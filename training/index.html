@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>xPanda Foam – Safety Training</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+    <link rel="apple-touch-icon" href="/assets/img/favicon.png">
+    
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f9f9f9; }
+
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    header img { height: 45px; }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      flex-wrap: wrap;
+    }
+
+    .lang-wrap { display: inline-flex; align-items: center; gap: 8px; }
+    .lang-label { color: #555; font-size: 13px; white-space: nowrap; }
+
+    #xpandaLang {
+      border: 1px solid #cfd8e3;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+      font-size: 14px;
+      color: #111;
+    }
+
+    h1 { font-size: 22px; margin: 0; line-height: 1.2; }
+    .sub { margin: 6px 0 16px 0; color: #555; font-size: 14px; }
+
+    .actions { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 14px; }
+    .action-btn {
+      display:block; text-decoration:none; border:1px solid #cfd8e3; background:#fff;
+      border-radius:10px; padding:14px; color:#111; transition: all 0.15s ease;
+    }
+    .action-btn:hover { border-color:#0074cc; box-shadow: 0 3px 8px rgba(0,0,0,0.05); }
+    .action-title { font-weight:bold; font-size:16px; margin:0 0 4px 0; }
+    .action-desc { margin:0; color:#555; font-size:13px; line-height:1.35; }
+
+    .grid { display:grid; grid-template-columns: 1fr; gap: 12px; }
+    .card {
+      display:block; text-decoration:none; color:#111;
+      background:#fff; border:1px solid #ddd; border-radius:12px;
+      padding:14px;
+    }
+    .card:hover { border-color:#0074cc; box-shadow: 0 3px 10px rgba(0,0,0,0.05); }
+
+    .card-top { display:flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+    .card-title { font-weight: bold; font-size: 16px; margin: 0; }
+    .badge {
+      font-size: 12px;
+      border: 1px solid #ddd;
+      border-radius: 999px;
+      padding: 3px 8px;
+      color: #555;
+      background: #f4f4f4;
+      white-space: nowrap;
+    }
+    .badge.done { background: #eaf7ee; border-color: #c9ebd2; color: #1f6a35; }
+    .badge.wip  { background: #fff7e6; border-color: #ffd59e; color: #7a4b00; }
+    .badge.todo { background: #f3f3f3; border-color: #e2e2e2; color: #555; }
+
+    .card-desc { margin: 6px 0 10px 0; color:#555; font-size: 13px; line-height: 1.35; }
+    .meta { font-size: 12px; color: #666; line-height: 1.35; }
+    .meta strong { color:#333; }
+
+    @media (min-width: 720px) {
+      .actions { grid-template-columns: 1fr 1fr; }
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <a href="../index.html">
+      <img src="../logo/xpanda.png" alt="xPanda Foam Logo">
+    </a>
+
+    <div style="flex:1;">
+      <div class="header-top">
+        <h1 data-i18n="train.title">Safety Training</h1>
+
+        <div class="lang-wrap">
+          <span class="lang-label" data-i18n="common.langLabel">Language:</span>
+          <select id="xpandaLang" aria-label="Language selector">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="ht">Kreyòl Ayisyen</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sub" data-i18n="train.subtitle">
+        Select a training block to view videos. Captions are available (Español + Kreyòl Ayisyen) where provided.
+      </div>
+    </div>
+  </header>
+
+  <div class="actions">
+    <a class="action-btn" href="../index.html">
+      <div class="action-title" data-i18n="train.backTitle">🏠 Back to Portal</div>
+      <p class="action-desc" data-i18n="train.backDesc">Return to SDS search and quick links.</p>
+    </a>
+
+    <a class="action-btn" href="../sds.html">
+      <div class="action-title" data-i18n="train.browseTitle">📚 Browse SDS</div>
+      <p class="action-desc" data-i18n="train.browseDesc">A–Z by manufacturer with filtering.</p>
+    </a>
+  </div>
+
+  <div class="grid">
+    <a class="card" href="block-01.html">
+      <div class="card-top">
+        <div class="card-title">Block 01 — New Hire Core Orientation</div>
+        <div class="badge done">Translated</div>
+      </div>
+      <div class="card-desc">
+        General Safety Orientation • PPE • Hearing Protection • Workers’ Comp (Non-CA)
+      </div>
+      <div class="meta">
+        <strong>Total:</strong> 47 minutes · <strong>Videos:</strong> 4
+      </div>
+    </a>
+
+    <a class="card" href="block-02.html">
+      <div class="card-top">
+        <div class="card-title">Block 02 — Walking, Slips and Lockout</div>
+        <div class="badge done">Translated</div>
+      </div>
+      <div class="card-desc">
+        Slips/Trips/Falls • Walking-Working Surfaces • Machine Guarding • Lockout/Tagout
+      </div>
+      <div class="meta">
+        <strong>Total:</strong> 47 minutes · <strong>Videos:</strong> 4
+      </div>
+    </a>
+
+    <a class="card" href="block-03.html">
+      <div class="card-top">
+        <div class="card-title">Block 03 — Physical Injury and First Response</div>
+        <div class="badge done">Translated</div>
+      </div>
+      <div class="card-desc">
+        First Aid (Basic) • Back Safety • Eyewash and Safety Shower
+      </div>
+      <div class="meta">
+        <strong>Total:</strong> 43 minutes · <strong>Videos:</strong> 3
+      </div>
+    </a>
+
+    <a class="card" href="block-04.html">
+      <div class="card-top">
+        <div class="card-title">Block 04 — Fall Protection and Heat Exposure</div>
+        <div class="badge done">Translated</div>
+      </div>
+      <div class="card-desc">
+        Fall Protection (General Industry Awareness) • Extreme Temperature (Heat)
+      </div>
+      <div class="meta">
+        <strong>Total:</strong> 26 minutes · <strong>Videos:</strong> 2
+      </div>
+    </a>
+
+    <a class="card" href="block-05.html">
+      <div class="card-top">
+        <div class="card-title">Block 05 — Fire, Chemicals and Containers</div>
+        <div class="badge todo">Work in Progress</div>
+      </div>
+      <div class="card-desc">
+        Fire Extinguisher • Hazard Communication • Flammable Liquids (Container Storage)
+      </div>
+      <div class="meta">
+        <strong>Total:</strong> 47 minutes · <strong>Videos:</strong> 3
+      </div>
+    </a>
+
+    <a class="card" href="block-06.html">
+      <div class="card-top">
+        <div class="card-title">Block 06 — Electrical and Power Tools</div>
+        <div class="badge todo">Work in Progress</div>
+      </div>
+      <div class="card-desc">
+        Electrical Safety • Hand and Portable Power Tools
+      </div>
+      <div class="meta">
+        <strong>Total:</strong> 41 minutes · <strong>Videos:</strong> 2
+      </div>
+    </a>
+
+    <a class="card" href="block-07.html">
+      <div class="card-top">
+        <div class="card-title">Block 07 — Gas, Ladders and Respiratory Equipment</div>
+        <div class="badge todo">Work in Progress</div>
+      </div>
+      <div class="card-desc">
+        Compressed Gas • Ladder Safety • Respirators (FFP) • Respirators (Air Purifying)
+      </div>
+      <div class="meta">
+        <strong>Total:</strong> 47 minutes · <strong>Videos:</strong> 4
+      </div>
+    </a>
+
+    <a class="card" href="block-08.html">
+      <div class="card-top">
+        <div class="card-title">Block 08 — Powered Industrial Equipment</div>
+        <div class="badge todo">Work in Progress</div>
+      </div>
+      <div class="card-desc">
+        Forklift • Safe Driving 
+      </div>
+      <div class="meta">
+        <strong>Total:</strong> 29 minutes · <strong>Videos:</strong> 2
+      </div>
+    </a>
+
+    <a class="card" href="block-09.html">
+      <div class="card-top">
+        <div class="card-title">Block 09 — Incident Response and Conduct</div>
+        <div class="badge todo">Work in Progress</div>
+      </div>
+      <div class="card-desc">
+        Accident Reporting • Workplace Violence • Emergency Action Plan (in progress)
+      </div>
+      <div class="meta">
+        <strong>Total:</strong> approx. 26 minutes · <strong>Videos:</strong> 3
+      </div>
+    </a>
+  </div>
+
+  <!-- Shared i18n -->
+  <script src="/i18n.js"></script>
+  <script>
+    window.xPandaI18n && window.xPandaI18n.initLanguageSelector({ selectorId: "xpandaLang" });
+  </script>
+
+</body>
+</html>

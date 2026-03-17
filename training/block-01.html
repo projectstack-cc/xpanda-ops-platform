@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>xPanda Foam – Training Block 01</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+   
+    <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+    <link rel="apple-touch-icon" href="/assets/img/favicon.png">
+    
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f9f9f9; }
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    header img { height: 45px; }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      flex-wrap: wrap;
+    }
+
+    .lang-wrap { display: inline-flex; align-items: center; gap: 8px; }
+    .lang-label { color: #555; font-size: 13px; white-space: nowrap; }
+
+    #xpandaLang {
+      border: 1px solid #cfd8e3;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+      font-size: 14px;
+      color: #111;
+    }
+
+    h1 { font-size: 22px; margin: 0; line-height: 1.2; }
+    .sub { margin: 6px 0 16px 0; color: #555; font-size: 14px; }
+
+    .actions { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 14px; }
+    .action-btn {
+      display:block; text-decoration:none; border:1px solid #cfd8e3; background:#fff;
+      border-radius:10px; padding:14px; color:#111; transition: all 0.15s ease;
+    }
+    .action-btn:hover { border-color:#0074cc; box-shadow: 0 3px 8px rgba(0,0,0,0.05); }
+    .action-title { font-weight:bold; font-size:16px; margin:0 0 4px 0; }
+    .action-desc { margin:0; color:#555; font-size:13px; line-height:1.35; }
+
+    .card { background:#fff; border:1px solid #ddd; border-radius:10px; padding:14px; margin-bottom:14px; }
+    .fineprint { color:#666; font-size:12px; line-height:1.35; margin-top: 10px; }
+
+    .video-card { border:1px solid #ddd; border-radius:10px; padding:12px; margin-top:12px; background:#fff; }
+    .video-title { font-weight:bold; margin:0 0 6px 0; font-size:15px; }
+    .video-desc { margin:0 0 10px 0; color:#555; font-size:13px; line-height:1.35; }
+    video { width:100%; border-radius:10px; border:1px solid #ddd; background:#000; }
+
+    @media (min-width: 720px) {
+      .actions { grid-template-columns: 1fr 1fr 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <a href="../index.html">
+      <img src="../logo/xpanda.png" alt="xPanda Foam Logo">
+    </a>
+
+    <div style="flex:1;">
+      <div class="header-top">
+        <h1>Block 01 — New Hire Core Orientation</h1>
+
+        <div class="lang-wrap">
+          <span class="lang-label" data-i18n="common.langLabel">Language:</span>
+          <select id="xpandaLang" aria-label="Language selector">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="ht">Kreyòl Ayisyen</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sub">
+        General Safety Orientation • PPE • Hearing Protection • Workers’ Comp (Non-CA)
+      </div>
+    </div>
+  </header>
+
+  <div class="actions">
+    <a class="action-btn" href="index.html">
+      <div class="action-title" data-i18n="train.backTrainingHomeTitle">⬅️ Back to Training Home</div>
+      <p class="action-desc" data-i18n="train.backTrainingHomeDesc">View all training blocks.</p>
+    </a>
+
+    <a class="action-btn" href="../index.html">
+      <div class="action-title" data-i18n="train.backTitle">🏠 Back to Portal</div>
+      <p class="action-desc" data-i18n="train.backDesc">Return to SDS search and quick links.</p>
+    </a>
+
+    <a class="action-btn" href="../sds.html">
+      <div class="action-title" data-i18n="train.browseTitle">📚 Browse SDS</div>
+      <p class="action-desc" data-i18n="train.browseDesc">A–Z by manufacturer with filtering.</p>
+    </a>
+  </div>
+
+  <div class="card">
+    <strong>
+      <span data-i18n="train.captionsTitle">Captions:</span>
+      <span data-i18n="train.captionsBody">Español + Kreyòl Ayisyen (when provided)</span>
+    </strong>
+    <div class="fineprint" data-i18n="train.tip">
+      Tip: In the video player, click the subtitles/CC control to select Español or Kreyòl Ayisyen.
+    </div>
+
+    <div class="video-card">
+      <div class="video-title">General Safety Orientation</div>
+      <div class="video-desc">Baseline safety orientation for new hires.</div>
+      <video controls playsinline preload="metadata" crossorigin="anonymous">
+        <source id="gso-src" type="video/mp4">
+        <track id="gso-es" kind="subtitles" srclang="es" label="Español" default>
+        <track id="gso-ht" kind="subtitles" srclang="ht" label="Kreyòl Ayisyen">
+      </video>
+    </div>
+
+    <div class="video-card">
+      <div class="video-title">Personal Protective Equipment</div>
+      <div class="video-desc">PPE expectations and required usage.</div>
+      <video controls playsinline preload="metadata" crossorigin="anonymous">
+        <source id="ppe-src" type="video/mp4">
+        <track id="ppe-es" kind="subtitles" srclang="es" label="Español" default>
+        <track id="ppe-ht" kind="subtitles" srclang="ht" label="Kreyòl Ayisyen">
+      </video>
+    </div>
+
+    <div class="video-card">
+      <div class="video-title">Hearing Protection</div>
+      <div class="video-desc">Hearing protection requirements and best practices.</div>
+      <video controls playsinline preload="metadata" crossorigin="anonymous">
+        <source id="hp-src" type="video/mp4">
+        <track id="hp-es" kind="subtitles" srclang="es" label="Español" default>
+        <track id="hp-ht" kind="subtitles" srclang="ht" label="Kreyòl Ayisyen">
+      </video>
+    </div>
+
+    <div class="video-card">
+      <div class="video-title">PEO Workers Comp (Non-CA)</div>
+      <div class="video-desc">Workers comp guidance for non-California context.</div>
+      <video controls playsinline preload="metadata" crossorigin="anonymous">
+        <source id="wc-src" type="video/mp4">
+        <track id="wc-es" kind="subtitles" srclang="es" label="Español" default>
+        <track id="wc-ht" kind="subtitles" srclang="ht" label="Kreyòl Ayisyen">
+      </video>
+    </div>
+  </div>
+
+  <!-- ✅ Completion card -->
+  <div class="card" id="completion-card">
+    <strong data-i18n="train.completionTitle">Training Completion</strong>
+    <div class="fineprint" data-i18n="train.completionBodyGeneric">
+      Enter your name and confirm you completed this training block.
+    </div>
+
+    <form id="completionForm" style="margin-top: 10px;">
+      <label style="display:block; margin-bottom: 10px;">
+        <span data-i18n="train.fullNameLabel">Full Name (required)</span>
+        <input
+          type="text"
+          id="employeeName"
+          required
+          style="width:100%; padding:10px; border:1px solid #cfd8e3; border-radius:8px; margin-top:6px;"
+          autocomplete="name"
+        >
+      </label>
+
+      <label style="display:block; margin: 10px 0;">
+        <input type="checkbox" id="attest" required>
+        <span data-i18n="train.attestText">I attest that I completed this training block in full.</span>
+      </label>
+
+      <button type="submit" style="padding:10px 14px; border-radius:10px; border:1px solid #cfd8e3; background:#fff; cursor:pointer;">
+        <span data-i18n="train.submitCompletion">Submit Completion</span>
+      </button>
+
+      <div id="completionMsg" class="fineprint" style="margin-top: 10px;"></div>
+    </form>
+  </div>
+
+  <!-- Shared i18n -->
+  <script src="/i18n.js"></script>
+  <script>
+    window.xPandaI18n && window.xPandaI18n.initLanguageSelector({ selectorId: "xpandaLang" });
+  </script>
+
+  <script>
+  // --- Media wiring (updated with poster) ---
+  const BASE_R2 = "https://pub-6fa76f0673dd4d7190bb9f79bb59b77d.r2.dev/training-media";
+
+  function bumpTextTracks(videoEl) {
+    try {
+      const tracks = videoEl.textTracks;
+      for (let i = 0; i < tracks.length; i++) {
+        const t = tracks[i];
+        const prev = t.mode;
+        t.mode = "hidden";
+        t.mode = prev || "disabled";
+      }
+    } catch (e) {
+      // no-op
+    }
+  }
+
+  function setMedia(idPrefix, blockFolder, baseName) {
+    const mp4 = `${BASE_R2}/${blockFolder}/${baseName}.mp4`;
+    const es  = `${BASE_R2}/${blockFolder}/${baseName}-es.vtt`;
+    const ht  = `${BASE_R2}/${blockFolder}/${baseName}-ht.vtt`;
+
+    const sourceEl = document.getElementById(`${idPrefix}-src`);
+    const esTrack  = document.getElementById(`${idPrefix}-es`);
+    const htTrack  = document.getElementById(`${idPrefix}-ht`);
+
+    sourceEl.src = mp4;
+    esTrack.src  = es;
+    htTrack.src  = ht;
+
+    const videoEl = sourceEl.closest("video");
+    if (videoEl) {
+      // ✅ Global poster for all training videos
+      videoEl.poster = "/assets/img/training-video-poster.png";
+
+      videoEl.load();
+      bumpTextTracks(videoEl);
+    }
+  }
+
+  // Block 01
+  setMedia("gso", "block-01-new-hire-core", "general-safety-orientation");
+  setMedia("ppe", "block-01-new-hire-core", "personal-protective-equipment");
+  setMedia("hp",  "block-01-new-hire-core", "hearing-protection");
+  setMedia("wc",  "block-01-new-hire-core", "peo-workers-comp-non-ca");
+</script>
+    
+  <!-- Completion submission script (unchanged) -->
+  <script>
+    (function () {
+      const form = document.getElementById("completionForm");
+      const msg = document.getElementById("completionMsg");
+      if (!form || !msg) return;
+
+      function setMsg(text, ok) {
+        msg.textContent = text;
+        msg.style.color = ok ? "#0a7b2c" : "#b00020";
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const employee_name = (document.getElementById("employeeName").value || "").trim();
+        const attested = document.getElementById("attest").checked;
+
+        if (!employee_name) return setMsg("Please enter your name.", false);
+        if (!attested) return setMsg("Please check the attestation box.", false);
+
+        const payload = {
+          employee_name,
+          block_id: "block-01",
+          block_title: "Block 01 — New Hire Core Orientation",
+          attested: true
+        };
+
+        try {
+          const res = await fetch("/api/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          const data = await res.json().catch(() => ({}));
+
+          if (res.ok && data.ok) {
+            setMsg("✅ Completion recorded. Thank you.", true);
+            form.querySelector("button[type='submit']").disabled = true;
+          } else if (res.status === 409) {
+            setMsg("⚠️ Already submitted today for this block.", false);
+          } else {
+            setMsg("❌ Submission failed. " + (data.error || "Try again."), false);
+          }
+        } catch (err) {
+          setMsg("❌ Network error. Please try again.", false);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

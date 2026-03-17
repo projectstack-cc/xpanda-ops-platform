@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>xPanda Foam – Incident Report</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+    <link rel="icon" href="/qc-assets/qc-favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/qc-assets/qc-favicon.png">
+
+  <link rel="stylesheet" href="/qc/qc-shared.css">
+  <style>
+    .page-wrap {
+      padding: 16px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 18px;
+      margin: 0 0 10px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 10px 0 4px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--input-border);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 14px;
+      background: var(--input-bg);
+      color: var(--text);
+    }
+
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    @media (min-width: 860px) {
+      .grid.two { grid-template-columns: 1fr 1fr; }
+      .grid.three { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
+    .sticky {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--bg);
+      padding: 8px 0 10px;
+      margin-bottom: 10px;
+    }
+
+    .bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .bar .left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .bar .right {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .row > * {
+      flex: 1;
+    }
+
+    .add-customer-row input {
+      flex: 1;
+    }
+
+    .add-customer-row button {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .checks {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--input-border);
+      border-radius: 10px;
+      background: var(--input-bg);
+    }
+
+    .check-item input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      flex: 0 0 auto;
+    }
+
+    .small {
+      font-size: 12px;
+      color: var(--pill);
+      margin-top: 6px;
+    }
+
+    .ok { color: #0b7a28; font-weight: 700; }
+    .warn { color: #b35c00; font-weight: 700; }
+    .err { color: #b00020; font-weight: 700; }
+
+    @media (max-width: 480px) {
+      .page-wrap {
+        padding: 12px;
+      }
+
+      .bar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .bar .right {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <script src="/qc/qc-header.js"></script>
+  <script>
+    document.getElementById('qc-page-title').textContent = 'Incident Report';
+    document.getElementById('qc-page-subtitle').textContent = 'Document quality-related incidents for customer, product, and process issues';
+  </script>
+
+  <div class="page-wrap">
+
+    <div class="sticky">
+      <div class="bar">
+        <div class="left">
+          <div><strong>Incident Report</strong></div>
+          <div class="pill" id="statusPill">Ready</div>
+        </div>
+        <div class="right">
+          <button class="btn ghost" type="button" id="themeToggleBtn">Dark Mode</button>
+          <button class="btn ghost" type="button" id="resetBtn">Reset</button>
+          <button class="btn primary" type="button" id="submitBtn">Submit</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>Report Info</h1>
+
+      <div class="grid two">
+        <div>
+          <label for="date">Date</label>
+          <input id="date" />
+        </div>
+        <div>
+          <label for="personCompleting">Person Completing Report</label>
+          <input id="personCompleting" value="Stephen Cook" autocomplete="off" />
+        </div>
+      </div>
+
+      <div>
+        <label for="reportingIndividual">Reporting Individual</label>
+        <input id="reportingIndividual" autocomplete="off" />
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>Incident Information</h1>
+
+      <div class="grid two">
+        <div>
+          <label for="customerSelect">Customer Name</label>
+          <select id="customerSelect">
+            <option value="">Loading customers...</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="newCustomer">Add New Customer</label>
+          <div class="row add-customer-row">
+            <input id="newCustomer" placeholder="Enter new customer name..." />
+            <button class="btn ghost" type="button" id="addCustomerBtn">Add</button>
+          </div>
+          <div class="small">Only use if customer is not in dropdown.</div>
+        </div>
+      </div>
+
+      <div class="grid three">
+        <div>
+          <label for="jobId">Job ID</label>
+          <input id="jobId" autocomplete="off" />
+        </div>
+        <div>
+          <label for="productDelivered">Product Delivered</label>
+          <select id="productDelivered">
+            <option value="">Select product...</option>
+            <option value="Block">Block</option>
+            <option value="Holey Board">Holey Board</option>
+            <option value="Sheets">Sheets</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label for="deliveryDate">Delivery Date</label>
+          <input id="deliveryDate" />
+        </div>
+      </div>
+
+      <div>
+        <label for="incidentCategory">Incident Category</label>
+        <select id="incidentCategory">
+          <option value="">Select category...</option>
+          <option value="Fusion">Fusion</option>
+          <option value="Density">Density</option>
+          <option value="Tolerances">Tolerances</option>
+          <option value="Packaging">Packaging</option>
+          <option value="Delivery">Delivery</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+
+        <div>
+         <label for="riskLevel">Risk Level</label>
+         <select id="riskLevel">
+         <option value="">Select risk level...</option>
+         <option value="Low">Low</option>
+         <option value="Medium">Medium</option>
+         <option value="High">High</option>
+        </select>
+    </div>
+      <div>
+        <label for="incidentDetails">Incident Details</label>
+        <textarea id="incidentDetails" placeholder="Describe the incident in clear detail..."></textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>Root Cause and Corrective Action</h1>
+
+      <div>
+        <label for="rootCauseDescription">Root Cause Description</label>
+        <textarea id="rootCauseDescription" placeholder="Optional at initial submission..."></textarea>
+      </div>
+
+      <div>
+        <label>Implicated Departments</label>
+        <div class="checks">
+          <label class="check-item"><input type="checkbox" value="Molding"> <span>Molding</span></label>
+          <label class="check-item"><input type="checkbox" value="Cutting"> <span>Cutting</span></label>
+          <label class="check-item"><input type="checkbox" value="Packaging and Loading"> <span>Packaging and Loading</span></label>
+          <label class="check-item"><input type="checkbox" value="Delivery"> <span>Delivery</span></label>
+        </div>
+      </div>
+
+      <div>
+        <label for="correctiveActions">Corrective Actions</label>
+        <textarea id="correctiveActions" placeholder="Optional at initial submission..."></textarea>
+      </div>
+    </div>
+
+    <form id="postForm" method="post" target="submitFrame" action="">
+      <input type="hidden" name="payload" id="payload" value="" />
+    </form>
+
+    <iframe name="submitFrame" style="display:none;"></iframe>
+
+  </div>
+
+  <footer class="footer">
+    xPanda QC System v1
+  </footer>
+
+  <script>
+    // ====== CONFIG ======
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwCULfoSrZQCcbKm2vRG5GWQHQhplfSDgX81mre6RaocuVT5FrNlZm0FN7agm64yczZ/exec";
+
+    // ====== ELEMENTS ======
+    const statusPill = document.getElementById('statusPill');
+
+    const dateEl = document.getElementById('date');
+    const personCompleting = document.getElementById('personCompleting');
+    const reportingIndividual = document.getElementById('reportingIndividual');
+
+    const customerSelect = document.getElementById('customerSelect');
+    const newCustomerInput = document.getElementById('newCustomer');
+    const addCustomerBtn = document.getElementById('addCustomerBtn');
+
+    const jobId = document.getElementById('jobId');
+    const productDelivered = document.getElementById('productDelivered');
+    const deliveryDate = document.getElementById('deliveryDate');
+    const incidentCategory = document.getElementById('incidentCategory');
+    const incidentDetails = document.getElementById('incidentDetails');
+
+    const rootCauseDescription = document.getElementById('rootCauseDescription');
+    const correctiveActions = document.getElementById('correctiveActions');
+
+      const riskLevel = document.getElementById('riskLevel');
+      
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const submitBtn = document.getElementById('submitBtn');
+
+    const postForm = document.getElementById('postForm');
+    const payloadEl = document.getElementById('payload');
+
+    // ====== HELPERS ======
+    function setStatus(text, cls) {
+      statusPill.textContent = text;
+      statusPill.className = 'pill ' + (cls || '');
+    }
+
+    function applyTheme(theme) {
+      const isDark = theme === 'dark';
+      document.body.classList.toggle('dark', isDark);
+      themeToggleBtn.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+      localStorage.setItem('xpandaTheme', isDark ? 'dark' : 'light');
+    }
+
+    function loadSavedTheme() {
+      const saved = localStorage.getItem('xpandaTheme') || 'light';
+      applyTheme(saved);
+    }
+
+    function nowDate() {
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function getCheckedDepartments() {
+      return Array.from(document.querySelectorAll('.checks input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
+    }
+
+    function populateCustomerSelect(list, selectedValue = '') {
+      customerSelect.innerHTML = '<option value="">Select customer...</option>';
+
+      list.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        customerSelect.appendChild(opt);
+      });
+
+      if (selectedValue && list.includes(selectedValue)) {
+        customerSelect.value = selectedValue;
+      }
+    }
+
+    function resetAll() {
+      dateEl.value = nowDate();
+      personCompleting.value = 'Stephen Cook';
+      reportingIndividual.value = '';
+      customerSelect.value = '';
+      newCustomerInput.value = '';
+      jobId.value = '';
+      productDelivered.value = '';
+      deliveryDate.value = '';
+      incidentCategory.value = '';
+      incidentDetails.value = '';
+      rootCauseDescription.value = '';
+      correctiveActions.value = '';
+        riskLevel.value = '';
+      document.querySelectorAll('.checks input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+      });
+
+      setStatus('Ready', '');
+    }
+
+    async function loadCustomers() {
+      if (!GAS_URL) {
+        customerSelect.innerHTML = '<option value="">Apps Script URL not set yet</option>';
+        return;
+      }
+
+      try {
+        const res = await fetch(GAS_URL + "?action=getIncidentCustomers");
+        const list = await res.json();
+
+        if (!Array.isArray(list)) {
+          throw new Error('Invalid customer list response');
+        }
+
+        populateCustomerSelect(list);
+      } catch (err) {
+        customerSelect.innerHTML = '<option value="">Failed to load</option>';
+        setStatus('Customer list failed', 'warn');
+      }
+    }
+
+    // ====== INIT ======
+    (function init() {
+      loadSavedTheme();
+      dateEl.value = nowDate();
+      loadCustomers();
+    })();
+
+    // ====== EVENTS ======
+    themeToggleBtn.addEventListener('click', () => {
+      const isDark = document.body.classList.contains('dark');
+      applyTheme(isDark ? 'light' : 'dark');
+    });
+
+    resetBtn.addEventListener('click', () => resetAll());
+
+    addCustomerBtn.addEventListener('click', async () => {
+      const name = newCustomerInput.value.trim();
+
+      if (!name) {
+        setStatus('Enter customer name', 'err');
+        return;
+      }
+
+      if (!GAS_URL) {
+        setStatus('Apps Script URL not set yet', 'warn');
+        return;
+      }
+
+      setStatus('Adding customer...', '');
+
+      try {
+        const res = await fetch(
+          GAS_URL + "?action=addIncidentCustomer&name=" + encodeURIComponent(name)
+        );
+        const list = await res.json();
+
+        if (!Array.isArray(list)) {
+          throw new Error('Invalid add customer response');
+        }
+
+        newCustomerInput.value = '';
+        populateCustomerSelect(list, name);
+        setStatus('Customer added', 'ok');
+      } catch (err) {
+        setStatus('Add failed', 'err');
+      }
+    });
+
+    submitBtn.addEventListener('click', () => {
+      if (!dateEl.value.trim()) return setStatus('Date required', 'err');
+      if (!personCompleting.value.trim()) return setStatus('Person completing report required', 'err');
+      if (!customerSelect.value) return setStatus('Select customer', 'err');
+      if (!productDelivered.value) return setStatus('Select product delivered', 'err');
+      if (!incidentCategory.value) return setStatus('Select incident category', 'err');
+      if (!incidentDetails.value.trim()) return setStatus('Incident details required', 'err');
+        if (!riskLevel.value) return setStatus('Select risk level', 'err');
+
+      const payload = {
+        action: "createIncidentReport",
+        date: dateEl.value.trim(),
+        personCompletingReport: personCompleting.value.trim(),
+        reportingIndividual: reportingIndividual.value.trim(),
+        customer: customerSelect.value,
+        jobId: jobId.value.trim(),
+        productDelivered: productDelivered.value,
+        deliveryDate: deliveryDate.value.trim(),
+        incidentCategory: incidentCategory.value,
+        incidentDetails: incidentDetails.value.trim(),
+        rootCauseDescription: rootCauseDescription.value.trim(),
+        implicatedDepartments: getCheckedDepartments(),
+        correctiveActions: correctiveActions.value.trim(),
+          riskLevel: riskLevel.value,
+      };
+
+      if (!GAS_URL) {
+        console.log("Incident payload preview:", payload);
+        setStatus('HTML ready — add Apps Script URL next', 'warn');
+        return;
+      }
+
+      setStatus('Submitting...', '');
+
+      postForm.action = GAS_URL;
+      payloadEl.value = JSON.stringify(payload);
+      postForm.submit();
+
+      setStatus('Submitted (check Drive)', 'ok');
+    });
+  </script>
+
+</body>
+</html>

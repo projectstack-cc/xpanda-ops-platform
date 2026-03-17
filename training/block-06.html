@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>xPanda Foam – Training Block 06</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+    <link rel="apple-touch-icon" href="/assets/img/favicon.png">
+    
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f9f9f9;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    header img { height: 45px; }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      flex-wrap: wrap;
+    }
+
+    .lang-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lang-label {
+      color: #555;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    #xpandaLang {
+      border: 1px solid #cfd8e3;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+      font-size: 14px;
+      color: #111;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 0;
+      line-height: 1.2;
+    }
+
+    .sub {
+      margin: 6px 0 16px 0;
+      color: #555;
+      font-size: 14px;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .action-btn {
+      display: block;
+      text-decoration: none;
+      border: 1px solid #cfd8e3;
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px;
+      color: #111;
+    }
+
+    .action-title {
+      font-weight: bold;
+      font-size: 15px;
+      margin: 0;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .fineprint {
+      font-size: 13px;
+      color: #666;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <a href="../index.html">
+    <img src="../logo/xpanda.png" alt="xPanda Foam Logo">
+  </a>
+
+  <div style="flex:1;">
+    <div class="header-top">
+      <h1>Training Block 06</h1>
+
+      <div class="lang-wrap">
+        <span class="lang-label" data-i18n="common.langLabel">Language:</span>
+        <select id="xpandaLang" aria-label="Language selector">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="ht">Kreyòl Ayisyen</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sub">
+      This training block is currently being prepared.
+    </div>
+  </div>
+</header>
+
+<div class="actions">
+  <a class="action-btn" href="index.html">
+    <div class="action-title">⬅️ Back to Training Home</div>
+  </a>
+
+  <a class="action-btn" href="../index.html">
+    <div class="action-title">🏠 Back to Portal</div>
+  </a>
+</div>
+
+<div class="card">
+  <strong>Work in Progress</strong>
+  <div class="fineprint">
+    This block is being translated and finalized.  
+    Please check back soon.
+  </div>
+</div>
+
+<!-- Shared i18n -->
+<script src="/i18n.js"></script>
+<script>
+  window.xPandaI18n && window.xPandaI18n.initLanguageSelector({ selectorId: "xpandaLang" });
+</script>
+
+</body>
+</html>

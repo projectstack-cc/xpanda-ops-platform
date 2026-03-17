@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>xPanda Foam Safety Portal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+    <link rel="apple-touch-icon" href="/assets/img/favicon.png">
+  
+    <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    header a {
+      display: inline-block;
+      text-decoration: none;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f9f9f9;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    header img { height: 45px; }
+
+    header a {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    /* Header top line (title + language selector) */
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .lang-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lang-label {
+      color: #555;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    /* Note: keep styling tied to the selector id we will standardize across all pages */
+    #xpandaLang {
+      border: 1px solid #cfd8e3;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+      font-size: 14px;
+      color: #111;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 0;
+      line-height: 1.2;
+    }
+
+    .sub {
+      margin: 6px 0 16px 0;
+      color: #555;
+      font-size: 14px;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+
+    .search-card {
+      border: 2px solid #0074cc;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .action-btn {
+      display: block;
+      text-decoration: none;
+      border: 1px solid #cfd8e3;
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px;
+      color: #111;
+      transition: all 0.15s ease;
+    }
+
+    .action-btn:hover {
+      border-color: #0074cc;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+    }
+
+    .action-title {
+      font-weight: bold;
+      font-size: 16px;
+      margin: 0 0 4px 0;
+    }
+
+    .action-desc {
+      margin: 0;
+      color: #555;
+      font-size: 13px;
+    }
+
+    #search {
+      width: 100%;
+      padding: 14px;
+      font-size: 17px;
+      margin-bottom: 10px;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+    }
+
+    #search:focus {
+      outline: none;
+      border-color: #0074cc;
+    }
+
+    ul { list-style: none; padding: 0; margin: 0; }
+
+    li {
+      margin-bottom: 8px;
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+    }
+
+    a { text-decoration: none; color: #0074cc; font-weight: bold; }
+    a:hover { text-decoration: underline; }
+
+    .fineprint {
+      color: #666;
+      font-size: 12px;
+      margin-top: 10px;
+      line-height: 1.35;
+    }
+
+    .statement {
+      background: #f3f7ff;
+      border: 1px solid #cfe0ff;
+    }
+
+    .emergency {
+      background: #fff7e6;
+      border: 1px solid #ffd59e;
+    }
+
+    .emergency strong {
+      display: inline-block;
+      margin-bottom: 4px;
+    }
+
+    @media (min-width: 720px) {
+      .actions { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <a href="index.html">
+    <img src="logo/xpanda.png" alt="xPanda Foam Logo">
+  </a>
+
+  <div style="flex:1;">
+    <div class="header-top">
+      <h1 data-i18n="home.title">xPanda Foam Safety Portal</h1>
+
+      <div class="lang-wrap">
+        <!-- Use common.langLabel (not home.langLabel) so the header stays consistent across pages -->
+        <span class="lang-label" data-i18n="common.langLabel">Language:</span>
+        <!-- Standardize id across all pages -->
+        <select id="xpandaLang" aria-label="Language selector">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="ht">Kreyòl Ayisyen</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sub" data-i18n="home.subtitle">SDS access • Safety training • Quick reference</div>
+  </div>
+</header>
+
+<!-- SEARCH FIRST -->
+<div id="searchCard" class="card search-card">
+  <p class="sub" style="margin-top:0;" data-i18n="home.searchHelp">
+    Search by product or manufacturer name to find Safety Data Sheets.
+  </p>
+
+  <input type="text" id="search" data-i18n-placeholder="home.searchPlaceholder" placeholder="Search SDS...">
+
+  <ul id="results"></ul>
+
+  <div class="fineprint" data-i18n="home.searchTip">
+    Tip: Try simple terms like “3M”, “Cleaner”, “Oil”, “Primer”.
+  </div>
+</div>
+
+<!-- BUTTONS SECOND -->
+<div class="actions">
+  <a class="action-btn" href="sds.html">
+    <div class="action-title" data-i18n="home.browseTitle">📚 Browse SDS</div>
+    <p class="action-desc" data-i18n="home.browseDesc">A–Z by manufacturer with filtering.</p>
+  </a>
+
+  <a class="action-btn" href="training/">
+    <div class="action-title" data-i18n="home.trainingTitle">🎥 Safety Training</div>
+    <p class="action-desc" data-i18n="home.trainingDesc">Videos, checklists, and quick guides.</p>
+  </a>
+</div>
+
+<!-- SAFETY STATEMENT -->
+<div class="card statement">
+  <strong data-i18n="home.complianceTitle">Safety & Compliance:</strong>
+  <span data-i18n="home.complianceBody">
+    This portal provides immediate access to Safety Data Sheets (SDS), training materials, and safety references to support a hazard-aware workplace and OSHA-aligned practices.
+  </span>
+  <div class="fineprint" data-i18n="home.complianceFineprint">
+    Multilingual training captions are available where provided.
+  </div>
+</div>
+
+<!-- EMERGENCY LAST -->
+<div class="card emergency">
+  <strong data-i18n="home.emergencyTitle">Emergency:</strong>
+  <span data-i18n="home.emergencyBody">
+    If there is immediate danger or a serious injury, call 911.
+  </span>
+  <div class="fineprint" data-i18n="home.poisonBody">
+    For chemical exposure guidance, contact Poison Control: 1-800-222-1222.
+  </div>
+</div>
+
+<!-- Shared i18n (no inline dictionaries on pages) -->
+<script src="/i18n.js"></script>
+<script>
+  // Initialize shared language system for this page
+  window.xPandaI18n && window.xPandaI18n.initLanguageSelector({ selectorId: "xpandaLang" });
+</script>
+
+<!-- Existing logic (unchanged) -->
+<script src="search.js"></script>
+
+</body>
+</html>

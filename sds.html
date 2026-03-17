@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>xPanda Foam SDS Browse</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+    <link rel="apple-touch-icon" href="/assets/img/favicon.png">
+    
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      scroll-padding-top: 110px; /* matches sticky controls height */
+    }
+
+    header a {
+      display: inline-block;
+      text-decoration: none;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f9f9f9;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    header img {
+      height: 45px;
+    }
+
+    /* Header top line (title + language selector) */
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      flex-wrap: wrap;
+    }
+
+    .lang-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lang-label {
+      color: #555;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    /* Note: keep styling tied to the selector id we will standardize across all pages */
+    #xpandaLang {
+      border: 1px solid #cfd8e3;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+      font-size: 14px;
+      color: #111;
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 0;
+    }
+
+    h2 {
+      margin-top: 30px;
+      font-size: 18px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 4px;
+    }
+
+    .entry {
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+      margin-bottom: 6px;
+    }
+
+    a {
+      text-decoration: none;
+      color: #0074cc;
+      font-weight: bold;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .back {
+      margin-bottom: 15px;
+      display: inline-block;
+      font-size: 14px;
+    }
+
+    /* Sticky control strip (Filter + A–Z) */
+    .controls {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #f9f9f9;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    #filter {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      margin: 0 0 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+
+    #az {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    #az a, #az span {
+      font-size: 14px;
+      padding: 4px 8px;
+      border: 1px solid #ddd;
+      border-radius: 999px;
+    }
+
+    #az a {
+      color: #0074cc;
+      background: white;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    #az a:hover {
+      text-decoration: underline;
+    }
+
+    #az span {
+      color: #aaa;
+      background: #f1f1f1;
+    }
+  </style>
+</head>
+
+<body>
+
+<a href="index.html" class="back" data-i18n="sds.back">← Back to Search</a>
+
+<header>
+  <!-- Root-level page: use root paths -->
+  <a href="index.html">
+    <img src="logo/xpanda.png" alt="xPanda Foam Logo">
+  </a>
+
+  <div class="header-top">
+    <h1 data-i18n="sds.title">SDS Library (Browse by Manufacturer)</h1>
+
+    <div class="lang-wrap">
+      <!-- Use common.langLabel so the header stays consistent across pages -->
+      <span class="lang-label" data-i18n="common.langLabel">Language:</span>
+      <!-- Standardize id across all pages -->
+      <select id="xpandaLang" aria-label="Language selector">
+        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="ht">Kreyòl Ayisyen</option>
+      </select>
+    </div>
+  </div>
+</header>
+
+<div class="controls">
+  <input
+    id="filter"
+    type="text"
+    data-i18n-placeholder="sds.filterPlaceholder"
+    placeholder="Filter (manufacturer or product)..."
+  />
+  <div id="az"></div>
+</div>
+
+<div id="library"></div>
+
+<!-- Shared i18n (no inline dictionaries on pages) -->
+<script src="/i18n.js"></script>
+<script>
+  // Initialize shared language system for this page
+  window.xPandaI18n && window.xPandaI18n.initLanguageSelector({ selectorId: "xpandaLang" });
+</script>
+
+<!-- Existing logic (unchanged) -->
+<script src="search.js"></script>
+<script src="browse.js"></script>
+
+</body>
+</html>

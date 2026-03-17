@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>xPanda Foam – Final Inspection</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <link rel="icon" href="/qc-assets/qc-favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/qc-assets/qc-favicon.png">
+    
+ <link rel="stylesheet" href="/qc/qc-shared.css">
+    <link rel="stylesheet" href="/qc/qc-shared.css">
+
+<style>
+.page-wrap {
+  padding: 16px;
+}
+
+.sample-card {
+  background: var(--card-bg);
+}
+
+h1 { font-size: 18px; margin: 0 0 10px; }
+h2 { font-size: 14px; margin: 0 0 10px; }
+
+label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}
+
+input, select, textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 14px;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+input:disabled, textarea:disabled, select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 860px) {
+  .grid.two { grid-template-columns: 1fr 1fr; }
+  .grid.three { grid-template-columns: 1fr 1fr 1fr; }
+  .grid.four { grid-template-columns: 1fr 1fr 1fr 1fr; }
+}
+
+.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  padding: 8px 0 10px;
+  margin-bottom: 10px;
+}
+
+.bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.bar .left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bar .right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.row > * {
+  flex: 1;
+}
+
+.add-customer-row input {
+  flex: 1;
+}
+
+.add-customer-row button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.toggle button {
+  flex: 1;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.toggle button.active {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26,115,232,0.15);
+}
+
+.small {
+  font-size: 12px;
+  color: var(--pill);
+  margin-top: 6px;
+}
+
+.ok { color: #0b7a28; font-weight: 700; }
+.warn { color: #b35c00; font-weight: 700; }
+.err { color: #b00020; font-weight: 700; }
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  transform: none;
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .page-wrap {
+    padding: 12px;
+  }
+
+  .bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bar .right {
+    flex-wrap: wrap;
+  }
+}
+</style>
+</head>
+<body>
+
+  <script src="/qc/qc-header.js"></script>
+  <script>
+    document.getElementById('qc-page-title').textContent = 'Final Inspection';
+    document.getElementById('qc-page-subtitle').textContent = 'Perform dimensional inspection and generate controlled PDF records';
+  </script>
+
+  <div class="page-wrap">
+
+    <div class="sticky">
+      <div class="bar">
+        <div class="left">
+          <div><strong>Final Inspection</strong></div>
+          <div class="pill" id="statusPill">Ready</div>
+        </div>
+        <div class="right">
+          <button class="btn ghost" type="button" id="themeToggleBtn">Dark Mode</button>
+          <button class="btn ghost" type="button" id="resetBtn">Reset</button>
+          <button class="btn primary" type="button" id="submitBtn">Submit</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>Job Info</h1>
+
+      <div class="grid two">
+        <div>
+          <label for="jobId">Job ID</label>
+          <input id="jobId" autocomplete="off" />
+        </div>
+        <div>
+          <label for="inspector">Inspector</label>
+          <input id="inspector" value="Stephen Cook" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div>
+          <label for="productCut">Product Cut</label>
+          <input id="productCut" autocomplete="off" />
+        </div>
+        <div>
+          <label for="totalPieces">Total Pieces in Job</label>
+          <input id="totalPieces" inputmode="numeric" pattern="[0-9]*" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div>
+          <label for="customerSelect">Customer</label>
+          <select id="customerSelect">
+            <option value="">Loading customers...</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="newCustomer">Add New Customer</label>
+          <div class="row add-customer-row">
+            <input id="newCustomer" placeholder="Enter new customer name..." />
+            <button class="btn ghost" type="button" id="addCustomerBtn">Add</button>
+          </div>
+          <div class="small">Only use if customer is not in dropdown.</div>
+        </div>
+      </div>
+
+      <div class="grid three">
+        <div>
+          <label for="date">Date</label>
+          <input id="date" />
+        </div>
+        <div>
+          <label for="time">Time</label>
+          <input id="time" />
+        </div>
+        <div>
+          <label for="lotSize">Lot Size</label>
+          <input id="lotSize" inputmode="numeric" pattern="[0-9]*" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div>
+          <label for="sampleSizeRequired">Sample Size Required</label>
+          <input id="sampleSizeRequired" readonly />
+          <div class="small" id="sampleHelp">Enter lot size (or total pieces) to calculate required sample size.</div>
+        </div>
+        <div>
+          <label for="tolerance">Tolerance</label>
+          <select id="tolerance">
+            <option value="1/16 (.0625) inch">1/16 (.0625) inch</option>
+            <option value="3/16 (.1875) inch">3/16 (.1875) inch</option>
+            <option value="1/8 (.125) inch" selected>1/8 (.125) inch</option>
+            <option value="1/4 (.25) inch">1/4 (.25) inch</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>Specific Product Dimensions</h1>
+      <div class="grid four">
+        <div>
+          <label for="dimLength">Length</label>
+          <input id="dimLength" inputmode="decimal" />
+        </div>
+        <div>
+          <label for="dimWidth">Width</label>
+          <input id="dimWidth" inputmode="decimal" />
+        </div>
+        <div>
+          <label for="dimHeight">Height</label>
+          <input id="dimHeight" inputmode="decimal" />
+        </div>
+        <div>
+          <label for="dimTapers">Tapers</label>
+          <input id="dimTapers" autocomplete="off" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content: space-between;">
+        <h1 style="margin:0;">Samples</h1>
+        <div class="pill" id="sampleProgress">Sample — of —</div>
+      </div>
+
+      <div class="row" style="margin: 10px 0;">
+        <button class="btn ghost" type="button" id="prevSample" disabled>Back</button>
+        <button class="btn ghost" type="button" id="repeatLastBtn" disabled>Repeat Last</button>
+        <button class="btn ghost" type="button" id="nextSample" disabled>Next</button>
+      </div>
+
+      <div class="card sample-card" id="sampleCard">
+        <h2 id="sampleTitle">Sample #—</h2>
+
+        <div class="grid four">
+          <div>
+            <label for="sLen">Length</label>
+            <input id="sLen" inputmode="decimal" disabled />
+          </div>
+          <div>
+            <label for="sWid">Width</label>
+            <input id="sWid" inputmode="decimal" disabled />
+          </div>
+          <div>
+            <label for="sHei">Height</label>
+            <input id="sHei" inputmode="decimal" disabled />
+          </div>
+          <div>
+            <label for="sTap">Taper</label>
+            <input id="sTap" inputmode="decimal" disabled />
+          </div>
+        </div>
+
+        <div class="grid two">
+          <div>
+            <label>Visual/Surface (checked = pass)</label>
+            <div class="checkbox-row">
+              <input type="checkbox" id="sVisual" disabled />
+              <span class="pill">Mark checked if visual/surface is acceptable.</span>
+            </div>
+          </div>
+
+          <div>
+            <label>Pass/Fail (part as a whole)</label>
+            <div class="toggle">
+              <button type="button" id="pfY" disabled>Y</button>
+              <button type="button" id="pfN" disabled>N</button>
+            </div>
+            <div class="small">This corresponds to the Pass/Fail (Y/N) column on the approved form.</div>
+          </div>
+        </div>
+
+        <div>
+          <label for="sNotes">Notes (optional)</label>
+          <textarea id="sNotes" placeholder="Optional notes for this sample…" disabled></textarea>
+        </div>
+      </div>
+
+      <div class="small">
+        *** Any product identified as defective should be sent directly to scrap ***
+      </div>
+    </div>
+
+    <form id="postForm" method="post" target="submitFrame"
+          action="https://script.google.com/a/macros/xpandafoam.com/s/AKfycbwCULfoSrZQCcbKm2vRG5GWQHQhplfSDgX81mre6RaocuVT5FrNlZm0FN7agm64yczZ/exec">
+      <input type="hidden" name="payload" id="payload" value="" />
+    </form>
+
+    <iframe name="submitFrame" style="display:none;"></iframe>
+
+  </div>
+
+  <script>
+    // ====== CONFIG ======
+    const GAS_URL = "https://script.google.com/a/macros/xpandafoam.com/s/AKfycbwCULfoSrZQCcbKm2vRG5GWQHQhplfSDgX81mre6RaocuVT5FrNlZm0FN7agm64yczZ/exec";
+
+    // ====== STATE ======
+    let lotSizeManual = false;
+    let sampleCount = 0;
+    let activeSampleIndex = 0;
+    let samples = [];
+
+    // ====== ELEMENTS ======
+    const statusPill = document.getElementById('statusPill');
+
+    const jobId = document.getElementById('jobId');
+    const inspector = document.getElementById('inspector');
+    const productCut = document.getElementById('productCut');
+    const totalPieces = document.getElementById('totalPieces');
+
+    const dateEl = document.getElementById('date');
+    const timeEl = document.getElementById('time');
+    const lotSizeEl = document.getElementById('lotSize');
+
+    const sampleSizeRequiredEl = document.getElementById('sampleSizeRequired');
+    const sampleHelp = document.getElementById('sampleHelp');
+    const toleranceEl = document.getElementById('tolerance');
+
+    const sampleProgress = document.getElementById('sampleProgress');
+    const sampleTitle = document.getElementById('sampleTitle');
+
+    const sLen = document.getElementById('sLen');
+    const sWid = document.getElementById('sWid');
+    const sHei = document.getElementById('sHei');
+    const sTap = document.getElementById('sTap');
+    const sVisual = document.getElementById('sVisual');
+    const sNotes = document.getElementById('sNotes');
+
+    const pfY = document.getElementById('pfY');
+    const pfN = document.getElementById('pfN');
+
+    const prevSample = document.getElementById('prevSample');
+    const repeatLastBtn = document.getElementById('repeatLastBtn');
+    const nextSample = document.getElementById('nextSample');
+
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const submitBtn = document.getElementById('submitBtn');
+
+    const postForm = document.getElementById('postForm');
+    const payloadEl = document.getElementById('payload');
+
+    const customerSelect = document.getElementById('customerSelect');
+    const newCustomerInput = document.getElementById('newCustomer');
+    const addCustomerBtn = document.getElementById('addCustomerBtn');
+
+    // ====== HELPERS ======
+    function setStatus(text, cls) {
+      statusPill.textContent = text;
+      statusPill.className = 'pill ' + (cls || '');
+    }
+
+    function applyTheme(theme) {
+      const isDark = theme === 'dark';
+      document.body.classList.toggle('dark', isDark);
+      themeToggleBtn.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+      localStorage.setItem('xpandaTheme', isDark ? 'dark' : 'light');
+    }
+
+    function loadSavedTheme() {
+      const saved = localStorage.getItem('xpandaTheme') || 'light';
+      applyTheme(saved);
+    }
+
+    function nowDate() {
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function nowTime() {
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mi = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mi}`;
+    }
+
+    function toInt(val) {
+      const n = parseInt(String(val || '').replace(/[^\d]/g, ''), 10);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function calcSampleSizeRequired(lotSize) {
+      if (!Number.isFinite(lotSize) || lotSize <= 0) return null;
+      if (lotSize <= 2) return lotSize;
+      if (lotSize <= 50) return 3;
+      if (lotSize <= 150) return 5;
+      if (lotSize <= 500) return 8;
+      return 10;
+    }
+
+    function ensureSamples(n) {
+      while (samples.length < n) {
+        samples.push({
+          length: '',
+          width: '',
+          height: '',
+          taper: '',
+          visualPass: false,
+          passFail: '',
+          notes: ''
+        });
+      }
+      if (samples.length > n) samples = samples.slice(0, n);
+    }
+
+    function isSampleComplete(sample) {
+      return !!(
+        String(sample.length || '').trim() &&
+        String(sample.width || '').trim() &&
+        String(sample.height || '').trim() &&
+        String(sample.passFail || '').trim()
+      );
+    }
+
+    function getIncompleteSampleNumbers(requiredCount) {
+      const missing = [];
+      for (let i = 0; i < requiredCount; i++) {
+        if (!isSampleComplete(samples[i] || {})) {
+          missing.push(i + 1);
+        }
+      }
+      return missing;
+    }
+
+    function setSampleInputsEnabled(enabled) {
+      sLen.disabled = !enabled;
+      sWid.disabled = !enabled;
+      sHei.disabled = !enabled;
+      sTap.disabled = !enabled;
+      sVisual.disabled = !enabled;
+      sNotes.disabled = !enabled;
+      pfY.disabled = !enabled;
+      pfN.disabled = !enabled;
+    }
+
+    function setPassFail(val) {
+      if (!sampleCount) return;
+      const s = samples[activeSampleIndex];
+      s.passFail = val;
+      pfY.classList.toggle('active', val === 'Y');
+      pfN.classList.toggle('active', val === 'N');
+    }
+
+    function clearPassFailButtons() {
+      pfY.classList.remove('active');
+      pfN.classList.remove('active');
+    }
+
+    function saveActiveSampleFromUI() {
+      if (!sampleCount || !samples[activeSampleIndex]) return;
+
+      const s = samples[activeSampleIndex];
+      s.length = sLen.value;
+      s.width = sWid.value;
+      s.height = sHei.value;
+      s.taper = sTap.value;
+      s.visualPass = !!sVisual.checked;
+      s.notes = sNotes.value;
+    }
+
+    function loadActiveSampleToUI() {
+      if (!sampleCount || !samples[activeSampleIndex]) {
+        sLen.value = '';
+        sWid.value = '';
+        sHei.value = '';
+        sTap.value = '';
+        sVisual.checked = false;
+        sNotes.value = '';
+        clearPassFailButtons();
+        return;
+      }
+
+      const s = samples[activeSampleIndex];
+      sLen.value = s.length || '';
+      sWid.value = s.width || '';
+      sHei.value = s.height || '';
+      sTap.value = s.taper || '';
+      sVisual.checked = !!s.visualPass;
+      sNotes.value = s.notes || '';
+      setPassFail(s.passFail || '');
+    }
+
+    function setNeutralSampleState() {
+      sampleCount = 0;
+      activeSampleIndex = 0;
+      samples = [];
+
+      sampleTitle.textContent = 'Sample #—';
+      sampleProgress.textContent = 'Sample — of —';
+
+      prevSample.disabled = true;
+      repeatLastBtn.disabled = true;
+      nextSample.disabled = true;
+
+      setSampleInputsEnabled(false);
+      loadActiveSampleToUI();
+    }
+
+    function updateSampleUI() {
+      if (!sampleCount) {
+        setNeutralSampleState();
+        return;
+      }
+
+      sampleTitle.textContent = `Sample #${activeSampleIndex + 1}`;
+      sampleProgress.textContent = `Sample ${activeSampleIndex + 1} of ${sampleCount}`;
+
+      prevSample.disabled = activeSampleIndex === 0;
+      repeatLastBtn.disabled = activeSampleIndex === 0;
+      nextSample.disabled = activeSampleIndex === (sampleCount - 1);
+
+      setSampleInputsEnabled(true);
+    }
+
+    function repeatLastMeasurement() {
+      if (!sampleCount || activeSampleIndex === 0) return;
+
+      const prev = samples[activeSampleIndex - 1];
+      const curr = samples[activeSampleIndex];
+
+      curr.length = prev.length || '';
+      curr.width = prev.width || '';
+      curr.height = prev.height || '';
+      curr.taper = prev.taper || '';
+
+      loadActiveSampleToUI();
+      setStatus(`Copied measurements from Sample #${activeSampleIndex} to Sample #${activeSampleIndex + 1}`, 'ok');
+    }
+
+    function applySampleCount(required) {
+      if (!required || required < 1) {
+        setNeutralSampleState();
+        return;
+      }
+
+      sampleCount = required;
+      ensureSamples(sampleCount);
+      activeSampleIndex = Math.min(activeSampleIndex, sampleCount - 1);
+      if (activeSampleIndex < 0) activeSampleIndex = 0;
+      loadActiveSampleToUI();
+      updateSampleUI();
+    }
+
+    function suggestSampleSize() {
+      const lot = toInt(lotSizeEl.value);
+      const suggested = calcSampleSizeRequired(lot);
+
+      if (suggested !== null) {
+        sampleSizeRequiredEl.value = String(suggested);
+        sampleHelp.innerHTML = `Calculated automatically: <span class="ok">${suggested}</span>`;
+        applySampleCount(suggested);
+        return;
+      }
+
+      sampleSizeRequiredEl.value = '';
+      sampleHelp.textContent = 'Enter lot size (or total pieces) to calculate required sample size.';
+      setNeutralSampleState();
+    }
+
+    function resetAll() {
+      jobId.value = '';
+      productCut.value = '';
+      totalPieces.value = '';
+      inspector.value = 'Stephen Cook';
+      dateEl.value = nowDate();
+      timeEl.value = nowTime();
+      lotSizeEl.value = '';
+      lotSizeManual = false;
+
+      document.getElementById('dimLength').value = '';
+      document.getElementById('dimWidth').value = '';
+      document.getElementById('dimHeight').value = '';
+      document.getElementById('dimTapers').value = '';
+
+      sampleSizeRequiredEl.value = '';
+      sampleHelp.textContent = 'Enter lot size (or total pieces) to calculate required sample size.';
+      toleranceEl.value = '1/8 (.125) inch';
+
+      customerSelect.value = '';
+      newCustomerInput.value = '';
+
+      setNeutralSampleState();
+      setStatus('Ready', '');
+    }
+
+    async function loadCustomers() {
+      try {
+        const res = await fetch(GAS_URL + "?action=getCustomers");
+        const list = await res.json();
+
+        customerSelect.innerHTML = '<option value="">Select customer...</option>';
+
+        list.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          customerSelect.appendChild(opt);
+        });
+
+      } catch (err) {
+        customerSelect.innerHTML = '<option value="">Failed to load</option>';
+        setStatus('Customer list failed', 'warn');
+      }
+    }
+
+    // ====== INIT ======
+    (function init() {
+      loadSavedTheme();
+      dateEl.value = nowDate();
+      timeEl.value = nowTime();
+      loadCustomers();
+      setNeutralSampleState();
+    })();
+
+    // ====== EVENTS ======
+    totalPieces.addEventListener('input', () => {
+      const tp = toInt(totalPieces.value);
+      if (tp !== null) {
+        if (!lotSizeManual) lotSizeEl.value = String(tp);
+        suggestSampleSize();
+      } else if (!lotSizeManual) {
+        lotSizeEl.value = '';
+        suggestSampleSize();
+      }
+    });
+
+    lotSizeEl.addEventListener('input', () => {
+      const raw = lotSizeEl.value.trim();
+      lotSizeManual = raw !== '';
+      suggestSampleSize();
+    });
+
+    prevSample.addEventListener('click', () => {
+      if (!sampleCount) return;
+      saveActiveSampleFromUI();
+      if (activeSampleIndex > 0) activeSampleIndex--;
+      loadActiveSampleToUI();
+      updateSampleUI();
+    });
+
+    nextSample.addEventListener('click', () => {
+      if (!sampleCount) return;
+      saveActiveSampleFromUI();
+      if (activeSampleIndex < sampleCount - 1) activeSampleIndex++;
+      loadActiveSampleToUI();
+      updateSampleUI();
+    });
+
+    repeatLastBtn.addEventListener('click', () => {
+      if (!sampleCount) return;
+      saveActiveSampleFromUI();
+      repeatLastMeasurement();
+    });
+
+    themeToggleBtn.addEventListener('click', () => {
+      const isDark = document.body.classList.contains('dark');
+      applyTheme(isDark ? 'light' : 'dark');
+    });
+
+    pfY.addEventListener('click', () => setPassFail('Y'));
+    pfN.addEventListener('click', () => setPassFail('N'));
+
+    resetBtn.addEventListener('click', () => resetAll());
+
+    submitBtn.addEventListener('click', () => {
+      saveActiveSampleFromUI();
+
+      if (!jobId.value.trim()) return setStatus('Job ID required', 'err');
+      if (!sampleSizeRequiredEl.value) return setStatus('Enter lot size to calculate required sample size', 'err');
+      if (!customerSelect.value) return setStatus('Select customer', 'err');
+
+      const requiredCount = toInt(sampleSizeRequiredEl.value);
+      if (!requiredCount || requiredCount < 1) {
+        return setStatus('Invalid required sample count', 'err');
+      }
+
+      const incompleteSamples = getIncompleteSampleNumbers(requiredCount);
+      if (incompleteSamples.length) {
+        return setStatus(`Complete required sample(s): ${incompleteSamples.join(', ')}`, 'err');
+      }
+
+      setStatus('Submitting…', '');
+
+      const payload = {
+        jobId: jobId.value.trim(),
+        date: dateEl.value || nowDate(),
+        productCut: productCut.value.trim(),
+        time: timeEl.value || nowTime(),
+        totalPieces: totalPieces.value.trim(),
+        inspector: inspector.value.trim(),
+        lotSize: (lotSizeEl.value || '').trim(),
+        sampleSizeRequired: sampleSizeRequiredEl.value,
+        tolerance: toleranceEl.value,
+
+        dimLength: document.getElementById('dimLength').value.trim(),
+        dimWidth: document.getElementById('dimWidth').value.trim(),
+        dimHeight: document.getElementById('dimHeight').value.trim(),
+        dimTapers: document.getElementById('dimTapers').value.trim(),
+        customer: customerSelect.value,
+
+        samples: samples.slice(0, requiredCount).map(s => ({
+          length: s.length,
+          width: s.width,
+          height: s.height,
+          taper: s.taper,
+          visualPass: s.visualPass,
+          passFail: s.passFail || '',
+          notes: s.notes || ''
+        }))
+      };
+
+      payloadEl.value = JSON.stringify(payload);
+      postForm.submit();
+
+      setStatus('Submitted (check Drive)', 'ok');
+    });
+
+    setInterval(() => {
+      timeEl.value = nowTime();
+    }, 30 * 1000);
+
+    addCustomerBtn.addEventListener('click', async () => {
+      const name = newCustomerInput.value.trim();
+
+      if (!name) {
+        setStatus('Enter customer name', 'err');
+        return;
+      }
+
+      setStatus('Adding customer...', '');
+
+      try {
+        const res = await fetch(GAS_URL + "?action=addCustomer&name=" + encodeURIComponent(name));
+        const list = await res.json();
+
+        newCustomerInput.value = '';
+        customerSelect.innerHTML = '<option value="">Select customer...</option>';
+
+        list.forEach(n => {
+          const opt = document.createElement('option');
+          opt.value = n;
+          opt.textContent = n;
+          customerSelect.appendChild(opt);
+        });
+
+        customerSelect.value = name;
+        setStatus('Customer added', 'ok');
+
+      } catch {
+        setStatus('Add failed', 'err');
+      }
+    });
+  </script>
+
+</body>
+</html>

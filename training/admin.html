@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>xPanda Foam — Training Completions Admin</title>
+
+    <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+    <link rel="apple-touch-icon" href="/assets/img/favicon.png">
+    
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+    label { display: inline-block; margin-right: 10px; }
+    input, select, button { padding: 8px; margin: 4px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; font-size: 14px; }
+    th { background: #fafafa; position: sticky; top: 0; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+    .muted { color: #666; font-size: 13px; }
+    .error { color: #b00020; }
+    .ok { color: #0a7b2c; }
+  </style>
+</head>
+<body>
+
+  <h1>xPanda Foam — Training Completions (Admin)</h1>
+  <p class="muted">Requires Admin Key. Use filters to query submissions. Export as CSV.</p>
+
+  <div class="card">
+    <h3>Admin Key</h3>
+    <label>
+      Key:
+      <input id="adminKey" type="password" placeholder="Enter admin key" />
+    </label>
+    <button id="saveKeyBtn">Unlock</button>
+    <span id="authMsg" class="muted"></span>
+  </div>
+
+  <div class="card">
+    <h3>Filters</h3>
+    <div class="row">
+      <label>
+        Block ID:
+        <input id="blockId" type="text" placeholder="block-01" />
+      </label>
+      <label>
+        Name contains:
+        <input id="name" type="text" placeholder="Steve" />
+      </label>
+      <label>
+        Date from:
+        <input id="dateFrom" type="date" />
+      </label>
+      <label>
+        Date to:
+        <input id="dateTo" type="date" />
+      </label>
+
+      <label>
+        Limit:
+        <select id="limit">
+          <option>50</option>
+          <option selected>200</option>
+          <option>500</option>
+          <option>1000</option>
+        </select>
+      </label>
+
+      <button id="runBtn">Run</button>
+      <button id="csvBtn">Export CSV</button>
+    </div>
+
+    <div id="status" class="muted"></div>
+    <div id="err" class="error"></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content: space-between;">
+      <div class="muted" id="pagingInfo"></div>
+      <div>
+        <button id="prevBtn">Prev</button>
+        <button id="nextBtn">Next</button>
+      </div>
+    </div>
+
+    <div style="overflow:auto; max-height: 70vh;">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Employee</th>
+            <th>Block</th>
+            <th>Title</th>
+            <th>Attested</th>
+            <th>Submitted (UTC)</th>
+            <th>Day</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+  let ADMIN_KEY = "";
+  let offset = 0;
+
+  function authHeaders() {
+    return { "Authorization": "Bearer " + ADMIN_KEY };
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function buildQuery() {
+    const p = new URLSearchParams();
+    const blockId = document.getElementById("blockId").value.trim();
+    const name = document.getElementById("name").value.trim();
+    const dateFrom = document.getElementById("dateFrom").value;
+    const dateTo = document.getElementById("dateTo").value;
+    const limit = document.getElementById("limit").value;
+
+    if (blockId) p.set("block_id", blockId);
+    if (name) p.set("name", name);
+    if (dateFrom) p.set("date_from", dateFrom);
+    if (dateTo) p.set("date_to", dateTo);
+
+    p.set("limit", limit);
+    p.set("offset", String(offset));
+    return p;
+  }
+
+  async function run() {
+    document.getElementById("err").textContent = "";
+    document.getElementById("status").textContent = "Loading...";
+    document.getElementById("tbody").innerHTML = "";
+
+    if (!ADMIN_KEY) {
+      document.getElementById("status").textContent = "";
+      document.getElementById("err").textContent = "Enter the admin key first.";
+      return;
+    }
+
+    try {
+      const url = "/api/completions?" + buildQuery().toString();
+      const res = await fetch(url, { headers: authHeaders() });
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data?.error || "Request failed");
+      }
+
+      const rows = data.rows || [];
+      const tbody = document.getElementById("tbody");
+
+      for (const r of rows) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${r.id}</td>
+          <td>${escapeHtml(r.employee_name)}</td>
+          <td>${escapeHtml(r.block_id)}</td>
+          <td>${escapeHtml(r.block_title)}</td>
+          <td>${r.attested ? "Yes" : "No"}</td>
+          <td>${escapeHtml(r.submitted_at)}</td>
+          <td>${escapeHtml(r.submitted_date)}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      document.getElementById("status").textContent = `Loaded ${rows.length} row(s).`;
+      document.getElementById("pagingInfo").textContent =
+        `Offset: ${offset} | Limit: ${data.limit}`;
+    } catch (e) {
+      document.getElementById("status").textContent = "";
+      document.getElementById("err").textContent = e.message || String(e);
+    }
+  }
+
+  async function exportCsv() {
+    document.getElementById("err").textContent = "";
+
+    if (!ADMIN_KEY) {
+      document.getElementById("err").textContent = "Enter the admin key first.";
+      return;
+    }
+
+    const p = buildQuery();
+    p.set("format", "csv");
+
+    const url = "/api/completions?" + p.toString();
+    const res = await fetch(url, { headers: authHeaders() });
+
+    if (!res.ok) {
+      const t = await res.text();
+      document.getElementById("err").textContent = "CSV export failed: " + t;
+      return;
+    }
+
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "completions.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  document.getElementById("saveKeyBtn").addEventListener("click", () => {
+    ADMIN_KEY = document.getElementById("adminKey").value.trim();
+    document.getElementById("authMsg").textContent =
+      ADMIN_KEY ? "Unlocked (in-memory only)." : "";
+  });
+
+  document.getElementById("runBtn").addEventListener("click", () => {
+    offset = 0;
+    run();
+  });
+
+  document.getElementById("csvBtn").addEventListener("click", exportCsv);
+
+  document.getElementById("prevBtn").addEventListener("click", () => {
+    const limit = parseInt(document.getElementById("limit").value, 10);
+    offset = Math.max(offset - limit, 0);
+    run();
+  });
+
+  document.getElementById("nextBtn").addEventListener("click", () => {
+    const limit = parseInt(document.getElementById("limit").value, 10);
+    offset = offset + limit;
+    run();
+  });
+</script>
+
+</body>
+</html>
