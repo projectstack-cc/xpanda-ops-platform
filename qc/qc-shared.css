@@ -120,6 +120,19 @@ textarea {
 
 /* LAYOUT */
 
+.qc-back-link {
+    display: inline-block;
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: #0074cc;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.qc-back-link:hover {
+    text-decoration: underline;
+}
+
 .qc-wrap {
     max-width: var(--page-max);
     margin: 0 auto;
