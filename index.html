@@ -1,273 +1,233 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>xPanda Foam Safety Portal</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-    
-    <link rel="icon" href="/assets/img/favicon.png" sizes="any">
-    <link rel="apple-touch-icon" href="/assets/img/favicon.png">
-  
-    <style>
-    *, *::before, *::after { box-sizing: border-box; }
+  <meta charset="UTF-8" />
+  <title>xPanda Operations Platform</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    header a {
-      display: inline-block;
-      text-decoration: none;
+  <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/img/favicon.png">
+
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --text: #f9fafb;
+      --muted: #cbd5e1;
+      --border: rgba(255,255,255,0.08);
+      --accent: #dc2626;
+      --accent-2: #2563eb;
+      --shadow: 0 10px 30px rgba(0,0,0,0.25);
+      --radius: 18px;
+      --max: 1100px;
     }
+
+    * { box-sizing: border-box; }
 
     body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      background-color: #f9f9f9;
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(220,38,38,0.12), transparent 30%),
+        linear-gradient(180deg, #0b1120 0%, #111827 100%);
+      color: var(--text);
+      min-height: 100vh;
     }
 
-    header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    .wrap {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 32px 18px 48px;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 28px 16px 22px;
+    }
+
+    .hero img {
+      max-width: 120px;
+      width: 100%;
+      height: auto;
       margin-bottom: 14px;
     }
 
-    header img { height: 45px; }
-
-    header a {
-      display: inline-flex;
-      align-items: center;
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: clamp(28px, 5vw, 42px);
+      line-height: 1.1;
     }
 
-    /* Header top line (title + language selector) */
-    .header-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
+    .hero p {
+      margin: 0 auto;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.6;
     }
 
-    .lang-wrap {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .lang-label {
-      color: #555;
-      font-size: 13px;
-      white-space: nowrap;
-    }
-
-    /* Note: keep styling tied to the selector id we will standardize across all pages */
-    #xpandaLang {
-      border: 1px solid #cfd8e3;
-      border-radius: 8px;
-      padding: 8px 10px;
-      background: #fff;
-      font-size: 14px;
-      color: #111;
-    }
-
-    h1 {
-      font-size: 22px;
-      margin: 0;
-      line-height: 1.2;
-    }
-
-    .sub {
-      margin: 6px 0 16px 0;
-      color: #555;
-      font-size: 14px;
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 28px;
     }
 
     .card {
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 10px;
-      padding: 14px;
-      margin-bottom: 14px;
+      background: rgba(17,24,39,0.86);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      min-height: 250px;
+      backdrop-filter: blur(4px);
     }
 
-    .search-card {
-      border: 2px solid #0074cc;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    .eyebrow {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #d1d5db;
+      margin-bottom: 12px;
+    }
+
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 24px;
+    }
+
+    .card p {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.6;
+      flex-grow: 1;
+    }
+
+    .features {
+      margin: 0 0 18px;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.7;
     }
 
     .actions {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
-      margin-bottom: 14px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: auto;
     }
 
-    .action-btn {
-      display: block;
+    .btn {
+      appearance: none;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
       text-decoration: none;
-      border: 1px solid #cfd8e3;
-      background: #fff;
-      border-radius: 10px;
-      padding: 14px;
-      color: #111;
-      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 140px;
+      transition: transform 0.15s ease, opacity 0.15s ease;
     }
 
-    .action-btn:hover {
-      border-color: #0074cc;
-      box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+    .btn:hover {
+      transform: translateY(-1px);
+      opacity: 0.95;
     }
 
-    .action-title {
-      font-weight: bold;
-      font-size: 16px;
-      margin: 0 0 4px 0;
+    .btn-safety {
+      background: var(--accent-2);
+      color: #fff;
     }
 
-    .action-desc {
-      margin: 0;
-      color: #555;
-      font-size: 13px;
+    .btn-qc {
+      background: var(--accent);
+      color: #fff;
     }
 
-    #search {
-      width: 100%;
-      padding: 14px;
-      font-size: 17px;
-      margin-bottom: 10px;
-      border: 2px solid #ccc;
-      border-radius: 8px;
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
     }
 
-    #search:focus {
-      outline: none;
-      border-color: #0074cc;
+    .footer-note {
+      margin-top: 28px;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 14px;
     }
 
-    ul { list-style: none; padding: 0; margin: 0; }
+    @media (max-width: 800px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
 
-    li {
-      margin-bottom: 8px;
-      background: white;
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px solid #ddd;
-    }
-
-    a { text-decoration: none; color: #0074cc; font-weight: bold; }
-    a:hover { text-decoration: underline; }
-
-    .fineprint {
-      color: #666;
-      font-size: 12px;
-      margin-top: 10px;
-      line-height: 1.35;
-    }
-
-    .statement {
-      background: #f3f7ff;
-      border: 1px solid #cfe0ff;
-    }
-
-    .emergency {
-      background: #fff7e6;
-      border: 1px solid #ffd59e;
-    }
-
-    .emergency strong {
-      display: inline-block;
-      margin-bottom: 4px;
-    }
-
-    @media (min-width: 720px) {
-      .actions { grid-template-columns: 1fr 1fr; }
+      .card {
+        min-height: auto;
+      }
     }
   </style>
 </head>
-
 <body>
+  <main class="wrap">
+    <section class="hero">
+      <img src="/logo/xpanda.png" alt="xPanda Foam logo">
+      <h1>xPanda Operations Platform</h1>
+      <p>
+        Central access point for xPanda Foam internal systems. Choose a platform below
+        to access safety resources, training tools, and quality control workflows.
+      </p>
+    </section>
 
-<header>
-  <a href="index.html">
-    <img src="logo/xpanda.png" alt="xPanda Foam Logo">
-  </a>
+    <section class="grid">
+      <article class="card">
+        <span class="eyebrow">Safety System</span>
+        <h2>Safety Portal</h2>
+        <p>
+          Access multilingual SDS search, document browsing, and employee training
+          resources through the xPanda Safety Portal.
+        </p>
+        <ul class="features">
+          <li>SDS search and browse</li>
+          <li>Training access</li>
+          <li>Multilingual content support</li>
+        </ul>
+        <div class="actions">
+          <a class="btn btn-safety" href="/safety/">Open Safety</a>
+          <a class="btn btn-secondary" href="/training/">Training</a>
+        </div>
+      </article>
 
-  <div style="flex:1;">
-    <div class="header-top">
-      <h1 data-i18n="home.title">xPanda Foam Safety Portal</h1>
+      <article class="card">
+        <span class="eyebrow">Quality System</span>
+        <h2>QC Platform</h2>
+        <p>
+          Launch quality workflows for inspections, incidents, and future plant quality
+          tools through the xPanda QC platform.
+        </p>
+        <ul class="features">
+          <li>Final inspection workflow</li>
+          <li>Incident reporting</li>
+          <li>Future scrap and analytics modules</li>
+        </ul>
+        <div class="actions">
+          <a class="btn btn-qc" href="/qc/">Open QC</a>
+        </div>
+      </article>
+    </section>
 
-      <div class="lang-wrap">
-        <!-- Use common.langLabel (not home.langLabel) so the header stays consistent across pages -->
-        <span class="lang-label" data-i18n="common.langLabel">Language:</span>
-        <!-- Standardize id across all pages -->
-        <select id="xpandaLang" aria-label="Language selector">
-          <option value="en">English</option>
-          <option value="es">Español</option>
-          <option value="ht">Kreyòl Ayisyen</option>
-        </select>
-      </div>
+    <div class="footer-note">
+      Additional systems may be added here as the operations platform grows.
     </div>
-
-    <div class="sub" data-i18n="home.subtitle">SDS access • Safety training • Quick reference</div>
-  </div>
-</header>
-
-<!-- SEARCH FIRST -->
-<div id="searchCard" class="card search-card">
-  <p class="sub" style="margin-top:0;" data-i18n="home.searchHelp">
-    Search by product or manufacturer name to find Safety Data Sheets.
-  </p>
-
-  <input type="text" id="search" data-i18n-placeholder="home.searchPlaceholder" placeholder="Search SDS...">
-
-  <ul id="results"></ul>
-
-  <div class="fineprint" data-i18n="home.searchTip">
-    Tip: Try simple terms like “3M”, “Cleaner”, “Oil”, “Primer”.
-  </div>
-</div>
-
-<!-- BUTTONS SECOND -->
-<div class="actions">
-  <a class="action-btn" href="sds.html">
-    <div class="action-title" data-i18n="home.browseTitle">📚 Browse SDS</div>
-    <p class="action-desc" data-i18n="home.browseDesc">A–Z by manufacturer with filtering.</p>
-  </a>
-
-  <a class="action-btn" href="training/">
-    <div class="action-title" data-i18n="home.trainingTitle">🎥 Safety Training</div>
-    <p class="action-desc" data-i18n="home.trainingDesc">Videos, checklists, and quick guides.</p>
-  </a>
-</div>
-
-<!-- SAFETY STATEMENT -->
-<div class="card statement">
-  <strong data-i18n="home.complianceTitle">Safety & Compliance:</strong>
-  <span data-i18n="home.complianceBody">
-    This portal provides immediate access to Safety Data Sheets (SDS), training materials, and safety references to support a hazard-aware workplace and OSHA-aligned practices.
-  </span>
-  <div class="fineprint" data-i18n="home.complianceFineprint">
-    Multilingual training captions are available where provided.
-  </div>
-</div>
-
-<!-- EMERGENCY LAST -->
-<div class="card emergency">
-  <strong data-i18n="home.emergencyTitle">Emergency:</strong>
-  <span data-i18n="home.emergencyBody">
-    If there is immediate danger or a serious injury, call 911.
-  </span>
-  <div class="fineprint" data-i18n="home.poisonBody">
-    For chemical exposure guidance, contact Poison Control: 1-800-222-1222.
-  </div>
-</div>
-
-<!-- Shared i18n (no inline dictionaries on pages) -->
-<script src="/i18n.js"></script>
-<script>
-  // Initialize shared language system for this page
-  window.xPandaI18n && window.xPandaI18n.initLanguageSelector({ selectorId: "xpandaLang" });
-</script>
-
-<!-- Existing logic (unchanged) -->
-<script src="search.js"></script>
-
+  </main>
 </body>
 </html>
