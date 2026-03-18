@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>xPanda Foam – Scrap Log</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <link rel="stylesheet" href="/qc/qc-shared.css">
+</head>
+<body>
+
+  <script src="/qc/qc-header.js"></script>
+  <script>
+    document.getElementById('qc-page-title').textContent = 'Scrap Log';
+  </script>
+
+  <main class="qc-container">
+    <form id="scrap-form">
+
+      <div class="card">
+        <h2>Basic Info</h2>
+
+        <label for="date">Date</label>
+        <input type="date" id="date" name="date" required>
+
+        <label for="shift">Shift</label>
+        <select id="shift" name="shift" required>
+          <option value="">Select shift</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <h2>Operator & Machine</h2>
+
+        <label for="operator">Operator</label>
+        <input type="text" id="operator" name="operator" required>
+
+        <label for="lineMachine">Line / Machine</label>
+        <select id="lineMachine" name="lineMachine" required>
+          <option value="">Select line / machine</option>
+          <option value="Blue Line">Blue Line</option>
+          <option value="Main Line">Main Line</option>
+          <option value="Cross Cutter">Cross Cutter</option>
+          <option value="Hole Cutter">Hole Cutter</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <h2>Job Details</h2>
+
+        <label for="invNumber">INV #</label>
+        <input type="text" id="invNumber" name="invNumber" required>
+
+        <label for="partProduct">Part / Product</label>
+        <input type="text" id="partProduct" name="partProduct" required>
+
+        <label for="materialDensity">Material / Density</label>
+        <input type="text" id="materialDensity" name="materialDensity" required>
+      </div>
+
+      <div class="card">
+        <h2>Scrap Details</h2>
+
+        <label for="scrapReason">Scrap Reason</label>
+        <select id="scrapReason" name="scrapReason" required>
+          <option value="">Select scrap reason</option>
+          <option value="Incorrect Cut">Incorrect Cut</option>
+          <option value="Hole Pass Issue">Hole Pass Issue</option>
+          <option value="Dirty / Wet Foam">Dirty / Wet Foam</option>
+          <option value="Equipment Issue">Equipment Issue</option>
+          <option value="Setup Error">Setup Error</option>
+        </select>
+
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="4"></textarea>
+      </div>
+
+      <div class="card">
+        <h2>Volume</h2>
+
+        <label for="scrapCubicIn">Scrap Cubic In</label>
+        <input type="number" id="scrapCubicIn" name="scrapCubicIn" min="0.01" step="any" required>
+
+        <p>Board feet will be calculated automatically on submit.</p>
+      </div>
+
+      <div class="card">
+        <button type="submit" id="scrap-submit">Submit Scrap Entry</button>
+        <div id="scrap-status" aria-live="polite"></div>
+      </div>
+
+    </form>
+  </main>
+
+</body>
+</html>
