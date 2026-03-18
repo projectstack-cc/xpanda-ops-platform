@@ -2,14 +2,13 @@
 
 export default {
   async fetch(request, env, ctx) {
-    const url = new URL(request.url);
+    try {
+      const url = new URL(request.url);
 
-    // 🔥 Training redirect safety net
-    if (url.pathname === "/training" || url.pathname === "/training/") {
-      return Response.redirect(`${url.origin}/safety/training/`, 301);
-    }
-
-    // existing logic continues below...
+      // 🔥 Training redirect safety net
+      if (url.pathname === "/training" || url.pathname === "/training/") {
+        return Response.redirect(`${url.origin}/safety/training/`, 301);
+      }
 
       // 1) Health check
       if (url.pathname === "/health") {
@@ -23,7 +22,6 @@ export default {
 
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
-        // This is the BIG smoking gun if it triggers.
         return new Response(
           "Worker error: env.ASSETS is missing.\n\n" +
           "This usually means the deployment is not providing the Pages assets binding.\n" +
@@ -35,8 +33,11 @@ export default {
       return await env.ASSETS.fetch(request);
 
     } catch (err) {
-      // Prevent Cloudflare 1019 by always returning a response
-      const msg = (err && (err.stack || err.message)) ? (err.stack || err.message) : String(err);
+      const msg =
+        (err && (err.stack || err.message))
+          ? (err.stack || err.message)
+          : String(err);
+
       return new Response(
         "Worker crashed:\n\n" + msg,
         { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8" } }
