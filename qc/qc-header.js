@@ -20,10 +20,13 @@ document.write(`
     </div>
 
 </header>
-
-${!isDashboard ? `
-<footer class="qc-platform-footer">
-    <a href="/">← Back to Operations Platform</a>
-</footer>
-` : ``}
 `);
+
+if (!isDashboard) {
+  window.addEventListener("DOMContentLoaded", () => {
+    const footer = document.createElement("footer");
+    footer.className = "qc-platform-footer";
+    footer.innerHTML = `<a href="/">← Back to Operations Platform</a>`;
+    document.body.appendChild(footer);
+  });
+}
