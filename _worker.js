@@ -15,9 +15,13 @@ export default {
         return new Response("FUNCTIONS_OK", { status: 200 });
       }
 
-      // 2) API route
+           // 2) API routes
       if (url.pathname === "/api/completions") {
         return handleApiCompletions(request, env);
+      }
+
+      if (url.pathname === "/api/scrap-log") {
+        return handleApiScrapLog(request, env);
       }
 
       // 3) Static site passthrough (Pages assets binding)
@@ -166,4 +170,133 @@ async function handleApiCompletions(request, env) {
   }
 
   return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+    // Week Helper
+function getWeekNumberMondayStart(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const dayOffset = (yearStart.getUTCDay() + 6) % 7;
+  const diff = Math.floor((d - yearStart) / 86400000);
+  return Math.floor((diff + dayOffset) / 7) + 1;
+}
+    //Scrap Log Backend
+async function handleApiScrapLog(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  if (request.method !== "POST") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return json({ ok: false, error: "Invalid JSON" }, 400);
+  }
+
+  const allowedShifts = ["1", "2", "3"];
+  const allowedMachines = ["Blue Line", "Main Line", "Cross Cutter", "Hole Cutter"];
+  const allowedReasons = [
+    "Incorrect Cut",
+    "Hole Pass Issue",
+    "Dirty / Wet Foam",
+    "Equipment Issue",
+    "Setup Error"
+  ];
+
+  const event_date = String(payload.date || "").trim();
+  const shift = String(payload.shift || "").trim();
+  const operator_name = normalizeName(payload.operator);
+  const line_machine = String(payload.lineMachine || "").trim();
+  const inv_number = String(payload.invNumber || "").trim();
+  const part_product = String(payload.partProduct || "").trim();
+  const material_density = String(payload.materialDensity || "").trim();
+  const scrap_reason = String(payload.scrapReason || "").trim();
+  const notes = String(payload.notes || "").trim();
+  const scrap_cubic_in = Number(payload.scrapCubicIn);
+
+  if (!event_date) return json({ ok: false, error: "Date required." }, 400);
+  if (!allowedShifts.includes(shift)) return json({ ok: false, error: "Invalid shift." }, 400);
+  if (!operator_name) return json({ ok: false, error: "Operator required." }, 400);
+  if (!allowedMachines.includes(line_machine)) return json({ ok: false, error: "Invalid line / machine." }, 400);
+  if (!inv_number) return json({ ok: false, error: "INV # required." }, 400);
+  if (!part_product) return json({ ok: false, error: "Part / Product required." }, 400);
+  if (!material_density) return json({ ok: false, error: "Material / Density required." }, 400);
+  if (!allowedReasons.includes(scrap_reason)) return json({ ok: false, error: "Invalid scrap reason." }, 400);
+  if (!Number.isFinite(scrap_cubic_in) || scrap_cubic_in <= 0) {
+    return json({ ok: false, error: "Scrap Cubic In must be greater than 0." }, 400);
+  }
+
+  const parsedDate = new Date(`${event_date}T00:00:00`);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return json({ ok: false, error: "Invalid date." }, 400);
+  }
+
+  const week_number = getWeekNumberMondayStart(parsedDate);
+  const month_name = parsedDate.toLocaleString("en-US", { month: "long" });
+  const scrap_board_ft = scrap_cubic_in / 144;
+  const id = crypto.randomUUID();
+  const created_at = new Date().toISOString();
+
+  try {
+    await db.prepare(`
+      INSERT INTO scrap_log (
+        id,
+        event_date,
+        week_number,
+        month_name,
+        shift,
+        operator_name,
+        line_machine,
+        inv_number,
+        part_product,
+        material_density,
+        scrap_reason,
+        notes,
+        scrap_cubic_in,
+        scrap_board_ft,
+        created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .bind(
+      id,
+      event_date,
+      week_number,
+      month_name,
+      shift,
+      operator_name,
+      line_machine,
+      inv_number,
+      part_product,
+      material_density,
+      scrap_reason,
+      notes,
+      scrap_cubic_in,
+      scrap_board_ft,
+      created_at
+    )
+    .run();
+
+    return json({
+      ok: true,
+      message: "Scrap entry saved.",
+      record: {
+        id,
+        event_date,
+        week_number,
+        month_name,
+        scrap_board_ft,
+        created_at
+      }
+    }, 201);
+
+  } catch (e) {
+    return json(
+      { ok: false, error: "Server error.", detail: String(e?.message || e) },
+      500
+    );
+  }
 }
