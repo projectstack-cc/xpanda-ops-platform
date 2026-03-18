@@ -2,8 +2,14 @@
 
 export default {
   async fetch(request, env, ctx) {
-    try {
-      const url = new URL(request.url);
+    const url = new URL(request.url);
+
+    // 🔥 Training redirect safety net
+    if (url.pathname === "/training" || url.pathname === "/training/") {
+      return Response.redirect(`${url.origin}/safety/training/`, 301);
+    }
+
+    // existing logic continues below...
 
       // 1) Health check
       if (url.pathname === "/health") {
