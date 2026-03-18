@@ -18,154 +18,184 @@
   </script>
 
   <main class="qc-wrap">
-    <form id="scrap-form">
+    <form id="scrap-form" class="qc-form">
 
       <div class="card">
         <h2>Basic Info</h2>
 
-        <label for="date">Date</label>
-        <input type="date" id="date" name="date" required>
+        <div class="qc-form-grid qc-form-grid-2">
+          <div class="qc-field">
+            <label for="date">Date</label>
+            <input type="date" id="date" name="date" required>
+          </div>
 
-        <label for="shift">Shift</label>
-        <select id="shift" name="shift" required>
-          <option value="">Select shift</option>
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-        </select>
+          <div class="qc-field">
+            <label for="shift">Shift</label>
+            <select id="shift" name="shift" required>
+              <option value="">Select shift</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <div class="card">
         <h2>Operator & Machine</h2>
 
-        <label for="operator">Operator</label>
-        <input type="text" id="operator" name="operator" required>
+        <div class="qc-form-grid qc-form-grid-2">
+          <div class="qc-field">
+            <label for="operator">Operator</label>
+            <input type="text" id="operator" name="operator" required>
+          </div>
 
-        <label for="lineMachine">Line / Machine</label>
-        <select id="lineMachine" name="lineMachine" required>
-          <option value="">Select line / machine</option>
-          <option value="Blue Line">Blue Line</option>
-          <option value="Main Line">Main Line</option>
-          <option value="Cross Cutter">Cross Cutter</option>
-          <option value="Hole Cutter">Hole Cutter</option>
-        </select>
+          <div class="qc-field">
+            <label for="lineMachine">Line / Machine</label>
+            <select id="lineMachine" name="lineMachine" required>
+              <option value="">Select line / machine</option>
+              <option value="Blue Line">Blue Line</option>
+              <option value="Main Line">Main Line</option>
+              <option value="Cross Cutter">Cross Cutter</option>
+              <option value="Hole Cutter">Hole Cutter</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <div class="card">
         <h2>Job Details</h2>
 
-        <label for="invNumber">INV #</label>
-        <input type="text" id="invNumber" name="invNumber" required>
+        <div class="qc-form-grid qc-form-grid-2">
+          <div class="qc-field">
+            <label for="invNumber">INV #</label>
+            <input type="text" id="invNumber" name="invNumber" required>
+          </div>
 
-        <label for="partProduct">Part / Product</label>
-        <input type="text" id="partProduct" name="partProduct" required>
+          <div class="qc-field">
+            <label for="partProduct">Part / Product</label>
+            <input type="text" id="partProduct" name="partProduct" required>
+          </div>
+        </div>
 
-        <label for="materialDensity">Material / Density</label>
-        <input type="text" id="materialDensity" name="materialDensity" required>
+        <div class="qc-field">
+          <label for="materialDensity">Material / Density</label>
+          <input type="text" id="materialDensity" name="materialDensity" required>
+        </div>
       </div>
 
       <div class="card">
         <h2>Scrap Details</h2>
 
-        <label for="scrapReason">Scrap Reason</label>
-        <select id="scrapReason" name="scrapReason" required>
-          <option value="">Select scrap reason</option>
-          <option value="Incorrect Cut">Incorrect Cut</option>
-          <option value="Hole Pass Issue">Hole Pass Issue</option>
-          <option value="Dirty / Wet Foam">Dirty / Wet Foam</option>
-          <option value="Equipment Issue">Equipment Issue</option>
-          <option value="Setup Error">Setup Error</option>
-        </select>
+        <div class="qc-field">
+          <label for="scrapReason">Scrap Reason</label>
+          <select id="scrapReason" name="scrapReason" required>
+            <option value="">Select scrap reason</option>
+            <option value="Incorrect Cut">Incorrect Cut</option>
+            <option value="Hole Pass Issue">Hole Pass Issue</option>
+            <option value="Dirty / Wet Foam">Dirty / Wet Foam</option>
+            <option value="Equipment Issue">Equipment Issue</option>
+            <option value="Setup Error">Setup Error</option>
+          </select>
+        </div>
 
-        <label for="notes">Notes</label>
-        <textarea id="notes" name="notes" rows="4"></textarea>
+        <div class="qc-field">
+          <label for="notes">Notes</label>
+          <textarea id="notes" name="notes" rows="4"></textarea>
+        </div>
       </div>
 
       <div class="card">
         <h2>Volume</h2>
 
-        <label for="scrapCubicIn">Scrap Cubic In</label>
-        <input type="number" id="scrapCubicIn" name="scrapCubicIn" min="0.01" step="any" required>
+        <div class="qc-field">
+          <label for="scrapCubicIn">Scrap Cubic In</label>
+          <input type="number" id="scrapCubicIn" name="scrapCubicIn" min="0.01" step="any" required>
+        </div>
 
-        <p>Board feet will be calculated automatically on submit.</p>
+        <p class="qc-help-text">Board feet will be calculated automatically on submit.</p>
       </div>
 
       <div class="card">
-        <button type="submit" id="scrap-submit">Submit Scrap Entry</button>
-        <div id="scrap-status" aria-live="polite"></div>
+        <div class="qc-actions">
+          <button type="submit" id="scrap-submit" class="btn primary">Submit Scrap Entry</button>
+        </div>
+
+        <div id="scrap-status" class="qc-status" aria-live="polite"></div>
       </div>
 
     </form>
   </main>
-    <script>
-  const form = document.getElementById('scrap-form');
-  const statusEl = document.getElementById('scrap-status');
-  const submitBtn = document.getElementById('scrap-submit');
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  <script>
+    const form = document.getElementById('scrap-form');
+    const statusEl = document.getElementById('scrap-status');
+    const submitBtn = document.getElementById('scrap-submit');
 
-    statusEl.textContent = '';
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Saving...';
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
 
-    const payload = {
-      date: document.getElementById('date').value.trim(),
-      shift: document.getElementById('shift').value.trim(),
-      operator: document.getElementById('operator').value.trim(),
-      lineMachine: document.getElementById('lineMachine').value.trim(),
-      invNumber: document.getElementById('invNumber').value.trim(),
-      partProduct: document.getElementById('partProduct').value.trim(),
-      materialDensity: document.getElementById('materialDensity').value.trim(),
-      scrapReason: document.getElementById('scrapReason').value.trim(),
-      notes: document.getElementById('notes').value.trim(),
-      scrapCubicIn: Number(document.getElementById('scrapCubicIn').value)
-    };
+      statusEl.textContent = '';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving...';
 
-    if (
-      !payload.date ||
-      !payload.shift ||
-      !payload.operator ||
-      !payload.lineMachine ||
-      !payload.invNumber ||
-      !payload.partProduct ||
-      !payload.materialDensity ||
-      !payload.scrapReason ||
-      !Number.isFinite(payload.scrapCubicIn) ||
-      payload.scrapCubicIn <= 0
-    ) {
-      statusEl.textContent = 'Please complete all required fields and enter a valid Scrap Cubic In value.';
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Submit Scrap Entry';
-      return;
-    }
+      const payload = {
+        date: document.getElementById('date').value.trim(),
+        shift: document.getElementById('shift').value.trim(),
+        operator: document.getElementById('operator').value.trim(),
+        lineMachine: document.getElementById('lineMachine').value.trim(),
+        invNumber: document.getElementById('invNumber').value.trim(),
+        partProduct: document.getElementById('partProduct').value.trim(),
+        materialDensity: document.getElementById('materialDensity').value.trim(),
+        scrapReason: document.getElementById('scrapReason').value.trim(),
+        notes: document.getElementById('notes').value.trim(),
+        scrapCubicIn: Number(document.getElementById('scrapCubicIn').value)
+      };
 
-    try {
-      const res = await fetch('/api/scrap-log', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || 'Failed to save scrap entry.');
+      if (
+        !payload.date ||
+        !payload.shift ||
+        !payload.operator ||
+        !payload.lineMachine ||
+        !payload.invNumber ||
+        !payload.partProduct ||
+        !payload.materialDensity ||
+        !payload.scrapReason ||
+        !Number.isFinite(payload.scrapCubicIn) ||
+        payload.scrapCubicIn <= 0
+      ) {
+        statusEl.textContent = 'Please complete all required fields and enter a valid Scrap Cubic In value.';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Scrap Entry';
+        return;
       }
 
-      form.reset();
-      statusEl.textContent = 'Scrap entry saved successfully.';
-      document.getElementById('date').focus();
+      try {
+        const res = await fetch('/api/scrap-log', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
 
-    } catch (err) {
-      statusEl.textContent = err.message || 'Failed to save scrap entry.';
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Submit Scrap Entry';
-    }
-  });
-</script>
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || 'Failed to save scrap entry.');
+        }
+
+        form.reset();
+        statusEl.textContent = 'Scrap entry saved successfully.';
+        document.getElementById('date').focus();
+
+      } catch (err) {
+        statusEl.textContent = err.message || 'Failed to save scrap entry.';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Scrap Entry';
+      }
+    });
+  </script>
 </body>
 </html>

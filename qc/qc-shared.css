@@ -357,3 +357,18 @@ textarea {
     gap: 10px;
     flex-wrap: wrap;
 }
+
+.qc-form-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.qc-form-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+    .qc-form-grid-2 {
+        grid-template-columns: 1fr;
+    }
+}
