@@ -291,3 +291,69 @@ textarea {
 .qc-platform-footer a:hover {
     text-decoration: underline;
 }
+
+/* SCRAP LOG FORM */
+
+.qc-form {
+    display: grid;
+    gap: 12px;
+}
+
+.qc-card h2,
+.card h2 {
+    margin: 0 0 12px;
+    font-size: 16px;
+    line-height: 1.25;
+}
+
+.qc-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.qc-field:last-child {
+    margin-bottom: 0;
+}
+
+.qc-field label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.qc-field input,
+.qc-field select,
+.qc-field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--input-border);
+    border-radius: 10px;
+    background: var(--input-bg);
+    color: var(--text);
+}
+
+.qc-field textarea {
+    resize: vertical;
+    min-height: 96px;
+}
+
+.qc-help-text {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.qc-status {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.qc-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
