@@ -97,6 +97,75 @@
 
     </form>
   </main>
+    <script>
+  const form = document.getElementById('scrap-form');
+  const statusEl = document.getElementById('scrap-status');
+  const submitBtn = document.getElementById('scrap-submit');
 
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    statusEl.textContent = '';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+
+    const payload = {
+      date: document.getElementById('date').value.trim(),
+      shift: document.getElementById('shift').value.trim(),
+      operator: document.getElementById('operator').value.trim(),
+      lineMachine: document.getElementById('lineMachine').value.trim(),
+      invNumber: document.getElementById('invNumber').value.trim(),
+      partProduct: document.getElementById('partProduct').value.trim(),
+      materialDensity: document.getElementById('materialDensity').value.trim(),
+      scrapReason: document.getElementById('scrapReason').value.trim(),
+      notes: document.getElementById('notes').value.trim(),
+      scrapCubicIn: Number(document.getElementById('scrapCubicIn').value)
+    };
+
+    if (
+      !payload.date ||
+      !payload.shift ||
+      !payload.operator ||
+      !payload.lineMachine ||
+      !payload.invNumber ||
+      !payload.partProduct ||
+      !payload.materialDensity ||
+      !payload.scrapReason ||
+      !Number.isFinite(payload.scrapCubicIn) ||
+      payload.scrapCubicIn <= 0
+    ) {
+      statusEl.textContent = 'Please complete all required fields and enter a valid Scrap Cubic In value.';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit Scrap Entry';
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/scrap-log', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Failed to save scrap entry.');
+      }
+
+      form.reset();
+      statusEl.textContent = 'Scrap entry saved successfully.';
+      document.getElementById('date').focus();
+
+    } catch (err) {
+      statusEl.textContent = err.message || 'Failed to save scrap entry.';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit Scrap Entry';
+    }
+  });
+</script>
 </body>
 </html>
