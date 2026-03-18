@@ -274,3 +274,20 @@ textarea {
         padding: 18px;
     }
 }
+
+.qc-platform-footer {
+    margin: 40px 0 10px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.qc-platform-footer a {
+    color: var(--primary-bg);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.qc-platform-footer a:hover {
+    text-decoration: underline;
+}

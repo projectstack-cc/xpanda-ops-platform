@@ -1,5 +1,8 @@
-const isDashboard = window.location.pathname === "/qc/" ||
-                    window.location.pathname === "/qc/index.html";
+const path = window.location.pathname;
+
+const isDashboard =
+  path === "/qc/" ||
+  path === "/qc/index.html";
 
 document.write(`
 <header class="topbar">
@@ -17,4 +20,10 @@ document.write(`
     </div>
 
 </header>
+
+${!isDashboard ? `
+<footer class="qc-platform-footer">
+    <a href="/">← Back to Operations Platform</a>
+</footer>
+` : ``}
 `);
