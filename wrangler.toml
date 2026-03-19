@@ -3,16 +3,10 @@ name = "xpanda-ops-platform"
 pages_build_output_dir = "."
 compatibility_date = "2026-03-17"
 
-[vars]
-ADMIN_KEY = "xpandaSafetyAdmin2026!"
-
 [[d1_databases]]
 database_id = "21d6f47b-0be9-4006-8014-d154e41f91e8"
 binding = "DB"
 database_name = "DB"
-
-[env.production.vars]
-ADMIN_KEY = "xpandaSafetyAdmin2026!"
 
 [[env.production.d1_databases]]
 database_id = "21d6f47b-0be9-4006-8014-d154e41f91e8"
