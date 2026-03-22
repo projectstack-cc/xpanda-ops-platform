@@ -181,6 +181,50 @@ function getWeekNumberMondayStart(date) {
   return Math.floor((diff + dayOffset) / 7) + 1;
 }
     //Scrap Log Backend
+  async function mirrorScrapLogToSheet(record, env) {
+  const url = env.SCRAP_MIRROR_URL;
+
+  if (!url) {
+    console.log("SCRAP_MIRROR_URL not set — skipping mirror.");
+    return { ok: false, skipped: true };
+  }
+
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(record)
+    });
+
+    const text = await resp.text();
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
+
+    if (!resp.ok) {
+      console.log("Mirror HTTP error:", resp.status, text);
+      return { ok: false, error: "http_error", detail: data };
+    }
+
+    if (data && data.ok === false) {
+      console.log("Mirror app error:", data);
+      return { ok: false, error: "app_error", detail: data };
+    }
+
+    console.log("Mirror success:", record.id);
+    return { ok: true };
+
+  } catch (err) {
+    console.log("Mirror fetch failed:", err);
+    return { ok: false, error: "fetch_error", detail: String(err) };
+  }
+}
 async function handleApiScrapLog(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
@@ -292,7 +336,21 @@ async function handleApiScrapLog(request, env) {
         created_at
       }
     }, 201);
-
+return json({
+  ok: true,
+  message: mirrorResult.ok
+    ? "Scrap entry saved and mirrored."
+    : "Scrap entry saved.",
+  mirror_ok: !!mirrorResult.ok,
+  record: {
+    id,
+    event_date,
+    week_number,
+    month_name,
+    scrap_board_ft,
+    created_at
+  }
+}, 201);
   } catch (e) {
     return json(
       { ok: false, error: "Server error.", detail: String(e?.message || e) },
