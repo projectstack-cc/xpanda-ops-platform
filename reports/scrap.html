@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Scrap Reports</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/qc/qc-shared.css">
+</head>
+
+<body>
+
+<script src="/qc/qc-header.js"></script>
+<script>
+document.getElementById('qc-page-title').textContent = 'Scrap Reports';
+</script>
+
+<div class="card">
+
+<label>Select Month</label>
+<input type="month" id="monthPicker">
+
+<button onclick="loadReport()">Load Report</button>
+
+</div>
+
+<div class="card" id="summary"></div>
+
+<div class="card">
+<h3>Scrap By Week</h3>
+<table id="weekTable"></table>
+</div>
+
+<div class="card">
+<h3>Scrap By Reason</h3>
+<table id="reasonTable"></table>
+</div>
+
+<script>
+
+async function loadReport(){
+
+  const month = document.getElementById("monthPicker").value;
+
+  const res = await fetch(`/api/reports/scrap-summary?month=${month}`);
+  const data = await res.json();
+
+  document.getElementById("summary").innerHTML =
+    `<h2>Total Scrap: ${data.total_scrap_board_ft.toFixed(2)} board ft</h2>
+     <p>Entries: ${data.entry_count}</p>`;
+
+  const weekTable = document.getElementById("weekTable");
+  weekTable.innerHTML = "<tr><th>Week</th><th>Board Ft</th></tr>";
+
+  data.by_week.forEach(w=>{
+    weekTable.innerHTML +=
+      `<tr><td>${w.week_number}</td><td>${w.scrap_board_ft.toFixed(2)}</td></tr>`;
+  });
+
+  const reasonTable = document.getElementById("reasonTable");
+  reasonTable.innerHTML = "<tr><th>Reason</th><th>Board Ft</th></tr>";
+
+  data.by_reason.forEach(r=>{
+    reasonTable.innerHTML +=
+      `<tr><td>${r.scrap_reason}</td><td>${r.scrap_board_ft.toFixed(2)}</td></tr>`;
+  });
+
+}
+
+</script>
+
+</body>
+</html>

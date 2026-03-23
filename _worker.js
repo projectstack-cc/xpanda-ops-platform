@@ -24,6 +24,10 @@ export default {
         return handleApiScrapLog(request, env);
       }
 
+      if (url.pathname === "/api/reports/scrap-summary") {
+  return handleApiReportsScrapSummary(request, env);
+}
+
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
         return new Response(
@@ -366,5 +370,67 @@ async function handleApiScrapLog(request, env) {
       { ok: false, error: "Server error.", detail: String(e?.message || e) },
       500
     );
+  }
+}
+async function handleApiReportsScrapSummary(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+
+  const url = new URL(request.url);
+  const month = String(url.searchParams.get("month") || "").trim();
+
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return json({ ok: false, error: "Invalid or missing month. Use YYYY-MM" }, 400);
+  }
+
+  try {
+
+    const total = await db.prepare(`
+      SELECT
+        COALESCE(SUM(scrap_board_ft),0) AS total_scrap_board_ft,
+        COUNT(*) AS entry_count
+      FROM scrap_log
+      WHERE strftime('%Y-%m', event_date) = ?
+    `).bind(month).first();
+
+    const byWeek = await db.prepare(`
+      SELECT
+        week_number,
+        COALESCE(SUM(scrap_board_ft),0) AS scrap_board_ft
+      FROM scrap_log
+      WHERE strftime('%Y-%m', event_date) = ?
+      GROUP BY week_number
+      ORDER BY week_number
+    `).bind(month).all();
+
+    const byReason = await db.prepare(`
+      SELECT
+        scrap_reason,
+        COALESCE(SUM(scrap_board_ft),0) AS scrap_board_ft
+      FROM scrap_log
+      WHERE strftime('%Y-%m', event_date) = ?
+      GROUP BY scrap_reason
+      ORDER BY scrap_board_ft DESC
+    `).bind(month).all();
+
+    return json({
+      ok: true,
+      month,
+      total_scrap_board_ft: total?.total_scrap_board_ft || 0,
+      entry_count: total?.entry_count || 0,
+      by_week: byWeek.results || [],
+      by_reason: byReason.results || []
+    });
+
+  } catch (e) {
+    return json({
+      ok: false,
+      error: "Server error",
+      detail: String(e?.message || e)
+    }, 500);
   }
 }
