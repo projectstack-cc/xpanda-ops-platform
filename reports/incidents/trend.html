@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Incident Trend</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/reports/reports-shared.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+<script src="/reports/reports-header.js"></script>
+<script>
+document.getElementById('reports-page-title').textContent = 'Incident Trend';
+</script>
+
+<div class="reports-wrap">
+
+<a href="/reports/incidents/" class="reports-back-link">← Back to Incident Reports</a>
+
+<div class="reports-section-intro">
+  <h2 class="reports-section-title">Incident Trend</h2>
+  <p class="reports-section-subtitle">
+    Yearly incident count by month with chart view switching.
+  </p>
+</div>
+
+<div class="card">
+  <div class="reports-actions">
+    <div class="reports-field" style="min-width: 180px; margin-bottom: 0;">
+      <label for="yearPicker">Select Year</label>
+      <select id="yearPicker"></select>
+    </div>
+
+    <div class="reports-field" style="min-width: 160px; margin-bottom: 0;">
+      <label for="chartTypePicker">Chart Type</label>
+      <select id="chartTypePicker">
+        <option value="bar">Bar</option>
+        <option value="line">Line</option>
+      </select>
+    </div>
+
+    <button class="btn primary" type="button" id="loadBtn">Load Report</button>
+  </div>
+
+  <p id="status" class="report-status"></p>
+</div>
+
+<div class="report-stats">
+  <div class="report-stat-card">
+    <div class="report-stat-label">Total Incidents</div>
+    <div class="report-stat-value" id="statTotal">--</div>
+  </div>
+
+  <div class="report-stat-card">
+    <div class="report-stat-label">Highest Month</div>
+    <div class="report-stat-value" id="statPeak">--</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Incident Count by Month</h2>
+  <div class="report-chart-wrap">
+    <canvas id="incidentTrendChart"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Monthly Totals</h2>
+  <div class="report-table-wrap">
+    <table class="report-table" id="trendTable">
+      <tr>
+        <th>Month</th>
+        <th>Incident Count</th>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<div class="reports-platform-footer">
+  <a href="/">← Back to Operations Platform</a>
+</div>
+
+</div>
+
+<script>
+let incidentTrendChart = null;
+let currentLabels = [];
+let currentValues = [];
+
+const monthNames = {
+  "01": "January",
+  "02": "February",
+  "03": "March",
+  "04": "April",
+  "05": "May",
+  "06": "June",
+  "07": "July",
+  "08": "August",
+  "09": "September",
+  "10": "October",
+  "11": "November",
+  "12": "December"
+};
+
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function buildYearOptions() {
+  const yearPicker = document.getElementById("yearPicker");
+  const currentYear = new Date().getFullYear();
+
+  yearPicker.innerHTML = "";
+
+  for (let year = currentYear; year >= 2025; year--) {
+    const opt = document.createElement("option");
+    opt.value = String(year);
+    opt.textContent = String(year);
+    yearPicker.appendChild(opt);
+  }
+
+  yearPicker.value = String(currentYear);
+}
+
+function renderChart() {
+  const chartType = document.getElementById("chartTypePicker").value;
+  const ctx = document.getElementById("incidentTrendChart");
+
+  if (incidentTrendChart) {
+    incidentTrendChart.destroy();
+  }
+
+  incidentTrendChart = new Chart(ctx, {
+    type: chartType,
+    data: {
+      labels: currentLabels,
+      datasets: [{
+        label: "Incident Count",
+        data: currentValues,
+        tension: chartType === "line" ? 0.25 : 0,
+        fill: false
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            precision: 0
+          }
+        }
+      }
+    }
+  });
+}
+
+async function loadTrendReport() {
+  const year = document.getElementById("yearPicker").value;
+  const status = document.getElementById("status");
+
+  if (!year) {
+    status.textContent = "Select a year.";
+    status.classList.add("error");
+    return;
+  }
+
+  status.textContent = "Loading...";
+  status.classList.remove("error");
+
+  try {
+    const res = await fetch(`/api/reports/incidents-trend?year=${encodeURIComponent(year)}`);
+    const data = await res.json();
+
+    if (!res.ok || !data.ok) {
+      status.textContent = data.error || "Load failed";
+      status.classList.add("error");
+      return;
+    }
+
+    currentLabels = data.months.map(row => {
+      const monthPart = row.month.split("-")[1];
+      return monthNames[monthPart] || row.month;
+    });
+
+    currentValues = data.months.map(row => num(row.count));
+
+    document.getElementById("statTotal").textContent = num(data.total);
+
+    let peakLabel = "--";
+    let peakCount = -1;
+
+    data.months.forEach(row => {
+      const count = num(row.count);
+      if (count > peakCount) {
+        peakCount = count;
+        peakLabel = `${monthNames[row.month.split("-")[1]]} (${count})`;
+      }
+    });
+
+    document.getElementById("statPeak").textContent = peakCount >= 0 ? peakLabel : "--";
+
+    renderChart();
+
+    const table = document.getElementById("trendTable");
+    table.innerHTML = `
+      <tr>
+        <th>Month</th>
+        <th>Incident Count</th>
+      </tr>
+    `;
+
+    data.months.forEach(row => {
+      const monthPart = row.month.split("-")[1];
+      table.innerHTML += `
+        <tr>
+          <td>${monthNames[monthPart] || row.month}</td>
+          <td>${num(row.count)}</td>
+        </tr>
+      `;
+    });
+
+    status.textContent = `Loaded ${year}`;
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+    status.classList.add("error");
+  }
+}
+
+document.getElementById("loadBtn").addEventListener("click", loadTrendReport);
+document.getElementById("chartTypePicker").addEventListener("change", () => {
+  if (currentLabels.length && currentValues.length) {
+    renderChart();
+  }
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  buildYearOptions();
+  loadTrendReport();
+});
+</script>
+
+</body>
+</html>
