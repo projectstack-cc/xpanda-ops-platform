@@ -566,22 +566,20 @@ async function handleApiReportsScrapReasons(request, env) {
   }
 }
 async function handleIncidentTrend(request, env) {
-
   const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
 
   if (!sheetUrl) {
-    return json({ ok:false, error:"Incident sheet URL not configured" },500);
+    return json({ ok: false, error: "Incident sheet URL not configured" }, 500);
   }
 
   const url = new URL(request.url);
   const year = url.searchParams.get("year");
 
   if (!year) {
-    return json({ ok:false, error:"Missing year parameter" },400);
+    return json({ ok: false, error: "Missing year parameter" }, 400);
   }
 
   try {
-
     const res = await fetch(sheetUrl);
     const text = await res.text();
 
@@ -591,18 +589,18 @@ async function handleIncidentTrend(request, env) {
       .slice(0, -2);
 
     const data = JSON.parse(jsonText);
+    const rows = data.table.rows || [];
 
-    const rows = data.table.rows;
-
+    const monthOrder = ["01","02","03","04","05","06","07","08","09","10","11","12"];
     const counts = {};
-    for (let i = 1; i <= 12; i++) {
-      counts[String(i).padStart(2,"0")] = 0;
-    }
+
+    monthOrder.forEach(m => {
+      counts[m] = 0;
+    });
 
     rows.forEach(r => {
-
-      const incidentMonth = r.c?.[11]?.v; // Column L
-      const incidentYear = r.c?.[13]?.v;  // Column N
+      const incidentMonth = r.c?.[11]?.v; // Column L = Incident Month
+      const incidentYear = r.c?.[7]?.v;   // Column H = Year
 
       if (!incidentMonth || !incidentYear) return;
       if (String(incidentYear) !== String(year)) return;
@@ -611,29 +609,25 @@ async function handleIncidentTrend(request, env) {
       if (counts[monthPart] !== undefined) {
         counts[monthPart]++;
       }
-
     });
 
-    const result = Object.keys(counts).map(m => ({
+    const result = monthOrder.map(m => ({
       month: `${year}-${m}`,
       count: counts[m]
     }));
 
     return json({
-      ok:true,
+      ok: true,
       year,
       months: result,
-      total: result.reduce((a,b)=>a+b.count,0)
+      total: result.reduce((sum, row) => sum + row.count, 0)
     });
 
-  } catch(e) {
-
+  } catch (e) {
     return json({
-      ok:false,
-      error:"Incident trend fetch failed",
-      detail:String(e.message || e)
-    },500);
-
+      ok: false,
+      error: "Incident trend fetch failed",
+      detail: String(e.message || e)
+    }, 500);
   }
-
 }
