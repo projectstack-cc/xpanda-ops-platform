@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>xPanda Reports</title>
+<title>Incident Reports</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/reports/reports-shared.css">
 </head>
@@ -11,30 +11,32 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Reports Dashboard';
+document.getElementById('reports-page-title').textContent = 'Incident Reports';
 </script>
 
 <div class="reports-wrap">
 
+<a href="/reports/" class="reports-back-link">← Back to Reports Dashboard</a>
+
 <div class="reports-section-intro">
-<h2 class="reports-section-title">Reports Dashboard</h2>
+<h2 class="reports-section-title">Incident Reports</h2>
 <p class="reports-section-subtitle">
-Operational analytics and trend visibility.
+Incident analytics and operational event reporting.
 </p>
 </div>
 
-<div class="reports-tile" onclick="location.href='/reports/scrap/'">
-  <h2>Scrap Reports</h2>
-  <p>Monthly scrap totals, trend visibility, and reason-based reporting.</p>
-</div>
-
-<div class="reports-tile" onclick="location.href='/reports/incidents/'">
-  <h2>Incident Reports</h2>
-  <p>Incident summaries, trends, and operational event analytics.</p>
+<div class="reports-tile is-disabled">
+  <h2>Incident Summary</h2>
+  <p>Coming soon.</p>
 </div>
 
 <div class="reports-tile is-disabled">
-  <h2>Inspection Trends</h2>
+  <h2>Incident Trend</h2>
+  <p>Coming soon.</p>
+</div>
+
+<div class="reports-tile is-disabled">
+  <h2>Incident by Type</h2>
   <p>Coming soon.</p>
 </div>
 

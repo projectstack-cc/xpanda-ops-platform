@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Scrap Reports</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/reports/reports-shared.css">
+</head>
+
+<body>
+
+<script src="/reports/reports-header.js"></script>
+<script>
+document.getElementById('reports-page-title').textContent = 'Scrap Reports';
+</script>
+
+<div class="reports-wrap">
+
+<a href="/reports/" class="reports-back-link">← Back to Reports Dashboard</a>
+
+<div class="reports-section-intro">
+<h2 class="reports-section-title">Scrap Reports</h2>
+<p class="reports-section-subtitle">
+Scrap reporting, trend visibility, and reason analysis.
+</p>
+</div>
+
+<div class="reports-tile" onclick="location.href='/reports/scrap/summary.html'">
+  <h2>Scrap Summary</h2>
+  <p>Monthly scrap totals, entry count, weekly totals, and reason grouping.</p>
+</div>
+
+<div class="reports-tile" onclick="location.href='/reports/scrap/scrap-trend.html'">
+  <h2>Scrap Trend</h2>
+  <p>Multi-month scrap performance visibility and KPI direction.</p>
+</div>
+
+<div class="reports-tile" onclick="location.href='/reports/scrap/scrap-reasons.html'">
+  <h2>Scrap by Reason</h2>
+  <p>Monthly scrap totals grouped by standardized scrap reasons.</p>
+</div>
+
+<div class="reports-platform-footer">
+<a href="/">← Back to Operations Platform</a>
+</div>
+
+</div>
+
+</body>
+</html>
