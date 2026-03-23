@@ -35,6 +35,10 @@ export default {
   return handleApiReportsScrapReasons(request, env);
 }
 
+if (url.pathname === "/api/reports/incidents-trend") {
+  return handleIncidentTrend(request, env);
+}
+
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
         return new Response(
@@ -560,4 +564,76 @@ async function handleApiReportsScrapReasons(request, env) {
       detail: String(e?.message || e)
     }, 500);
   }
+}
+async function handleIncidentTrend(request, env) {
+
+  const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
+
+  if (!sheetUrl) {
+    return json({ ok:false, error:"Incident sheet URL not configured" },500);
+  }
+
+  const url = new URL(request.url);
+  const year = url.searchParams.get("year");
+
+  if (!year) {
+    return json({ ok:false, error:"Missing year parameter" },400);
+  }
+
+  try {
+
+    const res = await fetch(sheetUrl);
+    const text = await res.text();
+
+    const jsonText = text
+      .replace("/*O_o*/", "")
+      .replace("google.visualization.Query.setResponse(", "")
+      .slice(0, -2);
+
+    const data = JSON.parse(jsonText);
+
+    const rows = data.table.rows;
+
+    const counts = {};
+    for (let i = 1; i <= 12; i++) {
+      counts[String(i).padStart(2,"0")] = 0;
+    }
+
+    rows.forEach(r => {
+
+      const incidentMonth = r.c?.[11]?.v; // Column L
+      const incidentYear = r.c?.[13]?.v;  // Column N
+
+      if (!incidentMonth || !incidentYear) return;
+      if (String(incidentYear) !== String(year)) return;
+
+      const monthPart = incidentMonth.split("-")[1];
+      if (counts[monthPart] !== undefined) {
+        counts[monthPart]++;
+      }
+
+    });
+
+    const result = Object.keys(counts).map(m => ({
+      month: `${year}-${m}`,
+      count: counts[m]
+    }));
+
+    return json({
+      ok:true,
+      year,
+      months: result,
+      total: result.reduce((a,b)=>a+b.count,0)
+    });
+
+  } catch(e) {
+
+    return json({
+      ok:false,
+      error:"Incident trend fetch failed",
+      detail:String(e.message || e)
+    },500);
+
+  }
+
 }
