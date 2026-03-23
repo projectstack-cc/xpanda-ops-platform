@@ -31,6 +31,10 @@ export default {
         return handleApiReportsScrapTrend(request, env);
       }
 
+      if (url.pathname === "/api/reports/scrap-reasons") {
+  return handleApiReportsScrapReasons(request, env);
+}
+
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
         return new Response(
@@ -505,4 +509,55 @@ async function handleApiReportsScrapTrend(request, env) {
 
   }
 
+}
+
+async function handleApiReportsScrapReasons(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+
+  const url = new URL(request.url);
+  const month = String(url.searchParams.get("month") || "").trim();
+
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return json({ ok: false, error: "Invalid or missing month. Use YYYY-MM" }, 400);
+  }
+
+  try {
+    const byReason = await db.prepare(`
+      SELECT
+        scrap_reason,
+        ROUND(COALESCE(SUM(scrap_board_ft), 0), 2) AS scrap_board_ft,
+        COUNT(*) AS entry_count
+      FROM scrap_log
+      WHERE strftime('%Y-%m', event_date) = ?
+      GROUP BY scrap_reason
+      ORDER BY scrap_board_ft DESC, scrap_reason ASC
+    `).bind(month).all();
+
+    const total = await db.prepare(`
+      SELECT
+        ROUND(COALESCE(SUM(scrap_board_ft), 0), 2) AS total_scrap_board_ft,
+        COUNT(*) AS entry_count
+      FROM scrap_log
+      WHERE strftime('%Y-%m', event_date) = ?
+    `).bind(month).first();
+
+    return json({
+      ok: true,
+      month,
+      total_scrap_board_ft: Number(total?.total_scrap_board_ft || 0),
+      entry_count: Number(total?.entry_count || 0),
+      by_reason: byReason.results || []
+    });
+  } catch (e) {
+    return json({
+      ok: false,
+      error: "Server error",
+      detail: String(e?.message || e)
+    }, 500);
+  }
 }

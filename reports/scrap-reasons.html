@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Scrap by Reason</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/reports/reports-shared.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+<script src="/reports/reports-header.js"></script>
+<script>
+document.getElementById('reports-page-title').textContent = 'Scrap by Reason';
+</script>
+
+<div class="reports-wrap">
+
+  <div class="reports-section-intro">
+    <h2 class="reports-section-title">Scrap by Reason</h2>
+    <p class="reports-section-subtitle">
+      View scrap totals by reason for a selected month.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="reports-field">
+      <label for="monthPicker">Select Month</label>
+      <input type="month" id="monthPicker">
+    </div>
+
+    <div class="reports-actions">
+      <button class="btn primary" onclick="loadReasonReport()">Load Report</button>
+    </div>
+
+    <p id="status" class="report-status"></p>
+  </div>
+
+  <div class="report-stats">
+    <div class="report-stat-card">
+      <div class="report-stat-label">Total Scrap</div>
+      <div class="report-stat-value" id="statScrap">--</div>
+    </div>
+
+    <div class="report-stat-card">
+      <div class="report-stat-label">Entries</div>
+      <div class="report-stat-value" id="statEntries">--</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Reason Breakdown</h2>
+    <div class="report-chart-wrap">
+      <canvas id="reasonChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Reason Totals</h2>
+    <div class="report-table-wrap">
+      <table class="report-table" id="reasonTable">
+        <tr>
+          <th>Reason</th>
+          <th>Board Ft</th>
+          <th>Entries</th>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="reports-platform-footer">
+    <a href="/">← Back to Operations Platform</a>
+  </div>
+
+</div>
+
+<script>
+let reasonChart = null;
+
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function setDefaultMonth() {
+  const picker = document.getElementById("monthPicker");
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  picker.value = `${year}-${month}`;
+}
+
+async function loadReasonReport() {
+  const month = document.getElementById("monthPicker").value;
+  const status = document.getElementById("status");
+
+  if (!month) {
+    status.textContent = "Select a month.";
+    status.classList.add("error");
+    return;
+  }
+
+  status.textContent = "Loading...";
+  status.classList.remove("error");
+
+  try {
+    const res = await fetch(`/api/reports/scrap-reasons?month=${encodeURIComponent(month)}`);
+    const data = await res.json();
+
+    if (!res.ok || !data.ok) {
+      status.textContent = data.error || "Load failed";
+      status.classList.add("error");
+      return;
+    }
+
+    document.getElementById("statScrap").textContent =
+      num(data.total_scrap_board_ft).toFixed(2);
+
+    document.getElementById("statEntries").textContent =
+      num(data.entry_count);
+
+    const table = document.getElementById("reasonTable");
+    table.innerHTML = `
+      <tr>
+        <th>Reason</th>
+        <th>Board Ft</th>
+        <th>Entries</th>
+      </tr>
+    `;
+
+    const rows = Array.isArray(data.by_reason) ? data.by_reason : [];
+
+    if (!rows.length) {
+      table.innerHTML += `
+        <tr>
+          <td colspan="3" class="report-empty">No reason data for this month.</td>
+        </tr>
+      `;
+    } else {
+      rows.forEach(r => {
+        table.innerHTML += `
+          <tr>
+            <td>${r.scrap_reason}</td>
+            <td>${num(r.scrap_board_ft).toFixed(2)}</td>
+            <td>${num(r.entry_count)}</td>
+          </tr>
+        `;
+      });
+    }
+
+    const labels = rows.map(r => r.scrap_reason);
+    const values = rows.map(r => num(r.scrap_board_ft));
+
+    const ctx = document.getElementById("reasonChart");
+
+    if (reasonChart) {
+      reasonChart.destroy();
+    }
+
+    reasonChart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Scrap Board Ft",
+          data: values
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    });
+
+    status.textContent = `Loaded ${month}`;
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+    status.classList.add("error");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setDefaultMonth();
+  loadReasonReport();
+});
+</script>
+
+</body>
+</html>

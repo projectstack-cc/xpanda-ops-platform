@@ -408,3 +408,9 @@ text-decoration: none;
 background: #e2e8f0;
 transform: translateY(-1px);
 }
+
+.report-chart-wrap {
+    position: relative;
+    width: 100%;
+    min-height: 320px;
+}
