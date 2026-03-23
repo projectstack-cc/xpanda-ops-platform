@@ -284,6 +284,24 @@ async function handleApiScrapLog(request, env) {
   const id = crypto.randomUUID();
   const created_at = new Date().toISOString();
 
+  const record = {
+    id,
+    event_date,
+    week_number,
+    month_name,
+    shift,
+    operator_name,
+    line_machine,
+    inv_number,
+    part_product,
+    material_density,
+    scrap_reason,
+    notes,
+    scrap_cubic_in,
+    scrap_board_ft,
+    created_at
+  };
+
   try {
     await db.prepare(`
       INSERT INTO scrap_log (
@@ -306,51 +324,43 @@ async function handleApiScrapLog(request, env) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
-      id,
-      event_date,
-      week_number,
-      month_name,
-      shift,
-      operator_name,
-      line_machine,
-      inv_number,
-      part_product,
-      material_density,
-      scrap_reason,
-      notes,
-      scrap_cubic_in,
-      scrap_board_ft,
-      created_at
+      record.id,
+      record.event_date,
+      record.week_number,
+      record.month_name,
+      record.shift,
+      record.operator_name,
+      record.line_machine,
+      record.inv_number,
+      record.part_product,
+      record.material_density,
+      record.scrap_reason,
+      record.notes,
+      record.scrap_cubic_in,
+      record.scrap_board_ft,
+      record.created_at
     )
     .run();
 
+    const mirrorResult = await mirrorScrapLogToSheet(record, env);
+
     return json({
       ok: true,
-      message: "Scrap entry saved.",
+      message: mirrorResult.ok
+        ? "Scrap entry saved and mirrored."
+        : "Scrap entry saved.",
+      mirror_ok: !!mirrorResult.ok,
+      mirror_result: mirrorResult.ok ? undefined : mirrorResult,
       record: {
-        id,
-        event_date,
-        week_number,
-        month_name,
-        scrap_board_ft,
-        created_at
+        id: record.id,
+        event_date: record.event_date,
+        week_number: record.week_number,
+        month_name: record.month_name,
+        scrap_board_ft: record.scrap_board_ft,
+        created_at: record.created_at
       }
     }, 201);
-return json({
-  ok: true,
-  message: mirrorResult.ok
-    ? "Scrap entry saved and mirrored."
-    : "Scrap entry saved.",
-  mirror_ok: !!mirrorResult.ok,
-  record: {
-    id,
-    event_date,
-    week_number,
-    month_name,
-    scrap_board_ft,
-    created_at
-  }
-}, 201);
+
   } catch (e) {
     return json(
       { ok: false, error: "Server error.", detail: String(e?.message || e) },
