@@ -25,8 +25,11 @@ export default {
       }
 
       if (url.pathname === "/api/reports/scrap-summary") {
-  return handleApiReportsScrapSummary(request, env);
-}
+        return handleApiReportsScrapSummary(request, env);
+      }
+      if (url.pathname === "/api/reports/scrap-trend") {
+        return handleApiReportsScrapTrend(request, env);
+      }
 
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
@@ -433,4 +436,73 @@ async function handleApiReportsScrapSummary(request, env) {
       detail: String(e?.message || e)
     }, 500);
   }
+}
+
+async function handleApiReportsScrapTrend(request, env) {
+
+  const db = env.DB;
+  if (!db) return json({ ok:false, error:"Missing DB binding" },500);
+
+  if (request.method !== "GET") {
+    return json({ ok:false, error:"Method Not Allowed" },405);
+  }
+
+  const url = new URL(request.url);
+  const monthsRequested = Number(url.searchParams.get("months")) || 6;
+
+  try {
+
+    const rows = await db.prepare(`
+      SELECT
+        strftime('%Y-%m', event_date) AS month,
+        ROUND(SUM(scrap_board_ft),2) AS total_scrap_board_ft
+      FROM scrap_log
+      GROUP BY month
+      ORDER BY month ASC
+    `).all();
+
+    let data = rows.results || [];
+
+    // Keep last N months
+    data = data.slice(-monthsRequested);
+
+    const latest = data[data.length-1] || null;
+    const previous = data[data.length-2] || null;
+
+    let delta = null;
+
+    if (latest && previous) {
+
+      const abs = latest.total_scrap_board_ft - previous.total_scrap_board_ft;
+
+      const pct =
+        previous.total_scrap_board_ft === 0
+          ? null
+          : (abs / previous.total_scrap_board_ft) * 100;
+
+      delta = {
+        absolute: Number(abs.toFixed(2)),
+        percent: pct !== null ? Number(pct.toFixed(2)) : null
+      };
+    }
+
+    return json({
+      ok:true,
+      range_months: monthsRequested,
+      months: data,
+      latest,
+      previous,
+      delta
+    });
+
+  } catch(e) {
+
+    return json({
+      ok:false,
+      error:"Server error",
+      detail:String(e?.message || e)
+    },500);
+
+  }
+
 }

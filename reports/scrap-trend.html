@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Scrap Trend</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/reports/reports-shared.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+<script src="/reports/reports-header.js"></script>
+<script>
+document.getElementById('reports-page-title').textContent = 'Scrap Trend';
+</script>
+
+<div class="reports-wrap">
+
+<div class="reports-section-intro">
+<h2 class="reports-section-title">Scrap Trend</h2>
+<p class="reports-section-subtitle">
+Multi-month scrap performance visibility.
+</p>
+</div>
+
+<div class="report-stats">
+
+<div class="report-stat-card">
+<div class="report-stat-label">Latest Month</div>
+<div class="report-stat-value" id="statLatest">--</div>
+</div>
+
+<div class="report-stat-card">
+<div class="report-stat-label">Change %</div>
+<div class="report-stat-value" id="statDelta">--</div>
+</div>
+
+</div>
+
+<div class="card">
+<canvas id="trendChart"></canvas>
+</div>
+
+<div class="card">
+<h2>Monthly Totals</h2>
+
+<div class="report-table-wrap">
+<table class="report-table" id="trendTable">
+<tr><th>Month</th><th>Board Ft</th></tr>
+</table>
+</div>
+
+</div>
+
+<div class="reports-platform-footer">
+<a href="/">← Back to Operations Platform</a>
+</div>
+
+</div>
+
+<script>
+
+function num(v){
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+async function loadTrend(){
+
+  const res = await fetch("/api/reports/scrap-trend?months=6");
+  const data = await res.json();
+
+  if(!data.ok){
+    alert("Trend load failed");
+    return;
+  }
+
+  const labels = data.months.map(m => m.month);
+  const values = data.months.map(m => num(m.total_scrap_board_ft));
+
+  document.getElementById("statLatest").textContent =
+    data.latest ? num(data.latest.total_scrap_board_ft).toFixed(2) : "--";
+
+  document.getElementById("statDelta").textContent =
+    data.delta?.percent !== null && data.delta
+      ? data.delta.percent.toFixed(2) + "%"
+      : "--";
+
+  new Chart(document.getElementById("trendChart"), {
+    type:"line",
+    data:{
+      labels,
+      datasets:[{
+        label:"Scrap Board Ft",
+        data:values,
+        tension:0.25
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{ legend:{ display:false } }
+    }
+  });
+
+  const table = document.getElementById("trendTable");
+
+  data.months.forEach(m=>{
+    table.innerHTML += `
+      <tr>
+        <td>${m.month}</td>
+        <td>${num(m.total_scrap_board_ft).toFixed(2)}</td>
+      </tr>`;
+  });
+
+}
+
+document.addEventListener("DOMContentLoaded", loadTrend);
+
+</script>
+
+</body>
+</html>
