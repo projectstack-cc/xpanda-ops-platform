@@ -8,7 +8,7 @@ header.innerHTML = `
 
 <div class="header-center">
 
-<a class="badge reports-badge" href="/reports/index.html" title="Back to Reports Dashboard">
+<a class="badge reports-badge" href="/reports/" title="Back to Reports Dashboard">
 XPANDA FOAM • REPORTS
 </a>
 
