@@ -4,29 +4,40 @@
 <meta charset="UTF-8">
 <title>xPanda Reports</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/qc/qc-shared.css">
+<link rel="stylesheet" href="/reports/reports-shared.css">
 </head>
 
 <body>
 
 <script src="/qc/qc-header.js"></script>
 <script>
-document.getElementById('qc-page-title').textContent = 'Reports';
+document.getElementById('qc-page-title').textContent = 'Reports Dashboard';
 </script>
 
-<div class="card">
+<div class="reports-wrap">
+
+<div class="reports-section-intro">
+<h2 class="reports-section-title">Reports Dashboard</h2>
+<p class="reports-section-subtitle">
+Operational analytics and trend visibility.
+</p>
+</div>
+
+<div class="reports-tile" onclick="location.href='/reports/scrap.html'">
 <h2>Scrap Reports</h2>
-<a href="/reports/scrap.html">Open Scrap Analytics</a>
+<p>Monthly scrap totals, weekly trends and reason breakdown.</p>
 </div>
 
-<div class="card">
+<div class="reports-tile is-disabled">
 <h2>Incident Reports</h2>
-<p>Coming Soon</p>
+<p>Coming soon.</p>
 </div>
 
-<div class="card">
+<div class="reports-tile is-disabled">
 <h2>Inspection Trends</h2>
-<p>Coming Soon</p>
+<p>Coming soon.</p>
+</div>
+
 </div>
 
 </body>

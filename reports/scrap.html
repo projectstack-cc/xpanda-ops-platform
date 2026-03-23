@@ -4,127 +4,144 @@
 <meta charset="UTF-8">
 <title>Scrap Reports</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/qc/qc-shared.css">
-<style>
-  table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
-  .muted { opacity: 0.75; }
-  .error { color: #b00020; font-weight: 700; }
-</style>
+<link rel="stylesheet" href="/reports/reports-shared.css">
 </head>
+
 <body>
 
 <script src="/qc/qc-header.js"></script>
 <script>
-document.getElementById('qc-page-title').textContent = 'Scrap Reports';
+document.getElementById('qc-page-title').textContent = 'Reports Dashboard';
 </script>
 
-<div class="card">
-  <label for="monthPicker">Select Month</label>
-  <input type="month" id="monthPicker">
-  <button type="button" onclick="loadReport()">Load Report</button>
-  <p id="status" class="muted"></p>
-</div>
+<div class="reports-wrap">
 
-<div class="card" id="summary">
-  <h2>Total Scrap: --</h2>
-  <p>Entries: --</p>
-</div>
+<a class="reports-back-link" href="/reports/index.html">
+← Back to Reports Dashboard
+</a>
 
-<div class="card">
-  <h3>Scrap By Week</h3>
-  <table id="weekTable">
-    <tr><th>Week</th><th>Board Ft</th></tr>
-    <tr><td colspan="2" class="muted">No data loaded yet.</td></tr>
-  </table>
+<div class="reports-section-intro">
+<h2 class="reports-section-title">Scrap Analytics</h2>
+<p class="reports-section-subtitle">
+Monthly scrap totals and operational trend visibility.
+</p>
 </div>
 
 <div class="card">
-  <h3>Scrap By Reason</h3>
-  <table id="reasonTable">
-    <tr><th>Reason</th><th>Board Ft</th></tr>
-    <tr><td colspan="2" class="muted">No data loaded yet.</td></tr>
-  </table>
+
+<div class="reports-field">
+<label>Select Month</label>
+<input type="month" id="monthPicker">
+</div>
+
+<div class="reports-actions">
+<button class="btn primary" onclick="loadReport()">Load Report</button>
+</div>
+
+<p id="status" class="report-status"></p>
+
+</div>
+
+<div class="report-stats">
+
+<div class="report-stat-card">
+<div class="report-stat-label">Total Scrap</div>
+<div class="report-stat-value" id="statScrap">--</div>
+</div>
+
+<div class="report-stat-card">
+<div class="report-stat-label">Entries</div>
+<div class="report-stat-value" id="statEntries">--</div>
+</div>
+
+</div>
+
+<div class="card">
+<h2>Scrap By Week</h2>
+
+<div class="report-table-wrap">
+<table class="report-table" id="weekTable">
+<tr><th>Week</th><th>Board Ft</th></tr>
+</table>
+</div>
+
+</div>
+
+<div class="card">
+<h2>Scrap By Reason</h2>
+
+<div class="report-table-wrap">
+<table class="report-table" id="reasonTable">
+<tr><th>Reason</th><th>Board Ft</th></tr>
+</table>
+</div>
+
+</div>
+
 </div>
 
 <script>
-function num(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
+
+function num(v){
+const n = Number(v);
+return Number.isFinite(n) ? n : 0;
 }
 
-async function loadReport() {
-  const month = document.getElementById("monthPicker").value;
-  const status = document.getElementById("status");
-  const summary = document.getElementById("summary");
-  const weekTable = document.getElementById("weekTable");
-  const reasonTable = document.getElementById("reasonTable");
+async function loadReport(){
 
-  if (!month) {
-    status.textContent = "Please select a month.";
-    status.className = "error";
-    return;
-  }
+const month = document.getElementById("monthPicker").value;
+const status = document.getElementById("status");
 
-  status.textContent = "Loading report...";
-  status.className = "muted";
-
-  try {
-    const res = await fetch(`/api/reports/scrap-summary?month=${encodeURIComponent(month)}`);
-    const data = await res.json();
-
-    if (!res.ok || !data.ok) {
-      throw new Error(data.error || `Request failed (${res.status})`);
-    }
-
-    summary.innerHTML = `
-      <h2>Total Scrap: ${num(data.total_scrap_board_ft).toFixed(2)} board ft</h2>
-      <p>Entries: ${num(data.entry_count)}</p>
-    `;
-
-    weekTable.innerHTML = "<tr><th>Week</th><th>Board Ft</th></tr>";
-    if (Array.isArray(data.by_week) && data.by_week.length) {
-      data.by_week.forEach(w => {
-        weekTable.innerHTML += `
-          <tr>
-            <td>${w.week_number}</td>
-            <td>${num(w.scrap_board_ft).toFixed(2)}</td>
-          </tr>
-        `;
-      });
-    } else {
-      weekTable.innerHTML += `<tr><td colspan="2" class="muted">No weekly data for this month.</td></tr>`;
-    }
-
-    reasonTable.innerHTML = "<tr><th>Reason</th><th>Board Ft</th></tr>";
-    if (Array.isArray(data.by_reason) && data.by_reason.length) {
-      data.by_reason.forEach(r => {
-        reasonTable.innerHTML += `
-          <tr>
-            <td>${r.scrap_reason}</td>
-            <td>${num(r.scrap_board_ft).toFixed(2)}</td>
-          </tr>
-        `;
-      });
-    } else {
-      reasonTable.innerHTML += `<tr><td colspan="2" class="muted">No reason data for this month.</td></tr>`;
-    }
-
-    status.textContent = `Loaded ${month}`;
-    status.className = "muted";
-
-  } catch (err) {
-    summary.innerHTML = `
-      <h2>Total Scrap: --</h2>
-      <p>Entries: --</p>
-    `;
-    weekTable.innerHTML = "<tr><th>Week</th><th>Board Ft</th></tr><tr><td colspan='2' class='muted'>No data loaded.</td></tr>";
-    reasonTable.innerHTML = "<tr><th>Reason</th><th>Board Ft</th></tr><tr><td colspan='2' class='muted'>No data loaded.</td></tr>";
-    status.textContent = `Error: ${err.message}`;
-    status.className = "error";
-    console.error("Scrap report load failed:", err);
-  }
+if(!month){
+status.textContent = "Select a month.";
+status.classList.add("error");
+return;
 }
+
+status.textContent = "Loading…";
+status.classList.remove("error");
+
+const res = await fetch(`/api/reports/scrap-summary?month=${month}`);
+const data = await res.json();
+
+if(!res.ok || !data.ok){
+status.textContent = data.error || "Load failed";
+status.classList.add("error");
+return;
+}
+
+document.getElementById("statScrap").textContent =
+num(data.total_scrap_board_ft).toFixed(2);
+
+document.getElementById("statEntries").textContent =
+num(data.entry_count);
+
+const weekTable = document.getElementById("weekTable");
+weekTable.innerHTML = "<tr><th>Week</th><th>Board Ft</th></tr>";
+
+data.by_week.forEach(w=>{
+weekTable.innerHTML += `
+<tr>
+<td>${w.week_number}</td>
+<td>${num(w.scrap_board_ft).toFixed(2)}</td>
+</tr>`;
+});
+
+const reasonTable = document.getElementById("reasonTable");
+reasonTable.innerHTML = "<tr><th>Reason</th><th>Board Ft</th></tr>";
+
+data.by_reason.forEach(r=>{
+reasonTable.innerHTML += `
+<tr>
+<td>${r.scrap_reason}</td>
+<td>${num(r.scrap_board_ft).toFixed(2)}</td>
+</tr>`;
+});
+
+status.textContent = `Loaded ${month}`;
+
+}
+
 </script>
 
 </body>
