@@ -397,3 +397,14 @@ textarea {
         padding: 18px;
     }
 }
+
+.reports-badge {
+cursor: pointer;
+transition: background .15s ease, transform .15s ease;
+text-decoration: none;
+}
+
+.reports-badge:hover {
+background: #e2e8f0;
+transform: translateY(-1px);
+}
