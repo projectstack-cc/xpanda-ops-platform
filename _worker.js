@@ -35,8 +35,12 @@ export default {
   return handleApiReportsScrapReasons(request, env);
 }
 
-if (url.pathname === "/api/reports/incidents-trend") {
+      if (url.pathname === "/api/reports/incidents-trend") {
   return handleIncidentTrend(request, env);
+}
+
+      if (pathname === "/api/reports/incidents-summary") {
+  return handleIncidentSummary(request, env);
 }
 
       // 3) Static site passthrough (Pages assets binding)
@@ -629,5 +633,110 @@ async function handleIncidentTrend(request, env) {
       error: "Incident trend fetch failed",
       detail: String(e.message || e)
     }, 500);
+  }
+}
+async function handleIncidentSummary(request, env) {
+  const url = new URL(request.url);
+  const year = url.searchParams.get("year");
+
+  if (!year) {
+    return Response.json({ ok: false, error: "Missing year" }, { status: 400 });
+  }
+
+  try {
+    const res = await fetch(env.INCIDENT_TRACKER_JSON_URL);
+    const text = await res.text();
+
+    const json = JSON.parse(
+      text.substring(
+        text.indexOf("{"),
+        text.lastIndexOf("}") + 1
+      )
+    );
+
+    const rows = json.table.rows || [];
+
+    let total = 0;
+    let highRisk = 0;
+
+    const customerCounts = {};
+    const typeCounts = {
+      Fusion: 0,
+      Density: 0,
+      Tolerances: 0,
+      Packaging: 0,
+      Delivery: 0,
+      Other: 0
+    };
+
+    const riskCounts = {
+      "1 - Low Risk": 0,
+      "2 - Medium Risk": 0,
+      "3 - High Risk": 0
+    };
+
+    rows.forEach(r => {
+      const cells = r.c;
+
+      const rowYear = String(cells[7]?.v || "").trim();
+      if (rowYear !== year) return;
+
+      total++;
+
+      const customer = String(cells[1]?.v || "Unspecified").trim();
+      const type = String(cells[2]?.v || "Other").trim();
+      const risk = String(cells[13]?.v || "").trim();
+
+      // customer
+      customerCounts[customer] = (customerCounts[customer] || 0) + 1;
+
+      // type
+      if (typeCounts[type] !== undefined) {
+        typeCounts[type]++;
+      } else {
+        typeCounts.Other++;
+      }
+
+      // risk
+      if (riskCounts[risk] !== undefined) {
+        riskCounts[risk]++;
+      }
+
+      if (risk === "3 - High Risk") {
+        highRisk++;
+      }
+    });
+
+    const uniqueCustomers = Object.keys(customerCounts).length;
+
+    const typeBreakdown = Object.entries(typeCounts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const riskBreakdown = Object.entries(riskCounts)
+      .map(([risk, count]) => ({ risk, count }));
+
+    const customerBreakdown = Object.entries(customerCounts)
+      .map(([customer, count]) => ({ customer, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const topType = typeBreakdown.length ? typeBreakdown[0].type : null;
+
+    return Response.json({
+      ok: true,
+      total,
+      highRisk,
+      uniqueCustomers,
+      topType,
+      typeBreakdown,
+      riskBreakdown,
+      customerBreakdown
+    });
+
+  } catch (err) {
+    return Response.json({
+      ok: false,
+      error: err.message
+    }, { status: 500 });
   }
 }
