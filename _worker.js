@@ -39,7 +39,7 @@ export default {
   return handleIncidentTrend(request, env);
 }
 
-      if (pathname === "/api/reports/incidents-summary") {
+      if (url.pathname === "/api/reports/incidents-summary") {
   return handleIncidentSummary(request, env);
 }
 
