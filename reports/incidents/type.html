@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Incident by Type</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/reports/reports-shared.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+<script src="/reports/reports-header.js"></script>
+<script>
+document.getElementById('reports-page-title').textContent = 'Incident by Type';
+</script>
+
+<div class="reports-wrap">
+
+  <a href="/reports/incidents/" class="reports-back-link">← Back to Incident Reports</a>
+
+  <div class="reports-section-intro">
+    <h2 class="reports-section-title">Incident by Type</h2>
+    <p class="reports-section-subtitle">
+      Breakdown of incident volume by category for the selected year.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="reports-actions">
+      <div class="reports-field" style="min-width: 180px; margin-bottom: 0;">
+        <label for="yearPicker">Select Year</label>
+        <select id="yearPicker"></select>
+      </div>
+
+      <div class="reports-field" style="min-width: 160px; margin-bottom: 0;">
+        <label for="chartTypePicker">Chart Type</label>
+        <select id="chartTypePicker">
+          <option value="bar">Bar</option>
+          <option value="line">Line</option>
+        </select>
+      </div>
+
+      <button class="btn primary" type="button" id="loadBtn">Load Report</button>
+    </div>
+
+    <p id="status" class="report-status"></p>
+  </div>
+
+  <div class="report-stats">
+    <div class="report-stat-card">
+      <div class="report-stat-label">Total Incidents</div>
+      <div class="report-stat-value" id="statTotal">--</div>
+    </div>
+
+    <div class="report-stat-card">
+      <div class="report-stat-label">Most Common Type</div>
+      <div class="report-stat-value" id="statTopType">--</div>
+    </div>
+
+    <div class="report-stat-card">
+      <div class="report-stat-label">Top Type Count</div>
+      <div class="report-stat-value" id="statTopCount">--</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Incident Count by Type</h2>
+    <div class="report-chart-wrap">
+      <canvas id="typeChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Type Totals</h2>
+    <div class="report-table-wrap">
+      <table class="report-table" id="typeTable">
+        <tr>
+          <th>Incident Type</th>
+          <th>Incident Count</th>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="reports-platform-footer">
+    <a href="/">← Back to Operations Platform</a>
+  </div>
+
+</div>
+
+<script>
+let typeChart = null;
+let currentLabels = [];
+let currentValues = [];
+
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function buildYearOptions() {
+  const yearPicker = document.getElementById("yearPicker");
+  const currentYear = new Date().getFullYear();
+
+  yearPicker.innerHTML = "";
+
+  for (let year = currentYear; year >= 2025; year--) {
+    const opt = document.createElement("option");
+    opt.value = String(year);
+    opt.textContent = String(year);
+    yearPicker.appendChild(opt);
+  }
+
+  yearPicker.value = String(currentYear);
+}
+
+function renderChart() {
+  const chartType = document.getElementById("chartTypePicker").value;
+  const ctx = document.getElementById("typeChart");
+
+  if (typeChart) {
+    typeChart.destroy();
+  }
+
+  typeChart = new Chart(ctx, {
+    type: chartType,
+    data: {
+      labels: currentLabels,
+      datasets: [{
+        label: "Incident Count",
+        data: currentValues,
+        tension: chartType === "line" ? 0.25 : 0,
+        fill: false
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0 }
+        }
+      }
+    }
+  });
+}
+
+function renderTable(rows) {
+  const table = document.getElementById("typeTable");
+
+  table.innerHTML = `
+    <tr>
+      <th>Incident Type</th>
+      <th>Incident Count</th>
+    </tr>
+  `;
+
+  rows.forEach(row => {
+    table.innerHTML += `
+      <tr>
+        <td>${row.type}</td>
+        <td>${num(row.count)}</td>
+      </tr>
+    `;
+  });
+}
+
+async function loadTypeReport() {
+  const year = document.getElementById("yearPicker").value;
+  const status = document.getElementById("status");
+
+  if (!year) {
+    status.textContent = "Select a year.";
+    status.classList.add("error");
+    return;
+  }
+
+  status.textContent = "Loading...";
+  status.classList.remove("error");
+
+  try {
+    const res = await fetch(`/api/reports/incidents-summary?year=${encodeURIComponent(year)}`);
+    const data = await res.json();
+
+    if (!res.ok || !data.ok) {
+      status.textContent = data.error || "Load failed";
+      status.classList.add("error");
+      return;
+    }
+
+    const rows = data.typeBreakdown || [];
+
+    currentLabels = rows.map(row => row.type);
+    currentValues = rows.map(row => num(row.count));
+
+    document.getElementById("statTotal").textContent = num(data.total);
+    document.getElementById("statTopType").textContent = data.topType || "--";
+    document.getElementById("statTopCount").textContent = rows.length ? num(rows[0].count) : "--";
+
+    renderChart();
+    renderTable(rows);
+
+    status.textContent = `Loaded ${year}`;
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+    status.classList.add("error");
+  }
+}
+
+document.getElementById("loadBtn").addEventListener("click", loadTypeReport);
+document.getElementById("chartTypePicker").addEventListener("change", () => {
+  if (currentLabels.length && currentValues.length) {
+    renderChart();
+  }
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  buildYearOptions();
+  loadTypeReport();
+});
+</script>
+
+</body>
+</html>
