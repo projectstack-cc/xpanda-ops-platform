@@ -1,263 +1,278 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Incident Summary</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/reports/reports-shared.css">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Incident Summary</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/reports/reports-shared.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
 
-<body>
+  <body>
+    <script src="/reports/reports-header.js"></script>
+    <script>
+      document.getElementById("reports-page-title").textContent =
+        "Incident Summary";
+    </script>
 
-<script src="/reports/reports-header.js"></script>
-<script>
-document.getElementById('reports-page-title').textContent = 'Incident Summary';
-</script>
+    <div class="reports-wrap">
+      <a href="/reports/incidents/" class="reports-back-link"
+        >← Back to Incident Reports</a
+      >
 
-<div class="reports-wrap">
-
-  <a href="/reports/incidents/" class="reports-back-link">← Back to Incident Reports</a>
-
-  <div class="reports-section-intro">
-    <h2 class="reports-section-title">Incident Summary</h2>
-    <p class="reports-section-subtitle">
-      Executive overview of incident volume, risk, type distribution, and affected customers.
-    </p>
-  </div>
-
-  <div class="card">
-    <div class="reports-actions">
-      <div class="reports-field" style="min-width: 180px; margin-bottom: 0;">
-        <label for="yearPicker">Select Year</label>
-        <select id="yearPicker"></select>
+      <div class="reports-section-intro">
+        <h2 class="reports-section-title">Incident Summary</h2>
+        <p class="reports-section-subtitle">
+          Executive overview of incident volume, risk, type distribution, and
+          affected customers.
+        </p>
       </div>
 
-      <button class="btn primary" type="button" id="loadBtn">Load Report</button>
+      <div class="card">
+        <div class="reports-actions">
+          <div class="reports-field" style="min-width: 180px; margin-bottom: 0">
+            <label for="yearPicker">Select Year</label>
+            <select id="yearPicker"></select>
+          </div>
+
+          <button class="btn primary" type="button" id="loadBtn">
+            Load Report
+          </button>
+        </div>
+
+        <p id="status" class="report-status"></p>
+      </div>
+
+      <div class="report-stats">
+        <div class="report-stat-card">
+          <div class="report-stat-label">Total Incidents</div>
+          <div class="report-stat-value" id="statTotal">--</div>
+        </div>
+
+        <div class="report-stat-card">
+          <div class="report-stat-label">High Risk Incidents</div>
+          <div class="report-stat-value" id="statHighRisk">--</div>
+        </div>
+
+        <div class="report-stat-card">
+          <div class="report-stat-label">Unique Customers</div>
+          <div class="report-stat-value" id="statCustomers">--</div>
+        </div>
+
+        <div class="report-stat-card">
+          <div class="report-stat-label">Most Common Type</div>
+          <div class="report-stat-value" id="statTopType">--</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Incidents by Type</h2>
+        <div class="report-chart-wrap">
+          <canvas id="typeChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Risk Level Breakdown</h2>
+        <div class="report-chart-wrap">
+          <canvas id="riskChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Customer Breakdown</h2>
+        <div class="report-table-wrap">
+          <table class="report-table" id="customerTable">
+            <tr>
+              <th>Customer</th>
+              <th>Incident Count</th>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="reports-platform-footer">
+        <a href="/">← Back to Operations Platform</a>
+      </div>
     </div>
 
-    <p id="status" class="report-status"></p>
-  </div>
+    <script>
+      let typeChart = null;
+      let riskChart = null;
 
-  <div class="report-stats">
-    <div class="report-stat-card">
-      <div class="report-stat-label">Total Incidents</div>
-      <div class="report-stat-value" id="statTotal">--</div>
-    </div>
+      function num(v) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+      }
 
-    <div class="report-stat-card">
-      <div class="report-stat-label">High Risk Incidents</div>
-      <div class="report-stat-value" id="statHighRisk">--</div>
-    </div>
+      function buildYearOptions() {
+        const yearPicker = document.getElementById("yearPicker");
+        const currentYear = new Date().getFullYear();
 
-    <div class="report-stat-card">
-      <div class="report-stat-label">Unique Customers</div>
-      <div class="report-stat-value" id="statCustomers">--</div>
-    </div>
+        yearPicker.innerHTML = "";
 
-    <div class="report-stat-card">
-      <div class="report-stat-label">Most Common Type</div>
-      <div class="report-stat-value" id="statTopType">--</div>
-    </div>
-  </div>
+        for (let year = currentYear; year >= 2025; year--) {
+          const opt = document.createElement("option");
+          opt.value = String(year);
+          opt.textContent = String(year);
+          yearPicker.appendChild(opt);
+        }
 
-  <div class="card">
-    <h2>Incidents by Type</h2>
-    <div class="report-chart-wrap">
-      <canvas id="typeChart"></canvas>
-    </div>
-  </div>
+        yearPicker.value = String(currentYear);
+      }
 
-  <div class="card">
-    <h2>Risk Level Breakdown</h2>
-    <div class="report-chart-wrap">
-      <canvas id="riskChart"></canvas>
-    </div>
-  </div>
+      function destroyCharts() {
+        if (typeChart) {
+          typeChart.destroy();
+          typeChart = null;
+        }
 
-  <div class="card">
-    <h2>Customer Breakdown</h2>
-    <div class="report-table-wrap">
-      <table class="report-table" id="customerTable">
-        <tr>
-          <th>Customer</th>
-          <th>Incident Count</th>
-        </tr>
-      </table>
-    </div>
-  </div>
-
-  <div class="reports-platform-footer">
-    <a href="/">← Back to Operations Platform</a>
-  </div>
-
-</div>
-
-<script>
-let typeChart = null;
-let riskChart = null;
-
-function num(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function buildYearOptions() {
-  const yearPicker = document.getElementById("yearPicker");
-  const currentYear = new Date().getFullYear();
-
-  yearPicker.innerHTML = "";
-
-  for (let year = currentYear; year >= 2025; year--) {
-    const opt = document.createElement("option");
-    opt.value = String(year);
-    opt.textContent = String(year);
-    yearPicker.appendChild(opt);
-  }
-
-  yearPicker.value = String(currentYear);
-}
-
-function destroyCharts() {
-  if (typeChart) {
-    typeChart.destroy();
-    typeChart = null;
-  }
-
-  if (riskChart) {
-    riskChart.destroy();
-    riskChart = null;
-  }
-}
-
-function renderTypeChart(rows) {
-  const ctx = document.getElementById("typeChart");
-
-  if (typeChart) typeChart.destroy();
-
-  typeChart = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels: rows.map(row => row.type),
-      datasets: [{
-        label: "Incident Count",
-        data: rows.map(row => num(row.count))
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { precision: 0 }
+        if (riskChart) {
+          riskChart.destroy();
+          riskChart = null;
         }
       }
-    }
-  });
-}
 
-function renderRiskChart(rows) {
-  const ctx = document.getElementById("riskChart");
+      function renderTypeChart(rows) {
+        const ctx = document.getElementById("typeChart");
 
-  if (riskChart) riskChart.destroy();
+        if (typeChart) typeChart.destroy();
 
-  riskChart = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels: rows.map(row => row.risk),
-      datasets: [{
-        label: "Incident Count",
-        data: rows.map(row => num(row.count))
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { precision: 0 }
-        }
+        typeChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: rows.map((row) => row.type),
+            datasets: [
+              {
+                label: "Incident Count",
+                data: rows.map((row) => num(row.count)),
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { precision: 0 },
+              },
+            },
+          },
+        });
       }
-    }
-  });
-}
 
-function renderCustomerTable(rows) {
-  const table = document.getElementById("customerTable");
+      function renderRiskChart(rows) {
+        const ctx = document.getElementById("riskChart");
 
-  table.innerHTML = `
+        if (riskChart) riskChart.destroy();
+
+        riskChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: rows.map((row) => row.risk),
+            datasets: [
+              {
+                label: "Incident Count",
+                data: rows.map((row) => num(row.count)),
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { precision: 0 },
+              },
+            },
+          },
+        });
+      }
+
+      function renderCustomerTable(rows) {
+        const table = document.getElementById("customerTable");
+
+        table.innerHTML = `
     <tr>
       <th>Customer</th>
       <th>Incident Count</th>
     </tr>
   `;
 
-  rows.forEach(row => {
-    table.innerHTML += `
+        rows.forEach((row) => {
+          table.innerHTML += `
       <tr>
         <td>${row.customer}</td>
         <td>${num(row.count)}</td>
       </tr>
     `;
-  });
-}
+        });
+      }
 
-async function loadSummaryReport() {
-  const year = document.getElementById("yearPicker").value;
-  const status = document.getElementById("status");
+      async function loadSummaryReport() {
+        const year = document.getElementById("yearPicker").value;
+        const status = document.getElementById("status");
 
-  if (!year) {
-    status.textContent = "Select a year.";
-    status.classList.add("error");
-    return;
-  }
+        if (!year) {
+          status.textContent = "Select a year.";
+          status.classList.add("error");
+          return;
+        }
 
-  status.textContent = "Loading...";
-  status.classList.remove("error");
+        status.textContent = "Loading...";
+        status.classList.remove("error");
 
-  try {
-    const res = await fetch(`/api/reports/incidents-summary?year=${encodeURIComponent(year)}`);
-    const data = await res.json();
+        try {
+          const res = await fetch(
+            `/api/reports/incidents-summary?year=${encodeURIComponent(year)}`,
+          );
+          const data = await res.json();
 
-    if (!res.ok || !data.ok) {
-      destroyCharts();
-      status.textContent = data.error || "Load failed";
-      status.classList.add("error");
-      return;
-    }
+          if (!res.ok || !data.ok) {
+            destroyCharts();
+            status.textContent = data.error || "Load failed";
+            status.classList.add("error");
+            return;
+          }
 
-    document.getElementById("statTotal").textContent = num(data.total);
-    document.getElementById("statHighRisk").textContent = num(data.highRisk);
-    document.getElementById("statCustomers").textContent = num(data.uniqueCustomers);
-    document.getElementById("statTopType").textContent = data.topType || "--";
+          document.getElementById("statTotal").textContent = num(data.total);
+          document.getElementById("statHighRisk").textContent = num(
+            data.highRisk,
+          );
+          document.getElementById("statCustomers").textContent = num(
+            data.uniqueCustomers,
+          );
+          document.getElementById("statTopType").textContent =
+            data.topType || "--";
 
-    renderTypeChart(data.typeBreakdown || []);
-    renderRiskChart(data.riskBreakdown || []);
-    renderCustomerTable(data.customerBreakdown || []);
+          renderTypeChart(data.typeBreakdown || []);
+          renderRiskChart(data.riskBreakdown || []);
+          renderCustomerTable(data.customerBreakdown || []);
 
-    status.textContent = `Loaded ${year}`;
-  } catch (err) {
-    destroyCharts();
-    status.textContent = `Error: ${err.message}`;
-    status.classList.add("error");
-  }
-}
+          status.textContent = `Loaded ${year}`;
+        } catch (err) {
+          destroyCharts();
+          status.textContent = `Error: ${err.message}`;
+          status.classList.add("error");
+        }
+      }
 
-document.getElementById("loadBtn").addEventListener("click", loadSummaryReport);
+      document
+        .getElementById("loadBtn")
+        .addEventListener("click", loadSummaryReport);
 
-document.addEventListener("DOMContentLoaded", () => {
-  buildYearOptions();
-  loadSummaryReport();
-});
-</script>
-
-</body>
+      document.addEventListener("DOMContentLoaded", () => {
+        buildYearOptions();
+        loadSummaryReport();
+      });
+    </script>
+  </body>
 </html>
