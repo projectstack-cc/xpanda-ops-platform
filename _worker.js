@@ -636,25 +636,30 @@ async function handleIncidentTrend(request, env) {
   }
 }
 async function handleIncidentSummary(request, env) {
+  const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
+
+  if (!sheetUrl) {
+    return json({ ok: false, error: "Incident sheet URL not configured" }, 500);
+  }
+
   const url = new URL(request.url);
   const year = url.searchParams.get("year");
 
   if (!year) {
-    return Response.json({ ok: false, error: "Missing year" }, { status: 400 });
+    return json({ ok: false, error: "Missing year parameter" }, 400);
   }
 
   try {
-    const res = await fetch(env.INCIDENT_TRACKER_JSON_URL);
+    const res = await fetch(sheetUrl);
     const text = await res.text();
 
-    const json = JSON.parse(
-      text.substring(
-        text.indexOf("{"),
-        text.lastIndexOf("}") + 1
-      )
-    );
+    const jsonText = text
+      .replace("/*O_o*/", "")
+      .replace("google.visualization.Query.setResponse(", "")
+      .slice(0, -2);
 
-    const rows = json.table.rows || [];
+    const data = JSON.parse(jsonText);
+    const rows = data.table.rows || [];
 
     let total = 0;
     let highRisk = 0;
@@ -672,37 +677,41 @@ async function handleIncidentSummary(request, env) {
     const riskCounts = {
       "1 - Low Risk": 0,
       "2 - Medium Risk": 0,
-      "3 - High Risk": 0
+      "3 - High Risk": 0,
+      "Unspecified": 0
     };
 
     rows.forEach(r => {
-      const cells = r.c;
+      const cells = r.c || [];
 
       const rowYear = String(cells[7]?.v || "").trim();
-      if (rowYear !== year) return;
+      if (rowYear !== String(year)) return;
 
       total++;
 
-      const customer = String(cells[1]?.v || "Unspecified").trim();
-      const type = String(cells[2]?.v || "Other").trim();
-      const risk = String(cells[13]?.v || "").trim();
+      const rawCustomer = String(cells[1]?.v || "").trim();
+      const rawType = String(cells[2]?.v || "").trim();
+      const rawRisk = String(cells[13]?.v || "").trim();
 
-      // customer
+      const customer = rawCustomer || "Unspecified";
+      const type = rawType || "Other";
+      const risk = rawRisk || "Unspecified";
+
       customerCounts[customer] = (customerCounts[customer] || 0) + 1;
 
-      // type
-      if (typeCounts[type] !== undefined) {
+      if (Object.prototype.hasOwnProperty.call(typeCounts, type)) {
         typeCounts[type]++;
       } else {
         typeCounts.Other++;
       }
 
-      // risk
-      if (riskCounts[risk] !== undefined) {
-        riskCounts[risk]++;
-      }
+      const normalizedRisk = Object.prototype.hasOwnProperty.call(riskCounts, risk)
+        ? risk
+        : "Unspecified";
 
-      if (risk === "3 - High Risk") {
+      riskCounts[normalizedRisk]++;
+
+      if (normalizedRisk === "3 - High Risk") {
         highRisk++;
       }
     });
@@ -711,19 +720,20 @@ async function handleIncidentSummary(request, env) {
 
     const typeBreakdown = Object.entries(typeCounts)
       .map(([type, count]) => ({ type, count }))
-      .sort((a, b) => b.count - a.count);
+      .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
 
     const riskBreakdown = Object.entries(riskCounts)
       .map(([risk, count]) => ({ risk, count }));
 
     const customerBreakdown = Object.entries(customerCounts)
       .map(([customer, count]) => ({ customer, count }))
-      .sort((a, b) => b.count - a.count);
+      .sort((a, b) => b.count - a.count || a.customer.localeCompare(b.customer));
 
     const topType = typeBreakdown.length ? typeBreakdown[0].type : null;
 
-    return Response.json({
+    return json({
       ok: true,
+      year,
       total,
       highRisk,
       uniqueCustomers,
@@ -733,10 +743,11 @@ async function handleIncidentSummary(request, env) {
       customerBreakdown
     });
 
-  } catch (err) {
-    return Response.json({
+  } catch (e) {
+    return json({
       ok: false,
-      error: err.message
-    }, { status: 500 });
+      error: "Incident summary fetch failed",
+      detail: String(e?.message || e)
+    }, 500);
   }
 }
