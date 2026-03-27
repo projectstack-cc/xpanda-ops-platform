@@ -569,6 +569,50 @@ async function handleApiReportsScrapReasons(request, env) {
     }, 500);
   }
 }
+
+function parseIncidentRows(gvizData) {
+  const rows = gvizData.table.rows || [];
+
+  return rows.map((r, index) => {
+    const cells = r.c || [];
+
+    const incidentMonth = cells[11]?.v || ""; // Column L
+    const year = String(cells[7]?.v || "").trim(); // Column H
+
+    const month = incidentMonth
+      ? String(incidentMonth).slice(0, 7) // YYYY-MM
+      : "";
+
+    return {
+      incident_id: `row-${index + 1}`,
+      sheet_row: index + 1,
+
+      // Core fields (you already use these)
+      customer: String(cells[1]?.v || "").trim(),
+      incident_type: String(cells[2]?.v || "").trim(),
+      year,
+      risk_level: String(cells[13]?.v || "").trim(),
+
+      // Derived
+      month,
+
+      // Optional / future-safe fields (safe defaults)
+      date: incidentMonth || "",
+      title: "",
+      summary: "",
+      description: "",
+      location: "",
+      reported_by: "",
+      immediate_actions: "",
+      root_cause: "",
+      corrective_action: "",
+      injury: "",
+      property_damage: "",
+      witnesses: "",
+    };
+  });
+}
+
 async function handleIncidentTrend(request, env) {
   const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
 
@@ -659,8 +703,7 @@ async function handleIncidentSummary(request, env) {
       .slice(0, -2);
 
     const data = JSON.parse(jsonText);
-    const rows = data.table.rows || [];
-
+    const incidents = parseIncidentRows(data);
     let total = 0;
     let highRisk = 0;
 
