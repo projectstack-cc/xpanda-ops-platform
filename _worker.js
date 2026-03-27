@@ -703,7 +703,6 @@ async function handleIncidentSummary(request, env) {
       .slice(0, -2);
 
     const data = JSON.parse(jsonText);
-    const incidents = parseIncidentRows(data);
     let total = 0;
     let highRisk = 0;
 
