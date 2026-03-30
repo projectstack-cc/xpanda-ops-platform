@@ -88,6 +88,7 @@ document.getElementById('reports-page-title').textContent = 'Incident Trend';
 let incidentTrendChart = null;
 let currentLabels = [];
 let currentValues = [];
+let currentMonths = [];
 
 const monthNames = {
   "01": "January",
@@ -147,6 +148,17 @@ function renderChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      onClick: (_, elements) => {
+        if (!elements.length) return;
+
+        const year = document.getElementById("yearPicker").value;
+        const month = currentMonths[elements[0].index];
+
+        if (!year || !month) return;
+
+        window.location.href =
+          `/reports/incidents/list.html?year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}`;
+      },
       plugins: {
         legend: { display: false }
       },
@@ -190,6 +202,7 @@ async function loadTrendReport() {
       return monthNames[monthPart] || row.month;
     });
 
+    currentMonths = data.months.map(row => row.month);
     currentValues = data.months.map(row => num(row.count));
 
     document.getElementById("statTotal").textContent = num(data.total);
