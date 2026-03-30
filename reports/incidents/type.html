@@ -93,6 +93,7 @@ document.getElementById('reports-page-title').textContent = 'Incident by Type';
 let typeChart = null;
 let currentLabels = [];
 let currentValues = [];
+let currentTypes = [];
 
 function num(v) {
   const n = Number(v);
@@ -137,6 +138,17 @@ function renderChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      onClick: (_, elements) => {
+        if (!elements.length) return;
+
+        const year = document.getElementById("yearPicker").value;
+        const type = currentTypes[elements[0].index];
+
+        if (!year || !type) return;
+
+        window.location.href =
+          `/reports/incidents/list.html?year=${encodeURIComponent(year)}&type=${encodeURIComponent(type)}`;
+      },
       plugins: {
         legend: { display: false }
       },
@@ -195,6 +207,7 @@ async function loadTypeReport() {
 
     const rows = data.typeBreakdown || [];
 
+    currentTypes = rows.map(row => row.type);
     currentLabels = rows.map(row => row.type);
     currentValues = rows.map(row => num(row.count));
 

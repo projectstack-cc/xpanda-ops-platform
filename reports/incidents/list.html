@@ -98,6 +98,10 @@ document.getElementById('reports-page-title').textContent = 'Incident Reports â€
 </div>
 
 <script>
+function getQueryParams() {
+  return new URLSearchParams(window.location.search);
+}
+
 function buildYearOptions() {
   const yearPicker = document.getElementById("yearPicker");
   const currentYear = new Date().getFullYear();
@@ -112,6 +116,23 @@ function buildYearOptions() {
   }
 
   yearPicker.value = String(currentYear);
+}
+
+function ensureSelectValue(select, value) {
+  if (!value) return;
+
+  const hasOption = Array.from(select.options).some(
+    (option) => option.value === value,
+  );
+
+  if (!hasOption) {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = value;
+    select.appendChild(opt);
+  }
+
+  select.value = value;
 }
 
 function buildMonthOptions() {
@@ -138,6 +159,56 @@ function resetTable() {
       <th>Summary</th>
     </tr>
   `;
+}
+
+function initializeFiltersFromUrl() {
+  const params = getQueryParams();
+  const year = (params.get("year") || "").trim();
+  const type = (params.get("type") || "").trim();
+  const month = (params.get("month") || "").trim();
+  const risk = (params.get("risk") || "").trim();
+
+  if (year) {
+    ensureSelectValue(document.getElementById("yearPicker"), year);
+  }
+
+  if (type) {
+    ensureSelectValue(document.getElementById("typePicker"), type);
+  }
+
+  if (risk) {
+    ensureSelectValue(document.getElementById("riskPicker"), risk);
+  }
+
+  if (month) {
+    const monthPart = month.split("-")[1] || "";
+    if (monthPart) {
+      ensureSelectValue(document.getElementById("monthPicker"), monthPart);
+    }
+
+    if (!year && month.includes("-")) {
+      ensureSelectValue(
+        document.getElementById("yearPicker"),
+        month.split("-")[0] || "",
+      );
+    }
+  }
+}
+
+function buildIncidentListParams() {
+  const year = document.getElementById("yearPicker").value;
+  const type = document.getElementById("typePicker").value;
+  const monthPart = document.getElementById("monthPicker").value;
+  const risk = document.getElementById("riskPicker").value;
+
+  const params = new URLSearchParams();
+
+  if (year) params.set("year", year);
+  if (type) params.set("type", type);
+  if (monthPart && year) params.set("month", `${year}-${monthPart}`);
+  if (risk) params.set("risk", risk);
+
+  return params;
 }
 
 function escapeHtml(value) {
@@ -178,11 +249,9 @@ function renderTable(items) {
 }
 
 async function loadIncidentList() {
-  const year = document.getElementById("yearPicker").value;
-  const type = document.getElementById("typePicker").value;
-  const monthPart = document.getElementById("monthPicker").value;
-  const risk = document.getElementById("riskPicker").value;
   const status = document.getElementById("status");
+  const params = buildIncidentListParams();
+  const year = params.get("year");
 
   if (!year) {
     status.textContent = "Select a year.";
@@ -192,12 +261,11 @@ async function loadIncidentList() {
 
   status.textContent = "Loading...";
   status.classList.remove("error");
-
-  const params = new URLSearchParams({ year });
-
-  if (type) params.set("type", type);
-  if (monthPart) params.set("month", `${year}-${monthPart}`);
-  if (risk) params.set("risk", risk);
+  window.history.replaceState(
+    null,
+    "",
+    `${window.location.pathname}?${params.toString()}`,
+  );
 
   try {
     const res = await fetch(`/api/reports/incidents-list?${params.toString()}`);
@@ -227,6 +295,7 @@ document.getElementById("loadBtn").addEventListener("click", loadIncidentList);
 document.addEventListener("DOMContentLoaded", () => {
   buildYearOptions();
   buildMonthOptions();
+  initializeFiltersFromUrl();
   resetTable();
   loadIncidentList();
 });
