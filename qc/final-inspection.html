@@ -2,17 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>xPanda Foam – Final Inspection</title>
+  <title>xPanda Foam - Final Inspection</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-    <link rel="icon" href="/qc-assets/qc-favicon.png" sizes="any">
-<link rel="apple-touch-icon" href="/qc-assets/qc-favicon.png">
-    
- <link rel="stylesheet" href="/qc/qc-shared.css">
-    <link rel="stylesheet" href="/qc/qc-shared.css">
+  <link rel="icon" href="/qc-assets/qc-favicon.png" sizes="any">
+  <link rel="apple-touch-icon" href="/qc-assets/qc-favicon.png">
+
+  <link rel="stylesheet" href="/qc/qc-shared.css">
+  <link rel="stylesheet" href="/qc/qc-shared.css">
 
 <style>
 .page-wrap {
@@ -160,6 +160,37 @@ textarea {
   margin: 0;
 }
 
+.batch-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.batch-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.batch-table th,
+.batch-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--card-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.batch-table th {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+.batch-table td {
+  font-size: 14px;
+}
+
 @media (max-width: 480px) {
   .page-wrap {
     padding: 12px;
@@ -195,6 +226,7 @@ textarea {
         <div class="right">
           <button class="btn ghost" type="button" id="themeToggleBtn">Dark Mode</button>
           <button class="btn ghost" type="button" id="resetBtn">Reset</button>
+          <button class="btn ghost" type="button" id="addBatchBtn">Add Inspection to Batch</button>
           <button class="btn primary" type="button" id="submitBtn">Submit</button>
         </div>
       </div>
@@ -301,7 +333,7 @@ textarea {
     <div class="card">
       <div class="row" style="justify-content: space-between;">
         <h1 style="margin:0;">Samples</h1>
-        <div class="pill" id="sampleProgress">Sample — of —</div>
+        <div class="pill" id="sampleProgress">Sample - of -</div>
       </div>
 
       <div class="row" style="margin: 10px 0;">
@@ -311,7 +343,7 @@ textarea {
       </div>
 
       <div class="card sample-card" id="sampleCard">
-        <h2 id="sampleTitle">Sample #—</h2>
+        <h2 id="sampleTitle">Sample #-</h2>
 
         <div class="grid four">
           <div>
@@ -353,12 +385,36 @@ textarea {
 
         <div>
           <label for="sNotes">Notes (optional)</label>
-          <textarea id="sNotes" placeholder="Optional notes for this sample…" disabled></textarea>
+          <textarea id="sNotes" placeholder="Optional notes for this sample..." disabled></textarea>
         </div>
       </div>
 
       <div class="small">
         *** Any product identified as defective should be sent directly to scrap ***
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>Batch Queue</h1>
+      <div class="batch-actions">
+        <button class="btn primary" type="button" id="submitBatchBtn">Submit Batch</button>
+        <button class="btn ghost" type="button" id="clearBatchBtn">Clear Batch</button>
+      </div>
+      <div class="small" id="batchCount">Queued inspections: 0</div>
+      <div style="overflow-x:auto; margin-top:10px;">
+        <table class="batch-table" id="batchTable">
+          <tr>
+            <th>#</th>
+            <th>Customer</th>
+            <th>Product Cut</th>
+            <th>Samples</th>
+            <th>Queued</th>
+            <th>Action</th>
+          </tr>
+          <tr>
+            <td colspan="6" class="small">No inspections queued.</td>
+          </tr>
+        </table>
       </div>
     </div>
 
@@ -380,6 +436,8 @@ textarea {
     let sampleCount = 0;
     let activeSampleIndex = 0;
     let samples = [];
+    let inspectionBatch = [];
+    let batchSubmitting = false;
 
     // ====== ELEMENTS ======
     const statusPill = document.getElementById('statusPill');
@@ -416,7 +474,12 @@ textarea {
 
     const themeToggleBtn = document.getElementById('themeToggleBtn');
     const resetBtn = document.getElementById('resetBtn');
+    const addBatchBtn = document.getElementById('addBatchBtn');
     const submitBtn = document.getElementById('submitBtn');
+    const submitBatchBtn = document.getElementById('submitBatchBtn');
+    const clearBatchBtn = document.getElementById('clearBatchBtn');
+    const batchCount = document.getElementById('batchCount');
+    const batchTable = document.getElementById('batchTable');
 
     const postForm = document.getElementById('postForm');
     const payloadEl = document.getElementById('payload');
@@ -461,6 +524,14 @@ textarea {
     function toInt(val) {
       const n = parseInt(String(val || '').replace(/[^\d]/g, ''), 10);
       return Number.isFinite(n) ? n : null;
+    }
+
+    function wait(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function nowBatchLabel() {
+      return `${dateEl.value || nowDate()} ${timeEl.value || nowTime()}`;
     }
 
     function calcSampleSizeRequired(lotSize) {
@@ -569,8 +640,8 @@ textarea {
       activeSampleIndex = 0;
       samples = [];
 
-      sampleTitle.textContent = 'Sample #—';
-      sampleProgress.textContent = 'Sample — of —';
+      sampleTitle.textContent = 'Sample #-';
+      sampleProgress.textContent = 'Sample - of -';
 
       prevSample.disabled = true;
       repeatLastBtn.disabled = true;
@@ -641,6 +712,22 @@ textarea {
       setNeutralSampleState();
     }
 
+    function resetInspectionOnly() {
+      const required = toInt(sampleSizeRequiredEl.value);
+      activeSampleIndex = 0;
+      samples = [];
+
+      if (!required || required < 1) {
+        setNeutralSampleState();
+        return;
+      }
+
+      sampleCount = required;
+      ensureSamples(sampleCount);
+      loadActiveSampleToUI();
+      updateSampleUI();
+    }
+
     function resetAll() {
       jobId.value = '';
       productCut.value = '';
@@ -663,8 +750,176 @@ textarea {
       customerSelect.value = '';
       newCustomerInput.value = '';
 
+      inspectionBatch = [];
+      batchSubmitting = false;
+
       setNeutralSampleState();
+      renderBatchQueue();
       setStatus('Ready', '');
+    }
+
+    function buildInspectionPayload(requiredCount) {
+      return {
+        jobId: jobId.value.trim(),
+        date: dateEl.value || nowDate(),
+        productCut: productCut.value.trim(),
+        time: timeEl.value || nowTime(),
+        totalPieces: totalPieces.value.trim(),
+        inspector: inspector.value.trim(),
+        lotSize: (lotSizeEl.value || '').trim(),
+        sampleSizeRequired: sampleSizeRequiredEl.value,
+        tolerance: toleranceEl.value,
+
+        dimLength: document.getElementById('dimLength').value.trim(),
+        dimWidth: document.getElementById('dimWidth').value.trim(),
+        dimHeight: document.getElementById('dimHeight').value.trim(),
+        dimTapers: document.getElementById('dimTapers').value.trim(),
+        customer: customerSelect.value,
+
+        samples: samples.slice(0, requiredCount).map((s) => ({
+          length: s.length,
+          width: s.width,
+          height: s.height,
+          taper: s.taper,
+          visualPass: s.visualPass,
+          passFail: s.passFail || '',
+          notes: s.notes || ''
+        }))
+      };
+    }
+
+    function validateInspectionForSubmission() {
+      saveActiveSampleFromUI();
+
+      if (!jobId.value.trim()) {
+        return { ok: false, error: 'Job ID required' };
+      }
+      if (!sampleSizeRequiredEl.value) {
+        return { ok: false, error: 'Enter lot size to calculate required sample size' };
+      }
+      if (!customerSelect.value) {
+        return { ok: false, error: 'Select customer' };
+      }
+
+      const requiredCount = toInt(sampleSizeRequiredEl.value);
+      if (!requiredCount || requiredCount < 1) {
+        return { ok: false, error: 'Invalid required sample count' };
+      }
+
+      const incompleteSamples = getIncompleteSampleNumbers(requiredCount);
+      if (incompleteSamples.length) {
+        return {
+          ok: false,
+          error: `Complete required sample(s): ${incompleteSamples.join(', ')}`
+        };
+      }
+
+      return {
+        ok: true,
+        payload: buildInspectionPayload(requiredCount),
+        requiredCount
+      };
+    }
+
+    function submitInspectionPayload(payload) {
+      payloadEl.value = JSON.stringify(payload);
+      postForm.submit();
+    }
+
+    function renderBatchQueue() {
+      batchCount.textContent = `Queued inspections: ${inspectionBatch.length}`;
+
+      batchTable.innerHTML = `
+        <tr>
+          <th>#</th>
+          <th>Customer</th>
+          <th>Product Cut</th>
+          <th>Samples</th>
+          <th>Queued</th>
+          <th>Action</th>
+        </tr>
+      `;
+
+      if (!inspectionBatch.length) {
+        batchTable.innerHTML += `
+          <tr>
+            <td colspan="6" class="small">No inspections queued.</td>
+          </tr>
+        `;
+      } else {
+        inspectionBatch.forEach((entry, index) => {
+          batchTable.innerHTML += `
+            <tr>
+              <td>${index + 1}</td>
+              <td>${entry.payload.customer || '--'}</td>
+              <td>${entry.payload.productCut || '--'}</td>
+              <td>${entry.payload.samples.length}</td>
+              <td>${entry.queuedAt}</td>
+              <td>
+                <button class="btn ghost" type="button" data-remove-batch="${index}" ${batchSubmitting ? 'disabled' : ''}>Remove</button>
+              </td>
+            </tr>
+          `;
+        });
+      }
+
+      addBatchBtn.disabled = batchSubmitting;
+      submitBtn.disabled = batchSubmitting;
+      submitBatchBtn.disabled = batchSubmitting || inspectionBatch.length === 0;
+      clearBatchBtn.disabled = batchSubmitting || inspectionBatch.length === 0;
+      resetBtn.disabled = batchSubmitting;
+    }
+
+    function addInspectionToBatch() {
+      if (batchSubmitting) return;
+
+      const validation = validateInspectionForSubmission();
+      if (!validation.ok) {
+        setStatus(validation.error, 'err');
+        return;
+      }
+
+      inspectionBatch.push({
+        payload: validation.payload,
+        queuedAt: nowBatchLabel()
+      });
+
+      renderBatchQueue();
+      resetInspectionOnly();
+      setStatus(`Inspection added to batch (${inspectionBatch.length} queued)`, 'ok');
+    }
+
+    function clearBatch() {
+      if (batchSubmitting) return;
+      inspectionBatch = [];
+      renderBatchQueue();
+      setStatus('Batch cleared', '');
+    }
+
+    async function submitBatch() {
+      if (batchSubmitting || !inspectionBatch.length) return;
+
+      batchSubmitting = true;
+      renderBatchQueue();
+
+      try {
+        const queuedItems = [...inspectionBatch];
+
+        for (let i = 0; i < queuedItems.length; i++) {
+          setStatus(`Submitting batch item ${i + 1} of ${queuedItems.length}...`, '');
+          submitInspectionPayload(queuedItems[i].payload);
+          await wait(1200);
+        }
+
+        inspectionBatch = [];
+        resetInspectionOnly();
+        setStatus(`Batch submission sent (${queuedItems.length} inspections)`, 'ok');
+      } catch (err) {
+        setStatus(`Batch submission stopped: ${String(err?.message || err)}`, 'err');
+      } finally {
+        batchSubmitting = false;
+        renderBatchQueue();
+      }
     }
 
     async function loadCustomers() {
@@ -674,7 +929,7 @@ textarea {
 
         customerSelect.innerHTML = '<option value="">Select customer...</option>';
 
-        list.forEach(name => {
+        list.forEach((name) => {
           const opt = document.createElement('option');
           opt.value = name;
           opt.textContent = name;
@@ -694,6 +949,7 @@ textarea {
       timeEl.value = nowTime();
       loadCustomers();
       setNeutralSampleState();
+      renderBatchQueue();
     })();
 
     // ====== EVENTS ======
@@ -745,57 +1001,20 @@ textarea {
     pfN.addEventListener('click', () => setPassFail('N'));
 
     resetBtn.addEventListener('click', () => resetAll());
+    addBatchBtn.addEventListener('click', () => addInspectionToBatch());
+    submitBatchBtn.addEventListener('click', () => submitBatch());
+    clearBatchBtn.addEventListener('click', () => clearBatch());
 
     submitBtn.addEventListener('click', () => {
-      saveActiveSampleFromUI();
+      if (batchSubmitting) return;
 
-      if (!jobId.value.trim()) return setStatus('Job ID required', 'err');
-      if (!sampleSizeRequiredEl.value) return setStatus('Enter lot size to calculate required sample size', 'err');
-      if (!customerSelect.value) return setStatus('Select customer', 'err');
-
-      const requiredCount = toInt(sampleSizeRequiredEl.value);
-      if (!requiredCount || requiredCount < 1) {
-        return setStatus('Invalid required sample count', 'err');
+      const validation = validateInspectionForSubmission();
+      if (!validation.ok) {
+        return setStatus(validation.error, 'err');
       }
 
-      const incompleteSamples = getIncompleteSampleNumbers(requiredCount);
-      if (incompleteSamples.length) {
-        return setStatus(`Complete required sample(s): ${incompleteSamples.join(', ')}`, 'err');
-      }
-
-      setStatus('Submitting…', '');
-
-      const payload = {
-        jobId: jobId.value.trim(),
-        date: dateEl.value || nowDate(),
-        productCut: productCut.value.trim(),
-        time: timeEl.value || nowTime(),
-        totalPieces: totalPieces.value.trim(),
-        inspector: inspector.value.trim(),
-        lotSize: (lotSizeEl.value || '').trim(),
-        sampleSizeRequired: sampleSizeRequiredEl.value,
-        tolerance: toleranceEl.value,
-
-        dimLength: document.getElementById('dimLength').value.trim(),
-        dimWidth: document.getElementById('dimWidth').value.trim(),
-        dimHeight: document.getElementById('dimHeight').value.trim(),
-        dimTapers: document.getElementById('dimTapers').value.trim(),
-        customer: customerSelect.value,
-
-        samples: samples.slice(0, requiredCount).map(s => ({
-          length: s.length,
-          width: s.width,
-          height: s.height,
-          taper: s.taper,
-          visualPass: s.visualPass,
-          passFail: s.passFail || '',
-          notes: s.notes || ''
-        }))
-      };
-
-      payloadEl.value = JSON.stringify(payload);
-      postForm.submit();
-
+      setStatus('Submitting...', '');
+      submitInspectionPayload(validation.payload);
       setStatus('Submitted (check Drive)', 'ok');
     });
 
@@ -820,7 +1039,7 @@ textarea {
         newCustomerInput.value = '';
         customerSelect.innerHTML = '<option value="">Select customer...</option>';
 
-        list.forEach(n => {
+        list.forEach((n) => {
           const opt = document.createElement('option');
           opt.value = n;
           opt.textContent = n;
@@ -833,6 +1052,18 @@ textarea {
       } catch {
         setStatus('Add failed', 'err');
       }
+    });
+
+    batchTable.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-remove-batch]');
+      if (!btn || batchSubmitting) return;
+
+      const index = Number(btn.getAttribute('data-remove-batch'));
+      if (!Number.isInteger(index) || index < 0 || index >= inspectionBatch.length) return;
+
+      inspectionBatch.splice(index, 1);
+      renderBatchQueue();
+      setStatus('Removed inspection from batch', '');
     });
   </script>
 
