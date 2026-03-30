@@ -52,6 +52,7 @@
 <script src="/reports/reports-header.js"></script>
 <script>
 document.getElementById('reports-page-title').textContent = 'Incident Detail';
+document.querySelector('.topbar p').textContent = 'Read-only incident visibility from the incident tracker.';
 </script>
 
 <div class="reports-wrap">
@@ -66,7 +67,7 @@ document.getElementById('reports-page-title').textContent = 'Incident Detail';
 </div>
 
 <div class="card">
-  <p id="status" class="report-status"></p>
+  <p id="status" class="report-status" style="display:none;"></p>
 </div>
 
 <div id="content" style="display: none;">
@@ -148,11 +149,13 @@ async function loadIncident() {
   const content = document.getElementById("content");
 
   if (!id) {
+    status.style.display = "block";
     status.textContent = "Missing incident id.";
     status.classList.add("error");
     return;
   }
 
+  status.style.display = "block";
   status.textContent = "Loading...";
   status.classList.remove("error");
 
@@ -161,12 +164,14 @@ async function loadIncident() {
     const data = await res.json();
 
     if (res.status === 404) {
+      status.style.display = "block";
       status.textContent = "Incident not found.";
       status.classList.add("error");
       return;
     }
 
     if (!res.ok || !data.ok || !data.item) {
+      status.style.display = "block";
       status.textContent = "Unable to load incident";
       status.classList.add("error");
       return;
@@ -174,8 +179,10 @@ async function loadIncident() {
 
     renderIncident(data.item);
     content.style.display = "block";
+    status.style.display = "none";
     status.textContent = "";
   } catch (err) {
+    status.style.display = "block";
     status.textContent = "Unable to load incident";
     status.classList.add("error");
   }
