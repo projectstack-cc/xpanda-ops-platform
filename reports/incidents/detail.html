@@ -61,112 +61,57 @@ document.getElementById('reports-page-title').textContent = 'Incident Detail';
 <div class="reports-section-intro">
   <h2 class="reports-section-title">Incident Detail</h2>
   <p class="reports-section-subtitle">
-    Read-only incident visibility for team members without direct Google Drive access.
+    Read-only incident visibility from the incident tracker.
   </p>
 </div>
 
 <div class="card">
   <p id="status" class="report-status"></p>
-  <div id="content" style="display: none;">
-    <div class="card">
-      <h2>Incident Overview</h2>
-      <div class="detail-grid">
-        <div class="detail-field">
-          <div class="detail-label">Date</div>
-          <div class="detail-value" id="fieldDate">--</div>
-        </div>
-        <div class="detail-field">
-          <div class="detail-label">Customer</div>
-          <div class="detail-value" id="fieldCustomer">--</div>
-        </div>
-        <div class="detail-field">
-          <div class="detail-label">Incident Type</div>
-          <div class="detail-value" id="fieldIncidentType">--</div>
-        </div>
-        <div class="detail-field">
-          <div class="detail-label">Risk Level</div>
-          <div class="detail-value" id="fieldRiskLevel">--</div>
-        </div>
+</div>
+
+<div id="content" style="display: none;">
+  <div class="card">
+    <h2>Incident Overview</h2>
+    <div class="detail-grid">
+      <div class="detail-field">
+        <div class="detail-label">Date</div>
+        <div class="detail-value" id="fieldDate">--</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Customer</div>
+        <div class="detail-value" id="fieldCustomer">--</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Incident Type</div>
+        <div class="detail-value" id="fieldIncidentType">--</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Risk Level</div>
+        <div class="detail-value" id="fieldRiskLevel">--</div>
       </div>
     </div>
+  </div>
 
-    <div class="card">
-      <h2>Classification</h2>
-      <div class="detail-grid">
-        <div class="detail-field">
-          <div class="detail-label">Month</div>
-          <div class="detail-value" id="fieldMonth">--</div>
-        </div>
-        <div class="detail-field">
-          <div class="detail-label">Year</div>
-          <div class="detail-value" id="fieldYear">--</div>
-        </div>
-        <div class="detail-field full">
-          <div class="detail-label">Reported By</div>
-          <div class="detail-value" id="fieldReportedBy">--</div>
-        </div>
+  <div class="card">
+    <h2>Classification</h2>
+    <div class="detail-grid">
+      <div class="detail-field">
+        <div class="detail-label">Month</div>
+        <div class="detail-value" id="fieldMonth">--</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Year</div>
+        <div class="detail-value" id="fieldYear">--</div>
       </div>
     </div>
+  </div>
 
-    <div class="card">
-      <h2>Details</h2>
-      <div class="detail-grid">
-        <div class="detail-field full">
-          <div class="detail-label">Summary</div>
-          <div class="detail-value" id="fieldSummary">--</div>
-        </div>
-        <div class="detail-field full">
-          <div class="detail-label">Description</div>
-          <div class="detail-value" id="fieldDescription">--</div>
-        </div>
-        <div class="detail-field full">
-          <div class="detail-label">Location</div>
-          <div class="detail-value" id="fieldLocation">--</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Actions / Root Cause</h2>
-      <div class="detail-grid">
-        <div class="detail-field full">
-          <div class="detail-label">Immediate Actions</div>
-          <div class="detail-value" id="fieldImmediateActions">--</div>
-        </div>
-        <div class="detail-field full">
-          <div class="detail-label">Root Cause</div>
-          <div class="detail-value" id="fieldRootCause">--</div>
-        </div>
-        <div class="detail-field full">
-          <div class="detail-label">Corrective Action</div>
-          <div class="detail-value" id="fieldCorrectiveAction">--</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Reference Information</h2>
-      <div class="detail-grid">
-        <div class="detail-field">
-          <div class="detail-label">Injury</div>
-          <div class="detail-value" id="fieldInjury">--</div>
-        </div>
-        <div class="detail-field">
-          <div class="detail-label">Property Damage</div>
-          <div class="detail-value" id="fieldPropertyDamage">--</div>
-        </div>
-        <div class="detail-field full">
-          <div class="detail-label">Witnesses</div>
-          <div class="detail-value" id="fieldWitnesses">--</div>
-        </div>
-        <div class="detail-field">
-          <div class="detail-label">Incident ID</div>
-          <div class="detail-value" id="fieldIncidentId">--</div>
-        </div>
-        <div class="detail-field">
-          <div class="detail-label">Sheet Row</div>
-          <div class="detail-value" id="fieldSheetRow">--</div>
-        </div>
+  <div class="card">
+    <h2>Summary</h2>
+    <div class="detail-grid">
+      <div class="detail-field full">
+        <div class="detail-label">Summary</div>
+        <div class="detail-value" id="fieldSummary">--</div>
       </div>
     </div>
   </div>
@@ -194,18 +139,7 @@ function renderIncident(item) {
   setText("fieldRiskLevel", item.risk_level);
   setText("fieldMonth", item.month);
   setText("fieldYear", item.year);
-  setText("fieldReportedBy", item.reported_by);
   setText("fieldSummary", item.summary);
-  setText("fieldDescription", item.description);
-  setText("fieldLocation", item.location);
-  setText("fieldImmediateActions", item.immediate_actions);
-  setText("fieldRootCause", item.root_cause);
-  setText("fieldCorrectiveAction", item.corrective_action);
-  setText("fieldInjury", item.injury);
-  setText("fieldPropertyDamage", item.property_damage);
-  setText("fieldWitnesses", item.witnesses);
-  setText("fieldIncidentId", item.incident_id);
-  setText("fieldSheetRow", item.sheet_row ? String(item.sheet_row) : "--");
 }
 
 async function loadIncident() {

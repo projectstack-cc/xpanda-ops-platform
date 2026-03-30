@@ -741,11 +741,7 @@ function parseIncidentRows(gvizData) {
         rawIncidentMonth ||
         "",
       title: getFieldValue(cells, ["title", "incidenttitle", "subject"]),
-      summary: getFieldValue(cells, ["summary", "incidentsummary"]),
-      description: getFieldValue(
-        cells,
-        ["incidentdetails", "description", "details"],
-      ),
+      summary: getFieldValue(cells, ["notes", "summary", "incidentsummary"], 3),
       location: getFieldValue(cells, ["location"]),
       reported_by: getFieldValue(
         cells,
@@ -1049,24 +1045,13 @@ async function handleIncidentDetail(request, env) {
       ok: true,
       item: {
         incident_id: incident.incident_id,
-        sheet_row: incident.sheet_row,
         date: incident.date,
         month: incident.month,
         year: incident.year,
         customer: incident.customer,
         incident_type: incident.incident_type,
         risk_level: incident.risk_level,
-        reported_by: incident.reported_by,
-        title: incident.title,
         summary: incident.summary,
-        description: incident.description,
-        location: incident.location,
-        immediate_actions: incident.immediate_actions,
-        root_cause: incident.root_cause,
-        corrective_action: incident.corrective_action,
-        injury: incident.injury,
-        property_damage: incident.property_damage,
-        witnesses: incident.witnesses,
       },
     });
   } catch (e) {
