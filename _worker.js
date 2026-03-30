@@ -43,6 +43,10 @@ export default {
         return handleIncidentSummary(request, env);
       }
 
+      if (url.pathname === "/api/reports/incidents-list") {
+        return handleIncidentList(request, env);
+      }
+
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
         return new Response(
@@ -646,17 +650,33 @@ async function handleApiReportsScrapReasons(request, env) {
 }
 
 function parseIncidentRows(gvizData) {
-  const rows = gvizData.table.rows || [];
+  const rows = gvizData?.table?.rows || [];
+
+  function getCellText(cell) {
+    if (!cell) return "";
+    if (cell.f != null && String(cell.f).trim()) return String(cell.f).trim();
+    if (cell.v == null) return "";
+    return String(cell.v).trim();
+  }
+
+  function normalizeIncidentMonth(value) {
+    const text = String(value || "").trim();
+    const dashMatch = text.match(/^(\d{4})-(\d{2})/);
+    if (dashMatch) return `${dashMatch[1]}-${dashMatch[2]}`;
+
+    const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashMatch) {
+      return `${slashMatch[3]}-${slashMatch[1].padStart(2, "0")}`;
+    }
+
+    return "";
+  }
 
   return rows.map((r, index) => {
     const cells = r.c || [];
-
-    const incidentMonth = cells[11]?.v || ""; // Column L
-    const year = String(cells[7]?.v || "").trim(); // Column H
-
-    const month = incidentMonth
-      ? String(incidentMonth).slice(0, 7) // YYYY-MM
-      : "";
+    const rawIncidentMonth = getCellText(cells[11]); // Column L
+    const month = normalizeIncidentMonth(rawIncidentMonth);
+    const year = getCellText(cells[7]) || (month ? month.slice(0, 4) : ""); // Column H
 
     return {
       incident_id: `row-${index + 1}`,
@@ -672,7 +692,7 @@ function parseIncidentRows(gvizData) {
       month,
 
       // Future-safe placeholders
-      date: incidentMonth || "",
+      date: rawIncidentMonth || "",
       title: "",
       summary: "",
       description: "",
@@ -713,6 +733,9 @@ async function handleIncidentTrend(request, env) {
 
     const data = JSON.parse(jsonText);
     const incidents = parseIncidentRows(data);
+    const incidentsForYear = incidents.filter((incident) => {
+      return incident.month && String(incident.year) === String(year);
+    });
 
     const monthOrder = [
       "01",
@@ -734,10 +757,7 @@ async function handleIncidentTrend(request, env) {
       counts[m] = 0;
     });
 
-    incidents.forEach((incident) => {
-      if (!incident.month || !incident.year) return;
-      if (String(incident.year) !== String(year)) return;
-
+    incidentsForYear.forEach((incident) => {
       const monthPart = incident.month.split("-")[1];
       if (counts[monthPart] !== undefined) {
         counts[monthPart]++;
@@ -792,6 +812,9 @@ async function handleIncidentSummary(request, env) {
 
     const data = JSON.parse(jsonText);
     const incidents = parseIncidentRows(data);
+    const incidentsForYear = incidents.filter(
+      (incident) => String(incident.year) === String(year),
+    );
 
     let total = 0;
     let highRisk = 0;
@@ -813,9 +836,7 @@ async function handleIncidentSummary(request, env) {
       Unspecified: 0,
     };
 
-    incidents.forEach((incident) => {
-      if (String(incident.year) !== String(year)) return;
-
+    incidentsForYear.forEach((incident) => {
       total++;
 
       const customer = incident.customer || "Unspecified";
@@ -879,6 +900,80 @@ async function handleIncidentSummary(request, env) {
       {
         ok: false,
         error: "Incident summary fetch failed",
+        detail: String(e?.message || e),
+      },
+      500,
+    );
+  }
+}
+
+async function handleIncidentList(request, env) {
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+
+  const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
+
+  if (!sheetUrl) {
+    return json({ ok: false, error: "Incident sheet URL not configured" }, 500);
+  }
+
+  const url = new URL(request.url);
+  const year = url.searchParams.get("year");
+  const type = (url.searchParams.get("type") || "").trim();
+  const month = (url.searchParams.get("month") || "").trim();
+  const risk = (url.searchParams.get("risk") || "").trim();
+
+  if (!year) {
+    return json({ ok: false, error: "Missing year parameter" }, 400);
+  }
+
+  try {
+    const res = await fetch(sheetUrl);
+    const text = await res.text();
+
+    const jsonText = text
+      .replace("/*O_o*/", "")
+      .replace("google.visualization.Query.setResponse(", "")
+      .slice(0, -2);
+
+    const data = JSON.parse(jsonText);
+    const incidents = parseIncidentRows(data);
+
+    const items = incidents
+      .filter((incident) => {
+        if (String(incident.year) !== String(year)) return false;
+        if (type && incident.incident_type !== type) return false;
+        if (month && incident.month !== month) return false;
+        if (risk && incident.risk_level !== risk) return false;
+        return true;
+      })
+      .map((incident) => ({
+        incident_id: incident.incident_id,
+        sheet_row: incident.sheet_row,
+        month: incident.month,
+        customer: incident.customer,
+        incident_type: incident.incident_type,
+        risk_level: incident.risk_level,
+        summary: incident.summary,
+      }));
+
+    return json({
+      ok: true,
+      year,
+      filters: {
+        type,
+        month,
+        risk,
+      },
+      count: items.length,
+      items,
+    });
+  } catch (e) {
+    return json(
+      {
+        ok: false,
+        error: "Incident list fetch failed",
         detail: String(e?.message || e),
       },
       500,
