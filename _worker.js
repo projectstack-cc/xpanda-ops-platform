@@ -708,13 +708,25 @@ function parseIncidentRows(gvizData) {
   });
 }
 
-async function handleIncidentTrend(request, env) {
+async function fetchIncidentData(env) {
   const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
 
   if (!sheetUrl) {
-    return json({ ok: false, error: "Incident sheet URL not configured" }, 500);
+    throw new Error("Incident sheet URL not configured");
   }
 
+  const res = await fetch(sheetUrl);
+  const text = await res.text();
+
+  const jsonText = text
+    .replace("/*O_o*/", "")
+    .replace("google.visualization.Query.setResponse(", "")
+    .slice(0, -2);
+
+  return JSON.parse(jsonText);
+}
+
+async function handleIncidentTrend(request, env) {
   const url = new URL(request.url);
   const year = url.searchParams.get("year");
 
@@ -723,15 +735,7 @@ async function handleIncidentTrend(request, env) {
   }
 
   try {
-    const res = await fetch(sheetUrl);
-    const text = await res.text();
-
-    const jsonText = text
-      .replace("/*O_o*/", "")
-      .replace("google.visualization.Query.setResponse(", "")
-      .slice(0, -2);
-
-    const data = JSON.parse(jsonText);
+    const data = await fetchIncidentData(env);
     const incidents = parseIncidentRows(data);
     const incidentsForYear = incidents.filter((incident) => {
       return incident.month && String(incident.year) === String(year);
@@ -788,12 +792,6 @@ async function handleIncidentTrend(request, env) {
 }
 
 async function handleIncidentSummary(request, env) {
-  const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
-
-  if (!sheetUrl) {
-    return json({ ok: false, error: "Incident sheet URL not configured" }, 500);
-  }
-
   const url = new URL(request.url);
   const year = url.searchParams.get("year");
 
@@ -802,15 +800,7 @@ async function handleIncidentSummary(request, env) {
   }
 
   try {
-    const res = await fetch(sheetUrl);
-    const text = await res.text();
-
-    const jsonText = text
-      .replace("/*O_o*/", "")
-      .replace("google.visualization.Query.setResponse(", "")
-      .slice(0, -2);
-
-    const data = JSON.parse(jsonText);
+    const data = await fetchIncidentData(env);
     const incidents = parseIncidentRows(data);
     const incidentsForYear = incidents.filter(
       (incident) => String(incident.year) === String(year),
@@ -912,12 +902,6 @@ async function handleIncidentList(request, env) {
     return json({ ok: false, error: "Method Not Allowed" }, 405);
   }
 
-  const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
-
-  if (!sheetUrl) {
-    return json({ ok: false, error: "Incident sheet URL not configured" }, 500);
-  }
-
   const url = new URL(request.url);
   const year = url.searchParams.get("year");
   const type = (url.searchParams.get("type") || "").trim();
@@ -929,15 +913,7 @@ async function handleIncidentList(request, env) {
   }
 
   try {
-    const res = await fetch(sheetUrl);
-    const text = await res.text();
-
-    const jsonText = text
-      .replace("/*O_o*/", "")
-      .replace("google.visualization.Query.setResponse(", "")
-      .slice(0, -2);
-
-    const data = JSON.parse(jsonText);
+    const data = await fetchIncidentData(env);
     const incidents = parseIncidentRows(data);
 
     const items = incidents

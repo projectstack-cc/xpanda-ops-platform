@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Incident List</title>
+<title>Incident Reports — List</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/reports/reports-shared.css">
 </head>
@@ -11,7 +11,7 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Incident List';
+document.getElementById('reports-page-title').textContent = 'Incident Reports — List';
 </script>
 
 <div class="reports-wrap">
@@ -19,7 +19,7 @@ document.getElementById('reports-page-title').textContent = 'Incident List';
 <a href="/reports/incidents/" class="reports-back-link">← Back to Incident Reports</a>
 
 <div class="reports-section-intro">
-  <h2 class="reports-section-title">Incident List</h2>
+  <h2 class="reports-section-title">Incident Reports — List</h2>
   <p class="reports-section-subtitle">
     Filtered incident lookup by year, type, month, and risk level.
   </p>
@@ -166,7 +166,7 @@ function renderTable(items) {
     const detailUrl = `/reports/incidents/detail.html?id=${encodeURIComponent(item.incident_id)}`;
 
     table.innerHTML += `
-      <tr>
+      <tr onclick="location.href='${detailUrl}'" style="cursor: pointer;">
         <td><a href="${detailUrl}">${escapeHtml(item.month || "")}</a></td>
         <td>${escapeHtml(item.customer || "")}</td>
         <td>${escapeHtml(item.incident_type || "")}</td>
@@ -206,7 +206,7 @@ async function loadIncidentList() {
     if (!res.ok || !data.ok) {
       document.getElementById("statCount").textContent = "--";
       resetTable();
-      status.textContent = data.error || "Load failed";
+      status.textContent = "Unable to load incidents.";
       status.classList.add("error");
       return;
     }
@@ -217,7 +217,7 @@ async function loadIncidentList() {
   } catch (err) {
     document.getElementById("statCount").textContent = "--";
     resetTable();
-    status.textContent = `Error: ${err.message}`;
+    status.textContent = "Unable to load incidents.";
     status.classList.add("error");
   }
 }
