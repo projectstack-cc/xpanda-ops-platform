@@ -47,6 +47,10 @@ export default {
         return handleIncidentList(request, env);
       }
 
+      if (url.pathname === "/api/reports/incidents-detail") {
+        return handleIncidentDetail(request, env);
+      }
+
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
         return new Response(
@@ -651,12 +655,19 @@ async function handleApiReportsScrapReasons(request, env) {
 
 function parseIncidentRows(gvizData) {
   const rows = gvizData?.table?.rows || [];
+  const cols = gvizData?.table?.cols || [];
 
   function getCellText(cell) {
     if (!cell) return "";
     if (cell.f != null && String(cell.f).trim()) return String(cell.f).trim();
     if (cell.v == null) return "";
     return String(cell.v).trim();
+  }
+
+  function normalizeLabel(label) {
+    return String(label || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
   }
 
   function normalizeIncidentMonth(value) {
@@ -672,49 +683,113 @@ function parseIncidentRows(gvizData) {
     return "";
   }
 
+  const labelToIndex = {};
+  cols.forEach((col, index) => {
+    const normalized = normalizeLabel(col?.label || col?.id || "");
+    if (normalized && labelToIndex[normalized] === undefined) {
+      labelToIndex[normalized] = index;
+    }
+  });
+
+  function getFieldValue(cells, labels, fallbackIndex) {
+    for (const label of labels) {
+      const index = labelToIndex[normalizeLabel(label)];
+      if (index !== undefined) {
+        const value = getCellText(cells[index]);
+        if (value) return value;
+      }
+    }
+
+    if (fallbackIndex !== undefined) {
+      return getCellText(cells[fallbackIndex]);
+    }
+
+    return "";
+  }
+
   return rows.map((r, index) => {
     const cells = r.c || [];
-    const rawIncidentMonth = getCellText(cells[11]); // Column L
+    const rawIncidentMonth = getFieldValue(
+      cells,
+      ["incidentmonth", "month", "reportmonth"],
+      11,
+    );
     const month = normalizeIncidentMonth(rawIncidentMonth);
-    const year = getCellText(cells[7]) || (month ? month.slice(0, 4) : ""); // Column H
+    const year =
+      getFieldValue(cells, ["year"], 7) || (month ? month.slice(0, 4) : "");
 
     return {
       incident_id: `row-${index + 1}`,
       sheet_row: index + 1,
 
       // Core fields
-      customer: String(cells[1]?.v || "").trim(),
-      incident_type: String(cells[2]?.v || "").trim(),
+      customer: getFieldValue(cells, ["customer", "customername"], 1),
+      incident_type: getFieldValue(
+        cells,
+        ["incidentcategory", "incidenttype", "category", "type"],
+        2,
+      ),
       year,
-      risk_level: String(cells[13]?.v || "").trim(),
+      risk_level: getFieldValue(cells, ["risklevel", "risk"], 13),
 
       // Derived
       month,
 
-      // Future-safe placeholders
-      date: rawIncidentMonth || "",
-      title: "",
-      summary: "",
-      description: "",
-      location: "",
-      reported_by: "",
-      immediate_actions: "",
-      root_cause: "",
-      corrective_action: "",
-      injury: "",
-      property_damage: "",
-      witnesses: "",
+      // Detail fields
+      date:
+        getFieldValue(cells, ["date", "incidentdate", "reportdate"]) ||
+        rawIncidentMonth ||
+        "",
+      title: getFieldValue(cells, ["title", "incidenttitle", "subject"]),
+      summary: getFieldValue(cells, ["notes", "summary", "incidentsummary"], 3),
+      location: getFieldValue(cells, ["location"]),
+      reported_by: getFieldValue(
+        cells,
+        [
+          "reportingindividual",
+          "reportedby",
+          "personcompletingreport",
+          "personcompleting",
+        ],
+      ),
+      immediate_actions: getFieldValue(
+        cells,
+        ["immediateactions", "containmentactions", "actions"],
+      ),
+      root_cause: getFieldValue(
+        cells,
+        ["rootcausedescription", "rootcause"],
+      ),
+      corrective_action: getFieldValue(
+        cells,
+        ["correctiveactions", "correctiveaction"],
+      ),
+      injury: getFieldValue(cells, ["injury"]),
+      property_damage: getFieldValue(cells, ["propertydamage"]),
+      witnesses: getFieldValue(cells, ["witnesses", "witness"]),
     };
   });
 }
 
-async function handleIncidentTrend(request, env) {
+async function fetchIncidentData(env) {
   const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
 
   if (!sheetUrl) {
-    return json({ ok: false, error: "Incident sheet URL not configured" }, 500);
+    throw new Error("Incident sheet URL not configured");
   }
 
+  const res = await fetch(sheetUrl);
+  const text = await res.text();
+
+  const jsonText = text
+    .replace("/*O_o*/", "")
+    .replace("google.visualization.Query.setResponse(", "")
+    .slice(0, -2);
+
+  return JSON.parse(jsonText);
+}
+
+async function handleIncidentTrend(request, env) {
   const url = new URL(request.url);
   const year = url.searchParams.get("year");
 
@@ -723,15 +798,7 @@ async function handleIncidentTrend(request, env) {
   }
 
   try {
-    const res = await fetch(sheetUrl);
-    const text = await res.text();
-
-    const jsonText = text
-      .replace("/*O_o*/", "")
-      .replace("google.visualization.Query.setResponse(", "")
-      .slice(0, -2);
-
-    const data = JSON.parse(jsonText);
+    const data = await fetchIncidentData(env);
     const incidents = parseIncidentRows(data);
     const incidentsForYear = incidents.filter((incident) => {
       return incident.month && String(incident.year) === String(year);
@@ -788,12 +855,6 @@ async function handleIncidentTrend(request, env) {
 }
 
 async function handleIncidentSummary(request, env) {
-  const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
-
-  if (!sheetUrl) {
-    return json({ ok: false, error: "Incident sheet URL not configured" }, 500);
-  }
-
   const url = new URL(request.url);
   const year = url.searchParams.get("year");
 
@@ -802,15 +863,7 @@ async function handleIncidentSummary(request, env) {
   }
 
   try {
-    const res = await fetch(sheetUrl);
-    const text = await res.text();
-
-    const jsonText = text
-      .replace("/*O_o*/", "")
-      .replace("google.visualization.Query.setResponse(", "")
-      .slice(0, -2);
-
-    const data = JSON.parse(jsonText);
+    const data = await fetchIncidentData(env);
     const incidents = parseIncidentRows(data);
     const incidentsForYear = incidents.filter(
       (incident) => String(incident.year) === String(year),
@@ -912,12 +965,6 @@ async function handleIncidentList(request, env) {
     return json({ ok: false, error: "Method Not Allowed" }, 405);
   }
 
-  const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
-
-  if (!sheetUrl) {
-    return json({ ok: false, error: "Incident sheet URL not configured" }, 500);
-  }
-
   const url = new URL(request.url);
   const year = url.searchParams.get("year");
   const type = (url.searchParams.get("type") || "").trim();
@@ -929,15 +976,7 @@ async function handleIncidentList(request, env) {
   }
 
   try {
-    const res = await fetch(sheetUrl);
-    const text = await res.text();
-
-    const jsonText = text
-      .replace("/*O_o*/", "")
-      .replace("google.visualization.Query.setResponse(", "")
-      .slice(0, -2);
-
-    const data = JSON.parse(jsonText);
+    const data = await fetchIncidentData(env);
     const incidents = parseIncidentRows(data);
 
     const items = incidents
@@ -974,6 +1013,52 @@ async function handleIncidentList(request, env) {
       {
         ok: false,
         error: "Incident list fetch failed",
+        detail: String(e?.message || e),
+      },
+      500,
+    );
+  }
+}
+
+async function handleIncidentDetail(request, env) {
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+
+  const url = new URL(request.url);
+  const id = (url.searchParams.get("id") || "").trim();
+
+  if (!id) {
+    return json({ ok: false, error: "Missing id parameter" }, 400);
+  }
+
+  try {
+    const data = await fetchIncidentData(env);
+    const incidents = parseIncidentRows(data);
+    const incident = incidents.find((item) => item.incident_id === id);
+
+    if (!incident) {
+      return json({ ok: false, error: "Incident not found" }, 404);
+    }
+
+    return json({
+      ok: true,
+      item: {
+        incident_id: incident.incident_id,
+        date: incident.date,
+        month: incident.month,
+        year: incident.year,
+        customer: incident.customer,
+        incident_type: incident.incident_type,
+        risk_level: incident.risk_level,
+        summary: incident.summary,
+      },
+    });
+  } catch (e) {
+    return json(
+      {
+        ok: false,
+        error: "Incident detail fetch failed",
         detail: String(e?.message || e),
       },
       500,

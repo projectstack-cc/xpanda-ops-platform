@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Incident Detail</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/reports/reports-shared.css">
+<style>
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.detail-field {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--card-bg);
+}
+
+.detail-field.full {
+  grid-column: 1 / -1;
+}
+
+.detail-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--muted);
+}
+
+.detail-value {
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<script src="/reports/reports-header.js"></script>
+<script>
+document.getElementById('reports-page-title').textContent = 'Incident Detail';
+document.querySelector('.topbar p').textContent = 'Read-only incident visibility from the incident tracker.';
+</script>
+
+<div class="reports-wrap">
+
+<a href="/reports/incidents/list.html" class="reports-back-link">← Back to Incident List</a>
+
+<div class="reports-section-intro">
+  <h2 class="reports-section-title">Incident Detail</h2>
+  <p class="reports-section-subtitle">
+    Read-only incident visibility from the incident tracker.
+  </p>
+</div>
+
+<div class="card">
+  <p id="status" class="report-status" style="display:none;"></p>
+</div>
+
+<div id="content" style="display: none;">
+  <div class="card">
+    <h2>Incident Overview</h2>
+    <div class="detail-grid">
+      <div class="detail-field">
+        <div class="detail-label">Date</div>
+        <div class="detail-value" id="fieldDate">--</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Customer</div>
+        <div class="detail-value" id="fieldCustomer">--</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Incident Type</div>
+        <div class="detail-value" id="fieldIncidentType">--</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Risk Level</div>
+        <div class="detail-value" id="fieldRiskLevel">--</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Classification</h2>
+    <div class="detail-grid">
+      <div class="detail-field">
+        <div class="detail-label">Month</div>
+        <div class="detail-value" id="fieldMonth">--</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Year</div>
+        <div class="detail-value" id="fieldYear">--</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Summary</h2>
+    <div class="detail-grid">
+      <div class="detail-field full">
+        <div class="detail-label">Summary</div>
+        <div class="detail-value" id="fieldSummary">--</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="reports-platform-footer">
+  <a href="/">← Back to Operations Platform</a>
+</div>
+
+</div>
+
+<script>
+function getQueryParam(name) {
+  return new URLSearchParams(window.location.search).get(name) || "";
+}
+
+function setText(id, value) {
+  document.getElementById(id).textContent = value || "--";
+}
+
+function renderIncident(item) {
+  setText("fieldDate", item.date);
+  setText("fieldCustomer", item.customer);
+  setText("fieldIncidentType", item.incident_type);
+  setText("fieldRiskLevel", item.risk_level);
+  setText("fieldMonth", item.month);
+  setText("fieldYear", item.year);
+  setText("fieldSummary", item.summary);
+}
+
+async function loadIncident() {
+  const id = getQueryParam("id");
+  const status = document.getElementById("status");
+  const content = document.getElementById("content");
+
+  if (!id) {
+    status.style.display = "block";
+    status.textContent = "Missing incident id.";
+    status.classList.add("error");
+    return;
+  }
+
+  status.style.display = "block";
+  status.textContent = "Loading...";
+  status.classList.remove("error");
+
+  try {
+    const res = await fetch(`/api/reports/incidents-detail?id=${encodeURIComponent(id)}`);
+    const data = await res.json();
+
+    if (res.status === 404) {
+      status.style.display = "block";
+      status.textContent = "Incident not found.";
+      status.classList.add("error");
+      return;
+    }
+
+    if (!res.ok || !data.ok || !data.item) {
+      status.style.display = "block";
+      status.textContent = "Unable to load incident";
+      status.classList.add("error");
+      return;
+    }
+
+    renderIncident(data.item);
+    content.style.display = "block";
+    status.style.display = "none";
+    status.textContent = "";
+  } catch (err) {
+    status.style.display = "block";
+    status.textContent = "Unable to load incident";
+    status.classList.add("error");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", loadIncident);
+</script>
+
+</body>
+</html>

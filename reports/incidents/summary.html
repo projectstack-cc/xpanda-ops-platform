@@ -100,6 +100,15 @@
       let typeChart = null;
       let riskChart = null;
 
+      function navigateToIncidentList(params) {
+        const query = new URLSearchParams(params);
+        const year = query.get("year");
+
+        if (!year) return;
+
+        window.location.href = `/reports/incidents/list.html?${query.toString()}`;
+      }
+
       function num(v) {
         const n = Number(v);
         return Number.isFinite(n) ? n : 0;
@@ -152,6 +161,16 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (_, elements) => {
+              if (!elements.length) return;
+
+              const year = document.getElementById("yearPicker").value;
+              const type = rows[elements[0].index]?.type;
+
+              if (!year || !type) return;
+
+              navigateToIncidentList({ year, type });
+            },
             plugins: {
               legend: { display: false },
             },
@@ -184,6 +203,16 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (_, elements) => {
+              if (!elements.length) return;
+
+              const year = document.getElementById("yearPicker").value;
+              const risk = rows[elements[0].index]?.risk;
+
+              if (!year || !risk) return;
+
+              navigateToIncidentList({ year, risk });
+            },
             plugins: {
               legend: { display: false },
             },
@@ -252,6 +281,29 @@
           );
           document.getElementById("statTopType").textContent =
             data.topType || "--";
+
+          const statHighRisk = document.getElementById("statHighRisk");
+          const statTopType = document.getElementById("statTopType");
+
+          statHighRisk.style.cursor = num(data.highRisk) > 0 ? "pointer" : "";
+          statTopType.style.cursor = data.topType ? "pointer" : "";
+
+          statHighRisk.onclick =
+            num(data.highRisk) > 0
+              ? () =>
+                  navigateToIncidentList({
+                    year,
+                    risk: "3 - High Risk",
+                  })
+              : null;
+
+          statTopType.onclick = data.topType
+            ? () =>
+                navigateToIncidentList({
+                  year,
+                  type: data.topType,
+                })
+            : null;
 
           renderTypeChart(data.typeBreakdown || []);
           renderRiskChart(data.riskBreakdown || []);
