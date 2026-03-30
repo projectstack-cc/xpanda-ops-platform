@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>xPanda Foam - Density Calculator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <link rel="icon" href="/qc-assets/qc-favicon.png" sizes="any">
+  <link rel="apple-touch-icon" href="/qc-assets/qc-favicon.png">
+
+  <link rel="stylesheet" href="/qc/qc-shared.css">
+
+  <style>
+    .page-wrap {
+      padding: 16px;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 18px;
+      margin: 0 0 10px;
+    }
+
+    h2 {
+      font-size: 14px;
+      margin: 0 0 10px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 10px 0 4px;
+    }
+
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--input-border);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 14px;
+      background: var(--input-bg);
+      color: var(--text);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    @media (min-width: 720px) {
+      .grid.two { grid-template-columns: 1fr 1fr; }
+    }
+
+    .sticky {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: var(--bg);
+      padding: 8px 0 10px;
+      margin-bottom: 10px;
+    }
+
+    .bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .bar .left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .bar .right {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .small {
+      font-size: 12px;
+      color: var(--pill);
+      margin-top: 6px;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .result-item {
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 12px;
+      background: var(--card-bg);
+    }
+
+    .result-label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      margin-bottom: 6px;
+    }
+
+    .result-value {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .ok { color: #0b7a28; font-weight: 700; }
+    .warn { color: #b35c00; font-weight: 700; }
+    .err { color: #b00020; font-weight: 700; }
+
+    @media (min-width: 720px) {
+      .result-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-wrap {
+        padding: 12px;
+      }
+
+      .bar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .bar .right {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <script src="/qc/qc-header.js"></script>
+  <script>
+    document.getElementById('qc-page-title').textContent = 'Density Calculator';
+    document.getElementById('qc-page-subtitle').textContent = 'Calculate foam density from dimensions and weight.';
+  </script>
+
+  <div class="page-wrap">
+    <div class="sticky">
+      <div class="bar">
+        <div class="left">
+          <div><strong>Density Calculator</strong></div>
+          <div class="pill" id="statusPill">Ready</div>
+        </div>
+        <div class="right">
+          <button class="btn ghost" type="button" id="resetBtn">Reset</button>
+          <button class="btn primary" type="button" id="calculateBtn">Calculate</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>Calculator</h1>
+      <div class="small">Enter dimensions in inches and weight in pounds.</div>
+
+      <div class="grid two">
+        <div>
+          <label for="length">Length (in)</label>
+          <input id="length" inputmode="decimal" autocomplete="off" />
+        </div>
+        <div>
+          <label for="width">Width (in)</label>
+          <input id="width" inputmode="decimal" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div>
+          <label for="height">Height (in)</label>
+          <input id="height" inputmode="decimal" autocomplete="off" />
+        </div>
+        <div>
+          <label for="weight">Weight (lbs)</label>
+          <input id="weight" inputmode="decimal" autocomplete="off" />
+        </div>
+      </div>
+
+      <div>
+        <label for="targetDensity">Target Density (lb/ft^3) - Optional</label>
+        <input id="targetDensity" inputmode="decimal" autocomplete="off" />
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>Results</h1>
+      <div class="result-grid">
+        <div class="result-item">
+          <div class="result-label">Cubic Inches</div>
+          <div class="result-value" id="cubicInchesValue">--</div>
+        </div>
+        <div class="result-item">
+          <div class="result-label">Cubic Feet</div>
+          <div class="result-value" id="cubicFeetValue">--</div>
+        </div>
+        <div class="result-item">
+          <div class="result-label">Density (lb/ft^3)</div>
+          <div class="result-value" id="densityValue">--</div>
+        </div>
+        <div class="result-item" id="targetCard" style="display:none;">
+          <div class="result-label">Target Density</div>
+          <div class="result-value" id="targetDensityValue">--</div>
+        </div>
+        <div class="result-item" id="varianceCard" style="display:none;">
+          <div class="result-label">Variance</div>
+          <div class="result-value" id="varianceValue">--</div>
+        </div>
+        <div class="result-item" id="comparisonCard" style="display:none;">
+          <div class="result-label">Comparison Result</div>
+          <div class="result-value" id="comparisonValue">--</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    xPanda QC System v1
+  </footer>
+
+  <script>
+    const statusPill = document.getElementById('statusPill');
+    const calculateBtn = document.getElementById('calculateBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    const lengthEl = document.getElementById('length');
+    const widthEl = document.getElementById('width');
+    const heightEl = document.getElementById('height');
+    const weightEl = document.getElementById('weight');
+    const targetDensityEl = document.getElementById('targetDensity');
+
+    const cubicInchesValue = document.getElementById('cubicInchesValue');
+    const cubicFeetValue = document.getElementById('cubicFeetValue');
+    const densityValue = document.getElementById('densityValue');
+    const targetCard = document.getElementById('targetCard');
+    const varianceCard = document.getElementById('varianceCard');
+    const comparisonCard = document.getElementById('comparisonCard');
+    const targetDensityValue = document.getElementById('targetDensityValue');
+    const varianceValue = document.getElementById('varianceValue');
+    const comparisonValue = document.getElementById('comparisonValue');
+
+    function setStatus(text, cls) {
+      statusPill.textContent = text;
+      statusPill.className = 'pill ' + (cls || '');
+    }
+
+    function toNumber(value) {
+      const n = Number(String(value || '').trim());
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function formatFixed(value) {
+      return Number(value).toFixed(3);
+    }
+
+    function resetResults() {
+      cubicInchesValue.textContent = '--';
+      cubicFeetValue.textContent = '--';
+      densityValue.textContent = '--';
+      targetDensityValue.textContent = '--';
+      varianceValue.textContent = '--';
+      comparisonValue.textContent = '--';
+      targetCard.style.display = 'none';
+      varianceCard.style.display = 'none';
+      comparisonCard.style.display = 'none';
+    }
+
+    function getInputs() {
+      return {
+        length: toNumber(lengthEl.value),
+        width: toNumber(widthEl.value),
+        height: toNumber(heightEl.value),
+        weight: toNumber(weightEl.value),
+        targetDensity: targetDensityEl.value.trim() === '' ? null : toNumber(targetDensityEl.value)
+      };
+    }
+
+    function calculateDensity(showErrors) {
+      const inputs = getInputs();
+
+      if (
+        !inputs.length || inputs.length <= 0 ||
+        !inputs.width || inputs.width <= 0 ||
+        !inputs.height || inputs.height <= 0 ||
+        !inputs.weight || inputs.weight <= 0
+      ) {
+        if (showErrors) {
+          setStatus('Enter valid values greater than 0 for length, width, height, and weight.', 'err');
+        } else {
+          setStatus('Ready', '');
+        }
+        resetResults();
+        return;
+      }
+
+      if (targetDensityEl.value.trim() !== '' && (!inputs.targetDensity || inputs.targetDensity <= 0)) {
+        if (showErrors) {
+          setStatus('Target density must be greater than 0 when provided.', 'err');
+        }
+        targetCard.style.display = 'none';
+        varianceCard.style.display = 'none';
+        comparisonCard.style.display = 'none';
+        return;
+      }
+
+      const cubicInches = inputs.length * inputs.width * inputs.height;
+      const cubicFeet = cubicInches / 1728;
+      const density = inputs.weight / cubicFeet;
+
+      cubicInchesValue.textContent = Math.round(cubicInches * 1000) / 1000;
+      cubicFeetValue.textContent = formatFixed(cubicFeet);
+      densityValue.textContent = formatFixed(density);
+
+      if (inputs.targetDensity && inputs.targetDensity > 0) {
+        const roundedDensity = Number(formatFixed(density));
+        const roundedTarget = Number(formatFixed(inputs.targetDensity));
+        const variance = roundedDensity - roundedTarget;
+
+        targetCard.style.display = 'block';
+        varianceCard.style.display = 'block';
+        comparisonCard.style.display = 'block';
+
+        targetDensityValue.textContent = formatFixed(inputs.targetDensity);
+        varianceValue.textContent = variance >= 0 ? `+${formatFixed(variance)}` : formatFixed(variance);
+
+        if (roundedDensity === roundedTarget) {
+          comparisonValue.textContent = 'On Target';
+        } else if (roundedDensity > roundedTarget) {
+          comparisonValue.textContent = 'Above Target';
+        } else {
+          comparisonValue.textContent = 'Below Target';
+        }
+      } else {
+        targetCard.style.display = 'none';
+        varianceCard.style.display = 'none';
+        comparisonCard.style.display = 'none';
+      }
+
+      setStatus('Density calculated', 'ok');
+    }
+
+    function resetCalculator() {
+      lengthEl.value = '';
+      widthEl.value = '';
+      heightEl.value = '';
+      weightEl.value = '';
+      targetDensityEl.value = '';
+      resetResults();
+      setStatus('Ready', '');
+      lengthEl.focus();
+    }
+
+    calculateBtn.addEventListener('click', () => calculateDensity(true));
+    resetBtn.addEventListener('click', resetCalculator);
+
+    [lengthEl, widthEl, heightEl, weightEl, targetDensityEl].forEach((input) => {
+      input.addEventListener('input', () => {
+        const valuesPresent =
+          lengthEl.value.trim() ||
+          widthEl.value.trim() ||
+          heightEl.value.trim() ||
+          weightEl.value.trim() ||
+          targetDensityEl.value.trim();
+
+        if (!valuesPresent) {
+          resetResults();
+          setStatus('Ready', '');
+          return;
+        }
+
+        calculateDensity(false);
+      });
+    });
+  </script>
+
+</body>
+</html>
