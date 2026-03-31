@@ -4,7 +4,9 @@ const header = document.createElement("div");
 header.className = "topbar";
 
 header.innerHTML = `
+<a href="/" aria-label="Back to Operations Platform">
 <img class="logo" src="/logo/xpanda.png">
+</a>
 
 <div class="header-center">
 

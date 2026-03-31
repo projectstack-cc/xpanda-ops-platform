@@ -217,6 +217,11 @@ textarea {
     letter-spacing: .3px;
     color: var(--muted);
     background: var(--accent-soft);
+    text-decoration: none;
+}
+
+.qc-badge:hover {
+    text-decoration: none;
 }
 
 /* BUTTON */
