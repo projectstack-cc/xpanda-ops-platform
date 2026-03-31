@@ -1,10 +1,8 @@
 # xPanda Backlog
 
 ## Reports polish
-- Fix weird status bar
 - Copy cleanup
 - Consistent subtitles
-- Mobile spacing check
 
 ## Next phase
 - Inspection trends
@@ -13,6 +11,4 @@
 
 ## Future platform ideas
 - QC login gate
-- Multi-inspection batching
 - Scrap batch entry
-- Density calculator

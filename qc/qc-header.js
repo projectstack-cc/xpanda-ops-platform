@@ -12,7 +12,9 @@ document.write(`
         <a href="/qc/" class="qc-back-link">← Back to Dashboard</a>
     ` : ``}
 
-    <img src="/logo/xpanda.png" alt="xPanda Logo" class="logo">
+    <a href="/" aria-label="Back to Operations Platform">
+        <img src="/logo/xpanda.png" alt="xPanda Logo" class="logo">
+    </a>
 
     <div class="header-center">
 
