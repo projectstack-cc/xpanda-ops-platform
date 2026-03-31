@@ -5,7 +5,7 @@ header.className = "topbar";
 
 header.innerHTML = `
 <a href="/" aria-label="Back to Operations Platform">
-<img class="logo" src="/logo/xpanda.png">
+<img class="logo" src="/logo/xpanda.png" alt="xPanda Logo">
 </a>
 
 <div class="header-center">
