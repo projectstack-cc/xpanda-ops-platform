@@ -70,7 +70,7 @@
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 18px;
     margin-top: 28px;
   }
@@ -167,9 +167,9 @@
   }
 
   .btn-reports {
-  background: #7c3aed;   /* nice analytics / intelligence purple */
-  color: #fff;
-}
+    background: #7c3aed;
+    color: #fff;
+  }
 
   .footer-note {
     margin-top: 28px;
@@ -178,7 +178,13 @@
     font-size: 14px;
   }
 
-  @media (max-width: 800px) {
+  @media (max-width: 980px) {
+    .grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 700px) {
     .grid {
       grid-template-columns: 1fr;
     }
@@ -223,13 +229,13 @@
         <span class="eyebrow">Quality System</span>
         <h2>QC Platform</h2>
         <p>
-          Launch quality workflows for inspections, incidents, and future plant quality
-          tools through the xPanda QC platform.
+          Launch production-ready quality workflows for inspections, incidents,
+          scrap tracking, and floor utility tools.
         </p>
         <ul class="features">
           <li>Final inspection workflow</li>
           <li>Incident reporting</li>
-          <li>Future scrap and analytics modules</li>
+          <li>Scrap logging and density calculation</li>
         </ul>
         <div class="actions">
           <a class="btn btn-qc" href="/qc/">Open QC</a>
@@ -239,13 +245,13 @@
   <span class="eyebrow">Analytics System</span>
   <h2>Reports</h2>
   <p>
-    View operational reporting dashboards including scrap summaries,
-    trends, and future plant performance analytics.
+    View operational dashboards for scrap and incident visibility,
+    trend monitoring, and drill-down reporting.
   </p>
   <ul class="features">
     <li>Scrap reporting dashboards</li>
+    <li>Incident analytics and list drill-down</li>
     <li>Trend monitoring</li>
-    <li>Operational intelligence insights</li>
   </ul>
   <div class="actions">
     <a class="btn btn-reports" href="/reports/">Open Reports</a>

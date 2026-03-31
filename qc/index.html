@@ -29,37 +29,27 @@ document.getElementById('qc-page-subtitle').textContent = 'Launch quality workfl
         <p class="qc-section-subtitle">Select a task to begin</p>
     </div>
 
-    <div class="qc-tile" onclick="go('final-inspection.html')">
+    <a class="qc-tile" href="/qc/final-inspection.html">
         <h2>Final Inspection</h2>
         <p>Perform dimensional inspection and generate controlled PDF record</p>
-    </div>
+    </a>
 
-    <div class="qc-tile" onclick="go('incident-report.html')">
+    <a class="qc-tile" href="/qc/incident-report.html">
         <h2>Incident Report</h2>
         <p>Create and document quality incidents for customer or production issues</p>
-    </div>
+    </a>
 
-    <div class="qc-tile" onclick="go('scrap-log.html')">
+    <a class="qc-tile" href="/qc/scrap-log.html">
     <h2>Scrap Log</h2>
     <p>Record scrap events for tracking, reporting, and future analytics</p>
-   </div>
+   </a>
 
-    <div class="qc-tile" onclick="go('density-calculator.html')">
+    <a class="qc-tile" href="/qc/density-calculator.html">
         <h2>Density Calculator</h2>
         <p>Calculate foam density quickly from dimensions and weight on the floor</p>
-    </div>
+    </a>
 
 </div>
-
-<footer class="qc-footer">
-    xPanda QC Platform v1.0
-</footer>
-
-<script>
-function go(page) {
-    window.location.href = page;
-}
-</script>
 
 </body>
 </html>
