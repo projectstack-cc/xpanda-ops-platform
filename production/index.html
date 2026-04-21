@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>xPanda Production Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+<link rel="icon" href="/assets/img/favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+
+<link rel="stylesheet" href="/production/production-shared.css">
+</head>
+
+<body>
+
+<script src="/production/production-header.js"></script>
+<script>
+document.getElementById('prod-page-title').textContent = 'Production Dashboard';
+document.getElementById('prod-page-subtitle').textContent = 'Production planning and manufacturing tools';
+</script>
+
+<div class="prod-wrap">
+
+    <div class="prod-section-intro">
+        <h1 class="prod-section-title">Production Tools</h1>
+        <p class="prod-section-subtitle">Select a tool to begin</p>
+    </div>
+
+    <a class="prod-tile" href="/production/block-calculator.html">
+        <h2>Block Calculator</h2>
+        <p>Calculate parts per block, generate cut lists, and visualize cut layouts</p>
+    </a>
+
+</div>
+
+</body>
+</html>
