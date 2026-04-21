@@ -1,0 +1,1027 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>xPanda Foam - Block Calculator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/img/favicon.png">
+
+  <link rel="stylesheet" href="/production/production-shared.css">
+
+  <style>
+    .page-wrap {
+      padding: 16px;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* sticky action bar */
+    .sticky {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--bg);
+      padding: 8px 0 10px;
+      margin-bottom: 10px;
+    }
+
+    .bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 10px 14px;
+    }
+
+    .bar-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .bar-right {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    /* preset block size buttons */
+    .preset-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .preset-btn {
+      padding: 7px 14px;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      background: var(--ghost-bg);
+      color: var(--ghost-text);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .preset-btn.active,
+    .preset-btn:hover {
+      border-color: var(--primary-bg);
+      background: #fffbeb;
+      color: #92400e;
+    }
+
+    /* orientation toggle */
+    .orient-toggle {
+      display: flex;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .orient-opt {
+      flex: 1;
+      padding: 9px 8px;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      background: var(--ghost-bg);
+      color: var(--ghost-text);
+      line-height: 1.2;
+      text-align: center;
+    }
+
+    .orient-opt.active {
+      background: var(--primary-bg);
+      color: var(--primary-text);
+    }
+
+    /* grid helpers */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    @media (max-width: 580px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .grid-3 { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 380px) {
+      .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    /* field label + input */
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .field input {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid var(--input-border);
+      border-radius: 8px;
+      background: var(--input-bg);
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .help-text {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 4px 0 0;
+    }
+
+    /* error message */
+    .error-banner {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 13px;
+      color: #b91c1c;
+      margin-bottom: 12px;
+    }
+
+    /* orientation info note */
+    .orient-note {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #78350f;
+      margin-bottom: 12px;
+    }
+
+    .orient-note strong {
+      font-size: 13px;
+      color: #92400e;
+    }
+
+    /* stat cards */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .stat-card {
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 12px;
+      background: var(--card-bg);
+      text-align: center;
+    }
+
+    .stat-num {
+      font-size: 30px;
+      font-weight: 700;
+      line-height: 1.1;
+      color: var(--text);
+    }
+
+    .stat-num.large {
+      font-size: 38px;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* utilization bar */
+    .util-bar-outer {
+      height: 10px;
+      background: var(--card-border);
+      border-radius: 5px;
+      overflow: hidden;
+      margin-bottom: 4px;
+    }
+
+    .util-bar-inner {
+      height: 100%;
+      border-radius: 5px;
+      transition: width 0.3s ease;
+    }
+
+    .util-green  { background: #16a34a; }
+    .util-yellow { background: #d97706; }
+    .util-red    { background: #dc2626; }
+
+    .util-bar-label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    /* cut list table */
+    .cut-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .cut-table th {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      padding: 6px 8px;
+      text-align: left;
+      border-bottom: 2px solid var(--line);
+    }
+
+    .cut-table td {
+      padding: 9px 8px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    .cut-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .machine-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .orient-map {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+      font-style: italic;
+    }
+
+    /* diagrams */
+    .diagram-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .diagram-card {
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 12px;
+      background: var(--card-bg);
+      overflow: hidden;
+    }
+
+    .diagram-svg-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .diagram-view-label {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 8px;
+      font-weight: 600;
+    }
+
+    @media (max-width: 480px) {
+      .page-wrap { padding: 12px; }
+
+      .bar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .bar-right {
+        justify-content: flex-end;
+      }
+
+      .stat-num { font-size: 26px; }
+      .stat-num.large { font-size: 30px; }
+
+      .cut-table { font-size: 12px; }
+      .cut-table th, .cut-table td { padding: 7px 6px; }
+    }
+  </style>
+</head>
+<body>
+
+  <script src="/production/production-header.js"></script>
+  <script>
+    document.getElementById('prod-page-title').textContent = 'Block Calculator';
+    document.getElementById('prod-page-subtitle').textContent = 'Parts per block, cut list, and layout diagrams';
+  </script>
+
+  <div class="page-wrap">
+
+    <!-- Sticky action bar -->
+    <div class="sticky">
+      <div class="bar">
+        <div class="bar-left">
+          <strong>Block Calculator</strong>
+          <div class="pill" id="statusPill">Ready</div>
+        </div>
+        <div class="bar-right">
+          <button class="btn ghost" type="button" id="resetBtn">Reset</button>
+          <button class="btn primary" type="button" id="calcBtn">Calculate</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Block Size -->
+    <div class="card">
+      <h2>Block Size</h2>
+      <div class="preset-row">
+        <button class="preset-btn" type="button" data-l="199" data-w="50" data-h="50">Standard 50<br><small style="font-weight:400;font-size:11px;">50 × 50 × 199"</small></button>
+        <button class="preset-btn" type="button" data-l="199" data-w="50" data-h="58">Standard 58<br><small style="font-weight:400;font-size:11px;">50 × 58 × 199"</small></button>
+      </div>
+      <div class="grid-3">
+        <div class="field">
+          <label for="bL">Length (in)</label>
+          <input id="bL" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off" placeholder="199">
+        </div>
+        <div class="field">
+          <label for="bW">Width (in)</label>
+          <input id="bW" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off" placeholder="50">
+        </div>
+        <div class="field">
+          <label for="bH">Height (in)</label>
+          <input id="bH" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off" placeholder="50">
+        </div>
+      </div>
+    </div>
+
+    <!-- Part Size -->
+    <div class="card">
+      <h2>Part Size</h2>
+      <div class="grid-3">
+        <div class="field">
+          <label for="pL">Part Length (in)</label>
+          <input id="pL" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="pW">Part Width (in)</label>
+          <input id="pW" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="pH">Part Height (in)</label>
+          <input id="pH" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off">
+        </div>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div class="card">
+      <h2>Options</h2>
+
+      <div class="prod-field" style="margin-bottom:14px;">
+        <label style="font-size:13px;font-weight:600;margin-bottom:5px;display:block;">Kerf / Wire Loss (in)</label>
+        <input id="kerf" type="number" inputmode="decimal" min="0" step="any" value="0.079" style="max-width:160px;padding:9px 10px;border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);color:var(--text);font-size:14px;">
+        <p class="help-text">Wire/blade loss added to each cut. Default: 2mm (0.079")</p>
+      </div>
+
+      <div class="prod-field" style="margin-bottom:14px;">
+        <label style="font-size:13px;font-weight:600;margin-bottom:5px;display:block;">Part Orientation</label>
+        <div class="orient-toggle">
+          <button class="orient-opt active" type="button" data-mode="auto" id="modeAuto">Auto (Best Fit)</button>
+          <button class="orient-opt" type="button" data-mode="fixed" id="modeFixed">Fixed (As Entered)</button>
+        </div>
+        <p class="help-text">Auto tries all 6 rotations and selects the orientation with the highest yield.</p>
+      </div>
+
+      <div class="field">
+        <label for="qty">Quantity Needed <span style="font-weight:400;">(optional)</span></label>
+        <input id="qty" type="number" inputmode="numeric" min="1" step="1" placeholder="Leave blank for per-block results only" style="max-width:340px;">
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="errorMsg" class="error-banner" style="display:none;"></div>
+
+    <!-- Results -->
+    <div id="results" style="display:none;">
+
+      <!-- Auto orientation note -->
+      <div id="orientNote" class="orient-note" style="display:none;"></div>
+
+      <!-- Stats -->
+      <div class="card">
+        <h2>Results</h2>
+
+        <div class="stat-grid" id="statGrid">
+          <div class="stat-card">
+            <div class="stat-num large" id="statParts">--</div>
+            <div class="stat-label">Parts per Block</div>
+          </div>
+          <div class="stat-card" id="statBlocksCard" style="display:none;">
+            <div class="stat-num" id="statBlocks">--</div>
+            <div class="stat-label">Blocks Needed</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="statUtil">--</div>
+            <div class="stat-label">Utilization</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="statWaste">--</div>
+            <div class="stat-label">Waste (in³)</div>
+          </div>
+        </div>
+
+        <div class="util-bar-outer">
+          <div class="util-bar-inner" id="utilBar" style="width:0%;"></div>
+        </div>
+        <div class="util-bar-label" id="utilBarLabel"></div>
+
+        <div id="qtyStats" style="display:none;">
+          <div class="stat-grid" style="margin-top:6px;">
+            <div class="stat-card">
+              <div class="stat-num" id="statTotalParts">--</div>
+              <div class="stat-label">Total Parts Produced</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num" id="statSurplus">--</div>
+              <div class="stat-label">Surplus Parts</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cut List -->
+      <div class="card">
+        <h2>Cut List</h2>
+        <div style="overflow-x:auto;">
+          <table class="cut-table">
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>Machine</th>
+                <th>Axis</th>
+                <th>Cuts</th>
+                <th>Spacing</th>
+                <th>Parts</th>
+                <th>Remnant</th>
+              </tr>
+            </thead>
+            <tbody id="cutBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Diagrams -->
+      <div class="card">
+        <h2>Cut Diagrams</h2>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">
+          <span style="display:inline-block;width:12px;height:12px;background:#dbeafe;border:1px solid #93c5fd;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Parts &nbsp;
+          <span style="display:inline-block;width:12px;height:12px;background:#fee2e2;border:1px solid #fca5a5;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Remnant/Waste
+        </p>
+        <div class="diagram-grid">
+          <div class="diagram-card">
+            <div class="diagram-svg-wrap" id="diagFront"></div>
+            <div class="diagram-view-label" id="diagFrontLabel">Front View (W × H)</div>
+          </div>
+          <div class="diagram-card">
+            <div class="diagram-svg-wrap" id="diagTop"></div>
+            <div class="diagram-view-label" id="diagTopLabel">Top View (L × W)</div>
+          </div>
+          <div class="diagram-card">
+            <div class="diagram-svg-wrap" id="diagSide"></div>
+            <div class="diagram-view-label" id="diagSideLabel">Side View (L × H)</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+  // ─── constants ───────────────────────────────────────────────────────────────
+
+  const DIM_NAMES = ['Length', 'Width', 'Height'];
+  // All 6 permutations of [0,1,2] — maps part dim indices to [blockL, blockW, blockH]
+  const PERMS = [
+    [0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]
+  ];
+
+  // ─── DOM refs ────────────────────────────────────────────────────────────────
+
+  const $bL     = document.getElementById('bL');
+  const $bW     = document.getElementById('bW');
+  const $bH     = document.getElementById('bH');
+  const $pL     = document.getElementById('pL');
+  const $pW     = document.getElementById('pW');
+  const $pH     = document.getElementById('pH');
+  const $kerf   = document.getElementById('kerf');
+  const $qty    = document.getElementById('qty');
+
+  const $calcBtn  = document.getElementById('calcBtn');
+  const $resetBtn = document.getElementById('resetBtn');
+  const $status   = document.getElementById('statusPill');
+  const $error    = document.getElementById('errorMsg');
+  const $results  = document.getElementById('results');
+
+  const $orientNote     = document.getElementById('orientNote');
+  const $statParts      = document.getElementById('statParts');
+  const $statBlocksCard = document.getElementById('statBlocksCard');
+  const $statBlocks     = document.getElementById('statBlocks');
+  const $statUtil       = document.getElementById('statUtil');
+  const $statWaste      = document.getElementById('statWaste');
+  const $utilBar        = document.getElementById('utilBar');
+  const $utilBarLabel   = document.getElementById('utilBarLabel');
+  const $qtyStats       = document.getElementById('qtyStats');
+  const $statTotalParts = document.getElementById('statTotalParts');
+  const $statSurplus    = document.getElementById('statSurplus');
+  const $cutBody        = document.getElementById('cutBody');
+
+  let currentMode = 'auto';
+
+  // ─── preset buttons ──────────────────────────────────────────────────────────
+
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $bL.value = btn.dataset.l;
+      $bW.value = btn.dataset.w;
+      $bH.value = btn.dataset.h;
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // clear preset highlight when user manually edits
+  [$bL, $bW, $bH].forEach(el => {
+    el.addEventListener('input', () => {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    });
+  });
+
+  // ─── orientation toggle ──────────────────────────────────────────────────────
+
+  document.getElementById('modeAuto').addEventListener('click', () => setMode('auto'));
+  document.getElementById('modeFixed').addEventListener('click', () => setMode('fixed'));
+
+  function setMode(mode) {
+    currentMode = mode;
+    document.getElementById('modeAuto').classList.toggle('active', mode === 'auto');
+    document.getElementById('modeFixed').classList.toggle('active', mode === 'fixed');
+  }
+
+  // ─── helpers ─────────────────────────────────────────────────────────────────
+
+  function toNum(val) {
+    const n = Number(String(val ?? '').trim());
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function fmtIn(val, decimals = 3) {
+    return val.toFixed(decimals) + '"';
+  }
+
+  function setStatus(text, cls) {
+    $status.textContent = text;
+    $status.className = 'pill ' + (cls || '');
+  }
+
+  // ─── core calculation ────────────────────────────────────────────────────────
+
+  function calcForPerm(bL, bW, bH, partDims, kerf, perm) {
+    const pA = partDims[perm[0]];
+    const pB = partDims[perm[1]];
+    const pC = partDims[perm[2]];
+
+    const effL = pA + kerf;
+    const effW = pB + kerf;
+    const effH = pC + kerf;
+
+    const nL = Math.floor(bL / effL);
+    const nW = Math.floor(bW / effW);
+    const nH = Math.floor(bH / effH);
+
+    const remL = bL - nL * effL;
+    const remW = bW - nW * effW;
+    const remH = bH - nH * effH;
+
+    const total = nL * nW * nH;
+
+    const partVol  = pA * pB * pC;
+    const blockVol = bL * bW * bH;
+    const volUsed  = total * partVol;
+    const wasteVol = blockVol - volUsed;
+    const utilPct  = (volUsed / blockVol) * 100;
+
+    return {
+      total, nL, nW, nH,
+      effL, effW, effH,
+      remL, remW, remH,
+      partDimL: pA, partDimW: pB, partDimH: pC,
+      partNameL: DIM_NAMES[perm[0]],
+      partNameW: DIM_NAMES[perm[1]],
+      partNameH: DIM_NAMES[perm[2]],
+      volUsed, wasteVol, utilPct, blockVol, partVol,
+      bL, bW, bH
+    };
+  }
+
+  function runCalc(inputs) {
+    const { bL, bW, bH, pL, pW, pH, kerf, mode } = inputs;
+    const partDims = [pL, pW, pH];
+
+    if (mode === 'auto') {
+      let best = null;
+      for (let i = 0; i < PERMS.length; i++) {
+        const r = calcForPerm(bL, bW, bH, partDims, kerf, PERMS[i]);
+        if (!best ||
+            r.total > best.total ||
+            (r.total === best.total && r.wasteVol < best.wasteVol)) {
+          best = r;
+        }
+      }
+      return best;
+    }
+
+    return calcForPerm(bL, bW, bH, partDims, kerf, PERMS[0]);
+  }
+
+  // ─── validate ────────────────────────────────────────────────────────────────
+
+  function validate() {
+    const bL   = toNum($bL.value);
+    const bW   = toNum($bW.value);
+    const bH   = toNum($bH.value);
+    const pL   = toNum($pL.value);
+    const pW   = toNum($pW.value);
+    const pH   = toNum($pH.value);
+    const kerf = toNum($kerf.value);
+    const qty  = $qty.value.trim() === '' ? null : toNum($qty.value);
+
+    if (!bL || bL <= 0) return 'Block Length must be greater than 0.';
+    if (!bW || bW <= 0) return 'Block Width must be greater than 0.';
+    if (!bH || bH <= 0) return 'Block Height must be greater than 0.';
+    if (!pL || pL <= 0) return 'Part Length must be greater than 0.';
+    if (!pW || pW <= 0) return 'Part Width must be greater than 0.';
+    if (!pH || pH <= 0) return 'Part Height must be greater than 0.';
+    if (kerf === null || kerf < 0) return 'Kerf must be 0 or greater.';
+    if (qty !== null && (qty <= 0 || !Number.isInteger(qty))) return 'Quantity must be a positive whole number.';
+
+    return null;
+  }
+
+  function getInputs() {
+    return {
+      bL:   toNum($bL.value),
+      bW:   toNum($bW.value),
+      bH:   toNum($bH.value),
+      pL:   toNum($pL.value),
+      pW:   toNum($pW.value),
+      pH:   toNum($pH.value),
+      kerf: toNum($kerf.value),
+      qty:  $qty.value.trim() === '' ? null : toNum($qty.value),
+      mode: currentMode
+    };
+  }
+
+  // ─── render results ──────────────────────────────────────────────────────────
+
+  function renderOrientNote(result, mode) {
+    if (mode !== 'auto') {
+      $orientNote.style.display = 'none';
+      return;
+    }
+    const isIdentity = result.partNameL === 'Length' && result.partNameW === 'Width' && result.partNameH === 'Height';
+    if (isIdentity) {
+      $orientNote.innerHTML = '<strong>Auto orientation:</strong> As-entered orientation is optimal.';
+    } else {
+      $orientNote.innerHTML =
+        '<strong>Auto orientation selected:</strong> ' +
+        `Block Length ← Part ${result.partNameL} (${result.partDimL}") &nbsp;|&nbsp; ` +
+        `Block Width ← Part ${result.partNameW} (${result.partDimW}") &nbsp;|&nbsp; ` +
+        `Block Height ← Part ${result.partNameH} (${result.partDimH}")`;
+    }
+    $orientNote.style.display = 'block';
+  }
+
+  function renderStats(result, qty) {
+    $statParts.textContent = result.total.toLocaleString();
+
+    $statUtil.textContent  = result.utilPct.toFixed(1) + '%';
+    $statWaste.textContent = Math.round(result.wasteVol).toLocaleString();
+
+    const pct = result.utilPct;
+    const barColor = pct >= 75 ? 'util-green' : pct >= 50 ? 'util-yellow' : 'util-red';
+    $utilBar.className = 'util-bar-inner ' + barColor;
+    $utilBar.style.width = Math.min(pct, 100).toFixed(1) + '%';
+    $utilBarLabel.textContent = pct.toFixed(1) + '% material utilization';
+
+    if (qty && qty > 0) {
+      const blocksNeeded  = Math.ceil(qty / result.total);
+      const totalProduced = blocksNeeded * result.total;
+      const surplus       = totalProduced - qty;
+
+      $statBlocks.textContent     = blocksNeeded.toLocaleString();
+      $statBlocksCard.style.display = 'block';
+
+      $statTotalParts.textContent = totalProduced.toLocaleString();
+      $statSurplus.textContent    = surplus.toLocaleString();
+      $qtyStats.style.display     = 'block';
+    } else {
+      $statBlocksCard.style.display = 'none';
+      $qtyStats.style.display = 'none';
+    }
+  }
+
+  function renderCutList(result, mode) {
+    const isAuto   = mode === 'auto';
+    const identity = result.partNameL === 'Length' && result.partNameW === 'Width' && result.partNameH === 'Height';
+    const showMap  = isAuto && !identity;
+
+    const rows = [
+      {
+        step: 1,
+        machine: 'Cross Cutter',
+        axis: 'Length',
+        n: result.nL,
+        spacing: result.effL,
+        partDim: result.partDimL,
+        rem: result.remL,
+        mapFrom: result.partNameL
+      },
+      {
+        step: 2,
+        machine: 'Main Line',
+        axis: 'Width',
+        n: result.nW,
+        spacing: result.effW,
+        partDim: result.partDimW,
+        rem: result.remW,
+        mapFrom: result.partNameW
+      },
+      {
+        step: 3,
+        machine: 'Blue Line',
+        axis: 'Height',
+        n: result.nH,
+        spacing: result.effH,
+        partDim: result.partDimH,
+        rem: result.remH,
+        mapFrom: result.partNameH
+      }
+    ];
+
+    $cutBody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.step}</td>
+        <td><span class="machine-tag">${r.machine}</span></td>
+        <td>
+          ${r.axis}
+          ${showMap && r.mapFrom !== r.axis ? `<span class="orient-map">← Part ${r.mapFrom}</span>` : ''}
+        </td>
+        <td>${r.n > 0 ? r.n - 1 : 0} cuts</td>
+        <td>${r.spacing.toFixed(4)}"</td>
+        <td>${r.n} pcs</td>
+        <td>${r.rem < 0.001 ? '0"' : r.rem.toFixed(3) + '"'}</td>
+      </tr>
+    `).join('');
+  }
+
+  // ─── SVG diagrams ─────────────────────────────────────────────────────────────
+
+  function drawView(containerEl, dim1, dim2, n1, n2, eff1, eff2, rem1, rem2, partD1, partD2, axLabel1, axLabel2) {
+    const PL = 46;  // left pad (rotated label)
+    const PT = 22;  // top pad
+    const PR = 46;  // right pad (right-side remnant label)
+    const PB = 32;  // bottom pad
+
+    const MAX_IW = 500;
+    const MAX_IH = 180;
+
+    const scale = Math.min(MAX_IW / dim1, MAX_IH / dim2);
+    const iW = dim1 * scale;
+    const iH = dim2 * scale;
+    const W  = Math.ceil(iW + PL + PR);
+    const H  = Math.ceil(iH + PT + PB);
+
+    const ox = PL;
+    const oy = PT;
+
+    const gW = n1 > 0 ? n1 * eff1 * scale : 0;
+    const gH = n2 > 0 ? n2 * eff2 * scale : 0;
+
+    const parts = [];
+    const f = v => v.toFixed(2);
+
+    // whole block background (waste color)
+    parts.push(`<rect x="${f(ox)}" y="${f(oy)}" width="${f(iW)}" height="${f(iH)}" fill="#fee2e2" stroke="none"/>`);
+
+    // part grid area
+    if (gW > 0 && gH > 0) {
+      parts.push(`<rect x="${f(ox)}" y="${f(oy)}" width="${f(gW)}" height="${f(gH)}" fill="#dbeafe" stroke="none"/>`);
+    }
+
+    // vertical cut lines
+    for (let i = 1; i < n1; i++) {
+      const x = ox + i * eff1 * scale;
+      parts.push(`<line x1="${f(x)}" y1="${f(oy)}" x2="${f(x)}" y2="${f(oy+gH)}" stroke="#93c5fd" stroke-width="0.8"/>`);
+    }
+
+    // horizontal cut lines
+    for (let j = 1; j < n2; j++) {
+      const y = oy + j * eff2 * scale;
+      parts.push(`<line x1="${f(ox)}" y1="${f(y)}" x2="${f(ox+gW)}" y2="${f(y)}" stroke="#93c5fd" stroke-width="0.8"/>`);
+    }
+
+    // block outline
+    parts.push(`<rect x="${f(ox)}" y="${f(oy)}" width="${f(iW)}" height="${f(iH)}" fill="none" stroke="#374151" stroke-width="1.5"/>`);
+
+    // remnant separator lines
+    if (rem1 > 0.001 && gW > 0) {
+      const x = ox + gW;
+      parts.push(`<line x1="${f(x)}" y1="${f(oy)}" x2="${f(x)}" y2="${f(oy+iH)}" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>`);
+    }
+    if (rem2 > 0.001 && gH > 0) {
+      const y = oy + gH;
+      parts.push(`<line x1="${f(ox)}" y1="${f(y)}" x2="${f(ox+iW)}" y2="${f(y)}" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>`);
+    }
+
+    // top dimension label (axis 1)
+    parts.push(`<text x="${f(ox + iW/2)}" y="${f(oy - 7)}" text-anchor="middle" font-size="10" fill="#374151" font-family="Arial,sans-serif">${dim1}" ${axLabel1}</text>`);
+
+    // left dimension label (axis 2) — rotated
+    const rotX = ox - 14;
+    const rotY = oy + iH / 2;
+    parts.push(`<text x="${f(rotX)}" y="${f(rotY)}" text-anchor="middle" font-size="10" fill="#374151" font-family="Arial,sans-serif" transform="rotate(-90 ${f(rotX)} ${f(rotY)})">${dim2}" ${axLabel2}</text>`);
+
+    // bottom: part dimension label under first cell
+    if (n1 > 0) {
+      const cx = ox + (partD1 * scale) / 2;
+      parts.push(`<text x="${f(cx)}" y="${f(oy+iH+14)}" text-anchor="middle" font-size="9" fill="#1d4ed8" font-family="Arial,sans-serif">${partD1}"</text>`);
+    }
+
+    // bottom: remnant label on right
+    if (rem1 > 0.001 && gW > 0) {
+      const rx = ox + gW + (rem1 * scale) / 2;
+      parts.push(`<text x="${f(rx)}" y="${f(oy+iH+14)}" text-anchor="middle" font-size="9" fill="#dc2626" font-family="Arial,sans-serif">rem ${rem1.toFixed(3)}"</text>`);
+    }
+
+    // right: remnant label below grid
+    if (rem2 > 0.001 && gH > 0) {
+      const ry = oy + gH + (rem2 * scale) / 2;
+      parts.push(`<text x="${f(ox+iW+4)}" y="${f(ry)}" text-anchor="start" font-size="9" fill="#dc2626" font-family="Arial,sans-serif">${rem2.toFixed(3)}"</text>`);
+    }
+
+    containerEl.innerHTML = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px;height:auto;display:block;">${parts.join('')}</svg>`;
+  }
+
+  function renderDiagrams(r) {
+    // Front View: Width (x) × Height (y)
+    drawView(
+      document.getElementById('diagFront'),
+      r.bW, r.bH,
+      r.nW, r.nH,
+      r.effW, r.effH,
+      r.remW, r.remH,
+      r.partDimW, r.partDimH,
+      'Width', 'Height'
+    );
+
+    // Top View: Length (x) × Width (y)
+    drawView(
+      document.getElementById('diagTop'),
+      r.bL, r.bW,
+      r.nL, r.nW,
+      r.effL, r.effW,
+      r.remL, r.remW,
+      r.partDimL, r.partDimW,
+      'Length', 'Width'
+    );
+
+    // Side View: Length (x) × Height (y)
+    drawView(
+      document.getElementById('diagSide'),
+      r.bL, r.bH,
+      r.nL, r.nH,
+      r.effL, r.effH,
+      r.remL, r.remH,
+      r.partDimL, r.partDimH,
+      'Length', 'Height'
+    );
+  }
+
+  // ─── main calculate handler ──────────────────────────────────────────────────
+
+  function calculate() {
+    $error.style.display = 'none';
+
+    const err = validate();
+    if (err) {
+      $error.textContent = err;
+      $error.style.display = 'block';
+      $results.style.display = 'none';
+      setStatus('Check inputs', 'err');
+      return;
+    }
+
+    const inputs = getInputs();
+    const result = runCalc(inputs);
+
+    if (result.total === 0) {
+      $error.textContent = 'No parts fit in this block with the given dimensions. Check that the part is smaller than the block.';
+      $error.style.display = 'block';
+      $results.style.display = 'none';
+      setStatus('No parts fit', 'err');
+      return;
+    }
+
+    renderOrientNote(result, inputs.mode);
+    renderStats(result, inputs.qty);
+    renderCutList(result, inputs.mode);
+    renderDiagrams(result);
+
+    $results.style.display = 'block';
+    setStatus(result.total + ' parts/block', 'ok');
+
+    // scroll to results on mobile
+    if (window.innerWidth <= 640) {
+      setTimeout(() => {
+        document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+    }
+  }
+
+  // ─── reset ───────────────────────────────────────────────────────────────────
+
+  function reset() {
+    $bL.value = '';
+    $bW.value = '';
+    $bH.value = '';
+    $pL.value = '';
+    $pW.value = '';
+    $pH.value = '';
+    $kerf.value = '0.079';
+    $qty.value = '';
+    setMode('auto');
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    $error.style.display = 'none';
+    $results.style.display = 'none';
+    setStatus('Ready', '');
+    $bL.focus();
+  }
+
+  // ─── status classes ──────────────────────────────────────────────────────────
+
+  // add color classes to pill
+  const origSetStatus = setStatus;
+  (function patchPillColors() {
+    const style = document.createElement('style');
+    style.textContent = `
+      .pill.ok   { background:#dcfce7; color:#166534; border-color:#86efac; }
+      .pill.err  { background:#fef2f2; color:#b91c1c; border-color:#fca5a5; }
+    `;
+    document.head.appendChild(style);
+  })();
+
+  // ─── event listeners ─────────────────────────────────────────────────────────
+
+  $calcBtn.addEventListener('click', calculate);
+  $resetBtn.addEventListener('click', reset);
+
+  // Allow Enter key to trigger calculate from any input
+  [[$bL,$bW,$bH,$pL,$pW,$pH,$kerf,$qty]].flat().forEach(el => {
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter') calculate();
+    });
+  });
+  </script>
+
+</body>
+</html>
