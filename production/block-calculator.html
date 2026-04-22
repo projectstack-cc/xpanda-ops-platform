@@ -4,404 +4,239 @@
   <meta charset="UTF-8">
   <title>xPanda Foam - Block Calculator</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
   <link rel="icon" href="/assets/img/favicon.png" sizes="any">
   <link rel="apple-touch-icon" href="/assets/img/favicon.png">
-
   <link rel="stylesheet" href="/production/production-shared.css">
 
   <style>
-    .page-wrap {
-      padding: 16px;
-      max-width: 860px;
-      margin: 0 auto;
-    }
+    /* ── layout ──────────────────────────────────────────────────────────────── */
+    .page-wrap { padding: 16px; max-width: 860px; margin: 0 auto; }
 
-    /* sticky action bar */
+    /* ── sticky bar ──────────────────────────────────────────────────────────── */
     .sticky {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      background: var(--bg);
-      padding: 8px 0 10px;
-      margin-bottom: 10px;
+      position: sticky; top: 0; z-index: 10;
+      background: var(--bg); padding: 8px 0 10px; margin-bottom: 10px;
     }
-
     .bar {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      justify-content: space-between;
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      padding: 10px 14px;
+      display: flex; gap: 8px; align-items: center; justify-content: space-between;
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 10px 14px;
     }
+    .bar-left { display: flex; flex-direction: column; gap: 2px; }
+    .bar-right { display: flex; gap: 8px; align-items: center; }
 
-    .bar-left {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .bar-right {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    /* preset block size buttons */
-    .preset-row {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-bottom: 12px;
-    }
-
+    /* ── preset buttons ──────────────────────────────────────────────────────── */
+    .preset-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
     .preset-btn {
-      padding: 7px 14px;
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      background: var(--ghost-bg);
-      color: var(--ghost-text);
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
+      padding: 7px 14px; border: 1px solid var(--card-border);
+      border-radius: 8px; background: var(--ghost-bg); color: var(--ghost-text);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .preset-btn.active, .preset-btn:hover {
+      border-color: var(--primary-bg); background: #fffbeb; color: #92400e;
     }
 
-    .preset-btn.active,
-    .preset-btn:hover {
-      border-color: var(--primary-bg);
-      background: #fffbeb;
-      color: #92400e;
-    }
-
-    /* orientation toggle */
+    /* ── orientation toggle ──────────────────────────────────────────────────── */
     .orient-toggle {
-      display: flex;
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      overflow: hidden;
+      display: flex; border: 1px solid var(--card-border);
+      border-radius: 10px; overflow: hidden;
     }
-
     .orient-opt {
-      flex: 1;
-      padding: 9px 8px;
-      font-size: 13px;
-      font-weight: 600;
-      border: none;
-      cursor: pointer;
-      background: var(--ghost-bg);
-      color: var(--ghost-text);
-      line-height: 1.2;
-      text-align: center;
+      flex: 1; padding: 9px 8px; font-size: 13px; font-weight: 600;
+      border: none; cursor: pointer; background: var(--ghost-bg);
+      color: var(--ghost-text); line-height: 1.2; text-align: center;
     }
+    .orient-opt.active { background: var(--primary-bg); color: var(--primary-text); }
 
-    .orient-opt.active {
-      background: var(--primary-bg);
-      color: var(--primary-text);
-    }
-
-    /* grid helpers */
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .grid-3 {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
-    }
-
+    /* ── grid helpers ────────────────────────────────────────────────────────── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
     @media (max-width: 580px) {
       .grid-2 { grid-template-columns: 1fr; }
       .grid-3 { grid-template-columns: 1fr 1fr; }
     }
+    @media (max-width: 380px) { .grid-3 { grid-template-columns: 1fr; } }
 
-    @media (max-width: 380px) {
-      .grid-3 { grid-template-columns: 1fr; }
-    }
-
-    /* field label + input */
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-
-    .field label {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--muted);
-    }
-
+    /* ── field ───────────────────────────────────────────────────────────────── */
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { font-size: 12px; font-weight: 600; color: var(--muted); }
     .field input {
-      width: 100%;
-      padding: 9px 10px;
-      border: 1px solid var(--input-border);
-      border-radius: 8px;
-      background: var(--input-bg);
-      color: var(--text);
-      font-size: 14px;
+      width: 100%; padding: 9px 10px; border: 1px solid var(--input-border);
+      border-radius: 8px; background: var(--input-bg); color: var(--text); font-size: 14px;
     }
+    .help-text { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
 
-    .help-text {
-      font-size: 12px;
-      color: var(--muted);
-      margin: 4px 0 0;
+    /* ── secondary part cards ────────────────────────────────────────────────── */
+    .sec-card-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
     }
+    .sec-card-title { font-size: 14px; font-weight: 700; }
+    .btn-remove {
+      padding: 4px 10px; border: 1px solid var(--card-border);
+      border-radius: 6px; background: var(--ghost-bg); color: var(--muted);
+      font-size: 12px; cursor: pointer;
+    }
+    .btn-remove:hover { border-color: #ef4444; color: #ef4444; }
+    .add-sec-row { margin-bottom: 12px; }
 
-    /* error message */
+    /* ── machine routing ─────────────────────────────────────────────────────── */
+    .machine-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+    .machine-row { display: flex; align-items: flex-start; gap: 10px; }
+    .machine-row input[type="checkbox"] {
+      margin-top: 2px; width: 16px; height: 16px;
+      accent-color: var(--primary-bg); flex-shrink: 0; cursor: pointer;
+    }
+    .machine-row label { font-size: 13px; font-weight: 600; cursor: pointer; line-height: 1.3; }
+    .machine-row label span { display: block; font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 1px; }
+    .reroute-note {
+      display: none; font-size: 11px; color: #b45309;
+      background: #fffbeb; border: 1px solid #fde68a;
+      border-radius: 6px; padding: 3px 7px; margin-top: 4px; margin-left: 26px;
+    }
+    .machine-row.disabled label { color: var(--muted); }
+
+    /* ── error / notes ───────────────────────────────────────────────────────── */
     .error-banner {
-      background: #fef2f2;
-      border: 1px solid #fca5a5;
-      border-radius: var(--radius);
-      padding: 12px 14px;
-      font-size: 13px;
-      color: #b91c1c;
-      margin-bottom: 12px;
+      background: #fef2f2; border: 1px solid #fca5a5; border-radius: var(--radius);
+      padding: 12px 14px; font-size: 13px; color: #b91c1c; margin-bottom: 12px;
     }
-
-    /* orientation info note */
     .orient-note {
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      border-radius: var(--radius);
-      padding: 10px 14px;
-      font-size: 12px;
-      color: #78350f;
-      margin-bottom: 12px;
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--radius);
+      padding: 10px 14px; font-size: 12px; color: #78350f; margin-bottom: 12px;
     }
+    .orient-note strong { font-size: 13px; color: #92400e; }
 
-    .orient-note strong {
-      font-size: 13px;
-      color: #92400e;
-    }
-
-    /* stat cards */
+    /* ── stat grid ───────────────────────────────────────────────────────────── */
     .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 10px;
-      margin-bottom: 12px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;
     }
-
+    @media (max-width: 500px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
     .stat-card {
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      padding: 12px;
-      background: var(--card-bg);
-      text-align: center;
+      border: 1px solid var(--card-border); border-radius: 10px;
+      padding: 12px; background: var(--card-bg); text-align: center;
     }
+    .stat-num { font-size: 26px; font-weight: 700; line-height: 1.1; color: var(--text); }
+    .stat-num.xl { font-size: 34px; }
+    .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-top: 4px; }
+    .stat-sublabel { font-size: 10px; color: var(--muted); margin-top: 3px; line-height: 1.3; }
 
-    .stat-num {
-      font-size: 30px;
-      font-weight: 700;
-      line-height: 1.1;
-      color: var(--text);
-    }
+    /* ── utilization bar ─────────────────────────────────────────────────────── */
+    .util-bar-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .util-bar-outer { height: 10px; background: var(--card-border); border-radius: 5px; overflow: hidden; }
+    .util-bar-inner { height: 100%; border-radius: 5px; transition: width 0.3s ease; }
+    .util-green  { background: #22c55e; }
+    .util-yellow { background: #f59e0b; }
+    .util-red    { background: #ef4444; }
 
-    .stat-num.large {
-      font-size: 38px;
-    }
-
-    .stat-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--muted);
-      margin-top: 4px;
-    }
-
-    /* utilization bar */
-    .util-bar-outer {
-      height: 10px;
-      background: var(--card-border);
-      border-radius: 5px;
-      overflow: hidden;
-      margin-bottom: 4px;
-    }
-
-    .util-bar-inner {
-      height: 100%;
-      border-radius: 5px;
-      transition: width 0.3s ease;
-    }
-
-    .util-green  { background: #16a34a; }
-    .util-yellow { background: #d97706; }
-    .util-red    { background: #dc2626; }
-
-    .util-bar-label {
-      font-size: 11px;
-      color: var(--muted);
-      margin-bottom: 12px;
-    }
-
-    /* cut list table */
-    .cut-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-
+    /* ── cut list ────────────────────────────────────────────────────────────── */
+    .cut-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .cut-table th {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--muted);
-      padding: 6px 8px;
-      text-align: left;
-      border-bottom: 2px solid var(--line);
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--muted); padding: 6px 8px;
+      text-align: left; border-bottom: 2px solid var(--line);
     }
-
-    .cut-table td {
-      padding: 9px 8px;
-      border-bottom: 1px solid var(--line);
-      vertical-align: top;
-    }
-
-    .cut-table tr:last-child td {
-      border-bottom: none;
-    }
+    .cut-table td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .cut-table tr:last-child td { border-bottom: none; }
+    .cut-table .sec-row td { background: rgba(0,0,0,0.02); }
 
     .machine-tag {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 700;
-      background: #fef3c7;
-      color: #92400e;
+      display: inline-block; padding: 2px 8px; border-radius: 6px;
+      font-size: 11px; font-weight: 700; background: #fef3c7; color: #92400e;
+    }
+    .machine-tag.rerouted { background: #dbeafe; color: #1e40af; }
+    .reroute-via { display: block; font-size: 10px; color: #b45309; margin-top: 2px; font-style: italic; }
+    .orient-map  { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; font-style: italic; }
+
+    .cut-list-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px; flex-wrap: wrap; gap: 8px;
+    }
+    .cut-list-header h2 { margin: 0; }
+    .orient-map-note { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+
+    .print-controls {
+      display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap;
+    }
+    .print-checkbox-label {
+      font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;
     }
 
-    .orient-map {
-      display: block;
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 2px;
-      font-style: italic;
-    }
-
-    /* machine routing */
-    .machine-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 6px;
-    }
-
-    .machine-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-    }
-
-    .machine-row input[type="checkbox"] {
-      margin-top: 2px;
-      width: 16px;
-      height: 16px;
-      accent-color: var(--primary-bg);
-      flex-shrink: 0;
-      cursor: pointer;
-    }
-
-    .machine-row label {
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      line-height: 1.3;
-    }
-
-    .machine-row label span {
-      display: block;
-      font-size: 11px;
-      font-weight: 400;
-      color: var(--muted);
-      margin-top: 1px;
-    }
-
-    .reroute-note {
-      display: none;
-      font-size: 11px;
-      color: #b45309;
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      border-radius: 6px;
-      padding: 3px 7px;
-      margin-top: 4px;
-      margin-left: 26px;
-    }
-
-    .machine-row.disabled label {
-      color: var(--muted);
-    }
-
-    /* rerouted tag in cut list */
-    .machine-tag.rerouted {
-      background: #dbeafe;
-      color: #1e40af;
-    }
-
-    .reroute-via {
-      display: block;
-      font-size: 10px;
-      color: #b45309;
-      margin-top: 2px;
-      font-style: italic;
-    }
-
-    /* diagrams */
+    /* ── diagram grid ────────────────────────────────────────────────────────── */
     .diagram-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 12px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
     }
+    @media (max-width: 680px) { .diagram-grid { grid-template-columns: 1fr; } }
 
     .diagram-card {
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      padding: 12px;
-      background: var(--card-bg);
-      overflow: hidden;
+      border: 1px solid var(--card-border); border-radius: 10px;
+      padding: 10px; background: var(--card-bg); overflow: hidden;
     }
-
-    .diagram-svg-wrap {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
+    .diagram-canvas-wrap {
+      overflow-x: auto; -webkit-overflow-scrolling: touch; cursor: zoom-in;
     }
-
+    .diagram-canvas-wrap canvas { display: block; }
     .diagram-view-label {
-      font-size: 12px;
-      color: var(--muted);
-      text-align: center;
-      margin-top: 8px;
-      font-weight: 600;
+      font-size: 11px; color: var(--muted); text-align: center;
+      margin-top: 6px; font-weight: 600;
     }
+    .diagram-hint { font-size: 10px; color: #b0b8c4; text-align: center; margin-top: 1px; }
 
+    /* ── modal ───────────────────────────────────────────────────────────────── */
+    #diagramModal {
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      align-items: center; justify-content: center;
+    }
+    .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.72); }
+    .modal-content {
+      position: relative; background: var(--card-bg); border-radius: 14px;
+      padding: 14px; max-width: 94vw; max-height: 94vh; overflow: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    .modal-close {
+      position: absolute; top: 8px; right: 10px; background: none; border: none;
+      font-size: 22px; cursor: pointer; color: var(--muted); line-height: 1; padding: 4px 8px;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal-label { font-size: 13px; font-weight: 700; text-align: center; margin-top: 8px; color: var(--muted); }
+    #modalCanvas { display: block; }
+
+    /* ── print header (screen: hidden) ──────────────────────────────────────── */
+    .print-header { display: none; }
+
+    /* ── pill status colors ──────────────────────────────────────────────────── */
+    .pill.ok  { background: #dcfce7; color: #166534; border-color: #86efac; }
+    .pill.err { background: #fef2f2; color: #b91c1c; border-color: #fca5a5; }
+
+    /* ── mobile ──────────────────────────────────────────────────────────────── */
     @media (max-width: 480px) {
       .page-wrap { padding: 12px; }
-
-      .bar {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .bar-right {
-        justify-content: flex-end;
-      }
-
-      .stat-num { font-size: 26px; }
-      .stat-num.large { font-size: 30px; }
-
+      .bar { flex-direction: column; align-items: stretch; }
+      .bar-right { justify-content: flex-end; }
+      .stat-num { font-size: 22px; }
+      .stat-num.xl { font-size: 28px; }
       .cut-table { font-size: 12px; }
-      .cut-table th, .cut-table td { padding: 7px 6px; }
+      .cut-table th, .cut-table td { padding: 6px 5px; }
+    }
+
+    /* ── print ───────────────────────────────────────────────────────────────── */
+    @media print {
+      .topbar, .sticky, .prod-platform-footer,
+      #blockSizeCard, #primaryPartCard, #secondaryPartsContainer,
+      .add-sec-row, #optionsCard, .error-banner, .print-controls { display: none !important; }
+
+      #results { display: block !important; }
+      .print-header { display: block !important; margin-bottom: 14px; font-size: 14px; }
+
+      body { background: white !important; }
+      .card { box-shadow: none !important; border-color: #ccc !important; page-break-inside: avoid; }
+      .orient-note { background: white !important; border-color: #ccc !important; color: black !important; }
+      .machine-tag { background: #eee !important; color: black !important; border: 1px solid #ccc; }
+      .sec-row td { background: #f8f8f8 !important; }
+    }
+    @media print {
+      body.no-print-diagrams .diagrams-section { display: none !important; }
     }
   </style>
 </head>
@@ -430,11 +265,15 @@
     </div>
 
     <!-- Block Size -->
-    <div class="card">
+    <div class="card" id="blockSizeCard">
       <h2>Block Size</h2>
       <div class="preset-row">
-        <button class="preset-btn" type="button" data-l="199" data-w="50" data-h="50">Standard 50<br><small style="font-weight:400;font-size:11px;">50 × 50 × 199"</small></button>
-        <button class="preset-btn" type="button" data-l="199" data-w="50" data-h="58">Standard 58<br><small style="font-weight:400;font-size:11px;">50 × 58 × 199"</small></button>
+        <button class="preset-btn" type="button" data-l="199" data-w="50" data-h="50">
+          Standard 50<br><small style="font-weight:400;font-size:11px;">50 × 50 × 199"</small>
+        </button>
+        <button class="preset-btn" type="button" data-l="199" data-w="50" data-h="58">
+          Standard 58<br><small style="font-weight:400;font-size:11px;">50 × 58 × 199"</small>
+        </button>
       </div>
       <div class="grid-3">
         <div class="field">
@@ -452,47 +291,57 @@
       </div>
     </div>
 
-    <!-- Part Size -->
-    <div class="card">
-      <h2>Part Size</h2>
+    <!-- Primary Part -->
+    <div class="card" id="primaryPartCard">
+      <h2>Primary Part</h2>
       <div class="grid-3">
         <div class="field">
-          <label for="pL">Part Length (in)</label>
+          <label for="pL">Length (in)</label>
           <input id="pL" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off">
         </div>
         <div class="field">
-          <label for="pW">Part Width (in)</label>
+          <label for="pW">Width (in)</label>
           <input id="pW" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off">
         </div>
         <div class="field">
-          <label for="pH">Part Height (in)</label>
+          <label for="pH">Height (in)</label>
           <input id="pH" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off">
         </div>
       </div>
     </div>
 
+    <!-- Secondary parts (dynamic) -->
+    <div id="secondaryPartsContainer"></div>
+
+    <!-- Add Secondary Part -->
+    <div class="add-sec-row">
+      <button class="btn ghost" type="button" id="addSecondaryBtn">+ Add Secondary Part</button>
+    </div>
+
     <!-- Options -->
-    <div class="card">
+    <div class="card" id="optionsCard">
       <h2>Options</h2>
 
-      <div class="prod-field" style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;margin-bottom:5px;display:block;">Kerf / Wire Loss (in)</label>
-        <input id="kerf" type="number" inputmode="decimal" min="0" step="any" value="0.079" style="max-width:160px;padding:9px 10px;border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);color:var(--text);font-size:14px;">
+      <div style="margin-bottom:14px;">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:5px;">Kerf / Wire Loss (in)</label>
+        <input id="kerf" type="number" inputmode="decimal" min="0" step="any" value="0.079"
+               style="max-width:160px;padding:9px 10px;border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);color:var(--text);font-size:14px;">
         <p class="help-text">Wire/blade loss added to each cut. Default: 2mm (0.079")</p>
       </div>
 
-      <div class="prod-field" style="margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;margin-bottom:5px;display:block;">Part Orientation</label>
+      <div style="margin-bottom:14px;">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:5px;">Part Orientation</label>
         <div class="orient-toggle">
-          <button class="orient-opt active" type="button" data-mode="auto" id="modeAuto">Auto (Best Fit)</button>
-          <button class="orient-opt" type="button" data-mode="fixed" id="modeFixed">Fixed (As Entered)</button>
+          <button class="orient-opt active" type="button" id="modeAuto">Auto (Best Fit)</button>
+          <button class="orient-opt" type="button" id="modeFixed">Fixed (As Entered)</button>
         </div>
         <p class="help-text">Auto tries all 6 rotations and selects the orientation with the highest yield.</p>
       </div>
 
       <div class="field" style="margin-bottom:14px;">
         <label for="qty">Quantity Needed <span style="font-weight:400;">(optional)</span></label>
-        <input id="qty" type="number" inputmode="numeric" min="1" step="1" placeholder="Leave blank for per-block results only" style="max-width:340px;">
+        <input id="qty" type="number" inputmode="numeric" min="1" step="1"
+               placeholder="Leave blank for per-block results only" style="max-width:340px;">
       </div>
 
       <div>
@@ -529,117 +378,119 @@
     <!-- Results -->
     <div id="results" style="display:none;">
 
+      <!-- Print-only header -->
+      <div class="print-header">
+        <strong>xPanda Foam — Block Calculator</strong>
+        &nbsp;|&nbsp; <span id="printDate"></span>
+      </div>
+
       <!-- Auto orientation note -->
       <div id="orientNote" class="orient-note" style="display:none;"></div>
 
-      <!-- Stats -->
+      <!-- Summary stats -->
       <div class="card">
         <h2>Results</h2>
-
-        <div class="stat-grid" id="statGrid">
-          <div class="stat-card">
-            <div class="stat-num large" id="statParts">--</div>
-            <div class="stat-label">Parts per Block</div>
-          </div>
-          <div class="stat-card" id="statBlocksCard" style="display:none;">
-            <div class="stat-num" id="statBlocks">--</div>
-            <div class="stat-label">Blocks Needed</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-num" id="statUtil">--</div>
-            <div class="stat-label">Utilization</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-num" id="statWaste">--</div>
-            <div class="stat-label">Waste (in³)</div>
-          </div>
-        </div>
-
+        <div class="stat-grid" id="statGrid"></div>
+        <div class="util-bar-label" id="utilBarLabel">Material Utilization: —</div>
         <div class="util-bar-outer">
           <div class="util-bar-inner" id="utilBar" style="width:0%;"></div>
         </div>
-        <div class="util-bar-label" id="utilBarLabel"></div>
-
-        <div id="qtyStats" style="display:none;">
-          <div class="stat-grid" style="margin-top:6px;">
-            <div class="stat-card">
-              <div class="stat-num" id="statTotalParts">--</div>
-              <div class="stat-label">Total Parts Produced</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-num" id="statSurplus">--</div>
-              <div class="stat-label">Surplus Parts</div>
-            </div>
-          </div>
-        </div>
       </div>
 
-      <!-- Cut List -->
+      <!-- Cut list -->
       <div class="card">
-        <h2>Cut List</h2>
+        <div class="cut-list-header">
+          <h2>Cut List</h2>
+        </div>
+        <div id="orientMapNote" class="orient-map-note" style="display:none;"></div>
         <div style="overflow-x:auto;">
           <table class="cut-table">
             <thead>
               <tr>
-                <th>Step</th>
+                <th>#</th>
                 <th>Machine</th>
-                <th>Axis</th>
-                <th>Cuts</th>
+                <th>Cut Direction</th>
+                <th>Part</th>
+                <th>Pieces</th>
                 <th>Spacing</th>
-                <th>Parts</th>
                 <th>Remnant</th>
               </tr>
             </thead>
             <tbody id="cutBody"></tbody>
           </table>
         </div>
+        <div class="print-controls">
+          <label class="print-checkbox-label">
+            <input type="checkbox" id="printDiagrams" checked>
+            Include diagrams in print
+          </label>
+          <button class="btn ghost" type="button" id="printBtn">Print Cut List</button>
+        </div>
       </div>
 
-      <!-- Diagrams -->
-      <div class="card">
+      <!-- 2D Diagrams -->
+      <div class="card diagrams-section">
         <h2>Cut Diagrams</h2>
-        <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">
-          <span style="display:inline-block;width:12px;height:12px;background:#dbeafe;border:1px solid #93c5fd;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Parts &nbsp;
-          <span style="display:inline-block;width:12px;height:12px;background:#fee2e2;border:1px solid #fca5a5;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Remnant/Waste
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">
+          <span style="display:inline-block;width:11px;height:11px;background:#dbeafe;border:1px solid #93c5fd;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Primary &nbsp;
+          <span style="display:inline-block;width:11px;height:11px;background:#dcfce7;border:1px solid #86efac;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Secondary &nbsp;
+          <span style="display:inline-block;width:11px;height:11px;background:#fecaca;border:1px solid #fca5a5;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Remnant
         </p>
         <div class="diagram-grid">
           <div class="diagram-card">
-            <div class="diagram-svg-wrap" id="diagFront"></div>
-            <div class="diagram-view-label" id="diagFrontLabel">Front View (W × H)</div>
+            <div class="diagram-canvas-wrap" id="wrapFront" data-view="0">
+              <canvas id="canvasFront"></canvas>
+            </div>
+            <div class="diagram-view-label">Front View (W × H)</div>
+            <div class="diagram-hint">Tap to zoom</div>
           </div>
           <div class="diagram-card">
-            <div class="diagram-svg-wrap" id="diagTop"></div>
-            <div class="diagram-view-label" id="diagTopLabel">Top View (L × W)</div>
+            <div class="diagram-canvas-wrap" id="wrapTop" data-view="1">
+              <canvas id="canvasTop"></canvas>
+            </div>
+            <div class="diagram-view-label">Top View (L × W)</div>
+            <div class="diagram-hint">Tap to zoom</div>
           </div>
           <div class="diagram-card">
-            <div class="diagram-svg-wrap" id="diagSide"></div>
-            <div class="diagram-view-label" id="diagSideLabel">Side View (L × H)</div>
+            <div class="diagram-canvas-wrap" id="wrapSide" data-view="2">
+              <canvas id="canvasSide"></canvas>
+            </div>
+            <div class="diagram-view-label">Side View (L × H)</div>
+            <div class="diagram-hint">Tap to zoom</div>
           </div>
         </div>
       </div>
 
+    </div><!-- /results -->
+  </div><!-- /page-wrap -->
+
+  <!-- Zoom modal -->
+  <div id="diagramModal" role="dialog" aria-modal="true" aria-label="Diagram zoom">
+    <div class="modal-backdrop" id="modalBackdrop"></div>
+    <div class="modal-content">
+      <button class="modal-close" id="modalClose" aria-label="Close">✕</button>
+      <canvas id="modalCanvas"></canvas>
+      <div class="modal-label" id="modalLabel"></div>
     </div>
   </div>
 
   <script>
-  // ─── constants ───────────────────────────────────────────────────────────────
+  // ─── constants ────────────────────────────────────────────────────────────────
 
   const DIM_NAMES = ['Length', 'Width', 'Height'];
-  // All 6 permutations of [0,1,2] — maps part dim indices to [blockL, blockW, blockH]
-  const PERMS = [
-    [0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]
-  ];
+  // All 6 permutations of [0,1,2] mapping part dims to block/zone axes
+  const PERMS = [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
 
-  // ─── DOM refs ────────────────────────────────────────────────────────────────
+  // ─── DOM refs ─────────────────────────────────────────────────────────────────
 
-  const $bL     = document.getElementById('bL');
-  const $bW     = document.getElementById('bW');
-  const $bH     = document.getElementById('bH');
-  const $pL     = document.getElementById('pL');
-  const $pW     = document.getElementById('pW');
-  const $pH     = document.getElementById('pH');
-  const $kerf   = document.getElementById('kerf');
-  const $qty    = document.getElementById('qty');
+  const $bL   = document.getElementById('bL');
+  const $bW   = document.getElementById('bW');
+  const $bH   = document.getElementById('bH');
+  const $pL   = document.getElementById('pL');
+  const $pW   = document.getElementById('pW');
+  const $pH   = document.getElementById('pH');
+  const $kerf = document.getElementById('kerf');
+  const $qty  = document.getElementById('qty');
 
   const $calcBtn  = document.getElementById('calcBtn');
   const $resetBtn = document.getElementById('resetBtn');
@@ -647,26 +498,38 @@
   const $error    = document.getElementById('errorMsg');
   const $results  = document.getElementById('results');
 
-  const $orientNote     = document.getElementById('orientNote');
-  const $statParts      = document.getElementById('statParts');
-  const $statBlocksCard = document.getElementById('statBlocksCard');
-  const $statBlocks     = document.getElementById('statBlocks');
-  const $statUtil       = document.getElementById('statUtil');
-  const $statWaste      = document.getElementById('statWaste');
-  const $utilBar        = document.getElementById('utilBar');
-  const $utilBarLabel   = document.getElementById('utilBarLabel');
-  const $qtyStats       = document.getElementById('qtyStats');
-  const $statTotalParts = document.getElementById('statTotalParts');
-  const $statSurplus    = document.getElementById('statSurplus');
-  const $cutBody        = document.getElementById('cutBody');
-
   const $machCross = document.getElementById('machCross');
   const $machMain  = document.getElementById('machMain');
   const $machBlue  = document.getElementById('machBlue');
 
-  let currentMode = 'auto';
+  const $statGrid     = document.getElementById('statGrid');
+  const $utilBar      = document.getElementById('utilBar');
+  const $utilBarLabel = document.getElementById('utilBarLabel');
+  const $orientNote   = document.getElementById('orientNote');
+  const $orientMapNote = document.getElementById('orientMapNote');
+  const $cutBody      = document.getElementById('cutBody');
+  const $printDate    = document.getElementById('printDate');
 
-  // ─── preset buttons ──────────────────────────────────────────────────────────
+  // ─── state ────────────────────────────────────────────────────────────────────
+
+  let currentMode    = 'auto';
+  let secIdCounter   = 0;
+  let secIds         = [];
+  let lastDrawParams = null; // [frontParams, topParams, sideParams] for zoom re-render
+
+  // ─── helpers ──────────────────────────────────────────────────────────────────
+
+  function toNum(val) {
+    const n = Number(String(val ?? '').trim());
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function setStatus(text, cls) {
+    $status.textContent = text;
+    $status.className = 'pill ' + (cls || '');
+  }
+
+  // ─── preset buttons ───────────────────────────────────────────────────────────
 
   document.querySelectorAll('.preset-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -677,15 +540,13 @@
       btn.classList.add('active');
     });
   });
-
-  // clear preset highlight when user manually edits
   [$bL, $bW, $bH].forEach(el => {
-    el.addEventListener('input', () => {
-      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    });
+    el.addEventListener('input', () =>
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'))
+    );
   });
 
-  // ─── orientation toggle ──────────────────────────────────────────────────────
+  // ─── orientation toggle ───────────────────────────────────────────────────────
 
   document.getElementById('modeAuto').addEventListener('click', () => setMode('auto'));
   document.getElementById('modeFixed').addEventListener('click', () => setMode('fixed'));
@@ -696,124 +557,86 @@
     document.getElementById('modeFixed').classList.toggle('active', mode === 'fixed');
   }
 
-  // ─── machine routing checkboxes ──────────────────────────────────────────────
+  // ─── machine routing ──────────────────────────────────────────────────────────
 
   function updateMachineUI() {
     const crossOn = $machCross.checked;
     const blueOn  = $machBlue.checked;
-
     document.getElementById('noteCross').style.display = crossOn ? 'none' : 'block';
     document.getElementById('noteBlue').style.display  = blueOn  ? 'none' : 'block';
-
     document.getElementById('rowCross').classList.toggle('disabled', !crossOn);
-    document.getElementById('rowBlue').classList.toggle('disabled', !blueOn);
+    document.getElementById('rowBlue').classList.toggle('disabled',  !blueOn);
   }
-
   $machCross.addEventListener('change', updateMachineUI);
   $machBlue.addEventListener('change', updateMachineUI);
-
-  // Main Line cannot be unchecked — it is the fallback for all cuts
   $machMain.addEventListener('change', () => { $machMain.checked = true; });
 
-  // ─── helpers ─────────────────────────────────────────────────────────────────
+  // ─── secondary parts ──────────────────────────────────────────────────────────
 
-  function toNum(val) {
-    const n = Number(String(val ?? '').trim());
-    return Number.isFinite(n) ? n : null;
+  document.getElementById('addSecondaryBtn').addEventListener('click', addSecondaryPart);
+
+  function addSecondaryPart() {
+    const id = ++secIdCounter;
+    secIds.push(id);
+    const n = secIds.length;
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = `sec-card-${id}`;
+    card.innerHTML = `
+      <div class="sec-card-header">
+        <span class="sec-card-title">Secondary Part ${n}</span>
+        <button class="btn-remove" type="button">Remove</button>
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label for="sec-label-${id}">Label <span style="font-weight:400;">(optional)</span></label>
+        <input id="sec-label-${id}" type="text" placeholder="e.g. Sheets for Customer X"
+               style="padding:8px 10px;border:1px solid var(--input-border);border-radius:8px;
+                      background:var(--input-bg);color:var(--text);font-size:13px;width:100%;">
+      </div>
+      <div class="grid-3">
+        <div class="field">
+          <label for="sec-L-${id}">Length (in)</label>
+          <input id="sec-L-${id}" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="sec-W-${id}">Width (in)</label>
+          <input id="sec-W-${id}" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="sec-H-${id}">Height (in)</label>
+          <input id="sec-H-${id}" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off">
+        </div>
+      </div>
+    `;
+    card.querySelector('.btn-remove').addEventListener('click', () => removeSecondaryPart(id));
+    document.getElementById('secondaryPartsContainer').appendChild(card);
   }
 
-  function fmtIn(val, decimals = 3) {
-    return val.toFixed(decimals) + '"';
+  function removeSecondaryPart(id) {
+    secIds = secIds.filter(x => x !== id);
+    const card = document.getElementById(`sec-card-${id}`);
+    if (card) card.remove();
+    secIds.forEach((sid, i) => {
+      const t = document.querySelector(`#sec-card-${sid} .sec-card-title`);
+      if (t) t.textContent = `Secondary Part ${i + 1}`;
+    });
   }
 
-  function setStatus(text, cls) {
-    $status.textContent = text;
-    $status.className = 'pill ' + (cls || '');
+  function getSecondaryParts() {
+    return secIds.map((id, i) => {
+      const lbl = (document.getElementById(`sec-label-${id}`)?.value || '').trim();
+      return {
+        id,
+        label: lbl || `Secondary ${i + 1}`,
+        L: toNum(document.getElementById(`sec-L-${id}`)?.value),
+        W: toNum(document.getElementById(`sec-W-${id}`)?.value),
+        H: toNum(document.getElementById(`sec-H-${id}`)?.value)
+      };
+    });
   }
 
-  // ─── core calculation ────────────────────────────────────────────────────────
-
-  function calcForPerm(bL, bW, bH, partDims, kerf, perm) {
-    const pA = partDims[perm[0]];
-    const pB = partDims[perm[1]];
-    const pC = partDims[perm[2]];
-
-    const effL = pA + kerf;
-    const effW = pB + kerf;
-    const effH = pC + kerf;
-
-    const nL = Math.floor(bL / effL);
-    const nW = Math.floor(bW / effW);
-    const nH = Math.floor(bH / effH);
-
-    const remL = bL - nL * effL;
-    const remW = bW - nW * effW;
-    const remH = bH - nH * effH;
-
-    const total = nL * nW * nH;
-
-    const partVol  = pA * pB * pC;
-    const blockVol = bL * bW * bH;
-    const volUsed  = total * partVol;
-    const wasteVol = blockVol - volUsed;
-    const utilPct  = (volUsed / blockVol) * 100;
-
-    return {
-      total, nL, nW, nH,
-      effL, effW, effH,
-      remL, remW, remH,
-      partDimL: pA, partDimW: pB, partDimH: pC,
-      partNameL: DIM_NAMES[perm[0]],
-      partNameW: DIM_NAMES[perm[1]],
-      partNameH: DIM_NAMES[perm[2]],
-      volUsed, wasteVol, utilPct, blockVol, partVol,
-      bL, bW, bH
-    };
-  }
-
-  function runCalc(inputs) {
-    const { bL, bW, bH, pL, pW, pH, kerf, mode } = inputs;
-    const partDims = [pL, pW, pH];
-
-    if (mode === 'auto') {
-      let best = null;
-      for (let i = 0; i < PERMS.length; i++) {
-        const r = calcForPerm(bL, bW, bH, partDims, kerf, PERMS[i]);
-        if (!best ||
-            r.total > best.total ||
-            (r.total === best.total && r.wasteVol < best.wasteVol)) {
-          best = r;
-        }
-      }
-      return best;
-    }
-
-    return calcForPerm(bL, bW, bH, partDims, kerf, PERMS[0]);
-  }
-
-  // ─── validate ────────────────────────────────────────────────────────────────
-
-  function validate() {
-    const bL   = toNum($bL.value);
-    const bW   = toNum($bW.value);
-    const bH   = toNum($bH.value);
-    const pL   = toNum($pL.value);
-    const pW   = toNum($pW.value);
-    const pH   = toNum($pH.value);
-    const kerf = toNum($kerf.value);
-    const qty  = $qty.value.trim() === '' ? null : toNum($qty.value);
-
-    if (!bL || bL <= 0) return 'Block Length must be greater than 0.';
-    if (!bW || bW <= 0) return 'Block Width must be greater than 0.';
-    if (!bH || bH <= 0) return 'Block Height must be greater than 0.';
-    if (!pL || pL <= 0) return 'Part Length must be greater than 0.';
-    if (!pW || pW <= 0) return 'Part Width must be greater than 0.';
-    if (!pH || pH <= 0) return 'Part Height must be greater than 0.';
-    if (kerf === null || kerf < 0) return 'Kerf must be 0 or greater.';
-    if (qty !== null && (qty <= 0 || !Number.isInteger(qty))) return 'Quantity must be a positive whole number.';
-
-    return null;
-  }
+  // ─── inputs / validation ─────────────────────────────────────────────────────
 
   function getInputs() {
     return {
@@ -830,251 +653,524 @@
         crossCutter: $machCross.checked,
         mainLine:    true,
         blueLine:    $machBlue.checked
-      }
+      },
+      secondaryParts: getSecondaryParts()
     };
   }
 
-  // ─── render results ──────────────────────────────────────────────────────────
+  function validate(inp) {
+    const { bL, bW, bH, pL, pW, pH, kerf, qty, secondaryParts: secs } = inp;
+    if (!bL || bL <= 0) return 'Block Length must be greater than 0.';
+    if (!bW || bW <= 0) return 'Block Width must be greater than 0.';
+    if (!bH || bH <= 0) return 'Block Height must be greater than 0.';
+    if (!pL || pL <= 0) return 'Primary Part Length must be greater than 0.';
+    if (!pW || pW <= 0) return 'Primary Part Width must be greater than 0.';
+    if (!pH || pH <= 0) return 'Primary Part Height must be greater than 0.';
+    if (kerf === null || kerf < 0) return 'Kerf must be 0 or greater.';
+    if (qty !== null && (qty <= 0 || !Number.isInteger(qty))) return 'Quantity must be a positive whole number.';
+    for (const s of secs) {
+      const any = s.L !== null || s.W !== null || s.H !== null;
+      if (!any) continue;
+      if (!s.L || s.L <= 0) return `"${s.label}": Length must be greater than 0.`;
+      if (!s.W || s.W <= 0) return `"${s.label}": Width must be greater than 0.`;
+      if (!s.H || s.H <= 0) return `"${s.label}": Height must be greater than 0.`;
+    }
+    return null;
+  }
 
-  function renderOrientNote(result, mode) {
-    if (mode !== 'auto') {
+  // ─── primary calculation ──────────────────────────────────────────────────────
+
+  function calcForPerm(bL, bW, bH, partDims, kerf, perm) {
+    const pA = partDims[perm[0]], pB = partDims[perm[1]], pC = partDims[perm[2]];
+    const effL = pA + kerf, effW = pB + kerf, effH = pC + kerf;
+    const nL = Math.floor(bL / effL);
+    const nW = Math.floor(bW / effW);
+    const nH = Math.floor(bH / effH);
+    const remL = bL - nL * effL;
+    const remW = bW - nW * effW;
+    const remH = bH - nH * effH;
+    const total    = nL * nW * nH;
+    const blockVol = bL * bW * bH;
+    const volUsed  = total * (pA * pB * pC);
+    return {
+      total, nL, nW, nH, effL, effW, effH,
+      remL, remW, remH,
+      partDimL: pA, partDimW: pB, partDimH: pC,
+      partNameL: DIM_NAMES[perm[0]],
+      partNameW: DIM_NAMES[perm[1]],
+      partNameH: DIM_NAMES[perm[2]],
+      blockVol, volUsed,
+      wasteVol: blockVol - volUsed,
+      utilPct:  (volUsed / blockVol) * 100,
+      bL, bW, bH
+    };
+  }
+
+  function runPrimaryCalc(bL, bW, bH, pL, pW, pH, kerf, mode) {
+    const dims = [pL, pW, pH];
+    if (mode === 'auto') {
+      let best = null;
+      for (const p of PERMS) {
+        const r = calcForPerm(bL, bW, bH, dims, kerf, p);
+        if (!best || r.total > best.total || (r.total === best.total && r.wasteVol < best.wasteVol))
+          best = r;
+      }
+      return best;
+    }
+    return calcForPerm(bL, bW, bH, dims, kerf, PERMS[0]);
+  }
+
+  // ─── secondary part calculation (remnant zones) ───────────────────────────────
+  //
+  // After primary cuts, three remnant strips remain:
+  //   Zone 1 (L-end):  remL  × bW   × bH    — strip at end of block along L
+  //   Zone 2 (W-end):  usedL × remW × bH    — strip along W in the non-L-end region
+  //   Zone 3 (H-end):  usedL × usedW × remH — strip along H, inside both used regions
+  //
+  // Each zone's d1/d2/d3 axes map to block Length/Width/Height respectively.
+
+  function bestFitInBox(d1, d2, d3, partDims, kerf, mode) {
+    if (d1 <= 0.001 || d2 <= 0.001 || d3 <= 0.001) {
+      return { total: 0, nA: 0, nB: 0, nC: 0,
+               pA: 0, pB: 0, pC: 0,
+               effA: 0, effB: 0, effC: 0,
+               remA: d1, remB: d2, remC: d3 };
+    }
+    if (mode === 'auto') {
+      let best = null;
+      for (const perm of PERMS) {
+        const pA = partDims[perm[0]], pB = partDims[perm[1]], pC = partDims[perm[2]];
+        const eA = pA + kerf, eB = pB + kerf, eC = pC + kerf;
+        const nA = Math.floor(d1 / eA), nB = Math.floor(d2 / eB), nC = Math.floor(d3 / eC);
+        const total = nA * nB * nC;
+        if (!best || total > best.total || (total === best.total && nA + nB + nC > best.nA + best.nB + best.nC)) {
+          best = { total, nA, nB, nC, pA, pB, pC,
+                   effA: eA, effB: eB, effC: eC,
+                   remA: d1 - nA * eA, remB: d2 - nB * eB, remC: d3 - nC * eC };
+        }
+      }
+      return best;
+    }
+    const [pA, pB, pC] = partDims;
+    const eA = pA + kerf, eB = pB + kerf, eC = pC + kerf;
+    const nA = Math.floor(d1 / eA), nB = Math.floor(d2 / eB), nC = Math.floor(d3 / eC);
+    return { total: nA * nB * nC, nA, nB, nC, pA, pB, pC,
+             effA: eA, effB: eB, effC: eC,
+             remA: d1 - nA * eA, remB: d2 - nB * eB, remC: d3 - nC * eC };
+  }
+
+  function calcSecondaryPart(sec, primary, kerf, mode) {
+    const { bL, bW, bH, nL, nW, effL, effW, remL, remW, remH } = primary;
+    const usedL = nL * effL;
+    const usedW = nW * effW;
+    const dims = [sec.L, sec.W, sec.H];
+
+    const zone1 = { ...bestFitInBox(remL,  bW,    bH,   dims, kerf, mode), zoneName: 'L-end' };
+    const zone2 = { ...bestFitInBox(usedL, remW,  bH,   dims, kerf, mode), zoneName: 'W-end' };
+    const zone3 = { ...bestFitInBox(usedL, usedW, remH, dims, kerf, mode), zoneName: 'H-end' };
+
+    return {
+      label: sec.label,
+      zone1, zone2, zone3,
+      totalPieces: zone1.total + zone2.total + zone3.total
+    };
+  }
+
+  // ─── full calculation ─────────────────────────────────────────────────────────
+
+  function runFullCalc(inp) {
+    const { bL, bW, bH, pL, pW, pH, kerf, qty, mode, routing, secondaryParts } = inp;
+    const primary = runPrimaryCalc(bL, bW, bH, pL, pW, pH, kerf, mode);
+
+    const validSecs = secondaryParts.filter(s => s.L > 0 && s.W > 0 && s.H > 0);
+    const secondaries = validSecs.map(s => calcSecondaryPart(s, primary, kerf, mode));
+
+    const secInZone1 = secondaries.some(s => s.zone1.total > 0);
+    const secInZone2 = secondaries.some(s => s.zone2.total > 0);
+    const secInZone3 = secondaries.some(s => s.zone3.total > 0);
+
+    let blocksNeeded = null, totalProduced = null, surplus = null;
+    if (qty && qty > 0 && primary.total > 0) {
+      blocksNeeded  = Math.ceil(qty / primary.total);
+      totalProduced = blocksNeeded * primary.total;
+      surplus       = totalProduced - qty;
+    }
+
+    return { primary, secondaries, secInZone1, secInZone2, secInZone3,
+             blocksNeeded, totalProduced, surplus, mode, routing };
+  }
+
+  // ─── render: orientation note ─────────────────────────────────────────────────
+
+  function renderOrientNote(calc) {
+    const p = calc.primary;
+    const isId = p.partNameL === 'Length' && p.partNameW === 'Width' && p.partNameH === 'Height';
+
+    $orientMapNote.style.display = 'none';
+
+    if (calc.mode !== 'auto') {
       $orientNote.style.display = 'none';
       return;
     }
-    const isIdentity = result.partNameL === 'Length' && result.partNameW === 'Width' && result.partNameH === 'Height';
-    if (isIdentity) {
+    if (isId) {
       $orientNote.innerHTML = '<strong>Auto orientation:</strong> As-entered orientation is optimal.';
     } else {
       $orientNote.innerHTML =
-        '<strong>Auto orientation selected:</strong> ' +
-        `Block Length ← Part ${result.partNameL} (${result.partDimL}") &nbsp;|&nbsp; ` +
-        `Block Width ← Part ${result.partNameW} (${result.partDimW}") &nbsp;|&nbsp; ` +
-        `Block Height ← Part ${result.partNameH} (${result.partDimH}")`;
+        `<strong>Auto orientation selected:</strong> ` +
+        `Block Length ← Part ${p.partNameL} (${p.partDimL}") &nbsp;|&nbsp; ` +
+        `Block Width ← Part ${p.partNameW} (${p.partDimW}") &nbsp;|&nbsp; ` +
+        `Block Height ← Part ${p.partNameH} (${p.partDimH}")`;
+      $orientMapNote.textContent =
+        `Orientation: Part L → Block ${p.partNameL},  Part W → Block ${p.partNameW},  Part H → Block ${p.partNameH}`;
+      $orientMapNote.style.display = 'block';
     }
     $orientNote.style.display = 'block';
   }
 
-  function renderStats(result, qty) {
-    $statParts.textContent = result.total.toLocaleString();
+  // ─── render: stats ────────────────────────────────────────────────────────────
 
-    $statUtil.textContent  = result.utilPct.toFixed(1) + '%';
-    $statWaste.textContent = Math.round(result.wasteVol).toLocaleString();
+  function renderStats(calc) {
+    const p = calc.primary;
+    const cards = [];
 
-    const pct = result.utilPct;
-    const barColor = pct >= 75 ? 'util-green' : pct >= 50 ? 'util-yellow' : 'util-red';
-    $utilBar.className = 'util-bar-inner ' + barColor;
+    cards.push(`<div class="stat-card">
+      <div class="stat-num xl">${p.total.toLocaleString()}</div>
+      <div class="stat-label">Parts per Block</div>
+    </div>`);
+
+    cards.push(`<div class="stat-card">
+      <div class="stat-num">${p.utilPct.toFixed(1)}%</div>
+      <div class="stat-label">Utilization</div>
+    </div>`);
+
+    cards.push(`<div class="stat-card">
+      <div class="stat-num">${Math.round(p.wasteVol).toLocaleString()}</div>
+      <div class="stat-label">Waste (in³)</div>
+    </div>`);
+
+    if (calc.blocksNeeded !== null) {
+      cards.push(`<div class="stat-card">
+        <div class="stat-num">${calc.blocksNeeded.toLocaleString()}</div>
+        <div class="stat-label">Blocks Needed</div>
+      </div>`);
+      cards.push(`<div class="stat-card">
+        <div class="stat-num">${calc.totalProduced.toLocaleString()}</div>
+        <div class="stat-label">Total Produced</div>
+      </div>`);
+      cards.push(`<div class="stat-card">
+        <div class="stat-num">${calc.surplus.toLocaleString()}</div>
+        <div class="stat-label">Surplus</div>
+      </div>`);
+    }
+
+    const totalSec = calc.secondaries.reduce((s, x) => s + x.totalPieces, 0);
+    if (totalSec > 0) {
+      const breakdown = calc.secondaries
+        .filter(s => s.totalPieces > 0)
+        .map(s => `${s.totalPieces} ${s.label}`)
+        .join(' + ');
+      cards.push(`<div class="stat-card">
+        <div class="stat-num">${totalSec.toLocaleString()}</div>
+        <div class="stat-label">Secondary Parts</div>
+        <div class="stat-sublabel">${breakdown}</div>
+      </div>`);
+    }
+
+    $statGrid.innerHTML = cards.join('');
+
+    const pct = p.utilPct;
+    $utilBar.className = 'util-bar-inner ' + (pct >= 75 ? 'util-green' : pct >= 50 ? 'util-yellow' : 'util-red');
     $utilBar.style.width = Math.min(pct, 100).toFixed(1) + '%';
-    $utilBarLabel.textContent = pct.toFixed(1) + '% material utilization';
-
-    if (qty && qty > 0) {
-      const blocksNeeded  = Math.ceil(qty / result.total);
-      const totalProduced = blocksNeeded * result.total;
-      const surplus       = totalProduced - qty;
-
-      $statBlocks.textContent     = blocksNeeded.toLocaleString();
-      $statBlocksCard.style.display = 'block';
-
-      $statTotalParts.textContent = totalProduced.toLocaleString();
-      $statSurplus.textContent    = surplus.toLocaleString();
-      $qtyStats.style.display     = 'block';
-    } else {
-      $statBlocksCard.style.display = 'none';
-      $qtyStats.style.display = 'none';
-    }
+    $utilBarLabel.textContent = `Material Utilization: ${pct.toFixed(1)}%`;
   }
 
-  function renderCutList(result, mode, routing) {
-    const isAuto   = mode === 'auto';
-    const identity = result.partNameL === 'Length' && result.partNameW === 'Width' && result.partNameH === 'Height';
-    const showMap  = isAuto && !identity;
+  // ─── render: cut list ─────────────────────────────────────────────────────────
 
-    const rows = [
-      {
-        step: 1,
-        assignedMachine: 'Cross Cutter',
-        active: routing.crossCutter,
-        axis: 'Length',
-        n: result.nL,
-        spacing: result.effL,
-        rem: result.remL,
-        mapFrom: result.partNameL
-      },
-      {
-        step: 2,
-        assignedMachine: 'Main Line',
-        active: true,
-        axis: 'Width',
-        n: result.nW,
-        spacing: result.effW,
-        rem: result.remW,
-        mapFrom: result.partNameW
-      },
-      {
-        step: 3,
-        assignedMachine: 'Blue Line',
-        active: routing.blueLine,
-        axis: 'Height',
-        n: result.nH,
-        spacing: result.effH,
-        rem: result.remH,
-        mapFrom: result.partNameH
-      }
+  function machineFor(axis, routing) {
+    if (axis === 'Length')
+      return routing.crossCutter
+        ? { name: 'Cross Cutter', rerouted: false }
+        : { name: 'Main Line',    rerouted: true, from: 'Cross Cutter' };
+    if (axis === 'Height')
+      return routing.blueLine
+        ? { name: 'Blue Line', rerouted: false }
+        : { name: 'Main Line', rerouted: true, from: 'Blue Line' };
+    return { name: 'Main Line', rerouted: false };
+  }
+
+  function machTagHTML(m) {
+    return m.rerouted
+      ? `<span class="machine-tag rerouted">${m.name}</span><span class="reroute-via">↑ from ${m.from}</span>`
+      : `<span class="machine-tag">${m.name}</span>`;
+  }
+
+  function renderCutList(calc) {
+    const p = calc.primary;
+    const { mode, routing } = calc;
+    const isRemap = mode === 'auto' &&
+      !(p.partNameL === 'Length' && p.partNameW === 'Width' && p.partNameH === 'Height');
+
+    const rows = [];
+    let step = 1;
+
+    // Primary part — three axis rows
+    const primaryAxes = [
+      { axis: 'Length', n: p.nL, sp: p.effL, rem: p.remL, from: p.partNameL },
+      { axis: 'Width',  n: p.nW, sp: p.effW, rem: p.remW, from: p.partNameW },
+      { axis: 'Height', n: p.nH, sp: p.effH, rem: p.remH, from: p.partNameH }
     ];
-
-    $cutBody.innerHTML = rows.map(r => {
-      const rerouted = !r.active;
-      const displayMachine = rerouted ? 'Main Line' : r.assignedMachine;
-      const tagClass = rerouted ? 'machine-tag rerouted' : 'machine-tag';
-
-      return `
-        <tr>
-          <td>${r.step}</td>
-          <td>
-            <span class="${tagClass}">${displayMachine}</span>
-            ${rerouted ? `<span class="reroute-via">↑ rerouted from ${r.assignedMachine}</span>` : ''}
-          </td>
-          <td>
-            ${r.axis}
-            ${showMap && r.mapFrom !== r.axis ? `<span class="orient-map">← Part ${r.mapFrom}</span>` : ''}
-          </td>
-          <td>${r.n > 0 ? r.n - 1 : 0} cuts</td>
-          <td>${r.spacing.toFixed(4)}"</td>
-          <td>${r.n} pcs</td>
-          <td>${r.rem < 0.001 ? '0"' : r.rem.toFixed(3) + '"'}</td>
-        </tr>
-      `;
-    }).join('');
-  }
-
-  // ─── SVG diagrams ─────────────────────────────────────────────────────────────
-
-  function drawView(containerEl, dim1, dim2, n1, n2, eff1, eff2, rem1, rem2, partD1, partD2, axLabel1, axLabel2) {
-    const PL = 46;  // left pad (rotated label)
-    const PT = 22;  // top pad
-    const PR = 46;  // right pad (right-side remnant label)
-    const PB = 32;  // bottom pad
-
-    const MAX_IW = 500;
-    const MAX_IH = 180;
-
-    const scale = Math.min(MAX_IW / dim1, MAX_IH / dim2);
-    const iW = dim1 * scale;
-    const iH = dim2 * scale;
-    const W  = Math.ceil(iW + PL + PR);
-    const H  = Math.ceil(iH + PT + PB);
-
-    const ox = PL;
-    const oy = PT;
-
-    const gW = n1 > 0 ? n1 * eff1 * scale : 0;
-    const gH = n2 > 0 ? n2 * eff2 * scale : 0;
-
-    const parts = [];
-    const f = v => v.toFixed(2);
-
-    // whole block background (waste color)
-    parts.push(`<rect x="${f(ox)}" y="${f(oy)}" width="${f(iW)}" height="${f(iH)}" fill="#fee2e2" stroke="none"/>`);
-
-    // part grid area
-    if (gW > 0 && gH > 0) {
-      parts.push(`<rect x="${f(ox)}" y="${f(oy)}" width="${f(gW)}" height="${f(gH)}" fill="#dbeafe" stroke="none"/>`);
+    for (const ax of primaryAxes) {
+      const m = machineFor(ax.axis, routing);
+      const dir = ax.axis + (isRemap && ax.from !== ax.axis
+        ? `<span class="orient-map">← Part ${ax.from}</span>` : '');
+      rows.push(`<tr>
+        <td>${step++}</td><td>${machTagHTML(m)}</td><td>${dir}</td>
+        <td><strong>Primary</strong></td>
+        <td>${ax.n}</td><td>${ax.sp.toFixed(3)}"</td>
+        <td>${ax.rem < 0.005 ? '0"' : ax.rem.toFixed(2) + '"'}</td>
+      </tr>`);
     }
 
-    // vertical cut lines
+    // Secondary parts — rows per zone per axis
+    const ZONE_LABEL = { 'L-end': 'L remnant', 'W-end': 'W remnant', 'H-end': 'H remnant' };
+
+    for (const sec of calc.secondaries) {
+      for (const zone of [sec.zone1, sec.zone2, sec.zone3]) {
+        if (zone.total <= 0) continue;
+        const zl = ZONE_LABEL[zone.zoneName];
+        // Zone d1→Length, d2→Width, d3→Height (all zones preserve block axis order)
+        const zAxes = [
+          { axis: 'Length', n: zone.nA, sp: zone.effA, rem: zone.remA },
+          { axis: 'Width',  n: zone.nB, sp: zone.effB, rem: zone.remB },
+          { axis: 'Height', n: zone.nC, sp: zone.effC, rem: zone.remC }
+        ];
+        for (const ax of zAxes) {
+          if (ax.n <= 0) continue;
+          const m = machineFor(ax.axis, routing);
+          const partCell =
+            `${sec.label} <span style="font-size:10px;color:var(--muted);">(${zl})</span>`;
+          rows.push(`<tr class="sec-row">
+            <td>${step++}</td><td>${machTagHTML(m)}</td><td>${ax.axis}</td>
+            <td>${partCell}</td>
+            <td>${ax.n}</td><td>${ax.sp.toFixed(3)}"</td>
+            <td>${ax.rem < 0.005 ? '0"' : ax.rem.toFixed(2) + '"'}</td>
+          </tr>`);
+        }
+      }
+    }
+
+    $cutBody.innerHTML = rows.join('');
+  }
+
+  // ─── canvas diagram drawing ───────────────────────────────────────────────────
+  //
+  // Draws a 2D cross-section onto a <canvas>.
+  // params: {
+  //   blockD1, blockD2   block dims (x-axis, y-axis)
+  //   n1, n2             primary part count per axis
+  //   eff1, eff2         effective cut spacing (part + kerf)
+  //   rem1, rem2         remnant after primary cuts per axis
+  //   partD1, partD2     part dimension per axis (for labels)
+  //   axisLabel1/2       human-readable axis names
+  //   secInRem1          bool — secondary parts in the right (rem1) strip
+  //   secInRem2          bool — secondary parts in the bottom (rem2) strip
+  // }
+  // maxW / maxH: available pixels (total including padding budget)
+
+  function drawBlockView(canvas, params, maxW, maxH) {
+    const {
+      blockD1, blockD2, n1, n2, eff1, eff2, rem1, rem2,
+      partD1, axisLabel1, axisLabel2, secInRem1, secInRem2
+    } = params;
+
+    const dpr = window.devicePixelRatio || 1;
+    const PL = 52, PT = 28, PR = 52, PB = 38;
+    const availW = maxW - PL - PR;
+    const availH = maxH - PT - PB;
+    const scale  = Math.min(availW / blockD1, availH / blockD2);
+    const rW = Math.round(blockD1 * scale);
+    const rH = Math.round(blockD2 * scale);
+    const W  = rW + PL + PR;
+    const H  = rH + PT + PB;
+
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+
+    const ox = PL, oy = PT;
+    // Primary grid extent in pixels
+    const gW = n1 * eff1 * scale;
+    const gH = n2 * eff2 * scale;
+
+    // 1. Right remnant strip
+    ctx.fillStyle = secInRem1 ? '#dcfce7' : '#fecaca';
+    ctx.fillRect(ox + gW, oy, rW - gW, rH);
+
+    // 2. Bottom remnant strip (within primary width only)
+    ctx.fillStyle = secInRem2 ? '#dcfce7' : '#fecaca';
+    ctx.fillRect(ox, oy + gH, gW, rH - gH);
+
+    // 3. Primary part cells (blue)
+    ctx.fillStyle = '#dbeafe';
+    if (gW > 0 && gH > 0) ctx.fillRect(ox, oy, gW, gH);
+
+    // 4. Primary cut grid lines
+    ctx.strokeStyle = '#93c5fd';
+    ctx.lineWidth = 0.7;
+    ctx.setLineDash([]);
     for (let i = 1; i < n1; i++) {
       const x = ox + i * eff1 * scale;
-      parts.push(`<line x1="${f(x)}" y1="${f(oy)}" x2="${f(x)}" y2="${f(oy+gH)}" stroke="#93c5fd" stroke-width="0.8"/>`);
+      ctx.beginPath(); ctx.moveTo(x, oy); ctx.lineTo(x, oy + gH); ctx.stroke();
     }
-
-    // horizontal cut lines
     for (let j = 1; j < n2; j++) {
       const y = oy + j * eff2 * scale;
-      parts.push(`<line x1="${f(ox)}" y1="${f(y)}" x2="${f(ox+gW)}" y2="${f(y)}" stroke="#93c5fd" stroke-width="0.8"/>`);
+      ctx.beginPath(); ctx.moveTo(ox, y); ctx.lineTo(ox + gW, y); ctx.stroke();
     }
 
-    // block outline
-    parts.push(`<rect x="${f(ox)}" y="${f(oy)}" width="${f(iW)}" height="${f(iH)}" fill="none" stroke="#374151" stroke-width="1.5"/>`);
+    // 5. Block outline
+    ctx.strokeStyle = '#374151';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    ctx.strokeRect(ox, oy, rW, rH);
 
-    // remnant separator lines
+    // 6. Remnant separator lines (dashed red)
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
     if (rem1 > 0.001 && gW > 0) {
-      const x = ox + gW;
-      parts.push(`<line x1="${f(x)}" y1="${f(oy)}" x2="${f(x)}" y2="${f(oy+iH)}" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>`);
+      ctx.beginPath(); ctx.moveTo(ox + gW, oy); ctx.lineTo(ox + gW, oy + rH); ctx.stroke();
     }
     if (rem2 > 0.001 && gH > 0) {
-      const y = oy + gH;
-      parts.push(`<line x1="${f(ox)}" y1="${f(y)}" x2="${f(ox+iW)}" y2="${f(y)}" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>`);
+      ctx.beginPath(); ctx.moveTo(ox, oy + gH); ctx.lineTo(ox + gW, oy + gH); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // 7. Labels
+    const fs = Math.max(9, Math.min(11, rW * 0.028));
+    ctx.fillStyle = '#374151';
+    ctx.font = `${fs}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Top: x-axis block dimension
+    ctx.fillText(`${blockD1}" ${axisLabel1}`, ox + rW / 2, oy - PT / 2 + 2);
+
+    // Left: y-axis block dimension (rotated)
+    ctx.save();
+    ctx.translate(ox - PL / 2 + 4, oy + rH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText(`${blockD2}" ${axisLabel2}`, 0, 0);
+    ctx.restore();
+
+    const smallFs = Math.max(8, Math.min(10, rW * 0.022));
+
+    // Bottom: part dim label under first part cell
+    if (n1 > 0 && gW > 0) {
+      ctx.fillStyle = '#1d4ed8';
+      ctx.font = `${smallFs}px Arial, sans-serif`;
+      ctx.fillText(`${partD1}"`, ox + (partD1 * scale) / 2, oy + rH + PB / 2 - 2);
     }
 
-    // top dimension label (axis 1)
-    parts.push(`<text x="${f(ox + iW/2)}" y="${f(oy - 7)}" text-anchor="middle" font-size="10" fill="#374151" font-family="Arial,sans-serif">${dim1}" ${axLabel1}</text>`);
-
-    // left dimension label (axis 2) — rotated
-    const rotX = ox - 14;
-    const rotY = oy + iH / 2;
-    parts.push(`<text x="${f(rotX)}" y="${f(rotY)}" text-anchor="middle" font-size="10" fill="#374151" font-family="Arial,sans-serif" transform="rotate(-90 ${f(rotX)} ${f(rotY)})">${dim2}" ${axLabel2}</text>`);
-
-    // bottom: part dimension label under first cell
-    if (n1 > 0) {
-      const cx = ox + (partD1 * scale) / 2;
-      parts.push(`<text x="${f(cx)}" y="${f(oy+iH+14)}" text-anchor="middle" font-size="9" fill="#1d4ed8" font-family="Arial,sans-serif">${partD1}"</text>`);
+    // Bottom: rem1 label
+    if (rem1 > 0.001 && rW - gW > 2) {
+      ctx.fillStyle = '#b91c1c';
+      ctx.font = `${smallFs}px Arial, sans-serif`;
+      ctx.fillText(`${rem1.toFixed(2)}"`, ox + gW + ((rW - gW) / 2), oy + rH + PB / 2 - 2);
     }
 
-    // bottom: remnant label on right
-    if (rem1 > 0.001 && gW > 0) {
-      const rx = ox + gW + (rem1 * scale) / 2;
-      parts.push(`<text x="${f(rx)}" y="${f(oy+iH+14)}" text-anchor="middle" font-size="9" fill="#dc2626" font-family="Arial,sans-serif">rem ${rem1.toFixed(3)}"</text>`);
+    // Right: rem2 label
+    if (rem2 > 0.001 && rH - gH > 2) {
+      ctx.fillStyle = '#b91c1c';
+      ctx.font = `${smallFs}px Arial, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText(`${rem2.toFixed(2)}"`, ox + rW + 4, oy + gH + (rH - gH) / 2);
     }
-
-    // right: remnant label below grid
-    if (rem2 > 0.001 && gH > 0) {
-      const ry = oy + gH + (rem2 * scale) / 2;
-      parts.push(`<text x="${f(ox+iW+4)}" y="${f(ry)}" text-anchor="start" font-size="9" fill="#dc2626" font-family="Arial,sans-serif">${rem2.toFixed(3)}"</text>`);
-    }
-
-    containerEl.innerHTML = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${W}px;height:auto;display:block;">${parts.join('')}</svg>`;
   }
 
-  function renderDiagrams(r) {
-    // Front View: Width (x) × Height (y)
-    drawView(
-      document.getElementById('diagFront'),
-      r.bW, r.bH,
-      r.nW, r.nH,
-      r.effW, r.effH,
-      r.remW, r.remH,
-      r.partDimW, r.partDimH,
-      'Width', 'Height'
-    );
+  // ─── render: diagrams ─────────────────────────────────────────────────────────
 
-    // Top View: Length (x) × Width (y)
-    drawView(
-      document.getElementById('diagTop'),
-      r.bL, r.bW,
-      r.nL, r.nW,
-      r.effL, r.effW,
-      r.remL, r.remW,
-      r.partDimL, r.partDimW,
-      'Length', 'Width'
-    );
-
-    // Side View: Length (x) × Height (y)
-    drawView(
-      document.getElementById('diagSide'),
-      r.bL, r.bH,
-      r.nL, r.nH,
-      r.effL, r.effH,
-      r.remL, r.remH,
-      r.partDimL, r.partDimH,
-      'Length', 'Height'
-    );
+  function buildDiagParams(calc) {
+    const p = calc.primary;
+    return [
+      // Front View (W × H)
+      { blockD1: p.bW, blockD2: p.bH, n1: p.nW, n2: p.nH, eff1: p.effW, eff2: p.effH,
+        rem1: p.remW, rem2: p.remH, partD1: p.partDimW, partD2: p.partDimH,
+        axisLabel1: 'Width', axisLabel2: 'Height',
+        secInRem1: calc.secInZone2, secInRem2: calc.secInZone3 },
+      // Top View (L × W)
+      { blockD1: p.bL, blockD2: p.bW, n1: p.nL, n2: p.nW, eff1: p.effL, eff2: p.effW,
+        rem1: p.remL, rem2: p.remW, partD1: p.partDimL, partD2: p.partDimW,
+        axisLabel1: 'Length', axisLabel2: 'Width',
+        secInRem1: calc.secInZone1, secInRem2: calc.secInZone2 },
+      // Side View (L × H)
+      { blockD1: p.bL, blockD2: p.bH, n1: p.nL, n2: p.nH, eff1: p.effL, eff2: p.effH,
+        rem1: p.remL, rem2: p.remH, partD1: p.partDimL, partD2: p.partDimH,
+        axisLabel1: 'Length', axisLabel2: 'Height',
+        secInRem1: calc.secInZone1, secInRem2: calc.secInZone3 }
+    ];
   }
 
-  // ─── main calculate handler ──────────────────────────────────────────────────
+  function renderDiagrams(calc) {
+    lastDrawParams = buildDiagParams(calc);
+    const ids = ['canvasFront', 'canvasTop', 'canvasSide'];
+    for (let i = 0; i < 3; i++) {
+      const canvas = document.getElementById(ids[i]);
+      const wrap   = canvas.parentElement;
+      const maxW   = Math.max(wrap.clientWidth - 4, 140);
+      drawBlockView(canvas, lastDrawParams[i], maxW, 180);
+    }
+  }
+
+  // ─── zoom modal ───────────────────────────────────────────────────────────────
+
+  const $modal      = document.getElementById('diagramModal');
+  const VIEW_LABELS = ['Front View (W × H)', 'Top View (L × W)', 'Side View (L × H)'];
+
+  function openModal(viewIndex) {
+    if (!lastDrawParams) return;
+    const maxW = Math.floor(window.innerWidth  * 0.82) - 60;
+    const maxH = Math.floor(window.innerHeight * 0.76) - 50;
+    drawBlockView(document.getElementById('modalCanvas'), lastDrawParams[viewIndex], maxW, maxH);
+    document.getElementById('modalLabel').textContent = VIEW_LABELS[viewIndex];
+    $modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    $modal.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+
+  ['wrapFront', 'wrapTop', 'wrapSide'].forEach((id, i) => {
+    document.getElementById(id).addEventListener('click', () => openModal(i));
+  });
+  document.getElementById('modalBackdrop').addEventListener('click', closeModal);
+  document.getElementById('modalClose').addEventListener('click', closeModal);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  // ─── print ────────────────────────────────────────────────────────────────────
+
+  window.addEventListener('afterprint', () => document.body.classList.remove('no-print-diagrams'));
+
+  document.getElementById('printBtn').addEventListener('click', () => {
+    $printDate.textContent = new Date().toLocaleDateString();
+    if (!document.getElementById('printDiagrams').checked)
+      document.body.classList.add('no-print-diagrams');
+    window.print();
+  });
+
+  // ─── calculate ────────────────────────────────────────────────────────────────
 
   function calculate() {
     $error.style.display = 'none';
+    const inp = getInputs();
+    const err = validate(inp);
 
-    const err = validate();
     if (err) {
       $error.textContent = err;
       $error.style.display = 'block';
@@ -1083,81 +1179,63 @@
       return;
     }
 
-    const inputs = getInputs();
-    const result = runCalc(inputs);
+    const calc = runFullCalc(inp);
 
-    if (result.total === 0) {
-      $error.textContent = 'No parts fit in this block with the given dimensions. Check that the part is smaller than the block.';
+    if (calc.primary.total === 0) {
+      $error.textContent = 'No primary parts fit in this block. Check that each part dimension (plus kerf) is less than the block dimension.';
       $error.style.display = 'block';
       $results.style.display = 'none';
       setStatus('No parts fit', 'err');
       return;
     }
 
-    renderOrientNote(result, inputs.mode);
-    renderStats(result, inputs.qty);
-    renderCutList(result, inputs.mode, inputs.routing);
-    renderDiagrams(result);
+    renderOrientNote(calc);
+    renderStats(calc);
+    renderCutList(calc);
+    renderDiagrams(calc);
 
+    $printDate.textContent = new Date().toLocaleDateString();
     $results.style.display = 'block';
-    setStatus(result.total + ' parts/block', 'ok');
+    setStatus(calc.primary.total.toLocaleString() + ' parts/block', 'ok');
 
-    // scroll to results on mobile
     if (window.innerWidth <= 640) {
-      setTimeout(() => {
-        document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 80);
+      setTimeout(() => $results.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
     }
   }
 
-  // ─── reset ───────────────────────────────────────────────────────────────────
+  // ─── reset ────────────────────────────────────────────────────────────────────
 
   function reset() {
-    $bL.value = '';
-    $bW.value = '';
-    $bH.value = '';
-    $pL.value = '';
-    $pW.value = '';
-    $pH.value = '';
+    $bL.value = ''; $bW.value = ''; $bH.value = '';
+    $pL.value = ''; $pW.value = ''; $pH.value = '';
     $kerf.value = '0.079';
-    $qty.value = '';
+    $qty.value  = '';
     setMode('auto');
     $machCross.checked = true;
     $machMain.checked  = true;
     $machBlue.checked  = true;
     updateMachineUI();
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    $error.style.display = 'none';
+
+    secIds.forEach(id => { document.getElementById(`sec-card-${id}`)?.remove(); });
+    secIds = [];
+
+    $error.style.display   = 'none';
     $results.style.display = 'none';
+    lastDrawParams = null;
     setStatus('Ready', '');
     $bL.focus();
   }
 
-  // ─── status classes ──────────────────────────────────────────────────────────
+  // ─── enter key ────────────────────────────────────────────────────────────────
 
-  // add color classes to pill
-  const origSetStatus = setStatus;
-  (function patchPillColors() {
-    const style = document.createElement('style');
-    style.textContent = `
-      .pill.ok   { background:#dcfce7; color:#166534; border-color:#86efac; }
-      .pill.err  { background:#fef2f2; color:#b91c1c; border-color:#fca5a5; }
-    `;
-    document.head.appendChild(style);
-  })();
-
-  // ─── event listeners ─────────────────────────────────────────────────────────
+  [$bL, $bW, $bH, $pL, $pW, $pH, $kerf, $qty].forEach(el => {
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') calculate(); });
+  });
 
   $calcBtn.addEventListener('click', calculate);
   $resetBtn.addEventListener('click', reset);
 
-  // Allow Enter key to trigger calculate from any input
-  [[$bL,$bW,$bH,$pL,$pW,$pH,$kerf,$qty]].flat().forEach(el => {
-    el.addEventListener('keydown', e => {
-      if (e.key === 'Enter') calculate();
-    });
-  });
   </script>
-
 </body>
 </html>
