@@ -289,6 +289,74 @@
       font-style: italic;
     }
 
+    /* machine routing */
+    .machine-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .machine-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .machine-row input[type="checkbox"] {
+      margin-top: 2px;
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary-bg);
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .machine-row label {
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      line-height: 1.3;
+    }
+
+    .machine-row label span {
+      display: block;
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+
+    .reroute-note {
+      display: none;
+      font-size: 11px;
+      color: #b45309;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 6px;
+      padding: 3px 7px;
+      margin-top: 4px;
+      margin-left: 26px;
+    }
+
+    .machine-row.disabled label {
+      color: var(--muted);
+    }
+
+    /* rerouted tag in cut list */
+    .machine-tag.rerouted {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .reroute-via {
+      display: block;
+      font-size: 10px;
+      color: #b45309;
+      margin-top: 2px;
+      font-style: italic;
+    }
+
     /* diagrams */
     .diagram-grid {
       display: grid;
@@ -422,9 +490,36 @@
         <p class="help-text">Auto tries all 6 rotations and selects the orientation with the highest yield.</p>
       </div>
 
-      <div class="field">
+      <div class="field" style="margin-bottom:14px;">
         <label for="qty">Quantity Needed <span style="font-weight:400;">(optional)</span></label>
         <input id="qty" type="number" inputmode="numeric" min="1" step="1" placeholder="Leave blank for per-block results only" style="max-width:340px;">
+      </div>
+
+      <div>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Active Machines</label>
+        <p class="help-text" style="margin:0 0 10px;">Uncheck a machine to skip it. Main Line can handle all cuts alone.</p>
+        <div class="machine-list">
+          <div class="machine-row" id="rowCross">
+            <input type="checkbox" id="machCross" checked>
+            <div>
+              <label for="machCross">Cross Cutter <span>Length cuts</span></label>
+              <div class="reroute-note" id="noteCross">Cross Cutter cuts will be handled by Main Line</div>
+            </div>
+          </div>
+          <div class="machine-row" id="rowMain">
+            <input type="checkbox" id="machMain" checked>
+            <div>
+              <label for="machMain">Main Line <span>Width cuts</span></label>
+            </div>
+          </div>
+          <div class="machine-row" id="rowBlue">
+            <input type="checkbox" id="machBlue" checked>
+            <div>
+              <label for="machBlue">Blue Line <span>Height cuts</span></label>
+              <div class="reroute-note" id="noteBlue">Blue Line cuts will be handled by Main Line</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -565,6 +660,10 @@
   const $statSurplus    = document.getElementById('statSurplus');
   const $cutBody        = document.getElementById('cutBody');
 
+  const $machCross = document.getElementById('machCross');
+  const $machMain  = document.getElementById('machMain');
+  const $machBlue  = document.getElementById('machBlue');
+
   let currentMode = 'auto';
 
   // ─── preset buttons ──────────────────────────────────────────────────────────
@@ -596,6 +695,25 @@
     document.getElementById('modeAuto').classList.toggle('active', mode === 'auto');
     document.getElementById('modeFixed').classList.toggle('active', mode === 'fixed');
   }
+
+  // ─── machine routing checkboxes ──────────────────────────────────────────────
+
+  function updateMachineUI() {
+    const crossOn = $machCross.checked;
+    const blueOn  = $machBlue.checked;
+
+    document.getElementById('noteCross').style.display = crossOn ? 'none' : 'block';
+    document.getElementById('noteBlue').style.display  = blueOn  ? 'none' : 'block';
+
+    document.getElementById('rowCross').classList.toggle('disabled', !crossOn);
+    document.getElementById('rowBlue').classList.toggle('disabled', !blueOn);
+  }
+
+  $machCross.addEventListener('change', updateMachineUI);
+  $machBlue.addEventListener('change', updateMachineUI);
+
+  // Main Line cannot be unchecked — it is the fallback for all cuts
+  $machMain.addEventListener('change', () => { $machMain.checked = true; });
 
   // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -707,7 +825,12 @@
       pH:   toNum($pH.value),
       kerf: toNum($kerf.value),
       qty:  $qty.value.trim() === '' ? null : toNum($qty.value),
-      mode: currentMode
+      mode: currentMode,
+      routing: {
+        crossCutter: $machCross.checked,
+        mainLine:    true,
+        blueLine:    $machBlue.checked
+      }
     };
   }
 
@@ -760,7 +883,7 @@
     }
   }
 
-  function renderCutList(result, mode) {
+  function renderCutList(result, mode, routing) {
     const isAuto   = mode === 'auto';
     const identity = result.partNameL === 'Length' && result.partNameW === 'Width' && result.partNameH === 'Height';
     const showMap  = isAuto && !identity;
@@ -768,50 +891,59 @@
     const rows = [
       {
         step: 1,
-        machine: 'Cross Cutter',
+        assignedMachine: 'Cross Cutter',
+        active: routing.crossCutter,
         axis: 'Length',
         n: result.nL,
         spacing: result.effL,
-        partDim: result.partDimL,
         rem: result.remL,
         mapFrom: result.partNameL
       },
       {
         step: 2,
-        machine: 'Main Line',
+        assignedMachine: 'Main Line',
+        active: true,
         axis: 'Width',
         n: result.nW,
         spacing: result.effW,
-        partDim: result.partDimW,
         rem: result.remW,
         mapFrom: result.partNameW
       },
       {
         step: 3,
-        machine: 'Blue Line',
+        assignedMachine: 'Blue Line',
+        active: routing.blueLine,
         axis: 'Height',
         n: result.nH,
         spacing: result.effH,
-        partDim: result.partDimH,
         rem: result.remH,
         mapFrom: result.partNameH
       }
     ];
 
-    $cutBody.innerHTML = rows.map(r => `
-      <tr>
-        <td>${r.step}</td>
-        <td><span class="machine-tag">${r.machine}</span></td>
-        <td>
-          ${r.axis}
-          ${showMap && r.mapFrom !== r.axis ? `<span class="orient-map">← Part ${r.mapFrom}</span>` : ''}
-        </td>
-        <td>${r.n > 0 ? r.n - 1 : 0} cuts</td>
-        <td>${r.spacing.toFixed(4)}"</td>
-        <td>${r.n} pcs</td>
-        <td>${r.rem < 0.001 ? '0"' : r.rem.toFixed(3) + '"'}</td>
-      </tr>
-    `).join('');
+    $cutBody.innerHTML = rows.map(r => {
+      const rerouted = !r.active;
+      const displayMachine = rerouted ? 'Main Line' : r.assignedMachine;
+      const tagClass = rerouted ? 'machine-tag rerouted' : 'machine-tag';
+
+      return `
+        <tr>
+          <td>${r.step}</td>
+          <td>
+            <span class="${tagClass}">${displayMachine}</span>
+            ${rerouted ? `<span class="reroute-via">↑ rerouted from ${r.assignedMachine}</span>` : ''}
+          </td>
+          <td>
+            ${r.axis}
+            ${showMap && r.mapFrom !== r.axis ? `<span class="orient-map">← Part ${r.mapFrom}</span>` : ''}
+          </td>
+          <td>${r.n > 0 ? r.n - 1 : 0} cuts</td>
+          <td>${r.spacing.toFixed(4)}"</td>
+          <td>${r.n} pcs</td>
+          <td>${r.rem < 0.001 ? '0"' : r.rem.toFixed(3) + '"'}</td>
+        </tr>
+      `;
+    }).join('');
   }
 
   // ─── SVG diagrams ─────────────────────────────────────────────────────────────
@@ -964,7 +1096,7 @@
 
     renderOrientNote(result, inputs.mode);
     renderStats(result, inputs.qty);
-    renderCutList(result, inputs.mode);
+    renderCutList(result, inputs.mode, inputs.routing);
     renderDiagrams(result);
 
     $results.style.display = 'block';
@@ -990,6 +1122,10 @@
     $kerf.value = '0.079';
     $qty.value = '';
     setMode('auto');
+    $machCross.checked = true;
+    $machMain.checked  = true;
+    $machBlue.checked  = true;
+    updateMachineUI();
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
     $error.style.display = 'none';
     $results.style.display = 'none';
