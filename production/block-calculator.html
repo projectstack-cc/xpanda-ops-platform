@@ -62,15 +62,16 @@
     /* ── field ───────────────────────────────────────────────────────────────── */
     .field { display: flex; flex-direction: column; gap: 5px; }
     .field label { font-size: 12px; font-weight: 600; color: var(--muted); }
-    .field input {
+    .field input, .field textarea {
       width: 100%; padding: 9px 10px; border: 1px solid var(--input-border);
       border-radius: 8px; background: var(--input-bg); color: var(--text); font-size: 14px;
     }
+    .field textarea { resize: vertical; min-height: 64px; }
     .help-text { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
 
     /* ── secondary part cards ────────────────────────────────────────────────── */
     .sec-card-header {
-      display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
     }
     .sec-card-title { font-size: 14px; font-weight: 700; }
     .btn-remove {
@@ -80,6 +81,25 @@
     }
     .btn-remove:hover { border-color: #ef4444; color: #ef4444; }
     .add-sec-row { margin-bottom: 12px; }
+
+    /* ── sec card: load from library ─────────────────────────────────────────── */
+    .sec-lib-row {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;
+    }
+    .sec-lib-btn {
+      font-size: 12px; color: var(--primary-bg); cursor: pointer;
+      border: none; background: none; padding: 0; font-weight: 600;
+      text-decoration: underline; line-height: 1.4;
+    }
+    .sec-lib-badge {
+      font-size: 11px; font-weight: 700; padding: 2px 7px;
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; color: #92400e;
+    }
+    .sec-lib-clear {
+      font-size: 12px; color: var(--muted); cursor: pointer;
+      border: none; background: none; padding: 0; line-height: 1;
+    }
+    .sec-lib-clear:hover { color: #ef4444; }
 
     /* ── machine routing ─────────────────────────────────────────────────────── */
     .machine-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
@@ -157,7 +177,7 @@
     .orient-map-note { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
 
     .print-controls {
-      display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap;
+      display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap;
     }
     .print-checkbox-label {
       font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;
@@ -183,8 +203,8 @@
     }
     .diagram-hint { font-size: 10px; color: #b0b8c4; text-align: center; margin-top: 1px; }
 
-    /* ── modal ───────────────────────────────────────────────────────────────── */
-    #diagramModal {
+    /* ── modal (shared) ──────────────────────────────────────────────────────── */
+    .modal-overlay {
       display: none; position: fixed; inset: 0; z-index: 1000;
       align-items: center; justify-content: center;
     }
@@ -201,6 +221,143 @@
     .modal-close:hover { color: var(--text); }
     .modal-label { font-size: 13px; font-weight: 700; text-align: center; margin-top: 8px; color: var(--muted); }
     #modalCanvas { display: block; }
+
+    /* ── parts library panel ─────────────────────────────────────────────────── */
+    .lib-panel-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px; margin-bottom: 10px;
+    }
+    .lib-panel-header h2 { margin: 0 0 2px; font-size: 16px; }
+    .lib-search {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--input-border);
+      border-radius: 8px; background: var(--input-bg); color: var(--text);
+      font-size: 13px; margin-bottom: 8px;
+    }
+    .lib-list {
+      display: flex; flex-direction: column; gap: 4px;
+      max-height: 200px; overflow-y: auto;
+    }
+    .lib-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 10px; border: 1px solid var(--card-border);
+      border-radius: 8px; cursor: pointer; background: var(--card-bg);
+      transition: border-color .15s ease, background .15s ease;
+      gap: 8px;
+    }
+    .lib-item:hover { border-color: var(--primary-bg); background: #fffbeb; }
+    .lib-item.selected { border-color: var(--primary-bg); background: #fffbeb; }
+    .lib-item-pn { font-size: 13px; font-weight: 700; }
+    .lib-item-meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .lib-item-dims { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; flex-shrink: 0; }
+    .lib-empty { font-size: 13px; color: var(--muted); padding: 6px 0; margin: 0; }
+    .lib-badge {
+      font-size: 11px; font-weight: 700; padding: 2px 8px;
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; color: #92400e;
+    }
+
+    /* ── parts management modal ──────────────────────────────────────────────── */
+    #partsModal { z-index: 1001; }
+    .parts-modal-box {
+      position: relative; background: var(--card-bg); border-radius: 14px;
+      padding: 18px; width: min(680px, 94vw); max-height: 90vh;
+      overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    .parts-modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; gap: 12px; flex-wrap: wrap;
+    }
+    .parts-modal-header h2 { margin: 0; font-size: 18px; }
+    .parts-modal-close {
+      background: none; border: none; font-size: 22px; cursor: pointer;
+      color: var(--muted); line-height: 1; padding: 4px 8px; flex-shrink: 0;
+    }
+    .parts-modal-close:hover { color: var(--text); }
+
+    .parts-search {
+      flex: 1; min-width: 160px; padding: 9px 10px;
+      border: 1px solid var(--input-border); border-radius: 8px;
+      background: var(--input-bg); color: var(--text); font-size: 13px;
+    }
+    .parts-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .parts-table th {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--muted); padding: 6px 8px;
+      text-align: left; border-bottom: 2px solid var(--line);
+    }
+    .parts-table td {
+      padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: middle;
+    }
+    .parts-table tr:last-child td { border-bottom: none; }
+
+    .btn-sm {
+      padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
+      border: 1px solid var(--card-border); background: var(--ghost-bg);
+      color: var(--ghost-text); white-space: nowrap;
+    }
+    .btn-sm:hover { border-color: var(--primary-bg); color: #92400e; }
+    .btn-sm.danger:hover { border-color: #ef4444; color: #ef4444; }
+    .btn-sm.primary-sm {
+      background: var(--primary-bg); color: var(--primary-text);
+      border-color: var(--primary-bg);
+    }
+    .btn-sm.primary-sm:hover { opacity: .9; }
+    .btn-row { display: flex; gap: 6px; }
+
+    /* part add/edit form */
+    .part-form-back {
+      display: inline-block; font-size: 13px; color: var(--primary-bg);
+      cursor: pointer; font-weight: 600; margin-bottom: 12px;
+    }
+    .part-form-back:hover { text-decoration: underline; }
+    .part-form-grid { display: grid; gap: 12px; }
+    .part-form-error {
+      font-size: 13px; color: #b91c1c; background: #fef2f2;
+      border: 1px solid #fca5a5; border-radius: 8px; padding: 8px 12px;
+    }
+
+    /* ── save combo section ──────────────────────────────────────────────────── */
+    .save-combo-trigger {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .save-combo-status {
+      font-size: 13px; color: #16a34a; font-weight: 600;
+    }
+    .save-combo-form { margin-top: 12px; display: grid; gap: 10px; }
+    .save-combo-form input {
+      width: 100%; padding: 9px 10px; border: 1px solid var(--input-border);
+      border-radius: 8px; background: var(--input-bg); color: var(--text); font-size: 13px;
+    }
+    .save-combo-actions { display: flex; gap: 8px; }
+    .save-combo-msg-ok {
+      font-size: 13px; color: #166534; background: #dcfce7;
+      border: 1px solid #86efac; border-radius: 8px; padding: 8px 12px;
+    }
+    .save-combo-msg-err {
+      font-size: 13px; color: #b91c1c; background: #fef2f2;
+      border: 1px solid #fca5a5; border-radius: 8px; padding: 8px 12px;
+    }
+
+    /* ── saved combos panel ──────────────────────────────────────────────────── */
+    .combos-panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; gap: 12px; flex-wrap: wrap;
+    }
+    .combos-panel-header h2 { margin: 0; }
+    .combo-list { display: flex; flex-direction: column; gap: 8px; }
+    .combo-card {
+      border: 1px solid var(--card-border); border-radius: 10px;
+      padding: 12px 14px; background: var(--ghost-bg);
+    }
+    .combo-card-top {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+    }
+    .combo-card-name { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+    .combo-card-desc { font-size: 12px; color: var(--muted); }
+    .combo-card-meta {
+      font-size: 12px; color: var(--muted); margin: 6px 0 8px; line-height: 1.5;
+    }
+    .combo-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .combos-empty { font-size: 13px; color: var(--muted); margin: 0; }
 
     /* ── print header (screen: hidden) ──────────────────────────────────────── */
     .print-header { display: none; }
@@ -223,8 +380,10 @@
     /* ── print ───────────────────────────────────────────────────────────────── */
     @media print {
       .topbar, .sticky, .prod-platform-footer,
-      #blockSizeCard, #primaryPartCard, #secondaryPartsContainer,
-      .add-sec-row, #optionsCard, .error-banner, .print-controls { display: none !important; }
+      #partsLibraryPanel, #blockSizeCard, #primaryPartCard,
+      #secondaryPartsContainer, .add-sec-row, #optionsCard,
+      .error-banner, .print-controls, #saveComboSection,
+      #savedCombosPanel { display: none !important; }
 
       #results { display: block !important; }
       .print-header { display: block !important; margin-bottom: 14px; font-size: 14px; }
@@ -264,6 +423,19 @@
       </div>
     </div>
 
+    <!-- Parts Library Panel -->
+    <div class="card" id="partsLibraryPanel">
+      <div class="lib-panel-header">
+        <div>
+          <h2>Parts Library</h2>
+          <p class="help-text" style="margin:0;">Select a saved part to load dimensions into a part field.</p>
+        </div>
+        <button class="btn ghost" type="button" id="managePartsBtn" style="white-space:nowrap;flex-shrink:0;">Manage Parts</button>
+      </div>
+      <input type="text" class="lib-search" id="libSearch" placeholder="Filter by part number or customer…" autocomplete="off">
+      <div id="libList" class="lib-list"><p class="lib-empty">Loading…</p></div>
+    </div>
+
     <!-- Block Size -->
     <div class="card" id="blockSizeCard">
       <h2>Block Size</h2>
@@ -293,7 +465,10 @@
 
     <!-- Primary Part -->
     <div class="card" id="primaryPartCard">
-      <h2>Primary Part</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
+        <h2 style="margin:0;">Primary Part</h2>
+        <span id="primaryLibBadge" class="lib-badge" style="display:none;"></span>
+      </div>
       <div class="grid-3">
         <div class="field">
           <label for="pL">Length (in)</label>
@@ -425,6 +600,32 @@
             Include diagrams in print
           </label>
           <button class="btn ghost" type="button" id="printBtn">Print Cut List</button>
+          <button class="btn ghost" type="button" id="exportXlsxBtn">Export XLSX</button>
+        </div>
+      </div>
+
+      <!-- Save Combination -->
+      <div class="card" id="saveComboSection">
+        <div class="save-combo-trigger">
+          <button class="btn ghost" type="button" id="saveComboBtn">Save This Combination</button>
+          <span class="save-combo-status" id="saveComboStatus" style="display:none;">✓ Saved!</span>
+        </div>
+        <div id="saveComboForm" style="display:none;">
+          <div class="save-combo-form">
+            <div class="field">
+              <label for="comboName">Combination Name <span style="color:#b91c1c;">*</span></label>
+              <input id="comboName" type="text" placeholder="e.g. Customer X — 33.5 cubes" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="comboDesc">Description <span style="font-weight:400;">(optional)</span></label>
+              <input id="comboDesc" type="text" placeholder="Notes about this run…" autocomplete="off">
+            </div>
+            <div class="save-combo-actions">
+              <button class="btn primary" type="button" id="saveComboSubmit">Save</button>
+              <button class="btn ghost" type="button" id="saveComboCancelBtn">Cancel</button>
+            </div>
+            <div id="saveComboMsg" style="display:none;"></div>
+          </div>
         </div>
       </div>
 
@@ -462,10 +663,19 @@
       </div>
 
     </div><!-- /results -->
+
+    <!-- Saved Combinations Panel -->
+    <div class="card" id="savedCombosPanel">
+      <div class="combos-panel-header">
+        <h2>Saved Combinations</h2>
+      </div>
+      <div id="comboList" class="combo-list"><p class="combos-empty">Loading…</p></div>
+    </div>
+
   </div><!-- /page-wrap -->
 
-  <!-- Zoom modal -->
-  <div id="diagramModal" role="dialog" aria-modal="true" aria-label="Diagram zoom">
+  <!-- Diagram zoom modal -->
+  <div id="diagramModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Diagram zoom">
     <div class="modal-backdrop" id="modalBackdrop"></div>
     <div class="modal-content">
       <button class="modal-close" id="modalClose" aria-label="Close">✕</button>
@@ -474,11 +684,25 @@
     </div>
   </div>
 
+  <!-- Parts management modal -->
+  <div id="partsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Parts Library">
+    <div class="modal-backdrop" id="partsModalBackdrop"></div>
+    <div class="parts-modal-box">
+      <div id="partsModalInner"><!-- JS renders list or form here --></div>
+    </div>
+  </div>
+
   <script>
+  // ─── HTML escape helper ───────────────────────────────────────────────────────
+
+  function esc(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   // ─── constants ────────────────────────────────────────────────────────────────
 
   const DIM_NAMES = ['Length', 'Width', 'Height'];
-  // All 6 permutations of [0,1,2] mapping part dims to block/zone axes
   const PERMS = [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
 
   // ─── DOM refs ─────────────────────────────────────────────────────────────────
@@ -502,20 +726,29 @@
   const $machMain  = document.getElementById('machMain');
   const $machBlue  = document.getElementById('machBlue');
 
-  const $statGrid     = document.getElementById('statGrid');
-  const $utilBar      = document.getElementById('utilBar');
-  const $utilBarLabel = document.getElementById('utilBarLabel');
-  const $orientNote   = document.getElementById('orientNote');
+  const $statGrid      = document.getElementById('statGrid');
+  const $utilBar       = document.getElementById('utilBar');
+  const $utilBarLabel  = document.getElementById('utilBarLabel');
+  const $orientNote    = document.getElementById('orientNote');
   const $orientMapNote = document.getElementById('orientMapNote');
-  const $cutBody      = document.getElementById('cutBody');
-  const $printDate    = document.getElementById('printDate');
+  const $cutBody       = document.getElementById('cutBody');
+  const $printDate     = document.getElementById('printDate');
 
   // ─── state ────────────────────────────────────────────────────────────────────
 
-  let currentMode    = 'auto';
-  let secIdCounter   = 0;
-  let secIds         = [];
-  let lastDrawParams = null; // [frontParams, topParams, sideParams] for zoom re-render
+  let currentMode      = 'auto';
+  let secIdCounter     = 0;
+  let secIds           = [];
+  let lastDrawParams   = null;
+  let lastCalc         = null;
+  let lastCalcInput    = null;
+  let partsCache       = [];
+  let combosCache      = [];
+  let primaryLibPart   = null; // { id, part_number, customer, density_material }
+  let secLibParts      = {};   // { [secCardId]: { ... } }
+  let libPickerMode    = false;
+  let libPickerCallback = null;
+  let editingPartId    = null;
 
   // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -578,6 +811,7 @@
   function addSecondaryPart() {
     const id = ++secIdCounter;
     secIds.push(id);
+    secLibParts[id] = null;
     const n = secIds.length;
 
     const card = document.createElement('div');
@@ -587,6 +821,11 @@
       <div class="sec-card-header">
         <span class="sec-card-title">Secondary Part ${n}</span>
         <button class="btn-remove" type="button">Remove</button>
+      </div>
+      <div class="sec-lib-row">
+        <button class="sec-lib-btn" type="button" id="sec-lib-btn-${id}">Load from Library</button>
+        <span class="sec-lib-badge" id="sec-lib-badge-${id}" style="display:none;"></span>
+        <button class="sec-lib-clear" id="sec-lib-clear-${id}" style="display:none;" title="Clear library selection" aria-label="Clear">×</button>
       </div>
       <div class="field" style="margin-bottom:10px;">
         <label for="sec-label-${id}">Label <span style="font-weight:400;">(optional)</span></label>
@@ -609,12 +848,46 @@
         </div>
       </div>
     `;
+
     card.querySelector('.btn-remove').addEventListener('click', () => removeSecondaryPart(id));
+
+    card.querySelector(`#sec-lib-btn-${id}`).addEventListener('click', () => {
+      openPartsPicker(part => {
+        secLibParts[id] = {
+          id: part.id, part_number: part.part_number,
+          customer: part.customer, density_material: part.density_material
+        };
+        document.getElementById(`sec-L-${id}`).value = part.length_in;
+        document.getElementById(`sec-W-${id}`).value = part.width_in;
+        document.getElementById(`sec-H-${id}`).value = part.height_in;
+        document.getElementById(`sec-lib-badge-${id}`).textContent = part.part_number;
+        document.getElementById(`sec-lib-badge-${id}`).style.display = 'inline-block';
+        document.getElementById(`sec-lib-clear-${id}`).style.display = 'inline-block';
+      });
+    });
+
+    card.querySelector(`#sec-lib-clear-${id}`).addEventListener('click', () => {
+      secLibParts[id] = null;
+      document.getElementById(`sec-lib-badge-${id}`).style.display = 'none';
+      document.getElementById(`sec-lib-clear-${id}`).style.display = 'none';
+    });
+
+    ['L','W','H'].forEach(dim => {
+      document.getElementById(`sec-${dim}-${id}`).addEventListener('input', () => {
+        if (secLibParts[id]) {
+          secLibParts[id] = null;
+          document.getElementById(`sec-lib-badge-${id}`).style.display = 'none';
+          document.getElementById(`sec-lib-clear-${id}`).style.display = 'none';
+        }
+      });
+    });
+
     document.getElementById('secondaryPartsContainer').appendChild(card);
   }
 
   function removeSecondaryPart(id) {
     secIds = secIds.filter(x => x !== id);
+    delete secLibParts[id];
     const card = document.getElementById(`sec-card-${id}`);
     if (card) card.remove();
     secIds.forEach((sid, i) => {
@@ -636,7 +909,7 @@
     });
   }
 
-  // ─── inputs / validation ─────────────────────────────────────────────────────
+  // ─── inputs / validation ──────────────────────────────────────────────────────
 
   function getInputs() {
     return {
@@ -722,12 +995,10 @@
 
   // ─── secondary part calculation (remnant zones) ───────────────────────────────
   //
-  // After primary cuts, three remnant strips remain:
-  //   Zone 1 (L-end):  remL  × bW   × bH    — strip at end of block along L
-  //   Zone 2 (W-end):  usedL × remW × bH    — strip along W in the non-L-end region
-  //   Zone 3 (H-end):  usedL × usedW × remH — strip along H, inside both used regions
-  //
-  // Each zone's d1/d2/d3 axes map to block Length/Width/Height respectively.
+  // Zone 1 (L-end):  remL  × bW   × bH
+  // Zone 2 (W-end):  usedL × remW × bH
+  // Zone 3 (H-end):  usedL × usedW × remH
+  // Each zone's d1/d2/d3 map to block L/W/H axes respectively.
 
   function bestFitInBox(d1, d2, d3, partDims, kerf, mode) {
     if (d1 <= 0.001 || d2 <= 0.001 || d3 <= 0.001) {
@@ -783,7 +1054,10 @@
     const primary = runPrimaryCalc(bL, bW, bH, pL, pW, pH, kerf, mode);
 
     const validSecs = secondaryParts.filter(s => s.L > 0 && s.W > 0 && s.H > 0);
-    const secondaries = validSecs.map(s => calcSecondaryPart(s, primary, kerf, mode));
+    const secondaries = validSecs.map(s => ({
+      ...calcSecondaryPart(s, primary, kerf, mode),
+      _secId: s.id
+    }));
 
     const secInZone1 = secondaries.some(s => s.zone1.total > 0);
     const secInZone2 = secondaries.some(s => s.zone2.total > 0);
@@ -884,7 +1158,7 @@
     $utilBarLabel.textContent = `Material Utilization: ${pct.toFixed(1)}%`;
   }
 
-  // ─── render: cut list ─────────────────────────────────────────────────────────
+  // ─── machine helper ───────────────────────────────────────────────────────────
 
   function machineFor(axis, routing) {
     if (axis === 'Length')
@@ -904,6 +1178,8 @@
       : `<span class="machine-tag">${m.name}</span>`;
   }
 
+  // ─── render: cut list ─────────────────────────────────────────────────────────
+
   function renderCutList(calc) {
     const p = calc.primary;
     const { mode, routing } = calc;
@@ -913,7 +1189,6 @@
     const rows = [];
     let step = 1;
 
-    // Primary part — three axis rows
     const primaryAxes = [
       { axis: 'Length', n: p.nL, sp: p.effL, rem: p.remL, from: p.partNameL },
       { axis: 'Width',  n: p.nW, sp: p.effW, rem: p.remW, from: p.partNameW },
@@ -931,14 +1206,12 @@
       </tr>`);
     }
 
-    // Secondary parts — rows per zone per axis
     const ZONE_LABEL = { 'L-end': 'L remnant', 'W-end': 'W remnant', 'H-end': 'H remnant' };
 
     for (const sec of calc.secondaries) {
       for (const zone of [sec.zone1, sec.zone2, sec.zone3]) {
         if (zone.total <= 0) continue;
         const zl = ZONE_LABEL[zone.zoneName];
-        // Zone d1→Length, d2→Width, d3→Height (all zones preserve block axis order)
         const zAxes = [
           { axis: 'Length', n: zone.nA, sp: zone.effA, rem: zone.remA },
           { axis: 'Width',  n: zone.nB, sp: zone.effB, rem: zone.remB },
@@ -947,8 +1220,7 @@
         for (const ax of zAxes) {
           if (ax.n <= 0) continue;
           const m = machineFor(ax.axis, routing);
-          const partCell =
-            `${sec.label} <span style="font-size:10px;color:var(--muted);">(${zl})</span>`;
+          const partCell = `${esc(sec.label)} <span style="font-size:10px;color:var(--muted);">(${zl})</span>`;
           rows.push(`<tr class="sec-row">
             <td>${step++}</td><td>${machTagHTML(m)}</td><td>${ax.axis}</td>
             <td>${partCell}</td>
@@ -962,20 +1234,83 @@
     $cutBody.innerHTML = rows.join('');
   }
 
+  // ─── build cut list rows (data structure, not HTML) ───────────────────────────
+
+  function buildOrientNoteText(calc) {
+    const p = calc.primary;
+    const isId = p.partNameL === 'Length' && p.partNameW === 'Width' && p.partNameH === 'Height';
+    if (calc.mode !== 'auto') return '';
+    if (isId) return 'As-entered orientation is optimal.';
+    return `Block L←Part ${p.partNameL} (${p.partDimL}"), Block W←Part ${p.partNameW} (${p.partDimW}"), Block H←Part ${p.partNameH} (${p.partDimH}")`;
+  }
+
+  function buildCutListRows(calc) {
+    const p = calc.primary;
+    const { mode, routing } = calc;
+    const isRemap = mode === 'auto' &&
+      !(p.partNameL === 'Length' && p.partNameW === 'Width' && p.partNameH === 'Height');
+
+    const rows = [];
+    let step = 1;
+
+    const primaryAxes = [
+      { axis: 'Length', n: p.nL, sp: p.effL, rem: p.remL, from: p.partNameL },
+      { axis: 'Width',  n: p.nW, sp: p.effW, rem: p.remW, from: p.partNameW },
+      { axis: 'Height', n: p.nH, sp: p.effH, rem: p.remH, from: p.partNameH }
+    ];
+    for (const ax of primaryAxes) {
+      const m = machineFor(ax.axis, routing);
+      rows.push({
+        step: step++,
+        machine: m.name,
+        machine_rerouted: m.rerouted || false,
+        machine_rerouted_from: m.rerouted ? (m.from || '') : '',
+        direction: ax.axis + (isRemap && ax.from !== ax.axis ? ` (← Part ${ax.from})` : ''),
+        part_label: 'Primary',
+        part_number: primaryLibPart?.part_number || '',
+        customer:    primaryLibPart?.customer    || '',
+        pieces:   ax.n,
+        spacing:  ax.sp,
+        remnant:  ax.rem
+      });
+    }
+
+    const ZONE_LABEL = { 'L-end': 'L remnant', 'W-end': 'W remnant', 'H-end': 'H remnant' };
+
+    for (const sec of calc.secondaries) {
+      const sl = secLibParts[sec._secId] || null;
+      for (const zone of [sec.zone1, sec.zone2, sec.zone3]) {
+        if (zone.total <= 0) continue;
+        const zl = ZONE_LABEL[zone.zoneName];
+        const zAxes = [
+          { axis: 'Length', n: zone.nA, sp: zone.effA, rem: zone.remA },
+          { axis: 'Width',  n: zone.nB, sp: zone.effB, rem: zone.remB },
+          { axis: 'Height', n: zone.nC, sp: zone.effC, rem: zone.remC }
+        ];
+        for (const ax of zAxes) {
+          if (ax.n <= 0) continue;
+          const m = machineFor(ax.axis, routing);
+          rows.push({
+            step: step++,
+            machine: m.name,
+            machine_rerouted: m.rerouted || false,
+            machine_rerouted_from: m.rerouted ? (m.from || '') : '',
+            direction: ax.axis,
+            part_label: `${sec.label} (${zl})`,
+            part_number: sl?.part_number || '',
+            customer:    sl?.customer    || '',
+            pieces:  ax.n,
+            spacing: ax.sp,
+            remnant: ax.rem
+          });
+        }
+      }
+    }
+
+    return rows;
+  }
+
   // ─── canvas diagram drawing ───────────────────────────────────────────────────
-  //
-  // Draws a 2D cross-section onto a <canvas>.
-  // params: {
-  //   blockD1, blockD2   block dims (x-axis, y-axis)
-  //   n1, n2             primary part count per axis
-  //   eff1, eff2         effective cut spacing (part + kerf)
-  //   rem1, rem2         remnant after primary cuts per axis
-  //   partD1, partD2     part dimension per axis (for labels)
-  //   axisLabel1/2       human-readable axis names
-  //   secInRem1          bool — secondary parts in the right (rem1) strip
-  //   secInRem2          bool — secondary parts in the bottom (rem2) strip
-  // }
-  // maxW / maxH: available pixels (total including padding budget)
 
   function drawBlockView(canvas, params, maxW, maxH) {
     const {
@@ -1003,7 +1338,6 @@
     ctx.clearRect(0, 0, W, H);
 
     const ox = PL, oy = PT;
-    // Primary grid extent in pixels
     const gW = n1 * eff1 * scale;
     const gH = n2 * eff2 * scale;
 
@@ -1011,11 +1345,11 @@
     ctx.fillStyle = secInRem1 ? '#dcfce7' : '#fecaca';
     ctx.fillRect(ox + gW, oy, rW - gW, rH);
 
-    // 2. Bottom remnant strip (within primary width only)
+    // 2. Bottom remnant strip
     ctx.fillStyle = secInRem2 ? '#dcfce7' : '#fecaca';
     ctx.fillRect(ox, oy + gH, gW, rH - gH);
 
-    // 3. Primary part cells (blue)
+    // 3. Primary part cells
     ctx.fillStyle = '#dbeafe';
     if (gW > 0 && gH > 0) ctx.fillRect(ox, oy, gW, gH);
 
@@ -1057,10 +1391,8 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Top: x-axis block dimension
     ctx.fillText(`${blockD1}" ${axisLabel1}`, ox + rW / 2, oy - PT / 2 + 2);
 
-    // Left: y-axis block dimension (rotated)
     ctx.save();
     ctx.translate(ox - PL / 2 + 4, oy + rH / 2);
     ctx.rotate(-Math.PI / 2);
@@ -1069,21 +1401,18 @@
 
     const smallFs = Math.max(8, Math.min(10, rW * 0.022));
 
-    // Bottom: part dim label under first part cell
     if (n1 > 0 && gW > 0) {
       ctx.fillStyle = '#1d4ed8';
       ctx.font = `${smallFs}px Arial, sans-serif`;
       ctx.fillText(`${partD1}"`, ox + (partD1 * scale) / 2, oy + rH + PB / 2 - 2);
     }
 
-    // Bottom: rem1 label
     if (rem1 > 0.001 && rW - gW > 2) {
       ctx.fillStyle = '#b91c1c';
       ctx.font = `${smallFs}px Arial, sans-serif`;
       ctx.fillText(`${rem1.toFixed(2)}"`, ox + gW + ((rW - gW) / 2), oy + rH + PB / 2 - 2);
     }
 
-    // Right: rem2 label
     if (rem2 > 0.001 && rH - gH > 2) {
       ctx.fillStyle = '#b91c1c';
       ctx.font = `${smallFs}px Arial, sans-serif`;
@@ -1151,7 +1480,7 @@
   });
   document.getElementById('modalBackdrop').addEventListener('click', closeModal);
   document.getElementById('modalClose').addEventListener('click', closeModal);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closePartsModal(); } });
 
   // ─── print ────────────────────────────────────────────────────────────────────
 
@@ -1163,6 +1492,774 @@
       document.body.classList.add('no-print-diagrams');
     window.print();
   });
+
+  // ─── parts library panel ──────────────────────────────────────────────────────
+
+  async function loadParts() {
+    try {
+      const res  = await fetch('/api/parts');
+      const data = await res.json();
+      if (data.ok) {
+        partsCache = data.parts;
+        renderLibraryList('');
+      } else {
+        document.getElementById('libList').innerHTML = '<p class="lib-empty">Could not load parts library.</p>';
+      }
+    } catch {
+      document.getElementById('libList').innerHTML = '<p class="lib-empty">Could not reach server.</p>';
+    }
+  }
+
+  function renderLibraryList(filter) {
+    const q = (filter || '').toLowerCase();
+    const filtered = partsCache.filter(p =>
+      p.part_number.toLowerCase().includes(q) ||
+      (p.customer || '').toLowerCase().includes(q)
+    );
+
+    const list = document.getElementById('libList');
+    if (!list) return;
+
+    if (filtered.length === 0) {
+      list.innerHTML = partsCache.length === 0
+        ? '<p class="lib-empty">No parts saved yet. Use <strong>Manage Parts</strong> to add some.</p>'
+        : '<p class="lib-empty">No parts match your filter.</p>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(p => {
+      const sel = primaryLibPart?.id === p.id;
+      return `<div class="lib-item${sel ? ' selected' : ''}" data-pid="${esc(p.id)}"
+                   role="button" tabindex="0" aria-label="Load ${esc(p.part_number)}">
+        <div>
+          <div class="lib-item-pn">${esc(p.part_number)}</div>
+          <div class="lib-item-meta">${esc(p.customer || '—')}${p.density_material ? ' · ' + esc(p.density_material) : ''}</div>
+        </div>
+        <div class="lib-item-dims">${p.length_in}" × ${p.width_in}" × ${p.height_in}"</div>
+      </div>`;
+    }).join('');
+
+    list.querySelectorAll('.lib-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const part = partsCache.find(p => p.id === el.dataset.pid);
+        if (part) selectPrimaryLibPart(part);
+      });
+      el.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+      });
+    });
+  }
+
+  function selectPrimaryLibPart(part) {
+    primaryLibPart = { id: part.id, part_number: part.part_number, customer: part.customer || '', density_material: part.density_material || '' };
+    $pL.value = part.length_in;
+    $pW.value = part.width_in;
+    $pH.value = part.height_in;
+    const badge = document.getElementById('primaryLibBadge');
+    if (badge) { badge.textContent = part.part_number; badge.style.display = 'inline-block'; }
+    renderLibraryList(document.getElementById('libSearch')?.value || '');
+  }
+
+  [$pL, $pW, $pH].forEach(el => {
+    el.addEventListener('input', () => {
+      if (primaryLibPart) {
+        primaryLibPart = null;
+        const badge = document.getElementById('primaryLibBadge');
+        if (badge) badge.style.display = 'none';
+        renderLibraryList(document.getElementById('libSearch')?.value || '');
+      }
+    });
+  });
+
+  document.getElementById('libSearch').addEventListener('input', e => renderLibraryList(e.target.value));
+
+  // ─── parts modal ──────────────────────────────────────────────────────────────
+
+  document.getElementById('managePartsBtn').addEventListener('click', () => openPartsModal());
+  document.getElementById('partsModalBackdrop').addEventListener('click', closePartsModal);
+
+  function openPartsModal() {
+    libPickerMode = false;
+    libPickerCallback = null;
+    editingPartId = null;
+    showPartsListView('');
+    document.getElementById('partsModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function openPartsPicker(callback) {
+    libPickerMode = true;
+    libPickerCallback = callback;
+    editingPartId = null;
+    showPartsListView('');
+    document.getElementById('partsModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closePartsModal() {
+    document.getElementById('partsModal').style.display = 'none';
+    document.body.style.overflow = '';
+    libPickerMode = false;
+    libPickerCallback = null;
+    editingPartId = null;
+  }
+
+  function showPartsListView(filter) {
+    editingPartId = null;
+    const q = (filter || '').toLowerCase();
+    const filtered = partsCache.filter(p =>
+      p.part_number.toLowerCase().includes(q) ||
+      (p.customer || '').toLowerCase().includes(q)
+    );
+
+    const title = libPickerMode ? 'Select a Part' : 'Parts Library';
+    const addBtnHTML = libPickerMode ? '' :
+      `<button class="btn primary" type="button" id="addPartBtn" style="white-space:nowrap;flex-shrink:0;">+ Add New Part</button>`;
+
+    let tableHTML = '';
+    if (filtered.length === 0) {
+      tableHTML = `<p class="lib-empty" style="padding:10px 0;">${partsCache.length === 0 ? 'No parts yet.' : 'No parts match.'}</p>`;
+    } else {
+      const actionHeader = libPickerMode ? '' : '<th>Actions</th>';
+      const rows = filtered.map(p => {
+        const actionCell = libPickerMode
+          ? `<td><button class="btn-sm primary-sm" type="button" data-pick="${esc(p.id)}">Select</button></td>`
+          : `<td><div class="btn-row">
+               <button class="btn-sm" type="button" data-edit="${esc(p.id)}">Edit</button>
+               <button class="btn-sm danger" type="button" data-del="${esc(p.id)}" data-pn="${esc(p.part_number)}">Delete</button>
+             </div></td>`;
+        return `<tr>
+          <td><strong>${esc(p.part_number)}</strong></td>
+          <td>${esc(p.customer || '—')}</td>
+          <td>${esc(p.density_material || '—')}</td>
+          <td style="white-space:nowrap;">${p.length_in}" × ${p.width_in}" × ${p.height_in}"</td>
+          ${actionCell}
+        </tr>`;
+      }).join('');
+      tableHTML = `<div style="overflow-x:auto;">
+        <table class="parts-table">
+          <thead><tr><th>Part #</th><th>Customer</th><th>Material</th><th>Dimensions</th>${actionHeader || '<th>Actions</th>'}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }
+
+    document.getElementById('partsModalInner').innerHTML = `
+      <div class="parts-modal-header">
+        <h2>${title}</h2>
+        <button class="parts-modal-close" id="partsModalCloseBtn" aria-label="Close">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+        <input type="text" class="parts-search" id="partsModalSearch"
+               placeholder="Filter by part number or customer…"
+               value="${esc(filter)}" autocomplete="off">
+        ${addBtnHTML}
+      </div>
+      ${tableHTML}
+    `;
+
+    document.getElementById('partsModalCloseBtn')?.addEventListener('click', closePartsModal);
+    document.getElementById('partsModalSearch')?.addEventListener('input', e => showPartsListView(e.target.value));
+    document.getElementById('addPartBtn')?.addEventListener('click', () => showPartForm(null));
+
+    document.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const part = partsCache.find(p => p.id === btn.dataset.edit);
+        if (part) showPartForm(part);
+      });
+    });
+
+    document.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', () => confirmDeletePart(btn.dataset.del, btn.dataset.pn));
+    });
+
+    document.querySelectorAll('[data-pick]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const part = partsCache.find(p => p.id === btn.dataset.pick);
+        if (part && libPickerCallback) libPickerCallback(part);
+        closePartsModal();
+      });
+    });
+  }
+
+  function showPartForm(part) {
+    editingPartId = part ? part.id : null;
+    const title = part ? `Edit — ${esc(part.part_number)}` : 'Add New Part';
+
+    document.getElementById('partsModalInner').innerHTML = `
+      <div class="parts-modal-header">
+        <h2>${title}</h2>
+        <button class="parts-modal-close" id="partsModalCloseBtn" aria-label="Close">✕</button>
+      </div>
+      <span class="part-form-back" id="partFormBack">← Back to list</span>
+      <div class="part-form-grid">
+        <div id="partFormError" class="part-form-error" style="display:none;"></div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="pf-pn">Part Number <span style="color:#b91c1c;">*</span></label>
+            <input id="pf-pn" type="text" value="${esc(part?.part_number || '')}" autocomplete="off" placeholder="e.g. P-1001">
+          </div>
+          <div class="field">
+            <label for="pf-cust">Customer</label>
+            <input id="pf-cust" type="text" value="${esc(part?.customer || '')}" autocomplete="off" placeholder="Customer name">
+          </div>
+        </div>
+        <div class="field">
+          <label for="pf-mat">Density / Material</label>
+          <input id="pf-mat" type="text" value="${esc(part?.density_material || '')}" autocomplete="off" placeholder="e.g. 1.0 lb EPS">
+        </div>
+        <div class="grid-3">
+          <div class="field">
+            <label for="pf-L">Length (in) <span style="color:#b91c1c;">*</span></label>
+            <input id="pf-L" type="number" inputmode="decimal" min="0.001" step="any" value="${part?.length_in || ''}">
+          </div>
+          <div class="field">
+            <label for="pf-W">Width (in) <span style="color:#b91c1c;">*</span></label>
+            <input id="pf-W" type="number" inputmode="decimal" min="0.001" step="any" value="${part?.width_in || ''}">
+          </div>
+          <div class="field">
+            <label for="pf-H">Height (in) <span style="color:#b91c1c;">*</span></label>
+            <input id="pf-H" type="number" inputmode="decimal" min="0.001" step="any" value="${part?.height_in || ''}">
+          </div>
+        </div>
+        <div class="field">
+          <label for="pf-notes">Notes</label>
+          <textarea id="pf-notes" placeholder="Optional notes…">${esc(part?.notes || '')}</textarea>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn primary" type="button" id="partFormSave">Save Part</button>
+          <button class="btn ghost" type="button" id="partFormCancel">Cancel</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('partsModalCloseBtn')?.addEventListener('click', closePartsModal);
+    document.getElementById('partFormBack')?.addEventListener('click', () => showPartsListView(''));
+    document.getElementById('partFormCancel')?.addEventListener('click', () => showPartsListView(''));
+    document.getElementById('partFormSave')?.addEventListener('click', submitPartForm);
+  }
+
+  async function submitPartForm() {
+    const part_number      = document.getElementById('pf-pn').value.trim();
+    const customer         = document.getElementById('pf-cust').value.trim();
+    const density_material = document.getElementById('pf-mat').value.trim();
+    const length_in        = Number(document.getElementById('pf-L').value);
+    const width_in         = Number(document.getElementById('pf-W').value);
+    const height_in        = Number(document.getElementById('pf-H').value);
+    const notes            = document.getElementById('pf-notes').value.trim();
+    const errEl            = document.getElementById('partFormError');
+
+    if (!part_number)                             { showFormError(errEl, 'Part number is required.'); return; }
+    if (!Number.isFinite(length_in) || length_in <= 0) { showFormError(errEl, 'Length must be > 0.'); return; }
+    if (!Number.isFinite(width_in)  || width_in  <= 0) { showFormError(errEl, 'Width must be > 0.'); return; }
+    if (!Number.isFinite(height_in) || height_in <= 0) { showFormError(errEl, 'Height must be > 0.'); return; }
+
+    errEl.style.display = 'none';
+    const saveBtn = document.getElementById('partFormSave');
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+
+    const isEdit = !!editingPartId;
+    const body = { part_number, customer, density_material, length_in, width_in, height_in, notes };
+    if (isEdit) body.id = editingPartId;
+
+    try {
+      const res  = await fetch('/api/parts', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        showFormError(errEl, data.error || 'Save failed.');
+        saveBtn.disabled = false; saveBtn.textContent = 'Save Part';
+        return;
+      }
+      await loadParts();
+      showPartsListView('');
+    } catch {
+      showFormError(errEl, 'Network error. Please try again.');
+      saveBtn.disabled = false; saveBtn.textContent = 'Save Part';
+    }
+  }
+
+  async function confirmDeletePart(id, partNumber) {
+    if (!confirm(`Delete part "${partNumber}"? This cannot be undone.`)) return;
+    try {
+      const res  = await fetch('/api/parts', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      if (data.ok) { await loadParts(); showPartsListView(''); }
+      else alert(data.error || 'Delete failed.');
+    } catch {
+      alert('Network error. Please try again.');
+    }
+  }
+
+  function showFormError(el, msg) {
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  // ─── save combination ─────────────────────────────────────────────────────────
+
+  document.getElementById('saveComboBtn').addEventListener('click', () => {
+    const form = document.getElementById('saveComboForm');
+    const isOpen = form.style.display !== 'none';
+    form.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) {
+      document.getElementById('saveComboMsg').style.display = 'none';
+      document.getElementById('comboName').focus();
+    }
+  });
+
+  document.getElementById('saveComboCancelBtn').addEventListener('click', () => {
+    document.getElementById('saveComboForm').style.display = 'none';
+  });
+
+  document.getElementById('saveComboSubmit').addEventListener('click', submitSaveCombo);
+
+  async function submitSaveCombo() {
+    if (!lastCalc || !lastCalcInput) return;
+
+    const name  = document.getElementById('comboName').value.trim();
+    const desc  = document.getElementById('comboDesc').value.trim();
+    const msgEl = document.getElementById('saveComboMsg');
+
+    if (!name) {
+      msgEl.className = 'save-combo-msg-err'; msgEl.textContent = 'Name is required.'; msgEl.style.display = 'block'; return;
+    }
+
+    const inp  = lastCalcInput;
+    const calc = lastCalc;
+    const p    = calc.primary;
+
+    const primarySnap = {
+      part_number:      primaryLibPart?.part_number    || 'Manual Entry',
+      customer:         primaryLibPart?.customer        || '',
+      density_material: primaryLibPart?.density_material || '',
+      length_in: inp.pL, width_in: inp.pW, height_in: inp.pH
+    };
+
+    const secSnaps = secIds.map((id, i) => {
+      const sl = secLibParts[id];
+      const L  = Number(document.getElementById(`sec-L-${id}`)?.value) || 0;
+      const W  = Number(document.getElementById(`sec-W-${id}`)?.value) || 0;
+      const H  = Number(document.getElementById(`sec-H-${id}`)?.value) || 0;
+      if (L <= 0 || W <= 0 || H <= 0) return null;
+      return {
+        label:            (document.getElementById(`sec-label-${id}`)?.value || '').trim() || `Secondary ${i+1}`,
+        part_number:      sl?.part_number    || 'Manual Entry',
+        customer:         sl?.customer        || '',
+        density_material: sl?.density_material || '',
+        length_in: L, width_in: W, height_in: H
+      };
+    }).filter(Boolean);
+
+    const cutRows = buildCutListRows(calc);
+    const resultSnap = {
+      parts_per_block: p.total,
+      util_pct:        p.utilPct,
+      waste_vol:       p.wasteVol,
+      blocks_needed:   calc.blocksNeeded,
+      total_produced:  calc.totalProduced,
+      surplus:         calc.surplus,
+      orient_note:     buildOrientNoteText(calc),
+      cut_rows:        cutRows,
+      secondary_totals: calc.secondaries.map(s => ({ label: s.label, total_pieces: s.totalPieces }))
+    };
+
+    const machinesActive = [];
+    if (inp.routing.crossCutter) machinesActive.push('cross_cutter');
+    machinesActive.push('main_line');
+    if (inp.routing.blueLine) machinesActive.push('blue_line');
+
+    const payload = {
+      name, description: desc,
+      block_l: inp.bL, block_w: inp.bW, block_h: inp.bH,
+      kerf: inp.kerf,
+      orientation_mode: inp.mode,
+      machines_active:  machinesActive,
+      primary_part_id:  primaryLibPart?.id || null,
+      primary_part_snapshot:      primarySnap,
+      secondary_parts_snapshot:   secSnaps,
+      result_snapshot:            resultSnap
+    };
+
+    const submitBtn = document.getElementById('saveComboSubmit');
+    submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
+
+    try {
+      const res  = await fetch('/api/combos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.ok) {
+        document.getElementById('saveComboForm').style.display = 'none';
+        document.getElementById('comboName').value = '';
+        document.getElementById('comboDesc').value  = '';
+        const statusEl = document.getElementById('saveComboStatus');
+        statusEl.style.display = 'inline';
+        setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
+        await loadCombos();
+      } else {
+        msgEl.className = 'save-combo-msg-err';
+        msgEl.textContent = data.error || 'Save failed.';
+        msgEl.style.display = 'block';
+      }
+    } catch {
+      msgEl.className = 'save-combo-msg-err';
+      msgEl.textContent = 'Network error. Please try again.';
+      msgEl.style.display = 'block';
+    } finally {
+      submitBtn.disabled = false; submitBtn.textContent = 'Save';
+    }
+  }
+
+  // ─── saved combos panel ───────────────────────────────────────────────────────
+
+  async function loadCombos() {
+    try {
+      const res  = await fetch('/api/combos');
+      const data = await res.json();
+      if (data.ok) {
+        combosCache = data.combos;
+        renderCombosPanel();
+      } else {
+        document.getElementById('comboList').innerHTML = '<p class="combos-empty">Could not load saved combinations.</p>';
+      }
+    } catch {
+      document.getElementById('comboList').innerHTML = '<p class="combos-empty">Could not reach server.</p>';
+    }
+  }
+
+  function renderCombosPanel() {
+    const list = document.getElementById('comboList');
+    if (!list) return;
+
+    if (combosCache.length === 0) {
+      list.innerHTML = '<p class="combos-empty">No saved combinations yet. Run a calculation and click <strong>Save This Combination</strong>.</p>';
+      return;
+    }
+
+    list.innerHTML = combosCache.map(c => {
+      const ps     = c.primary_part_snapshot || {};
+      const result = c.result_snapshot || {};
+      const pn     = ps.part_number && ps.part_number !== 'Manual Entry' ? ps.part_number : `${ps.length_in}" × ${ps.width_in}" × ${ps.height_in}"`;
+      const ppb    = result.parts_per_block != null ? result.parts_per_block.toLocaleString() : '—';
+      const util   = result.util_pct != null ? result.util_pct.toFixed(1) + '%' : '—';
+      const date   = new Date(c.updated_at).toLocaleDateString();
+
+      return `<div class="combo-card">
+        <div class="combo-card-top">
+          <div>
+            <div class="combo-card-name">${esc(c.name)}</div>
+            ${c.description ? `<div class="combo-card-desc">${esc(c.description)}</div>` : ''}
+          </div>
+          <button class="btn-sm danger" type="button"
+                  data-del-combo="${esc(c.id)}" data-combo-name="${esc(c.name)}">Delete</button>
+        </div>
+        <div class="combo-card-meta">
+          Block: ${c.block_l}" × ${c.block_w}" × ${c.block_h}"
+          &nbsp;·&nbsp; Primary: ${esc(pn)}
+          &nbsp;·&nbsp; ${ppb} parts/block &nbsp;·&nbsp; ${util} util
+          &nbsp;·&nbsp; Saved ${date}
+        </div>
+        <div class="combo-card-actions">
+          <button class="btn ghost" style="font-size:13px;padding:7px 12px;" type="button" data-load-combo="${esc(c.id)}">Load</button>
+          <button class="btn ghost" style="font-size:13px;padding:7px 12px;" type="button" data-export-combo="${esc(c.id)}">Export XLSX</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    list.querySelectorAll('[data-del-combo]').forEach(btn => {
+      btn.addEventListener('click', () => confirmDeleteCombo(btn.dataset.delCombo, btn.dataset.comboName));
+    });
+    list.querySelectorAll('[data-load-combo]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const combo = combosCache.find(c => c.id === btn.dataset.loadCombo);
+        if (combo) loadCombo(combo);
+      });
+    });
+    list.querySelectorAll('[data-export-combo]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const combo = combosCache.find(c => c.id === btn.dataset.exportCombo);
+        if (combo) exportXlsxFromCombo(combo);
+      });
+    });
+  }
+
+  async function confirmDeleteCombo(id, name) {
+    if (!confirm(`Delete combination "${name}"? This cannot be undone.`)) return;
+    try {
+      const res  = await fetch('/api/combos', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      if (data.ok) await loadCombos();
+      else alert(data.error || 'Delete failed.');
+    } catch {
+      alert('Network error. Please try again.');
+    }
+  }
+
+  function loadCombo(combo) {
+    // Block size
+    $bL.value = combo.block_l;
+    $bW.value = combo.block_w;
+    $bH.value = combo.block_h;
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+
+    // Kerf
+    $kerf.value = combo.kerf;
+
+    // Qty — clear (not stored in combo)
+    $qty.value = '';
+
+    // Orientation mode
+    setMode(combo.orientation_mode || 'auto');
+
+    // Machines
+    const active = Array.isArray(combo.machines_active) ? combo.machines_active : ['cross_cutter', 'main_line', 'blue_line'];
+    $machCross.checked = active.includes('cross_cutter');
+    $machMain.checked  = true;
+    $machBlue.checked  = active.includes('blue_line');
+    updateMachineUI();
+
+    // Primary part
+    const ps = combo.primary_part_snapshot || {};
+    $pL.value = ps.length_in || '';
+    $pW.value = ps.width_in  || '';
+    $pH.value = ps.height_in || '';
+
+    primaryLibPart = (ps.part_number && ps.part_number !== 'Manual Entry')
+      ? { id: combo.primary_part_id || null, part_number: ps.part_number, customer: ps.customer || '', density_material: ps.density_material || '' }
+      : null;
+
+    const badge = document.getElementById('primaryLibBadge');
+    if (badge) {
+      badge.textContent  = primaryLibPart ? primaryLibPart.part_number : '';
+      badge.style.display = primaryLibPart ? 'inline-block' : 'none';
+    }
+    renderLibraryList(document.getElementById('libSearch')?.value || '');
+
+    // Secondary parts — clear and rebuild
+    secIds.forEach(id => { document.getElementById(`sec-card-${id}`)?.remove(); });
+    secIds = [];
+    secLibParts = {};
+
+    const secs = Array.isArray(combo.secondary_parts_snapshot) ? combo.secondary_parts_snapshot : [];
+    for (const s of secs) {
+      addSecondaryPart();
+      const sid = secIds[secIds.length - 1];
+      const labelEl = document.getElementById(`sec-label-${sid}`);
+      if (labelEl) labelEl.value = s.label || '';
+      document.getElementById(`sec-L-${sid}`).value = s.length_in || '';
+      document.getElementById(`sec-W-${sid}`).value = s.width_in  || '';
+      document.getElementById(`sec-H-${sid}`).value = s.height_in || '';
+      if (s.part_number && s.part_number !== 'Manual Entry') {
+        secLibParts[sid] = { id: null, part_number: s.part_number, customer: s.customer || '', density_material: s.density_material || '' };
+        document.getElementById(`sec-lib-badge-${sid}`).textContent = s.part_number;
+        document.getElementById(`sec-lib-badge-${sid}`).style.display = 'inline-block';
+        document.getElementById(`sec-lib-clear-${sid}`).style.display = 'inline-block';
+      }
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(calculate, 200);
+  }
+
+  // ─── XLSX export ──────────────────────────────────────────────────────────────
+
+  document.getElementById('exportXlsxBtn').addEventListener('click', () => {
+    if (!lastCalc || !lastCalcInput) return;
+    exportXlsxFromCalc(lastCalc, lastCalcInput);
+  });
+
+  function exportXlsxFromCalc(calc, inp) {
+    const p = calc.primary;
+
+    const machineNames = [];
+    if (inp.routing.crossCutter) machineNames.push('Cross Cutter');
+    machineNames.push('Main Line');
+    if (inp.routing.blueLine) machineNames.push('Blue Line');
+
+    const cutRows = buildCutListRows(calc);
+
+    const partsMeta = [
+      {
+        part_number:      primaryLibPart?.part_number    || 'Manual Entry',
+        customer:         primaryLibPart?.customer        || '',
+        density_material: primaryLibPart?.density_material || '',
+        length_in: inp.pL, width_in: inp.pW, height_in: inp.pH,
+        role: 'Primary'
+      },
+      ...secIds.map((id, i) => {
+        const sl  = secLibParts[id];
+        const sec = calc.secondaries.find(s => s._secId === id);
+        if (!sec || sec.totalPieces === 0) return null;
+        return {
+          part_number:      sl?.part_number    || 'Manual Entry',
+          customer:         sl?.customer        || '',
+          density_material: sl?.density_material || '',
+          length_in: Number(document.getElementById(`sec-L-${id}`)?.value) || 0,
+          width_in:  Number(document.getElementById(`sec-W-${id}`)?.value) || 0,
+          height_in: Number(document.getElementById(`sec-H-${id}`)?.value) || 0,
+          role: `Secondary (${sec.label})`
+        };
+      }).filter(Boolean)
+    ];
+
+    const meta = {
+      blockStr:        `${inp.bL}" × ${inp.bW}" × ${inp.bH}"`,
+      orientMode:      inp.mode === 'auto' ? 'Auto (Best Fit)' : 'Fixed (As Entered)',
+      machines:        machineNames.join(', '),
+      date:            new Date().toLocaleDateString(),
+      parts_per_block: p.total,
+      util_pct:        p.utilPct,
+      waste_vol:       p.wasteVol,
+      blocks_needed:   calc.blocksNeeded,
+      total_produced:  calc.totalProduced,
+      surplus:         calc.surplus,
+      secondary_totals: calc.secondaries.map(s => ({ label: s.label, total: s.totalPieces }))
+    };
+
+    buildAndDownloadXlsx(cutRows, partsMeta, meta, 'block-calculator');
+  }
+
+  function exportXlsxFromCombo(combo) {
+    const result      = combo.result_snapshot || {};
+    const ps          = combo.primary_part_snapshot || {};
+    const secs        = Array.isArray(combo.secondary_parts_snapshot) ? combo.secondary_parts_snapshot : [];
+    const machActive  = Array.isArray(combo.machines_active) ? combo.machines_active : ['cross_cutter','main_line','blue_line'];
+
+    const machineNames = [];
+    if (machActive.includes('cross_cutter')) machineNames.push('Cross Cutter');
+    machineNames.push('Main Line');
+    if (machActive.includes('blue_line')) machineNames.push('Blue Line');
+
+    const cutRows = result.cut_rows || [];
+
+    const partsMeta = [
+      {
+        part_number:      ps.part_number || 'Manual Entry',
+        customer:         ps.customer    || '',
+        density_material: ps.density_material || '',
+        length_in: ps.length_in, width_in: ps.width_in, height_in: ps.height_in,
+        role: 'Primary'
+      },
+      ...secs.map(s => ({
+        part_number:      s.part_number || 'Manual Entry',
+        customer:         s.customer    || '',
+        density_material: s.density_material || '',
+        length_in: s.length_in, width_in: s.width_in, height_in: s.height_in,
+        role: `Secondary (${s.label})`
+      }))
+    ];
+
+    const meta = {
+      blockStr:        `${combo.block_l}" × ${combo.block_w}" × ${combo.block_h}"`,
+      orientMode:      combo.orientation_mode === 'auto' ? 'Auto (Best Fit)' : 'Fixed (As Entered)',
+      machines:        machineNames.join(', '),
+      date:            new Date().toLocaleDateString(),
+      parts_per_block: result.parts_per_block || 0,
+      util_pct:        result.util_pct        || 0,
+      waste_vol:       result.waste_vol        || 0,
+      blocks_needed:   result.blocks_needed    || null,
+      total_produced:  result.total_produced   || null,
+      surplus:         result.surplus          || null,
+      secondary_totals: (result.secondary_totals || []).map(s => ({ label: s.label, total: s.total_pieces }))
+    };
+
+    const slug = combo.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+    buildAndDownloadXlsx(cutRows, partsMeta, meta, `block-calc-${slug}`);
+  }
+
+  function buildAndDownloadXlsx(cutRows, partsMeta, meta, filename) {
+    if (typeof XLSX === 'undefined') {
+      alert('XLSX library not loaded. Please refresh the page and try again.');
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    // ── Sheet 1: Cut List ────────────────────────────────────────────────────
+    const cutData = [
+      ['xPanda Foam — Block Calculator'],
+      [`Date: ${meta.date}`],
+      [`Block Size: ${meta.blockStr}`],
+      [`Orientation: ${meta.orientMode}`],
+      [`Active Machines: ${meta.machines}`],
+      [],
+      ['#', 'Machine', 'Cut Direction', 'Part', 'Part Number', 'Customer', 'Pieces', 'Cut Spacing (in)', 'Remnant (in)']
+    ];
+    for (const row of cutRows) {
+      let mach = row.machine || '';
+      if (row.machine_rerouted) mach += ` (from ${row.machine_rerouted_from})`;
+      cutData.push([
+        row.step,
+        mach,
+        row.direction || '',
+        row.part_label || '',
+        row.part_number || '',
+        row.customer || '',
+        row.pieces,
+        typeof row.spacing === 'number' ? parseFloat(row.spacing.toFixed(3)) : (row.spacing || 0),
+        typeof row.remnant === 'number' ? parseFloat(row.remnant.toFixed(3)) : (row.remnant || 0)
+      ]);
+    }
+
+    const ws1 = XLSX.utils.aoa_to_sheet(cutData);
+    ws1['!cols'] = [
+      {wch:4},{wch:20},{wch:22},{wch:28},{wch:14},{wch:18},{wch:8},{wch:16},{wch:12}
+    ];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Cut List');
+
+    // ── Sheet 2: Summary ─────────────────────────────────────────────────────
+    const summData = [
+      ['Summary'],
+      [],
+      ['Parts per Block',        meta.parts_per_block],
+      ['Utilization',            parseFloat((meta.util_pct || 0).toFixed(1)) + '%'],
+      ['Waste per Block (in³)',  Math.round(meta.waste_vol || 0)],
+      ['Blocks Needed',          meta.blocks_needed  ?? 'N/A'],
+      ['Total Produced',         meta.total_produced ?? 'N/A'],
+      ['Surplus',                meta.surplus        ?? 'N/A']
+    ];
+    if (meta.secondary_totals && meta.secondary_totals.length > 0) {
+      summData.push([], ['Secondary Part Yields']);
+      for (const st of meta.secondary_totals) {
+        if (st.total > 0) summData.push([st.label, st.total]);
+      }
+    }
+
+    const ws2 = XLSX.utils.aoa_to_sheet(summData);
+    ws2['!cols'] = [{wch:26},{wch:16}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+
+    // ── Sheet 3: Parts ───────────────────────────────────────────────────────
+    const partsData = [
+      ['Part Number','Customer','Density / Material','Length (in)','Width (in)','Height (in)','Role']
+    ];
+    for (const pm of partsMeta) {
+      partsData.push([
+        pm.part_number || '', pm.customer || '', pm.density_material || '',
+        pm.length_in, pm.width_in, pm.height_in, pm.role
+      ]);
+    }
+
+    const ws3 = XLSX.utils.aoa_to_sheet(partsData);
+    ws3['!cols'] = [{wch:14},{wch:18},{wch:20},{wch:12},{wch:12},{wch:12},{wch:22}];
+    XLSX.utils.book_append_sheet(wb, ws3, 'Parts');
+
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+  }
 
   // ─── calculate ────────────────────────────────────────────────────────────────
 
@@ -1189,13 +2286,23 @@
       return;
     }
 
+    lastCalc      = calc;
+    lastCalcInput = inp;
+
     renderOrientNote(calc);
     renderStats(calc);
     renderCutList(calc);
     renderDiagrams(calc);
 
-    $printDate.textContent = new Date().toLocaleDateString();
-    $results.style.display = 'block';
+    // Reset save combo UI
+    document.getElementById('saveComboForm').style.display   = 'none';
+    document.getElementById('saveComboMsg').style.display    = 'none';
+    document.getElementById('saveComboStatus').style.display = 'none';
+    document.getElementById('comboName').value = '';
+    document.getElementById('comboDesc').value  = '';
+
+    $printDate.textContent   = new Date().toLocaleDateString();
+    $results.style.display   = 'block';
     setStatus(calc.primary.total.toLocaleString() + ' parts/block', 'ok');
 
     if (window.innerWidth <= 640) {
@@ -1218,11 +2325,20 @@
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
 
     secIds.forEach(id => { document.getElementById(`sec-card-${id}`)?.remove(); });
-    secIds = [];
+    secIds     = [];
+    secLibParts = {};
+
+    primaryLibPart = null;
+    const badge = document.getElementById('primaryLibBadge');
+    if (badge) badge.style.display = 'none';
+    renderLibraryList(document.getElementById('libSearch')?.value || '');
+
+    lastCalc      = null;
+    lastCalcInput = null;
+    lastDrawParams = null;
 
     $error.style.display   = 'none';
     $results.style.display = 'none';
-    lastDrawParams = null;
     setStatus('Ready', '');
     $bL.focus();
   }
@@ -1236,6 +2352,12 @@
   $calcBtn.addEventListener('click', calculate);
   $resetBtn.addEventListener('click', reset);
 
+  // ─── page init ────────────────────────────────────────────────────────────────
+
+  loadParts();
+  loadCombos();
+
   </script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </body>
 </html>
