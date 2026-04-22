@@ -873,7 +873,7 @@
     });
 
     ['L','W','H'].forEach(dim => {
-      document.getElementById(`sec-${dim}-${id}`).addEventListener('input', () => {
+      card.querySelector(`#sec-${dim}-${id}`).addEventListener('input', () => {
         if (secLibParts[id]) {
           secLibParts[id] = null;
           document.getElementById(`sec-lib-badge-${id}`).style.display = 'none';
