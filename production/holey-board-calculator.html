@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>xPanda Foam — Holey Board Calculator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/img/favicon.png">
+  <link rel="stylesheet" href="/production/production-shared.css">
+
+  <style>
+
+    /* ── layout ──────────────────────────────────────────────────────────────── */
+    .page-wrap { padding: 16px; max-width: 900px; margin: 0 auto; }
+
+    /* ── field ───────────────────────────────────────────────────────────────── */
+    .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .field input {
+      width: 100%; padding: 9px 10px;
+      border: 1px solid var(--input-border); border-radius: 8px;
+      background: var(--input-bg); color: var(--text); font-size: 14px;
+    }
+    .help-text { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+
+    /* ── chunk height toggle ──────────────────────────────────────────────────── */
+    .height-toggle {
+      display: flex; border: 1px solid var(--card-border);
+      border-radius: 10px; overflow: hidden; max-width: 180px;
+    }
+    .height-opt {
+      flex: 1; padding: 8px; font-size: 14px; font-weight: 600;
+      border: none; cursor: pointer; background: var(--ghost-bg);
+      color: var(--ghost-text); text-align: center; line-height: 1.2;
+    }
+    .height-opt.active { background: var(--primary-bg); color: var(--primary-text); }
+
+    /* ── quick calc ───────────────────────────────────────────────────────────── */
+    .quick-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .quick-row .field { flex: 0 0 auto; width: 160px; margin-bottom: 0; }
+    .quick-result-box { display: flex; flex-direction: column; gap: 2px; }
+    .quick-result-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .quick-result-val { font-size: 24px; font-weight: 700; }
+
+    /* ── line items ───────────────────────────────────────────────────────────── */
+    .line-item-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 8px; }
+    .line-item-row .field { flex: 1; margin-bottom: 0; }
+    .btn-remove {
+      flex-shrink: 0; padding: 9px 10px;
+      border: 1px solid var(--card-border); border-radius: 8px;
+      background: var(--ghost-bg); color: var(--muted);
+      font-size: 14px; cursor: pointer; line-height: 1;
+    }
+    .btn-remove:hover { border-color: #ef4444; color: #ef4444; }
+    .btn-remove:disabled { opacity: .35; pointer-events: none; }
+
+    /* ── error banner ─────────────────────────────────────────────────────────── */
+    .error-banner {
+      background: #fef2f2; border: 1px solid #fca5a5;
+      border-radius: var(--radius); padding: 12px 14px;
+      font-size: 13px; color: #b91c1c; margin-bottom: 12px;
+    }
+
+    /* ── stat grid ────────────────────────────────────────────────────────────── */
+    .stat-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 10px; margin-bottom: 14px;
+    }
+    @media (max-width: 580px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
+    .stat-card {
+      border: 1px solid var(--card-border); border-radius: 10px;
+      padding: 12px; background: var(--card-bg); text-align: center;
+    }
+    .stat-num { font-size: 26px; font-weight: 700; line-height: 1.1; }
+    .stat-num.xl { font-size: 34px; }
+    .stat-label {
+      font-size: 11px; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--muted); margin-top: 4px;
+    }
+
+    /* ── utilization bar ──────────────────────────────────────────────────────── */
+    .util-bar-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .util-bar-outer { height: 10px; background: var(--card-border); border-radius: 5px; overflow: hidden; }
+    .util-bar-inner { height: 100%; border-radius: 5px; transition: width .3s ease; }
+    .util-green  { background: #22c55e; }
+    .util-yellow { background: #f59e0b; }
+    .util-red    { background: #ef4444; }
+
+    /* ── breakdown table ──────────────────────────────────────────────────────── */
+    .cut-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .cut-table th {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--muted); padding: 6px 8px;
+      text-align: left; border-bottom: 2px solid var(--line);
+    }
+    .cut-table td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    .cut-table tr:last-child td { border-bottom: none; }
+    .cut-table .total-row td { font-weight: 700; background: var(--accent-soft); }
+    .swatch {
+      display: inline-block; width: 10px; height: 10px;
+      border-radius: 2px; margin-right: 5px; vertical-align: middle;
+    }
+
+    /* ── chunk grid ───────────────────────────────────────────────────────────── */
+    .chunk-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    @media (max-width: 700px) { .chunk-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 380px) { .chunk-grid { grid-template-columns: 1fr; } }
+
+    .chunk-card {
+      border: 1px solid var(--card-border); border-radius: 10px;
+      padding: 10px; background: var(--card-bg);
+    }
+    .chunk-card-header {
+      font-size: 12px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px;
+    }
+    .chunk-canvas-wrap { width: 100%; margin-bottom: 8px; border-radius: 4px; overflow: hidden; }
+    .chunk-canvas-wrap canvas { display: block; width: 100%; height: 200px; }
+    .chunk-text { font-size: 11px; color: var(--muted); line-height: 1.7; }
+    .chunk-text strong { color: var(--text); }
+
+    /* ── show-all toggle ──────────────────────────────────────────────────────── */
+    .show-all-row { margin-top: 10px; text-align: center; }
+    .show-all-btn {
+      font-size: 13px; font-weight: 600; color: var(--primary-bg);
+      background: none; border: none; cursor: pointer; padding: 6px 12px;
+      text-decoration: underline;
+    }
+
+    /* ── actions row ──────────────────────────────────────────────────────────── */
+    .actions-row {
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;
+    }
+
+    /* ── card heading ─────────────────────────────────────────────────────────── */
+    .card h2 { margin: 0 0 12px; font-size: 16px; }
+
+    /* ── print controls ───────────────────────────────────────────────────────── */
+    .print-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .print-checkbox-label {
+      font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer;
+    }
+    .chunk-header-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; flex-wrap: wrap; gap: 8px;
+    }
+    .chunk-header-row h2 { margin: 0; }
+
+    /* ── print header (hidden on screen) ─────────────────────────────────────── */
+    .print-header { display: none; }
+
+    /* ── mobile ───────────────────────────────────────────────────────────────── */
+    @media (max-width: 480px) {
+      .page-wrap { padding: 12px; }
+      .stat-num { font-size: 22px; }
+      .stat-num.xl { font-size: 28px; }
+    }
+
+    /* ── print ────────────────────────────────────────────────────────────────── */
+    @media print {
+      .topbar, .prod-platform-footer,
+      #settingsCard, #quickCalcCard, #orderCard,
+      .actions-row, .error-banner, .print-controls { display: none !important; }
+
+      #results { display: block !important; }
+      .print-header { display: block !important; margin-bottom: 14px; font-size: 14px; }
+      body { background: white !important; }
+      .card { box-shadow: none !important; border-color: #ccc !important; page-break-inside: avoid; }
+      .chunk-grid { grid-template-columns: repeat(3, 1fr) !important; }
+    }
+    @media print {
+      body.no-print-diagrams .chunk-diagrams-section { display: none !important; }
+    }
+
+  </style>
+</head>
+<body>
+
+<script src="/production/production-header.js"></script>
+<script>
+  document.getElementById('prod-page-title').textContent = 'Holey Board Calculator';
+  document.getElementById('prod-page-subtitle').textContent = 'Calculate chunks needed for board orders';
+</script>
+
+<div class="page-wrap">
+
+  <!-- ── settings ──────────────────────────────────────────────────────────── -->
+  <div class="card" id="settingsCard">
+    <h2>Chunk Settings</h2>
+    <div class="field">
+      <label>Chunk Height</label>
+      <div class="height-toggle">
+        <button type="button" class="height-opt active" onclick="setChunkHeight(50, this)">50"</button>
+        <button type="button" class="height-opt" onclick="setChunkHeight(51, this)">51"</button>
+      </div>
+      <p class="help-text">All chunks are 48" × 24". Select the available height.</p>
+    </div>
+    <div class="field" style="margin-bottom:0;">
+      <label for="kerfInput">Kerf / Wire Loss (in)</label>
+      <input type="number" id="kerfInput" inputmode="decimal" step="any" min="0" value="0.079">
+      <p class="help-text">Wire loss per cut. Default: 2mm (0.079")</p>
+    </div>
+  </div>
+
+  <!-- ── quick calc ─────────────────────────────────────────────────────────── -->
+  <div class="card" id="quickCalcCard">
+    <h2>Quick Calc</h2>
+    <p class="help-text" style="margin:0 0 12px;">How many boards of one thickness fit in a chunk?</p>
+    <div class="quick-row">
+      <div class="field">
+        <label for="quickThickness">Thickness (in)</label>
+        <input type="number" id="quickThickness" inputmode="decimal" step="any" min="0" placeholder="e.g. 2">
+      </div>
+      <div class="quick-result-box">
+        <span class="quick-result-label">Boards per chunk</span>
+        <span class="quick-result-val" id="quickResultVal">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── order line items ───────────────────────────────────────────────────── -->
+  <div class="card" id="orderCard">
+    <h2>Order Line Items</h2>
+    <div id="lineItems"></div>
+    <button type="button" class="btn ghost" style="font-size:13px;" onclick="addLineItem()">+ Add Line Item</button>
+  </div>
+
+  <!-- ── actions ────────────────────────────────────────────────────────────── -->
+  <div class="actions-row">
+    <button type="button" class="btn primary" onclick="calculate()">Calculate</button>
+    <button type="button" class="btn ghost" onclick="resetCalc()">Reset</button>
+  </div>
+
+  <!-- ── error ──────────────────────────────────────────────────────────────── -->
+  <div id="errorBanner" class="error-banner" style="display:none;"></div>
+
+  <!-- ── results ────────────────────────────────────────────────────────────── -->
+  <div id="results" style="display:none;">
+
+    <div class="print-header">
+      <strong>xPanda Foam — Holey Board Calculator</strong>
+      <span id="printDate"></span>
+    </div>
+
+    <!-- summary stats + utilization bar -->
+    <div class="card">
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="util-bar-label" id="utilLabel"></div>
+      <div class="util-bar-outer">
+        <div class="util-bar-inner" id="utilBar"></div>
+      </div>
+    </div>
+
+    <!-- order breakdown -->
+    <div class="card">
+      <h2>Order Breakdown</h2>
+      <div style="overflow-x:auto;">
+        <table class="cut-table" id="breakdownTable"></table>
+      </div>
+    </div>
+
+    <!-- chunk packing detail -->
+    <div class="card">
+      <div class="chunk-header-row">
+        <h2>Chunk Packing Detail</h2>
+        <div class="print-controls">
+          <label class="print-checkbox-label">
+            <input type="checkbox" id="printDiagramsChk" checked onchange="togglePrintDiagrams()">
+            Include diagrams in print
+          </label>
+          <button type="button" class="btn ghost" onclick="window.print()">Print</button>
+        </div>
+      </div>
+      <div class="chunk-diagrams-section">
+        <div class="chunk-grid" id="chunkGrid"></div>
+        <div class="show-all-row" id="showAllRow" style="display:none;">
+          <button type="button" class="show-all-btn" id="showAllBtn" onclick="showAllChunks()"></button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- .page-wrap -->
+
+<script>
+
+// ── state ──────────────────────────────────────────────────────────────────────
+let chunkHeight = 50;
+let lineItemId = 0;
+
+// stored after each calculate() run so showAllChunks() can reference them
+let lastChunks = null;
+let lastColorMap = null;
+let lastKerf = 0;
+
+// ── chunk height toggle ────────────────────────────────────────────────────────
+function setChunkHeight(h, btn) {
+  chunkHeight = h;
+  document.querySelectorAll('.height-opt').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  updateQuickCalc();
+}
+
+// ── kerf helper ────────────────────────────────────────────────────────────────
+function getKerf() {
+  return parseFloat(document.getElementById('kerfInput').value) || 0;
+}
+
+// ── quick calc (auto-updates on input change) ──────────────────────────────────
+function updateQuickCalc() {
+  const t = parseFloat(document.getElementById('quickThickness').value);
+  const kerf = getKerf();
+  const el = document.getElementById('quickResultVal');
+  if (!t || t <= 0 || t + kerf > chunkHeight) {
+    el.textContent = '—';
+  } else {
+    el.textContent = String(Math.floor(chunkHeight / (t + kerf)));
+  }
+}
+
+document.getElementById('quickThickness').addEventListener('input', updateQuickCalc);
+document.getElementById('kerfInput').addEventListener('input', updateQuickCalc);
+
+// ── line item management ───────────────────────────────────────────────────────
+function addLineItem(thickness, qty) {
+  const container = document.getElementById('lineItems');
+  const id = ++lineItemId;
+  const row = document.createElement('div');
+  row.className = 'line-item-row';
+  row.dataset.id = id;
+  row.innerHTML =
+    '<div class="field">' +
+      '<label>Thickness (in)</label>' +
+      '<input type="number" inputmode="decimal" step="any" min="0" placeholder="e.g. 2"' +
+      ' class="li-t" aria-label="Thickness"' +
+      (thickness != null ? ` value="${thickness}"` : '') + '>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label>Quantity</label>' +
+      '<input type="number" inputmode="numeric" step="1" min="1" placeholder="e.g. 100"' +
+      ' class="li-q" aria-label="Quantity"' +
+      (qty != null ? ` value="${qty}"` : '') + '>' +
+    '</div>' +
+    '<button type="button" class="btn-remove" onclick="removeLineItem(this)" aria-label="Remove">✕</button>';
+  container.appendChild(row);
+  syncRemoveButtons();
+}
+
+function removeLineItem(btn) {
+  const container = document.getElementById('lineItems');
+  if (container.children.length <= 1) return;
+  btn.closest('.line-item-row').remove();
+  syncRemoveButtons();
+}
+
+function syncRemoveButtons() {
+  const rows = document.querySelectorAll('.line-item-row');
+  const only = rows.length <= 1;
+  rows.forEach(r => { r.querySelector('.btn-remove').disabled = only; });
+}
+
+function getLineItems() {
+  const items = [];
+  document.querySelectorAll('.line-item-row').forEach(row => {
+    const t = parseFloat(row.querySelector('.li-t').value);
+    const q = parseInt(row.querySelector('.li-q').value, 10);
+    if (!isNaN(t) && !isNaN(q)) items.push({ thickness: t, qty: q });
+  });
+  return items;
+}
+
+// ── bin packing: First Fit Decreasing (FFD) ────────────────────────────────────
+//
+// Algorithm overview:
+//   1. The caller expands line items into a flat array of thickness values and
+//      sorts them descending before calling this function. Sorting largest-first
+//      is the FFD heuristic: thick boards are hardest to fit, so placing them
+//      first leaves smaller gaps that thin boards can fill.
+//   2. For each board, iterate existing chunks and place it in the FIRST chunk
+//      that has enough remaining height.  If none exists, open a new chunk.
+//
+// Kerf is included in the height consumed by every cut (including the last board
+// in a chunk) for simplicity and to provide a small safety margin.
+function binPack(boards, height, kerf) {
+  const chunks = [];
+
+  for (const thickness of boards) {
+    const effective = thickness + kerf;
+    let placed = false;
+
+    for (const chunk of chunks) {
+      // Small epsilon guards against floating-point drift when remaining ≈ 0
+      if (chunk.remaining >= effective - 1e-9) {
+        chunk.boards.push(thickness);
+        chunk.remaining -= effective;
+        placed = true;
+        break;
+      }
+    }
+
+    if (!placed) {
+      chunks.push({ boards: [thickness], remaining: height - effective, totalHeight: height });
+    }
+  }
+
+  return chunks;
+}
+
+// ── color palette (one per unique thickness, consistent across the output) ──────
+const PALETTE = [
+  '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6',
+  '#ec4899', '#06b6d4', '#ef4444', '#84cc16',
+  '#f97316', '#a78bfa', '#14b8a6', '#e879f9'
+];
+
+function buildColorMap(thicknesses) {
+  const unique = [...new Set(thicknesses)].sort((a, b) => b - a);
+  const map = {};
+  unique.forEach((t, i) => { map[t] = PALETTE[i % PALETTE.length]; });
+  return map;
+}
+
+// ── canvas diagram ─────────────────────────────────────────────────────────────
+// Draws the chunk as a vertical bar (side view).
+// Remnant (waste) is shown at the top in salmon/light-red.
+// Boards are drawn below in thickness order, colored by their thickness value.
+// Heights are proportional to (thickness + kerf) relative to the full chunk height.
+function drawChunkDiagram(canvas, chunk, colorMap, kerf) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth || 80;
+  const H = canvas.clientHeight || 200;
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const scale = H / chunk.totalHeight;
+  const remnant = Math.max(0, chunk.remaining);
+
+  // remnant at top (light red / salmon)
+  const remnantPx = remnant * scale;
+  ctx.fillStyle = '#fca5a5';
+  ctx.fillRect(0, 0, W, remnantPx);
+
+  if (remnantPx >= 14) {
+    ctx.fillStyle = '#b91c1c';
+    ctx.font = `600 ${Math.min(11, Math.floor(remnantPx - 2))}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(remnant.toFixed(3) + '"', W / 2, remnantPx / 2);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  // boards drawn top-to-bottom below the remnant
+  let y = remnantPx;
+  for (const thickness of chunk.boards) {
+    const bandPx = (thickness + kerf) * scale;
+    ctx.fillStyle = colorMap[thickness] || '#aaa';
+    ctx.fillRect(0, y, W, bandPx);
+
+    // subtle divider between boards
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.fillRect(0, y + bandPx - 1, W, 1);
+
+    if (bandPx >= 14) {
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.font = `600 ${Math.min(11, Math.floor(bandPx - 2))}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(thickness.toFixed(3) + '"', W / 2, y + bandPx / 2);
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    y += bandPx;
+  }
+
+  // border
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+}
+
+// ── validate and run calculation ───────────────────────────────────────────────
+function calculate() {
+  const kerf = getKerf();
+  hideError();
+
+  if (kerf < 0) { showError('Kerf must be 0 or greater.'); return; }
+
+  const items = getLineItems().filter(it => it.thickness > 0 && it.qty >= 1);
+
+  if (items.length === 0) {
+    showError('Enter at least one line item with thickness > 0 and quantity ≥ 1.');
+    return;
+  }
+
+  for (const it of items) {
+    if (it.thickness + kerf > chunkHeight) {
+      showError(
+        `Thickness ${it.thickness}" + kerf ${kerf}" = ${(it.thickness + kerf).toFixed(3)}" ` +
+        `exceeds the chunk height of ${chunkHeight}".`
+      );
+      return;
+    }
+  }
+
+  // expand into flat board list and sort descending for FFD
+  const allBoards = [];
+  for (const it of items) {
+    for (let i = 0; i < it.qty; i++) allBoards.push(it.thickness);
+  }
+  allBoards.sort((a, b) => b - a);
+
+  const chunks = binPack(allBoards, chunkHeight, kerf);
+  const colorMap = buildColorMap(items.map(it => it.thickness));
+
+  lastChunks = chunks;
+  lastColorMap = colorMap;
+  lastKerf = kerf;
+
+  renderResults(chunks, items, colorMap, kerf);
+}
+
+// ── render all results ─────────────────────────────────────────────────────────
+function renderResults(chunks, items, colorMap, kerf) {
+  const totalBoards = items.reduce((s, it) => s + it.qty, 0);
+  const totalChunks = chunks.length;
+
+  const avgUtil = chunks.reduce((s, ch) => {
+    return s + (ch.totalHeight - Math.max(0, ch.remaining)) / ch.totalHeight;
+  }, 0) / totalChunks * 100;
+
+  const totalWaste = chunks.reduce((s, ch) => s + Math.max(0, ch.remaining), 0);
+
+  // stat cards
+  document.getElementById('statGrid').innerHTML =
+    statCard(totalChunks, 'Total Chunks', true) +
+    statCard(totalBoards, 'Total Boards') +
+    statCard(avgUtil.toFixed(1) + '%', 'Avg Utilization') +
+    statCard(totalWaste.toFixed(2) + '"', 'Total Waste');
+
+  // utilization bar
+  const utilCls = avgUtil >= 75 ? 'util-green' : avgUtil >= 50 ? 'util-yellow' : 'util-red';
+  document.getElementById('utilLabel').textContent =
+    'Average Chunk Utilization: ' + avgUtil.toFixed(1) + '%';
+  const bar = document.getElementById('utilBar');
+  bar.className = 'util-bar-inner ' + utilCls;
+  bar.style.width = Math.min(100, avgUtil).toFixed(1) + '%';
+
+  // order breakdown table
+  let html = '<thead><tr>' +
+    '<th>Thickness</th><th>Qty Ordered</th><th>Chunks if Solo</th><th>Chunks Optimized</th>' +
+    '</tr></thead><tbody>';
+
+  let soloTotal = 0;
+  for (const it of items) {
+    const bpc = Math.floor(chunkHeight / (it.thickness + kerf));
+    const solo = bpc > 0 ? Math.ceil(it.qty / bpc) : 0;
+    soloTotal += solo;
+    const sw = `<span class="swatch" style="background:${colorMap[it.thickness]};"></span>`;
+    html += `<tr><td>${sw}${it.thickness.toFixed(3)}"</td><td>${it.qty}</td><td>${solo}</td><td>—</td></tr>`;
+  }
+  html +=
+    `<tr class="total-row">` +
+    `<td>Total</td><td>${totalBoards}</td><td>${soloTotal}</td><td>${totalChunks}</td>` +
+    `</tr></tbody>`;
+  document.getElementById('breakdownTable').innerHTML = html;
+
+  // chunk packing cards
+  renderChunkCards(chunks, colorMap, kerf);
+
+  // print header date
+  document.getElementById('printDate').textContent = ' — ' + new Date().toLocaleDateString();
+
+  const resultsEl = document.getElementById('results');
+  resultsEl.style.display = 'block';
+  resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function statCard(val, label, xl) {
+  return '<div class="stat-card">' +
+    `<div class="stat-num${xl ? ' xl' : ''}">${val}</div>` +
+    `<div class="stat-label">${label}</div>` +
+    '</div>';
+}
+
+// ── chunk cards ────────────────────────────────────────────────────────────────
+const MAX_INITIAL = 12;
+
+function renderChunkCards(chunks, colorMap, kerf) {
+  const grid = document.getElementById('chunkGrid');
+  const showAllRow = document.getElementById('showAllRow');
+  const showAllBtn = document.getElementById('showAllBtn');
+
+  grid.innerHTML = '';
+  chunks.slice(0, MAX_INITIAL).forEach((chunk, i) =>
+    appendChunkCard(grid, chunk, i, colorMap, kerf)
+  );
+
+  if (chunks.length > MAX_INITIAL) {
+    showAllRow.style.display = 'block';
+    showAllBtn.textContent = 'Show all ' + chunks.length + ' chunks';
+  } else {
+    showAllRow.style.display = 'none';
+  }
+
+  // draw canvases once layout is computed
+  requestAnimationFrame(() => drawPendingCanvases(chunks, colorMap, kerf));
+}
+
+function showAllChunks() {
+  const grid = document.getElementById('chunkGrid');
+  for (let i = MAX_INITIAL; i < lastChunks.length; i++) {
+    appendChunkCard(grid, lastChunks[i], i, lastColorMap, lastKerf);
+  }
+  document.getElementById('showAllRow').style.display = 'none';
+  requestAnimationFrame(() => drawPendingCanvases(lastChunks, lastColorMap, lastKerf));
+}
+
+function appendChunkCard(grid, chunk, idx, colorMap, kerf) {
+  // group boards by thickness, sorted descending, for the text summary
+  const grouped = {};
+  for (const t of chunk.boards) { grouped[t] = (grouped[t] || 0) + 1; }
+  const sortedEntries = Object.entries(grouped).sort((a, b) => parseFloat(b[0]) - parseFloat(a[0]));
+
+  const remnant = Math.max(0, chunk.remaining);
+  const util = ((chunk.totalHeight - remnant) / chunk.totalHeight * 100).toFixed(1);
+
+  let textHtml = '';
+  for (const [t, count] of sortedEntries) {
+    const tf = parseFloat(t);
+    textHtml +=
+      `<div><strong>${count}×</strong> ${tf.toFixed(3)}" = ${(count * tf).toFixed(3)}"</div>`;
+  }
+  textHtml += `<div>Remnant: ${remnant.toFixed(3)}"</div>`;
+  textHtml += `<div>Utilization: ${util}%</div>`;
+
+  const card = document.createElement('div');
+  card.className = 'chunk-card';
+  card.innerHTML =
+    `<div class="chunk-card-header">Chunk #${idx + 1}</div>` +
+    `<div class="chunk-canvas-wrap"><canvas data-ci="${idx}"></canvas></div>` +
+    `<div class="chunk-text">${textHtml}</div>`;
+  grid.appendChild(card);
+}
+
+// draws only canvases that haven't been drawn yet (data-drawn attribute)
+function drawPendingCanvases(chunks, colorMap, kerf) {
+  document.getElementById('chunkGrid')
+    .querySelectorAll('canvas[data-ci]:not([data-drawn])')
+    .forEach(canvas => {
+      const idx = parseInt(canvas.dataset.ci, 10);
+      drawChunkDiagram(canvas, chunks[idx], colorMap, kerf);
+      canvas.dataset.drawn = '1';
+    });
+}
+
+// ── print diagram toggle ───────────────────────────────────────────────────────
+function togglePrintDiagrams() {
+  document.body.classList.toggle(
+    'no-print-diagrams',
+    !document.getElementById('printDiagramsChk').checked
+  );
+}
+
+// ── error helpers ──────────────────────────────────────────────────────────────
+function showError(msg) {
+  const el = document.getElementById('errorBanner');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideError() {
+  document.getElementById('errorBanner').style.display = 'none';
+}
+
+// ── reset ──────────────────────────────────────────────────────────────────────
+function resetCalc() {
+  document.getElementById('lineItems').innerHTML = '';
+  lineItemId = 0;
+  addLineItem();
+  document.getElementById('results').style.display = 'none';
+  hideError();
+}
+
+// ── init ───────────────────────────────────────────────────────────────────────
+addLineItem();
+
+</script>
+</body>
+</html>
