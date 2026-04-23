@@ -294,6 +294,7 @@ let lineItemId = 0;
 
 // stored after each calculate() run so showAllChunks() can reference them
 let lastChunks = null;
+let lastGroups = null;
 let lastColorMap = null;
 let lastKerf = 0;
 
@@ -591,37 +592,71 @@ function statCard(val, label, xl) {
 // ── chunk cards ────────────────────────────────────────────────────────────────
 const MAX_INITIAL = 12;
 
+// Groups chunks with identical board contents into { key, chunk, chunkNumbers }.
+// Two chunks are identical when their sorted thickness arrays are equal.
+function groupChunks(chunks) {
+  const order = [];
+  const map = {};
+  chunks.forEach((chunk, i) => {
+    const key = [...chunk.boards].sort((a, b) => a - b).join(',');
+    if (!map[key]) {
+      map[key] = { key, chunk, chunkNumbers: [] };
+      order.push(map[key]);
+    }
+    map[key].chunkNumbers.push(i + 1); // 1-based chunk numbers
+  });
+  return order;
+}
+
+// Formats a group header label from its 1-based chunk numbers.
+function chunkGroupLabel(chunkNumbers) {
+  const n = chunkNumbers.length;
+  if (n === 1) return `Chunk #${chunkNumbers[0]}`;
+  let consecutive = true;
+  for (let i = 1; i < n; i++) {
+    if (chunkNumbers[i] !== chunkNumbers[i - 1] + 1) { consecutive = false; break; }
+  }
+  if (consecutive) return `Chunks #${chunkNumbers[0]}–${chunkNumbers[n - 1]} (\xd7${n})`;
+  return `Chunks #${chunkNumbers.join(', #')} (\xd7${n})`;
+}
+
 function renderChunkCards(chunks, colorMap, kerf) {
+  const groups = groupChunks(chunks);
+  lastGroups = groups;
+
   const grid = document.getElementById('chunkGrid');
   const showAllRow = document.getElementById('showAllRow');
   const showAllBtn = document.getElementById('showAllBtn');
 
   grid.innerHTML = '';
-  chunks.slice(0, MAX_INITIAL).forEach((chunk, i) =>
-    appendChunkCard(grid, chunk, i, colorMap, kerf)
+  groups.slice(0, MAX_INITIAL).forEach((group, gi) =>
+    appendChunkCard(grid, group, gi, colorMap, kerf)
   );
 
-  if (chunks.length > MAX_INITIAL) {
+  if (groups.length > MAX_INITIAL) {
     showAllRow.style.display = 'block';
-    showAllBtn.textContent = 'Show all ' + chunks.length + ' chunks';
+    showAllBtn.textContent = 'Show all ' + groups.length + ' chunk patterns';
   } else {
     showAllRow.style.display = 'none';
   }
 
   // draw canvases once layout is computed
-  requestAnimationFrame(() => drawPendingCanvases(chunks, colorMap, kerf));
+  requestAnimationFrame(() => drawPendingCanvases(groups, colorMap, kerf));
 }
 
 function showAllChunks() {
   const grid = document.getElementById('chunkGrid');
-  for (let i = MAX_INITIAL; i < lastChunks.length; i++) {
-    appendChunkCard(grid, lastChunks[i], i, lastColorMap, lastKerf);
+  for (let i = MAX_INITIAL; i < lastGroups.length; i++) {
+    appendChunkCard(grid, lastGroups[i], i, lastColorMap, lastKerf);
   }
   document.getElementById('showAllRow').style.display = 'none';
-  requestAnimationFrame(() => drawPendingCanvases(lastChunks, lastColorMap, lastKerf));
+  requestAnimationFrame(() => drawPendingCanvases(lastGroups, lastColorMap, lastKerf));
 }
 
-function appendChunkCard(grid, chunk, idx, colorMap, kerf) {
+function appendChunkCard(grid, group, gi, colorMap, kerf) {
+  const chunk = group.chunk;
+  const label = chunkGroupLabel(group.chunkNumbers);
+
   // group boards by thickness, sorted descending, for the text summary
   const grouped = {};
   for (const t of chunk.boards) { grouped[t] = (grouped[t] || 0) + 1; }
@@ -642,19 +677,19 @@ function appendChunkCard(grid, chunk, idx, colorMap, kerf) {
   const card = document.createElement('div');
   card.className = 'chunk-card';
   card.innerHTML =
-    `<div class="chunk-card-header">Chunk #${idx + 1}</div>` +
-    `<div class="chunk-canvas-wrap"><canvas data-ci="${idx}"></canvas></div>` +
+    `<div class="chunk-card-header">${label}</div>` +
+    `<div class="chunk-canvas-wrap"><canvas data-gi="${gi}"></canvas></div>` +
     `<div class="chunk-text">${textHtml}</div>`;
   grid.appendChild(card);
 }
 
 // draws only canvases that haven't been drawn yet (data-drawn attribute)
-function drawPendingCanvases(chunks, colorMap, kerf) {
+function drawPendingCanvases(groups, colorMap, kerf) {
   document.getElementById('chunkGrid')
-    .querySelectorAll('canvas[data-ci]:not([data-drawn])')
+    .querySelectorAll('canvas[data-gi]:not([data-drawn])')
     .forEach(canvas => {
-      const idx = parseInt(canvas.dataset.ci, 10);
-      drawChunkDiagram(canvas, chunks[idx], colorMap, kerf);
+      const gi = parseInt(canvas.dataset.gi, 10);
+      drawChunkDiagram(canvas, groups[gi].chunk, colorMap, kerf);
       canvas.dataset.drawn = '1';
     });
 }
