@@ -956,12 +956,15 @@
   function calcForPerm(bL, bW, bH, partDims, kerf, perm) {
     const pA = partDims[perm[0]], pB = partDims[perm[1]], pC = partDims[perm[2]];
     const effL = pA + kerf, effW = pB + kerf, effH = pC + kerf;
-    const nL = Math.floor(bL / effL);
-    const nW = Math.floor(bW / effW);
-    const nH = Math.floor(bH / effH);
-    const remL = bL - nL * effL;
-    const remW = bW - nW * effW;
-    const remH = bH - nH * effH;
+    // Add kerf to numerator: last piece on each axis needs no trailing cut,
+    // so (blockDim + kerf) / eff correctly handles part == blockDim → n=1 (not 0).
+    const nL = Math.floor((bL + kerf) / effL);
+    const nW = Math.floor((bW + kerf) / effW);
+    const nH = Math.floor((bH + kerf) / effH);
+    // Actual space consumed: n pieces + (n-1) kerfs between them
+    const remL = bL - (nL > 0 ? nL * pA + (nL - 1) * kerf : 0);
+    const remW = bW - (nW > 0 ? nW * pB + (nW - 1) * kerf : 0);
+    const remH = bH - (nH > 0 ? nH * pC + (nH - 1) * kerf : 0);
     const total    = nL * nW * nH;
     const blockVol = bL * bW * bH;
     const volUsed  = total * (pA * pB * pC);
@@ -995,9 +998,9 @@
 
   // ─── secondary part calculation (remnant zones) ───────────────────────────────
   //
-  // Zone 1 (L-end):  remL  × bW   × bH
-  // Zone 2 (W-end):  usedL × remW × bH
-  // Zone 3 (H-end):  usedL × usedW × remH
+  // Zone 2 (W-strip):  bL    × remW  × bH    — full block L and H, width-remnant wide
+  // Zone 3 (H-strip):  bL    × usedW × remH  — full block L, height-remnant tall
+  // Zone 1 (L-corner): remL  × usedW × usedH — corner at block end
   // Each zone's d1/d2/d3 map to block L/W/H axes respectively.
 
   function bestFitInBox(d1, d2, d3, partDims, kerf, mode) {
@@ -1012,22 +1015,26 @@
       for (const perm of PERMS) {
         const pA = partDims[perm[0]], pB = partDims[perm[1]], pC = partDims[perm[2]];
         const eA = pA + kerf, eB = pB + kerf, eC = pC + kerf;
-        const nA = Math.floor(d1 / eA), nB = Math.floor(d2 / eB), nC = Math.floor(d3 / eC);
+        const nA = Math.floor((d1 + kerf) / eA), nB = Math.floor((d2 + kerf) / eB), nC = Math.floor((d3 + kerf) / eC);
         const total = nA * nB * nC;
         if (!best || total > best.total || (total === best.total && nA + nB + nC > best.nA + best.nB + best.nC)) {
           best = { total, nA, nB, nC, pA, pB, pC,
                    effA: eA, effB: eB, effC: eC,
-                   remA: d1 - nA * eA, remB: d2 - nB * eB, remC: d3 - nC * eC };
+                   remA: d1 - (nA > 0 ? nA * pA + (nA - 1) * kerf : 0),
+                   remB: d2 - (nB > 0 ? nB * pB + (nB - 1) * kerf : 0),
+                   remC: d3 - (nC > 0 ? nC * pC + (nC - 1) * kerf : 0) };
         }
       }
       return best;
     }
     const [pA, pB, pC] = partDims;
     const eA = pA + kerf, eB = pB + kerf, eC = pC + kerf;
-    const nA = Math.floor(d1 / eA), nB = Math.floor(d2 / eB), nC = Math.floor(d3 / eC);
+    const nA = Math.floor((d1 + kerf) / eA), nB = Math.floor((d2 + kerf) / eB), nC = Math.floor((d3 + kerf) / eC);
     return { total: nA * nB * nC, nA, nB, nC, pA, pB, pC,
              effA: eA, effB: eB, effC: eC,
-             remA: d1 - nA * eA, remB: d2 - nB * eB, remC: d3 - nC * eC };
+             remA: d1 - (nA > 0 ? nA * pA + (nA - 1) * kerf : 0),
+             remB: d2 - (nB > 0 ? nB * pB + (nB - 1) * kerf : 0),
+             remC: d3 - (nC > 0 ? nC * pC + (nC - 1) * kerf : 0) };
   }
 
   function calcSecondaryPart(sec, primary, kerf, mode) {
