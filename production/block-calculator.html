@@ -1031,14 +1031,18 @@
   }
 
   function calcSecondaryPart(sec, primary, kerf, mode) {
-    const { bL, bW, bH, nL, nW, effL, effW, remL, remW, remH } = primary;
+    const { bL, bW, bH, nL, nW, nH, effL, effW, effH, remL, remW, remH } = primary;
     const usedL = nL * effL;
     const usedW = nW * effW;
+    const usedH = nH * effH;
     const dims = [sec.L, sec.W, sec.H];
 
-    const zone1 = { ...bestFitInBox(remL,  bW,    bH,   dims, kerf, mode), zoneName: 'L-end' };
-    const zone2 = { ...bestFitInBox(usedL, remW,  bH,   dims, kerf, mode), zoneName: 'W-end' };
-    const zone3 = { ...bestFitInBox(usedL, usedW, remH, dims, kerf, mode), zoneName: 'H-end' };
+    // Width strip: runs full block L and H — sheets peel off the full length, not just usedL
+    const zone2 = { ...bestFitInBox(bL,   remW,  bH,   dims, kerf, mode), zoneName: 'W-end' };
+    // Height strip: full block L, within used-W zone, height remnant only
+    const zone3 = { ...bestFitInBox(bL,   usedW, remH, dims, kerf, mode), zoneName: 'H-end' };
+    // Length strip: corner at block end — only the used-W × used-H footprint, not full W×H
+    const zone1 = { ...bestFitInBox(remL, usedW, usedH, dims, kerf, mode), zoneName: 'L-end' };
 
     return {
       label: sec.label,
@@ -1056,7 +1060,8 @@
     const validSecs = secondaryParts.filter(s => s.L > 0 && s.W > 0 && s.H > 0);
     const secondaries = validSecs.map(s => ({
       ...calcSecondaryPart(s, primary, kerf, mode),
-      _secId: s.id
+      _secId: s.id,
+      _dims: { L: s.L, W: s.W, H: s.H }
     }));
 
     const secInZone1 = secondaries.some(s => s.zone1.total > 0);
@@ -1107,18 +1112,26 @@
     const p = calc.primary;
     const cards = [];
 
+    // Combined utilization includes secondary parts volume
+    const secVolUsed = calc.secondaries.reduce((sum, sec) => {
+      return sum + sec.totalPieces * (sec._dims.L * sec._dims.W * sec._dims.H);
+    }, 0);
+    const combinedVolUsed = p.volUsed + secVolUsed;
+    const combinedUtil    = (combinedVolUsed / p.blockVol) * 100;
+    const combinedWaste   = p.blockVol - combinedVolUsed;
+
     cards.push(`<div class="stat-card">
       <div class="stat-num xl">${p.total.toLocaleString()}</div>
       <div class="stat-label">Parts per Block</div>
     </div>`);
 
     cards.push(`<div class="stat-card">
-      <div class="stat-num">${p.utilPct.toFixed(1)}%</div>
+      <div class="stat-num">${combinedUtil.toFixed(1)}%</div>
       <div class="stat-label">Utilization</div>
     </div>`);
 
     cards.push(`<div class="stat-card">
-      <div class="stat-num">${Math.round(p.wasteVol).toLocaleString()}</div>
+      <div class="stat-num">${Math.round(combinedWaste).toLocaleString()}</div>
       <div class="stat-label">Waste (in³)</div>
     </div>`);
 
@@ -1152,10 +1165,9 @@
 
     $statGrid.innerHTML = cards.join('');
 
-    const pct = p.utilPct;
-    $utilBar.className = 'util-bar-inner ' + (pct >= 75 ? 'util-green' : pct >= 50 ? 'util-yellow' : 'util-red');
-    $utilBar.style.width = Math.min(pct, 100).toFixed(1) + '%';
-    $utilBarLabel.textContent = `Material Utilization: ${pct.toFixed(1)}%`;
+    $utilBar.className = 'util-bar-inner ' + (combinedUtil >= 75 ? 'util-green' : combinedUtil >= 50 ? 'util-yellow' : 'util-red');
+    $utilBar.style.width = Math.min(combinedUtil, 100).toFixed(1) + '%';
+    $utilBarLabel.textContent = `Material Utilization: ${combinedUtil.toFixed(1)}%`;
   }
 
   // ─── machine helper ───────────────────────────────────────────────────────────
