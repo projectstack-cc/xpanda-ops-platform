@@ -483,6 +483,10 @@
           <input id="pH" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off">
         </div>
       </div>
+      <div class="field" style="margin-top:10px;max-width:260px;">
+        <label for="primaryQty">Quantity Needed <span style="font-weight:400;">(optional)</span></label>
+        <input id="primaryQty" type="number" inputmode="numeric" min="1" step="1" placeholder="e.g. 500" autocomplete="off">
+      </div>
     </div>
 
     <!-- Secondary parts (dynamic) -->
@@ -511,12 +515,6 @@
           <button class="orient-opt" type="button" id="modeFixed">Fixed (As Entered)</button>
         </div>
         <p class="help-text">Auto tries all 6 rotations and selects the orientation with the highest yield.</p>
-      </div>
-
-      <div class="field" style="margin-bottom:14px;">
-        <label for="qty">Quantity Needed <span style="font-weight:400;">(optional)</span></label>
-        <input id="qty" type="number" inputmode="numeric" min="1" step="1"
-               placeholder="Leave blank for per-block results only" style="max-width:340px;">
       </div>
 
       <div>
@@ -714,7 +712,6 @@
   const $pW   = document.getElementById('pW');
   const $pH   = document.getElementById('pH');
   const $kerf = document.getElementById('kerf');
-  const $qty  = document.getElementById('qty');
 
   const $calcBtn  = document.getElementById('calcBtn');
   const $resetBtn = document.getElementById('resetBtn');
@@ -847,6 +844,10 @@
           <input id="sec-H-${id}" type="number" inputmode="decimal" min="0.001" step="any" autocomplete="off">
         </div>
       </div>
+      <div class="field" style="margin-top:8px;max-width:260px;">
+        <label for="sec-qty-${id}">Quantity Needed <span style="font-weight:400;">(optional)</span></label>
+        <input id="sec-qty-${id}" type="number" inputmode="numeric" min="1" step="1" placeholder="e.g. 200" autocomplete="off">
+      </div>
     `;
 
     card.querySelector('.btn-remove').addEventListener('click', () => removeSecondaryPart(id));
@@ -898,13 +899,15 @@
 
   function getSecondaryParts() {
     return secIds.map((id, i) => {
-      const lbl = (document.getElementById(`sec-label-${id}`)?.value || '').trim();
+      const lbl  = (document.getElementById(`sec-label-${id}`)?.value || '').trim();
+      const qRaw = (document.getElementById(`sec-qty-${id}`)?.value || '').trim();
       return {
         id,
         label: lbl || `Secondary ${i + 1}`,
         L: toNum(document.getElementById(`sec-L-${id}`)?.value),
         W: toNum(document.getElementById(`sec-W-${id}`)?.value),
-        H: toNum(document.getElementById(`sec-H-${id}`)?.value)
+        H: toNum(document.getElementById(`sec-H-${id}`)?.value),
+        qty: qRaw === '' ? null : toNum(qRaw)
       };
     });
   }
@@ -912,6 +915,7 @@
   // ─── inputs / validation ──────────────────────────────────────────────────────
 
   function getInputs() {
+    const pqRaw = (document.getElementById('primaryQty')?.value || '').trim();
     return {
       bL:   toNum($bL.value),
       bW:   toNum($bW.value),
@@ -920,7 +924,7 @@
       pW:   toNum($pW.value),
       pH:   toNum($pH.value),
       kerf: toNum($kerf.value),
-      qty:  $qty.value.trim() === '' ? null : toNum($qty.value),
+      primaryQty: pqRaw === '' ? null : toNum(pqRaw),
       mode: currentMode,
       routing: {
         crossCutter: $machCross.checked,
@@ -932,7 +936,7 @@
   }
 
   function validate(inp) {
-    const { bL, bW, bH, pL, pW, pH, kerf, qty, secondaryParts: secs } = inp;
+    const { bL, bW, bH, pL, pW, pH, kerf, primaryQty, secondaryParts: secs } = inp;
     if (!bL || bL <= 0) return 'Block Length must be greater than 0.';
     if (!bW || bW <= 0) return 'Block Width must be greater than 0.';
     if (!bH || bH <= 0) return 'Block Height must be greater than 0.';
@@ -940,13 +944,16 @@
     if (!pW || pW <= 0) return 'Primary Part Width must be greater than 0.';
     if (!pH || pH <= 0) return 'Primary Part Height must be greater than 0.';
     if (kerf === null || kerf < 0) return 'Kerf must be 0 or greater.';
-    if (qty !== null && (qty <= 0 || !Number.isInteger(qty))) return 'Quantity must be a positive whole number.';
+    if (primaryQty !== null && (primaryQty <= 0 || !Number.isInteger(primaryQty)))
+      return 'Primary quantity must be a positive whole number.';
     for (const s of secs) {
       const any = s.L !== null || s.W !== null || s.H !== null;
       if (!any) continue;
       if (!s.L || s.L <= 0) return `"${s.label}": Length must be greater than 0.`;
       if (!s.W || s.W <= 0) return `"${s.label}": Width must be greater than 0.`;
       if (!s.H || s.H <= 0) return `"${s.label}": Height must be greater than 0.`;
+      if (s.qty !== null && s.qty !== undefined && (s.qty <= 0 || !Number.isInteger(s.qty)))
+        return `"${s.label}": Quantity must be a positive whole number.`;
     }
     return null;
   }
@@ -1061,29 +1068,38 @@
   // ─── full calculation ─────────────────────────────────────────────────────────
 
   function runFullCalc(inp) {
-    const { bL, bW, bH, pL, pW, pH, kerf, qty, mode, routing, secondaryParts } = inp;
+    const { bL, bW, bH, pL, pW, pH, kerf, primaryQty, mode, routing, secondaryParts } = inp;
     const primary = runPrimaryCalc(bL, bW, bH, pL, pW, pH, kerf, mode);
 
     const validSecs = secondaryParts.filter(s => s.L > 0 && s.W > 0 && s.H > 0);
     const secondaries = validSecs.map(s => ({
       ...calcSecondaryPart(s, primary, kerf, mode),
       _secId: s.id,
-      _dims: { L: s.L, W: s.W, H: s.H }
+      _dims: { L: s.L, W: s.W, H: s.H },
+      _qty:  s.qty || null
     }));
 
     const secInZone1 = secondaries.some(s => s.zone1.total > 0);
     const secInZone2 = secondaries.some(s => s.zone2.total > 0);
     const secInZone3 = secondaries.some(s => s.zone3.total > 0);
 
-    let blocksNeeded = null, totalProduced = null, surplus = null;
-    if (qty && qty > 0 && primary.total > 0) {
-      blocksNeeded  = Math.ceil(qty / primary.total);
-      totalProduced = blocksNeeded * primary.total;
-      surplus       = totalProduced - qty;
+    // Blocks needed = max across all parts that have a quantity
+    let blocksNeeded = null;
+    if (primaryQty && primaryQty > 0 && primary.total > 0)
+      blocksNeeded = Math.ceil(primaryQty / primary.total);
+    for (const sec of secondaries) {
+      if (sec._qty && sec._qty > 0 && sec.totalPieces > 0) {
+        const n = Math.ceil(sec._qty / sec.totalPieces);
+        blocksNeeded = blocksNeeded !== null ? Math.max(blocksNeeded, n) : n;
+      }
     }
 
+    // Per-part produced and surplus (use blocksNeeded which satisfies all constraints)
+    const totalProduced = blocksNeeded !== null ? blocksNeeded * primary.total : null;
+    const surplus       = (blocksNeeded !== null && primaryQty) ? totalProduced - primaryQty : null;
+
     return { primary, secondaries, secInZone1, secInZone2, secInZone3,
-             blocksNeeded, totalProduced, surplus, mode, routing };
+             blocksNeeded, totalProduced, surplus, primaryQty, mode, routing };
   }
 
   // ─── render: orientation note ─────────────────────────────────────────────────
@@ -1147,14 +1163,25 @@
         <div class="stat-num">${calc.blocksNeeded.toLocaleString()}</div>
         <div class="stat-label">Blocks Needed</div>
       </div>`);
-      cards.push(`<div class="stat-card">
-        <div class="stat-num">${calc.totalProduced.toLocaleString()}</div>
-        <div class="stat-label">Total Produced</div>
-      </div>`);
-      cards.push(`<div class="stat-card">
-        <div class="stat-num">${calc.surplus.toLocaleString()}</div>
-        <div class="stat-label">Surplus</div>
-      </div>`);
+      if (calc.primaryQty) {
+        const produced = calc.blocksNeeded * p.total;
+        const surplus  = produced - calc.primaryQty;
+        cards.push(`<div class="stat-card">
+          <div class="stat-num">${produced.toLocaleString()}</div>
+          <div class="stat-label">Primary Produced</div>
+          <div class="stat-sublabel">${surplus} surplus (${calc.primaryQty.toLocaleString()} needed)</div>
+        </div>`);
+      }
+      for (const sec of calc.secondaries) {
+        if (!sec._qty || sec.totalPieces === 0) continue;
+        const produced = calc.blocksNeeded * sec.totalPieces;
+        const surplus  = produced - sec._qty;
+        cards.push(`<div class="stat-card">
+          <div class="stat-num">${produced.toLocaleString()}</div>
+          <div class="stat-label">${esc(sec.label)} Produced</div>
+          <div class="stat-sublabel">${surplus} surplus (${sec._qty.toLocaleString()} needed)</div>
+        </div>`);
+      }
     }
 
     const totalSec = calc.secondaries.reduce((s, x) => s + x.totalPieces, 0);
@@ -2039,7 +2066,8 @@
     $kerf.value = combo.kerf;
 
     // Qty — clear (not stored in combo)
-    $qty.value = '';
+    const pqEl = document.getElementById('primaryQty');
+    if (pqEl) pqEl.value = '';
 
     // Orientation mode
     setMode(combo.orientation_mode || 'auto');
@@ -2335,7 +2363,8 @@
     $bL.value = ''; $bW.value = ''; $bH.value = '';
     $pL.value = ''; $pW.value = ''; $pH.value = '';
     $kerf.value = '0.079';
-    $qty.value  = '';
+    const pqElReset = document.getElementById('primaryQty');
+    if (pqElReset) pqElReset.value = '';
     setMode('auto');
     $machCross.checked = true;
     $machMain.checked  = true;
@@ -2364,9 +2393,10 @@
 
   // ─── enter key ────────────────────────────────────────────────────────────────
 
-  [$bL, $bW, $bH, $pL, $pW, $pH, $kerf, $qty].forEach(el => {
+  [$bL, $bW, $bH, $pL, $pW, $pH, $kerf].forEach(el => {
     el.addEventListener('keydown', e => { if (e.key === 'Enter') calculate(); });
   });
+  document.getElementById('primaryQty').addEventListener('keydown', e => { if (e.key === 'Enter') calculate(); });
 
   $calcBtn.addEventListener('click', calculate);
   $resetBtn.addEventListener('click', reset);
