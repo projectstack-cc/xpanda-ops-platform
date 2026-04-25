@@ -1,0 +1,1252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bead Inventory — xPanda Production</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+<link rel="icon" href="/assets/img/favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+
+<link rel="stylesheet" href="/production/production-shared.css">
+
+<style>
+/* ── Bead Inventory Specific Styles ────────────────────────────────────────── */
+.bead-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+}
+
+/* Stats Row */
+.bead-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.bead-stat-card {
+  background: #fff;
+  border: 1px solid #d9e2ec;
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bead-stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.bead-stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+}
+.bead-stat-value.alert { color: #dc2626; }
+.bead-stat-sub {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Toolbar */
+.bead-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 22px;
+}
+.bead-toolbar-right {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+}
+.bead-btn {
+  appearance: none;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.15s;
+  text-decoration: none;
+}
+.bead-btn:hover { opacity: 0.88; }
+.bead-btn-receive  { background: #16a34a; color: #fff; }
+.bead-btn-consume  { background: #dc2626; color: #fff; }
+.bead-btn-adjust   { background: #d97706; color: #fff; }
+.bead-btn-transfer { background: #7c3aed; color: #fff; }
+.bead-btn-manage   { background: #0f172a; color: #fff; }
+.bead-btn-outline  { background: #fff; color: #0f172a; border: 1px solid #d9e2ec; }
+
+/* Silo Grid */
+.bead-silos-heading {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin: 0 0 12px;
+}
+.bead-silos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 32px;
+}
+.bead-silo-card {
+  background: #fff;
+  border: 1px solid #d9e2ec;
+  border-radius: 12px;
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.bead-silo-card:hover { box-shadow: 0 4px 16px rgba(15,23,42,0.1); }
+.bead-silo-card.alert-reorder { border-left: 4px solid #dc2626; }
+.bead-silo-card.alert-low     { border-left: 4px solid #f59e0b; }
+.bead-silo-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+.bead-silo-type {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 10px;
+}
+.bead-silo-lbs {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+.bead-silo-lbs span { font-size: 13px; font-weight: 500; color: #64748b; }
+.bead-progress-bg {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 99px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.bead-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.3s;
+}
+.fill-green  { background: #16a34a; }
+.fill-yellow { background: #f59e0b; }
+.fill-red    { background: #dc2626; }
+.bead-silo-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+}
+.bead-reorder-badge {
+  display: inline-block;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin-top: 6px;
+}
+
+/* Transaction History */
+.bead-history-section {
+  margin-top: 8px;
+}
+.bead-history-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.bead-history-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+.bead-filter-select {
+  padding: 6px 10px;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+  color: #0f172a;
+}
+.bead-table-wrap {
+  background: #fff;
+  border: 1px solid #d9e2ec;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.bead-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.bead-table th {
+  background: #f8fafc;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+}
+.bead-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+.bead-table tr:last-child td { border-bottom: none; }
+.bead-table tr:hover td { background: #f8fafc; }
+.bead-type-badge {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.type-receive  { background: #dcfce7; color: #15803d; }
+.type-consume  { background: #fee2e2; color: #dc2626; }
+.type-adjust   { background: #fef3c7; color: #92400e; }
+.type-transfer { background: #ede9fe; color: #6d28d9; }
+.qty-positive { color: #16a34a; font-weight: 700; }
+.qty-negative { color: #dc2626; font-weight: 700; }
+.bead-empty-row td {
+  text-align: center;
+  color: #94a3b8;
+  padding: 28px;
+}
+
+/* ── Modal ────────────────────────────────────────────────────────────────── */
+.bead-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  z-index: 1000;
+  overflow-y: auto;
+}
+.bead-modal-overlay.hidden { display: none; }
+.bead-modal-panel {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(15,23,42,0.18);
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+}
+.bead-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+.bead-modal-header h2 {
+  margin: 0;
+  font-size: 17px;
+  color: #0f172a;
+}
+.bead-modal-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: #64748b;
+  line-height: 1;
+  padding: 4px;
+}
+.bead-modal-body {
+  padding: 20px 22px;
+  overflow-y: auto;
+  flex: 1;
+}
+.bead-modal-footer {
+  padding: 14px 22px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+/* Tab strip inside modal */
+.bead-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 20px;
+}
+.bead-tab {
+  padding: 8px 14px;
+  border: none;
+  background: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+.bead-tab.active {
+  color: #0f172a;
+  border-bottom-color: #0891b2;
+}
+.bead-tab-pane { display: none; }
+.bead-tab-pane.active { display: block; }
+
+/* Form helpers */
+.bead-field {
+  margin-bottom: 14px;
+}
+.bead-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #475569;
+  margin-bottom: 5px;
+}
+.bead-field input,
+.bead-field select,
+.bead-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #0f172a;
+  background: #fff;
+}
+.bead-field input:focus,
+.bead-field select:focus,
+.bead-field textarea:focus {
+  outline: 2px solid #0891b2;
+  outline-offset: 0;
+  border-color: transparent;
+}
+.bead-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.bead-error {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #dc2626;
+  font-size: 13px;
+  margin-bottom: 14px;
+  display: none;
+}
+.bead-error.visible { display: block; }
+
+/* Manage modal list */
+.bead-manage-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.bead-manage-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.bead-manage-item-name { font-weight: 700; color: #0f172a; }
+.bead-manage-item-sub  { font-size: 11px; color: #64748b; }
+.bead-manage-item-actions { display: flex; gap: 6px; }
+.bead-manage-btn {
+  background: none;
+  border: 1px solid #d9e2ec;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #475569;
+}
+.bead-manage-btn:hover { background: #f1f5f9; }
+.bead-manage-btn.danger { color: #dc2626; border-color: #fca5a5; }
+.bead-manage-btn.danger:hover { background: #fef2f2; }
+.bead-add-form-toggle {
+  width: 100%;
+  background: none;
+  border: 2px dashed #d9e2ec;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  color: #64748b;
+  cursor: pointer;
+  text-align: center;
+}
+.bead-add-form-toggle:hover { background: #f8fafc; }
+.bead-add-subform {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 10px;
+}
+
+/* Prompt banner (job integration) */
+.bead-prompt-banner {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #0f172a;
+  color: #fff;
+  border-radius: 12px;
+  padding: 14px 18px;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.25);
+  font-size: 14px;
+  z-index: 999;
+  max-width: 340px;
+  display: none;
+}
+.bead-prompt-banner.visible { display: block; }
+.bead-prompt-banner p { margin: 0 0 10px; }
+.bead-prompt-banner-actions { display: flex; gap: 8px; }
+.bead-prompt-banner .bead-btn { font-size: 13px; padding: 7px 13px; }
+
+@media (max-width: 700px) {
+  .bead-stats { grid-template-columns: repeat(2, 1fr); }
+  .bead-toolbar { gap: 8px; }
+  .bead-toolbar-right { margin-left: 0; width: 100%; }
+}
+</style>
+</head>
+
+<body>
+
+<script src="/production/production-header.js"></script>
+<script>
+document.getElementById('prod-page-title').textContent = 'Bead Inventory';
+document.getElementById('prod-page-subtitle').textContent = 'Raw bead tracking by silo';
+</script>
+
+<div class="bead-wrap">
+
+  <!-- Stats Row -->
+  <div class="bead-stats">
+    <div class="bead-stat-card">
+      <div class="bead-stat-label">Total Silos</div>
+      <div class="bead-stat-value" id="stat-total-silos">—</div>
+    </div>
+    <div class="bead-stat-card">
+      <div class="bead-stat-label">Total Inventory</div>
+      <div class="bead-stat-value" id="stat-total-lbs">—</div>
+      <div class="bead-stat-sub">lbs across all silos</div>
+    </div>
+    <div class="bead-stat-card">
+      <div class="bead-stat-label">Below Reorder</div>
+      <div class="bead-stat-value alert" id="stat-reorder-count">—</div>
+      <div class="bead-stat-sub">silos need attention</div>
+    </div>
+    <div class="bead-stat-card">
+      <div class="bead-stat-label">Transactions (30d)</div>
+      <div class="bead-stat-value" id="stat-tx-count">—</div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="bead-toolbar">
+    <button class="bead-btn bead-btn-receive"  onclick="openTxModal('receive')">+ Receive</button>
+    <button class="bead-btn bead-btn-consume"  onclick="openTxModal('consume')">− Consume</button>
+    <button class="bead-btn bead-btn-adjust"   onclick="openTxModal('adjust')">⟳ Adjust</button>
+    <button class="bead-btn bead-btn-transfer" onclick="openTxModal('transfer')">⇄ Transfer</button>
+    <div class="bead-toolbar-right">
+      <button class="bead-btn bead-btn-manage" onclick="openManageModal()">Manage Silos &amp; Types</button>
+    </div>
+  </div>
+
+  <!-- Silo Cards -->
+  <p class="bead-silos-heading">Silos</p>
+  <div class="bead-silos-grid" id="silos-grid">
+    <div style="color:#94a3b8;font-size:14px;">Loading silos…</div>
+  </div>
+
+  <!-- Transaction History -->
+  <div class="bead-history-section">
+    <div class="bead-history-header">
+      <h3>Transaction History</h3>
+      <select class="bead-filter-select" id="filter-silo" onchange="loadTransactions()">
+        <option value="">All Silos</option>
+      </select>
+      <select class="bead-filter-select" id="filter-type" onchange="loadTransactions()">
+        <option value="">All Types</option>
+        <option value="receive">Receive</option>
+        <option value="consume">Consume</option>
+        <option value="adjust">Adjust</option>
+        <option value="transfer">Transfer</option>
+      </select>
+      <select class="bead-filter-select" id="filter-days" onchange="loadTransactions()">
+        <option value="30">Last 30 days</option>
+        <option value="7">Last 7 days</option>
+        <option value="90">Last 90 days</option>
+      </select>
+    </div>
+    <div class="bead-table-wrap">
+      <table class="bead-table">
+        <thead>
+          <tr>
+            <th>Date/Time</th>
+            <th>Type</th>
+            <th>Silo</th>
+            <th>Bead Type</th>
+            <th>Qty (lbs)</th>
+            <th>Reference</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="tx-tbody">
+          <tr class="bead-empty-row"><td colspan="7">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── Transaction Modal ────────────────────────────────────────────────────── -->
+<div class="bead-modal-overlay hidden" id="tx-modal">
+  <div class="bead-modal-panel">
+    <div class="bead-modal-header">
+      <h2 id="tx-modal-title">Log Transaction</h2>
+      <button class="bead-modal-close" onclick="closeTxModal()">×</button>
+    </div>
+    <div class="bead-modal-body">
+      <div class="bead-error" id="tx-error"></div>
+
+      <div class="bead-field">
+        <label>Transaction Type</label>
+        <select id="tx-type" onchange="onTxTypeChange()">
+          <option value="receive">Receive (inbound delivery)</option>
+          <option value="consume">Consume (production use)</option>
+          <option value="adjust">Adjust (correction)</option>
+          <option value="transfer">Transfer (silo-to-silo)</option>
+        </select>
+      </div>
+
+      <div class="bead-field">
+        <label>Source Silo</label>
+        <select id="tx-silo-id">
+          <option value="">— select silo —</option>
+        </select>
+      </div>
+
+      <div class="bead-field" id="tx-dest-field" style="display:none;">
+        <label>Destination Silo</label>
+        <select id="tx-dest-silo-id">
+          <option value="">— select destination —</option>
+        </select>
+      </div>
+
+      <div class="bead-field-row">
+        <div class="bead-field">
+          <label>Quantity (lbs)</label>
+          <input type="number" id="tx-qty" min="0.01" step="0.01" placeholder="0.00">
+        </div>
+        <div class="bead-field">
+          <label>Bead Type (override)</label>
+          <select id="tx-bead-type-id">
+            <option value="">— use silo default —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="bead-field" id="tx-job-field">
+        <label>Job ID (optional)</label>
+        <input type="text" id="tx-job-id" placeholder="link to a job">
+      </div>
+
+      <div class="bead-field">
+        <label>Reference / PO#</label>
+        <input type="text" id="tx-reference" placeholder="delivery note, PO, etc.">
+      </div>
+
+      <div class="bead-field">
+        <label>Notes</label>
+        <textarea id="tx-notes" rows="2" placeholder="optional notes"></textarea>
+      </div>
+    </div>
+    <div class="bead-modal-footer">
+      <button class="bead-btn bead-btn-outline" onclick="closeTxModal()">Cancel</button>
+      <button class="bead-btn bead-btn-receive" id="tx-save-btn" onclick="saveTx()">Log Transaction</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Manage Modal ──────────────────────────────────────────────────────────── -->
+<div class="bead-modal-overlay hidden" id="manage-modal">
+  <div class="bead-modal-panel" style="max-width:600px;">
+    <div class="bead-modal-header">
+      <h2>Manage Silos &amp; Bead Types</h2>
+      <button class="bead-modal-close" onclick="closeManageModal()">×</button>
+    </div>
+    <div class="bead-modal-body">
+      <div class="bead-tabs">
+        <button class="bead-tab active" onclick="switchManageTab('silos', this)">Silos</button>
+        <button class="bead-tab" onclick="switchManageTab('types', this)">Bead Types</button>
+      </div>
+
+      <!-- Silos Tab -->
+      <div class="bead-tab-pane active" id="manage-tab-silos">
+        <ul class="bead-manage-list" id="manage-silos-list"></ul>
+        <button class="bead-add-form-toggle" onclick="toggleSiloForm()" id="silo-form-toggle">+ Add Silo</button>
+        <div class="bead-add-subform" id="silo-subform" style="display:none;">
+          <div class="bead-error" id="silo-error"></div>
+          <div class="bead-field">
+            <label>Silo Name</label>
+            <input type="text" id="sf-name" placeholder="e.g. Silo A">
+          </div>
+          <div class="bead-field">
+            <label>Bead Type</label>
+            <select id="sf-bead-type-id">
+              <option value="">— unassigned —</option>
+            </select>
+          </div>
+          <div class="bead-field-row">
+            <div class="bead-field">
+              <label>Capacity (lbs)</label>
+              <input type="number" id="sf-capacity" min="0" step="1" placeholder="0">
+            </div>
+            <div class="bead-field">
+              <label>Reorder Point (lbs)</label>
+              <input type="number" id="sf-reorder" min="0" step="1" placeholder="0">
+            </div>
+          </div>
+          <div class="bead-field">
+            <label>Location</label>
+            <input type="text" id="sf-location" placeholder="e.g. Bay 2">
+          </div>
+          <div class="bead-field">
+            <label>Notes</label>
+            <input type="text" id="sf-notes">
+          </div>
+          <input type="hidden" id="sf-id">
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
+            <button class="bead-btn bead-btn-outline" onclick="cancelSiloForm()">Cancel</button>
+            <button class="bead-btn bead-btn-manage" onclick="saveSilo()">Save Silo</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bead Types Tab -->
+      <div class="bead-tab-pane" id="manage-tab-types">
+        <ul class="bead-manage-list" id="manage-types-list"></ul>
+        <button class="bead-add-form-toggle" onclick="toggleTypeForm()" id="type-form-toggle">+ Add Bead Type</button>
+        <div class="bead-add-subform" id="type-subform" style="display:none;">
+          <div class="bead-error" id="type-error"></div>
+          <div class="bead-field-row">
+            <div class="bead-field">
+              <label>Name</label>
+              <input type="text" id="tf-name" placeholder="e.g. EPS 1.5 PCF">
+            </div>
+            <div class="bead-field">
+              <label>Grade</label>
+              <input type="text" id="tf-grade" placeholder="e.g. Standard">
+            </div>
+          </div>
+          <div class="bead-field-row">
+            <div class="bead-field">
+              <label>Color</label>
+              <input type="text" id="tf-color" placeholder="e.g. White">
+            </div>
+            <div class="bead-field">
+              <label>Notes</label>
+              <input type="text" id="tf-notes">
+            </div>
+          </div>
+          <input type="hidden" id="tf-id">
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
+            <button class="bead-btn bead-btn-outline" onclick="cancelTypeForm()">Cancel</button>
+            <button class="bead-btn bead-btn-manage" onclick="saveBeadType()">Save Bead Type</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bead-modal-footer">
+      <button class="bead-btn bead-btn-outline" onclick="closeManageModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Bead Prompt Banner (job integration) ─────────────────────────────────── -->
+<div class="bead-prompt-banner" id="bead-banner">
+  <p id="bead-banner-msg">Log bead consumption for this job?</p>
+  <div class="bead-prompt-banner-actions">
+    <button class="bead-btn bead-btn-consume" onclick="openTxFromBanner()">Log Consumption</button>
+    <button class="bead-btn bead-btn-outline" onclick="dismissBanner()">Dismiss</button>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let allSilos     = [];
+let allBeadTypes = [];
+let pendingJobId = null;
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(async () => {
+  const params = new URLSearchParams(location.search);
+  const jobId  = params.get("job_id");
+  if (jobId) {
+    pendingJobId = jobId;
+    const banner = document.getElementById("bead-banner");
+    document.getElementById("bead-banner-msg").textContent =
+      `Job ${jobId} moved to Done. Log bead consumption?`;
+    banner.classList.add("visible");
+  }
+
+  await Promise.all([loadSilos(), loadBeadTypes()]);
+  await loadTransactions();
+  updateStats();
+})();
+
+// ── Data Loaders ───────────────────────────────────────────────────────────
+async function loadSilos() {
+  const res  = await fetch("/api/silos");
+  const body = await res.json();
+  if (!body.ok) return;
+  allSilos = body.data;
+  renderSilos();
+  populateSiloSelects();
+}
+
+async function loadBeadTypes() {
+  const res  = await fetch("/api/bead-types");
+  const body = await res.json();
+  if (!body.ok) return;
+  allBeadTypes = body.data;
+  populateTypeSelects();
+}
+
+async function loadTransactions() {
+  const siloId = document.getElementById("filter-silo").value;
+  const type   = document.getElementById("filter-type").value;
+  const days   = document.getElementById("filter-days").value;
+
+  const params = new URLSearchParams({ days });
+  if (siloId) params.set("silo_id", siloId);
+  if (type)   params.set("type", type);
+
+  const res  = await fetch(`/api/bead-transactions?${params}`);
+  const body = await res.json();
+  renderTransactions(body.ok ? body.data : []);
+  document.getElementById("stat-tx-count").textContent =
+    body.ok ? body.data.length : "—";
+}
+
+// ── Render Silos ───────────────────────────────────────────────────────────
+function renderSilos() {
+  const grid = document.getElementById("silos-grid");
+  if (!allSilos.length) {
+    grid.innerHTML = `<div style="color:#94a3b8;font-size:14px;">No silos configured. Use Manage to add one.</div>`;
+    return;
+  }
+  grid.innerHTML = allSilos.map(s => {
+    const pct    = s.capacity_lbs > 0 ? Math.min(100, (s.current_lbs / s.capacity_lbs) * 100) : 0;
+    const fill   = pct <= 20 ? "fill-red" : pct <= 50 ? "fill-yellow" : "fill-green";
+    const cls    = s.below_reorder ? "bead-silo-card alert-reorder" : (pct <= 20 ? "bead-silo-card alert-low" : "bead-silo-card");
+    const typeLabel = s.bead_type_name
+      ? `${s.bead_type_name}${s.bead_type_grade ? " · " + s.bead_type_grade : ""}`
+      : "No bead type assigned";
+    return `
+      <div class="${cls}" onclick="openTxModal('consume', '${s.id}')">
+        <div class="bead-silo-name">${esc(s.name)}</div>
+        <div class="bead-silo-type">${esc(typeLabel)}</div>
+        <div class="bead-silo-lbs">${fmtLbs(s.current_lbs)} <span>/ ${fmtLbs(s.capacity_lbs)} lbs</span></div>
+        <div class="bead-progress-bg">
+          <div class="bead-progress-fill ${fill}" style="width:${pct.toFixed(1)}%"></div>
+        </div>
+        <div class="bead-silo-meta">
+          <span>${pct.toFixed(0)}% full</span>
+          <span>${s.location ? esc(s.location) : ""}</span>
+        </div>
+        ${s.below_reorder ? `<div class="bead-reorder-badge">⚠ Below Reorder Point</div>` : ""}
+      </div>`;
+  }).join("");
+}
+
+function updateStats() {
+  document.getElementById("stat-total-silos").textContent  = allSilos.length;
+  const totalLbs = allSilos.reduce((a, s) => a + (s.current_lbs || 0), 0);
+  document.getElementById("stat-total-lbs").textContent    = fmtLbs(totalLbs);
+  const reorder  = allSilos.filter(s => s.below_reorder).length;
+  document.getElementById("stat-reorder-count").textContent = reorder;
+}
+
+// ── Render Transactions ────────────────────────────────────────────────────
+function renderTransactions(rows) {
+  const tbody = document.getElementById("tx-tbody");
+  if (!rows.length) {
+    tbody.innerHTML = `<tr class="bead-empty-row"><td colspan="7">No transactions found.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(t => {
+    const qtyClass = t.quantity_lbs >= 0 ? "qty-positive" : "qty-negative";
+    const qtyStr   = (t.quantity_lbs >= 0 ? "+" : "") + fmtLbs(t.quantity_lbs);
+    const dt = t.created_at ? t.created_at.replace("T", " ").slice(0, 16) : "—";
+    return `<tr>
+      <td style="white-space:nowrap;">${esc(dt)}</td>
+      <td><span class="bead-type-badge type-${t.type}">${t.type}</span></td>
+      <td>${esc(t.silo_name || "—")}</td>
+      <td>${esc(t.bead_type_name || "—")}</td>
+      <td class="${qtyClass}">${qtyStr}</td>
+      <td>${esc(t.reference || "—")}</td>
+      <td>${esc(t.notes || "")}</td>
+    </tr>`;
+  }).join("");
+}
+
+// ── Select Population ──────────────────────────────────────────────────────
+function populateSiloSelects() {
+  const siloOpts = allSilos.map(s =>
+    `<option value="${s.id}">${esc(s.name)}</option>`
+  ).join("");
+
+  document.getElementById("tx-silo-id").innerHTML =
+    `<option value="">— select silo —</option>${siloOpts}`;
+  document.getElementById("tx-dest-silo-id").innerHTML =
+    `<option value="">— select destination —</option>${siloOpts}`;
+
+  // Filter select in history
+  const filterSilo = document.getElementById("filter-silo");
+  const currentVal = filterSilo.value;
+  filterSilo.innerHTML = `<option value="">All Silos</option>${siloOpts}`;
+  filterSilo.value = currentVal;
+
+  // Silo form type select
+  const sfBead = document.getElementById("sf-bead-type-id");
+  if (sfBead) {
+    sfBead.innerHTML = `<option value="">— unassigned —</option>` +
+      allBeadTypes.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
+  }
+}
+
+function populateTypeSelects() {
+  const typeOpts = allBeadTypes.map(t =>
+    `<option value="${t.id}">${esc(t.name)}</option>`
+  ).join("");
+  document.getElementById("tx-bead-type-id").innerHTML =
+    `<option value="">— use silo default —</option>${typeOpts}`;
+
+  // Silo form
+  const sfBead = document.getElementById("sf-bead-type-id");
+  if (sfBead) {
+    sfBead.innerHTML = `<option value="">— unassigned —</option>${typeOpts}`;
+  }
+}
+
+// ── Transaction Modal ──────────────────────────────────────────────────────
+function openTxModal(type, siloId) {
+  document.getElementById("tx-type").value = type || "receive";
+  if (siloId) document.getElementById("tx-silo-id").value = siloId;
+  onTxTypeChange();
+
+  const colors = {
+    receive: "bead-btn-receive", consume: "bead-btn-consume",
+    adjust: "bead-btn-adjust", transfer: "bead-btn-transfer"
+  };
+  const btn = document.getElementById("tx-save-btn");
+  btn.className = `bead-btn ${colors[type] || "bead-btn-receive"}`;
+  btn.textContent = "Log Transaction";
+
+  document.getElementById("tx-modal-title").textContent = {
+    receive: "Receive Beads",
+    consume: "Log Consumption",
+    adjust:  "Adjust Inventory",
+    transfer: "Transfer Between Silos"
+  }[type] || "Log Transaction";
+
+  showError("tx-error", "");
+  document.getElementById("tx-qty").value       = "";
+  document.getElementById("tx-job-id").value    = pendingJobId || "";
+  document.getElementById("tx-reference").value = "";
+  document.getElementById("tx-notes").value     = "";
+
+  document.getElementById("tx-modal").classList.remove("hidden");
+}
+
+function closeTxModal() {
+  document.getElementById("tx-modal").classList.add("hidden");
+}
+
+function onTxTypeChange() {
+  const type    = document.getElementById("tx-type").value;
+  const destEl  = document.getElementById("tx-dest-field");
+  const jobEl   = document.getElementById("tx-job-field");
+  destEl.style.display = (type === "transfer") ? "" : "none";
+  jobEl.style.display  = (type === "consume")  ? "" : "none";
+}
+
+async function saveTx() {
+  showError("tx-error", "");
+
+  const type   = document.getElementById("tx-type").value;
+  const siloId = document.getElementById("tx-silo-id").value.trim();
+  const qty    = parseFloat(document.getElementById("tx-qty").value);
+
+  if (!siloId) { showError("tx-error", "Please select a silo."); return; }
+  if (!qty || qty <= 0) { showError("tx-error", "Quantity must be greater than 0."); return; }
+
+  const payload = {
+    type,
+    silo_id:      siloId,
+    quantity_lbs: qty,
+    bead_type_id: document.getElementById("tx-bead-type-id").value || null,
+    job_id:       document.getElementById("tx-job-id").value.trim() || null,
+    reference:    document.getElementById("tx-reference").value.trim(),
+    notes:        document.getElementById("tx-notes").value.trim(),
+  };
+  if (type === "transfer") {
+    payload.dest_silo_id = document.getElementById("tx-dest-silo-id").value.trim();
+    if (!payload.dest_silo_id) { showError("tx-error", "Please select a destination silo."); return; }
+    if (payload.dest_silo_id === siloId) { showError("tx-error", "Source and destination must be different."); return; }
+  }
+
+  const btn = document.getElementById("tx-save-btn");
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+
+  try {
+    const res  = await fetch("/api/bead-transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json();
+    if (!body.ok) {
+      showError("tx-error", body.error || "Error saving transaction.");
+      return;
+    }
+    // Update local silo state
+    const updated = body.data.silo;
+    const idx = allSilos.findIndex(s => s.id === updated.id);
+    if (idx !== -1) allSilos[idx] = updated;
+
+    closeTxModal();
+    if (pendingJobId) dismissBanner();
+    renderSilos();
+    updateStats();
+    await loadTransactions();
+  } catch (e) {
+    showError("tx-error", "Network error. Please try again.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Log Transaction";
+  }
+}
+
+// ── Manage Modal ───────────────────────────────────────────────────────────
+function openManageModal() {
+  renderManageSilos();
+  renderManageTypes();
+  document.getElementById("manage-modal").classList.remove("hidden");
+}
+
+function closeManageModal() {
+  document.getElementById("manage-modal").classList.add("hidden");
+  cancelSiloForm();
+  cancelTypeForm();
+}
+
+function switchManageTab(tab, btn) {
+  document.querySelectorAll(".bead-tab").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  document.querySelectorAll(".bead-tab-pane").forEach(p => p.classList.remove("active"));
+  document.getElementById(`manage-tab-${tab}`).classList.add("active");
+}
+
+// -- Silo manage list --
+function renderManageSilos() {
+  const list = document.getElementById("manage-silos-list");
+  if (!allSilos.length) {
+    list.innerHTML = `<li style="color:#94a3b8;font-size:13px;padding:8px;">No silos yet.</li>`;
+    return;
+  }
+  list.innerHTML = allSilos.map(s => `
+    <li class="bead-manage-item">
+      <div>
+        <div class="bead-manage-item-name">${esc(s.name)}</div>
+        <div class="bead-manage-item-sub">${fmtLbs(s.current_lbs)} lbs · cap ${fmtLbs(s.capacity_lbs)} lbs${s.bead_type_name ? " · " + esc(s.bead_type_name) : ""}</div>
+      </div>
+      <div class="bead-manage-item-actions">
+        <button class="bead-manage-btn" onclick="editSilo('${s.id}')">Edit</button>
+        <button class="bead-manage-btn danger" onclick="deleteSilo('${s.id}')">Delete</button>
+      </div>
+    </li>
+  `).join("");
+}
+
+function toggleSiloForm() {
+  const form = document.getElementById("silo-subform");
+  const isHidden = form.style.display === "none";
+  form.style.display = isHidden ? "" : "none";
+  document.getElementById("silo-form-toggle").textContent = isHidden ? "− Cancel" : "+ Add Silo";
+  if (isHidden) clearSiloForm();
+}
+
+function clearSiloForm() {
+  ["sf-id","sf-name","sf-location","sf-notes"].forEach(id => document.getElementById(id).value = "");
+  ["sf-capacity","sf-reorder"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("sf-bead-type-id").value = "";
+  showError("silo-error", "");
+}
+
+function cancelSiloForm() {
+  document.getElementById("silo-subform").style.display = "none";
+  document.getElementById("silo-form-toggle").textContent = "+ Add Silo";
+  clearSiloForm();
+}
+
+function editSilo(id) {
+  const s = allSilos.find(s => s.id === id);
+  if (!s) return;
+  document.getElementById("sf-id").value           = s.id;
+  document.getElementById("sf-name").value         = s.name;
+  document.getElementById("sf-bead-type-id").value = s.bead_type_id || "";
+  document.getElementById("sf-capacity").value     = s.capacity_lbs;
+  document.getElementById("sf-reorder").value      = s.reorder_point_lbs;
+  document.getElementById("sf-location").value     = s.location;
+  document.getElementById("sf-notes").value        = s.notes;
+  document.getElementById("silo-subform").style.display = "";
+  document.getElementById("silo-form-toggle").textContent = "− Cancel";
+}
+
+async function saveSilo() {
+  showError("silo-error", "");
+  const id   = document.getElementById("sf-id").value.trim();
+  const name = document.getElementById("sf-name").value.trim();
+  if (!name) { showError("silo-error", "Name is required."); return; }
+
+  const payload = {
+    name,
+    bead_type_id:      document.getElementById("sf-bead-type-id").value || null,
+    capacity_lbs:      parseFloat(document.getElementById("sf-capacity").value) || 0,
+    reorder_point_lbs: parseFloat(document.getElementById("sf-reorder").value)  || 0,
+    location:          document.getElementById("sf-location").value.trim(),
+    notes:             document.getElementById("sf-notes").value.trim(),
+  };
+  if (id) payload.id = id;
+
+  const res  = await fetch("/api/silos", {
+    method: id ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json();
+  if (!body.ok) { showError("silo-error", body.error || "Error saving silo."); return; }
+
+  if (id) {
+    const idx = allSilos.findIndex(s => s.id === id);
+    if (idx !== -1) allSilos[idx] = body.data;
+  } else {
+    allSilos.push(body.data);
+  }
+  cancelSiloForm();
+  renderManageSilos();
+  renderSilos();
+  populateSiloSelects();
+  updateStats();
+}
+
+async function deleteSilo(id) {
+  if (!confirm("Delete this silo? All transactions for this silo will also be removed.")) return;
+  const res  = await fetch("/api/silos", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  const body = await res.json();
+  if (!body.ok) { alert(body.error || "Error deleting silo."); return; }
+  allSilos = allSilos.filter(s => s.id !== id);
+  renderManageSilos();
+  renderSilos();
+  populateSiloSelects();
+  updateStats();
+  loadTransactions();
+}
+
+// -- Bead type manage list --
+function renderManageTypes() {
+  const list = document.getElementById("manage-types-list");
+  if (!allBeadTypes.length) {
+    list.innerHTML = `<li style="color:#94a3b8;font-size:13px;padding:8px;">No bead types yet.</li>`;
+    return;
+  }
+  list.innerHTML = allBeadTypes.map(t => `
+    <li class="bead-manage-item">
+      <div>
+        <div class="bead-manage-item-name">${esc(t.name)}</div>
+        <div class="bead-manage-item-sub">${[t.grade, t.color].filter(Boolean).join(" · ")}</div>
+      </div>
+      <div class="bead-manage-item-actions">
+        <button class="bead-manage-btn" onclick="editBeadType('${t.id}')">Edit</button>
+        <button class="bead-manage-btn danger" onclick="deleteBeadType('${t.id}')">Delete</button>
+      </div>
+    </li>
+  `).join("");
+}
+
+function toggleTypeForm() {
+  const form = document.getElementById("type-subform");
+  const isHidden = form.style.display === "none";
+  form.style.display = isHidden ? "" : "none";
+  document.getElementById("type-form-toggle").textContent = isHidden ? "− Cancel" : "+ Add Bead Type";
+  if (isHidden) clearTypeForm();
+}
+
+function clearTypeForm() {
+  ["tf-id","tf-name","tf-grade","tf-color","tf-notes"].forEach(id =>
+    document.getElementById(id).value = "");
+  showError("type-error", "");
+}
+
+function cancelTypeForm() {
+  document.getElementById("type-subform").style.display = "none";
+  document.getElementById("type-form-toggle").textContent = "+ Add Bead Type";
+  clearTypeForm();
+}
+
+function editBeadType(id) {
+  const t = allBeadTypes.find(t => t.id === id);
+  if (!t) return;
+  document.getElementById("tf-id").value    = t.id;
+  document.getElementById("tf-name").value  = t.name;
+  document.getElementById("tf-grade").value = t.grade;
+  document.getElementById("tf-color").value = t.color;
+  document.getElementById("tf-notes").value = t.notes;
+  document.getElementById("type-subform").style.display = "";
+  document.getElementById("type-form-toggle").textContent = "− Cancel";
+}
+
+async function saveBeadType() {
+  showError("type-error", "");
+  const id   = document.getElementById("tf-id").value.trim();
+  const name = document.getElementById("tf-name").value.trim();
+  if (!name) { showError("type-error", "Name is required."); return; }
+
+  const payload = {
+    name,
+    grade: document.getElementById("tf-grade").value.trim(),
+    color: document.getElementById("tf-color").value.trim(),
+    notes: document.getElementById("tf-notes").value.trim(),
+  };
+  if (id) payload.id = id;
+
+  const res  = await fetch("/api/bead-types", {
+    method: id ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json();
+  if (!body.ok) { showError("type-error", body.error || "Error saving bead type."); return; }
+
+  if (id) {
+    const idx = allBeadTypes.findIndex(t => t.id === id);
+    if (idx !== -1) allBeadTypes[idx] = body.data;
+  } else {
+    allBeadTypes.push(body.data);
+  }
+  cancelTypeForm();
+  renderManageTypes();
+  populateTypeSelects();
+  renderSilos();
+}
+
+async function deleteBeadType(id) {
+  if (!confirm("Delete this bead type? Silos using it will become unassigned.")) return;
+  const res  = await fetch("/api/bead-types", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  const body = await res.json();
+  if (!body.ok) { alert(body.error || "Error deleting bead type."); return; }
+  allBeadTypes = allBeadTypes.filter(t => t.id !== id);
+  renderManageTypes();
+  populateTypeSelects();
+  await loadSilos();
+}
+
+// ── Banner (Job Integration) ───────────────────────────────────────────────
+function dismissBanner() {
+  document.getElementById("bead-banner").classList.remove("visible");
+  pendingJobId = null;
+}
+
+function openTxFromBanner() {
+  dismissBanner();
+  openTxModal("consume");
+  if (pendingJobId) document.getElementById("tx-job-id").value = pendingJobId;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function fmtLbs(n) {
+  const num = parseFloat(n) || 0;
+  return num.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+}
+
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.toggle("visible", !!msg);
+}
+</script>
+
+</body>
+</html>

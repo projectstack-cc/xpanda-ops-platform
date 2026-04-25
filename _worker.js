@@ -59,6 +59,22 @@ export default {
         return handleApiCombos(request, env);
       }
 
+      if (url.pathname === "/api/jobs") {
+        return handleApiJobs(request, env);
+      }
+
+      if (url.pathname === "/api/bead-types") {
+        return handleApiBeadTypes(request, env);
+      }
+
+      if (url.pathname === "/api/silos") {
+        return handleApiSilos(request, env);
+      }
+
+      if (url.pathname === "/api/bead-transactions") {
+        return handleApiBeadTransactions(request, env);
+      }
+
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
         return new Response(
@@ -1419,6 +1435,728 @@ async function handleApiCombos(request, env) {
         { ok: false, error: "Server error.", detail: String(e?.message || e) },
         500,
       );
+    }
+  }
+
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+// ─── Jobs: Job Board ─────────────────────────────────────────────────────────
+//
+// Schema — run via Wrangler CLI before deploying:
+//
+// CREATE TABLE IF NOT EXISTS jobs (
+//   id TEXT PRIMARY KEY,
+//   status TEXT NOT NULL DEFAULT 'not_started',
+//   customer TEXT NOT NULL,
+//   po_number TEXT NOT NULL DEFAULT '',
+//   invoice_number TEXT NOT NULL DEFAULT '',
+//   ship_date TEXT NOT NULL DEFAULT '',
+//   ship_day TEXT NOT NULL DEFAULT '',
+//   location TEXT NOT NULL DEFAULT '',
+//   delivery_time TEXT NOT NULL DEFAULT '',
+//   method TEXT NOT NULL DEFAULT '',
+//   carrier TEXT NOT NULL DEFAULT '',
+//   load_count INTEGER NOT NULL DEFAULT 1,
+//   total_bdft REAL NOT NULL DEFAULT 0,
+//   scrap_pickup TEXT NOT NULL DEFAULT '',
+//   sales_lead TEXT NOT NULL DEFAULT '',
+//   bol_info TEXT NOT NULL DEFAULT '',
+//   payment_info TEXT NOT NULL DEFAULT '',
+//   notes TEXT NOT NULL DEFAULT '',
+//   packing_instructions TEXT NOT NULL DEFAULT '',
+//   contact_name TEXT NOT NULL DEFAULT '',
+//   contact_phone TEXT NOT NULL DEFAULT '',
+//   combo_id TEXT DEFAULT NULL,
+//   priority TEXT NOT NULL DEFAULT 'normal',
+//   confirmed_to_ship INTEGER NOT NULL DEFAULT 0,
+//   created_at TEXT NOT NULL DEFAULT (datetime('now')),
+//   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+// );
+// CREATE INDEX IF NOT EXISTS idx_jobs_status    ON jobs(status);
+// CREATE INDEX IF NOT EXISTS idx_jobs_ship_date ON jobs(ship_date);
+// CREATE INDEX IF NOT EXISTS idx_jobs_customer  ON jobs(customer);
+//
+// CREATE TABLE IF NOT EXISTS job_line_items (
+//   id TEXT PRIMARY KEY,
+//   job_id TEXT NOT NULL,
+//   part_id TEXT DEFAULT NULL,
+//   part_number TEXT NOT NULL DEFAULT '',
+//   description TEXT NOT NULL DEFAULT '',
+//   quantity INTEGER NOT NULL DEFAULT 0,
+//   dimensions TEXT NOT NULL DEFAULT '',
+//   sort_order INTEGER NOT NULL DEFAULT 0,
+//   FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+// );
+// CREATE INDEX IF NOT EXISTS idx_job_items_job ON job_line_items(job_id);
+
+async function handleApiJobs(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  // ── GET ──────────────────────────────────────────────────────────────────
+  if (request.method === "GET") {
+    const url         = new URL(request.url);
+    const weekParam   = (url.searchParams.get("week")   || "").trim();
+    const statusParam = (url.searchParams.get("status") || "").trim();
+
+    let query, binds;
+
+    if (weekParam) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
+        return json({ ok: false, error: "Invalid week. Use YYYY-MM-DD (Monday of week)." }, 400);
+      }
+      // Monday through Friday of the requested week
+      query = `SELECT * FROM jobs WHERE ship_date >= ? AND ship_date <= date(?, '+4 days') ORDER BY ship_date ASC, created_at ASC`;
+      binds = [weekParam, weekParam];
+    } else if (statusParam) {
+      const statuses = statusParam.split(",").map(s => s.trim()).filter(Boolean);
+      const valid    = ["not_started", "in_production", "done", "shipped"];
+      for (const s of statuses) {
+        if (!valid.includes(s)) return json({ ok: false, error: `Invalid status: ${s}` }, 400);
+      }
+      const placeholders = statuses.map(() => "?").join(",");
+      query = `SELECT * FROM jobs WHERE status IN (${placeholders}) ORDER BY ship_date ASC, created_at ASC`;
+      binds = statuses;
+    } else {
+      // Default: all active + shipped in the last 7 days
+      query = `SELECT * FROM jobs WHERE status != 'shipped' OR (status = 'shipped' AND ship_date >= date('now', '-7 days')) ORDER BY ship_date ASC, created_at ASC`;
+      binds = [];
+    }
+
+    try {
+      const jobsResult = binds.length
+        ? await db.prepare(query).bind(...binds).all()
+        : await db.prepare(query).all();
+
+      const jobs = jobsResult.results || [];
+
+      // Batch-fetch line items for all returned jobs
+      const lineItemsMap = {};
+      if (jobs.length > 0) {
+        const ids = jobs.map(j => j.id);
+        const ph  = ids.map(() => "?").join(",");
+        const liResult = await db
+          .prepare(`SELECT * FROM job_line_items WHERE job_id IN (${ph}) ORDER BY job_id, sort_order ASC`)
+          .bind(...ids)
+          .all();
+        for (const item of (liResult.results || [])) {
+          if (!lineItemsMap[item.job_id]) lineItemsMap[item.job_id] = [];
+          lineItemsMap[item.job_id].push(item);
+        }
+      }
+
+      const enriched = jobs.map(job => ({
+        ...job,
+        line_items: lineItemsMap[job.id] || [],
+      }));
+
+      return json({ ok: true, jobs: enriched });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  // ── POST ─────────────────────────────────────────────────────────────────
+  if (request.method === "POST") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const customer = String(payload.customer || "").trim();
+    if (!customer) return json({ ok: false, error: "Customer is required." }, 400);
+
+    const ship_date = String(payload.ship_date || "").trim();
+    if (ship_date && !/^\d{4}-\d{2}-\d{2}$/.test(ship_date)) {
+      return json({ ok: false, error: "Invalid ship_date. Use YYYY-MM-DD." }, 400);
+    }
+
+    const validStatuses = ["not_started", "in_production", "done", "shipped"];
+    const status = String(payload.status || "not_started").trim();
+    if (!validStatuses.includes(status)) return json({ ok: false, error: "Invalid status." }, 400);
+
+    const validPriorities = ["normal", "rush"];
+    const priority = String(payload.priority || "normal").trim();
+    if (!validPriorities.includes(priority)) return json({ ok: false, error: "Invalid priority." }, 400);
+
+    const id  = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    const po_number            = String(payload.po_number            || "").trim();
+    const invoice_number       = String(payload.invoice_number       || "").trim();
+    const ship_day             = String(payload.ship_day             || "").trim();
+    const location             = String(payload.location             || "").trim();
+    const delivery_time        = String(payload.delivery_time        || "").trim();
+    const method               = String(payload.method               || "").trim();
+    const carrier              = String(payload.carrier              || "").trim();
+    const scrap_pickup         = String(payload.scrap_pickup         || "").trim();
+    const sales_lead           = String(payload.sales_lead           || "").trim();
+    const bol_info             = String(payload.bol_info             || "").trim();
+    const payment_info         = String(payload.payment_info         || "").trim();
+    const notes                = String(payload.notes                || "").trim();
+    const packing_instructions = String(payload.packing_instructions || "").trim();
+    const contact_name         = String(payload.contact_name         || "").trim();
+    const contact_phone        = String(payload.contact_phone        || "").trim();
+    const combo_id             = payload.combo_id ? String(payload.combo_id).trim() : null;
+    const load_count           = Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1;
+    const total_bdft           = Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0;
+    const confirmed_to_ship    = payload.confirmed_to_ship ? 1 : 0;
+
+    try {
+      await db.prepare(`
+        INSERT INTO jobs (
+          id, status, customer, po_number, invoice_number, ship_date, ship_day,
+          location, delivery_time, method, carrier, load_count, total_bdft,
+          scrap_pickup, sales_lead, bol_info, payment_info, notes,
+          packing_instructions, contact_name, contact_phone, combo_id,
+          priority, confirmed_to_ship, created_at, updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(
+        id, status, customer, po_number, invoice_number, ship_date, ship_day,
+        location, delivery_time, method, carrier, load_count, total_bdft,
+        scrap_pickup, sales_lead, bol_info, payment_info, notes,
+        packing_instructions, contact_name, contact_phone, combo_id,
+        priority, confirmed_to_ship, now, now,
+      ).run();
+
+      // Insert line items
+      const lineItems = Array.isArray(payload.line_items) ? payload.line_items : [];
+      for (let i = 0; i < lineItems.length; i++) {
+        const li = lineItems[i];
+        await db.prepare(`
+          INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, sort_order)
+          VALUES (?,?,?,?,?,?,?,?)
+        `).bind(
+          crypto.randomUUID(), id,
+          li.part_id ? String(li.part_id).trim() : null,
+          String(li.part_number || "").trim(),
+          String(li.description || "").trim(),
+          Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
+          String(li.dimensions  || "").trim(),
+          i,
+        ).run();
+      }
+
+      const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
+      const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
+
+      return json({ ok: true, message: "Job created.", job: { ...job, line_items: liRows.results || [] } }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  // ── PUT ──────────────────────────────────────────────────────────────────
+  if (request.method === "PUT") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+
+    const existing = await db.prepare("SELECT id FROM jobs WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Job not found." }, 404);
+
+    const sets  = [];
+    const binds = [];
+
+    if ("status" in payload) {
+      const v = String(payload.status).trim();
+      if (!["not_started", "in_production", "done", "shipped"].includes(v))
+        return json({ ok: false, error: "Invalid status." }, 400);
+      sets.push("status = ?"); binds.push(v);
+    }
+
+    if ("priority" in payload) {
+      const v = String(payload.priority).trim();
+      if (!["normal", "rush"].includes(v))
+        return json({ ok: false, error: "Invalid priority." }, 400);
+      sets.push("priority = ?"); binds.push(v);
+    }
+
+    const textFields = [
+      "customer", "po_number", "invoice_number", "ship_date", "ship_day",
+      "location", "delivery_time", "method", "carrier", "scrap_pickup",
+      "sales_lead", "bol_info", "payment_info", "notes",
+      "packing_instructions", "contact_name", "contact_phone",
+    ];
+    for (const f of textFields) {
+      if (f in payload) { sets.push(`${f} = ?`); binds.push(String(payload[f] || "").trim()); }
+    }
+
+    if ("load_count"        in payload) { sets.push("load_count = ?");        binds.push(Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1); }
+    if ("total_bdft"        in payload) { sets.push("total_bdft = ?");        binds.push(Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0); }
+    if ("confirmed_to_ship" in payload) { sets.push("confirmed_to_ship = ?"); binds.push(payload.confirmed_to_ship ? 1 : 0); }
+    if ("combo_id"          in payload) { sets.push("combo_id = ?");          binds.push(payload.combo_id ? String(payload.combo_id).trim() : null); }
+
+    sets.push("updated_at = ?");
+    binds.push(new Date().toISOString());
+    binds.push(id); // WHERE clause value
+
+    try {
+      await db.prepare(`UPDATE jobs SET ${sets.join(", ")} WHERE id = ?`).bind(...binds).run();
+
+      // Replace line items if provided
+      if (Array.isArray(payload.line_items)) {
+        await db.prepare("DELETE FROM job_line_items WHERE job_id = ?").bind(id).run();
+        for (let i = 0; i < payload.line_items.length; i++) {
+          const li = payload.line_items[i];
+          await db.prepare(`
+            INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, sort_order)
+            VALUES (?,?,?,?,?,?,?,?)
+          `).bind(
+            crypto.randomUUID(), id,
+            li.part_id ? String(li.part_id).trim() : null,
+            String(li.part_number || "").trim(),
+            String(li.description || "").trim(),
+            Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
+            String(li.dimensions  || "").trim(),
+            i,
+          ).run();
+        }
+      }
+
+      const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
+      const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
+
+      return json({ ok: true, message: "Job updated.", job: { ...job, line_items: liRows.results || [] } });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  // ── DELETE ───────────────────────────────────────────────────────────────
+  if (request.method === "DELETE") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+
+    const existing = await db.prepare("SELECT id FROM jobs WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Job not found." }, 404);
+
+    try {
+      // Explicit delete of line items (D1 FK cascade not guaranteed)
+      await db.prepare("DELETE FROM job_line_items WHERE job_id = ?").bind(id).run();
+      await db.prepare("DELETE FROM jobs WHERE id = ?").bind(id).run();
+      return json({ ok: true, message: "Job deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+
+// =============================================================================
+// BEAD INVENTORY SCHEMA (run once against D1)
+// =============================================================================
+/*
+CREATE TABLE IF NOT EXISTS bead_types (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  grade TEXT NOT NULL DEFAULT '',
+  color TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bead_types_name ON bead_types(name);
+
+CREATE TABLE IF NOT EXISTS silos (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  bead_type_id TEXT DEFAULT NULL,
+  capacity_lbs REAL NOT NULL DEFAULT 0,
+  current_lbs REAL NOT NULL DEFAULT 0,
+  reorder_point_lbs REAL NOT NULL DEFAULT 0,
+  location TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (bead_type_id) REFERENCES bead_types(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS bead_transactions (
+  id TEXT PRIMARY KEY,
+  silo_id TEXT NOT NULL,
+  bead_type_id TEXT DEFAULT NULL,
+  type TEXT NOT NULL,
+  quantity_lbs REAL NOT NULL,
+  job_id TEXT DEFAULT NULL,
+  reference TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (silo_id) REFERENCES silos(id) ON DELETE CASCADE,
+  FOREIGN KEY (bead_type_id) REFERENCES bead_types(id) ON DELETE SET NULL,
+  FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bead_tx_silo ON bead_transactions(silo_id);
+CREATE INDEX IF NOT EXISTS idx_bead_tx_type ON bead_transactions(type);
+CREATE INDEX IF NOT EXISTS idx_bead_tx_created ON bead_transactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_bead_tx_job ON bead_transactions(job_id);
+*/
+
+// =============================================================================
+// HANDLER: /api/bead-types  (GET / POST / PUT / DELETE)
+// =============================================================================
+async function handleApiBeadTypes(request, env) {
+  const db = env.DB;
+  const method = request.method.toUpperCase();
+
+  if (method === "GET") {
+    try {
+      const { results } = await db
+        .prepare("SELECT * FROM bead_types ORDER BY name ASC")
+        .all();
+      return json({ ok: true, data: results });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === "POST") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const name = String(payload.name || "").trim();
+    if (!name) return json({ ok: false, error: "name is required." }, 400);
+
+    const grade = String(payload.grade || "").trim();
+    const color = String(payload.color || "").trim();
+    const notes = String(payload.notes || "").trim();
+
+    const exists = await db
+      .prepare("SELECT id FROM bead_types WHERE name = ?")
+      .bind(name).first();
+    if (exists) return json({ ok: false, error: "A bead type with that name already exists." }, 409);
+
+    const id = crypto.randomUUID();
+    try {
+      await db.prepare(
+        "INSERT INTO bead_types (id, name, grade, color, notes) VALUES (?, ?, ?, ?, ?)"
+      ).bind(id, name, grade, color, notes).run();
+      const row = await db.prepare("SELECT * FROM bead_types WHERE id = ?").bind(id).first();
+      return json({ ok: true, data: row }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === "PUT") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+
+    const existing = await db
+      .prepare("SELECT id FROM bead_types WHERE id = ?")
+      .bind(id).first();
+    if (!existing) return json({ ok: false, error: "Bead type not found." }, 404);
+
+    const allowed = ["name", "grade", "color", "notes"];
+    const sets = [];
+    const vals = [];
+    for (const key of allowed) {
+      if (key in payload) {
+        sets.push(`${key} = ?`);
+        vals.push(String(payload[key] ?? "").trim());
+      }
+    }
+    if (sets.length === 0) return json({ ok: false, error: "No fields to update." }, 400);
+
+    if ("name" in payload) {
+      const conflict = await db
+        .prepare("SELECT id FROM bead_types WHERE name = ? AND id != ?")
+        .bind(payload.name.trim(), id).first();
+      if (conflict) return json({ ok: false, error: "Name already in use." }, 409);
+    }
+
+    sets.push("updated_at = datetime('now')");
+    vals.push(id);
+    try {
+      await db.prepare(`UPDATE bead_types SET ${sets.join(", ")} WHERE id = ?`)
+        .bind(...vals).run();
+      const row = await db.prepare("SELECT * FROM bead_types WHERE id = ?").bind(id).first();
+      return json({ ok: true, data: row });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === "DELETE") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+
+    const existing = await db
+      .prepare("SELECT id FROM bead_types WHERE id = ?")
+      .bind(id).first();
+    if (!existing) return json({ ok: false, error: "Bead type not found." }, 404);
+
+    try {
+      await db.prepare("DELETE FROM bead_types WHERE id = ?").bind(id).run();
+      return json({ ok: true, message: "Bead type deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+// =============================================================================
+// HANDLER: /api/silos  (GET / POST / PUT / DELETE)
+// =============================================================================
+async function handleApiSilos(request, env) {
+  const db = env.DB;
+  const method = request.method.toUpperCase();
+
+  if (method === "GET") {
+    try {
+      const { results } = await db.prepare(`
+        SELECT
+          s.*,
+          bt.name  AS bead_type_name,
+          bt.grade AS bead_type_grade,
+          bt.color AS bead_type_color,
+          CASE WHEN s.reorder_point_lbs > 0 AND s.current_lbs <= s.reorder_point_lbs
+               THEN 1 ELSE 0 END AS below_reorder
+        FROM silos s
+        LEFT JOIN bead_types bt ON bt.id = s.bead_type_id
+        ORDER BY s.name ASC
+      `).all();
+      return json({ ok: true, data: results });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === "POST") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const name = String(payload.name || "").trim();
+    if (!name) return json({ ok: false, error: "name is required." }, 400);
+
+    const id                = crypto.randomUUID();
+    const bead_type_id      = payload.bead_type_id      ? String(payload.bead_type_id).trim()      : null;
+    const capacity_lbs      = Number(payload.capacity_lbs      ?? 0);
+    const current_lbs       = Number(payload.current_lbs       ?? 0);
+    const reorder_point_lbs = Number(payload.reorder_point_lbs ?? 0);
+    const location          = String(payload.location || "").trim();
+    const notes             = String(payload.notes    || "").trim();
+
+    try {
+      await db.prepare(`
+        INSERT INTO silos (id, name, bead_type_id, capacity_lbs, current_lbs, reorder_point_lbs, location, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, name, bead_type_id, capacity_lbs, current_lbs, reorder_point_lbs, location, notes).run();
+
+      const row = await db.prepare(`
+        SELECT s.*, bt.name AS bead_type_name, bt.grade AS bead_type_grade, bt.color AS bead_type_color,
+               CASE WHEN s.reorder_point_lbs > 0 AND s.current_lbs <= s.reorder_point_lbs THEN 1 ELSE 0 END AS below_reorder
+        FROM silos s LEFT JOIN bead_types bt ON bt.id = s.bead_type_id WHERE s.id = ?
+      `).bind(id).first();
+      return json({ ok: true, data: row }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === "PUT") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+
+    const existing = await db.prepare("SELECT id FROM silos WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Silo not found." }, 404);
+
+    const allowed = ["name", "bead_type_id", "capacity_lbs", "current_lbs", "reorder_point_lbs", "location", "notes"];
+    const sets = [];
+    const vals = [];
+    for (const key of allowed) {
+      if (key in payload) {
+        sets.push(`${key} = ?`);
+        const raw = payload[key];
+        if (key === "bead_type_id") {
+          vals.push(raw ? String(raw).trim() : null);
+        } else if (["capacity_lbs", "current_lbs", "reorder_point_lbs"].includes(key)) {
+          vals.push(Number(raw ?? 0));
+        } else {
+          vals.push(String(raw ?? "").trim());
+        }
+      }
+    }
+    if (sets.length === 0) return json({ ok: false, error: "No fields to update." }, 400);
+
+    sets.push("updated_at = datetime('now')");
+    vals.push(id);
+    try {
+      await db.prepare(`UPDATE silos SET ${sets.join(", ")} WHERE id = ?`).bind(...vals).run();
+      const row = await db.prepare(`
+        SELECT s.*, bt.name AS bead_type_name, bt.grade AS bead_type_grade, bt.color AS bead_type_color,
+               CASE WHEN s.reorder_point_lbs > 0 AND s.current_lbs <= s.reorder_point_lbs THEN 1 ELSE 0 END AS below_reorder
+        FROM silos s LEFT JOIN bead_types bt ON bt.id = s.bead_type_id WHERE s.id = ?
+      `).bind(id).first();
+      return json({ ok: true, data: row });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === "DELETE") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+
+    const existing = await db.prepare("SELECT id FROM silos WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Silo not found." }, 404);
+
+    try {
+      await db.prepare("DELETE FROM bead_transactions WHERE silo_id = ?").bind(id).run();
+      await db.prepare("DELETE FROM silos WHERE id = ?").bind(id).run();
+      return json({ ok: true, message: "Silo deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+// =============================================================================
+// HANDLER: /api/bead-transactions  (GET / POST)
+// =============================================================================
+async function handleApiBeadTransactions(request, env) {
+  const db = env.DB;
+  const method = request.method.toUpperCase();
+  const url = new URL(request.url);
+
+  if (method === "GET") {
+    const siloId = url.searchParams.get("silo_id");
+    const txType = url.searchParams.get("type");
+    const jobId  = url.searchParams.get("job_id");
+    const days   = parseInt(url.searchParams.get("days") || "30", 10);
+
+    const where = ["t.created_at >= datetime('now', ? || ' days')"];
+    const vals  = [`-${days}`];
+
+    if (siloId) { where.push("t.silo_id = ?"); vals.push(siloId); }
+    if (txType) { where.push("t.type = ?");    vals.push(txType); }
+    if (jobId)  { where.push("t.job_id = ?");  vals.push(jobId); }
+
+    try {
+      const { results } = await db.prepare(`
+        SELECT
+          t.*,
+          s.name AS silo_name,
+          bt.name AS bead_type_name
+        FROM bead_transactions t
+        LEFT JOIN silos s ON s.id = t.silo_id
+        LEFT JOIN bead_types bt ON bt.id = t.bead_type_id
+        WHERE ${where.join(" AND ")}
+        ORDER BY t.created_at DESC
+        LIMIT 500
+      `).bind(...vals).all();
+      return json({ ok: true, data: results });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === "POST") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const txType      = String(payload.type     || "").trim();
+    const siloId      = String(payload.silo_id  || "").trim();
+    const quantityLbs = Number(payload.quantity_lbs ?? 0);
+
+    const validTypes = ["receive", "consume", "adjust", "transfer"];
+    if (!validTypes.includes(txType)) {
+      return json({ ok: false, error: `type must be one of: ${validTypes.join(", ")}` }, 400);
+    }
+    if (!siloId) return json({ ok: false, error: "silo_id is required." }, 400);
+    if (quantityLbs === 0) return json({ ok: false, error: "quantity_lbs must be non-zero." }, 400);
+
+    const silo = await db.prepare("SELECT * FROM silos WHERE id = ?").bind(siloId).first();
+    if (!silo) return json({ ok: false, error: "Silo not found." }, 404);
+
+    const beadTypeId = payload.bead_type_id ? String(payload.bead_type_id).trim() : silo.bead_type_id;
+    const jobId      = payload.job_id        ? String(payload.job_id).trim()       : null;
+    const reference  = String(payload.reference || "").trim();
+    const notes      = String(payload.notes     || "").trim();
+
+    let delta = quantityLbs;
+    if (txType === "consume" || txType === "transfer") {
+      delta = -Math.abs(quantityLbs);
+    }
+
+    const newLevel = silo.current_lbs + delta;
+    if (newLevel < 0) {
+      return json({
+        ok: false,
+        error: `Insufficient inventory. Silo has ${silo.current_lbs} lbs, transaction requires ${Math.abs(delta)} lbs.`
+      }, 422);
+    }
+
+    const txId = crypto.randomUUID();
+    try {
+      await db.batch([
+        db.prepare("UPDATE silos SET current_lbs = ?, updated_at = datetime('now') WHERE id = ?")
+          .bind(newLevel, siloId),
+        db.prepare(`
+          INSERT INTO bead_transactions (id, silo_id, bead_type_id, type, quantity_lbs, job_id, reference, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(txId, siloId, beadTypeId, txType, delta, jobId, reference, notes),
+      ]);
+
+      if (txType === "transfer" && payload.dest_silo_id) {
+        const destId = String(payload.dest_silo_id).trim();
+        const dest = await db.prepare("SELECT * FROM silos WHERE id = ?").bind(destId).first();
+        if (dest) {
+          const destTxId   = crypto.randomUUID();
+          const destNotes  = notes ? `Transfer from ${silo.name}: ${notes}` : `Transfer from ${silo.name}`;
+          await db.batch([
+            db.prepare("UPDATE silos SET current_lbs = ?, updated_at = datetime('now') WHERE id = ?")
+              .bind(dest.current_lbs + Math.abs(delta), destId),
+            db.prepare(`
+              INSERT INTO bead_transactions (id, silo_id, bead_type_id, type, quantity_lbs, job_id, reference, notes)
+              VALUES (?, ?, ?, 'receive', ?, ?, ?, ?)
+            `).bind(destTxId, destId, beadTypeId, Math.abs(delta), jobId, reference, destNotes),
+          ]);
+        }
+      }
+
+      const tx = await db.prepare("SELECT * FROM bead_transactions WHERE id = ?").bind(txId).first();
+      const updatedSilo = await db.prepare(`
+        SELECT s.*, bt.name AS bead_type_name, bt.grade AS bead_type_grade, bt.color AS bead_type_color,
+               CASE WHEN s.reorder_point_lbs > 0 AND s.current_lbs <= s.reorder_point_lbs THEN 1 ELSE 0 END AS below_reorder
+        FROM silos s LEFT JOIN bead_types bt ON bt.id = s.bead_type_id WHERE s.id = ?
+      `).bind(siloId).first();
+
+      return json({ ok: true, data: { transaction: tx, silo: updatedSilo } }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
   }
 

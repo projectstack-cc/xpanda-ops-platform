@@ -1,0 +1,1053 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Job Board — xPanda Foam</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+  <link rel="apple-touch-icon" href="/assets/img/favicon.png">
+  <link rel="stylesheet" href="/jobs/jobs-shared.css">
+</head>
+<body>
+
+<script src="/jobs/jobs-header.js"></script>
+<script>
+  document.getElementById('jobs-page-title').textContent = 'Job Board';
+  document.getElementById('jobs-page-subtitle').textContent = 'Track production jobs from order entry through shipment';
+</script>
+
+<!-- Toolbar -->
+<div class="jobs-toolbar">
+  <div class="jobs-toolbar-filters">
+    <span class="jobs-week-label">Week:</span>
+    <input type="date" id="week-filter" class="jobs-week-input" title="Filter by ship week (Monday)">
+    <button class="btn ghost small" id="btn-load-week">Apply</button>
+    <button class="btn ghost small" id="btn-all-jobs">Show All</button>
+  </div>
+  <button class="btn primary small jobs-new-btn" id="btn-new-job">+ New Job</button>
+</div>
+
+<!-- Mobile tabs -->
+<div class="jobs-tabs" id="jobs-tabs" role="tablist">
+  <button class="jobs-tab active" data-status="not_started" role="tab">Not Started</button>
+  <button class="jobs-tab" data-status="in_production" role="tab">In Production</button>
+  <button class="jobs-tab" data-status="done" role="tab">Done</button>
+  <button class="jobs-tab" data-status="shipped" role="tab">Shipped</button>
+</div>
+
+<!-- Kanban board -->
+<div class="jobs-board-scroll">
+  <div class="jobs-board" id="jobs-board">
+
+    <div class="jobs-col tab-active" data-status="not_started">
+      <div class="jobs-col-header">
+        <span class="jobs-col-title">Not Started</span>
+        <span class="jobs-col-count" id="count-not_started">0</span>
+      </div>
+      <div class="jobs-col-body" id="col-not_started" data-status="not_started"></div>
+    </div>
+
+    <div class="jobs-col" data-status="in_production">
+      <div class="jobs-col-header">
+        <span class="jobs-col-title">In Production</span>
+        <span class="jobs-col-count" id="count-in_production">0</span>
+      </div>
+      <div class="jobs-col-body" id="col-in_production" data-status="in_production"></div>
+    </div>
+
+    <div class="jobs-col" data-status="done">
+      <div class="jobs-col-header">
+        <span class="jobs-col-title">Done</span>
+        <span class="jobs-col-count" id="count-done">0</span>
+      </div>
+      <div class="jobs-col-body" id="col-done" data-status="done"></div>
+    </div>
+
+    <div class="jobs-col" data-status="shipped">
+      <div class="jobs-col-header">
+        <span class="jobs-col-title">Shipped</span>
+        <span class="jobs-col-count" id="count-shipped">0</span>
+      </div>
+      <div class="jobs-col-body" id="col-shipped" data-status="shipped"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ Job Modal ══ -->
+<div class="jobs-modal-overlay" id="jobs-modal" hidden>
+  <div class="jobs-modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+
+    <div class="jobs-modal-header">
+      <h2 id="modal-title">New Job</h2>
+      <button class="jobs-modal-close" id="modal-close" aria-label="Close">&times;</button>
+    </div>
+
+    <div class="jobs-modal-body">
+
+      <!-- Customer & Order -->
+      <div class="jobs-form-section">
+        <p class="jobs-form-section-title">Customer &amp; Order</p>
+        <div class="jobs-form-grid-2">
+          <div class="jobs-field">
+            <label for="f-customer">Customer *</label>
+            <input type="text" id="f-customer" placeholder="Customer name">
+          </div>
+          <div class="jobs-field">
+            <label for="f-sales-lead">Sales Lead</label>
+            <input type="text" id="f-sales-lead" placeholder="e.g. Tim for MS">
+          </div>
+        </div>
+        <div class="jobs-form-grid-2">
+          <div class="jobs-field">
+            <label for="f-po-number">PO Number</label>
+            <input type="text" id="f-po-number" placeholder="PO #">
+          </div>
+          <div class="jobs-field">
+            <label for="f-invoice-number">Invoice Number</label>
+            <input type="text" id="f-invoice-number" placeholder="INV #">
+          </div>
+        </div>
+      </div>
+
+      <!-- Shipping -->
+      <div class="jobs-form-section">
+        <p class="jobs-form-section-title">Shipping</p>
+        <div class="jobs-form-grid-3">
+          <div class="jobs-field">
+            <label for="f-ship-date">Ship Date</label>
+            <input type="date" id="f-ship-date">
+            <span class="jobs-field-hint" id="f-ship-day-display"></span>
+          </div>
+          <div class="jobs-field">
+            <label for="f-delivery-time">Delivery Time</label>
+            <input type="text" id="f-delivery-time" placeholder="e.g. 7:00 am &amp; HRLY">
+          </div>
+          <div class="jobs-field">
+            <label for="f-load-count">Load Count</label>
+            <input type="number" id="f-load-count" value="1" min="1">
+          </div>
+        </div>
+        <div class="jobs-field">
+          <label for="f-location">Location</label>
+          <input type="text" id="f-location" placeholder="City, State">
+        </div>
+        <div class="jobs-form-grid-3">
+          <div class="jobs-field">
+            <label for="f-method">Method</label>
+            <select id="f-method">
+              <option value="">— Select —</option>
+              <option value="dry van">Dry Van</option>
+              <option value="flatbed">Flatbed</option>
+              <option value="XPanda truck">XPanda Truck</option>
+              <option value="customer pickup">Customer Pickup</option>
+              <option value="hand deliver">Hand Deliver</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="jobs-field">
+            <label for="f-carrier">Carrier</label>
+            <input type="text" id="f-carrier" placeholder="e.g. LISMA" list="carrier-list">
+            <datalist id="carrier-list">
+              <option value="LISMA">
+              <option value="XPanda truck">
+              <option value="customer">
+            </datalist>
+          </div>
+          <div class="jobs-field">
+            <label for="f-total-bdft">Total BDFT</label>
+            <input type="number" id="f-total-bdft" value="0" min="0" step="1">
+          </div>
+        </div>
+        <div class="jobs-form-grid-3">
+          <div class="jobs-field">
+            <label for="f-scrap-pickup">Scrap Pickup</label>
+            <select id="f-scrap-pickup">
+              <option value="">— N/A —</option>
+              <option value="YES">YES</option>
+              <option value="NO">NO</option>
+              <option value="N/A">N/A</option>
+            </select>
+          </div>
+          <div class="jobs-field" style="justify-content:flex-end;padding-top:4px;">
+            <label class="jobs-checkbox-row">
+              <input type="checkbox" id="f-confirmed">
+              Confirmed to Ship
+            </label>
+          </div>
+          <div class="jobs-field">
+            <label>Priority</label>
+            <div class="jobs-priority-toggle">
+              <button type="button" class="jobs-priority-btn active-normal" id="priority-normal">Normal</button>
+              <button type="button" class="jobs-priority-btn" id="priority-rush">RUSH</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Details -->
+      <div class="jobs-form-section">
+        <p class="jobs-form-section-title">Details</p>
+        <div class="jobs-form-grid-2">
+          <div class="jobs-field">
+            <label for="f-contact-name">Contact Name</label>
+            <input type="text" id="f-contact-name" placeholder="Contact person">
+          </div>
+          <div class="jobs-field">
+            <label for="f-contact-phone">Contact Phone</label>
+            <input type="tel" id="f-contact-phone" placeholder="Phone number">
+          </div>
+        </div>
+        <div class="jobs-form-grid-2">
+          <div class="jobs-field">
+            <label for="f-payment-info">Payment Info</label>
+            <input type="text" id="f-payment-info" placeholder="e.g. Net 30 via FedEx check">
+          </div>
+          <div class="jobs-field">
+            <label for="f-bol-info">BOL Info</label>
+            <input type="text" id="f-bol-info" placeholder="Bill of lading details">
+          </div>
+        </div>
+      </div>
+
+      <!-- Instructions -->
+      <div class="jobs-form-section">
+        <p class="jobs-form-section-title">Instructions</p>
+        <div class="jobs-field">
+          <label for="f-packing">Packing Instructions</label>
+          <textarea id="f-packing" placeholder="Floor operator instructions — labeling, load on risers, QC requirements, unloading notes…" rows="3"></textarea>
+        </div>
+        <div class="jobs-field">
+          <label for="f-notes">Notes</label>
+          <textarea id="f-notes" placeholder="General notes, scheduling history, internal comments" rows="3"></textarea>
+        </div>
+      </div>
+
+      <!-- Line Items -->
+      <div class="jobs-form-section">
+        <p class="jobs-form-section-title">Line Items</p>
+        <div class="jobs-li-scroll">
+          <div class="jobs-li-header">
+            <span>Part #</span>
+            <span>Description</span>
+            <span>Qty</span>
+            <span>Dimensions</span>
+            <span></span>
+          </div>
+          <div id="li-container"></div>
+        </div>
+        <div class="jobs-li-footer">
+          <button type="button" class="btn ghost small" id="btn-add-li">+ Add Line Item</button>
+          <button type="button" class="btn ghost small" id="btn-load-parts">From Parts Library</button>
+        </div>
+      </div>
+
+      <!-- Block Calculator Combo -->
+      <div class="jobs-form-section">
+        <p class="jobs-form-section-title">Block Calculator Combo</p>
+        <div class="jobs-combo-area" id="combo-area">
+          <button type="button" class="btn ghost small" id="btn-link-combo">Link Combo</button>
+          <span id="combo-badge-wrap" hidden></span>
+        </div>
+      </div>
+
+      <p class="jobs-modal-status" id="modal-status"></p>
+
+    </div><!-- /.jobs-modal-body -->
+
+    <div class="jobs-modal-footer">
+      <button class="btn primary" id="modal-save">Save Job</button>
+      <button class="btn ghost" id="modal-cancel">Cancel</button>
+      <button class="btn danger" id="modal-delete" hidden>Delete Job</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Parts picker -->
+<div class="jobs-picker-overlay" id="parts-picker" hidden>
+  <div class="jobs-picker-panel">
+    <div class="jobs-picker-header">
+      <h3>Select Part</h3>
+      <button class="jobs-modal-close" id="parts-picker-close">&times;</button>
+    </div>
+    <div class="jobs-picker-search">
+      <input type="text" id="parts-picker-search" placeholder="Search by part # or customer…">
+    </div>
+    <div class="jobs-picker-body" id="parts-picker-body"></div>
+  </div>
+</div>
+
+<!-- Combo picker -->
+<div class="jobs-picker-overlay" id="combo-picker" hidden>
+  <div class="jobs-picker-panel">
+    <div class="jobs-picker-header">
+      <h3>Select Combo</h3>
+      <button class="jobs-modal-close" id="combo-picker-close">&times;</button>
+    </div>
+    <div class="jobs-picker-body" id="combo-picker-body"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="jobs-toast" id="jobs-toast" aria-live="polite"></div>
+
+<script>
+/* ═══════════════════════════════════════════
+   State
+═══════════════════════════════════════════ */
+
+const STATUS_ORDER  = ['not_started', 'in_production', 'done', 'shipped'];
+const STATUS_LABELS = {
+  not_started:   'Not Started',
+  in_production: 'In Production',
+  done:          'Done',
+  shipped:       'Shipped',
+};
+
+let allJobs         = [];
+let editingJobId    = null;
+let selectedPriority = 'normal';
+let selectedComboId  = null;
+let selectedComboName = '';
+let partsCache      = null;
+let combosCache     = null;
+let draggedId       = null;
+
+/* ═══════════════════════════════════════════
+   Init
+═══════════════════════════════════════════ */
+
+document.addEventListener('DOMContentLoaded', () => {
+  const monday = getCurrentWeekMonday();
+  document.getElementById('week-filter').value = monday;
+  loadJobs({ week: monday });
+
+  setupToolbar();
+  setupTabs();
+  setupBoard();
+  setupModal();
+  setupPickers();
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!document.getElementById('parts-picker').hidden) {
+      document.getElementById('parts-picker').hidden = true;
+    } else if (!document.getElementById('combo-picker').hidden) {
+      document.getElementById('combo-picker').hidden = true;
+    } else {
+      closeModal();
+    }
+  });
+});
+
+/* ═══════════════════════════════════════════
+   Date helpers
+═══════════════════════════════════════════ */
+
+function getCurrentWeekMonday() {
+  const d = new Date();
+  const day = d.getDay(); // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().split('T')[0];
+}
+
+function formatShipDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return `${days[d.getDay()]} ${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function getShipDay(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return days[d.getDay()];
+}
+
+/* ═══════════════════════════════════════════
+   API
+═══════════════════════════════════════════ */
+
+async function loadJobs(params) {
+  const q = new URLSearchParams();
+  if (params && params.week)   q.set('week',   params.week);
+  if (params && params.status) q.set('status', params.status);
+
+  try {
+    const res  = await fetch('/api/jobs?' + q.toString());
+    const data = await res.json();
+    if (!data.ok) { showToast('Error loading jobs: ' + data.error); return; }
+    allJobs = data.jobs;
+    renderBoard(allJobs);
+  } catch {
+    showToast('Network error loading jobs.');
+  }
+}
+
+/* ═══════════════════════════════════════════
+   Rendering
+═══════════════════════════════════════════ */
+
+function renderBoard(jobs) {
+  for (const status of STATUS_ORDER) {
+    const body  = document.getElementById('col-' + status);
+    const count = document.getElementById('count-' + status);
+    const colJobs = jobs.filter(j => j.status === status);
+
+    count.textContent = colJobs.length;
+    body.innerHTML    = '';
+
+    if (colJobs.length === 0) {
+      body.innerHTML = '<p class="jobs-empty-col">No jobs</p>';
+    } else {
+      for (const job of colJobs) body.appendChild(buildCard(job));
+    }
+  }
+}
+
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function buildCard(job) {
+  const card = document.createElement('div');
+  card.className    = 'jobs-card';
+  card.dataset.id   = job.id;
+  card.dataset.status = job.status;
+  card.draggable    = true;
+
+  const dateStr  = formatShipDate(job.ship_date);
+  const bdft     = job.total_bdft ? Number(job.total_bdft).toLocaleString() : '—';
+  const method   = job.method || '—';
+  const loadStr  = job.load_count > 1 ? ` × ${job.load_count}` : '';
+  const prev     = prevStatus(job.status);
+  const next     = nextStatus(job.status);
+
+  card.innerHTML = `
+    <div class="jobs-card-top">
+      <div class="jobs-card-customer">${esc(job.customer)}</div>
+      <div class="jobs-card-pill-group">
+        ${job.priority === 'rush' ? '<span class="jobs-rush-badge">RUSH</span>' : ''}
+        ${job.confirmed_to_ship   ? '<span class="jobs-confirmed-badge">✓</span>' : ''}
+      </div>
+    </div>
+    ${job.invoice_number ? `<div class="jobs-card-inv">${esc(job.invoice_number)}</div>` : ''}
+    ${dateStr             ? `<div class="jobs-card-date">${esc(dateStr)}</div>` : ''}
+    ${job.location        ? `<div class="jobs-card-location">${esc(job.location)}</div>` : ''}
+    <div class="jobs-card-meta">
+      <span>${esc(method)}${esc(loadStr)}</span>
+      <span>${bdft} BDFT</span>
+    </div>
+    <div class="jobs-card-actions">
+      ${prev
+        ? `<button class="jobs-arrow-btn" data-dir="prev" data-id="${esc(job.id)}" title="Move to ${STATUS_LABELS[prev]}">←</button>`
+        : '<span></span>'}
+      <span></span>
+      ${next
+        ? `<button class="jobs-arrow-btn" data-dir="next" data-id="${esc(job.id)}" title="Move to ${STATUS_LABELS[next]}">→</button>`
+        : '<span></span>'}
+    </div>
+  `;
+
+  return card;
+}
+
+function prevStatus(s) {
+  const i = STATUS_ORDER.indexOf(s);
+  return i > 0 ? STATUS_ORDER[i - 1] : null;
+}
+
+function nextStatus(s) {
+  const i = STATUS_ORDER.indexOf(s);
+  return i < STATUS_ORDER.length - 1 ? STATUS_ORDER[i + 1] : null;
+}
+
+/* ═══════════════════════════════════════════
+   Toolbar
+═══════════════════════════════════════════ */
+
+function setupToolbar() {
+  document.getElementById('btn-new-job').addEventListener('click', () => openModal(null));
+
+  document.getElementById('btn-load-week').addEventListener('click', () => {
+    const v = document.getElementById('week-filter').value;
+    loadJobs(v ? { week: v } : { week: getCurrentWeekMonday() });
+  });
+
+  document.getElementById('btn-all-jobs').addEventListener('click', () => loadJobs({}));
+
+  document.getElementById('week-filter').addEventListener('change', (e) => {
+    if (e.target.value) loadJobs({ week: e.target.value });
+  });
+}
+
+/* ═══════════════════════════════════════════
+   Mobile tabs
+═══════════════════════════════════════════ */
+
+function setupTabs() {
+  document.getElementById('jobs-tabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.jobs-tab');
+    if (!tab) return;
+    const status = tab.dataset.status;
+
+    document.querySelectorAll('.jobs-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    document.querySelectorAll('.jobs-col').forEach(col => {
+      col.classList.toggle('tab-active', col.dataset.status === status);
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════
+   Board — click & drag
+═══════════════════════════════════════════ */
+
+function setupBoard() {
+  const board = document.getElementById('jobs-board');
+
+  // Click delegation
+  board.addEventListener('click', (e) => {
+    if (e.target.closest('.jobs-arrow-btn')) {
+      const btn = e.target.closest('.jobs-arrow-btn');
+      e.stopPropagation();
+      handleArrow(btn.dataset.id, btn.dataset.dir);
+      return;
+    }
+    const card = e.target.closest('.jobs-card');
+    if (card) openModal(card.dataset.id);
+  });
+
+  // Drag
+  board.addEventListener('dragstart', (e) => {
+    const card = e.target.closest('.jobs-card');
+    if (!card) return;
+    draggedId = card.dataset.id;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  board.addEventListener('dragend', () => {
+    draggedId = null;
+    document.querySelectorAll('.jobs-card.dragging').forEach(c => c.classList.remove('dragging'));
+    document.querySelectorAll('.jobs-col-body.drag-over').forEach(b => b.classList.remove('drag-over'));
+  });
+
+  board.addEventListener('dragover', (e) => {
+    const body = e.target.closest('.jobs-col-body');
+    if (body && draggedId) {
+      e.preventDefault();
+      document.querySelectorAll('.jobs-col-body').forEach(b => b.classList.remove('drag-over'));
+      body.classList.add('drag-over');
+    }
+  });
+
+  board.addEventListener('dragleave', (e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      document.querySelectorAll('.jobs-col-body').forEach(b => b.classList.remove('drag-over'));
+    }
+  });
+
+  board.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    const body = e.target.closest('.jobs-col-body');
+    body && body.classList.remove('drag-over');
+    if (!body || !draggedId) return;
+    const newStatus = body.dataset.status;
+    const job = allJobs.find(j => j.id === draggedId);
+    if (job && job.status !== newStatus) await moveCard(draggedId, newStatus);
+  });
+}
+
+async function handleArrow(jobId, dir) {
+  const job = allJobs.find(j => j.id === jobId);
+  if (!job) return;
+  const newStatus = dir === 'next' ? nextStatus(job.status) : prevStatus(job.status);
+  if (newStatus) await moveCard(jobId, newStatus);
+}
+
+async function moveCard(jobId, newStatus) {
+  const job = allJobs.find(j => j.id === jobId);
+  if (!job) return;
+  const oldStatus = job.status;
+  job.status = newStatus;
+  renderBoard(allJobs);
+
+  try {
+    const res  = await fetch('/api/jobs', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: jobId, status: newStatus }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      job.status = oldStatus;
+      renderBoard(allJobs);
+      showToast('Error: ' + (data.error || 'Could not move job.'));
+    } else if (newStatus === 'done') {
+      showBeadPrompt(jobId, job.customer);
+    }
+  } catch {
+    job.status = oldStatus;
+    renderBoard(allJobs);
+    showToast('Network error. Please try again.');
+  }
+}
+
+function showBeadPrompt(jobId, customer) {
+  let banner = document.getElementById('bead-prompt-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'bead-prompt-banner';
+    banner.style.cssText = [
+      'position:fixed','bottom:20px','right:20px','background:#0f172a',
+      'color:#fff','border-radius:12px','padding:14px 18px',
+      'box-shadow:0 8px 24px rgba(15,23,42,0.25)','font-size:14px',
+      'z-index:999','max-width:320px','display:flex','flex-direction:column','gap:10px'
+    ].join(';');
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = `
+    <div style="font-weight:700;">Job moved to Done</div>
+    <div style="font-size:13px;color:#94a3b8;">Log bead consumption for <strong style="color:#fff;">${esc(customer)}</strong>?</div>
+    <div style="display:flex;gap:8px;">
+      <a href="/production/bead-inventory.html?job_id=${encodeURIComponent(jobId)}"
+         style="background:#dc2626;color:#fff;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:700;text-decoration:none;">
+        Log Consumption
+      </a>
+      <button onclick="document.getElementById('bead-prompt-banner').remove()"
+              style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer;">
+        Dismiss
+      </button>
+    </div>`;
+  banner.style.display = 'flex';
+}
+
+/* ═══════════════════════════════════════════
+   Modal — open / close / populate
+═══════════════════════════════════════════ */
+
+function setupModal() {
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', saveJob);
+  document.getElementById('modal-delete').addEventListener('click', confirmDelete);
+
+  document.getElementById('jobs-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('jobs-modal')) closeModal();
+  });
+
+  document.getElementById('priority-normal').addEventListener('click', () => setPriority('normal'));
+  document.getElementById('priority-rush').addEventListener('click',   () => setPriority('rush'));
+
+  document.getElementById('f-ship-date').addEventListener('change', (e) => {
+    document.getElementById('f-ship-day-display').textContent = getShipDay(e.target.value);
+  });
+
+  document.getElementById('btn-add-li').addEventListener('click', () => addLineItemRow());
+  document.getElementById('btn-load-parts').addEventListener('click', openPartsPicker);
+  document.getElementById('btn-link-combo').addEventListener('click', openComboPicker);
+}
+
+function openModal(jobId) {
+  editingJobId     = jobId;
+  selectedPriority = 'normal';
+  selectedComboId  = null;
+  selectedComboName = '';
+
+  clearForm();
+
+  const isNew = !jobId;
+  document.getElementById('modal-title').textContent  = isNew ? 'New Job' : 'Edit Job';
+  document.getElementById('modal-delete').hidden      = isNew;
+
+  if (!isNew) {
+    const job = allJobs.find(j => j.id === jobId);
+    if (job) populateForm(job);
+  }
+
+  document.getElementById('jobs-modal').hidden = false;
+  document.getElementById('f-customer').focus();
+}
+
+function closeModal() {
+  document.getElementById('jobs-modal').hidden = true;
+  editingJobId = null;
+}
+
+function clearForm() {
+  const textIds = [
+    'f-customer', 'f-sales-lead', 'f-po-number', 'f-invoice-number',
+    'f-ship-date', 'f-delivery-time', 'f-location', 'f-carrier',
+    'f-contact-name', 'f-contact-phone', 'f-payment-info', 'f-bol-info',
+    'f-packing', 'f-notes',
+  ];
+  textIds.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+  document.getElementById('f-ship-day-display').textContent = '';
+  document.getElementById('f-method').value       = '';
+  document.getElementById('f-scrap-pickup').value = '';
+  document.getElementById('f-load-count').value   = '1';
+  document.getElementById('f-total-bdft').value   = '0';
+  document.getElementById('f-confirmed').checked  = false;
+  document.getElementById('li-container').innerHTML = '';
+
+  setPriority('normal');
+  clearCombo();
+  setModalStatus('');
+}
+
+function populateForm(job) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+
+  set('f-customer',       job.customer);
+  set('f-sales-lead',     job.sales_lead);
+  set('f-po-number',      job.po_number);
+  set('f-invoice-number', job.invoice_number);
+  set('f-ship-date',      job.ship_date);
+  set('f-delivery-time',  job.delivery_time);
+  set('f-location',       job.location);
+  set('f-method',         job.method);
+  set('f-carrier',        job.carrier);
+  set('f-load-count',     job.load_count ?? 1);
+  set('f-total-bdft',     job.total_bdft  ?? 0);
+  set('f-scrap-pickup',   job.scrap_pickup);
+  set('f-contact-name',   job.contact_name);
+  set('f-contact-phone',  job.contact_phone);
+  set('f-payment-info',   job.payment_info);
+  set('f-bol-info',       job.bol_info);
+  set('f-packing',        job.packing_instructions);
+  set('f-notes',          job.notes);
+
+  document.getElementById('f-ship-day-display').textContent = getShipDay(job.ship_date);
+  document.getElementById('f-confirmed').checked = !!job.confirmed_to_ship;
+
+  setPriority(job.priority || 'normal');
+
+  document.getElementById('li-container').innerHTML = '';
+  if (Array.isArray(job.line_items)) {
+    job.line_items.forEach(li => addLineItemRow(li));
+  }
+
+  if (job.combo_id) showComboBadge(job.combo_id, 'Linked Combo');
+}
+
+function setPriority(p) {
+  selectedPriority = p;
+  document.getElementById('priority-normal').className =
+    'jobs-priority-btn' + (p === 'normal' ? ' active-normal' : '');
+  document.getElementById('priority-rush').className =
+    'jobs-priority-btn' + (p === 'rush' ? ' active-rush' : '');
+}
+
+function setModalStatus(msg, isError) {
+  const el = document.getElementById('modal-status');
+  el.textContent = msg;
+  el.className   = 'jobs-modal-status' + (isError ? ' error' : '');
+}
+
+/* ═══════════════════════════════════════════
+   Line items
+═══════════════════════════════════════════ */
+
+function addLineItemRow(data) {
+  const row = document.createElement('div');
+  row.className = 'jobs-li-row';
+  row.innerHTML = `
+    <input type="text"   class="li-part" placeholder="Part #"      value="${esc(data?.part_number  ?? '')}">
+    <input type="text"   class="li-desc" placeholder="Description" value="${esc(data?.description  ?? '')}">
+    <input type="number" class="li-qty"  placeholder="Qty"         value="${data?.quantity ?? ''}" min="0">
+    <input type="text"   class="li-dims" placeholder="Dims"        value="${esc(data?.dimensions   ?? '')}">
+    <button type="button" class="jobs-li-remove" title="Remove">&times;</button>
+  `;
+  row.querySelector('.jobs-li-remove').addEventListener('click', () => row.remove());
+  document.getElementById('li-container').appendChild(row);
+  return row;
+}
+
+function collectLineItems() {
+  return Array.from(document.querySelectorAll('#li-container .jobs-li-row'))
+    .map((row, i) => ({
+      part_number: row.querySelector('.li-part').value.trim(),
+      description: row.querySelector('.li-desc').value.trim(),
+      quantity:    parseInt(row.querySelector('.li-qty').value,  10) || 0,
+      dimensions:  row.querySelector('.li-dims').value.trim(),
+      sort_order:  i,
+    }))
+    .filter(li => li.description || li.part_number);
+}
+
+/* ═══════════════════════════════════════════
+   Combo badge
+═══════════════════════════════════════════ */
+
+function clearCombo() {
+  selectedComboId = null;
+  selectedComboName = '';
+  const wrap = document.getElementById('combo-badge-wrap');
+  wrap.hidden   = true;
+  wrap.innerHTML = '';
+  document.getElementById('btn-link-combo').hidden = false;
+}
+
+function showComboBadge(id, name) {
+  selectedComboId   = id;
+  selectedComboName = name;
+  const wrap = document.getElementById('combo-badge-wrap');
+  wrap.hidden   = false;
+  wrap.innerHTML = `
+    <span class="jobs-combo-badge">
+      <span>📦 ${esc(name)}</span>
+      <button type="button" class="jobs-combo-clear" title="Remove link">&times;</button>
+    </span>
+  `;
+  wrap.querySelector('.jobs-combo-clear').addEventListener('click', clearCombo);
+}
+
+/* ═══════════════════════════════════════════
+   Save / Delete
+═══════════════════════════════════════════ */
+
+async function saveJob() {
+  const customer = document.getElementById('f-customer').value.trim();
+  if (!customer) {
+    setModalStatus('Customer is required.', true);
+    document.getElementById('f-customer').focus();
+    return;
+  }
+
+  const shipDate = document.getElementById('f-ship-date').value;
+
+  const payload = {
+    customer,
+    po_number:            document.getElementById('f-po-number').value.trim(),
+    invoice_number:       document.getElementById('f-invoice-number').value.trim(),
+    sales_lead:           document.getElementById('f-sales-lead').value.trim(),
+    ship_date:            shipDate,
+    ship_day:             getShipDay(shipDate),
+    delivery_time:        document.getElementById('f-delivery-time').value.trim(),
+    location:             document.getElementById('f-location').value.trim(),
+    method:               document.getElementById('f-method').value,
+    carrier:              document.getElementById('f-carrier').value.trim(),
+    load_count:           parseInt(document.getElementById('f-load-count').value,  10) || 1,
+    total_bdft:           parseFloat(document.getElementById('f-total-bdft').value)    || 0,
+    scrap_pickup:         document.getElementById('f-scrap-pickup').value,
+    confirmed_to_ship:    document.getElementById('f-confirmed').checked ? 1 : 0,
+    priority:             selectedPriority,
+    contact_name:         document.getElementById('f-contact-name').value.trim(),
+    contact_phone:        document.getElementById('f-contact-phone').value.trim(),
+    payment_info:         document.getElementById('f-payment-info').value.trim(),
+    bol_info:             document.getElementById('f-bol-info').value.trim(),
+    packing_instructions: document.getElementById('f-packing').value.trim(),
+    notes:                document.getElementById('f-notes').value.trim(),
+    combo_id:             selectedComboId || null,
+    line_items:           collectLineItems(),
+  };
+
+  const btn = document.getElementById('modal-save');
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+  setModalStatus('');
+
+  try {
+    if (editingJobId) payload.id = editingJobId;
+
+    const res  = await fetch('/api/jobs', {
+      method:  editingJobId ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      setModalStatus(data.error || 'Save failed.', true);
+      return;
+    }
+
+    if (editingJobId) {
+      const idx = allJobs.findIndex(j => j.id === editingJobId);
+      if (idx !== -1) allJobs[idx] = data.job;
+      else allJobs.unshift(data.job);
+    } else {
+      allJobs.unshift(data.job);
+    }
+
+    renderBoard(allJobs);
+    closeModal();
+    showToast(editingJobId ? 'Job updated.' : 'Job created.');
+  } catch {
+    setModalStatus('Network error. Please try again.', true);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Save Job';
+  }
+}
+
+async function confirmDelete() {
+  if (!editingJobId) return;
+  const job  = allJobs.find(j => j.id === editingJobId);
+  const name = job ? job.customer : 'this job';
+  if (!confirm(`Delete job for "${name}"? This cannot be undone.`)) return;
+
+  try {
+    const res  = await fetch('/api/jobs', {
+      method:  'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id: editingJobId }),
+    });
+    const data = await res.json();
+    if (!data.ok) { showToast('Error: ' + (data.error || 'Delete failed.')); return; }
+
+    allJobs = allJobs.filter(j => j.id !== editingJobId);
+    renderBoard(allJobs);
+    closeModal();
+    showToast('Job deleted.');
+  } catch {
+    showToast('Network error. Please try again.');
+  }
+}
+
+/* ═══════════════════════════════════════════
+   Pickers
+═══════════════════════════════════════════ */
+
+function setupPickers() {
+  // Parts
+  document.getElementById('parts-picker-close').addEventListener('click', () => {
+    document.getElementById('parts-picker').hidden = true;
+  });
+  document.getElementById('parts-picker').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('parts-picker'))
+      document.getElementById('parts-picker').hidden = true;
+  });
+  document.getElementById('parts-picker-search').addEventListener('input', filterParts);
+
+  // Combo
+  document.getElementById('combo-picker-close').addEventListener('click', () => {
+    document.getElementById('combo-picker').hidden = true;
+  });
+  document.getElementById('combo-picker').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('combo-picker'))
+      document.getElementById('combo-picker').hidden = true;
+  });
+}
+
+let partsAll = [];
+
+async function openPartsPicker() {
+  const body = document.getElementById('parts-picker-body');
+  document.getElementById('parts-picker-search').value = '';
+  body.innerHTML = '<p style="padding:12px;color:var(--muted)">Loading…</p>';
+  document.getElementById('parts-picker').hidden = false;
+
+  if (!partsCache) {
+    try {
+      const res  = await fetch('/api/parts');
+      const data = await res.json();
+      partsCache = data.parts || [];
+    } catch {
+      body.innerHTML = '<p style="padding:12px;color:var(--muted)">Failed to load parts.</p>';
+      return;
+    }
+  }
+
+  partsAll = partsCache;
+  renderPartsList(partsAll);
+}
+
+function filterParts() {
+  const q = document.getElementById('parts-picker-search').value.toLowerCase();
+  renderPartsList(partsAll.filter(p =>
+    (p.part_number || '').toLowerCase().includes(q) ||
+    (p.customer    || '').toLowerCase().includes(q)
+  ));
+}
+
+function renderPartsList(parts) {
+  const body = document.getElementById('parts-picker-body');
+  if (!parts.length) {
+    body.innerHTML = '<p style="padding:12px;color:var(--muted)">No parts found.</p>';
+    return;
+  }
+  body.innerHTML = '';
+  for (const p of parts) {
+    const item = document.createElement('div');
+    item.className = 'jobs-picker-item';
+    item.innerHTML = `
+      <div style="font-weight:600;">${esc(p.part_number)}</div>
+      <div class="jobs-picker-item-sub">${esc(p.customer)} · ${esc(p.density_material)} · ${p.length_in}×${p.width_in}×${p.height_in}</div>
+    `;
+    item.addEventListener('click', () => {
+      addLineItemRow({
+        part_id:     p.id,
+        part_number: p.part_number,
+        description: `${p.density_material} ${p.length_in}×${p.width_in}×${p.height_in}`,
+        quantity:    1,
+        dimensions:  `${p.length_in}×${p.width_in}×${p.height_in}`,
+      });
+      document.getElementById('parts-picker').hidden = true;
+    });
+    body.appendChild(item);
+  }
+}
+
+async function openComboPicker() {
+  const body = document.getElementById('combo-picker-body');
+  body.innerHTML = '<p style="padding:12px;color:var(--muted)">Loading…</p>';
+  document.getElementById('combo-picker').hidden = false;
+
+  if (!combosCache) {
+    try {
+      const res  = await fetch('/api/combos');
+      const data = await res.json();
+      combosCache = data.combos || [];
+    } catch {
+      body.innerHTML = '<p style="padding:12px;color:var(--muted)">Failed to load combos.</p>';
+      return;
+    }
+  }
+
+  if (!combosCache.length) {
+    body.innerHTML = '<p style="padding:12px;color:var(--muted)">No saved combos.</p>';
+    return;
+  }
+
+  body.innerHTML = '';
+  for (const c of combosCache) {
+    const item = document.createElement('div');
+    item.className = 'jobs-picker-item';
+    item.innerHTML = `
+      <div style="font-weight:600;">${esc(c.name)}</div>
+      <div class="jobs-picker-item-sub">${esc(c.description || '')}${c.description ? ' · ' : ''}${c.block_l}×${c.block_w}×${c.block_h}</div>
+    `;
+    item.addEventListener('click', () => {
+      showComboBadge(c.id, c.name);
+      document.getElementById('combo-picker').hidden = true;
+    });
+    body.appendChild(item);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   Toast
+═══════════════════════════════════════════ */
+
+function showToast(msg) {
+  const t = document.getElementById('jobs-toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('visible'), 3200);
+}
+</script>
+
+</body>
+</html>
