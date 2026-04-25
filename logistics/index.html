@@ -1,0 +1,948 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Logistics — xPanda Operations</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+<link rel="icon" href="/assets/img/favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+
+<link rel="stylesheet" href="/logistics/logistics-shared.css">
+</head>
+<body>
+
+<script src="/logistics/logistics-header.js"></script>
+<script>
+document.getElementById('logistics-page-title').textContent = 'Logistics';
+document.getElementById('logistics-page-subtitle').textContent = 'Inbound deliveries and outbound shipments';
+</script>
+
+<div class="logistics-wrap">
+
+  <!-- Stats Row -->
+  <div class="logistics-stats">
+    <div class="logistics-stat-card">
+      <div class="logistics-stat-label">This Week Outbound</div>
+      <div class="logistics-stat-value" id="stat-outbound-week">—</div>
+    </div>
+    <div class="logistics-stat-card">
+      <div class="logistics-stat-label">Pending Inbound</div>
+      <div class="logistics-stat-value" id="stat-inbound-pending">—</div>
+      <div class="logistics-stat-sub">scheduled or in transit</div>
+    </div>
+    <div class="logistics-stat-card">
+      <div class="logistics-stat-label">In Transit</div>
+      <div class="logistics-stat-value" id="stat-in-transit">—</div>
+    </div>
+    <div class="logistics-stat-card">
+      <div class="logistics-stat-label">Delivered (30d)</div>
+      <div class="logistics-stat-value" id="stat-delivered">—</div>
+    </div>
+  </div>
+
+  <!-- Main Tab Strip -->
+  <div class="logistics-main-tabs">
+    <button class="logistics-main-tab active" onclick="switchTab('outbound', this)">Outbound Shipments</button>
+    <button class="logistics-main-tab" onclick="switchTab('inbound', this)">Inbound Deliveries</button>
+  </div>
+
+  <!-- ── Outbound Tab ──────────────────────────────────────────────────── -->
+  <div class="logistics-tab-pane active" id="tab-outbound">
+
+    <div class="logistics-toolbar">
+      <button class="logistics-btn logistics-btn-outbound" onclick="openModal('outbound')">+ New Shipment</button>
+      <button class="logistics-btn logistics-btn-outline" onclick="openShipJobPicker()">Ship from Job…</button>
+
+      <div class="logistics-toolbar-right">
+        <div class="logistics-filter-row" style="margin:0;">
+          <input type="week" id="outbound-week-input" class="logistics-filter-input" onchange="loadOutbound()">
+          <select class="logistics-filter-select" id="outbound-status-filter" onchange="loadOutbound()">
+            <option value="">All Statuses</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="in_transit">In Transit</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <button class="logistics-btn logistics-btn-outline" onclick="clearOutboundWeek()">Show All</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="outbound-content">
+      <div style="color:#94a3b8;font-size:14px;padding:20px 0;">Loading…</div>
+    </div>
+
+  </div>
+
+  <!-- ── Inbound Tab ───────────────────────────────────────────────────── -->
+  <div class="logistics-tab-pane" id="tab-inbound">
+
+    <div class="logistics-toolbar">
+      <button class="logistics-btn logistics-btn-inbound" onclick="openModal('inbound')">+ New Delivery</button>
+
+      <div class="logistics-toolbar-right">
+        <div class="logistics-filter-row" style="margin:0;">
+          <select class="logistics-filter-select" id="inbound-status-filter" onchange="loadInbound()">
+            <option value="">All Statuses</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="in_transit">In Transit</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <select class="logistics-filter-select" id="inbound-days-filter" onchange="loadInbound()">
+            <option value="30">Last 30 days</option>
+            <option value="7">Last 7 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="inbound-content">
+      <div style="color:#94a3b8;font-size:14px;padding:20px 0;">Loading…</div>
+    </div>
+
+  </div>
+
+</div><!-- /.logistics-wrap -->
+
+<!-- ── Shipment Modal ─────────────────────────────────────────────────────── -->
+<div class="logistics-modal-overlay hidden" id="shipment-modal">
+  <div class="logistics-modal-panel">
+    <div class="logistics-modal-header">
+      <h2 id="modal-title">New Shipment</h2>
+      <button class="logistics-modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="logistics-modal-body">
+      <div class="logistics-error" id="modal-error"></div>
+
+      <!-- Direction toggle — hidden when editing (direction is locked) -->
+      <div id="dir-toggle-wrap">
+        <div class="logistics-dir-toggle">
+          <button class="logistics-dir-btn active-outbound" id="dir-btn-outbound" onclick="setDirection('outbound')">Outbound</button>
+          <button class="logistics-dir-btn" id="dir-btn-inbound" onclick="setDirection('inbound')">Inbound</button>
+        </div>
+      </div>
+
+      <!-- Common fields -->
+      <div class="logistics-field-row">
+        <div class="logistics-field">
+          <label>Ship Date</label>
+          <input type="date" id="f-ship-date">
+        </div>
+        <div class="logistics-field">
+          <label>Delivery Date</label>
+          <input type="date" id="f-delivery-date">
+        </div>
+      </div>
+
+      <div class="logistics-field-row">
+        <div class="logistics-field">
+          <label>Status</label>
+          <select id="f-status">
+            <option value="scheduled">Scheduled</option>
+            <option value="in_transit">In Transit</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div class="logistics-field">
+          <label>Method</label>
+          <select id="f-method">
+            <option value="">— select —</option>
+            <option value="Dry Van">Dry Van</option>
+            <option value="Flatbed">Flatbed</option>
+            <option value="XPanda Truck">XPanda Truck</option>
+            <option value="Customer Pickup">Customer Pickup</option>
+            <option value="LTL">LTL</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="logistics-field-row">
+        <div class="logistics-field">
+          <label>Carrier</label>
+          <input type="text" id="f-carrier" placeholder="e.g. LISMA, XPanda Truck">
+        </div>
+        <div class="logistics-field">
+          <label>BOL Number</label>
+          <input type="text" id="f-bol-number" placeholder="BOL / tracking #">
+        </div>
+      </div>
+
+      <!-- Outbound-specific -->
+      <div class="logistics-field-section" id="outbound-fields">
+        <div class="logistics-field-section-label">Outbound Details</div>
+
+        <div class="logistics-field">
+          <label>Customer <span style="color:#dc2626;">*</span></label>
+          <input type="text" id="f-customer" placeholder="Customer name">
+        </div>
+
+        <div class="logistics-field">
+          <label>Destination / Location</label>
+          <input type="text" id="f-destination" placeholder="Ship-to address or location">
+        </div>
+
+        <div class="logistics-field-row">
+          <div class="logistics-field">
+            <label>Load Count</label>
+            <input type="number" id="f-load-count" min="1" step="1" value="1">
+          </div>
+          <div class="logistics-field">
+            <label>Total BDFT</label>
+            <input type="number" id="f-total-bdft" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+
+        <div class="logistics-field">
+          <label>Linked Job</label>
+          <select id="f-job-id">
+            <option value="">— no linked job —</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Inbound-specific -->
+      <div class="logistics-field-section" id="inbound-fields" style="display:none;">
+        <div class="logistics-field-section-label">Inbound Details</div>
+
+        <div class="logistics-field">
+          <label>Supplier <span style="color:#dc2626;">*</span></label>
+          <input type="text" id="f-supplier" placeholder="Supplier / vendor name">
+        </div>
+
+        <div class="logistics-field">
+          <label>Origin</label>
+          <input type="text" id="f-origin" placeholder="Shipping from">
+        </div>
+
+        <div class="logistics-field-row">
+          <div class="logistics-field">
+            <label>Bead Type</label>
+            <select id="f-bead-type-id">
+              <option value="">— select type —</option>
+            </select>
+          </div>
+          <div class="logistics-field">
+            <label>Weight (lbs)</label>
+            <input type="number" id="f-weight-lbs" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+
+        <div class="logistics-field">
+          <label>Destination Silo</label>
+          <select id="f-silo-id" onchange="onSiloChange()">
+            <option value="">— no silo (log separately) —</option>
+          </select>
+        </div>
+
+        <div class="logistics-checkbox-row" id="auto-log-wrap" style="display:none;">
+          <input type="checkbox" id="f-auto-log" checked>
+          <label for="f-auto-log" style="text-transform:none;letter-spacing:0;font-size:14px;">
+            Auto-update silo inventory when saved
+          </label>
+        </div>
+      </div>
+
+      <div class="logistics-field">
+        <label>Notes</label>
+        <textarea id="f-notes" rows="2" placeholder="optional notes"></textarea>
+      </div>
+
+      <input type="hidden" id="f-id">
+      <input type="hidden" id="f-direction">
+    </div>
+
+    <div class="logistics-modal-footer">
+      <button class="logistics-btn logistics-btn-outline" id="modal-delete-btn" onclick="confirmDelete()" style="margin-right:auto;display:none;">Delete</button>
+      <button class="logistics-btn logistics-btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="logistics-btn logistics-btn-primary" id="modal-save-btn" onclick="saveShipment()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Ship from Job Picker ───────────────────────────────────────────────── -->
+<div class="logistics-modal-overlay hidden" id="job-picker-modal">
+  <div class="logistics-modal-panel" style="max-width:520px;">
+    <div class="logistics-modal-header">
+      <h2>Ship from Job</h2>
+      <button class="logistics-modal-close" onclick="closeJobPicker()">×</button>
+    </div>
+    <div class="logistics-modal-body">
+      <p style="margin:0 0 14px;font-size:14px;color:#64748b;">Select a job to pre-fill a new outbound shipment.</p>
+      <input type="text" id="job-picker-search" class="logistics-filter-input" style="width:100%;margin-bottom:12px;" placeholder="Search customer or invoice…" oninput="filterJobPickerList()">
+      <div id="job-picker-list" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+    <div class="logistics-modal-footer">
+      <button class="logistics-btn logistics-btn-outline" onclick="closeJobPicker()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Prompt Banner ──────────────────────────────────────────────────────── -->
+<div class="logistics-prompt-banner" id="prompt-banner">
+  <div class="logistics-prompt-banner-title" id="prompt-title">Shipment delivered</div>
+  <div class="logistics-prompt-banner-msg" id="prompt-msg"></div>
+  <div class="logistics-prompt-banner-actions">
+    <button class="logistics-btn logistics-btn-outbound" id="prompt-yes-btn" onclick="promptYes()">Yes, update job</button>
+    <button class="logistics-btn logistics-btn-outline" onclick="dismissPrompt()" style="color:#fff;border-color:rgba(255,255,255,.2);">Dismiss</button>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let activeTab       = 'outbound';
+let allSilos        = [];
+let allBeadTypes    = [];
+let allOpenJobs     = [];
+let outboundData    = [];
+let inboundData     = [];
+let editingId       = null;
+let promptJobId     = null;
+let jobPickerFull   = [];
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(async () => {
+  setCurrentWeek();
+  await Promise.all([loadSilos(), loadBeadTypes(), loadOpenJobs()]);
+  await Promise.all([loadOutbound(), loadInbound()]);
+  updateStats();
+
+  // Job board → Logistics: pre-fill from ?job_id=
+  const params = new URLSearchParams(location.search);
+  const preJobId = params.get('job_id');
+  if (preJobId) {
+    const job = allOpenJobs.find(j => j.id === preJobId);
+    if (job) { openModal('outbound'); prefillFromJob(job); }
+  }
+})();
+
+function setCurrentWeek() {
+  const input = document.getElementById('outbound-week-input');
+  const now   = new Date();
+  const day   = now.getDay(); // 0=Sun
+  const diff  = day === 0 ? -6 : 1 - day;
+  const mon   = new Date(now);
+  mon.setDate(now.getDate() + diff);
+  // format YYYY-WNN for week input
+  const yr   = mon.getFullYear();
+  const wn   = getISOWeek(mon);
+  input.value = `${yr}-W${String(wn).padStart(2, '0')}`;
+}
+
+function getISOWeek(d) {
+  const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  return Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
+}
+
+function weekInputToMonday(val) {
+  if (!val) return null;
+  // val = "YYYY-Www"
+  const [yearStr, weekStr] = val.split('-W');
+  const year = parseInt(yearStr, 10);
+  const week = parseInt(weekStr, 10);
+  const jan4 = new Date(year, 0, 4);
+  const dayOfWeek = jan4.getDay() || 7;
+  const mon = new Date(jan4);
+  mon.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
+  return mon.toISOString().slice(0, 10);
+}
+
+// ── Data Loaders ───────────────────────────────────────────────────────────
+async function loadSilos() {
+  const res  = await fetch('/api/silos');
+  const body = await res.json();
+  if (body.ok) {
+    allSilos = body.data;
+    const siloOpts = allSilos.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    document.getElementById('f-silo-id').innerHTML =
+      `<option value="">— no silo (log separately) —</option>${siloOpts}`;
+  }
+}
+
+async function loadBeadTypes() {
+  const res  = await fetch('/api/bead-types');
+  const body = await res.json();
+  if (body.ok) {
+    allBeadTypes = body.data;
+    const opts = allBeadTypes.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+    document.getElementById('f-bead-type-id').innerHTML =
+      `<option value="">— select type —</option>${opts}`;
+  }
+}
+
+async function loadOpenJobs() {
+  const res  = await fetch('/api/jobs?status=not_started,in_production,done');
+  const body = await res.json();
+  if (body.ok) {
+    allOpenJobs = body.data;
+    jobPickerFull = body.data;
+    const opts = allOpenJobs.map(j => {
+      const label = `${esc(j.customer)}${j.invoice_number ? ' · ' + esc(j.invoice_number) : ''}`;
+      return `<option value="${j.id}">${label}</option>`;
+    }).join('');
+    document.getElementById('f-job-id').innerHTML =
+      `<option value="">— no linked job —</option>${opts}`;
+  }
+}
+
+async function loadOutbound() {
+  const weekVal = document.getElementById('outbound-week-input').value;
+  const status  = document.getElementById('outbound-status-filter').value;
+  const params  = new URLSearchParams({ direction: 'outbound' });
+  if (weekVal) {
+    const mon = weekInputToMonday(weekVal);
+    if (mon) params.set('week', mon);
+  } else {
+    params.set('days', '60');
+  }
+  if (status) params.set('status', status);
+
+  const res  = await fetch(`/api/shipments?${params}`);
+  const body = await res.json();
+  outboundData = body.ok ? body.data : [];
+  renderOutbound();
+}
+
+async function loadInbound() {
+  const status = document.getElementById('inbound-status-filter').value;
+  const days   = document.getElementById('inbound-days-filter').value;
+  const params = new URLSearchParams({ direction: 'inbound', days });
+  if (status) params.set('status', status);
+
+  const res  = await fetch(`/api/shipments?${params}`);
+  const body = await res.json();
+  inboundData = body.ok ? body.data : [];
+  renderInbound();
+}
+
+// ── Stats ──────────────────────────────────────────────────────────────────
+function updateStats() {
+  // outbound this week
+  const weekVal  = document.getElementById('outbound-week-input').value;
+  const mon      = weekVal ? weekInputToMonday(weekVal) : null;
+  let weekCount  = 0;
+  if (mon) {
+    const monD = new Date(mon);
+    const sunD = new Date(mon); sunD.setDate(monD.getDate() + 6);
+    weekCount  = outboundData.filter(s => {
+      const d = new Date(s.ship_date);
+      return d >= monD && d <= sunD;
+    }).length;
+  } else {
+    weekCount = outboundData.length;
+  }
+
+  const inboundPending = inboundData.filter(s =>
+    s.status === 'scheduled' || s.status === 'in_transit'
+  ).length;
+  const inTransit = [...outboundData, ...inboundData].filter(s => s.status === 'in_transit').length;
+  const delivered = [...outboundData, ...inboundData].filter(s => s.status === 'delivered').length;
+
+  document.getElementById('stat-outbound-week').textContent   = weekCount;
+  document.getElementById('stat-inbound-pending').textContent = inboundPending;
+  document.getElementById('stat-in-transit').textContent      = inTransit;
+  document.getElementById('stat-delivered').textContent       = delivered;
+}
+
+// ── Tab Switching ──────────────────────────────────────────────────────────
+function switchTab(tab, btn) {
+  activeTab = tab;
+  document.querySelectorAll('.logistics-main-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.logistics-tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+function clearOutboundWeek() {
+  document.getElementById('outbound-week-input').value = '';
+  loadOutbound();
+}
+
+// ── Render Outbound ────────────────────────────────────────────────────────
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function renderOutbound() {
+  const container = document.getElementById('outbound-content');
+  if (!outboundData.length) {
+    container.innerHTML = `<div style="color:#94a3b8;font-size:14px;padding:20px 0;">No outbound shipments found.</div>`;
+    updateStats();
+    return;
+  }
+
+  // Group by ship_date
+  const groups = {};
+  for (const s of outboundData) {
+    const key = s.ship_date || 'No Date';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(s);
+  }
+
+  const sortedDates = Object.keys(groups).sort((a, b) => {
+    if (a === 'No Date') return 1;
+    if (b === 'No Date') return -1;
+    return a < b ? -1 : 1;
+  });
+
+  container.innerHTML = sortedDates.map(dateKey => {
+    const rows    = groups[dateKey];
+    const dayName = dateKey !== 'No Date' ? DAYS[new Date(dateKey + 'T12:00:00').getDay()] : 'No Date';
+    const label   = dateKey !== 'No Date'
+      ? `${dayName} — ${formatDate(dateKey)}`
+      : 'No Date';
+
+    const rowsHtml = rows.map(s => buildOutboundRow(s)).join('');
+    return `
+      <div class="logistics-day-group">
+        <p class="logistics-day-label">${label}</p>
+        <div class="logistics-table-wrap">
+          <table class="logistics-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Method / Carrier</th>
+                <th>Loads</th>
+                <th>BDFT</th>
+                <th>BOL #</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join('');
+
+  updateStats();
+}
+
+function buildOutboundRow(s) {
+  const linkedJob = allOpenJobs.find(j => j.id === s.job_id);
+  const jobLink   = linkedJob
+    ? `<a class="logistics-job-link" href="/jobs/?job_id=${linkedJob.id}">Job: ${esc(linkedJob.customer)}${linkedJob.invoice_number ? ' · ' + esc(linkedJob.invoice_number) : ''}</a>`
+    : (s.job_id ? `<a class="logistics-job-link" href="/jobs/">Job linked ↗</a>` : '');
+
+  const methodCarrier = [s.method, s.carrier].filter(Boolean).join(' · ');
+  const bdft = s.total_bdft ? fmtNum(s.total_bdft) : '—';
+
+  return `<tr onclick="openEdit('${s.id}')">
+    <td class="logistics-customer-cell">
+      ${esc(s.customer) || '<span style="color:#94a3b8;">—</span>'}
+      ${jobLink ? `<br>${jobLink}` : ''}
+    </td>
+    <td>${esc(methodCarrier) || '—'}</td>
+    <td>${s.load_count || 1}</td>
+    <td>${bdft}</td>
+    <td>${esc(s.bol_number) || '—'}</td>
+    <td>${statusBadge(s.status)}</td>
+  </tr>`;
+}
+
+// ── Render Inbound ─────────────────────────────────────────────────────────
+function renderInbound() {
+  const container = document.getElementById('inbound-content');
+  if (!inboundData.length) {
+    container.innerHTML = `<div style="color:#94a3b8;font-size:14px;padding:20px 0;">No inbound deliveries found.</div>`;
+    updateStats();
+    return;
+  }
+
+  // Scheduled/in-transit at top, then delivered
+  const active   = inboundData.filter(s => s.status !== 'delivered' && s.status !== 'cancelled');
+  const done     = inboundData.filter(s => s.status === 'delivered' || s.status === 'cancelled');
+
+  const allRows = [...active, ...done];
+
+  container.innerHTML = `
+    <div class="logistics-table-wrap">
+      <table class="logistics-table">
+        <thead>
+          <tr>
+            <th>Supplier</th>
+            <th>Bead Type</th>
+            <th>Weight (lbs)</th>
+            <th>Ship Date</th>
+            <th>Carrier</th>
+            <th>BOL #</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${allRows.map(s => buildInboundRow(s)).join('')}</tbody>
+      </table>
+    </div>`;
+
+  updateStats();
+}
+
+function buildInboundRow(s) {
+  const beadType = s.bead_type ||
+    allBeadTypes.find(t => t.id === s.bead_type_id)?.name || '—';
+  const weightStr = s.weight_lbs ? fmtNum(s.weight_lbs) + ' lbs' : '—';
+
+  return `<tr onclick="openEdit('${s.id}')">
+    <td class="logistics-customer-cell">${esc(s.customer) || '—'}</td>
+    <td>${esc(beadType)}</td>
+    <td>${weightStr}</td>
+    <td>${s.ship_date ? formatDate(s.ship_date) : '—'}</td>
+    <td>${esc(s.carrier) || '—'}</td>
+    <td>${esc(s.bol_number) || '—'}</td>
+    <td>${statusBadge(s.status)}</td>
+  </tr>`;
+}
+
+// ── Modal ──────────────────────────────────────────────────────────────────
+let currentDirection = 'outbound';
+
+function openModal(direction, prefill) {
+  editingId        = null;
+  currentDirection = direction || 'outbound';
+
+  clearForm();
+  setDirection(currentDirection);
+  showError('');
+
+  document.getElementById('modal-title').textContent =
+    currentDirection === 'outbound' ? 'New Outbound Shipment' : 'New Inbound Delivery';
+  document.getElementById('dir-toggle-wrap').style.display = '';
+  document.getElementById('modal-delete-btn').style.display = 'none';
+  document.getElementById('modal-save-btn').textContent = 'Save';
+
+  if (prefill) applyPrefill(prefill);
+
+  document.getElementById('shipment-modal').classList.remove('hidden');
+}
+
+function openEdit(id) {
+  const s = [...outboundData, ...inboundData].find(x => x.id === id);
+  if (!s) return;
+
+  editingId        = id;
+  currentDirection = s.direction;
+
+  clearForm();
+  setDirection(currentDirection, true); // locked
+
+  document.getElementById('modal-title').textContent =
+    currentDirection === 'outbound' ? 'Edit Outbound Shipment' : 'Edit Inbound Delivery';
+  document.getElementById('dir-toggle-wrap').style.display = 'none';
+  document.getElementById('modal-delete-btn').style.display = '';
+  document.getElementById('modal-save-btn').textContent = 'Save Changes';
+  showError('');
+
+  // Populate
+  document.getElementById('f-id').value           = s.id;
+  document.getElementById('f-direction').value    = s.direction;
+  document.getElementById('f-ship-date').value    = s.ship_date || '';
+  document.getElementById('f-delivery-date').value= s.delivery_date || '';
+  document.getElementById('f-status').value       = s.status;
+  document.getElementById('f-method').value       = s.method || '';
+  document.getElementById('f-carrier').value      = s.carrier || '';
+  document.getElementById('f-bol-number').value   = s.bol_number || '';
+  document.getElementById('f-notes').value        = s.notes || '';
+
+  if (currentDirection === 'outbound') {
+    document.getElementById('f-customer').value   = s.customer || '';
+    document.getElementById('f-destination').value= s.destination || '';
+    document.getElementById('f-load-count').value = s.load_count || 1;
+    document.getElementById('f-total-bdft').value = s.total_bdft || '';
+    document.getElementById('f-job-id').value     = s.job_id || '';
+  } else {
+    document.getElementById('f-supplier').value   = s.customer || '';
+    document.getElementById('f-origin').value     = s.origin || '';
+    document.getElementById('f-weight-lbs').value = s.weight_lbs || '';
+    document.getElementById('f-bead-type-id').value = '';
+    // match bead type by name
+    const bt = allBeadTypes.find(t => t.name === s.bead_type);
+    if (bt) document.getElementById('f-bead-type-id').value = bt.id;
+    document.getElementById('f-silo-id').value    = '';
+  }
+
+  document.getElementById('shipment-modal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('shipment-modal').classList.add('hidden');
+  editingId = null;
+}
+
+function clearForm() {
+  ['f-ship-date','f-delivery-date','f-carrier','f-bol-number','f-notes',
+   'f-customer','f-destination','f-supplier','f-origin'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const lc = document.getElementById('f-load-count'); if (lc) lc.value = 1;
+  const bd = document.getElementById('f-total-bdft'); if (bd) bd.value = '';
+  const wl = document.getElementById('f-weight-lbs'); if (wl) wl.value = '';
+  document.getElementById('f-status').value = 'scheduled';
+  document.getElementById('f-method').value = '';
+  document.getElementById('f-job-id').value = '';
+  document.getElementById('f-bead-type-id').value = '';
+  document.getElementById('f-silo-id').value = '';
+  document.getElementById('f-id').value = '';
+}
+
+function setDirection(dir, locked) {
+  currentDirection = dir;
+  document.getElementById('f-direction').value = dir;
+
+  document.getElementById('outbound-fields').style.display = dir === 'outbound' ? '' : 'none';
+  document.getElementById('inbound-fields').style.display  = dir === 'inbound'  ? '' : 'none';
+
+  const btnOut = document.getElementById('dir-btn-outbound');
+  const btnIn  = document.getElementById('dir-btn-inbound');
+  btnOut.className = `logistics-dir-btn${dir === 'outbound' ? ' active-outbound' : ''}`;
+  btnIn.className  = `logistics-dir-btn${dir === 'inbound'  ? ' active-inbound'  : ''}`;
+
+  if (locked) {
+    btnOut.disabled = true;
+    btnIn.disabled  = true;
+  } else {
+    btnOut.disabled = false;
+    btnIn.disabled  = false;
+  }
+}
+
+function onSiloChange() {
+  const siloId = document.getElementById('f-silo-id').value;
+  document.getElementById('auto-log-wrap').style.display = siloId ? '' : 'none';
+}
+
+// ── Save ───────────────────────────────────────────────────────────────────
+async function saveShipment() {
+  showError('');
+
+  const dir        = document.getElementById('f-direction').value || currentDirection;
+  const shipDate   = document.getElementById('f-ship-date').value;
+  const status     = document.getElementById('f-status').value;
+  const method     = document.getElementById('f-method').value;
+  const carrier    = document.getElementById('f-carrier').value.trim();
+  const bolNumber  = document.getElementById('f-bol-number').value.trim();
+  const delivDate  = document.getElementById('f-delivery-date').value;
+  const notes      = document.getElementById('f-notes').value.trim();
+
+  const payload = { direction: dir, ship_date: shipDate, delivery_date: delivDate,
+    status, method, carrier, bol_number: bolNumber, notes };
+
+  if (dir === 'outbound') {
+    const customer = document.getElementById('f-customer').value.trim();
+    if (!customer) { showError('Customer is required for outbound shipments.'); return; }
+    payload.customer    = customer;
+    payload.destination = document.getElementById('f-destination').value.trim();
+    payload.load_count  = parseInt(document.getElementById('f-load-count').value || 1, 10);
+    payload.total_bdft  = parseFloat(document.getElementById('f-total-bdft').value) || 0;
+    payload.job_id      = document.getElementById('f-job-id').value || null;
+    payload.origin      = 'XPanda Foam';
+  } else {
+    const supplier = document.getElementById('f-supplier').value.trim();
+    if (!supplier) { showError('Supplier is required for inbound deliveries.'); return; }
+    payload.customer   = supplier;
+    payload.origin     = document.getElementById('f-origin').value.trim();
+    payload.weight_lbs = parseFloat(document.getElementById('f-weight-lbs').value) || 0;
+    payload.destination = 'XPanda Foam';
+
+    // Resolve bead type name from selected id
+    const beadTypeId = document.getElementById('f-bead-type-id').value;
+    if (beadTypeId) {
+      const bt = allBeadTypes.find(t => t.id === beadTypeId);
+      payload.bead_type    = bt ? bt.name : '';
+      payload.bead_type_id = beadTypeId;
+    }
+
+    const siloId  = document.getElementById('f-silo-id').value;
+    const autoLog = document.getElementById('f-auto-log')?.checked;
+    if (siloId && autoLog && !editingId) {
+      payload.silo_id = siloId;
+    }
+  }
+
+  if (editingId) payload.id = editingId;
+
+  const btn = document.getElementById('modal-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const res  = await fetch('/api/shipments', {
+      method: editingId ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json();
+
+    if (!body.ok) {
+      showError(body.error || 'Error saving shipment.');
+      return;
+    }
+
+    // Check if delivered + has linked job → prompt to update job status
+    const saved = body.data;
+    if (saved.status === 'delivered' && saved.job_id && !editingId) {
+      promptUpdateJob(saved.job_id, saved.customer);
+    }
+
+    closeModal();
+    await Promise.all([loadOutbound(), loadInbound()]);
+    updateStats();
+  } catch {
+    showError('Network error. Please try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = editingId ? 'Save Changes' : 'Save';
+  }
+}
+
+async function confirmDelete() {
+  if (!editingId) return;
+  if (!confirm('Delete this shipment? This cannot be undone.')) return;
+
+  const res  = await fetch('/api/shipments', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: editingId }),
+  });
+  const body = await res.json();
+  if (!body.ok) { alert(body.error || 'Error deleting shipment.'); return; }
+
+  closeModal();
+  await Promise.all([loadOutbound(), loadInbound()]);
+  updateStats();
+}
+
+// ── Ship from Job Picker ───────────────────────────────────────────────────
+function openShipJobPicker() {
+  document.getElementById('job-picker-search').value = '';
+  filterJobPickerList();
+  document.getElementById('job-picker-modal').classList.remove('hidden');
+}
+
+function closeJobPicker() {
+  document.getElementById('job-picker-modal').classList.add('hidden');
+}
+
+function filterJobPickerList() {
+  const q    = document.getElementById('job-picker-search').value.toLowerCase();
+  const list = document.getElementById('job-picker-list');
+  const jobs = jobPickerFull.filter(j =>
+    (j.customer || '').toLowerCase().includes(q) ||
+    (j.invoice_number || '').toLowerCase().includes(q)
+  );
+
+  if (!jobs.length) {
+    list.innerHTML = `<div style="color:#94a3b8;font-size:13px;padding:12px;">No open jobs found.</div>`;
+    return;
+  }
+
+  list.innerHTML = jobs.map(j => {
+    const label    = `${esc(j.customer)}${j.invoice_number ? ' · ' + esc(j.invoice_number) : ''}`;
+    const sub      = [j.ship_date, j.method, j.carrier].filter(Boolean).join(' · ');
+    const statusCl = `status-${j.status.replace('_', '-')}`;
+    return `
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 13px;cursor:pointer;"
+           onclick="selectJobForShipment('${j.id}')">
+        <div style="font-weight:700;font-size:14px;">${label}</div>
+        <div style="font-size:12px;color:#64748b;margin-top:2px;">${esc(sub)}</div>
+      </div>`;
+  }).join('');
+}
+
+function selectJobForShipment(jobId) {
+  const job = allOpenJobs.find(j => j.id === jobId);
+  if (!job) return;
+  closeJobPicker();
+  openModal('outbound');
+  prefillFromJob(job);
+}
+
+function prefillFromJob(job) {
+  document.getElementById('f-customer').value    = job.customer || '';
+  document.getElementById('f-destination').value = job.location || '';
+  document.getElementById('f-method').value      = job.method   || '';
+  document.getElementById('f-carrier').value     = job.carrier  || '';
+  document.getElementById('f-ship-date').value   = job.ship_date || '';
+  document.getElementById('f-load-count').value  = job.load_count || 1;
+  document.getElementById('f-total-bdft').value  = job.total_bdft || '';
+  document.getElementById('f-bol-number').value  = job.bol_info  || '';
+  document.getElementById('f-job-id').value      = job.id;
+}
+
+function applyPrefill(prefill) {
+  for (const [key, val] of Object.entries(prefill)) {
+    const el = document.getElementById(`f-${key}`);
+    if (el && val !== undefined) el.value = val;
+  }
+}
+
+// ── Prompt (Logistics → Job Board) ────────────────────────────────────────
+function promptUpdateJob(jobId, customer) {
+  promptJobId = jobId;
+  document.getElementById('prompt-msg').textContent =
+    `Update job "${customer}" to Shipped on the Job Board?`;
+  document.getElementById('prompt-banner').classList.add('visible');
+}
+
+async function promptYes() {
+  if (!promptJobId) return;
+  dismissPrompt();
+
+  try {
+    await fetch('/api/jobs', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: promptJobId, status: 'shipped' }),
+    });
+  } catch { /* silent */ }
+}
+
+function dismissPrompt() {
+  promptJobId = null;
+  document.getElementById('prompt-banner').classList.remove('visible');
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function showError(msg) {
+  const el = document.getElementById('modal-error');
+  el.textContent = msg;
+  el.classList.toggle('visible', !!msg);
+}
+
+function statusBadge(status) {
+  const labels = {
+    scheduled:  'Scheduled',
+    in_transit: 'In Transit',
+    delivered:  'Delivered',
+    cancelled:  'Cancelled',
+  };
+  return `<span class="logistics-status-badge status-${status}">${labels[status] || status}</span>`;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-');
+  const dt = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function fmtNum(n) {
+  return (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+}
+
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+</script>
+
+</body>
+</html>

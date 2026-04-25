@@ -75,6 +75,10 @@ export default {
         return handleApiBeadTransactions(request, env);
       }
 
+      if (url.pathname === "/api/shipments") {
+        return handleApiShipments(request, env);
+      }
+
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
         return new Response(
@@ -2155,6 +2159,236 @@ async function handleApiBeadTransactions(request, env) {
       `).bind(siloId).first();
 
       return json({ ok: true, data: { transaction: tx, silo: updatedSilo } }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+
+// =============================================================================
+// SHIPMENTS SCHEMA (run once against D1)
+// =============================================================================
+/*
+CREATE TABLE IF NOT EXISTS shipments (
+  id TEXT PRIMARY KEY,
+  direction TEXT NOT NULL,
+  job_id TEXT DEFAULT NULL,
+  customer TEXT NOT NULL DEFAULT '',
+  carrier TEXT NOT NULL DEFAULT '',
+  method TEXT NOT NULL DEFAULT '',
+  bol_number TEXT NOT NULL DEFAULT '',
+  origin TEXT NOT NULL DEFAULT '',
+  destination TEXT NOT NULL DEFAULT '',
+  ship_date TEXT NOT NULL DEFAULT '',
+  delivery_date TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'scheduled',
+  total_bdft REAL NOT NULL DEFAULT 0,
+  load_count INTEGER NOT NULL DEFAULT 1,
+  weight_lbs REAL NOT NULL DEFAULT 0,
+  bead_type TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_shipments_direction ON shipments(direction);
+CREATE INDEX IF NOT EXISTS idx_shipments_date ON shipments(ship_date);
+CREATE INDEX IF NOT EXISTS idx_shipments_status ON shipments(status);
+CREATE INDEX IF NOT EXISTS idx_shipments_job ON shipments(job_id);
+*/
+
+// =============================================================================
+// HANDLER: /api/shipments  (GET / POST / PUT / DELETE)
+// =============================================================================
+async function handleApiShipments(request, env) {
+  const db     = env.DB;
+  const method = request.method.toUpperCase();
+  const url    = new URL(request.url);
+
+  if (method === "GET") {
+    const direction = url.searchParams.get("direction");
+    const status    = url.searchParams.get("status");
+    const jobId     = url.searchParams.get("job_id");
+    const days      = parseInt(url.searchParams.get("days") || "30", 10);
+    const week      = url.searchParams.get("week"); // YYYY-MM-DD of week start (Mon)
+
+    const where = [];
+    const vals  = [];
+
+    if (week) {
+      // week window: Mon through Sun (+6 days)
+      where.push("ship_date >= ? AND ship_date <= date(?, '+6 days')");
+      vals.push(week, week);
+    } else {
+      where.push("created_at >= datetime('now', ? || ' days')");
+      vals.push(`-${days}`);
+    }
+
+    if (direction) { where.push("direction = ?"); vals.push(direction); }
+
+    if (status) {
+      const statuses = status.split(",").map(s => s.trim()).filter(Boolean);
+      if (statuses.length === 1) {
+        where.push("status = ?");
+        vals.push(statuses[0]);
+      } else if (statuses.length > 1) {
+        where.push(`status IN (${statuses.map(() => "?").join(",")})`);
+        vals.push(...statuses);
+      }
+    }
+
+    if (jobId) { where.push("job_id = ?"); vals.push(jobId); }
+
+    const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    try {
+      const { results } = await db.prepare(
+        `SELECT * FROM shipments ${clause} ORDER BY ship_date DESC, created_at DESC`
+      ).bind(...vals).all();
+      return json({ ok: true, data: results });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === "POST") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const direction = String(payload.direction || "").trim();
+    if (!["inbound", "outbound"].includes(direction)) {
+      return json({ ok: false, error: "direction must be 'inbound' or 'outbound'." }, 400);
+    }
+
+    const ship_date = String(payload.ship_date || "").trim();
+    if (ship_date && !/^\d{4}-\d{2}-\d{2}$/.test(ship_date)) {
+      return json({ ok: false, error: "ship_date must be YYYY-MM-DD." }, 400);
+    }
+
+    const validStatuses = ["scheduled", "in_transit", "delivered", "cancelled"];
+    const status = String(payload.status || "scheduled").trim();
+    if (!validStatuses.includes(status)) {
+      return json({ ok: false, error: `status must be one of: ${validStatuses.join(", ")}` }, 400);
+    }
+
+    const id            = crypto.randomUUID();
+    const job_id        = payload.job_id        ? String(payload.job_id).trim()        : null;
+    const customer      = String(payload.customer      || "").trim();
+    const carrier       = String(payload.carrier       || "").trim();
+    const method_val    = String(payload.method        || "").trim();
+    const bol_number    = String(payload.bol_number    || "").trim();
+    const origin        = String(payload.origin        || "").trim();
+    const destination   = String(payload.destination   || "").trim();
+    const delivery_date = String(payload.delivery_date || "").trim();
+    const total_bdft    = Number(payload.total_bdft    ?? 0);
+    const load_count    = Math.max(1, parseInt(payload.load_count ?? 1, 10));
+    const weight_lbs    = Number(payload.weight_lbs    ?? 0);
+    const bead_type     = String(payload.bead_type     || "").trim();
+    const notes         = String(payload.notes         || "").trim();
+
+    try {
+      await db.prepare(`
+        INSERT INTO shipments
+          (id, direction, job_id, customer, carrier, method, bol_number, origin, destination,
+           ship_date, delivery_date, status, total_bdft, load_count, weight_lbs, bead_type, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id, direction, job_id, customer, carrier, method_val, bol_number, origin, destination,
+        ship_date, delivery_date, status, total_bdft, load_count, weight_lbs, bead_type, notes
+      ).run();
+
+      // Auto-create bead receive transaction if inbound with silo
+      if (direction === "inbound" && weight_lbs > 0 && payload.silo_id) {
+        const siloId = String(payload.silo_id).trim();
+        const silo   = await db.prepare("SELECT * FROM silos WHERE id = ?").bind(siloId).first();
+        if (silo) {
+          const beadTypeId = payload.bead_type_id ? String(payload.bead_type_id).trim() : silo.bead_type_id;
+          const newLevel   = silo.current_lbs + weight_lbs;
+          const txId       = crypto.randomUUID();
+          await db.batch([
+            db.prepare("UPDATE silos SET current_lbs = ?, updated_at = datetime('now') WHERE id = ?")
+              .bind(newLevel, siloId),
+            db.prepare(`
+              INSERT INTO bead_transactions (id, silo_id, bead_type_id, type, quantity_lbs, reference, notes)
+              VALUES (?, ?, ?, 'receive', ?, ?, ?)
+            `).bind(txId, siloId, beadTypeId, weight_lbs, bol_number || id, `Auto-logged from inbound shipment ${id}`),
+          ]);
+        }
+      }
+
+      const row = await db.prepare("SELECT * FROM shipments WHERE id = ?").bind(id).first();
+      return json({ ok: true, data: row }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === "PUT") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+
+    const existing = await db.prepare("SELECT id FROM shipments WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Shipment not found." }, 404);
+
+    const allowed = [
+      "customer", "carrier", "method", "bol_number", "origin", "destination",
+      "ship_date", "delivery_date", "status", "total_bdft", "load_count",
+      "weight_lbs", "bead_type", "notes", "job_id",
+    ];
+    const sets = [];
+    const vals = [];
+
+    for (const key of allowed) {
+      if (!(key in payload)) continue;
+      sets.push(`${key} = ?`);
+      const raw = payload[key];
+      if (key === "job_id") {
+        vals.push(raw ? String(raw).trim() : null);
+      } else if (["total_bdft", "weight_lbs"].includes(key)) {
+        vals.push(Number(raw ?? 0));
+      } else if (key === "load_count") {
+        vals.push(Math.max(1, parseInt(raw ?? 1, 10)));
+      } else {
+        vals.push(String(raw ?? "").trim());
+      }
+    }
+
+    if (sets.length === 0) return json({ ok: false, error: "No fields to update." }, 400);
+
+    sets.push("updated_at = datetime('now')");
+    vals.push(id);
+
+    try {
+      await db.prepare(`UPDATE shipments SET ${sets.join(", ")} WHERE id = ?`).bind(...vals).run();
+      const row = await db.prepare("SELECT * FROM shipments WHERE id = ?").bind(id).first();
+      return json({ ok: true, data: row });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === "DELETE") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+
+    const existing = await db.prepare("SELECT id FROM shipments WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Shipment not found." }, 404);
+
+    try {
+      await db.prepare("DELETE FROM shipments WHERE id = ?").bind(id).run();
+      return json({ ok: true, message: "Shipment deleted." });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
