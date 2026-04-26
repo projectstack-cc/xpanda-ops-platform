@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Load Builder — xPanda Logistics</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+<link rel="icon" href="/assets/img/favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+
+<link rel="stylesheet" href="/logistics/logistics-shared.css">
+<style>
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Keep header from shrinking in the flex column */
+  .topbar { flex-shrink: 0; }
+
+  /* Slim contextual bar above the iframe */
+  .lb-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 16px;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+
+  .lb-powered {
+    flex: 1;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* Iframe container fills all remaining height */
+  .lb-frame-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #lb-iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+  }
+
+  /* Fallback shown when embedding is blocked */
+  .lb-fallback {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    padding: 32px;
+    text-align: center;
+  }
+
+  .lb-fallback.visible { display: flex; }
+
+  .lb-fallback-icon {
+    font-size: 36px;
+    line-height: 1;
+    color: #94a3b8;
+  }
+
+  .lb-fallback-msg {
+    font-size: 14px;
+    color: var(--muted);
+    max-width: 360px;
+    line-height: 1.5;
+  }
+
+  /* Hide the standard footer — this page uses the full viewport */
+  .logistics-platform-footer { display: none; }
+</style>
+</head>
+<body>
+
+<script src="/logistics/logistics-header.js"></script>
+<script>
+document.getElementById('logistics-page-title').textContent = 'Load Builder';
+document.getElementById('logistics-page-subtitle').textContent = 'Load planning and truck configuration';
+</script>
+
+<!-- Contextual toolbar above the iframe -->
+<div class="lb-toolbar">
+  <span class="lb-powered">Powered by Load Builder</span>
+  <a class="logistics-btn logistics-btn-outline"
+     href="https://load1.pages.dev"
+     target="_blank"
+     rel="noopener noreferrer"
+     style="font-size:13px;padding:6px 12px;text-decoration:none;">
+    Open in New Tab <span style="font-size:11px;opacity:.65;">↗</span>
+  </a>
+  <a class="logistics-btn logistics-btn-outline"
+     href="/logistics/"
+     style="font-size:13px;padding:6px 12px;text-decoration:none;">
+    ← Back to Logistics
+  </a>
+</div>
+
+<!-- Iframe embed -->
+<div class="lb-frame-wrap">
+  <iframe
+    id="lb-iframe"
+    src="https://load1.pages.dev"
+    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+    title="Load Builder"
+  ></iframe>
+
+  <!-- Shown if the external app blocks framing -->
+  <div class="lb-fallback" id="lb-fallback">
+    <div class="lb-fallback-icon">⊘</div>
+    <p class="lb-fallback-msg">
+      Load Builder couldn't be embedded. This may be due to the app's security settings.
+    </p>
+    <a class="logistics-btn logistics-btn-primary"
+       href="https://load1.pages.dev"
+       target="_blank"
+       rel="noopener noreferrer"
+       style="text-decoration:none;">
+      Open Load Builder in New Tab ↗
+    </a>
+  </div>
+</div>
+
+<script>
+(function () {
+  var iframe   = document.getElementById('lb-iframe');
+  var fallback = document.getElementById('lb-fallback');
+  var loaded   = false;
+
+  function showFallback() {
+    iframe.style.display = 'none';
+    fallback.classList.add('visible');
+  }
+
+  iframe.addEventListener('load', function () {
+    loaded = true;
+    try {
+      // Will throw SecurityError for a live cross-origin load — that means it worked.
+      // If it doesn't throw and the body is empty, the browser likely showed a block page.
+      var doc = iframe.contentDocument || iframe.contentWindow.document;
+      if (doc && doc.body && doc.body.children.length === 0) {
+        showFallback();
+      }
+    } catch (e) {
+      // SecurityError = cross-origin content loaded successfully — do nothing
+    }
+  });
+
+  // Safety net: if the load event never fires within 5 seconds, show the fallback
+  setTimeout(function () {
+    if (!loaded) showFallback();
+  }, 5000);
+}());
+</script>
+
+</body>
+</html>
