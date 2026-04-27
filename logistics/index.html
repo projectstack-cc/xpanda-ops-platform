@@ -311,7 +311,7 @@ let jobPickerFull   = [];
 // ── Init ───────────────────────────────────────────────────────────────────
 (async () => {
   setCurrentWeek();
-  await Promise.all([loadSilos(), loadBeadTypes(), loadOpenJobs()]);
+  await Promise.allSettled([loadSilos(), loadBeadTypes(), loadOpenJobs()]);
   await Promise.all([loadOutbound(), loadInbound()]);
   updateStats();
 
@@ -407,9 +407,13 @@ async function loadOutbound() {
   }
   if (status) params.set('status', status);
 
-  const res  = await fetch(`/api/shipments?${params}`);
-  const body = await res.json();
-  outboundData = body.ok ? body.data : [];
+  try {
+    const res  = await fetch(`/api/shipments?${params}`);
+    const body = await res.json();
+    outboundData = body.ok ? body.data : [];
+  } catch {
+    outboundData = [];
+  }
   renderOutbound();
 }
 
@@ -419,9 +423,13 @@ async function loadInbound() {
   const params = new URLSearchParams({ direction: 'inbound', days });
   if (status) params.set('status', status);
 
-  const res  = await fetch(`/api/shipments?${params}`);
-  const body = await res.json();
-  inboundData = body.ok ? body.data : [];
+  try {
+    const res  = await fetch(`/api/shipments?${params}`);
+    const body = await res.json();
+    inboundData = body.ok ? body.data : [];
+  } catch {
+    inboundData = [];
+  }
   renderInbound();
 }
 
@@ -819,10 +827,32 @@ async function confirmDelete() {
 }
 
 // ── Ship from Job Picker ───────────────────────────────────────────────────
-function openShipJobPicker() {
+async function openShipJobPicker() {
   document.getElementById('job-picker-search').value = '';
-  filterJobPickerList();
+  document.getElementById('job-picker-list').innerHTML =
+    '<div style="color:#94a3b8;font-size:13px;padding:12px;">Loading jobs…</div>';
   document.getElementById('job-picker-modal').classList.remove('hidden');
+
+  try {
+    const res  = await fetch('/api/jobs?status=not_started,in_production,done');
+    const body = await res.json();
+    if (body.ok) {
+      jobPickerFull = body.data;
+      allOpenJobs   = body.data;
+      const opts = allOpenJobs.map(j => {
+        const label = `${esc(j.customer)}${j.invoice_number ? ' · ' + esc(j.invoice_number) : ''}`;
+        return `<option value="${j.id}">${label}</option>`;
+      }).join('');
+      document.getElementById('f-job-id').innerHTML =
+        `<option value="">— no linked job —</option>${opts}`;
+    } else {
+      jobPickerFull = [];
+    }
+  } catch {
+    jobPickerFull = [];
+  }
+
+  filterJobPickerList();
 }
 
 function closeJobPicker() {
@@ -843,9 +873,8 @@ function filterJobPickerList() {
   }
 
   list.innerHTML = jobs.map(j => {
-    const label    = `${esc(j.customer)}${j.invoice_number ? ' · ' + esc(j.invoice_number) : ''}`;
-    const sub      = [j.ship_date, j.method, j.carrier].filter(Boolean).join(' · ');
-    const statusCl = `status-${j.status.replace('_', '-')}`;
+    const label = `${esc(j.customer)}${j.invoice_number ? ' · ' + esc(j.invoice_number) : ''}`;
+    const sub   = [j.ship_date, j.method, j.carrier].filter(Boolean).join(' · ');
     return `
       <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 13px;cursor:pointer;"
            onclick="selectJobForShipment('${j.id}')">
