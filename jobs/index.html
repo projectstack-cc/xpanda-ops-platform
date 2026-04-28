@@ -7,6 +7,21 @@
   <link rel="icon" href="/assets/img/favicon.png" sizes="any">
   <link rel="apple-touch-icon" href="/assets/img/favicon.png">
   <link rel="stylesheet" href="/jobs/jobs-shared.css">
+<style>
+@media (min-width: 700px) {
+  .jobs-board { grid-template-columns: repeat(5, minmax(210px, 1fr)); min-width: 1050px; }
+}
+.jobs-card[data-status="loading"] { border-left-color: #6366f1; }
+.jobs-card-processes { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 8px; }
+.jobs-proc-pill {
+  font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;
+  border: 1px solid #d1d5db; background: #f3f4f6; color: #6b7280;
+  cursor: pointer; line-height: 1.6; letter-spacing: .03em; transition: opacity .12s;
+}
+.jobs-proc-pill.completed { background: #dcfce7; border-color: #86efac; color: #16a34a; }
+.jobs-proc-pill:hover { opacity: .75; }
+.jobs-processes-grid { display: flex; flex-direction: column; gap: 8px; }
+</style>
 </head>
 <body>
 
@@ -32,6 +47,7 @@
   <button class="jobs-tab active" data-status="not_started" role="tab">Not Started</button>
   <button class="jobs-tab" data-status="in_production" role="tab">In Production</button>
   <button class="jobs-tab" data-status="done" role="tab">Done</button>
+  <button class="jobs-tab" data-status="loading" role="tab">Loading</button>
   <button class="jobs-tab" data-status="shipped" role="tab">Shipped</button>
 </div>
 
@@ -61,6 +77,14 @@
         <span class="jobs-col-count" id="count-done">0</span>
       </div>
       <div class="jobs-col-body" id="col-done" data-status="done"></div>
+    </div>
+
+    <div class="jobs-col" data-status="loading">
+      <div class="jobs-col-header">
+        <span class="jobs-col-title">Loading</span>
+        <span class="jobs-col-count" id="count-loading">0</span>
+      </div>
+      <div class="jobs-col-body" id="col-loading" data-status="loading"></div>
     </div>
 
     <div class="jobs-col" data-status="shipped">
@@ -223,6 +247,19 @@
         </div>
       </div>
 
+      <!-- Production Processes -->
+      <div class="jobs-form-section">
+        <p class="jobs-form-section-title">Production Processes</p>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px">Select which processes this job requires. Check off as completed.</p>
+        <div class="jobs-processes-grid">
+          <label class="jobs-checkbox-row" id="proc-cross-cutter-label"><input type="checkbox" id="proc-cross-cutter"> Cross Cutter</label>
+          <label class="jobs-checkbox-row" id="proc-hole-cutter-label"><input type="checkbox" id="proc-hole-cutter"> Hole Cutter</label>
+          <label class="jobs-checkbox-row" id="proc-main-line-label"><input type="checkbox" id="proc-main-line"> Main Line</label>
+          <label class="jobs-checkbox-row" id="proc-blue-line-label"><input type="checkbox" id="proc-blue-line"> Blue Line</label>
+          <label class="jobs-checkbox-row" id="proc-laminate-label"><input type="checkbox" id="proc-laminate"> Laminate</label>
+        </div>
+      </div>
+
       <!-- Line Items -->
       <div class="jobs-form-section">
         <p class="jobs-form-section-title">Line Items</p>
@@ -297,13 +334,22 @@
    State
 ═══════════════════════════════════════════ */
 
-const STATUS_ORDER  = ['not_started', 'in_production', 'done', 'shipped'];
+const STATUS_ORDER  = ['not_started', 'in_production', 'done', 'loading', 'shipped'];
 const STATUS_LABELS = {
   not_started:   'Not Started',
   in_production: 'In Production',
   done:          'Done',
+  loading:       'Loading',
   shipped:       'Shipped',
 };
+
+const PROCESSES = [
+  { name: 'Cross Cutter', abbr: 'CC',  id: 'proc-cross-cutter' },
+  { name: 'Hole Cutter',  abbr: 'HC',  id: 'proc-hole-cutter'  },
+  { name: 'Main Line',    abbr: 'ML',  id: 'proc-main-line'    },
+  { name: 'Blue Line',    abbr: 'BL',  id: 'proc-blue-line'    },
+  { name: 'Laminate',     abbr: 'LAM', id: 'proc-laminate'     },
+];
 
 let allJobs         = [];
 let editingJobId    = null;
@@ -430,6 +476,14 @@ function buildCard(job) {
   const prev     = prevStatus(job.status);
   const next     = nextStatus(job.status);
 
+  const procs = Array.isArray(job.processes) ? job.processes : [];
+  const procHtml = procs.length === 0 ? '' : `
+    <div class="jobs-card-processes">${procs.map(p => {
+      const def  = PROCESSES.find(d => d.name === p.name);
+      const abbr = def ? def.abbr : String(p.name).slice(0, 3).toUpperCase();
+      return `<button class="jobs-proc-pill${p.completed ? ' completed' : ''}" onclick="event.stopPropagation();toggleProcessPill('${esc(job.id)}','${esc(p.name)}')" title="${p.completed ? '✓ ' : ''}${esc(p.name)}">${p.completed ? '✓ ' : ''}${esc(abbr)}</button>`;
+    }).join('')}</div>`;
+
   card.innerHTML = `
     <div class="jobs-card-top">
       <div class="jobs-card-customer">${esc(job.customer)}</div>
@@ -445,6 +499,7 @@ function buildCard(job) {
       <span>${esc(method)}${esc(loadStr)}</span>
       <span>${bdft} BDFT</span>
     </div>
+    ${procHtml}
     <div class="jobs-card-actions">
       ${prev
         ? `<button class="jobs-arrow-btn" data-dir="prev" data-id="${esc(job.id)}" title="Move to ${STATUS_LABELS[prev]}">←</button>`
@@ -703,6 +758,13 @@ function clearForm() {
   setPriority('normal');
   clearCombo();
   setModalStatus('');
+
+  PROCESSES.forEach(def => {
+    const el    = document.getElementById(def.id);
+    const label = document.getElementById(def.id + '-label');
+    if (el)    el.checked = false;
+    if (label) label.style.textDecoration = '';
+  });
 }
 
 function populateForm(job) {
@@ -738,6 +800,15 @@ function populateForm(job) {
   }
 
   if (job.combo_id) showComboBadge(job.combo_id, 'Linked Combo');
+
+  PROCESSES.forEach(def => {
+    const el    = document.getElementById(def.id);
+    const label = document.getElementById(def.id + '-label');
+    if (!el) return;
+    const proc = (job.processes || []).find(p => p.name === def.name);
+    el.checked = !!proc;
+    if (label) label.style.textDecoration = (proc && proc.completed) ? 'line-through' : '';
+  });
 }
 
 function setPriority(p) {
@@ -850,6 +921,7 @@ async function saveJob() {
     notes:                document.getElementById('f-notes').value.trim(),
     combo_id:             selectedComboId || null,
     line_items:           collectLineItems(),
+    processes:            collectProcesses(),
   };
 
   const btn = document.getElementById('modal-save');
@@ -1033,6 +1105,52 @@ async function openComboPicker() {
       document.getElementById('combo-picker').hidden = true;
     });
     body.appendChild(item);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   Process pills
+═══════════════════════════════════════════ */
+
+function collectProcesses() {
+  const existing = editingJobId
+    ? (allJobs.find(j => j.id === editingJobId)?.processes || [])
+    : [];
+  return PROCESSES
+    .filter(def => document.getElementById(def.id)?.checked)
+    .map(def => {
+      const prev = existing.find(p => p.name === def.name);
+      return { name: def.name, completed: prev ? !!prev.completed : false };
+    });
+}
+
+async function toggleProcessPill(jobId, processName) {
+  const job = allJobs.find(j => j.id === jobId);
+  if (!job) return;
+  const procs = (Array.isArray(job.processes) ? job.processes : []).map(p => ({ ...p }));
+  const proc  = procs.find(p => p.name === processName);
+  if (!proc) return;
+  proc.completed = !proc.completed;
+  job.processes  = procs;
+  renderBoard(allJobs);
+  try {
+    const res  = await fetch('/api/jobs', {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id: jobId, processes: procs }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      proc.completed = !proc.completed;
+      job.processes  = procs;
+      renderBoard(allJobs);
+      showToast('Error: ' + (data.error || 'Could not update process.'));
+    }
+  } catch {
+    proc.completed = !proc.completed;
+    job.processes  = procs;
+    renderBoard(allJobs);
+    showToast('Network error. Please try again.');
   }
 }
 

@@ -1482,9 +1482,13 @@ async function handleApiCombos(request, env) {
 //   combo_id TEXT DEFAULT NULL,
 //   priority TEXT NOT NULL DEFAULT 'normal',
 //   confirmed_to_ship INTEGER NOT NULL DEFAULT 0,
+//   processes TEXT NOT NULL DEFAULT '[]',
 //   created_at TEXT NOT NULL DEFAULT (datetime('now')),
 //   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 // );
+//
+// Migration (run once if jobs table already exists):
+// ALTER TABLE jobs ADD COLUMN processes TEXT NOT NULL DEFAULT '[]';
 // CREATE INDEX IF NOT EXISTS idx_jobs_status    ON jobs(status);
 // CREATE INDEX IF NOT EXISTS idx_jobs_ship_date ON jobs(ship_date);
 // CREATE INDEX IF NOT EXISTS idx_jobs_customer  ON jobs(customer);
@@ -1523,7 +1527,7 @@ async function handleApiJobs(request, env) {
       binds = [weekParam, weekParam];
     } else if (statusParam) {
       const statuses = statusParam.split(",").map(s => s.trim()).filter(Boolean);
-      const valid    = ["not_started", "in_production", "done", "shipped"];
+      const valid    = ["not_started", "in_production", "done", "loading", "shipped"];
       for (const s of statuses) {
         if (!valid.includes(s)) return json({ ok: false, error: `Invalid status: ${s}` }, 400);
       }
@@ -1560,6 +1564,7 @@ async function handleApiJobs(request, env) {
 
       const enriched = jobs.map(job => ({
         ...job,
+        processes:  safeJsonParse(job.processes, []),
         line_items: lineItemsMap[job.id] || [],
       }));
 
@@ -1583,7 +1588,7 @@ async function handleApiJobs(request, env) {
       return json({ ok: false, error: "Invalid ship_date. Use YYYY-MM-DD." }, 400);
     }
 
-    const validStatuses = ["not_started", "in_production", "done", "shipped"];
+    const validStatuses = ["not_started", "in_production", "done", "loading", "shipped"];
     const status = String(payload.status || "not_started").trim();
     if (!validStatuses.includes(status)) return json({ ok: false, error: "Invalid status." }, 400);
 
@@ -1613,6 +1618,7 @@ async function handleApiJobs(request, env) {
     const load_count           = Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1;
     const total_bdft           = Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0;
     const confirmed_to_ship    = payload.confirmed_to_ship ? 1 : 0;
+    const processes            = Array.isArray(payload.processes) ? JSON.stringify(payload.processes) : '[]';
 
     try {
       await db.prepare(`
@@ -1621,14 +1627,14 @@ async function handleApiJobs(request, env) {
           location, delivery_time, method, carrier, load_count, total_bdft,
           scrap_pickup, sales_lead, bol_info, payment_info, notes,
           packing_instructions, contact_name, contact_phone, combo_id,
-          priority, confirmed_to_ship, created_at, updated_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          priority, confirmed_to_ship, processes, created_at, updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, status, customer, po_number, invoice_number, ship_date, ship_day,
         location, delivery_time, method, carrier, load_count, total_bdft,
         scrap_pickup, sales_lead, bol_info, payment_info, notes,
         packing_instructions, contact_name, contact_phone, combo_id,
-        priority, confirmed_to_ship, now, now,
+        priority, confirmed_to_ship, processes, now, now,
       ).run();
 
       // Insert line items
@@ -1652,7 +1658,7 @@ async function handleApiJobs(request, env) {
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
       const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
 
-      return json({ ok: true, message: "Job created.", job: { ...job, line_items: liRows.results || [] } }, 201);
+      return json({ ok: true, message: "Job created.", job: { ...job, processes: safeJsonParse(job.processes, []), line_items: liRows.results || [] } }, 201);
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
@@ -1675,7 +1681,7 @@ async function handleApiJobs(request, env) {
 
     if ("status" in payload) {
       const v = String(payload.status).trim();
-      if (!["not_started", "in_production", "done", "shipped"].includes(v))
+      if (!["not_started", "in_production", "done", "loading", "shipped"].includes(v))
         return json({ ok: false, error: "Invalid status." }, 400);
       sets.push("status = ?"); binds.push(v);
     }
@@ -1700,7 +1706,11 @@ async function handleApiJobs(request, env) {
     if ("load_count"        in payload) { sets.push("load_count = ?");        binds.push(Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1); }
     if ("total_bdft"        in payload) { sets.push("total_bdft = ?");        binds.push(Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0); }
     if ("confirmed_to_ship" in payload) { sets.push("confirmed_to_ship = ?"); binds.push(payload.confirmed_to_ship ? 1 : 0); }
-    if ("combo_id"          in payload) { sets.push("combo_id = ?");          binds.push(payload.combo_id ? String(payload.combo_id).trim() : null); }
+    if ("combo_id"  in payload) { sets.push("combo_id = ?");  binds.push(payload.combo_id ? String(payload.combo_id).trim() : null); }
+    if ("processes" in payload) {
+      const v = Array.isArray(payload.processes) ? JSON.stringify(payload.processes) : '[]';
+      sets.push("processes = ?"); binds.push(v);
+    }
 
     sets.push("updated_at = ?");
     binds.push(new Date().toISOString());
@@ -1732,7 +1742,7 @@ async function handleApiJobs(request, env) {
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
       const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
 
-      return json({ ok: true, message: "Job updated.", job: { ...job, line_items: liRows.results || [] } });
+      return json({ ok: true, message: "Job updated.", job: { ...job, processes: safeJsonParse(job.processes, []), line_items: liRows.results || [] } });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
