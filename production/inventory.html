@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>xPanda Inventory</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="icon" href="/assets/img/favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+<link rel="stylesheet" href="/production/production-shared.css">
+<style>
+/* ── Layout ────────────────────────────────────────── */
+.inv-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
+
+/* ── Tabs ──────────────────────────────────────────── */
+.inv-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; }
+.inv-tab {
+  padding: 9px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+  border: none; background: none; color: #64748b; border-bottom: 3px solid transparent;
+  margin-bottom: -2px; border-radius: 4px 4px 0 0; transition: color .15s;
+}
+.inv-tab:hover { color: #1e293b; }
+.inv-tab.active { color: #d97706; border-bottom-color: #d97706; }
+.inv-panel { display: none; }
+.inv-panel.active { display: block; }
+
+/* ── Stats row ─────────────────────────────────────── */
+.inv-stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.inv-stat {
+  flex: 1; min-width: 120px; background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 10px; padding: 14px 16px;
+}
+.inv-stat-val { font-size: 26px; font-weight: 800; color: #1e293b; line-height: 1; }
+.inv-stat-val.warn { color: #dc2626; }
+.inv-stat-lbl { font-size: 11px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: .04em; }
+
+/* ── Toolbar ───────────────────────────────────────── */
+.inv-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+.inv-toolbar-right { margin-left: auto; display: flex; gap: 8px; }
+
+/* ── Table ─────────────────────────────────────────── */
+.inv-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff; }
+table.inv-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.inv-table th {
+  background: #f8fafc; font-size: 11px; font-weight: 700; color: #64748b;
+  text-transform: uppercase; letter-spacing: .05em; padding: 10px 14px; text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+.inv-table td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.inv-table tr:last-child td { border-bottom: none; }
+.inv-table tr:hover td { background: #f8fafc; }
+
+/* ── Badges ────────────────────────────────────────── */
+.inv-badge {
+  display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .06em;
+  padding: 2px 7px; border-radius: 4px; text-transform: uppercase;
+}
+.inv-badge-low { background: #fee2e2; color: #dc2626; }
+.inv-badge-ok  { background: #dcfce7; color: #16a34a; }
+
+/* ── Empty state ───────────────────────────────────── */
+.inv-empty { text-align: center; padding: 48px 24px; color: #94a3b8; font-size: 14px; }
+
+/* ── Quick-entry form (Molding Log) ─────────────────── */
+.inv-quick-form {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 18px 20px; margin-bottom: 20px;
+}
+.inv-quick-form h3 { margin: 0 0 14px; font-size: 15px; color: #1e293b; }
+.inv-qf-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; align-items: end; }
+@media (max-width: 700px) { .inv-qf-grid { grid-template-columns: 1fr 1fr; } }
+
+/* ── Modals ────────────────────────────────────────── */
+.inv-modal-bg {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  z-index: 900; align-items: center; justify-content: center; padding: 16px;
+}
+.inv-modal-bg.open { display: flex; }
+.inv-modal {
+  background: #fff; border-radius: 14px; padding: 28px 24px;
+  width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+.inv-modal h2 { margin: 0 0 18px; font-size: 18px; color: #1e293b; }
+.inv-modal-footer { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+.inv-modal-close {
+  position: absolute; top: 12px; right: 16px; background: none; border: none;
+  font-size: 20px; cursor: pointer; color: #94a3b8; line-height: 1;
+}
+
+/* ── Job banner ────────────────────────────────────── */
+.inv-job-banner {
+  background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px;
+  padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;
+  font-size: 14px; color: #92400e;
+}
+.inv-job-banner strong { flex: 1; }
+</style>
+</head>
+
+<body>
+<script src="/production/production-header.js"></script>
+<script>
+document.getElementById('prod-page-title').textContent = 'Inventory';
+document.getElementById('prod-page-subtitle').textContent = 'Raw bead, blocks, and molding tracking';
+</script>
+
+<div class="inv-wrap">
+
+  <!-- Job banner (shown when ?job_id= is in URL) -->
+  <div class="inv-job-banner" id="job-banner" style="display:none">
+    <strong id="job-banner-text">Linked job: —</strong>
+    <button class="btn primary" onclick="openConsumeFromBanner()">Log Block Consumption</button>
+    <button class="btn ghost" onclick="clearJobParam()" style="padding:6px 12px;font-size:12px;">Dismiss</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="inv-tabs">
+    <button class="inv-tab active" onclick="switchTab('bead')">Bead Stock</button>
+    <button class="inv-tab"        onclick="switchTab('blocks')">Blocks</button>
+    <button class="inv-tab"        onclick="switchTab('molding')">Molding Log</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       TAB: BEAD STOCK
+  ════════════════════════════════════════════════════ -->
+  <div class="inv-panel active" id="panel-bead">
+
+    <div class="inv-stats" id="bead-stats">
+      <div class="inv-stat"><div class="inv-stat-val" id="bs-total-bags">—</div><div class="inv-stat-lbl">Total Bags</div></div>
+      <div class="inv-stat"><div class="inv-stat-val" id="bs-total-weight">—</div><div class="inv-stat-lbl">Total Weight (lbs)</div></div>
+      <div class="inv-stat"><div class="inv-stat-val" id="bs-low-count">—</div><div class="inv-stat-lbl">Below Reorder</div></div>
+      <div class="inv-stat"><div class="inv-stat-val" id="bs-type-count">—</div><div class="inv-stat-lbl">Bead Types</div></div>
+    </div>
+
+    <div class="inv-toolbar">
+      <button class="btn primary" onclick="openReceiveBead()">+ Receive Bead</button>
+      <button class="btn ghost"   onclick="openBeadModal(null)">+ Add Bead Type</button>
+    </div>
+
+    <div class="inv-table-wrap">
+      <table class="inv-table">
+        <thead>
+          <tr>
+            <th>Manufacturer</th>
+            <th>Bead Type</th>
+            <th>Bags On Hand</th>
+            <th>Bag Weight (lbs)</th>
+            <th>Total Weight (lbs)</th>
+            <th>Reorder At</th>
+            <th>Updated</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="bead-tbody">
+          <tr><td colspan="8" class="inv-empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       TAB: BLOCKS
+  ════════════════════════════════════════════════════ -->
+  <div class="inv-panel" id="panel-blocks">
+
+    <div class="inv-stats">
+      <div class="inv-stat"><div class="inv-stat-val" id="blk-total">—</div><div class="inv-stat-lbl">Total Blocks</div></div>
+      <div class="inv-stat"><div class="inv-stat-val" id="blk-types">—</div><div class="inv-stat-lbl">Block Types</div></div>
+    </div>
+
+    <div class="inv-toolbar">
+      <button class="btn primary" onclick="openAddBlocks()">+ Add Blocks</button>
+      <button class="btn ghost"   onclick="openConsumeModal(null)">− Log Consumption</button>
+      <button class="btn ghost"   onclick="openBlockModal(null)">+ Add Block Type</button>
+    </div>
+
+    <div class="inv-table-wrap">
+      <table class="inv-table">
+        <thead>
+          <tr>
+            <th>Density / Material</th>
+            <th>Dimensions (in)</th>
+            <th>Blocks on Floor</th>
+            <th>Notes</th>
+            <th>Updated</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="block-tbody">
+          <tr><td colspan="6" class="inv-empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       TAB: MOLDING LOG
+  ════════════════════════════════════════════════════ -->
+  <div class="inv-panel" id="panel-molding">
+
+    <div class="inv-quick-form">
+      <h3>Quick Entry — Log a Molding Run</h3>
+      <div class="inv-qf-grid">
+        <div>
+          <label class="prod-field">Bead Stock<select id="qf-bead-id" class="prod-field" style="margin-top:4px;width:100%"><option value="">— select —</option></select></label>
+        </div>
+        <div>
+          <label class="prod-field">Bags Consumed<input type="number" id="qf-bags" class="prod-field" min="1" step="1" placeholder="0" style="margin-top:4px;width:100%"></label>
+        </div>
+        <div>
+          <label class="prod-field">Block Type<select id="qf-block-id" class="prod-field" style="margin-top:4px;width:100%"><option value="">— select —</option></select></label>
+        </div>
+        <div>
+          <label class="prod-field">Blocks Produced<input type="number" id="qf-blocks" class="prod-field" min="1" step="1" placeholder="0" style="margin-top:4px;width:100%"></label>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:10px;align-items:flex-end">
+        <div style="flex:1">
+          <label class="prod-field" style="display:block">Notes<input type="text" id="qf-notes" class="prod-field" placeholder="Optional" style="margin-top:4px;width:100%"></label>
+        </div>
+        <button class="btn primary" onclick="submitMoldingRun()" style="white-space:nowrap">Log Run</button>
+      </div>
+    </div>
+
+    <div class="inv-toolbar">
+      <label class="prod-field" style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px">
+        Show last
+        <select id="molding-days" onchange="loadMoldingLog()" style="padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px">
+          <option value="7">7 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+          <option value="365">1 year</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="inv-table-wrap">
+      <table class="inv-table">
+        <thead>
+          <tr>
+            <th>Date / Time</th>
+            <th>Bead</th>
+            <th>Bags Used</th>
+            <th>Block Type</th>
+            <th>Blocks Made</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="molding-tbody">
+          <tr><td colspan="6" class="inv-empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /inv-wrap -->
+
+<!-- ═══════════════════════════════════════════════════
+     MODAL: Add / Edit Bead Stock Entry
+════════════════════════════════════════════════════ -->
+<div class="inv-modal-bg" id="bead-modal">
+  <div class="inv-modal" style="position:relative">
+    <button class="inv-modal-close" onclick="closeModal('bead-modal')" aria-label="Close">×</button>
+    <h2 id="bead-modal-title">Add Bead Type</h2>
+    <input type="hidden" id="bm-id">
+    <div class="prod-form-grid">
+      <label class="prod-field">Manufacturer<input type="text" id="bm-mfr" class="prod-field" placeholder="e.g. Foamex" style="margin-top:4px"></label>
+      <label class="prod-field">Bead Type<input type="text" id="bm-type" class="prod-field" placeholder="e.g. EPS 1.0" style="margin-top:4px"></label>
+      <label class="prod-field">Bags On Hand<input type="number" id="bm-bags" class="prod-field" min="0" step="1" placeholder="0" style="margin-top:4px"></label>
+      <label class="prod-field">Bag Weight (lbs)<input type="number" id="bm-weight" class="prod-field" min="0.01" step="0.01" placeholder="50" style="margin-top:4px"></label>
+      <label class="prod-field">Reorder At (bags)<input type="number" id="bm-reorder" class="prod-field" min="0" step="1" placeholder="5" style="margin-top:4px"></label>
+    </div>
+    <div class="inv-modal-footer">
+      <button class="btn ghost" onclick="closeModal('bead-modal')">Cancel</button>
+      <button class="btn primary" onclick="saveBeadStock()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MODAL: Receive Bead (quick add bags)
+════════════════════════════════════════════════════ -->
+<div class="inv-modal-bg" id="receive-modal">
+  <div class="inv-modal" style="position:relative">
+    <button class="inv-modal-close" onclick="closeModal('receive-modal')" aria-label="Close">×</button>
+    <h2>Receive Bead</h2>
+    <div class="prod-form-grid">
+      <label class="prod-field">Bead Type<select id="rm-bead-id" class="prod-field" style="margin-top:4px"><option value="">— select —</option></select></label>
+      <label class="prod-field">Bags Received<input type="number" id="rm-bags" class="prod-field" min="1" step="1" placeholder="0" style="margin-top:4px"></label>
+    </div>
+    <div class="inv-modal-footer">
+      <button class="btn ghost" onclick="closeModal('receive-modal')">Cancel</button>
+      <button class="btn primary" onclick="saveBagReceive()">Receive</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MODAL: Add / Edit Block Inventory Entry
+════════════════════════════════════════════════════ -->
+<div class="inv-modal-bg" id="block-modal">
+  <div class="inv-modal" style="position:relative">
+    <button class="inv-modal-close" onclick="closeModal('block-modal')" aria-label="Close">×</button>
+    <h2 id="block-modal-title">Add Block Type</h2>
+    <input type="hidden" id="blkm-id">
+    <div class="prod-form-grid">
+      <label class="prod-field">Density / Material<input type="text" id="blkm-density" class="prod-field" placeholder="e.g. 1.0 EPS" style="margin-top:4px"></label>
+      <label class="prod-field">Blocks on Floor<input type="number" id="blkm-count" class="prod-field" min="0" step="1" placeholder="0" style="margin-top:4px"></label>
+      <label class="prod-field">Length (in)<input type="number" id="blkm-len" class="prod-field" min="0.1" step="0.1" placeholder="96" style="margin-top:4px"></label>
+      <label class="prod-field">Width (in)<input type="number" id="blkm-wid" class="prod-field" min="0.1" step="0.1" placeholder="48" style="margin-top:4px"></label>
+      <label class="prod-field">Height (in)<input type="number" id="blkm-hgt" class="prod-field" min="0.1" step="0.1" placeholder="24" style="margin-top:4px"></label>
+      <label class="prod-field" style="grid-column:1/-1">Notes<input type="text" id="blkm-notes" class="prod-field" placeholder="Optional" style="margin-top:4px"></label>
+    </div>
+    <div class="inv-modal-footer">
+      <button class="btn ghost" onclick="closeModal('block-modal')">Cancel</button>
+      <button class="btn primary" onclick="saveBlockInventory()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MODAL: Add Blocks (quick adjust up)
+════════════════════════════════════════════════════ -->
+<div class="inv-modal-bg" id="add-blocks-modal">
+  <div class="inv-modal" style="position:relative">
+    <button class="inv-modal-close" onclick="closeModal('add-blocks-modal')" aria-label="Close">×</button>
+    <h2>Add Blocks</h2>
+    <div class="prod-form-grid">
+      <label class="prod-field">Block Type<select id="abm-block-id" class="prod-field" style="margin-top:4px"><option value="">— select —</option></select></label>
+      <label class="prod-field">Blocks to Add<input type="number" id="abm-count" class="prod-field" min="1" step="1" placeholder="0" style="margin-top:4px"></label>
+    </div>
+    <div class="inv-modal-footer">
+      <button class="btn ghost" onclick="closeModal('add-blocks-modal')">Cancel</button>
+      <button class="btn primary" onclick="saveAddBlocks()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MODAL: Log Block Consumption
+════════════════════════════════════════════════════ -->
+<div class="inv-modal-bg" id="consume-modal">
+  <div class="inv-modal" style="position:relative">
+    <button class="inv-modal-close" onclick="closeModal('consume-modal')" aria-label="Close">×</button>
+    <h2>Log Block Consumption</h2>
+    <input type="hidden" id="cm-job-id">
+    <div id="cm-job-label" style="display:none;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:13px;color:#92400e"></div>
+    <div class="prod-form-grid">
+      <label class="prod-field">Block Type<select id="cm-block-id" class="prod-field" style="margin-top:4px"><option value="">— select —</option></select></label>
+      <label class="prod-field">Blocks Consumed<input type="number" id="cm-count" class="prod-field" min="1" step="1" placeholder="0" style="margin-top:4px"></label>
+      <label class="prod-field" style="grid-column:1/-1">Notes<input type="text" id="cm-notes" class="prod-field" placeholder="Optional" style="margin-top:4px"></label>
+    </div>
+    <div class="inv-modal-footer">
+      <button class="btn ghost" onclick="closeModal('consume-modal')">Cancel</button>
+      <button class="btn primary" onclick="saveConsumption()">Log</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ─── State ───────────────────────────────────────── */
+let beadData  = [];
+let blockData = [];
+let moldingData = [];
+let openJobs  = [];
+let activeTab = 'bead';
+let bannerJobId = null;
+
+const params = new URLSearchParams(location.search);
+bannerJobId = params.get('job_id') || null;
+
+/* ─── Utilities ───────────────────────────────────── */
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso.includes('T') ? iso : iso + 'T00:00:00Z');
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', timeZone:'UTC' });
+}
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+}
+function fmtNum(n) { return n == null ? '—' : Number(n).toLocaleString(); }
+function fmtDec(n, places=1) { return n == null ? '—' : Number(n).toFixed(places); }
+
+function showErr(msg) { alert('Error: ' + msg); }
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+
+/* ─── Tabs ────────────────────────────────────────── */
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.inv-tab').forEach((el, i) => {
+    el.classList.toggle('active', ['bead','blocks','molding'][i] === tab);
+  });
+  document.querySelectorAll('.inv-panel').forEach(el => el.classList.remove('active'));
+  document.getElementById('panel-' + (tab === 'blocks' ? 'blocks' : tab === 'molding' ? 'molding' : 'bead')).classList.add('active');
+  if (tab === 'molding') loadMoldingLog();
+}
+
+/* ─── Job banner ──────────────────────────────────── */
+async function initJobBanner() {
+  if (!bannerJobId) return;
+  const banner = document.getElementById('job-banner');
+  try {
+    const res  = await fetch(`/api/jobs?status=not_started,in_production,done,shipped`);
+    const body = await res.json();
+    if (body.ok) {
+      const job = body.jobs.find(j => String(j.id) === String(bannerJobId));
+      if (job) {
+        const label = `${job.customer}${job.invoice_number ? ' · ' + job.invoice_number : ''}`;
+        document.getElementById('job-banner-text').textContent = `Linked job: ${label}`;
+        banner.style.display = 'flex';
+      }
+    }
+  } catch { /* ignore */ }
+}
+function clearJobParam() {
+  bannerJobId = null;
+  document.getElementById('job-banner').style.display = 'none';
+  history.replaceState({}, '', location.pathname);
+}
+function openConsumeFromBanner() {
+  openConsumeModal(null, bannerJobId);
+  switchTab('blocks');
+}
+
+/* ─── BEAD STOCK ──────────────────────────────────── */
+async function loadBeadStock() {
+  try {
+    const res  = await fetch('/api/bead-stock');
+    const body = await res.json();
+    beadData = body.ok ? body.data : [];
+  } catch { beadData = []; }
+  renderBeadStock();
+}
+
+function renderBeadStock() {
+  const tbody = document.getElementById('bead-tbody');
+  if (!beadData.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="inv-empty">No bead stock entries. Add a bead type to get started.</td></tr>';
+    document.getElementById('bs-total-bags').textContent   = '0';
+    document.getElementById('bs-total-weight').textContent = '0';
+    document.getElementById('bs-low-count').textContent    = '0';
+    document.getElementById('bs-type-count').textContent   = '0';
+    return;
+  }
+
+  let totalBags = 0, totalWeight = 0, lowCount = 0;
+  beadData.forEach(r => {
+    totalBags   += (r.bags_on_hand || 0);
+    totalWeight += (r.total_weight_lbs || 0);
+    if (r.below_reorder) lowCount++;
+  });
+
+  document.getElementById('bs-total-bags').textContent   = fmtNum(totalBags);
+  document.getElementById('bs-total-weight').textContent = fmtDec(totalWeight, 0);
+  document.getElementById('bs-low-count').textContent    = lowCount;
+  document.getElementById('bs-type-count').textContent   = beadData.length;
+  const lowEl = document.getElementById('bs-low-count');
+  lowEl.className = 'inv-stat-val' + (lowCount > 0 ? ' warn' : '');
+
+  tbody.innerHTML = beadData.map(r => `
+    <tr>
+      <td>${esc(r.manufacturer)}</td>
+      <td>${esc(r.bead_type)}</td>
+      <td>${fmtNum(r.bags_on_hand)} ${r.below_reorder ? '<span class="inv-badge inv-badge-low">LOW — REORDER</span>' : '<span class="inv-badge inv-badge-ok">OK</span>'}</td>
+      <td>${fmtDec(r.bag_weight_lbs)}</td>
+      <td>${fmtDec(r.total_weight_lbs, 0)}</td>
+      <td>${r.reorder_at_bags != null ? fmtNum(r.reorder_at_bags) : '—'}</td>
+      <td>${r.updated_at ? fmtDate(r.updated_at) : '—'}</td>
+      <td><button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="openBeadModal(${r.id})">Edit</button></td>
+    </tr>`).join('');
+
+  refreshBeadSelects();
+}
+
+function refreshBeadSelects() {
+  const opts = beadData.map(r => `<option value="${r.id}">${esc(r.manufacturer)} — ${esc(r.bead_type)} (${fmtNum(r.bags_on_hand)} bags)</option>`).join('');
+  ['rm-bead-id','qf-bead-id'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = `<option value="">— select —</option>${opts}`;
+  });
+}
+
+function openBeadModal(id) {
+  document.getElementById('bm-id').value    = id || '';
+  document.getElementById('bm-mfr').value   = '';
+  document.getElementById('bm-type').value  = '';
+  document.getElementById('bm-bags').value  = '';
+  document.getElementById('bm-weight').value= '';
+  document.getElementById('bm-reorder').value= '';
+  document.getElementById('bead-modal-title').textContent = id ? 'Edit Bead Type' : 'Add Bead Type';
+
+  if (id) {
+    const r = beadData.find(x => x.id === id);
+    if (r) {
+      document.getElementById('bm-mfr').value    = r.manufacturer || '';
+      document.getElementById('bm-type').value   = r.bead_type || '';
+      document.getElementById('bm-bags').value   = r.bags_on_hand ?? '';
+      document.getElementById('bm-weight').value = r.bag_weight_lbs ?? '';
+      document.getElementById('bm-reorder').value= r.reorder_at_bags ?? '';
+    }
+  }
+  openModal('bead-modal');
+}
+
+async function saveBeadStock() {
+  const id      = document.getElementById('bm-id').value;
+  const mfr     = document.getElementById('bm-mfr').value.trim();
+  const type    = document.getElementById('bm-type').value.trim();
+  const bags    = parseInt(document.getElementById('bm-bags').value, 10);
+  const weight  = parseFloat(document.getElementById('bm-weight').value);
+  const reorder = document.getElementById('bm-reorder').value !== ''
+                    ? parseInt(document.getElementById('bm-reorder').value, 10) : null;
+
+  if (!mfr || !type)               return showErr('Manufacturer and Bead Type are required.');
+  if (isNaN(weight) || weight <= 0) return showErr('Bag weight must be greater than 0.');
+  if (id === '' && (isNaN(bags) || bags < 0)) return showErr('Bags on hand must be 0 or more.');
+
+  const payload = { manufacturer: mfr, bead_type: type, bag_weight_lbs: weight, reorder_at_bags: reorder };
+  if (id === '') payload.bags_on_hand = isNaN(bags) ? 0 : bags;
+
+  const method = id ? 'PUT' : 'POST';
+  const url    = id ? `/api/bead-stock?id=${id}` : '/api/bead-stock';
+
+  try {
+    const res  = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const body = await res.json();
+    if (!body.ok) return showErr(body.error || 'Save failed.');
+    closeModal('bead-modal');
+    await loadBeadStock();
+  } catch { showErr('Network error.'); }
+}
+
+function openReceiveBead() { openModal('receive-modal'); }
+
+async function saveBagReceive() {
+  const beadId = document.getElementById('rm-bead-id').value;
+  const bags   = parseInt(document.getElementById('rm-bags').value, 10);
+  if (!beadId)           return showErr('Select a bead type.');
+  if (isNaN(bags) || bags < 1) return showErr('Enter bags received (minimum 1).');
+
+  const r = beadData.find(x => x.id == beadId);
+  if (!r) return showErr('Bead not found.');
+
+  const newBags = (r.bags_on_hand || 0) + bags;
+  try {
+    const res  = await fetch(`/api/bead-stock?id=${beadId}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ bags_on_hand: newBags })
+    });
+    const body = await res.json();
+    if (!body.ok) return showErr(body.error || 'Failed to update.');
+    closeModal('receive-modal');
+    document.getElementById('rm-bags').value = '';
+    await loadBeadStock();
+  } catch { showErr('Network error.'); }
+}
+
+/* ─── BLOCK INVENTORY ─────────────────────────────── */
+async function loadBlockInventory() {
+  try {
+    const res  = await fetch('/api/block-inventory');
+    const body = await res.json();
+    blockData = body.ok ? body.data : [];
+  } catch { blockData = []; }
+  renderBlockInventory();
+}
+
+function renderBlockInventory() {
+  const tbody = document.getElementById('block-tbody');
+  if (!blockData.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="inv-empty">No block types. Add a block type to get started.</td></tr>';
+    document.getElementById('blk-total').textContent = '0';
+    document.getElementById('blk-types').textContent = '0';
+    return;
+  }
+
+  const totalBlocks = blockData.reduce((s, r) => s + (r.blocks_on_hand || 0), 0);
+  document.getElementById('blk-total').textContent = fmtNum(totalBlocks);
+  document.getElementById('blk-types').textContent = blockData.length;
+
+  tbody.innerHTML = blockData.map(r => `
+    <tr>
+      <td>${esc(r.density_material)}</td>
+      <td>${fmtDec(r.length_in, 1)} × ${fmtDec(r.width_in, 1)} × ${fmtDec(r.height_in, 1)}</td>
+      <td>${fmtNum(r.blocks_on_hand)}</td>
+      <td>${r.notes ? esc(r.notes) : '—'}</td>
+      <td>${r.updated_at ? fmtDate(r.updated_at) : '—'}</td>
+      <td><button class="btn ghost" style="padding:4px 10px;font-size:12px" onclick="openBlockModal(${r.id})">Edit</button></td>
+    </tr>`).join('');
+
+  refreshBlockSelects();
+}
+
+function refreshBlockSelects() {
+  const opts = blockData.map(r =>
+    `<option value="${r.id}">${esc(r.density_material)} — ${fmtDec(r.length_in,1)}×${fmtDec(r.width_in,1)}×${fmtDec(r.height_in,1)} (${fmtNum(r.blocks_on_hand)} on hand)</option>`
+  ).join('');
+  ['abm-block-id','cm-block-id','qf-block-id'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = `<option value="">— select —</option>${opts}`;
+  });
+}
+
+function openBlockModal(id) {
+  document.getElementById('blkm-id').value      = id || '';
+  document.getElementById('blkm-density').value = '';
+  document.getElementById('blkm-count').value   = '';
+  document.getElementById('blkm-len').value     = '';
+  document.getElementById('blkm-wid').value     = '';
+  document.getElementById('blkm-hgt').value     = '';
+  document.getElementById('blkm-notes').value   = '';
+  document.getElementById('block-modal-title').textContent = id ? 'Edit Block Type' : 'Add Block Type';
+
+  if (id) {
+    const r = blockData.find(x => x.id === id);
+    if (r) {
+      document.getElementById('blkm-density').value = r.density_material || '';
+      document.getElementById('blkm-count').value   = r.blocks_on_hand ?? '';
+      document.getElementById('blkm-len').value     = r.length_in ?? '';
+      document.getElementById('blkm-wid').value     = r.width_in ?? '';
+      document.getElementById('blkm-hgt').value     = r.height_in ?? '';
+      document.getElementById('blkm-notes').value   = r.notes || '';
+    }
+  }
+  openModal('block-modal');
+}
+
+async function saveBlockInventory() {
+  const id      = document.getElementById('blkm-id').value;
+  const density = document.getElementById('blkm-density').value.trim();
+  const count   = parseInt(document.getElementById('blkm-count').value, 10);
+  const len     = parseFloat(document.getElementById('blkm-len').value);
+  const wid     = parseFloat(document.getElementById('blkm-wid').value);
+  const hgt     = parseFloat(document.getElementById('blkm-hgt').value);
+  const notes   = document.getElementById('blkm-notes').value.trim();
+
+  if (!density)                   return showErr('Density/Material is required.');
+  if (isNaN(len) || len <= 0)     return showErr('Length must be greater than 0.');
+  if (isNaN(wid) || wid <= 0)     return showErr('Width must be greater than 0.');
+  if (isNaN(hgt) || hgt <= 0)     return showErr('Height must be greater than 0.');
+
+  const payload = { density_material: density, length_in: len, width_in: wid, height_in: hgt, notes: notes || null };
+  if (id === '') payload.blocks_on_hand = isNaN(count) ? 0 : Math.max(0, count);
+
+  const method = id ? 'PUT' : 'POST';
+  const url    = id ? `/api/block-inventory?id=${id}` : '/api/block-inventory';
+
+  try {
+    const res  = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const body = await res.json();
+    if (!body.ok) return showErr(body.error || 'Save failed.');
+    closeModal('block-modal');
+    await loadBlockInventory();
+  } catch { showErr('Network error.'); }
+}
+
+function openAddBlocks() { openModal('add-blocks-modal'); }
+
+async function saveAddBlocks() {
+  const blockId = document.getElementById('abm-block-id').value;
+  const count   = parseInt(document.getElementById('abm-count').value, 10);
+  if (!blockId)            return showErr('Select a block type.');
+  if (isNaN(count) || count < 1) return showErr('Enter blocks to add (minimum 1).');
+
+  const r = blockData.find(x => x.id == blockId);
+  if (!r) return showErr('Block type not found.');
+
+  const newCount = (r.blocks_on_hand || 0) + count;
+  try {
+    const res  = await fetch(`/api/block-inventory?id=${blockId}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ blocks_on_hand: newCount })
+    });
+    const body = await res.json();
+    if (!body.ok) return showErr(body.error || 'Failed to update.');
+    closeModal('add-blocks-modal');
+    document.getElementById('abm-count').value = '';
+    await loadBlockInventory();
+  } catch { showErr('Network error.'); }
+}
+
+/* ─── BLOCK CONSUMPTION ───────────────────────────── */
+function openConsumeModal(blockId, jobId) {
+  document.getElementById('cm-job-id').value = jobId || '';
+  document.getElementById('cm-count').value  = '';
+  document.getElementById('cm-notes').value  = '';
+
+  const labelEl = document.getElementById('cm-job-label');
+  if (jobId) {
+    const job = openJobs.find(j => String(j.id) === String(jobId));
+    if (job) {
+      const label = `${job.customer}${job.invoice_number ? ' · ' + job.invoice_number : ''}`;
+      labelEl.textContent = `Linked to job: ${label}`;
+      labelEl.style.display = 'block';
+    }
+  } else {
+    labelEl.style.display = 'none';
+  }
+
+  if (blockId) document.getElementById('cm-block-id').value = blockId;
+  openModal('consume-modal');
+}
+
+async function saveConsumption() {
+  const blockId = document.getElementById('cm-block-id').value;
+  const count   = parseInt(document.getElementById('cm-count').value, 10);
+  const notes   = document.getElementById('cm-notes').value.trim();
+  const jobId   = document.getElementById('cm-job-id').value || null;
+
+  if (!blockId)            return showErr('Select a block type.');
+  if (isNaN(count) || count < 1) return showErr('Enter blocks consumed (minimum 1).');
+
+  const payload = { block_inventory_id: parseInt(blockId), blocks_consumed: count, notes: notes || null };
+  if (jobId) payload.job_id = parseInt(jobId);
+
+  try {
+    const res  = await fetch('/api/block-consumption', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const body = await res.json();
+    if (!body.ok) return showErr(body.error || 'Failed to log consumption.');
+    closeModal('consume-modal');
+    await loadBlockInventory();
+  } catch { showErr('Network error.'); }
+}
+
+/* ─── MOLDING LOG ─────────────────────────────────── */
+async function loadMoldingLog() {
+  const days = document.getElementById('molding-days').value;
+  const tbody = document.getElementById('molding-tbody');
+  try {
+    const res  = await fetch(`/api/molding-log?days=${days}`);
+    const body = await res.json();
+    moldingData = body.ok ? body.data : [];
+  } catch { moldingData = []; }
+  renderMoldingLog();
+}
+
+function renderMoldingLog() {
+  const tbody = document.getElementById('molding-tbody');
+  if (!moldingData.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="inv-empty">No molding runs in this period.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = moldingData.map(r => `
+    <tr>
+      <td style="white-space:nowrap">${fmtDateTime(r.molded_at)}</td>
+      <td>${esc(r.manufacturer || '')} — ${esc(r.bead_type || '')}</td>
+      <td>${fmtNum(r.bags_consumed)}</td>
+      <td>${esc(r.density_material || '')} ${r.length_in ? `${fmtDec(r.length_in,1)}×${fmtDec(r.width_in,1)}×${fmtDec(r.height_in,1)}` : ''}</td>
+      <td>${fmtNum(r.blocks_produced)}</td>
+      <td>${r.notes ? esc(r.notes) : '—'}</td>
+    </tr>`).join('');
+}
+
+async function submitMoldingRun() {
+  const beadId  = document.getElementById('qf-bead-id').value;
+  const bags    = parseInt(document.getElementById('qf-bags').value, 10);
+  const blockId = document.getElementById('qf-block-id').value;
+  const blocks  = parseInt(document.getElementById('qf-blocks').value, 10);
+  const notes   = document.getElementById('qf-notes').value.trim();
+
+  if (!beadId)             return showErr('Select a bead type.');
+  if (isNaN(bags) || bags < 1) return showErr('Bags consumed must be at least 1.');
+  if (!blockId)            return showErr('Select a block type.');
+  if (isNaN(blocks) || blocks < 1) return showErr('Blocks produced must be at least 1.');
+
+  try {
+    const res  = await fetch('/api/molding-log', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        bead_stock_id: parseInt(beadId),
+        bags_consumed: bags,
+        block_inventory_id: parseInt(blockId),
+        blocks_produced: blocks,
+        notes: notes || null
+      })
+    });
+    const body = await res.json();
+    if (!body.ok) return showErr(body.error || 'Failed to log run.');
+    document.getElementById('qf-bags').value   = '';
+    document.getElementById('qf-blocks').value = '';
+    document.getElementById('qf-notes').value  = '';
+    await Promise.all([loadBeadStock(), loadBlockInventory(), loadMoldingLog()]);
+  } catch { showErr('Network error.'); }
+}
+
+/* ─── Open Jobs (for consume modal) ──────────────── */
+async function loadOpenJobs() {
+  try {
+    const res  = await fetch('/api/jobs?status=not_started,in_production,done');
+    const body = await res.json();
+    openJobs = body.ok ? body.jobs : [];
+  } catch { openJobs = []; }
+}
+
+/* ─── Init ────────────────────────────────────────── */
+(async () => {
+  await Promise.allSettled([loadBeadStock(), loadBlockInventory(), loadOpenJobs()]);
+  initJobBanner();
+})();
+
+/* ─── Close modals on backdrop click ─────────────── */
+document.querySelectorAll('.inv-modal-bg').forEach(bg => {
+  bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('open'); });
+});
+</script>
+</body>
+</html>
