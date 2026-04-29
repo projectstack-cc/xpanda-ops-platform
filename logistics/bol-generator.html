@@ -1345,9 +1345,9 @@ async function generatePdf(bol) {
   const COORDS = {
     deliveryTime:       { x: 36,  y: 752, size: 10 },           // 40pt from top
     date:               { x: 338, y: 707, size: 10 },           // 85pt from top
-    bolNumber:          { x: 380, y: 684, size: 24, bold: true }, // 108pt from top
-    carrierName:        { x: 378, y: 652, size: 10 },           // 140pt from top
-    trailerNo:          { x: 378, y: 635, size: 10 },           // 157pt from top
+    bolNumber:          { x: 380, y: 675, size: 24, bold: true }, // 117pt from top — centered in box below label
+    carrierName:        { x: 378, y: 652, size: 10 },           // 140pt from top, after "Name:"
+    trailerNo:          { x: 360, y: 635, size: 10 },           // 157pt from top, after "No:"
     sealNumber:         { x: 378, y: 619, size: 10 },           // 173pt from top
     scac:               { x: 378, y: 601, size: 10 },           // 191pt from top
     proNo:              { x: 378, y: 585, size: 10 },           // 207pt from top
@@ -1356,11 +1356,11 @@ async function generatePdf(bol) {
     shipLine3:          { x: 55,  y: 581, size: 10 },
     shipLine4:          { x: 55,  y: 568, size: 10 },
     locationNo:         { x: 248, y: 619, size: 10 },           // 173pt from top
-    chkPrepaid:         { x: 49,  y: 532, size: 10 },           // 260pt from top
-    chkCollect:         { x: 105, y: 532, size: 10 },
-    chk3rdParty:        { x: 164, y: 532, size: 10 },
-    chkScrap:           { x: 245, y: 532, size: 10 },           // same row, independent
-    thirdPartyBillTo:   { x: 55,  y: 502, size: 9 },            // 290pt from top
+    chkPrepaid:         { x: 39,  y: 534, size: 10 },           // 258pt from top
+    chkCollect:         { x: 103, y: 534, size: 10 },
+    chk3rdParty:        { x: 164, y: 534, size: 10 },
+    thirdPartyBillTo:   { x: 42,  y: 502, size: 9 },            // 290pt from top
+    scrapPickupText:    { x: 42,  y: 502, size: 12, bold: true }, // repurposes bill-to area
     specialInstr:       { x: 310, y: 527, size: 9,  lineH: 11, maxW: 200 }, // 265pt from top
     masterBol:          { x: 538, y: 532, size: 10 },           // 260pt from top
     commodity:          { x: 245, y: 417, size: 10, lineH: 14, maxW: 340 }, // 375pt from top
@@ -1443,8 +1443,19 @@ async function generatePdf(bol) {
   if (ft === 'prepaid')   drawText('X', COORDS.chkPrepaid);
   if (ft === 'collect')   drawText('X', COORDS.chkCollect);
   if (ft === '3rd_party') drawText('X', COORDS.chk3rdParty);
-  if (bol.is_scrap_pickup) drawText('X', COORDS.chkScrap);
-  drawText(bol.third_party_bill_to, COORDS.thirdPartyBillTo);
+
+  // ── Bill-To / Scrap area ──
+  // 3rd-party bill-to text (if any) goes first; scrap pick-up writes
+  // "SCRAP PICK UP" in bold in the same area (next line if both present).
+  if (bol.third_party_bill_to) {
+    drawText(bol.third_party_bill_to, COORDS.thirdPartyBillTo);
+  }
+  if (bol.is_scrap_pickup) {
+    const scrapY = bol.third_party_bill_to
+      ? COORDS.thirdPartyBillTo.y - 14
+      : COORDS.scrapPickupText.y;
+    page.drawText('SCRAP PICK UP', { x: COORDS.scrapPickupText.x, y: scrapY, size: 12, font: fontBold, color: black });
+  }
 
   // ── Special instructions (multi-line) ──
   drawMultiline(bol.special_instructions, COORDS.specialInstr);
