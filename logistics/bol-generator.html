@@ -1,0 +1,1516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BOL Generator — xPanda Logistics</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="/assets/img/favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+<link rel="stylesheet" href="/logistics/logistics-shared.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+/* ── Layout ──────────────────────────────────────────────────────────── */
+.bol-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px 60px;
+}
+
+.bol-columns {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .bol-columns { grid-template-columns: 1fr; }
+  .bol-sidebar-col { order: -1; }
+}
+
+/* ── Section cards ───────────────────────────────────────────────────── */
+.bol-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+.bol-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ── Form fields ─────────────────────────────────────────────────────── */
+.bol-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.bol-field label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.bol-field input,
+.bol-field select,
+.bol-field textarea {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+  width: 100%;
+}
+
+.bol-field input:focus,
+.bol-field select:focus,
+.bol-field textarea:focus {
+  border-color: #334155;
+  box-shadow: 0 0 0 3px rgba(51,65,85,.1);
+}
+
+.bol-field textarea { resize: vertical; }
+
+.bol-row {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.bol-row-2 { grid-template-columns: 1fr 1fr; }
+.bol-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+.bol-row .bol-field { margin-bottom: 0; }
+
+@media (max-width: 600px) {
+  .bol-row-2, .bol-row-3 { grid-template-columns: 1fr; }
+}
+
+/* ── Customer / carrier search ───────────────────────────────────────── */
+.bol-search-wrap {
+  position: relative;
+}
+
+.bol-search-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.13);
+  z-index: 200;
+  max-height: 240px;
+  overflow-y: auto;
+  display: none;
+}
+
+.bol-search-dropdown.open { display: block; }
+
+.bol-search-item {
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.bol-search-item:last-child { border-bottom: none; }
+.bol-search-item:hover,
+.bol-search-item.kbd-active { background: var(--accent-soft); }
+
+.bol-search-company { font-weight: 700; }
+.bol-search-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ── Customer indicator ──────────────────────────────────────────────── */
+.bol-cust-indicator {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bol-cust-indicator.saved {
+  display: flex;
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.bol-cust-indicator.custom {
+  display: block;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.bol-clear-cust-btn {
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  white-space: nowrap;
+}
+
+/* ── Freight terms ───────────────────────────────────────────────────── */
+.bol-freight-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.bol-freight-opt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.bol-freight-opt input[type="radio"] {
+  accent-color: #334155;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+/* ── Collapsible ─────────────────────────────────────────────────────── */
+.bol-collapsible-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bol-collapsible-hdr .bol-section-title { margin-bottom: 0; border-bottom: none; padding-bottom: 0; }
+
+.bol-collapse-btn {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0;
+  pointer-events: none; /* clicks handled by parent */
+}
+
+.bol-collapsible-body {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+}
+
+.bol-collapsible-body.hidden { display: none; }
+
+/* ── Checkbox row ────────────────────────────────────────────────────── */
+.bol-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.bol-check-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #334155;
+  cursor: pointer;
+}
+
+/* ── Action buttons ──────────────────────────────────────────────────── */
+.bol-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.bol-btn {
+  appearance: none;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity .15s;
+  white-space: nowrap;
+}
+
+.bol-btn:hover { opacity: .88; }
+.bol-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.bol-btn-generate { background: #0891b2; color: #fff; }
+.bol-btn-draft    { background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
+.bol-btn-clear    { background: var(--card-bg); color: #dc2626;    border: 1px solid #fecaca; }
+
+.bol-status {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 10px;
+  min-height: 18px;
+}
+
+.bol-status.error   { color: #dc2626; }
+.bol-status.success { color: #16a34a; }
+
+/* ── Recent BOLs sidebar ─────────────────────────────────────────────── */
+.bol-recent-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background .1s, padding .1s;
+}
+
+.bol-recent-item:last-child { border-bottom: none; }
+
+.bol-recent-item:hover {
+  background: var(--accent-soft);
+  padding: 10px 6px;
+  margin: 0 -6px;
+}
+
+.bol-recent-num      { font-weight: 800; font-size: 14px; }
+.bol-recent-customer { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.bol-recent-meta     { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+.bol-recent-empty    { font-size: 13px; color: var(--muted); text-align: center; padding: 16px 0; }
+
+/* ── Address manager ─────────────────────────────────────────────────── */
+.bol-addr-table-wrap { overflow-x: auto; }
+
+.bol-addr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.bol-addr-table th {
+  background: #f8fafc;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: #64748b;
+  border-bottom: 1px solid var(--line);
+}
+
+.bol-addr-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.bol-addr-table tr:last-child td { border-bottom: none; }
+.bol-addr-table tr:hover td { background: #f8fafc; }
+
+.bol-addr-act-btn {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--text);
+  transition: background .1s;
+}
+
+.bol-addr-act-btn:hover { background: var(--accent-soft); }
+.bol-addr-act-btn.danger { color: #dc2626; border-color: #fecaca; }
+.bol-addr-act-btn.danger:hover { background: #fef2f2; }
+
+.bol-addr-form {
+  background: var(--accent-soft);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+  display: none;
+}
+
+.bol-addr-form.open { display: block; }
+
+.bol-addr-form-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────── */
+.bol-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: #0f172a;
+  color: #fff;
+  border-radius: 10px;
+  padding: 12px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 999;
+  transition: transform .25s ease, opacity .25s ease;
+  opacity: 0;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.bol-toast.visible { transform: translateX(-50%) translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+
+<script src="/logistics/logistics-header.js"></script>
+<script>
+document.getElementById('logistics-page-title').textContent    = 'BOL Generator';
+document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills of Lading';
+</script>
+
+<div class="bol-wrap">
+<div class="bol-columns">
+
+<!-- ═══════════════════════════════════════════════════
+     Left column — form
+════════════════════════════════════════════════════ -->
+<div class="bol-form-col">
+
+  <!-- Header -->
+  <div class="bol-section">
+    <div class="bol-section-title">Header</div>
+    <div class="bol-row bol-row-3">
+      <div class="bol-field">
+        <label>BOL Number</label>
+        <input type="number" id="f-bol-number" min="1" placeholder="Auto-assigned">
+      </div>
+      <div class="bol-field">
+        <label>Date</label>
+        <input type="date" id="f-date">
+      </div>
+      <div class="bol-field">
+        <label>Delivery Time</label>
+        <input type="text" id="f-delivery-time" placeholder="e.g. MON. 8:00am">
+      </div>
+    </div>
+  </div>
+
+  <!-- Ship To -->
+  <div class="bol-section">
+    <div class="bol-section-title">Ship To</div>
+
+    <div class="bol-field">
+      <label>Search Saved Customers</label>
+      <div class="bol-search-wrap">
+        <input type="text" id="customer-search" placeholder="Type company name, city…" autocomplete="off">
+        <div class="bol-search-dropdown" id="customer-dropdown"></div>
+      </div>
+    </div>
+
+    <div class="bol-cust-indicator" id="cust-indicator"></div>
+
+    <div class="bol-row bol-row-2">
+      <div class="bol-field">
+        <label>Company *</label>
+        <input type="text" id="f-ship-company" placeholder="Company name">
+      </div>
+      <div class="bol-field">
+        <label>Attention / c/o</label>
+        <input type="text" id="f-ship-attention" placeholder="Attn: or c/o …">
+      </div>
+    </div>
+
+    <div class="bol-field">
+      <label>Project Name</label>
+      <input type="text" id="f-project-name" placeholder="Job-site delivery — renders as Project c/o Company">
+    </div>
+
+    <div class="bol-field">
+      <label>Street</label>
+      <input type="text" id="f-ship-street" placeholder="Street address">
+    </div>
+
+    <div class="bol-field">
+      <label>Street 2</label>
+      <input type="text" id="f-ship-street2" placeholder="Suite, unit, bldg…">
+    </div>
+
+    <div class="bol-row bol-row-3">
+      <div class="bol-field">
+        <label>City</label>
+        <input type="text" id="f-ship-city" placeholder="City">
+      </div>
+      <div class="bol-field">
+        <label>State</label>
+        <input type="text" id="f-ship-state" value="FL" placeholder="FL">
+      </div>
+      <div class="bol-field">
+        <label>Zip</label>
+        <input type="text" id="f-ship-zip" placeholder="Zip">
+      </div>
+    </div>
+
+    <div class="bol-field">
+      <label>Location No</label>
+      <input type="text" id="f-location-no" placeholder="Optional">
+    </div>
+  </div>
+
+  <!-- Carrier -->
+  <div class="bol-section">
+    <div class="bol-section-title">Carrier</div>
+
+    <div class="bol-field">
+      <label>Carrier Name</label>
+      <div class="bol-search-wrap">
+        <input type="text" id="carrier-search" placeholder="Select or type carrier…" autocomplete="off">
+        <div class="bol-search-dropdown" id="carrier-dropdown"></div>
+      </div>
+    </div>
+
+    <div class="bol-row bol-row-2">
+      <div class="bol-field">
+        <label>Trailer No</label>
+        <input type="text" id="f-trailer-no">
+      </div>
+      <div class="bol-field">
+        <label>Seal Number</label>
+        <input type="text" id="f-seal-number">
+      </div>
+    </div>
+    <div class="bol-row bol-row-2">
+      <div class="bol-field">
+        <label>SCAC</label>
+        <input type="text" id="f-scac">
+      </div>
+      <div class="bol-field">
+        <label>Pro No</label>
+        <input type="text" id="f-pro-no">
+      </div>
+    </div>
+  </div>
+
+  <!-- Freight Terms -->
+  <div class="bol-section">
+    <div class="bol-section-title">Freight Terms</div>
+    <div class="bol-freight-row">
+      <label class="bol-freight-opt"><input type="radio" name="freight-terms" value="prepaid" checked> Prepaid</label>
+      <label class="bol-freight-opt"><input type="radio" name="freight-terms" value="collect"> Collect</label>
+      <label class="bol-freight-opt"><input type="radio" name="freight-terms" value="3rd_party"> 3rd Party</label>
+      <label class="bol-freight-opt"><input type="radio" name="freight-terms" value="scrap_pickup"> Scrap Pick-Up</label>
+    </div>
+    <div class="bol-field" id="third-party-field" style="display:none;">
+      <label>3rd Party Bill To</label>
+      <input type="text" id="f-third-party-bill-to" placeholder="Company and address">
+    </div>
+  </div>
+
+  <!-- Special Instructions -->
+  <div class="bol-section">
+    <div class="bol-section-title">Special Instructions</div>
+    <div class="bol-row bol-row-2">
+      <div class="bol-field">
+        <label>Contact Name</label>
+        <input type="text" id="f-contact-name">
+      </div>
+      <div class="bol-field">
+        <label>Contact Phone</label>
+        <input type="tel" id="f-contact-phone">
+      </div>
+    </div>
+    <div class="bol-field">
+      <label>PO #</label>
+      <input type="text" id="f-po-number">
+    </div>
+    <div class="bol-field">
+      <label>Additional Instructions</label>
+      <textarea id="f-special-instructions" rows="3" placeholder="Loading notes, special requirements…"></textarea>
+    </div>
+    <label class="bol-check-row">
+      <input type="checkbox" id="f-master-bol"> Master BOL
+    </label>
+  </div>
+
+  <!-- Commodity Description -->
+  <div class="bol-section">
+    <div class="bol-section-title">Commodity Description</div>
+    <div class="bol-field">
+      <textarea id="f-commodity" rows="6" placeholder="e.g. 640 pcs - 1.0#EPS 1.25&quot; x 96&quot; x 11/9&quot; TAPER"></textarea>
+    </div>
+  </div>
+
+  <!-- Weight & Handling (collapsible) -->
+  <div class="bol-section">
+    <div class="bol-collapsible-hdr" onclick="toggleSection('handling-body','handling-btn')">
+      <div class="bol-section-title">Weight &amp; Handling</div>
+      <button class="bol-collapse-btn" id="handling-btn">Show ▾</button>
+    </div>
+    <div class="bol-collapsible-body hidden" id="handling-body">
+      <div class="bol-row bol-row-2">
+        <div class="bol-field">
+          <label>Handling Unit QTY</label>
+          <input type="text" id="f-hu-qty">
+        </div>
+        <div class="bol-field">
+          <label>Handling Unit Type</label>
+          <input type="text" id="f-hu-type" placeholder="e.g. Pallet">
+        </div>
+      </div>
+      <div class="bol-row bol-row-2">
+        <div class="bol-field">
+          <label>Package QTY</label>
+          <input type="text" id="f-pkg-qty">
+        </div>
+        <div class="bol-field">
+          <label>Package Type</label>
+          <input type="text" id="f-pkg-type" placeholder="e.g. Bundle">
+        </div>
+      </div>
+      <div class="bol-field">
+        <label>Weight (lbs)</label>
+        <input type="text" id="f-weight">
+      </div>
+    </div>
+  </div>
+
+  <!-- Internal Notes -->
+  <div class="bol-section">
+    <div class="bol-section-title">Internal Notes</div>
+    <div class="bol-field">
+      <textarea id="f-notes" rows="2" placeholder="Not printed on BOL — internal reference only"></textarea>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="bol-section">
+    <div class="bol-actions">
+      <button class="bol-btn bol-btn-generate" id="btn-generate">Generate BOL PDF</button>
+      <button class="bol-btn bol-btn-draft"    id="btn-draft">Save Draft</button>
+      <button class="bol-btn bol-btn-clear"    id="btn-clear">Clear Form</button>
+    </div>
+    <div class="bol-status" id="bol-status"></div>
+  </div>
+
+</div><!-- /.bol-form-col -->
+
+<!-- ═══════════════════════════════════════════════════
+     Right column — sidebar
+════════════════════════════════════════════════════ -->
+<div class="bol-sidebar-col">
+
+  <div class="bol-section">
+    <div class="bol-section-title">Recent BOLs</div>
+    <div id="recent-bols-list">
+      <div class="bol-recent-empty">Loading…</div>
+    </div>
+  </div>
+
+</div><!-- /.bol-sidebar-col -->
+</div><!-- /.bol-columns -->
+
+<!-- ═══════════════════════════════════════════════════
+     Address Manager (full-width, collapsible)
+════════════════════════════════════════════════════ -->
+<div class="bol-section" style="margin-top:4px;">
+  <div class="bol-collapsible-hdr" onclick="toggleAddrMgr()">
+    <div class="bol-section-title">Manage Saved Addresses</div>
+    <button class="bol-collapse-btn" id="addr-mgr-btn">Show ▾</button>
+  </div>
+  <div class="bol-collapsible-body hidden" id="addr-mgr-body">
+
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+      <input type="text" id="addr-mgr-search" placeholder="Search…"
+             style="flex:1;min-width:160px;border:1px solid var(--input-border);border-radius:7px;padding:8px 10px;font-size:13px;"
+             oninput="filterAddrTable(this.value)">
+      <button class="logistics-btn logistics-btn-outline" onclick="openAddrForm(null)">+ Add Customer</button>
+    </div>
+
+    <!-- Inline form -->
+    <div class="bol-addr-form" id="addr-form">
+      <div class="bol-addr-form-title" id="addr-form-title">Add Customer</div>
+      <input type="hidden" id="af-id">
+      <div class="bol-row bol-row-2">
+        <div class="bol-field"><label>Company *</label><input type="text" id="af-company"></div>
+        <div class="bol-field"><label>Attention</label><input type="text" id="af-attention"></div>
+      </div>
+      <div class="bol-field"><label>Street</label><input type="text" id="af-street"></div>
+      <div class="bol-row bol-row-3">
+        <div class="bol-field"><label>City</label><input type="text" id="af-city"></div>
+        <div class="bol-field"><label>State</label><input type="text" id="af-state" value="FL"></div>
+        <div class="bol-field"><label>Zip</label><input type="text" id="af-zip"></div>
+      </div>
+      <div class="bol-row bol-row-2">
+        <div class="bol-field"><label>Contact Name</label><input type="text" id="af-contact-name"></div>
+        <div class="bol-field"><label>Phone</label><input type="tel" id="af-phone"></div>
+      </div>
+      <div class="bol-field"><label>Notes</label><textarea id="af-notes" rows="2"></textarea></div>
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap;">
+        <button class="logistics-btn logistics-btn-primary" onclick="saveAddrForm()">Save</button>
+        <button class="logistics-btn logistics-btn-outline" onclick="closeAddrForm()">Cancel</button>
+        <span id="af-status" style="font-size:13px;color:#dc2626;"></span>
+      </div>
+    </div>
+
+    <div class="bol-addr-table-wrap">
+      <table class="bol-addr-table">
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th>City, State</th>
+            <th>Contact</th>
+            <th>Phone</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="addr-tbody">
+          <tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div><!-- /.bol-wrap -->
+<div class="bol-toast" id="bol-toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════════════════
+
+let selectedCustomerId = null;
+let selectedCarrierId  = null;
+let carriersCache      = [];
+let allAddresses       = [];
+let addrMgrLoaded      = false;
+let custSearchTimer    = null;
+let custDropIdx        = -1;
+let carrierDropIdx     = -1;
+
+// ═══════════════════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════════════════
+
+document.addEventListener('DOMContentLoaded', async () => {
+  setTodayDate();
+  fetchNextBolNumber();
+  loadCarriers();
+  loadRecentBols();
+  setupFreightTerms();
+  setupCustomerSearch();
+  setupCarrierSearch();
+  setupActions();
+});
+
+function setTodayDate() {
+  document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+}
+
+async function fetchNextBolNumber() {
+  try {
+    const res  = await fetch('/api/bols/next-number');
+    const data = await res.json();
+    if (data.ok) document.getElementById('f-bol-number').value = data.next_number;
+  } catch { /* silent */ }
+}
+
+async function loadCarriers() {
+  try {
+    const res  = await fetch('/api/bol-carriers');
+    const data = await res.json();
+    carriersCache = data.carriers || [];
+  } catch { /* silent */ }
+}
+
+async function loadRecentBols() {
+  const list = document.getElementById('recent-bols-list');
+  try {
+    const res  = await fetch('/api/bols?days=90');
+    const data = await res.json();
+    const bols = (data.bols || []).slice(0, 10);
+
+    if (!bols.length) {
+      list.innerHTML = '<div class="bol-recent-empty">No recent BOLs</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    for (const b of bols) {
+      const item = document.createElement('div');
+      item.className = 'bol-recent-item';
+      item.innerHTML = `
+        <div class="bol-recent-num">BOL #${b.bol_number}</div>
+        <div class="bol-recent-customer">${esc(b.ship_to_company || '—')}</div>
+        <div class="bol-recent-meta">${esc(b.date)} · ${esc(b.carrier_name || '—')}</div>
+      `;
+      item.addEventListener('click', () => loadBolIntoForm(b));
+      list.appendChild(item);
+    }
+  } catch {
+    list.innerHTML = '<div class="bol-recent-empty">Failed to load</div>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Customer search
+// ═══════════════════════════════════════════════════════════════════
+
+function setupCustomerSearch() {
+  const input = document.getElementById('customer-search');
+  const drop  = document.getElementById('customer-dropdown');
+
+  input.addEventListener('input', () => {
+    clearTimeout(custSearchTimer);
+    const q = input.value.trim();
+    if (!q) { closeDrop(drop); return; }
+    custSearchTimer = setTimeout(() => doCustomerSearch(q), 220);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    handleDropKeys(e, drop, custDropIdx, (i) => { custDropIdx = i; }, () => {
+      const items = drop.querySelectorAll('.bol-search-item');
+      if (items[custDropIdx]) items[custDropIdx].click();
+    });
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#customer-search') && !e.target.closest('#customer-dropdown'))
+      closeDrop(drop);
+  });
+}
+
+async function doCustomerSearch(q) {
+  const drop = document.getElementById('customer-dropdown');
+  try {
+    const res  = await fetch('/api/bol-customers?search=' + encodeURIComponent(q));
+    const data = await res.json();
+    renderCustomerDrop(data.customers || []);
+  } catch {
+    drop.innerHTML = '<div class="bol-search-item" style="color:var(--muted)">Search error</div>';
+    drop.classList.add('open');
+  }
+}
+
+function renderCustomerDrop(customers) {
+  const drop = document.getElementById('customer-dropdown');
+  custDropIdx = -1;
+  if (!customers.length) {
+    drop.innerHTML = '<div class="bol-search-item" style="color:var(--muted)">No matches</div>';
+    drop.classList.add('open');
+    return;
+  }
+  drop.innerHTML = '';
+  for (const c of customers) {
+    const item = document.createElement('div');
+    item.className = 'bol-search-item';
+    item.innerHTML = `
+      <div class="bol-search-company">${esc(c.company)}</div>
+      <div class="bol-search-sub">${esc(c.city)}, ${esc(c.state)} ${esc(c.zip)}</div>
+    `;
+    item.addEventListener('click', () => selectCustomer(c));
+    drop.appendChild(item);
+  }
+  drop.classList.add('open');
+}
+
+function selectCustomer(c) {
+  selectedCustomerId = c.id;
+  document.getElementById('customer-search').value   = c.company;
+  closeDrop(document.getElementById('customer-dropdown'));
+
+  document.getElementById('f-ship-company').value   = c.company        || '';
+  document.getElementById('f-ship-attention').value = c.attention       || '';
+  document.getElementById('f-ship-street').value    = c.street          || '';
+  document.getElementById('f-ship-street2').value   = c.street2         || '';
+  document.getElementById('f-ship-city').value      = c.city            || '';
+  document.getElementById('f-ship-state').value     = c.state           || 'FL';
+  document.getElementById('f-ship-zip').value       = c.zip             || '';
+  document.getElementById('f-contact-name').value   = c.contact_name    || '';
+  document.getElementById('f-contact-phone').value  = c.phone           || '';
+
+  showCustIndicator('saved', `Using saved address: <strong>${esc(c.company)}</strong>`,
+    '<button class="bol-clear-cust-btn" onclick="clearCustSelection()">Use custom address</button>');
+}
+
+function clearCustSelection() {
+  selectedCustomerId = null;
+  document.getElementById('customer-search').value = '';
+  showCustIndicator('custom', 'Custom address (not saved)');
+}
+
+function showCustIndicator(type, html, extra) {
+  const ind = document.getElementById('cust-indicator');
+  ind.className   = 'bol-cust-indicator ' + type;
+  ind.innerHTML   = html + (extra ? extra : '');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Carrier search (local, from cached list)
+// ═══════════════════════════════════════════════════════════════════
+
+function setupCarrierSearch() {
+  const input = document.getElementById('carrier-search');
+  const drop  = document.getElementById('carrier-dropdown');
+
+  input.addEventListener('input', () => {
+    selectedCarrierId = null;
+    const q = input.value.trim().toLowerCase();
+    if (!q) { closeDrop(drop); return; }
+    const matches = carriersCache.filter(c => c.name.toLowerCase().includes(q));
+    renderCarrierDrop(matches);
+  });
+
+  input.addEventListener('focus', () => {
+    if (carriersCache.length && !input.value.trim()) renderCarrierDrop(carriersCache);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    handleDropKeys(e, drop, carrierDropIdx, (i) => { carrierDropIdx = i; }, () => {
+      const items = drop.querySelectorAll('.bol-search-item');
+      if (items[carrierDropIdx]) items[carrierDropIdx].click();
+    });
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#carrier-search') && !e.target.closest('#carrier-dropdown'))
+      closeDrop(drop);
+  });
+}
+
+function renderCarrierDrop(carriers) {
+  const drop = document.getElementById('carrier-dropdown');
+  carrierDropIdx = -1;
+  if (!carriers.length) { closeDrop(drop); return; }
+  drop.innerHTML = '';
+  for (const c of carriers) {
+    const item = document.createElement('div');
+    item.className = 'bol-search-item';
+    item.innerHTML = `<div class="bol-search-company">${esc(c.name)}</div>`;
+    item.addEventListener('click', () => {
+      selectedCarrierId = c.id;
+      document.getElementById('carrier-search').value = c.name;
+      closeDrop(drop);
+    });
+    drop.appendChild(item);
+  }
+  drop.classList.add('open');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Shared dropdown helpers
+// ═══════════════════════════════════════════════════════════════════
+
+function closeDrop(drop) {
+  drop.classList.remove('open');
+}
+
+function handleDropKeys(e, drop, currentIdx, setIdx, onEnter) {
+  const items = drop.querySelectorAll('.bol-search-item');
+  if (!drop.classList.contains('open') || !items.length) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    const next = Math.min(currentIdx + 1, items.length - 1);
+    setIdx(next);
+    highlightDrop(items, next);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    const prev = Math.max(currentIdx - 1, 0);
+    setIdx(prev);
+    highlightDrop(items, prev);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    onEnter();
+  } else if (e.key === 'Escape') {
+    closeDrop(drop);
+  }
+}
+
+function highlightDrop(items, idx) {
+  items.forEach((it, i) => it.classList.toggle('kbd-active', i === idx));
+  items[idx]?.scrollIntoView({ block: 'nearest' });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Freight terms
+// ═══════════════════════════════════════════════════════════════════
+
+function setupFreightTerms() {
+  document.querySelectorAll('input[name="freight-terms"]').forEach(r => {
+    r.addEventListener('change', () => {
+      document.getElementById('third-party-field').style.display =
+        r.value === '3rd_party' ? 'flex' : 'none';
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Collapsible sections
+// ═══════════════════════════════════════════════════════════════════
+
+function toggleSection(bodyId, btnId) {
+  const body   = document.getElementById(bodyId);
+  const btn    = document.getElementById(btnId);
+  const hidden = body.classList.toggle('hidden');
+  btn.textContent = hidden ? 'Show ▾' : 'Hide ▴';
+}
+
+function toggleAddrMgr() {
+  toggleSection('addr-mgr-body', 'addr-mgr-btn');
+  if (!document.getElementById('addr-mgr-body').classList.contains('hidden') && !addrMgrLoaded) {
+    addrMgrLoaded = true;
+    loadAddrManager();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Actions
+// ═══════════════════════════════════════════════════════════════════
+
+function setupActions() {
+  document.getElementById('btn-generate').addEventListener('click', handleGenerate);
+  document.getElementById('btn-draft').addEventListener('click', handleDraft);
+  document.getElementById('btn-clear').addEventListener('click', handleClear);
+}
+
+function collectPayload() {
+  const freightTerms = document.querySelector('input[name="freight-terms"]:checked')?.value || 'prepaid';
+
+  // Build special_instructions from convenience fields + free-text
+  const contact = document.getElementById('f-contact-name').value.trim();
+  const phone   = document.getElementById('f-contact-phone').value.trim();
+  const po      = document.getElementById('f-po-number').value.trim();
+  const extra   = document.getElementById('f-special-instructions').value.trim();
+  const instrParts = [];
+  if (contact || phone) instrParts.push([contact, phone].filter(Boolean).join(' · '));
+  if (po)   instrParts.push('PO# ' + po);
+  if (extra) instrParts.push(extra);
+
+  // Project name converts to "Project c/o Company" ship-to pattern
+  const project  = document.getElementById('f-project-name').value.trim();
+  const company  = document.getElementById('f-ship-company').value.trim();
+  let shipCompany   = company;
+  let shipAttention = document.getElementById('f-ship-attention').value.trim();
+  if (project) {
+    shipCompany   = project;
+    shipAttention = 'c/o ' + company;
+  }
+
+  return {
+    bol_number:            parseInt(document.getElementById('f-bol-number').value, 10) || null,
+    date:                  document.getElementById('f-date').value,
+    customer_id:           selectedCustomerId || null,
+    ship_to_company:       shipCompany,
+    ship_to_attention:     shipAttention,
+    ship_to_street:        document.getElementById('f-ship-street').value.trim(),
+    ship_to_street2:       document.getElementById('f-ship-street2').value.trim(),
+    ship_to_city:          document.getElementById('f-ship-city').value.trim(),
+    ship_to_state:         document.getElementById('f-ship-state').value.trim(),
+    ship_to_zip:           document.getElementById('f-ship-zip').value.trim(),
+    location_no:           document.getElementById('f-location-no').value.trim(),
+    carrier_id:            selectedCarrierId || null,
+    carrier_name:          document.getElementById('carrier-search').value.trim(),
+    trailer_no:            document.getElementById('f-trailer-no').value.trim(),
+    seal_number:           document.getElementById('f-seal-number').value.trim(),
+    scac:                  document.getElementById('f-scac').value.trim(),
+    pro_no:                document.getElementById('f-pro-no').value.trim(),
+    freight_terms:         freightTerms,
+    third_party_bill_to:   document.getElementById('f-third-party-bill-to').value.trim(),
+    special_instructions:  instrParts.join('\n'),
+    is_master_bol:         document.getElementById('f-master-bol').checked ? 1 : 0,
+    commodity_description: document.getElementById('f-commodity').value.trim(),
+    handling_unit_qty:     document.getElementById('f-hu-qty').value.trim(),
+    handling_unit_type:    document.getElementById('f-hu-type').value.trim(),
+    package_qty:           document.getElementById('f-pkg-qty').value.trim(),
+    package_type:          document.getElementById('f-pkg-type').value.trim(),
+    weight:                document.getElementById('f-weight').value.trim(),
+    delivery_time:         document.getElementById('f-delivery-time').value.trim(),
+    notes:                 document.getElementById('f-notes').value.trim(),
+  };
+}
+
+function validatePayload(p) {
+  if (!p.date)            return 'Date is required.';
+  if (!p.ship_to_company) return 'Company (Ship To) is required.';
+  return null;
+}
+
+async function handleGenerate() {
+  const payload = collectPayload();
+  const err     = validatePayload(payload);
+  if (err) { setStatus(err, 'error'); return; }
+
+  const btn = document.getElementById('btn-generate');
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  setStatus('');
+
+  try {
+    const res  = await fetch('/api/bols', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.ok) { setStatus(data.error || 'Save failed.', 'error'); return; }
+
+    await generatePdf(data.bol);
+    showToast(`BOL #${data.bol.bol_number} generated`);
+    loadRecentBols();
+    document.getElementById('f-bol-number').value = data.bol.bol_number + 1;
+  } catch (e) {
+    setStatus('Error: ' + (e.message || String(e)), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate BOL PDF';
+  }
+}
+
+async function handleDraft() {
+  const payload = collectPayload();
+  const err     = validatePayload(payload);
+  if (err) { setStatus(err, 'error'); return; }
+
+  const btn = document.getElementById('btn-draft');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  setStatus('');
+
+  try {
+    const res  = await fetch('/api/bols', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.ok) { setStatus(data.error || 'Save failed.', 'error'); return; }
+    showToast(`Draft saved — BOL #${data.bol.bol_number}`);
+    loadRecentBols();
+    document.getElementById('f-bol-number').value = data.bol.bol_number + 1;
+  } catch (e) {
+    setStatus('Error: ' + (e.message || String(e)), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Draft';
+  }
+}
+
+async function handleClear() {
+  selectedCustomerId = null;
+  selectedCarrierId  = null;
+
+  const ids = [
+    'f-ship-company','f-ship-attention','f-project-name','f-ship-street','f-ship-street2',
+    'f-ship-city','f-ship-zip','f-location-no',
+    'carrier-search','f-trailer-no','f-seal-number','f-scac','f-pro-no',
+    'f-third-party-bill-to','f-contact-name','f-contact-phone','f-po-number',
+    'f-special-instructions','f-commodity','f-hu-qty','f-hu-type',
+    'f-pkg-qty','f-pkg-type','f-weight','f-delivery-time','f-notes','customer-search',
+  ];
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+  document.getElementById('f-ship-state').value = 'FL';
+  document.getElementById('f-master-bol').checked = false;
+  document.querySelector('input[name="freight-terms"][value="prepaid"]').checked = true;
+  document.getElementById('third-party-field').style.display = 'none';
+
+  const ind = document.getElementById('cust-indicator');
+  ind.className = 'bol-cust-indicator';
+  ind.innerHTML = '';
+
+  setStatus('');
+  setTodayDate();
+  await fetchNextBolNumber();
+}
+
+function loadBolIntoForm(b) {
+  selectedCustomerId = b.customer_id || null;
+  selectedCarrierId  = b.carrier_id  || null;
+
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val || '';
+  };
+
+  set('f-bol-number',            b.bol_number);
+  set('f-date',                  b.date);
+  set('f-delivery-time',         b.delivery_time);
+  set('f-ship-company',          b.ship_to_company);
+  set('f-ship-attention',        b.ship_to_attention);
+  set('f-ship-street',           b.ship_to_street);
+  set('f-ship-street2',          b.ship_to_street2);
+  set('f-ship-city',             b.ship_to_city);
+  set('f-ship-state',            b.ship_to_state || 'FL');
+  set('f-ship-zip',              b.ship_to_zip);
+  set('f-location-no',           b.location_no);
+  set('carrier-search',          b.carrier_name);
+  set('f-trailer-no',            b.trailer_no);
+  set('f-seal-number',           b.seal_number);
+  set('f-scac',                  b.scac);
+  set('f-pro-no',                b.pro_no);
+  set('f-third-party-bill-to',   b.third_party_bill_to);
+  set('f-special-instructions',  b.special_instructions);
+  set('f-commodity',             b.commodity_description);
+  set('f-hu-qty',                b.handling_unit_qty);
+  set('f-hu-type',               b.handling_unit_type);
+  set('f-pkg-qty',               b.package_qty);
+  set('f-pkg-type',              b.package_type);
+  set('f-weight',                b.weight);
+  set('f-notes',                 b.notes);
+  document.getElementById('f-master-bol').checked = !!b.is_master_bol;
+
+  // Freight terms
+  const ft = b.freight_terms || 'prepaid';
+  const radio = document.querySelector(`input[name="freight-terms"][value="${ft}"]`);
+  if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
+
+  // Customer indicator
+  if (b.customer_id) {
+    document.getElementById('customer-search').value = b.ship_to_company;
+    showCustIndicator('saved',
+      `Using saved address: <strong>${esc(b.ship_to_company)}</strong>`,
+      '<button class="bol-clear-cust-btn" onclick="clearCustSelection()">Use custom address</button>');
+  } else {
+    document.getElementById('customer-search').value = '';
+    document.getElementById('cust-indicator').className = 'bol-cust-indicator';
+    document.getElementById('cust-indicator').innerHTML = '';
+  }
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  showToast(`BOL #${b.bol_number} loaded`);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PDF Generation
+// ═══════════════════════════════════════════════════════════════════
+//
+// Coordinates are estimates based on letter-size PDF (612×792 pts).
+// After placing BLANK_BOL_Xpanda.pdf in /logistics/assets/, generate
+// a test BOL and compare text positions against the blank template,
+// then adjust the values in COORDS as needed.
+// ═══════════════════════════════════════════════════════════════════
+
+async function generatePdf(bol) {
+  const { PDFDocument, StandardFonts, rgb } = PDFLib;
+
+  const COORDS = {
+    deliveryTime:       { x: 36,  y: 760, size: 10 },
+    date:               { x: 338, y: 711, size: 10 },
+    bolNumber:          { x: 380, y: 685, size: 24, bold: true },
+    carrierName:        { x: 400, y: 648, size: 10 },
+    trailerNo:          { x: 400, y: 633, size: 10 },
+    sealNumber:         { x: 400, y: 618, size: 10 },
+    scac:               { x: 400, y: 603, size: 10 },
+    proNo:              { x: 400, y: 588, size: 10 },
+    shipLine1:          { x: 55,  y: 610, size: 10 },
+    shipLine2:          { x: 55,  y: 597, size: 10 },
+    shipLine3:          { x: 55,  y: 584, size: 10 },
+    shipLine4:          { x: 55,  y: 571, size: 10 },
+    locationNo:         { x: 215, y: 625, size: 10 },
+    chkPrepaid:         { x: 49,  y: 535, size: 10 },
+    chkCollect:         { x: 105, y: 535, size: 10 },
+    chk3rdParty:        { x: 164, y: 535, size: 10 },
+    chkScrap:           { x: 245, y: 535, size: 10 },
+    thirdPartyBillTo:   { x: 55,  y: 510, size: 9 },
+    specialInstr:       { x: 310, y: 530, size: 9,  lineH: 11, maxW: 200 },
+    masterBol:          { x: 538, y: 545, size: 10 },
+    commodity:          { x: 245, y: 430, size: 10, lineH: 14, maxW: 340 },
+  };
+
+  let pdfBytes;
+  try {
+    const resp = await fetch('/logistics/assets/BLANK_BOL_Xpanda.pdf');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    pdfBytes = await resp.arrayBuffer();
+  } catch (e) {
+    setStatus(
+      'PDF template not found. Copy BLANK_BOL_Xpanda.pdf to /logistics/assets/ and redeploy.',
+      'error'
+    );
+    throw e;
+  }
+
+  const pdfDoc   = await PDFDocument.load(pdfBytes);
+  const page     = pdfDoc.getPages()[0];
+  const font     = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const black    = rgb(0, 0, 0);
+
+  const drawText = (text, coord, opts = {}) => {
+    if (!text) return;
+    const drawOpts = {
+      x:     coord.x,
+      y:     coord.y,
+      size:  coord.size || 10,
+      font:  (coord.bold || opts.bold) ? fontBold : font,
+      color: black,
+    };
+    if (opts.maxWidth || coord.maxW) drawOpts.maxWidth = opts.maxWidth || coord.maxW;
+    page.drawText(String(text), drawOpts);
+  };
+
+  const drawMultiline = (text, coord) => {
+    if (!text) return;
+    const lines = String(text).split('\n');
+    lines.forEach((line, i) => {
+      page.drawText(line, {
+        x:        coord.x,
+        y:        coord.y - i * (coord.lineH || 12),
+        size:     coord.size || 10,
+        font,
+        color:    black,
+        maxWidth: coord.maxW,
+      });
+    });
+  };
+
+  // ── Header ──
+  if (bol.delivery_time) drawText(bol.delivery_time, COORDS.deliveryTime);
+  drawText(bol.date, COORDS.date);
+  drawText(String(bol.bol_number), COORDS.bolNumber);
+
+  // ── Carrier block ──
+  drawText(bol.carrier_name, COORDS.carrierName);
+  drawText(bol.trailer_no,   COORDS.trailerNo);
+  drawText(bol.seal_number,  COORDS.sealNumber);
+  drawText(bol.scac,         COORDS.scac);
+  drawText(bol.pro_no,       COORDS.proNo);
+
+  // ── Ship To (up to 4 lines) ──
+  const shipLines = [
+    bol.ship_to_company,
+    bol.ship_to_attention,
+    [bol.ship_to_street, bol.ship_to_street2].filter(Boolean).join(', '),
+    [bol.ship_to_city, bol.ship_to_state, bol.ship_to_zip].filter(Boolean).join(', '),
+  ].filter(Boolean);
+
+  const shipCoords = [COORDS.shipLine1, COORDS.shipLine2, COORDS.shipLine3, COORDS.shipLine4];
+  shipLines.forEach((line, i) => { if (shipCoords[i]) drawText(line, shipCoords[i]); });
+
+  drawText(bol.location_no, COORDS.locationNo);
+
+  // ── Freight checkboxes ──
+  const ft = bol.freight_terms;
+  if (ft === 'prepaid')     drawText('X', COORDS.chkPrepaid);
+  if (ft === 'collect')     drawText('X', COORDS.chkCollect);
+  if (ft === '3rd_party')   drawText('X', COORDS.chk3rdParty);
+  if (ft === 'scrap_pickup') drawText('X', COORDS.chkScrap);
+  drawText(bol.third_party_bill_to, COORDS.thirdPartyBillTo);
+
+  // ── Special instructions (multi-line) ──
+  drawMultiline(bol.special_instructions, COORDS.specialInstr);
+
+  // ── Master BOL ──
+  if (bol.is_master_bol) drawText('X', COORDS.masterBol);
+
+  // ── Commodity description (multi-line) ──
+  drawMultiline(bol.commodity_description, COORDS.commodity);
+
+  // ── Save and open ──
+  const savedBytes = await pdfDoc.save();
+  const blob       = new Blob([savedBytes], { type: 'application/pdf' });
+  window.open(URL.createObjectURL(blob), '_blank');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Address Manager
+// ═══════════════════════════════════════════════════════════════════
+
+async function loadAddrManager() {
+  const tbody = document.getElementById('addr-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px;">Loading…</td></tr>';
+  try {
+    const res  = await fetch('/api/bol-customers?active=0');
+    const data = await res.json();
+    allAddresses = data.customers || [];
+    renderAddrTable(allAddresses);
+  } catch {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#dc2626;padding:20px;">Failed to load</td></tr>';
+  }
+}
+
+function filterAddrTable(q) {
+  const ql = q.toLowerCase();
+  const filtered = ql
+    ? allAddresses.filter(c =>
+        c.company.toLowerCase().includes(ql) ||
+        (c.city || '').toLowerCase().includes(ql)
+      )
+    : allAddresses;
+  renderAddrTable(filtered);
+}
+
+function renderAddrTable(customers) {
+  const tbody = document.getElementById('addr-tbody');
+  if (!customers.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px;">No customers found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = '';
+  for (const c of customers) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${esc(c.company)}</strong>${c.is_active ? '' : ' <span style="font-size:11px;color:#9ca3af;">(inactive)</span>'}</td>
+      <td>${esc(c.city)}, ${esc(c.state)}</td>
+      <td>${esc(c.contact_name || '')}</td>
+      <td>${esc(c.phone || '')}</td>
+      <td>
+        <div style="display:flex;gap:6px;">
+          <button class="bol-addr-act-btn" onclick="openAddrForm('${esc(c.id)}')">Edit</button>
+          ${c.is_active
+            ? `<button class="bol-addr-act-btn danger" onclick="deactivateAddr('${esc(c.id)}','${esc(c.company)}')">Deactivate</button>`
+            : ''}
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+function openAddrForm(id) {
+  document.getElementById('af-status').textContent = '';
+
+  if (!id) {
+    document.getElementById('addr-form-title').textContent = 'Add Customer';
+    document.getElementById('af-id').value = '';
+    ['af-company','af-attention','af-street','af-city','af-zip','af-contact-name','af-phone','af-notes']
+      .forEach(fid => { const el = document.getElementById(fid); if (el) el.value = ''; });
+    document.getElementById('af-state').value = 'FL';
+  } else {
+    const c = allAddresses.find(x => x.id === id);
+    if (!c) return;
+    document.getElementById('addr-form-title').textContent = 'Edit Customer';
+    document.getElementById('af-id').value           = c.id;
+    document.getElementById('af-company').value      = c.company      || '';
+    document.getElementById('af-attention').value    = c.attention    || '';
+    document.getElementById('af-street').value       = c.street       || '';
+    document.getElementById('af-city').value         = c.city         || '';
+    document.getElementById('af-state').value        = c.state        || 'FL';
+    document.getElementById('af-zip').value          = c.zip          || '';
+    document.getElementById('af-contact-name').value = c.contact_name || '';
+    document.getElementById('af-phone').value        = c.phone        || '';
+    document.getElementById('af-notes').value        = c.notes        || '';
+  }
+
+  document.getElementById('addr-form').classList.add('open');
+  document.getElementById('af-company').focus();
+}
+
+function closeAddrForm() {
+  document.getElementById('addr-form').classList.remove('open');
+}
+
+async function saveAddrForm() {
+  document.getElementById('af-status').textContent = '';
+  const id      = document.getElementById('af-id').value.trim();
+  const company = document.getElementById('af-company').value.trim();
+  if (!company) { document.getElementById('af-status').textContent = 'Company is required.'; return; }
+
+  const payload = {
+    company,
+    attention:    document.getElementById('af-attention').value.trim(),
+    street:       document.getElementById('af-street').value.trim(),
+    city:         document.getElementById('af-city').value.trim(),
+    state:        document.getElementById('af-state').value.trim(),
+    zip:          document.getElementById('af-zip').value.trim(),
+    contact_name: document.getElementById('af-contact-name').value.trim(),
+    phone:        document.getElementById('af-phone').value.trim(),
+    notes:        document.getElementById('af-notes').value.trim(),
+  };
+  if (id) payload.id = id;
+
+  try {
+    const res  = await fetch('/api/bol-customers', {
+      method:  id ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.ok) { document.getElementById('af-status').textContent = data.error || 'Save failed.'; return; }
+    closeAddrForm();
+    showToast(id ? 'Customer updated.' : 'Customer added.');
+    loadAddrManager();
+  } catch {
+    document.getElementById('af-status').textContent = 'Network error.';
+  }
+}
+
+async function deactivateAddr(id, name) {
+  if (!confirm(`Deactivate "${name}"? It will stop appearing in customer search.`)) return;
+  try {
+    const res  = await fetch('/api/bol-customers', {
+      method:  'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id }),
+    });
+    const data = await res.json();
+    if (!data.ok) { showToast('Error: ' + (data.error || 'Failed.')); return; }
+    showToast(name + ' deactivated.');
+    loadAddrManager();
+  } catch {
+    showToast('Network error.');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Utilities
+// ═══════════════════════════════════════════════════════════════════
+
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('bol-status');
+  el.textContent = msg;
+  el.className   = 'bol-status' + (type ? ' ' + type : '');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('bol-toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('visible'), 3200);
+}
+</script>
+
+</body>
+</html>
