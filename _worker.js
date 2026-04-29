@@ -87,6 +87,26 @@ export default {
         return handleApiShipments(request, env);
       }
 
+      if (url.pathname === "/api/bol-customers/seed") {
+        return handleApiBolCustomersSeed(request, env);
+      }
+
+      if (url.pathname === "/api/bol-customers") {
+        return handleApiBolCustomers(request, env);
+      }
+
+      if (url.pathname === "/api/bol-carriers") {
+        return handleApiBolCarriers(request, env);
+      }
+
+      if (url.pathname === "/api/bols/next-number") {
+        return handleApiBolsNextNumber(request, env);
+      }
+
+      if (url.pathname === "/api/bols" || url.pathname.startsWith("/api/bols/")) {
+        return handleApiBols(request, env);
+      }
+
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
         return new Response(
@@ -2556,6 +2576,449 @@ async function handleApiShipments(request, env) {
     try {
       await db.prepare("DELETE FROM shipments WHERE id = ?").bind(id).run();
       return json({ ok: true, message: "Shipment deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+
+// =============================================================================
+// BOL GENERATOR — SCHEMA (run once against D1)
+// =============================================================================
+/*
+CREATE TABLE IF NOT EXISTS bol_customers (
+  id TEXT PRIMARY KEY,
+  company TEXT NOT NULL,
+  attention TEXT NOT NULL DEFAULT '',
+  street TEXT NOT NULL DEFAULT '',
+  street2 TEXT NOT NULL DEFAULT '',
+  city TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT '',
+  zip TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  contact_name TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_bol_customers_company ON bol_customers(company);
+CREATE INDEX IF NOT EXISTS idx_bol_customers_active ON bol_customers(is_active);
+
+CREATE TABLE IF NOT EXISTS bol_carriers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  scac TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS bols (
+  id TEXT PRIMARY KEY,
+  bol_number INTEGER NOT NULL UNIQUE,
+  date TEXT NOT NULL,
+  customer_id TEXT DEFAULT NULL,
+  ship_to_company TEXT NOT NULL DEFAULT '',
+  ship_to_attention TEXT NOT NULL DEFAULT '',
+  ship_to_street TEXT NOT NULL DEFAULT '',
+  ship_to_street2 TEXT NOT NULL DEFAULT '',
+  ship_to_city TEXT NOT NULL DEFAULT '',
+  ship_to_state TEXT NOT NULL DEFAULT '',
+  ship_to_zip TEXT NOT NULL DEFAULT '',
+  location_no TEXT NOT NULL DEFAULT '',
+  carrier_id TEXT DEFAULT NULL,
+  carrier_name TEXT NOT NULL DEFAULT '',
+  trailer_no TEXT NOT NULL DEFAULT '',
+  seal_number TEXT NOT NULL DEFAULT '',
+  scac TEXT NOT NULL DEFAULT '',
+  pro_no TEXT NOT NULL DEFAULT '',
+  freight_terms TEXT NOT NULL DEFAULT 'prepaid',
+  third_party_bill_to TEXT NOT NULL DEFAULT '',
+  special_instructions TEXT NOT NULL DEFAULT '',
+  is_master_bol INTEGER NOT NULL DEFAULT 0,
+  commodity_description TEXT NOT NULL DEFAULT '',
+  handling_unit_qty TEXT NOT NULL DEFAULT '',
+  handling_unit_type TEXT NOT NULL DEFAULT '',
+  package_qty TEXT NOT NULL DEFAULT '',
+  package_type TEXT NOT NULL DEFAULT '',
+  weight TEXT NOT NULL DEFAULT '',
+  delivery_time TEXT NOT NULL DEFAULT '',
+  job_id TEXT DEFAULT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (customer_id) REFERENCES bol_customers(id) ON DELETE SET NULL,
+  FOREIGN KEY (carrier_id) REFERENCES bol_carriers(id) ON DELETE SET NULL,
+  FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bols_number ON bols(bol_number);
+CREATE INDEX IF NOT EXISTS idx_bols_date ON bols(date);
+CREATE INDEX IF NOT EXISTS idx_bols_customer ON bols(customer_id);
+*/
+
+async function handleApiBolCustomers(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const method = request.method;
+
+  // ── GET ──────────────────────────────────────────────────────────────────
+  if (method === "GET") {
+    const url         = new URL(request.url);
+    const search      = (url.searchParams.get("search") || "").trim();
+    const activeParam = url.searchParams.get("active");
+
+    let query   = "SELECT * FROM bol_customers";
+    const conds = [];
+    const binds = [];
+
+    if (activeParam !== "0") { conds.push("is_active = 1"); }
+    if (search) {
+      conds.push("(company LIKE ? OR attention LIKE ? OR city LIKE ?)");
+      binds.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    if (conds.length) query += " WHERE " + conds.join(" AND ");
+    query += " ORDER BY company ASC";
+
+    try {
+      const result = binds.length
+        ? await db.prepare(query).bind(...binds).all()
+        : await db.prepare(query).all();
+      return json({ ok: true, customers: result.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  // ── POST ─────────────────────────────────────────────────────────────────
+  if (method === "POST") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const company = String(payload.company || "").trim();
+    if (!company) return json({ ok: false, error: "company is required." }, 400);
+
+    const id           = crypto.randomUUID();
+    const now          = new Date().toISOString();
+    const attention    = String(payload.attention    || "").trim();
+    const street       = String(payload.street       || "").trim();
+    const street2      = String(payload.street2      || "").trim();
+    const city         = String(payload.city         || "").trim();
+    const state        = String(payload.state        || "").trim();
+    const zip          = String(payload.zip          || "").trim();
+    const phone        = String(payload.phone        || "").trim();
+    const email        = String(payload.email        || "").trim();
+    const contact_name = String(payload.contact_name || "").trim();
+    const notes        = String(payload.notes        || "").trim();
+
+    try {
+      await db.prepare(`
+        INSERT INTO bol_customers
+          (id, company, attention, street, street2, city, state, zip, phone, email, contact_name, notes, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(id, company, attention, street, street2, city, state, zip, phone, email, contact_name, notes, now, now).run();
+      const row = await db.prepare("SELECT * FROM bol_customers WHERE id = ?").bind(id).first();
+      return json({ ok: true, customer: row }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  // ── PUT ──────────────────────────────────────────────────────────────────
+  if (method === "PUT") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+
+    const existing = await db.prepare("SELECT id FROM bol_customers WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Customer not found." }, 404);
+
+    const textFields = ["company","attention","street","street2","city","state","zip","phone","email","contact_name","notes"];
+    const sets = [], binds = [];
+    for (const f of textFields) {
+      if (f in payload) { sets.push(`${f} = ?`); binds.push(String(payload[f] || "").trim()); }
+    }
+    if ("is_active" in payload) { sets.push("is_active = ?"); binds.push(payload.is_active ? 1 : 0); }
+
+    if (sets.length === 0) return json({ ok: false, error: "No fields to update." }, 400);
+
+    sets.push("updated_at = ?");
+    binds.push(new Date().toISOString(), id);
+
+    try {
+      await db.prepare(`UPDATE bol_customers SET ${sets.join(", ")} WHERE id = ?`).bind(...binds).run();
+      const row = await db.prepare("SELECT * FROM bol_customers WHERE id = ?").bind(id).first();
+      return json({ ok: true, customer: row });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  // ── DELETE (soft) ─────────────────────────────────────────────────────────
+  if (method === "DELETE") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+
+    try {
+      await db.prepare("UPDATE bol_customers SET is_active = 0, updated_at = ? WHERE id = ?")
+        .bind(new Date().toISOString(), id).run();
+      return json({ ok: true, message: "Customer deactivated." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+async function handleApiBolCustomersSeed(request, env) {
+  if (request.method !== "POST") return json({ ok: false, error: "Method Not Allowed" }, 405);
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  const existing = await db.prepare("SELECT COUNT(*) as cnt FROM bol_customers").first();
+  if (existing && existing.cnt > 0) {
+    return json({ ok: false, error: "Seed already applied — table is not empty." });
+  }
+
+  const SEED = [
+    { company: "ABC Supply - Dunnellon #497",         attention: "",                      street: "7975 W. Grover Cleveland Blvd.",          city: "Homosassa",       state: "FL", zip: "34446", contact_name: "Austin",           phone: "352-564-8319" },
+    { company: "AF Barriers",                          attention: "Attn: Scott Fullerton", street: "4455 18th St. East",                      city: "Bradenton",       state: "FL", zip: "34203", contact_name: "Kody Deiter",      phone: "941-584-3906" },
+    { company: "All Florida Weatherproofing",          attention: "Attn: Rick Fulford",    street: "4231 112th Terrace North",                city: "Clearwater",      state: "FL", zip: "33762", contact_name: "Rick",             phone: "352-702-5052" },
+    { company: "Accusolar",                            attention: "Attn: Trish Nicholson", street: "1800 SW 13th Ct.",                        city: "Pompano Beach",   state: "FL", zip: "33069", contact_name: "Trish Nicholson",  phone: "954-785-7557" },
+    { company: "Accudock",                             attention: "Attn: PM Nicholson",    street: "1790 SW 13th Ct.",                        city: "Pompano Beach",   state: "FL", zip: "33069", contact_name: "Trish Nicholson",  phone: "954-785-7557" },
+    { company: "Alumflo Inc.",                         attention: "Attn: Mark Daniel",     street: "2445 51st. Ave. N",                       city: "St. Petersburg",  state: "FL", zip: "33714", contact_name: "Mark Daniel",      phone: "" },
+    { company: "Architechtural Foam Fab, LLC",         attention: "",                      street: "8360 Currency Dr., Ste 2",                city: "West Palm Beach", state: "FL", zip: "33404", contact_name: "",                 phone: "" },
+    { company: "Atlantic Packaging Corp.",             attention: "Attn: Ken Thorpe",      street: "5301 W 5th St., Ste 1",                   city: "Jacksonville",    state: "FL", zip: "32254", contact_name: "Ken Thorpe",       phone: "904-409-3560" },
+    { company: "BMMI",                                 attention: "Attn: Scott Reed",      street: "8210 Manasota Key Rd.",                   city: "Englewood",       state: "FL", zip: "34223", contact_name: "Kyle",             phone: "863-990-8347" },
+    { company: "Bellingham Marine",                    attention: "Attn: Josh Hebert",     street: "2014 Dennis St.",                         city: "Jacksonville",    state: "FL", zip: "32204", contact_name: "Josh Hebert",      phone: "" },
+    { company: "CG3 - Victory Mgmt. Sol. Inc.",        attention: "Attn: Enrique Aranda",  street: "2423 Ryan Blvd",                          city: "Punta Gorda",     state: "FL", zip: "33950", contact_name: "Enrique Aranda",   phone: "305-803-2256" },
+    { company: "Prestige Spa Covers (CORE)",           attention: "Attn: Charline Fisher", street: "2875 MCI Dr.",                            city: "Pinellas Park",   state: "FL", zip: "33782", contact_name: "Charline Fisher",  phone: "" },
+    { company: "Collis Roofing, Inc.",                 attention: "",                      street: "485 Commerce Way",                        city: "Longwood",        state: "FL", zip: "32750", contact_name: "",                 phone: "" },
+    { company: "Comfort Cover Systems Inc.",           attention: "",                      street: "711 Turner St.",                          city: "Clearwater",      state: "FL", zip: "33756", contact_name: "Bob",              phone: "727-298-0955" },
+    { company: "Community Roofing",                    attention: "Attn: Joe Perrini",     street: "14042 66th Street",                       city: "Largo",           state: "FL", zip: "33771", contact_name: "Joe Perrini",      phone: "352-410-0548" },
+    { company: "Coolstructures Inc.",                  attention: "",                      street: "7173 Gasparilla Rd.",                     city: "Port Charlotte",  state: "FL", zip: "33981", contact_name: "Al",               phone: "855-220-0240" },
+    { company: "Crown Packaging",                      attention: "",                      street: "2716 Hazelhurst Ave.",                    city: "Orlando",         state: "FL", zip: "32804", contact_name: "",                 phone: "" },
+    { company: "Diversitech",                          attention: "Attn: Daniel Dees",     street: "1632 3rd St.",                            city: "Leesburg",        state: "FL", zip: "34748", contact_name: "Daniel Dees",      phone: "352-530-4930" },
+    { company: "Foam World, LLC",                      attention: "Attn: Devin Angels",    street: "3591 Work Dr. Bldg. B",                   city: "Fort Myers",      state: "FL", zip: "33916", contact_name: "Devin Angels",     phone: "" },
+    { company: "Gulfeagle Supply - #002",              attention: "",                      street: "2649 Rosselle St.",                       city: "Jacksonville",    state: "FL", zip: "32204", contact_name: "",                 phone: "" },
+    { company: "John Abell Corp.",                     attention: "attn: Jesus Quintana",  street: "10500 SW 186 ST.",                        city: "Miami",           state: "FL", zip: "33157", contact_name: "Jesus Quintana",   phone: "" },
+    { company: "Lansing Building Products - Ocala",    attention: "",                      street: "5371 SE Maricamp Rd.",                    city: "Ocala",           state: "FL", zip: "34480", contact_name: "",                 phone: "" },
+    { company: "Lion TB Construction",                 attention: "Attn: Sam Kazmarek",    street: "10020 US Hwy 301 N",                      city: "Tampa",           state: "FL", zip: "33637", contact_name: "Sam Kazmarek",     phone: "813-985-0850" },
+    { company: "New Panel Kits LLC",                   attention: "Attn: Jeanne Bishop",   street: "510 Paul Morris Dr",                      city: "Englewood",       state: "FL", zip: "34223", contact_name: "Brian Bishop",     phone: "941-915-3090" },
+    { company: "Ocala Architechtural Foam, LLC",       attention: "",                      street: "7175 S. Pine Ave. STE A",                 city: "Ocala",           state: "FL", zip: "34480", contact_name: "Nicholas",         phone: "" },
+    { company: "Precast & Foam Works",                 attention: "",                      street: "6612 Osteen Rd.",                         city: "New Port Richey", state: "FL", zip: "34653", contact_name: "Gabor",            phone: "" },
+    { company: "Net Zero Building / Spray Rock Mnfg.", attention: "",                      street: "7980 SW Jack James Dr.",                  city: "Stuart",          state: "FL", zip: "34997", contact_name: "John",             phone: "954-205-9577" },
+    { company: "Supply One ORL",                       attention: "",                      street: "3505 NW 112th St.",                       city: "Miami",           state: "FL", zip: "33167", contact_name: "",                 phone: "" },
+    { company: "Town & Country #816",                  attention: "Attn: Darcy Miller",    street: "4311 Shader Rd. Ste 100",                 city: "Orlando",         state: "FL", zip: "32808", contact_name: "Kosta",            phone: "407-292-1517" },
+    { company: "Virginia Foam",                        attention: "attn: Alex Gonzalez",   street: "1120 Summit St.",                         city: "Fredericksburg",  state: "VA", zip: "22401", contact_name: "Alex Gonzalez",    phone: "540-681-7665" },
+    { company: "Yanaex Inc.",                          attention: "Attn: Misha Gryb",      street: "8802 Corporate Square Ct., Ste. #106-206",city: "Jacksonville",    state: "FL", zip: "32216", contact_name: "Misha Gryb",       phone: "" },
+    { company: "Spectrum Eng. & Mfg. Inc",             attention: "",                      street: "11609 Pyramid Dr.",                       city: "Odessa",          state: "FL", zip: "33556", contact_name: "",                 phone: "" },
+  ];
+
+  const now = new Date().toISOString();
+  let inserted = 0;
+  for (const c of SEED) {
+    try {
+      await db.prepare(`
+        INSERT INTO bol_customers (id, company, attention, street, city, state, zip, phone, contact_name, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(
+        crypto.randomUUID(),
+        c.company, c.attention, c.street,
+        c.city, c.state, c.zip, c.phone, c.contact_name,
+        now, now
+      ).run();
+      inserted++;
+    } catch { /* skip on conflict */ }
+  }
+
+  // Seed carriers if the table is empty
+  const carrierRow = await db.prepare("SELECT COUNT(*) as cnt FROM bol_carriers").first();
+  let carriersInserted = 0;
+  if (!carrierRow || carrierRow.cnt === 0) {
+    const CARRIERS = ["LISMA Logistics", "LISMA Flatbed", "Xpanda Truck", "XP Co. Truck", "Customer Pickup (CPU)", "Priority1"];
+    for (const name of CARRIERS) {
+      try {
+        await db.prepare("INSERT INTO bol_carriers (id, name) VALUES (?,?)").bind(crypto.randomUUID(), name).run();
+        carriersInserted++;
+      } catch { /* skip */ }
+    }
+  }
+
+  return json({ ok: true, message: `Seeded ${inserted} customers and ${carriersInserted} carriers.` });
+}
+
+async function handleApiBolCarriers(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const method = request.method;
+
+  if (method === "GET") {
+    try {
+      const result = await db.prepare("SELECT * FROM bol_carriers WHERE is_active = 1 ORDER BY name ASC").all();
+      return json({ ok: true, carriers: result.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === "POST") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const name = String(payload.name || "").trim();
+    if (!name) return json({ ok: false, error: "name is required." }, 400);
+
+    const id    = crypto.randomUUID();
+    const scac  = String(payload.scac  || "").trim();
+    const phone = String(payload.phone || "").trim();
+
+    try {
+      await db.prepare("INSERT INTO bol_carriers (id, name, scac, phone) VALUES (?,?,?,?)")
+        .bind(id, name, scac, phone).run();
+      const row = await db.prepare("SELECT * FROM bol_carriers WHERE id = ?").bind(id).first();
+      return json({ ok: true, carrier: row }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+async function handleApiBolsNextNumber(request, env) {
+  if (request.method !== "GET") return json({ ok: false, error: "Method Not Allowed" }, 405);
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  try {
+    const row  = await db.prepare("SELECT MAX(bol_number) as max_num FROM bols").first();
+    const next = (row && row.max_num != null) ? row.max_num + 1 : 3600;
+    return json({ ok: true, next_number: next });
+  } catch (e) {
+    return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+  }
+}
+
+async function handleApiBols(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  const url    = new URL(request.url);
+  const method = request.method;
+  const parts  = url.pathname.split("/").filter(Boolean); // ["api","bols"] or ["api","bols","<id>"]
+  const bolId  = parts.length >= 3 ? parts[2] : null;
+
+  // ── GET /api/bols/:id ─────────────────────────────────────────────────────
+  if (method === "GET" && bolId) {
+    try {
+      const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(bolId).first();
+      if (!row) return json({ ok: false, error: "BOL not found." }, 404);
+      return json({ ok: true, bol: row });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  // ── GET /api/bols ─────────────────────────────────────────────────────────
+  if (method === "GET") {
+    const days        = parseInt(url.searchParams.get("days") || "30", 10);
+    const customer_id = (url.searchParams.get("customer_id") || "").trim();
+    const search      = (url.searchParams.get("search") || "").trim();
+
+    let query   = "SELECT * FROM bols";
+    const conds = [];
+    const binds = [];
+
+    if (!customer_id && !search && days > 0) {
+      conds.push("date >= date('now', ?)");
+      binds.push(`-${days} days`);
+    }
+    if (customer_id) { conds.push("customer_id = ?"); binds.push(customer_id); }
+    if (search) {
+      conds.push("(ship_to_company LIKE ? OR CAST(bol_number AS TEXT) LIKE ?)");
+      binds.push(`%${search}%`, `%${search}%`);
+    }
+
+    if (conds.length) query += " WHERE " + conds.join(" AND ");
+    query += " ORDER BY bol_number DESC";
+
+    try {
+      const result = binds.length
+        ? await db.prepare(query).bind(...binds).all()
+        : await db.prepare(query).all();
+      return json({ ok: true, bols: result.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  // ── POST /api/bols ────────────────────────────────────────────────────────
+  if (method === "POST") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const date = String(payload.date || "").trim();
+    if (!date) return json({ ok: false, error: "date is required." }, 400);
+
+    // Auto-assign bol_number if not provided
+    let bol_number = Number.isFinite(Number(payload.bol_number)) && Number(payload.bol_number) > 0
+      ? Number(payload.bol_number) : null;
+    if (!bol_number) {
+      const row  = await db.prepare("SELECT MAX(bol_number) as max_num FROM bols").first();
+      bol_number = (row && row.max_num != null) ? row.max_num + 1 : 3600;
+    }
+
+    const id  = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const s   = (f) => String(payload[f] || "").trim();
+
+    const validTerms    = ["prepaid", "collect", "3rd_party", "scrap_pickup"];
+    const freight_terms = validTerms.includes(s("freight_terms")) ? s("freight_terms") : "prepaid";
+
+    try {
+      await db.prepare(`
+        INSERT INTO bols (
+          id, bol_number, date, customer_id,
+          ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
+          ship_to_city, ship_to_state, ship_to_zip, location_no,
+          carrier_id, carrier_name, trailer_no, seal_number, scac, pro_no,
+          freight_terms, third_party_bill_to, special_instructions, is_master_bol,
+          commodity_description, handling_unit_qty, handling_unit_type,
+          package_qty, package_type, weight, delivery_time, job_id, notes, created_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(
+        id, bol_number, date,
+        payload.customer_id ? String(payload.customer_id).trim() : null,
+        s("ship_to_company"), s("ship_to_attention"), s("ship_to_street"), s("ship_to_street2"),
+        s("ship_to_city"), s("ship_to_state"), s("ship_to_zip"), s("location_no"),
+        payload.carrier_id ? String(payload.carrier_id).trim() : null,
+        s("carrier_name"), s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
+        freight_terms, s("third_party_bill_to"), s("special_instructions"),
+        payload.is_master_bol ? 1 : 0,
+        s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),
+        s("package_qty"), s("package_type"), s("weight"), s("delivery_time"),
+        payload.job_id ? String(payload.job_id).trim() : null,
+        s("notes"), now
+      ).run();
+
+      const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();
+      return json({ ok: true, message: "BOL created.", bol: row }, 201);
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
