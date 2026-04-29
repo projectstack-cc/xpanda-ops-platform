@@ -557,8 +557,10 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
       <label class="bol-freight-opt"><input type="radio" name="freight-terms" value="prepaid" checked> Prepaid</label>
       <label class="bol-freight-opt"><input type="radio" name="freight-terms" value="collect"> Collect</label>
       <label class="bol-freight-opt"><input type="radio" name="freight-terms" value="3rd_party"> 3rd Party</label>
-      <label class="bol-freight-opt"><input type="radio" name="freight-terms" value="scrap_pickup"> Scrap Pick-Up</label>
     </div>
+    <label class="bol-check-row" style="margin-top:4px;margin-bottom:8px;">
+      <input type="checkbox" id="f-scrap-pickup"> Scrap Pick-Up (independent of freight terms)
+    </label>
     <div class="bol-field" id="third-party-field" style="display:none;">
       <label>3rd Party Bill To</label>
       <input type="text" id="f-third-party-bill-to" placeholder="Company and address">
@@ -1154,6 +1156,7 @@ function collectPayload() {
     scac:                  document.getElementById('f-scac').value.trim(),
     pro_no:                document.getElementById('f-pro-no').value.trim(),
     freight_terms:         freightTerms,
+    is_scrap_pickup:       document.getElementById('f-scrap-pickup').checked ? 1 : 0,
     third_party_bill_to:   document.getElementById('f-third-party-bill-to').value.trim(),
     special_instructions:  instrParts.join('\n'),
     is_master_bol:         document.getElementById('f-master-bol').checked ? 1 : 0,
@@ -1252,7 +1255,8 @@ async function handleClear() {
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
   document.getElementById('f-ship-state').value = 'FL';
-  document.getElementById('f-master-bol').checked = false;
+  document.getElementById('f-master-bol').checked  = false;
+  document.getElementById('f-scrap-pickup').checked = false;
   document.querySelector('input[name="freight-terms"][value="prepaid"]').checked = true;
   document.getElementById('third-party-field').style.display = 'none';
 
@@ -1301,7 +1305,8 @@ function loadBolIntoForm(b) {
   set('f-pkg-type',              b.package_type);
   set('f-weight',                b.weight);
   set('f-notes',                 b.notes);
-  document.getElementById('f-master-bol').checked = !!b.is_master_bol;
+  document.getElementById('f-master-bol').checked  = !!b.is_master_bol;
+  document.getElementById('f-scrap-pickup').checked = !!b.is_scrap_pickup;
 
   // Freight terms
   const ft = b.freight_terms || 'prepaid';
@@ -1338,27 +1343,27 @@ async function generatePdf(bol) {
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
 
   const COORDS = {
-    deliveryTime:       { x: 36,  y: 760, size: 10 },
-    date:               { x: 338, y: 711, size: 10 },
-    bolNumber:          { x: 380, y: 685, size: 24, bold: true },
-    carrierName:        { x: 400, y: 648, size: 10 },
-    trailerNo:          { x: 400, y: 633, size: 10 },
-    sealNumber:         { x: 400, y: 618, size: 10 },
-    scac:               { x: 400, y: 603, size: 10 },
-    proNo:              { x: 400, y: 588, size: 10 },
-    shipLine1:          { x: 55,  y: 610, size: 10 },
-    shipLine2:          { x: 55,  y: 597, size: 10 },
-    shipLine3:          { x: 55,  y: 584, size: 10 },
-    shipLine4:          { x: 55,  y: 571, size: 10 },
-    locationNo:         { x: 215, y: 625, size: 10 },
-    chkPrepaid:         { x: 49,  y: 535, size: 10 },
-    chkCollect:         { x: 105, y: 535, size: 10 },
-    chk3rdParty:        { x: 164, y: 535, size: 10 },
-    chkScrap:           { x: 245, y: 535, size: 10 },
-    thirdPartyBillTo:   { x: 55,  y: 510, size: 9 },
-    specialInstr:       { x: 310, y: 530, size: 9,  lineH: 11, maxW: 200 },
-    masterBol:          { x: 538, y: 545, size: 10 },
-    commodity:          { x: 245, y: 430, size: 10, lineH: 14, maxW: 340 },
+    deliveryTime:       { x: 36,  y: 752, size: 10 },           // 40pt from top
+    date:               { x: 338, y: 707, size: 10 },           // 85pt from top
+    bolNumber:          { x: 380, y: 684, size: 24, bold: true }, // 108pt from top
+    carrierName:        { x: 378, y: 652, size: 10 },           // 140pt from top
+    trailerNo:          { x: 378, y: 635, size: 10 },           // 157pt from top
+    sealNumber:         { x: 378, y: 619, size: 10 },           // 173pt from top
+    scac:               { x: 378, y: 601, size: 10 },           // 191pt from top
+    proNo:              { x: 378, y: 585, size: 10 },           // 207pt from top
+    shipLine1:          { x: 55,  y: 607, size: 10 },           // 185pt from top
+    shipLine2:          { x: 55,  y: 594, size: 10 },           // +13pt line spacing
+    shipLine3:          { x: 55,  y: 581, size: 10 },
+    shipLine4:          { x: 55,  y: 568, size: 10 },
+    locationNo:         { x: 248, y: 619, size: 10 },           // 173pt from top
+    chkPrepaid:         { x: 49,  y: 532, size: 10 },           // 260pt from top
+    chkCollect:         { x: 105, y: 532, size: 10 },
+    chk3rdParty:        { x: 164, y: 532, size: 10 },
+    chkScrap:           { x: 245, y: 532, size: 10 },           // same row, independent
+    thirdPartyBillTo:   { x: 55,  y: 502, size: 9 },            // 290pt from top
+    specialInstr:       { x: 310, y: 527, size: 9,  lineH: 11, maxW: 200 }, // 265pt from top
+    masterBol:          { x: 538, y: 532, size: 10 },           // 260pt from top
+    commodity:          { x: 245, y: 417, size: 10, lineH: 14, maxW: 340 }, // 375pt from top
   };
 
   let pdfBytes;
@@ -1435,10 +1440,10 @@ async function generatePdf(bol) {
 
   // ── Freight checkboxes ──
   const ft = bol.freight_terms;
-  if (ft === 'prepaid')     drawText('X', COORDS.chkPrepaid);
-  if (ft === 'collect')     drawText('X', COORDS.chkCollect);
-  if (ft === '3rd_party')   drawText('X', COORDS.chk3rdParty);
-  if (ft === 'scrap_pickup') drawText('X', COORDS.chkScrap);
+  if (ft === 'prepaid')   drawText('X', COORDS.chkPrepaid);
+  if (ft === 'collect')   drawText('X', COORDS.chkCollect);
+  if (ft === '3rd_party') drawText('X', COORDS.chk3rdParty);
+  if (bol.is_scrap_pickup) drawText('X', COORDS.chkScrap);
   drawText(bol.third_party_bill_to, COORDS.thirdPartyBillTo);
 
   // ── Special instructions (multi-line) ──

@@ -2658,6 +2658,7 @@ CREATE TABLE IF NOT EXISTS bols (
   scac TEXT NOT NULL DEFAULT '',
   pro_no TEXT NOT NULL DEFAULT '',
   freight_terms TEXT NOT NULL DEFAULT 'prepaid',
+  is_scrap_pickup INTEGER NOT NULL DEFAULT 0,
   third_party_bill_to TEXT NOT NULL DEFAULT '',
   special_instructions TEXT NOT NULL DEFAULT '',
   is_master_bol INTEGER NOT NULL DEFAULT 0,
@@ -3014,8 +3015,9 @@ async function handleApiBols(request, env) {
     const now = new Date().toISOString();
     const s   = (f) => String(payload[f] || "").trim();
 
-    const validTerms    = ["prepaid", "collect", "3rd_party", "scrap_pickup"];
-    const freight_terms = validTerms.includes(s("freight_terms")) ? s("freight_terms") : "prepaid";
+    const validTerms     = ["prepaid", "collect", "3rd_party"];
+    const freight_terms  = validTerms.includes(s("freight_terms")) ? s("freight_terms") : "prepaid";
+    const is_scrap_pickup = payload.is_scrap_pickup ? 1 : 0;
 
     try {
       await db.prepare(`
@@ -3024,10 +3026,10 @@ async function handleApiBols(request, env) {
           ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
           ship_to_city, ship_to_state, ship_to_zip, location_no,
           carrier_id, carrier_name, trailer_no, seal_number, scac, pro_no,
-          freight_terms, third_party_bill_to, special_instructions, is_master_bol,
+          freight_terms, is_scrap_pickup, third_party_bill_to, special_instructions, is_master_bol,
           commodity_description, handling_unit_qty, handling_unit_type,
           package_qty, package_type, weight, delivery_time, job_id, notes, created_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, bol_number, date,
         payload.customer_id ? String(payload.customer_id).trim() : null,
@@ -3035,7 +3037,7 @@ async function handleApiBols(request, env) {
         s("ship_to_city"), s("ship_to_state"), s("ship_to_zip"), s("location_no"),
         payload.carrier_id ? String(payload.carrier_id).trim() : null,
         s("carrier_name"), s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
-        freight_terms, s("third_party_bill_to"), s("special_instructions"),
+        freight_terms, is_scrap_pickup, s("third_party_bill_to"), s("special_instructions"),
         payload.is_master_bol ? 1 : 0,
         s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),
         s("package_qty"), s("package_type"), s("weight"), s("delivery_time"),
