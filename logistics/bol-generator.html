@@ -1344,7 +1344,7 @@ async function generatePdf(bol) {
 
   const COORDS = {
     deliveryTime:       { x: 36,  y: 752, size: 10 },           // 40pt from top
-    date:               { x: 338, y: 707, size: 10 },           // 85pt from top
+    date:               { x: 338, y: 708, size: 10 },           // 85pt from top
     bolNumber:          { x: 380, y: 675, size: 24, bold: true }, // 117pt from top — centered in box below label
     carrierName:        { x: 378, y: 652, size: 10 },           // 140pt from top, after "Name:"
     trailerNo:          { x: 360, y: 635, size: 10 },           // 157pt from top, after "No:"
@@ -1360,7 +1360,7 @@ async function generatePdf(bol) {
     chkCollect:         { x: 103, y: 534, size: 10 },
     chk3rdParty:        { x: 164, y: 534, size: 10 },
     thirdPartyBillTo:   { x: 42,  y: 502, size: 9 },            // 290pt from top
-    scrapPickupText:    { x: 42,  y: 502, size: 12, bold: true }, // repurposes bill-to area
+    scrapPickupText:    { x: 42,  y: 500, size: 12, bold: true }, // repurposes bill-to area
     specialInstr:       { x: 310, y: 527, size: 9,  lineH: 11, maxW: 200 }, // 265pt from top
     masterBol:          { x: 538, y: 532, size: 10 },           // 260pt from top
     commodity:          { x: 245, y: 417, size: 10, lineH: 14, maxW: 340 }, // 375pt from top
