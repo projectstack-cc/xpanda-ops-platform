@@ -24,6 +24,15 @@
 .jobs-proc-pill.completed { background: #dcfce7; border-color: #86efac; color: #16a34a; }
 .jobs-proc-pill:hover { opacity: .75; }
 .jobs-processes-grid { display: flex; flex-direction: column; gap: 8px; }
+.jobs-bol-row { margin-top: 6px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.jobs-bol-link {
+  font-size: 11px; font-weight: 700; color: #0369a1; text-decoration: none;
+  border: 1px solid #bae6fd; background: #f0f9ff; border-radius: 5px;
+  padding: 2px 8px; white-space: nowrap; line-height: 1.6;
+  transition: background .12s;
+}
+.jobs-bol-link:hover { background: #e0f2fe; }
+.jobs-bol-number { font-size: 11px; color: #16a34a; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -455,6 +464,23 @@ function renderBoard(jobs) {
       for (const job of colJobs) body.appendChild(buildCard(job));
     }
   }
+
+  const bolJobIds = jobs
+    .filter(j => j.status === 'done' || j.status === 'loading' || j.status === 'shipped')
+    .map(j => j.id);
+  if (bolJobIds.length) fetchJobBols(bolJobIds);
+}
+
+async function fetchJobBols(jobIds) {
+  try {
+    const res  = await fetch('/api/bols?job_ids=' + jobIds.map(encodeURIComponent).join(','));
+    const data = await res.json();
+    if (!data.ok) return;
+    for (const b of (data.bols || [])) {
+      const el = document.getElementById('bol-num-' + b.job_id);
+      if (el) el.textContent = 'BOL #' + b.bol_number;
+    }
+  } catch { /* silent — non-critical */ }
 }
 
 function esc(str) {
@@ -503,6 +529,11 @@ function buildCard(job) {
       <span>${bdft} BDFT</span>
     </div>
     ${procHtml}
+    ${(job.status === 'done' || job.status === 'loading' || job.status === 'shipped') ? `
+    <div class="jobs-bol-row" id="bol-row-${job.id}">
+      <a class="jobs-bol-link" href="/logistics/bol-generator.html?job_id=${job.id}" onclick="event.stopPropagation()">Generate BOL</a>
+      <span class="jobs-bol-number" id="bol-num-${job.id}"></span>
+    </div>` : ''}
     <div class="jobs-card-actions">
       ${prev
         ? `<button class="jobs-arrow-btn" data-dir="prev" data-id="${esc(job.id)}" title="Move to ${STATUS_LABELS[prev]}">←</button>`

@@ -391,6 +391,24 @@
 }
 
 .bol-toast.visible { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+/* ── Job pre-fill banner ─────────────────────────────────────────────── */
+.bol-job-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #1e40af;
+}
+.bol-job-banner-icon { font-size: 16px; flex-shrink: 0; }
+.bol-job-banner-text { flex: 1; line-height: 1.4; }
+.bol-job-banner-text strong { display: block; margin-bottom: 2px; }
+.bol-job-banner.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -402,6 +420,15 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
 </script>
 
 <div class="bol-wrap">
+
+<div class="bol-job-banner hidden" id="job-banner">
+  <div class="bol-job-banner-icon">📋</div>
+  <div class="bol-job-banner-text">
+    <strong id="job-banner-title"></strong>
+    <span id="job-banner-sub"></span>
+  </div>
+</div>
+
 <div class="bol-columns">
 
 <!-- ═══════════════════════════════════════════════════
@@ -713,6 +740,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
 
 let selectedCustomerId = null;
 let selectedCarrierId  = null;
+let prefilledJobId     = null;
 let carriersCache      = [];
 let allAddresses       = [];
 let addrMgrLoaded      = false;
@@ -733,7 +761,85 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupCustomerSearch();
   setupCarrierSearch();
   setupActions();
+
+  const jobId = new URLSearchParams(window.location.search).get('job_id');
+  if (jobId) prefillFromJob(jobId);
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// Job pre-fill (Phase 3 integration)
+// ═══════════════════════════════════════════════════════════════════
+
+async function prefillFromJob(jobId) {
+  try {
+    const res  = await fetch('/api/jobs/' + encodeURIComponent(jobId));
+    const data = await res.json();
+    if (!data.ok || !data.job) return;
+    const job = data.job;
+
+    prefilledJobId = jobId;
+
+    // Banner
+    const date = job.ship_date
+      ? new Date(job.ship_date + 'T00:00:00').toLocaleDateString('en-US', { weekday:'short', month:'numeric', day:'numeric' })
+      : '';
+    document.getElementById('job-banner-title').textContent = 'Pre-filled from Job: ' + job.customer;
+    document.getElementById('job-banner-sub').textContent   =
+      [date, job.location, job.invoice_number ? 'INV ' + job.invoice_number : ''].filter(Boolean).join(' · ');
+    document.getElementById('job-banner').classList.remove('hidden');
+
+    // Date & delivery time
+    if (job.ship_date)      document.getElementById('f-date').value          = job.ship_date;
+    if (job.delivery_time)  document.getElementById('f-delivery-time').value = job.delivery_time;
+
+    // Carrier — set text (ID unknown without matching against carrier list)
+    if (job.carrier) document.getElementById('carrier-search').value = job.carrier;
+
+    // Contact
+    if (job.contact_name)  document.getElementById('f-contact-name').value  = job.contact_name;
+    if (job.contact_phone) document.getElementById('f-contact-phone').value = job.contact_phone;
+
+    // PO
+    if (job.po_number || job.invoice_number)
+      document.getElementById('f-po-number').value = job.po_number || job.invoice_number;
+
+    // Commodity from line items
+    if (Array.isArray(job.line_items) && job.line_items.length > 0) {
+      const lines = job.line_items.map(li => {
+        const parts = [
+          li.quantity    ? li.quantity + ' ×' : '',
+          li.part_number || '',
+          li.description || '',
+          li.dimensions  ? '(' + li.dimensions + ')' : '',
+        ].filter(Boolean);
+        return parts.join(' ');
+      });
+      document.getElementById('f-commodity').value = lines.join('\n');
+    }
+
+    // Customer: try single-match search, else fall back to manual
+    if (job.customer) {
+      try {
+        const cRes  = await fetch('/api/bol-customers?search=' + encodeURIComponent(job.customer));
+        const cData = await cRes.json();
+        const matches = cData.customers || [];
+        if (matches.length === 1) {
+          selectCustomer(matches[0]);
+        } else {
+          document.getElementById('f-ship-company').value = job.customer;
+          if (job.location) {
+            const parts = job.location.split(',').map(s => s.trim());
+            if (parts[0]) document.getElementById('f-ship-city').value  = parts[0];
+            if (parts[1]) document.getElementById('f-ship-state').value = parts[1];
+          }
+          showCustIndicator('custom', 'Custom address — pre-filled from job. Edit as needed.');
+        }
+      } catch { /* keep manual entry */ }
+    }
+  } catch (e) {
+    console.error('prefillFromJob failed:', e);
+  }
+}
 
 function setTodayDate() {
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
@@ -1059,6 +1165,7 @@ function collectPayload() {
     weight:                document.getElementById('f-weight').value.trim(),
     delivery_time:         document.getElementById('f-delivery-time').value.trim(),
     notes:                 document.getElementById('f-notes').value.trim(),
+    job_id:                prefilledJobId || null,
   };
 }
 
@@ -1131,6 +1238,8 @@ async function handleDraft() {
 async function handleClear() {
   selectedCustomerId = null;
   selectedCarrierId  = null;
+  prefilledJobId     = null;
+  document.getElementById('job-banner').classList.add('hidden');
 
   const ids = [
     'f-ship-company','f-ship-attention','f-project-name','f-ship-street','f-ship-street2',
@@ -1159,6 +1268,8 @@ async function handleClear() {
 function loadBolIntoForm(b) {
   selectedCustomerId = b.customer_id || null;
   selectedCarrierId  = b.carrier_id  || null;
+  prefilledJobId     = b.job_id      || null;
+  document.getElementById('job-banner').classList.add('hidden');
 
   const set = (id, val) => {
     const el = document.getElementById(id);

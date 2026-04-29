@@ -59,7 +59,7 @@ export default {
         return handleApiCombos(request, env);
       }
 
-      if (url.pathname === "/api/jobs") {
+      if (url.pathname === "/api/jobs" || url.pathname.startsWith("/api/jobs/")) {
         return handleApiJobs(request, env);
       }
 
@@ -1530,9 +1530,29 @@ async function handleApiJobs(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
 
+  const url   = new URL(request.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  const jobId = parts.length >= 3 ? parts[2] : null;
+
+  // ── GET /api/jobs/:id ─────────────────────────────────────────────────────
+  if (request.method === "GET" && jobId) {
+    try {
+      const row = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(jobId).first();
+      if (!row) return json({ ok: false, error: "Job not found." }, 404);
+      const liResult = await db
+        .prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC")
+        .bind(jobId).all();
+      return json({
+        ok:  true,
+        job: { ...row, processes: safeJsonParse(row.processes, []), line_items: liResult.results || [] },
+      });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
   // ── GET ──────────────────────────────────────────────────────────────────
   if (request.method === "GET") {
-    const url         = new URL(request.url);
     const weekParam   = (url.searchParams.get("week")   || "").trim();
     const statusParam = (url.searchParams.get("status") || "").trim();
 
@@ -2937,14 +2957,20 @@ async function handleApiBols(request, env) {
   // ── GET /api/bols ─────────────────────────────────────────────────────────
   if (method === "GET") {
     const days        = parseInt(url.searchParams.get("days") || "30", 10);
-    const customer_id = (url.searchParams.get("customer_id") || "").trim();
-    const search      = (url.searchParams.get("search") || "").trim();
+    const customer_id  = (url.searchParams.get("customer_id") || "").trim();
+    const search       = (url.searchParams.get("search")      || "").trim();
+    const jobIdsParam  = (url.searchParams.get("job_ids")     || "").trim();
+    const jobIds       = jobIdsParam ? jobIdsParam.split(",").map(s => s.trim()).filter(Boolean) : [];
 
     let query   = "SELECT * FROM bols";
     const conds = [];
     const binds = [];
 
-    if (!customer_id && !search && days > 0) {
+    if (jobIds.length) {
+      const ph = jobIds.map(() => "?").join(",");
+      conds.push(`job_id IN (${ph})`);
+      binds.push(...jobIds);
+    } else if (!customer_id && !search && days > 0) {
       conds.push("date >= date('now', ?)");
       binds.push(`-${days} days`);
     }
