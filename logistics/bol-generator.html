@@ -458,7 +458,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
     <div class="bol-row bol-row-3">
       <div class="bol-field">
         <label>BOL Number</label>
-        <input type="number" id="f-bol-number" min="1" placeholder="Auto-assigned">
+        <input type="number" id="f-bol-number" min="1" placeholder="Required">
       </div>
       <div class="bol-field">
         <label>Date</label>
@@ -777,7 +777,6 @@ let carrierDropIdx     = -1;
 
 document.addEventListener('DOMContentLoaded', async () => {
   setTodayDate();
-  fetchNextBolNumber();
   loadCarriers();
   loadRecentBols();
   setupFreightTerms();
@@ -1195,6 +1194,7 @@ function collectPayload() {
 }
 
 function validatePayload(p) {
+  if (!p.bol_number)      return 'BOL Number is required.';
   if (!p.date)            return 'Date is required.';
   if (!p.ship_to_company) return 'Company (Ship To) is required.';
   return null;
@@ -1223,7 +1223,6 @@ async function handleGenerate() {
     await generatePdf(data.bol);
     showToast(`BOL #${data.bol.bol_number} ${isEdit ? 'updated' : 'generated'}`);
     loadRecentBols();
-    if (!isEdit) document.getElementById('f-bol-number').value = data.bol.bol_number + 1;
   } catch (e) {
     setStatus('Error: ' + (e.message || String(e)), 'error');
   } finally {
@@ -1253,7 +1252,6 @@ async function handleDraft() {
     if (!data.ok) { setStatus(data.error || 'Save failed.', 'error'); return; }
     showToast(`${isEdit ? 'Updated' : 'Draft saved'} — BOL #${data.bol.bol_number}`);
     loadRecentBols();
-    if (!isEdit) document.getElementById('f-bol-number').value = data.bol.bol_number + 1;
   } catch (e) {
     setStatus('Error: ' + (e.message || String(e)), 'error');
   } finally {
@@ -1292,14 +1290,14 @@ async function handleClear() {
 
   setStatus('');
   setTodayDate();
-  await fetchNextBolNumber();
+  document.getElementById('f-bol-number').value = '';
 }
 
-async function handleDuplicate() {
+function handleDuplicate() {
   editingBolId = null;
   document.getElementById('edit-mode-banner').classList.remove('visible');
-  await fetchNextBolNumber();
-  showToast('Duplicated as new BOL — edit and generate to save');
+  document.getElementById('f-bol-number').value = '';
+  showToast('Duplicated as new BOL — enter a BOL number and generate to save');
 }
 
 function loadBolIntoForm(b) {
