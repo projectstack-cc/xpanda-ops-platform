@@ -271,9 +271,25 @@
 .bol-btn:hover { opacity: .88; }
 .bol-btn:disabled { opacity: .45; cursor: not-allowed; }
 
-.bol-btn-generate { background: #0891b2; color: #fff; }
-.bol-btn-draft    { background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
-.bol-btn-clear    { background: var(--card-bg); color: #dc2626;    border: 1px solid #fecaca; }
+.bol-btn-generate   { background: #0891b2; color: #fff; }
+.bol-btn-draft      { background: var(--card-bg); color: var(--text); border: 1px solid var(--card-border); }
+.bol-btn-clear      { background: var(--card-bg); color: #dc2626;    border: 1px solid #fecaca; }
+.bol-btn-duplicate  { background: var(--card-bg); color: #0891b2;    border: 1px solid #bae6fd; }
+
+.bol-edit-banner {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #92400e;
+  margin-bottom: 10px;
+}
+.bol-edit-banner.visible { display: flex; }
+.bol-edit-banner strong  { font-weight: 600; }
 
 .bol-status {
   font-size: 13px;
@@ -645,6 +661,10 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
 
   <!-- Actions -->
   <div class="bol-section">
+    <div class="bol-edit-banner" id="edit-mode-banner">
+      <span>Editing <strong id="edit-mode-label">BOL #—</strong></span>
+      <button class="bol-btn bol-btn-duplicate" id="btn-duplicate">Duplicate as New</button>
+    </div>
     <div class="bol-actions">
       <button class="bol-btn bol-btn-generate" id="btn-generate">Generate BOL PDF</button>
       <button class="bol-btn bol-btn-draft"    id="btn-draft">Save Draft</button>
@@ -743,6 +763,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
 let selectedCustomerId = null;
 let selectedCarrierId  = null;
 let prefilledJobId     = null;
+let editingBolId       = null;
 let carriersCache      = [];
 let allAddresses       = [];
 let addrMgrLoaded      = false;
@@ -1112,6 +1133,7 @@ function setupActions() {
   document.getElementById('btn-generate').addEventListener('click', handleGenerate);
   document.getElementById('btn-draft').addEventListener('click', handleDraft);
   document.getElementById('btn-clear').addEventListener('click', handleClear);
+  document.getElementById('btn-duplicate').addEventListener('click', handleDuplicate);
 }
 
 function collectPayload() {
@@ -1189,8 +1211,9 @@ async function handleGenerate() {
   setStatus('');
 
   try {
-    const res  = await fetch('/api/bols', {
-      method:  'POST',
+    const isEdit = !!editingBolId;
+    const res  = await fetch(isEdit ? `/api/bols/${editingBolId}` : '/api/bols', {
+      method:  isEdit ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(payload),
     });
@@ -1198,9 +1221,9 @@ async function handleGenerate() {
     if (!data.ok) { setStatus(data.error || 'Save failed.', 'error'); return; }
 
     await generatePdf(data.bol);
-    showToast(`BOL #${data.bol.bol_number} generated`);
+    showToast(`BOL #${data.bol.bol_number} ${isEdit ? 'updated' : 'generated'}`);
     loadRecentBols();
-    document.getElementById('f-bol-number').value = data.bol.bol_number + 1;
+    if (!isEdit) document.getElementById('f-bol-number').value = data.bol.bol_number + 1;
   } catch (e) {
     setStatus('Error: ' + (e.message || String(e)), 'error');
   } finally {
@@ -1220,16 +1243,17 @@ async function handleDraft() {
   setStatus('');
 
   try {
-    const res  = await fetch('/api/bols', {
-      method:  'POST',
+    const isEdit = !!editingBolId;
+    const res  = await fetch(isEdit ? `/api/bols/${editingBolId}` : '/api/bols', {
+      method:  isEdit ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(payload),
     });
     const data = await res.json();
     if (!data.ok) { setStatus(data.error || 'Save failed.', 'error'); return; }
-    showToast(`Draft saved — BOL #${data.bol.bol_number}`);
+    showToast(`${isEdit ? 'Updated' : 'Draft saved'} — BOL #${data.bol.bol_number}`);
     loadRecentBols();
-    document.getElementById('f-bol-number').value = data.bol.bol_number + 1;
+    if (!isEdit) document.getElementById('f-bol-number').value = data.bol.bol_number + 1;
   } catch (e) {
     setStatus('Error: ' + (e.message || String(e)), 'error');
   } finally {
@@ -1242,7 +1266,9 @@ async function handleClear() {
   selectedCustomerId = null;
   selectedCarrierId  = null;
   prefilledJobId     = null;
+  editingBolId       = null;
   document.getElementById('job-banner').classList.add('hidden');
+  document.getElementById('edit-mode-banner').classList.remove('visible');
 
   const ids = [
     'f-ship-company','f-ship-attention','f-project-name','f-ship-street','f-ship-street2',
@@ -1269,11 +1295,21 @@ async function handleClear() {
   await fetchNextBolNumber();
 }
 
+async function handleDuplicate() {
+  editingBolId = null;
+  document.getElementById('edit-mode-banner').classList.remove('visible');
+  await fetchNextBolNumber();
+  showToast('Duplicated as new BOL — edit and generate to save');
+}
+
 function loadBolIntoForm(b) {
   selectedCustomerId = b.customer_id || null;
   selectedCarrierId  = b.carrier_id  || null;
   prefilledJobId     = b.job_id      || null;
+  editingBolId       = b.id;
   document.getElementById('job-banner').classList.add('hidden');
+  document.getElementById('edit-mode-label').textContent = `BOL #${b.bol_number}`;
+  document.getElementById('edit-mode-banner').classList.add('visible');
 
   const set = (id, val) => {
     const el = document.getElementById(id);
