@@ -8,7 +8,12 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git rm *)",
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Bash(\"C:\\\\Program Files\\\\Git\\\\mingw64\\\\bin\\\\pdftotext.exe\" -layout -bbox \"72ab78c2-c849-45f1-9ed7-19ac33803867.pdf\" -)",
+      "Bash(\"C:\\\\Program Files\\\\Git\\\\mingw64\\\\bin\\\\pdftotext.exe\" -layout \"72ab78c2-c849-45f1-9ed7-19ac33803867.pdf\" -)",
+      "Bash(python -c \"import pdfminer; print\\('pdfminer ok'\\)\")",
+      "Bash(python -m pip install pdfminer.six -q)",
+      "Bash(python *)"
     ]
   }
 }

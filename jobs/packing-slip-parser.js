@@ -67,9 +67,15 @@ window.PackingSlipParser = (function () {
 
   // ─── Dimension detection ─────────────────────────────────────────────────
 
-  // Matches patterns like: 54-3/4" x 90-3/4" x 8"
+  // QuickBooks PDFs encode the inch mark as U+201D (right double quotation mark),
+  // not standard ASCII U+0022. Both are accepted here for robustness.
+  const INCH_RE = '["”]';
+
+  // Matches patterns like: 54-3/4" x 90-3/4" x 8" (with either " variant)
+  const DIM_PATTERN = new RegExp(`\\d[\\d\\-\\/]*${INCH_RE}(\\s*[xX×]\\s*\\d[\\d\\-\\/]*${INCH_RE})+`);
+
   function isDimensionLine(text) {
-    return /\d[\d\-\/]*"(\s*[xX×]\s*\d[\d\-\/]*")+/.test(text);
+    return DIM_PATTERN.test(text);
   }
 
   // ─── Address block parsers ────────────────────────────────────────────────
@@ -162,23 +168,34 @@ window.PackingSlipParser = (function () {
         if (!current.description && /Foam Block/i.test(lineText)) {
           current.description = lineText;
 
+        } else if (/^NO\s+LABEL\s*-/i.test(lineText)) {
+          // "NO LABEL - 54-3/4" x 90-3/4" x 7""
+          const m = lineText.match(/^NO\s+LABEL\s*-\s*(.*)/i);
+          if (m) { current.label = 'NO LABEL'; current.dimensions = m[1].trim(); }
+
         } else if (/LABEL\s*[–\-]/i.test(lineText)) {
-          // "LABEL – LabelName [Dimensions]" or "LABEL – LabelName" (dims on next line)
+          // "LABEL – LabelName - Dimensions"
+          // The en dash (U+2013) separates LABEL from the label name.
+          // The label name and dimensions are always on the same line, separated by " - ".
           const m = lineText.match(/LABEL\s*[–\-]\s*(.*)/i);
           if (m) {
             const rest = m[1].trim();
-            if (isDimensionLine(rest)) {
-              // Label name and dimensions on the same line
-              const dimStart = rest.search(/\d[\d\-\/]*"/);
-              current.label      = rest.slice(0, dimStart).trim();
-              current.dimensions = rest.slice(dimStart).trim();
+            // Split on " - " before the dimension number (e.g. "Stock - 54-3/4"...")
+            const split = rest.match(/^(.+?)\s+-\s+(\d.*)/);
+            if (split) {
+              current.label      = split[1].trim();
+              current.dimensions = split[2].trim();
+            } else if (isDimensionLine(rest)) {
+              // No label name prefix — dimensions only
+              current.dimensions = rest;
             } else {
-              current.label = rest;
+              // Label name only; dimensions expected on next line (fallback)
+              current.label = rest.replace(/\s*-\s*$/, '').trim();
             }
           }
 
         } else if (current.label && !current.dimensions && isDimensionLine(lineText)) {
-          // Dimensions appear on their own line below the LABEL line
+          // Dimensions on their own line (fallback for unusual layouts)
           current.dimensions = lineText;
         }
       }
