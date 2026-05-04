@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Packing Slip Parser Test — xPanda Foam</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+  <link rel="stylesheet" href="/jobs/jobs-shared.css">
+<style>
+.pst-wrap {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.pst-upload-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
+}
+
+.pst-upload-card label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.pst-upload-card input[type="file"] {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.pst-status {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 4px 0;
+  width: 100%;
+}
+
+.pst-status.error { color: var(--danger-bg); }
+
+.pst-section {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+
+.pst-section h2 {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+#json-output {
+  background: var(--col-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text);
+  margin: 0;
+}
+
+.pst-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.pst-field-group {
+  background: var(--col-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.pst-field-group h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--muted);
+}
+
+.pst-kv { font-size: 13px; margin-bottom: 4px; }
+.pst-kv:last-child { margin-bottom: 0; }
+.pst-kv-key { color: var(--muted); font-weight: 600; }
+.pst-kv-val { color: var(--text); word-break: break-word; }
+.pst-kv-empty { color: var(--input-border); font-style: italic; }
+
+.pst-table-wrap { overflow-x: auto; }
+
+.pst-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 620px;
+}
+
+.pst-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--muted);
+  border-bottom: 2px solid var(--line);
+  white-space: nowrap;
+}
+
+.pst-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  color: var(--text);
+}
+
+.pst-table tr:last-child td { border-bottom: none; }
+
+.pst-table td.pst-qty {
+  font-weight: 700;
+  color: var(--primary-bg);
+  text-align: right;
+}
+
+.pst-table td.pst-num {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pst-empty-items {
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 24px;
+}
+</style>
+</head>
+<body>
+
+<script src="/jobs/jobs-header.js"></script>
+<script>
+  document.getElementById('jobs-page-title').textContent = 'Packing Slip Parser Test';
+  document.getElementById('jobs-page-subtitle').textContent = 'Dev tool — validates PDF packing slip extraction';
+</script>
+
+<div class="pst-wrap">
+
+  <!-- Upload -->
+  <div class="pst-upload-card">
+    <label for="pdf-file">PDF File</label>
+    <input type="file" id="pdf-file" accept=".pdf">
+    <button class="btn primary" id="btn-parse">Parse</button>
+    <span class="pst-status" id="pst-status"></span>
+  </div>
+
+  <!-- Results (hidden until a parse completes) -->
+  <div id="results" hidden>
+
+    <!-- Raw JSON -->
+    <div class="pst-section">
+      <h2>Raw JSON Output</h2>
+      <pre id="json-output"></pre>
+    </div>
+
+    <!-- Parsed fields -->
+    <div class="pst-section">
+      <h2>Parsed Fields</h2>
+
+      <div class="pst-fields-grid" id="fields-grid"></div>
+
+      <h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 10px;">Line Items</h3>
+      <div class="pst-table-wrap">
+        <table class="pst-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Category</th>
+              <th>Description</th>
+              <th>Label</th>
+              <th>Dimensions</th>
+              <th style="text-align:right;">Qty</th>
+            </tr>
+          </thead>
+          <tbody id="li-tbody"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script src="/jobs/packing-slip-parser.js"></script>
+<script>
+const btnParse  = document.getElementById('btn-parse');
+const fileInput = document.getElementById('pdf-file');
+const statusEl  = document.getElementById('pst-status');
+const resultsEl = document.getElementById('results');
+const jsonOut   = document.getElementById('json-output');
+const fieldsGrid = document.getElementById('fields-grid');
+const liTbody   = document.getElementById('li-tbody');
+
+btnParse.addEventListener('click', async () => {
+  const file = fileInput.files[0];
+  if (!file) {
+    setStatus('Select a PDF file first.', true);
+    return;
+  }
+
+  btnParse.disabled    = true;
+  btnParse.textContent = 'Parsing…';
+  setStatus('Extracting text from PDF…');
+  resultsEl.hidden = true;
+
+  const result = await window.PackingSlipParser.parse(file);
+
+  btnParse.disabled    = false;
+  btnParse.textContent = 'Parse';
+
+  if (!result.success) {
+    setStatus('Error: ' + result.error, true);
+    return;
+  }
+
+  setStatus('Done.');
+  renderResults(result);
+});
+
+function setStatus(msg, isError) {
+  statusEl.textContent = msg;
+  statusEl.className   = 'pst-status' + (isError ? ' error' : '');
+}
+
+function val(v) {
+  if (v === null || v === undefined || v === '') {
+    return '<span class="pst-kv-empty">—</span>';
+  }
+  return '<span class="pst-kv-val">' + esc(String(v)) + '</span>';
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function kv(label, value) {
+  return `<div class="pst-kv"><span class="pst-kv-key">${esc(label)}:</span> ${val(value)}</div>`;
+}
+
+function group(title, html) {
+  return `<div class="pst-field-group"><h3>${esc(title)}</h3>${html}</div>`;
+}
+
+function renderResults(result) {
+  const d = result.data;
+
+  // Raw JSON
+  jsonOut.textContent = JSON.stringify(result, null, 2);
+
+  // Header fields
+  const orderGroup = group('Order',
+    kv('Invoice #', d.invoice_number) +
+    kv('Date', d.date) +
+    kv('PO Number', d.po_number)
+  );
+
+  const shipGroup = group('Shipping',
+    kv('Ship Date', d.ship_date) +
+    kv('Ship Via', d.ship_via)
+  );
+
+  const contactGroup = group('Contact',
+    kv('Name', d.contact_name) +
+    kv('Phone', d.contact_phone)
+  );
+
+  const bt = d.bill_to || {};
+  const billGroup = group('Bill To',
+    kv('Company', bt.company) +
+    kv('Street', bt.street) +
+    kv('City', bt.city) +
+    kv('State', bt.state) +
+    kv('Zip', bt.zip)
+  );
+
+  const st = d.ship_to || {};
+  const shipToGroup = group('Ship To',
+    kv('Company', st.company) +
+    kv('Attention', st.attention) +
+    kv('Street', st.street) +
+    kv('City', st.city) +
+    kv('State', st.state) +
+    kv('Zip', st.zip)
+  );
+
+  fieldsGrid.innerHTML = orderGroup + shipGroup + contactGroup + billGroup + shipToGroup;
+
+  // Line items table
+  const items = d.line_items || [];
+  if (!items.length) {
+    liTbody.innerHTML = `<tr><td colspan="6" class="pst-empty-items">No line items found.</td></tr>`;
+  } else {
+    liTbody.innerHTML = items.map((li, i) => `
+      <tr>
+        <td class="pst-num">${i + 1}</td>
+        <td>${val(li.category)}</td>
+        <td>${val(li.description)}</td>
+        <td>${val(li.label)}</td>
+        <td>${val(li.dimensions)}</td>
+        <td class="pst-qty">${esc(String(li.quantity))}</td>
+      </tr>
+    `).join('');
+  }
+
+  resultsEl.hidden = false;
+  resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+</script>
+
+</body>
+</html>
