@@ -376,7 +376,7 @@ function fromCSV(text, offset) {
     const p = line.split(",").map(x => x.trim());
     if (p.length < 6) return;
     const [name, sku, length, width, height, weight, ...notes] = p;
-    if (!name || isNaN(+length) || isNaN(+width) || isNaN(+height) || isNaN(+weight)) return;
+    if (!name || isNaN(+length) || isNaN(+width) || isNaN(+height) || isNaN(+weight) || +length <= 0 || +width <= 0 || +height <= 0 || +weight <= 0) return;
     result.push({
       id: Date.now() + offset + i, name, sku: sku || name,
       length: +length, width: +width, height: +height, weight: +weight,
@@ -405,6 +405,7 @@ function buildDemand(cart, skus, dims) {
   return cart.map(c => {
     const sku = skus.find(s => s.id === c.skuId);
     if (!sku) return null;
+    if (sku.length <= 0 || sku.width <= 0 || sku.height <= 0) return null;
     if (sku.length > dims.length || sku.width > dims.width || sku.height > dims.height) return null;
     return { skuId: sku.id, sku, originalQty: c.qty, remaining: c.qty };
   }).filter(Boolean);
@@ -559,6 +560,15 @@ function calcLoading(cart, skus, dims, variant = 0) {
   if (!cart.length) return { trailers: [], warnings: [], totalWeight: 0, utilization: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 };
   let demand = buildDemand(cart, skus, dims);
   const warnings = [], floorArea = dims.length * dims.width, trailers = [];
+  cart.forEach(c => {
+    const sku = skus.find(s => s.id === c.skuId);
+    if (!sku) return;
+    if (sku.length <= 0 || sku.width <= 0 || sku.height <= 0) {
+      warnings.push(`"${sku.name}" has invalid dimensions and will be skipped.`);
+    } else if (sku.length > dims.length || sku.width > dims.width || sku.height > dims.height) {
+      warnings.push(`"${sku.name}" exceeds trailer dimensions and will be skipped.`);
+    }
+  });
   while (demand.some(d => d.remaining > 0)) {
     demand = sortDemandPriority(demand, variant);
     const highLead = demand.find(d => d.remaining > 0 && d.remaining >= getFullTrailerThreshold(d.sku, dims));
@@ -603,7 +613,6 @@ function calcLoading(cart, skus, dims, variant = 0) {
   const utilization = trailers.length ? trailers.reduce((s, t) => s + t.usedFloorArea / floorArea, 0) / trailers.length : 0;
   trailers.forEach((t, i) => {
     if (t.usedWeight / dims.maxWeight > 0.95) warnings.push(`Trailer ${i + 1} is near weight limit.`);
-    if (t.rows.some(r => r.columns.some(c => c.totalHeight < dims.height))) warnings.push(`Trailer ${i + 1} has stacks below full trailer height.`);
   });
   return { trailers, warnings, totalWeight, utilization, totalUnits, totalStacks, mixedStacks };
 }
