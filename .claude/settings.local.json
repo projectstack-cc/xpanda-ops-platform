@@ -14,7 +14,8 @@
       "Bash(python -c \"import pdfminer; print\\('pdfminer ok'\\)\")",
       "Bash(python -m pip install pdfminer.six -q)",
       "Bash(python *)",
-      "Bash(powershell -command \"\\(Get-Content 'C:\\\\Users\\\\scook\\\\.dev\\\\xpanda-ops-platform\\\\_worker.js'\\).Count\")"
+      "Bash(powershell -command \"\\(Get-Content 'C:\\\\Users\\\\scook\\\\.dev\\\\xpanda-ops-platform\\\\_worker.js'\\).Count\")",
+      "Bash(git push *)"
     ]
   }
 }
