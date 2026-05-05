@@ -33,6 +33,22 @@
 }
 .jobs-bol-link:hover { background: #e0f2fe; }
 .jobs-bol-number { font-size: 11px; color: #16a34a; font-weight: 700; }
+.jobs-toolbar-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.jobs-slip-badge {
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 16px; font-size: 13px; color: #1e40af;
+  display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap;
+}
+.jobs-slip-badge-info { flex: 1; min-width: 0; }
+.jobs-slip-badge-title { font-weight: 700; margin-bottom: 2px; }
+.jobs-slip-badge-file { font-size: 12px; color: #3b82f6; }
+.jobs-slip-badge-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; margin-top: 2px; }
+.jobs-slip-remove { font-size: 12px; color: #ef4444; cursor: pointer; background: none; border: none; padding: 0; text-decoration: underline; font-family: inherit; }
+.jobs-slip-view { font-size: 12px; color: #1e40af; cursor: pointer; background: none; border: 1px solid #93c5fd; border-radius: 5px; padding: 3px 8px; font-family: inherit; font-weight: 600; }
+.jobs-card-slip { font-size: 11px; cursor: pointer; opacity: 0.7; margin-left: 3px; vertical-align: middle; }
+.jobs-card-slip:hover { opacity: 1; }
+@keyframes slip-fade { from { background: #dbeafe; } to { background: transparent; } }
+.slip-prefilled { animation: slip-fade 2s ease-out forwards; border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -51,7 +67,11 @@
     <button class="btn ghost small" id="btn-load-week">Apply</button>
     <button class="btn ghost small" id="btn-all-jobs">Show All</button>
   </div>
-  <button class="btn primary small jobs-new-btn" id="btn-new-job">+ New Job</button>
+  <div class="jobs-toolbar-actions">
+    <button class="btn ghost small" id="btn-upload-slip">📄 Upload Packing Slip</button>
+    <button class="btn primary small" id="btn-new-job">+ New Job</button>
+  </div>
+  <input type="file" id="packing-slip-upload" accept=".pdf" style="display:none">
 </div>
 
 <!-- Mobile tabs -->
@@ -120,6 +140,9 @@
     </div>
 
     <div class="jobs-modal-body">
+
+      <!-- Packing slip badge -->
+      <div id="slip-badge" class="jobs-slip-badge" hidden></div>
 
       <!-- Customer & Order -->
       <div class="jobs-form-section">
@@ -341,6 +364,7 @@
 <!-- Toast -->
 <div class="jobs-toast" id="jobs-toast" aria-live="polite"></div>
 
+<script src="/jobs/packing-slip-parser.js"></script>
 <script>
 /* ═══════════════════════════════════════════
    State
@@ -363,8 +387,10 @@ const PROCESSES = [
   { name: 'Laminate',     abbr: 'LAM', id: 'proc-laminate'     },
 ];
 
-let allJobs         = [];
-let editingJobId    = null;
+let allJobs          = [];
+let editingJobId     = null;
+let pendingSlip      = null;
+let pendingSlipRemoved = false;
 let selectedPriority = 'normal';
 let selectedComboId  = null;
 let selectedComboName = '';
@@ -513,9 +539,13 @@ function buildCard(job) {
       return `<button class="jobs-proc-pill${p.completed ? ' completed' : ''}" onclick="event.stopPropagation();toggleProcessPill('${esc(job.id)}','${esc(p.name)}')" title="${p.completed ? '✓ ' : ''}${esc(p.name)}">${p.completed ? '✓ ' : ''}${esc(abbr)}</button>`;
     }).join('')}</div>`;
 
+  const slipIcon = job.packing_slip_filename
+    ? ` <span class="jobs-card-slip" onclick="event.stopPropagation();window.open('/api/jobs/${encodeURIComponent(job.id)}/packing-slip','_blank')" title="View packing slip: ${esc(job.packing_slip_filename)}">📄</span>`
+    : '';
+
   card.innerHTML = `
     <div class="jobs-card-top">
-      <div class="jobs-card-customer">${esc(job.customer)}</div>
+      <div class="jobs-card-customer">${esc(job.customer)}${slipIcon}</div>
       <div class="jobs-card-pill-group">
         ${job.priority === 'rush' ? '<span class="jobs-rush-badge">RUSH</span>' : ''}
         ${job.confirmed_to_ship   ? '<span class="jobs-confirmed-badge">✓</span>' : ''}
@@ -564,6 +594,57 @@ function nextStatus(s) {
 
 function setupToolbar() {
   document.getElementById('btn-new-job').addEventListener('click', () => openModal(null));
+
+  const uploadInput = document.getElementById('packing-slip-upload');
+  document.getElementById('btn-upload-slip').addEventListener('click', () => uploadInput.click());
+
+  uploadInput.addEventListener('change', async () => {
+    const file = uploadInput.files[0];
+    uploadInput.value = '';
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      showToast('Please upload a PDF file.');
+      return;
+    }
+
+    const btn = document.getElementById('btn-upload-slip');
+    btn.disabled    = true;
+    btn.textContent = 'Parsing…';
+
+    const base64 = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        resolve(dataUrl.split(',')[1] || '');
+      };
+      reader.readAsDataURL(file);
+    });
+
+    let parseResult = { success: false };
+    if (window.PackingSlipParser) {
+      parseResult = await window.PackingSlipParser.parse(file);
+    }
+
+    btn.disabled    = false;
+    btn.textContent = '📄 Upload Packing Slip';
+
+    pendingSlip = {
+      pdf:      base64,
+      filename: file.name,
+      invoice:  (parseResult.success && parseResult.data?.invoice_number) || '',
+    };
+
+    openModal(null);
+
+    if (parseResult.success && parseResult.data) {
+      prefillForm(parseResult.data);
+      showSlipBadge(pendingSlip.invoice, pendingSlip.filename, false, null);
+    } else {
+      const errMsg = parseResult.error ? ': ' + parseResult.error : '';
+      showToast('Could not parse packing slip' + errMsg + '. You can still create the job manually.');
+      showSlipBadge('', pendingSlip.filename, false, null);
+    }
+  });
 
   document.getElementById('btn-load-week').addEventListener('click', () => {
     const v = document.getElementById('week-filter').value;
@@ -769,7 +850,95 @@ function openModal(jobId) {
 
 function closeModal() {
   document.getElementById('jobs-modal').hidden = true;
-  editingJobId = null;
+  editingJobId       = null;
+  pendingSlip        = null;
+  pendingSlipRemoved = false;
+}
+
+function prefillForm(data) {
+  const highlight = (el) => {
+    if (!el) return;
+    el.classList.remove('slip-prefilled');
+    void el.offsetWidth;
+    el.classList.add('slip-prefilled');
+  };
+  const set = (id, v) => {
+    const el = document.getElementById(id);
+    if (!el || !v) return;
+    el.value = v;
+    highlight(el);
+  };
+
+  if (data.ship_to?.company) set('f-customer',       data.ship_to.company);
+  if (data.po_number)         set('f-po-number',      data.po_number);
+  if (data.invoice_number)    set('f-invoice-number', data.invoice_number);
+  if (data.contact_name)      set('f-contact-name',   data.contact_name);
+  if (data.contact_phone)     set('f-contact-phone',  data.contact_phone);
+
+  if (data.ship_date) {
+    const parts = data.ship_date.split('/');
+    if (parts.length === 3) {
+      const iso = `${parts[2]}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}`;
+      const dateEl = document.getElementById('f-ship-date');
+      if (dateEl) {
+        dateEl.value = iso;
+        document.getElementById('f-ship-day-display').textContent = getShipDay(iso);
+        highlight(dateEl);
+      }
+    }
+  }
+
+  if (Array.isArray(data.line_items) && data.line_items.length) {
+    document.getElementById('li-container').innerHTML = '';
+    for (const li of data.line_items) {
+      const descParts = [li.description];
+      if (li.label) descParts.push('– ' + li.label);
+      if (li.dimensions && !li.label) descParts.push(li.dimensions);
+      const desc = descParts.filter(Boolean).join(' ').trim();
+      const row = addLineItemRow({
+        description: desc,
+        quantity:    li.quantity ?? 1,
+        dimensions:  li.dimensions || '',
+      });
+      row.querySelectorAll('input').forEach(inp => highlight(inp));
+    }
+  }
+}
+
+function showSlipBadge(invoice, filename, isExisting, jobId) {
+  const badge = document.getElementById('slip-badge');
+  const invLine = invoice
+    ? `📄 Created from Packing Slip: Invoice #${esc(invoice)}`
+    : '📄 Packing Slip Attached';
+  badge.innerHTML = `
+    <div class="jobs-slip-badge-info">
+      <div class="jobs-slip-badge-title">${invLine}</div>
+      <div class="jobs-slip-badge-file">&#128206; ${esc(filename || 'Unknown file')}</div>
+    </div>
+    <div class="jobs-slip-badge-actions">
+      ${isExisting && jobId ? `<button type="button" class="jobs-slip-view" id="slip-view-btn">View / Print</button>` : ''}
+      <button type="button" class="jobs-slip-remove" id="slip-remove-btn">${isExisting ? 'Remove Attachment' : 'Remove'}</button>
+    </div>
+  `;
+  badge.hidden = false;
+
+  if (isExisting && jobId) {
+    document.getElementById('slip-view-btn').addEventListener('click', () => {
+      window.open('/api/jobs/' + encodeURIComponent(jobId) + '/packing-slip', '_blank');
+    });
+  }
+
+  document.getElementById('slip-remove-btn').addEventListener('click', () => {
+    if (isExisting) pendingSlipRemoved = true;
+    pendingSlip = null;
+    hideSlipBadge();
+  });
+}
+
+function hideSlipBadge() {
+  const badge = document.getElementById('slip-badge');
+  badge.hidden   = true;
+  badge.innerHTML = '';
 }
 
 function clearForm() {
@@ -791,6 +960,7 @@ function clearForm() {
 
   setPriority('normal');
   clearCombo();
+  hideSlipBadge();
   setModalStatus('');
 
   PROCESSES.forEach(def => {
@@ -834,6 +1004,10 @@ function populateForm(job) {
   }
 
   if (job.combo_id) showComboBadge(job.combo_id, 'Linked Combo');
+
+  if (job.packing_slip_filename) {
+    showSlipBadge(job.packing_slip_invoice || '', job.packing_slip_filename, true, job.id);
+  }
 
   PROCESSES.forEach(def => {
     const el    = document.getElementById(def.id);
@@ -957,6 +1131,18 @@ async function saveJob() {
     line_items:           collectLineItems(),
     processes:            collectProcesses(),
   };
+
+  if (pendingSlip) {
+    payload.source                = 'packing_slip';
+    payload.packing_slip_pdf      = pendingSlip.pdf;
+    payload.packing_slip_filename = pendingSlip.filename;
+    payload.packing_slip_invoice  = pendingSlip.invoice;
+  } else if (pendingSlipRemoved) {
+    payload.source                = 'manual';
+    payload.packing_slip_pdf      = null;
+    payload.packing_slip_filename = '';
+    payload.packing_slip_invoice  = '';
+  }
 
   const btn = document.getElementById('modal-save');
   btn.disabled    = true;
