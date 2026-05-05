@@ -441,7 +441,7 @@ function exactFillHeight(targetH, candidates, maxWeightBudget) {
   return best.totalH > 0 ? best : null;
 }
 
-function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = null) {
+function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = null, allowMixing = true) {
   const baseSku = baseDemand.sku;
   const maxBase = Math.min(baseDemand.remaining, Math.floor(dims.height / baseSku.height));
   if (maxBase <= 0) return null;
@@ -456,7 +456,7 @@ function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = n
     let totalHeight = baseHeight, totalWeight = baseWeight;
     const remainH = dims.height - totalHeight;
     const budget = dims.maxWeight - usedWeightSoFar - totalWeight;
-    if (remainH > 0) {
+    if (remainH > 0 && allowMixing) {
       let fillPool = tempPool;
       if (preferredSkuId) { const pref = tempPool.filter(d => d.skuId === preferredSkuId && d.remaining > 0); if (pref.length) fillPool = pref; }
       let fill = exactFillHeight(remainH, fillPool, budget);
@@ -491,7 +491,7 @@ function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = n
   };
 }
 
-function buildRow(demand, dims, curX, trailerUsedWeight, variant, preferredSkuId = null) {
+function buildRow(demand, dims, curX, trailerUsedWeight, variant, preferredSkuId = null, allowMixing = true) {
   const ordered = sortDemandPriority(demand.filter(d => d.remaining > 0 && d.sku.length <= dims.length - curX && d.sku.width <= dims.width && d.sku.height <= dims.height), variant);
   if (!ordered.length) return null;
   let dominant = preferredSkuId ? ordered.find(d => d.skuId === preferredSkuId) : null;
@@ -510,7 +510,7 @@ function buildRow(demand, dims, curX, trailerUsedWeight, variant, preferredSkuId
     let placed = false;
     for (const candidate of candidates) {
       const footprintPool = sortDemandPriority(working.filter(d => d.remaining > 0 && d.sku.length === candidate.sku.length && d.sku.width === candidate.sku.width), variant);
-      const col = buildColumn(candidate, footprintPool, dims, trailerUsedWeight + row.totalWeight, preferredSkuId);
+      const col = buildColumn(candidate, footprintPool, dims, trailerUsedWeight + row.totalWeight, preferredSkuId, allowMixing);
       if (!col) continue;
       row.columns.push({ ...col, posY, label: col.layers.map(l => `${l.unitHeight}"`).join(" + ") });
       row.rowWidthUsed += col.colWidth;
@@ -565,10 +565,12 @@ function calcLoading(cart, skus, dims, variant = 0) {
     const preferredSkuId = highLead ? highLead.skuId : (demand.find(d => d.remaining > 0)?.skuId ?? null);
     const rows = [];
     let curX = 0, usedWeight = 0, progress = true;
+
+    // Pass 1: same-size stacks only — no mixing allowed
     while (progress && curX < dims.length) {
       progress = false;
-      let best = buildRow(demand, dims, curX, usedWeight, variant, preferredSkuId);
-      if (!best) best = buildRow(demand, dims, curX, usedWeight, variant, null);
+      let best = buildRow(demand, dims, curX, usedWeight, variant, preferredSkuId, false);
+      if (!best) best = buildRow(demand, dims, curX, usedWeight, variant, null, false);
       if (!best) break;
       rows.push(best.row);
       demand = best.updatedDemand;
@@ -576,6 +578,21 @@ function calcLoading(cart, skus, dims, variant = 0) {
       usedWeight += best.row.totalWeight;
       progress = true;
     }
+
+    // Pass 2: mixed fill for any remainders — grouped at the tail of the trailer
+    progress = true;
+    while (progress && curX < dims.length) {
+      progress = false;
+      let best = buildRow(demand, dims, curX, usedWeight, variant, preferredSkuId, true);
+      if (!best) best = buildRow(demand, dims, curX, usedWeight, variant, null, true);
+      if (!best) break;
+      rows.push(best.row);
+      demand = best.updatedDemand;
+      curX += best.row.rowLength;
+      usedWeight += best.row.totalWeight;
+      progress = true;
+    }
+
     if (!rows.length) { const stuck = demand.find(d => d.remaining > 0); if (stuck) warnings.push(`Could not place remaining ${stuck.sku.name}.`); break; }
     trailers.push(buildTrailerStats(rows, dims));
   }
