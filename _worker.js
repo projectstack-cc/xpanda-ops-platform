@@ -1525,14 +1525,55 @@ async function handleApiCombos(request, env) {
 //   FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
 // );
 // CREATE INDEX IF NOT EXISTS idx_job_items_job ON job_line_items(job_id);
+//
+// Migration: Add packing slip storage to jobs (run once against D1)
+// ALTER TABLE jobs ADD COLUMN packing_slip_pdf TEXT DEFAULT NULL;
+// ALTER TABLE jobs ADD COLUMN packing_slip_filename TEXT NOT NULL DEFAULT '';
+// ALTER TABLE jobs ADD COLUMN packing_slip_invoice TEXT NOT NULL DEFAULT '';
+// ALTER TABLE jobs ADD COLUMN source TEXT NOT NULL DEFAULT 'manual';
 
 async function handleApiJobs(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
 
-  const url   = new URL(request.url);
-  const parts = url.pathname.split("/").filter(Boolean);
-  const jobId = parts.length >= 3 ? parts[2] : null;
+  const url      = new URL(request.url);
+  const parts    = url.pathname.split("/").filter(Boolean);
+  const jobId    = parts.length >= 3 ? parts[2] : null;
+  const subRoute = parts.length >= 4 ? parts[3] : null;
+
+  // Columns returned in list responses — packing_slip_pdf is intentionally excluded (too large)
+  const JOB_LIST_COLS = `
+    id, status, customer, po_number, invoice_number, ship_date, ship_day,
+    location, delivery_time, method, carrier, load_count, total_bdft,
+    scrap_pickup, sales_lead, bol_info, payment_info, notes,
+    packing_instructions, contact_name, contact_phone, combo_id,
+    priority, confirmed_to_ship, processes, created_at, updated_at,
+    packing_slip_filename, packing_slip_invoice, source
+  `;
+
+  // ── GET /api/jobs/:id/packing-slip ───────────────────────────────────────
+  if (request.method === "GET" && jobId && subRoute === "packing-slip") {
+    try {
+      const row = await db
+        .prepare("SELECT packing_slip_pdf, packing_slip_filename FROM jobs WHERE id = ?")
+        .bind(jobId).first();
+      if (!row) return json({ ok: false, error: "Job not found." }, 404);
+      if (!row.packing_slip_pdf) return json({ ok: false, error: "No packing slip attached to this job." }, 404);
+
+      const binary = Uint8Array.from(atob(row.packing_slip_pdf), c => c.charCodeAt(0));
+      const filename = row.packing_slip_filename || "packing-slip.pdf";
+      return new Response(binary, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename="${filename.replace(/"/g, '')}"`,
+          "Cache-Control": "private, max-age=3600",
+        },
+      });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
 
   // ── GET /api/jobs/:id ─────────────────────────────────────────────────────
   if (request.method === "GET" && jobId) {
@@ -1563,7 +1604,7 @@ async function handleApiJobs(request, env) {
         return json({ ok: false, error: "Invalid week. Use YYYY-MM-DD (Monday of week)." }, 400);
       }
       // Monday through Friday of the requested week
-      query = `SELECT * FROM jobs WHERE ship_date >= ? AND ship_date <= date(?, '+4 days') ORDER BY ship_date ASC, created_at ASC`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs WHERE ship_date >= ? AND ship_date <= date(?, '+4 days') ORDER BY ship_date ASC, created_at ASC`;
       binds = [weekParam, weekParam];
     } else if (statusParam) {
       const statuses = statusParam.split(",").map(s => s.trim()).filter(Boolean);
@@ -1572,11 +1613,11 @@ async function handleApiJobs(request, env) {
         if (!valid.includes(s)) return json({ ok: false, error: `Invalid status: ${s}` }, 400);
       }
       const placeholders = statuses.map(() => "?").join(",");
-      query = `SELECT * FROM jobs WHERE status IN (${placeholders}) ORDER BY ship_date ASC, created_at ASC`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs WHERE status IN (${placeholders}) ORDER BY ship_date ASC, created_at ASC`;
       binds = statuses;
     } else {
       // Default: all active + shipped in the last 7 days
-      query = `SELECT * FROM jobs WHERE status != 'shipped' OR (status = 'shipped' AND ship_date >= date('now', '-7 days')) ORDER BY ship_date ASC, created_at ASC`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs WHERE status != 'shipped' OR (status = 'shipped' AND ship_date >= date('now', '-7 days')) ORDER BY ship_date ASC, created_at ASC`;
       binds = [];
     }
 
@@ -1660,6 +1701,13 @@ async function handleApiJobs(request, env) {
     const confirmed_to_ship    = payload.confirmed_to_ship ? 1 : 0;
     const processes            = Array.isArray(payload.processes) ? JSON.stringify(payload.processes) : '[]';
 
+    // Packing slip fields (optional — present when job is created from an uploaded PDF)
+    const packing_slip_pdf      = payload.packing_slip_pdf ? String(payload.packing_slip_pdf) : null;
+    const packing_slip_filename = String(payload.packing_slip_filename || "").trim();
+    const packing_slip_invoice  = String(payload.packing_slip_invoice  || "").trim();
+    const source = ["manual", "packing_slip"].includes(String(payload.source || "").trim())
+      ? String(payload.source).trim() : "manual";
+
     try {
       await db.prepare(`
         INSERT INTO jobs (
@@ -1667,14 +1715,16 @@ async function handleApiJobs(request, env) {
           location, delivery_time, method, carrier, load_count, total_bdft,
           scrap_pickup, sales_lead, bol_info, payment_info, notes,
           packing_instructions, contact_name, contact_phone, combo_id,
-          priority, confirmed_to_ship, processes, created_at, updated_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          priority, confirmed_to_ship, processes, created_at, updated_at,
+          packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, status, customer, po_number, invoice_number, ship_date, ship_day,
         location, delivery_time, method, carrier, load_count, total_bdft,
         scrap_pickup, sales_lead, bol_info, payment_info, notes,
         packing_instructions, contact_name, contact_phone, combo_id,
         priority, confirmed_to_ship, processes, now, now,
+        packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
       ).run();
 
       // Insert line items
@@ -1738,6 +1788,7 @@ async function handleApiJobs(request, env) {
       "location", "delivery_time", "method", "carrier", "scrap_pickup",
       "sales_lead", "bol_info", "payment_info", "notes",
       "packing_instructions", "contact_name", "contact_phone",
+      "packing_slip_filename", "packing_slip_invoice",
     ];
     for (const f of textFields) {
       if (f in payload) { sets.push(`${f} = ?`); binds.push(String(payload[f] || "").trim()); }
@@ -1750,6 +1801,17 @@ async function handleApiJobs(request, env) {
     if ("processes" in payload) {
       const v = Array.isArray(payload.processes) ? JSON.stringify(payload.processes) : '[]';
       sets.push("processes = ?"); binds.push(v);
+    }
+    if ("source" in payload) {
+      const v = String(payload.source).trim();
+      if (!["manual", "packing_slip"].includes(v))
+        return json({ ok: false, error: "Invalid source." }, 400);
+      sets.push("source = ?"); binds.push(v);
+    }
+    // packing_slip_pdf is nullable — pass null to clear, base64 string to set
+    if ("packing_slip_pdf" in payload) {
+      sets.push("packing_slip_pdf = ?");
+      binds.push(payload.packing_slip_pdf ? String(payload.packing_slip_pdf) : null);
     }
 
     sets.push("updated_at = ?");

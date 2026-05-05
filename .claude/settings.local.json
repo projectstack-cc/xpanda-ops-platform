@@ -13,7 +13,8 @@
       "Bash(\"C:\\\\Program Files\\\\Git\\\\mingw64\\\\bin\\\\pdftotext.exe\" -layout \"72ab78c2-c849-45f1-9ed7-19ac33803867.pdf\" -)",
       "Bash(python -c \"import pdfminer; print\\('pdfminer ok'\\)\")",
       "Bash(python -m pip install pdfminer.six -q)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(powershell -command \"\\(Get-Content 'C:\\\\Users\\\\scook\\\\.dev\\\\xpanda-ops-platform\\\\_worker.js'\\).Count\")"
     ]
   }
 }
