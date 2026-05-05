@@ -292,6 +292,10 @@ document.getElementById('logistics-page-subtitle').textContent = 'Load planning 
 // ═══════════════════════════════════════════════════════════════
 const STORAGE_KEY = "foam_trailer_loader_v31";
 
+const SVG_TOPVIEW_SCALE  = 0.52;  // px per inch, screen layout view
+const SVG_PRINT_SCALE    = 1.9;   // px per inch, print view (before fit-scaling)
+const SVG_PRINT_MAX_WIDTH = 1050; // max print SVG width in px (landscape page)
+
 const DEFAULT_SKUS = [
   { id: 1, name: "4in block", sku: "FB-4", length: 48, width: 24, height: 4, weight: 1, notes: "", color: "#D97706" },
   { id: 2, name: "5in block", sku: "FB-5", length: 48, width: 24, height: 5, weight: 1, notes: "", color: "#0F766E" },
@@ -448,7 +452,7 @@ function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = n
   if (maxBase <= 0) return null;
   let best = null;
   for (let baseCount = maxBase; baseCount >= 1; baseCount--) {
-    const tempPool = pool;
+    const tempPool = pool; // alias (not a clone); isolation comes from cloneDemand(tempPool) in the snapshot below
     const baseHeight = baseCount * baseSku.height;
     const baseWeight = baseCount * baseSku.weight;
     if (usedWeightSoFar + baseWeight > dims.maxWeight) continue;
@@ -497,7 +501,6 @@ function buildRow(demand, dims, curX, trailerUsedWeight, variant, preferredSkuId
   if (!ordered.length) return null;
   let dominant = preferredSkuId ? ordered.find(d => d.skuId === preferredSkuId) : null;
   if (!dominant) dominant = ordered[0];
-  if (!dominant) return null;
   const rowLength = dominant.sku.length;
   const working = cloneDemand(sortDemandPriority(demand.filter(d => d.remaining > 0 && d.sku.length === rowLength && d.sku.width <= dims.width), variant));
   const row = { posFromFront: curX, rowLength, rowWidthUsed: 0, columns: [], totalUnits: 0, totalWeight: 0 };
@@ -635,7 +638,7 @@ function getStackPrintLines(col) {
 // SVG BUILDERS
 // ═══════════════════════════════════════════════════════════════
 function buildTopViewSVG(trailer, dims) {
-  const SC = 0.52, W = 10, PAD = 64;
+  const SC = SVG_TOPVIEW_SCALE, W = 10, PAD = 64;
   const pxL = dims.length * SC, pxW = dims.width * SC;
   const svgW = pxL + W * 2 + PAD, svgH = pxW + W * 2 + 40;
   const rects = [];
@@ -674,7 +677,7 @@ function buildTopViewSVG(trailer, dims) {
 }
 
 function buildPrintSvg(trailer, dims) {
-  const BASE_SC = 1.9, M = 20, MAX_PRINT_WIDTH = 1050;
+  const BASE_SC = SVG_PRINT_SCALE, M = 20, MAX_PRINT_WIDTH = SVG_PRINT_MAX_WIDTH;
   const rawPxL = dims.length * BASE_SC;
   const fitScale = (rawPxL + M * 2 + 78) > MAX_PRINT_WIDTH ? MAX_PRINT_WIDTH / (rawPxL + M * 2 + 78) : 1;
   const SC = BASE_SC * fitScale;
