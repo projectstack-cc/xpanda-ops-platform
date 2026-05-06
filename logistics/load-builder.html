@@ -297,16 +297,16 @@ const SVG_PRINT_SCALE    = 1.9;   // px per inch, print view (before fit-scaling
 const SVG_PRINT_MAX_WIDTH = 1050; // max print SVG width in px (landscape page)
 
 const DEFAULT_SKUS = [
-  { id: 1, name: "4in block", sku: "FB-4", length: 48, width: 24, height: 4, weight: 1, notes: "", color: "#D97706" },
-  { id: 2, name: "5in block", sku: "FB-5", length: 48, width: 24, height: 5, weight: 1, notes: "", color: "#0F766E" },
-  { id: 3, name: "6in block", sku: "FB-6", length: 48, width: 24, height: 6, weight: 1, notes: "", color: "#2563EB" },
-  { id: 4, name: "7in block", sku: "FB-7", length: 48, width: 24, height: 7, weight: 1, notes: "", color: "#7C3AED" },
-  { id: 5, name: "8in block", sku: "FB-8", length: 48, width: 24, height: 8, weight: 1, notes: "", color: "#DC2626" },
-  { id: 6, name: "9in block", sku: "FB-9", length: 48, width: 24, height: 9, weight: 1, notes: "", color: "#059669" },
-  { id: 7, name: "10in block", sku: "FB-10", length: 48, width: 24, height: 10, weight: 1, notes: "", color: "#9333EA" },
-  { id: 8, name: "11in block", sku: "FB-11", length: 48, width: 24, height: 11, weight: 1, notes: "", color: "#0891B2" },
-  { id: 9, name: "12in block", sku: "FB-12", length: 48, width: 24, height: 12, weight: 1, notes: "", color: "#CA8A04" },
-  { id: 10, name: "13in block", sku: "FB-13", length: 48, width: 24, height: 13, weight: 1, notes: "", color: "#4F46E5" },
+  { id: 1, name: "4in block", sku: "FB-4", length: 48, width: 24, height: 4, weight: 1, notes: "", color: "#D97706", allowRotation: false },
+  { id: 2, name: "5in block", sku: "FB-5", length: 48, width: 24, height: 5, weight: 1, notes: "", color: "#0F766E", allowRotation: false },
+  { id: 3, name: "6in block", sku: "FB-6", length: 48, width: 24, height: 6, weight: 1, notes: "", color: "#2563EB", allowRotation: false },
+  { id: 4, name: "7in block", sku: "FB-7", length: 48, width: 24, height: 7, weight: 1, notes: "", color: "#7C3AED", allowRotation: false },
+  { id: 5, name: "8in block", sku: "FB-8", length: 48, width: 24, height: 8, weight: 1, notes: "", color: "#DC2626", allowRotation: false },
+  { id: 6, name: "9in block", sku: "FB-9", length: 48, width: 24, height: 9, weight: 1, notes: "", color: "#059669", allowRotation: false },
+  { id: 7, name: "10in block", sku: "FB-10", length: 48, width: 24, height: 10, weight: 1, notes: "", color: "#9333EA", allowRotation: false },
+  { id: 8, name: "11in block", sku: "FB-11", length: 48, width: 24, height: 11, weight: 1, notes: "", color: "#0891B2", allowRotation: false },
+  { id: 9, name: "12in block", sku: "FB-12", length: 48, width: 24, height: 12, weight: 1, notes: "", color: "#CA8A04", allowRotation: false },
+  { id: 10, name: "13in block", sku: "FB-13", length: 48, width: 24, height: 13, weight: 1, notes: "", color: "#4F46E5", allowRotation: false },
 ];
 
 const TRAILER_TYPES = {
@@ -340,7 +340,7 @@ let state = {
   pasteErr: "",
   editorTrailer: null,
   manualRowsByTrailer: {},
-  form: { name: "", sku: "", length: "", width: "", height: "", weight: "", notes: "" },
+  form: { name: "", sku: "", length: "", width: "", height: "", weight: "", notes: "", allowRotation: false },
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -360,6 +360,7 @@ function loadSaved() {
           id: s.id ?? Date.now() + i, name: s.name ?? "SKU", sku: s.sku ?? "SKU",
           length: +s.length || 0, width: +s.width || 0, height: +s.height || 0,
           weight: +s.weight || 0, notes: s.notes || "", color: s.color || COLORS[i % COLORS.length],
+          allowRotation: s.allowRotation === true,
         })));
       }
     }
@@ -368,8 +369,8 @@ function loadSaved() {
 }
 
 function toCSV(skus) {
-  return ["name,sku,length,width,height,weight,notes",
-    ...skus.map(s => [s.name, s.sku, s.length, s.width, s.height, s.weight, (s.notes || "").replace(/,/g, ";")].join(","))
+  return ["name,sku,length,width,height,weight,notes,allowRotation",
+    ...skus.map(s => [s.name, s.sku, s.length, s.width, s.height, s.weight, (s.notes || "").replace(/,/g, ";"), s.allowRotation ? "true" : "false"].join(","))
   ].join("\n");
 }
 
@@ -379,12 +380,13 @@ function fromCSV(text, offset) {
     if (line.toLowerCase().startsWith("name")) return;
     const p = line.split(",").map(x => x.trim());
     if (p.length < 6) return;
-    const [name, sku, length, width, height, weight, ...notes] = p;
+    const [name, sku, length, width, height, weight, notesRaw, rotationRaw] = p;
     if (!name || isNaN(+length) || isNaN(+width) || isNaN(+height) || isNaN(+weight) || +length <= 0 || +width <= 0 || +height <= 0 || +weight <= 0) return;
     result.push({
       id: Date.now() + offset + i, name, sku: sku || name,
       length: +length, width: +width, height: +height, weight: +weight,
-      notes: notes.join(",") || "", color: COLORS[(offset + i) % COLORS.length],
+      notes: notesRaw || "", color: COLORS[(offset + i) % COLORS.length],
+      allowRotation: rotationRaw ? rotationRaw.toLowerCase() === "true" : false,
     });
   });
   return result;
@@ -410,8 +412,27 @@ function buildDemand(cart, skus, dims) {
     const sku = skus.find(s => s.id === c.skuId);
     if (!sku) return null;
     if (sku.length <= 0 || sku.width <= 0 || sku.height <= 0) return null;
-    if (sku.length > dims.length || sku.width > dims.width || sku.height > dims.height) return null;
-    return { skuId: sku.id, sku, originalQty: c.qty, remaining: c.qty };
+
+    let effectiveLength = sku.length, effectiveWidth = sku.width, rotated = false;
+
+    if (sku.allowRotation) {
+      const origFits = sku.length <= dims.length && sku.width <= dims.width;
+      const rotFits = sku.width <= dims.length && sku.length <= dims.width;
+      if (origFits && rotFits) {
+        const origScore = Math.floor(dims.length / sku.length) * Math.floor(dims.width / sku.width);
+        const rotScore = Math.floor(dims.length / sku.width) * Math.floor(dims.width / sku.length);
+        if (rotScore > origScore) { effectiveLength = sku.width; effectiveWidth = sku.length; rotated = true; }
+      } else if (!origFits && rotFits) {
+        effectiveLength = sku.width; effectiveWidth = sku.length; rotated = true;
+      }
+    }
+
+    if (effectiveLength > dims.length || effectiveWidth > dims.width || sku.height > dims.height) return null;
+
+    const effectiveSku = rotated
+      ? { ...sku, length: effectiveLength, width: effectiveWidth, name: sku.name + " (rotated)" }
+      : sku;
+    return { skuId: sku.id, sku: effectiveSku, originalQty: c.qty, remaining: c.qty };
   }).filter(Boolean);
 }
 
@@ -652,6 +673,14 @@ function buildTopViewSVG(trailer, dims) {
   svg += `<defs><pattern id="ep" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#CBD5E1" stroke-width="2"/></pattern></defs>`;
   svg += `<rect x="${W}" y="${W}" width="${pxL}" height="${pxW}" fill="#F8FAFC" stroke="#94A3B8" stroke-width="2" rx="3"/>`;
   if (emptyW > 2) svg += `<rect x="${usedX}" y="${W}" width="${emptyW}" height="${pxW}" fill="url(#ep)"/>`;
+  if (emptyW > 40) {
+    const remainingInches = dims.length - (trailer.usedLength || 0);
+    const remainingFeet = Math.floor(remainingInches / 12);
+    const remainingInchesRem = remainingInches % 12;
+    const remLabel = remainingFeet > 0 ? `${remainingFeet}' ${remainingInchesRem}" remaining` : `${remainingInchesRem}" remaining`;
+    const remFs = Math.max(8, Math.min(11, emptyW / (remLabel.length * 7)));
+    svg += `<text x="${usedX + emptyW / 2}" y="${W + pxW / 2 + 4}" text-anchor="middle" fill="#94A3B8" font-size="${remFs}" font-weight="700">${remLabel}</text>`;
+  }
   (trailer.rows || []).forEach((row, ri) => {
     svg += `<line x1="${W + row.posFromFront * SC}" y1="${W}" x2="${W + row.posFromFront * SC}" y2="${W + pxW}" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="4,3"/>`;
   });
@@ -695,8 +724,20 @@ function buildPrintSvg(trailer, dims) {
     const startY = r.y + r.h / 2 - ((lines.length - 1) * lineGap) / 2;
     return lines.map((line, i) => `<text x="${r.x + r.w / 2}" y="${startY + i * lineGap}" text-anchor="middle" dominant-baseline="middle" font-size="${baseSize}" font-weight="700" fill="#111827">${line}</text>`).join("");
   };
+  const printUsedPxL = (trailer.usedLength || 0) * SC;
+  const printEmptyW = pxL - printUsedPxL;
   let svg = `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="font-family:Arial,sans-serif;display:block;">`;
+  svg += `<defs><pattern id="pep" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#CBD5E1" stroke-width="2"/></pattern></defs>`;
   svg += `<rect x="${M}" y="${M}" width="${pxL}" height="${pxW}" fill="#ffffff" stroke="#475569" stroke-width="2.5" rx="4"/>`;
+  if (printEmptyW > 2) svg += `<rect x="${M + printUsedPxL}" y="${M}" width="${printEmptyW}" height="${pxW}" fill="url(#pep)"/>`;
+  if (printEmptyW > 40) {
+    const remainingInches = dims.length - (trailer.usedLength || 0);
+    const remainingFeet = Math.floor(remainingInches / 12);
+    const remainingInchesRem = remainingInches % 12;
+    const remLabel = remainingFeet > 0 ? `${remainingFeet}' ${remainingInchesRem}" remaining` : `${remainingInchesRem}" remaining`;
+    const remFs = Math.max(10, Math.min(15, printEmptyW / (remLabel.length * 7)));
+    svg += `<text x="${M + printUsedPxL + printEmptyW / 2}" y="${M + pxW / 2 + 5}" text-anchor="middle" fill="#94A3B8" font-size="${remFs}" font-weight="700">${remLabel}</text>`;
+  }
   rects.forEach(r => { svg += `<g><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="#ffffff" stroke="#334155" stroke-width="1.8" rx="2"/>${renderLines(r)}</g>`; });
   (trailer.rows || []).forEach((row, ri) => {
     svg += `<text x="${M + row.posFromFront * SC + row.rowLength * SC / 2}" y="${M - 4}" text-anchor="middle" font-size="13" font-weight="700" fill="#475569">R${ri + 1}</text>`;
@@ -833,6 +874,9 @@ function renderLoadTab() {
     const info = h('div', { style: { fontSize: '14px', color: 'var(--text-mid)', lineHeight: '1.8' } });
     info.appendChild(h('div', {}, `${s.length}" × ${s.width}" × ${s.height}"`));
     info.appendChild(h('div', {}, `${Math.floor(dims.height / s.height)} pcs if all same-size stack`));
+    if (s.allowRotation) {
+      info.appendChild(h('span', { style: { fontSize: '11px', fontWeight: 700, color: 'var(--text-ghost)', letterSpacing: '0.5px' } }, '↻ ROTATE'));
+    }
     skuCard.appendChild(info);
 
     const actions = h('div', { className: 'flex gap-8 items-center', style: { marginTop: '14px' } });
@@ -898,7 +942,7 @@ function renderSkusTab() {
   right.appendChild(h('button', { className: `btn ${state.pasteMode ? 'btn-dark' : 'btn-white'}`, onClick: () => { state.pasteMode = !state.pasteMode; state.pasteErr = ''; state.pasteText = ''; render(); } }, state.pasteMode ? 'CANCEL' : 'PASTE IMPORT'));
   right.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { if (confirm('Reset to defaults?')) { persist(DEFAULT_SKUS); state.cart = []; render(); } } }, 'RESET'));
   right.appendChild(h('button', { className: 'btn btn-accent', onClick: () => {
-    if (state.showForm && !state.editId) { state.showForm = false; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'' }; }
+    if (state.showForm && !state.editId) { state.showForm = false; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false }; }
     else { state.showForm = true; state.editId = null; state.formErr = ''; }
     render();
   } }, state.showForm && !state.editId ? 'CANCEL' : '+ NEW SKU'));
@@ -943,6 +987,19 @@ function renderSkusTab() {
     notesWrap.appendChild(h('div', { className: 'form-label' }, 'NOTES'));
     notesWrap.appendChild(h('textarea', { className: 'inp', value: state.form.notes, style: { minHeight: '70px', resize: 'vertical' }, onInput: e => { state.form.notes = e.target.value; state.formErr = ''; } }));
     grid.appendChild(notesWrap);
+
+    const rotWrap = h('div', { className: 'full-width', style: { paddingTop: '4px' } });
+    const rotLabel = h('label', { style: { display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' } });
+    const rotCheckbox = h('input', { type: 'checkbox', onChange: e => { state.form.allowRotation = e.target.checked; } });
+    rotCheckbox.checked = state.form.allowRotation === true;
+    const rotTextWrap = h('div');
+    rotTextWrap.appendChild(h('div', { style: { fontWeight: 700, fontSize: '14px', color: 'var(--text-mid)' } }, 'Allow rotation when loading'));
+    rotTextWrap.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-ghost)', marginTop: '3px', lineHeight: '1.5' } }, "When checked, the algorithm may rotate this SKU’s length and width for better trailer fit"));
+    rotLabel.appendChild(rotCheckbox);
+    rotLabel.appendChild(rotTextWrap);
+    rotWrap.appendChild(rotLabel);
+    grid.appendChild(rotWrap);
+
     formCard.appendChild(grid);
 
     const formBtns = h('div', { className: 'flex gap-8 mt-14' });
@@ -951,13 +1008,13 @@ function renderSkusTab() {
       if (!f.name.trim()) { state.formErr = 'Name required.'; render(); return; }
       if (!f.sku.trim()) { state.formErr = 'SKU code required.'; render(); return; }
       if (!+f.length || !+f.width || !+f.height || !+f.weight) { state.formErr = 'All dimensions and weight must be positive.'; render(); return; }
-      const payload = { name: f.name.trim(), sku: f.sku.trim(), length: +f.length, width: +f.width, height: +f.height, weight: +f.weight, notes: f.notes || '' };
+      const payload = { name: f.name.trim(), sku: f.sku.trim(), length: +f.length, width: +f.width, height: +f.height, weight: +f.weight, notes: f.notes || '', allowRotation: f.allowRotation === true };
       if (state.editId) persist(state.skus.map(s => s.id === state.editId ? { ...s, ...payload } : s));
       else persist([...state.skus, { ...payload, id: Date.now(), color: COLORS[state.skus.length % COLORS.length] }]);
-      state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'' };
+      state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false };
       render();
     } }, state.editId ? 'SAVE CHANGES' : 'ADD SKU'));
-    formBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'' }; render(); } }, 'CANCEL'));
+    formBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false }; render(); } }, 'CANCEL'));
     formCard.appendChild(formBtns);
     cont.appendChild(formCard);
   }
@@ -970,15 +1027,18 @@ function renderSkusTab() {
     inner.appendChild(h('div', { className: 'color-dot', style: { background: s.color } }));
     const info = h('div', { style: { flex: 1, minWidth: '200px' } });
     info.appendChild(h('div', { style: { fontWeight: 800, fontSize: '16px' } }, s.name));
-    info.appendChild(h('div', { style: { fontSize: '14px', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--mono)', fontSize: '13px' } }, `${s.sku} · ${s.length}"×${s.width}"×${s.height}"`));
+    const dimRow = h('div', { style: { fontSize: '13px', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: '8px' } });
+    dimRow.appendChild(document.createTextNode(`${s.sku} · ${s.length}"×${s.width}"×${s.height}"`));
+    if (s.allowRotation) dimRow.appendChild(h('span', { style: { fontSize: '10px', fontWeight: 700, color: 'var(--text-ghost)', fontFamily: 'var(--font)', letterSpacing: '0.5px' } }, '↻'));
+    info.appendChild(dimRow);
     if (s.notes) info.appendChild(h('div', { style: { fontSize: '13px', color: 'var(--text-faint)', marginTop: '4px' } }, s.notes));
     inner.appendChild(info);
     inner.appendChild(h('button', { className: 'btn btn-white', onClick: () => {
-      state.form = { name: s.name, sku: s.sku, length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '' };
+      state.form = { name: s.name, sku: s.sku, length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true };
       state.editId = s.id; state.showForm = true; state.tab = 'skus'; state.formErr = ''; render();
     } }, 'EDIT'));
     inner.appendChild(h('button', { className: 'btn btn-teal-light', onClick: () => {
-      state.form = { name: s.name + ' Copy', sku: s.sku + '-2', length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '' };
+      state.form = { name: s.name + ' Copy', sku: s.sku + '-2', length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true };
       state.editId = null; state.showForm = true; state.tab = 'skus'; state.formErr = ''; render();
     } }, 'COPY'));
     inner.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { persist(state.skus.filter(x => x.id !== s.id)); state.cart = state.cart.filter(x => x.skuId !== s.id); render(); } }, 'DEL'));

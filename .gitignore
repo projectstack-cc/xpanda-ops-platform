@@ -4,6 +4,3 @@ bead_inventory.sql
 job_board.sql
 logistics.sql
 seed-parts.sql
-prompt-1-packing-slip-parser.md
-prompt-2-packing-slip-storage.md
-prompt-3-job-board-upload-ui.md
