@@ -311,10 +311,10 @@ const DEFAULT_SKUS = [
 
 const TRAILER_TYPES = {
   "53ft Standard": { length: 636, width: 98, height: 108, maxWeight: 44000 },
-  "48ft Standard": { length: 576, width: 98, height: 108, maxWeight: 44000 },
+  "48ft Flatbed":  { length: 576, width: 98, height: 108, maxWeight: 44000 },
   "40ft Container": { length: 480, width: 90, height: 102, maxWeight: 55000 },
   "20ft Container": { length: 240, width: 90, height: 86, maxWeight: 44000 },
-  "28ft Pup": { length: 336, width: 98, height: 108, maxWeight: 28000 },
+  "26ft Box Truck": { length: 312, width: 98, height: 108, maxWeight: 28000 },
 };
 
 const COLORS = [
@@ -634,6 +634,16 @@ function calcLoading(cart, skus, dims, variant = 0) {
     if (!rows.length) { const stuck = demand.find(d => d.remaining > 0); if (stuck) warnings.push(`Could not place remaining ${stuck.sku.name}.`); break; }
     trailers.push(buildTrailerStats(rows, dims));
   }
+  // Auto-downsize last trailer to 26ft Box Truck if it fits and a larger trailer was selected
+  const boxTruckDims = TRAILER_TYPES["26ft Box Truck"];
+  if (trailers.length > 1 && dims.length > boxTruckDims.length) {
+    const last = trailers[trailers.length - 1];
+    if (last.usedLength <= boxTruckDims.length && last.usedWeight <= boxTruckDims.maxWeight) {
+      last.downsizedType = "26ft Box Truck";
+      last.downsizedDims = boxTruckDims;
+    }
+  }
+
   const totalWeight = cart.reduce((s, c) => { const sku = skus.find(x => x.id === c.skuId); return s + (sku ? c.qty * sku.weight : 0); }, 0);
   const totalUnits = cart.reduce((s, c) => s + c.qty, 0);
   const totalStacks = trailers.reduce((s, t) => s + t.totalStacks, 0);
@@ -1206,8 +1216,10 @@ function renderResultsTab() {
 
   // Trailers
   result.trailers.forEach((trailer, ti) => {
-    const usedPct = Math.min(100, (trailer.usedLength / dims.length) * 100);
-    const floorPct = Math.min(100, (trailer.usedFloorArea / (dims.length * dims.width)) * 100);
+    const trailerLabel = trailer.downsizedType || state.trailerType;
+    const trailerDims = trailer.downsizedDims || dims;
+    const usedPct = Math.min(100, (trailer.usedLength / trailerDims.length) * 100);
+    const floorPct = Math.min(100, (trailer.usedFloorArea / (trailerDims.length * trailerDims.width)) * 100);
     const packList = buildPackingList(trailer);
     const isManual = !!state.manualRowsByTrailer[ti];
 
@@ -1217,11 +1229,12 @@ function renderResultsTab() {
     const tHdr = h('div', { className: 'flex justify-between items-center mb-10 flex-wrap gap-10', style: { alignItems: 'flex-start' } });
     const tLeft = h('div');
     const titleRow = h('div', { className: 'flex items-center gap-10 flex-wrap' });
-    titleRow.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 900, fontSize: '18px' } }, `TRAILER ${ti + 1} — ${state.trailerType}`));
+    titleRow.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 900, fontSize: '18px' } }, `TRAILER ${ti + 1} — ${trailerLabel}`));
     titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--blue-bg)', color: 'var(--blue-dark)' } }, `${trailer.totalStacks} stacks · ${trailer.totalUnits} pcs`));
+    if (trailer.downsizedType) titleRow.appendChild(h('span', { className: 'tag', style: { background: '#FEF3C7', color: '#92400E' } }, 'AUTO-DOWNSIZED'));
     if (isManual) titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--teal-bg)', color: 'var(--green-dark)' } }, 'CUSTOMIZED'));
     tLeft.appendChild(titleRow);
-    const remainingIn = dims.length - (trailer.usedLength || 0);
+    const remainingIn = trailerDims.length - (trailer.usedLength || 0);
     const remLabel = remainingIn === 0 ? 'FULL' : remainingIn >= 12
       ? `${Math.floor(remainingIn / 12)}' ${remainingIn % 12}" remaining`
       : `${remainingIn}" remaining`;
@@ -1234,7 +1247,7 @@ function renderResultsTab() {
     const tRight = h('div', { className: 'flex gap-8 flex-wrap' });
     tRight.appendChild(h('button', { className: 'btn btn-blue-light', onClick: () => { state.editorTrailer = state.editorTrailer === ti ? null : ti; render(); } }, state.editorTrailer === ti ? 'CLOSE CUSTOMIZE' : 'CUSTOMIZE TRAILER'));
     if (isManual) tRight.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { delete state.manualRowsByTrailer[ti]; render(); } }, 'CLEAR CUSTOM'));
-    tRight.appendChild(h('button', { className: 'btn btn-teal', onClick: () => printPackingSlip(trailer, dims, state.trailerType, ti + 1, packList) }, 'PRINT PACKING SLIP'));
+    tRight.appendChild(h('button', { className: 'btn btn-teal', onClick: () => printPackingSlip(trailer, trailerDims, trailerLabel, ti + 1, packList) }, 'PRINT PACKING SLIP'));
     tHdr.appendChild(tRight);
     tCard.appendChild(tHdr);
 
@@ -1253,7 +1266,7 @@ function renderResultsTab() {
     // SVG layout
     const layoutPanel = h('div', { className: 'panel' });
     layoutPanel.appendChild(h('div', { className: 'panel-title' }, 'TRAILER LAYOUT'));
-    const svgWrap = h('div', { className: 'svg-wrap', innerHTML: buildTopViewSVG(trailer, dims) });
+    const svgWrap = h('div', { className: 'svg-wrap', innerHTML: buildTopViewSVG(trailer, trailerDims) });
     layoutPanel.appendChild(svgWrap);
     tCard.appendChild(layoutPanel);
 
