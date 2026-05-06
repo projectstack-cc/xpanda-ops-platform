@@ -107,6 +107,18 @@ export default {
         return handleApiBols(request, env);
       }
 
+      if (url.pathname === "/api/load-builder-skus/seed") {
+        return handleApiLoadBuilderSkusSeed(request, env);
+      }
+
+      if (url.pathname === "/api/load-builder-skus/all") {
+        return handleApiLoadBuilderSkusDeleteAll(request, env);
+      }
+
+      if (url.pathname === "/api/load-builder-skus" || url.pathname.startsWith("/api/load-builder-skus/")) {
+        return handleApiLoadBuilderSkus(request, env);
+      }
+
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
         return new Response(
@@ -3163,4 +3175,143 @@ async function handleApiBols(request, env) {
   }
 
   return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+// ========================
+// Load Builder SKU API
+// ========================
+/*
+ * DDL — run once in the Cloudflare D1 console before deploying:
+ *
+ * CREATE TABLE IF NOT EXISTS load_builder_skus (
+ *   id TEXT PRIMARY KEY,
+ *   name TEXT NOT NULL,
+ *   sku TEXT NOT NULL,
+ *   length_in REAL NOT NULL,
+ *   width_in REAL NOT NULL,
+ *   height_in REAL NOT NULL,
+ *   weight REAL NOT NULL DEFAULT 1,
+ *   notes TEXT NOT NULL DEFAULT '',
+ *   color TEXT NOT NULL DEFAULT '#D97706',
+ *   allow_rotation INTEGER NOT NULL DEFAULT 0,
+ *   sort_order INTEGER NOT NULL DEFAULT 0,
+ *   created_at TEXT NOT NULL DEFAULT (datetime('now')),
+ *   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+ * );
+ *
+ * CREATE INDEX IF NOT EXISTS idx_lb_skus_sku ON load_builder_skus(sku);
+ */
+
+function mapSkuRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    sku: row.sku,
+    length: row.length_in,
+    width: row.width_in,
+    height: row.height_in,
+    weight: row.weight,
+    notes: row.notes,
+    color: row.color,
+    allowRotation: row.allow_rotation === 1,
+  };
+}
+
+const LB_DEFAULT_SKUS = [
+  { name: "4in block",  sku: "FB-4",  length: 48, width: 24, height: 4,  weight: 1, notes: "", color: "#D97706" },
+  { name: "5in block",  sku: "FB-5",  length: 48, width: 24, height: 5,  weight: 1, notes: "", color: "#0F766E" },
+  { name: "6in block",  sku: "FB-6",  length: 48, width: 24, height: 6,  weight: 1, notes: "", color: "#2563EB" },
+  { name: "7in block",  sku: "FB-7",  length: 48, width: 24, height: 7,  weight: 1, notes: "", color: "#7C3AED" },
+  { name: "8in block",  sku: "FB-8",  length: 48, width: 24, height: 8,  weight: 1, notes: "", color: "#DC2626" },
+  { name: "9in block",  sku: "FB-9",  length: 48, width: 24, height: 9,  weight: 1, notes: "", color: "#059669" },
+  { name: "10in block", sku: "FB-10", length: 48, width: 24, height: 10, weight: 1, notes: "", color: "#9333EA" },
+  { name: "11in block", sku: "FB-11", length: 48, width: 24, height: 11, weight: 1, notes: "", color: "#0891B2" },
+  { name: "12in block", sku: "FB-12", length: 48, width: 24, height: 12, weight: 1, notes: "", color: "#CA8A04" },
+  { name: "13in block", sku: "FB-13", length: 48, width: 24, height: 13, weight: 1, notes: "", color: "#4F46E5" },
+];
+
+async function handleApiLoadBuilderSkus(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  const url = new URL(request.url);
+  const pathId = url.pathname.slice("/api/load-builder-skus".length).replace(/^\//, "");
+  const skuId = pathId.length > 0 ? pathId : null;
+
+  if (request.method === "GET" && !skuId) {
+    const result = await db.prepare(
+      "SELECT * FROM load_builder_skus ORDER BY height_in ASC, name ASC"
+    ).all();
+    return json((result.results || []).map(mapSkuRow));
+  }
+
+  if (request.method === "POST" && !skuId) {
+    let body;
+    try { body = await request.json(); } catch (_) { return json({ ok: false, error: "Invalid JSON" }, 400); }
+    const { name, sku, length, width, height, weight = 1, notes = "", color = "#D97706", allowRotation = false } = body;
+    if (!name) return json({ ok: false, error: "Name required." }, 400);
+    if (!sku) return json({ ok: false, error: "SKU code required." }, 400);
+    if (!length || !width || !height) return json({ ok: false, error: "Dimensions required." }, 400);
+    const newId = crypto.randomUUID();
+    const countRow = await db.prepare("SELECT COUNT(*) as cnt FROM load_builder_skus").first();
+    const sortOrder = countRow?.cnt || 0;
+    await db.prepare(
+      "INSERT INTO load_builder_skus (id, name, sku, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(newId, name, sku, +length, +width, +height, +weight || 1, notes || "", color || "#D97706", allowRotation ? 1 : 0, sortOrder).run();
+    const created = await db.prepare("SELECT * FROM load_builder_skus WHERE id = ?").bind(newId).first();
+    return json(mapSkuRow(created), 201);
+  }
+
+  if (request.method === "PUT" && skuId) {
+    let body;
+    try { body = await request.json(); } catch (_) { return json({ ok: false, error: "Invalid JSON" }, 400); }
+    const { name, sku, length, width, height, weight, notes, color, allowRotation } = body;
+    const updates = [];
+    const binds = [];
+    if (name !== undefined) { updates.push("name = ?"); binds.push(name); }
+    if (sku !== undefined) { updates.push("sku = ?"); binds.push(sku); }
+    if (length !== undefined) { updates.push("length_in = ?"); binds.push(+length); }
+    if (width !== undefined) { updates.push("width_in = ?"); binds.push(+width); }
+    if (height !== undefined) { updates.push("height_in = ?"); binds.push(+height); }
+    if (weight !== undefined) { updates.push("weight = ?"); binds.push(+weight); }
+    if (notes !== undefined) { updates.push("notes = ?"); binds.push(notes); }
+    if (color !== undefined) { updates.push("color = ?"); binds.push(color); }
+    if (allowRotation !== undefined) { updates.push("allow_rotation = ?"); binds.push(allowRotation ? 1 : 0); }
+    updates.push("updated_at = datetime('now')");
+    if (updates.length === 1) return json({ ok: false, error: "Nothing to update." }, 400);
+    await db.prepare(`UPDATE load_builder_skus SET ${updates.join(", ")} WHERE id = ?`).bind(...binds, skuId).run();
+    const updated = await db.prepare("SELECT * FROM load_builder_skus WHERE id = ?").bind(skuId).first();
+    if (!updated) return json({ ok: false, error: "SKU not found." }, 404);
+    return json(mapSkuRow(updated));
+  }
+
+  if (request.method === "DELETE" && skuId) {
+    await db.prepare("DELETE FROM load_builder_skus WHERE id = ?").bind(skuId).run();
+    return json({ success: true });
+  }
+
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+async function handleApiLoadBuilderSkusDeleteAll(request, env) {
+  if (request.method !== "DELETE") return json({ ok: false, error: "Method Not Allowed" }, 405);
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  await db.prepare("DELETE FROM load_builder_skus").run();
+  return json({ success: true });
+}
+
+async function handleApiLoadBuilderSkusSeed(request, env) {
+  if (request.method !== "POST") return json({ ok: false, error: "Method Not Allowed" }, 405);
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const countRow = await db.prepare("SELECT COUNT(*) as cnt FROM load_builder_skus").first();
+  if ((countRow?.cnt || 0) > 0) return json({ seeded: false, message: "SKUs already exist" });
+  for (let i = 0; i < LB_DEFAULT_SKUS.length; i++) {
+    const s = LB_DEFAULT_SKUS[i];
+    await db.prepare(
+      "INSERT INTO load_builder_skus (id, name, sku, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(crypto.randomUUID(), s.name, s.sku, s.length, s.width, s.height, s.weight, s.notes, s.color, 0, i).run();
+  }
+  return json({ seeded: true, message: `Inserted ${LB_DEFAULT_SKUS.length} default SKUs.` });
 }

@@ -341,6 +341,9 @@ let state = {
   editorTrailer: null,
   manualRowsByTrailer: {},
   form: { name: "", sku: "", length: "", width: "", height: "", weight: "", notes: "", allowRotation: false },
+  skuLoading: true,
+  skuError: "",
+  skuMutating: false,
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -788,10 +791,81 @@ function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 function getDims() { return TRAILER_TYPES[state.trailerType]; }
 function getSortedSkus() { return sortByHeight(state.skus); }
 
-function persist(newSkus) {
-  state.skus = sortByHeight(newSkus);
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.skus)); } catch (_) {}
-  render();
+async function fetchSkusFromApi() {
+  const res = await fetch('/api/load-builder-skus');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
+
+async function addSku(payload) {
+  state.skuMutating = true; render();
+  try {
+    await fetch('/api/load-builder-skus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    state.skus = sortByHeight(await fetchSkusFromApi());
+    state.skuError = '';
+  } catch (_) { state.skuError = 'Failed to save SKU. Changes are not persisted.'; }
+  state.skuMutating = false; render();
+}
+
+async function updateSku(id, payload) {
+  state.skuMutating = true; render();
+  try {
+    await fetch(`/api/load-builder-skus/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    state.skus = sortByHeight(await fetchSkusFromApi());
+    state.skuError = '';
+  } catch (_) { state.skuError = 'Failed to update SKU. Changes are not persisted.'; }
+  state.skuMutating = false; render();
+}
+
+async function deleteSku(id) {
+  state.skuMutating = true; render();
+  try {
+    await fetch(`/api/load-builder-skus/${id}`, { method: 'DELETE' });
+    state.skus = sortByHeight(await fetchSkusFromApi());
+    state.cart = state.cart.filter(x => x.skuId !== id);
+    state.skuError = '';
+  } catch (_) { state.skuError = 'Failed to delete SKU.'; }
+  state.skuMutating = false; render();
+}
+
+async function resetSkus() {
+  state.skuMutating = true; render();
+  try {
+    await fetch('/api/load-builder-skus/all', { method: 'DELETE' });
+    await fetch('/api/load-builder-skus/seed', { method: 'POST' });
+    state.skus = sortByHeight(await fetchSkusFromApi());
+    state.cart = [];
+    state.skuError = '';
+  } catch (_) { state.skuError = 'Failed to reset SKUs.'; }
+  state.skuMutating = false; render();
+}
+
+async function importSkus(rows) {
+  state.skuMutating = true; render();
+  try {
+    for (const row of rows) {
+      await fetch('/api/load-builder-skus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
+    }
+    state.skus = sortByHeight(await fetchSkusFromApi());
+    state.skuError = '';
+  } catch (_) { state.skuError = 'Failed to import SKUs.'; }
+  state.skuMutating = false; render();
+}
+
+async function initSkus() {
+  state.skuLoading = true; render();
+  try {
+    let skus = await fetchSkusFromApi();
+    if (skus.length === 0) {
+      await fetch('/api/load-builder-skus/seed', { method: 'POST' });
+      skus = await fetchSkusFromApi();
+    }
+    state.skus = sortByHeight(skus);
+  } catch (_) {
+    state.skus = loadSaved();
+    state.skuError = 'Using local data — API unavailable.';
+  }
+  state.skuLoading = false; render();
 }
 
 function getResult() {
@@ -927,6 +1001,12 @@ function renderLoadTab() {
 function renderSkusTab() {
   const cont = document.getElementById('tabSkus');
   cont.innerHTML = '';
+
+  if (state.skuLoading) {
+    cont.appendChild(h('div', { style: { color: 'var(--text-faint)', fontSize: '15px', padding: '40px', textAlign: 'center', fontWeight: 600 } }, 'Loading SKUs…'));
+    return;
+  }
+
   const sorted = getSortedSkus();
   const filtered = getFiltered();
 
@@ -934,20 +1014,27 @@ function renderSkusTab() {
   const hdr = h('div', { className: 'flex justify-between items-center mb-14 gap-8 flex-wrap' });
   const left = h('div', { className: 'flex items-center gap-10' });
   left.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 800, fontSize: '14px' } }, `SKU LIBRARY (${sorted.length})`));
-  left.appendChild(h('span', { style: { fontSize: '12px', color: 'var(--text-ghost)', fontWeight: 700 } }, 'AUTO-SAVED'));
+  left.appendChild(h('span', { style: { fontSize: '12px', color: 'var(--text-ghost)', fontWeight: 700 } }, state.skuError ? 'LOCAL FALLBACK' : 'CLOUD SAVED'));
   hdr.appendChild(left);
 
   const right = h('div', { className: 'flex gap-8 flex-wrap' });
-  right.appendChild(h('button', { className: 'btn btn-white', onClick: async () => { try { await navigator.clipboard.writeText(toCSV(sorted)); } catch (_) {} } }, 'COPY ALL'));
-  right.appendChild(h('button', { className: `btn ${state.pasteMode ? 'btn-dark' : 'btn-white'}`, onClick: () => { state.pasteMode = !state.pasteMode; state.pasteErr = ''; state.pasteText = ''; render(); } }, state.pasteMode ? 'CANCEL' : 'PASTE IMPORT'));
-  right.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { if (confirm('Reset to defaults?')) { persist(DEFAULT_SKUS); state.cart = []; render(); } } }, 'RESET'));
-  right.appendChild(h('button', { className: 'btn btn-accent', onClick: () => {
+  right.appendChild(h('button', { className: 'btn btn-white', disabled: state.skuMutating, onClick: async () => { try { await navigator.clipboard.writeText(toCSV(sorted)); } catch (_) {} } }, 'COPY ALL'));
+  right.appendChild(h('button', { className: `btn ${state.pasteMode ? 'btn-dark' : 'btn-white'}`, disabled: state.skuMutating, onClick: () => { state.pasteMode = !state.pasteMode; state.pasteErr = ''; state.pasteText = ''; render(); } }, state.pasteMode ? 'CANCEL' : 'PASTE IMPORT'));
+  right.appendChild(h('button', { className: 'btn btn-red-light', disabled: state.skuMutating, onClick: () => { if (confirm('Reset to defaults?')) { resetSkus(); } } }, 'RESET'));
+  right.appendChild(h('button', { className: 'btn btn-accent', disabled: state.skuMutating, onClick: () => {
     if (state.showForm && !state.editId) { state.showForm = false; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false }; }
     else { state.showForm = true; state.editId = null; state.formErr = ''; }
     render();
   } }, state.showForm && !state.editId ? 'CANCEL' : '+ NEW SKU'));
   hdr.appendChild(right);
   cont.appendChild(hdr);
+
+  if (state.skuError) {
+    cont.appendChild(h('div', { style: { marginBottom: '14px', color: '#92400E', fontSize: '13px', border: '1px solid #FDE68A', background: '#FFFBEB', padding: '10px 12px', borderRadius: 'var(--radius)', fontWeight: 600 } }, `⚠ ${state.skuError}`));
+  }
+  if (state.skuMutating) {
+    cont.appendChild(h('div', { style: { marginBottom: '14px', color: 'var(--text-faint)', fontSize: '13px', fontWeight: 600 } }, 'Saving…'));
+  }
 
   // Search
   cont.appendChild(h('input', { className: 'inp', value: state.search, placeholder: 'Search library…', style: { width: '360px', maxWidth: '100%', marginBottom: '12px' }, onInput: e => { state.search = e.target.value; render(); } }));
@@ -960,12 +1047,11 @@ function renderSkusTab() {
     const ta = h('textarea', { className: 'inp', value: state.pasteText, placeholder: '4in block, FB-4, 48, 24, 4, 1,', style: { height: '120px', resize: 'vertical' }, onInput: e => { state.pasteText = e.target.value; state.pasteErr = ''; } });
     pasteCard.appendChild(ta);
     if (state.pasteErr) pasteCard.appendChild(h('div', { style: { color: 'var(--red-dark)', fontSize: '13px', marginTop: '6px' } }, state.pasteErr));
-    pasteCard.appendChild(h('button', { className: 'btn btn-teal', style: { marginTop: '10px' }, onClick: () => {
+    pasteCard.appendChild(h('button', { className: 'btn btn-teal', style: { marginTop: '10px' }, disabled: state.skuMutating, onClick: () => {
       const rows = fromCSV(state.pasteText, sorted.length);
       if (!rows.length) { state.pasteErr = 'No valid rows found.'; render(); return; }
-      persist([...sorted, ...rows]);
       state.pasteText = ''; state.pasteMode = false; state.pasteErr = '';
-      render();
+      importSkus(rows);
     } }, 'IMPORT'));
     cont.appendChild(pasteCard);
   }
@@ -1003,16 +1089,16 @@ function renderSkusTab() {
     formCard.appendChild(grid);
 
     const formBtns = h('div', { className: 'flex gap-8 mt-14' });
-    formBtns.appendChild(h('button', { className: 'btn btn-accent', onClick: () => {
+    formBtns.appendChild(h('button', { className: 'btn btn-accent', disabled: state.skuMutating, onClick: () => {
       const f = state.form;
       if (!f.name.trim()) { state.formErr = 'Name required.'; render(); return; }
       if (!f.sku.trim()) { state.formErr = 'SKU code required.'; render(); return; }
       if (!+f.length || !+f.width || !+f.height || !+f.weight) { state.formErr = 'All dimensions and weight must be positive.'; render(); return; }
       const payload = { name: f.name.trim(), sku: f.sku.trim(), length: +f.length, width: +f.width, height: +f.height, weight: +f.weight, notes: f.notes || '', allowRotation: f.allowRotation === true };
-      if (state.editId) persist(state.skus.map(s => s.id === state.editId ? { ...s, ...payload } : s));
-      else persist([...state.skus, { ...payload, id: Date.now(), color: COLORS[state.skus.length % COLORS.length] }]);
+      const savedEditId = state.editId;
       state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false };
-      render();
+      if (savedEditId) updateSku(savedEditId, payload);
+      else addSku({ ...payload, color: COLORS[state.skus.length % COLORS.length] });
     } }, state.editId ? 'SAVE CHANGES' : 'ADD SKU'));
     formBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false }; render(); } }, 'CANCEL'));
     formCard.appendChild(formBtns);
@@ -1041,7 +1127,7 @@ function renderSkusTab() {
       state.form = { name: s.name + ' Copy', sku: s.sku + '-2', length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true };
       state.editId = null; state.showForm = true; state.tab = 'skus'; state.formErr = ''; render();
     } }, 'COPY'));
-    inner.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { persist(state.skus.filter(x => x.id !== s.id)); state.cart = state.cart.filter(x => x.skuId !== s.id); render(); } }, 'DEL'));
+    inner.appendChild(h('button', { className: 'btn btn-red-light', disabled: state.skuMutating, onClick: () => { deleteSku(s.id); } }, 'DEL'));
     row.appendChild(inner);
     list.appendChild(row);
   });
@@ -1102,7 +1188,13 @@ function renderResultsTab() {
     titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--blue-bg)', color: 'var(--blue-dark)' } }, `${trailer.totalStacks} stacks · ${trailer.totalUnits} pcs`));
     if (isManual) titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--teal-bg)', color: 'var(--green-dark)' } }, 'CUSTOMIZED'));
     tLeft.appendChild(titleRow);
-    tLeft.appendChild(h('div', { style: { fontSize: '14px', color: 'var(--text-muted)', fontWeight: 600, marginTop: '6px' } }, `${Math.round(usedPct)}% length · ${Math.round(floorPct)}% floor · ${trailer.mixedStacks} mixed stacks`));
+    const remainingIn = dims.length - (trailer.usedLength || 0);
+    const remLabel = remainingIn === 0 ? 'FULL' : remainingIn >= 12
+      ? `${Math.floor(remainingIn / 12)}' ${remainingIn % 12}" remaining`
+      : `${remainingIn}" remaining`;
+    const subtitleEl = h('div', { style: { fontSize: '14px', color: 'var(--text-muted)', fontWeight: 600, marginTop: '6px' } });
+    subtitleEl.innerHTML = `${Math.round(usedPct)}% length · ${Math.round(floorPct)}% floor · ${trailer.mixedStacks} mixed stacks · <span style="color:#D97706">${remLabel}</span>`;
+    tLeft.appendChild(subtitleEl);
     tHdr.appendChild(tLeft);
 
     const tRight = h('div', { className: 'flex gap-8 flex-wrap' });
@@ -1325,8 +1417,7 @@ function applyEditorRows(ti, skuLib) {
 // ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
-state.skus = loadSaved();
-render();
+initSkus();
 </script>
 </body>
 </html>
