@@ -785,7 +785,8 @@ function h(tag, attrs = {}, ...children) {
     else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
     else if (k === 'className') el.className = v;
     else if (k === 'innerHTML') el.innerHTML = v;
-    else el.setAttribute(k, v);
+    else if (v === true) el.setAttribute(k, '');
+    else if (v !== false && v != null) el.setAttribute(k, v);
   }
   children.flat(Infinity).forEach(c => {
     if (c == null || c === false) return;
