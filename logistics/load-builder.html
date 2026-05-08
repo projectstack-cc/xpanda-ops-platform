@@ -617,39 +617,72 @@ function calcLoading(cart, skus, dims, variant = 0) {
       progress = true;
     }
 
-    // Pass 2: consolidate remainders into vertically-packed mixed columns
-    // Groups by SKU length, then greedily fills each column to max height before starting the next
+    // Pass 2: consolidate remainders into minimum mixed columns
     {
       const remainByLength = {};
       demand.filter(d => d.remaining > 0).forEach(d => {
         if (!remainByLength[d.sku.length]) remainByLength[d.sku.length] = [];
         remainByLength[d.sku.length].push(d);
       });
+
       for (const [lenKey, group] of Object.entries(remainByLength)) {
         const rowLength = Number(lenKey);
         if (curX + rowLength > dims.length) continue;
+
         const row = { posFromFront: curX, rowLength, rowWidthUsed: 0, columns: [], totalUnits: 0, totalWeight: 0 };
         let widthLeft = dims.width, posY = 0;
+
         while (widthLeft > 0 && group.some(d => d.remaining > 0)) {
           const candidates = group.filter(d => d.remaining > 0 && d.sku.width <= widthLeft);
           if (!candidates.length) break;
           const colWidth = Math.min(...candidates.map(d => d.sku.width));
-          const fill = exactFillHeight(dims.height, candidates, dims.maxWeight - usedWeight - row.totalWeight);
-          if (!fill || !fill.picks.length) break;
-          const layers = fill.picks.map(pick => {
-            pick.demand.remaining -= pick.count;
-            return { skuId: pick.demand.sku.id, skuName: pick.demand.sku.name, skuCode: pick.demand.sku.sku, color: pick.demand.sku.color, unitHeight: pick.demand.sku.height, count: pick.count };
-          });
+          if (colWidth > widthLeft) break;
+
+          const totalRemainHeight = candidates.reduce((s, d) => s + d.remaining * d.sku.height, 0);
+          const weightBudget = dims.maxWeight - usedWeight - row.totalWeight;
+          const totalRemainWeight = candidates.reduce((s, d) => s + d.remaining * d.sku.weight, 0);
+
+          let layers;
+
+          if (totalRemainHeight <= dims.height && totalRemainWeight <= weightBudget) {
+            // Everything fits in one column — stack them all directly, no DFS needed
+            layers = candidates.filter(d => d.remaining > 0).map(d => {
+              const count = d.remaining;
+              d.remaining = 0;
+              return { skuId: d.sku.id, skuName: d.sku.name, skuCode: d.sku.sku, color: d.sku.color, unitHeight: d.sku.height, count };
+            }).filter(l => l.count > 0);
+          } else {
+            // Too tall for one column — use exactFillHeight to pack optimally
+            const fill = exactFillHeight(dims.height, candidates, weightBudget);
+            if (!fill || !fill.picks.length) break;
+            layers = fill.picks.map(pick => {
+              pick.demand.remaining -= pick.count;
+              return { skuId: pick.demand.sku.id, skuName: pick.demand.sku.name, skuCode: pick.demand.sku.sku, color: pick.demand.sku.color, unitHeight: pick.demand.sku.height, count: pick.count };
+            });
+          }
+
+          if (!layers.length) break;
+
+          const totalHeight = layers.reduce((s, l) => s + l.unitHeight * l.count, 0);
+          const totalWeight = layers.reduce((s, l) => {
+            const sku = candidates.find(d => d.sku.id === l.skuId)?.sku;
+            return s + (sku ? sku.weight * l.count : 0);
+          }, 0);
+
           const col = {
-            colWidth, posY, skuId: layers[0].skuId, skuName: layers[0].skuName, skuCode: layers[0].skuCode,
-            color: layers[0].color, unitHeight: layers[0].unitHeight, totalHeight: fill.totalH, totalWeight: fill.totalWeight,
-            stackCount: layers.reduce((s, l) => s + l.count, 0), layers, mixed: layers.length > 1,
+            colWidth, posY,
+            skuId: layers[0].skuId, skuName: layers[0].skuName, skuCode: layers[0].skuCode,
+            color: layers[0].color, unitHeight: layers[0].unitHeight,
+            totalHeight, totalWeight,
+            stackCount: layers.reduce((s, l) => s + l.count, 0),
+            layers, mixed: layers.length > 1,
             label: layers.map(l => `${l.unitHeight}"`).join(" + "),
           };
           row.columns.push(col);
           row.rowWidthUsed += colWidth; row.totalUnits += col.stackCount; row.totalWeight += col.totalWeight;
           posY += colWidth; widthLeft -= colWidth;
         }
+
         if (!row.columns.length) continue;
         rows.push(row);
         curX += rowLength;
