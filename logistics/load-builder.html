@@ -269,7 +269,56 @@
     .progress-grid { grid-template-columns: 1fr; }
     .calc-btn-grid { grid-template-columns: 1fr; }
   }
+
+  /* BOL Modal ─────────────────────────────────────────────────── */
+  .bol-backdrop {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(15,23,42,0.5);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .bol-modal {
+    background: var(--surface); border-radius: var(--radius-lg);
+    max-width: 680px; width: 95vw; max-height: 90vh; overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(15,23,42,0.3);
+    display: flex; flex-direction: column;
+  }
+  .bol-modal-header {
+    padding: 20px 24px 16px; border-bottom: 1px solid var(--border-light);
+    position: sticky; top: 0; background: var(--surface); z-index: 1; flex-shrink: 0;
+  }
+  .bol-modal-body { padding: 20px 24px; flex: 1; }
+  .bol-modal-footer {
+    padding: 14px 24px; border-top: 1px solid var(--border-light);
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; bottom: 0; background: var(--surface); flex-shrink: 0;
+  }
+  .bol-source-tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+  .bol-search-results {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); box-shadow: 0 4px 16px rgba(15,23,42,0.1);
+    max-height: 200px; overflow-y: auto; margin-top: 4px;
+  }
+  .bol-search-item {
+    padding: 10px 14px; cursor: pointer;
+    border-bottom: 1px solid var(--border-light); font-size: 14px;
+  }
+  .bol-search-item:hover { background: var(--bg); }
+  .bol-search-item:last-child { border-bottom: none; }
+  .bol-confirm-msg { font-size: 13px; color: var(--green); font-weight: 600; margin-bottom: 12px; }
+  .bol-form-group { margin-bottom: 12px; }
+  .bol-form-group .form-label { display: block; margin-bottom: 4px; }
+  .bol-city-row { display: grid; grid-template-columns: 1fr 60px 90px; gap: 8px; }
+  .bol-freight-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .bol-progress-list, .bol-success-list { list-style: none; padding: 0; margin: 12px 0; }
+  .bol-progress-list li, .bol-success-list li {
+    padding: 8px 0; font-size: 14px; border-bottom: 1px solid var(--border-light);
+  }
+  @media (max-width: 600px) {
+    .bol-modal { border-radius: 0; width: 100vw; max-height: 100vh; }
+    .bol-city-row { grid-template-columns: 1fr; }
+  }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
 <body>
 
@@ -345,6 +394,7 @@ let state = {
   skuError: "",
   skuMutating: false,
   runnerHeight: 0,
+  bolModal: { open: false, currentPage: 0, trailerCount: 0, trailerData: [], bolError: '', generating: false, generateProgress: [], bolSuccess: null, searchQuery: '', searchResults: [], searchLoading: false, searchConfirm: '' },
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -977,6 +1027,7 @@ function render() {
   renderSkusTab();
   renderResultsTab();
   document.querySelectorAll('.tab-content').forEach(el => el.classList.toggle('active', el.id === 'tab' + state.tab.charAt(0).toUpperCase() + state.tab.slice(1)));
+  renderBolModal();
 }
 
 function renderTabs() {
@@ -1244,6 +1295,7 @@ function renderResultsTab() {
   const topBtns = h('div', { className: 'flex gap-10 flex-wrap mb-14' });
   topBtns.appendChild(h('button', { className: 'btn btn-blue-light', onClick: () => { state.manualRowsByTrailer = {}; state.editorTrailer = null; state.variant++; render(); } }, 'RECALCULATE DIFFERENT'));
   topBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.manualRowsByTrailer = {}; state.editorTrailer = null; state.variant = 0; render(); } }, 'RESET VARIANTS'));
+  if (result.trailers.length > 0) topBtns.appendChild(h('button', { className: 'btn btn-dark', onClick: () => openBolModal(result) }, 'GENERATE BOLs'));
   cont.appendChild(topBtns);
 
   // Runner quick-toggle
@@ -1518,6 +1570,449 @@ function applyEditorRows(ti, skuLib) {
   state.manualRowsByTrailer[ti] = rebuiltRows;
   state.editorTrailer = null;
   render();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BOL MODAL
+// ═══════════════════════════════════════════════════════════════
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+}
+
+function openBolModal(result) {
+  const today = new Date().toISOString().slice(0, 10);
+  const trailerData = result.trailers.map((trailer, i) => {
+    const breakdown = Object.values(trailer.skuBreakdown).sort((a, b) => a.name.localeCompare(b.name));
+    const commodityDescription = breakdown.map(item => {
+      const sku = state.skus.find(s => s.id === item.skuId);
+      if (!sku) return `${item.pieces} pcs — ${item.name} (${item.sku})`;
+      return `${item.pieces} pcs — ${item.name} (${item.sku}) ${sku.length}"\xd7${sku.width}"\xd7${sku.height}"`;
+    }).join('\n');
+    return {
+      trailerIndex: i,
+      trailerLabel: trailer.downsizedType || state.trailerType,
+      commodityDescription,
+      totalStacks: trailer.totalStacks,
+      totalPieces: trailer.totalUnits,
+      totalWeight: trailer.usedWeight,
+      customerSource: 'manual',
+      customerId: null, jobId: null,
+      shipToCompany: '', shipToAttention: '', shipToStreet: '', shipToStreet2: '',
+      shipToCity: '', shipToState: '', shipToZip: '',
+      contactName: '', contactPhone: '', carrierName: '',
+      poNumber: '', deliveryTime: '', date: today,
+      freightTerms: 'prepaid', specialInstructions: '',
+      trailerNo: '', sealNumber: '', carryOver: false,
+    };
+  });
+  state.bolModal = {
+    open: true, currentPage: 0, trailerCount: result.trailers.length, trailerData,
+    bolError: '', generating: false, generateProgress: [], bolSuccess: null,
+    searchQuery: '', searchResults: [], searchLoading: false, searchConfirm: '',
+  };
+  renderBolModal();
+}
+
+function renderBolModal() {
+  const existing = document.getElementById('bol-modal-backdrop');
+  if (existing) existing.remove();
+  if (!state.bolModal.open) return;
+
+  const bm = state.bolModal;
+  const td = bm.trailerData[bm.currentPage];
+
+  const backdrop = h('div', {
+    id: 'bol-modal-backdrop', className: 'bol-backdrop',
+    onClick: () => { state.bolModal.open = false; renderBolModal(); },
+  });
+  const modal = h('div', { className: 'bol-modal', onClick: e => e.stopPropagation() });
+
+  // Header
+  const header = h('div', { className: 'bol-modal-header' });
+  const hdrRow = h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } });
+  const hdrLeft = h('div');
+  hdrLeft.appendChild(h('div', { style: { color: 'var(--accent)', fontWeight: 900, fontSize: '18px' } }, `GENERATE BOL — Trailer ${bm.currentPage + 1} of ${bm.trailerCount}`));
+  hdrLeft.appendChild(h('div', { style: { fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 600 } }, `${td.trailerLabel} \xb7 ${td.totalPieces} pcs \xb7 ${td.totalStacks} stacks`));
+  hdrRow.appendChild(hdrLeft);
+  hdrRow.appendChild(h('button', { className: 'btn btn-white', style: { padding: '6px 12px' }, onClick: () => { state.bolModal.open = false; renderBolModal(); } }, '✕'));
+  header.appendChild(hdrRow);
+  modal.appendChild(header);
+
+  const body = h('div', { className: 'bol-modal-body' });
+
+  // Success view
+  if (bm.bolSuccess) {
+    body.appendChild(h('div', { style: { textAlign: 'center', marginBottom: '20px' } },
+      h('div', { style: { fontSize: '22px', fontWeight: 900, color: 'var(--green)' } }, '✓ BOLs Generated Successfully')
+    ));
+    const ul = h('ul', { className: 'bol-success-list' });
+    bm.bolSuccess.forEach((bol, i) => { ul.appendChild(h('li', {}, `Trailer ${i + 1} → BOL #${bol.bol_number} — ${bol.ship_to_company || ''}`)); });
+    body.appendChild(ul);
+    if (bm.bolError) {
+      body.appendChild(h('div', { style: { color: 'var(--warn-text)', fontSize: '14px', fontWeight: 600, marginTop: '8px' } }, bm.bolError));
+    } else {
+      body.appendChild(h('div', { style: { fontSize: '14px', color: 'var(--text-muted)', marginTop: '12px' } }, 'PDF opened in new tab.'));
+    }
+    body.appendChild(h('button', { className: 'btn btn-dark', style: { marginTop: '16px' }, onClick: () => { state.bolModal.open = false; renderBolModal(); } }, 'Close'));
+    modal.appendChild(body);
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    return;
+  }
+
+  // Generating view
+  if (bm.generating) {
+    body.appendChild(h('div', { style: { fontWeight: 800, fontSize: '16px', marginBottom: '16px' } }, 'Generating BOLs...'));
+    const ul = h('ul', { className: 'bol-progress-list' });
+    bm.generateProgress.forEach(p => {
+      ul.appendChild(h('li', { style: { color: p.done ? 'var(--green)' : p.pending ? 'var(--text-ghost)' : 'var(--text)' } }, p.text));
+    });
+    body.appendChild(ul);
+    if (bm.bolError) body.appendChild(h('div', { style: { color: 'var(--red-dark)', fontSize: '14px', fontWeight: 600, marginTop: '12px' } }, bm.bolError));
+    modal.appendChild(body);
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    return;
+  }
+
+  // Error banner
+  if (bm.bolError) {
+    body.appendChild(h('div', { style: { marginBottom: '14px', color: 'var(--red-dark)', fontSize: '13px', border: '1px solid var(--red-border)', background: 'var(--red-bg)', padding: '10px 12px', borderRadius: 'var(--radius)', fontWeight: 600 } }, bm.bolError));
+  }
+
+  // Commodity description
+  const commPanel = h('div', { className: 'panel', style: { marginBottom: '14px' } });
+  commPanel.appendChild(h('div', { className: 'panel-title' }, 'COMMODITY DESCRIPTION'));
+  const commTA = h('textarea', { className: 'inp', style: { height: '90px', resize: 'vertical', fontFamily: 'var(--mono)', fontSize: '13px', lineHeight: '1.6' } });
+  commTA.value = td.commodityDescription || '';
+  commTA.addEventListener('input', e => { td.commodityDescription = e.target.value; });
+  commPanel.appendChild(commTA);
+  body.appendChild(commPanel);
+
+  // Carry-over checkbox (pages 2+)
+  if (bm.currentPage > 0) {
+    const carryWrap = h('div', { style: { marginBottom: '14px' } });
+    const carryLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 600 } });
+    const carryChk = h('input', { type: 'checkbox' });
+    carryChk.checked = td.carryOver;
+    carryChk.addEventListener('change', e => {
+      td.carryOver = e.target.checked;
+      if (e.target.checked) {
+        const prev = bm.trailerData[bm.currentPage - 1];
+        td.customerId = prev.customerId; td.customerSource = prev.customerSource;
+        td.shipToCompany = prev.shipToCompany; td.shipToAttention = prev.shipToAttention;
+        td.shipToStreet = prev.shipToStreet; td.shipToStreet2 = prev.shipToStreet2;
+        td.shipToCity = prev.shipToCity; td.shipToState = prev.shipToState; td.shipToZip = prev.shipToZip;
+        td.contactName = prev.contactName; td.contactPhone = prev.contactPhone;
+        td.carrierName = prev.carrierName; td.freightTerms = prev.freightTerms;
+        td.specialInstructions = prev.specialInstructions;
+      }
+      renderBolModal();
+    });
+    carryLabel.appendChild(carryChk);
+    carryLabel.appendChild(document.createTextNode(`Carry over address from Trailer ${bm.currentPage}`));
+    carryWrap.appendChild(carryLabel);
+    body.appendChild(carryWrap);
+  }
+
+  // Customer source tabs
+  const sourceTabs = h('div', { className: 'bol-source-tabs' });
+  [['job', 'Pull from Job'], ['customer', 'Search Customers'], ['manual', 'Manual Entry']].forEach(([val, lbl]) => {
+    sourceTabs.appendChild(h('button', {
+      className: `btn ${td.customerSource === val ? 'btn-dark' : 'btn-white'}`,
+      style: { fontSize: '13px', padding: '8px 14px' },
+      onClick: () => { td.customerSource = val; bm.searchQuery = ''; bm.searchResults = []; bm.searchLoading = false; bm.searchConfirm = ''; renderBolModal(); },
+    }, lbl));
+  });
+  body.appendChild(sourceTabs);
+
+  // Search UI for job and customer tabs
+  if (td.customerSource === 'job' || td.customerSource === 'customer') {
+    const isJob = td.customerSource === 'job';
+    const debouncedSearch = debounce(async (q) => {
+      if (!q.trim()) { bm.searchResults = []; bm.searchLoading = false; renderBolModal(); return; }
+      bm.searchLoading = true; renderBolModal();
+      try {
+        const url = isJob ? `/api/jobs?search=${encodeURIComponent(q)}` : `/api/bol-customers?search=${encodeURIComponent(q)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        bm.searchResults = isJob ? (data.jobs || []) : (data.customers || []);
+      } catch (_) { bm.searchResults = []; }
+      bm.searchLoading = false; renderBolModal();
+    }, 300);
+
+    const searchWrap = h('div', { style: { position: 'relative', marginBottom: '14px' } });
+    const searchInp = h('input', { className: 'inp', placeholder: isJob ? 'Search by customer, PO, or invoice #...' : 'Search saved customers...' });
+    searchInp.value = bm.searchQuery || '';
+    searchInp.addEventListener('input', e => { bm.searchQuery = e.target.value; debouncedSearch(e.target.value); });
+    searchWrap.appendChild(searchInp);
+
+    if (bm.searchLoading) {
+      searchWrap.appendChild(h('div', { className: 'bol-search-results' }, h('div', { className: 'bol-search-item', style: { color: 'var(--text-faint)' } }, 'Searching...')));
+    } else if (bm.searchResults.length) {
+      const dropdown = h('div', { className: 'bol-search-results' });
+      bm.searchResults.forEach(item => {
+        const row = h('div', { className: 'bol-search-item' });
+        if (isJob) {
+          row.appendChild(h('div', { style: { fontWeight: 700 } }, item.customer || '(no customer)'));
+          const details = [];
+          if (item.ship_date) { const d = new Date(item.ship_date + 'T12:00:00'); details.push(d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })); }
+          if (item.po_number || item.invoice_number) details.push(`PO/Inv: ${item.po_number || item.invoice_number}`);
+          if (item.status) details.push(item.status);
+          if (details.length) row.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-faint)', marginTop: '2px' } }, details.join(' \xb7 ')));
+          row.addEventListener('click', async () => {
+            try {
+              const res = await fetch(`/api/jobs/${item.id}`);
+              const data = await res.json();
+              const job = data.job || data;
+              td.jobId = job.id; td.shipToCompany = job.customer || '';
+              if (job.location) { const p = job.location.split(',').map(s => s.trim()); td.shipToCity = p[0] || ''; td.shipToState = p[1] || ''; }
+              td.carrierName = job.carrier || ''; td.poNumber = job.po_number || job.invoice_number || '';
+              td.deliveryTime = job.delivery_time || ''; td.contactName = job.contact_name || ''; td.contactPhone = job.contact_phone || '';
+              try {
+                const cr = await fetch(`/api/bol-customers?search=${encodeURIComponent(job.customer || '')}`);
+                const cd = await cr.json();
+                const custs = cd.customers || [];
+                if (custs.length === 1) {
+                  const c = custs[0]; td.customerId = c.id;
+                  td.shipToCompany = c.company || td.shipToCompany; td.shipToAttention = c.attention || '';
+                  td.shipToStreet = c.street || ''; td.shipToStreet2 = c.street2 || '';
+                  td.shipToCity = c.city || td.shipToCity; td.shipToState = c.state || td.shipToState;
+                  td.shipToZip = c.zip || ''; td.contactName = c.contact_name || td.contactName; td.contactPhone = c.phone || td.contactPhone;
+                }
+              } catch (_) {}
+              if (bm.currentPage > 0) td.carryOver = false;
+              bm.searchResults = []; bm.searchQuery = ''; bm.searchConfirm = `✓ Loaded from job: ${job.customer || ''}`;
+              renderBolModal();
+            } catch (_) { bm.searchConfirm = 'Error loading job details.'; renderBolModal(); }
+          });
+        } else {
+          row.appendChild(h('div', { style: { fontWeight: 700 } }, item.company || ''));
+          const det = [[item.city, item.state].filter(Boolean).join(', '), item.contact_name].filter(Boolean).join(' \xb7 ');
+          if (det) row.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-faint)', marginTop: '2px' } }, det));
+          row.addEventListener('click', () => {
+            td.customerId = item.id; td.shipToCompany = item.company || ''; td.shipToAttention = item.attention || '';
+            td.shipToStreet = item.street || ''; td.shipToStreet2 = item.street2 || '';
+            td.shipToCity = item.city || ''; td.shipToState = item.state || ''; td.shipToZip = item.zip || '';
+            td.contactName = item.contact_name || ''; td.contactPhone = item.phone || '';
+            if (bm.currentPage > 0) td.carryOver = false;
+            bm.searchResults = []; bm.searchQuery = ''; bm.searchConfirm = `✓ Using saved address: ${item.company || ''}`;
+            renderBolModal();
+          });
+        }
+        dropdown.appendChild(row);
+      });
+      searchWrap.appendChild(dropdown);
+    }
+    body.appendChild(searchWrap);
+    if (bm.searchConfirm) body.appendChild(h('div', { className: 'bol-confirm-msg' }, bm.searchConfirm));
+  }
+
+  // Form fields
+  const fg = (label, el) => { const g = h('div', { className: 'bol-form-group' }); g.appendChild(h('div', { className: 'form-label' }, label)); g.appendChild(el); return g; };
+  const inp = (field, type = 'text', ph = '') => {
+    const el = h('input', { type, className: 'inp', placeholder: ph });
+    el.value = td[field] || '';
+    el.addEventListener('input', e => { td[field] = e.target.value; });
+    return el;
+  };
+
+  body.appendChild(fg('BOL Date', inp('date', 'date')));
+  body.appendChild(fg('Company', inp('shipToCompany')));
+  body.appendChild(fg('Attention', inp('shipToAttention')));
+  body.appendChild(fg('Street', inp('shipToStreet')));
+  body.appendChild(fg('Street 2', inp('shipToStreet2')));
+
+  const cityWrap = h('div', { className: 'bol-form-group' });
+  cityWrap.appendChild(h('div', { className: 'form-label' }, 'City / State / Zip'));
+  const cityRow = h('div', { className: 'bol-city-row' });
+  ['shipToCity', 'shipToState', 'shipToZip'].forEach((f, i) => {
+    const el = h('input', { type: 'text', className: 'inp', placeholder: ['City', 'ST', 'Zip'][i] });
+    el.value = td[f] || ''; el.addEventListener('input', e => { td[f] = e.target.value; });
+    cityRow.appendChild(el);
+  });
+  cityWrap.appendChild(cityRow);
+  body.appendChild(cityWrap);
+
+  body.appendChild(fg('Contact Name', inp('contactName')));
+  body.appendChild(fg('Contact Phone', inp('contactPhone')));
+  body.appendChild(fg('Carrier', inp('carrierName')));
+  body.appendChild(fg('Trailer #', inp('trailerNo')));
+  body.appendChild(fg('Seal #', inp('sealNumber')));
+  body.appendChild(fg('PO / Invoice #', inp('poNumber')));
+  body.appendChild(fg('Delivery Time', inp('deliveryTime')));
+
+  const ftWrap = h('div', { className: 'bol-form-group' });
+  ftWrap.appendChild(h('div', { className: 'form-label' }, 'Freight Terms'));
+  const ftRow = h('div', { className: 'bol-freight-row' });
+  [['prepaid', 'Prepaid'], ['collect', 'Collect'], ['3rd_party', '3rd Party']].forEach(([val, lbl]) => {
+    const lbl_el = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '14px' } });
+    const radio = h('input', { type: 'radio', name: `bol-freight-${bm.currentPage}`, value: val });
+    radio.checked = td.freightTerms === val;
+    radio.addEventListener('change', () => { td.freightTerms = val; });
+    lbl_el.appendChild(radio); lbl_el.appendChild(document.createTextNode(lbl));
+    ftRow.appendChild(lbl_el);
+  });
+  ftWrap.appendChild(ftRow);
+  body.appendChild(ftWrap);
+
+  const siTA = h('textarea', { className: 'inp', style: { minHeight: '70px', resize: 'vertical' } });
+  siTA.value = td.specialInstructions || '';
+  siTA.addEventListener('input', e => { td.specialInstructions = e.target.value; });
+  body.appendChild(fg('Special Instructions', siTA));
+
+  modal.appendChild(body);
+
+  // Footer
+  const footer = h('div', { className: 'bol-modal-footer' });
+  footer.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.bolModal.open = false; renderBolModal(); } }, 'Cancel'));
+  const navRight = h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } });
+  const prevBtn = h('button', { className: 'btn btn-white', disabled: bm.currentPage === 0 });
+  prevBtn.textContent = '← Prev';
+  prevBtn.addEventListener('click', () => { bm.currentPage--; bm.searchQuery = ''; bm.searchResults = []; bm.searchConfirm = ''; renderBolModal(); });
+  navRight.appendChild(prevBtn);
+  navRight.appendChild(h('span', { style: { fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)' } }, `${bm.currentPage + 1}/${bm.trailerCount}`));
+  const isLastPage = bm.currentPage === bm.trailerCount - 1;
+  if (isLastPage) {
+    const genBtn = h('button', { className: 'btn btn-dark' });
+    genBtn.textContent = 'GENERATE ALL BOLs';
+    genBtn.addEventListener('click', generateAllBols);
+    navRight.appendChild(genBtn);
+  } else {
+    const nextBtn = h('button', { className: 'btn btn-dark' });
+    nextBtn.textContent = 'Next →';
+    nextBtn.addEventListener('click', () => { bm.currentPage++; bm.searchQuery = ''; bm.searchResults = []; bm.searchConfirm = ''; renderBolModal(); });
+    navRight.appendChild(nextBtn);
+  }
+  footer.appendChild(navRight);
+  modal.appendChild(footer);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+}
+
+async function generateAllBols() {
+  const bm = state.bolModal;
+  bm.bolError = '';
+  for (let i = 0; i < bm.trailerData.length; i++) {
+    const td = bm.trailerData[i];
+    if (!td.date) { bm.currentPage = i; bm.bolError = `Trailer ${i + 1}: Date is required.`; renderBolModal(); return; }
+    if (!td.shipToCompany.trim()) { bm.currentPage = i; bm.bolError = `Trailer ${i + 1}: Company is required.`; renderBolModal(); return; }
+  }
+  bm.generating = true; bm.bolError = '';
+  bm.generateProgress = bm.trailerData.map((_, i) => ({ text: `Trailer ${i + 1} — waiting...`, done: false, pending: true }));
+  renderBolModal();
+  const savedBols = [];
+  for (let i = 0; i < bm.trailerData.length; i++) {
+    const td = bm.trailerData[i];
+    bm.generateProgress[i] = { text: `⏳ Trailer ${i + 1} — saving...`, done: false, pending: false };
+    renderBolModal();
+    try {
+      const payload = {
+        date: td.date, customer_id: td.customerId || null,
+        ship_to_company: td.shipToCompany, ship_to_attention: td.shipToAttention,
+        ship_to_street: td.shipToStreet, ship_to_street2: td.shipToStreet2,
+        ship_to_city: td.shipToCity, ship_to_state: td.shipToState, ship_to_zip: td.shipToZip,
+        location_no: '', carrier_id: null, carrier_name: td.carrierName,
+        trailer_no: td.trailerNo, seal_number: td.sealNumber, scac: '', pro_no: '',
+        freight_terms: td.freightTerms, is_scrap_pickup: 0, third_party_bill_to: '',
+        special_instructions: td.specialInstructions, is_master_bol: 0,
+        commodity_description: td.commodityDescription,
+        handling_unit_qty: String(td.totalStacks), handling_unit_type: 'stacks',
+        package_qty: String(td.totalPieces), package_type: 'pcs',
+        weight: String(td.totalWeight), delivery_time: td.deliveryTime,
+        job_id: td.jobId || null, notes: '',
+      };
+      const res = await fetch('/api/bols', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!res.ok) { const ed = await res.json().catch(() => ({})); throw new Error(ed.error || `HTTP ${res.status}`); }
+      const data = await res.json();
+      savedBols.push(data.bol);
+      bm.generateProgress[i] = { text: `✓ Trailer ${i + 1} — BOL #${data.bol.bol_number} saved`, done: true, pending: false };
+      renderBolModal();
+    } catch (e) { bm.generating = false; bm.bolError = `Trailer ${i + 1}: ${e.message}`; renderBolModal(); return; }
+  }
+  bm.generateProgress.push({ text: 'Generating PDF...', done: false, pending: false });
+  renderBolModal();
+  try {
+    await generateBolPdf(savedBols);
+    bm.generating = false; bm.bolSuccess = savedBols; renderBolModal();
+  } catch (e) {
+    bm.generating = false; bm.bolSuccess = savedBols;
+    bm.bolError = e.popupBlocked ? 'PDF was generated but your browser blocked the popup. Please allow popups for this site.'
+      : e.message.includes('template') ? 'BOL PDF template not found. Contact admin.' : `PDF error: ${e.message}`;
+    renderBolModal();
+  }
+}
+
+async function generateBolPdf(bolRecords) {
+  const { PDFDocument, StandardFonts, rgb } = PDFLib;
+  const COORDS = {
+    deliveryTime:     { x: 430, y: 775, size: 18 },
+    date:             { x: 338, y: 708, size: 10 },
+    bolNumber:        { x: 380, y: 675, size: 24, bold: true },
+    carrierName:      { x: 378, y: 652, size: 10 },
+    trailerNo:        { x: 360, y: 635, size: 10 },
+    sealNumber:       { x: 378, y: 619, size: 10 },
+    scac:             { x: 378, y: 601, size: 10 },
+    proNo:            { x: 378, y: 585, size: 10 },
+    shipLine1:        { x: 55,  y: 607, size: 10 },
+    shipLine2:        { x: 55,  y: 594, size: 10 },
+    shipLine3:        { x: 55,  y: 581, size: 10 },
+    shipLine4:        { x: 55,  y: 568, size: 10 },
+    locationNo:       { x: 248, y: 619, size: 10 },
+    chkPrepaid:       { x: 39,  y: 534, size: 10 },
+    chkCollect:       { x: 103, y: 534, size: 10 },
+    chk3rdParty:      { x: 164, y: 534, size: 10 },
+    thirdPartyBillTo: { x: 42,  y: 502, size: 9  },
+    scrapPickupText:  { x: 42,  y: 500, size: 12, bold: true },
+    specialInstr:     { x: 310, y: 527, size: 9,  lineH: 11, maxW: 200 },
+    masterBol:        { x: 538, y: 532, size: 10 },
+    commodity:        { x: 245, y: 417, size: 10, lineH: 14, maxW: 340 },
+  };
+  const templateResp = await fetch('/logistics/assets/BLANK_BOL_Xpanda.pdf');
+  if (!templateResp.ok) throw new Error('BOL template not found at /logistics/assets/BLANK_BOL_Xpanda.pdf');
+  const templateBytes = await templateResp.arrayBuffer();
+  const combinedPdf = await PDFDocument.create();
+  for (const bol of bolRecords) {
+    const templateDoc = await PDFDocument.load(templateBytes);
+    const page = templateDoc.getPages()[0];
+    const font = await templateDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await templateDoc.embedFont(StandardFonts.HelveticaBold);
+    const black = rgb(0, 0, 0);
+    const drawText = (text, coord, opts = {}) => {
+      if (!text) return;
+      const o = { x: coord.x, y: coord.y, size: coord.size || 10, font: (coord.bold || opts.bold) ? fontBold : font, color: black };
+      if (opts.maxWidth || coord.maxW) o.maxWidth = opts.maxWidth || coord.maxW;
+      page.drawText(String(text), o);
+    };
+    const drawMultiline = (text, coord) => {
+      if (!text) return;
+      String(text).split('\n').forEach((line, i) => {
+        page.drawText(line, { x: coord.x, y: coord.y - i * (coord.lineH || 12), size: coord.size || 10, font, color: black, maxWidth: coord.maxW });
+      });
+    };
+    if (bol.delivery_time) page.drawText(String(bol.delivery_time), { x: COORDS.deliveryTime.x, y: COORDS.deliveryTime.y, size: 18, font: fontBold, color: rgb(1, 0, 0) });
+    drawText(bol.date, COORDS.date);
+    drawText(String(bol.bol_number), COORDS.bolNumber);
+    drawText(bol.carrier_name, COORDS.carrierName);
+    drawText(bol.trailer_no, COORDS.trailerNo);
+    drawText(bol.seal_number, COORDS.sealNumber);
+    const shipLines = [bol.ship_to_company, bol.ship_to_attention, [bol.ship_to_street, bol.ship_to_street2].filter(Boolean).join(', '), [bol.ship_to_city, bol.ship_to_state, bol.ship_to_zip].filter(Boolean).join(', ')].filter(Boolean);
+    [COORDS.shipLine1, COORDS.shipLine2, COORDS.shipLine3, COORDS.shipLine4].forEach((coord, i) => { if (shipLines[i]) drawText(shipLines[i], coord); });
+    const ft = bol.freight_terms;
+    if (ft === 'prepaid')   drawText('X', COORDS.chkPrepaid);
+    if (ft === 'collect')   drawText('X', COORDS.chkCollect);
+    if (ft === '3rd_party') drawText('X', COORDS.chk3rdParty);
+    drawMultiline(bol.special_instructions, COORDS.specialInstr);
+    drawMultiline(bol.commodity_description, COORDS.commodity);
+    const [copiedPage] = await combinedPdf.copyPages(templateDoc, [0]);
+    combinedPdf.addPage(copiedPage);
+  }
+  const pdfBytes = await combinedPdf.save();
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const win = window.open(URL.createObjectURL(blob), '_blank');
+  if (!win) { const e = new Error('PDF was generated but your browser blocked the popup. Please allow popups for this site.'); e.popupBlocked = true; throw e; }
 }
 
 // ═══════════════════════════════════════════════════════════════

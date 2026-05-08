@@ -1606,12 +1606,17 @@ async function handleApiJobs(request, env) {
 
   // ── GET ──────────────────────────────────────────────────────────────────
   if (request.method === "GET") {
+    const searchParam = (url.searchParams.get("search") || "").trim();
     const weekParam   = (url.searchParams.get("week")   || "").trim();
     const statusParam = (url.searchParams.get("status") || "").trim();
 
     let query, binds;
 
-    if (weekParam) {
+    if (searchParam) {
+      const like = `%${searchParam}%`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs WHERE (customer LIKE ? OR po_number LIKE ? OR invoice_number LIKE ?) ORDER BY ship_date DESC LIMIT 10`;
+      binds = [like, like, like];
+    } else if (weekParam) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
         return json({ ok: false, error: "Invalid week. Use YYYY-MM-DD (Monday of week)." }, 400);
       }
