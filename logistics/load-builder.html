@@ -297,16 +297,16 @@ const SVG_PRINT_SCALE    = 1.9;   // px per inch, print view (before fit-scaling
 const SVG_PRINT_MAX_WIDTH = 1050; // max print SVG width in px (landscape page)
 
 const DEFAULT_SKUS = [
-  { id: 1, name: "4in block", sku: "FB-4", length: 48, width: 24, height: 4, weight: 1, notes: "", color: "#D97706", allowRotation: false },
-  { id: 2, name: "5in block", sku: "FB-5", length: 48, width: 24, height: 5, weight: 1, notes: "", color: "#0F766E", allowRotation: false },
-  { id: 3, name: "6in block", sku: "FB-6", length: 48, width: 24, height: 6, weight: 1, notes: "", color: "#2563EB", allowRotation: false },
-  { id: 4, name: "7in block", sku: "FB-7", length: 48, width: 24, height: 7, weight: 1, notes: "", color: "#7C3AED", allowRotation: false },
-  { id: 5, name: "8in block", sku: "FB-8", length: 48, width: 24, height: 8, weight: 1, notes: "", color: "#DC2626", allowRotation: false },
-  { id: 6, name: "9in block", sku: "FB-9", length: 48, width: 24, height: 9, weight: 1, notes: "", color: "#059669", allowRotation: false },
-  { id: 7, name: "10in block", sku: "FB-10", length: 48, width: 24, height: 10, weight: 1, notes: "", color: "#9333EA", allowRotation: false },
-  { id: 8, name: "11in block", sku: "FB-11", length: 48, width: 24, height: 11, weight: 1, notes: "", color: "#0891B2", allowRotation: false },
-  { id: 9, name: "12in block", sku: "FB-12", length: 48, width: 24, height: 12, weight: 1, notes: "", color: "#CA8A04", allowRotation: false },
-  { id: 10, name: "13in block", sku: "FB-13", length: 48, width: 24, height: 13, weight: 1, notes: "", color: "#4F46E5", allowRotation: false },
+  { id: 1, name: "4in block", sku: "HB-04", length: 48, width: 24, height: 4, weight: 1, notes: "", color: "#D97706", allowRotation: false },
+  { id: 2, name: "5in block", sku: "HB-05", length: 48, width: 24, height: 5, weight: 1, notes: "", color: "#0F766E", allowRotation: false },
+  { id: 3, name: "6in block", sku: "HB-06", length: 48, width: 24, height: 6, weight: 1, notes: "", color: "#2563EB", allowRotation: false },
+  { id: 4, name: "7in block", sku: "HB-07", length: 48, width: 24, height: 7, weight: 1, notes: "", color: "#7C3AED", allowRotation: false },
+  { id: 5, name: "8in block", sku: "HB-08", length: 48, width: 24, height: 8, weight: 1, notes: "", color: "#DC2626", allowRotation: false },
+  { id: 6, name: "9in block", sku: "HB-09", length: 48, width: 24, height: 9, weight: 1, notes: "", color: "#059669", allowRotation: false },
+  { id: 7, name: "10in block", sku: "HB-10", length: 48, width: 24, height: 10, weight: 1, notes: "", color: "#9333EA", allowRotation: false },
+  { id: 8, name: "11in block", sku: "HB-11", length: 48, width: 24, height: 11, weight: 1, notes: "", color: "#0891B2", allowRotation: false },
+  { id: 9, name: "12in block", sku: "HB-12", length: 48, width: 24, height: 12, weight: 1, notes: "", color: "#CA8A04", allowRotation: false },
+  { id: 10, name: "13in block", sku: "HB-13", length: 48, width: 24, height: 13, weight: 1, notes: "", color: "#4F46E5", allowRotation: false },
 ];
 
 const TRAILER_TYPES = {
@@ -1137,7 +1137,7 @@ function renderSkusTab() {
     const pasteCard = h('div', { className: 'card mb-14', style: { border: '2px solid var(--teal-border)' } });
     pasteCard.appendChild(h('div', { style: { color: 'var(--teal)', fontWeight: 800, fontSize: '13px', marginBottom: '6px' } }, 'PASTE SKU DATA'));
     pasteCard.appendChild(h('div', { style: { fontSize: '13px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: '1.7' }, innerHTML: 'Format: <strong>name, sku, length, width, height, weight, notes</strong>' }));
-    const ta = h('textarea', { className: 'inp', value: state.pasteText, placeholder: '4in block, FB-4, 48, 24, 4, 1,', style: { height: '120px', resize: 'vertical' }, onInput: e => { state.pasteText = e.target.value; state.pasteErr = ''; } });
+    const ta = h('textarea', { className: 'inp', value: state.pasteText, placeholder: '4in block, HB-04, 48, 24, 4, 1,', style: { height: '120px', resize: 'vertical' }, onInput: e => { state.pasteText = e.target.value; state.pasteErr = ''; } });
     pasteCard.appendChild(ta);
     if (state.pasteErr) pasteCard.appendChild(h('div', { style: { color: 'var(--red-dark)', fontSize: '13px', marginTop: '6px' } }, state.pasteErr));
     pasteCard.appendChild(h('button', { className: 'btn btn-teal', style: { marginTop: '10px' }, disabled: state.skuMutating, onClick: () => {

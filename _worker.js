@@ -3218,16 +3218,16 @@ function mapSkuRow(row) {
 }
 
 const LB_DEFAULT_SKUS = [
-  { name: "4in block",  sku: "FB-4",  length: 48, width: 24, height: 4,  weight: 1, notes: "", color: "#D97706" },
-  { name: "5in block",  sku: "FB-5",  length: 48, width: 24, height: 5,  weight: 1, notes: "", color: "#0F766E" },
-  { name: "6in block",  sku: "FB-6",  length: 48, width: 24, height: 6,  weight: 1, notes: "", color: "#2563EB" },
-  { name: "7in block",  sku: "FB-7",  length: 48, width: 24, height: 7,  weight: 1, notes: "", color: "#7C3AED" },
-  { name: "8in block",  sku: "FB-8",  length: 48, width: 24, height: 8,  weight: 1, notes: "", color: "#DC2626" },
-  { name: "9in block",  sku: "FB-9",  length: 48, width: 24, height: 9,  weight: 1, notes: "", color: "#059669" },
-  { name: "10in block", sku: "FB-10", length: 48, width: 24, height: 10, weight: 1, notes: "", color: "#9333EA" },
-  { name: "11in block", sku: "FB-11", length: 48, width: 24, height: 11, weight: 1, notes: "", color: "#0891B2" },
-  { name: "12in block", sku: "FB-12", length: 48, width: 24, height: 12, weight: 1, notes: "", color: "#CA8A04" },
-  { name: "13in block", sku: "FB-13", length: 48, width: 24, height: 13, weight: 1, notes: "", color: "#4F46E5" },
+  { name: "4in block",  sku: "HB-04", length: 48, width: 24, height: 4,  weight: 1, notes: "", color: "#D97706" },
+  { name: "5in block",  sku: "HB-05", length: 48, width: 24, height: 5,  weight: 1, notes: "", color: "#0F766E" },
+  { name: "6in block",  sku: "HB-06", length: 48, width: 24, height: 6,  weight: 1, notes: "", color: "#2563EB" },
+  { name: "7in block",  sku: "HB-07", length: 48, width: 24, height: 7,  weight: 1, notes: "", color: "#7C3AED" },
+  { name: "8in block",  sku: "HB-08", length: 48, width: 24, height: 8,  weight: 1, notes: "", color: "#DC2626" },
+  { name: "9in block",  sku: "HB-09", length: 48, width: 24, height: 9,  weight: 1, notes: "", color: "#059669" },
+  { name: "10in block", sku: "HB-10", length: 48, width: 24, height: 10, weight: 1, notes: "", color: "#9333EA" },
+  { name: "11in block", sku: "HB-11", length: 48, width: 24, height: 11, weight: 1, notes: "", color: "#0891B2" },
+  { name: "12in block", sku: "HB-12", length: 48, width: 24, height: 12, weight: 1, notes: "", color: "#CA8A04" },
+  { name: "13in block", sku: "HB-13", length: 48, width: 24, height: 13, weight: 1, notes: "", color: "#4F46E5" },
 ];
 
 async function handleApiLoadBuilderSkus(request, env) {
