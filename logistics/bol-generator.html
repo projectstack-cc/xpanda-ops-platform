@@ -1379,11 +1379,11 @@ async function generatePdf(bol) {
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
 
   const COORDS = {
-    deliveryTime:       { x: 430, y: 775, size: 18 },           // top-right, 18pt bold red
-    date:               { x: 338, y: 708, size: 10 },           // 85pt from top
+    deliveryTime:       { x: 430, y: 771, size: 18 },           // top-right, 18pt bold red
+    date:               { x: 338, y: 710, size: 10 },           // 85pt from top
     bolNumber:          { x: 380, y: 675, size: 24, bold: true }, // 117pt from top — centered in box below label
-    carrierName:        { x: 378, y: 652, size: 10 },           // 140pt from top, after "Name:"
-    trailerNo:          { x: 360, y: 635, size: 10 },           // 157pt from top, after "No:"
+    carrierName:        { x: 378, y: 650.5, size: 10 },         // 140pt from top, after "Name:"
+    trailerNo:          { x: 360, y: 633.5, size: 10 },         // 157pt from top, after "No:"
     sealNumber:         { x: 378, y: 619, size: 10 },           // 173pt from top
     scac:               { x: 378, y: 601, size: 10 },           // 191pt from top
     proNo:              { x: 378, y: 585, size: 10 },           // 207pt from top
@@ -1392,9 +1392,9 @@ async function generatePdf(bol) {
     shipLine3:          { x: 55,  y: 581, size: 10 },
     shipLine4:          { x: 55,  y: 568, size: 10 },
     locationNo:         { x: 248, y: 619, size: 10 },           // 173pt from top
-    chkPrepaid:         { x: 39,  y: 534, size: 10 },           // 258pt from top
-    chkCollect:         { x: 103, y: 534, size: 10 },
-    chk3rdParty:        { x: 164, y: 534, size: 10 },
+    chkPrepaid:         { x: 39,  y: 532, size: 10 },           // 258pt from top
+    chkCollect:         { x: 103, y: 532, size: 10 },
+    chk3rdParty:        { x: 164, y: 532, size: 10 },
     thirdPartyBillTo:   { x: 42,  y: 502, size: 9 },            // 290pt from top
     scrapPickupText:    { x: 42,  y: 500, size: 12, bold: true }, // repurposes bill-to area
     specialInstr:       { x: 310, y: 527, size: 9,  lineH: 11, maxW: 200 }, // 265pt from top
@@ -1510,7 +1510,21 @@ async function generatePdf(bol) {
   // ── Save and open ──
   const savedBytes = await pdfDoc.save();
   const blob       = new Blob([savedBytes], { type: 'application/pdf' });
-  window.open(URL.createObjectURL(blob), '_blank');
+  const blobUrl    = URL.createObjectURL(blob);
+
+  // Trigger a download so the file saves properly
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = `BOL-${bol.bol_number}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  // Also open in a new tab for immediate viewing
+  window.open(blobUrl, '_blank');
+
+  // Clean up the blob URL after a delay (allow time for download + tab to load)
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
 }
 
 // ═══════════════════════════════════════════════════════════════════
