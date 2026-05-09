@@ -449,14 +449,15 @@ function fromCSV(text, offset) {
 function cloneDemand(demand) { return demand.map(d => ({ ...d })); }
 
 function sortDemandPriority(demand, variant = 0) {
-  const mode = variant % 4;
   return [...demand].sort((a, b) => {
-    if (b.originalQty !== a.originalQty) return b.originalQty - a.originalQty;
+    // Primary: tallest blocks first (shop floor loading order)
+    if (b.sku.height !== a.sku.height) return b.sku.height - a.sku.height;
+    // Secondary: highest remaining quantity first
     if (b.remaining !== a.remaining) return b.remaining - a.remaining;
-    if (mode === 0) { if (b.sku.width !== a.sku.width) return b.sku.width - a.sku.width; if (a.sku.height !== b.sku.height) return a.sku.height - b.sku.height; }
-    else if (mode === 1) { if (a.sku.height !== b.sku.height) return a.sku.height - b.sku.height; if (b.sku.width !== a.sku.width) return b.sku.width - a.sku.width; }
-    else if (mode === 2) { if (b.sku.length !== a.sku.length) return b.sku.length - a.sku.length; if (b.sku.width !== a.sku.width) return b.sku.width - a.sku.width; }
-    else { if (b.sku.width !== a.sku.width) return b.sku.width - a.sku.width; if (b.sku.length !== a.sku.length) return b.sku.length - a.sku.length; }
+    // Tertiary tiebreaker varies by variant so "Recalculate Different" produces distinct results
+    const dir = variant % 2 === 0 ? 1 : -1;
+    if (b.sku.width !== a.sku.width) return dir * (b.sku.width - a.sku.width);
+    if (b.sku.length !== a.sku.length) return dir * (b.sku.length - a.sku.length);
     return a.sku.name.localeCompare(b.sku.name);
   });
 }
@@ -536,7 +537,7 @@ function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = n
     let totalHeight = baseHeight, totalWeight = baseWeight;
     const remainH = dims.height - totalHeight;
     const budget = dims.maxWeight - usedWeightSoFar - totalWeight;
-    if (remainH > 0 && allowMixing) {
+    if (remainH > 0 && allowMixing && baseCount < Math.floor(dims.height / baseSku.height)) {
       let fillPool = tempPool;
       if (preferredSkuId) { const pref = tempPool.filter(d => d.skuId === preferredSkuId && d.remaining > 0); if (pref.length) fillPool = pref; }
       let fill = exactFillHeight(remainH, fillPool, budget);
@@ -649,16 +650,15 @@ function calcLoading(cart, skus, dims, variant = 0) {
   });
   while (demand.some(d => d.remaining > 0)) {
     demand = sortDemandPriority(demand, variant);
-    const highLead = demand.find(d => d.remaining > 0 && d.remaining >= getFullTrailerThreshold(d.sku, dims));
-    const preferredSkuId = highLead ? highLead.skuId : (demand.find(d => d.remaining > 0)?.skuId ?? null);
+    const preferredSkuId = demand.find(d => d.remaining > 0)?.skuId ?? null;
     const rows = [];
     let curX = 0, usedWeight = 0, progress = true;
 
-    // Pass 1: same-size stacks only — no mixing allowed
+    // Single pass: tallest-first, top-off when a size runs out mid-column
     while (progress && curX < dims.length) {
       progress = false;
-      let best = buildRow(demand, dims, curX, usedWeight, variant, preferredSkuId, false);
-      if (!best) best = buildRow(demand, dims, curX, usedWeight, variant, null, false);
+      let best = buildRow(demand, dims, curX, usedWeight, variant, preferredSkuId, true);
+      if (!best) best = buildRow(demand, dims, curX, usedWeight, variant, null, true);
       if (!best) break;
       rows.push(best.row);
       demand = best.updatedDemand;
