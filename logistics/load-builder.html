@@ -363,7 +363,7 @@ const TRAILER_TYPES = {
   "48ft Flatbed":  { length: 576, width: 98, height: 108, maxWeight: 44000 },
   "40ft Container": { length: 480, width: 90, height: 102, maxWeight: 55000 },
   "20ft Container": { length: 240, width: 90, height: 86, maxWeight: 44000 },
-  "26ft Box Truck": { length: 312, width: 98, height: 108, maxWeight: 28000 },
+  "26ft Box Truck": { length: 312, width: 72, height: 108, maxWeight: 28000 },
 };
 
 const COLORS = [
@@ -394,6 +394,10 @@ let state = {
   skuError: "",
   skuMutating: false,
   runnerHeight: 0,
+  autoDownsize: true,
+  forcedTrailers: [],
+  forcedMode: false,
+  trailerInvNumbers: {},
   bolModal: { open: false, currentPage: 0, trailerCount: 0, trailerData: [], bolError: '', generating: false, generateProgress: [], bolSuccess: null, searchQuery: '', searchResults: [], searchLoading: false, searchConfirm: '' },
 };
 
@@ -648,17 +652,33 @@ function calcLoading(cart, skus, dims, variant = 0) {
       warnings.push(`"${sku.name}" exceeds trailer dimensions and will be skipped.`);
     }
   });
+  // Build forced trailer queue (empty when forcedMode is off)
+  const trailerQueue = [];
+  if (state.forcedMode && state.forcedTrailers.length > 0) {
+    state.forcedTrailers.forEach(ft => {
+      const ftDims = TRAILER_TYPES[ft.type];
+      if (!ftDims) return;
+      const effective = state.runnerHeight > 0 ? { ...ftDims, height: ftDims.height - state.runnerHeight } : ftDims;
+      for (let i = 0; i < ft.count; i++) trailerQueue.push({ type: ft.type, dims: effective });
+    });
+  }
+  let trailerIdx = 0;
+
   while (demand.some(d => d.remaining > 0)) {
+    const forcedEntry = trailerIdx < trailerQueue.length ? trailerQueue[trailerIdx] : null;
+    const currentDims = forcedEntry ? forcedEntry.dims : dims;
+    trailerIdx++;
+
     demand = sortDemandPriority(demand, variant);
     const preferredSkuId = demand.find(d => d.remaining > 0)?.skuId ?? null;
     const rows = [];
     let curX = 0, usedWeight = 0, progress = true;
 
     // Single pass: tallest-first, top-off when a size runs out mid-column
-    while (progress && curX < dims.length) {
+    while (progress && curX < currentDims.length) {
       progress = false;
-      let best = buildRow(demand, dims, curX, usedWeight, variant, preferredSkuId, true);
-      if (!best) best = buildRow(demand, dims, curX, usedWeight, variant, null, true);
+      let best = buildRow(demand, currentDims, curX, usedWeight, variant, preferredSkuId, true);
+      if (!best) best = buildRow(demand, currentDims, curX, usedWeight, variant, null, true);
       if (!best) break;
       rows.push(best.row);
       demand = best.updatedDemand;
@@ -677,10 +697,10 @@ function calcLoading(cart, skus, dims, variant = 0) {
 
       for (const [lenKey, group] of Object.entries(remainByLength)) {
         const rowLength = Number(lenKey);
-        if (curX + rowLength > dims.length) continue;
+        if (curX + rowLength > currentDims.length) continue;
 
         const row = { posFromFront: curX, rowLength, rowWidthUsed: 0, columns: [], totalUnits: 0, totalWeight: 0 };
-        let widthLeft = dims.width, posY = 0;
+        let widthLeft = currentDims.width, posY = 0;
 
         while (widthLeft > 0 && group.some(d => d.remaining > 0)) {
           const candidates = group.filter(d => d.remaining > 0 && d.sku.width <= widthLeft);
@@ -689,12 +709,12 @@ function calcLoading(cart, skus, dims, variant = 0) {
           if (colWidth > widthLeft) break;
 
           const totalRemainHeight = candidates.reduce((s, d) => s + d.remaining * d.sku.height, 0);
-          const weightBudget = dims.maxWeight - usedWeight - row.totalWeight;
+          const weightBudget = currentDims.maxWeight - usedWeight - row.totalWeight;
           const totalRemainWeight = candidates.reduce((s, d) => s + d.remaining * d.sku.weight, 0);
 
           let layers;
 
-          if (totalRemainHeight <= dims.height && totalRemainWeight <= weightBudget) {
+          if (totalRemainHeight <= currentDims.height && totalRemainWeight <= weightBudget) {
             // Everything fits in one column — stack them all directly, no DFS needed
             layers = candidates.filter(d => d.remaining > 0).map(d => {
               const count = d.remaining;
@@ -703,7 +723,7 @@ function calcLoading(cart, skus, dims, variant = 0) {
             }).filter(l => l.count > 0);
           } else {
             // Too tall for one column — use exactFillHeight to pack optimally
-            const fill = exactFillHeight(dims.height, candidates, weightBudget);
+            const fill = exactFillHeight(currentDims.height, candidates, weightBudget);
             if (!fill || !fill.picks.length) break;
             layers = fill.picks.map(pick => {
               pick.demand.remaining -= pick.count;
@@ -741,15 +761,19 @@ function calcLoading(cart, skus, dims, variant = 0) {
     }
 
     if (!rows.length) { const stuck = demand.find(d => d.remaining > 0); if (stuck) warnings.push(`Could not place remaining ${stuck.sku.name}.`); break; }
-    trailers.push(buildTrailerStats(rows, dims));
+    const stats = buildTrailerStats(rows, currentDims);
+    if (forcedEntry) stats.forcedType = forcedEntry.type;
+    trailers.push(stats);
   }
-  // Auto-downsize last trailer to 26ft Box Truck if it fits and a larger trailer was selected
-  const boxTruckDims = TRAILER_TYPES["26ft Box Truck"];
-  if (trailers.length > 1 && dims.length > boxTruckDims.length) {
-    const last = trailers[trailers.length - 1];
-    if (last.usedLength <= boxTruckDims.length && last.usedWeight <= boxTruckDims.maxWeight) {
-      last.downsizedType = "26ft Box Truck";
-      last.downsizedDims = boxTruckDims;
+  // Auto-downsize last trailer to 26ft Box Truck if it fits, a larger trailer was selected, and toggle is on
+  if (state.autoDownsize && !state.forcedMode) {
+    const boxTruckDims = TRAILER_TYPES["26ft Box Truck"];
+    if (trailers.length > 1 && dims.length > boxTruckDims.length) {
+      const last = trailers[trailers.length - 1];
+      if (last.usedLength <= boxTruckDims.length && last.usedWeight <= boxTruckDims.maxWeight) {
+        last.downsizedType = "26ft Box Truck";
+        last.downsizedDims = boxTruckDims;
+      }
     }
   }
 
@@ -884,13 +908,14 @@ function buildPrintSvg(trailer, dims) {
 // ═══════════════════════════════════════════════════════════════
 // PRINT
 // ═══════════════════════════════════════════════════════════════
-function printPackingSlip(trailer, dims, trailerType, trailerNumber, packList) {
+function printPackingSlip(trailer, dims, trailerType, trailerNumber, packList, invNumber = '') {
   const win = window.open("", "_blank", "width=1600,height=1100");
   if (!win) return;
   const piecesHtml = packList.pieces.map(item => `<tr><td style="padding:8px 10px;border:1px solid #cbd5e1;font-weight:700;"><span style="display:inline-block;width:10px;height:10px;background:${item.color};border-radius:2px;margin-right:8px;"></span>${item.name}</td><td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;">${item.pieces}</td></tr>`).join("");
   const stackHtml = packList.stacks.map(s => `<tr><td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;font-weight:700;">${s.stacks}</td><td style="padding:8px 10px;border:1px solid #cbd5e1;">${s.lines.join(" · ")}</td></tr>`).join("");
   const runnerNotice = state.runnerHeight > 0 ? `<div style="margin:6px 0 10px;padding:8px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;font-weight:700;font-size:13px;color:#92400E;">⚠ RUNNERS: ${state.runnerHeight}" dunnage required under all stacks</div>` : '';
-  win.document.write(`<html><head><title>Packing Slip - Trailer ${trailerNumber}</title><style>@page{size:landscape;margin:0.22in}body{font-family:Arial,sans-serif;color:#0f172a;margin:0;padding:0}.page{padding:10px 12px}h1{margin:0 0 4px 0;font-size:24px}h2{margin:0 0 8px 0;font-size:15px;color:#475569}.box{border:1px solid #cbd5e1;border-radius:12px;padding:9px;margin-bottom:9px}table{width:100%;border-collapse:collapse;font-size:13px}.note{font-size:11px;color:#64748b;margin-bottom:6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}</style></head><body><div class="page"><h1>Trailer ${trailerNumber} Packing Slip</h1><h2>${trailerType}</h2>${runnerNotice}<div class="box" style="overflow:hidden"><div style="font-weight:700;margin-bottom:6px">TRAILER LAYOUT</div><div class="note">Layout scaled to fit fully on one page.</div><div style="width:100%;overflow:hidden">${buildPrintSvg(trailer, dims)}</div></div><div class="grid"><div class="box"><div style="font-weight:700;margin-bottom:8px">PIECES</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Item</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Pieces</th></tr></thead><tbody>${piecesHtml}</tbody></table></div><div class="box"><div style="font-weight:700;margin-bottom:8px">STACK BREAKDOWN</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Stacks</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Sizes in stack</th></tr></thead><tbody>${stackHtml}</tbody></table></div></div></div><script>window.onload=function(){setTimeout(function(){window.print()},250)};<\/script></body></html>`);
+  const invSuffix = invNumber ? ` · INV# ${invNumber}` : '';
+  win.document.write(`<html><head><title>Packing Slip - Trailer ${trailerNumber}</title><style>@page{size:landscape;margin:0.22in}body{font-family:Arial,sans-serif;color:#0f172a;margin:0;padding:0}.page{padding:10px 12px}h1{margin:0 0 4px 0;font-size:24px}h2{margin:0 0 8px 0;font-size:15px;color:#475569}.box{border:1px solid #cbd5e1;border-radius:12px;padding:9px;margin-bottom:9px}table{width:100%;border-collapse:collapse;font-size:13px}.note{font-size:11px;color:#64748b;margin-bottom:6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}</style></head><body><div class="page"><h1>Trailer ${trailerNumber} Packing Slip</h1><h2>${trailerType}${invSuffix}</h2>${runnerNotice}<div class="box" style="overflow:hidden"><div style="font-weight:700;margin-bottom:6px">TRAILER LAYOUT</div><div class="note">Layout scaled to fit fully on one page.</div><div style="width:100%;overflow:hidden">${buildPrintSvg(trailer, dims)}</div></div><div class="grid"><div class="box"><div style="font-weight:700;margin-bottom:8px">PIECES</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Item</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Pieces</th></tr></thead><tbody>${piecesHtml}</tbody></table></div><div class="box"><div style="font-weight:700;margin-bottom:8px">STACK BREAKDOWN</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Stacks</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Sizes in stack</th></tr></thead><tbody>${stackHtml}</tbody></table></div></div></div><script>window.onload=function(){setTimeout(function(){window.print()},250)};<\/script></body></html>`);
   win.document.close();
 }
 
@@ -1056,7 +1081,8 @@ function renderLoadTab() {
     const active = state.trailerType === t;
     typeRow.appendChild(h('button', { className: `btn ${active ? 'btn-accent' : 'btn-white'}`, onClick: () => { state.trailerType = t; state.manualRowsByTrailer = {}; state.editorTrailer = null; render(); } }, t));
   });
-  const dimsLabel = h('span', { style: { marginLeft: 'auto', color: 'var(--text-muted)', fontSize: '14px', fontWeight: 600 } }, `${dims.length}"L × ${dims.width}"W × ${dims.height}"H · ${dims.maxWeight.toLocaleString()} max`);
+  const bdft = Math.round((dims.length * dims.width * dims.height) / 144);
+  const dimsLabel = h('span', { style: { marginLeft: 'auto', color: 'var(--text-muted)', fontSize: '14px', fontWeight: 600 } }, `${dims.length}"L × ${dims.width}"W × ${dims.height}"H · ${bdft.toLocaleString()} BDFT`);
   typeRow.appendChild(dimsLabel);
   typeCard.appendChild(typeRow);
 
@@ -1070,7 +1096,47 @@ function renderLoadTab() {
     runnerRow.appendChild(h('span', { style: { fontSize: '13px', color: 'var(--text-faint)', fontWeight: 600 } }, `Runner height deducted from available stacking height (${dims.height}" → ${dims.height - state.runnerHeight}")`));
   }
   typeCard.appendChild(runnerRow);
+
+  const downsizeRow = h('div', { className: 'flex items-center gap-10 flex-wrap', style: { marginTop: '10px' } });
+  downsizeRow.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 800, fontSize: '13px' } }, 'AUTO-DOWNSIZE'));
+  ['ON', 'OFF'].forEach(v => {
+    const active = state.autoDownsize === (v === 'ON');
+    downsizeRow.appendChild(h('button', { className: `btn ${active ? 'btn-accent' : 'btn-white'}`, onClick: () => { state.autoDownsize = v === 'ON'; render(); } }, v));
+  });
+  downsizeRow.appendChild(h('span', { style: { fontSize: '13px', color: 'var(--text-faint)', fontWeight: 600 } }, 'Auto-downsize last trailer to 26ft Box Truck when it fits'));
+  typeCard.appendChild(downsizeRow);
   cont.appendChild(typeCard);
+
+  // Forced trailer sizes panel
+  const forcedCard = h('div', { className: 'card mb-18' });
+  const forcedHdr = h('div', { className: 'flex items-center gap-10 flex-wrap' });
+  forcedHdr.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 800, fontSize: '13px' } }, 'FORCE TRAILER SIZES'));
+  ['OFF', 'ON'].forEach(v => {
+    const active = state.forcedMode === (v === 'ON');
+    forcedHdr.appendChild(h('button', { className: `btn ${active ? 'btn-accent' : 'btn-white'}`, onClick: () => { state.forcedMode = v === 'ON'; render(); } }, v));
+  });
+  forcedCard.appendChild(forcedHdr);
+  if (state.forcedMode) {
+    const forcedBody = h('div', { style: { marginTop: '12px', display: 'grid', gap: '8px' } });
+    state.forcedTrailers.forEach((ft, fti) => {
+      const ftRow = h('div', { className: 'flex items-center gap-8 flex-wrap' });
+      const typeSelect = h('select', { className: 'inp', style: { width: '200px', padding: '8px 10px' }, onChange: e => { state.forcedTrailers[fti].type = e.target.value; render(); } });
+      Object.keys(TRAILER_TYPES).forEach(t => {
+        const opt = h('option', { value: t }, t);
+        if (ft.type === t) opt.selected = true;
+        typeSelect.appendChild(opt);
+      });
+      ftRow.appendChild(typeSelect);
+      const countInput = h('input', { type: 'number', min: '1', max: '10', className: 'inp', value: String(ft.count), style: { width: '70px', padding: '8px 10px' }, onInput: e => { state.forcedTrailers[fti].count = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)); } });
+      ftRow.appendChild(countInput);
+      ftRow.appendChild(h('span', { style: { fontSize: '13px', color: 'var(--text-muted)' } }, ft.count === 1 ? 'trailer' : 'trailers'));
+      ftRow.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { state.forcedTrailers.splice(fti, 1); render(); } }, '×'));
+      forcedBody.appendChild(ftRow);
+    });
+    forcedBody.appendChild(h('button', { className: 'btn btn-white', style: { marginTop: '4px' }, onClick: () => { state.forcedTrailers.push({ type: state.trailerType, count: 1 }); render(); } }, '+ ADD TRAILER'));
+    forcedCard.appendChild(forcedBody);
+  }
+  cont.appendChild(forcedCard);
 
   // Search
   const searchInp = h('input', { className: 'inp', value: state.search, placeholder: 'Search SKUs…', style: { width: '360px', maxWidth: '100%', marginBottom: '14px' }, onInput: e => { state.search = e.target.value; render(); } });
@@ -1343,22 +1409,31 @@ function renderResultsTab() {
     titleRow.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 900, fontSize: '18px' } }, `TRAILER ${ti + 1} — ${trailerLabel}`));
     titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--blue-bg)', color: 'var(--blue-dark)' } }, `${trailer.totalStacks} stacks · ${trailer.totalUnits} pcs`));
     if (trailer.downsizedType) titleRow.appendChild(h('span', { className: 'tag', style: { background: '#FEF3C7', color: '#92400E' } }, 'AUTO-DOWNSIZED'));
+    if (trailer.forcedType && trailer.forcedType !== state.trailerType) titleRow.appendChild(h('span', { className: 'tag', style: { background: '#EDE9FE', color: '#5B21B6' } }, `FORCED: ${trailer.forcedType}`));
     if (isManual) titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--teal-bg)', color: 'var(--green-dark)' } }, 'CUSTOMIZED'));
     tLeft.appendChild(titleRow);
     const remainingIn = trailerDims.length - (trailer.usedLength || 0);
     const remLabel = remainingIn === 0 ? 'FULL' : remainingIn >= 12
       ? `${Math.floor(remainingIn / 12)}' ${remainingIn % 12}" remaining`
       : `${remainingIn}" remaining`;
+    const totalBdft = Math.round((trailerDims.length * trailerDims.width * trailerDims.height) / 144);
+    const usedBdft = Math.round(Object.values(trailer.skuBreakdown).reduce((s, entry) => {
+      const sku = state.skus.find(x => x.id === entry.skuId);
+      return s + (sku ? entry.pieces * (sku.length * sku.width * sku.height) / 144 : 0);
+    }, 0));
+    const bdftPct = totalBdft > 0 ? Math.round((usedBdft / totalBdft) * 100) : 0;
     const subtitleEl = h('div', { style: { fontSize: '14px', color: 'var(--text-muted)', fontWeight: 600, marginTop: '6px' } });
     const runnerPart = state.runnerHeight > 0 ? ` · <span style="color:#92400E">${state.runnerHeight}" runners</span>` : '';
-    subtitleEl.innerHTML = `${Math.round(usedPct)}% length · ${Math.round(floorPct)}% floor · ${trailer.mixedStacks} mixed stacks · <span style="color:#D97706">${remLabel}</span>${runnerPart}`;
+    subtitleEl.innerHTML = `${Math.round(usedPct)}% length · ${Math.round(floorPct)}% floor · ${trailer.mixedStacks} mixed stacks · ${usedBdft.toLocaleString()} / ${totalBdft.toLocaleString()} BDFT (${bdftPct}%) · <span style="color:#D97706">${remLabel}</span>${runnerPart}`;
     tLeft.appendChild(subtitleEl);
     tHdr.appendChild(tLeft);
 
-    const tRight = h('div', { className: 'flex gap-8 flex-wrap' });
+    const tRight = h('div', { className: 'flex gap-8 flex-wrap items-center' });
     tRight.appendChild(h('button', { className: 'btn btn-blue-light', onClick: () => { state.editorTrailer = state.editorTrailer === ti ? null : ti; render(); } }, state.editorTrailer === ti ? 'CLOSE CUSTOMIZE' : 'CUSTOMIZE TRAILER'));
     if (isManual) tRight.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { delete state.manualRowsByTrailer[ti]; render(); } }, 'CLEAR CUSTOM'));
-    tRight.appendChild(h('button', { className: 'btn btn-teal', onClick: () => printPackingSlip(trailer, trailerDims, trailerLabel, ti + 1, packList) }, 'PRINT PACKING SLIP'));
+    const invInput = h('input', { type: 'text', placeholder: 'INV #', value: state.trailerInvNumbers[ti] || '', className: 'inp', style: { width: '120px', padding: '8px 10px', fontSize: '13px' }, onInput: e => { state.trailerInvNumbers[ti] = e.target.value; } });
+    tRight.appendChild(invInput);
+    tRight.appendChild(h('button', { className: 'btn btn-teal', onClick: () => printPackingSlip(trailer, trailerDims, trailerLabel, ti + 1, packList, state.trailerInvNumbers[ti] || '') }, 'PRINT PACKING SLIP'));
     tHdr.appendChild(tRight);
     tCard.appendChild(tHdr);
 
@@ -1474,7 +1549,7 @@ function renderEditorContent(box, ti, skuLib) {
     rowHdr.appendChild(h('strong', {}, `Row ${ri + 1}`));
 
     const sel = h('select', { className: 'inp', value: String(row.skuId), style: { width: '220px', padding: '8px 10px' }, onChange: e => {
-      const sku = skuLib.find(s => s.id === +e.target.value); if (!sku) return;
+      const sku = skuLib.find(s => s.id === e.target.value); if (!sku) return;
       editorRows[ri].skuId = sku.id; editorRows[ri].length = sku.length;
       editorRows[ri].columns.forEach(c => c.width = sku.width);
       const box = document.getElementById('editor-' + ti); box.innerHTML = ''; renderEditorContent(box, ti, skuLib);
@@ -1515,7 +1590,7 @@ function renderEditorContent(box, ti, skuLib) {
       col.layers.forEach((layer, li) => {
         const layerRow = h('div', { className: 'editor-layer-grid' });
         const lSel = h('select', { className: 'inp', style: { padding: '8px 10px' }, onChange: e => {
-          editorRows[ri].columns[ci].layers[li].skuId = +e.target.value;
+          editorRows[ri].columns[ci].layers[li].skuId = e.target.value;
         } });
         skuLib.forEach(s => { const opt = h('option', { value: String(s.id) }, s.name); if (s.id === layer.skuId) opt.selected = true; lSel.appendChild(opt); });
         layerRow.appendChild(lSel);
