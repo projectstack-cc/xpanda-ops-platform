@@ -258,6 +258,75 @@
   /* Sku library list */
   .sku-list { display: flex; flex-direction: column; gap: 10px; }
 
+  /* Categorized SKU list */
+  .sku-category-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius) var(--radius) 0 0;
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 13px;
+    color: var(--text-mid);
+    user-select: none;
+    margin-top: 8px;
+  }
+  .sku-category-header:first-child { margin-top: 0; }
+  .sku-category-body {
+    border: 1px solid var(--border-light);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+    background: var(--surface);
+    margin-bottom: 2px;
+  }
+  .sku-row {
+    display: grid;
+    grid-template-columns: 16px 78px 1fr 110px 72px 136px;
+    align-items: center;
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 14px;
+    gap: 10px;
+    transition: background 0.1s;
+    border-left: 3px solid transparent;
+  }
+  .sku-row:last-child { border-bottom: none; }
+  .sku-row:hover { background: rgba(0,0,0,0.018); }
+  .sku-row .sku-actions { display: flex; align-items: center; gap: 5px; justify-content: flex-end; }
+  .qty-input-sm {
+    width: 54px;
+    text-align: center;
+    background: #fff;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    padding: 4px 4px;
+    border-radius: 8px;
+    border: 2px solid;
+  }
+  .sku-row-manage {
+    display: grid;
+    grid-template-columns: 16px 78px 1fr 110px 80px auto;
+    align-items: center;
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 14px;
+    gap: 10px;
+    transition: background 0.1s;
+  }
+  .sku-row-manage:last-child { border-bottom: none; }
+  .sku-row-manage:hover { background: rgba(0,0,0,0.018); }
+  .sku-row-manage .sku-row-btns { display: flex; gap: 5px; justify-content: flex-end; }
+  @media (max-width: 600px) {
+    .sku-row { grid-template-columns: 16px 60px 1fr 110px; }
+    .sku-row .sku-dim, .sku-row .sku-stack { display: none; }
+    .sku-row-manage { grid-template-columns: 16px 60px 1fr auto; }
+    .sku-row-manage .sku-dim, .sku-row-manage .sku-cat-tag { display: none; }
+  }
+
   .calc-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
 
   /* SVG container */
@@ -398,6 +467,7 @@ let state = {
   forcedTrailers: [],
   forcedMode: false,
   trailerInvNumbers: {},
+  collapsedCategories: {},
   bolModal: { open: false, currentPage: 0, trailerCount: 0, trailerData: [], bolError: '', generating: false, generateProgress: [], bolSuccess: null, searchQuery: '', searchResults: [], searchLoading: false, searchConfirm: '' },
 };
 
@@ -427,8 +497,8 @@ function loadSaved() {
 }
 
 function toCSV(skus) {
-  return ["name,sku,length,width,height,weight,notes,allowRotation",
-    ...skus.map(s => [s.name, s.sku, s.length, s.width, s.height, s.weight, (s.notes || "").replace(/,/g, ";"), s.allowRotation ? "true" : "false"].join(","))
+  return ["name,sku,length,width,height,weight,notes,allowRotation,category",
+    ...skus.map(s => [s.name, s.sku, s.length, s.width, s.height, s.weight, (s.notes || "").replace(/,/g, ";"), s.allowRotation ? "true" : "false", (s.category || "").replace(/,/g, ";")].join(","))
   ].join("\n");
 }
 
@@ -438,13 +508,14 @@ function fromCSV(text, offset) {
     if (line.toLowerCase().startsWith("name")) return;
     const p = line.split(",").map(x => x.trim());
     if (p.length < 6) return;
-    const [name, sku, length, width, height, weight, notesRaw, rotationRaw] = p;
+    const [name, sku, length, width, height, weight, notesRaw, rotationRaw, categoryRaw] = p;
     if (!name || isNaN(+length) || isNaN(+width) || isNaN(+height) || isNaN(+weight) || +length <= 0 || +width <= 0 || +height <= 0 || +weight <= 0) return;
     result.push({
       id: Date.now() + offset + i, name, sku: sku || name,
       length: +length, width: +width, height: +height, weight: +weight,
       notes: notesRaw || "", color: COLORS[(offset + i) % COLORS.length],
       allowRotation: rotationRaw ? rotationRaw.toLowerCase() === "true" : false,
+      category: categoryRaw || "",
     });
   });
   return result;
@@ -1048,6 +1119,21 @@ function getFiltered() {
   return !q ? sorted : sorted.filter(s => s.name.toLowerCase().includes(q) || s.sku.toLowerCase().includes(q));
 }
 
+function groupByCategory(skus) {
+  const groups = {};
+  skus.forEach(s => {
+    const cat = (s.category || '').trim() || 'Uncategorized';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(s);
+  });
+  const catKeys = Object.keys(groups).sort((a, b) => {
+    if (a === 'Uncategorized') return 1;
+    if (b === 'Uncategorized') return -1;
+    return a.localeCompare(b);
+  });
+  return { groups, catKeys };
+}
+
 // ═══════════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════════
@@ -1147,45 +1233,65 @@ function renderLoadTab() {
   const searchInp = h('input', { className: 'inp', value: state.search, placeholder: 'Search SKUs…', style: { width: '360px', maxWidth: '100%', marginBottom: '14px' }, onInput: e => { state.search = e.target.value; render(); } });
   cont.appendChild(searchInp);
 
-  // SKU grid
-  const grid = h('div', { className: 'sku-grid' });
-  filtered.forEach(s => {
-    const inCart = state.cart.find(c => c.skuId === s.id);
-    const skuCard = h('div', { className: 'card sku-card', style: { borderColor: inCart ? s.color : 'var(--border-light)', borderWidth: '2px' } });
+  // SKU categorized list
+  const isSearching = !!state.search.trim();
+  const { groups: skuGroups, catKeys } = groupByCategory(filtered);
+  const allGroupKeys = groupByCategory(sorted).catKeys;
+  const allCollapsed = allGroupKeys.length > 0 && allGroupKeys.every(c => !!state.collapsedCategories[c]);
 
-    const topRow = h('div', { className: 'flex justify-between' });
-    topRow.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-faint)', fontWeight: 700, fontFamily: 'var(--mono)' } }, s.sku));
-    topRow.appendChild(h('div', { style: { width: '12px', height: '12px', background: s.color, borderRadius: '50%' } }));
-    skuCard.appendChild(topRow);
+  const listHeader = h('div', { className: 'flex justify-between items-center', style: { marginBottom: '8px' } });
+  listHeader.appendChild(h('div'));
+  listHeader.appendChild(h('button', { className: 'btn btn-white', style: { fontSize: '12px', padding: '5px 12px' }, onClick: () => {
+    if (allCollapsed) { state.collapsedCategories = {}; }
+    else { const nc = {}; allGroupKeys.forEach(c => nc[c] = true); state.collapsedCategories = nc; }
+    render();
+  }}, allCollapsed ? 'EXPAND ALL' : 'COLLAPSE ALL'));
+  cont.appendChild(listHeader);
 
-    skuCard.appendChild(h('div', { style: { fontWeight: 800, fontSize: '20px', margin: '8px 0 10px' } }, s.name));
-
-    const info = h('div', { style: { fontSize: '14px', color: 'var(--text-mid)', lineHeight: '1.8' } });
-    info.appendChild(h('div', {}, `${s.length}" × ${s.width}" × ${s.height}"`));
-    info.appendChild(h('div', {}, `${Math.floor(dims.height / s.height)} pcs if all same-size stack`));
-    if (s.allowRotation) {
-      info.appendChild(h('span', { style: { fontSize: '11px', fontWeight: 700, color: 'var(--text-ghost)', letterSpacing: '0.5px' } }, '↻ ROTATE'));
+  const listWrap = h('div', { style: { marginBottom: '22px' } });
+  catKeys.forEach(cat => {
+    const catSkus = skuGroups[cat];
+    if (!catSkus || !catSkus.length) return;
+    const isCollapsed = !isSearching && !!state.collapsedCategories[cat];
+    const catHdr = h('div', { className: 'sku-category-header', onClick: () => { if (!isSearching) { state.collapsedCategories[cat] = !state.collapsedCategories[cat]; render(); } }});
+    catHdr.appendChild(h('span', {}, isCollapsed ? '▶' : '▼'));
+    catHdr.appendChild(h('span', {}, cat));
+    catHdr.appendChild(h('span', { style: { color: 'var(--text-ghost)', fontWeight: 600, fontSize: '12px' } }, `(${catSkus.length})`));
+    listWrap.appendChild(catHdr);
+    if (!isCollapsed) {
+      const catBody = h('div', { className: 'sku-category-body' });
+      catSkus.forEach(s => {
+        const inCart = state.cart.find(c => c.skuId === s.id);
+        const perStack = Math.floor(dims.height / s.height);
+        const rowStyle = { borderLeft: inCart ? `3px solid ${s.color}` : '3px solid transparent' };
+        if (inCart) rowStyle.background = s.color + '12';
+        const row = h('div', { className: 'sku-row', style: rowStyle });
+        row.appendChild(h('div', { style: { width: '12px', height: '12px', background: s.color, borderRadius: '50%', flexShrink: '0' } }));
+        row.appendChild(h('div', { style: { fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--text-faint)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.sku));
+        row.appendChild(h('div', { style: { fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.name));
+        row.appendChild(h('div', { className: 'sku-dim', style: { color: 'var(--text-ghost)', fontSize: '13px', whiteSpace: 'nowrap' } }, `${s.length}×${s.width}×${s.height}"`));
+        row.appendChild(h('div', { className: 'sku-stack', style: { color: 'var(--text-ghost)', fontSize: '13px', whiteSpace: 'nowrap' } }, `${perStack}/stack`));
+        const actions = h('div', { className: 'sku-actions' });
+        if (inCart) {
+          actions.appendChild(h('button', { className: 'btn btn-white', style: { padding: '4px 9px', fontSize: '15px', fontWeight: 800 }, onClick: () => { state.cart = state.cart.map(x => x.skuId === s.id ? { ...x, qty: Math.max(0, x.qty - 1) } : x).filter(x => x.qty > 0); render(); } }, '−'));
+          const qtyInp = h('input', { type: 'number', min: '1', value: String(inCart.qty), className: 'qty-input-sm', style: { borderColor: s.color }, onChange: e => {
+            const v = e.target.value;
+            if (v === '' || v === '0') { state.cart = state.cart.filter(x => x.skuId !== s.id); }
+            else { const n = parseInt(v, 10); if (!isNaN(n) && n >= 1) state.cart = state.cart.map(x => x.skuId === s.id ? { ...x, qty: n } : x); }
+            render();
+          }});
+          actions.appendChild(qtyInp);
+          actions.appendChild(h('button', { className: 'btn btn-white', style: { padding: '4px 9px', fontSize: '15px', fontWeight: 800 }, onClick: () => { const f = state.cart.find(x => x.skuId === s.id); if (f) f.qty++; else state.cart.push({ skuId: s.id, qty: 1 }); render(); } }, '+'));
+        } else {
+          actions.appendChild(h('button', { className: 'btn btn-white', style: { padding: '4px 12px', fontSize: '13px' }, onClick: () => { state.cart.push({ skuId: s.id, qty: 1 }); render(); } }, '+'));
+        }
+        row.appendChild(actions);
+        catBody.appendChild(row);
+      });
+      listWrap.appendChild(catBody);
     }
-    skuCard.appendChild(info);
-
-    const actions = h('div', { className: 'flex gap-8 items-center', style: { marginTop: '14px' } });
-    if (inCart) {
-      actions.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.cart = state.cart.map(x => x.skuId === s.id ? { ...x, qty: Math.max(0, x.qty - 1) } : x).filter(x => x.qty > 0); render(); } }, '−'));
-      const qtyInp = h('input', { type: 'number', min: '1', value: String(inCart.qty), className: 'qty-input', style: { borderColor: s.color, color: 'var(--text)' }, onChange: e => {
-        const v = e.target.value;
-        if (v === '' || v === '0') { state.cart = state.cart.filter(x => x.skuId !== s.id); }
-        else { const n = parseInt(v, 10); if (!isNaN(n) && n >= 1) state.cart = state.cart.map(x => x.skuId === s.id ? { ...x, qty: n } : x); }
-        render();
-      } });
-      actions.appendChild(qtyInp);
-      actions.appendChild(h('button', { className: 'btn btn-white', onClick: () => { const found = state.cart.find(x => x.skuId === s.id); if (found) found.qty++; else state.cart.push({ skuId: s.id, qty: 1 }); render(); } }, '+'));
-    } else {
-      actions.appendChild(h('button', { className: 'btn', style: { background: s.color, color: '#fff', borderColor: s.color, flex: 1 }, onClick: () => { const found = state.cart.find(x => x.skuId === s.id); if (found) found.qty++; else state.cart.push({ skuId: s.id, qty: 1 }); render(); } }, 'ADD PCS'));
-    }
-    skuCard.appendChild(actions);
-    grid.appendChild(skuCard);
   });
-  cont.appendChild(grid);
+  cont.appendChild(listWrap);
 
   // Cart summary
   if (state.cart.length > 0) {
@@ -1198,10 +1304,13 @@ function renderLoadTab() {
     state.cart.forEach(c => {
       const s = sorted.find(x => x.id === c.skuId);
       if (!s) return;
-      const row = h('div', { className: 'flex items-center gap-10', style: { padding: '10px 0', borderBottom: '1px solid var(--border-light)', fontSize: '15px' } });
-      row.appendChild(h('div', { style: { width: '8px', height: '8px', background: s.color, borderRadius: '50%' } }));
-      row.appendChild(h('span', { style: { flex: 1, fontWeight: 600 } }, s.name));
-      row.appendChild(h('span', { style: { color: 'var(--text-muted)' } }, `${c.qty} pcs`));
+      const row = h('div', { className: 'flex items-center gap-10', style: { padding: '9px 0', borderBottom: '1px solid var(--border-light)', fontSize: '14px' } });
+      row.appendChild(h('div', { style: { width: '8px', height: '8px', background: s.color, borderRadius: '50%', flexShrink: '0' } }));
+      const nameWrap = h('div', { style: { flex: 1, minWidth: 0 } });
+      if (s.category) nameWrap.appendChild(h('div', { style: { fontSize: '11px', color: 'var(--text-ghost)', fontWeight: 700, marginBottom: '1px' } }, s.category));
+      nameWrap.appendChild(h('div', { style: { fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.name));
+      row.appendChild(nameWrap);
+      row.appendChild(h('span', { style: { color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' } }, `${c.qty} pcs`));
       cartCard.appendChild(row);
     });
 
@@ -1237,7 +1346,7 @@ function renderSkusTab() {
   right.appendChild(h('button', { className: `btn ${state.pasteMode ? 'btn-dark' : 'btn-white'}`, disabled: state.skuMutating, onClick: () => { state.pasteMode = !state.pasteMode; state.pasteErr = ''; state.pasteText = ''; render(); } }, state.pasteMode ? 'CANCEL' : 'PASTE IMPORT'));
   right.appendChild(h('button', { className: 'btn btn-red-light', disabled: state.skuMutating, onClick: () => { if (confirm('Reset to defaults?')) { resetSkus(); } } }, 'RESET'));
   right.appendChild(h('button', { className: 'btn btn-accent', disabled: state.skuMutating, onClick: () => {
-    if (state.showForm && !state.editId) { state.showForm = false; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false }; }
+    if (state.showForm && !state.editId) { state.showForm = false; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false, category: '' }; }
     else { state.showForm = true; state.editId = null; state.formErr = ''; }
     render();
   } }, state.showForm && !state.editId ? 'CANCEL' : '+ NEW SKU'));
@@ -1289,6 +1398,14 @@ function renderSkusTab() {
     notesWrap.appendChild(h('textarea', { className: 'inp', value: state.form.notes, style: { minHeight: '70px', resize: 'vertical' }, onInput: e => { state.form.notes = e.target.value; state.formErr = ''; } }));
     grid.appendChild(notesWrap);
 
+    const catWrap = h('div');
+    catWrap.appendChild(h('div', { className: 'form-label' }, 'CATEGORY'));
+    const catList = h('datalist', { id: 'sku-cat-list' });
+    ['Holey Board', 'Blocks', 'Sheets'].forEach(c => catList.appendChild(h('option', { value: c })));
+    catWrap.appendChild(catList);
+    catWrap.appendChild(h('input', { className: 'inp', list: 'sku-cat-list', value: state.form.category || '', placeholder: 'e.g. Holey Board', onInput: e => { state.form.category = e.target.value; state.formErr = ''; } }));
+    grid.appendChild(catWrap);
+
     const rotWrap = h('div', { className: 'full-width', style: { paddingTop: '4px' } });
     const rotLabel = h('label', { style: { display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' } });
     const rotCheckbox = h('input', { type: 'checkbox', onChange: e => { state.form.allowRotation = e.target.checked; } });
@@ -1309,44 +1426,75 @@ function renderSkusTab() {
       if (!f.name.trim()) { state.formErr = 'Name required.'; render(); return; }
       if (!f.sku.trim()) { state.formErr = 'SKU code required.'; render(); return; }
       if (!+f.length || !+f.width || !+f.height || !+f.weight) { state.formErr = 'All dimensions and weight must be positive.'; render(); return; }
-      const payload = { name: f.name.trim(), sku: f.sku.trim(), length: +f.length, width: +f.width, height: +f.height, weight: +f.weight, notes: f.notes || '', allowRotation: f.allowRotation === true };
+      const payload = { name: f.name.trim(), sku: f.sku.trim(), length: +f.length, width: +f.width, height: +f.height, weight: +f.weight, notes: f.notes || '', allowRotation: f.allowRotation === true, category: (f.category || '').trim() };
       const savedEditId = state.editId;
-      state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false };
+      state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false, category: '' };
       if (savedEditId) updateSku(savedEditId, payload);
       else addSku({ ...payload, color: COLORS[state.skus.length % COLORS.length] });
     } }, state.editId ? 'SAVE CHANGES' : 'ADD SKU'));
-    formBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false }; render(); } }, 'CANCEL'));
+    formBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false, category: '' }; render(); } }, 'CANCEL'));
     formCard.appendChild(formBtns);
     cont.appendChild(formCard);
   }
 
-  // SKU list
-  const list = h('div', { className: 'sku-list' });
-  filtered.forEach(s => {
-    const row = h('div', { className: 'card' });
-    const inner = h('div', { className: 'flex items-center gap-14 flex-wrap' });
-    inner.appendChild(h('div', { className: 'color-dot', style: { background: s.color } }));
-    const info = h('div', { style: { flex: 1, minWidth: '200px' } });
-    info.appendChild(h('div', { style: { fontWeight: 800, fontSize: '16px' } }, s.name));
-    const dimRow = h('div', { style: { fontSize: '13px', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: '8px' } });
-    dimRow.appendChild(document.createTextNode(`${s.sku} · ${s.length}"×${s.width}"×${s.height}"`));
-    if (s.allowRotation) dimRow.appendChild(h('span', { style: { fontSize: '10px', fontWeight: 700, color: 'var(--text-ghost)', fontFamily: 'var(--font)', letterSpacing: '0.5px' } }, '↻'));
-    info.appendChild(dimRow);
-    if (s.notes) info.appendChild(h('div', { style: { fontSize: '13px', color: 'var(--text-faint)', marginTop: '4px' } }, s.notes));
-    inner.appendChild(info);
-    inner.appendChild(h('button', { className: 'btn btn-white', onClick: () => {
-      state.form = { name: s.name, sku: s.sku, length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true };
-      state.editId = s.id; state.showForm = true; state.tab = 'skus'; state.formErr = ''; render();
-    } }, 'EDIT'));
-    inner.appendChild(h('button', { className: 'btn btn-teal-light', onClick: () => {
-      state.form = { name: s.name + ' Copy', sku: s.sku + '-2', length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true };
-      state.editId = null; state.showForm = true; state.tab = 'skus'; state.formErr = ''; render();
-    } }, 'COPY'));
-    inner.appendChild(h('button', { className: 'btn btn-red-light', disabled: state.skuMutating, onClick: () => { deleteSku(s.id); } }, 'DEL'));
-    row.appendChild(inner);
-    list.appendChild(row);
+  // SKU categorized list (manage view)
+  const isSkuSearching = !!state.search.trim();
+  const { groups: skuMgmtGroups, catKeys: skuMgmtCatKeys } = groupByCategory(filtered);
+  const allSkuCatKeys = groupByCategory(sorted).catKeys;
+  const skuAllCollapsed = allSkuCatKeys.length > 0 && allSkuCatKeys.every(c => !!state.collapsedCategories[c]);
+
+  const skuListHeader = h('div', { className: 'flex justify-between items-center', style: { marginBottom: '8px' } });
+  skuListHeader.appendChild(h('div'));
+  skuListHeader.appendChild(h('button', { className: 'btn btn-white', style: { fontSize: '12px', padding: '5px 12px' }, onClick: () => {
+    if (skuAllCollapsed) { state.collapsedCategories = {}; }
+    else { const nc = {}; allSkuCatKeys.forEach(c => nc[c] = true); state.collapsedCategories = nc; }
+    render();
+  }}, skuAllCollapsed ? 'EXPAND ALL' : 'COLLAPSE ALL'));
+  cont.appendChild(skuListHeader);
+
+  const skuListWrap = h('div', { style: { marginBottom: '14px' } });
+  skuMgmtCatKeys.forEach(cat => {
+    const catSkus = skuMgmtGroups[cat];
+    if (!catSkus || !catSkus.length) return;
+    const isCollapsed = !isSkuSearching && !!state.collapsedCategories[cat];
+    const catHdr = h('div', { className: 'sku-category-header', onClick: () => { if (!isSkuSearching) { state.collapsedCategories[cat] = !state.collapsedCategories[cat]; render(); } }});
+    catHdr.appendChild(h('span', {}, isCollapsed ? '▶' : '▼'));
+    catHdr.appendChild(h('span', {}, cat));
+    catHdr.appendChild(h('span', { style: { color: 'var(--text-ghost)', fontWeight: 600, fontSize: '12px' } }, `(${catSkus.length})`));
+    skuListWrap.appendChild(catHdr);
+    if (!isCollapsed) {
+      const catBody = h('div', { className: 'sku-category-body' });
+      catSkus.forEach(s => {
+        const row = h('div', { className: 'sku-row-manage' });
+        row.appendChild(h('div', { style: { width: '12px', height: '12px', background: s.color, borderRadius: '50%', flexShrink: '0' } }));
+        row.appendChild(h('div', { style: { fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--text-faint)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.sku));
+        const nameCell = h('div', { style: { overflow: 'hidden' } });
+        nameCell.appendChild(h('div', { style: { fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.name));
+        if (s.notes) nameCell.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-ghost)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.notes));
+        row.appendChild(nameCell);
+        row.appendChild(h('div', { className: 'sku-dim', style: { color: 'var(--text-ghost)', fontSize: '13px', whiteSpace: 'nowrap' } }, `${s.length}×${s.width}×${s.height}"`));
+        if (s.category) {
+          row.appendChild(h('span', { className: 'sku-cat-tag tag', style: { background: 'var(--bg)', color: 'var(--text-faint)', border: '1px solid var(--border-light)', fontSize: '11px' } }, s.category));
+        } else {
+          row.appendChild(h('div'));
+        }
+        const btns = h('div', { className: 'sku-row-btns' });
+        btns.appendChild(h('button', { className: 'btn btn-white', style: { padding: '5px 10px', fontSize: '13px' }, onClick: () => {
+          state.form = { name: s.name, sku: s.sku, length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true, category: s.category || '' };
+          state.editId = s.id; state.showForm = true; state.tab = 'skus'; state.formErr = ''; render();
+        } }, 'EDIT'));
+        btns.appendChild(h('button', { className: 'btn btn-teal-light', style: { padding: '5px 10px', fontSize: '13px' }, onClick: () => {
+          state.form = { name: s.name + ' Copy', sku: s.sku + '-2', length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true, category: s.category || '' };
+          state.editId = null; state.showForm = true; state.tab = 'skus'; state.formErr = ''; render();
+        } }, 'COPY'));
+        btns.appendChild(h('button', { className: 'btn btn-red-light', style: { padding: '5px 10px', fontSize: '13px' }, disabled: state.skuMutating, onClick: () => { deleteSku(s.id); } }, 'DEL'));
+        row.appendChild(btns);
+        catBody.appendChild(row);
+      });
+      skuListWrap.appendChild(catBody);
+    }
   });
-  cont.appendChild(list);
+  cont.appendChild(skuListWrap);
 }
 
 function renderResultsTab() {

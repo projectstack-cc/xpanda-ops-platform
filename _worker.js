@@ -3219,6 +3219,7 @@ function mapSkuRow(row) {
     notes: row.notes,
     color: row.color,
     allowRotation: row.allow_rotation === 1,
+    category: row.category || '',
   };
 }
 
@@ -3253,7 +3254,7 @@ async function handleApiLoadBuilderSkus(request, env) {
   if (request.method === "POST" && !skuId) {
     let body;
     try { body = await request.json(); } catch (_) { return json({ ok: false, error: "Invalid JSON" }, 400); }
-    const { name, sku, length, width, height, weight = 1, notes = "", color = "#D97706", allowRotation = false } = body;
+    const { name, sku, length, width, height, weight = 1, notes = "", color = "#D97706", allowRotation = false, category = "" } = body;
     if (!name) return json({ ok: false, error: "Name required." }, 400);
     if (!sku) return json({ ok: false, error: "SKU code required." }, 400);
     if (!length || !width || !height) return json({ ok: false, error: "Dimensions required." }, 400);
@@ -3261,8 +3262,8 @@ async function handleApiLoadBuilderSkus(request, env) {
     const countRow = await db.prepare("SELECT COUNT(*) as cnt FROM load_builder_skus").first();
     const sortOrder = countRow?.cnt || 0;
     await db.prepare(
-      "INSERT INTO load_builder_skus (id, name, sku, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(newId, name, sku, +length, +width, +height, +weight || 1, notes || "", color || "#D97706", allowRotation ? 1 : 0, sortOrder).run();
+      "INSERT INTO load_builder_skus (id, name, sku, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(newId, name, sku, +length, +width, +height, +weight || 1, notes || "", color || "#D97706", allowRotation ? 1 : 0, sortOrder, category || "").run();
     const created = await db.prepare("SELECT * FROM load_builder_skus WHERE id = ?").bind(newId).first();
     return json(mapSkuRow(created), 201);
   }
@@ -3270,7 +3271,7 @@ async function handleApiLoadBuilderSkus(request, env) {
   if (request.method === "PUT" && skuId) {
     let body;
     try { body = await request.json(); } catch (_) { return json({ ok: false, error: "Invalid JSON" }, 400); }
-    const { name, sku, length, width, height, weight, notes, color, allowRotation } = body;
+    const { name, sku, length, width, height, weight, notes, color, allowRotation, category } = body;
     const updates = [];
     const binds = [];
     if (name !== undefined) { updates.push("name = ?"); binds.push(name); }
@@ -3282,6 +3283,7 @@ async function handleApiLoadBuilderSkus(request, env) {
     if (notes !== undefined) { updates.push("notes = ?"); binds.push(notes); }
     if (color !== undefined) { updates.push("color = ?"); binds.push(color); }
     if (allowRotation !== undefined) { updates.push("allow_rotation = ?"); binds.push(allowRotation ? 1 : 0); }
+    if (category !== undefined) { updates.push("category = ?"); binds.push(category || ""); }
     updates.push("updated_at = datetime('now')");
     if (updates.length === 1) return json({ ok: false, error: "Nothing to update." }, 400);
     await db.prepare(`UPDATE load_builder_skus SET ${updates.join(", ")} WHERE id = ?`).bind(...binds, skuId).run();
