@@ -599,6 +599,19 @@ function exactFillHeight(targetH, candidates, maxWeightBudget, maxSkus = 2) {
   return best.totalH > 0 ? best : null;
 }
 
+function mergeLayers(layers) {
+  const merged = [];
+  for (const layer of layers) {
+    const prev = merged.length ? merged[merged.length - 1] : null;
+    if (prev && prev.skuId === layer.skuId) {
+      prev.count += layer.count;
+    } else {
+      merged.push({ ...layer });
+    }
+  }
+  return merged;
+}
+
 function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = null, allowMixing = true) {
   const baseSku = baseDemand.sku;
   const maxBase = Math.min(baseDemand.remaining, Math.floor(dims.height / baseSku.height));
@@ -668,12 +681,13 @@ function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = n
   }
   if (!best) return null;
   pool.forEach((d, i) => { d.remaining = best.remainingSnapshot[i]; });
+  const finalLayers = mergeLayers(best.layers);
   return {
-    colWidth: baseSku.width, skuId: best.layers[0].skuId, skuName: best.layers[0].skuName,
-    skuCode: best.layers[0].skuCode, color: best.layers[0].color, unitHeight: best.layers[0].unitHeight,
+    colWidth: baseSku.width, skuId: finalLayers[0].skuId, skuName: finalLayers[0].skuName,
+    skuCode: finalLayers[0].skuCode, color: finalLayers[0].color, unitHeight: finalLayers[0].unitHeight,
     totalHeight: best.totalHeight, totalWeight: best.totalWeight,
-    stackCount: best.layers.reduce((s, l) => s + l.count, 0), layers: best.layers,
-    mixed: best.layers.length > 1,
+    stackCount: finalLayers.reduce((s, l) => s + l.count, 0), layers: finalLayers,
+    mixed: finalLayers.length > 1,
   };
 }
 
@@ -740,7 +754,7 @@ function getFullTrailerThreshold(sku, dims) {
   return cols * rows * Math.max(1, Math.floor(dims.height / sku.height));
 }
 
-function calcLoading(cart, skus, dims, variant = 0) {
+function calcLoading(cart, skus, dims, variant = 0, options = {}) {
   if (!cart.length) return { trailers: [], warnings: [], totalWeight: 0, utilization: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 };
   let demand = buildDemand(cart, skus, dims);
   const warnings = [], floorArea = dims.length * dims.width, trailers = [];
@@ -839,6 +853,7 @@ function calcLoading(cart, skus, dims, variant = 0) {
           }
 
           if (!layers.length) break;
+          layers = mergeLayers(layers);
 
           const totalHeight = layers.reduce((s, l) => s + l.unitHeight * l.count, 0);
           const totalWeight = layers.reduce((s, l) => {
@@ -881,14 +896,37 @@ function calcLoading(cart, skus, dims, variant = 0) {
     if (forcedEntry) stats.forcedType = forcedEntry.type;
     trailers.push(stats);
   }
-  // Auto-downsize last trailer to 26ft Box Truck if it fits, a larger trailer was selected, and toggle is on
-  if (state.autoDownsize && !state.forcedMode) {
+  // Auto-downsize last trailer to 26ft Box Truck — repack using actual box truck dimensions
+  if (!options.skipDownsize && state.autoDownsize && !state.forcedMode) {
     const boxTruckDims = TRAILER_TYPES["26ft Box Truck"];
     if (trailers.length > 1 && dims.length > boxTruckDims.length) {
       const last = trailers[trailers.length - 1];
-      if (last.usedLength <= boxTruckDims.length && last.usedWeight <= boxTruckDims.maxWeight) {
-        last.downsizedType = "26ft Box Truck";
-        last.downsizedDims = boxTruckDims;
+      const lastTrailerPieces = [];
+      last.rows.forEach(row => {
+        row.columns.forEach(col => {
+          col.layers.forEach(layer => {
+            lastTrailerPieces.push({ skuId: layer.skuId, count: layer.count });
+          });
+        });
+      });
+      const tempCart = [];
+      lastTrailerPieces.forEach(p => {
+        const existing = tempCart.find(c => c.skuId === p.skuId);
+        if (existing) existing.qty += p.count;
+        else tempCart.push({ skuId: p.skuId, qty: p.count });
+      });
+      const allSkusFit = lastTrailerPieces.every(p => {
+        const sku = skus.find(s => s.id === p.skuId);
+        return sku && sku.width <= boxTruckDims.width && sku.length <= boxTruckDims.length && sku.height <= boxTruckDims.height;
+      });
+      if (allSkusFit && tempCart.length) {
+        const boxResult = calcLoading(tempCart, skus, boxTruckDims, variant, { skipDownsize: true });
+        if (boxResult && boxResult.trailers.length === 1) {
+          const repacked = boxResult.trailers[0];
+          trailers[trailers.length - 1] = repacked;
+          repacked.downsizedType = "26ft Box Truck";
+          repacked.downsizedDims = boxTruckDims;
+        }
       }
     }
   }
