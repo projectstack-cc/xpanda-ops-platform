@@ -601,23 +601,46 @@ function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = n
   const baseSku = baseDemand.sku;
   const maxBase = Math.min(baseDemand.remaining, Math.floor(dims.height / baseSku.height));
   if (maxBase <= 0) return null;
+
+  const pureHeight = maxBase * baseSku.height;
+  const gap = dims.height - pureHeight;
+  // Only mix when the pure stack leaves a gap >= one block height (i.e., supply ran out before filling)
+  const shouldMix = allowMixing && (gap >= baseSku.height);
+
+  if (!shouldMix) {
+    // Pure stack: use maxBase directly, no scoring iteration needed
+    const baseHeight = maxBase * baseSku.height;
+    const baseWeight = maxBase * baseSku.weight;
+    if (usedWeightSoFar + baseWeight > dims.maxWeight) return null;
+    baseDemand.remaining -= maxBase;
+    const layers = [{ skuId: baseSku.id, skuName: baseSku.name, skuCode: baseSku.sku, color: baseSku.color, unitHeight: baseSku.height, count: maxBase }];
+    return {
+      colWidth: baseSku.width, skuId: layers[0].skuId, skuName: layers[0].skuName,
+      skuCode: layers[0].skuCode, color: layers[0].color, unitHeight: layers[0].unitHeight,
+      totalHeight: baseHeight, totalWeight: baseWeight,
+      stackCount: maxBase, layers,
+      mixed: false,
+    };
+  }
+
+  // Mixing pass: try different base counts to find best mixed fill
+  const minTopOffHeight = baseSku.height * 0.5;
   let best = null;
   for (let baseCount = maxBase; baseCount >= 1; baseCount--) {
-    const tempPool = pool; // alias (not a clone); isolation comes from cloneDemand(tempPool) in the snapshot below
+    const savedRemaining = pool.map(d => d.remaining);
     const baseHeight = baseCount * baseSku.height;
     const baseWeight = baseCount * baseSku.weight;
-    if (usedWeightSoFar + baseWeight > dims.maxWeight) continue;
+    if (usedWeightSoFar + baseWeight > dims.maxWeight) {
+      pool.forEach((d, i) => { d.remaining = savedRemaining[i]; });
+      continue;
+    }
     baseDemand.remaining -= baseCount;
     const layers = [{ skuId: baseSku.id, skuName: baseSku.name, skuCode: baseSku.sku, color: baseSku.color, unitHeight: baseSku.height, count: baseCount }];
     let totalHeight = baseHeight, totalWeight = baseWeight;
     const remainH = dims.height - totalHeight;
     const budget = dims.maxWeight - usedWeightSoFar - totalWeight;
-    // Rule 1: only top-off when gap is meaningful (≥ one block height) and supply ran out
-    // Rule 2: only use sizes within 50% of current height — prevents tiny blocks from scattering
-    const maxPhysicalStack = Math.floor(dims.height / baseSku.height);
-    const minTopOffHeight = baseSku.height * 0.5;
-    if (allowMixing && remainH >= baseSku.height && baseCount < maxPhysicalStack) {
-      const sizedPool = tempPool.filter(d => d.sku.height >= minTopOffHeight);
+    if (remainH >= baseSku.height) {
+      const sizedPool = pool.filter(d => d.sku.height >= minTopOffHeight);
       let fillPool = sizedPool;
       if (preferredSkuId) { const pref = sizedPool.filter(d => d.skuId === preferredSkuId && d.remaining > 0); if (pref.length) fillPool = pref; }
       let fill = exactFillHeight(remainH, fillPool, budget);
@@ -636,13 +659,13 @@ function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = n
     const preferredBonus = preferredSkuId && layers.some(l => l.skuId === preferredSkuId) ? 100 : 0;
     const score = totalHeight * 1000 - waste * 200 - mixedPenalty + preferredBonus;
     if (!best || score > best.score) {
-      best = { score, totalHeight, totalWeight, layers: layers.map(l => ({ ...l })), remainingSnapshot: cloneDemand(tempPool) };
+      best = { score, totalHeight, totalWeight, layers: layers.map(l => ({ ...l })), remainingSnapshot: pool.map(d => d.remaining) };
     }
-    pool.forEach((d, i) => { d.remaining = tempPool[i].remaining; });
+    pool.forEach((d, i) => { d.remaining = savedRemaining[i]; });
     baseDemand.remaining += baseCount;
   }
   if (!best) return null;
-  pool.forEach((d, i) => { d.remaining = best.remainingSnapshot[i].remaining; });
+  pool.forEach((d, i) => { d.remaining = best.remainingSnapshot[i]; });
   return {
     colWidth: baseSku.width, skuId: best.layers[0].skuId, skuName: best.layers[0].skuName,
     skuCode: best.layers[0].skuCode, color: best.layers[0].color, unitHeight: best.layers[0].unitHeight,
@@ -741,6 +764,12 @@ function calcLoading(cart, skus, dims, variant = 0) {
   let trailerIdx = 0;
 
   while (demand.some(d => d.remaining > 0)) {
+    if (trailers.length >= 20) {
+      demand.filter(d => d.remaining > 0).forEach(d => {
+        warnings.push(`${d.remaining} pcs of ${d.sku.name} could not be placed (trailer limit reached).`);
+      });
+      break;
+    }
     const forcedEntry = trailerIdx < trailerQueue.length ? trailerQueue[trailerIdx] : null;
     const currentDims = forcedEntry ? forcedEntry.dims : dims;
     trailerIdx++;
@@ -836,7 +865,16 @@ function calcLoading(cart, skus, dims, variant = 0) {
       }
     }
 
-    if (!rows.length) { const stuck = demand.find(d => d.remaining > 0); if (stuck) warnings.push(`Could not place remaining ${stuck.sku.name}.`); break; }
+    if (!rows.length) {
+      const canFit = demand.some(d => d.remaining > 0 && d.sku.length <= currentDims.length && d.sku.width <= currentDims.width && d.sku.height <= currentDims.height);
+      if (!canFit) {
+        demand.filter(d => d.remaining > 0).forEach(d => {
+          warnings.push(`Could not place remaining ${d.remaining} pcs of ${d.sku.name}.`);
+        });
+        break;
+      }
+      warnings.push(`Some pieces could not be optimally placed. Adding overflow trailer.`);
+    }
     const stats = buildTrailerStats(rows, currentDims);
     if (forcedEntry) stats.forcedType = forcedEntry.type;
     trailers.push(stats);
