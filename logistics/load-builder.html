@@ -566,7 +566,7 @@ function buildDemand(cart, skus, dims) {
   }).filter(Boolean);
 }
 
-function exactFillHeight(targetH, candidates, maxWeightBudget) {
+function exactFillHeight(targetH, candidates, maxWeightBudget, maxSkus = 2) {
   const opts = candidates.filter(d => d.remaining > 0 && d.sku.height <= targetH)
     .map(d => ({ demand: d, maxCount: Math.min(d.remaining, Math.floor(targetH / d.sku.height)) }))
     .filter(x => x.maxCount > 0);
@@ -574,7 +574,7 @@ function exactFillHeight(targetH, candidates, maxWeightBudget) {
   let best = { totalH: 0, totalWeight: 0, picks: [] };
   let iterations = 0;
   const LIMIT = 10000;
-  function dfs(idx, remainH, usedWeight, picks) {
+  function dfs(idx, remainH, usedWeight, picks, skuCount) {
     iterations++;
     if (iterations > LIMIT) return;
     const currentH = targetH - remainH;
@@ -585,15 +585,17 @@ function exactFillHeight(targetH, candidates, maxWeightBudget) {
     const opt = opts[idx];
     const maxTake = Math.min(opt.maxCount, Math.floor(remainH / opt.demand.sku.height));
     for (let take = maxTake; take >= 0; take--) {
+      const newSkuCount = take > 0 ? skuCount + 1 : skuCount;
+      if (newSkuCount > maxSkus) continue;
       const addWeight = take * opt.demand.sku.weight;
       if (usedWeight + addWeight > maxWeightBudget) continue;
       if (take > 0) picks.push({ demand: opt.demand, count: take });
-      dfs(idx + 1, remainH - take * opt.demand.sku.height, usedWeight + addWeight, picks);
+      dfs(idx + 1, remainH - take * opt.demand.sku.height, usedWeight + addWeight, picks, newSkuCount);
       if (take > 0) picks.pop();
       if (best.totalH === targetH) return;
     }
   }
-  dfs(0, targetH, 0, []);
+  dfs(0, targetH, 0, [], 0);
   return best.totalH > 0 ? best : null;
 }
 
@@ -643,8 +645,8 @@ function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = n
       const sizedPool = pool.filter(d => d.sku.height >= minTopOffHeight);
       let fillPool = sizedPool;
       if (preferredSkuId) { const pref = sizedPool.filter(d => d.skuId === preferredSkuId && d.remaining > 0); if (pref.length) fillPool = pref; }
-      let fill = exactFillHeight(remainH, fillPool, budget);
-      if ((!fill || !fill.picks.length) && preferredSkuId) fill = exactFillHeight(remainH, sizedPool, budget);
+      let fill = exactFillHeight(remainH, fillPool, budget, 1);
+      if ((!fill || !fill.picks.length) && preferredSkuId) fill = exactFillHeight(remainH, sizedPool, budget, 1);
       if (fill && fill.picks.length) {
         fill.picks.forEach(pick => {
           pick.demand.remaining -= pick.count;
@@ -828,7 +830,7 @@ function calcLoading(cart, skus, dims, variant = 0) {
             }).filter(l => l.count > 0);
           } else {
             // Too tall for one column — use exactFillHeight to pack optimally
-            const fill = exactFillHeight(currentDims.height, candidates, weightBudget);
+            const fill = exactFillHeight(currentDims.height, candidates, weightBudget, 2);
             if (!fill || !fill.picks.length) break;
             layers = fill.picks.map(pick => {
               pick.demand.remaining -= pick.count;
