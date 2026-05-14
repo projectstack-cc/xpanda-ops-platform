@@ -1419,6 +1419,7 @@ function renderLoadTab() {
 
         const chevron = h('button', {
           className: 'btn-chevron',
+          style: { width: '20px', flexShrink: '0' },
           onClick: e => {
             e.stopPropagation();
             state.collapsedParentGroups[pgKey] = (state.collapsedParentGroups[pgKey] === false) ? true : false;
@@ -1426,6 +1427,12 @@ function renderLoadTab() {
           }
         }, isPgCollapsed ? '▶' : '▼');
         const parentRow = buildSkuRow(parentSku);
+        parentRow.style.flexWrap = 'nowrap';
+        parentRow.style.alignItems = 'center';
+        const actionsEl = parentRow.querySelector('.sku-actions');
+        if (actionsEl) actionsEl.style.flexShrink = '0';
+        const qtyInputEl = parentRow.querySelector('.qty-input-sm');
+        if (qtyInputEl) qtyInputEl.style.width = '54px';
         parentRow.insertBefore(chevron, parentRow.firstChild);
         catBody.appendChild(parentRow);
 
