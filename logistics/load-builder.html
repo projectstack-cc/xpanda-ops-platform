@@ -282,6 +282,21 @@
     background: var(--surface);
     margin-bottom: 2px;
   }
+  .load-builder-app .sku-parent-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid var(--border-light);
+  }
+  .load-builder-app .sku-parent-header:hover {
+    background: rgba(0,0,0,0.02);
+  }
   .sku-row {
     display: grid;
     grid-template-columns: 16px 78px 1fr 110px 72px 136px;
@@ -468,6 +483,7 @@ let state = {
   forcedMode: false,
   trailerInvNumbers: {},
   collapsedCategories: {},
+  collapsedParentGroups: {},
   bolModal: { open: false, currentPage: 0, trailerCount: 0, trailerData: [], bolError: '', generating: false, generateProgress: [], bolSuccess: null, searchQuery: '', searchResults: [], searchLoading: false, searchConfirm: '' },
 };
 
@@ -1338,10 +1354,11 @@ function renderLoadTab() {
     listWrap.appendChild(catHdr);
     if (!isCollapsed) {
       const catBody = h('div', { className: 'sku-category-body' });
-      catSkus.forEach(s => {
+
+      const buildSkuRow = (s, extraStyle) => {
         const inCart = state.cart.find(c => c.skuId === s.id);
         const perStack = Math.floor(dims.height / s.height);
-        const rowStyle = { borderLeft: inCart ? `3px solid ${s.color}` : '3px solid transparent' };
+        const rowStyle = { ...(extraStyle || {}), borderLeft: inCart ? `3px solid ${s.color}` : '3px solid transparent' };
         if (inCart) rowStyle.background = s.color + '12';
         const row = h('div', { className: 'sku-row', style: rowStyle });
         row.appendChild(h('div', { style: { width: '12px', height: '12px', background: s.color, borderRadius: '50%', flexShrink: '0' } }));
@@ -1364,8 +1381,33 @@ function renderLoadTab() {
           actions.appendChild(h('button', { className: 'btn btn-white', style: { padding: '4px 12px', fontSize: '13px' }, onClick: () => { state.cart.push({ skuId: s.id, qty: 1 }); render(); } }, '+'));
         }
         row.appendChild(actions);
-        catBody.appendChild(row);
+        return row;
+      };
+
+      const ungrouped = catSkus.filter(s => !(s.parent_group || ''));
+      const parentMap = new Map();
+      catSkus.filter(s => s.parent_group || '').forEach(s => {
+        if (!parentMap.has(s.parent_group)) parentMap.set(s.parent_group, []);
+        parentMap.get(s.parent_group).push(s);
       });
+
+      ungrouped.forEach(s => catBody.appendChild(buildSkuRow(s)));
+
+      parentMap.forEach((groupSkus, pgName) => {
+        const pgKey = cat + '::' + pgName;
+        const isPgCollapsed = !isSearching && !!state.collapsedParentGroups[pgKey];
+        const pgHdr = h('div', { className: 'sku-parent-header', onClick: () => {
+          if (!isSearching) { state.collapsedParentGroups[pgKey] = !state.collapsedParentGroups[pgKey]; render(); }
+        }});
+        pgHdr.appendChild(h('span', {}, isPgCollapsed ? '▶' : '▼'));
+        pgHdr.appendChild(h('span', {}, pgName));
+        pgHdr.appendChild(h('span', { style: { color: 'var(--text-ghost)', fontWeight: 600, fontSize: '12px' } }, `(${groupSkus.length})`));
+        catBody.appendChild(pgHdr);
+        if (!isPgCollapsed) {
+          groupSkus.forEach(s => catBody.appendChild(buildSkuRow(s, { paddingLeft: '16px' })));
+        }
+      });
+
       listWrap.appendChild(catBody);
     }
   });
