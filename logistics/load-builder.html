@@ -297,6 +297,19 @@
   .load-builder-app .sku-parent-header:hover {
     background: rgba(0,0,0,0.02);
   }
+  .load-builder-app .btn-chevron {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-ghost);
+    padding: 0 4px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .load-builder-app .btn-chevron:hover {
+    color: var(--text-muted);
+  }
   .sku-row {
     display: grid;
     grid-template-columns: 16px 78px 1fr 110px 72px 136px;
@@ -1394,17 +1407,30 @@ function renderLoadTab() {
       ungrouped.forEach(s => catBody.appendChild(buildSkuRow(s)));
 
       parentMap.forEach((groupSkus, pgName) => {
+        if (isSearching) {
+          groupSkus.forEach(s => catBody.appendChild(buildSkuRow(s)));
+          return;
+        }
         const pgKey = cat + '::' + pgName;
-        const isPgCollapsed = !isSearching && !!state.collapsedParentGroups[pgKey];
-        const pgHdr = h('div', { className: 'sku-parent-header', onClick: () => {
-          if (!isSearching) { state.collapsedParentGroups[pgKey] = !state.collapsedParentGroups[pgKey]; render(); }
-        }});
-        pgHdr.appendChild(h('span', {}, isPgCollapsed ? '▶' : '▼'));
-        pgHdr.appendChild(h('span', {}, pgName));
-        pgHdr.appendChild(h('span', { style: { color: 'var(--text-ghost)', fontWeight: 600, fontSize: '12px' } }, `(${groupSkus.length})`));
-        catBody.appendChild(pgHdr);
+        const isPgCollapsed = state.collapsedParentGroups[pgKey] !== false;
+        const sortedGroup = [...groupSkus].sort((a, b) => a.height - b.height);
+        const parentSku = sortedGroup[0];
+        const children = sortedGroup.slice(1);
+
+        const chevron = h('button', {
+          className: 'btn-chevron',
+          onClick: e => {
+            e.stopPropagation();
+            state.collapsedParentGroups[pgKey] = (state.collapsedParentGroups[pgKey] === false) ? true : false;
+            render();
+          }
+        }, isPgCollapsed ? '▶' : '▼');
+        const parentRow = buildSkuRow(parentSku);
+        parentRow.insertBefore(chevron, parentRow.firstChild);
+        catBody.appendChild(parentRow);
+
         if (!isPgCollapsed) {
-          groupSkus.forEach(s => catBody.appendChild(buildSkuRow(s, { paddingLeft: '16px' })));
+          children.forEach(s => catBody.appendChild(buildSkuRow(s, { paddingLeft: '24px' })));
         }
       });
 
