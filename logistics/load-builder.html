@@ -1427,10 +1427,11 @@ function renderLoadTab() {
           }
         }, isPgCollapsed ? '▶' : '▼');
         const parentRow = buildSkuRow(parentSku);
+        parentRow.style.display = 'flex';
         parentRow.style.flexWrap = 'nowrap';
         parentRow.style.alignItems = 'center';
         const actionsEl = parentRow.querySelector('.sku-actions');
-        if (actionsEl) actionsEl.style.flexShrink = '0';
+        if (actionsEl) { actionsEl.style.flexShrink = '0'; actionsEl.style.marginLeft = 'auto'; }
         const qtyInputEl = parentRow.querySelector('.qty-input-sm');
         if (qtyInputEl) qtyInputEl.style.width = '54px';
         parentRow.insertBefore(chevron, parentRow.firstChild);
