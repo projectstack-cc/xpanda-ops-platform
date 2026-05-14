@@ -46,6 +46,7 @@
 .jobs-slip-remove { font-size: 12px; color: #ef4444; cursor: pointer; background: none; border: none; padding: 0; text-decoration: underline; font-family: inherit; }
 .jobs-slip-view { font-size: 12px; color: #1e40af; cursor: pointer; background: none; border: 1px solid #93c5fd; border-radius: 5px; padding: 3px 8px; font-family: inherit; font-weight: 600; }
 .jobs-card-slip { font-size: 11px; cursor: pointer; opacity: 0.7; margin-left: 3px; vertical-align: middle; }
+.jobs-card-shipment { font-size: 11px; opacity: 0.7; margin-left: 3px; vertical-align: middle; }
 .jobs-card-slip:hover { opacity: 1; }
 @keyframes slip-fade { from { background: #dbeafe; } to { background: transparent; } }
 .slip-prefilled { animation: slip-fade 2s ease-out forwards; border-radius: 4px; }
@@ -542,10 +543,13 @@ function buildCard(job) {
   const slipIcon = job.packing_slip_filename
     ? ` <span class="jobs-card-slip" onclick="event.stopPropagation();window.open('/api/jobs/${encodeURIComponent(job.id)}/packing-slip','_blank')" title="View packing slip: ${esc(job.packing_slip_filename)}">📄</span>`
     : '';
+  const shipmentIcon = job.has_shipment
+    ? ` <span class="jobs-card-shipment" title="Outbound shipment record exists">🚚</span>`
+    : '';
 
   card.innerHTML = `
     <div class="jobs-card-top">
-      <div class="jobs-card-customer">${esc(job.customer)}${slipIcon}</div>
+      <div class="jobs-card-customer">${esc(job.customer)}${slipIcon}${shipmentIcon}</div>
       <div class="jobs-card-pill-group">
         ${job.priority === 'rush' ? '<span class="jobs-rush-badge">RUSH</span>' : ''}
         ${job.confirmed_to_ship   ? '<span class="jobs-confirmed-badge">✓</span>' : ''}

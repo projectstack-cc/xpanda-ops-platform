@@ -183,6 +183,11 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
         <div class="logistics-field-section-label">Outbound Details</div>
 
         <div class="logistics-field">
+          <label>Trailer #</label>
+          <input type="text" id="f-trailer-number" placeholder="Trailer number">
+        </div>
+
+        <div class="logistics-field">
           <label>Customer <span style="color:#dc2626;">*</span></label>
           <input type="text" id="f-customer" placeholder="Customer name">
         </div>
@@ -520,6 +525,7 @@ function renderOutbound() {
               <tr>
                 <th>Customer</th>
                 <th>Method / Carrier</th>
+                <th>Trailer #</th>
                 <th>Loads</th>
                 <th>BDFT</th>
                 <th>BOL #</th>
@@ -550,6 +556,7 @@ function buildOutboundRow(s) {
       ${jobLink ? `<br>${jobLink}` : ''}
     </td>
     <td>${esc(methodCarrier) || '—'}</td>
+    <td>${esc(s.trailer_number) || '—'}</td>
     <td>${s.load_count || 1}</td>
     <td>${bdft}</td>
     <td>${esc(s.bol_number) || '—'}</td>
@@ -660,11 +667,12 @@ function openEdit(id) {
   document.getElementById('f-notes').value        = s.notes || '';
 
   if (currentDirection === 'outbound') {
-    document.getElementById('f-customer').value   = s.customer || '';
-    document.getElementById('f-destination').value= s.destination || '';
-    document.getElementById('f-load-count').value = s.load_count || 1;
-    document.getElementById('f-total-bdft').value = s.total_bdft || '';
-    document.getElementById('f-job-id').value     = s.job_id || '';
+    document.getElementById('f-customer').value       = s.customer || '';
+    document.getElementById('f-destination').value    = s.destination || '';
+    document.getElementById('f-load-count').value     = s.load_count || 1;
+    document.getElementById('f-total-bdft').value     = s.total_bdft || '';
+    document.getElementById('f-job-id').value         = s.job_id || '';
+    document.getElementById('f-trailer-number').value = s.trailer_number || '';
   } else {
     document.getElementById('f-supplier').value   = s.customer || '';
     document.getElementById('f-origin').value     = s.origin || '';
@@ -686,7 +694,7 @@ function closeModal() {
 
 function clearForm() {
   ['f-ship-date','f-delivery-date','f-carrier','f-bol-number','f-notes',
-   'f-customer','f-destination','f-supplier','f-origin'].forEach(id => {
+   'f-customer','f-destination','f-supplier','f-origin','f-trailer-number'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -746,12 +754,13 @@ async function saveShipment() {
   if (dir === 'outbound') {
     const customer = document.getElementById('f-customer').value.trim();
     if (!customer) { showError('Customer is required for outbound shipments.'); return; }
-    payload.customer    = customer;
-    payload.destination = document.getElementById('f-destination').value.trim();
-    payload.load_count  = parseInt(document.getElementById('f-load-count').value || 1, 10);
-    payload.total_bdft  = parseFloat(document.getElementById('f-total-bdft').value) || 0;
-    payload.job_id      = document.getElementById('f-job-id').value || null;
-    payload.origin      = 'XPanda Foam';
+    payload.customer       = customer;
+    payload.destination    = document.getElementById('f-destination').value.trim();
+    payload.load_count     = parseInt(document.getElementById('f-load-count').value || 1, 10);
+    payload.total_bdft     = parseFloat(document.getElementById('f-total-bdft').value) || 0;
+    payload.job_id         = document.getElementById('f-job-id').value || null;
+    payload.origin         = 'XPanda Foam';
+    payload.trailer_number = document.getElementById('f-trailer-number').value.trim();
   } else {
     const supplier = document.getElementById('f-supplier').value.trim();
     if (!supplier) { showError('Supplier is required for inbound deliveries.'); return; }

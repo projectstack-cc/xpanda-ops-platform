@@ -834,7 +834,6 @@ async function prefillFromJob(jobId) {
           li.quantity    ? li.quantity + ' ×' : '',
           li.part_number || '',
           li.description || '',
-          li.dimensions  ? '(' + li.dimensions + ')' : '',
         ].filter(Boolean);
         return parts.join(' ');
       });

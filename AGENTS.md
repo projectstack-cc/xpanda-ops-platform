@@ -1,6 +1,6 @@
 # xPanda Operations Platform — Agent Guidance
 
-This file defines rules that any AI agent (Codex, ChatGPT, etc.) must follow when making changes to this repository.
+This file defines rules that any AI agent (Claude Code, Codex, etc.) must follow when making changes to this repository.
 
 Agents must follow these rules strictly.  
 Changes must be surgical and must not introduce architectural drift.
@@ -19,7 +19,7 @@ Backend:
 env.ASSETS.fetch(request)
 
 Data Sources:
-- **D1 Database** → QC tools (scrap log, inspections)
+- **D1 Database** → Jobs, Logistics, QC tools (scrap log, inspections, BOLs, inventory)
 - **Google Sheets gviz endpoint** → incident report analytics
 
 Frontend:
@@ -50,7 +50,9 @@ Examples:
 /api/completions  
 /api/scrap-log  
 /api/reports/scrap-summary  
-/api/reports/incidents-trend  
+/api/reports/incidents-trend
+/api/jobs
+/api/bol
 
 Rules:
 
@@ -85,52 +87,68 @@ All incident analytics must operate on the normalized incident array.
 
 ---
 
-# 4. Reports Module Design
+# 4. Module Overview
 
-Reports follow a consistent pattern.
+The platform has grown beyond read-only reporting and now includes operational workflow modules. Each module has its own subdirectory, shared header JS, and shared CSS file.
 
-Backend:
-- `/api/reports/...`
+| Module | Path | Purpose |
+|---|---|---|
+| Jobs / Job Board | `/jobs/` | Kanban workflow — job lifecycle from creation to shipping |
+| Logistics | `/logistics/` | BOL generator, load builder, shipment tracking |
+| Production | `/production/` | Bead inventory, block calculator, holey board calculator |
+| QC | `/qc/` | Scrap log, final inspection, density calculator, incident report |
+| Safety | `/safety/` | SDS browser, i18n safety content |
+| Reports | `/reports/` | Read-only analytics dashboards (incidents, scrap) |
 
-Frontend:
-- `/reports/...`
-
-Report pages follow this UI pattern:
-
-- Page header
-- Year selector
-- Load button
-- Fetch API data
-- Chart.js or simple table display
-
-Reports are **read-only visibility tools**.
-
-They are NOT workflow systems.
+Each module uses a shared header JS file (`*-header.js`) and shared CSS file (`*-shared.css`).  
+Agents must NOT modify shared CSS or shared header files unless the task explicitly requires it.
 
 ---
 
 # 5. Scope Guardrails
 
-Agents must NOT implement:
+The platform has expanded from read-only reporting into operational workflow tooling. The following modules are **established and active** — agents must treat them as stable, production code:
 
-- editing interfaces
-- workflow assignment
-- comments
-- attachments
-- notifications
-- audit trails
-- role-based permissions
-- authentication systems
+**Established modules (do not restructure):**
+- Job Board — Kanban with five statuses, line items, production sub-steps, packing slip upload
+- BOL Generator — PDF generation via pdf-lib, customer dropdown, edit/new/duplicate modes
+- Load Builder — trailer load planning, parts placement, auto-resize, repack logic
+- Logistics Dashboard — inbound/outbound shipment tracking
+- Inventory — three-layer model (bead bags → blocks → molding log)
+- Block Calculator — multi-part nesting, 2D diagrams, parts library, saved combos, XLSX export
+- Holey Board Calculator — bin-packing optimization
 
-The platform focuses on:
+**Intentionally not yet built (do not add unless explicitly requested):**
+- Authentication / user login
+- Role-based permissions
+- Notifications or push alerts
+- Audit trails
+- Comments or attachments on records
+- Multi-tenant or multi-location support
 
-Operational visibility  
-Analytics dashboards  
-Record lookup
+Agents must NOT speculatively add any of the above even if the feature seems useful.
 
 ---
 
-# 6. Change Philosophy
+# 6. Data Storage Conventions
+
+- **D1 (SQLite)** is the primary data store for all operational records.
+- Small file attachments (e.g. packing slip PDFs) are stored as **base64 in D1** — do NOT introduce Cloudflare R2 unless explicitly requested.
+- `localStorage` keys for client-side state are **versioned** (e.g. `foam_trailer_loader_v31`). Preserve existing keys exactly — do not rename or reset them.
+
+---
+
+# 7. CSS Conventions
+
+Each module has a scoped CSS file. App-specific styles within a page should be scoped under a wrapper class (e.g. `.load-builder-app`) to prevent collisions.
+
+Do NOT:
+- Add global styles to a module's shared CSS file for page-specific features
+- Mix styles from different module CSS systems on the same page
+
+---
+
+# 8. Change Philosophy
 
 Changes must be **surgical**.
 
@@ -143,9 +161,11 @@ Agents must:
 
 Large refactors are not allowed unless explicitly requested.
 
+Business logic and calculation algorithms are **untouchable** during integration or chrome work.
+
 ---
 
-# 7. Coding Style
+# 9. Coding Style
 
 Follow the existing Worker style:
 
@@ -160,11 +180,11 @@ Keep the code understandable by a single maintainer.
 
 ---
 
-# 8. Preferred Implementation Order
+# 10. Preferred Implementation Order
 
-When implementing new report features:
+When implementing new features:
 
-1. Backend API route
+1. Backend API route (if needed)
 2. Validate response structure
 3. Build frontend page
 4. Connect navigation

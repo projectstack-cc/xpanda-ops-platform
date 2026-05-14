@@ -1555,12 +1555,13 @@ async function handleApiJobs(request, env) {
 
   // Columns returned in list responses — packing_slip_pdf is intentionally excluded (too large)
   const JOB_LIST_COLS = `
-    id, status, customer, po_number, invoice_number, ship_date, ship_day,
-    location, delivery_time, method, carrier, load_count, total_bdft,
-    scrap_pickup, sales_lead, bol_info, payment_info, notes,
-    packing_instructions, contact_name, contact_phone, combo_id,
-    priority, confirmed_to_ship, processes, created_at, updated_at,
-    packing_slip_filename, packing_slip_invoice, source
+    j.id, j.status, j.customer, j.po_number, j.invoice_number, j.ship_date, j.ship_day,
+    j.location, j.delivery_time, j.method, j.carrier, j.load_count, j.total_bdft,
+    j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
+    j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
+    j.priority, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
+    j.packing_slip_filename, j.packing_slip_invoice, j.source,
+    CASE WHEN EXISTS (SELECT 1 FROM shipments s WHERE s.job_id = j.id AND s.direction = 'outbound') THEN 1 ELSE 0 END AS has_shipment
   `;
 
   // ── GET /api/jobs/:id/packing-slip ───────────────────────────────────────
@@ -1614,14 +1615,14 @@ async function handleApiJobs(request, env) {
 
     if (searchParam) {
       const like = `%${searchParam}%`;
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs WHERE (customer LIKE ? OR po_number LIKE ? OR invoice_number LIKE ?) ORDER BY ship_date DESC LIMIT 10`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.customer LIKE ? OR j.po_number LIKE ? OR j.invoice_number LIKE ?) ORDER BY j.ship_date DESC LIMIT 10`;
       binds = [like, like, like];
     } else if (weekParam) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
         return json({ ok: false, error: "Invalid week. Use YYYY-MM-DD (Monday of week)." }, 400);
       }
       // Monday through Friday of the requested week
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs WHERE ship_date >= ? AND ship_date <= date(?, '+4 days') ORDER BY ship_date ASC, created_at ASC`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.ship_date >= ? AND j.ship_date <= date(?, '+4 days') ORDER BY j.ship_date ASC, j.created_at ASC`;
       binds = [weekParam, weekParam];
     } else if (statusParam) {
       const statuses = statusParam.split(",").map(s => s.trim()).filter(Boolean);
@@ -1630,11 +1631,11 @@ async function handleApiJobs(request, env) {
         if (!valid.includes(s)) return json({ ok: false, error: `Invalid status: ${s}` }, 400);
       }
       const placeholders = statuses.map(() => "?").join(",");
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs WHERE status IN (${placeholders}) ORDER BY ship_date ASC, created_at ASC`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.status IN (${placeholders}) ORDER BY j.ship_date ASC, j.created_at ASC`;
       binds = statuses;
     } else {
       // Default: all active + shipped in the last 7 days
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs WHERE status != 'shipped' OR (status = 'shipped' AND ship_date >= date('now', '-7 days')) ORDER BY ship_date ASC, created_at ASC`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.status != 'shipped' OR (j.status = 'shipped' AND j.ship_date >= date('now', '-7 days')) ORDER BY j.ship_date ASC, j.created_at ASC`;
       binds = [];
     }
 
@@ -1762,10 +1763,41 @@ async function handleApiJobs(request, env) {
         ).run();
       }
 
+      // Auto-create outbound shipment
+      try {
+        const shipmentId = crypto.randomUUID();
+        await db.prepare(`
+          INSERT INTO shipments
+            (id, direction, job_id, customer, carrier, method, bol_number, origin,
+             destination, ship_date, delivery_date, status, total_bdft, load_count,
+             weight_lbs, bead_type, notes, trailer_number)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          shipmentId, 'outbound', id,
+          customer,
+          carrier || '',
+          method  || '',
+          '',
+          'XPanda Foam',
+          location || '',
+          ship_date || '',
+          '',
+          'scheduled',
+          total_bdft,
+          load_count,
+          0,
+          '',
+          '',
+          '',
+        ).run();
+      } catch (e) {
+        console.error('Auto-shipment creation failed:', String(e?.message || e));
+      }
+
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
       const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
 
-      return json({ ok: true, message: "Job created.", job: { ...job, processes: safeJsonParse(job.processes, []), line_items: liRows.results || [] } }, 201);
+      return json({ ok: true, message: "Job created.", job: { ...job, has_shipment: true, processes: safeJsonParse(job.processes, []), line_items: liRows.results || [] } }, 201);
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
@@ -2575,16 +2607,17 @@ async function handleApiShipments(request, env) {
     const weight_lbs    = Number(payload.weight_lbs    ?? 0);
     const bead_type     = String(payload.bead_type     || "").trim();
     const notes         = String(payload.notes         || "").trim();
+    const trailer_number = String(payload.trailer_number || "").trim();
 
     try {
       await db.prepare(`
         INSERT INTO shipments
           (id, direction, job_id, customer, carrier, method, bol_number, origin, destination,
-           ship_date, delivery_date, status, total_bdft, load_count, weight_lbs, bead_type, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ship_date, delivery_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         id, direction, job_id, customer, carrier, method_val, bol_number, origin, destination,
-        ship_date, delivery_date, status, total_bdft, load_count, weight_lbs, bead_type, notes
+        ship_date, delivery_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number
       ).run();
 
       // Auto-create bead receive transaction if inbound with silo
@@ -2627,7 +2660,7 @@ async function handleApiShipments(request, env) {
     const allowed = [
       "customer", "carrier", "method", "bol_number", "origin", "destination",
       "ship_date", "delivery_date", "status", "total_bdft", "load_count",
-      "weight_lbs", "bead_type", "notes", "job_id",
+      "weight_lbs", "bead_type", "notes", "job_id", "trailer_number",
     ];
     const sets = [];
     const vals = [];

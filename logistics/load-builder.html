@@ -1736,8 +1736,13 @@ function renderResultsTab() {
 // MANUAL TRAILER EDITOR
 // ═══════════════════════════════════════════════════════════════
 let editorRows = [];
+let editorOriginalSkuCounts = {};
 
 function renderTrailerEditor(trailer, ti, skuLib) {
+  editorOriginalSkuCounts = {};
+  Object.values(trailer.skuBreakdown || {}).forEach(entry => {
+    editorOriginalSkuCounts[entry.skuId] = entry.pieces;
+  });
   editorRows = (trailer.rows || []).map(row => ({
     skuId: row.columns?.[0]?.layers?.[0]?.skuId || row.columns?.[0]?.skuId || skuLib[0]?.id,
     length: row.rowLength,
@@ -1846,6 +1851,41 @@ function renderEditorContent(box, ti, skuLib) {
     rowsContainer.appendChild(rowEl);
   });
   box.appendChild(rowsContainer);
+
+  // Over-capacity alert
+  const editorTotal = editorRows.reduce((sum, row) =>
+    sum + row.columns.reduce((s2, col) =>
+      s2 + col.layers.reduce((s3, l) => s3 + (l.count || 0), 0), 0), 0);
+  const originalTotal = Object.values(editorOriginalSkuCounts).reduce((s, v) => s + v, 0);
+  if (editorTotal > originalTotal) {
+    const warn = h('div', { style: { background: '#fff3cd', border: '1px solid #ffc107', borderRadius: '6px', padding: '10px 14px', marginTop: '12px', color: '#856404', fontSize: '13px' } },
+      `⚠️ Layout exceeds original piece count (${editorTotal} placed vs ${originalTotal} expected). Consider reviewing before applying.`);
+    box.appendChild(warn);
+  }
+
+  // Unassigned pieces section
+  const editorSkuCounts = {};
+  editorRows.forEach(row => row.columns.forEach(col => col.layers.forEach(l => {
+    editorSkuCounts[l.skuId] = (editorSkuCounts[l.skuId] || 0) + (l.count || 0);
+  })));
+  const unassigned = Object.entries(editorOriginalSkuCounts)
+    .map(([skuId, origCount]) => ({ skuId, unassigned: origCount - (editorSkuCounts[skuId] || 0) }))
+    .filter(x => x.unassigned > 0);
+  if (unassigned.length > 0) {
+    const section = h('div', { style: { marginTop: '16px' } });
+    section.appendChild(h('div', { style: { fontWeight: 700, fontSize: '12px', letterSpacing: '0.05em', color: 'var(--text-mid)', marginBottom: '8px' } }, 'UNASSIGNED PIECES'));
+    const tbl = h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: '13px' } });
+    unassigned.forEach(({ skuId, unassigned: qty }) => {
+      const skuEntry = skuLib.find(s => s.id === skuId);
+      const name = skuEntry ? skuEntry.name : skuId;
+      const tr = h('tr', { style: { borderBottom: '1px solid var(--border-light)' } });
+      tr.appendChild(h('td', { style: { padding: '6px 8px' } }, name));
+      tr.appendChild(h('td', { style: { padding: '6px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' } }, String(qty)));
+      tbl.appendChild(tr);
+    });
+    section.appendChild(tbl);
+    box.appendChild(section);
+  }
 }
 
 function applyEditorRows(ti, skuLib) {
