@@ -606,6 +606,10 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
       <label>Additional Instructions</label>
       <textarea id="f-special-instructions" rows="3" placeholder="Loading notes, special requirements…"></textarea>
     </div>
+    <div class="bol-field">
+      <label>Contact Info</label>
+      <textarea id="f-contact-info" rows="2" placeholder="Contact details for the BOL…"></textarea>
+    </div>
     <label class="bol-check-row">
       <input type="checkbox" id="f-master-bol"> Master BOL
     </label>
@@ -1182,6 +1186,7 @@ function collectPayload() {
     is_scrap_pickup:       document.getElementById('f-scrap-pickup').checked ? 1 : 0,
     third_party_bill_to:   document.getElementById('f-third-party-bill-to').value.trim(),
     special_instructions:  instrParts.join('\n'),
+    contact_info:          document.getElementById('f-contact-info').value.trim(),
     is_master_bol:         document.getElementById('f-master-bol').checked ? 1 : 0,
     commodity_description: document.getElementById('f-commodity').value.trim(),
     handling_unit_qty:     document.getElementById('f-hu-qty').value.trim(),
@@ -1275,7 +1280,7 @@ async function handleClear() {
     'f-ship-city','f-ship-zip','f-location-no',
     'carrier-search','f-trailer-no','f-seal-number','f-scac','f-pro-no',
     'f-third-party-bill-to','f-contact-name','f-contact-phone','f-po-number',
-    'f-special-instructions','f-commodity','f-hu-qty','f-hu-type',
+    'f-special-instructions','f-contact-info','f-commodity','f-hu-qty','f-hu-type',
     'f-pkg-qty','f-pkg-type','f-weight','f-delivery-time','f-notes','customer-search',
   ];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1334,6 +1339,7 @@ function loadBolIntoForm(b) {
   set('f-pro-no',                b.pro_no);
   set('f-third-party-bill-to',   b.third_party_bill_to);
   set('f-special-instructions',  b.special_instructions);
+  set('f-contact-info',          b.contact_info);
   set('f-commodity',             b.commodity_description);
   set('f-hu-qty',                b.handling_unit_qty);
   set('f-hu-type',               b.handling_unit_type);
@@ -1379,27 +1385,36 @@ async function generatePdf(bol) {
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
 
   const COORDS = {
-    deliveryTime:       { x: 430, y: 771, size: 18 },           // top-right, 18pt bold red
-    date:               { x: 338, y: 710, size: 10 },           // 85pt from top
-    bolNumber:          { x: 380, y: 675, size: 24, bold: true }, // 117pt from top — centered in box below label
-    carrierName:        { x: 378, y: 650.5, size: 10 },         // 140pt from top, after "Name:"
-    trailerNo:          { x: 360, y: 633.5, size: 10 },         // 157pt from top, after "No:"
-    sealNumber:         { x: 378, y: 619, size: 10 },           // 173pt from top
-    scac:               { x: 378, y: 601, size: 10 },           // 191pt from top
-    proNo:              { x: 378, y: 585, size: 10 },           // 207pt from top
-    shipLine1:          { x: 55,  y: 607, size: 10 },           // 185pt from top
-    shipLine2:          { x: 55,  y: 594, size: 10 },           // +13pt line spacing
-    shipLine3:          { x: 55,  y: 581, size: 10 },
-    shipLine4:          { x: 55,  y: 568, size: 10 },
-    locationNo:         { x: 248, y: 619, size: 10 },           // 173pt from top
-    chkPrepaid:         { x: 39,  y: 532, size: 10 },           // 258pt from top
-    chkCollect:         { x: 103, y: 532, size: 10 },
-    chk3rdParty:        { x: 164, y: 532, size: 10 },
-    thirdPartyBillTo:   { x: 42,  y: 502, size: 9 },            // 290pt from top
-    scrapPickupText:    { x: 42,  y: 500, size: 12, bold: true }, // repurposes bill-to area
-    specialInstr:       { x: 310, y: 527, size: 9,  lineH: 11, maxW: 200 }, // 265pt from top
-    masterBol:          { x: 538, y: 532, size: 10 },           // 260pt from top
-    commodity:          { x: 245, y: 417, size: 10, lineH: 14, maxW: 340 }, // 375pt from top
+    // Top-right bold red delivery time
+    deliveryTime:    { x: 430, y: 741, size: 18 },
+
+    // Top-right block
+    date:            { x: 360, y: 721, size: 10 },
+    bolNumber:       { x: 420, y: 704, size: 14, bold: true },
+    carrierName:     { x: 390, y: 656, size: 10 },
+    trailerNo:       { x: 365, y: 640, size: 10 },
+
+    // Left column — Ship To (4 lines)
+    shipLine1:       { x: 42,  y: 609, size: 10 },
+    shipLine2:       { x: 42,  y: 596, size: 10 },
+    shipLine3:       { x: 42,  y: 583, size: 10 },
+    shipLine4:       { x: 42,  y: 570, size: 10 },
+
+    // Left column — Location No (same row as Ship To label)
+    locationNo:      { x: 250, y: 625, size: 10 },
+
+    // Right column — Special Instructions (multiline)
+    specialInstr:    { x: 311, y: 592, size: 9, lineH: 11, maxW: 255 },
+
+    // Right column — Contact Info (multiline)
+    contactInfo:     { x: 313, y: 530, size: 9, lineH: 11, maxW: 255 },
+
+    // Left column — Scrap Pick Up checkboxes
+    scrapYes:        { x: 109, y: 515, size: 10 },   // X next to ☐ Yes
+    scrapNo:         { x: 110, y: 498, size: 10 },   // X next to ☐ No
+
+    // Commodity description (multiline, full width)
+    commodity:       { x: 38,  y: 424, size: 10, lineH: 9.7, maxW: 535 },
   };
 
   let pdfBytes;
@@ -1449,22 +1464,21 @@ async function generatePdf(bol) {
     });
   };
 
-  // ── Header ──
+  // ── Delivery time (bold red, top right) ──
   if (bol.delivery_time) {
     page.drawText(String(bol.delivery_time), {
       x: COORDS.deliveryTime.x, y: COORDS.deliveryTime.y,
       size: 18, font: fontBold, color: rgb(1, 0, 0),
     });
   }
-  drawText(bol.date, COORDS.date);
+
+  // ── Date and BOL Number ──
+  drawText(bol.date,             COORDS.date);
   drawText(String(bol.bol_number), COORDS.bolNumber);
 
   // ── Carrier block ──
   drawText(bol.carrier_name, COORDS.carrierName);
   drawText(bol.trailer_no,   COORDS.trailerNo);
-  drawText(bol.seal_number,  COORDS.sealNumber);
-  drawText(bol.scac,         COORDS.scac);
-  drawText(bol.pro_no,       COORDS.proNo);
 
   // ── Ship To (up to 4 lines) ──
   const shipLines = [
@@ -1473,38 +1487,28 @@ async function generatePdf(bol) {
     [bol.ship_to_street, bol.ship_to_street2].filter(Boolean).join(', '),
     [bol.ship_to_city, bol.ship_to_state, bol.ship_to_zip].filter(Boolean).join(', '),
   ].filter(Boolean);
-
   const shipCoords = [COORDS.shipLine1, COORDS.shipLine2, COORDS.shipLine3, COORDS.shipLine4];
   shipLines.forEach((line, i) => { if (shipCoords[i]) drawText(line, shipCoords[i]); });
 
+  // ── Location No ──
   drawText(bol.location_no, COORDS.locationNo);
 
-  // ── Freight checkboxes ──
-  const ft = bol.freight_terms;
-  if (ft === 'prepaid')   drawText('X', COORDS.chkPrepaid);
-  if (ft === 'collect')   drawText('X', COORDS.chkCollect);
-  if (ft === '3rd_party') drawText('X', COORDS.chk3rdParty);
-
-  // ── Bill-To / Scrap area ──
-  // 3rd-party bill-to text (if any) goes first; scrap pick-up writes
-  // "SCRAP PICK UP" in bold in the same area (next line if both present).
-  if (bol.third_party_bill_to) {
-    drawText(bol.third_party_bill_to, COORDS.thirdPartyBillTo);
-  }
-  if (bol.is_scrap_pickup) {
-    const scrapY = bol.third_party_bill_to
-      ? COORDS.thirdPartyBillTo.y - 14
-      : COORDS.scrapPickupText.y;
-    page.drawText('SCRAP PICK UP', { x: COORDS.scrapPickupText.x, y: scrapY, size: 12, font: fontBold, color: black });
-  }
-
-  // ── Special instructions (multi-line) ──
+  // ── Special Instructions (multiline) ──
   drawMultiline(bol.special_instructions, COORDS.specialInstr);
 
-  // ── Master BOL ──
-  if (bol.is_master_bol) drawText('X', COORDS.masterBol);
+  // ── Contact Info (multiline) ──
+  drawMultiline(bol.contact_info, COORDS.contactInfo);
 
-  // ── Commodity description (multi-line) ──
+  // ── Scrap Pick Up ──
+  // Template has ☐ Yes and ☐ No already printed.
+  // Write X next to whichever applies.
+  if (bol.is_scrap_pickup) {
+    drawText('X', COORDS.scrapYes);
+  } else {
+    drawText('X', COORDS.scrapNo);
+  }
+
+  // ── Commodity description (multiline) ──
   drawMultiline(bol.commodity_description, COORDS.commodity);
 
   // ── Save and open ──
