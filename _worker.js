@@ -2773,6 +2773,7 @@ CREATE TABLE IF NOT EXISTS bols (
   is_scrap_pickup INTEGER NOT NULL DEFAULT 0,
   third_party_bill_to TEXT NOT NULL DEFAULT '',
   special_instructions TEXT NOT NULL DEFAULT '',
+  contact_info TEXT NOT NULL DEFAULT '',
   is_master_bol INTEGER NOT NULL DEFAULT 0,
   commodity_description TEXT NOT NULL DEFAULT '',
   handling_unit_qty TEXT NOT NULL DEFAULT '',
@@ -3138,10 +3139,10 @@ async function handleApiBols(request, env) {
           ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
           ship_to_city, ship_to_state, ship_to_zip, location_no,
           carrier_id, carrier_name, trailer_no, seal_number, scac, pro_no,
-          freight_terms, is_scrap_pickup, third_party_bill_to, special_instructions, is_master_bol,
+          freight_terms, is_scrap_pickup, third_party_bill_to, special_instructions, contact_info, is_master_bol,
           commodity_description, handling_unit_qty, handling_unit_type,
           package_qty, package_type, weight, delivery_time, job_id, notes, created_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, bol_number, date,
         payload.customer_id ? String(payload.customer_id).trim() : null,
@@ -3149,7 +3150,7 @@ async function handleApiBols(request, env) {
         s("ship_to_city"), s("ship_to_state"), s("ship_to_zip"), s("location_no"),
         payload.carrier_id ? String(payload.carrier_id).trim() : null,
         s("carrier_name"), s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
-        freight_terms, is_scrap_pickup, s("third_party_bill_to"), s("special_instructions"),
+        freight_terms, is_scrap_pickup, s("third_party_bill_to"), s("special_instructions"), s("contact_info"),
         payload.is_master_bol ? 1 : 0,
         s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),
         s("package_qty"), s("package_type"), s("weight"), s("delivery_time"),
@@ -3185,7 +3186,7 @@ async function handleApiBols(request, env) {
           ship_to_company = ?, ship_to_attention = ?, ship_to_street = ?, ship_to_street2 = ?,
           ship_to_city = ?, ship_to_state = ?, ship_to_zip = ?, location_no = ?,
           carrier_id = ?, carrier_name = ?, trailer_no = ?, seal_number = ?, scac = ?, pro_no = ?,
-          freight_terms = ?, is_scrap_pickup = ?, third_party_bill_to = ?, special_instructions = ?,
+          freight_terms = ?, is_scrap_pickup = ?, third_party_bill_to = ?, special_instructions = ?, contact_info = ?,
           is_master_bol = ?, commodity_description = ?, handling_unit_qty = ?, handling_unit_type = ?,
           package_qty = ?, package_type = ?, weight = ?, delivery_time = ?, job_id = ?, notes = ?
         WHERE id = ?
@@ -3196,7 +3197,7 @@ async function handleApiBols(request, env) {
         s("ship_to_city"), s("ship_to_state"), s("ship_to_zip"), s("location_no"),
         payload.carrier_id ? String(payload.carrier_id).trim() : null,
         s("carrier_name"), s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
-        freight_terms, is_scrap_pickup, s("third_party_bill_to"), s("special_instructions"),
+        freight_terms, is_scrap_pickup, s("third_party_bill_to"), s("special_instructions"), s("contact_info"),
         payload.is_master_bol ? 1 : 0,
         s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),
         s("package_qty"), s("package_type"), s("weight"), s("delivery_time"),
