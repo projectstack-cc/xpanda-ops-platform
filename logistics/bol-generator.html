@@ -546,73 +546,35 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
       </div>
     </div>
 
-    <div class="bol-row bol-row-2">
-      <div class="bol-field">
-        <label>Trailer No</label>
-        <input type="text" id="f-trailer-no">
-      </div>
-      <div class="bol-field">
-        <label>Seal Number</label>
-        <input type="text" id="f-seal-number">
-      </div>
-    </div>
-    <div class="bol-row bol-row-2">
-      <div class="bol-field">
-        <label>SCAC</label>
-        <input type="text" id="f-scac">
-      </div>
-      <div class="bol-field">
-        <label>Pro No</label>
-        <input type="text" id="f-pro-no">
-      </div>
-    </div>
-  </div>
-
-  <!-- Freight Terms -->
-  <div class="bol-section">
-    <div class="bol-section-title">Freight Terms</div>
-    <div class="bol-freight-row">
-      <label class="bol-freight-opt"><input type="radio" name="freight-terms" value="prepaid" checked> Prepaid</label>
-      <label class="bol-freight-opt"><input type="radio" name="freight-terms" value="collect"> Collect</label>
-      <label class="bol-freight-opt"><input type="radio" name="freight-terms" value="3rd_party"> 3rd Party</label>
-    </div>
-    <label class="bol-check-row" style="margin-top:4px;margin-bottom:8px;">
-      <input type="checkbox" id="f-scrap-pickup"> Scrap Pick-Up (independent of freight terms)
-    </label>
-    <div class="bol-field" id="third-party-field" style="display:none;">
-      <label>3rd Party Bill To</label>
-      <input type="text" id="f-third-party-bill-to" placeholder="Company and address">
-    </div>
-  </div>
-
-  <!-- Special Instructions -->
-  <div class="bol-section">
-    <div class="bol-section-title">Special Instructions</div>
-    <div class="bol-row bol-row-2">
-      <div class="bol-field">
-        <label>Contact Name</label>
-        <input type="text" id="f-contact-name">
-      </div>
-      <div class="bol-field">
-        <label>Contact Phone</label>
-        <input type="tel" id="f-contact-phone">
-      </div>
-    </div>
     <div class="bol-field">
-      <label>PO #</label>
-      <input type="text" id="f-po-number">
+      <label>Trailer No</label>
+      <input type="text" id="f-trailer-no">
     </div>
+  </div>
+
+
+  <!-- Special Instructions & Contact -->
+  <div class="bol-section">
+    <div class="bol-section-title">Special Instructions &amp; Contact</div>
+    <label class="bol-check-row" style="margin-bottom:12px;">
+      <input type="checkbox" id="f-scrap-pickup"> Scrap Pick-Up
+    </label>
     <div class="bol-field">
       <label>Additional Instructions</label>
       <textarea id="f-special-instructions" rows="3" placeholder="Loading notes, special requirements…"></textarea>
     </div>
     <div class="bol-field">
-      <label>Contact Info</label>
-      <textarea id="f-contact-info" rows="2" placeholder="Contact details for the BOL…"></textarea>
+      <label>Contact Name</label>
+      <input type="text" id="f-contact-name">
     </div>
-    <label class="bol-check-row">
-      <input type="checkbox" id="f-master-bol"> Master BOL
-    </label>
+    <div class="bol-field">
+      <label>Contact Phone</label>
+      <input type="tel" id="f-contact-phone">
+    </div>
+    <div class="bol-field">
+      <label>Contact Info</label>
+      <textarea id="f-contact-info" rows="2" placeholder="Additional contact details…"></textarea>
+    </div>
   </div>
 
   <!-- Commodity Description -->
@@ -623,39 +585,6 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
     </div>
   </div>
 
-  <!-- Weight & Handling (collapsible) -->
-  <div class="bol-section">
-    <div class="bol-collapsible-hdr" onclick="toggleSection('handling-body','handling-btn')">
-      <div class="bol-section-title">Weight &amp; Handling</div>
-      <button class="bol-collapse-btn" id="handling-btn">Show ▾</button>
-    </div>
-    <div class="bol-collapsible-body hidden" id="handling-body">
-      <div class="bol-row bol-row-2">
-        <div class="bol-field">
-          <label>Handling Unit QTY</label>
-          <input type="text" id="f-hu-qty">
-        </div>
-        <div class="bol-field">
-          <label>Handling Unit Type</label>
-          <input type="text" id="f-hu-type" placeholder="e.g. Pallet">
-        </div>
-      </div>
-      <div class="bol-row bol-row-2">
-        <div class="bol-field">
-          <label>Package QTY</label>
-          <input type="text" id="f-pkg-qty">
-        </div>
-        <div class="bol-field">
-          <label>Package Type</label>
-          <input type="text" id="f-pkg-type" placeholder="e.g. Bundle">
-        </div>
-      </div>
-      <div class="bol-field">
-        <label>Weight (lbs)</label>
-        <input type="text" id="f-weight">
-      </div>
-    </div>
-  </div>
 
   <!-- Internal Notes -->
   <div class="bol-section">
@@ -785,7 +714,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   setTodayDate();
   loadCarriers();
   loadRecentBols();
-  setupFreightTerms();
   setupCustomerSearch();
   setupCarrierSearch();
   setupActions();
@@ -827,9 +755,6 @@ async function prefillFromJob(jobId) {
     if (job.contact_name)  document.getElementById('f-contact-name').value  = job.contact_name;
     if (job.contact_phone) document.getElementById('f-contact-phone').value = job.contact_phone;
 
-    // PO
-    if (job.po_number || job.invoice_number)
-      document.getElementById('f-po-number').value = job.po_number || job.invoice_number;
 
     // Commodity from line items
     if (Array.isArray(job.line_items) && job.line_items.length > 0) {
@@ -1098,19 +1023,6 @@ function highlightDrop(items, idx) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Freight terms
-// ═══════════════════════════════════════════════════════════════════
-
-function setupFreightTerms() {
-  document.querySelectorAll('input[name="freight-terms"]').forEach(r => {
-    r.addEventListener('change', () => {
-      document.getElementById('third-party-field').style.display =
-        r.value === '3rd_party' ? 'flex' : 'none';
-    });
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════════
 // Collapsible sections
 // ═══════════════════════════════════════════════════════════════════
 
@@ -1141,17 +1053,16 @@ function setupActions() {
 }
 
 function collectPayload() {
-  const freightTerms = document.querySelector('input[name="freight-terms"]:checked')?.value || 'prepaid';
-
-  // Build special_instructions from convenience fields + free-text
+  // Contact info maps to contact_info field on BOL
   const contact = document.getElementById('f-contact-name').value.trim();
   const phone   = document.getElementById('f-contact-phone').value.trim();
-  const po      = document.getElementById('f-po-number').value.trim();
-  const extra   = document.getElementById('f-special-instructions').value.trim();
-  const instrParts = [];
-  if (contact || phone) instrParts.push([contact, phone].filter(Boolean).join(' · '));
-  if (po)   instrParts.push('PO# ' + po);
-  if (extra) instrParts.push(extra);
+  const extra   = document.getElementById('f-contact-info').value.trim();
+  const contactParts = [];
+  if (contact || phone) contactParts.push([contact, phone].filter(Boolean).join(' · '));
+  if (extra) contactParts.push(extra);
+
+  // Additional Instructions maps to special_instructions field on BOL
+  const specialInstr = document.getElementById('f-special-instructions').value.trim();
 
   // Project name converts to "Project c/o Company" ship-to pattern
   const project  = document.getElementById('f-project-name').value.trim();
@@ -1178,21 +1089,10 @@ function collectPayload() {
     carrier_id:            selectedCarrierId || null,
     carrier_name:          document.getElementById('carrier-search').value.trim(),
     trailer_no:            document.getElementById('f-trailer-no').value.trim(),
-    seal_number:           document.getElementById('f-seal-number').value.trim(),
-    scac:                  document.getElementById('f-scac').value.trim(),
-    pro_no:                document.getElementById('f-pro-no').value.trim(),
-    freight_terms:         freightTerms,
     is_scrap_pickup:       document.getElementById('f-scrap-pickup').checked ? 1 : 0,
-    third_party_bill_to:   document.getElementById('f-third-party-bill-to').value.trim(),
-    special_instructions:  instrParts.join('\n'),
-    contact_info:          document.getElementById('f-contact-info').value.trim(),
-    is_master_bol:         document.getElementById('f-master-bol').checked ? 1 : 0,
+    special_instructions:  specialInstr,
+    contact_info:          contactParts.join('\n'),
     commodity_description: document.getElementById('f-commodity').value.trim(),
-    handling_unit_qty:     document.getElementById('f-hu-qty').value.trim(),
-    handling_unit_type:    document.getElementById('f-hu-type').value.trim(),
-    package_qty:           document.getElementById('f-pkg-qty').value.trim(),
-    package_type:          document.getElementById('f-pkg-type').value.trim(),
-    weight:                document.getElementById('f-weight').value.trim(),
     delivery_time:         document.getElementById('f-delivery-time').value.trim(),
     notes:                 document.getElementById('f-notes').value.trim(),
     job_id:                prefilledJobId || null,
@@ -1277,18 +1177,15 @@ async function handleClear() {
   const ids = [
     'f-ship-company','f-ship-attention','f-project-name','f-ship-street','f-ship-street2',
     'f-ship-city','f-ship-zip','f-location-no',
-    'carrier-search','f-trailer-no','f-seal-number','f-scac','f-pro-no',
-    'f-third-party-bill-to','f-contact-name','f-contact-phone','f-po-number',
-    'f-special-instructions','f-contact-info','f-commodity','f-hu-qty','f-hu-type',
-    'f-pkg-qty','f-pkg-type','f-weight','f-delivery-time','f-notes','customer-search',
+    'carrier-search','f-trailer-no',
+    'f-contact-name','f-contact-phone',
+    'f-special-instructions','f-contact-info','f-commodity',
+    'f-delivery-time','f-notes','customer-search',
   ];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
   document.getElementById('f-ship-state').value = 'FL';
-  document.getElementById('f-master-bol').checked  = false;
   document.getElementById('f-scrap-pickup').checked = false;
-  document.querySelector('input[name="freight-terms"][value="prepaid"]').checked = true;
-  document.getElementById('third-party-field').style.display = 'none';
 
   const ind = document.getElementById('cust-indicator');
   ind.className = 'bol-cust-indicator';
@@ -1333,26 +1230,11 @@ function loadBolIntoForm(b) {
   set('f-location-no',           b.location_no);
   set('carrier-search',          b.carrier_name);
   set('f-trailer-no',            b.trailer_no);
-  set('f-seal-number',           b.seal_number);
-  set('f-scac',                  b.scac);
-  set('f-pro-no',                b.pro_no);
-  set('f-third-party-bill-to',   b.third_party_bill_to);
   set('f-special-instructions',  b.special_instructions);
   set('f-contact-info',          b.contact_info);
   set('f-commodity',             b.commodity_description);
-  set('f-hu-qty',                b.handling_unit_qty);
-  set('f-hu-type',               b.handling_unit_type);
-  set('f-pkg-qty',               b.package_qty);
-  set('f-pkg-type',              b.package_type);
-  set('f-weight',                b.weight);
   set('f-notes',                 b.notes);
-  document.getElementById('f-master-bol').checked  = !!b.is_master_bol;
   document.getElementById('f-scrap-pickup').checked = !!b.is_scrap_pickup;
-
-  // Freight terms
-  const ft = b.freight_terms || 'prepaid';
-  const radio = document.querySelector(`input[name="freight-terms"][value="${ft}"]`);
-  if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
 
   // Customer indicator
   if (b.customer_id) {
