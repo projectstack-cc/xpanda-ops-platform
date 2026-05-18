@@ -494,6 +494,8 @@ let state = {
   autoDownsize: true,
   forcedTrailers: [],
   forcedMode: false,
+  prefillJobId: null,
+  prefillJobData: null,
   trailerInvNumbers: {},
   collapsedCategories: {},
   collapsedParentGroups: {},
@@ -2078,7 +2080,7 @@ function openBolModal(result) {
       if (!sku) return `${item.pieces} pcs — ${item.name} (${item.sku})`;
       return `${item.pieces} pcs — ${item.name} (${item.sku}) ${sku.length}"\xd7${sku.width}"\xd7${sku.height}"`;
     }).join('\n');
-    return {
+    const td = {
       trailerIndex: i,
       trailerLabel: trailer.downsizedType || state.trailerType,
       commodityDescription,
@@ -2094,6 +2096,24 @@ function openBolModal(result) {
       freightTerms: 'prepaid', specialInstructions: '',
       trailerNo: '', sealNumber: '', carryOver: false,
     };
+    if (state.prefillJobData && i === 0) {
+      const job = state.prefillJobData;
+      td.jobId          = job.id;
+      td.shipToCompany  = job.ship_to_company  || job.customer || '';
+      td.shipToAttention = job.ship_to_attention || '';
+      td.shipToStreet   = job.ship_to_street   || '';
+      td.shipToStreet2  = job.ship_to_street2  || '';
+      td.shipToCity     = job.ship_to_city     || (job.location || '').split(',')[0]?.trim() || '';
+      td.shipToState    = job.ship_to_state    || (job.location || '').split(',')[1]?.trim() || '';
+      td.shipToZip      = job.ship_to_zip      || '';
+      td.carrierName    = job.carrier          || '';
+      td.contactName    = job.contact_name     || '';
+      td.contactPhone   = job.contact_phone    || '';
+      td.poNumber       = job.po_number        || job.invoice_number || '';
+      td.deliveryTime   = job.delivery_time    || '';
+      td.date           = job.ship_date        || today;
+    }
+    return td;
   });
   state.bolModal = {
     open: true, currentPage: 0, trailerCount: result.trailers.length, trailerData,
@@ -2507,9 +2527,148 @@ async function generateBolPdf(bolRecords) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// JOB PREFILL
+// ═══════════════════════════════════════════════════════════════
+function parseDimensionString(dimStr) {
+  if (!dimStr) return null;
+  let s = dimStr.replace(/[“”„‟]/g, '"').replace(/[×xX]/g, 'x');
+  const parts = s.split(/\s*x\s*/i);
+  if (parts.length < 2) return null;
+  function parseInches(str) {
+    str = str.replace(/[""\s]/g, '').trim();
+    const mixed = str.match(/^(\d+)-(\d+)\/(\d+)$/);
+    if (mixed) return parseInt(mixed[1]) + parseInt(mixed[2]) / parseInt(mixed[3]);
+    const frac = str.match(/^(\d+)\/(\d+)$/);
+    if (frac) return parseInt(frac[1]) / parseInt(frac[2]);
+    const num = parseFloat(str);
+    return isNaN(num) ? null : num;
+  }
+  const length = parseInches(parts[0]);
+  const width  = parseInches(parts[1]);
+  const height = parts.length >= 3 ? parseInches(parts[2]) : null;
+  if (length === null || width === null) return null;
+  return { length, width, height: height || width };
+}
+
+async function createPartOnTheFly(lineItem, dims, customerName) {
+  const partNumber = `CUSTOM-${dims.length}x${dims.width}x${dims.height}`;
+  const payload = {
+    part_number: partNumber,
+    name: lineItem.description || partNumber,
+    customer: customerName || '',
+    density_material: '',
+    length_in: dims.length,
+    width_in: dims.width,
+    height_in: dims.height,
+    weight: 1,
+    category: dims.height <= 1 ? 'Sheets' : 'Blocks',
+    parent_group: '',
+  };
+  try {
+    const res = await fetch('/api/parts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (data.ok && data.part) return data.part;
+    if (data.error && /unique/i.test(data.error || data.detail || '')) {
+      const listRes = await fetch('/api/parts');
+      const listData = await listRes.json();
+      return (listData.parts || []).find(p => p.part_number === partNumber) || null;
+    }
+    return null;
+  } catch { return null; }
+}
+
+function showJobBanner(job, pieceCount) {
+  const existing = document.getElementById('job-prefill-banner');
+  if (existing) existing.remove();
+  const banner = document.createElement('div');
+  banner.id = 'job-prefill-banner';
+  banner.style.cssText = 'background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#1e40af;';
+  banner.innerHTML = `
+    <div>
+      <strong>Pre-loaded from job:</strong> ${job.customer || '(no customer)'}
+      <span style="margin-left:8px;opacity:0.7;">${pieceCount} piece${pieceCount !== 1 ? 's' : ''} added</span>
+    </div>
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;font-size:16px;color:#1e40af;padding:0 4px;">&times;</button>
+  `;
+  const mainContent = document.querySelector('.load-builder-app') || document.body;
+  const firstChild = mainContent.querySelector('.toolbar') || mainContent.firstElementChild;
+  if (firstChild) { firstChild.parentNode.insertBefore(banner, firstChild); }
+  else { mainContent.prepend(banner); }
+}
+
+async function prefillFromJob(jobId) {
+  try {
+    const res = await fetch('/api/jobs/' + encodeURIComponent(jobId));
+    const data = await res.json();
+    if (!data.ok || !data.job) { console.warn('Could not load job', jobId); return; }
+    const job = data.job;
+    const lineItems = job.line_items || [];
+    if (!lineItems.length) { console.warn('Job has no line items'); return; }
+
+    state.prefillJobId = jobId;
+    state.prefillJobData = job;
+
+    const existingSkus = [...state.skus];
+    const cartMap = new Map();
+
+    for (const li of lineItems) {
+      let matchedSku = null;
+
+      if (li.part_id) {
+        matchedSku = existingSkus.find(s => s.id === li.part_id);
+      }
+      if (!matchedSku && li.part_number) {
+        matchedSku = existingSkus.find(s => (s.sku || '').toLowerCase() === li.part_number.toLowerCase());
+      }
+      if (!matchedSku && li.dimensions) {
+        const dims = parseDimensionString(li.dimensions);
+        if (dims) {
+          matchedSku = existingSkus.find(s =>
+            Math.abs(s.length - dims.length) < 0.1 &&
+            Math.abs(s.width  - dims.width)  < 0.1 &&
+            Math.abs(s.height - dims.height) < 0.1
+          );
+        }
+      }
+      if (!matchedSku && li.dimensions) {
+        const dims = parseDimensionString(li.dimensions);
+        if (dims) {
+          const newPart = await createPartOnTheFly(li, dims, job.customer);
+          if (newPart) {
+            matchedSku = { id: newPart.id, name: newPart.name || newPart.part_number, sku: newPart.part_number, length: newPart.length_in, width: newPart.width_in, height: newPart.height_in, weight: newPart.weight || 1, color: newPart.color || '#D97706', allowRotation: false, category: newPart.category || '', parent_group: newPart.parent_group || '' };
+            existingSkus.push(matchedSku);
+          }
+        }
+      }
+
+      if (matchedSku) {
+        const qty = li.quantity || 1;
+        if (cartMap.has(matchedSku.id)) { cartMap.get(matchedSku.id).qty += qty; }
+        else { cartMap.set(matchedSku.id, { skuId: matchedSku.id, qty }); }
+      }
+    }
+
+    const cartEntries = [...cartMap.values()];
+    if (cartEntries.length > 0) {
+      for (const entry of cartEntries) { state.cart.push(entry); }
+      const totalPieces = cartEntries.reduce((s, e) => s + e.qty, 0);
+      showJobBanner(job, totalPieces);
+    }
+
+    state.skus = sortByHeight(existingSkus);
+    render();
+  } catch (e) {
+    console.error('prefillFromJob failed:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
-initSkus();
+initSkus().then(() => {
+  const prefillJobId = new URLSearchParams(location.search).get('job_id');
+  if (prefillJobId) prefillFromJob(prefillJobId);
+});
 </script>
 </body>
 </html>
