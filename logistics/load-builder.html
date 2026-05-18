@@ -2398,7 +2398,9 @@ async function generateAllBols() {
     bm.generateProgress[i] = { text: `⏳ Trailer ${i + 1} — saving...`, done: false, pending: false };
     renderBolModal();
     try {
+      const invNumber = (state.trailerInvNumbers[i] || '').trim();
       const payload = {
+        bol_number: invNumber ? parseInt(invNumber, 10) || invNumber : undefined,
         date: td.date, customer_id: td.customerId || null,
         ship_to_company: td.shipToCompany, ship_to_attention: td.shipToAttention,
         ship_to_street: td.shipToStreet, ship_to_street2: td.shipToStreet2,
