@@ -649,7 +649,7 @@ function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = n
   const pureHeight = maxBase * baseSku.height;
   const gap = dims.height - pureHeight;
   // Only mix when the pure stack leaves a gap >= one block height (i.e., supply ran out before filling)
-  const shouldMix = allowMixing && (gap >= baseSku.height);
+  const shouldMix = false;
 
   if (!shouldMix) {
     // Pure stack: use maxBase directly, no scoring iteration needed
