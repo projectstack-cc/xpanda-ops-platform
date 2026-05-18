@@ -108,7 +108,7 @@ export default {
       }
 
       if (url.pathname === "/api/load-builder-skus/seed") {
-        return handleApiLoadBuilderSkusSeed(request, env);
+        return handleApiPartsSeed(request, env);
       }
 
       if (url.pathname === "/api/load-builder-skus/all") {
@@ -1138,19 +1138,27 @@ async function handleIncidentDetail(request, env) {
 //
 // Schema — run via Wrangler CLI before deploying:
 //
-// CREATE TABLE IF NOT EXISTS parts_library (
+// CREATE TABLE IF NOT EXISTS parts (
 //   id TEXT PRIMARY KEY,
 //   part_number TEXT NOT NULL,
+//   name TEXT NOT NULL DEFAULT '',
 //   customer TEXT NOT NULL DEFAULT '',
 //   density_material TEXT NOT NULL DEFAULT '',
 //   length_in REAL NOT NULL,
 //   width_in REAL NOT NULL,
 //   height_in REAL NOT NULL,
+//   weight REAL NOT NULL DEFAULT 1,
 //   notes TEXT NOT NULL DEFAULT '',
+//   color TEXT NOT NULL DEFAULT '#D97706',
+//   allow_rotation INTEGER NOT NULL DEFAULT 0,
+//   sort_order INTEGER NOT NULL DEFAULT 0,
+//   category TEXT NOT NULL DEFAULT '',
+//   parent_group TEXT NOT NULL DEFAULT '',
 //   created_at TEXT NOT NULL DEFAULT (datetime('now')),
 //   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 // );
-// CREATE UNIQUE INDEX IF NOT EXISTS idx_parts_part_number ON parts_library(part_number);
+// CREATE UNIQUE INDEX IF NOT EXISTS idx_parts_part_number ON parts(part_number);
+// CREATE INDEX IF NOT EXISTS idx_parts_category ON parts(category);
 //
 // CREATE TABLE IF NOT EXISTS saved_combos (
 //   id TEXT PRIMARY KEY,
@@ -1185,67 +1193,54 @@ async function handleApiParts(request, env) {
   if (request.method === "GET") {
     try {
       const rows = await db
-        .prepare("SELECT * FROM parts_library ORDER BY part_number ASC")
+        .prepare("SELECT * FROM parts ORDER BY category ASC, sort_order ASC, part_number ASC")
         .all();
       return json({ ok: true, parts: rows.results || [] });
     } catch (e) {
-      return json(
-        { ok: false, error: "Server error.", detail: String(e?.message || e) },
-        500,
-      );
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
   }
 
   if (request.method === "POST") {
     let payload;
-    try {
-      payload = await request.json();
-    } catch {
-      return json({ ok: false, error: "Invalid JSON" }, 400);
-    }
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
 
-    const part_number = String(payload.part_number || "").trim();
-    const customer = String(payload.customer || "").trim();
+    const part_number      = String(payload.part_number || "").trim();
+    const name             = String(payload.name || payload.part_number || "").trim();
+    const customer         = String(payload.customer || "").trim();
     const density_material = String(payload.density_material || "").trim();
-    const length_in = Number(payload.length_in);
-    const width_in = Number(payload.width_in);
-    const height_in = Number(payload.height_in);
-    const notes = String(payload.notes || "").trim();
+    const length_in        = Number(payload.length_in);
+    const width_in         = Number(payload.width_in);
+    const height_in        = Number(payload.height_in);
+    const weight           = Number.isFinite(Number(payload.weight)) ? Number(payload.weight) : 1;
+    const notes            = String(payload.notes || "").trim();
+    const color            = String(payload.color || "#D97706").trim();
+    const allow_rotation   = payload.allow_rotation ? 1 : 0;
+    const sort_order       = Number.isFinite(Number(payload.sort_order)) ? Number(payload.sort_order) : 0;
+    const category         = String(payload.category || "").trim();
+    const parent_group     = String(payload.parent_group || "").trim();
 
-    if (!part_number)
-      return json({ ok: false, error: "Part number is required." }, 400);
-    if (!Number.isFinite(length_in) || length_in <= 0)
-      return json({ ok: false, error: "Length must be greater than 0." }, 400);
-    if (!Number.isFinite(width_in) || width_in <= 0)
-      return json({ ok: false, error: "Width must be greater than 0." }, 400);
-    if (!Number.isFinite(height_in) || height_in <= 0)
-      return json({ ok: false, error: "Height must be greater than 0." }, 400);
+    if (!part_number) return json({ ok: false, error: "Part number is required." }, 400);
+    if (!Number.isFinite(length_in) || length_in <= 0) return json({ ok: false, error: "Length must be greater than 0." }, 400);
+    if (!Number.isFinite(width_in)  || width_in  <= 0) return json({ ok: false, error: "Width must be greater than 0." }, 400);
+    if (!Number.isFinite(height_in) || height_in <= 0) return json({ ok: false, error: "Height must be greater than 0." }, 400);
 
-    const id = crypto.randomUUID();
+    const id  = crypto.randomUUID();
     const now = new Date().toISOString();
 
     try {
-      await db
-        .prepare(
-          `INSERT INTO parts_library
-           (id, part_number, customer, density_material, length_in, width_in, height_in, notes, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(id, part_number, customer, density_material, length_in, width_in, height_in, notes, now, now)
-        .run();
+      await db.prepare(
+        `INSERT INTO parts (id, part_number, name, customer, density_material, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(id, part_number, name, customer, density_material, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group, now, now).run();
 
-      const part = await db
-        .prepare("SELECT * FROM parts_library WHERE id = ?")
-        .bind(id)
-        .first();
+      const part = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(id).first();
       return json({ ok: true, message: "Part created.", part }, 201);
     } catch (e) {
       const msg = String(e?.message || e);
       if (/unique/i.test(msg) || /constraint/i.test(msg)) {
-        return json(
-          { ok: false, error: "A part with that number already exists.", code: "DUPLICATE_PART_NUMBER" },
-          409,
-        );
+        return json({ ok: false, error: "A part with that number already exists.", code: "DUPLICATE_PART_NUMBER" }, 409);
       }
       return json({ ok: false, error: "Server error.", detail: msg }, 500);
     }
@@ -1253,60 +1248,39 @@ async function handleApiParts(request, env) {
 
   if (request.method === "PUT") {
     let payload;
-    try {
-      payload = await request.json();
-    } catch {
-      return json({ ok: false, error: "Invalid JSON" }, 400);
-    }
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
 
-    const id = String(payload.id || "").trim();
-    const part_number = String(payload.part_number || "").trim();
-    const customer = String(payload.customer || "").trim();
+    const id               = String(payload.id || "").trim();
+    const part_number      = String(payload.part_number || "").trim();
+    const customer         = String(payload.customer || "").trim();
     const density_material = String(payload.density_material || "").trim();
-    const length_in = Number(payload.length_in);
-    const width_in = Number(payload.width_in);
-    const height_in = Number(payload.height_in);
-    const notes = String(payload.notes || "").trim();
+    const length_in        = Number(payload.length_in);
+    const width_in         = Number(payload.width_in);
+    const height_in        = Number(payload.height_in);
+    const notes            = String(payload.notes || "").trim();
 
     if (!id) return json({ ok: false, error: "id is required." }, 400);
-    if (!part_number)
-      return json({ ok: false, error: "Part number is required." }, 400);
-    if (!Number.isFinite(length_in) || length_in <= 0)
-      return json({ ok: false, error: "Length must be greater than 0." }, 400);
-    if (!Number.isFinite(width_in) || width_in <= 0)
-      return json({ ok: false, error: "Width must be greater than 0." }, 400);
-    if (!Number.isFinite(height_in) || height_in <= 0)
-      return json({ ok: false, error: "Height must be greater than 0." }, 400);
+    if (!part_number) return json({ ok: false, error: "Part number is required." }, 400);
+    if (!Number.isFinite(length_in) || length_in <= 0) return json({ ok: false, error: "Length must be greater than 0." }, 400);
+    if (!Number.isFinite(width_in)  || width_in  <= 0) return json({ ok: false, error: "Width must be greater than 0." }, 400);
+    if (!Number.isFinite(height_in) || height_in <= 0) return json({ ok: false, error: "Height must be greater than 0." }, 400);
 
-    const existing = await db
-      .prepare("SELECT id FROM parts_library WHERE id = ?")
-      .bind(id)
-      .first();
+    const existing = await db.prepare("SELECT id FROM parts WHERE id = ?").bind(id).first();
     if (!existing) return json({ ok: false, error: "Part not found." }, 404);
 
     const now = new Date().toISOString();
     try {
-      await db
-        .prepare(
-          `UPDATE parts_library
-           SET part_number=?, customer=?, density_material=?, length_in=?, width_in=?, height_in=?, notes=?, updated_at=?
-           WHERE id=?`,
-        )
-        .bind(part_number, customer, density_material, length_in, width_in, height_in, notes, now, id)
-        .run();
+      await db.prepare(
+        `UPDATE parts SET part_number=?, customer=?, density_material=?, length_in=?, width_in=?, height_in=?, notes=?, updated_at=? WHERE id=?`
+      ).bind(part_number, customer, density_material, length_in, width_in, height_in, notes, now, id).run();
 
-      const part = await db
-        .prepare("SELECT * FROM parts_library WHERE id = ?")
-        .bind(id)
-        .first();
+      const part = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(id).first();
       return json({ ok: true, message: "Part updated.", part });
     } catch (e) {
       const msg = String(e?.message || e);
       if (/unique/i.test(msg) || /constraint/i.test(msg)) {
-        return json(
-          { ok: false, error: "A part with that number already exists.", code: "DUPLICATE_PART_NUMBER" },
-          409,
-        );
+        return json({ ok: false, error: "A part with that number already exists.", code: "DUPLICATE_PART_NUMBER" }, 409);
       }
       return json({ ok: false, error: "Server error.", detail: msg }, 500);
     }
@@ -1314,29 +1288,20 @@ async function handleApiParts(request, env) {
 
   if (request.method === "DELETE") {
     let payload;
-    try {
-      payload = await request.json();
-    } catch {
-      return json({ ok: false, error: "Invalid JSON" }, 400);
-    }
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
 
     const id = String(payload.id || "").trim();
     if (!id) return json({ ok: false, error: "id is required." }, 400);
 
-    const existing = await db
-      .prepare("SELECT id FROM parts_library WHERE id = ?")
-      .bind(id)
-      .first();
+    const existing = await db.prepare("SELECT id FROM parts WHERE id = ?").bind(id).first();
     if (!existing) return json({ ok: false, error: "Part not found." }, 404);
 
     try {
-      await db.prepare("DELETE FROM parts_library WHERE id = ?").bind(id).run();
+      await db.prepare("DELETE FROM parts WHERE id = ?").bind(id).run();
       return json({ ok: true, message: "Part deleted." });
     } catch (e) {
-      return json(
-        { ok: false, error: "Server error.", detail: String(e?.message || e) },
-        500,
-      );
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
   }
 
@@ -1713,6 +1678,13 @@ async function handleApiJobs(request, env) {
     const packing_instructions = String(payload.packing_instructions || "").trim();
     const contact_name         = String(payload.contact_name         || "").trim();
     const contact_phone        = String(payload.contact_phone        || "").trim();
+    const ship_to_company      = String(payload.ship_to_company      || "").trim();
+    const ship_to_attention    = String(payload.ship_to_attention    || "").trim();
+    const ship_to_street       = String(payload.ship_to_street       || "").trim();
+    const ship_to_street2      = String(payload.ship_to_street2      || "").trim();
+    const ship_to_city         = String(payload.ship_to_city         || "").trim();
+    const ship_to_state        = String(payload.ship_to_state        || "").trim();
+    const ship_to_zip          = String(payload.ship_to_zip          || "").trim();
     const combo_id             = payload.combo_id ? String(payload.combo_id).trim() : null;
     const load_count           = Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1;
     const total_bdft           = Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0;
@@ -1734,8 +1706,10 @@ async function handleApiJobs(request, env) {
           scrap_pickup, sales_lead, bol_info, payment_info, notes,
           packing_instructions, contact_name, contact_phone, combo_id,
           priority, confirmed_to_ship, processes, created_at, updated_at,
-          packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
+          ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
+          ship_to_city, ship_to_state, ship_to_zip
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, status, customer, po_number, invoice_number, ship_date, ship_day,
         location, delivery_time, method, carrier, load_count, total_bdft,
@@ -1743,6 +1717,8 @@ async function handleApiJobs(request, env) {
         packing_instructions, contact_name, contact_phone, combo_id,
         priority, confirmed_to_ship, processes, now, now,
         packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
+        ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
+        ship_to_city, ship_to_state, ship_to_zip,
       ).run();
 
       // Insert line items
@@ -1838,6 +1814,8 @@ async function handleApiJobs(request, env) {
       "sales_lead", "bol_info", "payment_info", "notes",
       "packing_instructions", "contact_name", "contact_phone",
       "packing_slip_filename", "packing_slip_invoice",
+      "ship_to_company", "ship_to_attention", "ship_to_street", "ship_to_street2",
+      "ship_to_city", "ship_to_state", "ship_to_zip",
     ];
     for (const f of textFields) {
       if (f in payload) { sets.push(`${f} = ?`); binds.push(String(payload[f] || "").trim()); }
@@ -3222,31 +3200,15 @@ async function handleApiBols(request, env) {
 /*
  * DDL — run once in the Cloudflare D1 console before deploying:
  *
- * CREATE TABLE IF NOT EXISTS load_builder_skus (
- *   id TEXT PRIMARY KEY,
- *   name TEXT NOT NULL,
- *   sku TEXT NOT NULL,
- *   length_in REAL NOT NULL,
- *   width_in REAL NOT NULL,
- *   height_in REAL NOT NULL,
- *   weight REAL NOT NULL DEFAULT 1,
- *   notes TEXT NOT NULL DEFAULT '',
- *   color TEXT NOT NULL DEFAULT '#D97706',
- *   allow_rotation INTEGER NOT NULL DEFAULT 0,
- *   sort_order INTEGER NOT NULL DEFAULT 0,
- *   parent_group TEXT NOT NULL DEFAULT '',
- *   created_at TEXT NOT NULL DEFAULT (datetime('now')),
- *   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
- * );
- *
- * CREATE INDEX IF NOT EXISTS idx_lb_skus_sku ON load_builder_skus(sku);
+ * load_builder_skus has been merged into the unified parts table.
+ * See the parts table DDL near handleApiParts above.
  */
 
-function mapSkuRow(row) {
+function mapPartToSku(row) {
   return {
     id: row.id,
-    name: row.name,
-    sku: row.sku,
+    name: row.name || row.part_number,
+    sku: row.part_number,
     length: row.length_in,
     width: row.width_in,
     height: row.height_in,
@@ -3259,127 +3221,131 @@ function mapSkuRow(row) {
   };
 }
 
-const LB_DEFAULT_SKUS = [
-  { name: "1in block", sku: "HB-01", length: 48, width: 24, height: 1, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
-  { name: "1.25in Block", sku: "HB-01.25", length: 48, width: 24, height: 1.25, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
-  { name: "1.5in Block", sku: "HB-1.5", length: 48, width: 24, height: 1.5, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
-  { name: "1.75in Block", sku: "HB-1.75", length: 48, width: 24, height: 1.75, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
-  { name: "2in block", sku: "HB-02", length: 48, width: 24, height: 2, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
-  { name: "2.25in Block", sku: "HB-02.25", length: 48, width: 24, height: 2.25, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
-  { name: "2.5in Block", sku: "HB-2.5", length: 48, width: 24, height: 2.5, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
-  { name: "2.75in Block", sku: "HB-2.75", length: 48, width: 24, height: 2.75, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
-  { name: "3in block", sku: "HB-03", length: 48, width: 24, height: 3, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
-  { name: "3.25in Block", sku: "HB-03.25", length: 48, width: 24, height: 3.25, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
-  { name: "3.5in Block", sku: "HB-3.5", length: 48, width: 24, height: 3.5, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
-  { name: "3.75in Block", sku: "HB-3.75", length: 48, width: 24, height: 3.75, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
-  { name: "4in block", sku: "HB-04", length: 48, width: 24, height: 4, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
-  { name: "4.25in Block", sku: "HB-04.25", length: 48, width: 24, height: 4.25, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
-  { name: "4.5in Block", sku: "HB-4.5", length: 48, width: 24, height: 4.5, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
-  { name: "4.75in Block", sku: "HB-4.75", length: 48, width: 24, height: 4.75, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
-  { name: "5in block", sku: "HB-05", length: 48, width: 24, height: 5, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
-  { name: "5.25in Block", sku: "HB-05.25", length: 48, width: 24, height: 5.25, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
-  { name: "5.5in Block", sku: "HB-5.5", length: 48, width: 24, height: 5.5, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
-  { name: "5.75in Block", sku: "HB-5.75", length: 48, width: 24, height: 5.75, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
-  { name: "6in block", sku: "HB-06", length: 48, width: 24, height: 6, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
-  { name: "6.25in Block", sku: "HB-06.25", length: 48, width: 24, height: 6.25, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
-  { name: "6.5in Block", sku: "HB-6.5", length: 48, width: 24, height: 6.5, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
-  { name: "6.75in Block", sku: "HB-6.75", length: 48, width: 24, height: 6.75, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
-  { name: "7in block", sku: "HB-07", length: 48, width: 24, height: 7, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
-  { name: "7.25in Block", sku: "HB-07.25", length: 48, width: 24, height: 7.25, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
-  { name: "7.5in Block", sku: "HB-7.5", length: 48, width: 24, height: 7.5, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
-  { name: "7.75in Block", sku: "HB-7.75", length: 48, width: 24, height: 7.75, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
-  { name: "8in block", sku: "HB-08", length: 48, width: 24, height: 8, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
-  { name: "8.25in Block", sku: "HB-08.25", length: 48, width: 24, height: 8.25, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
-  { name: "8.5in Block", sku: "HB-8.5", length: 48, width: 24, height: 8.5, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
-  { name: "8.75in Block", sku: "HB-8.75", length: 48, width: 24, height: 8.75, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
-  { name: "9in block", sku: "HB-09", length: 48, width: 24, height: 9, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
-  { name: "9.25in Block", sku: "HB-09.25", length: 48, width: 24, height: 9.25, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
-  { name: "9.5in Block", sku: "HB-9.5", length: 48, width: 24, height: 9.5, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
-  { name: "9.75in Block", sku: "HB-9.75", length: 48, width: 24, height: 9.75, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
-  { name: "10in block", sku: "HB-10", length: 48, width: 24, height: 10, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
-  { name: "10.25in Block", sku: "HB-10.25", length: 48, width: 24, height: 10.25, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
-  { name: "10.5in Block", sku: "HB-10.5", length: 48, width: 24, height: 10.5, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
-  { name: "10.75in Block", sku: "HB-10.75", length: 48, width: 24, height: 10.75, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
-  { name: "11in block", sku: "HB-11", length: 48, width: 24, height: 11, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
-  { name: "11.25in Block", sku: "HB-11.25", length: 48, width: 24, height: 11.25, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
-  { name: "11.5in Block", sku: "HB-11.5", length: 48, width: 24, height: 11.5, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
-  { name: "11.75in Block", sku: "HB-11.75", length: 48, width: 24, height: 11.75, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
-  { name: "12in block", sku: "HB-12", length: 48, width: 24, height: 12, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
-  { name: "12.25in Block", sku: "HB-12.25", length: 48, width: 24, height: 12.25, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
-  { name: "12.5in Block", sku: "HB-12.5", length: 48, width: 24, height: 12.5, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
-  { name: "12.75in Block", sku: "HB-12.75", length: 48, width: 24, height: 12.75, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
-  { name: "13in block", sku: "HB-13", length: 48, width: 24, height: 13, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
-  { name: "13.25in Block", sku: "HB-13.25", length: 48, width: 24, height: 13.25, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
-  { name: "13.5in Block", sku: "HB-13.5", length: 48, width: 24, height: 13.5, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
-  { name: "13.75in Block", sku: "HB-13.75", length: 48, width: 24, height: 13.75, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
-  { name: "14in block", sku: "HB-14", length: 48, width: 24, height: 14, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
-  { name: "14.25in Block", sku: "HB-14.25", length: 48, width: 24, height: 14.25, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
-  { name: "14.5in Block", sku: "HB-14.5", length: 48, width: 24, height: 14.5, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
-  { name: "14.75in Block", sku: "HB-14.75", length: 48, width: 24, height: 14.75, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
-  { name: "15in block", sku: "HB-15", length: 48, width: 24, height: 15, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
-  { name: "15.25in Block", sku: "HB-15.25", length: 48, width: 24, height: 15.25, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
-  { name: "15.5in Block", sku: "HB-15.5", length: 48, width: 24, height: 15.5, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
-  { name: "15.75in Block", sku: "HB-15.75", length: 48, width: 24, height: 15.75, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
-  { name: "16in block", sku: "HB-16", length: 48, width: 24, height: 16, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
-  { name: "16.25in Block", sku: "HB-16.25", length: 48, width: 24, height: 16.25, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
-  { name: "16.5in Block", sku: "HB-16.5", length: 48, width: 24, height: 16.5, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
-  { name: "16.75in Block", sku: "HB-16.75", length: 48, width: 24, height: 16.75, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
-  { name: "17in block", sku: "HB-17", length: 48, width: 24, height: 17, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
-  { name: "17.25in Block", sku: "HB-17.25", length: 48, width: 24, height: 17.25, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
-  { name: "17.5in Block", sku: "HB-17.5", length: 48, width: 24, height: 17.5, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
-  { name: "17.75in Block", sku: "HB-17.75", length: 48, width: 24, height: 17.75, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
-  { name: "18in block", sku: "HB-18", length: 48, width: 24, height: 18, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
-  { name: "18.25in Block", sku: "HB-18.25", length: 48, width: 24, height: 18.25, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
-  { name: "18.5in Block", sku: "HB-18.5", length: 48, width: 24, height: 18.5, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
-  { name: "18.75in Block", sku: "HB-18.75", length: 48, width: 24, height: 18.75, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
-  { name: "19in block", sku: "HB-19", length: 48, width: 24, height: 19, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
-  { name: "19.25in Block", sku: "HB-19.25", length: 48, width: 24, height: 19.25, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
-  { name: "19.5in Block", sku: "HB-19.5", length: 48, width: 24, height: 19.5, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
-  { name: "19.75in Block", sku: "HB-19.75", length: 48, width: 24, height: 19.75, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
-  { name: "20in block", sku: "HB-20", length: 48, width: 24, height: 20, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
-  { name: "20.25in Block", sku: "HB-20.25", length: 48, width: 24, height: 20.25, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
-  { name: "20.5in Block", sku: "HB-20.5", length: 48, width: 24, height: 20.5, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
-  { name: "20.75in Block", sku: "HB-20.75", length: 48, width: 24, height: 20.75, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
-  { name: "21in block", sku: "HB-21", length: 48, width: 24, height: 21, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
-  { name: "21.25in Block", sku: "HB-21.25", length: 48, width: 24, height: 21.25, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
-  { name: "21.5in Block", sku: "HB-21.5", length: 48, width: 24, height: 21.5, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
-  { name: "21.75in Block", sku: "HB-21.75", length: 48, width: 24, height: 21.75, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
-  { name: "22in block", sku: "HB-22", length: 48, width: 24, height: 22, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
-  { name: "22.25in Block", sku: "HB-22.25", length: 48, width: 24, height: 22.25, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
-  { name: "22.5in Block", sku: "HB-22.5", length: 48, width: 24, height: 22.5, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
-  { name: "22.75in Block", sku: "HB-22.75", length: 48, width: 24, height: 22.75, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
-  { name: "23in block", sku: "HB-23", length: 48, width: 24, height: 23, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
-  { name: "23.25in Block", sku: "HB-23.25", length: 48, width: 24, height: 23.25, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
-  { name: "23.5in Block", sku: "HB-23.5", length: 48, width: 24, height: 23.5, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
-  { name: "23.75in Block", sku: "HB-23.75", length: 48, width: 24, height: 23.75, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
-  { name: "24in block", sku: "HB-24", length: 48, width: 24, height: 24, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
-  { name: "24.25in Block", sku: "HB-24.25", length: 48, width: 24, height: 24.25, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
-  { name: "24.5in Block", sku: "HB-24.5", length: 48, width: 24, height: 24.5, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
-  { name: "24.75in Block", sku: "HB-24.75", length: 48, width: 24, height: 24.75, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
-  { name: "25in block", sku: "HB-25", length: 48, width: 24, height: 25, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
-  { name: "25.25in Block", sku: "HB-25.25", length: 48, width: 24, height: 25.25, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
-  { name: "25.5in Block", sku: "HB-25.5", length: 48, width: 24, height: 25.5, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
-  { name: "25.75in Block", sku: "HB-25.75", length: 48, width: 24, height: 25.75, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
-  { name: "26in block", sku: "HB-26", length: 48, width: 24, height: 26, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
-  { name: "26.25in Block", sku: "HB-26.25", length: 48, width: 24, height: 26.25, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
-  { name: "26.5in Block", sku: "HB-26.5", length: 48, width: 24, height: 26.5, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
-  { name: "26.75in Block", sku: "HB-26.75", length: 48, width: 24, height: 26.75, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
-  { name: "27in block", sku: "HB-27", length: 48, width: 24, height: 27, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
-  { name: "27.25in Block", sku: "HB-27.25", length: 48, width: 24, height: 27.25, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
-  { name: "27.5in Block", sku: "HB-27.5", length: 48, width: 24, height: 27.5, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
-  { name: "27.75in Block", sku: "HB-27.75", length: 48, width: 24, height: 27.75, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
-  { name: "28in block", sku: "HB-28", length: 48, width: 24, height: 28, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
-  { name: "28.25in Block", sku: "HB-28.25", length: 48, width: 24, height: 28.25, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
-  { name: "28.5in Block", sku: "HB-28.5", length: 48, width: 24, height: 28.5, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
-  { name: "28.75in Block", sku: "HB-28.75", length: 48, width: 24, height: 28.75, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
-  { name: "29in block", sku: "HB-29", length: 48, width: 24, height: 29, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
-  { name: "29.25in Block", sku: "HB-29.25", length: 48, width: 24, height: 29.25, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
-  { name: "29.5in Block", sku: "HB-29.5", length: 48, width: 24, height: 29.5, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
-  { name: "29.75in Block", sku: "HB-29.75", length: 48, width: 24, height: 29.75, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
-  { name: "30in block", sku: "HB-30", length: 48, width: 24, height: 30, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
-  { name: "30.25in Block", sku: "HB-30.25", length: 48, width: 24, height: 30.25, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
-  { name: "30.5in Block", sku: "HB-30.5", length: 48, width: 24, height: 30.5, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
-  { name: "30.75in Block", sku: "HB-30.75", length: 48, width: 24, height: 30.75, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
+const DEFAULT_PARTS = [
+  { part_number: "HB-01", name: "1in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 1, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
+  { part_number: "HB-01.25", name: "1.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 1.25, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
+  { part_number: "HB-1.5", name: "1.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 1.5, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
+  { part_number: "HB-1.75", name: "1.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 1.75, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
+  { part_number: "HB-02", name: "2in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 2, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
+  { part_number: "HB-02.25", name: "2.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 2.25, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
+  { part_number: "HB-2.5", name: "2.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 2.5, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
+  { part_number: "HB-2.75", name: "2.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 2.75, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
+  { part_number: "HB-03", name: "3in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 3, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
+  { part_number: "HB-03.25", name: "3.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 3.25, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
+  { part_number: "HB-3.5", name: "3.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 3.5, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
+  { part_number: "HB-3.75", name: "3.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 3.75, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
+  { part_number: "HB-04", name: "4in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 4, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
+  { part_number: "HB-04.25", name: "4.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 4.25, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
+  { part_number: "HB-4.5", name: "4.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 4.5, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
+  { part_number: "HB-4.75", name: "4.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 4.75, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
+  { part_number: "HB-05", name: "5in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 5, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
+  { part_number: "HB-05.25", name: "5.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 5.25, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
+  { part_number: "HB-5.5", name: "5.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 5.5, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
+  { part_number: "HB-5.75", name: "5.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 5.75, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
+  { part_number: "HB-06", name: "6in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 6, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
+  { part_number: "HB-06.25", name: "6.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 6.25, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
+  { part_number: "HB-6.5", name: "6.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 6.5, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
+  { part_number: "HB-6.75", name: "6.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 6.75, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
+  { part_number: "HB-07", name: "7in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 7, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
+  { part_number: "HB-07.25", name: "7.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 7.25, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
+  { part_number: "HB-7.5", name: "7.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 7.5, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
+  { part_number: "HB-7.75", name: "7.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 7.75, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
+  { part_number: "HB-08", name: "8in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 8, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
+  { part_number: "HB-08.25", name: "8.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 8.25, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
+  { part_number: "HB-8.5", name: "8.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 8.5, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
+  { part_number: "HB-8.75", name: "8.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 8.75, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
+  { part_number: "HB-09", name: "9in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 9, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
+  { part_number: "HB-09.25", name: "9.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 9.25, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
+  { part_number: "HB-9.5", name: "9.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 9.5, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
+  { part_number: "HB-9.75", name: "9.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 9.75, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
+  { part_number: "HB-10", name: "10in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 10, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
+  { part_number: "HB-10.25", name: "10.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 10.25, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
+  { part_number: "HB-10.5", name: "10.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 10.5, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
+  { part_number: "HB-10.75", name: "10.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 10.75, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
+  { part_number: "HB-11", name: "11in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 11, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
+  { part_number: "HB-11.25", name: "11.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 11.25, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
+  { part_number: "HB-11.5", name: "11.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 11.5, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
+  { part_number: "HB-11.75", name: "11.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 11.75, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
+  { part_number: "HB-12", name: "12in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 12, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
+  { part_number: "HB-12.25", name: "12.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 12.25, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
+  { part_number: "HB-12.5", name: "12.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 12.5, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
+  { part_number: "HB-12.75", name: "12.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 12.75, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
+  { part_number: "HB-13", name: "13in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 13, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
+  { part_number: "HB-13.25", name: "13.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 13.25, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
+  { part_number: "HB-13.5", name: "13.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 13.5, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
+  { part_number: "HB-13.75", name: "13.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 13.75, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
+  { part_number: "HB-14", name: "14in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 14, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
+  { part_number: "HB-14.25", name: "14.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 14.25, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
+  { part_number: "HB-14.5", name: "14.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 14.5, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
+  { part_number: "HB-14.75", name: "14.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 14.75, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
+  { part_number: "HB-15", name: "15in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 15, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
+  { part_number: "HB-15.25", name: "15.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 15.25, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
+  { part_number: "HB-15.5", name: "15.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 15.5, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
+  { part_number: "HB-15.75", name: "15.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 15.75, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
+  { part_number: "HB-16", name: "16in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 16, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
+  { part_number: "HB-16.25", name: "16.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 16.25, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
+  { part_number: "HB-16.5", name: "16.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 16.5, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
+  { part_number: "HB-16.75", name: "16.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 16.75, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
+  { part_number: "HB-17", name: "17in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 17, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
+  { part_number: "HB-17.25", name: "17.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 17.25, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
+  { part_number: "HB-17.5", name: "17.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 17.5, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
+  { part_number: "HB-17.75", name: "17.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 17.75, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
+  { part_number: "HB-18", name: "18in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 18, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
+  { part_number: "HB-18.25", name: "18.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 18.25, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
+  { part_number: "HB-18.5", name: "18.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 18.5, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
+  { part_number: "HB-18.75", name: "18.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 18.75, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
+  { part_number: "HB-19", name: "19in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 19, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
+  { part_number: "HB-19.25", name: "19.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 19.25, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
+  { part_number: "HB-19.5", name: "19.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 19.5, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
+  { part_number: "HB-19.75", name: "19.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 19.75, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
+  { part_number: "HB-20", name: "20in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 20, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
+  { part_number: "HB-20.25", name: "20.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 20.25, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
+  { part_number: "HB-20.5", name: "20.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 20.5, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
+  { part_number: "HB-20.75", name: "20.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 20.75, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
+  { part_number: "HB-21", name: "21in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 21, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
+  { part_number: "HB-21.25", name: "21.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 21.25, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
+  { part_number: "HB-21.5", name: "21.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 21.5, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
+  { part_number: "HB-21.75", name: "21.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 21.75, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
+  { part_number: "HB-22", name: "22in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 22, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
+  { part_number: "HB-22.25", name: "22.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 22.25, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
+  { part_number: "HB-22.5", name: "22.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 22.5, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
+  { part_number: "HB-22.75", name: "22.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 22.75, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
+  { part_number: "HB-23", name: "23in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 23, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
+  { part_number: "HB-23.25", name: "23.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 23.25, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
+  { part_number: "HB-23.5", name: "23.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 23.5, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
+  { part_number: "HB-23.75", name: "23.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 23.75, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
+  { part_number: "HB-24", name: "24in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 24, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
+  { part_number: "HB-24.25", name: "24.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 24.25, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
+  { part_number: "HB-24.5", name: "24.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 24.5, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
+  { part_number: "HB-24.75", name: "24.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 24.75, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
+  { part_number: "HB-25", name: "25in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 25, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
+  { part_number: "HB-25.25", name: "25.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 25.25, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
+  { part_number: "HB-25.5", name: "25.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 25.5, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
+  { part_number: "HB-25.75", name: "25.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 25.75, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
+  { part_number: "HB-26", name: "26in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 26, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
+  { part_number: "HB-26.25", name: "26.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 26.25, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
+  { part_number: "HB-26.5", name: "26.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 26.5, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
+  { part_number: "HB-26.75", name: "26.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 26.75, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
+  { part_number: "HB-27", name: "27in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 27, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
+  { part_number: "HB-27.25", name: "27.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 27.25, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
+  { part_number: "HB-27.5", name: "27.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 27.5, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
+  { part_number: "HB-27.75", name: "27.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 27.75, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
+  { part_number: "HB-28", name: "28in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 28, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
+  { part_number: "HB-28.25", name: "28.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 28.25, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
+  { part_number: "HB-28.5", name: "28.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 28.5, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
+  { part_number: "HB-28.75", name: "28.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 28.75, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
+  { part_number: "HB-29", name: "29in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 29, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
+  { part_number: "HB-29.25", name: "29.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 29.25, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
+  { part_number: "HB-29.5", name: "29.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 29.5, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
+  { part_number: "HB-29.75", name: "29.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 29.75, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
+  { part_number: "HB-30", name: "30in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 30, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
+  { part_number: "HB-30.25", name: "30.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 30.25, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
+  { part_number: "HB-30.5", name: "30.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 30.5, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
+  { part_number: "HB-30.75", name: "30.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 30.75, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
+  { part_number: "H4040-4", name: "H4040-4", customer: "DiversiTech", density_material: "1.0 RC", length: 37.5, width: 37.5, height: 3.62, weight: 1, notes: "", color: "#D97706", category: "", parent_group: "" },
+  { part_number: "H1840-4", name: "H1840-4", customer: "DiversiTech", density_material: "1.0 RC", length: 37.5, width: 15.5, height: 3.62, weight: 1, notes: "", color: "#D97706", category: "", parent_group: "" },
+  { part_number: "H3232-4", name: "H3232-4", customer: "DiversiTech", density_material: "1.0 RC", length: 29.5, width: 29.5, height: 3.62, weight: 1, notes: "", color: "#D97706", category: "", parent_group: "" },
+  { part_number: "H2436-4", name: "H2436-4", customer: "DiversiTech", density_material: "1.0 RC", length: 33.5, width: 21.5, height: 3.62, weight: 1, notes: "", color: "#D97706", category: "", parent_group: "" },
 ];
 
 async function handleApiLoadBuilderSkus(request, env) {
@@ -3392,9 +3358,9 @@ async function handleApiLoadBuilderSkus(request, env) {
 
   if (request.method === "GET" && !skuId) {
     const result = await db.prepare(
-      "SELECT * FROM load_builder_skus ORDER BY height_in ASC, name ASC"
+      "SELECT * FROM parts ORDER BY sort_order ASC, height_in ASC, name ASC"
     ).all();
-    return json((result.results || []).map(mapSkuRow));
+    return json((result.results || []).map(mapPartToSku));
   }
 
   if (request.method === "POST" && !skuId) {
@@ -3405,13 +3371,13 @@ async function handleApiLoadBuilderSkus(request, env) {
     if (!sku) return json({ ok: false, error: "SKU code required." }, 400);
     if (!length || !width || !height) return json({ ok: false, error: "Dimensions required." }, 400);
     const newId = crypto.randomUUID();
-    const countRow = await db.prepare("SELECT COUNT(*) as cnt FROM load_builder_skus").first();
+    const countRow = await db.prepare("SELECT COUNT(*) as cnt FROM parts").first();
     const sortOrder = countRow?.cnt || 0;
     await db.prepare(
-      "INSERT INTO load_builder_skus (id, name, sku, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(newId, name, sku, +length, +width, +height, +weight || 1, notes || "", color || "#D97706", allowRotation ? 1 : 0, sortOrder, category || "", parent_group || "").run();
-    const created = await db.prepare("SELECT * FROM load_builder_skus WHERE id = ?").bind(newId).first();
-    return json(mapSkuRow(created), 201);
+      "INSERT INTO parts (id, part_number, name, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(newId, sku, name, +length, +width, +height, +weight || 1, notes || "", color || "#D97706", allowRotation ? 1 : 0, sortOrder, category || "", parent_group || "").run();
+    const created = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(newId).first();
+    return json(mapPartToSku(created), 201);
   }
 
   if (request.method === "PUT" && skuId) {
@@ -3421,7 +3387,7 @@ async function handleApiLoadBuilderSkus(request, env) {
     const updates = [];
     const binds = [];
     if (name !== undefined) { updates.push("name = ?"); binds.push(name); }
-    if (sku !== undefined) { updates.push("sku = ?"); binds.push(sku); }
+    if (sku !== undefined) { updates.push("part_number = ?"); binds.push(sku); }
     if (length !== undefined) { updates.push("length_in = ?"); binds.push(+length); }
     if (width !== undefined) { updates.push("width_in = ?"); binds.push(+width); }
     if (height !== undefined) { updates.push("height_in = ?"); binds.push(+height); }
@@ -3433,14 +3399,14 @@ async function handleApiLoadBuilderSkus(request, env) {
     if (parent_group !== undefined) { updates.push("parent_group = ?"); binds.push(parent_group || ""); }
     updates.push("updated_at = datetime('now')");
     if (updates.length === 1) return json({ ok: false, error: "Nothing to update." }, 400);
-    await db.prepare(`UPDATE load_builder_skus SET ${updates.join(", ")} WHERE id = ?`).bind(...binds, skuId).run();
-    const updated = await db.prepare("SELECT * FROM load_builder_skus WHERE id = ?").bind(skuId).first();
+    await db.prepare(`UPDATE parts SET ${updates.join(", ")} WHERE id = ?`).bind(...binds, skuId).run();
+    const updated = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(skuId).first();
     if (!updated) return json({ ok: false, error: "SKU not found." }, 404);
-    return json(mapSkuRow(updated));
+    return json(mapPartToSku(updated));
   }
 
   if (request.method === "DELETE" && skuId) {
-    await db.prepare("DELETE FROM load_builder_skus WHERE id = ?").bind(skuId).run();
+    await db.prepare("DELETE FROM parts WHERE id = ?").bind(skuId).run();
     return json({ success: true });
   }
 
@@ -3451,21 +3417,21 @@ async function handleApiLoadBuilderSkusDeleteAll(request, env) {
   if (request.method !== "DELETE") return json({ ok: false, error: "Method Not Allowed" }, 405);
   const db = env.DB;
   if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
-  await db.prepare("DELETE FROM load_builder_skus").run();
+  await db.prepare("DELETE FROM parts").run();
   return json({ success: true });
 }
 
-async function handleApiLoadBuilderSkusSeed(request, env) {
+async function handleApiPartsSeed(request, env) {
   if (request.method !== "POST") return json({ ok: false, error: "Method Not Allowed" }, 405);
   const db = env.DB;
   if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
-  const countRow = await db.prepare("SELECT COUNT(*) as cnt FROM load_builder_skus").first();
-  if ((countRow?.cnt || 0) > 0) return json({ seeded: false, message: "SKUs already exist" });
-  for (let i = 0; i < LB_DEFAULT_SKUS.length; i++) {
-    const s = LB_DEFAULT_SKUS[i];
+  const countRow = await db.prepare("SELECT COUNT(*) as cnt FROM parts").first();
+  if ((countRow?.cnt || 0) > 0) return json({ seeded: false, message: "Parts already exist" });
+  for (let i = 0; i < DEFAULT_PARTS.length; i++) {
+    const s = DEFAULT_PARTS[i];
     await db.prepare(
-      "INSERT INTO load_builder_skus (id, name, sku, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(crypto.randomUUID(), s.name, s.sku, s.length, s.width, s.height, s.weight, s.notes, s.color, 0, i).run();
+      "INSERT INTO parts (id, part_number, name, customer, density_material, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(crypto.randomUUID(), s.part_number, s.name, s.customer || "", s.density_material || "", s.length, s.width, s.height, s.weight, s.notes, s.color, 0, i, s.category || "", s.parent_group || "").run();
   }
-  return json({ seeded: true, message: `Inserted ${LB_DEFAULT_SKUS.length} default SKUs.` });
+  return json({ seeded: true, message: `Inserted ${DEFAULT_PARTS.length} default parts.` });
 }
