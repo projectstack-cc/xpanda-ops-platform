@@ -1178,9 +1178,9 @@
         const produced = calc.blocksNeeded * sec.totalPieces;
         const surplus  = produced - sec._qty;
         cards.push(`<div class="stat-card">
-          <div class="stat-num">${produced.toLocaleString()}</div>
-          <div class="stat-label">${esc(sec.label)} Produced</div>
-          <div class="stat-sublabel">${surplus} surplus (${sec._qty.toLocaleString()} needed)</div>
+          <div class="stat-num">${sec._qty.toLocaleString()}</div>
+          <div class="stat-label">${esc(sec.label)} Ordered</div>
+          <div class="stat-sublabel">${produced.toLocaleString()} produced · ${surplus >= 0 ? surplus + ' surplus' : Math.abs(surplus) + ' short'}</div>
         </div>`);
       }
     }
