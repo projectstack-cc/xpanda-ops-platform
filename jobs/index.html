@@ -158,6 +158,43 @@
             <input type="text" id="f-sales-lead" placeholder="e.g. Tim for MS">
           </div>
         </div>
+        <div class="jobs-form-group" style="grid-column: 1 / -1;">
+          <div id="ship-to-toggle" style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; margin-bottom:6px;">
+            <span id="ship-to-chevron" style="font-size:12px; transition:transform 0.2s;">&#9658;</span>
+            <label style="cursor:pointer; font-weight:600; font-size:13px;">Ship-To Address</label>
+            <span id="ship-to-summary" style="font-size:12px; color:var(--muted); margin-left:4px;"></span>
+          </div>
+          <div id="ship-to-fields" hidden>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+              <div class="jobs-field">
+                <label for="f-ship-to-company">Company</label>
+                <input type="text" id="f-ship-to-company" placeholder="Ship-to company name">
+              </div>
+              <div class="jobs-field">
+                <label for="f-ship-to-attention">Attention</label>
+                <input type="text" id="f-ship-to-attention" placeholder="ATTN: name">
+              </div>
+            </div>
+            <div class="jobs-field" style="margin-top:8px;">
+              <label for="f-ship-to-street">Street</label>
+              <input type="text" id="f-ship-to-street" placeholder="Street address">
+            </div>
+            <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:8px; margin-top:8px;">
+              <div class="jobs-field">
+                <label for="f-ship-to-city">City</label>
+                <input type="text" id="f-ship-to-city" placeholder="City">
+              </div>
+              <div class="jobs-field">
+                <label for="f-ship-to-state">State</label>
+                <input type="text" id="f-ship-to-state" placeholder="ST" maxlength="2" style="text-transform:uppercase;">
+              </div>
+              <div class="jobs-field">
+                <label for="f-ship-to-zip">Zip</label>
+                <input type="text" id="f-ship-to-zip" placeholder="Zip" maxlength="10">
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="jobs-form-grid-2">
           <div class="jobs-field">
             <label for="f-po-number">PO Number</label>
@@ -565,6 +602,7 @@ function buildCard(job) {
     ${procHtml}
     ${(job.status === 'done' || job.status === 'loading' || job.status === 'shipped') ? `
     <div class="jobs-bol-row" id="bol-row-${job.id}">
+      <a class="jobs-bol-link" href="/logistics/load-builder.html?job_id=${job.id}" onclick="event.stopPropagation()" style="background:#fef3c7;color:#92400e;">Build Load</a>
       <a class="jobs-bol-link" href="/logistics/bol-generator.html?job_id=${job.id}" onclick="event.stopPropagation()">Generate BOL</a>
       <span class="jobs-bol-number" id="bol-num-${job.id}"></span>
     </div>` : ''}
@@ -873,7 +911,22 @@ function prefillForm(data) {
     highlight(el);
   };
 
-  if (data.ship_to?.company) set('f-customer',       data.ship_to.company);
+  if (data.ship_to?.company)   set('f-customer',           data.ship_to.company);
+  if (data.ship_to?.company)   set('f-ship-to-company',    data.ship_to.company);
+  if (data.ship_to?.attention) set('f-ship-to-attention',  data.ship_to.attention);
+  if (data.ship_to?.street)    set('f-ship-to-street',     data.ship_to.street);
+  if (data.ship_to?.city)      set('f-ship-to-city',       data.ship_to.city);
+  if (data.ship_to?.state)     set('f-ship-to-state',      data.ship_to.state);
+  if (data.ship_to?.zip)       set('f-ship-to-zip',        data.ship_to.zip);
+  if (data.ship_to?.city || data.ship_to?.state) {
+    const loc = [data.ship_to.city, data.ship_to.state].filter(Boolean).join(', ');
+    set('f-location', loc);
+  }
+  if (data.ship_to?.street || data.ship_to?.city) {
+    document.getElementById('ship-to-fields').hidden = false;
+    document.getElementById('ship-to-chevron').style.transform = 'rotate(90deg)';
+  }
+  updateShipToSummary();
   if (data.po_number)         set('f-po-number',      data.po_number);
   if (data.invoice_number)    set('f-invoice-number', data.invoice_number);
   if (data.contact_name)      set('f-contact-name',   data.contact_name);
@@ -945,14 +998,37 @@ function hideSlipBadge() {
   badge.innerHTML = '';
 }
 
+function updateShipToSummary() {
+  const city  = document.getElementById('f-ship-to-city').value.trim();
+  const state = document.getElementById('f-ship-to-state').value.trim();
+  const el    = document.getElementById('ship-to-summary');
+  if (el) el.textContent = (city || state) ? [city, state].filter(Boolean).join(', ') : '';
+}
+
+document.getElementById('ship-to-toggle').addEventListener('click', () => {
+  const fields  = document.getElementById('ship-to-fields');
+  const chevron = document.getElementById('ship-to-chevron');
+  const isHidden = fields.hidden;
+  fields.hidden = !isHidden;
+  chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
+});
+
+document.getElementById('f-ship-to-city').addEventListener('input', updateShipToSummary);
+document.getElementById('f-ship-to-state').addEventListener('input', updateShipToSummary);
+
 function clearForm() {
   const textIds = [
     'f-customer', 'f-sales-lead', 'f-po-number', 'f-invoice-number',
     'f-ship-date', 'f-delivery-time', 'f-location', 'f-carrier',
     'f-contact-name', 'f-contact-phone', 'f-payment-info', 'f-bol-info',
     'f-packing', 'f-notes',
+    'f-ship-to-company', 'f-ship-to-attention', 'f-ship-to-street',
+    'f-ship-to-city', 'f-ship-to-state', 'f-ship-to-zip',
   ];
   textIds.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('ship-to-fields').hidden = true;
+  document.getElementById('ship-to-chevron').style.transform = '';
+  document.getElementById('ship-to-summary').textContent = '';
 
   document.getElementById('f-ship-day-display').textContent = '';
   document.getElementById('f-method').value       = '';
@@ -996,6 +1072,18 @@ function populateForm(job) {
   set('f-bol-info',       job.bol_info);
   set('f-packing',        job.packing_instructions);
   set('f-notes',          job.notes);
+
+  set('f-ship-to-company',   job.ship_to_company);
+  set('f-ship-to-attention', job.ship_to_attention);
+  set('f-ship-to-street',    job.ship_to_street);
+  set('f-ship-to-city',      job.ship_to_city);
+  set('f-ship-to-state',     job.ship_to_state);
+  set('f-ship-to-zip',       job.ship_to_zip);
+  updateShipToSummary();
+  if (job.ship_to_street || job.ship_to_city) {
+    document.getElementById('ship-to-fields').hidden = false;
+    document.getElementById('ship-to-chevron').style.transform = 'rotate(90deg)';
+  }
 
   document.getElementById('f-ship-day-display').textContent = getShipDay(job.ship_date);
   document.getElementById('f-confirmed').checked = !!job.confirmed_to_ship;
@@ -1134,6 +1222,13 @@ async function saveJob() {
     combo_id:             selectedComboId || null,
     line_items:           collectLineItems(),
     processes:            collectProcesses(),
+    ship_to_company:      document.getElementById('f-ship-to-company').value.trim(),
+    ship_to_attention:    document.getElementById('f-ship-to-attention').value.trim(),
+    ship_to_street:       document.getElementById('f-ship-to-street').value.trim(),
+    ship_to_street2:      '',
+    ship_to_city:         document.getElementById('f-ship-to-city').value.trim(),
+    ship_to_state:        document.getElementById('f-ship-to-state').value.trim(),
+    ship_to_zip:          document.getElementById('f-ship-to-zip').value.trim(),
   };
 
   if (pendingSlip) {
