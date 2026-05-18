@@ -1271,32 +1271,32 @@ async function generatePdf(bol) {
     deliveryTime:  { x: 38,  y: 760, size: 18 },
 
     // Top-right block
-    date:          { x: 347, y: 721, size: 10 },           // right of "Date:" label
-    bolNumber:     { x: 420, y: 700, size: 14, bold: true },// below "Bill of Lading No:" label
-    carrierName:   { x: 390, y: 656, size: 10 },            // right of "Name:" label
-    trailerNo:     { x: 365, y: 640, size: 10 },            // right of "No:" label
+    date:          { x: 347, y: 718, size: 10 },           // right of "Date:" label
+    bolNumber:     { x: 416, y: 698, size: 14, bold: true },// below "Bill of Lading No:" label
+    carrierName:   { x: 390, y: 654, size: 10 },            // right of "Name:" label
+    trailerNo:     { x: 365, y: 638, size: 10 },            // right of "No:" label
 
     // Left column — Ship To (4 lines, inside cell)
-    shipLine1:     { x: 42,  y: 618, size: 10 },
-    shipLine2:     { x: 42,  y: 605, size: 10 },
-    shipLine3:     { x: 42,  y: 592, size: 10 },
-    shipLine4:     { x: 42,  y: 579, size: 10 },
+    shipLine1:     { x: 42,  y: 609, size: 10 },
+    shipLine2:     { x: 42,  y: 596, size: 10 },
+    shipLine3:     { x: 42,  y: 583, size: 10 },
+    shipLine4:     { x: 42,  y: 570, size: 10 },
 
     // Location No — same baseline as first Ship To line
-    locationNo:    { x: 250, y: 618, size: 10 },
+    locationNo:    { x: 250, y: 625, size: 10 },
 
     // Right column — Special Instructions (multiline, below label)
-    specialInstr:  { x: 311, y: 595, size: 9, lineH: 11, maxW: 255 },
+    specialInstr:  { x: 311, y: 593, size: 9, lineH: 11, maxW: 255 },
 
     // Right column — Contact Info (multiline, below label)
-    contactInfo:   { x: 313, y: 533, size: 9, lineH: 11, maxW: 255 },
+    contactInfo:   { x: 313, y: 531, size: 9, lineH: 11, maxW: 255 },
 
     // Left column — Scrap Pick Up checkboxes
     scrapYes:      { x: 109, y: 515, size: 10 },   // X next to ☐ Yes
     scrapNo:       { x: 110, y: 498, size: 10 },   // X next to ☐ No
 
     // Commodity description rows
-    commodity:     { x: 38,  y: 421, size: 10, lineH: 10.5, maxW: 535 },
+    commodity:     { x: 38,  y: 420, size: 10, lineH: 10.5, maxW: 535 },
   };
 
   let pdfBytes;
