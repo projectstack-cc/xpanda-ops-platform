@@ -769,24 +769,53 @@ async function prefillFromJob(jobId) {
       document.getElementById('f-commodity').value = lines.join('\n');
     }
 
-    // Customer: try single-match search, else fall back to manual
     if (job.customer) {
-      try {
-        const cRes  = await fetch('/api/bol-customers?search=' + encodeURIComponent(job.customer));
-        const cData = await cRes.json();
-        const matches = cData.customers || [];
-        if (matches.length === 1) {
-          selectCustomer(matches[0]);
-        } else {
-          document.getElementById('f-ship-company').value = job.customer;
-          if (job.location) {
-            const parts = job.location.split(',').map(s => s.trim());
-            if (parts[0]) document.getElementById('f-ship-city').value  = parts[0];
-            if (parts[1]) document.getElementById('f-ship-state').value = parts[1];
+      const hasStructuredAddr = job.ship_to_street || job.ship_to_city || job.ship_to_zip;
+
+      if (hasStructuredAddr) {
+        let matched = false;
+        try {
+          const cRes  = await fetch('/api/bol-customers?search=' + encodeURIComponent(job.ship_to_company || job.customer));
+          const cData = await cRes.json();
+          const matches = cData.customers || [];
+          const exact = matches.find(c =>
+            (c.company || '').toLowerCase() === (job.ship_to_company || job.customer || '').toLowerCase() &&
+            (c.street  || '').toLowerCase() === (job.ship_to_street  || '').toLowerCase()
+          );
+          if (exact) { selectCustomer(exact); matched = true; }
+        } catch { /* continue to manual fill */ }
+
+        if (!matched) {
+          document.getElementById('f-ship-company').value   = job.ship_to_company || job.customer || '';
+          document.getElementById('f-ship-attention').value = job.ship_to_attention || '';
+          document.getElementById('f-ship-street').value    = job.ship_to_street   || '';
+          if (document.getElementById('f-ship-street2')) {
+            document.getElementById('f-ship-street2').value = job.ship_to_street2  || '';
           }
-          showCustIndicator('custom', 'Custom address — pre-filled from job. Edit as needed.');
+          document.getElementById('f-ship-city').value      = job.ship_to_city    || '';
+          document.getElementById('f-ship-state').value     = job.ship_to_state   || '';
+          document.getElementById('f-ship-zip').value       = job.ship_to_zip     || '';
+          document.getElementById('customer-search').value  = job.ship_to_company || job.customer || '';
+          showCustIndicator('custom', 'Address pre-filled from job. <button class="bol-clear-cust-btn" onclick="clearCustSelection()">Clear</button>');
         }
-      } catch { /* keep manual entry */ }
+      } else {
+        try {
+          const cRes  = await fetch('/api/bol-customers?search=' + encodeURIComponent(job.customer));
+          const cData = await cRes.json();
+          const matches = cData.customers || [];
+          if (matches.length === 1) {
+            selectCustomer(matches[0]);
+          } else {
+            document.getElementById('f-ship-company').value = job.customer;
+            if (job.location) {
+              const parts = job.location.split(',').map(s => s.trim());
+              if (parts[0]) document.getElementById('f-ship-city').value  = parts[0];
+              if (parts[1]) document.getElementById('f-ship-state').value = parts[1];
+            }
+            showCustIndicator('custom', 'Custom address — pre-filled from job. Edit as needed.');
+          }
+        } catch { /* keep manual entry */ }
+      }
     }
   } catch (e) {
     console.error('prefillFromJob failed:', e);
