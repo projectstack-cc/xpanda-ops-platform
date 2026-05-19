@@ -1299,9 +1299,9 @@ async function generatePdf(bol) {
     deliveryTime:  { x: 390, y: 758, size: 20 },
 
     // Top-right block
-    date:          { x: 346, y: 716, size: 10 },            // right of "Date:" label (label at x:310, y:718)
+    date:          { x: 346, y: 712, size: 10 },            // right of "Date:" label (label at x:310, y:718)
     bolNumber:     { x: 404, y: 693, size: 14, bold: true }, // below "Bill of Lading No:" (label at y:700)
-    carrierName:   { x: 389, y: 651, size: 10 },             // right of "Carrier Name:" (label at x:310, y:654)
+    carrierName:   { x: 389, y: 648, size: 10 },             // right of "Carrier Name:" (label at x:310, y:654)
     trailerNo:     { x: 365, y: 622, size: 10 },             // right of "Trailer No:" (label at x:310, y:622)
 
     // Left column — Ship To (4 lines, INDENTED under "Ship To:" label)
@@ -1315,11 +1315,11 @@ async function generatePdf(bol) {
     specialInstr:  { x: 315, y: 585, size: 9, lineH: 12, maxW: 255 },
 
     // Contact Info — right column, below label (label "Contact Info:" at x:312, y:544)
-    contactInfo:   { x: 315, y: 530, size: 9, lineH: 12, maxW: 255 },
+    contactInfo:   { x: 315, y: 525, size: 11, lineH: 12, maxW: 255 },
 
     // Scrap Pick Up checkboxes (☐ at x:107)
-    scrapYes:      { x: 109, y: 515, size: 10 },
-    scrapNo:       { x: 109, y: 498, size: 10 },
+    scrapYes:      { x: 110, y: 513, size: 10 },
+    scrapNo:       { x: 110, y: 497, size: 10 },
 
     // Commodity description — larger text with generous line spacing
     commodity:     { x: 55,  y: 410, size: 13, lineH: 28, maxW: 510 },

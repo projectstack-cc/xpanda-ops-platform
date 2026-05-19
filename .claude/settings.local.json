@@ -18,7 +18,10 @@
       "Bash(git push *)",
       "Bash(git checkout *)",
       "Bash(git merge *)",
-      "Bash(Remove-Item *)"
+      "Bash(Remove-Item *)",
+      "WebSearch",
+      "WebFetch(domain:claude.com)",
+      "Bash(git remote *)"
     ]
   }
 }
