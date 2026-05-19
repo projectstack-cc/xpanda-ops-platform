@@ -2119,6 +2119,7 @@ function openBolModal(result) {
     open: true, currentPage: 0, trailerCount: result.trailers.length, trailerData,
     bolError: '', generating: false, generateProgress: [], bolSuccess: null,
     searchQuery: '', searchResults: [], searchLoading: false, searchConfirm: '',
+    includePacking: false,
   };
   renderBolModal();
 }
@@ -2377,6 +2378,15 @@ function renderBolModal() {
   // Footer
   const footer = h('div', { className: 'bol-modal-footer' });
   footer.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.bolModal.open = false; renderBolModal(); } }, 'Cancel'));
+  if (state.prefillJobData?.id) {
+    const packingLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer', color: 'var(--text-muted)' } });
+    const packingChk = h('input', { type: 'checkbox' });
+    packingChk.checked = state.bolModal.includePacking;
+    packingChk.addEventListener('change', e => { state.bolModal.includePacking = e.target.checked; });
+    packingLabel.appendChild(packingChk);
+    packingLabel.appendChild(document.createTextNode('Include packing slip'));
+    footer.appendChild(packingLabel);
+  }
   const navRight = h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } });
   const prevBtn = h('button', { className: 'btn btn-white', disabled: bm.currentPage === 0 });
   prevBtn.textContent = '← Prev';
@@ -2519,6 +2529,17 @@ async function generateBolPdf(bolRecords) {
     drawMultiline(bol.commodity_description, COORDS.commodity);
     const [copiedPage] = await combinedPdf.copyPages(templateDoc, [0]);
     combinedPdf.addPage(copiedPage);
+  }
+  if (state.bolModal.includePacking && state.prefillJobData?.id) {
+    try {
+      const slipRes = await fetch('/api/jobs/' + encodeURIComponent(state.prefillJobData.id) + '/packing-slip');
+      if (slipRes.ok) {
+        const slipBytes = await slipRes.arrayBuffer();
+        const slipDoc = await PDFDocument.load(slipBytes);
+        const slipPages = await combinedPdf.copyPages(slipDoc, slipDoc.getPageIndices());
+        slipPages.forEach(page => combinedPdf.addPage(page));
+      }
+    } catch { /* packing slip unavailable — generate BOLs-only PDF */ }
   }
   const pdfBytes = await combinedPdf.save();
   const blob = new Blob([pdfBytes], { type: 'application/pdf' });
