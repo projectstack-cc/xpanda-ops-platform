@@ -858,11 +858,19 @@ async function loadRecentBols() {
     for (const b of bols) {
       const item = document.createElement('div');
       item.className = 'bol-recent-item';
+      item.style.position = 'relative';
       item.innerHTML = `
         <div class="bol-recent-num">BOL #${b.bol_number}</div>
         <div class="bol-recent-customer">${esc(b.ship_to_company || '—')}</div>
         <div class="bol-recent-meta">${esc(b.date)} · ${esc(b.carrier_name || '—')}</div>
+        <button class="bol-delete-btn" title="Delete BOL" style="position:absolute;top:6px;right:6px;background:none;border:none;color:#dc2626;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1;">&times;</button>
       `;
+      item.querySelector('.bol-delete-btn').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Delete BOL #${b.bol_number}? This cannot be undone.`)) return;
+        const res = await fetch(`/api/bols/${b.id}`, { method: 'DELETE' });
+        if (res.ok) { item.remove(); } else { alert('Failed to delete BOL.'); }
+      });
       item.addEventListener('click', () => loadBolIntoForm(b));
       list.appendChild(item);
     }

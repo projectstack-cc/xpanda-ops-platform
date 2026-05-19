@@ -3191,6 +3191,18 @@ async function handleApiBols(request, env) {
     }
   }
 
+  // ── DELETE /api/bols/:id ──────────────────────────────────────────────────
+  if (method === "DELETE" && bolId) {
+    try {
+      const exists = await db.prepare("SELECT id FROM bols WHERE id = ?").bind(bolId).first();
+      if (!exists) return json({ ok: false, error: "BOL not found." }, 404);
+      await db.prepare("DELETE FROM bols WHERE id = ?").bind(bolId).run();
+      return json({ ok: true, message: "BOL deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
   return json({ ok: false, error: "Method Not Allowed" }, 405);
 }
 
