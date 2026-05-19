@@ -1295,37 +1295,34 @@ async function generatePdf(bol) {
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
 
   const COORDS = {
-    // Delivery time — top-left, ABOVE "Straight Bill of Lading" title
-    // Logo occupies top-right; this renders above the title text
-    deliveryTime:  { x: 38,  y: 760, size: 18 },
+    // Delivery time — top-right, next to logo (bold red)
+    deliveryTime:  { x: 383, y: 763, size: 18 },
 
     // Top-right block
-    date:          { x: 347, y: 715, size: 10 },           // right of "Date:" label
-    bolNumber:     { x: 413, y: 694, size: 14, bold: true },// below "Bill of Lading No:" label
-    carrierName:   { x: 390, y: 650, size: 10 },            // right of "Name:" label
-    trailerNo:     { x: 365, y: 634, size: 10 },            // right of "No:" label
+    date:          { x: 346, y: 720, size: 10 },            // right of "Date:" label (label at x:310, y:718)
+    bolNumber:     { x: 404, y: 693, size: 14, bold: true }, // below "Bill of Lading No:" (label at y:700)
+    carrierName:   { x: 389, y: 655, size: 10 },             // right of "Carrier Name:" (label at x:310, y:654)
+    trailerNo:     { x: 365, y: 622, size: 10 },             // right of "Trailer No:" (label at x:310, y:622)
 
-    // Left column — Ship To (4 lines, inside cell)
-    shipLine1:     { x: 42,  y: 609, size: 10 },
-    shipLine2:     { x: 42,  y: 596, size: 10 },
-    shipLine3:     { x: 42,  y: 583, size: 10 },
-    shipLine4:     { x: 42,  y: 570, size: 10 },
+    // Left column — Ship To (4 lines, INDENTED under "Ship To:" label)
+    // Label "Ship To:" is at x:40, y:622. Address lines start indented at x:95.
+    shipLine1:     { x: 95,  y: 615, size: 10 },
+    shipLine2:     { x: 95,  y: 601, size: 10 },
+    shipLine3:     { x: 95,  y: 587, size: 10 },
+    shipLine4:     { x: 95,  y: 573, size: 10 },
 
-    // Location No — same baseline as first Ship To line
-    locationNo:    { x: 250, y: 625, size: 10 },
+    // Special Instructions — right column, below label (label at x:309, y:603)
+    specialInstr:  { x: 315, y: 585, size: 9, lineH: 12, maxW: 255 },
 
-    // Right column — Special Instructions (multiline, below label)
-    specialInstr:  { x: 311, y: 583, size: 9, lineH: 11, maxW: 255 },
+    // Contact Info — right column, below label (label "Contact Info:" at x:312, y:544)
+    contactInfo:   { x: 315, y: 530, size: 9, lineH: 12, maxW: 255 },
 
-    // Right column — Contact Info (multiline, below label)
-    contactInfo:   { x: 313, y: 522, size: 9, lineH: 11, maxW: 255 },
+    // Scrap Pick Up checkboxes (☐ at x:107)
+    scrapYes:      { x: 109, y: 515, size: 10 },
+    scrapNo:       { x: 109, y: 498, size: 10 },
 
-    // Left column — Scrap Pick Up checkboxes
-    scrapYes:      { x: 109, y: 515, size: 10 },   // X next to ☐ Yes
-    scrapNo:       { x: 110, y: 498, size: 10 },   // X next to ☐ No
-
-    // Commodity description rows
-    commodity:     { x: 38,  y: 420, size: 10, lineH: 10.5, maxW: 535 },
+    // Commodity description — larger text with generous line spacing
+    commodity:     { x: 55,  y: 410, size: 13, lineH: 28, maxW: 510 },
   };
 
   let pdfBytes;
@@ -1400,9 +1397,6 @@ async function generatePdf(bol) {
   ].filter(Boolean);
   const shipCoords = [COORDS.shipLine1, COORDS.shipLine2, COORDS.shipLine3, COORDS.shipLine4];
   shipLines.forEach((line, i) => { if (shipCoords[i]) drawText(line, shipCoords[i]); });
-
-  // ── Location No ──
-  drawText(bol.location_no, COORDS.locationNo);
 
   // ── Special Instructions (multiline) ──
   drawMultiline(bol.special_instructions, COORDS.specialInstr);
