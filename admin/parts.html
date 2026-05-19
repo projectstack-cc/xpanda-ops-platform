@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Parts Library — xPanda Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #f0f2f5;
+    --card-bg: #ffffff;
+    --text: #111827;
+    --muted: #4b5563;
+    --border: #d1d5db;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,.07);
+    --primary: #334155;
+    --danger: #dc2626;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  .topbar {
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .topbar-logo {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    text-decoration: none;
+  }
+
+  .topbar-badge {
+    background: #f1f5f9;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .topbar-title {
+    flex: 1;
+  }
+
+  .topbar-title h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .topbar-title p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .topbar-nav {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 13px;
+  }
+
+  .topbar-nav a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .topbar-nav a:hover { text-decoration: underline; }
+
+  .wrap {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 24px 18px 48px;
+  }
+
+  .filterbar {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px 16px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .filterbar input, .filterbar select {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+  }
+
+  .filterbar input { flex: 1; min-width: 180px; }
+  .filterbar input:focus, .filterbar select:focus { border-color: #94a3b8; }
+
+  .count-badge {
+    font-size: 13px;
+    color: var(--muted);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .btn {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: #1e293b; }
+  .btn-danger { background: var(--danger); color: #fff; font-size: 12px; padding: 5px 10px; }
+  .btn-danger:hover { background: #b91c1c; }
+  .btn-edit { background: #f1f5f9; color: var(--primary); border: 1px solid var(--border); font-size: 12px; padding: 5px 10px; }
+  .btn-edit:hover { background: #e2e8f0; }
+
+  .table-wrap {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead tr { background: #f8fafc; }
+  th {
+    text-align: left;
+    padding: 10px 12px;
+    font-weight: 700;
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) { background: #fafafa; }
+  tr:nth-child(even):hover { background: #f1f5f9; }
+  tr:nth-child(odd):hover { background: #f8fafc; }
+
+  .part-color-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .actions-col { display: flex; gap: 6px; align-items: center; }
+
+  /* Modal */
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 100;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 16px;
+    overflow-y: auto;
+  }
+
+  .overlay.open { display: flex; }
+
+  .modal {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    padding: 24px;
+    width: 100%;
+    max-width: 560px;
+    position: relative;
+  }
+
+  .modal h2 {
+    font-size: 18px;
+    margin-bottom: 18px;
+    color: #0f172a;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group.full { grid-column: 1 / -1; }
+
+  label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  input[type="text"], input[type="number"], select, textarea {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--text);
+    font-family: inherit;
+    outline: none;
+    width: 100%;
+  }
+
+  input:focus, select:focus, textarea:focus { border-color: #94a3b8; }
+
+  textarea { resize: vertical; min-height: 64px; }
+
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .btn-cancel { background: #f1f5f9; color: var(--text); }
+  .btn-cancel:hover { background: #e2e8f0; }
+
+  .error-msg {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    color: #b91c1c;
+    padding: 8px 12px;
+    font-size: 13px;
+    margin-bottom: 14px;
+    display: none;
+  }
+
+  .error-msg.visible { display: block; }
+
+  .footer-back {
+    text-align: center;
+    margin-top: 28px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .footer-back a { color: var(--primary); text-decoration: none; font-weight: 600; }
+  .footer-back a:hover { text-decoration: underline; }
+
+  @media (max-width: 600px) {
+    .form-row { grid-template-columns: 1fr; }
+    .filterbar { flex-direction: column; align-items: stretch; }
+    .count-badge { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="topbar-logo" href="/">xPanda</a>
+  <span class="topbar-badge">xPanda Foam &bull; Admin</span>
+  <div class="topbar-title">
+    <h1>Parts Library</h1>
+    <p>Manage parts across all platform modules</p>
+  </div>
+  <div class="topbar-nav">
+    <a href="/admin/activity-log.html">Activity Log &rarr;</a>
+    <a href="/">← Back to Platform</a>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="filterbar">
+    <input type="text" id="searchInput" placeholder="Search by part number, name, or customer…" oninput="applyFilters()">
+    <select id="categoryFilter" onchange="applyFilters()">
+      <option value="">All Categories</option>
+      <option value="Holey Board">Holey Board</option>
+      <option value="Blocks">Blocks</option>
+      <option value="Sheets">Sheets</option>
+      <option value="">Uncategorized</option>
+    </select>
+    <button class="btn btn-primary" onclick="openModal(null)">+ Add Part</button>
+    <span class="count-badge" id="countBadge">— parts</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Part Number</th>
+          <th>Name</th>
+          <th>Customer</th>
+          <th>Category</th>
+          <th>Dimensions (L&times;W&times;H)</th>
+          <th>Density / Material</th>
+          <th>Weight</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="partsBody">
+        <tr><td colspan="9" class="empty-state">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer-back">
+    <a href="/">&larr; Back to Operations Platform</a>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="overlay" id="overlay" onclick="handleOverlayClick(event)">
+  <div class="modal" id="modal">
+    <h2 id="modalTitle">Add Part</h2>
+    <div class="error-msg" id="errorMsg"></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="fPartNumber">Part Number *</label>
+        <input type="text" id="fPartNumber" placeholder="e.g. HB-06">
+      </div>
+      <div class="form-group">
+        <label for="fName">Name</label>
+        <input type="text" id="fName" placeholder="Display name">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="fCustomer">Customer</label>
+        <input type="text" id="fCustomer" placeholder="Customer name">
+      </div>
+      <div class="form-group">
+        <label for="fCategory">Category</label>
+        <select id="fCategory">
+          <option value="">Uncategorized</option>
+          <option value="Holey Board">Holey Board</option>
+          <option value="Blocks">Blocks</option>
+          <option value="Sheets">Sheets</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="fLength">Length (in) *</label>
+        <input type="number" id="fLength" placeholder="48" step="0.01" min="0.01">
+      </div>
+      <div class="form-group">
+        <label for="fWidth">Width (in) *</label>
+        <input type="number" id="fWidth" placeholder="24" step="0.01" min="0.01">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="fHeight">Height (in) *</label>
+        <input type="number" id="fHeight" placeholder="6" step="0.01" min="0.01">
+      </div>
+      <div class="form-group">
+        <label for="fWeight">Weight</label>
+        <input type="number" id="fWeight" placeholder="1" step="0.01" min="0">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="fDensity">Density / Material</label>
+        <input type="text" id="fDensity" placeholder="e.g. 1.0 RC">
+      </div>
+      <div class="form-group">
+        <label for="fColor">Color</label>
+        <input type="color" id="fColor" value="#D97706" style="padding:3px 6px;height:36px;">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="fParentGroup">Parent Group</label>
+        <input type="text" id="fParentGroup" placeholder="e.g. 1in HB">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group full">
+        <label for="fNotes">Notes</label>
+        <textarea id="fNotes" placeholder="Optional notes"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="savePart()">Save Part</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let allParts = [];
+let filteredParts = [];
+let editingPart = null;
+
+async function loadParts() {
+  try {
+    const res = await fetch('/api/parts');
+    const data = await res.json();
+    allParts = (data.parts || []).sort((a, b) => (a.part_number || '').localeCompare(b.part_number || ''));
+    applyFilters();
+  } catch (e) {
+    document.getElementById('partsBody').innerHTML = '<tr><td colspan="9" class="empty-state">Failed to load parts.</td></tr>';
+  }
+}
+
+function applyFilters() {
+  const search = document.getElementById('searchInput').value.trim().toLowerCase();
+  const cat = document.getElementById('categoryFilter').value;
+
+  filteredParts = allParts.filter(p => {
+    const matchSearch = !search ||
+      (p.part_number || '').toLowerCase().includes(search) ||
+      (p.name || '').toLowerCase().includes(search) ||
+      (p.customer || '').toLowerCase().includes(search);
+
+    let matchCat = true;
+    if (cat === '') {
+      matchCat = true; // "All" when no value selected
+    }
+    // If a specific category option is selected (non-empty string from option values):
+    // The select has option value="" twice — first for All, last for Uncategorized.
+    // We need a different approach: track via data attribute.
+    matchCat = !cat || (p.category || '') === cat;
+
+    return matchSearch && matchCat;
+  });
+
+  renderTable();
+  document.getElementById('countBadge').textContent = `${filteredParts.length} part${filteredParts.length !== 1 ? 's' : ''}`;
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderTable() {
+  const tbody = document.getElementById('partsBody');
+  if (filteredParts.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No parts found. Add your first part or adjust your filters.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filteredParts.map(p => `
+    <tr>
+      <td>
+        <span class="part-color-dot" style="background:${esc(p.color || '#D97706')}"></span>
+        <strong>${esc(p.part_number)}</strong>
+      </td>
+      <td>${esc(p.name || '')}</td>
+      <td>${esc(p.customer || '—')}</td>
+      <td>${esc(p.category || '—')}</td>
+      <td>${formatDims(p)}</td>
+      <td>${esc(p.density_material || '—')}</td>
+      <td>${p.weight != null ? p.weight : '—'}</td>
+      <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(p.notes || '')}">${esc(p.notes || '—')}</td>
+      <td>
+        <div class="actions-col">
+          <button class="btn btn-edit" onclick='editPart(${JSON.stringify(p.id)})'>Edit</button>
+          <button class="btn btn-danger" onclick='deletePart(${JSON.stringify(p.id)}, ${JSON.stringify(p.part_number)})'>×</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function formatDims(p) {
+  const l = p.length_in, w = p.width_in, h = p.height_in;
+  if (!l && !w && !h) return '—';
+  return `${l || 0}" &times; ${w || 0}" &times; ${h || 0}"`;
+}
+
+function openModal(part) {
+  editingPart = part;
+  document.getElementById('modalTitle').textContent = part ? 'Edit Part' : 'Add Part';
+  document.getElementById('fPartNumber').value = part?.part_number || '';
+  document.getElementById('fName').value = part?.name || '';
+  document.getElementById('fCustomer').value = part?.customer || '';
+  document.getElementById('fCategory').value = part?.category || '';
+  document.getElementById('fLength').value = part?.length_in || '';
+  document.getElementById('fWidth').value = part?.width_in || '';
+  document.getElementById('fHeight').value = part?.height_in || '';
+  document.getElementById('fWeight').value = part?.weight ?? '';
+  document.getElementById('fDensity').value = part?.density_material || '';
+  document.getElementById('fColor').value = part?.color || '#D97706';
+  document.getElementById('fParentGroup').value = part?.parent_group || '';
+  document.getElementById('fNotes').value = part?.notes || '';
+  hideError();
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('fPartNumber').focus();
+}
+
+function editPart(id) {
+  const part = allParts.find(p => p.id === id);
+  if (part) openModal(part);
+}
+
+function closeModal() {
+  document.getElementById('overlay').classList.remove('open');
+  editingPart = null;
+}
+
+function handleOverlayClick(e) {
+  if (e.target === document.getElementById('overlay')) closeModal();
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+
+function hideError() {
+  document.getElementById('errorMsg').classList.remove('visible');
+}
+
+async function savePart() {
+  hideError();
+  const part_number = document.getElementById('fPartNumber').value.trim();
+  const length_in   = parseFloat(document.getElementById('fLength').value);
+  const width_in    = parseFloat(document.getElementById('fWidth').value);
+  const height_in   = parseFloat(document.getElementById('fHeight').value);
+
+  if (!part_number) return showError('Part number is required.');
+  if (!length_in || length_in <= 0) return showError('Length must be greater than 0.');
+  if (!width_in  || width_in  <= 0) return showError('Width must be greater than 0.');
+  if (!height_in || height_in <= 0) return showError('Height must be greater than 0.');
+
+  const payload = {
+    part_number,
+    name:             document.getElementById('fName').value.trim(),
+    customer:         document.getElementById('fCustomer').value.trim(),
+    category:         document.getElementById('fCategory').value,
+    length_in,
+    width_in,
+    height_in,
+    weight:           parseFloat(document.getElementById('fWeight').value) || 1,
+    density_material: document.getElementById('fDensity').value.trim(),
+    color:            document.getElementById('fColor').value,
+    parent_group:     document.getElementById('fParentGroup').value.trim(),
+    notes:            document.getElementById('fNotes').value.trim(),
+  };
+
+  const method = editingPart ? 'PUT' : 'POST';
+  if (editingPart) payload.id = editingPart.id;
+
+  try {
+    const res = await fetch('/api/parts', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.ok) return showError(data.error || 'Save failed.');
+    closeModal();
+    loadParts();
+  } catch (e) {
+    showError('Network error. Please try again.');
+  }
+}
+
+async function deletePart(id, partNumber) {
+  if (!confirm(`Delete part ${partNumber}? This cannot be undone.`)) return;
+  try {
+    const res = await fetch('/api/parts', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json();
+    if (!data.ok) return alert(data.error || 'Delete failed.');
+    loadParts();
+  } catch (e) {
+    alert('Network error. Please try again.');
+  }
+}
+
+// Fix category filter: "All" = empty string dropdown value, handle Uncategorized separately
+document.getElementById('categoryFilter').innerHTML = `
+  <option value="all">All Categories</option>
+  <option value="Holey Board">Holey Board</option>
+  <option value="Blocks">Blocks</option>
+  <option value="Sheets">Sheets</option>
+  <option value="uncategorized">Uncategorized</option>
+`;
+
+document.getElementById('categoryFilter').addEventListener('change', function() {
+  applyFilters();
+});
+
+// Override applyFilters to handle special cat values
+function applyFilters() {
+  const search = document.getElementById('searchInput').value.trim().toLowerCase();
+  const cat = document.getElementById('categoryFilter').value;
+
+  filteredParts = allParts.filter(p => {
+    const matchSearch = !search ||
+      (p.part_number || '').toLowerCase().includes(search) ||
+      (p.name || '').toLowerCase().includes(search) ||
+      (p.customer || '').toLowerCase().includes(search);
+
+    let matchCat = true;
+    if (cat === 'all') {
+      matchCat = true;
+    } else if (cat === 'uncategorized') {
+      matchCat = !p.category || p.category === '';
+    } else {
+      matchCat = (p.category || '') === cat;
+    }
+
+    return matchSearch && matchCat;
+  });
+
+  renderTable();
+  document.getElementById('countBadge').textContent = `${filteredParts.length} part${filteredParts.length !== 1 ? 's' : ''}`;
+}
+
+loadParts();
+</script>
+</body>
+</html>

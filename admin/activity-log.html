@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Activity Log — xPanda Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #f0f2f5;
+    --card-bg: #ffffff;
+    --text: #111827;
+    --muted: #4b5563;
+    --border: #d1d5db;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,.07);
+    --primary: #334155;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  .topbar {
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .topbar-logo {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    text-decoration: none;
+  }
+
+  .topbar-badge {
+    background: #f1f5f9;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .topbar-title {
+    flex: 1;
+  }
+
+  .topbar-title h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .topbar-title p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .topbar-nav {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 13px;
+  }
+
+  .topbar-nav a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .topbar-nav a:hover { text-decoration: underline; }
+
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 18px 48px;
+  }
+
+  .filterbar {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px 16px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .filterbar select {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+  }
+
+  .filterbar select:focus { border-color: #94a3b8; }
+
+  .btn {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: #1e293b; }
+  .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
+
+  .count-info {
+    font-size: 13px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+
+  .log-list {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .log-entry {
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .log-entry:last-child { border-bottom: none; }
+  .log-entry:hover { background: #f8fafc; }
+
+  .log-entry-row {
+    display: grid;
+    grid-template-columns: 180px 80px 140px 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+  }
+
+  .log-ts {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .badge {
+    display: inline-block;
+    border-radius: 6px;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .badge-create { background: #d1fae5; color: #065f46; }
+  .badge-update { background: #dbeafe; color: #1e40af; }
+  .badge-delete { background: #fee2e2; color: #991b1b; }
+
+  .log-entity {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .log-summary {
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .log-detail {
+    display: none;
+    padding: 0 16px 14px;
+  }
+
+  .log-detail.open { display: block; }
+
+  .log-detail pre {
+    background: #f1f5f9;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #374151;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .load-more-wrap {
+    text-align: center;
+    margin-top: 18px;
+  }
+
+  .footer-back {
+    text-align: center;
+    margin-top: 28px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .footer-back a { color: var(--primary); text-decoration: none; font-weight: 600; }
+  .footer-back a:hover { text-decoration: underline; }
+
+  @media (max-width: 700px) {
+    .log-entry-row {
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+    }
+
+    .log-summary { grid-column: 1 / -1; }
+    .filterbar { flex-direction: column; align-items: stretch; }
+    .count-info { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="topbar-logo" href="/">xPanda</a>
+  <span class="topbar-badge">xPanda Foam &bull; Admin</span>
+  <div class="topbar-title">
+    <h1>Activity Log</h1>
+    <p>Platform-wide audit trail</p>
+  </div>
+  <div class="topbar-nav">
+    <a href="/admin/parts.html">Parts Library &rarr;</a>
+    <a href="/">← Back to Platform</a>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="filterbar">
+    <select id="entityFilter" onchange="reload()">
+      <option value="">All Entity Types</option>
+      <option value="job">Jobs</option>
+      <option value="bol">BOLs</option>
+      <option value="part">Parts</option>
+      <option value="shipment">Shipments</option>
+      <option value="bol_customer">Customers</option>
+      <option value="bol_carrier">Carriers</option>
+    </select>
+    <select id="actionFilter" onchange="reload()">
+      <option value="">All Actions</option>
+      <option value="create">Create</option>
+      <option value="update">Update</option>
+      <option value="delete">Delete</option>
+    </select>
+    <span class="count-info" id="countInfo"></span>
+  </div>
+
+  <div class="log-list" id="logList">
+    <div class="empty-state">Loading…</div>
+  </div>
+
+  <div class="load-more-wrap" id="loadMoreWrap" style="display:none;">
+    <button class="btn btn-primary" id="loadMoreBtn" onclick="loadMore()">Load More</button>
+  </div>
+
+  <div class="footer-back">
+    <a href="/">&larr; Back to Operations Platform</a>
+  </div>
+</div>
+
+<script>
+const PAGE = 50;
+let offset = 0;
+let total = 0;
+let entries = [];
+
+function reload() {
+  offset = 0;
+  entries = [];
+  total = 0;
+  document.getElementById('logList').innerHTML = '<div class="empty-state">Loading…</div>';
+  document.getElementById('loadMoreWrap').style.display = 'none';
+  fetchEntries();
+}
+
+async function fetchEntries() {
+  const entityType = document.getElementById('entityFilter').value;
+  const action = document.getElementById('actionFilter').value;
+
+  const params = new URLSearchParams({ limit: PAGE, offset });
+  if (entityType) params.set('entity_type', entityType);
+  if (action) params.set('action', action);
+
+  try {
+    const res = await fetch('/api/activity-log?' + params.toString());
+    const data = await res.json();
+
+    if (!data.ok) {
+      document.getElementById('logList').innerHTML = '<div class="empty-state">Failed to load activity log.</div>';
+      return;
+    }
+
+    total = data.total || 0;
+    const newEntries = data.entries || [];
+    entries = entries.concat(newEntries);
+    offset += newEntries.length;
+
+    renderEntries();
+    updateCountInfo();
+
+    const loadMoreWrap = document.getElementById('loadMoreWrap');
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    if (offset < total) {
+      loadMoreWrap.style.display = 'block';
+      loadMoreBtn.disabled = false;
+      loadMoreBtn.textContent = 'Load More';
+    } else {
+      loadMoreWrap.style.display = 'none';
+    }
+  } catch (e) {
+    document.getElementById('logList').innerHTML = '<div class="empty-state">Network error.</div>';
+  }
+}
+
+async function loadMore() {
+  const btn = document.getElementById('loadMoreBtn');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  await fetchEntries();
+}
+
+function updateCountInfo() {
+  const el = document.getElementById('countInfo');
+  if (total === 0) {
+    el.textContent = '';
+  } else {
+    el.textContent = `Showing ${entries.length} of ${total} entries`;
+  }
+}
+
+function formatEntityLabel(type, id) {
+  switch (type) {
+    case 'job':          return `Job`;
+    case 'bol':          return `BOL`;
+    case 'part':         return `Part`;
+    case 'shipment':     return `Shipment`;
+    case 'bol_customer': return `Customer`;
+    case 'bol_carrier':  return `Carrier`;
+    default:             return type || '—';
+  }
+}
+
+function formatTs(ts) {
+  if (!ts) return '—';
+  try {
+    return new Date(ts).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', hour12: true
+    });
+  } catch { return ts; }
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDetail(detail) {
+  if (!detail) return '{}';
+  try {
+    const obj = typeof detail === 'string' ? JSON.parse(detail) : detail;
+    return JSON.stringify(obj, null, 2);
+  } catch {
+    return String(detail);
+  }
+}
+
+function renderEntries() {
+  const list = document.getElementById('logList');
+
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="empty-state">No activity recorded yet.</div>';
+    return;
+  }
+
+  list.innerHTML = entries.map((e, i) => {
+    const badgeClass = e.action === 'create' ? 'badge-create'
+                     : e.action === 'update' ? 'badge-update'
+                     : 'badge-delete';
+    return `
+      <div class="log-entry" onclick="toggleDetail(${i})">
+        <div class="log-entry-row">
+          <span class="log-ts">${esc(formatTs(e.timestamp))}</span>
+          <span class="badge ${badgeClass}">${esc(e.action)}</span>
+          <span class="log-entity">${esc(formatEntityLabel(e.entity_type, e.entity_id))}</span>
+          <span class="log-summary">${esc(e.summary || '—')}</span>
+        </div>
+        <div class="log-detail" id="detail-${i}">
+          <pre>${esc(formatDetail(e.detail))}</pre>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleDetail(i) {
+  const el = document.getElementById(`detail-${i}`);
+  if (el) el.classList.toggle('open');
+}
+
+reload();
+</script>
+</body>
+</html>

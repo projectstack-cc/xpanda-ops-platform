@@ -119,6 +119,10 @@ export default {
         return handleApiLoadBuilderSkus(request, env);
       }
 
+      if (url.pathname === "/api/activity-log" || url.pathname.startsWith("/api/activity-log/")) {
+        return handleApiActivityLog(request, env);
+      }
+
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
         return new Response(
@@ -160,6 +164,25 @@ function json(body, status = 200, extraHeaders = {}) {
       ...extraHeaders,
     },
   });
+}
+
+async function logActivity(db, action, entityType, entityId, summary, detail) {
+  try {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const detailStr = typeof detail === 'string' ? detail : JSON.stringify(detail || {});
+    await db.prepare(
+      `INSERT INTO activity_log (id, timestamp, action, entity_type, entity_id, summary, detail, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id, now, action, entityType, String(entityId || ''),
+      String(summary || '').slice(0, 500),
+      detailStr.slice(0, 2000),
+      now
+    ).run();
+  } catch (e) {
+    console.error('Activity log write failed:', e);
+  }
 }
 
 function isAdminAuthorized(request, env) {
@@ -1236,6 +1259,10 @@ async function handleApiParts(request, env) {
       ).bind(id, part_number, name, customer, density_material, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group, now, now).run();
 
       const part = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(id).first();
+      await logActivity(db, 'create', 'part', id,
+        `Created part ${part_number}`,
+        { part_number, customer, length_in, width_in, height_in }
+      );
       return json({ ok: true, message: "Part created.", part }, 201);
     } catch (e) {
       const msg = String(e?.message || e);
@@ -1276,6 +1303,10 @@ async function handleApiParts(request, env) {
       ).bind(part_number, customer, density_material, length_in, width_in, height_in, notes, now, id).run();
 
       const part = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(id).first();
+      await logActivity(db, 'update', 'part', id,
+        `Updated part ${part_number}`,
+        { part_number, customer, length_in, width_in, height_in }
+      );
       return json({ ok: true, message: "Part updated.", part });
     } catch (e) {
       const msg = String(e?.message || e);
@@ -1299,6 +1330,7 @@ async function handleApiParts(request, env) {
 
     try {
       await db.prepare("DELETE FROM parts WHERE id = ?").bind(id).run();
+      await logActivity(db, 'delete', 'part', id, `Deleted part ${id}`, { id });
       return json({ ok: true, message: "Part deleted." });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -1773,6 +1805,10 @@ async function handleApiJobs(request, env) {
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
       const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
 
+      await logActivity(db, 'create', 'job', id,
+        `Created job "${customer}" — ${lineItems.length} line items`,
+        { customer, status, po_number, line_items_count: lineItems.length }
+      );
       return json({ ok: true, message: "Job created.", job: { ...job, has_shipment: true, processes: safeJsonParse(job.processes, []), line_items: liRows.results || [] } }, 201);
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -1871,6 +1907,10 @@ async function handleApiJobs(request, env) {
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
       const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
 
+      await logActivity(db, 'update', 'job', id,
+        `Updated job "${payload.customer || ''}" — status: ${payload.status || ''}`,
+        { fields_updated: Object.keys(payload).filter(k => k !== 'id') }
+      );
       return json({ ok: true, message: "Job updated.", job: { ...job, processes: safeJsonParse(job.processes, []), line_items: liRows.results || [] } });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -1893,6 +1933,7 @@ async function handleApiJobs(request, env) {
       // Explicit delete of line items (D1 FK cascade not guaranteed)
       await db.prepare("DELETE FROM job_line_items WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM jobs WHERE id = ?").bind(id).run();
+      await logActivity(db, 'delete', 'job', id, `Deleted job ${id}`, { id });
       return json({ ok: true, message: "Job deleted." });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -2618,6 +2659,10 @@ async function handleApiShipments(request, env) {
       }
 
       const row = await db.prepare("SELECT * FROM shipments WHERE id = ?").bind(id).first();
+      await logActivity(db, 'create', 'shipment', id,
+        `Created shipment for ${customer} — ${direction} ${status}`,
+        { customer, direction, status, ship_date }
+      );
       return json({ ok: true, data: row }, 201);
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -2666,6 +2711,10 @@ async function handleApiShipments(request, env) {
     try {
       await db.prepare(`UPDATE shipments SET ${sets.join(", ")} WHERE id = ?`).bind(...vals).run();
       const row = await db.prepare("SELECT * FROM shipments WHERE id = ?").bind(id).first();
+      await logActivity(db, 'update', 'shipment', id,
+        `Updated shipment ${id} — status: ${payload.status || ''}`,
+        { fields_updated: Object.keys(payload).filter(k => k !== 'id') }
+      );
       return json({ ok: true, data: row });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -2685,6 +2734,7 @@ async function handleApiShipments(request, env) {
 
     try {
       await db.prepare("DELETE FROM shipments WHERE id = ?").bind(id).run();
+      await logActivity(db, 'delete', 'shipment', id, `Deleted shipment ${id}`, { id });
       return json({ ok: true, message: "Shipment deleted." });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -2835,6 +2885,10 @@ async function handleApiBolCustomers(request, env) {
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(id, company, attention, street, street2, city, state, zip, phone, email, contact_name, notes, now, now).run();
       const row = await db.prepare("SELECT * FROM bol_customers WHERE id = ?").bind(id).first();
+      await logActivity(db, 'create', 'bol_customer', id,
+        `Created customer "${company}"`,
+        { company, city, state }
+      );
       return json({ ok: true, customer: row }, 201);
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -2868,6 +2922,10 @@ async function handleApiBolCustomers(request, env) {
     try {
       await db.prepare(`UPDATE bol_customers SET ${sets.join(", ")} WHERE id = ?`).bind(...binds).run();
       const row = await db.prepare("SELECT * FROM bol_customers WHERE id = ?").bind(id).first();
+      await logActivity(db, 'update', 'bol_customer', id,
+        `Updated customer "${payload.company || id}"`,
+        { fields_updated: Object.keys(payload).filter(k => k !== 'id') }
+      );
       return json({ ok: true, customer: row });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -2886,6 +2944,7 @@ async function handleApiBolCustomers(request, env) {
     try {
       await db.prepare("UPDATE bol_customers SET is_active = 0, updated_at = ? WHERE id = ?")
         .bind(new Date().toISOString(), id).run();
+      await logActivity(db, 'delete', 'bol_customer', id, `Deleted customer ${id}`, { id });
       return json({ ok: true, message: "Customer deactivated." });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -3003,6 +3062,10 @@ async function handleApiBolCarriers(request, env) {
       await db.prepare("INSERT INTO bol_carriers (id, name, scac, phone) VALUES (?,?,?,?)")
         .bind(id, name, scac, phone).run();
       const row = await db.prepare("SELECT * FROM bol_carriers WHERE id = ?").bind(id).first();
+      await logActivity(db, 'create', 'bol_carrier', id,
+        `Created carrier "${name}"`,
+        { name, scac, phone }
+      );
       return json({ ok: true, carrier: row }, 201);
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -3137,6 +3200,10 @@ async function handleApiBols(request, env) {
       ).run();
 
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();
+      await logActivity(db, 'create', 'bol', id,
+        `Created BOL #${bol_number} for ${s('ship_to_company')}`,
+        { bol_number, ship_to_company: s('ship_to_company'), carrier_name: s('carrier_name'), date }
+      );
       return json({ ok: true, message: "BOL created.", bol: row }, 201);
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -3185,6 +3252,10 @@ async function handleApiBols(request, env) {
       ).run();
 
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(bolId).first();
+      await logActivity(db, 'update', 'bol', bolId,
+        `Updated BOL #${payload.bol_number || bolId}`,
+        { fields_updated: Object.keys(payload).filter(k => k !== 'id') }
+      );
       return json({ ok: true, message: "BOL updated.", bol: row });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -3194,9 +3265,13 @@ async function handleApiBols(request, env) {
   // ── DELETE /api/bols/:id ──────────────────────────────────────────────────
   if (method === "DELETE" && bolId) {
     try {
-      const exists = await db.prepare("SELECT id FROM bols WHERE id = ?").bind(bolId).first();
+      const exists = await db.prepare("SELECT id, bol_number FROM bols WHERE id = ?").bind(bolId).first();
       if (!exists) return json({ ok: false, error: "BOL not found." }, 404);
       await db.prepare("DELETE FROM bols WHERE id = ?").bind(bolId).run();
+      await logActivity(db, 'delete', 'bol', bolId,
+        `Deleted BOL #${exists.bol_number || bolId}`,
+        { id: bolId }
+      );
       return json({ ok: true, message: "BOL deleted." });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -3446,4 +3521,60 @@ async function handleApiPartsSeed(request, env) {
     ).bind(crypto.randomUUID(), s.part_number, s.name, s.customer || "", s.density_material || "", s.length, s.width, s.height, s.weight, s.notes, s.color, 0, i, s.category || "", s.parent_group || "").run();
   }
   return json({ seeded: true, message: `Inserted ${DEFAULT_PARTS.length} default parts.` });
+}
+
+async function handleApiActivityLog(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  if (request.method !== "GET") return json({ ok: false, error: "Method not allowed" }, 405);
+
+  const url = new URL(request.url);
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);
+  const offset = parseInt(url.searchParams.get('offset') || '0');
+  const entityType = url.searchParams.get('entity_type') || '';
+  const action = url.searchParams.get('action') || '';
+
+  try {
+    let query = "SELECT * FROM activity_log";
+    const conditions = [];
+    const binds = [];
+
+    if (entityType) {
+      conditions.push("entity_type = ?");
+      binds.push(entityType);
+    }
+    if (action) {
+      conditions.push("action = ?");
+      binds.push(action);
+    }
+
+    if (conditions.length > 0) {
+      query += " WHERE " + conditions.join(" AND ");
+    }
+
+    query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?";
+    binds.push(limit, offset);
+
+    const rows = await db.prepare(query).bind(...binds).all();
+
+    let countQuery = "SELECT COUNT(*) as total FROM activity_log";
+    if (conditions.length > 0) {
+      countQuery += " WHERE " + conditions.join(" AND ");
+    }
+    const countBinds = binds.slice(0, -2);
+    const countRow = countBinds.length
+      ? await db.prepare(countQuery).bind(...countBinds).first()
+      : await db.prepare(countQuery).first();
+
+    return json({
+      ok: true,
+      entries: rows.results || [],
+      total: countRow?.total || 0,
+      limit,
+      offset,
+    });
+  } catch (e) {
+    return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+  }
 }

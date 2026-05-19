@@ -189,6 +189,15 @@
     color: #fff;
   }
 
+  .btn-admin {
+    background: #334155;
+    color: #fff;
+  }
+
+  .btn-admin:hover {
+    background: #1e293b;
+  }
+
   .footer-note {
     margin-top: 28px;
     text-align: center;
@@ -324,6 +333,24 @@
         </ul>
         <div class="actions">
           <a class="btn btn-production" href="/production/">Open Production</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="eyebrow">Administration</span>
+        <h2>Admin</h2>
+        <p>
+          Platform administration tools. Manage the parts library,
+          view system settings, and configure shared resources.
+        </p>
+        <ul class="features">
+          <li>Parts library management</li>
+          <li>Add, edit, and remove parts</li>
+          <li>Platform-wide activity log</li>
+        </ul>
+        <div class="actions">
+          <a class="btn btn-admin" href="/admin/parts.html">Parts Library</a>
+          <a class="btn btn-admin" href="/admin/activity-log.html">Activity Log</a>
         </div>
       </article>
     </section>
