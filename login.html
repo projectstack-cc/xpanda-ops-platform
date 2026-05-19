@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sign In — xPanda Ops</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/assets/img/favicon.png" sizes="any">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-wrap {
+      width: 100%;
+      padding: 24px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-card {
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 40px 36px 36px;
+      width: 100%;
+      max-width: 380px;
+      text-align: center;
+    }
+
+    .login-logo {
+      max-width: 100px;
+      width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto 18px;
+    }
+
+    h1 {
+      font-size: 20px;
+      color: #111827;
+      margin-bottom: 28px;
+      font-weight: 700;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      display: block;
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      font-size: 15px;
+      margin-bottom: 12px;
+      outline: none;
+      font-family: inherit;
+      color: #111827;
+      transition: border-color 0.15s;
+    }
+
+    input:focus { border-color: #94a3b8; }
+
+    button {
+      display: block;
+      width: 100%;
+      background: #1e293b;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 14px 0;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s;
+    }
+
+    button:hover { background: #334155; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+
+    .error-msg {
+      color: #dc2626;
+      font-size: 13px;
+      margin-top: 12px;
+      text-align: left;
+    }
+
+    .info-msg {
+      color: #2563eb;
+      font-size: 13px;
+      margin-bottom: 16px;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <img src="/logo/xpanda.png" alt="xPanda" class="login-logo" />
+      <h1>Operations Platform</h1>
+
+      <div id="login-form">
+        <input type="text" id="f-username" placeholder="Username" autocomplete="username" autofocus />
+        <input type="password" id="f-password" placeholder="Password" autocomplete="current-password" />
+        <button id="btn-login" onclick="doLogin()">Sign In</button>
+        <div id="login-error" class="error-msg" hidden></div>
+      </div>
+
+      <div id="password-form" hidden>
+        <p class="info-msg">Welcome! Please set a new password to continue.</p>
+        <input type="password" id="f-new-password" placeholder="New password (min 4 characters)" />
+        <input type="password" id="f-confirm-password" placeholder="Confirm new password" />
+        <button id="btn-set-password" onclick="doChangePassword()">Set Password &amp; Continue</button>
+        <div id="password-error" class="error-msg" hidden></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function checkAuth() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    if (data.ok && data.user) {
+      if (data.user.firstLogin) {
+        showPasswordForm();
+      } else {
+        window.location.href = '/';
+      }
+    }
+  } catch {}
+}
+
+async function doLogin() {
+  const username = document.getElementById('f-username').value.trim();
+  const password = document.getElementById('f-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.hidden = true;
+
+  if (!username || !password) {
+    errEl.textContent = 'Please enter username and password.';
+    errEl.hidden = false;
+    return;
+  }
+
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+
+    if (data.ok && data.user) {
+      if (data.user.firstLogin) {
+        showPasswordForm();
+      } else {
+        window.location.href = '/';
+      }
+    } else {
+      errEl.textContent = data.error || 'Login failed.';
+      errEl.hidden = false;
+    }
+  } catch {
+    errEl.textContent = 'Connection error. Please try again.';
+    errEl.hidden = false;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Sign In';
+}
+
+function showPasswordForm() {
+  document.getElementById('login-form').hidden = true;
+  document.getElementById('password-form').hidden = false;
+}
+
+async function doChangePassword() {
+  const newPwd = document.getElementById('f-new-password').value;
+  const confirmPwd = document.getElementById('f-confirm-password').value;
+  const errEl = document.getElementById('password-error');
+  errEl.hidden = true;
+
+  if (newPwd.length < 4) {
+    errEl.textContent = 'Password must be at least 4 characters.';
+    errEl.hidden = false;
+    return;
+  }
+  if (newPwd !== confirmPwd) {
+    errEl.textContent = 'Passwords do not match.';
+    errEl.hidden = false;
+    return;
+  }
+
+  const btn = document.getElementById('btn-set-password');
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_password: newPwd }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      window.location.href = '/';
+    } else {
+      errEl.textContent = data.error || 'Failed to set password.';
+      errEl.hidden = false;
+    }
+  } catch {
+    errEl.textContent = 'Connection error.';
+    errEl.hidden = false;
+  }
+
+  btn.disabled = false;
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    if (!document.getElementById('login-form').hidden) doLogin();
+    else if (!document.getElementById('password-form').hidden) doChangePassword();
+  }
+});
+
+checkAuth();
+</script>
+</body>
+</html>

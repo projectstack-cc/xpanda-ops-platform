@@ -223,6 +223,11 @@
 </style>
 </head>
 <body>
+  <div id="user-bar" style="position:fixed; top:0; right:0; padding:10px 18px; font-size:13px; color:#5b6472; z-index:1000; display:flex; align-items:center; gap:12px;">
+    <span id="user-display"></span>
+    <a href="#" onclick="doLogout(); return false;" style="color:#dc2626; text-decoration:none; font-weight:600;">Sign Out</a>
+  </div>
+
   <main class="wrap">
     <section class="hero">
       <img src="/logo/xpanda.png" alt="xPanda Foam logo">
@@ -345,12 +350,13 @@
         </p>
         <ul class="features">
           <li>Parts library management</li>
-          <li>Add, edit, and remove parts</li>
-          <li>Platform-wide activity log</li>
+          <li>Activity log &amp; audit trail</li>
+          <li>User management &amp; roles</li>
         </ul>
         <div class="actions">
           <a class="btn btn-admin" href="/admin/parts.html">Parts Library</a>
           <a class="btn btn-admin" href="/admin/activity-log.html">Activity Log</a>
+          <a class="btn btn-admin" href="/admin/users.html">Users</a>
         </div>
       </article>
     </section>
@@ -359,5 +365,33 @@
       Additional systems may be added here as the operations platform grows.
     </div>
   </main>
+<script>
+const _origFetch = window.fetch;
+window.fetch = async function(...args) {
+  const res = await _origFetch.apply(this, args);
+  if (res.status === 401 && !window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login.html';
+    return res;
+  }
+  return res;
+};
+
+async function loadCurrentUser() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    if (data.ok && data.user) {
+      document.getElementById('user-display').textContent = data.user.displayName || data.user.username;
+    }
+  } catch {}
+}
+
+async function doLogout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/login.html';
+}
+
+loadCurrentUser();
+</script>
 </body>
 </html>

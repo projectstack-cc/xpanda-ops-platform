@@ -15,7 +15,41 @@ export default {
         return new Response("FUNCTIONS_OK", { status: 200 });
       }
 
-      // 2) API routes
+      // 2) Static asset passthrough — must come before session gate
+      const STATIC_EXT = /\.(png|jpe?g|gif|svg|ico|webp|css|js|woff2?|ttf|eot|map|pdf)$/i;
+      const STATIC_PREFIX = ['/logo/', '/assets/', '/logistics/assets/', '/qc-assets/'];
+      const isStaticAsset = STATIC_EXT.test(url.pathname) ||
+        STATIC_PREFIX.some(p => url.pathname.startsWith(p));
+
+      // 3) Auth API routes (always accessible)
+      if (url.pathname === '/api/auth/login') return handleAuthLogin(request, env);
+      if (url.pathname === '/api/auth/logout') return handleAuthLogout(request, env);
+      if (url.pathname === '/api/auth/me') return handleAuthMe(request, env);
+      if (url.pathname === '/api/auth/change-password') return handleAuthChangePassword(request, env);
+      if (url.pathname === '/api/users' || url.pathname.startsWith('/api/users/')) {
+        return handleApiUsers(request, env);
+      }
+
+      // 4) Login page (serve without auth check)
+      if (url.pathname === '/login' || url.pathname === '/login.html') {
+        return env.ASSETS.fetch(request);
+      }
+
+      // 5) Session gate — redirect unauthenticated users
+      if (!isStaticAsset) {
+        const db = env.DB;
+        if (db) {
+          const user = await validateSession(db, request);
+          if (!user) {
+            if (url.pathname.startsWith('/api/')) {
+              return json({ ok: false, error: 'Unauthorized' }, 401);
+            }
+            return Response.redirect(`${url.origin}/login.html`, 302);
+          }
+        }
+      }
+
+      // 6) API routes
       if (url.pathname === "/api/completions") {
         return handleApiCompletions(request, env);
       }
@@ -166,23 +200,83 @@ function json(body, status = 200, extraHeaders = {}) {
   });
 }
 
-async function logActivity(db, action, entityType, entityId, summary, detail) {
+async function logActivity(db, action, entityType, entityId, summary, detail, userId) {
   try {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const detailStr = typeof detail === 'string' ? detail : JSON.stringify(detail || {});
     await db.prepare(
-      `INSERT INTO activity_log (id, timestamp, action, entity_type, entity_id, summary, detail, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO activity_log (id, timestamp, action, entity_type, entity_id, summary, detail, user_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       id, now, action, entityType, String(entityId || ''),
       String(summary || '').slice(0, 500),
       detailStr.slice(0, 2000),
+      userId || null,
       now
     ).run();
   } catch (e) {
     console.error('Activity log write failed:', e);
   }
+}
+
+// ========================
+// Auth Helpers
+// ========================
+
+function getSessionToken(request) {
+  const cookie = request.headers.get('Cookie') || '';
+  const match = cookie.match(/(?:^|;\s*)xpanda_session=([^;]+)/);
+  return match ? match[1] : null;
+}
+
+async function validateSession(db, request) {
+  const token = getSessionToken(request);
+  if (!token) return null;
+
+  const now = new Date().toISOString();
+  const row = await db.prepare(
+    `SELECT s.id as session_id, s.expires_at,
+            u.id, u.username, u.display_name, u.role, u.is_active, u.first_login
+     FROM sessions s
+     JOIN users u ON u.id = s.user_id
+     WHERE s.id = ? AND s.expires_at > ? AND u.is_active = 1`
+  ).bind(token, now).first();
+
+  if (!row) return null;
+
+  // 1% session cleanup
+  if (Math.random() < 0.01) {
+    db.prepare(`DELETE FROM sessions WHERE expires_at < ?`).bind(now).run().catch(() => {});
+  }
+
+  return row;
+}
+
+async function createSession(db, userId) {
+  const sessionId = crypto.randomUUID();
+  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await db.prepare(
+    `INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)`
+  ).bind(sessionId, userId, expires).run();
+  return { sessionId, expires };
+}
+
+function sessionCookie(sessionId, expires) {
+  const expDate = new Date(expires).toUTCString();
+  return `xpanda_session=${sessionId}; Path=/; Expires=${expDate}; HttpOnly; SameSite=Lax`;
+}
+
+function clearSessionCookie() {
+  return `xpanda_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax`;
+}
+
+function canWrite(request) {
+  return ['admin', 'staff'].includes(request.headers.get('X-User-Role'));
+}
+
+function isAdmin(request) {
+  return request.headers.get('X-User-Role') === 'admin';
 }
 
 function isAdminAuthorized(request, env) {
@@ -3576,5 +3670,191 @@ async function handleApiActivityLog(request, env) {
     });
   } catch (e) {
     return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+  }
+}
+
+// ========================
+// Auth Handlers
+// ========================
+
+async function handleAuthLogin(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, 405);
+
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+  const username = String(body.username || '').trim();
+  const password = String(body.password || '');
+
+  if (!username || !password) return json({ ok: false, error: 'Username and password required.' }, 400);
+
+  try {
+    const user = await db.prepare(
+      `SELECT id, username, display_name, role, is_active, first_login, password
+       FROM users WHERE username = ? COLLATE NOCASE`
+    ).bind(username).first();
+
+    if (!user || !user.is_active) return json({ ok: false, error: 'Invalid username or password.' }, 401);
+    if (user.password !== password) return json({ ok: false, error: 'Invalid username or password.' }, 401);
+
+    const { sessionId, expires } = await createSession(db, user.id);
+
+    return json({
+      ok: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        role: user.role,
+        firstLogin: user.first_login === 1,
+      }
+    }, 200, { 'Set-Cookie': sessionCookie(sessionId, expires) });
+  } catch (e) {
+    return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+  }
+}
+
+async function handleAuthLogout(request, env) {
+  const db = env.DB;
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, 405);
+
+  const token = getSessionToken(request);
+  if (token && db) {
+    try { await db.prepare(`DELETE FROM sessions WHERE id = ?`).bind(token).run(); } catch {}
+  }
+
+  return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
+}
+
+async function handleAuthMe(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+
+  const user = await validateSession(db, request);
+  if (!user) return json({ ok: false, error: 'Not authenticated' }, 401);
+
+  return json({
+    ok: true,
+    user: {
+      id: user.id,
+      username: user.username,
+      displayName: user.display_name,
+      role: user.role,
+      firstLogin: user.first_login === 1,
+    }
+  });
+}
+
+async function handleAuthChangePassword(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, 405);
+
+  const user = await validateSession(db, request);
+  if (!user) return json({ ok: false, error: 'Not authenticated' }, 401);
+
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+  const newPassword = String(body.new_password || '');
+  if (newPassword.length < 4) return json({ ok: false, error: 'Password must be at least 4 characters.' }, 400);
+
+  try {
+    await db.prepare(
+      `UPDATE users SET password = ?, first_login = 0, updated_at = ? WHERE id = ?`
+    ).bind(newPassword, new Date().toISOString(), user.id).run();
+
+    return json({ ok: true });
+  } catch (e) {
+    return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+  }
+}
+
+async function handleApiUsers(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+
+  const sessionUser = await validateSession(db, request);
+  if (!sessionUser) return json({ ok: false, error: 'Unauthorized' }, 401);
+  if (sessionUser.role !== 'admin') return json({ ok: false, error: 'Forbidden' }, 403);
+
+  const url = new URL(request.url);
+  const pathParts = url.pathname.replace('/api/users', '').split('/').filter(Boolean);
+  const userId = pathParts[0] || null;
+
+  try {
+    if (request.method === 'GET') {
+      const rows = await db.prepare(
+        `SELECT id, username, display_name, password, role, is_active, first_login, created_at, updated_at
+         FROM users ORDER BY username COLLATE NOCASE`
+      ).all();
+      return json({ ok: true, users: rows.results || [] });
+    }
+
+    if (request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+      const username = String(body.username || '').trim().toLowerCase();
+      const displayName = String(body.display_name || body.displayName || '').trim();
+      const password = String(body.password || username);
+      const role = ['admin', 'staff', 'readonly'].includes(body.role) ? body.role : 'staff';
+
+      if (!username) return json({ ok: false, error: 'Username required.' }, 400);
+      if (!displayName) return json({ ok: false, error: 'Display name required.' }, 400);
+
+      const newId = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      await db.prepare(
+        `INSERT INTO users (id, username, display_name, password, role, is_active, first_login, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`
+      ).bind(newId, username, displayName, password, role, now, now).run();
+
+      return json({ ok: true, id: newId }, 201);
+    }
+
+    if (request.method === 'PUT') {
+      if (!userId) return json({ ok: false, error: 'User ID required.' }, 400);
+      let body;
+      try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+      const now = new Date().toISOString();
+      const fields = [];
+      const binds = [];
+
+      if (body.display_name !== undefined) { fields.push('display_name = ?'); binds.push(String(body.display_name).trim()); }
+      if (body.role !== undefined && ['admin', 'staff', 'readonly'].includes(body.role)) { fields.push('role = ?'); binds.push(body.role); }
+      if (body.is_active !== undefined) { fields.push('is_active = ?'); binds.push(body.is_active ? 1 : 0); }
+      if (body.first_login !== undefined) { fields.push('first_login = ?'); binds.push(body.first_login ? 1 : 0); }
+      if (body.password !== undefined && String(body.password).length >= 1) { fields.push('password = ?'); binds.push(String(body.password)); }
+
+      if (fields.length === 0) return json({ ok: false, error: 'Nothing to update.' }, 400);
+
+      fields.push('updated_at = ?');
+      binds.push(now);
+      binds.push(userId);
+
+      await db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).bind(...binds).run();
+      return json({ ok: true });
+    }
+
+    if (request.method === 'DELETE') {
+      if (!userId) return json({ ok: false, error: 'User ID required.' }, 400);
+      if (userId === sessionUser.id) return json({ ok: false, error: 'Cannot delete your own account.' }, 400);
+
+      await db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId).run();
+      await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
+      return json({ ok: true });
+    }
+
+    return json({ ok: false, error: 'Method not allowed' }, 405);
+  } catch (e) {
+    if (String(e?.message || e).includes('UNIQUE')) {
+      return json({ ok: false, error: 'Username already exists.' }, 409);
+    }
+    return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
   }
 }
