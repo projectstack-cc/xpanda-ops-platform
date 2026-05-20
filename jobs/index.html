@@ -142,21 +142,35 @@
 
     <div class="jobs-modal-body">
 
+      <!-- Packing slip drop zone -->
+      <div id="slip-dropzone" style="border:2px dashed #d1d5db;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;transition:all 0.2s;cursor:pointer;" onclick="document.getElementById('packing-slip-upload').click()">
+        <div style="font-size:14px;color:#6b7280;">
+          <span style="font-size:20px;">📄</span><br>
+          Drag &amp; drop a packing slip PDF here<br>
+          <span style="font-size:12px;color:#9ca3af;">or click to browse</span>
+        </div>
+      </div>
+
       <!-- Packing slip badge -->
       <div id="slip-badge" class="jobs-slip-badge" hidden></div>
+
+      <!-- Inline packing slip viewer -->
+      <div id="slip-inline-viewer" hidden style="margin:8px 0 12px;">
+        <div id="slip-viewer-toggle" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;margin-bottom:6px;">
+          <span id="slip-viewer-chevron" style="font-size:12px;transition:transform 0.2s;">&#9658;</span>
+          <span style="font-size:13px;font-weight:600;color:#1e40af;">View Packing Slip</span>
+        </div>
+        <div id="slip-viewer-content" hidden>
+          <iframe id="slip-viewer-iframe" style="width:100%;height:500px;border:1px solid #d1d5db;border-radius:8px;" src="about:blank"></iframe>
+        </div>
+      </div>
 
       <!-- Customer & Order -->
       <div class="jobs-form-section">
         <p class="jobs-form-section-title">Customer &amp; Order</p>
-        <div class="jobs-form-grid-2">
-          <div class="jobs-field">
-            <label for="f-customer">Customer *</label>
-            <input type="text" id="f-customer" placeholder="Customer name">
-          </div>
-          <div class="jobs-field">
-            <label for="f-sales-lead">Sales Lead</label>
-            <input type="text" id="f-sales-lead" placeholder="e.g. Tim for MS">
-          </div>
+        <div class="jobs-field">
+          <label for="f-customer">Customer *</label>
+          <input type="text" id="f-customer" placeholder="Customer name">
         </div>
         <div class="jobs-form-group" style="grid-column: 1 / -1;">
           <div id="ship-to-toggle" style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; margin-bottom:6px;">
@@ -256,29 +270,14 @@
             <input type="number" id="f-total-bdft" value="0" min="0" step="1">
           </div>
         </div>
-        <div class="jobs-form-grid-3">
-          <div class="jobs-field">
-            <label for="f-scrap-pickup">Scrap Pickup</label>
-            <select id="f-scrap-pickup">
-              <option value="">— N/A —</option>
-              <option value="YES">YES</option>
-              <option value="NO">NO</option>
-              <option value="N/A">N/A</option>
-            </select>
-          </div>
-          <div class="jobs-field" style="justify-content:flex-end;padding-top:4px;">
-            <label class="jobs-checkbox-row">
-              <input type="checkbox" id="f-confirmed">
-              Confirmed to Ship
-            </label>
-          </div>
-          <div class="jobs-field">
-            <label>Priority</label>
-            <div class="jobs-priority-toggle">
-              <button type="button" class="jobs-priority-btn active-normal" id="priority-normal">Normal</button>
-              <button type="button" class="jobs-priority-btn" id="priority-rush">RUSH</button>
-            </div>
-          </div>
+        <div class="jobs-field">
+          <label for="f-scrap-pickup">Scrap Pickup</label>
+          <select id="f-scrap-pickup">
+            <option value="">— N/A —</option>
+            <option value="YES">YES</option>
+            <option value="NO">NO</option>
+            <option value="N/A">N/A</option>
+          </select>
         </div>
       </div>
 
@@ -295,28 +294,9 @@
             <input type="tel" id="f-contact-phone" placeholder="Phone number">
           </div>
         </div>
-        <div class="jobs-form-grid-2">
-          <div class="jobs-field">
-            <label for="f-payment-info">Payment Info</label>
-            <input type="text" id="f-payment-info" placeholder="e.g. Net 30 via FedEx check">
-          </div>
-          <div class="jobs-field">
-            <label for="f-bol-info">BOL Info</label>
-            <input type="text" id="f-bol-info" placeholder="Bill of lading details">
-          </div>
-        </div>
-      </div>
-
-      <!-- Instructions -->
-      <div class="jobs-form-section">
-        <p class="jobs-form-section-title">Instructions</p>
         <div class="jobs-field">
-          <label for="f-packing">Packing Instructions</label>
-          <textarea id="f-packing" placeholder="Floor operator instructions — labeling, load on risers, QC requirements, unloading notes…" rows="3"></textarea>
-        </div>
-        <div class="jobs-field">
-          <label for="f-notes">Notes</label>
-          <textarea id="f-notes" placeholder="General notes, scheduling history, internal comments" rows="3"></textarea>
+          <label for="f-payment-info">Payment Info</label>
+          <input type="text" id="f-payment-info" placeholder="e.g. Net 30 via FedEx check">
         </div>
       </div>
 
@@ -358,6 +338,19 @@
         <div class="jobs-combo-area" id="combo-area">
           <button type="button" class="btn ghost small" id="btn-link-combo">Link Combo</button>
           <span id="combo-badge-wrap" hidden></span>
+        </div>
+      </div>
+
+      <!-- Instructions -->
+      <div class="jobs-form-section">
+        <p class="jobs-form-section-title">Instructions</p>
+        <div class="jobs-field">
+          <label for="f-packing">Packing Instructions</label>
+          <textarea id="f-packing" placeholder="Floor operator instructions — labeling, load on risers, QC requirements, unloading notes…" rows="3"></textarea>
+        </div>
+        <div class="jobs-field">
+          <label for="f-notes">Notes</label>
+          <textarea id="f-notes" placeholder="General notes, scheduling history, internal comments" rows="3"></textarea>
         </div>
       </div>
 
@@ -429,7 +422,6 @@ let allJobs          = [];
 let editingJobId     = null;
 let pendingSlip      = null;
 let pendingSlipRemoved = false;
-let selectedPriority = 'normal';
 let selectedComboId  = null;
 let selectedComboName = '';
 let partsCache      = null;
@@ -587,10 +579,6 @@ function buildCard(job) {
   card.innerHTML = `
     <div class="jobs-card-top">
       <div class="jobs-card-customer">${esc(job.customer)}${slipIcon}${shipmentIcon}</div>
-      <div class="jobs-card-pill-group">
-        ${job.priority === 'rush' ? '<span class="jobs-rush-badge">RUSH</span>' : ''}
-        ${job.confirmed_to_ship   ? '<span class="jobs-confirmed-badge">✓</span>' : ''}
-      </div>
     </div>
     ${job.invoice_number ? `<div class="jobs-card-inv">${esc(job.invoice_number)}</div>` : ''}
     ${dateStr             ? `<div class="jobs-card-date">${esc(dateStr)}</div>` : ''}
@@ -855,13 +843,6 @@ function setupModal() {
   document.getElementById('modal-save').addEventListener('click', saveJob);
   document.getElementById('modal-delete').addEventListener('click', confirmDelete);
 
-  document.getElementById('jobs-modal').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('jobs-modal')) closeModal();
-  });
-
-  document.getElementById('priority-normal').addEventListener('click', () => setPriority('normal'));
-  document.getElementById('priority-rush').addEventListener('click',   () => setPriority('rush'));
-
   document.getElementById('f-ship-date').addEventListener('change', (e) => {
     document.getElementById('f-ship-day-display').textContent = getShipDay(e.target.value);
   });
@@ -869,11 +850,43 @@ function setupModal() {
   document.getElementById('btn-add-li').addEventListener('click', () => addLineItemRow());
   document.getElementById('btn-load-parts').addEventListener('click', openPartsPicker);
   document.getElementById('btn-link-combo').addEventListener('click', openComboPicker);
+
+  document.getElementById('slip-viewer-toggle').addEventListener('click', () => {
+    const content = document.getElementById('slip-viewer-content');
+    const chevron = document.getElementById('slip-viewer-chevron');
+    const isHidden = content.hidden;
+    content.hidden = !isHidden;
+    chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
+  });
+
+  const dropzone = document.getElementById('slip-dropzone');
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.style.borderColor = '#3b82f6';
+    dropzone.style.backgroundColor = '#eff6ff';
+  });
+  dropzone.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dropzone.style.borderColor = '#d1d5db';
+    dropzone.style.backgroundColor = '';
+  });
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.style.borderColor = '#d1d5db';
+    dropzone.style.backgroundColor = '';
+    const files = e.dataTransfer.files;
+    if (files.length && files[0].type === 'application/pdf') {
+      const input = document.getElementById('packing-slip-upload');
+      const dt = new DataTransfer();
+      dt.items.add(files[0]);
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
 }
 
 function openModal(jobId) {
   editingJobId     = jobId;
-  selectedPriority = 'normal';
   selectedComboId  = null;
   selectedComboName = '';
 
@@ -958,6 +971,7 @@ function prefillForm(data) {
         description: desc,
         quantity:    li.quantity ?? 1,
         dimensions:  li.dimensions || '',
+        qty_unit:    li.qty_unit || 'pcs',
       });
       row.querySelectorAll('input').forEach(inp => highlight(inp));
     }
@@ -975,23 +989,30 @@ function showSlipBadge(invoice, filename, isExisting, jobId) {
       <div class="jobs-slip-badge-file">&#128206; ${esc(filename || 'Unknown file')}</div>
     </div>
     <div class="jobs-slip-badge-actions">
-      ${isExisting && jobId ? `<button type="button" class="jobs-slip-view" id="slip-view-btn">View / Print</button>` : ''}
       <button type="button" class="jobs-slip-remove" id="slip-remove-btn">${isExisting ? 'Remove Attachment' : 'Remove'}</button>
     </div>
   `;
   badge.hidden = false;
 
   if (isExisting && jobId) {
-    document.getElementById('slip-view-btn').addEventListener('click', () => {
-      window.open('/api/jobs/' + encodeURIComponent(jobId) + '/packing-slip', '_blank');
-    });
+    document.getElementById('slip-inline-viewer').hidden = false;
+    document.getElementById('slip-viewer-toggle').addEventListener('click', function loadSlip() {
+      const iframe = document.getElementById('slip-viewer-iframe');
+      if (iframe.src === 'about:blank' || !iframe.src.includes('/packing-slip')) {
+        iframe.src = '/api/jobs/' + encodeURIComponent(jobId) + '/packing-slip';
+      }
+    }, { once: true });
   }
 
   document.getElementById('slip-remove-btn').addEventListener('click', () => {
     if (isExisting) pendingSlipRemoved = true;
     pendingSlip = null;
     hideSlipBadge();
+    document.getElementById('slip-inline-viewer').hidden = true;
+    document.getElementById('slip-dropzone').hidden = false;
   });
+
+  document.getElementById('slip-dropzone').hidden = true;
 }
 
 function hideSlipBadge() {
@@ -1020,9 +1041,9 @@ document.getElementById('f-ship-to-state').addEventListener('input', updateShipT
 
 function clearForm() {
   const textIds = [
-    'f-customer', 'f-sales-lead', 'f-po-number', 'f-invoice-number',
+    'f-customer', 'f-po-number', 'f-invoice-number',
     'f-ship-date', 'f-delivery-time', 'f-location', 'f-carrier',
-    'f-contact-name', 'f-contact-phone', 'f-payment-info', 'f-bol-info',
+    'f-contact-name', 'f-contact-phone', 'f-payment-info',
     'f-packing', 'f-notes',
     'f-ship-to-company', 'f-ship-to-attention', 'f-ship-to-street',
     'f-ship-to-city', 'f-ship-to-state', 'f-ship-to-zip',
@@ -1037,10 +1058,14 @@ function clearForm() {
   document.getElementById('f-scrap-pickup').value = '';
   document.getElementById('f-load-count').value   = '1';
   document.getElementById('f-total-bdft').value   = '0';
-  document.getElementById('f-confirmed').checked  = false;
   document.getElementById('li-container').innerHTML = '';
 
-  setPriority('normal');
+  document.getElementById('slip-inline-viewer').hidden = true;
+  document.getElementById('slip-viewer-content').hidden = true;
+  document.getElementById('slip-viewer-chevron').style.transform = '';
+  document.getElementById('slip-viewer-iframe').src = 'about:blank';
+  document.getElementById('slip-dropzone').hidden = false;
+
   clearCombo();
   hideSlipBadge();
   setModalStatus('');
@@ -1057,7 +1082,6 @@ function populateForm(job) {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
 
   set('f-customer',       job.customer);
-  set('f-sales-lead',     job.sales_lead);
   set('f-po-number',      job.po_number);
   set('f-invoice-number', job.invoice_number);
   set('f-ship-date',      job.ship_date);
@@ -1071,7 +1095,6 @@ function populateForm(job) {
   set('f-contact-name',   job.contact_name);
   set('f-contact-phone',  job.contact_phone);
   set('f-payment-info',   job.payment_info);
-  set('f-bol-info',       job.bol_info);
   set('f-packing',        job.packing_instructions);
   set('f-notes',          job.notes);
 
@@ -1088,9 +1111,6 @@ function populateForm(job) {
   }
 
   document.getElementById('f-ship-day-display').textContent = getShipDay(job.ship_date);
-  document.getElementById('f-confirmed').checked = !!job.confirmed_to_ship;
-
-  setPriority(job.priority || 'normal');
 
   document.getElementById('li-container').innerHTML = '';
   if (Array.isArray(job.line_items)) {
@@ -1113,14 +1133,6 @@ function populateForm(job) {
   });
 }
 
-function setPriority(p) {
-  selectedPriority = p;
-  document.getElementById('priority-normal').className =
-    'jobs-priority-btn' + (p === 'normal' ? ' active-normal' : '');
-  document.getElementById('priority-rush').className =
-    'jobs-priority-btn' + (p === 'rush' ? ' active-rush' : '');
-}
-
 function setModalStatus(msg, isError) {
   const el = document.getElementById('modal-status');
   el.textContent = msg;
@@ -1132,12 +1144,16 @@ function setModalStatus(msg, isError) {
 ═══════════════════════════════════════════ */
 
 function addLineItemRow(data) {
+  const isBdft = data?.qty_unit === 'bdft';
   const row = document.createElement('div');
   row.className = 'jobs-li-row';
   row.innerHTML = `
     <input type="text"   class="li-part" placeholder="Part #"      value="${esc(data?.part_number  ?? '')}">
     <input type="text"   class="li-desc" placeholder="Description" value="${esc(data?.description  ?? '')}">
-    <input type="number" class="li-qty"  placeholder="Qty"         value="${data?.quantity ?? ''}" min="0">
+    <span style="display:flex;align-items:center;gap:4px;">
+      <input type="number" class="li-qty"  placeholder="Qty" value="${data?.quantity ?? ''}" min="0" style="flex:1;">
+      ${isBdft ? '<span style="font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:3px;padding:1px 4px;white-space:nowrap;">BDFT</span>' : ''}
+    </span>
     <input type="text"   class="li-dims" placeholder="Dims"        value="${esc(data?.dimensions   ?? '')}">
     <button type="button" class="jobs-li-remove" title="Remove">&times;</button>
   `;
@@ -1203,7 +1219,6 @@ async function saveJob() {
     customer,
     po_number:            document.getElementById('f-po-number').value.trim(),
     invoice_number:       document.getElementById('f-invoice-number').value.trim(),
-    sales_lead:           document.getElementById('f-sales-lead').value.trim(),
     ship_date:            shipDate,
     ship_day:             getShipDay(shipDate),
     delivery_time:        document.getElementById('f-delivery-time').value.trim(),
@@ -1213,12 +1228,9 @@ async function saveJob() {
     load_count:           parseInt(document.getElementById('f-load-count').value,  10) || 1,
     total_bdft:           parseFloat(document.getElementById('f-total-bdft').value)    || 0,
     scrap_pickup:         document.getElementById('f-scrap-pickup').value,
-    confirmed_to_ship:    document.getElementById('f-confirmed').checked ? 1 : 0,
-    priority:             selectedPriority,
     contact_name:         document.getElementById('f-contact-name').value.trim(),
     contact_phone:        document.getElementById('f-contact-phone').value.trim(),
     payment_info:         document.getElementById('f-payment-info').value.trim(),
-    bol_info:             document.getElementById('f-bol-info').value.trim(),
     packing_instructions: document.getElementById('f-packing').value.trim(),
     notes:                document.getElementById('f-notes').value.trim(),
     combo_id:             selectedComboId || null,
