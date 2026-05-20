@@ -432,7 +432,7 @@ function renderTable() {
     return;
   }
 
-  tbody.innerHTML = users.map(u => `
+  tbody.innerHTML = users.map((u, i) => `
     <tr>
       <td><strong>${esc(u.username)}</strong></td>
       <td>${esc(u.display_name)}</td>
@@ -445,7 +445,7 @@ function renderTable() {
       <td>${u.first_login ? 'Yes' : 'No'}</td>
       <td>
         <div class="actions-cell">
-          <button class="btn btn-ghost btn-sm" onclick="openModal(${JSON.stringify(JSON.stringify(u))})">Edit</button>
+          <button class="btn btn-ghost btn-sm" onclick="openModal(${i})">Edit</button>
           <button class="btn btn-ghost btn-sm" onclick="resetPassword('${esc(u.id)}', '${esc(u.display_name)}')">Reset PW</button>
           <button class="btn btn-ghost btn-sm" onclick="toggleActive('${esc(u.id)}', ${u.is_active})">${u.is_active ? 'Disable' : 'Enable'}</button>
           <button class="btn btn-danger btn-sm" onclick="deleteUser('${esc(u.id)}', '${esc(u.display_name)}')">Delete</button>
@@ -455,7 +455,7 @@ function renderTable() {
   `).join('');
 }
 
-function openModal(userJson) {
+function openModal(idx) {
   editingId = null;
   document.getElementById('modal-title').textContent = 'Add User';
   document.getElementById('m-username').value = '';
@@ -466,8 +466,8 @@ function openModal(userJson) {
   document.getElementById('modal-error').textContent = '';
   document.getElementById('m-password-group').style.display = '';
 
-  if (userJson) {
-    const u = JSON.parse(userJson);
+  if (idx !== null && idx !== undefined) {
+    const u = users[idx];
     editingId = u.id;
     document.getElementById('modal-title').textContent = 'Edit User';
     document.getElementById('m-username').value = u.username;
