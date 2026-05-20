@@ -69,7 +69,7 @@ window.PackingSlipParser = (function () {
 
   // QuickBooks PDFs encode the inch mark as U+201D (right double quotation mark),
   // not standard ASCII U+0022. Both are accepted here for robustness.
-  const INCH_RE = '["”]';
+  const INCH_RE = '[""]';
 
   // Matches patterns like: 54-3/4" x 90-3/4" x 8" (with either " variant)
   const DIM_PATTERN = new RegExp(`\\d[\\d\\-\\/]*${INCH_RE}(\\s*[xX×]\\s*\\d[\\d\\-\\/]*${INCH_RE})+`);
@@ -103,23 +103,85 @@ window.PackingSlipParser = (function () {
 
   /**
    * Parse an ordered array of text rows representing the SHIP TO column.
-   * Handles optional ATTN line before the street address.
+   * Works backwards from city/state/zip to handle multi-line building names
+   * and "Attn:" appearing mid-block.
    */
   function parseShipTo(rows) {
     const st = { company: '', attention: '', street: '', city: '', state: '', zip: '' };
     const r = rows.filter(t => t && !/^SHIP\s+TO$/i.test(t.trim()));
-    let i = 0;
-    if (i < r.length && /^ATTN:/i.test(r[i])) {
-      st.attention = r[i++].replace(/^ATTN:\s*/i, '').trim();
-    } else {
-      st.company = (r[i++] || '').trim();
-      if (i < r.length && /^ATTN:/i.test(r[i])) {
-        st.attention = r[i++].replace(/^ATTN:\s*/i, '').trim();
+    if (!r.length) return st;
+
+    // Step 1: Find the city/state/zip line (work backwards from the bottom)
+    let cityStateIdx = -1;
+    let zipIdx = -1;
+
+    for (let i = r.length - 1; i >= 0; i--) {
+      const line = r[i].trim();
+      if (/^\d{5}(-\d{4})?$/.test(line)) {
+        zipIdx = i;
+        st.zip = line;
+        continue;
+      }
+      const csz = line.match(/^(.+?),?\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+      if (csz) {
+        cityStateIdx = i;
+        st.city = csz[1].trim();
+        st.state = csz[2];
+        st.zip = csz[3];
+        break;
+      }
+      const cs = line.match(/^(.+?),?\s+([A-Z]{2})$/);
+      if (cs && cs[1].length > 1) {
+        cityStateIdx = i;
+        st.city = cs[1].trim();
+        st.state = cs[2];
+        break;
       }
     }
-    if (i < r.length) st.street = r[i++].trim();
-    if (i < r.length) parseCityStateLine(r[i++], st);
-    if (i < r.length && /^\d{5}(-\d{4})?$/.test(r[i].trim())) st.zip = r[i].trim();
+
+    // Step 2: Find the street address line (the line before city/state, that looks like a street)
+    const endIdx = cityStateIdx >= 0 ? cityStateIdx : (zipIdx >= 0 ? zipIdx : r.length);
+    let streetIdx = -1;
+
+    for (let i = endIdx - 1; i >= 0; i--) {
+      const line = r[i].trim();
+      if (/^\d+\s/.test(line) || /\b(St|Rd|Ave|Blvd|Dr|Ln|Lane|Ct|Way|Pkwy|Terrace|Circle|Place|Highway|Hwy)\b/i.test(line)) {
+        streetIdx = i;
+        st.street = line;
+        break;
+      }
+    }
+
+    // Step 3: Find Attn line
+    let attnIdx = -1;
+    for (let i = 0; i < endIdx; i++) {
+      if (/^Attn:/i.test(r[i].trim())) {
+        attnIdx = i;
+        let attnText = r[i].replace(/^Attn:\s*/i, '').trim();
+        if (i + 1 < endIdx && i + 1 !== streetIdx && /^[&a-zA-Z]/.test(r[i + 1].trim()) && !/^\d/.test(r[i + 1].trim())) {
+          attnText += ' ' + r[i + 1].trim();
+          attnIdx = i + 1;
+        }
+        st.attention = attnText;
+        break;
+      }
+    }
+
+    // Step 4: Everything before Attn (or before street if no Attn) is the company name
+    let compEndIdx = endIdx;
+    const firstAttnIdx = r.findIndex(l => /^Attn:/i.test(l.trim()));
+    if (firstAttnIdx >= 0) compEndIdx = Math.min(compEndIdx, firstAttnIdx);
+    if (streetIdx >= 0) compEndIdx = Math.min(compEndIdx, streetIdx);
+
+    const companyLines = r.slice(0, Math.max(1, compEndIdx)).map(l => l.trim());
+    st.company = companyLines.join(' ').trim();
+
+    if (!st.zip && cityStateIdx < 0) {
+      const lastLine = r[r.length - 1].trim();
+      const zipMatch = lastLine.match(/(\d{5}(-\d{4})?)$/);
+      if (zipMatch) st.zip = zipMatch[1];
+    }
+
     return st;
   }
 
@@ -127,13 +189,14 @@ window.PackingSlipParser = (function () {
 
   /**
    * A line is a "product category header" when its rightmost item is a pure
-   * integer (the quantity) with a large x-gap separating it from the description.
-   * This mimics the right-aligned QTY column in the packing slip layout.
+   * integer (the quantity, possibly with commas) with a large x-gap separating
+   * it from the description.
    */
   function isItemHeader(sortedItems) {
     if (sortedItems.length < 2) return false;
     const last = sortedItems[sortedItems.length - 1];
-    if (!/^\d+$/.test(last.text.trim())) return false;
+    const qtyText = last.text.trim().replace(/,/g, '');
+    if (!/^\d+$/.test(qtyText)) return false;
     const prev = sortedItems[sortedItems.length - 2];
     const gap = last.x - (prev.x + (prev.width || prev.text.length * 5.5));
     return gap > 50;
@@ -141,68 +204,100 @@ window.PackingSlipParser = (function () {
 
   /**
    * Parse all line items from groups below the DESCRIPTION/QTY header line.
-   * Each item spans 2–3 lines: category+qty, description, LABEL±dimensions.
+   * Handles diverse product types: Block Foam, Laminates, Holey Board, Plugs, etc.
+   * Filters out "notes" pseudo-items and zero-quantity items.
    */
   function parseLineItems(groups, descriptionY) {
     const items = [];
     let current = null;
 
-    // Only process lines that appear below the DESCRIPTION header (lower y in PDF coords)
     const relevant = groups
       .filter(lg => lg.y < descriptionY)
-      .sort((a, b) => b.y - a.y); // top-to-bottom
+      .sort((a, b) => b.y - a.y);
 
     for (const lg of relevant) {
       const sorted = [...lg.items].sort((a, b) => a.x - b.x);
       const lineText = reconstructLine(sorted).trim();
       if (!lineText) continue;
 
+      // Skip repeated DESCRIPTION/QTY headers on subsequent pages
+      if (/^\s*DESCRIPTION\b/i.test(lineText) && /\bQTY\b/i.test(lineText)) continue;
+
+      // Stop at boilerplate/legal sections at page bottom
+      if (/Commodities requiring/i.test(lineText)) break;
+      if (/NOTE:\s*Liability/i.test(lineText)) break;
+      if (/Customer acknowledges/i.test(lineText)) break;
+      if (/certify that/i.test(lineText)) break;
+      if (/Carrier Signature/i.test(lineText)) break;
+      if (/Shipper Signature/i.test(lineText)) break;
+
       if (isItemHeader(sorted)) {
-        // Start a new line item
         if (current) items.push(current);
-        const qty = parseInt(sorted[sorted.length - 1].text, 10);
+        const qty = parseInt(sorted[sorted.length - 1].text.replace(/,/g, ''), 10);
         const category = reconstructLine(sorted.slice(0, -1)).trim();
-        current = { category, description: '', label: '', dimensions: '', quantity: qty };
+        const isNotes = /^notes\b/i.test(category);
+
+        current = {
+          category,
+          description: '',
+          label: '',
+          dimensions: '',
+          quantity: qty,
+          _isNotes: isNotes,
+          _descLines: [],
+        };
 
       } else if (current) {
-        if (!current.description && /Foam Block/i.test(lineText)) {
-          current.description = lineText;
+        if (current._isNotes) continue;
 
-        } else if (/^NO\s+LABEL\s*-/i.test(lineText)) {
-          // "NO LABEL - 54-3/4" x 90-3/4" x 7""
-          const m = lineText.match(/^NO\s+LABEL\s*-\s*(.*)/i);
-          if (m) { current.label = 'NO LABEL'; current.dimensions = m[1].trim(); }
+        // Extract dimensions if not yet found
+        const dimMatch = lineText.match(/(\d[\d.\/\-]*)\s*[""”]?\s*[xX×]\s*(\d[\d.\/\-]*)\s*[""”]?\s*[xX×]\s*(\d[\d.\/\-]*)\s*[""”]?/);
+        if (dimMatch && !current.dimensions) {
+          current.dimensions = dimMatch[0].trim();
+        }
 
-        } else if (/LABEL\s*[–\-]/i.test(lineText)) {
-          // "LABEL – LabelName - Dimensions"
-          // The en dash (U+2013) separates LABEL from the label name.
-          // The label name and dimensions are always on the same line, separated by " - ".
-          const m = lineText.match(/LABEL\s*[–\-]\s*(.*)/i);
-          if (m) {
-            const rest = m[1].trim();
-            // Split on " - " before the dimension number (e.g. "Stock - 54-3/4"...")
-            const split = rest.match(/^(.+?)\s+-\s+(\d.*)/);
-            if (split) {
-              current.label      = split[1].trim();
-              current.dimensions = split[2].trim();
-            } else if (isDimensionLine(rest)) {
-              // No label name prefix — dimensions only
-              current.dimensions = rest;
-            } else {
-              // Label name only; dimensions expected on next line (fallback)
-              current.label = rest.replace(/\s*-\s*$/, '').trim();
-            }
+        // Collect description lines (skip bundle info and label instructions)
+        if (!/^\d+\s*pieces?\s*per\s*bundle/i.test(lineText) &&
+            !/^LABEL\s+AS\s+INDICATED/i.test(lineText) &&
+            !/^NO\s+LABEL/i.test(lineText)) {
+          current._descLines.push(lineText);
+        }
+
+        // Detect specific product description patterns
+        if (!current.description) {
+          if (/Foam Block/i.test(lineText)) {
+            current.description = lineText;
+          } else if (/Laminate/i.test(lineText) && !/specify Laminate type/i.test(lineText)) {
+            current.description = lineText;
+          } else if (/Holey Board/i.test(lineText)) {
+            current.description = lineText;
+          } else if (/Insulperm/i.test(lineText)) {
+            current.description = lineText;
           }
-
-        } else if (current.label && !current.dimensions && isDimensionLine(lineText)) {
-          // Dimensions on their own line (fallback for unusual layouts)
-          current.dimensions = lineText;
         }
       }
     }
 
     if (current) items.push(current);
-    return items;
+
+    return items
+      .filter(item => {
+        if (item._isNotes) return false;
+        if (!item.quantity || item.quantity <= 0) return false;
+        return true;
+      })
+      .map(item => {
+        if (!item.description && item._descLines.length) {
+          item.description = item._descLines
+            .filter(l => !/^\d+\s*pieces?\s*per/i.test(l))
+            .join(' — ')
+            .slice(0, 200);
+        }
+        item.qty_unit = /BDFT\s*per\s*piece/i.test(item._descLines.join(' ')) ? 'bdft' : 'pcs';
+        delete item._isNotes;
+        delete item._descLines;
+        return item;
+      });
   }
 
   // ─── Main document parser ─────────────────────────────────────────────────
@@ -221,7 +316,6 @@ window.PackingSlipParser = (function () {
       line_items:    [],
     };
 
-    // Group items into lines, sort top-to-bottom, sort items within each line left-to-right
     const groups = groupByY(rawItems, 3);
     groups.sort((a, b) => b.y - a.y);
     for (const g of groups) g.items.sort((a, b) => a.x - b.x);
@@ -234,15 +328,15 @@ window.PackingSlipParser = (function () {
 
     // ── Locate key section boundaries ────────────────────────────────────────
 
-    let billToIdx      = -1; // "BILL TO / SHIP TO / INVOICE #" header line
-    let shipDateHdrIdx = -1; // "SHIP DATE / SHIP VIA / WITH PHONE # / PURCHASE ORDER" header
-    let descriptionIdx = -1; // "DESCRIPTION / QTY" header line
+    let billToIdx      = -1;
+    let shipDateHdrIdx = -1;
+    let descriptionIdx = -1;
 
     for (let i = 0; i < lines.length; i++) {
       const t = lines[i].text;
       if (/BILL\s+TO/i.test(t) && /SHIP\s+TO/i.test(t)) billToIdx = i;
-      if (/SHIP\s+DATE/i.test(t) && /SHIP\s+VIA/i.test(t)) shipDateHdrIdx = i;
-      if (/^\s*DESCRIPTION\b/i.test(t) && /\bQTY\b/i.test(t)) descriptionIdx = i;
+      if (/SHIP\s+DATE/i.test(t) && (/SHIP\s+VIA/i.test(t) || /SHIPMENT\s+CONTACT/i.test(t) || /PHONE/i.test(t))) shipDateHdrIdx = i;
+      if (/^\s*DESCRIPTION\b/i.test(t) && /\bQTY\b/i.test(t) && descriptionIdx < 0) descriptionIdx = i;
     }
 
     // ── Invoice number (right side of BILL TO header line) ────────────────────
@@ -260,16 +354,11 @@ window.PackingSlipParser = (function () {
     }
 
     // ── Ship date, ship via, contact name/phone, PO number ───────────────────
-    //
-    // Header row:  SHIP DATE   SHIP VIA   WITH PHONE #   PURCHASE ORDER
-    // Value row:   05/12/2026  carrier    Trish Nicholson  AD050426-4
-    // Phone row:                          954/785-7557
 
     if (shipDateHdrIdx >= 0) {
       const hdrLine = lines[shipDateHdrIdx];
       const valIdx  = shipDateHdrIdx + 1;
 
-      // Locate x positions of column headers for positional extraction
       let contactHdrX = null;
       let poHdrX      = null;
 
@@ -281,8 +370,13 @@ window.PackingSlipParser = (function () {
       if (valIdx < lines.length) {
         const valItems = [...lines[valIdx].items].sort((a, b) => a.x - b.x);
 
-        // Ship date: leftmost item
-        if (valItems.length >= 1) data.ship_date = valItems[0].text.trim();
+        // Ship date: find item matching date pattern
+        for (const it of valItems) {
+          if (/^\d{2}\/\d{2}\/\d{4}$/.test(it.text.trim())) {
+            data.ship_date = it.text.trim();
+            break;
+          }
+        }
 
         if (contactHdrX !== null && poHdrX !== null) {
           const contactPoMid = (contactHdrX + poHdrX) / 2;
@@ -305,7 +399,6 @@ window.PackingSlipParser = (function () {
           data.po_number    = poParts.join(' ').trim();
 
         } else {
-          // Fallback: use position in item list
           if (valItems.length >= 2) data.ship_via = valItems[1].text.trim();
           if (valItems.length >= 4) {
             data.po_number    = valItems[valItems.length - 1].text.trim();
@@ -325,18 +418,48 @@ window.PackingSlipParser = (function () {
             data.contact_phone = phoneItems.map(it => it.text.trim()).join('').trim();
           } else {
             for (const it of phoneLine.items) {
-              if (/[\d\/]{7,}/.test(it.text)) { data.contact_phone = it.text.trim(); break; }
+              if (/[\d(][\d\/\-().ext\s]{6,}/.test(it.text)) { data.contact_phone = it.text.trim(); break; }
             }
+          }
+        }
+
+        // Fallback PO extraction: rightmost non-phone, non-date item on the value line
+        if (!data.po_number && valItems.length >= 2) {
+          for (let vi = valItems.length - 1; vi >= 1; vi--) {
+            const t = valItems[vi].text.trim();
+            if (/^\d{2}\/\d{2}\/\d{4}$/.test(t)) continue;
+            if (/^\d{3}[\-\/]\d{3}[\-\/]\d{4}/.test(t)) continue;
+            if (/^CARRIER$/i.test(t)) continue;
+            data.po_number = t;
+            break;
           }
         }
       }
     }
 
+    // ── Post-process contact name/phone ──────────────────────────────────────
+
+    if (data.contact_name && data.contact_phone) {
+      const trailingPhone = data.contact_name.match(/\s+([\d(]+[\d\-\/()]{0,5})$/);
+      if (trailingPhone) {
+        data.contact_phone = trailingPhone[1] + data.contact_phone;
+        data.contact_name = data.contact_name.slice(0, -trailingPhone[0].length).trim();
+      }
+    }
+
+    if (data.contact_name && !data.contact_phone) {
+      const phoneInName = data.contact_name.match(/\s*(\(?\w?\)?\s*\d{3}[\-\/\.\s]\d{3}[\-\/\.\s]\d{4}(?:\s*(?:x|ext\.?)\s*\d+)?)\s*$/i);
+      if (phoneInName) {
+        data.contact_phone = phoneInName[1].trim();
+        data.contact_name = data.contact_name.slice(0, -phoneInName[0].length).trim();
+      }
+    }
+
+    if (data.contact_phone) {
+      data.contact_phone = data.contact_phone.replace(/\//g, '-').replace(/^\(c\)/i, '').trim();
+    }
+
     // ── Bill to / Ship to address blocks ─────────────────────────────────────
-    //
-    // Both columns appear in lines below the "BILL TO / SHIP TO" header.
-    // We split items by x position: left of mid → bill_to, right of mid → ship_to.
-    // Items on the same y are merged per-column before being passed to address parsers.
 
     if (billToIdx >= 0) {
       const hdrItems = [...lines[billToIdx].items].sort((a, b) => a.x - b.x);
@@ -353,19 +476,17 @@ window.PackingSlipParser = (function () {
         const shipRightBound = invoiceX !== null ? invoiceX - 5 : Infinity;
         const startY         = lines[billToIdx].y;
 
-        // Address section ends just above the SHIPMENT CONTACT or SHIP DATE header
         const addrEndLine = lines.find(l =>
           l.y < startY && (/SHIPMENT\s+CONTACT/i.test(l.text) || /SHIP\s+DATE/i.test(l.text))
         );
         const endY = addrEndLine ? addrEndLine.y : -Infinity;
 
-        // Collect per-line text for each column (merge items on the same y per column)
         const billRows = [];
         const shipRows = [];
 
         const addrGroups = groups
           .filter(g => g.y < startY && g.y > endY)
-          .sort((a, b) => b.y - a.y); // top-to-bottom
+          .sort((a, b) => b.y - a.y);
 
         for (const g of addrGroups) {
           const billItems = g.items.filter(it => it.x <= mid).sort((a, b) => a.x - b.x);
@@ -405,18 +526,29 @@ window.PackingSlipParser = (function () {
       try {
         const lib = await loadPdfJs();
         const arrayBuffer = await file.arrayBuffer();
-        const pdf  = await lib.getDocument({ data: arrayBuffer }).promise;
-        const page = await pdf.getPage(1);
-        const tc   = await page.getTextContent();
+        const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
+        const numPages = pdf.numPages;
+        let rawItems = [];
 
-        const rawItems = tc.items
-          .filter(item => item.str.trim())
-          .map(item => ({
-            text:  item.str,
-            x:     item.transform[4],
-            y:     item.transform[5],
-            width: item.width || 0,
-          }));
+        for (let p = 1; p <= numPages; p++) {
+          const page = await pdf.getPage(p);
+          const tc   = await page.getTextContent();
+          const vp   = page.getViewport({ scale: 1 });
+          const pageHeight = vp.height;
+          const yOffset = (p - 1) * pageHeight;
+
+          const pageItems = tc.items
+            .filter(item => item.str.trim())
+            .map(item => ({
+              text:  item.str,
+              x:     item.transform[4],
+              y:     item.transform[5] - yOffset,
+              width: item.width || 0,
+              page:  p,
+            }));
+
+          rawItems = rawItems.concat(pageItems);
+        }
 
         const data = parseDoc(rawItems);
         return { success: true, data };
