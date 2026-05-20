@@ -38,8 +38,8 @@
 
 ## Admin / Platform
 
-- [ ] User login / authentication system
-- [ ] Role-based permissions (admin, staff, read-only, etc.)
+- [x] ~~User login / authentication system~~ — Prompts 21-22, session-based auth with login page, change-password flow
+- [x] ~~Role-based permissions (admin, staff, read-only, etc.)~~ — Prompts 23-24, roles table, permission middleware, Admin → Roles editor
 - [ ] Customer master record — central `customers` table that `bol_customers`, `jobs.customer`, and shipments all reference. Eliminates fuzzy matching; packing slips either match an existing customer or create a new one. Build after Customer CRUD is done.
 - [ ] Dashboard KPIs / metrics panel — homepage widget showing jobs by status, BOLs generated this week, shipments pending/in-transit/delivered, most-used parts. Simple SQL COUNT queries rendered in cards.
 - [ ] Notifications / alerts — in-app notification bar with rules-based alerts (e.g. "3 jobs stuck in Production >3 days", "BOL missing trailer number", "load build exceeds weight limit"). Runs on page load, no auth dependency.
@@ -51,6 +51,8 @@
 
 - [x] ~~Admin pages: standalone parts library management~~ — Prompt 19, full CRUD at `/admin/parts.html`
 - [x] ~~Activity log / audit trail~~ — Prompt 20, platform-wide logging + viewer at `/admin/activity-log.html`
+- [x] ~~User login / authentication system~~ — Prompts 21-22, session-based auth, login page, change-password flow
+- [x] ~~Role-based permissions~~ — Prompts 23-24, roles table, permission middleware, Admin → Roles editor, frontend gating on all modules
 
 ---
 
