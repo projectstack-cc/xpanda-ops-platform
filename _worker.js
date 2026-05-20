@@ -189,6 +189,10 @@ export default {
         return handleApiActivityLog(request, env);
       }
 
+      if (url.pathname === "/api/saved-loads" || url.pathname.startsWith("/api/saved-loads/")) {
+        return handleApiSavedLoads(request, env);
+      }
+
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
         return new Response(
@@ -3405,8 +3409,6 @@ async function handleApiBols(request, env) {
       return json({ ok: true, message: "BOL created.", bol: row }, 201);
     } catch (e) {
       const msg = String(e?.message || e);
-      if (msg.includes("UNIQUE constraint failed") && msg.includes("bol_number"))
-        return json({ ok: false, error: `BOL/INV # "${bol_number}" is already in use. Please enter a different number.` }, 409);
       return json({ ok: false, error: "Server error.", detail: msg }, 500);
     }
   }
@@ -3460,8 +3462,6 @@ async function handleApiBols(request, env) {
       return json({ ok: true, message: "BOL updated.", bol: row });
     } catch (e) {
       const msg = String(e?.message || e);
-      if (msg.includes("UNIQUE constraint failed") && msg.includes("bol_number"))
-        return json({ ok: false, error: `BOL/INV # "${payload.bol_number}" is already in use. Please enter a different number.` }, 409);
       return json({ ok: false, error: "Server error.", detail: msg }, 500);
     }
   }
@@ -3638,6 +3638,108 @@ const DEFAULT_PARTS = [
   { part_number: "H3232-4", name: "H3232-4", customer: "DiversiTech", density_material: "1.0 RC", length: 29.5, width: 29.5, height: 3.62, weight: 1, notes: "", color: "#D97706", category: "", parent_group: "" },
   { part_number: "H2436-4", name: "H2436-4", customer: "DiversiTech", density_material: "1.0 RC", length: 33.5, width: 21.5, height: 3.62, weight: 1, notes: "", color: "#D97706", category: "", parent_group: "" },
 ];
+
+async function handleApiSavedLoads(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  const url    = new URL(request.url);
+  const method = request.method;
+  const loadId = url.pathname.slice("/api/saved-loads".length).replace(/^\//, "") || null;
+
+  // ── GET /api/saved-loads ──────────────────────────────────────────────────
+  if (method === "GET" && !loadId) {
+    const now = new Date().toISOString();
+    await db.prepare("DELETE FROM saved_loads WHERE expires_at < ?").bind(now).run();
+    const result = await db.prepare(
+      "SELECT id, name, job_id, customer, trailer_type, created_at, updated_at FROM saved_loads ORDER BY updated_at DESC"
+    ).all();
+    return json({ ok: true, loads: result.results || [] });
+  }
+
+  // ── GET /api/saved-loads/:id ──────────────────────────────────────────────
+  if (method === "GET" && loadId) {
+    const row = await db.prepare("SELECT * FROM saved_loads WHERE id = ?").bind(loadId).first();
+    if (!row) return json({ ok: false, error: "Saved load not found." }, 404);
+    return json({ ok: true, load: row });
+  }
+
+  // ── POST /api/saved-loads ─────────────────────────────────────────────────
+  if (method === "POST") {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const id         = crypto.randomUUID();
+    const now        = new Date().toISOString();
+    const expires_at = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
+    await db.prepare(`
+      INSERT INTO saved_loads (id, name, job_id, customer, trailer_type, state_json, created_at, updated_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      String(payload.name || "").trim(),
+      payload.job_id ? String(payload.job_id).trim() : null,
+      String(payload.customer || "").trim(),
+      String(payload.trailer_type || "").trim(),
+      typeof payload.state_json === "string" ? payload.state_json : JSON.stringify(payload.state_json || {}),
+      now, now, expires_at
+    ).run();
+
+    await logActivity(db, 'create', 'saved_load', id,
+      `Saved load "${payload.name || id}" for ${payload.customer || ''}`,
+      { name: payload.name, customer: payload.customer, trailer_type: payload.trailer_type }
+    );
+    const row = await db.prepare("SELECT * FROM saved_loads WHERE id = ?").bind(id).first();
+    return json({ ok: true, load: row }, 201);
+  }
+
+  // ── PUT /api/saved-loads/:id ──────────────────────────────────────────────
+  if (method === "PUT" && loadId) {
+    let payload;
+    try { payload = await request.json(); }
+    catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const existing = await db.prepare("SELECT id FROM saved_loads WHERE id = ?").bind(loadId).first();
+    if (!existing) return json({ ok: false, error: "Saved load not found." }, 404);
+
+    const now        = new Date().toISOString();
+    const expires_at = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
+    await db.prepare(`
+      UPDATE saved_loads SET
+        name = ?, job_id = ?, customer = ?, trailer_type = ?,
+        state_json = ?, updated_at = ?, expires_at = ?
+      WHERE id = ?
+    `).bind(
+      String(payload.name || "").trim(),
+      payload.job_id ? String(payload.job_id).trim() : null,
+      String(payload.customer || "").trim(),
+      String(payload.trailer_type || "").trim(),
+      typeof payload.state_json === "string" ? payload.state_json : JSON.stringify(payload.state_json || {}),
+      now, expires_at, loadId
+    ).run();
+
+    const row = await db.prepare("SELECT * FROM saved_loads WHERE id = ?").bind(loadId).first();
+    return json({ ok: true, load: row });
+  }
+
+  // ── DELETE /api/saved-loads/:id ───────────────────────────────────────────
+  if (method === "DELETE" && loadId) {
+    const existing = await db.prepare("SELECT id, name, customer FROM saved_loads WHERE id = ?").bind(loadId).first();
+    if (!existing) return json({ ok: false, error: "Saved load not found." }, 404);
+
+    await db.prepare("DELETE FROM saved_loads WHERE id = ?").bind(loadId).run();
+    await logActivity(db, 'delete', 'saved_load', loadId,
+      `Deleted saved load "${existing.name || loadId}" for ${existing.customer || ''}`,
+      { name: existing.name, customer: existing.customer }
+    );
+    return json({ ok: true, message: "Saved load deleted." });
+  }
+
+  return json({ ok: false, error: "Method not allowed." }, 405);
+}
 
 async function handleApiLoadBuilderSkus(request, env) {
   const db = env.DB;

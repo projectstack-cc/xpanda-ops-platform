@@ -23,14 +23,14 @@
 
 ## Job Board
 
-- [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy — blocked on Quickbase input formatting improvements)
 - [ ] Create packet feature with Bill of Materials (BOM)
-- [ ] UI improvements pass
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
 
 ### Done
 
 - [x] ~~Packing slip upload + parser~~ — PDF upload, client-side parsing, job prefill
+- [x] ~~Packing slip parser overhaul~~ — Prompt 26, multi-page, diverse product types, contact/phone splitting, BDFT units
+- [x] ~~Job board UI cleanup~~ — Prompt 27, removed unused fields, inline slip viewer, drag-drop upload, Instructions moved to bottom
 - [x] ~~Ship-to address carry-through~~ — covered by Prompt 15
 - [x] ~~Auto-generate outbound shipment record when a job is created~~ — completed
 
@@ -38,12 +38,9 @@
 
 ## Admin / Platform
 
-- [x] ~~User login / authentication system~~ — Prompts 21-22, session-based auth with login page, change-password flow
-- [x] ~~Role-based permissions (admin, staff, read-only, etc.)~~ — Prompts 23-24, roles table, permission middleware, Admin → Roles editor
 - [ ] Customer master record — central `customers` table that `bol_customers`, `jobs.customer`, and shipments all reference. Eliminates fuzzy matching; packing slips either match an existing customer or create a new one. Build after Customer CRUD is done.
 - [ ] Dashboard KPIs / metrics panel — homepage widget showing jobs by status, BOLs generated this week, shipments pending/in-transit/delivered, most-used parts. Simple SQL COUNT queries rendered in cards.
 - [ ] Notifications / alerts — in-app notification bar with rules-based alerts (e.g. "3 jobs stuck in Production >3 days", "BOL missing trailer number", "load build exceeds weight limit"). Runs on page load, no auth dependency.
-- [ ] QC login gate (depends on auth)
 - [ ] Port language / i18n features from Safety portal to platform-wide use
 - [ ] Scrap batch entry tool
 
@@ -51,8 +48,8 @@
 
 - [x] ~~Admin pages: standalone parts library management~~ — Prompt 19, full CRUD at `/admin/parts.html`
 - [x] ~~Activity log / audit trail~~ — Prompt 20, platform-wide logging + viewer at `/admin/activity-log.html`
-- [x] ~~User login / authentication system~~ — Prompts 21-22, session-based auth, login page, change-password flow
-- [x] ~~Role-based permissions~~ — Prompts 23-24, roles table, permission middleware, Admin → Roles editor, frontend gating on all modules
+- [x] ~~User login / authentication system~~ — Prompts 21–22, session-based auth with first-login password flow
+- [x] ~~Role-based permissions~~ — Prompts 23–24, configurable roles with per-module view/edit toggles, admin bypass
 
 ---
 
@@ -99,6 +96,10 @@ Items moved here once fully shipped and verified.
 - [x] BOL text positioning fix (Prompt 18) — coords remapped to new template
 - [x] Admin parts library page (Prompt 19) — full CRUD at `/admin/parts.html`
 - [x] Activity log / audit trail (Prompt 20) — platform-wide logging + viewer at `/admin/activity-log.html`
+- [x] Auth system (Prompts 21–22) — username/password login, sessions, first-login password flow, user management admin page
+- [x] Roles & permissions (Prompts 23–24) — configurable roles with per-module view/edit toggles, admin bypass, permission grid UI
+- [x] Shared BOL module (Prompt 25) — unified `bol-shared.js` for PDF generation, eliminated coord duplication between BOL generator and load builder, optional BOL number with toast confirmation
+- [x] Load builder improvements (Prompt 28) — D1 saved loads (90-day expiry), duplicate BOL support, auto-increment BOL suffixes for multi-trailer loads, drag-and-drop in customize mode
 - [x] BOL Generator — PDF generation, customer dropdown, edit/new/duplicate modes
 - [x] Load Builder — native integration into platform (converted from React/Vite iframe)
 - [x] Job Board — Kanban with five statuses, line items, production sub-steps
