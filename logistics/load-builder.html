@@ -2157,7 +2157,7 @@ function renderBolModal() {
       h('div', { style: { fontSize: '22px', fontWeight: 900, color: 'var(--green)' } }, '✓ BOLs Generated Successfully')
     ));
     const ul = h('ul', { className: 'bol-success-list' });
-    bm.bolSuccess.forEach((bol, i) => { ul.appendChild(h('li', {}, `Trailer ${i + 1} → BOL #${bol.bol_number} — ${bol.ship_to_company || ''}`)); });
+    bm.bolSuccess.forEach((bol, i) => { ul.appendChild(h('li', {}, `Trailer ${i + 1} → ${bol.bol_number ? `BOL #${bol.bol_number}` : 'BOL'} — ${bol.ship_to_company || ''}`)); });
     body.appendChild(ul);
     if (bm.bolError) {
       body.appendChild(h('div', { style: { color: 'var(--warn-text)', fontSize: '14px', fontWeight: 600, marginTop: '8px' } }, bm.bolError));
@@ -2449,7 +2449,7 @@ async function generateAllBols() {
       if (!res.ok) { const ed = await res.json().catch(() => ({})); throw new Error(ed.error || `HTTP ${res.status}`); }
       const data = await res.json();
       savedBols.push(data.bol);
-      bm.generateProgress[i] = { text: `✓ Trailer ${i + 1} — BOL #${data.bol.bol_number} saved`, done: true, pending: false };
+      bm.generateProgress[i] = { text: `✓ Trailer ${i + 1} — ${data.bol.bol_number ? `BOL #${data.bol.bol_number}` : 'BOL'} saved`, done: true, pending: false };
       renderBolModal();
     } catch (e) { bm.generating = false; bm.bolError = `Trailer ${i + 1}: ${e.message}`; renderBolModal(); return; }
   }
@@ -2515,7 +2515,7 @@ async function generateBolPdf(bolRecords) {
     };
     if (bol.delivery_time) page.drawText(String(bol.delivery_time), { x: COORDS.deliveryTime.x, y: COORDS.deliveryTime.y, size: 18, font: fontBold, color: rgb(1, 0, 0) });
     drawText(bol.date, COORDS.date);
-    drawText(String(bol.bol_number), COORDS.bolNumber);
+    if (bol.bol_number) drawText(String(bol.bol_number), COORDS.bolNumber);
     drawText(bol.carrier_name, COORDS.carrierName);
     drawText(bol.trailer_no, COORDS.trailerNo);
     drawText(bol.seal_number, COORDS.sealNumber);

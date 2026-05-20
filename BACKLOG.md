@@ -4,14 +4,10 @@
 
 ## Logistics
 
-- [ ] Fix text positioning on certain BOL fields (pdf-lib layout issues)
 - [ ] Customer database (full CRUD)
-- [ ] Add trailer number field on logistics dashboard
 - [ ] Loading status indicator
 - [ ] Consider separate dashboards for staff vs. management (TV display)
 - [ ] Zoning support for deck systems
-- [ ] Load Builder customize mode: alert when too many parts are added; show unassigned pieces section when parts are removed
-- [ ] Remove dimensions field from BOL output
 - [ ] Part bundle quantities — certain parts ship in customer-specific bundle counts (e.g. H3636-4 bundles in 5's). Need a `bundle_qty` field on parts so the load builder can snap to bundle multiples.
 
 ### Done
@@ -19,20 +15,24 @@
 - [x] ~~Add Loading BOL / Trailer assignment app into Ops Platform~~ — Load Builder integrated natively
 - [x] ~~Link BOL Generator to Load Builder~~ — covered by Prompts 16–17
 - [x] ~~Load Builder column max fix~~ — 53ft Standard trailer height corrected from 108" to 109"
+- [x] ~~BOL text positioning fix~~ — Prompt 18, coords remapped to new template
+- [x] ~~Load Builder customize mode alerts~~ — completed
+- [x] ~~Add trailer number field on logistics dashboard~~ — already implemented
 
 ---
 
 ## Job Board
 
-- [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy)
+- [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy — blocked on Quickbase input formatting improvements)
 - [ ] Create packet feature with Bill of Materials (BOM)
-- [ ] Auto-generate outbound shipment record when a job is created
 - [ ] UI improvements pass
+- [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
 
 ### Done
 
 - [x] ~~Packing slip upload + parser~~ — PDF upload, client-side parsing, job prefill
 - [x] ~~Ship-to address carry-through~~ — covered by Prompt 15
+- [x] ~~Auto-generate outbound shipment record when a job is created~~ — completed
 
 ---
 
@@ -40,10 +40,17 @@
 
 - [ ] User login / authentication system
 - [ ] Role-based permissions (admin, staff, read-only, etc.)
-- [ ] Admin pages: standalone parts library management (add/edit/remove parts outside of calculator context)
+- [ ] Customer master record — central `customers` table that `bol_customers`, `jobs.customer`, and shipments all reference. Eliminates fuzzy matching; packing slips either match an existing customer or create a new one. Build after Customer CRUD is done.
+- [ ] Dashboard KPIs / metrics panel — homepage widget showing jobs by status, BOLs generated this week, shipments pending/in-transit/delivered, most-used parts. Simple SQL COUNT queries rendered in cards.
+- [ ] Notifications / alerts — in-app notification bar with rules-based alerts (e.g. "3 jobs stuck in Production >3 days", "BOL missing trailer number", "load build exceeds weight limit"). Runs on page load, no auth dependency.
 - [ ] QC login gate (depends on auth)
 - [ ] Port language / i18n features from Safety portal to platform-wide use
 - [ ] Scrap batch entry tool
+
+### Done
+
+- [x] ~~Admin pages: standalone parts library management~~ — Prompt 19, full CRUD at `/admin/parts.html`
+- [x] ~~Activity log / audit trail~~ — Prompt 20, platform-wide logging + viewer at `/admin/activity-log.html`
 
 ---
 
@@ -87,6 +94,9 @@ Items moved here once fully shipped and verified.
 - [x] Job → Load Builder linking (Prompt 16) — "Build Load" button, parts pre-loaded from job line items, on-the-fly part creation
 - [x] BOL prefill upgrade (Prompt 17) — real address from job instead of fuzzy customer search
 - [x] Load Builder 53ft trailer height fix — corrected from 108" to 109"
+- [x] BOL text positioning fix (Prompt 18) — coords remapped to new template
+- [x] Admin parts library page (Prompt 19) — full CRUD at `/admin/parts.html`
+- [x] Activity log / audit trail (Prompt 20) — platform-wide logging + viewer at `/admin/activity-log.html`
 - [x] BOL Generator — PDF generation, customer dropdown, edit/new/duplicate modes
 - [x] Load Builder — native integration into platform (converted from React/Vite iframe)
 - [x] Job Board — Kanban with five statuses, line items, production sub-steps

@@ -459,8 +459,8 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
     <div class="bol-section-title">Header</div>
     <div class="bol-row bol-row-3">
       <div class="bol-field">
-        <label>BOL Number</label>
-        <input type="number" id="f-bol-number" min="1" placeholder="Required">
+        <label>BOL / INV #</label>
+        <input type="text" id="f-bol-number" placeholder="Optional">
       </div>
       <div class="bol-field">
         <label>Date</label>
@@ -826,13 +826,6 @@ function setTodayDate() {
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
 }
 
-async function fetchNextBolNumber() {
-  try {
-    const res  = await fetch('/api/bols/next-number');
-    const data = await res.json();
-    if (data.ok) document.getElementById('f-bol-number').value = data.next_number;
-  } catch { /* silent */ }
-}
 
 async function loadCarriers() {
   try {
@@ -1112,7 +1105,7 @@ function collectPayload() {
   }
 
   return {
-    bol_number:            parseInt(document.getElementById('f-bol-number').value, 10) || null,
+    bol_number:            document.getElementById('f-bol-number').value.trim() || null,
     date:                  document.getElementById('f-date').value,
     customer_id:           selectedCustomerId || null,
     ship_to_company:       shipCompany,
@@ -1137,10 +1130,44 @@ function collectPayload() {
 }
 
 function validatePayload(p) {
-  if (!p.bol_number)      return 'BOL Number is required.';
   if (!p.date)            return 'Date is required.';
   if (!p.ship_to_company) return 'Company (Ship To) is required.';
   return null;
+}
+
+function showBolConfirmModal(onContinue, onCancel) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.18);padding:28px 32px;max-width:380px;width:90%;text-align:center;';
+
+  const msg = document.createElement('p');
+  msg.style.cssText = 'font-size:15px;color:#1e293b;margin:0 0 22px;line-height:1.5;';
+  msg.textContent = 'No BOL/INV # entered. Continue without one?';
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:12px;justify-content:center;';
+
+  const continueBtn = document.createElement('button');
+  continueBtn.textContent = 'Continue';
+  continueBtn.style.cssText = 'background:#334155;color:#fff;border:none;border-radius:8px;padding:9px 22px;font-size:14px;font-weight:600;cursor:pointer;';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'background:transparent;color:#334155;border:2px solid #334155;border-radius:8px;padding:9px 22px;font-size:14px;font-weight:600;cursor:pointer;';
+
+  function destroy() { overlay.remove(); }
+
+  continueBtn.addEventListener('click', () => { destroy(); onContinue(); });
+  cancelBtn.addEventListener('click',   () => { destroy(); onCancel(); });
+
+  btnRow.appendChild(continueBtn);
+  btnRow.appendChild(cancelBtn);
+  card.appendChild(msg);
+  card.appendChild(btnRow);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
 }
 
 async function handleGenerate() {
@@ -1148,6 +1175,18 @@ async function handleGenerate() {
   const err     = validatePayload(payload);
   if (err) { setStatus(err, 'error'); return; }
 
+  if (!payload.bol_number) {
+    showBolConfirmModal(
+      () => doGenerate(payload),
+      () => document.getElementById('f-bol-number').focus()
+    );
+    return;
+  }
+
+  doGenerate(payload);
+}
+
+async function doGenerate(payload) {
   const btn = document.getElementById('btn-generate');
   btn.disabled = true;
   btn.textContent = 'Generating…';
@@ -1164,7 +1203,8 @@ async function handleGenerate() {
     if (!data.ok) { setStatus(data.error || 'Save failed.', 'error'); return; }
 
     await generatePdf(data.bol);
-    showToast(`BOL #${data.bol.bol_number} ${isEdit ? 'updated' : 'generated'}`);
+    const bolLabel = data.bol.bol_number ? `BOL #${data.bol.bol_number}` : 'BOL';
+    showToast(`${bolLabel} ${isEdit ? 'updated' : 'generated'}`);
     loadRecentBols();
   } catch (e) {
     setStatus('Error: ' + (e.message || String(e)), 'error');
@@ -1193,7 +1233,7 @@ async function handleDraft() {
     });
     const data = await res.json();
     if (!data.ok) { setStatus(data.error || 'Save failed.', 'error'); return; }
-    showToast(`${isEdit ? 'Updated' : 'Draft saved'} — BOL #${data.bol.bol_number}`);
+    showToast(data.bol.bol_number ? `${isEdit ? 'Updated' : 'Draft saved'} — BOL #${data.bol.bol_number}` : isEdit ? 'Updated' : 'Draft saved');
     loadRecentBols();
   } catch (e) {
     setStatus('Error: ' + (e.message || String(e)), 'error');
@@ -1389,8 +1429,8 @@ async function generatePdf(bol) {
   }
 
   // ── Date and BOL Number ──
-  drawText(bol.date,             COORDS.date);
-  drawText(String(bol.bol_number), COORDS.bolNumber);
+  drawText(bol.date, COORDS.date);
+  if (bol.bol_number) drawText(String(bol.bol_number), COORDS.bolNumber);
 
   // ── Carrier block ──
   drawText(bol.carrier_name, COORDS.carrierName);
@@ -1432,7 +1472,7 @@ async function generatePdf(bol) {
   // Trigger a download so the file saves properly
   const a = document.createElement('a');
   a.href = blobUrl;
-  a.download = `BOL-${bol.bol_number}.pdf`;
+  a.download = bol.bol_number ? `BOL-${bol.bol_number}.pdf` : 'BOL.pdf';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

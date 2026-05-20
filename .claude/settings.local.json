@@ -21,7 +21,9 @@
       "Bash(Remove-Item *)",
       "WebSearch",
       "WebFetch(domain:claude.com)",
-      "Bash(git remote *)"
+      "Bash(git remote *)",
+      "Bash(npx wrangler *)",
+      "Bash(del migrate-bol-number.sql)"
     ]
   }
 }

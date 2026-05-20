@@ -2874,7 +2874,7 @@ CREATE TABLE IF NOT EXISTS bol_carriers (
 
 CREATE TABLE IF NOT EXISTS bols (
   id TEXT PRIMARY KEY,
-  bol_number INTEGER NOT NULL UNIQUE,
+  bol_number TEXT DEFAULT NULL,
   date TEXT NOT NULL,
   customer_id TEXT DEFAULT NULL,
   ship_to_company TEXT NOT NULL DEFAULT '',
@@ -3251,13 +3251,7 @@ async function handleApiBols(request, env) {
     const date = String(payload.date || "").trim();
     if (!date) return json({ ok: false, error: "date is required." }, 400);
 
-    // Auto-assign bol_number if not provided
-    let bol_number = Number.isFinite(Number(payload.bol_number)) && Number(payload.bol_number) > 0
-      ? Number(payload.bol_number) : null;
-    if (!bol_number) {
-      const row  = await db.prepare("SELECT MAX(bol_number) as max_num FROM bols").first();
-      bol_number = (row && row.max_num != null) ? row.max_num + 1 : 3600;
-    }
+    const bol_number = payload.bol_number ? String(payload.bol_number).trim() || null : null;
 
     const id  = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -3295,12 +3289,15 @@ async function handleApiBols(request, env) {
 
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();
       await logActivity(db, 'create', 'bol', id,
-        `Created BOL #${bol_number} for ${s('ship_to_company')}`,
+        `Created ${bol_number ? `BOL #${bol_number}` : 'BOL'} for ${s('ship_to_company')}`,
         { bol_number, ship_to_company: s('ship_to_company'), carrier_name: s('carrier_name'), date }
       );
       return json({ ok: true, message: "BOL created.", bol: row }, 201);
     } catch (e) {
-      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+      const msg = String(e?.message || e);
+      if (msg.includes("UNIQUE constraint failed") && msg.includes("bol_number"))
+        return json({ ok: false, error: `BOL/INV # "${bol_number}" is already in use. Please enter a different number.` }, 409);
+      return json({ ok: false, error: "Server error.", detail: msg }, 500);
     }
   }
 
@@ -3352,7 +3349,10 @@ async function handleApiBols(request, env) {
       );
       return json({ ok: true, message: "BOL updated.", bol: row });
     } catch (e) {
-      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+      const msg = String(e?.message || e);
+      if (msg.includes("UNIQUE constraint failed") && msg.includes("bol_number"))
+        return json({ ok: false, error: `BOL/INV # "${payload.bol_number}" is already in use. Please enter a different number.` }, 409);
+      return json({ ok: false, error: "Server error.", detail: msg }, 500);
     }
   }
 
