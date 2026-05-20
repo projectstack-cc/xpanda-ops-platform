@@ -416,6 +416,7 @@
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="/logistics/bol-shared.js"></script>
 </head>
 <body>
 
@@ -1775,7 +1776,7 @@ function renderResultsTab() {
     const tRight = h('div', { className: 'flex gap-8 flex-wrap items-center' });
     tRight.appendChild(h('button', { className: 'btn btn-blue-light', onClick: () => { state.editorTrailer = state.editorTrailer === ti ? null : ti; render(); } }, state.editorTrailer === ti ? 'CLOSE CUSTOMIZE' : 'CUSTOMIZE TRAILER'));
     if (isManual) tRight.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { delete state.manualRowsByTrailer[ti]; render(); } }, 'CLEAR CUSTOM'));
-    const invInput = h('input', { type: 'text', placeholder: 'INV #', value: state.trailerInvNumbers[ti] || '', className: 'inp', style: { width: '120px', padding: '8px 10px', fontSize: '13px' }, onInput: e => { state.trailerInvNumbers[ti] = e.target.value; } });
+    const invInput = h('input', { type: 'text', placeholder: 'BOL / INV #', value: state.trailerInvNumbers[ti] || '', className: 'inp', style: { width: '120px', padding: '8px 10px', fontSize: '13px' }, onInput: e => { state.trailerInvNumbers[ti] = e.target.value; } });
     tRight.appendChild(invInput);
     tRight.appendChild(h('button', { className: 'btn btn-teal', onClick: () => printPackingSlip(trailer, trailerDims, trailerLabel, ti + 1, packList, state.trailerInvNumbers[ti] || '') }, 'PRINT PACKING SLIP'));
     tHdr.appendChild(tRight);
@@ -2419,6 +2420,11 @@ async function generateAllBols() {
     if (!td.date) { bm.currentPage = i; bm.bolError = `Trailer ${i + 1}: Date is required.`; renderBolModal(); return; }
     if (!td.shipToCompany.trim()) { bm.currentPage = i; bm.bolError = `Trailer ${i + 1}: Company is required.`; renderBolModal(); return; }
   }
+  const missingNumbers = bm.trailerData.some((_, i) => !(state.trailerInvNumbers[i] || '').trim());
+  if (missingNumbers) {
+    const proceed = await BolShared.confirmNoBolNumber();
+    if (!proceed) return;
+  }
   bm.generating = true; bm.bolError = '';
   bm.generateProgress = bm.trailerData.map((_, i) => ({ text: `Trailer ${i + 1} — waiting...`, done: false, pending: true }));
   renderBolModal();
@@ -2467,84 +2473,17 @@ async function generateAllBols() {
 }
 
 async function generateBolPdf(bolRecords) {
-  const { PDFDocument, StandardFonts, rgb } = PDFLib;
-  const COORDS = {
-    deliveryTime:     { x: 430, y: 775, size: 18 },
-    date:             { x: 338, y: 708, size: 10 },
-    bolNumber:        { x: 380, y: 675, size: 24, bold: true },
-    carrierName:      { x: 378, y: 652, size: 10 },
-    trailerNo:        { x: 360, y: 635, size: 10 },
-    sealNumber:       { x: 378, y: 619, size: 10 },
-    scac:             { x: 378, y: 601, size: 10 },
-    proNo:            { x: 378, y: 585, size: 10 },
-    shipLine1:        { x: 55,  y: 607, size: 10 },
-    shipLine2:        { x: 55,  y: 594, size: 10 },
-    shipLine3:        { x: 55,  y: 581, size: 10 },
-    shipLine4:        { x: 55,  y: 568, size: 10 },
-    locationNo:       { x: 248, y: 619, size: 10 },
-    chkPrepaid:       { x: 39,  y: 534, size: 10 },
-    chkCollect:       { x: 103, y: 534, size: 10 },
-    chk3rdParty:      { x: 164, y: 534, size: 10 },
-    thirdPartyBillTo: { x: 42,  y: 502, size: 9  },
-    scrapPickupText:  { x: 42,  y: 500, size: 12, bold: true },
-    specialInstr:     { x: 310, y: 527, size: 9,  lineH: 11, maxW: 200 },
-    masterBol:        { x: 538, y: 532, size: 10 },
-    commodity:        { x: 245, y: 417, size: 10, lineH: 14, maxW: 340 },
-  };
-  const templateResp = await fetch('/logistics/assets/BLANK_BOL_Xpanda.pdf');
-  if (!templateResp.ok) throw new Error('BOL template not found at /logistics/assets/BLANK_BOL_Xpanda.pdf');
-  const templateBytes = await templateResp.arrayBuffer();
-  const combinedPdf = await PDFDocument.create();
-  for (const bol of bolRecords) {
-    const templateDoc = await PDFDocument.load(templateBytes);
-    const page = templateDoc.getPages()[0];
-    const font = await templateDoc.embedFont(StandardFonts.Helvetica);
-    const fontBold = await templateDoc.embedFont(StandardFonts.HelveticaBold);
-    const black = rgb(0, 0, 0);
-    const drawText = (text, coord, opts = {}) => {
-      if (!text) return;
-      const o = { x: coord.x, y: coord.y, size: coord.size || 10, font: (coord.bold || opts.bold) ? fontBold : font, color: black };
-      if (opts.maxWidth || coord.maxW) o.maxWidth = opts.maxWidth || coord.maxW;
-      page.drawText(String(text), o);
-    };
-    const drawMultiline = (text, coord) => {
-      if (!text) return;
-      String(text).split('\n').forEach((line, i) => {
-        page.drawText(line, { x: coord.x, y: coord.y - i * (coord.lineH || 12), size: coord.size || 10, font, color: black, maxWidth: coord.maxW });
-      });
-    };
-    if (bol.delivery_time) page.drawText(String(bol.delivery_time), { x: COORDS.deliveryTime.x, y: COORDS.deliveryTime.y, size: 18, font: fontBold, color: rgb(1, 0, 0) });
-    drawText(bol.date, COORDS.date);
-    if (bol.bol_number) drawText(String(bol.bol_number), COORDS.bolNumber);
-    drawText(bol.carrier_name, COORDS.carrierName);
-    drawText(bol.trailer_no, COORDS.trailerNo);
-    drawText(bol.seal_number, COORDS.sealNumber);
-    const shipLines = [bol.ship_to_company, bol.ship_to_attention, [bol.ship_to_street, bol.ship_to_street2].filter(Boolean).join(', '), [bol.ship_to_city, bol.ship_to_state, bol.ship_to_zip].filter(Boolean).join(', ')].filter(Boolean);
-    [COORDS.shipLine1, COORDS.shipLine2, COORDS.shipLine3, COORDS.shipLine4].forEach((coord, i) => { if (shipLines[i]) drawText(shipLines[i], coord); });
-    const ft = bol.freight_terms;
-    if (ft === 'prepaid')   drawText('X', COORDS.chkPrepaid);
-    if (ft === 'collect')   drawText('X', COORDS.chkCollect);
-    if (ft === '3rd_party') drawText('X', COORDS.chk3rdParty);
-    drawMultiline(bol.special_instructions, COORDS.specialInstr);
-    drawMultiline(bol.commodity_description, COORDS.commodity);
-    const [copiedPage] = await combinedPdf.copyPages(templateDoc, [0]);
-    combinedPdf.addPage(copiedPage);
-  }
+  let packingSlipPdfBytes = null;
   if (state.bolModal.includePacking && state.prefillJobData?.id) {
     try {
       const slipRes = await fetch('/api/jobs/' + encodeURIComponent(state.prefillJobData.id) + '/packing-slip');
       if (slipRes.ok) {
-        const slipBytes = await slipRes.arrayBuffer();
-        const slipDoc = await PDFDocument.load(slipBytes);
-        const slipPages = await combinedPdf.copyPages(slipDoc, slipDoc.getPageIndices());
-        slipPages.forEach(page => combinedPdf.addPage(page));
+        packingSlipPdfBytes = await slipRes.arrayBuffer();
       }
-    } catch { /* packing slip unavailable — generate BOLs-only PDF */ }
+    } catch { /* packing slip unavailable */ }
   }
-  const pdfBytes = await combinedPdf.save();
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-  const win = window.open(URL.createObjectURL(blob), '_blank');
-  if (!win) { const e = new Error('PDF was generated but your browser blocked the popup. Please allow popups for this site.'); e.popupBlocked = true; throw e; }
+
+  await BolShared.generatePdf(bolRecords, { packingSlipPdfBytes });
 }
 
 // ═══════════════════════════════════════════════════════════════

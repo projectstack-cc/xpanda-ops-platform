@@ -11,6 +11,7 @@
 <link rel="apple-touch-icon" href="/assets/img/favicon.png">
 <link rel="stylesheet" href="/logistics/logistics-shared.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="/logistics/bol-shared.js"></script>
 <style>
 .logistics-back-link { display: none; }
 
@@ -1135,52 +1136,17 @@ function validatePayload(p) {
   return null;
 }
 
-function showBolConfirmModal(onContinue, onCancel) {
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
-
-  const card = document.createElement('div');
-  card.style.cssText = 'background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.18);padding:28px 32px;max-width:380px;width:90%;text-align:center;';
-
-  const msg = document.createElement('p');
-  msg.style.cssText = 'font-size:15px;color:#1e293b;margin:0 0 22px;line-height:1.5;';
-  msg.textContent = 'No BOL/INV # entered. Continue without one?';
-
-  const btnRow = document.createElement('div');
-  btnRow.style.cssText = 'display:flex;gap:12px;justify-content:center;';
-
-  const continueBtn = document.createElement('button');
-  continueBtn.textContent = 'Continue';
-  continueBtn.style.cssText = 'background:#334155;color:#fff;border:none;border-radius:8px;padding:9px 22px;font-size:14px;font-weight:600;cursor:pointer;';
-
-  const cancelBtn = document.createElement('button');
-  cancelBtn.textContent = 'Cancel';
-  cancelBtn.style.cssText = 'background:transparent;color:#334155;border:2px solid #334155;border-radius:8px;padding:9px 22px;font-size:14px;font-weight:600;cursor:pointer;';
-
-  function destroy() { overlay.remove(); }
-
-  continueBtn.addEventListener('click', () => { destroy(); onContinue(); });
-  cancelBtn.addEventListener('click',   () => { destroy(); onCancel(); });
-
-  btnRow.appendChild(continueBtn);
-  btnRow.appendChild(cancelBtn);
-  card.appendChild(msg);
-  card.appendChild(btnRow);
-  overlay.appendChild(card);
-  document.body.appendChild(overlay);
-}
-
 async function handleGenerate() {
   const payload = collectPayload();
   const err     = validatePayload(payload);
   if (err) { setStatus(err, 'error'); return; }
 
   if (!payload.bol_number) {
-    showBolConfirmModal(
-      () => doGenerate(payload),
-      () => document.getElementById('f-bol-number').focus()
-    );
-    return;
+    const proceed = await BolShared.confirmNoBolNumber();
+    if (!proceed) {
+      document.getElementById('f-bol-number').focus();
+      return;
+    }
   }
 
   doGenerate(payload);
@@ -1331,157 +1297,26 @@ function loadBolIntoForm(b) {
 
 // ═══════════════════════════════════════════════════════════════════
 // PDF Generation
-// ═══════════════════════════════════════════════════════════════════
-//
-// Coordinates are estimates based on letter-size PDF (612×792 pts).
-// After placing BLANK_BOL_Xpanda.pdf in /logistics/assets/, generate
-// a test BOL and compare text positions against the blank template,
-// then adjust the values in COORDS as needed.
-// ═══════════════════════════════════════════════════════════════════
+// PDF rendering is handled by BolShared.generatePdf() in /logistics/bol-shared.js.
+// To adjust coordinates, edit COORDS in that file only.
 
 async function generatePdf(bol) {
-  const { PDFDocument, StandardFonts, rgb } = PDFLib;
-
-  const COORDS = {
-    // Delivery time — top-right, next to logo (bold red)
-    deliveryTime:  { x: 390, y: 758, size: 20 },
-
-    // Top-right block
-    date:          { x: 346, y: 712, size: 10 },            // right of "Date:" label (label at x:310, y:718)
-    bolNumber:     { x: 404, y: 693, size: 14, bold: true }, // below "Bill of Lading No:" (label at y:700)
-    carrierName:   { x: 389, y: 648, size: 10 },             // right of "Carrier Name:" (label at x:310, y:654)
-    trailerNo:     { x: 365, y: 622, size: 10 },             // right of "Trailer No:" (label at x:310, y:622)
-
-    // Left column — Ship To (4 lines, INDENTED under "Ship To:" label)
-    // Label "Ship To:" is at x:40, y:622. Address lines start indented at x:95.
-    shipLine1:     { x: 95,  y: 615, size: 10 },
-    shipLine2:     { x: 95,  y: 601, size: 10 },
-    shipLine3:     { x: 95,  y: 587, size: 10 },
-    shipLine4:     { x: 95,  y: 573, size: 10 },
-
-    // Special Instructions — right column, below label (label at x:309, y:603)
-    specialInstr:  { x: 315, y: 585, size: 9, lineH: 12, maxW: 255 },
-
-    // Contact Info — right column, below label (label "Contact Info:" at x:312, y:544)
-    contactInfo:   { x: 315, y: 525, size: 11, lineH: 12, maxW: 255 },
-
-    // Scrap Pick Up checkboxes (☐ at x:107)
-    scrapYes:      { x: 110, y: 513, size: 10 },
-    scrapNo:       { x: 110, y: 497, size: 10 },
-
-    // Commodity description — larger text with generous line spacing
-    commodity:     { x: 55,  y: 410, size: 13, lineH: 28, maxW: 510 },
-  };
-
-  let pdfBytes;
-  try {
-    const resp = await fetch('/logistics/assets/BLANK_BOL_Xpanda.pdf');
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    pdfBytes = await resp.arrayBuffer();
-  } catch (e) {
-    setStatus(
-      'PDF template not found. Copy BLANK_BOL_Xpanda.pdf to /logistics/assets/ and redeploy.',
-      'error'
-    );
-    throw e;
+  let packingSlipPdfBytes = null;
+  if (prefilledJobId && document.getElementById('f-include-packing')?.checked) {
+    try {
+      const res = await fetch('/api/jobs/' + encodeURIComponent(prefilledJobId));
+      const data = await res.json();
+      if (data.job?.packing_slip_pdf) {
+        const b64 = data.job.packing_slip_pdf;
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        packingSlipPdfBytes = bytes.buffer;
+      }
+    } catch (e) { console.error('Failed to fetch packing slip:', e); }
   }
 
-  const pdfDoc   = await PDFDocument.load(pdfBytes);
-  const page     = pdfDoc.getPages()[0];
-  const font     = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const black    = rgb(0, 0, 0);
-
-  const drawText = (text, coord, opts = {}) => {
-    if (!text) return;
-    const drawOpts = {
-      x:     coord.x,
-      y:     coord.y,
-      size:  coord.size || 10,
-      font:  (coord.bold || opts.bold) ? fontBold : font,
-      color: black,
-    };
-    if (opts.maxWidth || coord.maxW) drawOpts.maxWidth = opts.maxWidth || coord.maxW;
-    page.drawText(String(text), drawOpts);
-  };
-
-  const drawMultiline = (text, coord) => {
-    if (!text) return;
-    const lines = String(text).split('\n');
-    lines.forEach((line, i) => {
-      page.drawText(line, {
-        x:        coord.x,
-        y:        coord.y - i * (coord.lineH || 12),
-        size:     coord.size || 10,
-        font,
-        color:    black,
-        maxWidth: coord.maxW,
-      });
-    });
-  };
-
-  // ── Delivery time (bold red, top right) ──
-  if (bol.delivery_time) {
-    page.drawText(String(bol.delivery_time), {
-      x: COORDS.deliveryTime.x, y: COORDS.deliveryTime.y,
-      size: 18, font: fontBold, color: rgb(1, 0, 0),
-    });
-  }
-
-  // ── Date and BOL Number ──
-  drawText(bol.date, COORDS.date);
-  if (bol.bol_number) drawText(String(bol.bol_number), COORDS.bolNumber);
-
-  // ── Carrier block ──
-  drawText(bol.carrier_name, COORDS.carrierName);
-  drawText(bol.trailer_no,   COORDS.trailerNo);
-
-  // ── Ship To (up to 4 lines) ──
-  const shipLines = [
-    bol.ship_to_company,
-    bol.ship_to_attention,
-    [bol.ship_to_street, bol.ship_to_street2].filter(Boolean).join(', '),
-    [bol.ship_to_city, bol.ship_to_state, bol.ship_to_zip].filter(Boolean).join(', '),
-  ].filter(Boolean);
-  const shipCoords = [COORDS.shipLine1, COORDS.shipLine2, COORDS.shipLine3, COORDS.shipLine4];
-  shipLines.forEach((line, i) => { if (shipCoords[i]) drawText(line, shipCoords[i]); });
-
-  // ── Special Instructions (multiline) ──
-  drawMultiline(bol.special_instructions, COORDS.specialInstr);
-
-  // ── Contact Info (multiline) ──
-  drawMultiline(bol.contact_info, COORDS.contactInfo);
-
-  // ── Scrap Pick Up ──
-  // Template has ☐ Yes and ☐ No already printed.
-  // Write X next to whichever applies.
-  if (bol.is_scrap_pickup) {
-    drawText('X', COORDS.scrapYes);
-  } else {
-    drawText('X', COORDS.scrapNo);
-  }
-
-  // ── Commodity description (multiline) ──
-  drawMultiline(bol.commodity_description, COORDS.commodity);
-
-  // ── Save and open ──
-  const savedBytes = await pdfDoc.save();
-  const blob       = new Blob([savedBytes], { type: 'application/pdf' });
-  const blobUrl    = URL.createObjectURL(blob);
-
-  // Trigger a download so the file saves properly
-  const a = document.createElement('a');
-  a.href = blobUrl;
-  a.download = bol.bol_number ? `BOL-${bol.bol_number}.pdf` : 'BOL.pdf';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-
-  // Also open in a new tab for immediate viewing
-  window.open(blobUrl, '_blank');
-
-  // Clean up the blob URL after a delay (allow time for download + tab to load)
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+  await BolShared.generatePdf([bol], { packingSlipPdfBytes });
 }
 
 // ═══════════════════════════════════════════════════════════════════
