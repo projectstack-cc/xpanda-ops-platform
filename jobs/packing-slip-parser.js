@@ -385,6 +385,11 @@ window.PackingSlipParser = (function () {
       data.line_items = parseLineItems(groups, lines[descriptionIdx].y);
     }
 
+    data.line_items = (data.line_items || []).filter(li => {
+      const qty = parseFloat(li.quantity);
+      return qty && qty > 0;
+    });
+
     return data;
   }
 
