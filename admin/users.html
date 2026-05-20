@@ -299,8 +299,10 @@
     <p>Manage platform users and roles</p>
   </div>
   <div class="topbar-nav">
-    <a href="/admin/parts.html">Parts Library &rarr;</a>
-    <a href="/admin/activity-log.html">Activity Log &rarr;</a>
+    <a href="/admin/parts.html">Parts</a>
+    <a href="/admin/activity-log.html">Activity Log</a>
+    <a href="/admin/users.html">Users</a>
+    <a href="/admin/roles.html">Roles</a>
     <a href="/">← Back to Platform</a>
   </div>
   <div class="header-user-bar">
@@ -357,10 +359,8 @@
     </div>
     <div class="form-group">
       <label>Role</label>
-      <select id="m-role">
-        <option value="staff">Staff</option>
-        <option value="admin">Admin</option>
-        <option value="readonly">Readonly</option>
+      <select id="f-role-id">
+        <option value="role-staff">Staff</option>
       </select>
     </div>
     <div class="modal-error" id="modal-error"></div>
@@ -386,6 +386,16 @@ window.fetch = async function(...args) {
 let users = [];
 let editingId = null;
 
+async function loadRolesDropdown() {
+  try {
+    const res = await fetch('/api/roles');
+    const data = await res.json();
+    const roles = data.roles || [];
+    const sel = document.getElementById('f-role-id');
+    sel.innerHTML = roles.map(r => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
+  } catch {}
+}
+
 async function loadUsers() {
   try {
     const res = await fetch('/api/users');
@@ -407,10 +417,12 @@ function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function roleLabel(role) {
-  if (role === 'admin') return '<span class="badge badge-admin">Admin</span>';
-  if (role === 'readonly') return '<span class="badge badge-readonly">Readonly</span>';
-  return '<span class="badge badge-staff">Staff</span>';
+function roleLabel(u) {
+  const name = u.role_name || u.role || 'Staff';
+  let cls = 'badge-staff';
+  if (u.role_id === 'role-administrator' || u.role === 'admin') cls = 'badge-admin';
+  else if (u.role_id === 'role-readonly' || u.role === 'readonly') cls = 'badge-readonly';
+  return `<span class="badge ${cls}">${esc(name)}</span>`;
 }
 
 function renderTable() {
@@ -424,7 +436,7 @@ function renderTable() {
     <tr>
       <td><strong>${esc(u.username)}</strong></td>
       <td>${esc(u.display_name)}</td>
-      <td>${roleLabel(u.role)}</td>
+      <td>${roleLabel(u)}</td>
       <td class="pw-cell" title="${esc(u.password)}">${esc(u.password)}</td>
       <td>
         <span class="status-dot ${u.is_active ? 'dot-active' : 'dot-disabled'}"></span>
@@ -450,7 +462,7 @@ function openModal(userJson) {
   document.getElementById('m-username').readOnly = false;
   document.getElementById('m-display-name').value = '';
   document.getElementById('m-password').value = '';
-  document.getElementById('m-role').value = 'staff';
+  document.getElementById('f-role-id').value = 'role-staff';
   document.getElementById('modal-error').textContent = '';
   document.getElementById('m-password-group').style.display = '';
 
@@ -461,7 +473,7 @@ function openModal(userJson) {
     document.getElementById('m-username').value = u.username;
     document.getElementById('m-username').readOnly = true;
     document.getElementById('m-display-name').value = u.display_name;
-    document.getElementById('m-role').value = u.role;
+    document.getElementById('f-role-id').value = u.role_id || 'role-staff';
     document.getElementById('m-password').value = u.password || '';
   }
 
@@ -476,7 +488,7 @@ async function saveUser() {
   const username = document.getElementById('m-username').value.trim().toLowerCase();
   const displayName = document.getElementById('m-display-name').value.trim();
   const password = document.getElementById('m-password').value;
-  const role = document.getElementById('m-role').value;
+  const role_id = document.getElementById('f-role-id').value;
   const errEl = document.getElementById('modal-error');
   errEl.textContent = '';
 
@@ -489,7 +501,7 @@ async function saveUser() {
   try {
     let res;
     if (editingId) {
-      const body = { display_name: displayName, role };
+      const body = { display_name: displayName, role_id };
       if (password) body.password = password;
       res = await fetch(`/api/users/${editingId}`, {
         method: 'PUT',
@@ -497,7 +509,7 @@ async function saveUser() {
         body: JSON.stringify(body),
       });
     } else {
-      const body = { username, display_name: displayName, role };
+      const body = { username, display_name: displayName, role_id };
       if (password) body.password = password;
       res = await fetch('/api/users', {
         method: 'POST',
@@ -577,6 +589,7 @@ document.getElementById('hdr-logout').addEventListener('click', async (e) => {
   window.location.href = '/login.html';
 });
 
+loadRolesDropdown();
 loadUsers();
 </script>
 </body>

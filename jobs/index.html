@@ -740,6 +740,7 @@ function setupBoard() {
 
   // Drag
   board.addEventListener('dragstart', (e) => {
+    if (window.__readOnlyMode) return;
     const card = e.target.closest('.jobs-card');
     if (!card) return;
     draggedId = card.dataset.id;
@@ -769,6 +770,7 @@ function setupBoard() {
   });
 
   board.addEventListener('drop', async (e) => {
+    if (window.__readOnlyMode) return;
     e.preventDefault();
     const body = e.target.closest('.jobs-col-body');
     body && body.classList.remove('drag-over');
@@ -1484,6 +1486,21 @@ function showToast(msg) {
   clearTimeout(t._t);
   t._t = setTimeout(() => t.classList.remove('visible'), 3200);
 }
+
+async function gateJobsWrite() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    if (!data.ok || !data.user || data.user.isAdministrator) return;
+
+    const perms = data.user.permissions || {};
+    if (perms['jobs']?.edit) return;
+
+    document.querySelectorAll('#btn-new-job, #btn-upload-slip, #modal-delete').forEach(el => el.style.display = 'none');
+    window.__readOnlyMode = true;
+  } catch {}
+}
+gateJobsWrite();
 </script>
 
 </body>

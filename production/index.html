@@ -47,5 +47,25 @@ document.getElementById('prod-page-subtitle').textContent = 'Production planning
 
 </div>
 
+<script>
+async function gateProductionNav() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    if (!data.ok || !data.user || data.user.isAdministrator) return;
+
+    const perms = data.user.permissions || {};
+
+    if (!perms['production.calculators']?.view) {
+      document.querySelectorAll('a[href*="block-calculator"], a[href*="holey-board"]').forEach(el => el.style.display = 'none');
+    }
+    if (!perms['production.inventory']?.view) {
+      document.querySelectorAll('a[href*="inventory"], a[href*="bead-inventory"]').forEach(el => el.style.display = 'none');
+    }
+  } catch {}
+}
+gateProductionNav();
+</script>
+
 </body>
 </html>

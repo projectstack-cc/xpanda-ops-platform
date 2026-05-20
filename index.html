@@ -239,7 +239,7 @@
     </section>
 
     <section class="grid">
-      <article class="card">
+      <article class="card" data-permission="safety">
         <span class="eyebrow">Safety System</span>
         <h2>Safety Portal</h2>
         <p>
@@ -257,7 +257,7 @@
         </div>
       </article>
 
-      <article class="card">
+      <article class="card" data-permission="qc">
         <span class="eyebrow">Quality System</span>
         <h2>QC Platform</h2>
         <p>
@@ -273,7 +273,7 @@
           <a class="btn btn-qc" href="/qc/">Open QC</a>
         </div>
       </article>
-      <article class="card">
+      <article class="card" data-permission="reports">
   <span class="eyebrow">Analytics System</span>
   <h2>Reports</h2>
   <p>
@@ -290,7 +290,7 @@
   </div>
 </article>
 
-      <article class="card">
+      <article class="card" data-permission="jobs">
         <span class="eyebrow">Operations</span>
         <h2>Job Board</h2>
         <p>
@@ -307,7 +307,7 @@
         </div>
       </article>
 
-      <article class="card">
+      <article class="card" data-permission="logistics.dashboard,logistics.bol,logistics.load-builder">
         <span class="eyebrow">Logistics</span>
         <h2>Logistics</h2>
         <p>
@@ -324,7 +324,7 @@
         </div>
       </article>
 
-      <article class="card">
+      <article class="card" data-permission="production.calculators,production.inventory">
         <span class="eyebrow">Production System</span>
         <h2>Production / Manufacturing</h2>
         <p>
@@ -341,7 +341,7 @@
         </div>
       </article>
 
-      <article class="card">
+      <article class="card" data-permission="admin">
         <span class="eyebrow">Administration</span>
         <h2>Admin</h2>
         <p>
@@ -351,12 +351,13 @@
         <ul class="features">
           <li>Parts library management</li>
           <li>Activity log &amp; audit trail</li>
-          <li>User management &amp; roles</li>
+          <li>User &amp; role management</li>
         </ul>
         <div class="actions">
           <a class="btn btn-admin" href="/admin/parts.html">Parts Library</a>
           <a class="btn btn-admin" href="/admin/activity-log.html">Activity Log</a>
           <a class="btn btn-admin" href="/admin/users.html">Users</a>
+          <a class="btn btn-admin" href="/admin/roles.html">Roles</a>
         </div>
       </article>
     </section>
@@ -392,6 +393,47 @@ async function doLogout() {
 }
 
 loadCurrentUser();
+
+async function gateHomepage() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    if (!data.ok || !data.user) return;
+
+    const user = data.user;
+    const perms = user.permissions || {};
+
+    if (user.isAdministrator) return;
+
+    document.querySelectorAll('.card[data-permission]').forEach(card => {
+      const keys = card.dataset.permission.split(',');
+      const canView = keys.some(key => perms[key.trim()]?.view === true);
+      if (!canView) card.style.display = 'none';
+    });
+
+    document.querySelectorAll('.card a[href]').forEach(link => {
+      const href = link.getAttribute('href');
+      let permKey = null;
+      if (href.includes('/logistics/bol')) permKey = 'logistics.bol';
+      else if (href.includes('/logistics/load-builder')) permKey = 'logistics.load-builder';
+      else if (href.includes('/logistics/')) permKey = 'logistics.dashboard';
+      else if (href.includes('/admin/')) permKey = 'admin';
+
+      if (permKey && !perms[permKey]?.view) link.style.display = 'none';
+    });
+  } catch {}
+}
+
+if (new URLSearchParams(window.location.search).get('access_denied')) {
+  const banner = document.createElement('div');
+  banner.style.cssText = 'background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 18px;margin:12px 24px;color:#991b1b;font-size:14px;text-align:center;';
+  banner.textContent = 'You do not have permission to access that page.';
+  const main = document.querySelector('main');
+  if (main) main.insertBefore(banner, main.firstChild.nextSibling);
+  history.replaceState(null, '', '/');
+}
+
+gateHomepage();
 </script>
 </body>
 </html>

@@ -985,6 +985,24 @@ function esc(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
+async function gateLogisticsNav() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    if (!data.ok || !data.user || data.user.isAdministrator) return;
+
+    const perms = data.user.permissions || {};
+
+    if (!perms['logistics.bol']?.view) {
+      document.querySelectorAll('a[href*="bol-generator"]').forEach(el => el.style.display = 'none');
+    }
+    if (!perms['logistics.load-builder']?.view) {
+      document.querySelectorAll('a[href*="load-builder"]').forEach(el => el.style.display = 'none');
+    }
+  } catch {}
+}
+gateLogisticsNav();
 </script>
 
 </body>

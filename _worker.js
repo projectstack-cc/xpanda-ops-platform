@@ -26,9 +26,6 @@ export default {
       if (url.pathname === '/api/auth/logout') return handleAuthLogout(request, env);
       if (url.pathname === '/api/auth/me') return handleAuthMe(request, env);
       if (url.pathname === '/api/auth/change-password') return handleAuthChangePassword(request, env);
-      if (url.pathname === '/api/users' || url.pathname.startsWith('/api/users/')) {
-        return handleApiUsers(request, env);
-      }
 
       // 4) Login page (serve without auth check)
       if (url.pathname === '/login' || url.pathname === '/login.html') {
@@ -46,10 +43,45 @@ export default {
             }
             return Response.redirect(`${url.origin}/login.html`, 302);
           }
+
+          // ── Permission check ─────────────────────────────────────────────
+          const isApi = url.pathname.startsWith('/api/');
+          const permKey = getPermissionKey(url.pathname, isApi);
+
+          if (permKey) {
+            const requiredAction = (request.method === 'GET' || request.method === 'HEAD') ? 'view' : 'edit';
+            if (!hasPermission(user, permKey, requiredAction)) {
+              if (isApi) {
+                return json({ ok: false, error: 'Access denied. Insufficient permissions.' }, 403);
+              }
+              return Response.redirect(`${url.origin}/?access_denied=1`, 302);
+            }
+          }
+
+          // ── Inject user headers ──────────────────────────────────────────
+          request = new Request(request.url, {
+            method: request.method,
+            headers: new Headers([...request.headers.entries(),
+              ['X-User-Id', String(user.userId)],
+              ['X-User-Role', user.role],
+              ['X-User-Name', user.displayName || user.username],
+              ['X-User-Permissions', JSON.stringify(user.permissions)],
+              ['X-User-Is-Admin', user.isAdministrator ? '1' : '0'],
+            ]),
+            body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : null,
+          });
         }
       }
 
       // 6) API routes
+      if (url.pathname === '/api/users' || url.pathname.startsWith('/api/users/')) {
+        return handleApiUsers(request, env);
+      }
+
+      if (url.pathname === '/api/roles' || url.pathname.startsWith('/api/roles/')) {
+        return handleApiRoles(request, env);
+      }
+
       if (url.pathname === "/api/completions") {
         return handleApiCompletions(request, env);
       }
@@ -234,23 +266,50 @@ async function validateSession(db, request) {
   const token = getSessionToken(request);
   if (!token) return null;
 
-  const now = new Date().toISOString();
-  const row = await db.prepare(
-    `SELECT s.id as session_id, s.expires_at,
-            u.id, u.username, u.display_name, u.role, u.is_active, u.first_login
-     FROM sessions s
-     JOIN users u ON u.id = s.user_id
-     WHERE s.id = ? AND s.expires_at > ? AND u.is_active = 1`
-  ).bind(token, now).first();
+  try {
+    const session = await db.prepare(`
+      SELECT s.id, s.user_id, s.expires_at,
+             u.id as uid, u.username, u.display_name, u.role, u.role_id, u.is_active, u.first_login,
+             r.name as role_name, r.permissions as role_permissions
+      FROM sessions s
+      JOIN users u ON s.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE s.id = ?
+    `).bind(token).first();
 
-  if (!row) return null;
+    if (!session) return null;
+    if (!session.is_active) return null;
+    if (new Date(session.expires_at) < new Date()) {
+      await db.prepare("DELETE FROM sessions WHERE id = ?").bind(token).run();
+      return null;
+    }
 
-  // 1% session cleanup
-  if (Math.random() < 0.01) {
-    db.prepare(`DELETE FROM sessions WHERE expires_at < ?`).bind(now).run().catch(() => {});
+    // 1% session cleanup
+    if (Math.random() < 0.01) {
+      const now = new Date().toISOString();
+      db.prepare(`DELETE FROM sessions WHERE expires_at < ?`).bind(now).run().catch(() => {});
+    }
+
+    let permissions = {};
+    try { permissions = JSON.parse(session.role_permissions || '{}'); } catch {}
+
+    const isAdministrator = session.role_id === 'role-administrator' || session.role === 'admin';
+
+    return {
+      userId: session.uid,
+      username: session.username,
+      displayName: session.display_name,
+      role: session.role_name || session.role || 'staff',
+      roleId: session.role_id,
+      firstLogin: session.first_login === 1,
+      sessionId: session.id,
+      isAdministrator,
+      permissions,
+    };
+  } catch (e) {
+    console.error('Session validation failed:', e);
+    return null;
   }
-
-  return row;
 }
 
 async function createSession(db, userId) {
@@ -269,6 +328,57 @@ function sessionCookie(sessionId, expires) {
 
 function clearSessionCookie() {
   return `xpanda_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax`;
+}
+
+const PATH_PERMISSION_MAP = [
+  { pattern: /^\/admin\//,                                                    key: 'admin' },
+  { pattern: /^\/jobs\//,                                                     key: 'jobs' },
+  { pattern: /^\/logistics\/bol-generator/,                                   key: 'logistics.bol' },
+  { pattern: /^\/logistics\/load-builder/,                                    key: 'logistics.load-builder' },
+  { pattern: /^\/logistics\//,                                                key: 'logistics.dashboard' },
+  { pattern: /^\/production\/(block-calculator|holey-board-calculator)/,      key: 'production.calculators' },
+  { pattern: /^\/production\//,                                               key: 'production.inventory' },
+  { pattern: /^\/qc\//,                                                       key: 'qc' },
+  { pattern: /^\/safety\//,                                                   key: 'safety' },
+  { pattern: /^\/reports\//,                                                  key: 'reports' },
+];
+
+const API_PERMISSION_MAP = [
+  { pattern: /^\/api\/users/,              key: 'admin' },
+  { pattern: /^\/api\/roles/,              key: 'admin' },
+  { pattern: /^\/api\/activity-log/,       key: 'admin' },
+  { pattern: /^\/api\/jobs/,              key: 'jobs' },
+  { pattern: /^\/api\/bols/,              key: 'logistics.bol' },
+  { pattern: /^\/api\/bol-customers/,     key: 'logistics.bol' },
+  { pattern: /^\/api\/bol-carriers/,      key: 'logistics.bol' },
+  { pattern: /^\/api\/shipments/,         key: 'logistics.dashboard' },
+  { pattern: /^\/api\/load-builder-skus/, key: 'logistics.load-builder' },
+  { pattern: /^\/api\/parts/,             key: 'production.calculators' },
+  { pattern: /^\/api\/combos/,            key: 'production.calculators' },
+  { pattern: /^\/api\/bead/,              key: 'production.inventory' },
+  { pattern: /^\/api\/block/,             key: 'production.inventory' },
+  { pattern: /^\/api\/molding-log/,       key: 'production.inventory' },
+  { pattern: /^\/api\/scrap-log/,         key: 'qc' },
+  { pattern: /^\/api\/completions/,       key: 'qc' },
+  { pattern: /^\/api\/reports/,           key: 'reports' },
+];
+
+function getPermissionKey(pathname, isApi) {
+  const map = isApi ? API_PERMISSION_MAP : PATH_PERMISSION_MAP;
+  for (const entry of map) {
+    if (entry.pattern.test(pathname)) return entry.key;
+  }
+  return null;
+}
+
+function hasPermission(user, permKey, action) {
+  if (user.isAdministrator) return true;
+  if (!permKey) return true;
+  const perm = user.permissions[permKey];
+  if (!perm) return false;
+  if (action === 'view') return perm.view === true;
+  if (action === 'edit') return perm.edit === true;
+  return false;
 }
 
 function canWrite(request) {
@@ -3738,12 +3848,15 @@ async function handleAuthMe(request, env) {
   return json({
     ok: true,
     user: {
-      id: user.id,
+      id: user.userId,
       username: user.username,
-      displayName: user.display_name,
+      displayName: user.displayName,
       role: user.role,
-      firstLogin: user.first_login === 1,
-    }
+      roleId: user.roleId,
+      firstLogin: user.firstLogin,
+      isAdministrator: user.isAdministrator,
+      permissions: user.permissions,
+    },
   });
 }
 
@@ -3764,7 +3877,7 @@ async function handleAuthChangePassword(request, env) {
   try {
     await db.prepare(
       `UPDATE users SET password = ?, first_login = 0, updated_at = ? WHERE id = ?`
-    ).bind(newPassword, new Date().toISOString(), user.id).run();
+    ).bind(newPassword, new Date().toISOString(), user.userId).run();
 
     return json({ ok: true });
   } catch (e) {
@@ -3778,7 +3891,7 @@ async function handleApiUsers(request, env) {
 
   const sessionUser = await validateSession(db, request);
   if (!sessionUser) return json({ ok: false, error: 'Unauthorized' }, 401);
-  if (sessionUser.role !== 'admin') return json({ ok: false, error: 'Forbidden' }, 403);
+  if (!sessionUser.isAdministrator) return json({ ok: false, error: 'Forbidden' }, 403);
 
   const url = new URL(request.url);
   const pathParts = url.pathname.replace('/api/users', '').split('/').filter(Boolean);
@@ -3787,8 +3900,10 @@ async function handleApiUsers(request, env) {
   try {
     if (request.method === 'GET') {
       const rows = await db.prepare(
-        `SELECT id, username, display_name, password, role, is_active, first_login, created_at, updated_at
-         FROM users ORDER BY username COLLATE NOCASE`
+        `SELECT u.id, u.username, u.display_name, u.password, u.role, u.role_id, u.is_active, u.first_login, u.created_at, u.updated_at,
+                r.name as role_name
+         FROM users u LEFT JOIN roles r ON u.role_id = r.id
+         ORDER BY u.username COLLATE NOCASE`
       ).all();
       return json({ ok: true, users: rows.results || [] });
     }
@@ -3800,7 +3915,8 @@ async function handleApiUsers(request, env) {
       const username = String(body.username || '').trim().toLowerCase();
       const displayName = String(body.display_name || body.displayName || '').trim();
       const password = String(body.password || username);
-      const role = ['admin', 'staff', 'readonly'].includes(body.role) ? body.role : 'staff';
+      const role_id = String(body.role_id || 'role-staff').trim();
+      const legacyRole = role_id === 'role-administrator' ? 'admin' : (role_id === 'role-readonly' ? 'readonly' : 'staff');
 
       if (!username) return json({ ok: false, error: 'Username required.' }, 400);
       if (!displayName) return json({ ok: false, error: 'Display name required.' }, 400);
@@ -3809,9 +3925,9 @@ async function handleApiUsers(request, env) {
       const now = new Date().toISOString();
 
       await db.prepare(
-        `INSERT INTO users (id, username, display_name, password, role, is_active, first_login, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`
-      ).bind(newId, username, displayName, password, role, now, now).run();
+        `INSERT INTO users (id, username, display_name, password, role, role_id, is_active, first_login, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)`
+      ).bind(newId, username, displayName, password, legacyRole, role_id, now, now).run();
 
       return json({ ok: true, id: newId }, 201);
     }
@@ -3826,7 +3942,13 @@ async function handleApiUsers(request, env) {
       const binds = [];
 
       if (body.display_name !== undefined) { fields.push('display_name = ?'); binds.push(String(body.display_name).trim()); }
-      if (body.role !== undefined && ['admin', 'staff', 'readonly'].includes(body.role)) { fields.push('role = ?'); binds.push(body.role); }
+      if (body.role_id !== undefined) {
+        const legacyRole = body.role_id === 'role-administrator' ? 'admin' : (body.role_id === 'role-readonly' ? 'readonly' : 'staff');
+        fields.push('role_id = ?'); binds.push(body.role_id);
+        fields.push('role = ?'); binds.push(legacyRole);
+      } else if (body.role !== undefined && ['admin', 'staff', 'readonly'].includes(body.role)) {
+        fields.push('role = ?'); binds.push(body.role);
+      }
       if (body.is_active !== undefined) { fields.push('is_active = ?'); binds.push(body.is_active ? 1 : 0); }
       if (body.first_login !== undefined) { fields.push('first_login = ?'); binds.push(body.first_login ? 1 : 0); }
       if (body.password !== undefined && String(body.password).length >= 1) { fields.push('password = ?'); binds.push(String(body.password)); }
@@ -3843,7 +3965,7 @@ async function handleApiUsers(request, env) {
 
     if (request.method === 'DELETE') {
       if (!userId) return json({ ok: false, error: 'User ID required.' }, 400);
-      if (userId === sessionUser.id) return json({ ok: false, error: 'Cannot delete your own account.' }, 400);
+      if (userId === sessionUser.userId) return json({ ok: false, error: 'Cannot delete your own account.' }, 400);
 
       await db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId).run();
       await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
@@ -3857,4 +3979,119 @@ async function handleApiUsers(request, env) {
     }
     return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
   }
+}
+
+async function handleApiRoles(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'DB not available' }, 500);
+
+  const method = request.method;
+
+  if (method === 'GET') {
+    try {
+      const rows = await db.prepare(
+        `SELECT r.*, COUNT(u.id) as user_count
+         FROM roles r LEFT JOIN users u ON u.role_id = r.id
+         GROUP BY r.id ORDER BY r.is_system DESC, r.name ASC`
+      ).all();
+      return json({ ok: true, roles: rows.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === 'POST') {
+    let payload;
+    try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+    const name = String(payload.name || '').trim();
+    const description = String(payload.description || '').trim();
+    const permissions = payload.permissions || {};
+
+    if (!name) return json({ ok: false, error: 'Role name is required.' }, 400);
+    if (name.length < 2) return json({ ok: false, error: 'Role name must be at least 2 characters.' }, 400);
+
+    const id = 'role-' + crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    try {
+      await db.prepare(
+        `INSERT INTO roles (id, name, description, permissions, is_system, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?)`
+      ).bind(id, name, description, JSON.stringify(permissions), now, now).run();
+
+      const role = await db.prepare('SELECT * FROM roles WHERE id = ?').bind(id).first();
+      await logActivity(db, 'create', 'role', id, `Created role "${name}"`, { name, permissions });
+      return json({ ok: true, role }, 201);
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (/unique/i.test(msg)) return json({ ok: false, error: 'Role name already exists.' }, 409);
+      return json({ ok: false, error: 'Server error.', detail: msg }, 500);
+    }
+  }
+
+  if (method === 'PUT') {
+    let payload;
+    try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+    const id = String(payload.id || '').trim();
+    if (!id) return json({ ok: false, error: 'id is required.' }, 400);
+
+    const existing = await db.prepare('SELECT * FROM roles WHERE id = ?').bind(id).first();
+    if (!existing) return json({ ok: false, error: 'Role not found.' }, 404);
+
+    if (id === 'role-administrator' && payload.name && payload.name !== existing.name) {
+      return json({ ok: false, error: 'Cannot rename the Administrator role.' }, 400);
+    }
+
+    const updates = [];
+    const binds = [];
+
+    if (payload.name !== undefined) { updates.push('name = ?'); binds.push(String(payload.name).trim()); }
+    if (payload.description !== undefined) { updates.push('description = ?'); binds.push(String(payload.description).trim()); }
+    if (payload.permissions !== undefined) { updates.push('permissions = ?'); binds.push(JSON.stringify(payload.permissions)); }
+
+    if (updates.length === 0) return json({ ok: false, error: 'No fields to update.' }, 400);
+
+    updates.push('updated_at = ?');
+    binds.push(new Date().toISOString());
+    binds.push(id);
+
+    try {
+      await db.prepare(`UPDATE roles SET ${updates.join(', ')} WHERE id = ?`).bind(...binds).run();
+      const role = await db.prepare('SELECT * FROM roles WHERE id = ?').bind(id).first();
+      await logActivity(db, 'update', 'role', id, `Updated role "${role.name}"`, { fields: Object.keys(payload).filter(k => k !== 'id') });
+      return json({ ok: true, role });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (method === 'DELETE') {
+    let payload;
+    try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+    const id = String(payload.id || '').trim();
+    if (!id) return json({ ok: false, error: 'id is required.' }, 400);
+
+    const existing = await db.prepare('SELECT * FROM roles WHERE id = ?').bind(id).first();
+    if (!existing) return json({ ok: false, error: 'Role not found.' }, 404);
+
+    if (existing.is_system) return json({ ok: false, error: 'Cannot delete a system role. Edit its permissions instead.' }, 400);
+
+    const usersWithRole = await db.prepare('SELECT COUNT(*) as cnt FROM users WHERE role_id = ?').bind(id).first();
+    if (usersWithRole && usersWithRole.cnt > 0) {
+      return json({ ok: false, error: `Cannot delete role — ${usersWithRole.cnt} user(s) are assigned to it. Reassign them first.` }, 400);
+    }
+
+    try {
+      await db.prepare('DELETE FROM roles WHERE id = ?').bind(id).run();
+      await logActivity(db, 'delete', 'role', id, `Deleted role "${existing.name}"`, { name: existing.name });
+      return json({ ok: true, message: 'Role deleted.' });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: 'Method not allowed' }, 405);
 }
