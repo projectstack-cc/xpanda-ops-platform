@@ -165,10 +165,6 @@ export default {
         return handleApiBolCarriers(request, env);
       }
 
-      if (url.pathname === "/api/bols/next-number") {
-        return handleApiBolsNextNumber(request, env);
-      }
-
       if (url.pathname === "/api/bols" || url.pathname.startsWith("/api/bols/")) {
         return handleApiBols(request, env);
       }
@@ -220,6 +216,30 @@ export default {
     }
   },
 };
+
+// ════════════════════════════════════════════════════════════════════
+// DATABASE SCHEMA REFERENCE
+// Tables are created via SQL migrations run in Cloudflare D1 Console.
+// This block is documentation only — not executable.
+// ════════════════════════════════════════════════════════════════════
+//
+// TABLE: users — id, username, display_name, password, role, role_id, ...
+// TABLE: sessions — id, user_id, expires_at, ...
+// TABLE: roles — id, name, description, permissions (JSON), is_system, ...
+// TABLE: parts — id, part_number, name, customer, density_material, L/W/H, weight, color, category, parent_group, ...
+// TABLE: saved_combos — id, name, parts_json, ...
+// TABLE: jobs — id, customer, status, po_number, invoice_number, line_items (JSON), ship_to_*, ...
+// TABLE: job_line_items — id, job_id, part_number, description, quantity, dimensions, ...
+// TABLE: bead_types, bead_stock, block_inventory, molding_log, block_consumption_log
+// TABLE: shipments — id, direction, customer, origin, destination, status, ...
+// TABLE: bol_customers — id, company, street, city, state, zip, ...
+// TABLE: bol_carriers — id, name, scac, ...
+// TABLE: bols — id, bol_number, date, customer_id, ship_to_*, carrier_*, commodity_description, ...
+// TABLE: activity_log — id, timestamp, action, entity_type, entity_id, summary, detail, user_id, ...
+// TABLE: saved_loads — id, name, job_id, customer, trailer_type, state_json, expires_at, ...
+//
+// See individual .sql migration files for full DDL.
+// ════════════════════════════════════════════════════════════════════
 
 // ========================
 // Backend Logic Below
@@ -385,10 +405,12 @@ function hasPermission(user, permKey, action) {
   return false;
 }
 
+// Reserved: will be used for per-endpoint write checks
 function canWrite(request) {
   return ['admin', 'staff'].includes(request.headers.get('X-User-Role'));
 }
 
+// Reserved: will be used for admin-only endpoint checks
 function isAdmin(request) {
   return request.headers.get('X-User-Role') === 'admin';
 }
@@ -1365,50 +1387,6 @@ async function handleIncidentDetail(request, env) {
   }
 }
 
-// ─── Production: Parts Library & Saved Combinations ──────────────────────────
-//
-// Schema — run via Wrangler CLI before deploying:
-//
-// CREATE TABLE IF NOT EXISTS parts (
-//   id TEXT PRIMARY KEY,
-//   part_number TEXT NOT NULL,
-//   name TEXT NOT NULL DEFAULT '',
-//   customer TEXT NOT NULL DEFAULT '',
-//   density_material TEXT NOT NULL DEFAULT '',
-//   length_in REAL NOT NULL,
-//   width_in REAL NOT NULL,
-//   height_in REAL NOT NULL,
-//   weight REAL NOT NULL DEFAULT 1,
-//   notes TEXT NOT NULL DEFAULT '',
-//   color TEXT NOT NULL DEFAULT '#D97706',
-//   allow_rotation INTEGER NOT NULL DEFAULT 0,
-//   sort_order INTEGER NOT NULL DEFAULT 0,
-//   category TEXT NOT NULL DEFAULT '',
-//   parent_group TEXT NOT NULL DEFAULT '',
-//   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-//   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-// );
-// CREATE UNIQUE INDEX IF NOT EXISTS idx_parts_part_number ON parts(part_number);
-// CREATE INDEX IF NOT EXISTS idx_parts_category ON parts(category);
-//
-// CREATE TABLE IF NOT EXISTS saved_combos (
-//   id TEXT PRIMARY KEY,
-//   name TEXT NOT NULL,
-//   description TEXT NOT NULL DEFAULT '',
-//   block_l REAL NOT NULL,
-//   block_w REAL NOT NULL,
-//   block_h REAL NOT NULL,
-//   kerf REAL NOT NULL DEFAULT 0.079,
-//   orientation_mode TEXT NOT NULL DEFAULT 'auto',
-//   machines_active TEXT NOT NULL DEFAULT '["cross_cutter","main_line","blue_line"]',
-//   primary_part_id TEXT,
-//   primary_part_snapshot TEXT NOT NULL,
-//   secondary_parts_snapshot TEXT NOT NULL DEFAULT '[]',
-//   result_snapshot TEXT NOT NULL DEFAULT '{}',
-//   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-//   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-// );
-
 function safeJsonParse(str, fallback) {
   try {
     return JSON.parse(str);
@@ -1689,65 +1667,6 @@ async function handleApiCombos(request, env) {
 
   return json({ ok: false, error: "Method Not Allowed" }, 405);
 }
-
-// ─── Jobs: Job Board ─────────────────────────────────────────────────────────
-//
-// Schema — run via Wrangler CLI before deploying:
-//
-// CREATE TABLE IF NOT EXISTS jobs (
-//   id TEXT PRIMARY KEY,
-//   status TEXT NOT NULL DEFAULT 'not_started',
-//   customer TEXT NOT NULL,
-//   po_number TEXT NOT NULL DEFAULT '',
-//   invoice_number TEXT NOT NULL DEFAULT '',
-//   ship_date TEXT NOT NULL DEFAULT '',
-//   ship_day TEXT NOT NULL DEFAULT '',
-//   location TEXT NOT NULL DEFAULT '',
-//   delivery_time TEXT NOT NULL DEFAULT '',
-//   method TEXT NOT NULL DEFAULT '',
-//   carrier TEXT NOT NULL DEFAULT '',
-//   load_count INTEGER NOT NULL DEFAULT 1,
-//   total_bdft REAL NOT NULL DEFAULT 0,
-//   scrap_pickup TEXT NOT NULL DEFAULT '',
-//   sales_lead TEXT NOT NULL DEFAULT '',
-//   bol_info TEXT NOT NULL DEFAULT '',
-//   payment_info TEXT NOT NULL DEFAULT '',
-//   notes TEXT NOT NULL DEFAULT '',
-//   packing_instructions TEXT NOT NULL DEFAULT '',
-//   contact_name TEXT NOT NULL DEFAULT '',
-//   contact_phone TEXT NOT NULL DEFAULT '',
-//   combo_id TEXT DEFAULT NULL,
-//   priority TEXT NOT NULL DEFAULT 'normal',
-//   confirmed_to_ship INTEGER NOT NULL DEFAULT 0,
-//   processes TEXT NOT NULL DEFAULT '[]',
-//   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-//   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-// );
-//
-// Migration (run once if jobs table already exists):
-// ALTER TABLE jobs ADD COLUMN processes TEXT NOT NULL DEFAULT '[]';
-// CREATE INDEX IF NOT EXISTS idx_jobs_status    ON jobs(status);
-// CREATE INDEX IF NOT EXISTS idx_jobs_ship_date ON jobs(ship_date);
-// CREATE INDEX IF NOT EXISTS idx_jobs_customer  ON jobs(customer);
-//
-// CREATE TABLE IF NOT EXISTS job_line_items (
-//   id TEXT PRIMARY KEY,
-//   job_id TEXT NOT NULL,
-//   part_id TEXT DEFAULT NULL,
-//   part_number TEXT NOT NULL DEFAULT '',
-//   description TEXT NOT NULL DEFAULT '',
-//   quantity INTEGER NOT NULL DEFAULT 0,
-//   dimensions TEXT NOT NULL DEFAULT '',
-//   sort_order INTEGER NOT NULL DEFAULT 0,
-//   FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
-// );
-// CREATE INDEX IF NOT EXISTS idx_job_items_job ON job_line_items(job_id);
-//
-// Migration: Add packing slip storage to jobs (run once against D1)
-// ALTER TABLE jobs ADD COLUMN packing_slip_pdf TEXT DEFAULT NULL;
-// ALTER TABLE jobs ADD COLUMN packing_slip_filename TEXT NOT NULL DEFAULT '';
-// ALTER TABLE jobs ADD COLUMN packing_slip_invoice TEXT NOT NULL DEFAULT '';
-// ALTER TABLE jobs ADD COLUMN source TEXT NOT NULL DEFAULT 'manual';
 
 async function handleApiJobs(request, env) {
   const db = env.DB;
@@ -2151,64 +2070,6 @@ async function handleApiJobs(request, env) {
   return json({ ok: false, error: "Method Not Allowed" }, 405);
 }
 
-
-// =============================================================================
-// INVENTORY SCHEMA (run once against D1)
-// =============================================================================
-/*
-CREATE TABLE IF NOT EXISTS bead_stock (
-  id TEXT PRIMARY KEY,
-  manufacturer TEXT NOT NULL,
-  bead_type TEXT NOT NULL,
-  bag_weight_lbs REAL NOT NULL DEFAULT 0,
-  bags_on_hand INTEGER NOT NULL DEFAULT 0,
-  reorder_point_bags INTEGER NOT NULL DEFAULT 0,
-  notes TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_bead_mfr_type ON bead_stock(manufacturer, bead_type);
-
-CREATE TABLE IF NOT EXISTS block_inventory (
-  id TEXT PRIMARY KEY,
-  density_material TEXT NOT NULL,
-  length_in REAL NOT NULL,
-  width_in REAL NOT NULL,
-  height_in REAL NOT NULL,
-  blocks_on_hand INTEGER NOT NULL DEFAULT 0,
-  notes TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_block_size ON block_inventory(density_material, length_in, width_in, height_in);
-
-CREATE TABLE IF NOT EXISTS molding_log (
-  id TEXT PRIMARY KEY,
-  bead_stock_id TEXT NOT NULL,
-  block_inventory_id TEXT NOT NULL,
-  bags_consumed INTEGER NOT NULL,
-  blocks_produced INTEGER NOT NULL,
-  notes TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY (bead_stock_id) REFERENCES bead_stock(id) ON DELETE CASCADE,
-  FOREIGN KEY (block_inventory_id) REFERENCES block_inventory(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_mold_date ON molding_log(created_at);
-
-CREATE TABLE IF NOT EXISTS block_consumption_log (
-  id TEXT PRIMARY KEY,
-  block_inventory_id TEXT NOT NULL,
-  job_id TEXT DEFAULT NULL,
-  blocks_consumed INTEGER NOT NULL,
-  notes TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY (block_inventory_id) REFERENCES block_inventory(id) ON DELETE CASCADE,
-  FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
-);
-CREATE INDEX IF NOT EXISTS idx_consumption_block ON block_consumption_log(block_inventory_id);
-CREATE INDEX IF NOT EXISTS idx_consumption_job ON block_consumption_log(job_id);
-CREATE INDEX IF NOT EXISTS idx_consumption_date ON block_consumption_log(created_at);
-*/
 
 // =============================================================================
 // HANDLER: /api/bead-types  (GET / POST / PUT / DELETE)
@@ -2714,38 +2575,6 @@ async function handleApiBlockConsumption(request, env) {
 
 
 // =============================================================================
-// SHIPMENTS SCHEMA (run once against D1)
-// =============================================================================
-/*
-CREATE TABLE IF NOT EXISTS shipments (
-  id TEXT PRIMARY KEY,
-  direction TEXT NOT NULL,
-  job_id TEXT DEFAULT NULL,
-  customer TEXT NOT NULL DEFAULT '',
-  carrier TEXT NOT NULL DEFAULT '',
-  method TEXT NOT NULL DEFAULT '',
-  bol_number TEXT NOT NULL DEFAULT '',
-  origin TEXT NOT NULL DEFAULT '',
-  destination TEXT NOT NULL DEFAULT '',
-  ship_date TEXT NOT NULL DEFAULT '',
-  delivery_date TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'scheduled',
-  total_bdft REAL NOT NULL DEFAULT 0,
-  load_count INTEGER NOT NULL DEFAULT 1,
-  weight_lbs REAL NOT NULL DEFAULT 0,
-  bead_type TEXT NOT NULL DEFAULT '',
-  notes TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
-);
-CREATE INDEX IF NOT EXISTS idx_shipments_direction ON shipments(direction);
-CREATE INDEX IF NOT EXISTS idx_shipments_date ON shipments(ship_date);
-CREATE INDEX IF NOT EXISTS idx_shipments_status ON shipments(status);
-CREATE INDEX IF NOT EXISTS idx_shipments_job ON shipments(job_id);
-*/
-
-// =============================================================================
 // HANDLER: /api/shipments  (GET / POST / PUT / DELETE)
 // =============================================================================
 async function handleApiShipments(request, env) {
@@ -2952,83 +2781,6 @@ async function handleApiShipments(request, env) {
   return json({ ok: false, error: "Method Not Allowed" }, 405);
 }
 
-
-// =============================================================================
-// BOL GENERATOR — SCHEMA (run once against D1)
-// =============================================================================
-/*
-CREATE TABLE IF NOT EXISTS bol_customers (
-  id TEXT PRIMARY KEY,
-  company TEXT NOT NULL,
-  attention TEXT NOT NULL DEFAULT '',
-  street TEXT NOT NULL DEFAULT '',
-  street2 TEXT NOT NULL DEFAULT '',
-  city TEXT NOT NULL DEFAULT '',
-  state TEXT NOT NULL DEFAULT '',
-  zip TEXT NOT NULL DEFAULT '',
-  phone TEXT NOT NULL DEFAULT '',
-  email TEXT NOT NULL DEFAULT '',
-  contact_name TEXT NOT NULL DEFAULT '',
-  notes TEXT NOT NULL DEFAULT '',
-  is_active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_bol_customers_company ON bol_customers(company);
-CREATE INDEX IF NOT EXISTS idx_bol_customers_active ON bol_customers(is_active);
-
-CREATE TABLE IF NOT EXISTS bol_carriers (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  scac TEXT NOT NULL DEFAULT '',
-  phone TEXT NOT NULL DEFAULT '',
-  is_active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS bols (
-  id TEXT PRIMARY KEY,
-  bol_number TEXT DEFAULT NULL,
-  date TEXT NOT NULL,
-  customer_id TEXT DEFAULT NULL,
-  ship_to_company TEXT NOT NULL DEFAULT '',
-  ship_to_attention TEXT NOT NULL DEFAULT '',
-  ship_to_street TEXT NOT NULL DEFAULT '',
-  ship_to_street2 TEXT NOT NULL DEFAULT '',
-  ship_to_city TEXT NOT NULL DEFAULT '',
-  ship_to_state TEXT NOT NULL DEFAULT '',
-  ship_to_zip TEXT NOT NULL DEFAULT '',
-  location_no TEXT NOT NULL DEFAULT '',
-  carrier_id TEXT DEFAULT NULL,
-  carrier_name TEXT NOT NULL DEFAULT '',
-  trailer_no TEXT NOT NULL DEFAULT '',
-  seal_number TEXT NOT NULL DEFAULT '',
-  scac TEXT NOT NULL DEFAULT '',
-  pro_no TEXT NOT NULL DEFAULT '',
-  freight_terms TEXT NOT NULL DEFAULT 'prepaid',
-  is_scrap_pickup INTEGER NOT NULL DEFAULT 0,
-  third_party_bill_to TEXT NOT NULL DEFAULT '',
-  special_instructions TEXT NOT NULL DEFAULT '',
-  contact_info TEXT NOT NULL DEFAULT '',
-  is_master_bol INTEGER NOT NULL DEFAULT 0,
-  commodity_description TEXT NOT NULL DEFAULT '',
-  handling_unit_qty TEXT NOT NULL DEFAULT '',
-  handling_unit_type TEXT NOT NULL DEFAULT '',
-  package_qty TEXT NOT NULL DEFAULT '',
-  package_type TEXT NOT NULL DEFAULT '',
-  weight TEXT NOT NULL DEFAULT '',
-  delivery_time TEXT NOT NULL DEFAULT '',
-  job_id TEXT DEFAULT NULL,
-  notes TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY (customer_id) REFERENCES bol_customers(id) ON DELETE SET NULL,
-  FOREIGN KEY (carrier_id) REFERENCES bol_carriers(id) ON DELETE SET NULL,
-  FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
-);
-CREATE INDEX IF NOT EXISTS idx_bols_number ON bols(bol_number);
-CREATE INDEX IF NOT EXISTS idx_bols_date ON bols(date);
-CREATE INDEX IF NOT EXISTS idx_bols_customer ON bols(customer_id);
-*/
 
 async function handleApiBolCustomers(request, env) {
   const db = env.DB;
@@ -3283,20 +3035,6 @@ async function handleApiBolCarriers(request, env) {
   return json({ ok: false, error: "Method Not Allowed" }, 405);
 }
 
-async function handleApiBolsNextNumber(request, env) {
-  if (request.method !== "GET") return json({ ok: false, error: "Method Not Allowed" }, 405);
-  const db = env.DB;
-  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
-
-  try {
-    const row  = await db.prepare("SELECT MAX(bol_number) as max_num FROM bols").first();
-    const next = (row && row.max_num != null) ? row.max_num + 1 : 3600;
-    return json({ ok: true, next_number: next });
-  } catch (e) {
-    return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
-  }
-}
-
 async function handleApiBols(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
@@ -3488,12 +3226,6 @@ async function handleApiBols(request, env) {
 // ========================
 // Load Builder SKU API
 // ========================
-/*
- * DDL — run once in the Cloudflare D1 console before deploying:
- *
- * load_builder_skus has been merged into the unified parts table.
- * See the parts table DDL near handleApiParts above.
- */
 
 function mapPartToSku(row) {
   return {

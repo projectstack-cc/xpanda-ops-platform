@@ -48,13 +48,25 @@ document.getElementById('prod-page-subtitle').textContent = 'Production planning
 </div>
 
 <script>
+function getUser() {
+  return new Promise(resolve => {
+    if (window.__xpandaUser !== undefined) return resolve(window.__xpandaUser);
+    let attempts = 0;
+    const check = setInterval(() => {
+      if (window.__xpandaUser !== undefined || ++attempts > 20) {
+        clearInterval(check);
+        resolve(window.__xpandaUser || null);
+      }
+    }, 50);
+  });
+}
+
 async function gateProductionNav() {
   try {
-    const res = await fetch('/api/auth/me');
-    const data = await res.json();
-    if (!data.ok || !data.user || data.user.isAdministrator) return;
+    const user = await getUser();
+    if (!user || user.isAdministrator) return;
 
-    const perms = data.user.permissions || {};
+    const perms = user.permissions || {};
 
     if (!perms['production.calculators']?.view) {
       document.querySelectorAll('a[href*="block-calculator"], a[href*="holey-board"]').forEach(el => el.style.display = 'none');

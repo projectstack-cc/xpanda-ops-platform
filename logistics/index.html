@@ -986,13 +986,25 @@ function esc(str) {
     .replace(/"/g, '&quot;');
 }
 
+function getUser() {
+  return new Promise(resolve => {
+    if (window.__xpandaUser !== undefined) return resolve(window.__xpandaUser);
+    let attempts = 0;
+    const check = setInterval(() => {
+      if (window.__xpandaUser !== undefined || ++attempts > 20) {
+        clearInterval(check);
+        resolve(window.__xpandaUser || null);
+      }
+    }, 50);
+  });
+}
+
 async function gateLogisticsNav() {
   try {
-    const res = await fetch('/api/auth/me');
-    const data = await res.json();
-    if (!data.ok || !data.user || data.user.isAdministrator) return;
+    const user = await getUser();
+    if (!user || user.isAdministrator) return;
 
-    const perms = data.user.permissions || {};
+    const perms = user.permissions || {};
 
     if (!perms['logistics.bol']?.view) {
       document.querySelectorAll('a[href*="bol-generator"]').forEach(el => el.style.display = 'none');

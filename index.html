@@ -377,50 +377,41 @@ window.fetch = async function(...args) {
   return res;
 };
 
-async function loadCurrentUser() {
-  try {
-    const res = await fetch('/api/auth/me');
-    const data = await res.json();
-    if (data.ok && data.user) {
-      document.getElementById('user-display').textContent = data.user.displayName || data.user.username;
-    }
-  } catch {}
-}
-
 async function doLogout() {
   await fetch('/api/auth/logout', { method: 'POST' });
   window.location.href = '/login.html';
 }
 
-loadCurrentUser();
-
-async function gateHomepage() {
+async function initHomepage() {
   try {
     const res = await fetch('/api/auth/me');
     const data = await res.json();
     if (!data.ok || !data.user) return;
 
     const user = data.user;
-    const perms = user.permissions || {};
 
-    if (user.isAdministrator) return;
+    document.getElementById('user-display').textContent = user.displayName || user.username;
 
-    document.querySelectorAll('.card[data-permission]').forEach(card => {
-      const keys = card.dataset.permission.split(',');
-      const canView = keys.some(key => perms[key.trim()]?.view === true);
-      if (!canView) card.style.display = 'none';
-    });
+    if (!user.isAdministrator) {
+      const perms = user.permissions || {};
 
-    document.querySelectorAll('.card a[href]').forEach(link => {
-      const href = link.getAttribute('href');
-      let permKey = null;
-      if (href.includes('/logistics/bol')) permKey = 'logistics.bol';
-      else if (href.includes('/logistics/load-builder')) permKey = 'logistics.load-builder';
-      else if (href.includes('/logistics/')) permKey = 'logistics.dashboard';
-      else if (href.includes('/admin/')) permKey = 'admin';
+      document.querySelectorAll('.card[data-permission]').forEach(card => {
+        const keys = card.dataset.permission.split(',');
+        const canView = keys.some(key => perms[key.trim()]?.view === true);
+        if (!canView) card.style.display = 'none';
+      });
 
-      if (permKey && !perms[permKey]?.view) link.style.display = 'none';
-    });
+      document.querySelectorAll('.card a[href]').forEach(link => {
+        const href = link.getAttribute('href');
+        let permKey = null;
+        if (href.includes('/logistics/bol')) permKey = 'logistics.bol';
+        else if (href.includes('/logistics/load-builder')) permKey = 'logistics.load-builder';
+        else if (href.includes('/logistics/')) permKey = 'logistics.dashboard';
+        else if (href.includes('/admin/')) permKey = 'admin';
+
+        if (permKey && !perms[permKey]?.view) link.style.display = 'none';
+      });
+    }
   } catch {}
 }
 
@@ -433,7 +424,7 @@ if (new URLSearchParams(window.location.search).get('access_denied')) {
   history.replaceState(null, '', '/');
 }
 
-gateHomepage();
+initHomepage();
 </script>
 </body>
 </html>

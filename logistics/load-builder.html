@@ -1096,6 +1096,7 @@ function buildPrintSvg(trailer, dims) {
 // PRINT
 // ═══════════════════════════════════════════════════════════════
 function printPackingSlip(trailer, dims, trailerType, trailerNumber, packList, invNumber = '') {
+  // document.write() is correct here — writing into a new blank popup window for printing
   const win = window.open("", "_blank", "width=1600,height=1100");
   if (!win) return;
   const piecesHtml = packList.pieces.map(item => `<tr><td style="padding:8px 10px;border:1px solid #cbd5e1;font-weight:700;"><span style="display:inline-block;width:10px;height:10px;background:${item.color};border-radius:2px;margin-right:8px;"></span>${item.name}</td><td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;">${item.pieces}</td></tr>`).join("");

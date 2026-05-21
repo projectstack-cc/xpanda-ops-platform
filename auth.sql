@@ -1,3 +1,4 @@
+-- MIGRATION COMPLETE: This file has been run in D1 and is kept for reference only.
 -- MANUAL STEP: Run this migration in the Cloudflare D1 Dashboard Console.
 
 CREATE TABLE IF NOT EXISTS users (

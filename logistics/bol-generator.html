@@ -529,10 +529,6 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
       </div>
     </div>
 
-    <div class="bol-field">
-      <label>Location No</label>
-      <input type="text" id="f-location-no" placeholder="Optional">
-    </div>
   </div>
 
   <!-- Carrier -->
@@ -1116,7 +1112,6 @@ function collectPayload() {
     ship_to_city:          document.getElementById('f-ship-city').value.trim(),
     ship_to_state:         document.getElementById('f-ship-state').value.trim(),
     ship_to_zip:           document.getElementById('f-ship-zip').value.trim(),
-    location_no:           document.getElementById('f-location-no').value.trim(),
     carrier_id:            selectedCarrierId || null,
     carrier_name:          document.getElementById('carrier-search').value.trim(),
     trailer_no:            document.getElementById('f-trailer-no').value.trim(),
@@ -1219,7 +1214,7 @@ async function handleClear() {
 
   const ids = [
     'f-ship-company','f-ship-attention','f-project-name','f-ship-street','f-ship-street2',
-    'f-ship-city','f-ship-zip','f-location-no',
+    'f-ship-city','f-ship-zip',
     'carrier-search','f-trailer-no',
     'f-contact-name','f-contact-phone',
     'f-special-instructions','f-contact-info','f-commodity',
@@ -1270,7 +1265,6 @@ function loadBolIntoForm(b) {
   set('f-ship-city',             b.ship_to_city);
   set('f-ship-state',            b.ship_to_state || 'FL');
   set('f-ship-zip',              b.ship_to_zip);
-  set('f-location-no',           b.location_no);
   set('carrier-search',          b.carrier_name);
   set('f-trailer-no',            b.trailer_no);
   set('f-special-instructions',  b.special_instructions);

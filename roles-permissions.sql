@@ -1,3 +1,4 @@
+-- MIGRATION COMPLETE: This file has been run in D1 and is kept for reference only.
 -- Roles & Permissions migration
 -- Run: wrangler d1 execute DB --remote --file ./roles-permissions.sql
 

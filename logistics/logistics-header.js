@@ -4,6 +4,8 @@ const isDashboard =
   path === "/logistics/" ||
   path === "/logistics/index.html";
 
+// NOTE: document.write() is used here for legacy compatibility.
+// Future refactor: switch to DOMContentLoaded + insertAdjacentHTML.
 document.write(`
 
 <header class="topbar">
@@ -55,11 +57,12 @@ window.addEventListener("DOMContentLoaded", () => {
   };
 
   fetch('/api/auth/me').then(r => r.json()).then(d => {
+    window.__xpandaUser = d.ok ? d.user : null;
     if (d.ok && d.user) {
       const el = document.getElementById('hdr-user-name');
       if (el) el.textContent = d.user.displayName || d.user.username;
     }
-  }).catch(() => {});
+  }).catch(() => { window.__xpandaUser = null; });
 
   document.getElementById('hdr-logout')?.addEventListener('click', async (e) => {
     e.preventDefault();
