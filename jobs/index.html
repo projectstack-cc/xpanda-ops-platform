@@ -294,10 +294,6 @@
             <input type="tel" id="f-contact-phone" placeholder="Phone number">
           </div>
         </div>
-        <div class="jobs-field">
-          <label for="f-payment-info">Payment Info</label>
-          <input type="text" id="f-payment-info" placeholder="e.g. Net 30 via FedEx check">
-        </div>
       </div>
 
       <!-- Production Processes -->
@@ -588,12 +584,11 @@ function buildCard(job) {
       <span>${bdft} BDFT</span>
     </div>
     ${procHtml}
-    ${(job.status === 'done' || job.status === 'loading' || job.status === 'shipped') ? `
     <div class="jobs-bol-row" id="bol-row-${job.id}">
       <a class="jobs-bol-link" href="/logistics/load-builder.html?job_id=${job.id}" onclick="event.stopPropagation()" style="background:#fef3c7;color:#92400e;">Build Load</a>
       <a class="jobs-bol-link" href="/logistics/bol-generator.html?job_id=${job.id}" onclick="event.stopPropagation()">Generate BOL</a>
       <span class="jobs-bol-number" id="bol-num-${job.id}"></span>
-    </div>` : ''}
+    </div>
     <div class="jobs-card-actions">
       ${prev
         ? `<button class="jobs-arrow-btn" data-dir="prev" data-id="${esc(job.id)}" title="Move to ${STATUS_LABELS[prev]}">←</button>`
@@ -1163,7 +1158,7 @@ function clearForm() {
   const textIds = [
     'f-customer', 'f-po-number', 'f-invoice-number',
     'f-ship-date', 'f-delivery-time', 'f-location', 'f-carrier',
-    'f-contact-name', 'f-contact-phone', 'f-payment-info',
+    'f-contact-name', 'f-contact-phone',
     'f-packing', 'f-notes',
     'f-ship-to-company', 'f-ship-to-attention', 'f-ship-to-street',
     'f-ship-to-city', 'f-ship-to-state', 'f-ship-to-zip',
@@ -1214,7 +1209,6 @@ function populateForm(job) {
   set('f-scrap-pickup',   job.scrap_pickup);
   set('f-contact-name',   job.contact_name);
   set('f-contact-phone',  job.contact_phone);
-  set('f-payment-info',   job.payment_info);
   set('f-packing',        job.packing_instructions);
   set('f-notes',          job.notes);
 
@@ -1352,7 +1346,6 @@ async function saveJob() {
     scrap_pickup:         document.getElementById('f-scrap-pickup').value,
     contact_name:         document.getElementById('f-contact-name').value.trim(),
     contact_phone:        document.getElementById('f-contact-phone').value.trim(),
-    payment_info:         document.getElementById('f-payment-info').value.trim(),
     packing_instructions: document.getElementById('f-packing').value.trim(),
     notes:                document.getElementById('f-notes').value.trim(),
     combo_id:             selectedComboId || null,

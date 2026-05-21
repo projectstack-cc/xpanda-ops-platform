@@ -2728,10 +2728,14 @@ function showJobBanner(job, pieceCount) {
   const banner = document.createElement('div');
   banner.id = 'job-prefill-banner';
   banner.style.cssText = 'background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#1e40af;';
+  const invPart = job.invoice_number ? ` | INV# ${job.invoice_number}` : '';
+  const slipLink = job.packing_slip_filename
+    ? ` <a href="/api/jobs/${encodeURIComponent(job.id)}/packing-slip" target="_blank" style="color:#1e40af;margin-left:12px;font-size:12px;">View Packing Slip</a>`
+    : '';
   banner.innerHTML = `
     <div>
-      <strong>Pre-loaded from job:</strong> ${job.customer || '(no customer)'}
-      <span style="margin-left:8px;opacity:0.7;">${pieceCount} piece${pieceCount !== 1 ? 's' : ''} added</span>
+      <strong>Pre-loaded from job:</strong> ${job.customer || '(no customer)'}${invPart}
+      <span style="margin-left:8px;opacity:0.7;">${pieceCount} piece${pieceCount !== 1 ? 's' : ''} added</span>${slipLink}
     </div>
     <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;font-size:16px;color:#1e40af;padding:0 4px;">&times;</button>
   `;
