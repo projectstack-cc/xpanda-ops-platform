@@ -912,7 +912,104 @@ function closeModal() {
   pendingSlipRemoved = false;
 }
 
-function prefillForm(data) {
+async function getPartsLibrary() {
+  if (partsCache) return partsCache;
+  try {
+    const res = await fetch('/api/parts');
+    const data = await res.json();
+    partsCache = data.parts || [];
+    return partsCache;
+  } catch {
+    return [];
+  }
+}
+
+function parseDimensionValues(dimStr) {
+  if (!dimStr) return null;
+  let s = dimStr.replace(/[“”„‟""]/g, '"').replace(/[×xX]/g, 'x');
+  const parts = s.split(/\s*x\s*/i);
+  if (parts.length < 2) return null;
+
+  function parseInches(str) {
+    str = str.replace(/["'\s]/g, '').trim();
+    const mixed = str.match(/^(\d+)-(\d+)\/(\d+)$/);
+    if (mixed) return parseInt(mixed[1]) + parseInt(mixed[2]) / parseInt(mixed[3]);
+    const frac = str.match(/^(\d+)\/(\d+)$/);
+    if (frac) return parseInt(frac[1]) / parseInt(frac[2]);
+    const num = parseFloat(str);
+    return isNaN(num) ? null : num;
+  }
+
+  const length = parseInches(parts[0]);
+  const width = parseInches(parts[1]);
+  const height = parts.length >= 3 ? parseInches(parts[2]) : null;
+  if (length === null || width === null) return null;
+  return { length, width, height: height || width };
+}
+
+function matchLineItemToPart(lineItem, partsLibrary) {
+  const desc = (lineItem.description || '').toLowerCase();
+  const cat = (lineItem.category || '').toLowerCase();
+  const dims = lineItem.dimensions || '';
+  const parsedDims = parseDimensionValues(dims);
+
+  // Pass 1: Exact part_number match
+  const partNumPatterns = desc.match(/\b([A-Z]{1,4}[\-]?\d{2,6}[\-]?\d{0,4})\b/gi) || [];
+  for (const candidate of partNumPatterns) {
+    const match = partsLibrary.find(p => p.part_number.toLowerCase() === candidate.toLowerCase());
+    if (match) return { part: match, method: 'part_number' };
+  }
+  const catPartNums = cat.match(/\b([A-Z]{1,4}[\-]?\d{2,6}[\-]?\d{0,4})\b/gi) || [];
+  for (const candidate of catPartNums) {
+    const match = partsLibrary.find(p => p.part_number.toLowerCase() === candidate.toLowerCase());
+    if (match) return { part: match, method: 'part_number' };
+  }
+
+  // Pass 2: Exact dimension match (±0.25" tolerance)
+  if (parsedDims) {
+    const tolerance = 0.25;
+    const dimMatches = partsLibrary.filter(p =>
+      Math.abs(p.length_in - parsedDims.length) <= tolerance &&
+      Math.abs(p.width_in - parsedDims.width) <= tolerance &&
+      Math.abs(p.height_in - parsedDims.height) <= tolerance
+    );
+    if (dimMatches.length === 1) {
+      return { part: dimMatches[0], method: 'dimensions' };
+    }
+    if (dimMatches.length > 1) {
+      const narrowed = dimMatches.find(p => {
+        const pDesc = (p.name + ' ' + p.part_number + ' ' + p.customer + ' ' + p.density_material).toLowerCase();
+        if (desc.includes('holey board') || desc.includes('insulperm') || cat.includes('holey board')) {
+          return p.category === 'Holey Board';
+        }
+        if (desc.includes('laminate') || cat.includes('laminate')) {
+          return pDesc.includes('laminate') || p.category === 'Sheets';
+        }
+        if (desc.includes('plug')) { return pDesc.includes('plug'); }
+        if (desc.includes('notch')) { return pDesc.includes('notch'); }
+        return false;
+      });
+      if (narrowed) return { part: narrowed, method: 'dimensions+keyword' };
+      return { part: dimMatches[0], method: 'dimensions_fuzzy' };
+    }
+  }
+
+  // Pass 3: Holey Board by height
+  if ((desc.includes('holey board') || desc.includes('insulperm') || /\bHB\b/i.test(desc) ||
+       cat.includes('holey board') || /\bHB\b/i.test(cat)) && parsedDims) {
+    const hbMatch = partsLibrary.find(p =>
+      p.category === 'Holey Board' &&
+      Math.abs(p.height_in - parsedDims.height) <= 0.25 &&
+      Math.abs(p.length_in - parsedDims.length) <= 0.5 &&
+      Math.abs(p.width_in - parsedDims.width) <= 0.5
+    );
+    if (hbMatch) return { part: hbMatch, method: 'holey_board_height' };
+  }
+
+  return null;
+}
+
+async function prefillForm(data) {
   const highlight = (el) => {
     if (!el) return;
     el.classList.remove('slip-prefilled');
@@ -961,19 +1058,42 @@ function prefillForm(data) {
   }
 
   if (Array.isArray(data.line_items) && data.line_items.length) {
+    const partsLibrary = await getPartsLibrary();
+    const matchedLineItems = data.line_items.map(li => {
+      const result = matchLineItemToPart(li, partsLibrary);
+      if (result) {
+        return { ...li, part_id: result.part.id, part_number: result.part.part_number, matched_part_name: result.part.name || result.part.part_number, match_method: result.method };
+      }
+      return { ...li, part_id: null, match_method: 'none' };
+    });
+
     document.getElementById('li-container').innerHTML = '';
-    for (const li of data.line_items) {
+    for (const li of matchedLineItems) {
       const descParts = [li.description];
       if (li.label) descParts.push('– ' + li.label);
       if (li.dimensions && !li.label) descParts.push(li.dimensions);
       const desc = descParts.filter(Boolean).join(' ').trim();
       const row = addLineItemRow({
+        part_id:     li.part_id,
+        part_number: li.part_number || '',
         description: desc,
         quantity:    li.quantity ?? 1,
         dimensions:  li.dimensions || '',
         qty_unit:    li.qty_unit || 'pcs',
       });
       row.querySelectorAll('input').forEach(inp => highlight(inp));
+
+      const badge = document.createElement('div');
+      badge.style.cssText = 'font-size:11px;font-weight:600;margin:-4px 0 6px;padding-left:96px;min-width:380px;';
+      if (li.part_id) {
+        badge.style.color = '#059669';
+        badge.textContent = '✓ Matched: ' + li.part_number;
+      } else {
+        badge.style.color = '#d97706';
+        badge.textContent = '⚠ No match — new part will be created on load build';
+      }
+      document.getElementById('li-container').appendChild(badge);
+      row.querySelector('.jobs-li-remove').addEventListener('click', () => badge.remove());
     }
   }
 }
@@ -1147,6 +1267,7 @@ function addLineItemRow(data) {
   const isBdft = data?.qty_unit === 'bdft';
   const row = document.createElement('div');
   row.className = 'jobs-li-row';
+  row.dataset.partId = data?.part_id ?? '';
   row.innerHTML = `
     <input type="text"   class="li-part" placeholder="Part #"      value="${esc(data?.part_number  ?? '')}">
     <input type="text"   class="li-desc" placeholder="Description" value="${esc(data?.description  ?? '')}">
@@ -1165,6 +1286,7 @@ function addLineItemRow(data) {
 function collectLineItems() {
   return Array.from(document.querySelectorAll('#li-container .jobs-li-row'))
     .map((row, i) => ({
+      part_id:     row.dataset.partId || null,
       part_number: row.querySelector('.li-part').value.trim(),
       description: row.querySelector('.li-desc').value.trim(),
       quantity:    parseInt(row.querySelector('.li-qty').value,  10) || 0,
