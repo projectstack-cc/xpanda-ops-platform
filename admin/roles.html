@@ -654,9 +654,7 @@ async function deleteRole(id, name) {
   }
 }
 
-document.getElementById('add-role-modal').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('add-role-modal')) closeAddRoleModal();
-});
+// Click-outside-close disabled — use Cancel button to close
 
 document.getElementById('new-role-name').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') saveNewRole();

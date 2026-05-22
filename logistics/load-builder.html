@@ -439,7 +439,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Load planning 
 // ═══════════════════════════════════════════════════════════════
 const STORAGE_KEY = "foam_trailer_loader_v31";
 
-const SVG_TOPVIEW_SCALE  = 0.52;  // px per inch, screen layout view
+const SVG_TOPVIEW_SCALE  = 0.85;  // px per inch, screen layout view
 const SVG_PRINT_SCALE    = 1.9;   // px per inch, print view (before fit-scaling)
 const SVG_PRINT_MAX_WIDTH = 1050; // max print SVG width in px (landscape page)
 
@@ -1043,10 +1043,19 @@ function buildTopViewSVG(trailer, dims) {
   rects.forEach(r => {
     svg += `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="${r.col.color}55" stroke="${r.col.color}" stroke-width="1.5" rx="2"/>`;
     if (runnerH > 0) svg += `<rect x="${r.x}" y="${r.y + r.h - 3}" width="${r.w}" height="3" fill="#92400E" opacity="0.7" rx="1"/>`;
-    if (r.w > 22 && r.h > 16) {
-      const fs = Math.min(11, r.w / 3, r.h / 2.2);
-      const label = r.col.mixed ? "MIX" : `${r.col.unitHeight}"`;
-      svg += `<text x="${r.x + r.w / 2}" y="${r.y + r.h / 2 + 4}" text-anchor="middle" fill="${r.col.color}" font-size="${fs}" font-weight="800">${label}</text>`;
+    if (r.w > 18 && r.h > 12) {
+      const stackCount = r.col.stackCount || 0;
+      const heightLabel = r.col.mixed ? 'MIX' : `${r.col.unitHeight}"`;
+      if (r.h > 30 && stackCount) {
+        const fs = Math.min(9, r.w / 4);
+        const cfs = Math.min(14, r.w / 2, r.h / 2.5);
+        svg += `<text x="${r.x + r.w / 2}" y="${r.y + r.h / 2 - 2}" text-anchor="middle" fill="${r.col.color}" font-size="${fs}" font-weight="600" opacity="0.75">${heightLabel}</text>`;
+        svg += `<text x="${r.x + r.w / 2}" y="${r.y + r.h / 2 + 11}" text-anchor="middle" fill="${r.col.color}" font-size="${cfs}" font-weight="800">${stackCount}</text>`;
+      } else if (r.w > 22 && r.h > 16) {
+        const fs = Math.min(11, r.w / 3, r.h / 2.2);
+        const label = stackCount || heightLabel;
+        svg += `<text x="${r.x + r.w / 2}" y="${r.y + r.h / 2 + 4}" text-anchor="middle" fill="${r.col.color}" font-size="${fs}" font-weight="800">${label}</text>`;
+      }
     }
   });
   (trailer.rows || []).forEach((row, ri) => {
@@ -2175,9 +2184,10 @@ function openBolModal(result) {
       shipToCompany: '', shipToAttention: '', shipToStreet: '', shipToStreet2: '',
       shipToCity: '', shipToState: '', shipToZip: '',
       contactName: '', contactPhone: '', carrierName: '',
+      invNumber: state.trailerInvNumbers[i] || '',
       poNumber: '', deliveryTime: '', date: today,
       freightTerms: 'prepaid', specialInstructions: '',
-      trailerNo: '', sealNumber: '', carryOver: true,
+      carryOver: true,
     };
     if (state.prefillJobData && i === 0) {
       const job = state.prefillJobData;
@@ -2192,7 +2202,8 @@ function openBolModal(result) {
       td.carrierName    = job.carrier          || '';
       td.contactName    = job.contact_name     || '';
       td.contactPhone   = job.contact_phone    || '';
-      td.poNumber       = job.po_number        || job.invoice_number || '';
+      td.poNumber       = job.po_number        || '';
+      td.invNumber      = job.invoice_number   || job.packing_slip_invoice || '';
       td.deliveryTime   = job.delivery_time    || '';
       td.date           = job.ship_date        || today;
     }
@@ -2232,7 +2243,6 @@ function renderBolModal() {
 
   const backdrop = h('div', {
     id: 'bol-modal-backdrop', className: 'bol-backdrop',
-    onClick: () => { state.bolModal.open = false; renderBolModal(); },
   });
   const modal = h('div', { className: 'bol-modal', onClick: e => e.stopPropagation() });
 
@@ -2316,6 +2326,7 @@ function renderBolModal() {
         td.carrierName = prev.carrierName; td.freightTerms = prev.freightTerms;
         td.specialInstructions = prev.specialInstructions;
         td.poNumber = prev.poNumber; td.deliveryTime = prev.deliveryTime;
+        td.invNumber = prev.invNumber;
       }
       renderBolModal();
     });
@@ -2424,7 +2435,28 @@ function renderBolModal() {
   const inp = (field, type = 'text', ph = '') => {
     const el = h('input', { type, className: 'inp', placeholder: ph });
     el.value = td[field] || '';
-    el.addEventListener('input', e => { td[field] = e.target.value; });
+    el.addEventListener('input', e => {
+      td[field] = e.target.value;
+      if (field === 'invNumber') {
+        state.trailerInvNumbers[bm.currentPage] = e.target.value;
+        if (bm.currentPage === 0) {
+          const val = td.invNumber.trim();
+          const match = val.match(/^(.+-)(\d+)$/);
+          if (match) {
+            const prefix = match[1], startNum = parseInt(match[2], 10);
+            for (let j = 1; j < bm.trailerData.length; j++) {
+              const nextTd = bm.trailerData[j];
+              if (!nextTd.invNumber || nextTd._invAutoFilled) {
+                const suffix = String(startNum + j).padStart(match[2].length, '0');
+                nextTd.invNumber = prefix + suffix;
+                nextTd._invAutoFilled = true;
+                state.trailerInvNumbers[j] = nextTd.invNumber;
+              }
+            }
+          }
+        }
+      }
+    });
     return el;
   };
 
@@ -2448,9 +2480,8 @@ function renderBolModal() {
   body.appendChild(fg('Contact Name', inp('contactName')));
   body.appendChild(fg('Contact Phone', inp('contactPhone')));
   body.appendChild(fg('Carrier', inp('carrierName')));
-  body.appendChild(fg('Trailer #', inp('trailerNo')));
-  body.appendChild(fg('Seal #', inp('sealNumber')));
-  body.appendChild(fg('PO / Invoice #', inp('poNumber')));
+  body.appendChild(fg('PO Number', inp('poNumber')));
+  body.appendChild(fg('INV #', inp('invNumber')));
   body.appendChild(fg('Delivery Time', inp('deliveryTime')));
 
   const ftWrap = h('div', { className: 'bol-form-group' });
@@ -2647,7 +2678,7 @@ async function generateAllBols() {
     if (!td.date) { bm.currentPage = i; bm.bolError = `Trailer ${i + 1}: Date is required.`; renderBolModal(); return; }
     if (!td.shipToCompany.trim()) { bm.currentPage = i; bm.bolError = `Trailer ${i + 1}: Company is required.`; renderBolModal(); return; }
   }
-  const missingNumbers = bm.trailerData.some((_, i) => !(state.trailerInvNumbers[i] || '').trim());
+  const missingNumbers = bm.trailerData.some(td => !(td.invNumber || '').trim());
   if (missingNumbers) {
     const proceed = await BolShared.confirmNoBolNumber();
     if (!proceed) return;
@@ -2661,15 +2692,14 @@ async function generateAllBols() {
     bm.generateProgress[i] = { text: `⏳ Trailer ${i + 1} — saving...`, done: false, pending: false };
     renderBolModal();
     try {
-      const invNumber = (state.trailerInvNumbers[i] || '').trim();
       const payload = {
-        bol_number: invNumber ? parseInt(invNumber, 10) || invNumber : undefined,
+        bol_number: td.invNumber ? (parseInt(td.invNumber, 10) || td.invNumber) : null,
         date: td.date, customer_id: td.customerId || null,
         ship_to_company: td.shipToCompany, ship_to_attention: td.shipToAttention,
         ship_to_street: td.shipToStreet, ship_to_street2: td.shipToStreet2,
         ship_to_city: td.shipToCity, ship_to_state: td.shipToState, ship_to_zip: td.shipToZip,
         location_no: '', carrier_id: null, carrier_name: td.carrierName,
-        trailer_no: td.trailerNo, seal_number: td.sealNumber, scac: '', pro_no: '',
+        trailer_no: '', seal_number: '', scac: '', pro_no: '',
         freight_terms: td.freightTerms, is_scrap_pickup: 0, third_party_bill_to: '',
         special_instructions: td.specialInstructions,
         contact_info: [td.contactName ? ('POC: ' + td.contactName) : '', td.contactPhone || ''].filter(Boolean).join(' '),

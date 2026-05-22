@@ -570,10 +570,7 @@ async function deleteUser(id, displayName) {
   } catch { alert('Network error.'); }
 }
 
-// Close modal on overlay click
-document.getElementById('modal').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('modal')) closeModal();
-});
+// Click-outside-close disabled — use Cancel button to close
 
 // Header user display + logout
 fetch('/api/auth/me').then(r => r.json()).then(d => {
