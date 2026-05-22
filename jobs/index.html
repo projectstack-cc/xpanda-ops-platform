@@ -50,6 +50,21 @@
 .jobs-card-slip:hover { opacity: 1; }
 @keyframes slip-fade { from { background: #dbeafe; } to { background: transparent; } }
 .slip-prefilled { animation: slip-fade 2s ease-out forwards; border-radius: 4px; }
+.jobs-archive-btn {
+  background: none; border: 1px solid #d1d5db; color: #6b7280;
+  font-size: 11px; padding: 3px 10px; border-radius: 6px; cursor: pointer; transition: all 0.15s;
+}
+.jobs-archive-btn:hover { background: #f3f4f6; color: #374151; border-color: #9ca3af; }
+.jobs-archive-toggle {
+  background: none; border: 1px solid #d1d5db; color: #6b7280;
+  font-size: 12px; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+}
+.jobs-archive-toggle.active { background: #f0fdf4; border-color: #86efac; color: #166534; }
+.jobs-card[data-status="archived"] { opacity: 0.6; border-left: 3px solid #9ca3af; background: #f9fafb; }
+@keyframes toastSlideUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
 </style>
 </head>
 <body>
@@ -70,6 +85,7 @@
   </div>
   <div class="jobs-toolbar-actions">
     <button class="btn ghost small" id="btn-upload-slip">📄 Upload Packing Slip</button>
+    <button class="jobs-archive-toggle" id="toggle-archived" title="Show/hide archived jobs">📦 Show Archived</button>
     <button class="btn primary small" id="btn-new-job">+ New Job</button>
   </div>
   <input type="file" id="packing-slip-upload" accept=".pdf" style="display:none">
@@ -415,6 +431,7 @@ const PROCESSES = [
 ];
 
 let allJobs          = [];
+let showArchived     = false;
 let editingJobId     = null;
 let pendingSlip      = null;
 let pendingSlipRemoved = false;
@@ -485,6 +502,7 @@ async function loadJobs(params) {
   const q = new URLSearchParams();
   if (params && params.week)   q.set('week',   params.week);
   if (params && params.status) q.set('status', params.status);
+  if (showArchived) q.set('include_archived', '1');
 
   try {
     const res  = await fetch('/api/jobs?' + q.toString());
@@ -505,7 +523,9 @@ function renderBoard(jobs) {
   for (const status of STATUS_ORDER) {
     const body  = document.getElementById('col-' + status);
     const count = document.getElementById('count-' + status);
-    const colJobs = jobs.filter(j => j.status === status);
+    const colJobs = status === 'shipped'
+      ? jobs.filter(j => j.status === 'shipped' || (showArchived && j.status === 'archived'))
+      : jobs.filter(j => j.status === status);
 
     count.textContent = colJobs.length;
     body.innerHTML    = '';
@@ -548,7 +568,7 @@ function buildCard(job) {
   card.className    = 'jobs-card';
   card.dataset.id   = job.id;
   card.dataset.status = job.status;
-  card.draggable    = true;
+  card.draggable    = job.status !== 'archived';
 
   const dateStr  = formatShipDate(job.ship_date);
   const bdft     = job.total_bdft ? Number(job.total_bdft).toLocaleString() : '—';
@@ -588,6 +608,8 @@ function buildCard(job) {
       <a class="jobs-bol-link" href="/logistics/load-builder.html?job_id=${job.id}" onclick="event.stopPropagation()" style="background:#fef3c7;color:#92400e;">Build Load</a>
       <a class="jobs-bol-link" href="/logistics/bol-generator.html?job_id=${job.id}" onclick="event.stopPropagation()">Generate BOL</a>
       <span class="jobs-bol-number" id="bol-num-${job.id}"></span>
+      ${job.status === 'shipped' ? `<button class="jobs-archive-btn" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
+      ${job.status === 'archived' ? `<button class="jobs-archive-btn" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to shipped">Unarchive</button>` : ''}
     </div>
     <div class="jobs-card-actions">
       ${prev
@@ -611,6 +633,77 @@ function prevStatus(s) {
 function nextStatus(s) {
   const i = STATUS_ORDER.indexOf(s);
   return i < STATUS_ORDER.length - 1 ? STATUS_ORDER[i + 1] : null;
+}
+
+async function archiveJob(jobId, customerName) {
+  try {
+    const res = await fetch('/api/jobs', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: jobId, status: 'archived' }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const card = document.querySelector(`.jobs-card[data-id="${jobId}"]`);
+      if (card) {
+        card.style.transition = 'opacity 0.3s, transform 0.3s';
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+          allJobs = allJobs.filter(j => j.id !== jobId);
+          renderBoard(allJobs);
+        }, 300);
+      } else {
+        allJobs = allJobs.filter(j => j.id !== jobId);
+        renderBoard(allJobs);
+      }
+      showArchiveToast(customerName || 'Job');
+    }
+  } catch (e) {
+    console.error('Archive failed:', e);
+  }
+}
+
+async function unarchiveJob(jobId) {
+  try {
+    const res = await fetch('/api/jobs', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: jobId, status: 'shipped' }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const job = allJobs.find(j => j.id === jobId);
+      if (job) job.status = 'shipped';
+      renderBoard(allJobs);
+    }
+  } catch (e) {
+    console.error('Unarchive failed:', e);
+  }
+}
+
+function showArchiveToast(customerName) {
+  const existing = document.getElementById('archive-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'archive-toast';
+  toast.style.cssText = `
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:#1e293b;color:#fff;padding:12px 24px;border-radius:10px;
+    font-size:14px;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,0.15);
+    z-index:10000;display:flex;align-items:center;gap:8px;
+    animation:toastSlideUp 0.3s ease-out;
+  `;
+  toast.innerHTML = `<span style="color:#34d399;">✓</span><span>${customerName} archived</span>`;
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.transition = 'opacity 0.3s, transform 0.3s';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-50%) translateY(10px)';
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
 }
 
 /* ═══════════════════════════════════════════
@@ -680,6 +773,15 @@ function setupToolbar() {
 
   document.getElementById('week-filter').addEventListener('change', (e) => {
     if (e.target.value) loadJobs({ week: e.target.value });
+  });
+
+  document.getElementById('toggle-archived').addEventListener('click', () => {
+    showArchived = !showArchived;
+    const btn = document.getElementById('toggle-archived');
+    btn.classList.toggle('active', showArchived);
+    btn.textContent = showArchived ? '📦 Hide Archived' : '📦 Show Archived';
+    const v = document.getElementById('week-filter').value;
+    loadJobs(v ? { week: v } : {});
   });
 }
 
