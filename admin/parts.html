@@ -357,12 +357,13 @@
           <th>Dimensions (L&times;W&times;H)</th>
           <th>Density / Material</th>
           <th>Weight</th>
+          <th>Bundle</th>
           <th>Notes</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody id="partsBody">
-        <tr><td colspan="9" class="empty-state">Loading…</td></tr>
+        <tr><td colspan="10" class="empty-state">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -439,6 +440,13 @@
       </div>
     </div>
     <div class="form-row">
+      <div class="form-group">
+        <label for="fBundleQty">Bundle Qty</label>
+        <input type="number" id="fBundleQty" min="0" value="0" placeholder="0 = no bundling">
+        <small style="color:var(--muted);font-size:11px;">Pieces per bundle (0 = individual pieces)</small>
+      </div>
+    </div>
+    <div class="form-row">
       <div class="form-group full">
         <label for="fNotes">Notes</label>
         <textarea id="fNotes" placeholder="Optional notes"></textarea>
@@ -463,7 +471,7 @@ async function loadParts() {
     allParts = (data.parts || []).sort((a, b) => (a.part_number || '').localeCompare(b.part_number || ''));
     applyFilters();
   } catch (e) {
-    document.getElementById('partsBody').innerHTML = '<tr><td colspan="9" class="empty-state">Failed to load parts.</td></tr>';
+    document.getElementById('partsBody').innerHTML = '<tr><td colspan="10" class="empty-state">Failed to load parts.</td></tr>';
   }
 }
 
@@ -500,7 +508,7 @@ function esc(s) {
 function renderTable() {
   const tbody = document.getElementById('partsBody');
   if (filteredParts.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No parts found. Add your first part or adjust your filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No parts found. Add your first part or adjust your filters.</td></tr>';
     return;
   }
 
@@ -516,6 +524,7 @@ function renderTable() {
       <td>${formatDims(p)}</td>
       <td>${esc(p.density_material || '—')}</td>
       <td>${p.weight != null ? p.weight : '—'}</td>
+      <td>${p.bundle_qty > 0 ? p.bundle_qty : '—'}</td>
       <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(p.notes || '')}">${esc(p.notes || '—')}</td>
       <td>
         <div class="actions-col">
@@ -547,6 +556,7 @@ function openModal(part) {
   document.getElementById('fDensity').value = part?.density_material || '';
   document.getElementById('fColor').value = part?.color || '#D97706';
   document.getElementById('fParentGroup').value = part?.parent_group || '';
+  document.getElementById('fBundleQty').value = part?.bundle_qty || 0;
   document.getElementById('fNotes').value = part?.notes || '';
   hideError();
   document.getElementById('overlay').classList.add('open');
@@ -601,6 +611,7 @@ async function savePart() {
     density_material: document.getElementById('fDensity').value.trim(),
     color:            document.getElementById('fColor').value,
     parent_group:     document.getElementById('fParentGroup').value.trim(),
+    bundle_qty:       parseInt(document.getElementById('fBundleQty').value, 10) || 0,
     notes:            document.getElementById('fNotes').value.trim(),
   };
 

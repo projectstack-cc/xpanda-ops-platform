@@ -487,7 +487,7 @@ let state = {
   pasteErr: "",
   editorTrailer: null,
   manualRowsByTrailer: {},
-  form: { name: "", sku: "", length: "", width: "", height: "", weight: "", notes: "", allowRotation: false },
+  form: { name: "", sku: "", length: "", width: "", height: "", weight: "", notes: "", allowRotation: false, bundleQty: 0 },
   skuLoading: true,
   skuError: "",
   skuMutating: false,
@@ -521,7 +521,7 @@ function loadSaved() {
           id: s.id ?? Date.now() + i, name: s.name ?? "SKU", sku: s.sku ?? "SKU",
           length: +s.length || 0, width: +s.width || 0, height: +s.height || 0,
           weight: +s.weight || 0, notes: s.notes || "", color: s.color || COLORS[i % COLORS.length],
-          allowRotation: s.allowRotation === true,
+          allowRotation: s.allowRotation === true, bundleQty: +s.bundleQty || 0,
         })));
       }
     }
@@ -576,25 +576,43 @@ function buildDemand(cart, skus, dims) {
     if (!sku) return null;
     if (sku.length <= 0 || sku.width <= 0 || sku.height <= 0) return null;
 
-    let effectiveLength = sku.length, effectiveWidth = sku.width, rotated = false;
-
-    if (sku.allowRotation) {
-      const origFits = sku.length <= dims.length && sku.width <= dims.width;
-      const rotFits = sku.width <= dims.length && sku.length <= dims.width;
-      if (origFits && rotFits) {
-        const origScore = Math.floor(dims.length / sku.length) * Math.floor(dims.width / sku.width);
-        const rotScore = Math.floor(dims.length / sku.width) * Math.floor(dims.width / sku.length);
-        if (rotScore > origScore) { effectiveLength = sku.width; effectiveWidth = sku.length; rotated = true; }
-      } else if (!origFits && rotFits) {
-        effectiveLength = sku.width; effectiveWidth = sku.length; rotated = true;
-      }
+    // Holey Board: NEVER rotate — always length along trailer, width across, height stacked up.
+    if (sku.category === 'Holey Board') {
+      if (sku.length > dims.length || sku.width > dims.width || sku.height > dims.height) return null;
+      return { skuId: sku.id, sku: { ...sku }, originalQty: c.qty, remaining: c.qty };
     }
 
-    if (effectiveLength > dims.length || effectiveWidth > dims.width || sku.height > dims.height) return null;
+    // Non-Holey-Board: try all 6 axis orientations and pick the best fit.
+    const orientations = [
+      { length: sku.length, width: sku.width,  height: sku.height, label: '' },
+      { length: sku.length, width: sku.height, height: sku.width,  label: ' (on side)' },
+      { length: sku.width,  width: sku.length, height: sku.height, label: ' (rotated)' },
+      { length: sku.width,  width: sku.height, height: sku.length, label: ' (on end)' },
+      { length: sku.height, width: sku.length, height: sku.width,  label: ' (stood up)' },
+      { length: sku.height, width: sku.width,  height: sku.length, label: ' (stood up rotated)' },
+    ];
 
-    const effectiveSku = rotated
-      ? { ...sku, length: effectiveLength, width: effectiveWidth, name: sku.name + " (rotated)" }
-      : sku;
+    let bestOrientation = null;
+    let bestScore = -1;
+
+    for (const o of orientations) {
+      if (o.length > dims.length || o.width > dims.width || o.height > dims.height) continue;
+      const columnsPerRow = Math.floor(dims.width / o.width);
+      const rowsPerTrailer = Math.floor(dims.length / o.length);
+      const piecesPerStack = Math.floor(dims.height / o.height);
+      let effectivePiecesPerStack = piecesPerStack;
+      if (sku.bundleQty && sku.bundleQty > 0 && piecesPerStack >= sku.bundleQty) {
+        effectivePiecesPerStack = Math.floor(piecesPerStack / sku.bundleQty) * sku.bundleQty;
+      }
+      const totalPieces = columnsPerRow * rowsPerTrailer * effectivePiecesPerStack;
+      if (totalPieces > bestScore) { bestScore = totalPieces; bestOrientation = o; }
+    }
+
+    if (!bestOrientation) return null;
+
+    const effectiveSku = { ...sku, length: bestOrientation.length, width: bestOrientation.width, height: bestOrientation.height };
+    if (bestOrientation.label) effectiveSku.name = sku.name + bestOrientation.label;
+
     return { skuId: sku.id, sku: effectiveSku, originalQty: c.qty, remaining: c.qty };
   }).filter(Boolean);
 }
@@ -647,7 +665,10 @@ function mergeLayers(layers) {
 
 function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = null, allowMixing = true) {
   const baseSku = baseDemand.sku;
-  const maxBase = Math.min(baseDemand.remaining, Math.floor(dims.height / baseSku.height));
+  let maxBase = Math.min(baseDemand.remaining, Math.floor(dims.height / baseSku.height));
+  if (baseSku.bundleQty && baseSku.bundleQty > 0 && maxBase >= baseSku.bundleQty) {
+    maxBase = Math.floor(maxBase / baseSku.bundleQty) * baseSku.bundleQty;
+  }
   if (maxBase <= 0) return null;
 
   const pureHeight = maxBase * baseSku.height;
@@ -1588,6 +1609,11 @@ function renderSkusTab() {
       wrap.appendChild(h('input', { className: 'inp', value: state.form[k], onInput: e => { state.form[k] = e.target.value; state.formErr = ''; } }));
       grid.appendChild(wrap);
     });
+    const bundleWrap = h('div');
+    bundleWrap.appendChild(h('div', { className: 'form-label' }, 'BUNDLE QTY'));
+    bundleWrap.appendChild(h('input', { type: 'number', min: '0', className: 'inp', value: String(state.form.bundleQty || 0), placeholder: '0 = no bundling', onInput: e => { state.form.bundleQty = parseInt(e.target.value, 10) || 0; state.formErr = ''; } }));
+    grid.appendChild(bundleWrap);
+
     const notesWrap = h('div', { className: 'full-width' });
     notesWrap.appendChild(h('div', { className: 'form-label' }, 'NOTES'));
     notesWrap.appendChild(h('textarea', { className: 'inp', value: state.form.notes, style: { minHeight: '70px', resize: 'vertical' }, onInput: e => { state.form.notes = e.target.value; state.formErr = ''; } }));
@@ -1621,13 +1647,13 @@ function renderSkusTab() {
       if (!f.name.trim()) { state.formErr = 'Name required.'; render(); return; }
       if (!f.sku.trim()) { state.formErr = 'SKU code required.'; render(); return; }
       if (!+f.length || !+f.width || !+f.height || !+f.weight) { state.formErr = 'All dimensions and weight must be positive.'; render(); return; }
-      const payload = { name: f.name.trim(), sku: f.sku.trim(), length: +f.length, width: +f.width, height: +f.height, weight: +f.weight, notes: f.notes || '', allowRotation: f.allowRotation === true, category: (f.category || '').trim() };
+      const payload = { name: f.name.trim(), sku: f.sku.trim(), length: +f.length, width: +f.width, height: +f.height, weight: +f.weight, notes: f.notes || '', allowRotation: f.allowRotation === true, category: (f.category || '').trim(), bundleQty: parseInt(f.bundleQty, 10) || 0 };
       const savedEditId = state.editId;
-      state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false, category: '' };
+      state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false, category: '', bundleQty: 0 };
       if (savedEditId) updateSku(savedEditId, payload);
       else addSku({ ...payload, color: COLORS[state.skus.length % COLORS.length] });
     } }, state.editId ? 'SAVE CHANGES' : 'ADD SKU'));
-    formBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false, category: '' }; render(); } }, 'CANCEL'));
+    formBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false, category: '', bundleQty: 0 }; render(); } }, 'CANCEL'));
     formCard.appendChild(formBtns);
     cont.appendChild(formCard);
   }
@@ -1675,11 +1701,11 @@ function renderSkusTab() {
         }
         const btns = h('div', { className: 'sku-row-btns' });
         btns.appendChild(h('button', { className: 'btn btn-white', style: { padding: '5px 10px', fontSize: '13px' }, onClick: () => {
-          state.form = { name: s.name, sku: s.sku, length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true, category: s.category || '' };
+          state.form = { name: s.name, sku: s.sku, length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true, category: s.category || '', bundleQty: s.bundleQty || 0 };
           state.editId = s.id; state.showForm = true; state.tab = 'skus'; state.formErr = ''; render();
         } }, 'EDIT'));
         btns.appendChild(h('button', { className: 'btn btn-teal-light', style: { padding: '5px 10px', fontSize: '13px' }, onClick: () => {
-          state.form = { name: s.name + ' Copy', sku: s.sku + '-2', length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true, category: s.category || '' };
+          state.form = { name: s.name + ' Copy', sku: s.sku + '-2', length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true, category: s.category || '', bundleQty: s.bundleQty || 0 };
           state.editId = null; state.showForm = true; state.tab = 'skus'; state.formErr = ''; render();
         } }, 'COPY'));
         btns.appendChild(h('button', { className: 'btn btn-red-light', style: { padding: '5px 10px', fontSize: '13px' }, disabled: state.skuMutating, onClick: () => { deleteSku(s.id); } }, 'DEL'));

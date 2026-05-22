@@ -1429,6 +1429,7 @@ async function handleApiParts(request, env) {
     const sort_order       = Number.isFinite(Number(payload.sort_order)) ? Number(payload.sort_order) : 0;
     const category         = String(payload.category || "").trim();
     const parent_group     = String(payload.parent_group || "").trim();
+    const bundle_qty       = parseInt(payload.bundle_qty, 10) || 0;
 
     if (!part_number) return json({ ok: false, error: "Part number is required." }, 400);
     if (!Number.isFinite(length_in) || length_in <= 0) return json({ ok: false, error: "Length must be greater than 0." }, 400);
@@ -1440,9 +1441,9 @@ async function handleApiParts(request, env) {
 
     try {
       await db.prepare(
-        `INSERT INTO parts (id, part_number, name, customer, density_material, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(id, part_number, name, customer, density_material, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group, now, now).run();
+        `INSERT INTO parts (id, part_number, name, customer, density_material, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group, bundle_qty, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(id, part_number, name, customer, density_material, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group, bundle_qty, now, now).run();
 
       const part = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(id).first();
       await logActivity(db, 'create', 'part', id,
@@ -1484,9 +1485,14 @@ async function handleApiParts(request, env) {
 
     const now = new Date().toISOString();
     try {
-      await db.prepare(
-        `UPDATE parts SET part_number=?, customer=?, density_material=?, length_in=?, width_in=?, height_in=?, notes=?, updated_at=? WHERE id=?`
-      ).bind(part_number, customer, density_material, length_in, width_in, height_in, notes, now, id).run();
+      const bundle_qty_upd = payload.bundle_qty !== undefined ? (parseInt(payload.bundle_qty, 10) || 0) : undefined;
+      const updateSql = bundle_qty_upd !== undefined
+        ? `UPDATE parts SET part_number=?, customer=?, density_material=?, length_in=?, width_in=?, height_in=?, notes=?, bundle_qty=?, updated_at=? WHERE id=?`
+        : `UPDATE parts SET part_number=?, customer=?, density_material=?, length_in=?, width_in=?, height_in=?, notes=?, updated_at=? WHERE id=?`;
+      const updateBinds = bundle_qty_upd !== undefined
+        ? [part_number, customer, density_material, length_in, width_in, height_in, notes, bundle_qty_upd, now, id]
+        : [part_number, customer, density_material, length_in, width_in, height_in, notes, now, id];
+      await db.prepare(updateSql).bind(...updateBinds).run();
 
       const part = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(id).first();
       await logActivity(db, 'update', 'part', id,
@@ -1731,22 +1737,25 @@ async function handleApiJobs(request, env) {
 
   // ── GET ──────────────────────────────────────────────────────────────────
   if (request.method === "GET") {
-    const searchParam = (url.searchParams.get("search") || "").trim();
-    const weekParam   = (url.searchParams.get("week")   || "").trim();
-    const statusParam = (url.searchParams.get("status") || "").trim();
+    const searchParam    = (url.searchParams.get("search") || "").trim();
+    const weekParam      = (url.searchParams.get("week")   || "").trim();
+    const statusParam    = (url.searchParams.get("status") || "").trim();
+    const includeArchived = url.searchParams.get("include_archived") === "1";
 
     let query, binds;
 
     if (searchParam) {
       const like = `%${searchParam}%`;
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.customer LIKE ? OR j.po_number LIKE ? OR j.invoice_number LIKE ?) ORDER BY j.ship_date DESC LIMIT 10`;
+      const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.customer LIKE ? OR j.po_number LIKE ? OR j.invoice_number LIKE ?)${archiveClause} ORDER BY j.ship_date DESC LIMIT 10`;
       binds = [like, like, like];
     } else if (weekParam) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
         return json({ ok: false, error: "Invalid week. Use YYYY-MM-DD (Monday of week)." }, 400);
       }
+      const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
       // Monday through Friday of the requested week
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.ship_date >= ? AND j.ship_date <= date(?, '+4 days') ORDER BY j.ship_date ASC, j.created_at ASC`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.ship_date >= ? AND j.ship_date <= date(?, '+4 days')${archiveClause} ORDER BY j.ship_date ASC, j.created_at ASC`;
       binds = [weekParam, weekParam];
     } else if (statusParam) {
       const statuses = statusParam.split(",").map(s => s.trim()).filter(Boolean);
@@ -1758,8 +1767,9 @@ async function handleApiJobs(request, env) {
       query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.status IN (${placeholders}) ORDER BY j.ship_date ASC, j.created_at ASC`;
       binds = statuses;
     } else {
-      // Default: all active + shipped in the last 7 days
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.status != 'shipped' OR (j.status = 'shipped' AND j.ship_date >= date('now', '-7 days')) ORDER BY j.ship_date ASC, j.created_at ASC`;
+      // Default: all active + shipped in last 7 days, excluding archived unless requested
+      const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.status != 'shipped' OR (j.status = 'shipped' AND j.ship_date >= date('now', '-7 days')))${archiveClause} ORDER BY j.ship_date ASC, j.created_at ASC`;
       binds = [];
     }
 
@@ -3241,6 +3251,7 @@ function mapPartToSku(row) {
     allowRotation: row.allow_rotation === 1,
     category: row.category || '',
     parent_group: row.parent_group || '',
+    bundleQty: row.bundle_qty || 0,
   };
 }
 
@@ -3492,6 +3503,7 @@ async function handleApiLoadBuilderSkus(request, env) {
     let body;
     try { body = await request.json(); } catch (_) { return json({ ok: false, error: "Invalid JSON" }, 400); }
     const { name, sku, length, width, height, weight = 1, notes = "", color = "#D97706", allowRotation = false, category = "", parent_group = "" } = body;
+    const bundle_qty_lb = parseInt(body.bundleQty || body.bundle_qty, 10) || 0;
     if (!name) return json({ ok: false, error: "Name required." }, 400);
     if (!sku) return json({ ok: false, error: "SKU code required." }, 400);
     if (!length || !width || !height) return json({ ok: false, error: "Dimensions required." }, 400);
@@ -3499,8 +3511,8 @@ async function handleApiLoadBuilderSkus(request, env) {
     const countRow = await db.prepare("SELECT COUNT(*) as cnt FROM parts").first();
     const sortOrder = countRow?.cnt || 0;
     await db.prepare(
-      "INSERT INTO parts (id, part_number, name, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(newId, sku, name, +length, +width, +height, +weight || 1, notes || "", color || "#D97706", allowRotation ? 1 : 0, sortOrder, category || "", parent_group || "").run();
+      "INSERT INTO parts (id, part_number, name, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group, bundle_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(newId, sku, name, +length, +width, +height, +weight || 1, notes || "", color || "#D97706", allowRotation ? 1 : 0, sortOrder, category || "", parent_group || "", bundle_qty_lb).run();
     const created = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(newId).first();
     return json(mapPartToSku(created), 201);
   }
@@ -3522,6 +3534,7 @@ async function handleApiLoadBuilderSkus(request, env) {
     if (allowRotation !== undefined) { updates.push("allow_rotation = ?"); binds.push(allowRotation ? 1 : 0); }
     if (category !== undefined) { updates.push("category = ?"); binds.push(category || ""); }
     if (parent_group !== undefined) { updates.push("parent_group = ?"); binds.push(parent_group || ""); }
+    if (body.bundleQty !== undefined) { updates.push("bundle_qty = ?"); binds.push(parseInt(body.bundleQty, 10) || 0); }
     updates.push("updated_at = datetime('now')");
     if (updates.length === 1) return json({ ok: false, error: "Nothing to update." }, 400);
     await db.prepare(`UPDATE parts SET ${updates.join(", ")} WHERE id = ?`).bind(...binds, skuId).run();
