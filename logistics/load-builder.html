@@ -2177,7 +2177,7 @@ function openBolModal(result) {
       contactName: '', contactPhone: '', carrierName: '',
       poNumber: '', deliveryTime: '', date: today,
       freightTerms: 'prepaid', specialInstructions: '',
-      trailerNo: '', sealNumber: '', carryOver: false,
+      trailerNo: '', sealNumber: '', carryOver: true,
     };
     if (state.prefillJobData && i === 0) {
       const job = state.prefillJobData;
@@ -2198,6 +2198,21 @@ function openBolModal(result) {
     }
     return td;
   });
+  // Auto-apply carry-over for trailers beyond the first (carryOver defaults to true)
+  for (let i = 1; i < trailerData.length; i++) {
+    const prev = trailerData[i - 1];
+    const td = trailerData[i];
+    if (td.carryOver) {
+      td.customerId = prev.customerId; td.customerSource = prev.customerSource;
+      td.shipToCompany = prev.shipToCompany; td.shipToAttention = prev.shipToAttention;
+      td.shipToStreet = prev.shipToStreet; td.shipToStreet2 = prev.shipToStreet2;
+      td.shipToCity = prev.shipToCity; td.shipToState = prev.shipToState; td.shipToZip = prev.shipToZip;
+      td.contactName = prev.contactName; td.contactPhone = prev.contactPhone;
+      td.carrierName = prev.carrierName; td.freightTerms = prev.freightTerms;
+      td.specialInstructions = prev.specialInstructions;
+      td.poNumber = prev.poNumber; td.deliveryTime = prev.deliveryTime;
+    }
+  }
   state.bolModal = {
     open: true, currentPage: 0, trailerCount: result.trailers.length, trailerData,
     bolError: '', generating: false, generateProgress: [], bolSuccess: null,
@@ -2300,6 +2315,7 @@ function renderBolModal() {
         td.contactName = prev.contactName; td.contactPhone = prev.contactPhone;
         td.carrierName = prev.carrierName; td.freightTerms = prev.freightTerms;
         td.specialInstructions = prev.specialInstructions;
+        td.poNumber = prev.poNumber; td.deliveryTime = prev.deliveryTime;
       }
       renderBolModal();
     });
@@ -2655,7 +2671,10 @@ async function generateAllBols() {
         location_no: '', carrier_id: null, carrier_name: td.carrierName,
         trailer_no: td.trailerNo, seal_number: td.sealNumber, scac: '', pro_no: '',
         freight_terms: td.freightTerms, is_scrap_pickup: 0, third_party_bill_to: '',
-        special_instructions: td.specialInstructions, is_master_bol: 0,
+        special_instructions: td.specialInstructions,
+        contact_info: [td.contactName ? ('POC: ' + td.contactName) : '', td.contactPhone || ''].filter(Boolean).join(' '),
+        po_number: td.poNumber || '',
+        is_master_bol: 0,
         commodity_description: td.commodityDescription,
         handling_unit_qty: String(td.totalStacks), handling_unit_type: 'stacks',
         package_qty: String(td.totalPieces), package_type: 'pcs',
@@ -2665,6 +2684,7 @@ async function generateAllBols() {
       const res = await fetch('/api/bols', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!res.ok) { const ed = await res.json().catch(() => ({})); throw new Error(ed.error || `HTTP ${res.status}`); }
       const data = await res.json();
+      if (td.poNumber) data.bol.po_number = data.bol.po_number || td.poNumber;
       savedBols.push(data.bol);
       bm.generateProgress[i] = { text: `✓ Trailer ${i + 1} — ${data.bol.bol_number ? `BOL #${data.bol.bol_number}` : 'BOL'} saved`, done: true, pending: false };
       renderBolModal();
@@ -2754,9 +2774,11 @@ function showJobBanner(job, pieceCount) {
   const banner = document.createElement('div');
   banner.id = 'job-prefill-banner';
   banner.style.cssText = 'background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#1e40af;';
-  const invPart = job.invoice_number ? ` | INV# ${job.invoice_number}` : '';
-  const slipLink = job.packing_slip_filename
-    ? ` <a href="/api/jobs/${encodeURIComponent(job.id)}/packing-slip" target="_blank" style="color:#1e40af;margin-left:12px;font-size:12px;">View Packing Slip</a>`
+  const invNum = job.invoice_number || job.packing_slip_invoice || '';
+  const invPart = invNum ? ` | INV# ${invNum}` : '';
+  const hasSlip = job.packing_slip_filename || job.packing_slip_pdf;
+  const slipLink = hasSlip
+    ? ` <a href="/api/jobs/${encodeURIComponent(job.id)}/packing-slip" target="_blank" style="color:#1e40af;margin-left:12px;text-decoration:underline;font-size:12px;">View Packing Slip</a>`
     : '';
   banner.innerHTML = `
     <div>

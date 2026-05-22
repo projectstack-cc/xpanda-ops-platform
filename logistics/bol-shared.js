@@ -29,6 +29,9 @@ window.BolShared = (function() {
     // Contact Info
     contactInfo:   { x: 315, y: 525, size: 11, lineH: 12, maxW: 255 },
 
+    // PO / Invoice Number
+    poNumber:      { x: 315, y: 498, size: 11, lineH: 12, maxW: 255 },
+
     // Scrap Pick Up checkboxes
     scrapYes:      { x: 110, y: 513, size: 10 },
     scrapNo:       { x: 110, y: 497, size: 10 },
@@ -124,6 +127,10 @@ window.BolShared = (function() {
         bol.contact_phone || '',
       ].filter(Boolean).join(' ');
       if (contactStr) drawMultiline(contactStr, COORDS.contactInfo);
+
+      // ── PO / Invoice Number ──
+      const poStr = bol.po_number || bol.poNumber || '';
+      if (poStr) drawMultiline('PO: ' + poStr, COORDS.poNumber);
 
       // ── Scrap Pick Up ──
       if (bol.is_scrap_pickup === 1 || bol.is_scrap_pickup === true || bol.is_scrap_pickup === '1') {
