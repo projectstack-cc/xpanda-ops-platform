@@ -550,7 +550,7 @@ async function fetchJobBols(jobIds) {
     if (!data.ok) return;
     for (const b of (data.bols || [])) {
       const el = document.getElementById('bol-num-' + b.job_id);
-      if (el) el.textContent = 'BOL #' + b.bol_number;
+      if (el) el.textContent = (el.dataset.hasInv ? ' | BOL #' : 'BOL #') + b.bol_number;
     }
   } catch { /* silent — non-critical */ }
 }
@@ -596,7 +596,9 @@ function buildCard(job) {
     <div class="jobs-card-top">
       <div class="jobs-card-customer">${esc(job.customer)}${slipIcon}${shipmentIcon}</div>
     </div>
-    ${job.invoice_number ? `<div class="jobs-card-inv">${esc(job.invoice_number)}</div>` : ''}
+    <div class="jobs-card-inv">
+      ${job.invoice_number ? esc(job.invoice_number) : ''}<span class="jobs-bol-number" id="bol-num-${job.id}"${job.invoice_number ? ' data-has-inv="1"' : ''}></span>
+    </div>
     ${dateStr             ? `<div class="jobs-card-date">${esc(dateStr)}</div>` : ''}
     ${job.location        ? `<div class="jobs-card-location">${esc(job.location)}</div>` : ''}
     <div class="jobs-card-meta">
@@ -607,10 +609,9 @@ function buildCard(job) {
     <div class="jobs-bol-row" id="bol-row-${job.id}">
       <a class="jobs-bol-link" href="/logistics/load-builder.html?job_id=${job.id}" onclick="event.stopPropagation()" style="background:#fef3c7;color:#92400e;">Build Load</a>
       <a class="jobs-bol-link" href="/logistics/bol-generator.html?job_id=${job.id}" onclick="event.stopPropagation()">Generate BOL</a>
-      <span class="jobs-bol-number" id="bol-num-${job.id}"></span>
-      ${job.status === 'shipped' ? `<button class="jobs-archive-btn" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
-      ${job.status === 'archived' ? `<button class="jobs-archive-btn" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to shipped">Unarchive</button>` : ''}
     </div>
+    ${job.status === 'shipped' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
+    ${job.status === 'archived' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to shipped">Unarchive</button>` : ''}
     <div class="jobs-card-actions">
       ${prev
         ? `<button class="jobs-arrow-btn" data-dir="prev" data-id="${esc(job.id)}" title="Move to ${STATUS_LABELS[prev]}">←</button>`
