@@ -65,6 +65,40 @@
   from { opacity: 0; transform: translateX(-50%) translateY(20px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
+.jobs-view-btn {
+  padding: 6px 14px; font-size: 12px; font-weight: 600;
+  border: none; background: #fff; color: #6b7280;
+  cursor: pointer; transition: all 0.15s;
+}
+.jobs-view-btn.active { background: #1e293b; color: #fff; }
+.jobs-view-btn:hover:not(.active) { background: #f3f4f6; }
+/* ── Calendar View ── */
+.cal-header-row { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 2px solid #e5e7eb; }
+.cal-header-cell { padding: 8px 4px; text-align: center; font-size: 12px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+.cal-body { border-left: 1px solid #e5e7eb; border-top: 1px solid #e5e7eb; }
+.cal-row { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-cell { min-height: 110px; border-right: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; padding: 4px; background: #fff; overflow: hidden; }
+.cal-cell-empty { background: #fafafa; min-height: 110px; border-right: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
+.cal-today { background: #eff6ff !important; }
+.cal-weekend { background: #fafafa; }
+.cal-day-num { font-size: 13px; font-weight: 600; color: #6b7280; margin-bottom: 4px; padding: 2px 4px; }
+.cal-day-today { color: #fff; background: #1e293b; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.cal-pill { padding: 3px 6px; margin-bottom: 2px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity 0.15s; }
+.cal-pill:hover { opacity: 0.8; }
+.cal-more { padding: 2px 6px; font-size: 10px; font-weight: 600; color: #6b7280; cursor: pointer; }
+.cal-more:hover { color: #1e40af; text-decoration: underline; }
+@media (max-width: 768px) {
+  .cal-cell { min-height: 70px; padding: 2px; }
+  .cal-header-cell { font-size: 10px; padding: 6px 2px; }
+  .cal-day-num { font-size: 11px; }
+  .cal-pill { font-size: 9px; padding: 2px 4px; }
+  .cal-day-today { width: 20px; height: 20px; font-size: 10px; }
+}
+@media (max-width: 480px) {
+  .cal-cell { min-height: 50px; }
+  .cal-pill { font-size: 8px; padding: 1px 3px; border-left-width: 2px; }
+  .cal-header-cell { font-size: 9px; }
+}
 </style>
 </head>
 <body>
@@ -84,6 +118,10 @@
     <button class="btn ghost small" id="btn-all-jobs">Show All</button>
   </div>
   <div class="jobs-toolbar-actions">
+    <div class="jobs-view-toggle" style="display:inline-flex;border:1px solid #d1d5db;border-radius:8px;overflow:hidden;">
+      <button id="view-kanban" class="jobs-view-btn active" onclick="setView('kanban')">Kanban</button>
+      <button id="view-calendar" class="jobs-view-btn" onclick="setView('calendar')">Calendar</button>
+    </div>
     <button class="btn ghost small" id="btn-upload-slip">📄 Upload Packing Slip</button>
     <button class="jobs-archive-toggle" id="toggle-archived" title="Show/hide archived jobs">📦 Show Archived</button>
     <button class="btn primary small" id="btn-new-job">+ New Job</button>
@@ -101,7 +139,7 @@
 </div>
 
 <!-- Kanban board -->
-<div class="jobs-board-scroll">
+<div class="jobs-board-scroll" id="kanban-container">
   <div class="jobs-board" id="jobs-board">
 
     <div class="jobs-col tab-active" data-status="not_started">
@@ -145,6 +183,17 @@
     </div>
 
   </div>
+</div>
+
+<!-- Calendar view -->
+<div id="calendar-container" style="display:none;padding:0 16px 24px;">
+  <div id="calendar-nav" style="display:flex;align-items:center;justify-content:center;gap:16px;padding:12px 0;">
+    <button onclick="changeMonth(-1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">←</button>
+    <h3 id="calendar-month-label" style="margin:0;font-size:18px;font-weight:700;min-width:180px;text-align:center;"></h3>
+    <button onclick="changeMonth(1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">→</button>
+    <button onclick="goToToday()" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
+  </div>
+  <div id="calendar-grid"></div>
 </div>
 
 <!-- ══ Job Modal ══ -->
@@ -432,6 +481,8 @@ const PROCESSES = [
 
 let allJobs          = [];
 let showArchived     = false;
+let currentView      = 'kanban';
+let calendarMonth    = new Date();
 let editingJobId     = null;
 let pendingSlip      = null;
 let pendingSlipRemoved = false;
@@ -541,6 +592,8 @@ function renderBoard(jobs) {
     .filter(j => j.status === 'done' || j.status === 'loading' || j.status === 'shipped')
     .map(j => j.id);
   if (bolJobIds.length) fetchJobBols(bolJobIds);
+
+  if (currentView === 'calendar') renderCalendar(jobs);
 }
 
 async function fetchJobBols(jobIds) {
@@ -553,6 +606,122 @@ async function fetchJobBols(jobIds) {
       if (el) el.textContent = (el.dataset.hasInv ? ' | BOL #' : 'BOL #') + b.bol_number;
     }
   } catch { /* silent — non-critical */ }
+}
+
+/* ═══════════════════════════════════════════
+   Calendar View
+═══════════════════════════════════════════ */
+
+const STATUS_COLORS = {
+  not_started:   { bg: '#f3f4f6', text: '#374151', border: '#9ca3af' },
+  in_production: { bg: '#fef3c7', text: '#92400e', border: '#f59e0b' },
+  done:          { bg: '#d1fae5', text: '#065f46', border: '#10b981' },
+  loading:       { bg: '#e0e7ff', text: '#3730a3', border: '#6366f1' },
+  shipped:       { bg: '#dbeafe', text: '#1e40af', border: '#3b82f6' },
+  archived:      { bg: '#f9fafb', text: '#9ca3af', border: '#d1d5db' },
+};
+
+function setView(view) {
+  currentView = view;
+  document.getElementById('view-kanban').classList.toggle('active', view === 'kanban');
+  document.getElementById('view-calendar').classList.toggle('active', view === 'calendar');
+  document.getElementById('kanban-container').style.display = view === 'kanban' ? '' : 'none';
+  document.getElementById('calendar-container').style.display = view === 'calendar' ? '' : 'none';
+  if (view === 'calendar') loadJobs({});
+}
+
+function changeMonth(delta) {
+  calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + delta, 1);
+  renderCalendar(allJobs);
+}
+
+function goToToday() {
+  calendarMonth = new Date();
+  renderCalendar(allJobs);
+}
+
+function renderCalendar(jobs) {
+  const grid  = document.getElementById('calendar-grid');
+  const label = document.getElementById('calendar-month-label');
+  if (!grid || !label) return;
+
+  const year  = calendarMonth.getFullYear();
+  const month = calendarMonth.getMonth();
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  label.textContent = `${monthNames[month]} ${year}`;
+
+  const firstDay  = new Date(year, month, 1);
+  const lastDay   = new Date(year, month + 1, 0);
+  const startDow  = firstDay.getDay();
+  const totalDays = lastDay.getDate();
+
+  const jobsByDate = {};
+  jobs.forEach(job => {
+    if (!job.ship_date) return;
+    let d = job.ship_date;
+    if (d.includes('/')) {
+      const p = d.split('/');
+      d = `${p[2]}-${p[0].padStart(2,'0')}-${p[1].padStart(2,'0')}`;
+    }
+    if (!jobsByDate[d]) jobsByDate[d] = [];
+    jobsByDate[d].push(job);
+  });
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  let html = '<div class="cal-header-row">';
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => { html += `<div class="cal-header-cell">${d}</div>`; });
+  html += '</div><div class="cal-body">';
+
+  const totalCells = Math.ceil((startDow + totalDays) / 7) * 7;
+  let dayNum = 1;
+
+  for (let i = 0; i < totalCells; i++) {
+    if (i % 7 === 0) html += '<div class="cal-row">';
+    if (i < startDow || dayNum > totalDays) {
+      html += '<div class="cal-cell cal-cell-empty"></div>';
+    } else {
+      const dateStr   = `${year}-${String(month+1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`;
+      const isToday   = dateStr === todayStr;
+      const isWeekend = (i % 7 === 0 || i % 7 === 6);
+      const dayJobs   = jobsByDate[dateStr] || [];
+      const maxVisible = 4;
+
+      html += `<div class="cal-cell${isToday ? ' cal-today' : ''}${isWeekend ? ' cal-weekend' : ''}">`;
+      html += `<div class="cal-day-num${isToday ? ' cal-day-today' : ''}">${dayNum}</div>`;
+
+      dayJobs.slice(0, maxVisible).forEach(job => {
+        const sc = STATUS_COLORS[job.status] || STATUS_COLORS.not_started;
+        html += `<div class="cal-pill" style="background:${sc.bg};color:${sc.text};border-left:3px solid ${sc.border};" onclick="openJobFromCalendar('${job.id}')" title="${esc(job.customer)} — ${job.status.replace(/_/g,' ')}">`;
+        html += `${esc(job.customer || 'Untitled')}</div>`;
+      });
+
+      if (dayJobs.length > maxVisible) {
+        html += `<div class="cal-more" onclick="showDayJobs('${dateStr}')">+${dayJobs.length - maxVisible} more</div>`;
+      }
+
+      html += '</div>';
+      dayNum++;
+    }
+    if (i % 7 === 6) html += '</div>';
+  }
+  html += '</div>';
+  grid.innerHTML = html;
+}
+
+function openJobFromCalendar(jobId) {
+  openModal(jobId);
+}
+
+function showDayJobs(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const mondayStr = monday.toISOString().slice(0, 10);
+  document.getElementById('week-filter').value = mondayStr;
+  setView('kanban');
+  loadJobs({ week: mondayStr });
 }
 
 function esc(str) {
