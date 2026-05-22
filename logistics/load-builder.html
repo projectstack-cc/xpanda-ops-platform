@@ -2693,7 +2693,7 @@ async function generateAllBols() {
     renderBolModal();
     try {
       const payload = {
-        bol_number: td.invNumber ? (parseInt(td.invNumber, 10) || td.invNumber) : null,
+        bol_number: td.invNumber || null,
         date: td.date, customer_id: td.customerId || null,
         ship_to_company: td.shipToCompany, ship_to_attention: td.shipToAttention,
         ship_to_street: td.shipToStreet, ship_to_street2: td.shipToStreet2,
