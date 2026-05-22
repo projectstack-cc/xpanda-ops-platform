@@ -1969,7 +1969,7 @@ async function handleApiJobs(request, env) {
 
     if ("status" in payload) {
       const v = String(payload.status).trim();
-      if (!["not_started", "in_production", "done", "loading", "shipped"].includes(v))
+      if (!["not_started", "in_production", "done", "loading", "shipped", "archived"].includes(v))
         return json({ ok: false, error: "Invalid status." }, 400);
       sets.push("status = ?"); binds.push(v);
     }
