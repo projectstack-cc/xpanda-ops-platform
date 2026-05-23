@@ -290,14 +290,19 @@ async function validateSession(db, request) {
   const token = getSessionToken(request);
   if (!token) return null;
 
+  // Clean up expired sessions ~1% of the time
+  if (Math.random() < 0.01) {
+    db.prepare("DELETE FROM sessions WHERE expires_at < ?")
+      .bind(new Date().toISOString()).run().catch(() => {});
+  }
+
   try {
+    // Get session + user (without role — roles come from junction table)
     const session = await db.prepare(`
       SELECT s.id, s.user_id, s.expires_at,
-             u.id as uid, u.username, u.display_name, u.role, u.role_id, u.is_active, u.first_login,
-             r.name as role_name, r.permissions as role_permissions
+             u.id as uid, u.username, u.display_name, u.role, u.role_id, u.is_active, u.first_login
       FROM sessions s
       JOIN users u ON s.user_id = u.id
-      LEFT JOIN roles r ON u.role_id = r.id
       WHERE s.id = ?
     `).bind(token).first();
 
@@ -308,27 +313,58 @@ async function validateSession(db, request) {
       return null;
     }
 
-    // 1% session cleanup
-    if (Math.random() < 0.01) {
-      const now = new Date().toISOString();
-      db.prepare(`DELETE FROM sessions WHERE expires_at < ?`).bind(now).run().catch(() => {});
+    // Fetch ALL roles for this user from the junction table
+    const roleRows = await db.prepare(`
+      SELECT r.id, r.name, r.permissions
+      FROM user_roles ur
+      JOIN roles r ON ur.role_id = r.id
+      WHERE ur.user_id = ?
+    `).bind(session.uid).all();
+
+    const userRoles = roleRows.results || [];
+
+    // Check if user has the Administrator role
+    const isAdministrator = userRoles.some(r => r.id === 'role-administrator') || session.role === 'admin';
+
+    // Merge permissions: most permissive wins per key
+    const mergedPermissions = {};
+    for (const role of userRoles) {
+      let perms = {};
+      try { perms = JSON.parse(role.permissions || '{}'); } catch {}
+      for (const [key, val] of Object.entries(perms)) {
+        if (!mergedPermissions[key]) mergedPermissions[key] = { view: false, edit: false };
+        if (val.view) mergedPermissions[key].view = true;
+        if (val.edit) mergedPermissions[key].edit = true;
+      }
     }
 
-    let permissions = {};
-    try { permissions = JSON.parse(session.role_permissions || '{}'); } catch {}
-
-    const isAdministrator = session.role_id === 'role-administrator' || session.role === 'admin';
+    // Fallback: if junction table is empty, use legacy role_id
+    if (userRoles.length === 0 && session.role_id) {
+      const fallbackRole = await db.prepare("SELECT * FROM roles WHERE id = ?").bind(session.role_id).first();
+      if (fallbackRole) {
+        try {
+          const perms = JSON.parse(fallbackRole.permissions || '{}');
+          for (const [key, val] of Object.entries(perms)) {
+            if (!mergedPermissions[key]) mergedPermissions[key] = { view: false, edit: false };
+            if (val.view) mergedPermissions[key].view = true;
+            if (val.edit) mergedPermissions[key].edit = true;
+          }
+        } catch {}
+        userRoles.push(fallbackRole);
+      }
+    }
 
     return {
       userId: session.uid,
       username: session.username,
       displayName: session.display_name,
-      role: session.role_name || session.role || 'staff',
-      roleId: session.role_id,
+      role: userRoles.map(r => r.name).join(', ') || session.role || 'staff',
+      roleIds: userRoles.map(r => r.id),
+      roleNames: userRoles.map(r => r.name),
       firstLogin: session.first_login === 1,
       sessionId: session.id,
       isAdministrator,
-      permissions,
+      permissions: mergedPermissions,
     };
   } catch (e) {
     console.error('Session validation failed:', e);
@@ -3699,7 +3735,8 @@ async function handleAuthMe(request, env) {
       username: user.username,
       displayName: user.displayName,
       role: user.role,
-      roleId: user.roleId,
+      roleIds: user.roleIds,
+      roleNames: user.roleNames,
       firstLogin: user.firstLogin,
       isAdministrator: user.isAdministrator,
       permissions: user.permissions,
@@ -3746,13 +3783,26 @@ async function handleApiUsers(request, env) {
 
   try {
     if (request.method === 'GET') {
-      const rows = await db.prepare(
-        `SELECT u.id, u.username, u.display_name, u.password, u.role, u.role_id, u.is_active, u.first_login, u.created_at, u.updated_at,
-                r.name as role_name
-         FROM users u LEFT JOIN roles r ON u.role_id = r.id
-         ORDER BY u.username COLLATE NOCASE`
+      const userRows = await db.prepare(
+        "SELECT id, username, display_name, password, role, role_id, is_active, first_login, created_at, updated_at FROM users ORDER BY username COLLATE NOCASE"
       ).all();
-      return json({ ok: true, users: rows.results || [] });
+
+      const allAssignments = await db.prepare(
+        "SELECT ur.user_id, ur.role_id, r.name as role_name FROM user_roles ur JOIN roles r ON ur.role_id = r.id"
+      ).all();
+
+      const assignmentMap = {};
+      for (const a of (allAssignments.results || [])) {
+        if (!assignmentMap[a.user_id]) assignmentMap[a.user_id] = [];
+        assignmentMap[a.user_id].push({ role_id: a.role_id, role_name: a.role_name });
+      }
+
+      const enriched = (userRows.results || []).map(u => ({
+        ...u,
+        roles: assignmentMap[u.id] || [],
+      }));
+
+      return json({ ok: true, users: enriched });
     }
 
     if (request.method === 'POST') {
@@ -3762,8 +3812,9 @@ async function handleApiUsers(request, env) {
       const username = String(body.username || '').trim().toLowerCase();
       const displayName = String(body.display_name || body.displayName || '').trim();
       const password = String(body.password || username);
-      const role_id = String(body.role_id || 'role-staff').trim();
-      const legacyRole = role_id === 'role-administrator' ? 'admin' : (role_id === 'role-readonly' ? 'readonly' : 'staff');
+      const role_ids = Array.isArray(body.role_ids) ? body.role_ids : (body.role_id ? [body.role_id] : ['role-staff']);
+      const legacyRoleId = role_ids[0] || 'role-staff';
+      const legacyRole = legacyRoleId === 'role-administrator' ? 'admin' : (legacyRoleId === 'role-readonly' ? 'readonly' : 'staff');
 
       if (!username) return json({ ok: false, error: 'Username required.' }, 400);
       if (!displayName) return json({ ok: false, error: 'Display name required.' }, 400);
@@ -3774,7 +3825,11 @@ async function handleApiUsers(request, env) {
       await db.prepare(
         `INSERT INTO users (id, username, display_name, password, role, role_id, is_active, first_login, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)`
-      ).bind(newId, username, displayName, password, legacyRole, role_id, now, now).run();
+      ).bind(newId, username, displayName, password, legacyRole, legacyRoleId, now, now).run();
+
+      for (const rid of role_ids) {
+        await db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)").bind(newId, rid).run();
+      }
 
       return json({ ok: true, id: newId }, 201);
     }
@@ -3789,7 +3844,17 @@ async function handleApiUsers(request, env) {
       const binds = [];
 
       if (body.display_name !== undefined) { fields.push('display_name = ?'); binds.push(String(body.display_name).trim()); }
-      if (body.role_id !== undefined) {
+      if (body.role_ids !== undefined) {
+        const newRoleIds = Array.isArray(body.role_ids) ? body.role_ids : [body.role_ids];
+        await db.prepare("DELETE FROM user_roles WHERE user_id = ?").bind(userId).run();
+        for (const rid of newRoleIds) {
+          await db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)").bind(userId, rid).run();
+        }
+        const legacyRoleId = newRoleIds[0] || 'role-staff';
+        const legacyRole = legacyRoleId === 'role-administrator' ? 'admin' : (legacyRoleId === 'role-readonly' ? 'readonly' : 'staff');
+        fields.push('role_id = ?'); binds.push(legacyRoleId);
+        fields.push('role = ?'); binds.push(legacyRole);
+      } else if (body.role_id !== undefined) {
         const legacyRole = body.role_id === 'role-administrator' ? 'admin' : (body.role_id === 'role-readonly' ? 'readonly' : 'staff');
         fields.push('role_id = ?'); binds.push(body.role_id);
         fields.push('role = ?'); binds.push(legacyRole);
