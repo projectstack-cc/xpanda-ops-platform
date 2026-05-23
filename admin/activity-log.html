@@ -268,6 +268,14 @@
     <a href="/">← Back to Platform</a>
   </div>
   <div style="position:absolute;top:10px;right:16px;font-size:12px;color:#5b6472;display:flex;align-items:center;gap:8px;">
+    <span id="hdr-notif-bell" onclick="toggleNotifDropdown()" style="position:relative;cursor:pointer;font-size:18px;line-height:1;">🔔<span id="hdr-notif-badge" style="display:none;position:absolute;top:-4px;right:-6px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:16px;height:16px;text-align:center;line-height:16px;"></span></span>
+    <div id="hdr-notif-dropdown" style="display:none;position:absolute;top:36px;right:0;width:340px;max-height:420px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);overflow:hidden;z-index:9999;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #e5e7eb;">
+        <span style="font-weight:700;font-size:14px;">Notifications</span>
+        <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
+      </div>
+      <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
+    </div>
     <span id="hdr-user-name"></span>
     <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;">Sign Out</a>
   </div>
@@ -470,6 +478,26 @@ document.getElementById('hdr-logout').addEventListener('click', async (e) => {
   await fetch('/api/auth/logout', { method: 'POST' });
   window.location.href = '/login.html';
 });
+
+// Notification bell
+let _notifOpen = false;
+function toggleNotifDropdown() { _notifOpen = !_notifOpen; document.getElementById('hdr-notif-dropdown').style.display = _notifOpen ? '' : 'none'; if (_notifOpen) _loadNotifs(); }
+document.addEventListener('click', (e) => { const b = document.getElementById('hdr-notif-bell'), d = document.getElementById('hdr-notif-dropdown'); if (b && d && !b.contains(e.target) && !d.contains(e.target)) { _notifOpen = false; d.style.display = 'none'; } });
+async function markAllRead() { await fetch('/api/notifications/read', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ all: true }) }); _loadNotifs(); }
+function handleNotifClick(id, type) { fetch('/api/notifications/read', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id] }) }); if (type === 'loading_assignment') window.location.href = '/logistics/loading.html'; _notifOpen = false; document.getElementById('hdr-notif-dropdown').style.display = 'none'; }
+async function _loadNotifs() {
+  try {
+    const d = await (await fetch('/api/notifications')).json(); if (!d.ok) return;
+    const badge = document.getElementById('hdr-notif-badge'); if (badge) { badge.textContent = d.unreadCount > 99 ? '99+' : d.unreadCount; badge.style.display = d.unreadCount > 0 ? '' : 'none'; }
+    const list = document.getElementById('hdr-notif-list'); if (!list) return;
+    if (!d.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">No notifications</div>'; return; }
+    const e2 = s => { const el = document.createElement('div'); el.textContent = s||''; return el.innerHTML; };
+    const ago = iso => { const m=Math.floor((Date.now()-new Date(iso))/60000); return m<1?'Just now':m<60?m+'m ago':Math.floor(m/60)<24?Math.floor(m/60)+'h ago':Math.floor(m/1440)+'d ago'; };
+    list.innerHTML = d.notifications.map(n=>`<div style="padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;${n.is_read?'opacity:0.6;':'background:#eff6ff;'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')"><div style="font-size:13px;font-weight:${n.is_read?'400':'600'};color:#111827;">${e2(n.title)}</div><div style="font-size:12px;color:#6b7280;">${e2(n.message)}</div><div style="font-size:10px;color:#9ca3af;margin-top:4px;">${ago(n.created_at)}</div></div>`).join('');
+  } catch {}
+}
+setInterval(() => { if (!_notifOpen) _loadNotifs(); }, 60000);
+_loadNotifs();
 </script>
 </body>
 </html>
