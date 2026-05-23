@@ -3992,6 +3992,10 @@ async function handleApiRoles(request, env) {
     if (payload.name !== undefined) { updates.push('name = ?'); binds.push(String(payload.name).trim()); }
     if (payload.description !== undefined) { updates.push('description = ?'); binds.push(String(payload.description).trim()); }
     if (payload.permissions !== undefined) { updates.push('permissions = ?'); binds.push(JSON.stringify(payload.permissions)); }
+    if (payload.notification_types !== undefined) {
+      const nt = typeof payload.notification_types === 'string' ? payload.notification_types : JSON.stringify(payload.notification_types);
+      updates.push('notification_types = ?'); binds.push(nt);
+    }
 
     if (updates.length === 0) return json({ ok: false, error: 'No fields to update.' }, 400);
 

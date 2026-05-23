@@ -389,6 +389,14 @@ window.fetch = async function(...args) {
   return res;
 };
 
+const NOTIFICATION_TYPE_LABELS = {
+  'loading.assigned':   'Job assigned to loading',
+  'loading.started':    'Trailer loading started',
+  'loading.loaded':     'Trailer loaded',
+  'loading.in_transit': 'Trailer in transit',
+  'loading.delivered':  'Delivery confirmed',
+};
+
 const PERMISSION_LABELS = {
   'jobs':                      { group: 'Jobs',       label: 'Job Board' },
   'logistics.dashboard':       { group: 'Logistics',  label: 'Dashboard & Shipments' },
@@ -491,6 +499,24 @@ function renderPermissionEditor(role) {
     return header + rows;
   }).join('');
 
+  let notifTypes = [];
+  try { notifTypes = JSON.parse(role.notification_types || '[]'); } catch {}
+
+  const notifSection = `
+    <div class="perm-grid" style="margin-top:16px;">
+      <h4 style="margin:0 0 6px;font-size:14px;font-weight:700;color:#374151;">Notification Subscriptions</h4>
+      <p style="margin:0 0 10px;font-size:12px;color:#6b7280;">Users with this role will receive these notifications</p>
+      ${Object.entries(NOTIFICATION_TYPE_LABELS).map(([type, label]) => `
+        <div class="perm-row">
+          <div class="perm-label">${esc(label)}</div>
+          <div class="perm-toggle" style="grid-column:span 2;text-align:center;">
+            <input type="checkbox" data-notif-type="${esc(type)}" ${notifTypes.includes(type) ? 'checked' : ''}
+              onchange="onNotifTypeToggle('${esc(type)}', this.checked)">
+          </div>
+        </div>`).join('')}
+    </div>
+  `;
+
   panel.innerHTML = `
     <div class="editor-card">
       <div class="editor-card-header">
@@ -518,12 +544,25 @@ function renderPermissionEditor(role) {
       </div>
       ${gridRows}
     </div>
+    ${notifSection}
   `;
 }
 
 function onRoleFieldChange() {
   clearTimeout(saveTimeout);
   saveTimeout = setTimeout(() => saveRolePermissions(), 600);
+}
+
+function onNotifTypeToggle(type, checked) {
+  const role = allRoles.find(r => r.id === selectedRoleId);
+  if (!role) return;
+  let notifTypes = [];
+  try { notifTypes = JSON.parse(role.notification_types || '[]'); } catch {}
+  if (checked) { if (!notifTypes.includes(type)) notifTypes.push(type); }
+  else notifTypes = notifTypes.filter(t => t !== type);
+  role.notification_types = JSON.stringify(notifTypes);
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => saveRolePermissions(), 500);
 }
 
 function onPermissionToggle(key, action, checked) {
@@ -565,6 +604,7 @@ async function saveRolePermissions() {
   const payload = {
     id: role.id,
     permissions: typeof role.permissions === 'string' ? JSON.parse(role.permissions) : (role.permissions || {}),
+    notification_types: role.notification_types || '[]',
   };
   if (nameInput && !nameInput.readOnly) payload.name = nameInput.value.trim();
   if (descInput) payload.description = descInput.value.trim();
