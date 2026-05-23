@@ -12,9 +12,10 @@
   <link rel="stylesheet" href="/jobs/jobs-shared.css">
 <style>
 @media (min-width: 700px) {
-  .jobs-board { grid-template-columns: repeat(5, minmax(210px, 1fr)); min-width: 1050px; }
+  .jobs-board { grid-template-columns: repeat(3, minmax(280px, 1fr)); min-width: 840px; }
+  .jobs-col { max-width: 450px; }
+  .jobs-card { width: 100%; }
 }
-.jobs-card[data-status="loading"] { border-left-color: #6366f1; }
 .jobs-card-processes { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 8px; }
 .jobs-proc-pill {
   font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;
@@ -134,8 +135,6 @@
   <button class="jobs-tab active" data-status="not_started" role="tab">Not Started</button>
   <button class="jobs-tab" data-status="in_production" role="tab">In Production</button>
   <button class="jobs-tab" data-status="done" role="tab">Done</button>
-  <button class="jobs-tab" data-status="loading" role="tab">Loading</button>
-  <button class="jobs-tab" data-status="shipped" role="tab">Shipped</button>
 </div>
 
 <!-- Kanban board -->
@@ -164,22 +163,6 @@
         <span class="jobs-col-count" id="count-done">0</span>
       </div>
       <div class="jobs-col-body" id="col-done" data-status="done"></div>
-    </div>
-
-    <div class="jobs-col" data-status="loading">
-      <div class="jobs-col-header">
-        <span class="jobs-col-title">Loading</span>
-        <span class="jobs-col-count" id="count-loading">0</span>
-      </div>
-      <div class="jobs-col-body" id="col-loading" data-status="loading"></div>
-    </div>
-
-    <div class="jobs-col" data-status="shipped">
-      <div class="jobs-col-header">
-        <span class="jobs-col-title">Shipped</span>
-        <span class="jobs-col-count" id="count-shipped">0</span>
-      </div>
-      <div class="jobs-col-body" id="col-shipped" data-status="shipped"></div>
     </div>
 
   </div>
@@ -462,7 +445,7 @@
    State
 ═══════════════════════════════════════════ */
 
-const STATUS_ORDER  = ['not_started', 'in_production', 'done', 'loading', 'shipped'];
+const STATUS_ORDER  = ['not_started', 'in_production', 'done'];
 const STATUS_LABELS = {
   not_started:   'Not Started',
   in_production: 'In Production',
@@ -574,9 +557,14 @@ function renderBoard(jobs) {
   for (const status of STATUS_ORDER) {
     const body  = document.getElementById('col-' + status);
     const count = document.getElementById('count-' + status);
-    const colJobs = status === 'shipped'
-      ? jobs.filter(j => j.status === 'shipped' || (showArchived && j.status === 'archived'))
-      : jobs.filter(j => j.status === status);
+
+    let colJobs;
+    if (status === 'done') {
+      // Legacy loading/shipped jobs fall into Done column
+      colJobs = jobs.filter(j => j.status === 'done' || j.status === 'loading' || j.status === 'shipped');
+    } else {
+      colJobs = jobs.filter(j => j.status === status);
+    }
 
     count.textContent = colJobs.length;
     body.innerHTML    = '';
