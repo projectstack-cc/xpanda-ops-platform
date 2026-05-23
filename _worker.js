@@ -32,6 +32,18 @@ export default {
         return env.ASSETS.fetch(request);
       }
 
+      if (url.pathname === '/sw.js') {
+        return env.ASSETS.fetch(request);
+      }
+
+      if (url.pathname === '/manifest.json') {
+        return env.ASSETS.fetch(request);
+      }
+
+      if (url.pathname === '/api/push/vapid-public-key') {
+        return json({ ok: true, key: env.VAPID_PUBLIC_KEY || '' });
+      }
+
       // 5) Session gate — redirect unauthenticated users
       if (!isStaticAsset) {
         const db = env.DB;
@@ -188,6 +200,21 @@ export default {
       if (url.pathname === "/api/saved-loads" || url.pathname.startsWith("/api/saved-loads/")) {
         return handleApiSavedLoads(request, env);
       }
+
+      if (url.pathname === "/api/loading-bays" || url.pathname.startsWith("/api/loading-bays/")) {
+        return handleApiLoadingBays(request, env);
+      }
+
+      if (url.pathname === "/api/loading-assignments" || url.pathname.startsWith("/api/loading-assignments/")) {
+        return handleApiLoadingAssignments(request, env);
+      }
+
+      if (url.pathname === "/api/notifications" || url.pathname.startsWith("/api/notifications/")) {
+        return handleApiNotifications(request, env);
+      }
+
+      if (url.pathname === "/api/push/subscribe") return handleApiPushSubscribe(request, env);
+      if (url.pathname === "/api/push/unsubscribe") return handleApiPushUnsubscribe(request, env);
 
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
@@ -395,6 +422,7 @@ const PATH_PERMISSION_MAP = [
   { pattern: /^\/jobs\//,                                                     key: 'jobs' },
   { pattern: /^\/logistics\/bol-generator/,                                   key: 'logistics.bol' },
   { pattern: /^\/logistics\/load-builder/,                                    key: 'logistics.load-builder' },
+  { pattern: /^\/logistics\/loading/,                                         key: 'logistics.loading' },
   { pattern: /^\/logistics\//,                                                key: 'logistics.dashboard' },
   { pattern: /^\/production\/(block-calculator|holey-board-calculator)/,      key: 'production.calculators' },
   { pattern: /^\/production\//,                                               key: 'production.inventory' },
@@ -413,6 +441,8 @@ const API_PERMISSION_MAP = [
   { pattern: /^\/api\/bol-carriers/,      key: 'logistics.bol' },
   { pattern: /^\/api\/shipments/,         key: 'logistics.dashboard' },
   { pattern: /^\/api\/load-builder-skus/, key: 'logistics.load-builder' },
+  { pattern: /^\/api\/loading-bays/,      key: 'logistics.loading' },
+  { pattern: /^\/api\/loading-assignments/, key: 'logistics.loading' },
   { pattern: /^\/api\/parts/,             key: 'production.calculators' },
   { pattern: /^\/api\/combos/,            key: 'production.calculators' },
   { pattern: /^\/api\/bead/,              key: 'production.inventory' },
@@ -4006,4 +4036,394 @@ async function handleApiRoles(request, env) {
   }
 
   return json({ ok: false, error: 'Method not allowed' }, 405);
+}
+
+// ========================
+// Loading Dashboard API
+// ========================
+
+async function handleApiLoadingBays(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+
+  if (request.method === 'GET') {
+    try {
+      const rows = await db.prepare(
+        "SELECT * FROM loading_bays WHERE is_active = 1 ORDER BY bay_number ASC"
+      ).all();
+      return json({ ok: true, bays: rows.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (request.method === 'PUT') {
+    let payload;
+    try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+    const { id, trailer_number, label } = payload;
+    if (!id) return json({ ok: false, error: 'id is required.' }, 400);
+
+    const updates = [];
+    const binds = [];
+    if (trailer_number !== undefined) { updates.push('trailer_number = ?'); binds.push(String(trailer_number)); }
+    if (label !== undefined) { updates.push('label = ?'); binds.push(String(label)); }
+    if (updates.length === 0) return json({ ok: false, error: 'Nothing to update.' }, 400);
+
+    updates.push('updated_at = ?');
+    binds.push(new Date().toISOString());
+    binds.push(id);
+
+    try {
+      await db.prepare(`UPDATE loading_bays SET ${updates.join(', ')} WHERE id = ?`).bind(...binds).run();
+      return json({ ok: true });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: 'Method not allowed' }, 405);
+}
+
+async function handleApiLoadingAssignments(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+
+  const url = new URL(request.url);
+  const pathParts = url.pathname.replace('/api/loading-assignments', '').split('/').filter(Boolean);
+  const assignmentId = pathParts[0] || null;
+
+  const userPerms = JSON.parse(request.headers.get('X-User-Permissions') || '{}');
+  const isAdministrator = request.headers.get('X-User-Is-Admin') === '1';
+
+  if (request.method === 'GET') {
+    try {
+      const includeArchived = url.searchParams.get('include_archived') === '1';
+      const bayId = url.searchParams.get('bay_id') || '';
+
+      let query = `
+        SELECT la.*, j.customer, j.invoice_number, j.po_number, j.ship_date, j.ship_to_company,
+               j.ship_to_city, j.ship_to_state, j.carrier, j.method,
+               lb.bay_number, lb.label as bay_label
+        FROM loading_assignments la
+        JOIN jobs j ON la.job_id = j.id
+        LEFT JOIN loading_bays lb ON la.bay_id = lb.id
+      `;
+
+      const conditions = [];
+      const binds = [];
+      if (!includeArchived) conditions.push("la.loading_status != 'archived'");
+      if (bayId) { conditions.push("la.bay_id = ?"); binds.push(bayId); }
+      if (conditions.length) query += " WHERE " + conditions.join(" AND ");
+      query += " ORDER BY la.created_at ASC";
+
+      const rows = await db.prepare(query).bind(...binds).all();
+      return json({ ok: true, assignments: rows.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (request.method === 'POST') {
+    if (!isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
+      return json({ ok: false, error: 'Manager access required to assign jobs to loading.' }, 403);
+    }
+
+    let payload;
+    try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+    if (!payload.job_id) return json({ ok: false, error: 'job_id is required.' }, 400);
+
+    const id = crypto.randomUUID();
+    const loading_status = payload.bay_id ? 'not_started' : 'awaiting';
+    const now = new Date().toISOString();
+
+    try {
+      await db.prepare(`
+        INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, payload.job_id, payload.bay_id || null, payload.trailer_number || '', loading_status,
+              request.headers.get('X-User-Id') || null, payload.notes || '', now, now).run();
+
+      const job = await db.prepare("SELECT customer, invoice_number FROM jobs WHERE id = ?").bind(payload.job_id).first();
+      const customerName = job?.customer || 'Unknown';
+      const invNum = job?.invoice_number || '';
+      await dispatchNotification(db, env, 'loading.assigned',
+        'Job Assigned to Loading',
+        `${customerName}${invNum ? ' (INV# ' + invNum + ')' : ''} assigned to ${payload.bay_id ? 'Bay' : 'awaiting queue'}`,
+        'loading_assignment', id
+      );
+
+      await logActivity(db, 'create', 'loading_assignment', id,
+        `Assigned job to loading — ${loading_status}`, { job_id: payload.job_id, bay_id: payload.bay_id },
+        request.headers.get('X-User-Id'));
+      return json({ ok: true, id }, 201);
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (request.method === 'PUT') {
+    let payload;
+    try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+    const id = payload.id || assignmentId;
+    if (!id) return json({ ok: false, error: 'id is required.' }, 400);
+
+    const existing = await db.prepare("SELECT * FROM loading_assignments WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: 'Assignment not found.' }, 404);
+
+    const now = new Date().toISOString();
+    const updates = [];
+    const binds = [];
+
+    if (payload.bay_id !== undefined) { updates.push('bay_id = ?'); binds.push(payload.bay_id || null); }
+    if (payload.trailer_number !== undefined) { updates.push('trailer_number = ?'); binds.push(String(payload.trailer_number)); }
+    if (payload.notes !== undefined) { updates.push('notes = ?'); binds.push(String(payload.notes)); }
+
+    if (payload.loading_status) {
+      // Manager-only: assigning to bay (awaiting → not_started) or reassigning bays
+      if ((existing.loading_status === 'awaiting' && payload.loading_status === 'not_started') ||
+          (payload.bay_id && payload.bay_id !== existing.bay_id)) {
+        if (!isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
+          return json({ ok: false, error: 'Manager access required for bay assignment.' }, 403);
+        }
+      }
+
+      updates.push('loading_status = ?'); binds.push(payload.loading_status);
+
+      if (payload.loading_status === 'loading' && !existing.started_at) {
+        updates.push('started_at = ?'); binds.push(now);
+      }
+      if (payload.loading_status === 'loaded' && !existing.loaded_at) {
+        updates.push('loaded_at = ?'); binds.push(now);
+      }
+      if (payload.loading_status === 'in_transit' && !existing.in_transit_at) {
+        updates.push('in_transit_at = ?'); binds.push(now);
+      }
+      if (payload.loading_status === 'delivered' && !existing.delivered_at) {
+        updates.push('delivered_at = ?'); binds.push(now);
+      }
+
+      // Dispatch notification on status transition
+      if (payload.loading_status !== existing.loading_status) {
+        const job = await db.prepare("SELECT customer, invoice_number FROM jobs WHERE id = ?").bind(existing.job_id).first();
+        const customerName = job?.customer || 'Unknown';
+        const invNum = job?.invoice_number || '';
+        const trailerNum = payload.trailer_number || existing.trailer_number || '';
+
+        const typeMap = {
+          loading: 'loading.started',
+          loaded: 'loading.loaded',
+          in_transit: 'loading.in_transit',
+          delivered: 'loading.delivered',
+        };
+
+        const notifType = typeMap[payload.loading_status];
+        if (notifType) {
+          const messages = {
+            'loading.started': `Trailer${trailerNum ? ' ' + trailerNum : ''} has begun loading — ${customerName}`,
+            'loading.loaded': `Trailer${trailerNum ? ' ' + trailerNum : ''} is loaded — ${customerName}`,
+            'loading.in_transit': `Trailer${trailerNum ? ' ' + trailerNum : ''} has departed — ${customerName}`,
+            'loading.delivered': `Delivery confirmed — ${customerName}${invNum ? ' (INV# ' + invNum + ')' : ''}`,
+          };
+          const notifTitle = notifType.split('.')[1].charAt(0).toUpperCase() + notifType.split('.')[1].slice(1).replace('_', ' ');
+          await dispatchNotification(db, env, notifType, notifTitle, messages[notifType], 'loading_assignment', id);
+        }
+      }
+    }
+
+    if (updates.length === 0) return json({ ok: false, error: 'Nothing to update.' }, 400);
+
+    updates.push('updated_at = ?');
+    binds.push(now);
+    binds.push(id);
+
+    try {
+      await db.prepare(`UPDATE loading_assignments SET ${updates.join(', ')} WHERE id = ?`).bind(...binds).run();
+      if (payload.loading_status && payload.loading_status !== existing.loading_status) {
+        await logActivity(db, 'update', 'loading_assignment', id,
+          `Loading status: ${existing.loading_status} → ${payload.loading_status}`,
+          { job_id: existing.job_id, bay_id: payload.bay_id || existing.bay_id },
+          request.headers.get('X-User-Id'));
+      }
+      return json({ ok: true });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (request.method === 'DELETE') {
+    if (!isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
+      return json({ ok: false, error: 'Manager access required to remove assignments.' }, 403);
+    }
+
+    let payload;
+    try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+    const id = payload.id || assignmentId;
+    if (!id) return json({ ok: false, error: 'id is required.' }, 400);
+
+    try {
+      await db.prepare("DELETE FROM loading_assignments WHERE id = ?").bind(id).run();
+      await logActivity(db, 'delete', 'loading_assignment', id, 'Removed loading assignment', { id },
+        request.headers.get('X-User-Id'));
+      return json({ ok: true });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: 'Method not allowed' }, 405);
+}
+
+// ========================
+// Notification Dispatch
+// ========================
+
+async function dispatchNotification(db, env, type, title, message, entityType, entityId) {
+  try {
+    const roles = await db.prepare("SELECT id, notification_types FROM roles").all();
+
+    const subscribedRoleIds = (roles.results || [])
+      .filter(r => {
+        try { return JSON.parse(r.notification_types || '[]').includes(type); } catch { return false; }
+      })
+      .map(r => r.id);
+
+    if (!subscribedRoleIds.length) return;
+
+    const placeholders = subscribedRoleIds.map(() => '?').join(',');
+    const userRows = await db.prepare(
+      `SELECT DISTINCT ur.user_id FROM user_roles ur WHERE ur.role_id IN (${placeholders})`
+    ).bind(...subscribedRoleIds).all();
+
+    const userIds = (userRows.results || []).map(r => r.user_id);
+    if (!userIds.length) return;
+
+    const now = new Date().toISOString();
+    for (const userId of userIds) {
+      const nid = crypto.randomUUID();
+      await db.prepare(
+        `INSERT INTO notifications (id, user_id, type, title, message, entity_type, entity_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(nid, userId, type, title, message, entityType, entityId, now).run();
+    }
+
+    if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
+      for (const userId of userIds) {
+        const subs = await db.prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").bind(userId).all();
+        for (const sub of (subs.results || [])) {
+          try {
+            await sendPushNotification(env, sub, { title, body: message, type, entityType, entityId });
+          } catch (e) {
+            if (e.statusCode === 410 || e.statusCode === 404) {
+              await db.prepare("DELETE FROM push_subscriptions WHERE id = ?").bind(sub.id).run();
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Notification dispatch failed:', e);
+  }
+}
+
+async function sendPushNotification(env, subscription, payload) {
+  // NOTE: Full VAPID signing requires a web-push compatible library or manual JWT.
+  // In-app notifications work immediately. Push is a follow-up once VAPID keys are set.
+  console.log('Push notification queued:', subscription.endpoint, JSON.stringify(payload));
+}
+
+// ========================
+// Notifications API
+// ========================
+
+async function handleApiNotifications(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+
+  const url = new URL(request.url);
+  const userId = request.headers.get('X-User-Id');
+  if (!userId) return json({ ok: false, error: 'Unauthorized' }, 401);
+
+  if (request.method === 'GET') {
+    try {
+      const unreadOnly = url.searchParams.get('unread') === '1';
+      let query = "SELECT * FROM notifications WHERE user_id = ?";
+      const binds = [userId];
+      if (unreadOnly) { query += " AND is_read = 0"; }
+      query += " ORDER BY created_at DESC LIMIT 50";
+
+      const rows = await db.prepare(query).bind(...binds).all();
+      const countRow = await db.prepare(
+        "SELECT COUNT(*) as unread_count FROM notifications WHERE user_id = ? AND is_read = 0"
+      ).bind(userId).first();
+
+      return json({ ok: true, notifications: rows.results || [], unreadCount: countRow?.unread_count || 0 });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (request.method === 'PUT' && url.pathname === '/api/notifications/read') {
+    let payload;
+    try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+    try {
+      if (payload.all) {
+        await db.prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ?").bind(userId).run();
+      } else if (Array.isArray(payload.ids)) {
+        for (const nid of payload.ids) {
+          await db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?").bind(nid, userId).run();
+        }
+      }
+      return json({ ok: true });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: 'Method not allowed' }, 405);
+}
+
+async function handleApiPushSubscribe(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, 405);
+
+  const userId = request.headers.get('X-User-Id');
+  if (!userId) return json({ ok: false, error: 'Unauthorized' }, 401);
+
+  let payload;
+  try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+  const { endpoint, keys } = payload;
+  if (!endpoint) return json({ ok: false, error: 'endpoint is required.' }, 400);
+
+  try {
+    const id = crypto.randomUUID();
+    await db.prepare(
+      "INSERT OR REPLACE INTO push_subscriptions (id, user_id, endpoint, p256dh, auth_key) VALUES (?, ?, ?, ?, ?)"
+    ).bind(id, userId, endpoint, keys?.p256dh || '', keys?.auth || '').run();
+    return json({ ok: true });
+  } catch (e) {
+    return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+  }
+}
+
+async function handleApiPushUnsubscribe(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+  if (request.method !== 'DELETE') return json({ ok: false, error: 'Method not allowed' }, 405);
+
+  const userId = request.headers.get('X-User-Id');
+  if (!userId) return json({ ok: false, error: 'Unauthorized' }, 401);
+
+  try {
+    await db.prepare("DELETE FROM push_subscriptions WHERE user_id = ?").bind(userId).run();
+    return json({ ok: true });
+  } catch (e) {
+    return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+  }
 }

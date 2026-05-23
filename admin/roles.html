@@ -382,16 +382,18 @@ window.fetch = async function(...args) {
 };
 
 const PERMISSION_LABELS = {
-  'jobs':                    { group: 'Jobs',       label: 'Job Board' },
-  'logistics.dashboard':     { group: 'Logistics',  label: 'Dashboard & Shipments' },
-  'logistics.bol':           { group: 'Logistics',  label: 'BOL Generator' },
-  'logistics.load-builder':  { group: 'Logistics',  label: 'Load Builder' },
-  'production.calculators':  { group: 'Production', label: 'Calculators' },
-  'production.inventory':    { group: 'Production', label: 'Inventory' },
-  'qc':                      { group: 'QC',         label: 'Quality Control' },
-  'safety':                  { group: 'Safety',     label: 'Safety Portal' },
-  'reports':                 { group: 'Reports',    label: 'Reports & Analytics' },
-  'admin':                   { group: 'Admin',      label: 'Administration' },
+  'jobs':                      { group: 'Jobs',       label: 'Job Board' },
+  'logistics.dashboard':       { group: 'Logistics',  label: 'Dashboard & Shipments' },
+  'logistics.bol':             { group: 'Logistics',  label: 'BOL Generator' },
+  'logistics.load-builder':    { group: 'Logistics',  label: 'Load Builder' },
+  'logistics.loading':         { group: 'Logistics',  label: 'Loading Dashboard' },
+  'logistics.loading.manage':  { group: 'Logistics',  label: 'Loading — Bay Management (manager)' },
+  'production.calculators':    { group: 'Production', label: 'Calculators' },
+  'production.inventory':      { group: 'Production', label: 'Inventory' },
+  'qc':                        { group: 'QC',         label: 'Quality Control' },
+  'safety':                    { group: 'Safety',     label: 'Safety Portal' },
+  'reports':                   { group: 'Reports',    label: 'Reports & Analytics' },
+  'admin':                     { group: 'Admin',      label: 'Administration' },
 };
 
 let allRoles = [];
