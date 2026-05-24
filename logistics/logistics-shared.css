@@ -100,18 +100,6 @@ button, input, select, textarea {
     color: var(--muted);
 }
 
-.logistics-back-link {
-    position: absolute;
-    left: 60px;
-    top: 22px;
-    font-size: 13px;
-    color: var(--muted);
-    text-decoration: none;
-    font-weight: 600;
-}
-
-.logistics-back-link:hover { text-decoration: underline; }
-
 /* ── Page Wrap ───────────────────────────────────────────────────────────── */
 
 .logistics-wrap {

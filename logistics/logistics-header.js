@@ -10,10 +10,6 @@ document.write(`
 
 <header class="topbar">
 
-    ${!isDashboard ? `
-        <a href="/logistics/" class="logistics-back-link">← Back to Logistics</a>
-    ` : ``}
-
     <a href="/" aria-label="Back to Operations Platform">
         <img src="/logo/xpanda.png" alt="xPanda Logo" class="logo">
     </a>
