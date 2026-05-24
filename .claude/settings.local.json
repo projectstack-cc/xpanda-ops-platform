@@ -23,7 +23,9 @@
       "WebFetch(domain:claude.com)",
       "Bash(git remote *)",
       "Bash(npx wrangler *)",
-      "Bash(del migrate-bol-number.sql)"
+      "Bash(del migrate-bol-number.sql)",
+      "Bash(wrangler --version)",
+      "Bash(wrangler d1 *)"
     ]
   }
 }

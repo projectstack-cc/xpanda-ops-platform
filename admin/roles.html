@@ -481,7 +481,7 @@ function renderPermissionEditor(role) {
   const gridRows = Object.entries(groups).map(([groupName, items]) => {
     const header = `<div class="perm-group-header">${esc(groupName)}</div>`;
     const rows = items.map(({ key, label }) => {
-      const perm = perms[key] || { view: false, edit: false };
+      const perm = isAdmin ? { view: true, edit: true } : (perms[key] || { view: false, edit: false });
       const viewChecked = perm.view ? 'checked' : '';
       const editChecked = perm.edit ? 'checked' : '';
       const disabled = isAdmin ? 'disabled' : '';

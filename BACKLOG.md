@@ -8,7 +8,12 @@
 - [ ] Loading status indicator
 - [ ] Consider separate dashboards for staff vs. management (TV display)
 - [ ] Zoning support for deck systems
-- [ ] Part bundle quantities — certain parts ship in customer-specific bundle counts (e.g. H3636-4 bundles in 5's). Need a `bundle_qty` field on parts so the load builder can snap to bundle multiples.
+- [ ] Part bundle quantities — `bundle_qty` field on parts, load builder snaps to bundle multiples
+- [ ] Load builder: non-holey-board parts rotation — maximize truck load by rotating parts any way possible unless they have a bundle qty
+- [ ] Load builder: make initial calculated load view larger, include the stacks visually
+- [ ] Load builder: fix/clarify customize mode drag-and-drop (move layers between columns)
+- [ ] Calendar view for shipments board
+- [ ] Explore: use Claude Chrome to navigate AppSheets apps for a "Load Dashboard" for loading team
 
 ### Done
 
@@ -23,14 +28,16 @@
 
 ## Job Board
 
+- [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy — blocked on Quickbase input formatting improvements)
 - [ ] Create packet feature with Bill of Materials (BOM)
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
+- [ ] Calendar view for job board
+- [ ] Archive feature — when a job hits "Shipped" (final state), add an "Archive" button to the card + toast confirmation; archived jobs move off the kanban to reduce clutter
+- [ ] Label printing — DiversiTech and UL labels
 
 ### Done
 
 - [x] ~~Packing slip upload + parser~~ — PDF upload, client-side parsing, job prefill
-- [x] ~~Packing slip parser overhaul~~ — Prompt 26, multi-page, diverse product types, contact/phone splitting, BDFT units
-- [x] ~~Job board UI cleanup~~ — Prompt 27, removed unused fields, inline slip viewer, drag-drop upload, Instructions moved to bottom
 - [x] ~~Ship-to address carry-through~~ — covered by Prompt 15
 - [x] ~~Auto-generate outbound shipment record when a job is created~~ — completed
 
@@ -38,6 +45,8 @@
 
 ## Admin / Platform
 
+- [ ] "Test as role" feature — admin dropdown to preview the platform as a specific role without logging out
+- [ ] Breakdown job board permissions into more granular sub-modules
 - [ ] Customer master record — central `customers` table that `bol_customers`, `jobs.customer`, and shipments all reference. Eliminates fuzzy matching; packing slips either match an existing customer or create a new one. Build after Customer CRUD is done.
 - [ ] Dashboard KPIs / metrics panel — homepage widget showing jobs by status, BOLs generated this week, shipments pending/in-transit/delivered, most-used parts. Simple SQL COUNT queries rendered in cards.
 - [ ] Notifications / alerts — in-app notification bar with rules-based alerts (e.g. "3 jobs stuck in Production >3 days", "BOL missing trailer number", "load build exceeds weight limit"). Runs on page load, no auth dependency.
@@ -99,7 +108,11 @@ Items moved here once fully shipped and verified.
 - [x] Auth system (Prompts 21–22) — username/password login, sessions, first-login password flow, user management admin page
 - [x] Roles & permissions (Prompts 23–24) — configurable roles with per-module view/edit toggles, admin bypass, permission grid UI
 - [x] Shared BOL module (Prompt 25) — unified `bol-shared.js` for PDF generation, eliminated coord duplication between BOL generator and load builder, optional BOL number with toast confirmation
-- [x] Load builder improvements (Prompt 28) — D1 saved loads (90-day expiry), duplicate BOL support, auto-increment BOL suffixes for multi-trailer loads, drag-and-drop in customize mode
+- [x] Parser overhaul (Prompt 26) — multi-page PDF parsing, improved address/contact extraction, zero-qty filtering, notes filtering
+- [x] Job board UI cleanup (Prompt 27) — removed stale fields, inline packing slip viewer, drag-drop upload, modal close fix
+- [x] Load builder improvements (Prompt 28) — saved loads to D1, BOL duplicate fix, auto-increment suffixes, customize drag-drop
+- [x] Platform QC (Prompt 29) — dead code removal, auth caching, schema consolidation, hygiene pass
+- [x] Parts matching at parse time (Prompt 30) — line items auto-matched to parts library during packing slip upload
 - [x] BOL Generator — PDF generation, customer dropdown, edit/new/duplicate modes
 - [x] Load Builder — native integration into platform (converted from React/Vite iframe)
 - [x] Job Board — Kanban with five statuses, line items, production sub-steps
