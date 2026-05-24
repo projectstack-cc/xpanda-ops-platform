@@ -64,6 +64,8 @@
     .ld-job-result { padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
     .ld-job-result:hover { background: #f3f4f6; }
     .ld-job-result.selected { background: #eff6ff; border-color: #3b82f6; }
+    .ld-card[draggable="true"] { cursor: grab; }
+    .ld-card[draggable="true"]:active { cursor: grabbing; }
     @media (max-width: 768px) {
       .ld-bays-grid { flex-direction: column; min-width: unset; }
       .ld-bay-col { width: 100%; min-width: unset; }
@@ -130,6 +132,26 @@
     <div class="ld-modal-footer">
       <button onclick="closePullJobModal()" class="ld-btn-cancel">Cancel</button>
       <button onclick="confirmPullJob()" class="ld-btn-confirm">Pull to Loading</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Bay Modal -->
+<div id="assign-bay-modal" class="ld-modal-backdrop" hidden>
+  <div class="ld-modal-card" style="max-width:360px;">
+    <div class="ld-modal-header">
+      <h3>Assign to Bay</h3>
+      <button onclick="closeAssignBayModal()" class="ld-modal-close">✕</button>
+    </div>
+    <div class="ld-modal-body">
+      <label>Select Bay</label>
+      <select id="assign-bay-select">
+        <!-- populated dynamically -->
+      </select>
+    </div>
+    <div class="ld-modal-footer">
+      <button onclick="closeAssignBayModal()" class="ld-btn-cancel">Cancel</button>
+      <button onclick="confirmAssignBay()" class="ld-btn-confirm">Assign</button>
     </div>
   </div>
 </div>
@@ -203,7 +225,10 @@ function renderOverview() {
             value="${escAttr(bay.trailer_number || '')}"
             onchange="updateBayTrailer('${bay.id}', this.value)" />
         </div>
-        <div class="ld-bay-body">
+        <div class="ld-bay-body"
+          ondragover="event.preventDefault(); this.style.background='#dbeafe';"
+          ondragleave="this.style.background='';"
+          ondrop="onBayDrop(event, '${bay.id}'); this.style.background='';">
           ${bayAssignments.length
             ? bayAssignments.map(a => renderAssignmentCard(a, false, false)).join('')
             : '<div class="ld-empty-bay">Empty</div>'}
@@ -267,9 +292,12 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
   const next = getNextLoadingStatus(a.loading_status);
   const user = window.__xpandaUser;
   const isManager = user && (user.isAdministrator || user.permissions?.['logistics.loading.manage']?.edit);
+  const dragAttrs = a.loading_status === 'awaiting'
+    ? `draggable="true" ondragstart="onCardDragStart(event, '${a.id}')"`
+    : '';
 
   return `
-    <div class="ld-card" style="border-left:4px solid ${sc.border};background:${sc.bg};" data-assignment-id="${a.id}">
+    <div class="ld-card" ${dragAttrs} style="border-left:4px solid ${sc.border};background:${sc.bg};" data-assignment-id="${a.id}">
       <div class="ld-card-header">
         <strong>${esc(a.customer || 'Unknown')}</strong>
         <span class="ld-status-badge" style="color:${sc.text};">${sc.label}</span>
@@ -280,8 +308,12 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
         ${a.ship_to_city ? `<span>${esc(a.ship_to_city)}${a.ship_to_state ? ', ' + esc(a.ship_to_state) : ''}</span>` : ''}
       </div>
       <div class="ld-card-actions">
-        ${a.loading_status === 'awaiting' && isManager ? `<button class="ld-btn-assign" onclick="openAssignBayModal('${a.id}')">Assign Bay</button>` : ''}
-        ${next ? `<button class="ld-btn-advance" onclick="advanceStatus('${a.id}', '${next}')">${getAdvanceLabel(next)}</button>` : ''}
+        ${a.loading_status === 'awaiting' && isManager
+          ? `<button class="ld-btn-assign" onclick="openAssignBayModal('${a.id}')">Assign Bay</button>`
+          : ''}
+        ${next && a.loading_status !== 'awaiting'
+          ? `<button class="ld-btn-advance" onclick="advanceStatus('${a.id}', '${next}')">${getAdvanceLabel(next)}</button>`
+          : ''}
         ${showArchiveBtn ? `<button class="ld-btn-archive" onclick="archiveAssignment('${a.id}')">Archive</button>` : ''}
       </div>
     </div>
@@ -340,19 +372,74 @@ async function archiveAssignment(assignmentId) {
   setTimeout(() => toast.remove(), 3000);
 }
 
-function openAssignBayModal(assignmentId) {
-  // Reuse pull job modal as an assign-bay modal
-  // Pre-select the assignment and skip job selection step
-  document.getElementById('pull-job-modal').hidden = false;
-  document.getElementById('pull-job-search').value = '';
-  document.getElementById('pull-job-results').innerHTML = '';
-  pullJobSelectedId = null;
-  // Store the assignment ID for direct bay assignment
-  document.getElementById('pull-job-modal').dataset.assignmentId = assignmentId;
+let assignBayTargetId = null;
 
-  const baySelect = document.getElementById('pull-job-bay');
-  baySelect.innerHTML = '<option value="">Awaiting Queue (no bay)</option>' +
-    allBays.map(b => `<option value="${b.id}">Bay ${b.bay_number}${b.trailer_number ? ` — TR# ${b.trailer_number}` : ''}</option>`).join('');
+function openAssignBayModal(assignmentId) {
+  assignBayTargetId = assignmentId;
+  const sel = document.getElementById('assign-bay-select');
+  sel.innerHTML = allBays.map(b =>
+    `<option value="${b.id}">Bay ${b.bay_number}${b.trailer_number ? ' — TR# ' + b.trailer_number : ''}</option>`
+  ).join('');
+  document.getElementById('assign-bay-modal').hidden = false;
+}
+
+function closeAssignBayModal() {
+  document.getElementById('assign-bay-modal').hidden = true;
+  assignBayTargetId = null;
+}
+
+async function confirmAssignBay() {
+  if (!assignBayTargetId) return;
+  const bayId = document.getElementById('assign-bay-select').value;
+  if (!bayId) { alert('Select a bay'); return; }
+
+  try {
+    const res = await fetch('/api/loading-assignments', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: assignBayTargetId, bay_id: bayId, loading_status: 'not_started' }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      closeAssignBayModal();
+      loadDashboard();
+    } else {
+      alert(data.error || 'Failed to assign bay');
+    }
+  } catch (e) {
+    console.error('Assign bay failed:', e);
+  }
+}
+
+let draggedAssignmentId = null;
+
+function onCardDragStart(event, assignmentId) {
+  draggedAssignmentId = assignmentId;
+  event.dataTransfer.effectAllowed = 'move';
+  event.target.style.opacity = '0.5';
+  event.target.addEventListener('dragend', () => { event.target.style.opacity = '1'; }, { once: true });
+}
+
+async function onBayDrop(event, bayId) {
+  event.preventDefault();
+  if (!draggedAssignmentId) return;
+
+  try {
+    const res = await fetch('/api/loading-assignments', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: draggedAssignmentId, bay_id: bayId, loading_status: 'not_started' }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      loadDashboard();
+    } else {
+      alert(data.error || 'Failed to assign bay');
+    }
+  } catch (e) {
+    console.error('Drop assign failed:', e);
+  }
+  draggedAssignmentId = null;
 }
 
 async function openPullJobModal() {
