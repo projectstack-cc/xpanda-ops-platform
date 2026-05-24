@@ -64,7 +64,10 @@
     .ld-job-result { padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
     .ld-job-result:hover { background: #f3f4f6; }
     .ld-job-result.selected { background: #eff6ff; border-color: #3b82f6; }
-    .ld-card[draggable="true"] { cursor: grab; }
+    .ld-drop-zone { transition: background 0.15s; border-radius: 8px; padding: 4px; }
+    .ld-drop-zone.ld-drop-hover { background: #dbeafe; }
+    .ld-bay-body.ld-drop-hover { background: #dbeafe; }
+    .ld-card[draggable="true"] { cursor: grab; user-select: none; -webkit-user-select: none; }
     .ld-card[draggable="true"]:active { cursor: grabbing; }
     @media (max-width: 768px) {
       .ld-bays-grid { flex-direction: column; min-width: unset; }
@@ -237,6 +240,7 @@ function renderOverview() {
     `;
   }).join('');
   document.getElementById('ld-bays').innerHTML = baysHtml;
+  initTouchDragForOverview();
 
   const transit = allAssignments.filter(a => a.loading_status === 'in_transit');
   document.getElementById('ld-transit').innerHTML = transit.length
@@ -252,7 +256,7 @@ function renderOverview() {
 function renderBayView() {
   const sel = document.getElementById('bay-selector');
   sel.innerHTML = allBays.map(b =>
-    `<option value="${b.id}" ${b.id === selectedBayId ? 'selected' : ''}>Bay ${b.bay_number}${b.trailer_number ? ` — TR# ${b.trailer_number}` : ''}</option>`
+    `<option value="${b.id}" ${b.id === selectedBayId ? 'selected' : ''}>Bay ${b.bay_number}${b.trailer_number ? ' — TR# ' + b.trailer_number : ''}</option>`
   ).join('');
 
   if (!selectedBayId) return;
@@ -262,9 +266,9 @@ function renderBayView() {
   const bayAssignments = allAssignments.filter(a => a.bay_id === selectedBayId);
 
   const groups = [
-    { label: 'Not Started', assignments: bayAssignments.filter(a => a.loading_status === 'not_started') },
-    { label: 'Loading',     assignments: bayAssignments.filter(a => a.loading_status === 'loading') },
-    { label: 'Loaded',      assignments: bayAssignments.filter(a => a.loading_status === 'loaded') },
+    { status: 'not_started', label: 'Not Started', assignments: bayAssignments.filter(a => a.loading_status === 'not_started') },
+    { status: 'loading',     label: 'Loading',     assignments: bayAssignments.filter(a => a.loading_status === 'loading') },
+    { status: 'loaded',      label: 'Loaded',      assignments: bayAssignments.filter(a => a.loading_status === 'loaded') },
   ];
 
   const html = `
@@ -275,7 +279,7 @@ function renderBayView() {
           onchange="updateBayTrailer('${bay.id}', this.value)" style="max-width:140px;" />
       </div>
       ${groups.map(g => `
-        <div class="ld-bay-group">
+        <div class="ld-bay-group ld-drop-zone" data-target-status="${g.status}">
           <div class="ld-bay-group-title">${g.label} (${g.assignments.length})</div>
           ${g.assignments.length
             ? g.assignments.map(a => renderAssignmentCard(a, false, false)).join('')
@@ -285,6 +289,7 @@ function renderBayView() {
     </div>
   `;
   document.getElementById('ld-single-bay').innerHTML = html;
+  initTouchDragForBayView();
 }
 
 function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
@@ -441,6 +446,122 @@ async function onBayDrop(event, bayId) {
   }
   draggedAssignmentId = null;
 }
+
+// Touch drag state
+let touchDragEl = null;
+let touchDragId = null;
+let touchClone = null;
+let touchStartY = 0;
+let touchStartX = 0;
+let touchMoved = false;
+
+function initTouchDragForBayView() {
+  const cards = document.querySelectorAll('#ld-single-bay .ld-card');
+  cards.forEach(card => {
+    card.setAttribute('draggable', 'true');
+
+    card.addEventListener('dragstart', (e) => {
+      touchDragId = card.dataset.assignmentId;
+      e.dataTransfer.effectAllowed = 'move';
+      card.style.opacity = '0.5';
+      card.addEventListener('dragend', () => { card.style.opacity = '1'; }, { once: true });
+    });
+
+    card.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      touchDragEl = card;
+      touchDragId = card.dataset.assignmentId;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchMoved = false;
+    }, { passive: true });
+  });
+
+  const zones = document.querySelectorAll('#ld-single-bay .ld-drop-zone');
+  zones.forEach(zone => {
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      zone.style.background = '#dbeafe';
+    });
+    zone.addEventListener('dragleave', () => { zone.style.background = ''; });
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.style.background = '';
+      if (touchDragId) {
+        const targetStatus = zone.dataset.targetStatus;
+        advanceStatus(touchDragId, targetStatus);
+        touchDragId = null;
+      }
+    });
+  });
+}
+
+function initTouchDragForOverview() {
+  const awaitingCards = document.querySelectorAll('#ld-awaiting .ld-card[draggable="true"]');
+  awaitingCards.forEach(card => {
+    card.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      touchDragEl = card;
+      touchDragId = card.dataset.assignmentId;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchMoved = false;
+    }, { passive: true });
+  });
+}
+
+document.addEventListener('touchmove', (e) => {
+  if (!touchDragEl) return;
+  const dx = e.touches[0].clientX - touchStartX;
+  const dy = e.touches[0].clientY - touchStartY;
+  if (!touchMoved && Math.abs(dy) < 10 && Math.abs(dx) < 10) return;
+  touchMoved = true;
+
+  if (!touchClone) {
+    touchClone = touchDragEl.cloneNode(true);
+    touchClone.style.cssText = `
+      position:fixed; z-index:10001; pointer-events:none;
+      width:${touchDragEl.offsetWidth}px; opacity:0.85;
+      box-shadow:0 8px 24px rgba(0,0,0,0.2); transform:rotate(2deg);
+    `;
+    document.body.appendChild(touchClone);
+    touchDragEl.style.opacity = '0.3';
+  }
+  touchClone.style.left = (e.touches[0].clientX - touchDragEl.offsetWidth / 2) + 'px';
+  touchClone.style.top = (e.touches[0].clientY - 20) + 'px';
+
+  document.querySelectorAll('.ld-drop-zone, .ld-bay-body').forEach(z => z.classList.remove('ld-drop-hover'));
+  const elUnder = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+  const zone = elUnder?.closest('.ld-drop-zone') || elUnder?.closest('.ld-bay-body');
+  if (zone) zone.classList.add('ld-drop-hover');
+}, { passive: true });
+
+document.addEventListener('touchend', () => {
+  if (!touchDragEl) return;
+  if (touchClone) {
+    const hoveredZone = document.querySelector('.ld-drop-zone.ld-drop-hover');
+    if (hoveredZone && touchDragId) {
+      const targetStatus = hoveredZone.dataset.targetStatus;
+      advanceStatus(touchDragId, targetStatus);
+    }
+    const hoveredBay = document.querySelector('.ld-bay-body.ld-drop-hover');
+    if (hoveredBay && touchDragId) {
+      const bayCol = hoveredBay.closest('.ld-bay-col');
+      const bayId = bayCol?.dataset.bayId;
+      if (bayId) {
+        draggedAssignmentId = touchDragId;
+        onBayDrop(new Event('drop'), bayId);
+      }
+    }
+    touchClone.remove();
+    touchClone = null;
+  }
+  if (touchDragEl) touchDragEl.style.opacity = '1';
+  touchDragEl = null;
+  touchDragId = null;
+  touchMoved = false;
+  document.querySelectorAll('.ld-drop-zone, .ld-bay-body').forEach(z => z.classList.remove('ld-drop-hover'));
+});
 
 async function openPullJobModal() {
   document.getElementById('pull-job-modal').hidden = false;

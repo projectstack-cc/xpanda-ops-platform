@@ -4134,6 +4134,27 @@ async function handleApiLoadingAssignments(request, env) {
 
   if (request.method === 'GET') {
     try {
+      const orphanJobs = await db.prepare(`
+        SELECT j.id FROM jobs j
+        WHERE j.status IN ('done', 'loading', 'shipped')
+        AND NOT EXISTS (SELECT 1 FROM loading_assignments la WHERE la.job_id = j.id)
+      `).all();
+      const orphans = orphanJobs.results || [];
+      if (orphans.length > 0) {
+        const now = new Date().toISOString();
+        for (const oj of orphans) {
+          const laId = crypto.randomUUID();
+          await db.prepare(`
+            INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, created_at, updated_at)
+            VALUES (?, ?, NULL, '', 'awaiting', NULL, '', ?, ?)
+          `).bind(laId, oj.id, now, now).run();
+        }
+      }
+    } catch (e) {
+      console.error('Loading assignment backfill failed:', e);
+    }
+
+    try {
       const includeArchived = url.searchParams.get('include_archived') === '1';
       const bayId = url.searchParams.get('bay_id') || '';
 

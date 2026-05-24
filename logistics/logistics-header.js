@@ -25,8 +25,7 @@ document.write(`
 
     </div>
 
-    <div class="header-user-bar" style="position:absolute;top:10px;right:16px;font-size:12px;color:#5b6472;display:flex;align-items:center;gap:8px;">
-      <a href="/logistics/loading.html" style="color:#1e293b;text-decoration:none;font-weight:600;font-size:11px;padding:4px 8px;background:#f1f5f9;border-radius:6px;">Loading</a>
+    <div class="header-user-bar" style="position:absolute;top:14px;right:16px;">
       <span id="hdr-notif-bell" onclick="toggleNotifDropdown()" style="position:relative;cursor:pointer;font-size:18px;line-height:1;">🔔<span id="hdr-notif-badge" style="display:none;position:absolute;top:-4px;right:-6px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:16px;height:16px;text-align:center;line-height:16px;"></span></span>
       <div id="hdr-notif-dropdown" style="display:none;position:absolute;top:36px;right:0;width:340px;max-height:420px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);overflow:hidden;z-index:9999;">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #e5e7eb;">
@@ -35,8 +34,6 @@ document.write(`
         </div>
         <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
       </div>
-      <span id="hdr-user-name"></span>
-      <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;">Sign Out</a>
     </div>
 
 </header>
@@ -47,7 +44,14 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const footer = document.createElement("footer");
   footer.className = "logistics-platform-footer";
-  footer.innerHTML = `<a href="/">← Back to Operations Platform</a>`;
+  footer.innerHTML = `
+  <div id="footer-user-bar" style="margin-bottom:8px;font-size:12px;color:#6b7280;">
+    <span id="hdr-user-name"></span>
+    <span style="margin:0 4px;">•</span>
+    <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;font-size:12px;">Sign Out</a>
+  </div>
+  <a href="/">← Back to Operations Platform</a>
+`;
   document.body.appendChild(footer);
 
   // 401 handler
