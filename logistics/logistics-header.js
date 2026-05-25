@@ -32,6 +32,10 @@ document.write(`
           <span style="font-weight:700;font-size:14px;">Notifications</span>
           <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
         </div>
+        <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:#eff6ff;border-bottom:1px solid #e5e7eb;cursor:pointer;" onclick="enablePushFromBanner()">
+          <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 Enable push notifications</div>
+          <div style="font-size:11px;color:#6b7280;margin-top:2px;">Tap to get alerts on this device</div>
+        </div>
         <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
       </div>
     </div>
@@ -177,30 +181,52 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
     try {
       const reg = await navigator.serviceWorker.register('/sw.js');
+      // Wait for SW to be active (required for iOS)
+      if (reg.installing || reg.waiting) {
+        await new Promise(resolve => {
+          const sw = reg.installing || reg.waiting;
+          sw.addEventListener('statechange', () => {
+            if (sw.state === 'activated') resolve();
+          });
+          if (reg.active) resolve();
+        });
+      }
       const existingSub = await reg.pushManager.getSubscription();
       if (existingSub) return;
+      // Show the enable banner instead of auto-prompting
+      const banner = document.getElementById('hdr-push-banner');
+      if (banner) banner.style.display = 'block';
+    } catch (e) {
+      console.error('Push init check failed:', e);
+    }
+  }
 
+  window.enablePushFromBanner = async function() {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        document.getElementById('hdr-push-banner').style.display = 'none';
+        return;
+      }
+      const reg = await navigator.serviceWorker.ready;
       const vapidRes = await fetch('/api/push/vapid-public-key');
       const vapidData = await vapidRes.json();
       if (!vapidData.ok || !vapidData.key) return;
-
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') return;
 
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidData.key),
       });
-
       await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sub.toJSON()),
       });
+      document.getElementById('hdr-push-banner').style.display = 'none';
     } catch (e) {
-      console.error('Push notification setup failed:', e);
+      console.error('Push subscribe failed:', e);
     }
-  }
+  };
 
   function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -211,6 +237,6 @@ window.addEventListener("DOMContentLoaded", () => {
     return outputArray;
   }
 
-  setTimeout(initPushNotifications, 3000);
+  setTimeout(initPushNotifications, 2000);
 
 });
