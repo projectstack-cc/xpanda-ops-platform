@@ -26,6 +26,8 @@ export default {
       if (url.pathname === '/api/auth/logout') return handleAuthLogout(request, env);
       if (url.pathname === '/api/auth/me') return handleAuthMe(request, env);
       if (url.pathname === '/api/auth/change-password') return handleAuthChangePassword(request, env);
+      if (url.pathname === '/api/auth/simulate-role' && request.method === 'POST') return handleSimulateRoleStart(request, env);
+      if (url.pathname === '/api/auth/simulate-role' && request.method === 'DELETE') return handleSimulateRoleStop(request, env);
 
       // 4) Login page (serve without auth check)
       if (url.pathname === '/login' || url.pathname === '/login.html') {
@@ -60,7 +62,11 @@ export default {
           const isApi = url.pathname.startsWith('/api/');
           const permKey = getPermissionKey(url.pathname, isApi);
 
-          if (permKey) {
+          // Escape hatch: real admins always access admin/auth paths even when simulating
+          const ESCAPE_PREFIXES = ['/admin/', '/api/auth/', '/api/roles', '/api/users', '/api/activity-log', '/login'];
+          const isEscapePath = user.isRealAdmin && ESCAPE_PREFIXES.some(p => url.pathname.startsWith(p));
+
+          if (permKey && !isEscapePath) {
             const requiredAction = (request.method === 'GET' || request.method === 'HEAD') ? 'view' : 'edit';
             if (!hasPermission(user, permKey, requiredAction)) {
               if (isApi) {
@@ -326,7 +332,7 @@ async function validateSession(db, request) {
   try {
     // Get session + user (without role — roles come from junction table)
     const session = await db.prepare(`
-      SELECT s.id, s.user_id, s.expires_at,
+      SELECT s.id, s.user_id, s.expires_at, s.simulating_role_id,
              u.id as uid, u.username, u.display_name, u.role, u.role_id, u.is_active, u.first_login
       FROM sessions s
       JOIN users u ON s.user_id = u.id
@@ -350,10 +356,10 @@ async function validateSession(db, request) {
 
     const userRoles = roleRows.results || [];
 
-    // Check if user has the Administrator role
-    const isAdministrator = userRoles.some(r => r.id === 'role-administrator') || session.role === 'admin';
+    // Check if user has the Administrator role (real check, before simulation)
+    const isRealAdmin = userRoles.some(r => r.id === 'role-administrator') || session.role === 'admin';
 
-    // Merge permissions: most permissive wins per key
+    // Merge permissions from all real roles: most permissive wins per key
     const mergedPermissions = {};
     for (const role of userRoles) {
       let perms = {};
@@ -381,17 +387,36 @@ async function validateSession(db, request) {
       }
     }
 
+    // Simulation: if admin is simulating a role, override permissions
+    let simulatingRole = null;
+    let effectivePermissions = mergedPermissions;
+    let effectiveRole = userRoles.map(r => r.name).join(', ') || session.role || 'staff';
+
+    if (isRealAdmin && session.simulating_role_id) {
+      const simRole = await db.prepare("SELECT id, name, permissions FROM roles WHERE id = ?")
+        .bind(session.simulating_role_id).first();
+      if (simRole) {
+        simulatingRole = { id: simRole.id, name: simRole.name };
+        effectiveRole = simRole.name;
+        try { effectivePermissions = JSON.parse(simRole.permissions || '{}'); } catch { effectivePermissions = {}; }
+      }
+    }
+
+    const isSimulating = simulatingRole !== null;
+
     return {
       userId: session.uid,
       username: session.username,
       displayName: session.display_name,
-      role: userRoles.map(r => r.name).join(', ') || session.role || 'staff',
+      role: effectiveRole,
       roleIds: userRoles.map(r => r.id),
       roleNames: userRoles.map(r => r.name),
       firstLogin: session.first_login === 1,
       sessionId: session.id,
-      isAdministrator,
-      permissions: mergedPermissions,
+      isAdministrator: isRealAdmin && !isSimulating,
+      isRealAdmin,
+      permissions: effectivePermissions,
+      simulatingRole,
     };
   } catch (e) {
     console.error('Session validation failed:', e);
@@ -3801,7 +3826,9 @@ async function handleAuthMe(request, env) {
       roleNames: user.roleNames,
       firstLogin: user.firstLogin,
       isAdministrator: user.isAdministrator,
+      isRealAdmin: user.isRealAdmin || false,
       permissions: user.permissions,
+      simulatingRole: user.simulatingRole || null,
     },
   });
 }
@@ -3831,13 +3858,62 @@ async function handleAuthChangePassword(request, env) {
   }
 }
 
+async function handleSimulateRoleStart(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+
+  const user = await validateSession(db, request);
+  if (!user) return json({ ok: false, error: 'Not authenticated' }, 401);
+  if (!user.isRealAdmin) return json({ ok: false, error: 'Only administrators can simulate roles.' }, 403);
+
+  let payload;
+  try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+  const roleId = String(payload.roleId || '').trim();
+  if (!roleId) return json({ ok: false, error: 'roleId is required.' }, 400);
+
+  if (roleId === 'role-administrator') {
+    return json({ ok: false, error: 'Cannot simulate the administrator role.' }, 400);
+  }
+
+  const role = await db.prepare("SELECT id, name FROM roles WHERE id = ?").bind(roleId).first();
+  if (!role) return json({ ok: false, error: 'Role not found.' }, 404);
+
+  await db.prepare("UPDATE sessions SET simulating_role_id = ? WHERE id = ?")
+    .bind(roleId, user.sessionId).run();
+
+  await logActivity(db, 'simulate_role_start', 'session', user.sessionId,
+    `Testing as: ${role.name}`,
+    { simulatedRoleId: roleId, simulatedRoleName: role.name },
+    user.userId);
+
+  return json({ ok: true, simulatingRole: { id: role.id, name: role.name } });
+}
+
+async function handleSimulateRoleStop(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+
+  const user = await validateSession(db, request);
+  if (!user) return json({ ok: false, error: 'Not authenticated' }, 401);
+  if (!user.isRealAdmin) return json({ ok: false, error: 'Only administrators can manage simulation.' }, 403);
+
+  await db.prepare("UPDATE sessions SET simulating_role_id = NULL WHERE id = ?")
+    .bind(user.sessionId).run();
+
+  await logActivity(db, 'simulate_role_stop', 'session', user.sessionId,
+    'Stopped role simulation', {}, user.userId);
+
+  return json({ ok: true });
+}
+
 async function handleApiUsers(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
 
   const sessionUser = await validateSession(db, request);
   if (!sessionUser) return json({ ok: false, error: 'Unauthorized' }, 401);
-  if (!sessionUser.isAdministrator) return json({ ok: false, error: 'Forbidden' }, 403);
+  if (!sessionUser.isRealAdmin) return json({ ok: false, error: 'Forbidden' }, 403);
 
   const url = new URL(request.url);
   const pathParts = url.pathname.replace('/api/users', '').split('/').filter(Boolean);

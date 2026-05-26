@@ -430,13 +430,32 @@ function esc(s) {
 
 async function loadRoles() {
   try {
-    const res = await fetch('/api/roles');
-    const data = await res.json();
+    const [rolesRes, meRes] = await Promise.all([fetch('/api/roles'), fetch('/api/auth/me')]);
+    const data = await rolesRes.json();
+    const meData = await meRes.json();
     allRoles = data.roles || [];
     renderRoleList();
     if (selectedRoleId) {
       const still = allRoles.find(r => r.id === selectedRoleId);
       if (still) selectRole(selectedRoleId);
+    }
+    // Show simulation status indicator if active
+    const existingStatus = document.getElementById('sim-status-bar');
+    if (existingStatus) existingStatus.remove();
+    if (meData.ok && meData.user && meData.user.simulatingRole) {
+      const statusDiv = document.createElement('div');
+      statusDiv.id = 'sim-status-bar';
+      statusDiv.style.cssText = 'background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;';
+      statusDiv.innerHTML = `<span><strong>🔍 Currently testing as:</strong> ${meData.user.simulatingRole.name}</span><button id="roles-stop-sim" style="background:#dc2626;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:600;">Stop Testing</button>`;
+      const container = document.getElementById('roles-list');
+      if (container) container.parentNode.insertBefore(statusDiv, container);
+      document.getElementById('roles-stop-sim').addEventListener('click', async () => {
+        try {
+          const res = await fetch('/api/auth/simulate-role', { method: 'DELETE' });
+          const d = await res.json();
+          if (d.ok) { window.location.reload(); } else { alert('Failed: ' + (d.error || 'Unknown error')); }
+        } catch (e) { alert('Error: ' + e.message); }
+      });
     }
   } catch {
     document.getElementById('roles-list').innerHTML = '<div style="color:#dc2626;font-size:14px;">Failed to load roles.</div>';
@@ -457,6 +476,7 @@ function renderRoleList() {
           <div class="role-card-meta">${r.user_count || 0} user${(r.user_count || 0) !== 1 ? 's' : ''}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+          ${r.id !== 'role-administrator' ? `<button class="btn btn-sm" style="background:#f59e0b;color:#000;border:none;" onclick="event.stopPropagation();testAsRole('${esc(r.id)}','${esc(r.name)}')" title="Preview platform as this role">Test</button>` : ''}
           ${r.is_system ? '<span class="badge-system">System</span>' : `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteRole('${esc(r.id)}','${esc(r.name)}')">Delete</button>`}
         </div>
       </div>
@@ -712,6 +732,25 @@ async function deleteRole(id, name) {
   }
 }
 
+async function testAsRole(roleId, roleName) {
+  if (!confirm(`Start testing as "${roleName}"? You'll see the platform as this role would. Admin pages will remain accessible.`)) return;
+  try {
+    const res = await fetch('/api/auth/simulate-role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roleId }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      window.location.href = '/';
+    } else {
+      alert('Failed to start simulation: ' + (data.error || 'Unknown error'));
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
 // Click-outside-close disabled — use Cancel button to close
 
 document.getElementById('new-role-name').addEventListener('keydown', (e) => {
@@ -723,6 +762,21 @@ fetch('/api/auth/me').then(r => r.json()).then(d => {
   if (d.ok && d.user) {
     const el = document.getElementById('hdr-user-name');
     if (el) el.textContent = d.user.displayName || d.user.username;
+    if (d.user.simulatingRole) {
+      const simBanner = document.createElement('div');
+      simBanner.id = 'sim-role-banner';
+      simBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:#f59e0b;color:#000;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:14px;font-weight:600;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
+      simBanner.innerHTML = `<span>🔍 Testing as: ${d.user.simulatingRole.name}</span><button id="sim-stop-btn" style="background:#fff;color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">Stop Testing</button>`;
+      document.body.prepend(simBanner);
+      document.body.style.paddingTop = simBanner.offsetHeight + 'px';
+      document.getElementById('sim-stop-btn').addEventListener('click', async () => {
+        try {
+          const res = await fetch('/api/auth/simulate-role', { method: 'DELETE' });
+          const data = await res.json();
+          if (data.ok) { window.location.reload(); } else { alert('Failed to stop simulation: ' + (data.error || 'Unknown error')); }
+        } catch (e) { alert('Error stopping simulation: ' + e.message); }
+      });
+    }
   }
 }).catch(() => {});
 
