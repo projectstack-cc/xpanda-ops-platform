@@ -2005,9 +2005,9 @@ async function handleApiJobs(request, env) {
         await db.prepare(`
           INSERT INTO shipments
             (id, direction, job_id, customer, carrier, method, bol_number, origin,
-             destination, ship_date, delivery_date, status, total_bdft, load_count,
+             destination, ship_date, status, total_bdft, load_count,
              weight_lbs, bead_type, notes, trailer_number)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           shipmentId, 'outbound', id,
           customer,
@@ -2017,8 +2017,7 @@ async function handleApiJobs(request, env) {
           'XPanda Foam',
           location || '',
           ship_date || '',
-          '',
-          'scheduled',
+          'awaiting',
           total_bdft,
           load_count,
           0,
@@ -2776,8 +2775,8 @@ async function handleApiShipments(request, env) {
       return json({ ok: false, error: "ship_date must be YYYY-MM-DD." }, 400);
     }
 
-    const validStatuses = ["scheduled", "in_transit", "delivered", "cancelled"];
-    const status = String(payload.status || "scheduled").trim();
+    const validStatuses = ["awaiting", "not_started", "loading", "loaded", "in_transit", "delivered", "cancelled", "scheduled"];
+    const status = String(payload.status || "awaiting").trim();
     if (!validStatuses.includes(status)) {
       return json({ ok: false, error: `status must be one of: ${validStatuses.join(", ")}` }, 400);
     }
@@ -2790,7 +2789,6 @@ async function handleApiShipments(request, env) {
     const bol_number    = String(payload.bol_number    || "").trim();
     const origin        = String(payload.origin        || "").trim();
     const destination   = String(payload.destination   || "").trim();
-    const delivery_date = String(payload.delivery_date || "").trim();
     const total_bdft    = Number(payload.total_bdft    ?? 0);
     const load_count    = Math.max(1, parseInt(payload.load_count ?? 1, 10));
     const weight_lbs    = Number(payload.weight_lbs    ?? 0);
@@ -2802,11 +2800,11 @@ async function handleApiShipments(request, env) {
       await db.prepare(`
         INSERT INTO shipments
           (id, direction, job_id, customer, carrier, method, bol_number, origin, destination,
-           ship_date, delivery_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ship_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         id, direction, job_id, customer, carrier, method_val, bol_number, origin, destination,
-        ship_date, delivery_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number
+        ship_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number
       ).run();
 
       // Auto-create bead receive transaction if inbound with silo
@@ -2852,7 +2850,7 @@ async function handleApiShipments(request, env) {
 
     const allowed = [
       "customer", "carrier", "method", "bol_number", "origin", "destination",
-      "ship_date", "delivery_date", "status", "total_bdft", "load_count",
+      "ship_date", "status", "total_bdft", "load_count",
       "weight_lbs", "bead_type", "notes", "job_id", "trailer_number",
     ];
     const sets = [];
@@ -4278,6 +4276,20 @@ async function handleApiLoadingAssignments(request, env) {
       `).bind(id, payload.job_id, payload.bay_id || null, payload.trailer_number || '', loading_status,
               request.headers.get('X-User-Id') || null, payload.notes || '', now, now).run();
 
+      // Sync initial loading status to linked shipment
+      try {
+        const shipment = await db.prepare(
+          "SELECT id FROM shipments WHERE job_id = ? AND direction = 'outbound' LIMIT 1"
+        ).bind(payload.job_id).first();
+        if (shipment) {
+          await db.prepare(
+            "UPDATE shipments SET status = ?, updated_at = datetime('now') WHERE id = ?"
+          ).bind(loading_status, shipment.id).run();
+        }
+      } catch (e) {
+        console.error('Shipment status sync on assignment creation failed:', e);
+      }
+
       const job = await db.prepare("SELECT customer, invoice_number FROM jobs WHERE id = ?").bind(payload.job_id).first();
       const customerName = job?.customer || 'Unknown';
       const invNum = job?.invoice_number || '';
@@ -4375,6 +4387,18 @@ async function handleApiLoadingAssignments(request, env) {
     try {
       await db.prepare(`UPDATE loading_assignments SET ${updates.join(', ')} WHERE id = ?`).bind(...binds).run();
       if (payload.loading_status && payload.loading_status !== existing.loading_status) {
+        try {
+          const shipment = await db.prepare(
+            "SELECT id FROM shipments WHERE job_id = ? AND direction = 'outbound' LIMIT 1"
+          ).bind(existing.job_id).first();
+          if (shipment) {
+            await db.prepare(
+              "UPDATE shipments SET status = ?, updated_at = datetime('now') WHERE id = ?"
+            ).bind(payload.loading_status, shipment.id).run();
+          }
+        } catch (e) {
+          console.error('Shipment status sync failed:', e);
+        }
         await logActivity(db, 'update', 'loading_assignment', id,
           `Loading status: ${existing.loading_status} → ${payload.loading_status}`,
           { job_id: existing.job_id, bay_id: payload.bay_id || existing.bay_id },

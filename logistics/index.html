@@ -34,7 +34,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
     <div class="logistics-stat-card">
       <div class="logistics-stat-label">Pending Inbound</div>
       <div class="logistics-stat-value" id="stat-inbound-pending">—</div>
-      <div class="logistics-stat-sub">scheduled or in transit</div>
+      <div class="logistics-stat-sub">not yet delivered</div>
     </div>
     <div class="logistics-stat-card">
       <div class="logistics-stat-label">In Transit</div>
@@ -66,7 +66,10 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
           <input type="week" id="outbound-week-input" class="logistics-filter-input" onchange="loadOutbound()">
           <select class="logistics-filter-select" id="outbound-status-filter" onchange="loadOutbound()">
             <option value="">All Statuses</option>
-            <option value="scheduled">Scheduled</option>
+            <option value="awaiting">Awaiting</option>
+            <option value="not_started">Not Started</option>
+            <option value="loading">Loading</option>
+            <option value="loaded">Loaded</option>
             <option value="in_transit">In Transit</option>
             <option value="delivered">Delivered</option>
             <option value="cancelled">Cancelled</option>
@@ -92,7 +95,10 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
         <div class="logistics-filter-row" style="margin:0;">
           <select class="logistics-filter-select" id="inbound-status-filter" onchange="loadInbound()">
             <option value="">All Statuses</option>
-            <option value="scheduled">Scheduled</option>
+            <option value="awaiting">Awaiting</option>
+            <option value="not_started">Not Started</option>
+            <option value="loading">Loading</option>
+            <option value="loaded">Loaded</option>
             <option value="in_transit">In Transit</option>
             <option value="delivered">Delivered</option>
             <option value="cancelled">Cancelled</option>
@@ -139,21 +145,20 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
           <input type="date" id="f-ship-date">
         </div>
         <div class="logistics-field">
-          <label>Delivery Date</label>
-          <input type="date" id="f-delivery-date">
-        </div>
-      </div>
-
-      <div class="logistics-field-row">
-        <div class="logistics-field">
           <label>Status</label>
           <select id="f-status">
-            <option value="scheduled">Scheduled</option>
+            <option value="awaiting">Awaiting</option>
+            <option value="not_started">Not Started</option>
+            <option value="loading">Loading</option>
+            <option value="loaded">Loaded</option>
             <option value="in_transit">In Transit</option>
             <option value="delivered">Delivered</option>
             <option value="cancelled">Cancelled</option>
           </select>
         </div>
+      </div>
+
+      <div class="logistics-field-row">
         <div class="logistics-field">
           <label>Method</label>
           <select id="f-method">
@@ -166,17 +171,15 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
             <option value="Other">Other</option>
           </select>
         </div>
-      </div>
-
-      <div class="logistics-field-row">
         <div class="logistics-field">
           <label>Carrier</label>
           <input type="text" id="f-carrier" placeholder="e.g. LISMA, XPanda Truck">
         </div>
-        <div class="logistics-field">
-          <label>BOL Number</label>
-          <input type="text" id="f-bol-number" placeholder="BOL / tracking #">
-        </div>
+      </div>
+
+      <div class="logistics-field">
+        <label>BOL Number</label>
+        <input type="text" id="f-bol-number" placeholder="BOL / tracking #">
       </div>
 
       <!-- Outbound-specific -->
@@ -459,7 +462,7 @@ function updateStats() {
   }
 
   const inboundPending = inboundData.filter(s =>
-    s.status === 'scheduled' || s.status === 'in_transit'
+    s.status !== 'delivered' && s.status !== 'cancelled'
   ).length;
   const inTransit = [...outboundData, ...inboundData].filter(s => s.status === 'in_transit').length;
   const delivered = [...outboundData, ...inboundData].filter(s => s.status === 'delivered').length;
@@ -660,7 +663,6 @@ function openEdit(id) {
   document.getElementById('f-id').value           = s.id;
   document.getElementById('f-direction').value    = s.direction;
   document.getElementById('f-ship-date').value    = s.ship_date || '';
-  document.getElementById('f-delivery-date').value= s.delivery_date || '';
   document.getElementById('f-status').value       = s.status;
   document.getElementById('f-method').value       = s.method || '';
   document.getElementById('f-carrier').value      = s.carrier || '';
@@ -694,7 +696,7 @@ function closeModal() {
 }
 
 function clearForm() {
-  ['f-ship-date','f-delivery-date','f-carrier','f-bol-number','f-notes',
+  ['f-ship-date','f-carrier','f-bol-number','f-notes',
    'f-customer','f-destination','f-supplier','f-origin','f-trailer-number'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -702,7 +704,7 @@ function clearForm() {
   const lc = document.getElementById('f-load-count'); if (lc) lc.value = 1;
   const bd = document.getElementById('f-total-bdft'); if (bd) bd.value = '';
   const wl = document.getElementById('f-weight-lbs'); if (wl) wl.value = '';
-  document.getElementById('f-status').value = 'scheduled';
+  document.getElementById('f-status').value = 'awaiting';
   document.getElementById('f-method').value = '';
   document.getElementById('f-job-id').value = '';
   document.getElementById('f-bead-type-id').value = '';
@@ -746,10 +748,9 @@ async function saveShipment() {
   const method     = document.getElementById('f-method').value;
   const carrier    = document.getElementById('f-carrier').value.trim();
   const bolNumber  = document.getElementById('f-bol-number').value.trim();
-  const delivDate  = document.getElementById('f-delivery-date').value;
   const notes      = document.getElementById('f-notes').value.trim();
 
-  const payload = { direction: dir, ship_date: shipDate, delivery_date: delivDate,
+  const payload = { direction: dir, ship_date: shipDate,
     status, method, carrier, bol_number: bolNumber, notes };
 
   if (dir === 'outbound') {
@@ -960,10 +961,14 @@ function showError(msg) {
 
 function statusBadge(status) {
   const labels = {
-    scheduled:  'Scheduled',
-    in_transit: 'In Transit',
-    delivered:  'Delivered',
-    cancelled:  'Cancelled',
+    awaiting:    'Awaiting',
+    not_started: 'Not Started',
+    loading:     'Loading',
+    loaded:      'Loaded',
+    in_transit:  'In Transit',
+    delivered:   'Delivered',
+    cancelled:   'Cancelled',
+    scheduled:   'Scheduled',
   };
   return `<span class="logistics-status-badge status-${status}">${labels[status] || status}</span>`;
 }

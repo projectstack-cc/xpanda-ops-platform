@@ -18,7 +18,7 @@
     --accent: #1e293b;
     --accent-soft: #f1f5f9;
 
-    --status-scheduled: #6b7280;
+    --status-awaiting: #6b7280;
     --status-in-transit: #d97706;
     --status-delivered: #16a34a;
     --status-cancelled: #9ca3af;
@@ -300,10 +300,14 @@ button, input, select, textarea {
     white-space: nowrap;
 }
 
-.status-scheduled  { background: #f1f5f9; color: #475569; }
-.status-in_transit { background: #fef3c7; color: #92400e; }
-.status-delivered  { background: #dcfce7; color: #15803d; }
-.status-cancelled  { background: #f3f4f6; color: #9ca3af; }
+.status-awaiting    { background: #f3f4f6; color: #374151; }
+.status-not_started { background: #fef3c7; color: #92400e; }
+.status-loading     { background: #dbeafe; color: #1e40af; }
+.status-loaded      { background: #d1fae5; color: #065f46; }
+.status-in_transit  { background: #fef3c7; color: #92400e; }
+.status-delivered   { background: #dcfce7; color: #15803d; }
+.status-cancelled   { background: #f3f4f6; color: #9ca3af; }
+.status-scheduled   { background: #f1f5f9; color: #475569; }
 
 /* ── Inbound Cards ───────────────────────────────────────────────────────── */
 
@@ -325,9 +329,13 @@ button, input, select, textarea {
 }
 
 .logistics-inbound-card:hover { box-shadow: 0 4px 16px rgba(15,23,42,.1); }
-.logistics-inbound-card.status-in_transit { border-left-color: #d97706; }
-.logistics-inbound-card.status-scheduled  { border-left-color: #94a3b8; }
-.logistics-inbound-card.status-cancelled  { border-left-color: #e5e7eb; }
+.logistics-inbound-card.status-awaiting    { border-left-color: #9ca3af; }
+.logistics-inbound-card.status-not_started { border-left-color: #f59e0b; }
+.logistics-inbound-card.status-loading     { border-left-color: #3b82f6; }
+.logistics-inbound-card.status-loaded      { border-left-color: #10b981; }
+.logistics-inbound-card.status-in_transit  { border-left-color: #d97706; }
+.logistics-inbound-card.status-scheduled   { border-left-color: #94a3b8; }
+.logistics-inbound-card.status-cancelled   { border-left-color: #e5e7eb; }
 
 .logistics-inbound-supplier {
     font-size: 15px;
