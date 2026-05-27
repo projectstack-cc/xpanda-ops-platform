@@ -78,6 +78,10 @@
       .ld-bay-col { width: 100%; min-width: unset; }
       .ld-queue .ld-card, .ld-transit-grid .ld-card { width: 100%; }
     }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
   </style>
 </head>
 <body>
@@ -88,7 +92,7 @@
     <h2>Loading Dashboard</h2>
     <div class="ld-view-toggle">
       <button id="view-overview" class="ld-view-btn active" onclick="setLdView('overview')">Overview</button>
-      <button id="view-bay" class="ld-view-btn" onclick="setLdView('bay')">Bay View</button>
+      <button id="view-bay" class="ld-view-btn" onclick="setLdView('bay')">Loading Team View</button>
     </div>
     <select id="bay-selector" style="display:none;" onchange="selectBay(this.value)"></select>
     <button id="btn-pull-job" class="ld-btn-pull" onclick="openPullJobModal()" style="display:none;">+ Pull Job</button>
@@ -116,6 +120,17 @@
   <!-- Bay view -->
   <div id="ld-bay-view" style="display:none;">
     <div id="ld-single-bay"></div>
+  </div>
+
+  <!-- Bay list (entry point for Loading Team View) -->
+  <div id="ld-bay-list" style="display:none;">
+    <div id="ld-bay-list-content">
+      <div class="ld-skeleton" style="padding:12px;">
+        <div style="height:72px;background:#f3f4f6;border-radius:12px;margin-bottom:8px;animation:pulse 1.5s infinite;"></div>
+        <div style="height:72px;background:#f3f4f6;border-radius:12px;margin-bottom:8px;animation:pulse 1.5s infinite;"></div>
+        <div style="height:72px;background:#f3f4f6;border-radius:12px;margin-bottom:8px;animation:pulse 1.5s infinite;"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -198,23 +213,37 @@ function setLdView(view) {
   currentLdView = view;
   document.getElementById('view-overview').classList.toggle('active', view === 'overview');
   document.getElementById('view-bay').classList.toggle('active', view === 'bay');
+
   document.getElementById('ld-overview').style.display = view === 'overview' ? '' : 'none';
-  document.getElementById('ld-bay-view').style.display = view === 'bay' ? '' : 'none';
-  document.getElementById('bay-selector').style.display = view === 'bay' ? '' : 'none';
 
   if (view === 'bay') {
-    if (!selectedBayId && allBays.length) selectedBayId = allBays[0].id;
-    renderBayView();
+    document.getElementById('ld-bay-list').style.display = '';
+    document.getElementById('ld-bay-view').style.display = 'none';
+    document.getElementById('bay-selector').style.display = 'none';
+    renderBayList();
+  } else {
+    document.getElementById('ld-bay-list').style.display = 'none';
+    document.getElementById('ld-bay-view').style.display = 'none';
+    document.getElementById('bay-selector').style.display = 'none';
   }
 }
 
 function renderDashboard() {
-  if (currentLdView === 'overview') renderOverview();
-  else renderBayView();
+  if (currentLdView === 'overview') {
+    renderOverview();
+  } else {
+    if (document.getElementById('ld-bay-view').style.display !== 'none') {
+      renderBayView();
+    } else {
+      renderBayList();
+    }
+  }
   updatePullButtonVisibility();
 }
 
 function renderOverview() {
+  const user = window.__xpandaUser;
+  const isManager = user && (user.isAdministrator || user.permissions?.['logistics.loading.manage']?.edit);
   const awaiting = allAssignments.filter(a => a.loading_status === 'awaiting');
   document.getElementById('ld-awaiting').innerHTML = awaiting.length
     ? awaiting.map(a => renderAssignmentCard(a, false, false)).join('')
@@ -228,9 +257,13 @@ function renderOverview() {
       <div class="ld-bay-col" data-bay-id="${bay.id}">
         <div class="ld-bay-header">
           <div class="ld-bay-number">Bay ${bay.bay_number}</div>
-          <input class="ld-trailer-input" type="text" placeholder="Trailer #"
-            value="${escAttr(bay.trailer_number || '')}"
-            onchange="updateBayTrailer('${bay.id}', this.value)" />
+          ${isManager
+            ? `<input class="ld-trailer-input" type="text" placeholder="Trailer #"
+                value="${escAttr(bay.trailer_number || '')}"
+                onchange="updateBayTrailer('${bay.id}', this.value)" />`
+            : bay.trailer_number
+              ? `<span style="font-size:13px;color:#6b7280;">Trailer: ${esc(bay.trailer_number)}</span>`
+              : ''}
         </div>
         <div class="ld-bay-body"
           ondragover="event.preventDefault(); this.style.background='#dbeafe';"
@@ -258,6 +291,9 @@ function renderOverview() {
 }
 
 function renderBayView() {
+  const user = window.__xpandaUser;
+  const isManager = user && (user.isAdministrator || user.permissions?.['logistics.loading.manage']?.edit);
+
   const sel = document.getElementById('bay-selector');
   sel.innerHTML = allBays.map(b =>
     `<option value="${b.id}" ${b.id === selectedBayId ? 'selected' : ''}>Bay ${b.bay_number}${b.trailer_number ? ' — TR# ' + b.trailer_number : ''}</option>`
@@ -277,10 +313,19 @@ function renderBayView() {
 
   const html = `
     <div class="ld-bay-single">
+      <button onclick="backToBayList()" style="
+        background:none;border:none;color:#3b82f6;font-size:14px;font-weight:600;
+        cursor:pointer;padding:0;margin-bottom:12px;display:flex;align-items:center;gap:4px;
+      ">← All Bays</button>
       <div class="ld-bay-single-header">
         <h3>Bay ${bay.bay_number}</h3>
-        <input class="ld-trailer-input" type="text" placeholder="Trailer #" value="${escAttr(bay.trailer_number || '')}"
-          onchange="updateBayTrailer('${bay.id}', this.value)" style="max-width:140px;" />
+        ${isManager
+          ? `<input class="ld-trailer-input" type="text" placeholder="Trailer #" value="${escAttr(bay.trailer_number || '')}"
+              onchange="updateBayTrailer('${bay.id}', this.value)" style="max-width:140px;" />`
+          : bay.trailer_number
+            ? `<span style="font-size:13px;color:#6b7280;">Trailer: ${esc(bay.trailer_number)}</span>`
+            : ''
+        }
       </div>
       ${groups.map(g => `
         <div class="ld-bay-group ld-drop-zone" data-target-status="${g.status}">
@@ -294,6 +339,66 @@ function renderBayView() {
   `;
   document.getElementById('ld-single-bay').innerHTML = html;
   initTouchDragForBayView();
+}
+
+function renderBayList() {
+  const container = document.getElementById('ld-bay-list-content');
+  if (!allBays.length) {
+    container.innerHTML = '<div class="ld-empty" style="padding:32px;">No bays configured</div>';
+    return;
+  }
+
+  const html = allBays.map(bay => {
+    const bayAssignments = allAssignments.filter(a =>
+      a.bay_id === bay.id && ['not_started', 'loading', 'loaded'].includes(a.loading_status)
+    );
+    const jobCount = bayAssignments.length;
+    const activeJob = bayAssignments.find(a => a.loading_status === 'loading') || bayAssignments[0];
+
+    return `
+      <div class="ld-bay-list-item" onclick="drillIntoBay('${bay.id}')" style="
+        display:flex; align-items:center; justify-content:space-between;
+        padding:16px; margin-bottom:8px; background:#fff;
+        border:1px solid #e5e7eb; border-radius:12px;
+        cursor:pointer; transition:background 0.15s;
+      " onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='#fff'">
+        <div>
+          <div style="font-weight:700;font-size:18px;color:#111827;">Bay ${bay.bay_number}</div>
+          ${bay.trailer_number ? `<div style="font-size:13px;color:#6b7280;margin-top:2px;">Trailer: ${esc(bay.trailer_number)}</div>` : ''}
+          ${activeJob
+            ? `<div style="font-size:13px;color:#374151;margin-top:4px;">
+                ${esc(activeJob.customer || 'Unknown')}${activeJob.invoice_number ? ' — INV# ' + esc(activeJob.invoice_number) : ''}
+              </div>`
+            : `<div style="font-size:13px;color:#9ca3af;margin-top:4px;">No active jobs</div>`
+          }
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${jobCount > 0
+            ? `<span style="background:#dbeafe;color:#1e40af;font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;">${jobCount} job${jobCount > 1 ? 's' : ''}</span>`
+            : ''
+          }
+          <span style="color:#9ca3af;font-size:18px;">›</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+function drillIntoBay(bayId) {
+  selectedBayId = bayId;
+  document.getElementById('ld-bay-list').style.display = 'none';
+  document.getElementById('ld-bay-view').style.display = '';
+  document.getElementById('bay-selector').style.display = '';
+  renderBayView();
+}
+
+function backToBayList() {
+  document.getElementById('ld-bay-view').style.display = 'none';
+  document.getElementById('bay-selector').style.display = 'none';
+  document.getElementById('ld-bay-list').style.display = '';
+  renderBayList();
 }
 
 function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
@@ -670,25 +775,42 @@ function escAttr(s) {
   return String(s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// Wait for auth then load
 window.addEventListener('DOMContentLoaded', () => {
-  // Set initial view based on screen size
-  if (window.innerWidth < 768) {
-    document.getElementById('view-overview').classList.remove('active');
-    document.getElementById('view-bay').classList.add('active');
-    document.getElementById('ld-overview').style.display = 'none';
-    document.getElementById('ld-bay-view').style.display = '';
-    document.getElementById('bay-selector').style.display = '';
-  }
+  function initWhenReady() {
+    const user = window.__xpandaUser;
 
-  // Small delay to let auth/header settle
-  setTimeout(() => {
+    if (user === undefined) {
+      setTimeout(initWhenReady, 50);
+      return;
+    }
+
+    const isManager = user && (user.isAdministrator || user.permissions?.['logistics.loading.manage']?.edit);
+
+    if (!isManager) {
+      document.querySelector('.ld-view-toggle').style.display = 'none';
+      currentLdView = 'bay';
+      document.getElementById('ld-overview').style.display = 'none';
+      document.getElementById('ld-bay-list').style.display = '';
+      document.getElementById('ld-bay-view').style.display = 'none';
+      document.getElementById('bay-selector').style.display = 'none';
+    } else {
+      if (window.innerWidth < 768) {
+        currentLdView = 'bay';
+        document.getElementById('view-overview').classList.remove('active');
+        document.getElementById('view-bay').classList.add('active');
+        document.getElementById('ld-overview').style.display = 'none';
+        document.getElementById('ld-bay-list').style.display = '';
+        document.getElementById('bay-selector').style.display = 'none';
+      }
+    }
+
     loadDashboard();
     updatePullButtonVisibility();
-  }, 200);
+  }
 
-  // Auto-refresh every 30 seconds
-  setInterval(loadDashboard, 30000);
+  initWhenReady();
+
+  setInterval(loadDashboard, 15000);
 });
 </script>
 
