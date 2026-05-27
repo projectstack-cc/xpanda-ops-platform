@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Orders Report — xPanda</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="/reports/reports-shared.css">
+</head>
+<body>
+
+<script src="/reports/reports-header.js"></script>
+<script>
+document.getElementById('reports-page-title').textContent = 'Orders Report';
+</script>
+
+<div class="reports-wrap">
+
+  <a href="/reports/" class="reports-back-link">← Back to Reports</a>
+
+  <div class="reports-section-intro">
+    <h2 class="reports-section-title">Orders Report</h2>
+    <p class="reports-section-subtitle">All jobs — active and archived. Search by customer, PO#, or invoice#.</p>
+  </div>
+
+  <!-- Filters -->
+  <div class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+
+    <div class="reports-field" style="flex:1;min-width:200px;">
+      <label>Search</label>
+      <input type="text" id="f-search" placeholder="Customer, PO#, or Invoice#" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+    </div>
+
+    <div class="reports-field">
+      <label>Status</label>
+      <select id="f-status" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+        <option value="">All</option>
+        <option value="not_started">Not Started</option>
+        <option value="in_production">In Production</option>
+        <option value="done">Done</option>
+        <option value="loading">Loading</option>
+        <option value="shipped">Shipped</option>
+        <option value="archived">Archived</option>
+      </select>
+    </div>
+
+    <div class="reports-field">
+      <label>Ship Date From</label>
+      <input type="date" id="f-date-from" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+    </div>
+
+    <div class="reports-field">
+      <label>Ship Date To</label>
+      <input type="date" id="f-date-to" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+    </div>
+
+    <div>
+      <button class="btn primary" onclick="loadReport()">Load</button>
+      <button class="btn ghost" onclick="clearFilters()">Clear</button>
+    </div>
+
+  </div>
+
+  <!-- Stats -->
+  <div class="report-stats">
+    <div class="report-stat-card">
+      <div class="report-stat-label">Total Orders</div>
+      <div class="report-stat-value" id="stat-total">--</div>
+    </div>
+    <div class="report-stat-card">
+      <div class="report-stat-label">Active</div>
+      <div class="report-stat-value" id="stat-active">--</div>
+    </div>
+    <div class="report-stat-card">
+      <div class="report-stat-label">Shipped</div>
+      <div class="report-stat-value" id="stat-shipped">--</div>
+    </div>
+    <div class="report-stat-card">
+      <div class="report-stat-label">Archived</div>
+      <div class="report-stat-value" id="stat-archived">--</div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="results-wrap"></div>
+
+</div>
+
+<script>
+const _origFetch = window.fetch;
+window.fetch = async function(...args) {
+  const res = await _origFetch.apply(this, args);
+  if (res.status === 401 && !window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login.html';
+  }
+  return res;
+};
+
+let allJobs = [];
+let sortCol = 'ship_date';
+let sortDir = 'desc';
+
+async function loadReport() {
+  const search   = document.getElementById('f-search').value.trim();
+  const status   = document.getElementById('f-status').value;
+  const dateFrom = document.getElementById('f-date-from').value;
+  const dateTo   = document.getElementById('f-date-to').value;
+
+  const wrap = document.getElementById('results-wrap');
+  wrap.innerHTML = '<p style="color:#94a3b8;padding:12px;">Loading…</p>';
+
+  try {
+    // Fetch all jobs including archived
+    let url = '/api/jobs?include_archived=1';
+    if (search) url += '&search=' + encodeURIComponent(search);
+
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (!data.ok) { wrap.innerHTML = '<p style="color:#ef4444;">Error loading jobs.</p>'; return; }
+
+    allJobs = data.jobs || [];
+
+    // Client-side filters (status, date range)
+    let filtered = allJobs;
+
+    if (status) {
+      filtered = filtered.filter(j => j.status === status);
+    }
+    if (dateFrom) {
+      filtered = filtered.filter(j => j.ship_date && j.ship_date >= dateFrom);
+    }
+    if (dateTo) {
+      filtered = filtered.filter(j => j.ship_date && j.ship_date <= dateTo);
+    }
+
+    updateStats(filtered);
+    renderTable(filtered);
+  } catch {
+    wrap.innerHTML = '<p style="color:#ef4444;">Network error.</p>';
+  }
+}
+
+function updateStats(jobs) {
+  document.getElementById('stat-total').textContent    = jobs.length;
+  document.getElementById('stat-active').textContent   = jobs.filter(j => !['shipped','archived'].includes(j.status)).length;
+  document.getElementById('stat-shipped').textContent  = jobs.filter(j => j.status === 'shipped').length;
+  document.getElementById('stat-archived').textContent = jobs.filter(j => j.status === 'archived').length;
+}
+
+function sortBy(col) {
+  if (sortCol === col) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
+  else { sortCol = col; sortDir = 'asc'; }
+  renderTable(getFiltered());
+}
+
+function getFiltered() {
+  const status   = document.getElementById('f-status').value;
+  const dateFrom = document.getElementById('f-date-from').value;
+  const dateTo   = document.getElementById('f-date-to').value;
+
+  let filtered = allJobs;
+  if (status)   filtered = filtered.filter(j => j.status === status);
+  if (dateFrom) filtered = filtered.filter(j => j.ship_date && j.ship_date >= dateFrom);
+  if (dateTo)   filtered = filtered.filter(j => j.ship_date && j.ship_date <= dateTo);
+  return filtered;
+}
+
+function renderTable(jobs) {
+  const wrap = document.getElementById('results-wrap');
+  if (!jobs.length) {
+    wrap.innerHTML = '<p style="color:#94a3b8;padding:12px;">No orders found.</p>';
+    return;
+  }
+
+  // Sort
+  const sorted = [...jobs].sort((a, b) => {
+    let va = a[sortCol] || '';
+    let vb = b[sortCol] || '';
+    if (sortCol === 'ship_date' || sortCol === 'created_at') {
+      va = va || '9999'; vb = vb || '9999';
+    }
+    const cmp = String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: 'base' });
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  const arrow = (col) => sortCol === col ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+
+  wrap.innerHTML = `
+    <div class="report-table-wrap">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th onclick="sortBy('customer')" style="cursor:pointer;">Customer${arrow('customer')}</th>
+            <th onclick="sortBy('invoice_number')" style="cursor:pointer;">Invoice#${arrow('invoice_number')}</th>
+            <th onclick="sortBy('po_number')" style="cursor:pointer;">PO#${arrow('po_number')}</th>
+            <th onclick="sortBy('ship_date')" style="cursor:pointer;">Ship Date${arrow('ship_date')}</th>
+            <th onclick="sortBy('status')" style="cursor:pointer;">Status${arrow('status')}</th>
+            <th>Source</th>
+            <th onclick="sortBy('created_at')" style="cursor:pointer;">Created${arrow('created_at')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sorted.map(j => `
+            <tr onclick="window.open('/jobs/#${j.id}','_blank')" style="cursor:pointer;" title="Open in Job Board">
+              <td style="font-weight:600;">${esc(j.customer || '—')}</td>
+              <td>${esc(j.invoice_number || '—')}</td>
+              <td>${esc(j.po_number || '—')}</td>
+              <td>${j.ship_date ? formatDate(j.ship_date) : '—'}</td>
+              <td>${statusBadge(j.status)}</td>
+              <td style="font-size:11px;color:#6b7280;">${esc(j.source || 'manual')}</td>
+              <td style="font-size:11px;color:#6b7280;">${j.created_at ? formatDate(j.created_at.slice(0,10)) : '—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:11px;color:#9ca3af;padding:8px 0;">Showing ${sorted.length} order${sorted.length !== 1 ? 's' : ''}. Click a row to open in Job Board.</p>
+  `;
+}
+
+function clearFilters() {
+  document.getElementById('f-search').value  = '';
+  document.getElementById('f-status').value  = '';
+  document.getElementById('f-date-from').value = '';
+  document.getElementById('f-date-to').value   = '';
+  loadReport();
+}
+
+function statusBadge(status) {
+  const labels = {
+    not_started: 'Not Started', in_production: 'In Production', done: 'Done',
+    loading: 'Loading', shipped: 'Shipped', archived: 'Archived',
+  };
+  const colors = {
+    not_started:   'background:#f3f4f6;color:#374151;',
+    in_production: 'background:#fef3c7;color:#92400e;',
+    done:          'background:#d1fae5;color:#065f46;',
+    loading:       'background:#dbeafe;color:#1e40af;',
+    shipped:       'background:#e0e7ff;color:#3730a3;',
+    archived:      'background:#f9fafb;color:#9ca3af;',
+  };
+  return `<span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;${colors[status] || ''}">${labels[status] || status}</span>`;
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  const parts = d.split('-');
+  if (parts.length !== 3) return d;
+  return `${parseInt(parts[1])}/${parseInt(parts[2])}/${parts[0]}`;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+// Debounced search on typing
+let searchTimer;
+document.getElementById('f-search').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadReport, 400);
+});
+
+// Load on page open
+loadReport();
+</script>
+
+</body>
+</html>

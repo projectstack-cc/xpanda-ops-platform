@@ -1832,13 +1832,14 @@ async function handleApiJobs(request, env) {
     const weekParam      = (url.searchParams.get("week")   || "").trim();
     const statusParam    = (url.searchParams.get("status") || "").trim();
     const includeArchived = url.searchParams.get("include_archived") === "1";
+    const limitParam     = Math.min(parseInt(url.searchParams.get("limit") || "200", 10), 500);
 
     let query, binds;
 
     if (searchParam) {
       const like = `%${searchParam}%`;
       const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.customer LIKE ? OR j.po_number LIKE ? OR j.invoice_number LIKE ?)${archiveClause} ORDER BY j.ship_date DESC LIMIT 10`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.customer LIKE ? OR j.po_number LIKE ? OR j.invoice_number LIKE ?)${archiveClause} ORDER BY j.ship_date DESC LIMIT ${limitParam}`;
       binds = [like, like, like];
     } else if (weekParam) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
@@ -1846,7 +1847,7 @@ async function handleApiJobs(request, env) {
       }
       const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
       // Monday through Friday of the requested week
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.ship_date >= ? AND j.ship_date <= date(?, '+4 days')${archiveClause} ORDER BY j.ship_date ASC, j.created_at ASC`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.ship_date >= ? AND j.ship_date <= date(?, '+4 days')${archiveClause} ORDER BY j.ship_date ASC, j.created_at ASC LIMIT ${limitParam}`;
       binds = [weekParam, weekParam];
     } else if (statusParam) {
       const statuses = statusParam.split(",").map(s => s.trim()).filter(Boolean);
@@ -1855,12 +1856,16 @@ async function handleApiJobs(request, env) {
         if (!valid.includes(s)) return json({ ok: false, error: `Invalid status: ${s}` }, 400);
       }
       const placeholders = statuses.map(() => "?").join(",");
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.status IN (${placeholders}) ORDER BY j.ship_date ASC, j.created_at ASC`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.status IN (${placeholders}) ORDER BY j.ship_date ASC, j.created_at ASC LIMIT ${limitParam}`;
       binds = statuses;
+    } else if (includeArchived && !searchParam && !weekParam && !statusParam) {
+      // All jobs including archived — for reports
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j ORDER BY j.ship_date DESC LIMIT ${limitParam}`;
+      binds = [];
     } else {
       // Default: all active + shipped in last 7 days, excluding archived unless requested
       const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.status != 'shipped' OR (j.status = 'shipped' AND j.ship_date >= date('now', '-7 days')))${archiveClause} ORDER BY j.ship_date ASC, j.created_at ASC`;
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.status != 'shipped' OR (j.status = 'shipped' AND j.ship_date >= date('now', '-7 days')))${archiveClause} ORDER BY j.ship_date ASC, j.created_at ASC LIMIT ${limitParam}`;
       binds = [];
     }
 
