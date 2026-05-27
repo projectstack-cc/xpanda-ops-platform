@@ -7,226 +7,226 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
-
   <link rel="icon" href="/assets/img/favicon.png" sizes="any">
   <link rel="apple-touch-icon" href="/assets/img/favicon.png">
   <link rel="manifest" href="/manifest.json">
-
 <style>
   :root {
-    --bg: #f4f7fb;
-    --panel: #ffffff;
-    --panel-2: #eef2f7;
+    --bg: #f4f6f9;
+    --surface: #ffffff;
+    --surface-2: #f8f9fb;
     --text: #111827;
-    --muted: #5b6472;
-    --border: #d9e2ec;
-    --accent: #dc2626;
-    --accent-2: #2563eb;
-    --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-    --radius: 18px;
-    --max: 1100px;
+    --text-muted: #6b7280;
+    --text-hint: #9ca3af;
+    --border: #e5e7eb;
+    --radius: 12px;
+    --max-w: 960px;
   }
 
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; margin: 0; }
 
   body {
-    margin: 0;
-    font-family: Arial, Helvetica, sans-serif;
-    background:
-      radial-gradient(circle at top, rgba(37,99,235,0.08), transparent 32%),
-      linear-gradient(180deg, #f8fafc 0%, #eef4f9 100%);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    background: var(--bg);
     color: var(--text);
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
 
-  .wrap {
-    max-width: var(--max);
-    margin: 0 auto;
-    padding: 32px 18px 48px;
-  }
-
-  .hero {
-    text-align: center;
-    padding: 28px 16px 22px;
-  }
-
-  .hero img {
-    max-width: 120px;
-    width: 100%;
-    height: auto;
-    margin-bottom: 14px;
-  }
-
-  .hero h1 {
-    margin: 0 0 10px;
-    font-size: clamp(28px, 5vw, 42px);
-    line-height: 1.1;
-    color: #0f172a;
-  }
-
-  .hero p {
-    margin: 0 auto;
-    max-width: 760px;
-    color: var(--muted);
-    font-size: 16px;
-    line-height: 1.6;
-  }
-
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 18px;
-    margin-top: 28px;
-  }
-
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 22px;
+  /* ── Header bar ─────────────────────────────── */
+  .hp-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
     display: flex;
-    flex-direction: column;
-    min-height: 250px;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
   }
-
-  .eyebrow {
-    display: inline-block;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #64748b;
-    margin-bottom: 12px;
-  }
-
-  .card h2 {
-    margin: 0 0 10px;
-    font-size: 24px;
-    color: #0f172a;
-  }
-
-  .card p {
-    margin: 0 0 18px;
-    color: var(--muted);
-    line-height: 1.6;
-    flex-grow: 1;
-  }
-
-  .features {
-    margin: 0 0 18px;
-    padding-left: 18px;
-    color: var(--muted);
-    line-height: 1.7;
-  }
-
-  .actions {
+  .hp-header-left {
     display: flex;
+    align-items: center;
     gap: 12px;
-    flex-wrap: wrap;
-    margin-top: auto;
   }
-
-  .btn {
-    appearance: none;
-    border: none;
-    border-radius: 12px;
-    padding: 12px 16px;
+  .hp-header-left img {
+    height: 32px;
+    width: auto;
+  }
+  .hp-header-title {
     font-size: 15px;
     font-weight: 700;
-    cursor: pointer;
+    color: var(--text);
+    line-height: 1.2;
+  }
+  .hp-header-sub {
+    font-size: 11px;
+    color: var(--text-hint);
+    font-weight: 400;
+  }
+  .hp-header-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 13px;
+    color: var(--text-muted);
+    position: relative;
+  }
+  .hp-header-right a {
+    color: #dc2626;
     text-decoration: none;
-    display: inline-flex;
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  /* ── Card grid ──────────────────────────────── */
+  .hp-grid-wrap {
+    max-width: var(--max-w);
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+  }
+  .hp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+  }
+
+  /* ── Card ────────────────────────────────────── */
+  .hp-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+  .hp-card:hover {
+    border-color: #d1d5db;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .hp-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .hp-card-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 140px;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    flex-shrink: 0;
+    font-size: 18px;
   }
-
-  .btn:hover {
-    transform: translateY(-1px);
-    opacity: 0.96;
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
-  }
-
-  .btn-safety {
-    background: var(--accent-2);
-    color: #fff;
-  }
-
-  .btn-training {
-    background: #0f766e;
-    color: #fff;
-  }
-
-  .btn-qc {
-    background: var(--accent);
-    color: #fff;
-  }
-
-  .btn-secondary {
-    background: #ffffff;
+  .hp-card-title {
+    font-size: 15px;
+    font-weight: 700;
     color: var(--text);
+  }
+  .hp-card-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .hp-card-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: auto;
+    padding-top: 4px;
+  }
+
+  /* ── Buttons ─────────────────────────────────── */
+  .hp-btn {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 6px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    border: none;
+  }
+  .hp-btn:hover { opacity: 0.85; }
+  .hp-btn-outline {
+    background: var(--surface);
+    color: var(--text-muted);
     border: 1px solid var(--border);
   }
+  .hp-btn-outline:hover { background: var(--surface-2); }
 
-  .btn-reports {
-    background: #7c3aed;
-    color: #fff;
+  /* Module-specific button colors */
+  .hp-btn-safety     { background: #2563eb; color: #fff; }
+  .hp-btn-qc         { background: #dc2626; color: #fff; }
+  .hp-btn-reports    { background: #7c3aed; color: #fff; }
+  .hp-btn-jobs       { background: #0891b2; color: #fff; }
+  .hp-btn-logistics  { background: #475569; color: #fff; }
+  .hp-btn-loading    { background: #2563eb; color: #fff; }
+  .hp-btn-production { background: #d97706; color: #fff; }
+  .hp-btn-admin      { background: #475569; color: #fff; }
+
+  /* Module-specific icon backgrounds */
+  .hp-icon-safety     { background: #dbeafe; color: #1e40af; }
+  .hp-icon-qc         { background: #fee2e2; color: #991b1b; }
+  .hp-icon-reports    { background: #ede9fe; color: #5b21b6; }
+  .hp-icon-jobs       { background: #cffafe; color: #155e75; }
+  .hp-icon-logistics  { background: #f1f5f9; color: #334155; }
+  .hp-icon-loading    { background: #dbeafe; color: #1e40af; }
+  .hp-icon-production { background: #fef3c7; color: #92400e; }
+  .hp-icon-admin      { background: #f1f5f9; color: #334155; }
+
+  /* ── Notification dropdown (reused from existing) ── */
+  .hp-notif-bell { position: relative; cursor: pointer; font-size: 18px; line-height: 1; }
+  .hp-notif-badge {
+    display: none; position: absolute; top: -4px; right: -6px;
+    background: #dc2626; color: #fff; font-size: 9px; font-weight: 700;
+    border-radius: 50%; width: 16px; height: 16px; text-align: center; line-height: 16px;
+  }
+  .hp-notif-dropdown {
+    display: none; position: absolute; top: 36px; right: 0; width: 340px; max-height: 420px;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12); overflow: hidden; z-index: 9999;
   }
 
-  .btn-production {
-    background: #d97706;
-    color: #fff;
+  /* ── Access denied banner ────────────────────── */
+  .hp-denied-banner {
+    background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+    padding: 10px 18px; color: #991b1b; font-size: 13px; text-align: center;
+    max-width: var(--max-w); margin: 16px auto 0;
   }
 
-  .btn-jobs {
-    background: #0891b2;
-    color: #fff;
+  /* ── Responsive ──────────────────────────────── */
+  @media (max-width: 600px) {
+    .hp-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .hp-grid-wrap { padding: 16px 12px 32px; }
+    .hp-card { padding: 14px 12px; gap: 8px; }
+    .hp-card-desc { display: none; }
+    .hp-header-sub { display: none; }
   }
-
-  .btn-logistics {
-    background: #334155;
-    color: #fff;
-  }
-
-  .btn-admin {
-    background: #334155;
-    color: #fff;
-  }
-
-  .btn-admin:hover {
-    background: #1e293b;
-  }
-
-  .footer-note {
-    margin-top: 28px;
-    text-align: center;
-    color: #64748b;
-    font-size: 14px;
-  }
-
-  @media (max-width: 980px) {
-    .grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 700px) {
-    .grid {
-      grid-template-columns: 1fr;
-    }
-
-    .card {
-      min-height: auto;
-    }
+  @media (max-width: 380px) {
+    .hp-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
-  <div id="user-bar" style="position:fixed; top:0; right:0; padding:10px 18px; font-size:13px; color:#5b6472; z-index:1000; display:flex; align-items:center; gap:12px; position:relative;">
-    <span id="hdr-notif-bell" onclick="toggleNotifDropdown()" style="position:relative;cursor:pointer;font-size:18px;line-height:1;">🔔<span id="hdr-notif-badge" style="display:none;position:absolute;top:-4px;right:-6px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:16px;height:16px;text-align:center;line-height:16px;"></span></span>
-    <div id="hdr-notif-dropdown" style="display:none;position:fixed;top:48px;right:18px;width:340px;max-height:420px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);overflow:hidden;z-index:9999;">
+
+<!-- Header bar -->
+<header class="hp-header">
+  <div class="hp-header-left">
+    <img src="/logo/xpanda.png" alt="xPanda Foam">
+    <div>
+      <div class="hp-header-title">xPanda Operations</div>
+      <div class="hp-header-sub">XPanda Foam, LLC — Orlando, FL</div>
+    </div>
+  </div>
+  <div class="hp-header-right">
+    <span id="hdr-notif-bell" class="hp-notif-bell" onclick="toggleNotifDropdown()">🔔<span id="hdr-notif-badge" class="hp-notif-badge"></span></span>
+    <div id="hdr-notif-dropdown" class="hp-notif-dropdown">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #e5e7eb;">
         <span style="font-weight:700;font-size:14px;">Notifications</span>
         <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
@@ -237,149 +237,125 @@
       </div>
       <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
     </div>
-    <span id="user-display"></span>
-    <a href="#" onclick="doLogout(); return false;" style="color:#dc2626; text-decoration:none; font-weight:600;">Sign Out</a>
+    <span id="user-display" style="font-size:13px;"></span>
+    <a href="#" onclick="doLogout(); return false;">Sign Out</a>
   </div>
+</header>
 
-  <main class="wrap">
-    <section class="hero">
-      <img src="/logo/xpanda.png" alt="xPanda Foam logo">
-      <h1>xPanda Operations Platform</h1>
-      <p>
-        Central access point for xPanda Foam internal systems. Choose a platform below
-        to access safety resources, training tools, and quality control workflows.
-      </p>
-    </section>
+<!-- Access denied banner (shown via JS if redirected) -->
+<div id="access-denied-banner" class="hp-denied-banner" style="display:none;">
+  You do not have permission to access that page.
+</div>
 
-    <section class="grid">
-      <article class="card" data-permission="safety">
-        <span class="eyebrow">Safety System</span>
-        <h2>Safety Portal</h2>
-        <p>
-          Access multilingual SDS search, document browsing, and employee training
-          resources through the xPanda Safety Portal.
-        </p>
-        <ul class="features">
-          <li>SDS search and browse</li>
-          <li>Training access</li>
-          <li>Multilingual content support</li>
-        </ul>
-        <div class="actions">
-          <a class="btn btn-safety" href="/safety/">Open Safety</a>
-          <a class="btn btn-training" href="/safety/training/">Training</a>
-        </div>
-      </article>
+<!-- Card grid -->
+<main class="hp-grid-wrap">
+  <div class="hp-grid">
 
-      <article class="card" data-permission="qc">
-        <span class="eyebrow">Quality System</span>
-        <h2>QC Platform</h2>
-        <p>
-          Launch production-ready quality workflows for inspections, incidents,
-          scrap tracking, and floor utility tools.
-        </p>
-        <ul class="features">
-          <li>Final inspection workflow</li>
-          <li>Incident reporting</li>
-          <li>Scrap logging and density calculation</li>
-        </ul>
-        <div class="actions">
-          <a class="btn btn-qc" href="/qc/">Open QC</a>
-        </div>
-      </article>
-      <article class="card" data-permission="reports">
-  <span class="eyebrow">Analytics System</span>
-  <h2>Reports</h2>
-  <p>
-    View operational dashboards for scrap and incident visibility,
-    trend monitoring, and drill-down reporting.
-  </p>
-  <ul class="features">
-    <li>Scrap reporting dashboards</li>
-    <li>Incident analytics and list drill-down</li>
-    <li>Trend monitoring</li>
-  </ul>
-  <div class="actions">
-    <a class="btn btn-reports" href="/reports/">Open Reports</a>
+    <!-- Safety -->
+    <article class="hp-card" data-permission="safety">
+      <div class="hp-card-head">
+        <div class="hp-card-icon hp-icon-safety">🛡️</div>
+        <div class="hp-card-title">Safety</div>
+      </div>
+      <div class="hp-card-desc">SDS library, multilingual training</div>
+      <div class="hp-card-actions">
+        <a class="hp-btn hp-btn-safety" href="/safety/">Open</a>
+        <a class="hp-btn hp-btn-outline" href="/safety/training/">Training</a>
+      </div>
+    </article>
+
+    <!-- QC -->
+    <article class="hp-card" data-permission="qc">
+      <div class="hp-card-head">
+        <div class="hp-card-icon hp-icon-qc">📋</div>
+        <div class="hp-card-title">QC</div>
+      </div>
+      <div class="hp-card-desc">Inspections, incidents, scrap tracking</div>
+      <div class="hp-card-actions">
+        <a class="hp-btn hp-btn-qc" href="/qc/">Open</a>
+      </div>
+    </article>
+
+    <!-- Reports -->
+    <article class="hp-card" data-permission="reports">
+      <div class="hp-card-head">
+        <div class="hp-card-icon hp-icon-reports">📊</div>
+        <div class="hp-card-title">Reports</div>
+      </div>
+      <div class="hp-card-desc">Scrap dashboards, incident analytics</div>
+      <div class="hp-card-actions">
+        <a class="hp-btn hp-btn-reports" href="/reports/">Open</a>
+      </div>
+    </article>
+
+    <!-- Job Board -->
+    <article class="hp-card" data-permission="jobs">
+      <div class="hp-card-head">
+        <div class="hp-card-icon hp-icon-jobs">📦</div>
+        <div class="hp-card-title">Job Board</div>
+      </div>
+      <div class="hp-card-desc">Kanban tracking, order entry to shipment</div>
+      <div class="hp-card-actions">
+        <a class="hp-btn hp-btn-jobs" href="/jobs/">Open</a>
+      </div>
+    </article>
+
+    <!-- Logistics (shipments, BOL, load builder — NOT loading dashboard) -->
+    <article class="hp-card" data-permission="logistics.dashboard,logistics.bol,logistics.load-builder">
+      <div class="hp-card-head">
+        <div class="hp-card-icon hp-icon-logistics">🚛</div>
+        <div class="hp-card-title">Logistics</div>
+      </div>
+      <div class="hp-card-desc">Shipments, BOL generator, load builder</div>
+      <div class="hp-card-actions">
+        <a class="hp-btn hp-btn-logistics" href="/logistics/" data-perm-key="logistics.dashboard">Dashboard</a>
+        <a class="hp-btn hp-btn-outline" href="/logistics/bol-generator.html" data-perm-key="logistics.bol">BOL</a>
+        <a class="hp-btn hp-btn-outline" href="/logistics/load-builder.html" data-perm-key="logistics.load-builder">Load Builder</a>
+      </div>
+    </article>
+
+    <!-- Loading Dashboard (own card, own permission) -->
+    <article class="hp-card" data-permission="logistics.loading">
+      <div class="hp-card-head">
+        <div class="hp-card-icon hp-icon-loading">🏗️</div>
+        <div class="hp-card-title">Loading</div>
+      </div>
+      <div class="hp-card-desc">Bay assignments, trailer loading status</div>
+      <div class="hp-card-actions">
+        <a class="hp-btn hp-btn-loading" href="/logistics/loading.html">Open</a>
+      </div>
+    </article>
+
+    <!-- Production -->
+    <article class="hp-card" data-permission="production.calculators,production.inventory">
+      <div class="hp-card-head">
+        <div class="hp-card-icon hp-icon-production">🧮</div>
+        <div class="hp-card-title">Production</div>
+      </div>
+      <div class="hp-card-desc">Block calculator, inventory, molding log</div>
+      <div class="hp-card-actions">
+        <a class="hp-btn hp-btn-production" href="/production/">Open</a>
+      </div>
+    </article>
+
+    <!-- Admin -->
+    <article class="hp-card" data-permission="admin">
+      <div class="hp-card-head">
+        <div class="hp-card-icon hp-icon-admin">⚙️</div>
+        <div class="hp-card-title">Admin</div>
+      </div>
+      <div class="hp-card-desc">Parts library, users, roles, activity log</div>
+      <div class="hp-card-actions">
+        <a class="hp-btn hp-btn-admin" href="/admin/parts.html">Parts</a>
+        <a class="hp-btn hp-btn-outline" href="/admin/users.html">Users</a>
+        <a class="hp-btn hp-btn-outline" href="/admin/roles.html">Roles</a>
+        <a class="hp-btn hp-btn-outline" href="/admin/activity-log.html">Log</a>
+      </div>
+    </article>
+
   </div>
-</article>
+</main>
 
-      <article class="card" data-permission="jobs">
-        <span class="eyebrow">Operations</span>
-        <h2>Job Board</h2>
-        <p>
-          Track production jobs from order entry through cutting to shipment.
-          Kanban board with drag-and-drop status management.
-        </p>
-        <ul class="features">
-          <li>Kanban job board</li>
-          <li>Order entry &amp; tracking</li>
-          <li>Ship date visibility</li>
-        </ul>
-        <div class="actions">
-          <a class="btn btn-jobs" href="/jobs/">Open Jobs</a>
-        </div>
-      </article>
-
-      <article class="card" data-permission="logistics.dashboard,logistics.bol,logistics.load-builder">
-        <span class="eyebrow">Logistics</span>
-        <h2>Logistics</h2>
-        <p>
-          Track inbound deliveries and outbound shipments. Carrier management,
-          BOL tracking, and shipment history.
-        </p>
-        <ul class="features">
-          <li>Inbound receiving</li>
-          <li>Outbound shipping</li>
-          <li>BOL &amp; carrier tracking</li>
-        </ul>
-        <div class="actions">
-          <a class="btn btn-logistics" href="/logistics/">Open Logistics</a>
-          <a class="btn btn-logistics" href="/logistics/loading.html">Loading Dashboard</a>
-        </div>
-      </article>
-
-      <article class="card" data-permission="production.calculators,production.inventory">
-        <span class="eyebrow">Production System</span>
-        <h2>Production / Manufacturing</h2>
-        <p>
-          Production planning tools, block calculators, and cut optimization
-          for floor and office use.
-        </p>
-        <ul class="features">
-          <li>Block calculator</li>
-          <li>Cut list generation</li>
-          <li>Material usage tracking</li>
-        </ul>
-        <div class="actions">
-          <a class="btn btn-production" href="/production/">Open Production</a>
-        </div>
-      </article>
-
-      <article class="card" data-permission="admin">
-        <span class="eyebrow">Administration</span>
-        <h2>Admin</h2>
-        <p>
-          Platform administration tools. Manage the parts library,
-          view system settings, and configure shared resources.
-        </p>
-        <ul class="features">
-          <li>Parts library management</li>
-          <li>Activity log &amp; audit trail</li>
-          <li>User &amp; role management</li>
-        </ul>
-        <div class="actions">
-          <a class="btn btn-admin" href="/admin/parts.html">Parts Library</a>
-          <a class="btn btn-admin" href="/admin/activity-log.html">Activity Log</a>
-          <a class="btn btn-admin" href="/admin/users.html">Users</a>
-          <a class="btn btn-admin" href="/admin/roles.html">Roles</a>
-        </div>
-      </article>
-    </section>
-
-    <div class="footer-note">
-      Additional systems may be added here as the operations platform grows.
-    </div>
-  </main>
 <script>
 const _origFetch = window.fetch;
 window.fetch = async function(...args) {
@@ -409,39 +385,38 @@ async function initHomepage() {
     if (!user.isAdministrator) {
       const perms = user.permissions || {};
 
-      document.querySelectorAll('.card[data-permission]').forEach(card => {
+      // Hide cards the user has no access to
+      document.querySelectorAll('.hp-card[data-permission]').forEach(card => {
         const keys = card.dataset.permission.split(',');
         const canView = keys.some(key => perms[key.trim()]?.view === true);
         if (!canView) card.style.display = 'none';
       });
 
-      document.querySelectorAll('.card a[href]').forEach(link => {
-        const href = link.getAttribute('href');
-        let permKey = null;
-        if (href.includes('/logistics/bol')) permKey = 'logistics.bol';
-        else if (href.includes('/logistics/load-builder')) permKey = 'logistics.load-builder';
-        else if (href.includes('/logistics/')) permKey = 'logistics.dashboard';
-        else if (href.includes('/admin/')) permKey = 'admin';
-
+      // Hide individual action links the user can't access
+      document.querySelectorAll('.hp-card a[data-perm-key]').forEach(link => {
+        const permKey = link.dataset.permKey;
         if (permKey && !perms[permKey]?.view) link.style.display = 'none';
+      });
+
+      // Also hide admin links if not admin
+      document.querySelectorAll('.hp-card a[href*="/admin/"]').forEach(link => {
+        if (!perms['admin']?.view) link.style.display = 'none';
       });
     }
   } catch {}
 }
 
+// Access denied banner
 if (new URLSearchParams(window.location.search).get('access_denied')) {
-  const banner = document.createElement('div');
-  banner.style.cssText = 'background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 18px;margin:12px 24px;color:#991b1b;font-size:14px;text-align:center;';
-  banner.textContent = 'You do not have permission to access that page.';
-  const main = document.querySelector('main');
-  if (main) main.insertBefore(banner, main.firstChild.nextSibling);
+  const banner = document.getElementById('access-denied-banner');
+  if (banner) banner.style.display = '';
   history.replaceState(null, '', '/');
 }
 
 initHomepage();
 setTimeout(loadNotifications, 500);
 
-// Notification bell
+// ── Notification system (unchanged) ──────────────────────
 let notifDropdownOpen = false;
 
 function toggleNotifDropdown() {
@@ -504,6 +479,7 @@ function fmtAgo(iso) {
 
 setInterval(() => { if (!notifDropdownOpen) loadNotifications(); }, 60000);
 
+// ── Push notifications (unchanged) ───────────────────────
 async function initPushNotifications() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
