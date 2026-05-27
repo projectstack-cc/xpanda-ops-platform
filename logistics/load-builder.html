@@ -1343,6 +1343,10 @@ function renderLoadTab() {
   const sorted = getSortedSkus();
   const filtered = getFiltered();
 
+  // Saved loads button
+  const savedLoadsBtn = h('button', { className: 'btn btn-white', style: { marginBottom: '12px' }, onClick: () => openLoadModal() }, 'SAVED LOADS');
+  cont.appendChild(savedLoadsBtn);
+
   // Trailer type selector
   const typeCard = h('div', { className: 'card mb-18' });
   const typeRow = h('div', { className: 'flex items-center gap-10 flex-wrap' });
@@ -2168,15 +2172,20 @@ function openBolModal(result) {
   const today = new Date().toISOString().slice(0, 10);
   const trailerData = result.trailers.map((trailer, i) => {
     const breakdown = Object.values(trailer.skuBreakdown).sort((a, b) => a.name.localeCompare(b.name));
-    const commodityDescription = breakdown.map(item => {
+    const commodityDescriptionFull = breakdown.map(item => {
       const sku = state.skus.find(s => s.id === item.skuId);
       if (!sku) return `${item.pieces} pcs — ${item.name} (${item.sku})`;
       return `${item.pieces} pcs — ${item.name} (${item.sku}) ${sku.length}"\xd7${sku.width}"\xd7${sku.height}"`;
     }).join('\n');
+    const commodityDescriptionNoDims = breakdown.map(item => {
+      return `${item.pieces} pcs — ${item.name} (${item.sku})`;
+    }).join('\n');
     const td = {
       trailerIndex: i,
       trailerLabel: trailer.downsizedType || state.trailerType,
-      commodityDescription,
+      commodityDescription: commodityDescriptionFull,
+      commodityDescriptionFull,
+      commodityDescriptionNoDims,
       totalStacks: trailer.totalStacks,
       totalPieces: trailer.totalUnits,
       totalWeight: trailer.usedWeight,
@@ -2305,8 +2314,27 @@ function renderBolModal() {
   commPanel.appendChild(h('div', { className: 'panel-title' }, 'COMMODITY DESCRIPTION'));
   const commTA = h('textarea', { className: 'inp', style: { height: '90px', resize: 'vertical', fontFamily: 'var(--mono)', fontSize: '13px', lineHeight: '1.6' } });
   commTA.value = td.commodityDescription || '';
-  commTA.addEventListener('input', e => { td.commodityDescription = e.target.value; });
+  commTA.addEventListener('input', e => {
+    td.commodityDescription = e.target.value;
+    if (!hideDimsCheck.checked) {
+      td.commodityDescriptionFull = e.target.value;
+    } else {
+      td.commodityDescriptionNoDims = e.target.value;
+    }
+  });
   commPanel.appendChild(commTA);
+
+  const hideDimsLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6b7280', cursor: 'pointer', marginTop: '6px' } });
+  const hideDimsCheck = h('input', { type: 'checkbox' });
+  hideDimsCheck.addEventListener('change', e => {
+    const hide = e.target.checked;
+    td.commodityDescription = hide ? td.commodityDescriptionNoDims : td.commodityDescriptionFull;
+    commTA.value = td.commodityDescription;
+  });
+  hideDimsLabel.appendChild(hideDimsCheck);
+  hideDimsLabel.appendChild(document.createTextNode('Part # and qty only (hide dimensions)'));
+  commPanel.appendChild(hideDimsLabel);
+
   body.appendChild(commPanel);
 
   // Carry-over checkbox (pages 2+)
@@ -2724,8 +2752,10 @@ async function generateAllBols() {
   bm.generateProgress.push({ text: 'Generating PDF...', done: false, pending: false });
   renderBolModal();
   try {
-    await generateBolPdf(savedBols);
-    bm.generating = false; bm.bolSuccess = savedBols; renderBolModal();
+    const blobUrl = await generateBolPdf(savedBols);
+    bm.generating = false;
+    renderBolModal();
+    showBolReviewLB(blobUrl, savedBols);
   } catch (e) {
     bm.generating = false; bm.bolSuccess = savedBols;
     bm.bolError = e.popupBlocked ? 'PDF was generated but your browser blocked the popup. Please allow popups for this site.'
@@ -2745,7 +2775,50 @@ async function generateBolPdf(bolRecords) {
     } catch { /* packing slip unavailable */ }
   }
 
-  await BolShared.generatePdf(bolRecords, { packingSlipPdfBytes });
+  const result = await BolShared.generatePdf(bolRecords, { previewOnly: true, packingSlipPdfBytes });
+  return result.blobUrl;
+}
+
+let lbPendingBlobUrl = null;
+let lbPendingBols = null;
+
+function showBolReviewLB(blobUrl, savedBols) {
+  lbPendingBlobUrl = blobUrl;
+  lbPendingBols = savedBols;
+
+  const backdrop = document.getElementById('bol-review-backdrop');
+  const iframe = document.getElementById('bol-review-iframe');
+  iframe.src = blobUrl;
+  backdrop.style.display = 'flex';
+
+  const approveBtn = document.getElementById('bol-review-approve');
+  const editBtn = document.getElementById('bol-review-edit');
+
+  const newApprove = approveBtn.cloneNode(true);
+  approveBtn.parentNode.replaceChild(newApprove, approveBtn);
+  newApprove.addEventListener('click', () => {
+    BolShared.openPdf(lbPendingBlobUrl);
+    lbPendingBlobUrl = null;
+    const bols = lbPendingBols;
+    lbPendingBols = null;
+    closeBolReviewLB();
+    bm.bolSuccess = bols || [];
+    renderBolModal();
+  });
+
+  const newEdit = editBtn.cloneNode(true);
+  editBtn.parentNode.replaceChild(newEdit, editBtn);
+  newEdit.addEventListener('click', closeBolReviewLB);
+}
+
+function closeBolReviewLB() {
+  const backdrop = document.getElementById('bol-review-backdrop');
+  backdrop.style.display = 'none';
+  document.getElementById('bol-review-iframe').src = '';
+  if (lbPendingBlobUrl) {
+    URL.revokeObjectURL(lbPendingBlobUrl);
+    lbPendingBlobUrl = null;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2898,5 +2971,37 @@ initSkus().then(() => {
   if (prefillJobId) prefillFromJob(prefillJobId);
 });
 </script>
+
+<!-- BOL Review Modal -->
+<div id="bol-review-backdrop" style="
+  position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;
+  display:none;align-items:center;justify-content:center;
+">
+  <div style="
+    background:#fff;border-radius:12px;width:95%;max-width:800px;
+    height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);
+  ">
+    <div style="
+      display:flex;justify-content:space-between;align-items:center;
+      padding:16px 20px;border-bottom:1px solid #e5e7eb;
+    ">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827;">Review BOL</h3>
+      <div style="display:flex;gap:8px;">
+        <button id="bol-review-edit" style="
+          padding:8px 20px;border-radius:8px;border:1px solid #d1d5db;
+          background:#fff;cursor:pointer;font-size:14px;font-weight:600;color:#111827;
+        ">Make Changes</button>
+        <button id="bol-review-approve" style="
+          padding:8px 20px;border-radius:8px;border:none;
+          background:#1e293b;color:#fff;cursor:pointer;font-size:14px;font-weight:600;
+        ">Approve</button>
+      </div>
+    </div>
+    <iframe id="bol-review-iframe" style="
+      flex:1;border:none;border-radius:0 0 12px 12px;
+    "></iframe>
+  </div>
+</div>
+
 </body>
 </html>

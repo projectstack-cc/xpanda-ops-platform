@@ -576,6 +576,10 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
     <div class="bol-section-title">Commodity Description</div>
     <div class="bol-field">
       <textarea id="f-commodity" rows="6" placeholder="e.g. 640 pcs - 1.0#EPS 1.25&quot; x 96&quot; x 11/9&quot; TAPER"></textarea>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;color:#6b7280;cursor:pointer;">
+        <input type="checkbox" id="f-hide-dims" onchange="toggleHideDims()">
+        Part # and qty only (hide dimensions)
+      </label>
     </div>
   </div>
 
@@ -761,6 +765,8 @@ async function prefillFromJob(jobId) {
         return parts.join(' ');
       });
       document.getElementById('f-commodity').value = lines.join('\n');
+      commodityWithDims = '';
+      document.getElementById('f-hide-dims').checked = false;
     }
 
     if (job.customer) {
@@ -1144,32 +1150,142 @@ async function handleGenerate() {
   doGenerate(payload);
 }
 
+let commodityWithDims = '';
+
+function toggleHideDims() {
+  const ta = document.getElementById('f-commodity');
+  const hide = document.getElementById('f-hide-dims').checked;
+
+  if (hide) {
+    commodityWithDims = ta.value;
+    ta.value = stripDimsFromCommodity(ta.value);
+  } else {
+    if (commodityWithDims) {
+      ta.value = commodityWithDims;
+    }
+  }
+}
+
+function stripDimsFromCommodity(text) {
+  return text.split('\n').map(line => {
+    let stripped = line.replace(/\s+\d+(?:\.\d+)?"\s*[×xX]\s*\d+(?:\.\d+)?"\s*[×xX]\s*\d+(?:\.\d+)?"\s*$/, '');
+    stripped = stripped.replace(/\s+\d+(?:\.\d+)?(?:"|'')\s*[×xX]\s*\d+(?:\.\d+)?(?:"|'')\s*[×xX]\s*\d+(?:\.\d+)?(?:"|'')\s*/g, ' ');
+    stripped = stripped.replace(/\s+[\d/.]+"\s*[×xX]\s*[\d/.]+"\s*[×xX]\s*[\d/.]+"\s*/g, ' ');
+    stripped = stripped.replace(/\s{2,}/g, ' ').trim();
+    return stripped;
+  }).join('\n');
+}
+
 async function doGenerate(payload) {
   const btn = document.getElementById('btn-generate');
   btn.disabled = true;
-  btn.textContent = 'Generating…';
+  btn.textContent = 'Generating preview…';
   setStatus('');
 
   try {
-    const isEdit = !!editingBolId;
-    const res  = await fetch(isEdit ? `/api/bols/${editingBolId}` : '/api/bols', {
-      method:  isEdit ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!data.ok) { setStatus(data.error || 'Save failed.', 'error'); return; }
+    const tempBol = {
+      ...payload,
+      bol_number: payload.bol_number || '',
+    };
 
-    await generatePdf(data.bol);
-    const bolLabel = data.bol.bol_number ? `BOL #${data.bol.bol_number}` : 'BOL';
-    showToast(`${bolLabel} ${isEdit ? 'updated' : 'generated'}`);
-    loadRecentBols();
+    let packingSlipPdfBytes = null;
+    if (prefilledJobId && document.getElementById('f-include-packing')?.checked) {
+      try {
+        const res = await fetch('/api/jobs/' + encodeURIComponent(prefilledJobId));
+        const data = await res.json();
+        if (data.job?.packing_slip_pdf) {
+          const b64 = data.job.packing_slip_pdf;
+          const binary = atob(b64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          packingSlipPdfBytes = bytes.buffer;
+        }
+      } catch (e) { console.error('Failed to fetch packing slip:', e); }
+    }
+
+    const result = await BolShared.generatePdf([tempBol], { previewOnly: true, packingSlipPdfBytes });
+    showBolReview(result.blobUrl, payload);
   } catch (e) {
     setStatus('Error: ' + (e.message || String(e)), 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Generate BOL PDF';
   }
+}
+
+let pendingReviewPayload = null;
+let pendingReviewBlobUrl = null;
+
+function showBolReview(blobUrl, payload) {
+  pendingReviewPayload = payload;
+  pendingReviewBlobUrl = blobUrl;
+
+  const backdrop = document.getElementById('bol-review-backdrop');
+  const iframe = document.getElementById('bol-review-iframe');
+  iframe.src = blobUrl;
+  backdrop.style.display = 'flex';
+
+  const approveBtn = document.getElementById('bol-review-approve');
+  const editBtn = document.getElementById('bol-review-edit');
+
+  const newApprove = approveBtn.cloneNode(true);
+  approveBtn.parentNode.replaceChild(newApprove, approveBtn);
+  newApprove.addEventListener('click', handleReviewApprove);
+
+  const newEdit = editBtn.cloneNode(true);
+  editBtn.parentNode.replaceChild(newEdit, editBtn);
+  newEdit.addEventListener('click', handleReviewEdit);
+}
+
+function closeBolReview() {
+  const backdrop = document.getElementById('bol-review-backdrop');
+  backdrop.style.display = 'none';
+  document.getElementById('bol-review-iframe').src = '';
+  if (pendingReviewBlobUrl) {
+    URL.revokeObjectURL(pendingReviewBlobUrl);
+    pendingReviewBlobUrl = null;
+  }
+}
+
+async function handleReviewApprove() {
+  if (!pendingReviewPayload) return;
+
+  const approveBtn = document.getElementById('bol-review-approve');
+  approveBtn.disabled = true;
+  approveBtn.textContent = 'Saving…';
+
+  try {
+    const isEdit = !!editingBolId;
+    const res = await fetch(isEdit ? `/api/bols/${editingBolId}` : '/api/bols', {
+      method: isEdit ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pendingReviewPayload),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      setStatus(data.error || 'Save failed.', 'error');
+      closeBolReview();
+      return;
+    }
+
+    BolShared.openPdf(pendingReviewBlobUrl);
+    pendingReviewBlobUrl = null;
+
+    const bolLabel = data.bol.bol_number ? `BOL #${data.bol.bol_number}` : 'BOL';
+    showToast(`${bolLabel} ${isEdit ? 'updated' : 'generated'}`);
+    loadRecentBols();
+    closeBolReview();
+  } catch (e) {
+    setStatus('Error: ' + (e.message || String(e)), 'error');
+    closeBolReview();
+  } finally {
+    approveBtn.disabled = false;
+    approveBtn.textContent = 'Approve & Save';
+  }
+}
+
+function handleReviewEdit() {
+  closeBolReview();
 }
 
 async function handleDraft() {
@@ -1229,6 +1345,8 @@ async function handleClear() {
   setStatus('');
   setTodayDate();
   document.getElementById('f-bol-number').value = '';
+  commodityWithDims = '';
+  if (document.getElementById('f-hide-dims')) document.getElementById('f-hide-dims').checked = false;
 }
 
 function handleDuplicate() {
@@ -1283,30 +1401,6 @@ function loadBolIntoForm(b) {
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
   showToast(`BOL #${b.bol_number} loaded`);
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// PDF Generation
-// PDF rendering is handled by BolShared.generatePdf() in /logistics/bol-shared.js.
-// To adjust coordinates, edit COORDS in that file only.
-
-async function generatePdf(bol) {
-  let packingSlipPdfBytes = null;
-  if (prefilledJobId && document.getElementById('f-include-packing')?.checked) {
-    try {
-      const res = await fetch('/api/jobs/' + encodeURIComponent(prefilledJobId));
-      const data = await res.json();
-      if (data.job?.packing_slip_pdf) {
-        const b64 = data.job.packing_slip_pdf;
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        packingSlipPdfBytes = bytes.buffer;
-      }
-    } catch (e) { console.error('Failed to fetch packing slip:', e); }
-  }
-
-  await BolShared.generatePdf([bol], { packingSlipPdfBytes });
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1475,6 +1569,37 @@ function showToast(msg) {
   t._t = setTimeout(() => t.classList.remove('visible'), 3200);
 }
 </script>
+
+<!-- BOL Review Modal -->
+<div id="bol-review-backdrop" style="
+  position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;
+  display:none;align-items:center;justify-content:center;
+">
+  <div style="
+    background:#fff;border-radius:12px;width:95%;max-width:800px;
+    height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);
+  ">
+    <div style="
+      display:flex;justify-content:space-between;align-items:center;
+      padding:16px 20px;border-bottom:1px solid #e5e7eb;
+    ">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827;">Review BOL</h3>
+      <div style="display:flex;gap:8px;">
+        <button id="bol-review-edit" style="
+          padding:8px 20px;border-radius:8px;border:1px solid #d1d5db;
+          background:#fff;cursor:pointer;font-size:14px;font-weight:600;color:#111827;
+        ">Make Changes</button>
+        <button id="bol-review-approve" style="
+          padding:8px 20px;border-radius:8px;border:none;
+          background:#1e293b;color:#fff;cursor:pointer;font-size:14px;font-weight:600;
+        ">Approve &amp; Save</button>
+      </div>
+    </div>
+    <iframe id="bol-review-iframe" style="
+      flex:1;border:none;border-radius:0 0 12px 12px;
+    "></iframe>
+  </div>
+</div>
 
 </body>
 </html>

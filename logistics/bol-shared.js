@@ -158,21 +158,15 @@ window.BolShared = (function() {
       }
     }
 
-    // Save, download, and open
     const pdfBytes = await combinedPdf.save();
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     const blobUrl = URL.createObjectURL(blob);
 
-    // Trigger download
-    const bolNum = bolRecords[0]?.bol_number || 'BOL';
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = `BOL-${bolNum}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    if (opts.previewOnly) {
+      return { blobUrl, pdfBytes };
+    }
 
-    // Open in new tab
+    // Open in new tab (no auto-download)
     const win = window.open(blobUrl, '_blank');
     if (!win) {
       const err = new Error('PDF was generated but your browser blocked the popup. Please allow popups for this site.');
@@ -181,6 +175,15 @@ window.BolShared = (function() {
     }
 
     // Clean up blob URL after delay
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+  }
+
+  function openPdf(blobUrl) {
+    const win = window.open(blobUrl, '_blank');
+    if (!win) {
+      alert('Your browser blocked the popup. Please allow popups for this site.');
+      return;
+    }
     setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
   }
 
@@ -260,6 +263,7 @@ window.BolShared = (function() {
   return {
     COORDS,
     generatePdf,
+    openPdf,
     buildShipToLines,
     wrapText,
     confirmNoBolNumber,

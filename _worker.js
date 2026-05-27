@@ -215,6 +215,10 @@ export default {
         return handleApiLoadingAssignments(request, env);
       }
 
+      if (url.pathname === "/api/loading-photos" || url.pathname.startsWith("/api/loading-photos/")) {
+        return handleApiLoadingPhotos(request, env);
+      }
+
       if (url.pathname === "/api/notifications" || url.pathname.startsWith("/api/notifications/")) {
         return handleApiNotifications(request, env);
       }
@@ -468,6 +472,7 @@ const API_PERMISSION_MAP = [
   { pattern: /^\/api\/load-builder-skus/, key: 'logistics.load-builder' },
   { pattern: /^\/api\/loading-bays/,      key: 'logistics.loading' },
   { pattern: /^\/api\/loading-assignments/, key: 'logistics.loading' },
+  { pattern: /^\/api\/loading-photos/, key: 'logistics.loading' },
   { pattern: /^\/api\/parts/,             key: 'production.calculators' },
   { pattern: /^\/api\/combos/,            key: 'production.calculators' },
   { pattern: /^\/api\/bead/,              key: 'production.inventory' },
@@ -3198,12 +3203,16 @@ async function handleApiBols(request, env) {
     const search       = (url.searchParams.get("search")      || "").trim();
     const jobIdsParam  = (url.searchParams.get("job_ids")     || "").trim();
     const jobIds       = jobIdsParam ? jobIdsParam.split(",").map(s => s.trim()).filter(Boolean) : [];
+    const jobId        = (url.searchParams.get("job_id")      || "").trim();
 
     let query   = "SELECT * FROM bols";
     const conds = [];
     const binds = [];
 
-    if (jobIds.length) {
+    if (jobId) {
+      conds.push("job_id = ?");
+      binds.push(jobId);
+    } else if (jobIds.length) {
       const ph = jobIds.map(() => "?").join(",");
       conds.push(`job_id IN (${ph})`);
       binds.push(...jobIds);
@@ -4173,6 +4182,13 @@ async function handleApiLoadingBays(request, env) {
   }
 
   if (request.method === 'PUT') {
+    const userPerms = JSON.parse(request.headers.get('X-User-Permissions') || '{}');
+    const isAdministrator = request.headers.get('X-User-Is-Admin') === '1';
+
+    if (!isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
+      return json({ ok: false, error: 'Manager access required to update bay settings.' }, 403);
+    }
+
     let payload;
     try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
 
@@ -4212,21 +4228,27 @@ async function handleApiLoadingAssignments(request, env) {
   const isAdministrator = request.headers.get('X-User-Is-Admin') === '1';
 
   if (request.method === 'GET') {
+    // Backfill: create loading assignments for jobs that don't have enough
     try {
-      const orphanJobs = await db.prepare(`
-        SELECT j.id FROM jobs j
+      const backfillJobs = await db.prepare(`
+        SELECT j.id, j.load_count,
+          (SELECT COUNT(*) FROM loading_assignments la WHERE la.job_id = j.id) AS existing_count
+        FROM jobs j
         WHERE j.status IN ('done', 'loading', 'shipped')
-        AND NOT EXISTS (SELECT 1 FROM loading_assignments la WHERE la.job_id = j.id)
+        AND (SELECT COUNT(*) FROM loading_assignments la WHERE la.job_id = j.id) < CASE WHEN j.load_count > 1 THEN j.load_count ELSE 1 END
       `).all();
-      const orphans = orphanJobs.results || [];
-      if (orphans.length > 0) {
+      const backfill = backfillJobs.results || [];
+      if (backfill.length > 0) {
         const now = new Date().toISOString();
-        for (const oj of orphans) {
-          const laId = crypto.randomUUID();
-          await db.prepare(`
-            INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, created_at, updated_at)
-            VALUES (?, ?, NULL, '', 'awaiting', NULL, '', ?, ?)
-          `).bind(laId, oj.id, now, now).run();
+        for (const bj of backfill) {
+          const targetCount = Math.max(bj.load_count || 1, 1);
+          for (let n = bj.existing_count + 1; n <= targetCount; n++) {
+            const laId = crypto.randomUUID();
+            await db.prepare(`
+              INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, load_number, created_at, updated_at)
+              VALUES (?, ?, NULL, '', 'awaiting', NULL, '', ?, ?, ?)
+            `).bind(laId, bj.id, n, now, now).run();
+          }
         }
       }
     } catch (e) {
@@ -4239,7 +4261,7 @@ async function handleApiLoadingAssignments(request, env) {
 
       let query = `
         SELECT la.*, j.customer, j.invoice_number, j.po_number, j.ship_date, j.ship_to_company,
-               j.ship_to_city, j.ship_to_state, j.carrier, j.method,
+               j.ship_to_city, j.ship_to_state, j.carrier, j.method, j.load_count,
                lb.bay_number, lb.label as bay_label
         FROM loading_assignments la
         JOIN jobs j ON la.job_id = j.id
@@ -4270,16 +4292,31 @@ async function handleApiLoadingAssignments(request, env) {
 
     if (!payload.job_id) return json({ ok: false, error: 'job_id is required.' }, 400);
 
+    const job = await db.prepare("SELECT load_count FROM jobs WHERE id = ?").bind(payload.job_id).first();
+    if (!job) return json({ ok: false, error: 'Job not found.' }, 404);
+
+    const maxLoads = Math.max(job.load_count || 1, 1);
+    const existingCountRow = await db.prepare(
+      "SELECT COUNT(*) as cnt FROM loading_assignments WHERE job_id = ?"
+    ).bind(payload.job_id).first();
+
+    const currentCount = existingCountRow?.cnt || 0;
+    if (currentCount >= maxLoads) {
+      return json({ ok: false, error: `This job already has ${currentCount} of ${maxLoads} load assignment(s).` }, 400);
+    }
+
+    const loadNumber = currentCount + 1;
+
     const id = crypto.randomUUID();
     const loading_status = payload.bay_id ? 'not_started' : 'awaiting';
     const now = new Date().toISOString();
 
     try {
       await db.prepare(`
-        INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, load_number, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(id, payload.job_id, payload.bay_id || null, payload.trailer_number || '', loading_status,
-              request.headers.get('X-User-Id') || null, payload.notes || '', now, now).run();
+              request.headers.get('X-User-Id') || null, payload.notes || '', loadNumber, now, now).run();
 
       // Sync initial loading status to linked shipment
       try {
@@ -4330,6 +4367,10 @@ async function handleApiLoadingAssignments(request, env) {
     if (payload.bay_id !== undefined) { updates.push('bay_id = ?'); binds.push(payload.bay_id || null); }
     if (payload.trailer_number !== undefined) { updates.push('trailer_number = ?'); binds.push(String(payload.trailer_number)); }
     if (payload.notes !== undefined) { updates.push('notes = ?'); binds.push(String(payload.notes)); }
+    if (payload.ready_checklist !== undefined) {
+      updates.push('ready_checklist = ?');
+      binds.push(typeof payload.ready_checklist === 'string' ? payload.ready_checklist : JSON.stringify(payload.ready_checklist));
+    }
 
     if (payload.loading_status) {
       // Manager-only: assigning to bay (awaiting → not_started) or reassigning bays
@@ -4429,6 +4470,100 @@ async function handleApiLoadingAssignments(request, env) {
     try {
       await db.prepare("DELETE FROM loading_assignments WHERE id = ?").bind(id).run();
       await logActivity(db, 'delete', 'loading_assignment', id, 'Removed loading assignment', { id },
+        request.headers.get('X-User-Id'));
+      return json({ ok: true });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: 'Method not allowed' }, 405);
+}
+
+async function handleApiLoadingPhotos(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+
+  const url = new URL(request.url);
+  const pathParts = url.pathname.replace('/api/loading-photos', '').split('/').filter(Boolean);
+  const photoId = pathParts[0] || null;
+
+  if (request.method === 'GET') {
+    try {
+      if (photoId) {
+        const row = await db.prepare("SELECT * FROM loading_photos WHERE id = ?").bind(photoId).first();
+        if (!row) return json({ ok: false, error: 'Photo not found.' }, 404);
+        return json({ ok: true, photo: row });
+      }
+
+      const jobId = url.searchParams.get('job_id');
+      const assignmentId = url.searchParams.get('assignment_id');
+
+      let query = "SELECT id, assignment_id, job_id, filename, uploaded_by, created_at FROM loading_photos";
+      const conditions = [];
+      const binds = [];
+
+      if (jobId) { conditions.push("job_id = ?"); binds.push(jobId); }
+      if (assignmentId) { conditions.push("assignment_id = ?"); binds.push(assignmentId); }
+      if (conditions.length) query += " WHERE " + conditions.join(" AND ");
+      query += " ORDER BY created_at ASC";
+
+      const rows = await db.prepare(query).bind(...binds).all();
+      return json({ ok: true, photos: rows.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (request.method === 'POST') {
+    let payload;
+    try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+    if (!payload.assignment_id) return json({ ok: false, error: 'assignment_id is required.' }, 400);
+    if (!payload.job_id) return json({ ok: false, error: 'job_id is required.' }, 400);
+    if (!payload.photo_data) return json({ ok: false, error: 'photo_data is required.' }, 400);
+
+    if (payload.photo_data.length > 1500000) {
+      return json({ ok: false, error: 'Photo too large. Maximum ~1MB after compression.' }, 400);
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    try {
+      await db.prepare(`
+        INSERT INTO loading_photos (id, assignment_id, job_id, photo_data, filename, uploaded_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id, payload.assignment_id, payload.job_id, payload.photo_data,
+        payload.filename || '', request.headers.get('X-User-Id') || null, now
+      ).run();
+
+      await logActivity(db, 'create', 'loading_photo', id,
+        `Uploaded loading photo for assignment ${payload.assignment_id}`,
+        { assignment_id: payload.assignment_id, job_id: payload.job_id },
+        request.headers.get('X-User-Id'));
+
+      return json({ ok: true, id }, 201);
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (request.method === 'DELETE' && photoId) {
+    const userPerms = JSON.parse(request.headers.get('X-User-Permissions') || '{}');
+    const isAdministrator = request.headers.get('X-User-Is-Admin') === '1';
+
+    if (!isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
+      return json({ ok: false, error: 'Manager access required to delete photos.' }, 403);
+    }
+
+    try {
+      const exists = await db.prepare("SELECT id FROM loading_photos WHERE id = ?").bind(photoId).first();
+      if (!exists) return json({ ok: false, error: 'Photo not found.' }, 404);
+
+      await db.prepare("DELETE FROM loading_photos WHERE id = ?").bind(photoId).run();
+      await logActivity(db, 'delete', 'loading_photo', photoId, 'Deleted loading photo', {},
         request.headers.get('X-User-Id'));
       return json({ ok: true });
     } catch (e) {

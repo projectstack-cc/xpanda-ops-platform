@@ -40,6 +40,8 @@
     .ld-btn-advance:hover { background: #334155; }
     .ld-btn-assign { padding: 4px 10px; border: 1px solid #3b82f6; background: #eff6ff; color: #1e40af; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; }
     .ld-btn-archive { padding: 4px 10px; border: 1px solid #d1d5db; background: #fff; color: #6b7280; border-radius: 6px; font-size: 11px; cursor: pointer; }
+    .ld-btn-bol { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .ld-btn-bol:hover { background: #e0f2fe; }
     .ld-empty { color: #9ca3af; font-size: 12px; text-align: center; padding: 16px; }
     .ld-empty-bay { color: #9ca3af; font-size: 12px; text-align: center; padding: 16px; }
     .ld-queue { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -81,6 +83,22 @@
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }
+    }
+    .loading-photo-thumb {
+      position: relative;
+      width: 80px; height: 80px;
+      border-radius: 8px; overflow: hidden;
+      border: 1px solid #d1d5db;
+    }
+    .loading-photo-thumb img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .loading-photo-thumb .remove-photo {
+      position: absolute; top: 2px; right: 2px;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: rgba(0,0,0,0.6); color: #fff;
+      border: none; font-size: 12px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
     }
   </style>
 </head>
@@ -177,6 +195,9 @@
     </div>
   </div>
 </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="/logistics/bol-shared.js"></script>
 
 <script>
 let allBays = [];
@@ -418,6 +439,7 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
       </div>
       <div class="ld-card-meta">
         ${a.invoice_number ? `<span>INV# ${esc(a.invoice_number)}</span>` : ''}
+        ${(a.load_count || 1) > 1 ? `<span style="font-weight:700;color:#6366f1;">Load ${a.load_number || 1} of ${a.load_count}</span>` : ''}
         ${a.trailer_number ? `<span>Trailer: ${esc(a.trailer_number)}</span>` : ''}
         ${a.ship_to_city ? `<span>${esc(a.ship_to_city)}${a.ship_to_state ? ', ' + esc(a.ship_to_state) : ''}</span>` : ''}
       </div>
@@ -427,6 +449,9 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
           : ''}
         ${next && a.loading_status !== 'awaiting'
           ? `<button class="ld-btn-advance" onclick="advanceStatus('${a.id}', '${next}')">${getAdvanceLabel(next)}</button>`
+          : ''}
+        ${a.loading_status !== 'awaiting'
+          ? `<button class="ld-btn-bol" onclick="viewBolForJob('${a.job_id}')">View BOL</button>`
           : ''}
         ${showArchiveBtn ? `<button class="ld-btn-archive" onclick="archiveAssignment('${a.id}')">Archive</button>` : ''}
       </div>
@@ -452,6 +477,11 @@ function getAdvanceLabel(nextStatus) {
 }
 
 async function advanceStatus(assignmentId, newStatus) {
+  if (newStatus === 'loaded') {
+    openLoadedChecklist(assignmentId);
+    return;
+  }
+
   try {
     const res = await fetch('/api/loading-assignments', {
       method: 'PUT',
@@ -812,7 +842,258 @@ window.addEventListener('DOMContentLoaded', () => {
 
   setInterval(loadDashboard, 15000);
 });
+
+async function viewBolForJob(jobId) {
+  try {
+    const res = await fetch('/api/bols?job_id=' + encodeURIComponent(jobId));
+    const data = await res.json();
+
+    if (!data.ok || !data.bols || data.bols.length === 0) {
+      alert('No BOL found for this job. Generate a BOL first from the BOL Generator or Load Builder.');
+      return;
+    }
+
+    const bol = data.bols[data.bols.length - 1];
+
+    if (typeof BolShared.openPdf === 'function') {
+      const result = await BolShared.generatePdf([bol], { previewOnly: true });
+      BolShared.openPdf(result.blobUrl);
+    } else {
+      await BolShared.generatePdf([bol]);
+    }
+  } catch (e) {
+    console.error('Failed to load BOL:', e);
+    alert('Failed to load BOL. Please try again.');
+  }
+}
+
+let checklistAssignmentId = null;
+let pendingPhotos = [];
+
+function openLoadedChecklist(assignmentId) {
+  checklistAssignmentId = assignmentId;
+  pendingPhotos = [];
+
+  document.getElementById('chk-qty-verified').checked = false;
+  document.getElementById('chk-changes-issues').checked = false;
+  document.getElementById('chk-paperwork-secured').checked = false;
+  document.getElementById('changes-notes').value = '';
+  document.getElementById('changes-notes-row').style.display = 'none';
+  document.getElementById('loading-photo-previews').innerHTML = '';
+
+  document.getElementById('loaded-checklist-modal').hidden = false;
+}
+
+function closeLoadedChecklist() {
+  document.getElementById('loaded-checklist-modal').hidden = true;
+  checklistAssignmentId = null;
+  pendingPhotos = [];
+}
+
+function captureLoadingPhoto() {
+  document.getElementById('loading-photo-capture').click();
+}
+
+function uploadLoadingPhoto() {
+  document.getElementById('loading-photo-upload').click();
+}
+
+async function handleLoadingPhotoSelected(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+
+  for (const file of files) {
+    try {
+      const compressed = await compressPhoto(file, 1200, 0.6);
+      pendingPhotos.push({ dataUrl: compressed, filename: file.name });
+    } catch (e) {
+      console.error('Photo compression failed:', e);
+    }
+  }
+
+  renderPhotoPreview();
+  input.value = '';
+}
+
+function compressPhoto(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width;
+        let h = img.height;
+
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round(h * (maxDim / w));
+            w = maxDim;
+          } else {
+            w = Math.round(w * (maxDim / h));
+            h = maxDim;
+          }
+        }
+
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderPhotoPreview() {
+  const container = document.getElementById('loading-photo-previews');
+  container.innerHTML = pendingPhotos.map((p, i) => `
+    <div class="loading-photo-thumb">
+      <img src="${p.dataUrl}" alt="Photo ${i + 1}">
+      <button class="remove-photo" onclick="removeLoadingPhoto(${i})">&#x2715;</button>
+    </div>
+  `).join('');
+}
+
+function removeLoadingPhoto(index) {
+  pendingPhotos.splice(index, 1);
+  renderPhotoPreview();
+}
+
+async function confirmLoadedChecklist() {
+  const qtyVerified = document.getElementById('chk-qty-verified').checked;
+  const paperworkSecured = document.getElementById('chk-paperwork-secured').checked;
+
+  if (!qtyVerified) { alert('Please confirm all quantities have been counted and verified.'); return; }
+  if (!paperworkSecured) { alert('Please confirm the paperwork was secured inside the trailer.'); return; }
+
+  const changesIssues = document.getElementById('chk-changes-issues').checked;
+  const changesNotes = changesIssues ? document.getElementById('changes-notes').value.trim() : '';
+
+  const checklist = {
+    qty_verified: true,
+    changes_issues: changesIssues,
+    changes_notes: changesNotes,
+    paperwork_secured: true,
+    completed_at: new Date().toISOString(),
+  };
+
+  const btn = document.getElementById('btn-confirm-loaded');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const res = await fetch('/api/loading-assignments', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: checklistAssignmentId,
+        loading_status: 'loaded',
+        ready_checklist: JSON.stringify(checklist),
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      alert(data.error || 'Failed to mark as loaded');
+      return;
+    }
+
+    const assignment = allAssignments.find(a => a.id === checklistAssignmentId);
+    const jobId = assignment?.job_id;
+
+    if (pendingPhotos.length > 0 && jobId) {
+      for (const photo of pendingPhotos) {
+        const base64 = photo.dataUrl.split(',')[1] || photo.dataUrl;
+        try {
+          await fetch('/api/loading-photos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              assignment_id: checklistAssignmentId,
+              job_id: jobId,
+              photo_data: base64,
+              filename: photo.filename,
+            }),
+          });
+        } catch (e) {
+          console.error('Photo upload failed:', e);
+        }
+      }
+    }
+
+    closeLoadedChecklist();
+    loadDashboard();
+
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:10000;';
+    toast.innerHTML = '<span style="color:#34d399;">&#x2713;</span> Marked as loaded';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+
+  } catch (e) {
+    console.error('Loaded checklist submission failed:', e);
+    alert('Failed to submit checklist. Please try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirm & Mark Loaded';
+  }
+}
 </script>
+
+<!-- Mark Loaded Checklist Modal -->
+<div id="loaded-checklist-modal" class="ld-modal-backdrop" hidden>
+  <div class="ld-modal-card" style="max-width:500px;">
+    <div class="ld-modal-header">
+      <h3>Loading Completion Checklist</h3>
+      <button onclick="closeLoadedChecklist()" class="ld-modal-close">&#x2715;</button>
+    </div>
+    <div class="ld-modal-body">
+      <p style="font-size:13px;color:#6b7280;margin:0 0 16px;">
+        Confirm the following before marking this load as complete.
+      </p>
+
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;cursor:pointer;font-size:14px;color:#111827;">
+        <input type="checkbox" id="chk-qty-verified" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;">
+        Have all quantities been counted and verified?
+      </label>
+
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;cursor:pointer;font-size:14px;color:#111827;">
+        <input type="checkbox" id="chk-changes-issues" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;" onchange="document.getElementById('changes-notes-row').style.display = this.checked ? '' : 'none';">
+        Were there any changes or issues?
+      </label>
+      <div id="changes-notes-row" style="display:none;margin:0 0 16px 28px;">
+        <textarea id="changes-notes" rows="3" placeholder="Describe changes or issues&#8230;"
+          style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;resize:vertical;"></textarea>
+      </div>
+
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:20px;cursor:pointer;font-size:14px;color:#111827;">
+        <input type="checkbox" id="chk-paperwork-secured" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;">
+        Was the paperwork secured inside the trailer?
+      </label>
+
+      <div style="border-top:1px solid #e5e7eb;padding-top:16px;">
+        <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px;">Photos (optional)</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <button type="button" onclick="captureLoadingPhoto()" class="ld-btn-advance" style="font-size:13px;">&#x1F4F7; Take Photo</button>
+          <button type="button" onclick="uploadLoadingPhoto()" class="ld-btn-assign" style="font-size:13px;">&#x1F4C1; Upload from Library</button>
+        </div>
+        <input type="file" id="loading-photo-capture" accept="image/*" capture="environment" style="display:none;" onchange="handleLoadingPhotoSelected(this)">
+        <input type="file" id="loading-photo-upload" accept="image/*" style="display:none;" onchange="handleLoadingPhotoSelected(this)" multiple>
+        <div id="loading-photo-previews" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+    </div>
+    <div class="ld-modal-footer">
+      <button onclick="closeLoadedChecklist()" class="ld-btn-cancel">Cancel</button>
+      <button id="btn-confirm-loaded" onclick="confirmLoadedChecklist()" class="ld-btn-confirm">Confirm &amp; Mark Loaded</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>

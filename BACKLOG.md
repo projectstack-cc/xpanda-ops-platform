@@ -13,6 +13,13 @@
 - [ ] Load builder: make initial calculated load view larger, include the stacks visually
 - [ ] Load builder: fix/clarify customize mode drag-and-drop (move layers between columns)
 - [ ] Calendar view for shipments board
+- [ ] Saved Loads button on Load Builder initial page (Prompt 53)
+- [ ] Trailer number backend permission guard — manager-only on PUT /api/loading-bays (Prompt 53)
+- [ ] BOL review/approve flow + stop auto-download of PDF (Prompt 54)
+- [ ] Part # and qty only toggle on BOL generator — hide dims (Prompt 55)
+- [ ] Mark Loaded checklist — three confirmation questions + photo capture/upload with compression (Prompt 56)
+- [ ] Load count multi-assignment — jobs with load_count > 1 generate multiple loading cards (Prompt 57)
+- [ ] View BOL from loading cards (Prompt 58)
 - [ ] Explore: use Claude Chrome to navigate AppSheets apps for a "Load Dashboard" for loading team
 
 ### Done
