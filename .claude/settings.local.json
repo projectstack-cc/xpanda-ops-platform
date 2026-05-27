@@ -25,7 +25,9 @@
       "Bash(npx wrangler *)",
       "Bash(del migrate-bol-number.sql)",
       "Bash(wrangler --version)",
-      "Bash(wrangler d1 *)"
+      "Bash(wrangler d1 *)",
+      "Bash(mv prompt-*.md \"Prompts/\")",
+      "Bash(mv *.sql \"DB Migrations/\")"
     ]
   }
 }
