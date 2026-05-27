@@ -611,6 +611,39 @@ button, input, select, textarea {
 
 .logistics-platform-footer a:hover { text-decoration: underline; }
 
+/* ── Calendar View ───────────────────────────────────────────────────────── */
+.cal-header-row { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 2px solid #e5e7eb; }
+.cal-header-cell { padding: 8px 4px; text-align: center; font-size: 12px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+.cal-body { border-left: 1px solid #e5e7eb; border-top: 1px solid #e5e7eb; }
+.cal-row { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-cell { min-height: 110px; border-right: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; padding: 4px; background: #fff; overflow: hidden; }
+.cal-cell-empty { background: #fafafa; min-height: 110px; border-right: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
+.cal-today { background: #eff6ff !important; }
+.cal-weekend { background: #fafafa; }
+.cal-day-num { font-size: 13px; font-weight: 600; color: #6b7280; margin-bottom: 4px; padding: 2px 4px; }
+.cal-day-today { color: #fff; background: #1e293b; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.cal-pill { padding: 3px 6px; margin-bottom: 2px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity 0.15s; }
+.cal-pill:hover { opacity: 0.8; }
+.cal-more { padding: 2px 6px; font-size: 10px; font-weight: 600; color: #6b7280; cursor: pointer; }
+.cal-more:hover { color: #1e40af; text-decoration: underline; }
+
+.logistics-view-toggle { display: flex; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; }
+.logistics-view-btn { padding: 5px 12px; font-size: 12px; font-weight: 600; border: none; background: #fff; color: #6b7280; cursor: pointer; }
+.logistics-view-btn.active { background: #1e293b; color: #fff; }
+
+@media (max-width: 768px) {
+  .cal-cell { min-height: 70px; padding: 2px; }
+  .cal-header-cell { font-size: 10px; padding: 6px 2px; }
+  .cal-day-num { font-size: 11px; }
+  .cal-pill { font-size: 9px; padding: 2px 4px; }
+  .cal-day-today { width: 20px; height: 20px; font-size: 10px; }
+}
+@media (max-width: 480px) {
+  .cal-cell { min-height: 50px; }
+  .cal-pill { font-size: 8px; padding: 1px 3px; border-left-width: 2px; }
+  .cal-header-cell { font-size: 9px; }
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 700px) {

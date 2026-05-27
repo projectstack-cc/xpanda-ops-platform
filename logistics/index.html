@@ -56,6 +56,10 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
   <div class="logistics-tab-pane active" id="tab-outbound">
 
     <div class="logistics-toolbar">
+      <div class="logistics-view-toggle">
+        <button class="logistics-view-btn active" id="outbound-view-list" onclick="setOutboundView('list')">List</button>
+        <button class="logistics-view-btn" id="outbound-view-calendar" onclick="setOutboundView('calendar')">Calendar</button>
+      </div>
       <button class="logistics-btn logistics-btn-outbound" onclick="openModal('outbound')">+ New Shipment</button>
       <button class="logistics-btn logistics-btn-outline" onclick="openShipJobPicker()">Ship from Job…</button>
       <a class="logistics-btn logistics-btn-outline" href="/logistics/load-builder.html" style="text-decoration:none;">Load Builder</a>
@@ -83,12 +87,27 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
       <div style="color:#94a3b8;font-size:14px;padding:20px 0;">Loading…</div>
     </div>
 
+    <!-- Outbound calendar view -->
+    <div id="outbound-calendar" style="display:none;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:12px 0;">
+        <button onclick="changeShipCalMonth('outbound', -1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">←</button>
+        <h3 id="outbound-cal-label" style="margin:0;font-size:18px;font-weight:700;min-width:180px;text-align:center;"></h3>
+        <button onclick="changeShipCalMonth('outbound', 1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">→</button>
+        <button onclick="goToShipCalToday('outbound')" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
+      </div>
+      <div id="outbound-cal-grid"></div>
+    </div>
+
   </div>
 
   <!-- ── Inbound Tab ───────────────────────────────────────────────────── -->
   <div class="logistics-tab-pane" id="tab-inbound">
 
     <div class="logistics-toolbar">
+      <div class="logistics-view-toggle">
+        <button class="logistics-view-btn active" id="inbound-view-list" onclick="setInboundView('list')">List</button>
+        <button class="logistics-view-btn" id="inbound-view-calendar" onclick="setInboundView('calendar')">Calendar</button>
+      </div>
       <button class="logistics-btn logistics-btn-inbound" onclick="openModal('inbound')">+ New Delivery</button>
 
       <div class="logistics-toolbar-right">
@@ -114,6 +133,17 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
 
     <div id="inbound-content">
       <div style="color:#94a3b8;font-size:14px;padding:20px 0;">Loading…</div>
+    </div>
+
+    <!-- Inbound calendar view -->
+    <div id="inbound-calendar" style="display:none;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:12px 0;">
+        <button onclick="changeShipCalMonth('inbound', -1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">←</button>
+        <h3 id="inbound-cal-label" style="margin:0;font-size:18px;font-weight:700;min-width:180px;text-align:center;"></h3>
+        <button onclick="changeShipCalMonth('inbound', 1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">→</button>
+        <button onclick="goToShipCalToday('inbound')" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
+      </div>
+      <div id="inbound-cal-grid"></div>
     </div>
 
   </div>
@@ -315,6 +345,21 @@ let allBeadTypes    = [];
 let allOpenJobs     = [];
 let outboundData    = [];
 let inboundData     = [];
+let outboundCalView = 'list';
+let inboundCalView  = 'list';
+let outboundCalMonth = new Date();
+let inboundCalMonth  = new Date();
+
+const SHIPMENT_STATUS_COLORS = {
+  awaiting:    { bg: '#f3f4f6', text: '#374151', border: '#9ca3af' },
+  not_started: { bg: '#fef3c7', text: '#92400e', border: '#f59e0b' },
+  loading:     { bg: '#dbeafe', text: '#1e40af', border: '#3b82f6' },
+  loaded:      { bg: '#d1fae5', text: '#065f46', border: '#10b981' },
+  in_transit:  { bg: '#e0e7ff', text: '#3730a3', border: '#6366f1' },
+  delivered:   { bg: '#f0fdf4', text: '#166534', border: '#22c55e' },
+  cancelled:   { bg: '#f3f4f6', text: '#9ca3af', border: '#d1d5db' },
+  scheduled:   { bg: '#f1f5f9', text: '#475569', border: '#94a3b8' },
+};
 let editingId       = null;
 let promptJobId     = null;
 let jobPickerFull   = [];
@@ -407,14 +452,14 @@ async function loadOpenJobs() {
 }
 
 async function loadOutbound() {
-  const weekVal = document.getElementById('outbound-week-input').value;
+  const weekVal = outboundCalView === 'calendar' ? '' : document.getElementById('outbound-week-input').value;
   const status  = document.getElementById('outbound-status-filter').value;
   const params  = new URLSearchParams({ direction: 'outbound' });
   if (weekVal) {
     const mon = weekInputToMonday(weekVal);
     if (mon) params.set('week', mon);
   } else {
-    params.set('days', '60');
+    params.set('days', outboundCalView === 'calendar' ? '365' : '60');
   }
   if (status) params.set('status', status);
 
@@ -430,7 +475,7 @@ async function loadOutbound() {
 
 async function loadInbound() {
   const status = document.getElementById('inbound-status-filter').value;
-  const days   = document.getElementById('inbound-days-filter').value;
+  const days   = inboundCalView === 'calendar' ? '365' : document.getElementById('inbound-days-filter').value;
   const params = new URLSearchParams({ direction: 'inbound', days });
   if (status) params.set('status', status);
 
@@ -543,6 +588,7 @@ function renderOutbound() {
   }).join('');
 
   updateStats();
+  if (outboundCalView === 'calendar') renderShipmentCalendar('outbound');
 }
 
 function buildOutboundRow(s) {
@@ -602,6 +648,7 @@ function renderInbound() {
     </div>`;
 
   updateStats();
+  if (inboundCalView === 'calendar') renderShipmentCalendar('inbound');
 }
 
 function buildInboundRow(s) {
@@ -957,6 +1004,139 @@ function showError(msg) {
   const el = document.getElementById('modal-error');
   el.textContent = msg;
   el.classList.toggle('visible', !!msg);
+}
+
+// ── Calendar view toggle ───────────────────────────────────────────────────
+function setOutboundView(view) {
+  outboundCalView = view;
+  document.getElementById('outbound-view-list').classList.toggle('active', view === 'list');
+  document.getElementById('outbound-view-calendar').classList.toggle('active', view === 'calendar');
+  document.getElementById('outbound-content').style.display = view === 'list' ? '' : 'none';
+  document.getElementById('outbound-calendar').style.display = view === 'calendar' ? '' : 'none';
+  const filterRow = document.querySelector('#tab-outbound .logistics-toolbar-right');
+  if (filterRow) filterRow.style.display = view === 'list' ? '' : 'none';
+  if (view === 'calendar') renderShipmentCalendar('outbound');
+}
+
+function setInboundView(view) {
+  inboundCalView = view;
+  document.getElementById('inbound-view-list').classList.toggle('active', view === 'list');
+  document.getElementById('inbound-view-calendar').classList.toggle('active', view === 'calendar');
+  document.getElementById('inbound-content').style.display = view === 'list' ? '' : 'none';
+  document.getElementById('inbound-calendar').style.display = view === 'calendar' ? '' : 'none';
+  const filterRow = document.querySelector('#tab-inbound .logistics-toolbar-right');
+  if (filterRow) filterRow.style.display = view === 'list' ? '' : 'none';
+  if (view === 'calendar') renderShipmentCalendar('inbound');
+}
+
+function changeShipCalMonth(direction, delta) {
+  if (direction === 'outbound') {
+    outboundCalMonth = new Date(outboundCalMonth.getFullYear(), outboundCalMonth.getMonth() + delta, 1);
+    renderShipmentCalendar('outbound');
+  } else {
+    inboundCalMonth = new Date(inboundCalMonth.getFullYear(), inboundCalMonth.getMonth() + delta, 1);
+    renderShipmentCalendar('inbound');
+  }
+}
+
+function goToShipCalToday(direction) {
+  if (direction === 'outbound') {
+    outboundCalMonth = new Date();
+    renderShipmentCalendar('outbound');
+  } else {
+    inboundCalMonth = new Date();
+    renderShipmentCalendar('inbound');
+  }
+}
+
+function renderShipmentCalendar(direction) {
+  const isOutbound = direction === 'outbound';
+  const data       = isOutbound ? outboundData : inboundData;
+  const calMonth   = isOutbound ? outboundCalMonth : inboundCalMonth;
+  const gridEl     = document.getElementById(isOutbound ? 'outbound-cal-grid' : 'inbound-cal-grid');
+  const labelEl    = document.getElementById(isOutbound ? 'outbound-cal-label' : 'inbound-cal-label');
+  if (!gridEl || !labelEl) return;
+
+  const year  = calMonth.getFullYear();
+  const month = calMonth.getMonth();
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  labelEl.textContent = `${monthNames[month]} ${year}`;
+
+  const firstDay  = new Date(year, month, 1);
+  const lastDay   = new Date(year, month + 1, 0);
+  const startDow  = firstDay.getDay();
+  const totalDays = lastDay.getDate();
+
+  const shipByDate = {};
+  data.forEach(s => {
+    if (!s.ship_date) return;
+    if (!shipByDate[s.ship_date]) shipByDate[s.ship_date] = [];
+    shipByDate[s.ship_date].push(s);
+  });
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  let html = '<div class="cal-header-row">';
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => { html += `<div class="cal-header-cell">${d}</div>`; });
+  html += '</div><div class="cal-body">';
+
+  const totalCells = Math.ceil((startDow + totalDays) / 7) * 7;
+  let dayNum = 1;
+
+  for (let i = 0; i < totalCells; i++) {
+    if (i % 7 === 0) html += '<div class="cal-row">';
+    if (i < startDow || dayNum > totalDays) {
+      html += '<div class="cal-cell cal-cell-empty"></div>';
+    } else {
+      const dateStr      = `${year}-${String(month+1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`;
+      const isToday      = dateStr === todayStr;
+      const isWeekend    = (i % 7 === 0 || i % 7 === 6);
+      const dayShipments = shipByDate[dateStr] || [];
+      const maxVisible   = 4;
+
+      html += `<div class="cal-cell${isToday ? ' cal-today' : ''}${isWeekend ? ' cal-weekend' : ''}">`;
+      html += `<div class="cal-day-num${isToday ? ' cal-day-today' : ''}">${dayNum}</div>`;
+
+      dayShipments.slice(0, maxVisible).forEach(s => {
+        const sc = SHIPMENT_STATUS_COLORS[s.status] || SHIPMENT_STATUS_COLORS.awaiting;
+        const displayName = esc(s.customer || 'Unknown');
+        const titleText   = `${displayName} — ${(s.status || '').replace(/_/g, ' ')}`;
+        html += `<div class="cal-pill" style="background:${sc.bg};color:${sc.text};border-left:3px solid ${sc.border};" onclick="openEdit('${s.id}')" title="${esc(titleText)}">${displayName}</div>`;
+      });
+
+      if (dayShipments.length > maxVisible) {
+        html += `<div class="cal-more" onclick="showCalDay('${direction}','${dateStr}')">+${dayShipments.length - maxVisible} more</div>`;
+      }
+
+      html += '</div>';
+      dayNum++;
+    }
+    if (i % 7 === 6) html += '</div>';
+  }
+  html += '</div>';
+  gridEl.innerHTML = html;
+}
+
+function showCalDay(direction, dateStr) {
+  if (direction === 'outbound') {
+    const d = new Date(dateStr + 'T12:00:00');
+    const dayOfWeek = d.getDay();
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
+    const weekInput = document.getElementById('outbound-week-input');
+    if (weekInput) {
+      const year  = monday.getFullYear();
+      const jan1  = new Date(year, 0, 1);
+      const days  = Math.floor((monday - jan1) / 86400000);
+      const weekNum = Math.ceil((days + jan1.getDay() + 1) / 7);
+      weekInput.value = `${year}-W${String(weekNum).padStart(2, '0')}`;
+    }
+    setOutboundView('list');
+    loadOutbound();
+  } else {
+    setInboundView('list');
+  }
 }
 
 function statusBadge(status) {
