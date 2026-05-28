@@ -41,8 +41,6 @@
   max-width: 120px;
 }
 
-.status-in_production { background: #fef3c7; color: #92400e; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
-.status-ready_to_ship { background: #dcfce7; color: #166534; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -954,16 +952,9 @@ function openEdit(id) {
     document.getElementById('f-silo-id').value    = '';
   }
 
-  // Job-linked note
+  // Hide job-linked note — edits here sync back to the job automatically
   const jobNote = document.getElementById('job-linked-note');
-  if (jobNote) {
-    if (s.job_id) {
-      jobNote.style.display = '';
-      jobNote.innerHTML = `<span style="color:#0369a1;">ℹ</span> This shipment is linked to a job. Changes to customer, carrier, address, and dates should be made on the <a href="/jobs/?job_id=${s.job_id}" style="color:#0369a1;font-weight:600;">Job Board</a> to stay in sync.`;
-    } else {
-      jobNote.style.display = 'none';
-    }
-  }
+  if (jobNote) jobNote.style.display = 'none';
 
   document.getElementById('shipment-modal').classList.remove('hidden');
 }
