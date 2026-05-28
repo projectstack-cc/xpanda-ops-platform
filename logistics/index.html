@@ -248,7 +248,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
 
       <!-- Outbound-specific -->
       <div class="logistics-field-section" id="outbound-fields">
-        <div class="logistics-field-section-label">Customer & Order</div>
+        <div class="logistics-field-section-label">Customer &amp; Order</div>
 
         <div class="logistics-field">
           <label>Customer <span style="color:#dc2626;">*</span></label>
@@ -309,7 +309,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
         <div class="logistics-field-row">
           <div class="logistics-field">
             <label>Delivery Time</label>
-            <input type="text" id="f-delivery-time" placeholder="e.g. 7:00 am &amp; HRLY">
+            <input type="text" id="f-delivery-time" placeholder="e.g. 7:00 am">
           </div>
           <div class="logistics-field">
             <label>Scrap Pickup</label>
@@ -979,8 +979,6 @@ async function fetchJobForModal(jobId) {
     const data = await res.json();
     if (!data.ok || !data.job) return;
     const j = data.job;
-
-    // Populate job fields into the modal
     if (j.po_number)         document.getElementById('f-po-number').value = j.po_number;
     if (j.invoice_number)    document.getElementById('f-invoice-number').value = j.invoice_number;
     if (j.ship_to_company)   document.getElementById('f-ship-to-company').value = j.ship_to_company;
@@ -993,17 +991,48 @@ async function fetchJobForModal(jobId) {
     if (j.contact_name)      document.getElementById('f-contact-name').value = j.contact_name;
     if (j.contact_phone)     document.getElementById('f-contact-phone').value = j.contact_phone;
     if (j.scrap_pickup)      document.getElementById('f-scrap-pickup').value = j.scrap_pickup;
-
-    // Also sync fields that might have drifted
-    if (j.customer)    document.getElementById('f-customer').value = j.customer;
-    if (j.carrier)     document.getElementById('f-carrier').value = j.carrier;
-    if (j.method)      document.getElementById('f-method').value = j.method;
-    if (j.ship_date)   document.getElementById('f-ship-date').value = j.ship_date;
-    if (j.location)    document.getElementById('f-destination').value = j.location;
-    if (j.load_count)  document.getElementById('f-load-count').value = j.load_count;
-    if (j.total_bdft)  document.getElementById('f-total-bdft').value = j.total_bdft;
+    if (j.customer)          document.getElementById('f-customer').value = j.customer;
+    if (j.carrier)           document.getElementById('f-carrier').value = j.carrier;
+    if (j.method)            document.getElementById('f-method').value = j.method;
+    if (j.ship_date)         document.getElementById('f-ship-date').value = j.ship_date;
+    if (j.location)          document.getElementById('f-destination').value = j.location;
+    if (j.load_count)        document.getElementById('f-load-count').value = j.load_count;
+    if (j.total_bdft)        document.getElementById('f-total-bdft').value = j.total_bdft;
   } catch (e) {
-    console.error('Failed to fetch job data for modal:', e);
+    console.error('Failed to fetch job for modal:', e);
+  }
+}
+
+async function syncJobFromModal(jobId) {
+  try {
+    await fetch('/api/jobs/' + encodeURIComponent(jobId), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: jobId,
+        customer:          document.getElementById('f-customer').value.trim(),
+        carrier:           document.getElementById('f-carrier').value.trim(),
+        method:            document.getElementById('f-method').value,
+        ship_date:         document.getElementById('f-ship-date').value,
+        location:          document.getElementById('f-destination').value.trim(),
+        load_count:        parseInt(document.getElementById('f-load-count').value || 1, 10),
+        total_bdft:        parseFloat(document.getElementById('f-total-bdft').value) || 0,
+        ship_to_company:   document.getElementById('f-ship-to-company')?.value?.trim() || '',
+        ship_to_attention: document.getElementById('f-ship-to-attention')?.value?.trim() || '',
+        ship_to_street:    document.getElementById('f-ship-to-street')?.value?.trim() || '',
+        ship_to_city:      document.getElementById('f-ship-to-city')?.value?.trim() || '',
+        ship_to_state:     document.getElementById('f-ship-to-state')?.value?.trim() || '',
+        ship_to_zip:       document.getElementById('f-ship-to-zip')?.value?.trim() || '',
+        delivery_time:     document.getElementById('f-delivery-time')?.value?.trim() || '',
+        contact_name:      document.getElementById('f-contact-name')?.value?.trim() || '',
+        contact_phone:     document.getElementById('f-contact-phone')?.value?.trim() || '',
+        scrap_pickup:      document.getElementById('f-scrap-pickup')?.value || '',
+        po_number:         document.getElementById('f-po-number')?.value?.trim() || '',
+        invoice_number:    document.getElementById('f-invoice-number')?.value?.trim() || '',
+      }),
+    });
+  } catch (e) {
+    console.error('Job sync from logistics failed:', e);
   }
 }
 
@@ -1121,55 +1150,10 @@ async function saveShipment() {
       return;
     }
 
-    // Sync editable fields back to the linked job
-    const jobId = document.getElementById('f-job-id').value;
-    if (jobId && dir === 'outbound') {
-      try {
-        const jobPayload = {
-          id: jobId,
-          customer: payload.customer,
-          carrier: payload.carrier,
-          method: payload.method,
-          ship_date: payload.ship_date,
-          location: payload.destination,
-          load_count: payload.load_count,
-          total_bdft: payload.total_bdft,
-        };
-
-        // Sync address fields
-        const shipToFields = {
-          ship_to_company:   document.getElementById('f-ship-to-company')?.value?.trim() || '',
-          ship_to_attention: document.getElementById('f-ship-to-attention')?.value?.trim() || '',
-          ship_to_street:    document.getElementById('f-ship-to-street')?.value?.trim() || '',
-          ship_to_city:      document.getElementById('f-ship-to-city')?.value?.trim() || '',
-          ship_to_state:     document.getElementById('f-ship-to-state')?.value?.trim() || '',
-          ship_to_zip:       document.getElementById('f-ship-to-zip')?.value?.trim() || '',
-        };
-        Object.assign(jobPayload, shipToFields);
-
-        // Sync other detail fields
-        const detailFields = {
-          delivery_time:  document.getElementById('f-delivery-time')?.value?.trim() || '',
-          contact_name:   document.getElementById('f-contact-name')?.value?.trim() || '',
-          contact_phone:  document.getElementById('f-contact-phone')?.value?.trim() || '',
-          scrap_pickup:   document.getElementById('f-scrap-pickup')?.value || '',
-          po_number:      document.getElementById('f-po-number')?.value?.trim() || '',
-          invoice_number: document.getElementById('f-invoice-number')?.value?.trim() || '',
-        };
-        Object.assign(jobPayload, detailFields);
-
-        await fetch('/api/jobs/' + encodeURIComponent(jobId), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(jobPayload),
-        });
-      } catch (e) {
-        console.error('Job sync from logistics failed:', e);
-      }
-    }
-
     // Check if delivered + has linked job → prompt to update job status
     const saved = body.data;
+    const syncJobId = document.getElementById('f-job-id').value;
+    if (syncJobId && dir === 'outbound') await syncJobFromModal(syncJobId);
     if (saved.status === 'delivered' && saved.job_id && !editingId) {
       promptUpdateJob(saved.job_id, saved.customer);
     }
