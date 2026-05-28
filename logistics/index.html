@@ -71,8 +71,9 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
           <input type="week" id="outbound-week-input" class="logistics-filter-input" onchange="loadOutbound()">
           <select class="logistics-filter-select" id="outbound-status-filter" onchange="loadOutbound()">
             <option value="">All Statuses</option>
-            <option value="awaiting">Awaiting</option>
             <option value="not_started">Not Started</option>
+            <option value="in_production">In Production</option>
+            <option value="ready_to_ship">Ready to Ship</option>
             <option value="loading">Loading</option>
             <option value="loaded">Loaded</option>
             <option value="in_transit">In Transit</option>
@@ -160,6 +161,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
     </div>
     <div class="logistics-modal-body">
       <div class="logistics-error" id="modal-error"></div>
+      <div id="job-linked-note" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#1e40af;"></div>
 
       <!-- Direction toggle — hidden when editing (direction is locked) -->
       <div id="dir-toggle-wrap">
@@ -346,6 +348,8 @@ let allBeadTypes    = [];
 let allOpenJobs     = [];
 let outboundData    = [];
 let inboundData     = [];
+let allLoadingBays  = [];
+let loadingAssignmentsByJobId = {};
 let outboundCalView = 'list';
 let inboundCalView  = 'list';
 let outboundCalMonth = new Date();
@@ -368,7 +372,7 @@ let jobPickerFull   = [];
 // ── Init ───────────────────────────────────────────────────────────────────
 (async () => {
   setCurrentWeek();
-  await Promise.allSettled([loadSilos(), loadBeadTypes(), loadOpenJobs()]);
+  await Promise.allSettled([loadSilos(), loadBeadTypes(), loadOpenJobs(), loadBays(), loadLoadingAssignments()]);
   await Promise.all([loadOutbound(), loadInbound()]);
   updateStats();
 
@@ -438,7 +442,7 @@ async function loadBeadTypes() {
 }
 
 async function loadOpenJobs() {
-  const res  = await fetch('/api/jobs?status=not_started,in_production,done');
+  const res  = await fetch('/api/jobs?status=not_started,in_production,done,loading,shipped');
   const body = await res.json();
   if (body.ok) {
     allOpenJobs = body.jobs;
@@ -449,6 +453,64 @@ async function loadOpenJobs() {
     }).join('');
     document.getElementById('f-job-id').innerHTML =
       `<option value="">— no linked job —</option>${opts}`;
+  }
+}
+
+async function loadBays() {
+  try {
+    const res  = await fetch('/api/loading-bays');
+    const body = await res.json();
+    allLoadingBays = body.ok ? (body.bays || []).filter(b => b.is_active) : [];
+  } catch {
+    allLoadingBays = [];
+  }
+}
+
+async function loadLoadingAssignments() {
+  try {
+    const res  = await fetch('/api/loading-assignments');
+    const body = await res.json();
+    if (body.ok && body.assignments) {
+      loadingAssignmentsByJobId = {};
+      for (const la of body.assignments) {
+        if (!loadingAssignmentsByJobId[la.job_id]) {
+          loadingAssignmentsByJobId[la.job_id] = la;
+        }
+      }
+    }
+  } catch {
+    loadingAssignmentsByJobId = {};
+  }
+}
+
+async function assignBayFromDashboard(assignmentId, bayId) {
+  if (!bayId) return;
+  try {
+    const res = await fetch('/api/loading-assignments', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: assignmentId,
+        bay_id: bayId,
+        loading_status: 'not_started',
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      await loadLoadingAssignments();
+      renderOutbound();
+
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:10000;';
+      toast.innerHTML = '<span style="color:#34d399;">✓</span> Bay assigned';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    } else {
+      alert(data.error || 'Failed to assign bay');
+    }
+  } catch (e) {
+    console.error('Bay assignment failed:', e);
+    alert('Failed to assign bay');
   }
 }
 
@@ -472,6 +534,7 @@ async function loadOutbound() {
     outboundData = [];
   }
   renderOutbound();
+  loadLoadingAssignments();
 }
 
 async function loadInbound() {
@@ -580,6 +643,8 @@ function renderOutbound() {
                 <th>BDFT</th>
                 <th>BOL #</th>
                 <th>Status</th>
+                <th>Bay</th>
+                <th style="text-align:right;">Actions</th>
               </tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
@@ -595,11 +660,15 @@ function renderOutbound() {
 function buildOutboundRow(s) {
   const linkedJob = allOpenJobs.find(j => j.id === s.job_id);
   const jobLink   = linkedJob
-    ? `<a class="logistics-job-link" href="/jobs/?job_id=${linkedJob.id}">Job: ${esc(linkedJob.customer)}${linkedJob.invoice_number ? ' · ' + esc(linkedJob.invoice_number) : ''}</a>`
-    : (s.job_id ? `<a class="logistics-job-link" href="/jobs/">Job linked ↗</a>` : '');
+    ? `<a class="logistics-job-link" href="/jobs/?job_id=${linkedJob.id}" onclick="event.stopPropagation()">Job: ${esc(linkedJob.customer)}${linkedJob.invoice_number ? ' · ' + esc(linkedJob.invoice_number) : ''}</a>`
+    : (s.job_id ? `<a class="logistics-job-link" href="/jobs/" onclick="event.stopPropagation()">Job linked ↗</a>` : '');
 
   const methodCarrier = [s.method, s.carrier].filter(Boolean).join(' · ');
   const bdft = s.total_bdft ? fmtNum(s.total_bdft) : '—';
+
+  const la = s.job_id ? loadingAssignmentsByJobId[s.job_id] : null;
+  const bayHtml     = buildBayCell(s, la);
+  const actionsHtml = buildActionButtons(s);
 
   return `<tr onclick="openEdit('${s.id}')">
     <td class="logistics-customer-cell">
@@ -612,7 +681,47 @@ function buildOutboundRow(s) {
     <td>${bdft}</td>
     <td>${esc(s.bol_number) || '—'}</td>
     <td>${statusBadge(s.status)}</td>
+    <td>${bayHtml}</td>
+    <td style="text-align:right;">${actionsHtml}</td>
   </tr>`;
+}
+
+function buildBayCell(shipment, loadingAssignment) {
+  if (!shipment.job_id) return '—';
+
+  if (loadingAssignment && loadingAssignment.bay_number) {
+    return `<span style="font-size:12px;font-weight:600;">Bay ${loadingAssignment.bay_number}</span>`;
+  }
+
+  if (['ready_to_ship'].includes(shipment.status) && allLoadingBays.length > 0) {
+    const laId = loadingAssignment?.id || '';
+    if (!laId) return '—';
+    const opts = allLoadingBays.map(b =>
+      `<option value="${b.id}">Bay ${b.bay_number}${b.label ? ' — ' + esc(b.label) : ''}</option>`
+    ).join('');
+    return `<select class="logistics-bay-select" onchange="assignBayFromDashboard('${laId}', this.value)" onclick="event.stopPropagation()">
+      <option value="">Assign…</option>
+      ${opts}
+    </select>`;
+  }
+
+  return '—';
+}
+
+function buildActionButtons(shipment) {
+  if (!shipment.job_id) return '';
+
+  const buttons = [];
+
+  if (['ready_to_ship', 'loading', 'loaded'].includes(shipment.status)) {
+    buttons.push(`<a class="logistics-action-btn action-load" href="/logistics/load-builder.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Build Load</a>`);
+  }
+
+  if (['ready_to_ship', 'loading', 'loaded', 'in_transit'].includes(shipment.status)) {
+    buttons.push(`<a class="logistics-action-btn action-bol" href="/logistics/bol-generator.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Generate BOL</a>`);
+  }
+
+  return buttons.join(' ');
 }
 
 // ── Render Inbound ─────────────────────────────────────────────────────────
@@ -733,6 +842,17 @@ function openEdit(id) {
     const bt = allBeadTypes.find(t => t.name === s.bead_type);
     if (bt) document.getElementById('f-bead-type-id').value = bt.id;
     document.getElementById('f-silo-id').value    = '';
+  }
+
+  // Job-linked note
+  const jobNote = document.getElementById('job-linked-note');
+  if (jobNote) {
+    if (s.job_id) {
+      jobNote.style.display = '';
+      jobNote.innerHTML = `<span style="color:#0369a1;">ℹ</span> This shipment is linked to a job. Changes to customer, carrier, address, and dates should be made on the <a href="/jobs/?job_id=${s.job_id}" style="color:#0369a1;font-weight:600;">Job Board</a> to stay in sync.`;
+    } else {
+      jobNote.style.display = 'none';
+    }
   }
 
   document.getElementById('shipment-modal').classList.remove('hidden');
@@ -1142,14 +1262,16 @@ function showCalDay(direction, dateStr) {
 
 function statusBadge(status) {
   const labels = {
-    awaiting:    'Awaiting',
-    not_started: 'Not Started',
-    loading:     'Loading',
-    loaded:      'Loaded',
-    in_transit:  'In Transit',
-    delivered:   'Delivered',
-    cancelled:   'Cancelled',
-    scheduled:   'Scheduled',
+    not_started:    'Not Started',
+    in_production:  'In Production',
+    ready_to_ship:  'Ready to Ship',
+    loading:        'Loading',
+    loaded:         'Loaded',
+    in_transit:     'In Transit',
+    delivered:      'Delivered',
+    cancelled:      'Cancelled',
+    scheduled:      'Scheduled',
+    awaiting:       'Awaiting',  // legacy — keep for old records
   };
   return `<span class="logistics-status-badge status-${status}">${labels[status] || status}</span>`;
 }

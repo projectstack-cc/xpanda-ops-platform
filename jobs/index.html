@@ -764,10 +764,6 @@ function buildCard(job) {
       <span>${bdft} BDFT</span>
     </div>
     ${procHtml}
-    <div class="jobs-bol-row" id="bol-row-${job.id}">
-      <a class="jobs-bol-link" href="/logistics/load-builder.html?job_id=${job.id}" onclick="event.stopPropagation()" style="background:#fef3c7;color:#92400e;">Build Load</a>
-      <a class="jobs-bol-link" href="/logistics/bol-generator.html?job_id=${job.id}" onclick="event.stopPropagation()">Generate BOL</a>
-    </div>
     ${job.status === 'shipped' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
     ${job.status === 'archived' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to shipped">Unarchive</button>` : ''}
     <div class="jobs-card-actions">

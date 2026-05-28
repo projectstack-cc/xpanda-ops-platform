@@ -300,14 +300,42 @@ button, input, select, textarea {
     white-space: nowrap;
 }
 
-.status-awaiting    { background: #f3f4f6; color: #374151; }
-.status-not_started { background: #fef3c7; color: #92400e; }
-.status-loading     { background: #dbeafe; color: #1e40af; }
-.status-loaded      { background: #d1fae5; color: #065f46; }
-.status-in_transit  { background: #fef3c7; color: #92400e; }
-.status-delivered   { background: #dcfce7; color: #15803d; }
-.status-cancelled   { background: #f3f4f6; color: #9ca3af; }
-.status-scheduled   { background: #f1f5f9; color: #475569; }
+.status-awaiting      { background: #f3f4f6; color: #374151; }
+.status-not_started   { background: #fef3c7; color: #92400e; }
+.status-in_production { background: #fef3c7; color: #92400e; }
+.status-ready_to_ship { background: #dcfce7; color: #166534; }
+.status-loading       { background: #dbeafe; color: #1e40af; }
+.status-loaded        { background: #d1fae5; color: #065f46; }
+.status-in_transit    { background: #fef3c7; color: #92400e; }
+.status-delivered     { background: #dcfce7; color: #15803d; }
+.status-cancelled     { background: #f3f4f6; color: #9ca3af; }
+.status-scheduled     { background: #f1f5f9; color: #475569; }
+
+.logistics-action-btn {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 5px;
+  text-decoration: none;
+  white-space: nowrap;
+  margin-left: 4px;
+  transition: background .12s;
+}
+.action-load  { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.action-load:hover  { background: #fde68a; }
+.action-bol   { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.action-bol:hover   { background: #e0f2fe; }
+
+.logistics-bay-select {
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  max-width: 120px;
+}
 
 /* ── Inbound Cards ───────────────────────────────────────────────────────── */
 

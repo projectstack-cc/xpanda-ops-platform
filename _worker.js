@@ -2027,7 +2027,7 @@ async function handleApiJobs(request, env) {
           'XPanda Foam',
           location || '',
           ship_date || '',
-          'awaiting',
+          'not_started',
           total_bdft,
           load_count,
           0,
@@ -2037,6 +2037,21 @@ async function handleApiJobs(request, env) {
         ).run();
       } catch (e) {
         console.error('Auto-shipment creation failed:', String(e?.message || e));
+      }
+
+      // Auto-create loading assignment
+      try {
+        const loadCount = Math.max(load_count || 1, 1);
+        const now2 = new Date().toISOString();
+        for (let n = 1; n <= loadCount; n++) {
+          const laId = crypto.randomUUID();
+          await db.prepare(`
+            INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, load_number, created_at, updated_at)
+            VALUES (?, ?, NULL, '', 'awaiting', NULL, '', ?, ?, ?)
+          `).bind(laId, id, n, now2, now2).run();
+        }
+      } catch (e) {
+        console.error('Auto-create loading assignment on job create failed:', String(e?.message || e));
       }
 
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
@@ -2144,35 +2159,66 @@ async function handleApiJobs(request, env) {
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
       const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
 
-      if (payload.status === 'done') {
+      // Sync job status to linked shipment
+      if (payload.status) {
+        const JOB_TO_SHIPMENT_STATUS = {
+          not_started:  'not_started',
+          in_production: 'in_production',
+          done:         'ready_to_ship',
+        };
+        const mappedStatus = JOB_TO_SHIPMENT_STATUS[payload.status];
+        if (mappedStatus) {
+          try {
+            const shipment = await db.prepare(
+              "SELECT id FROM shipments WHERE job_id = ? AND direction = 'outbound' LIMIT 1"
+            ).bind(id).first();
+            if (shipment) {
+              await db.prepare(
+                "UPDATE shipments SET status = ?, updated_at = datetime('now') WHERE id = ?"
+              ).bind(mappedStatus, shipment.id).run();
+            }
+          } catch (e) {
+            console.error('Job→Shipment status sync failed:', e);
+          }
+        }
+      }
+
+      // Sync editable fields to linked shipment
+      const SYNC_FIELDS_JOB_TO_SHIPMENT = {
+        customer:   'customer',
+        carrier:    'carrier',
+        method:     'method',
+        ship_date:  'ship_date',
+        location:   'destination',
+        total_bdft: 'total_bdft',
+        load_count: 'load_count',
+      };
+
+      const syncSets = [];
+      const syncBinds = [];
+      for (const [jobField, shipField] of Object.entries(SYNC_FIELDS_JOB_TO_SHIPMENT)) {
+        if (jobField in payload) {
+          syncSets.push(`${shipField} = ?`);
+          if (['total_bdft', 'load_count'].includes(jobField)) {
+            syncBinds.push(Number(payload[jobField]) || 0);
+          } else {
+            syncBinds.push(String(payload[jobField] || '').trim());
+          }
+        }
+      }
+
+      if (syncSets.length > 0) {
         try {
-          const existingLA = await db.prepare(
-            "SELECT id FROM loading_assignments WHERE job_id = ?"
+          const shipment = await db.prepare(
+            "SELECT id FROM shipments WHERE job_id = ? AND direction = 'outbound' LIMIT 1"
           ).bind(id).first();
-
-          if (!existingLA) {
-            const laId = crypto.randomUUID();
-            const now2 = new Date().toISOString();
-            await db.prepare(`
-              INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, created_at, updated_at)
-              VALUES (?, ?, NULL, '', 'awaiting', ?, '', ?, ?)
-            `).bind(laId, id, request.headers.get('X-User-Id') || null, now2, now2).run();
-
-            const jobData = await db.prepare("SELECT customer, invoice_number FROM jobs WHERE id = ?").bind(id).first();
-            const custName = jobData?.customer || 'Unknown';
-            const inv = jobData?.invoice_number || '';
-            await dispatchNotification(db, env, 'loading.assigned',
-              'Job Ready for Loading',
-              `${custName}${inv ? ' (INV# ' + inv + ')' : ''} moved to loading queue`,
-              'loading_assignment', laId
-            );
-
-            await logActivity(db, 'create', 'loading_assignment', laId,
-              `Auto-created loading assignment — job moved to Done`,
-              { job_id: id }, request.headers.get('X-User-Id'));
+          if (shipment) {
+            syncSets.push("updated_at = datetime('now')");
+            syncBinds.push(shipment.id);
+            await db.prepare(`UPDATE shipments SET ${syncSets.join(', ')} WHERE id = ?`).bind(...syncBinds).run();
           }
         } catch (e) {
-          console.error('Auto-create loading assignment failed:', e);
+          console.error('Job→Shipment field sync failed:', e);
         }
       }
 
@@ -2785,7 +2831,7 @@ async function handleApiShipments(request, env) {
       return json({ ok: false, error: "ship_date must be YYYY-MM-DD." }, 400);
     }
 
-    const validStatuses = ["awaiting", "not_started", "loading", "loaded", "in_transit", "delivered", "cancelled", "scheduled"];
+    const validStatuses = ["awaiting", "not_started", "in_production", "ready_to_ship", "loading", "loaded", "in_transit", "delivered", "cancelled", "scheduled"];
     const status = String(payload.status || "awaiting").trim();
     if (!validStatuses.includes(status)) {
       return json({ ok: false, error: `status must be one of: ${validStatuses.join(", ")}` }, 400);
