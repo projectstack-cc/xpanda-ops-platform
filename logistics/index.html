@@ -353,6 +353,22 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
             <option value="">— no linked job —</option>
           </select>
         </div>
+
+        <!-- Read-only Line Items -->
+        <div id="shipment-line-items" style="display:none;margin-top:16px;">
+          <div class="logistics-field-section-label">Line Items</div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;">
+            <thead>
+              <tr style="text-align:left;border-bottom:2px solid #e5e7eb;">
+                <th style="padding:6px 8px;font-weight:700;color:#374151;">Part #</th>
+                <th style="padding:6px 8px;font-weight:700;color:#374151;">Description</th>
+                <th style="padding:6px 8px;font-weight:700;color:#374151;text-align:right;">Qty</th>
+                <th style="padding:6px 8px;font-weight:700;color:#374151;">Dimensions</th>
+              </tr>
+            </thead>
+            <tbody id="shipment-line-items-body"></tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Inbound-specific -->
@@ -989,6 +1005,24 @@ async function fetchJobForModal(jobId) {
     if (j.location)          document.getElementById('f-destination').value = j.location;
     if (j.load_count)        document.getElementById('f-load-count').value = j.load_count;
     if (j.total_bdft)        document.getElementById('f-total-bdft').value = j.total_bdft;
+
+    // Render read-only line items
+    const liContainer = document.getElementById('shipment-line-items');
+    const liBody = document.getElementById('shipment-line-items-body');
+    if (liContainer && liBody) {
+      if (Array.isArray(j.line_items) && j.line_items.length > 0) {
+        liBody.innerHTML = j.line_items.map(li => `<tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:6px 8px;font-weight:600;color:#111827;">${esc(li.part_number || '—')}</td>
+          <td style="padding:6px 8px;color:#374151;">${esc(li.description || '—')}</td>
+          <td style="padding:6px 8px;text-align:right;color:#111827;">${li.quantity || '—'}</td>
+          <td style="padding:6px 8px;color:#6b7280;">${esc(li.dimensions || '—')}</td>
+        </tr>`).join('');
+        liContainer.style.display = '';
+      } else {
+        liBody.innerHTML = '';
+        liContainer.style.display = 'none';
+      }
+    }
   } catch (e) {
     console.error('Failed to fetch job for modal:', e);
   }
@@ -1046,6 +1080,10 @@ function clearForm() {
   document.getElementById('f-bead-type-id').value = '';
   document.getElementById('f-silo-id').value = '';
   document.getElementById('f-id').value = '';
+  const liContainer = document.getElementById('shipment-line-items');
+  const liBody = document.getElementById('shipment-line-items-body');
+  if (liContainer) liContainer.style.display = 'none';
+  if (liBody) liBody.innerHTML = '';
 }
 
 function setDirection(dir, locked) {
