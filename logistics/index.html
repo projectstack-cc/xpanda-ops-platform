@@ -14,6 +14,36 @@
 <link rel="apple-touch-icon" href="/assets/img/favicon.png">
 
 <link rel="stylesheet" href="/logistics/logistics-shared.css">
+<style>
+.logistics-action-btn {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 5px;
+  text-decoration: none;
+  white-space: nowrap;
+  margin-left: 4px;
+  transition: background .12s;
+}
+.action-load { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.action-load:hover { background: #fde68a; }
+.action-bol { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; }
+.action-bol:hover { background: #e0f2fe; }
+
+.logistics-bay-select {
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  max-width: 120px;
+}
+
+.status-in_production { background: #fef3c7; color: #92400e; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+.status-ready_to_ship { background: #dcfce7; color: #166534; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+</style>
 </head>
 <body>
 
@@ -180,8 +210,9 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
         <div class="logistics-field">
           <label>Status</label>
           <select id="f-status">
-            <option value="awaiting">Awaiting</option>
             <option value="not_started">Not Started</option>
+            <option value="in_production">In Production</option>
+            <option value="ready_to_ship">Ready to Ship</option>
             <option value="loading">Loading</option>
             <option value="loaded">Loaded</option>
             <option value="in_transit">In Transit</option>
@@ -217,24 +248,80 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
 
       <!-- Outbound-specific -->
       <div class="logistics-field-section" id="outbound-fields">
-        <div class="logistics-field-section-label">Outbound Details</div>
-
-        <div class="logistics-field">
-          <label>Trailer #</label>
-          <input type="text" id="f-trailer-number" placeholder="Trailer number">
-        </div>
+        <div class="logistics-field-section-label">Customer & Order</div>
 
         <div class="logistics-field">
           <label>Customer <span style="color:#dc2626;">*</span></label>
           <input type="text" id="f-customer" placeholder="Customer name">
         </div>
 
+        <div class="logistics-field-row">
+          <div class="logistics-field">
+            <label>PO Number</label>
+            <input type="text" id="f-po-number" placeholder="PO #">
+          </div>
+          <div class="logistics-field">
+            <label>Invoice Number</label>
+            <input type="text" id="f-invoice-number" placeholder="INV #">
+          </div>
+        </div>
+
+        <div class="logistics-field-section-label" style="margin-top:12px;">Ship-To Address</div>
+
+        <div class="logistics-field-row">
+          <div class="logistics-field">
+            <label>Company</label>
+            <input type="text" id="f-ship-to-company" placeholder="Ship-to company name">
+          </div>
+          <div class="logistics-field">
+            <label>Attention</label>
+            <input type="text" id="f-ship-to-attention" placeholder="ATTN: name">
+          </div>
+        </div>
+
         <div class="logistics-field">
-          <label>Destination / Location</label>
-          <input type="text" id="f-destination" placeholder="Ship-to address or location">
+          <label>Street</label>
+          <input type="text" id="f-ship-to-street" placeholder="Street address">
+        </div>
+
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">
+          <div class="logistics-field">
+            <label>City</label>
+            <input type="text" id="f-ship-to-city" placeholder="City">
+          </div>
+          <div class="logistics-field">
+            <label>State</label>
+            <input type="text" id="f-ship-to-state" placeholder="ST" maxlength="2" style="text-transform:uppercase;">
+          </div>
+          <div class="logistics-field">
+            <label>Zip</label>
+            <input type="text" id="f-ship-to-zip" placeholder="Zip" maxlength="10">
+          </div>
+        </div>
+
+        <div class="logistics-field-section-label" style="margin-top:12px;">Shipping</div>
+
+        <div class="logistics-field">
+          <label>Trailer #</label>
+          <input type="text" id="f-trailer-number" placeholder="Trailer number">
         </div>
 
         <div class="logistics-field-row">
+          <div class="logistics-field">
+            <label>Delivery Time</label>
+            <input type="text" id="f-delivery-time" placeholder="e.g. 7:00 am &amp; HRLY">
+          </div>
+          <div class="logistics-field">
+            <label>Scrap Pickup</label>
+            <select id="f-scrap-pickup">
+              <option value="">— N/A —</option>
+              <option value="YES">YES</option>
+              <option value="NO">NO</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
           <div class="logistics-field">
             <label>Load Count</label>
             <input type="number" id="f-load-count" min="1" step="1" value="1">
@@ -242,6 +329,23 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
           <div class="logistics-field">
             <label>Total BDFT</label>
             <input type="number" id="f-total-bdft" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="logistics-field">
+            <label>Location</label>
+            <input type="text" id="f-destination" placeholder="City, State">
+          </div>
+        </div>
+
+        <div class="logistics-field-section-label" style="margin-top:12px;">Contact</div>
+
+        <div class="logistics-field-row">
+          <div class="logistics-field">
+            <label>Contact Name</label>
+            <input type="text" id="f-contact-name" placeholder="Contact person">
+          </div>
+          <div class="logistics-field">
+            <label>Contact Phone</label>
+            <input type="tel" id="f-contact-phone" placeholder="Phone number">
           </div>
         </div>
 
@@ -833,6 +937,21 @@ function openEdit(id) {
     document.getElementById('f-total-bdft').value     = s.total_bdft || '';
     document.getElementById('f-job-id').value         = s.job_id || '';
     document.getElementById('f-trailer-number').value = s.trailer_number || '';
+
+    // Clear new fields first
+    ['f-po-number','f-invoice-number','f-ship-to-company','f-ship-to-attention',
+     'f-ship-to-street','f-ship-to-city','f-ship-to-state','f-ship-to-zip',
+     'f-delivery-time','f-contact-name','f-contact-phone'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    const sp = document.getElementById('f-scrap-pickup');
+    if (sp) sp.value = '';
+
+    // If job-linked, fetch full job data and populate address/details from job
+    if (s.job_id) {
+      fetchJobForModal(s.job_id);
+    }
   } else {
     document.getElementById('f-supplier').value   = s.customer || '';
     document.getElementById('f-origin').value     = s.origin || '';
@@ -863,16 +982,54 @@ function closeModal() {
   editingId = null;
 }
 
+async function fetchJobForModal(jobId) {
+  try {
+    const res = await fetch('/api/jobs/' + encodeURIComponent(jobId));
+    const data = await res.json();
+    if (!data.ok || !data.job) return;
+    const j = data.job;
+
+    // Populate job fields into the modal
+    if (j.po_number)         document.getElementById('f-po-number').value = j.po_number;
+    if (j.invoice_number)    document.getElementById('f-invoice-number').value = j.invoice_number;
+    if (j.ship_to_company)   document.getElementById('f-ship-to-company').value = j.ship_to_company;
+    if (j.ship_to_attention) document.getElementById('f-ship-to-attention').value = j.ship_to_attention;
+    if (j.ship_to_street)    document.getElementById('f-ship-to-street').value = j.ship_to_street;
+    if (j.ship_to_city)      document.getElementById('f-ship-to-city').value = j.ship_to_city;
+    if (j.ship_to_state)     document.getElementById('f-ship-to-state').value = j.ship_to_state;
+    if (j.ship_to_zip)       document.getElementById('f-ship-to-zip').value = j.ship_to_zip;
+    if (j.delivery_time)     document.getElementById('f-delivery-time').value = j.delivery_time;
+    if (j.contact_name)      document.getElementById('f-contact-name').value = j.contact_name;
+    if (j.contact_phone)     document.getElementById('f-contact-phone').value = j.contact_phone;
+    if (j.scrap_pickup)      document.getElementById('f-scrap-pickup').value = j.scrap_pickup;
+
+    // Also sync fields that might have drifted
+    if (j.customer)    document.getElementById('f-customer').value = j.customer;
+    if (j.carrier)     document.getElementById('f-carrier').value = j.carrier;
+    if (j.method)      document.getElementById('f-method').value = j.method;
+    if (j.ship_date)   document.getElementById('f-ship-date').value = j.ship_date;
+    if (j.location)    document.getElementById('f-destination').value = j.location;
+    if (j.load_count)  document.getElementById('f-load-count').value = j.load_count;
+    if (j.total_bdft)  document.getElementById('f-total-bdft').value = j.total_bdft;
+  } catch (e) {
+    console.error('Failed to fetch job data for modal:', e);
+  }
+}
+
 function clearForm() {
   ['f-ship-date','f-carrier','f-bol-number','f-notes',
-   'f-customer','f-destination','f-supplier','f-origin','f-trailer-number'].forEach(id => {
+   'f-customer','f-destination','f-supplier','f-origin','f-trailer-number',
+   'f-po-number','f-invoice-number','f-ship-to-company','f-ship-to-attention',
+   'f-ship-to-street','f-ship-to-city','f-ship-to-state','f-ship-to-zip',
+   'f-delivery-time','f-contact-name','f-contact-phone'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
   const lc = document.getElementById('f-load-count'); if (lc) lc.value = 1;
   const bd = document.getElementById('f-total-bdft'); if (bd) bd.value = '';
   const wl = document.getElementById('f-weight-lbs'); if (wl) wl.value = '';
-  document.getElementById('f-status').value = 'awaiting';
+  const sp = document.getElementById('f-scrap-pickup'); if (sp) sp.value = '';
+  document.getElementById('f-status').value = 'not_started';
   document.getElementById('f-method').value = '';
   document.getElementById('f-job-id').value = '';
   document.getElementById('f-bead-type-id').value = '';
@@ -971,6 +1128,53 @@ async function saveShipment() {
     if (!body.ok) {
       showError(body.error || 'Error saving shipment.');
       return;
+    }
+
+    // Sync editable fields back to the linked job
+    const jobId = document.getElementById('f-job-id').value;
+    if (jobId && dir === 'outbound') {
+      try {
+        const jobPayload = {
+          id: jobId,
+          customer: payload.customer,
+          carrier: payload.carrier,
+          method: payload.method,
+          ship_date: payload.ship_date,
+          location: payload.destination,
+          load_count: payload.load_count,
+          total_bdft: payload.total_bdft,
+        };
+
+        // Sync address fields
+        const shipToFields = {
+          ship_to_company:   document.getElementById('f-ship-to-company')?.value?.trim() || '',
+          ship_to_attention: document.getElementById('f-ship-to-attention')?.value?.trim() || '',
+          ship_to_street:    document.getElementById('f-ship-to-street')?.value?.trim() || '',
+          ship_to_city:      document.getElementById('f-ship-to-city')?.value?.trim() || '',
+          ship_to_state:     document.getElementById('f-ship-to-state')?.value?.trim() || '',
+          ship_to_zip:       document.getElementById('f-ship-to-zip')?.value?.trim() || '',
+        };
+        Object.assign(jobPayload, shipToFields);
+
+        // Sync other detail fields
+        const detailFields = {
+          delivery_time:  document.getElementById('f-delivery-time')?.value?.trim() || '',
+          contact_name:   document.getElementById('f-contact-name')?.value?.trim() || '',
+          contact_phone:  document.getElementById('f-contact-phone')?.value?.trim() || '',
+          scrap_pickup:   document.getElementById('f-scrap-pickup')?.value || '',
+          po_number:      document.getElementById('f-po-number')?.value?.trim() || '',
+          invoice_number: document.getElementById('f-invoice-number')?.value?.trim() || '',
+        };
+        Object.assign(jobPayload, detailFields);
+
+        await fetch('/api/jobs/' + encodeURIComponent(jobId), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(jobPayload),
+        });
+      } catch (e) {
+        console.error('Job sync from logistics failed:', e);
+      }
     }
 
     // Check if delivered + has linked job → prompt to update job status
