@@ -814,18 +814,9 @@ function buildBayCell(shipment, loadingAssignment) {
 
 function buildActionButtons(shipment) {
   if (!shipment.job_id) return '';
+  if (['delivered', 'cancelled'].includes(shipment.status)) return '';
 
-  const buttons = [];
-
-  if (['ready_to_ship', 'loading', 'loaded'].includes(shipment.status)) {
-    buttons.push(`<a class="logistics-action-btn action-load" href="/logistics/load-builder.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Build Load</a>`);
-  }
-
-  if (['ready_to_ship', 'loading', 'loaded', 'in_transit'].includes(shipment.status)) {
-    buttons.push(`<a class="logistics-action-btn action-bol" href="/logistics/bol-generator.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Generate BOL</a>`);
-  }
-
-  return buttons.join(' ');
+  return `<a class="logistics-action-btn action-load" href="/logistics/load-builder.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Build Load</a> <a class="logistics-action-btn action-bol" href="/logistics/bol-generator.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Generate BOL</a>`;
 }
 
 // ── Render Inbound ─────────────────────────────────────────────────────────
