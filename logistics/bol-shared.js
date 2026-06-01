@@ -9,7 +9,7 @@ window.BolShared = (function() {
 
   const COORDS = {
     // Delivery time — top-right, bold red
-    deliveryTime:  { x: 390, y: 758, size: 20 },
+    deliveryTime:  { x: 390, y: 758, size: 24 },
 
     // Top-right block
     date:          { x: 346, y: 712, size: 10 },
@@ -33,12 +33,48 @@ window.BolShared = (function() {
     poNumber:      { x: 315, y: 498, size: 11, lineH: 12, maxW: 255 },
 
     // Scrap Pick Up checkboxes
-    scrapYes:      { x: 110, y: 513, size: 10 },
-    scrapNo:       { x: 110, y: 497, size: 10 },
+    scrapYes:      { x: 109, y: 512, size: 13 },
+    scrapNo:       { x: 109, y: 496, size: 13 },
 
-    // Commodity description
-    commodity:     { x: 55,  y: 410, size: 13, lineH: 28, maxW: 510 },
+    // Commodity description (size/lineH set dynamically — see commodity render block)
+    commodity:     { x: 55,  y: 410, size: 13, lineH: 28, maxW: 510, center: true },
   };
+
+  const PAGE = { width: 612, height: 792 }; // template is fixed US Letter
+
+  // Field map — single source of truth for what is editable and how it renders.
+  // type: 'single' | 'multiline' | 'shipto' | 'scrap'
+  const FIELD_MAP = [
+    { key: 'deliveryTime',  type: 'single',    coord: COORDS.deliveryTime, overrideKey: 'deliveryTime' },
+    { key: 'date',          type: 'single',    coord: COORDS.date,         overrideKey: 'date' },
+    { key: 'bolNumber',     type: 'single',    coord: COORDS.bolNumber,    overrideKey: 'bolNumber' },
+    { key: 'carrierName',   type: 'single',    coord: COORDS.carrierName,  overrideKey: 'carrierName' },
+    { key: 'trailerNo',     type: 'single',    coord: COORDS.trailerNo,    overrideKey: 'trailerNo' },
+    { key: 'shipTo',        type: 'shipto',    coords: [COORDS.shipLine1, COORDS.shipLine2, COORDS.shipLine3, COORDS.shipLine4], overrideKey: 'shipTo' },
+    { key: 'specialInstr',  type: 'multiline', coord: COORDS.specialInstr, overrideKey: 'specialInstr' },
+    { key: 'contactInfo',   type: 'multiline', coord: COORDS.contactInfo,  overrideKey: 'contactInfo' },
+    { key: 'poNumber',      type: 'multiline', coord: COORDS.poNumber,     overrideKey: 'poNumber' },
+    { key: 'commodity',     type: 'multiline', coord: COORDS.commodity,    overrideKey: 'commodity' },
+    { key: 'scrap',         type: 'scrap',     coords: { yes: COORDS.scrapYes, no: COORDS.scrapNo }, overrideKey: 'scrap' },
+  ];
+
+  // Picks the commodity size tier from text + pdf-lib font. Shared by both the
+  // un-overridden (Prompt 66) and override render paths so they stay in sync.
+  // NOTE: spec suggests pickCommodityTier(lineCount) but lineCount depends on
+  // font size per tier, so (text, pdfFont) is the correct signature.
+  function pickCommodityTier(text, pdfFont) {
+    const tiers = [
+      { size: 24, lineH: 30, maxLines: 2 },
+      { size: 20, lineH: 26, maxLines: 5 },
+      { size: 18, lineH: 22, maxLines: Infinity },
+    ];
+    for (const t of tiers) {
+      if (wrapText(String(text), pdfFont, t.size, COORDS.commodity.maxW).length <= t.maxLines) {
+        return { size: t.size, lineH: t.lineH };
+      }
+    }
+    return { size: 18, lineH: 22 };
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // PDF GENERATION
@@ -85,20 +121,29 @@ window.BolShared = (function() {
         const maxW = coord.maxW || 250;
         const wrappedLines = wrapText(String(text), font, size, maxW);
         wrappedLines.forEach((line, i) => {
-          page.drawText(line, {
+          const opts = {
             x: coord.x,
             y: coord.y - (i * lineH),
             size,
             font,
             color: black,
-            maxWidth: maxW,
-          });
+          };
+          if (coord.center && line) {
+            const lineWidth = font.widthOfTextAtSize(line, size);
+            opts.x = coord.x + (maxW - lineWidth) / 2;
+          } else {
+            opts.maxWidth = maxW;
+          }
+          page.drawText(line, opts);
         });
       };
 
+      const _ov = bol._overrides || {};
+
       // ── Delivery time (bold red, top right) ──
-      if (bol.delivery_time) {
-        page.drawText(String(bol.delivery_time), {
+      const _deliveryTimeVal = 'deliveryTime' in _ov ? _ov.deliveryTime : bol.delivery_time;
+      if (_deliveryTimeVal) {
+        page.drawText(String(_deliveryTimeVal), {
           x: COORDS.deliveryTime.x, y: COORDS.deliveryTime.y,
           size: COORDS.deliveryTime.size,
           font: fontBold,
@@ -107,40 +152,50 @@ window.BolShared = (function() {
       }
 
       // ── Standard fields ──
-      drawText(bol.date, COORDS.date);
-      drawText(String(bol.bol_number || ''), COORDS.bolNumber);
-      drawText(bol.carrier_name, COORDS.carrierName);
-      drawText(bol.trailer_no, COORDS.trailerNo);
+      drawText('date' in _ov        ? _ov.date        : bol.date,                    COORDS.date);
+      drawText('bolNumber' in _ov   ? _ov.bolNumber   : String(bol.bol_number || ''), COORDS.bolNumber);
+      drawText('carrierName' in _ov ? _ov.carrierName : bol.carrier_name,             COORDS.carrierName);
+      drawText('trailerNo' in _ov   ? _ov.trailerNo   : bol.trailer_no,               COORDS.trailerNo);
 
       // ── Ship-to address (up to 4 lines) ──
-      const shipLines = buildShipToLines(bol);
+      const shipLines = Array.isArray(_ov.shipTo) ? _ov.shipTo : buildShipToLines(bol);
       const shipCoords = [COORDS.shipLine1, COORDS.shipLine2, COORDS.shipLine3, COORDS.shipLine4];
       shipLines.forEach((line, i) => { if (shipCoords[i]) drawText(line, shipCoords[i]); });
 
       // ── Special Instructions ──
-      drawMultiline(bol.special_instructions, COORDS.specialInstr);
+      drawMultiline(
+        Array.isArray(_ov.specialInstr) ? _ov.specialInstr.join('\n') : bol.special_instructions,
+        COORDS.specialInstr);
 
       // ── Contact Info ──
-      // Accept either contact_info (BOL generator) or contact_name/contact_phone (load builder)
-      const contactStr = bol.contact_info || [
-        bol.contact_name ? ('POC: ' + bol.contact_name) : '',
-        bol.contact_phone || '',
-      ].filter(Boolean).join(' ');
-      if (contactStr) drawMultiline(contactStr, COORDS.contactInfo);
+      // Accept either contact_info (BOL generator) or contact_name/contact_phone (load builder).
+      // Override arrives as literal lines — draw verbatim (no 'POC: ' prefix added).
+      const _contactVal = Array.isArray(_ov.contactInfo)
+        ? _ov.contactInfo.join('\n')
+        : (bol.contact_info || [
+            bol.contact_name ? ('POC: ' + bol.contact_name) : '',
+            bol.contact_phone || '',
+          ].filter(Boolean).join(' '));
+      if (_contactVal) drawMultiline(_contactVal, COORDS.contactInfo);
 
       // ── PO / Invoice Number ──
-      const poStr = bol.po_number || bol.poNumber || '';
-      if (poStr) drawMultiline('PO: ' + poStr, COORDS.poNumber);
+      // Override arrives as literal lines — draw verbatim (no 'PO: ' prefix added).
+      const _poVal = Array.isArray(_ov.poNumber)
+        ? _ov.poNumber.join('\n')
+        : (() => { const v = bol.po_number || bol.poNumber || ''; return v ? 'PO: ' + v : ''; })();
+      if (_poVal) drawMultiline(_poVal, COORDS.poNumber);
 
       // ── Scrap Pick Up ──
-      if (bol.is_scrap_pickup === 1 || bol.is_scrap_pickup === true || bol.is_scrap_pickup === '1') {
-        drawText('X', COORDS.scrapYes);
-      } else {
-        drawText('X', COORDS.scrapNo);
-      }
+      const _isScrap = typeof _ov.scrap === 'boolean' ? _ov.scrap
+        : (bol.is_scrap_pickup === 1 || bol.is_scrap_pickup === true || bol.is_scrap_pickup === '1');
+      drawText('X', _isScrap ? COORDS.scrapYes : COORDS.scrapNo);
 
-      // ── Commodity description ──
-      drawMultiline(bol.commodity_description, COORDS.commodity);
+      // ── Commodity description (centered, auto-sized by wrapped line count) ──
+      const _commodityText = Array.isArray(_ov.commodity) ? _ov.commodity.join('\n') : bol.commodity_description;
+      if (_commodityText) {
+        const _tier = pickCommodityTier(String(_commodityText), font);
+        drawMultiline(_commodityText, { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH });
+      }
 
       // ── Copy page into combined PDF ──
       const [copiedPage] = await combinedPdf.copyPages(templateDoc, [0]);
@@ -262,6 +317,9 @@ window.BolShared = (function() {
 
   return {
     COORDS,
+    PAGE,
+    FIELD_MAP,
+    pickCommodityTier,
     generatePdf,
     openPdf,
     buildShipToLines,

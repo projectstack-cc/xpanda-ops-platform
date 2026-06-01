@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="/logistics/logistics-shared.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="/logistics/bol-shared.js"></script>
+<script src="/logistics/bol-editor.js"></script>
 <style>
 .logistics-back-link { display: none; }
 
@@ -1203,8 +1204,9 @@ async function doGenerate(payload) {
       } catch (e) { console.error('Failed to fetch packing slip:', e); }
     }
 
+    pendingPackingSlipBytes = packingSlipPdfBytes;
     const result = await BolShared.generatePdf([tempBol], { previewOnly: true, packingSlipPdfBytes });
-    showBolReview(result.blobUrl, payload);
+    showBolReview(result.blobUrl, payload, tempBol);
   } catch (e) {
     setStatus('Error: ' + (e.message || String(e)), 'error');
   } finally {
@@ -1213,12 +1215,15 @@ async function doGenerate(payload) {
   }
 }
 
-let pendingReviewPayload = null;
-let pendingReviewBlobUrl = null;
+let pendingReviewPayload    = null;
+let pendingReviewBlobUrl    = null;
+let pendingReviewBol        = null;
+let pendingPackingSlipBytes = null;
 
-function showBolReview(blobUrl, payload) {
+function showBolReview(blobUrl, payload, bolForEditor) {
   pendingReviewPayload = payload;
   pendingReviewBlobUrl = blobUrl;
+  pendingReviewBol     = bolForEditor || null;
 
   const backdrop = document.getElementById('bol-review-backdrop');
   const iframe = document.getElementById('bol-review-iframe');
@@ -1285,7 +1290,34 @@ async function handleReviewApprove() {
 }
 
 function handleReviewEdit() {
-  closeBolReview();
+  if (!pendingReviewBol) { closeBolReview(); return; }
+  const iframe     = document.getElementById('bol-review-iframe');
+  const editorHost = document.getElementById('bol-editor-host');
+  iframe.style.display     = 'none';
+  editorHost.style.display = 'flex';
+  BolEditor.open(pendingReviewBol, editorHost, {
+    onApply: async function (updatedBol) {
+      try {
+        editorHost.style.display = 'none';
+        iframe.style.display     = '';
+        iframe.src = '';
+        const result = await BolShared.generatePdf([updatedBol], {
+          previewOnly: true,
+          packingSlipPdfBytes: pendingPackingSlipBytes,
+        });
+        if (pendingReviewBlobUrl) URL.revokeObjectURL(pendingReviewBlobUrl);
+        pendingReviewBlobUrl = result.blobUrl;
+        iframe.src = result.blobUrl;
+      } catch (e) {
+        setStatus('Error regenerating preview: ' + (e.message || String(e)), 'error');
+        closeBolReview();
+      }
+    },
+    onCancel: function () {
+      editorHost.style.display = 'none';
+      iframe.style.display     = '';
+    },
+  });
 }
 
 async function handleDraft() {
@@ -1598,6 +1630,7 @@ function showToast(msg) {
     <iframe id="bol-review-iframe" style="
       flex:1;border:none;border-radius:0 0 12px 12px;
     "></iframe>
+    <div id="bol-editor-host" style="flex:1;display:none;flex-direction:column;overflow:hidden;border-radius:0 0 12px 12px;"></div>
   </div>
 </div>
 
