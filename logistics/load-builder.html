@@ -2841,6 +2841,7 @@ function closeBolReviewLB() {
   document.getElementById('bol-review-iframe').src = '';
   document.getElementById('bol-review-iframe').style.display = '';
   document.getElementById('bol-review-editor-host-lb').style.display = 'none';
+  document.getElementById('bol-review-picker-lb').style.display = 'none';
   if (lbPendingBlobUrl) {
     URL.revokeObjectURL(lbPendingBlobUrl);
     lbPendingBlobUrl = null;
@@ -2860,6 +2861,7 @@ async function lbEditorOnApply(updatedBol) {
     iframe.src = newBlobUrl;
     editorHost.style.display = 'none';
     iframe.style.display = '';
+    document.getElementById('bol-review-picker-lb').style.display = 'none';
   } catch (e) {
     console.error('Failed to regenerate BOL preview:', e);
   }
@@ -2868,6 +2870,7 @@ async function lbEditorOnApply(updatedBol) {
 function lbEditorOnCancel() {
   document.getElementById('bol-review-editor-host-lb').style.display = 'none';
   document.getElementById('bol-review-iframe').style.display = '';
+  document.getElementById('bol-review-picker-lb').style.display = 'none';
 }
 
 function handleReviewEditLB() {
@@ -2875,6 +2878,7 @@ function handleReviewEditLB() {
   const editorHost = document.getElementById('bol-review-editor-host-lb');
   iframe.style.display     = 'none';
   editorHost.style.display = 'flex';
+  document.getElementById('bol-review-picker-lb').style.display = 'flex';
 
   const sel = document.getElementById('bol-review-picker-select-lb');
   sel.innerHTML = '';
@@ -3087,27 +3091,28 @@ initSkus().then(() => {
         ">Approve</button>
       </div>
     </div>
+    <div id="bol-review-picker-lb" style="
+      display: none;
+      padding: 8px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #ffffff;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      flex-shrink: 0;
+    ">
+      <label style="font-weight:600; color:#374151;">Editing BOL:</label>
+      <select id="bol-review-picker-select-lb" style="
+        padding: 4px 8px;
+        border: 1px solid #d1d5db;
+        border-radius: 4px;
+        font-size: 14px;
+      "></select>
+    </div>
     <iframe id="bol-review-iframe" style="
       flex:1;border:none;border-radius:0 0 12px 12px;
     "></iframe>
     <div id="bol-review-editor-host-lb" style="display:none; flex:1; overflow:auto; background:#f9fafb;">
-      <div id="bol-review-picker-lb" style="
-        padding: 8px 12px;
-        border-bottom: 1px solid #e5e7eb;
-        background: #ffffff;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 14px;
-      ">
-        <label style="font-weight:600; color:#374151;">Editing BOL:</label>
-        <select id="bol-review-picker-select-lb" style="
-          padding: 4px 8px;
-          border: 1px solid #d1d5db;
-          border-radius: 4px;
-          font-size: 14px;
-        "></select>
-      </div>
       <div id="bol-review-editor-mount-lb" style="position:relative;"></div>
     </div>
   </div>
