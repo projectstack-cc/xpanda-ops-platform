@@ -3303,6 +3303,15 @@ async function handleApiBols(request, env) {
     const validTerms     = ["prepaid", "collect", "3rd_party"];
     const freight_terms  = validTerms.includes(s("freight_terms")) ? s("freight_terms") : "prepaid";
     const is_scrap_pickup = payload.is_scrap_pickup ? 1 : 0;
+    let render_overrides = null;
+    if (payload.render_overrides != null) {
+      if (typeof payload.render_overrides === 'object') {
+        render_overrides = JSON.stringify(payload.render_overrides);
+      } else if (typeof payload.render_overrides === 'string' && payload.render_overrides.trim()) {
+        try { JSON.parse(payload.render_overrides); render_overrides = payload.render_overrides; }
+        catch { render_overrides = null; }
+      }
+    }
 
     try {
       await db.prepare(`
@@ -3313,8 +3322,8 @@ async function handleApiBols(request, env) {
           carrier_id, carrier_name, trailer_no, seal_number, scac, pro_no,
           freight_terms, is_scrap_pickup, third_party_bill_to, special_instructions, contact_info, is_master_bol,
           commodity_description, handling_unit_qty, handling_unit_type,
-          package_qty, package_type, weight, delivery_time, job_id, notes, created_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          package_qty, package_type, weight, delivery_time, job_id, notes, render_overrides, created_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, bol_number, date,
         payload.customer_id ? String(payload.customer_id).trim() : null,
@@ -3327,7 +3336,7 @@ async function handleApiBols(request, env) {
         s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),
         s("package_qty"), s("package_type"), s("weight"), s("delivery_time"),
         payload.job_id ? String(payload.job_id).trim() : null,
-        s("notes"), now
+        s("notes"), render_overrides, now
       ).run();
 
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();
@@ -3348,13 +3357,27 @@ async function handleApiBols(request, env) {
     try { payload = await request.json(); }
     catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
 
-    const existing = await db.prepare("SELECT id FROM bols WHERE id = ?").bind(bolId).first();
+    const existing = await db.prepare("SELECT id, render_overrides FROM bols WHERE id = ?").bind(bolId).first();
     if (!existing) return json({ ok: false, error: "BOL not found." }, 404);
 
     const s = (f) => String(payload[f] || "").trim();
     const validTerms    = ["prepaid", "collect", "3rd_party"];
     const freight_terms = validTerms.includes(s("freight_terms")) ? s("freight_terms") : "prepaid";
     const is_scrap_pickup = payload.is_scrap_pickup ? 1 : 0;
+    const hasOverridesField = Object.prototype.hasOwnProperty.call(payload, 'render_overrides');
+    let render_overrides = null;
+    if (hasOverridesField) {
+      if (payload.render_overrides != null) {
+        if (typeof payload.render_overrides === 'object') {
+          render_overrides = JSON.stringify(payload.render_overrides);
+        } else if (typeof payload.render_overrides === 'string' && payload.render_overrides.trim()) {
+          try { JSON.parse(payload.render_overrides); render_overrides = payload.render_overrides; }
+          catch { render_overrides = null; }
+        }
+      }
+    } else {
+      render_overrides = existing.render_overrides ?? null;
+    }
 
     try {
       await db.prepare(`
@@ -3365,7 +3388,7 @@ async function handleApiBols(request, env) {
           carrier_id = ?, carrier_name = ?, trailer_no = ?, seal_number = ?, scac = ?, pro_no = ?,
           freight_terms = ?, is_scrap_pickup = ?, third_party_bill_to = ?, special_instructions = ?, contact_info = ?,
           is_master_bol = ?, commodity_description = ?, handling_unit_qty = ?, handling_unit_type = ?,
-          package_qty = ?, package_type = ?, weight = ?, delivery_time = ?, job_id = ?, notes = ?
+          package_qty = ?, package_type = ?, weight = ?, delivery_time = ?, job_id = ?, notes = ?, render_overrides = ?
         WHERE id = ?
       `).bind(
         s("date"),
@@ -3379,7 +3402,7 @@ async function handleApiBols(request, env) {
         s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),
         s("package_qty"), s("package_type"), s("weight"), s("delivery_time"),
         payload.job_id ? String(payload.job_id).trim() : null,
-        s("notes"),
+        s("notes"), render_overrides,
         bolId
       ).run();
 

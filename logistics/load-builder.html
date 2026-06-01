@@ -418,6 +418,7 @@
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="/logistics/bol-shared.js"></script>
+<script src="/logistics/bol-editor.js"></script>
 </head>
 <body>
 
@@ -2779,46 +2780,125 @@ async function generateBolPdf(bolRecords) {
   return result.blobUrl;
 }
 
-let lbPendingBlobUrl = null;
-let lbPendingBols = null;
+let lbPendingBlobUrl    = null;
+let lbPendingBols       = null;
+let lbReviewBols        = [];
+let lbReviewActiveIndex = 0;
 
 function showBolReviewLB(blobUrl, savedBols) {
-  lbPendingBlobUrl = blobUrl;
-  lbPendingBols = savedBols;
+  lbPendingBlobUrl    = blobUrl;
+  lbPendingBols       = savedBols;
+  lbReviewBols        = [...savedBols];
+  lbReviewActiveIndex = 0;
 
   const backdrop = document.getElementById('bol-review-backdrop');
   const iframe = document.getElementById('bol-review-iframe');
   iframe.src = blobUrl;
+  iframe.style.display = '';
+  document.getElementById('bol-review-editor-host-lb').style.display = 'none';
   backdrop.style.display = 'flex';
 
   const approveBtn = document.getElementById('bol-review-approve');
-  const editBtn = document.getElementById('bol-review-edit');
+  const editBtn    = document.getElementById('bol-review-edit');
+  const closeBtn   = document.getElementById('bol-review-close-lb');
 
   const newApprove = approveBtn.cloneNode(true);
   approveBtn.parentNode.replaceChild(newApprove, approveBtn);
-  newApprove.addEventListener('click', () => {
+  newApprove.addEventListener('click', async () => {
+    for (const bol of lbReviewBols) {
+      if (bol._overrides) {
+        try {
+          await fetch(`/api/bols/${bol.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...bol, render_overrides: bol._overrides }),
+          });
+        } catch (e) { console.error('Failed to save overrides for BOL', bol.id, e); }
+      }
+    }
     BolShared.openPdf(lbPendingBlobUrl);
     lbPendingBlobUrl = null;
-    const bols = lbPendingBols;
-    lbPendingBols = null;
+    const bols = [...lbReviewBols];
     closeBolReviewLB();
-    bm.bolSuccess = bols || [];
+    state.bolModal.bolSuccess = bols;
     renderBolModal();
   });
 
   const newEdit = editBtn.cloneNode(true);
   editBtn.parentNode.replaceChild(newEdit, editBtn);
-  newEdit.addEventListener('click', closeBolReviewLB);
+  newEdit.addEventListener('click', handleReviewEditLB);
+
+  if (closeBtn) {
+    const newClose = closeBtn.cloneNode(true);
+    closeBtn.parentNode.replaceChild(newClose, closeBtn);
+    newClose.addEventListener('click', closeBolReviewLB);
+  }
 }
 
 function closeBolReviewLB() {
   const backdrop = document.getElementById('bol-review-backdrop');
   backdrop.style.display = 'none';
   document.getElementById('bol-review-iframe').src = '';
+  document.getElementById('bol-review-iframe').style.display = '';
+  document.getElementById('bol-review-editor-host-lb').style.display = 'none';
   if (lbPendingBlobUrl) {
     URL.revokeObjectURL(lbPendingBlobUrl);
     lbPendingBlobUrl = null;
   }
+  lbReviewBols        = [];
+  lbReviewActiveIndex = 0;
+}
+
+async function lbEditorOnApply(updatedBol) {
+  lbReviewBols[lbReviewActiveIndex] = updatedBol;
+  const editorHost = document.getElementById('bol-review-editor-host-lb');
+  const iframe     = document.getElementById('bol-review-iframe');
+  try {
+    const newBlobUrl = await generateBolPdf(lbReviewBols);
+    if (lbPendingBlobUrl) URL.revokeObjectURL(lbPendingBlobUrl);
+    lbPendingBlobUrl = newBlobUrl;
+    iframe.src = newBlobUrl;
+    editorHost.style.display = 'none';
+    iframe.style.display = '';
+  } catch (e) {
+    console.error('Failed to regenerate BOL preview:', e);
+  }
+}
+
+function lbEditorOnCancel() {
+  document.getElementById('bol-review-editor-host-lb').style.display = 'none';
+  document.getElementById('bol-review-iframe').style.display = '';
+}
+
+function handleReviewEditLB() {
+  const iframe     = document.getElementById('bol-review-iframe');
+  const editorHost = document.getElementById('bol-review-editor-host-lb');
+  iframe.style.display     = 'none';
+  editorHost.style.display = 'flex';
+
+  const sel = document.getElementById('bol-review-picker-select-lb');
+  sel.innerHTML = '';
+  lbReviewBols.forEach((b, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    const label = b.ship_to_company || b.bol_number || `BOL ${i + 1}`;
+    opt.textContent = `BOL ${i + 1} of ${lbReviewBols.length} — ${label}`;
+    sel.appendChild(opt);
+  });
+  sel.value = String(lbReviewActiveIndex);
+
+  const newSel = sel.cloneNode(true);
+  sel.parentNode.replaceChild(newSel, sel);
+  newSel.addEventListener('change', (e) => {
+    lbReviewActiveIndex = Number(e.target.value) || 0;
+    BolEditor.open(lbReviewBols[lbReviewActiveIndex],
+      document.getElementById('bol-review-editor-mount-lb'),
+      { onApply: lbEditorOnApply, onCancel: lbEditorOnCancel });
+  });
+
+  BolEditor.open(lbReviewBols[lbReviewActiveIndex],
+    document.getElementById('bol-review-editor-mount-lb'),
+    { onApply: lbEditorOnApply, onCancel: lbEditorOnCancel });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2987,6 +3067,16 @@ initSkus().then(() => {
     ">
       <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827;">Review BOL</h3>
       <div style="display:flex;gap:8px;">
+        <button id="bol-review-close-lb" style="
+          padding: 8px 16px;
+          background: #ffffff;
+          color: #374151;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-weight: 600;
+          cursor: pointer;
+          font-size: 14px;
+        ">Close</button>
         <button id="bol-review-edit" style="
           padding:8px 20px;border-radius:8px;border:1px solid #d1d5db;
           background:#fff;cursor:pointer;font-size:14px;font-weight:600;color:#111827;
@@ -3000,6 +3090,26 @@ initSkus().then(() => {
     <iframe id="bol-review-iframe" style="
       flex:1;border:none;border-radius:0 0 12px 12px;
     "></iframe>
+    <div id="bol-review-editor-host-lb" style="display:none; flex:1; overflow:auto; background:#f9fafb;">
+      <div id="bol-review-picker-lb" style="
+        padding: 8px 12px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #ffffff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+      ">
+        <label style="font-weight:600; color:#374151;">Editing BOL:</label>
+        <select id="bol-review-picker-select-lb" style="
+          padding: 4px 8px;
+          border: 1px solid #d1d5db;
+          border-radius: 4px;
+          font-size: 14px;
+        "></select>
+      </div>
+      <div id="bol-review-editor-mount-lb" style="position:relative;"></div>
+    </div>
   </div>
 </div>
 

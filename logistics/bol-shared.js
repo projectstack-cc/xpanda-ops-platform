@@ -27,17 +27,17 @@ window.BolShared = (function() {
     specialInstr:  { x: 315, y: 585, size: 9, lineH: 12, maxW: 255 },
 
     // Contact Info
-    contactInfo:   { x: 315, y: 525, size: 11, lineH: 12, maxW: 255 },
+    contactInfo:   { x: 315, y: 495, size: 12, lineH: 13, maxW: 255 },
 
     // PO / Invoice Number
-    poNumber:      { x: 315, y: 498, size: 11, lineH: 12, maxW: 255 },
+    poNumber:      { x: 315, y: 468, size: 12, lineH: 13, maxW: 255 },
 
     // Scrap Pick Up checkboxes
     scrapYes:      { x: 109, y: 512, size: 13 },
     scrapNo:       { x: 109, y: 496, size: 13 },
 
     // Commodity description (size/lineH set dynamically — see commodity render block)
-    commodity:     { x: 55,  y: 410, size: 13, lineH: 28, maxW: 510, center: true },
+    commodity:     { x: 55,  y: 380, size: 13, lineH: 28, maxW: 510, center: true },
   };
 
   const PAGE = { width: 612, height: 792 }; // template is fixed US Letter
@@ -64,16 +64,16 @@ window.BolShared = (function() {
   // font size per tier, so (text, pdfFont) is the correct signature.
   function pickCommodityTier(text, pdfFont) {
     const tiers = [
-      { size: 24, lineH: 30, maxLines: 2 },
-      { size: 20, lineH: 26, maxLines: 5 },
-      { size: 18, lineH: 22, maxLines: Infinity },
+      { size: 26, lineH: 32, maxLines: 2 },
+      { size: 22, lineH: 28, maxLines: 5 },
+      { size: 20, lineH: 24, maxLines: Infinity },
     ];
     for (const t of tiers) {
       if (wrapText(String(text), pdfFont, t.size, COORDS.commodity.maxW).length <= t.maxLines) {
         return { size: t.size, lineH: t.lineH };
       }
     }
-    return { size: 18, lineH: 22 };
+    return { size: 20, lineH: 24 };
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -152,7 +152,14 @@ window.BolShared = (function() {
       }
 
       // ── Standard fields ──
-      drawText('date' in _ov        ? _ov.date        : bol.date,                    COORDS.date);
+      const formatBolDate = (iso) => {
+        if (!iso) return '';
+        const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        return m ? `${m[2]}/${m[3]}/${m[1]}` : String(iso);
+      };
+      const _rawDate = 'date' in _ov ? _ov.date : bol.date;
+      const _displayDate = 'date' in _ov ? String(_rawDate) : formatBolDate(_rawDate);
+      drawText(_displayDate,                                                           COORDS.date);
       drawText('bolNumber' in _ov   ? _ov.bolNumber   : String(bol.bol_number || ''), COORDS.bolNumber);
       drawText('carrierName' in _ov ? _ov.carrierName : bol.carrier_name,             COORDS.carrierName);
       drawText('trailerNo' in _ov   ? _ov.trailerNo   : bol.trailer_no,               COORDS.trailerNo);

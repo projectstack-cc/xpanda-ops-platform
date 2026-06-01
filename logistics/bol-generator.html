@@ -694,12 +694,13 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
 // State
 // ═══════════════════════════════════════════════════════════════════
 
-let selectedCustomerId = null;
-let selectedCarrierId  = null;
-let prefilledJobId     = null;
-let editingBolId       = null;
-let carriersCache      = [];
-let allAddresses       = [];
+let selectedCustomerId    = null;
+let selectedCarrierId     = null;
+let prefilledJobId        = null;
+let editingBolId          = null;
+let currentLoadedOverrides = null;
+let carriersCache         = [];
+let allAddresses          = [];
 let addrMgrLoaded      = false;
 let custSearchTimer    = null;
 let custDropIdx        = -1;
@@ -1188,6 +1189,7 @@ async function doGenerate(payload) {
       ...payload,
       bol_number: payload.bol_number || '',
     };
+    if (currentLoadedOverrides) tempBol._overrides = currentLoadedOverrides;
 
     let packingSlipPdfBytes = null;
     if (prefilledJobId && document.getElementById('f-include-packing')?.checked) {
@@ -1240,6 +1242,13 @@ function showBolReview(blobUrl, payload, bolForEditor) {
   const newEdit = editBtn.cloneNode(true);
   editBtn.parentNode.replaceChild(newEdit, editBtn);
   newEdit.addEventListener('click', handleReviewEdit);
+
+  const closeBtn = document.getElementById('bol-review-close');
+  if (closeBtn) {
+    const newClose = closeBtn.cloneNode(true);
+    closeBtn.parentNode.replaceChild(newClose, closeBtn);
+    newClose.addEventListener('click', closeBolReview);
+  }
 }
 
 function closeBolReview() {
@@ -1301,6 +1310,7 @@ function handleReviewEdit() {
         editorHost.style.display = 'none';
         iframe.style.display     = '';
         iframe.src = '';
+        pendingReviewPayload.render_overrides = updatedBol._overrides || null;
         const result = await BolShared.generatePdf([updatedBol], {
           previewOnly: true,
           packingSlipPdfBytes: pendingPackingSlipBytes,
@@ -1350,10 +1360,11 @@ async function handleDraft() {
 }
 
 async function handleClear() {
-  selectedCustomerId = null;
-  selectedCarrierId  = null;
-  prefilledJobId     = null;
-  editingBolId       = null;
+  selectedCustomerId    = null;
+  selectedCarrierId     = null;
+  prefilledJobId        = null;
+  editingBolId          = null;
+  currentLoadedOverrides = null;
   document.getElementById('job-banner').classList.add('hidden');
   document.getElementById('edit-mode-banner').classList.remove('visible');
 
@@ -1382,7 +1393,8 @@ async function handleClear() {
 }
 
 function handleDuplicate() {
-  editingBolId = null;
+  editingBolId          = null;
+  currentLoadedOverrides = null;
   document.getElementById('edit-mode-banner').classList.remove('visible');
   document.getElementById('f-bol-number').value = '';
   showToast('Duplicated as new BOL — enter a BOL number and generate to save');
@@ -1429,6 +1441,12 @@ function loadBolIntoForm(b) {
     document.getElementById('customer-search').value = '';
     document.getElementById('cust-indicator').className = 'bol-cust-indicator';
     document.getElementById('cust-indicator').innerHTML = '';
+  }
+
+  try {
+    currentLoadedOverrides = b.render_overrides ? JSON.parse(b.render_overrides) : null;
+  } catch {
+    currentLoadedOverrides = null;
   }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1617,6 +1635,16 @@ function showToast(msg) {
     ">
       <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827;">Review BOL</h3>
       <div style="display:flex;gap:8px;">
+        <button id="bol-review-close" style="
+          padding: 8px 16px;
+          background: #ffffff;
+          color: #374151;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          font-weight: 600;
+          cursor: pointer;
+          font-size: 14px;
+        ">Close</button>
         <button id="bol-review-edit" style="
           padding:8px 20px;border-radius:8px;border:1px solid #d1d5db;
           background:#fff;cursor:pointer;font-size:14px;font-weight:600;color:#111827;
