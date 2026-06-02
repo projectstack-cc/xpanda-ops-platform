@@ -30,12 +30,17 @@
     .ld-bay-number { font-weight: 700; font-size: 14px; margin-bottom: 6px; color: #111827; }
     .ld-trailer-input { width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; text-align: center; box-sizing: border-box; }
     .ld-bay-body { padding: 8px; min-height: 150px; }
-    .ld-card { padding: 10px; border-radius: 8px; margin-bottom: 8px; border: 1px solid transparent; }
-    .ld-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-    .ld-card-header strong { font-size: 13px; color: #111827; }
+    .ld-card { padding: 6px 8px; border-radius: 6px; margin-bottom: 6px; border: 1px solid transparent; }
+    .ld-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; gap: 6px; }
+    .ld-card-header strong { font-size: 12px; color: #111827; }
+    .ld-card-subtext { font-size: 10px; color: #6b7280; margin-bottom: 2px; }
+    .ld-inv-link { color: #1e40af; text-decoration: underline; cursor: pointer; }
+    .ld-inv-link:hover { color: #1e3a8a; }
     .ld-status-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; }
-    .ld-card-meta { font-size: 11px; color: #6b7280; display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-    .ld-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .ld-card-meta { font-size: 10px; color: #6b7280; display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+    .ld-card-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+    .ld-section-title { cursor: pointer; user-select: none; }
+    .ld-section-chevron { display: inline-block; min-width: 14px; font-size: 12px; color: #6b7280; transition: transform 0.15s ease; }
     .ld-btn-advance { padding: 4px 10px; border: none; background: #1e293b; color: #fff; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; }
     .ld-btn-advance:hover { background: #334155; }
     .ld-btn-assign { padding: 4px 10px; border: 1px solid #3b82f6; background: #eff6ff; color: #1e40af; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; }
@@ -46,7 +51,7 @@
     .ld-empty-bay { color: #9ca3af; font-size: 12px; text-align: center; padding: 16px; }
     .ld-queue { display: flex; flex-wrap: wrap; gap: 8px; }
     .ld-transit-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-    .ld-queue .ld-card, .ld-transit-grid .ld-card { width: 260px; }
+    .ld-queue .ld-card, .ld-transit-grid .ld-card { width: 230px; }
     /* Bay view */
     .ld-bay-single { max-width: 500px; margin: 0 auto; }
     .ld-bay-single-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
@@ -118,19 +123,28 @@
 
   <!-- Overview mode -->
   <div id="ld-overview">
-    <div class="ld-section">
-      <h3 class="ld-section-title">Awaiting Trailer Assignment</h3>
+    <div class="ld-section" data-section-key="awaiting">
+      <h3 class="ld-section-title" onclick="toggleSection('awaiting')" style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
+        <span class="ld-section-chevron" id="ld-chevron-awaiting">▾</span>
+        Awaiting Trailer Assignment
+      </h3>
       <div id="ld-awaiting" class="ld-queue"></div>
     </div>
     <div class="ld-bays-scroll">
       <div id="ld-bays" class="ld-bays-grid"></div>
     </div>
-    <div class="ld-section">
-      <h3 class="ld-section-title">In Transit</h3>
+    <div class="ld-section" data-section-key="transit">
+      <h3 class="ld-section-title" onclick="toggleSection('transit')" style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
+        <span class="ld-section-chevron" id="ld-chevron-transit">▾</span>
+        In Transit
+      </h3>
       <div id="ld-transit" class="ld-transit-grid"></div>
     </div>
-    <div class="ld-section">
-      <h3 class="ld-section-title">Delivered</h3>
+    <div class="ld-section" data-section-key="delivered">
+      <h3 class="ld-section-title" onclick="toggleSection('delivered')" style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
+        <span class="ld-section-chevron" id="ld-chevron-delivered">▾</span>
+        Delivered
+      </h3>
       <div id="ld-delivered" class="ld-transit-grid"></div>
     </div>
   </div>
@@ -196,6 +210,32 @@
   </div>
 </div>
 
+<!-- Shipping Info Modal -->
+<div id="ld-shipping-info-modal" class="ld-modal-backdrop" hidden onclick="if(event.target===this) closeShippingInfo()">
+  <div class="ld-modal-card" style="max-width: 480px;">
+    <div style="padding: 16px 20px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+      <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #111827;">Shipping Information</h3>
+      <button onclick="closeShippingInfo()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #6b7280; padding: 0; line-height: 1;">×</button>
+    </div>
+    <div id="ld-shipping-info-body" style="padding: 16px 20px; font-size: 13px; color: #374151; line-height: 1.5;">
+    </div>
+  </div>
+</div>
+
+<!-- BOL View Modal -->
+<div id="ld-bol-view-modal" class="ld-modal-backdrop" hidden onclick="if(event.target===this) closeBolViewModal()" style="z-index: 1000;">
+  <div class="ld-modal-card" style="max-width: 95vw; width: 95vw; max-height: 95vh; height: 95vh; display: flex; flex-direction: column;">
+    <div style="padding: 10px 16px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+      <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #111827;">Bill of Lading</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button id="ld-bol-download-btn" onclick="downloadBolFromViewer()" style="padding:6px 12px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">Download</button>
+        <button onclick="closeBolViewModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6b7280; padding: 0; line-height: 1;">×</button>
+      </div>
+    </div>
+    <iframe id="ld-bol-view-iframe" style="flex:1; width:100%; border:none; background:#525659;"></iframe>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="/logistics/bol-shared.js"></script>
 
@@ -206,6 +246,39 @@ let selectedBayId = null;
 let currentLdView = window.innerWidth < 768 ? 'bay' : 'overview';
 let pullJobSelectedId = null;
 let pullJobSearchResults = [];
+
+const LD_COLLAPSE_KEY = 'ld_section_collapsed_v1';
+
+function loadCollapseState() {
+  try {
+    const raw = localStorage.getItem(LD_COLLAPSE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveCollapseState(state) {
+  try { localStorage.setItem(LD_COLLAPSE_KEY, JSON.stringify(state)); } catch {}
+}
+
+function applyCollapseState() {
+  const state = loadCollapseState();
+  ['awaiting', 'transit', 'delivered'].forEach(key => {
+    const section = document.querySelector(`.ld-section[data-section-key="${key}"]`);
+    if (!section) return;
+    const body = section.querySelector('.ld-queue, .ld-transit-grid');
+    const chevron = document.getElementById(`ld-chevron-${key}`);
+    const collapsed = !!state[key];
+    if (body) body.style.display = collapsed ? 'none' : '';
+    if (chevron) chevron.textContent = collapsed ? '▸' : '▾';
+  });
+}
+
+function toggleSection(key) {
+  const state = loadCollapseState();
+  state[key] = !state[key];
+  saveCollapseState(state);
+  applyCollapseState();
+}
 
 const LD_STATUS_COLORS = {
   awaiting:    { bg: '#f3f4f6', border: '#9ca3af', text: '#374151', label: 'Awaiting' },
@@ -309,6 +382,8 @@ function renderOverview() {
   document.getElementById('ld-delivered').innerHTML = delivered.length
     ? delivered.map(a => renderAssignmentCard(a, false, true)).join('')
     : '<div class="ld-empty">No recent deliveries</div>';
+
+  applyCollapseState();
 }
 
 function renderBayView() {
@@ -434,12 +509,20 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
   return `
     <div class="ld-card" ${dragAttrs} style="border-left:4px solid ${sc.border};background:${sc.bg};" data-assignment-id="${a.id}">
       <div class="ld-card-header">
-        <strong>${esc(a.customer || 'Unknown')}</strong>
+        <strong>
+          ${a.invoice_number
+            ? `<a href="#" class="ld-inv-link" onclick="event.preventDefault(); event.stopPropagation(); openShippingInfo('${esc(a.id)}'); return false;">INV# ${esc(a.invoice_number)}</a>`
+            : 'No INV#'}
+          ${(a.load_count || 1) > 1
+            ? `<span style="font-weight:700;color:#6366f1;margin-left:6px;font-size:11px;">Load ${a.load_number || 1} of ${a.load_count}</span>`
+            : ''}
+        </strong>
         <span class="ld-status-badge" style="color:${sc.text};">${sc.label}</span>
       </div>
+      <div class="ld-card-subtext" title="${escAttr(a.customer || 'Unknown')}">
+        ${esc(truncate(a.customer || 'Unknown', 20))}
+      </div>
       <div class="ld-card-meta">
-        ${a.invoice_number ? `<span>INV# ${esc(a.invoice_number)}</span>` : ''}
-        ${(a.load_count || 1) > 1 ? `<span style="font-weight:700;color:#6366f1;">Load ${a.load_number || 1} of ${a.load_count}</span>` : ''}
         ${a.trailer_number ? `<span>Trailer: ${esc(a.trailer_number)}</span>` : ''}
         ${a.ship_to_city ? `<span>${esc(a.ship_to_city)}${a.ship_to_state ? ', ' + esc(a.ship_to_state) : ''}</span>` : ''}
       </div>
@@ -805,6 +888,12 @@ function escAttr(s) {
   return String(s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function truncate(s, n) {
+  if (s == null) return '';
+  const str = String(s);
+  return str.length > n ? str.slice(0, n) + '…' : str;
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   function initWhenReady() {
     const user = window.__xpandaUser;
@@ -843,6 +932,9 @@ window.addEventListener('DOMContentLoaded', () => {
   setInterval(loadDashboard, 15000);
 });
 
+let currentBolBlobUrl = null;
+let currentBolFilename = 'BOL.pdf';
+
 async function viewBolForJob(jobId) {
   try {
     const res = await fetch('/api/bols?job_id=' + encodeURIComponent(jobId));
@@ -854,18 +946,115 @@ async function viewBolForJob(jobId) {
     }
 
     const bol = data.bols[data.bols.length - 1];
+    const result = await BolShared.generatePdf([bol], { previewOnly: true });
 
-    if (typeof BolShared.openPdf === 'function') {
-      const result = await BolShared.generatePdf([bol], { previewOnly: true });
-      BolShared.openPdf(result.blobUrl);
-    } else {
-      await BolShared.generatePdf([bol]);
+    if (currentBolBlobUrl) {
+      try { URL.revokeObjectURL(currentBolBlobUrl); } catch {}
     }
+    currentBolBlobUrl = result.blobUrl;
+    currentBolFilename = `BOL_${bol.bol_number || bol.id || 'unknown'}.pdf`;
+
+    document.getElementById('ld-bol-view-iframe').src = currentBolBlobUrl;
+    document.getElementById('ld-bol-view-modal').hidden = false;
   } catch (e) {
     console.error('Failed to load BOL:', e);
     alert('Failed to load BOL. Please try again.');
   }
 }
+
+function closeBolViewModal() {
+  document.getElementById('ld-bol-view-modal').hidden = true;
+  document.getElementById('ld-bol-view-iframe').src = '';
+  if (currentBolBlobUrl) {
+    try { URL.revokeObjectURL(currentBolBlobUrl); } catch {}
+    currentBolBlobUrl = null;
+  }
+}
+
+function downloadBolFromViewer() {
+  if (!currentBolBlobUrl) return;
+  const a = document.createElement('a');
+  a.href = currentBolBlobUrl;
+  a.download = currentBolFilename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+const shippingInfoJobCache = new Map();
+
+async function openShippingInfo(assignmentId) {
+  const a = allAssignments.find(x => x.id === assignmentId);
+  if (!a) return;
+
+  const modal = document.getElementById('ld-shipping-info-modal');
+  const body = document.getElementById('ld-shipping-info-body');
+  body.innerHTML = '<div style="color:#6b7280;">Loading…</div>';
+  modal.hidden = false;
+
+  try {
+    let job;
+    if (shippingInfoJobCache.has(a.job_id)) {
+      job = shippingInfoJobCache.get(a.job_id);
+    } else {
+      const res = await fetch('/api/jobs/' + encodeURIComponent(a.job_id));
+      const data = await res.json();
+      if (!data.ok || !data.job) {
+        body.innerHTML = '<div style="color:#b91c1c;">Could not load shipping information.</div>';
+        return;
+      }
+      job = data.job;
+      shippingInfoJobCache.set(a.job_id, job);
+    }
+    populateShippingInfo(job, a);
+  } catch (e) {
+    console.error('Failed to fetch shipping info:', e);
+    body.innerHTML = '<div style="color:#b91c1c;">Error loading shipping information.</div>';
+  }
+}
+
+function closeShippingInfo() {
+  document.getElementById('ld-shipping-info-modal').hidden = true;
+}
+
+function populateShippingInfo(job, a) {
+  const row = (label, value) => value
+    ? `<div style="display:flex;gap:8px;margin-bottom:6px;"><span style="min-width:110px;color:#6b7280;font-weight:600;">${esc(label)}:</span><span>${esc(value)}</span></div>`
+    : '';
+
+  const streetLine = [job.ship_to_street, job.ship_to_street2].filter(Boolean).join(', ');
+  const cityStateZip = [job.ship_to_city, job.ship_to_state, job.ship_to_zip].filter(Boolean).join(', ');
+
+  document.getElementById('ld-shipping-info-body').innerHTML = `
+    <div style="font-weight:700;font-size:14px;color:#111827;margin-bottom:10px;">
+      INV# ${esc(a.invoice_number || job.invoice_number || '—')}
+      ${(a.load_count || 1) > 1 ? `<span style="font-weight:700;color:#6366f1;margin-left:8px;font-size:12px;">Load ${a.load_number || 1} of ${a.load_count}</span>` : ''}
+    </div>
+    ${row('Customer', job.customer)}
+    ${row('Ship To', job.ship_to_company)}
+    ${row('Attention', job.ship_to_attention)}
+    ${row('Address', streetLine)}
+    ${row('', cityStateZip)}
+    ${row('Contact', job.ship_to_contact_name)}
+    ${row('Phone', job.ship_to_phone)}
+    ${row('Email', job.ship_to_email)}
+    ${row('PO #', job.po_number)}
+    ${row('Ship Date', job.ship_date)}
+    ${row('Delivery Time', job.delivery_time)}
+    ${row('Carrier', job.carrier)}
+    ${row('Method', job.method)}
+    ${row('Notes', job.notes)}
+  `;
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const bolModal = document.getElementById('ld-bol-view-modal');
+    const shippingModal = document.getElementById('ld-shipping-info-modal');
+    if (bolModal && !bolModal.hidden) { closeBolViewModal(); }
+    else if (shippingModal && !shippingModal.hidden) { closeShippingInfo(); }
+  }
+});
 
 let checklistAssignmentId = null;
 let pendingPhotos = [];

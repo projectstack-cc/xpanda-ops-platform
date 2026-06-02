@@ -417,6 +417,7 @@
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="/logistics/bol-shared.js"></script>
 <script src="/logistics/bol-editor.js"></script>
 </head>
@@ -1127,16 +1128,55 @@ function buildPrintSvg(trailer, dims) {
 // ═══════════════════════════════════════════════════════════════
 // PRINT
 // ═══════════════════════════════════════════════════════════════
-function printPackingSlip(trailer, dims, trailerType, trailerNumber, packList, invNumber = '') {
-  // document.write() is correct here — writing into a new blank popup window for printing
-  const win = window.open("", "_blank", "width=1600,height=1100");
-  if (!win) return;
+function buildLoadingDiagramInnerHtml(trailer, dims, trailerType, trailerNumber, packList, invNumber = '') {
   const piecesHtml = packList.pieces.map(item => `<tr><td style="padding:8px 10px;border:1px solid #cbd5e1;font-weight:700;"><span style="display:inline-block;width:10px;height:10px;background:${item.color};border-radius:2px;margin-right:8px;"></span>${item.name}</td><td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;">${item.pieces}</td></tr>`).join("");
   const stackHtml = packList.stacks.map(s => `<tr><td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;font-weight:700;">${s.stacks}</td><td style="padding:8px 10px;border:1px solid #cbd5e1;">${s.lines.join(" · ")}</td></tr>`).join("");
   const runnerNotice = state.runnerHeight > 0 ? `<div style="margin:6px 0 10px;padding:8px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;font-weight:700;font-size:13px;color:#92400E;">⚠ RUNNERS: ${state.runnerHeight}" dunnage required under all stacks</div>` : '';
   const invSuffix = invNumber ? ` · INV# ${invNumber}` : '';
-  win.document.write(`<html><head><title>Packing Slip - Trailer ${trailerNumber}</title><style>@page{size:landscape;margin:0.22in}body{font-family:Arial,sans-serif;color:#0f172a;margin:0;padding:0}.page{padding:10px 12px}h1{margin:0 0 4px 0;font-size:24px}h2{margin:0 0 8px 0;font-size:15px;color:#475569}.box{border:1px solid #cbd5e1;border-radius:12px;padding:9px;margin-bottom:9px}table{width:100%;border-collapse:collapse;font-size:13px}.note{font-size:11px;color:#64748b;margin-bottom:6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}</style></head><body><div class="page"><h1>Trailer ${trailerNumber} Packing Slip</h1><h2>${trailerType}${invSuffix}</h2>${runnerNotice}<div class="box" style="overflow:hidden"><div style="font-weight:700;margin-bottom:6px">TRAILER LAYOUT</div><div class="note">Layout scaled to fit fully on one page.</div><div style="width:100%;overflow:hidden">${buildPrintSvg(trailer, dims)}</div></div><div class="grid"><div class="box"><div style="font-weight:700;margin-bottom:8px">PIECES</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Item</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Pieces</th></tr></thead><tbody>${piecesHtml}</tbody></table></div><div class="box"><div style="font-weight:700;margin-bottom:8px">STACK BREAKDOWN</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Stacks</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Sizes in stack</th></tr></thead><tbody>${stackHtml}</tbody></table></div></div></div><script>window.onload=function(){setTimeout(function(){window.print()},250)};<\/script></body></html>`);
+  return `<style>@page{size:landscape;margin:0.22in}body{font-family:Arial,sans-serif;color:#0f172a;margin:0;padding:0}.page{padding:10px 12px}h1{margin:0 0 4px 0;font-size:24px}h2{margin:0 0 8px 0;font-size:15px;color:#475569}.box{border:1px solid #cbd5e1;border-radius:12px;padding:9px;margin-bottom:9px}table{width:100%;border-collapse:collapse;font-size:13px}.note{font-size:11px;color:#64748b;margin-bottom:6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}</style><div class="page"><h1>Trailer ${trailerNumber} Loading Diagram</h1><h2>${trailerType}${invSuffix}</h2>${runnerNotice}<div class="box" style="overflow:hidden"><div style="font-weight:700;margin-bottom:6px">TRAILER LAYOUT</div><div class="note">Layout scaled to fit fully on one page.</div><div style="width:100%;overflow:hidden">${buildPrintSvg(trailer, dims)}</div></div><div class="grid"><div class="box"><div style="font-weight:700;margin-bottom:8px">PIECES</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Item</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Pieces</th></tr></thead><tbody>${piecesHtml}</tbody></table></div><div class="box"><div style="font-weight:700;margin-bottom:8px">STACK BREAKDOWN</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Stacks</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Sizes in stack</th></tr></thead><tbody>${stackHtml}</tbody></table></div></div></div>`;
+}
+
+function printPackingSlip(trailer, dims, trailerType, trailerNumber, packList, invNumber = '') {
+  // document.write() is correct here — writing into a new blank popup window for printing
+  const win = window.open("", "_blank", "width=1600,height=1100");
+  if (!win) return;
+  win.document.write(`<html><head><title>Loading Diagram - Trailer ${trailerNumber}</title></head><body>${buildLoadingDiagramInnerHtml(trailer, dims, trailerType, trailerNumber, packList, invNumber)}<script>window.onload=function(){setTimeout(function(){window.print()},250)};<\/script></body></html>`);
   win.document.close();
+}
+
+async function buildLoadingDiagramPdfBytes(trailer, dims, trailerType, trailerNumber, packList, invNumber = '') {
+  const innerHtml = buildLoadingDiagramInnerHtml(trailer, dims, trailerType, trailerNumber, packList, invNumber);
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed; left:-99999px; top:0; width:1100px; background:#fff; font-family:Arial, sans-serif; color:#0f172a;';
+  host.innerHTML = innerHtml;
+  document.body.appendChild(host);
+  let canvas;
+  try {
+    canvas = await html2canvas(host, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
+  } finally {
+    document.body.removeChild(host);
+  }
+  const pngDataUrl = canvas.toDataURL('image/png');
+  const pngBytes = await fetch(pngDataUrl).then(r => r.arrayBuffer());
+  const { PDFDocument } = PDFLib;
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([792, 612]); // US Letter landscape (points)
+  const pageW = page.getWidth();
+  const pageH = page.getHeight();
+  const margin = 18;
+  const pngImg = await doc.embedPng(pngBytes);
+  const maxW = pageW - margin * 2;
+  const maxH = pageH - margin * 2;
+  const ratio = Math.min(maxW / pngImg.width, maxH / pngImg.height);
+  const drawW = pngImg.width * ratio;
+  const drawH = pngImg.height * ratio;
+  page.drawImage(pngImg, {
+    x: (pageW - drawW) / 2,
+    y: (pageH - drawH) / 2,
+    width: drawW,
+    height: drawH,
+  });
+  return await doc.save();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1846,7 +1886,7 @@ function renderResultsTab() {
       }
     });
     tRight.appendChild(invInput);
-    tRight.appendChild(h('button', { className: 'btn btn-teal', onClick: () => printPackingSlip(trailer, trailerDims, trailerLabel, ti + 1, packList, state.trailerInvNumbers[ti] || '') }, 'PRINT PACKING SLIP'));
+    tRight.appendChild(h('button', { className: 'btn btn-teal', onClick: () => printPackingSlip(trailer, trailerDims, trailerLabel, ti + 1, packList, state.trailerInvNumbers[ti] || '') }, 'PRINT LOADING DIAGRAM'));
     tHdr.appendChild(tRight);
     tCard.appendChild(tHdr);
 
@@ -2237,9 +2277,11 @@ function openBolModal(result) {
   }
   state.bolModal = {
     open: true, currentPage: 0, trailerCount: result.trailers.length, trailerData,
+    trailers: result.trailers,
     bolError: '', generating: false, generateProgress: [], bolSuccess: null,
     searchQuery: '', searchResults: [], searchLoading: false, searchConfirm: '',
     includePacking: false,
+    includeLoadingDiagram: false,
   };
   renderBolModal();
 }
@@ -2547,6 +2589,15 @@ function renderBolModal() {
     packingLabel.appendChild(document.createTextNode('Include packing slip'));
     footer.appendChild(packingLabel);
   }
+  {
+    const diagramLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer', color: 'var(--text-muted)' } });
+    const diagramChk = h('input', { type: 'checkbox' });
+    diagramChk.checked = state.bolModal.includeLoadingDiagram;
+    diagramChk.addEventListener('change', e => { state.bolModal.includeLoadingDiagram = e.target.checked; });
+    diagramLabel.appendChild(diagramChk);
+    diagramLabel.appendChild(document.createTextNode('Include Loading Diagram'));
+    footer.appendChild(diagramLabel);
+  }
   const navRight = h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } });
   const prevBtn = h('button', { className: 'btn btn-white', disabled: bm.currentPage === 0 });
   prevBtn.textContent = '← Prev';
@@ -2766,7 +2817,12 @@ async function generateAllBols() {
 }
 
 async function generateBolPdf(bolRecords) {
+  // Collect optional appended-PDF bytes (packing slip and/or loading diagram).
+  // bol-shared.js accepts a single packingSlipPdfBytes; if both are present we
+  // merge them into one PDF here so the generator stays untouched.
   let packingSlipPdfBytes = null;
+  let loadingDiagramPdfBytes = null;
+
   if (state.bolModal.includePacking && state.prefillJobData?.id) {
     try {
       const slipRes = await fetch('/api/jobs/' + encodeURIComponent(state.prefillJobData.id) + '/packing-slip');
@@ -2776,7 +2832,51 @@ async function generateBolPdf(bolRecords) {
     } catch { /* packing slip unavailable */ }
   }
 
-  const result = await BolShared.generatePdf(bolRecords, { previewOnly: true, packingSlipPdfBytes });
+  if (state.bolModal.includeLoadingDiagram) {
+    // BolShared.generatePdf is called once for all BOLs (not per-trailer), so we
+    // attach only the diagram for the currently-displayed trailer (currentPage).
+    // When GENERATE ALL BOLs is triggered from the last page, this is the last trailer.
+    try {
+      const idx = state.bolModal.currentPage;
+      const trailer = state.bolModal.trailers[idx];
+      const trailerDims = trailer.downsizedDims || getDims();
+      const trailerLabel = trailer.downsizedType || state.trailerType;
+      const packList = buildPackingList(trailer);
+      loadingDiagramPdfBytes = await buildLoadingDiagramPdfBytes(
+        trailer,
+        trailerDims,
+        trailerLabel,
+        idx + 1,
+        packList,
+        state.trailerInvNumbers[idx] || ''
+      );
+    } catch (e) {
+      console.error('Failed to build loading diagram PDF:', e);
+    }
+  }
+
+  // Combine: if both, merge into one. If only one, use it. Else null.
+  let combinedAppendBytes = null;
+  if (packingSlipPdfBytes && loadingDiagramPdfBytes) {
+    try {
+      const { PDFDocument } = PDFLib;
+      const combined = await PDFDocument.create();
+      const slipDoc = await PDFDocument.load(packingSlipPdfBytes);
+      const diagDoc = await PDFDocument.load(loadingDiagramPdfBytes);
+      const slipPages = await combined.copyPages(slipDoc, slipDoc.getPageIndices());
+      slipPages.forEach(p => combined.addPage(p));
+      const diagPages = await combined.copyPages(diagDoc, diagDoc.getPageIndices());
+      diagPages.forEach(p => combined.addPage(p));
+      combinedAppendBytes = await combined.save();
+    } catch (e) {
+      console.error('Failed to merge packing slip + loading diagram:', e);
+      combinedAppendBytes = packingSlipPdfBytes || loadingDiagramPdfBytes;
+    }
+  } else {
+    combinedAppendBytes = packingSlipPdfBytes || loadingDiagramPdfBytes;
+  }
+
+  const result = await BolShared.generatePdf(bolRecords, { previewOnly: true, packingSlipPdfBytes: combinedAppendBytes });
   return result.blobUrl;
 }
 
