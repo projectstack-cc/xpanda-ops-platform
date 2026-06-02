@@ -6,43 +6,264 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="icon" href="/assets/img/favicon.png" sizes="any">
 <style>
-  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #111827; padding: 24px; min-height: 100vh; box-sizing: border-box; }
-  .card { max-width: 480px; margin: 40px auto; background: #fff; border-radius: 16px; padding: 32px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-  h1 { margin: 0 0 16px 0; font-size: 22px; }
-  .muted { color: #6b7280; font-size: 14px; line-height: 1.5; }
-  .err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 12px; border-radius: 8px; }
+  :root { --primary: #1e40af; --success: #15803d; --danger: #b91c1c; --muted: #6b7280; --border: #d1d5db; --bg: #f0f2f5; --card: #ffffff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: #111827; padding: 16px; min-height: 100vh; }
+  .wrap { max-width: 520px; margin: 16px auto; }
+  .card { background: var(--card); border-radius: 16px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 16px; }
+  h1 { margin: 0 0 8px 0; font-size: 22px; }
+  h2 { margin: 16px 0 8px 0; font-size: 16px; color: var(--muted); }
+  .muted { color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; font-size: 14px; }
+  .row .label { min-width: 110px; color: var(--muted); font-weight: 600; }
+  .btn { display: block; width: 100%; padding: 16px; border-radius: 12px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 16px; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:disabled { opacity: 0.6; cursor: wait; }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-success:disabled { opacity: 0.6; cursor: wait; }
+  .err { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; padding: 12px; border-radius: 8px; }
+  .ok { background: #f0fdf4; color: var(--success); border: 1px solid #bbf7d0; padding: 12px; border-radius: 8px; }
+  label.field { display: block; margin: 16px 0 4px 0; font-weight: 600; font-size: 14px; }
+  .radio-group { display: flex; gap: 8px; }
+  .radio-group label { flex: 1; padding: 12px; border: 2px solid var(--border); border-radius: 10px; text-align: center; cursor: pointer; font-weight: 600; }
+  .radio-group label.checked { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
+  .radio-group input { display: none; }
+  textarea, input[type="text"] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 16px; font-family: inherit; }
+  textarea { min-height: 80px; resize: vertical; }
+  .photo-area { margin-top: 8px; }
+  .photo-preview { width: 100%; max-height: 320px; object-fit: contain; background: #f3f4f6; border-radius: 8px; display: none; }
+  .photo-input { display: none; }
+  .photo-btn { display: block; width: 100%; padding: 14px; border: 2px dashed var(--border); border-radius: 10px; text-align: center; background: #fafafa; cursor: pointer; font-weight: 600; color: var(--muted); }
+  .line-items { background: #f9fafb; padding: 12px; border-radius: 8px; font-size: 13px; }
+  .line-items div { margin-bottom: 4px; }
 </style>
 </head>
 <body>
-<div class="card">
-  <h1>BOL Tracking</h1>
-  <div id="status" class="muted">Loading…</div>
+<div class="wrap">
+  <div class="card">
+    <h1 id="title">BOL Tracking</h1>
+    <div id="content" class="muted">Loading…</div>
+  </div>
 </div>
+
 <script>
-(async function () {
+(function () {
   const token = location.pathname.replace(/^\/track\/?/, '').replace(/\/$/, '');
-  const statusEl = document.getElementById('status');
+  const contentEl = document.getElementById('content');
+  const titleEl = document.getElementById('title');
+
   if (!token) {
-    statusEl.innerHTML = '<div class="err">No tracking token in URL.</div>';
+    contentEl.innerHTML = '<div class="err">No tracking token in URL.</div>';
     return;
   }
-  try {
-    const res = await fetch('/api/public/bol-lookup/' + encodeURIComponent(token));
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      statusEl.innerHTML = '<div class="err">' + (data.error === 'expired_or_invalid'
-        ? 'This tracking link is no longer active. The shipment has been delivered or the link is invalid.'
-        : 'Unable to load shipment details. Please try again later.') + '</div>';
-      return;
+
+  let currentBol = null;
+
+  async function load() {
+    contentEl.innerHTML = '<div class="muted">Loading…</div>';
+    try {
+      const res = await fetch('/api/public/bol-lookup/' + encodeURIComponent(token));
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        contentEl.innerHTML = '<div class="err">' + (data.error === 'expired_or_invalid'
+          ? 'This tracking link is no longer active.'
+          : 'Unable to load shipment details.') + '</div>';
+        return;
+      }
+      currentBol = data.bol;
+      render();
+    } catch {
+      contentEl.innerHTML = '<div class="err">Network error. Check your connection and refresh.</div>';
     }
-    // P82 placeholder: just show the BOL number and stage.
-    // P83 replaces this with the real pickup-confirmation and delivery flows.
-    statusEl.innerHTML = '<p><strong>BOL #' + (data.bol.bol_number || '—') + '</strong></p>'
-      + '<p>Stage: ' + data.bol.stage + '</p>'
-      + '<p class="muted">Driver-facing flow shipping in next deploy.</p>';
-  } catch (e) {
-    statusEl.innerHTML = '<div class="err">Network error. Please check your connection.</div>';
   }
+
+  function render() {
+    if (currentBol.stage === 'delivered') return renderDelivered();
+    if (currentBol.stage === 'in_transit') return renderDelivery();
+    return renderPickup();
+  }
+
+  function fmtAddress(b) {
+    const parts = [b.ship_to_company, b.ship_to_attention && ('attn: ' + b.ship_to_attention)].filter(Boolean);
+    const street = [b.ship_to_street, b.ship_to_street2].filter(Boolean).join(', ');
+    if (street) parts.push(street);
+    const csz = [b.ship_to_city, b.ship_to_state, b.ship_to_zip].filter(Boolean).join(', ');
+    if (csz) parts.push(csz);
+    return parts.map(p => '<div>' + escapeHtml(p) + '</div>').join('');
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ── Stage 1: Pickup confirmation ──────────────────────────────────────
+  function renderPickup() {
+    titleEl.textContent = 'Confirm Pickup';
+    const b = currentBol;
+    contentEl.innerHTML = `
+      <div class="row"><div class="label">BOL #</div><div><strong>${escapeHtml(b.bol_number || '—')}</strong></div></div>
+      <div class="row"><div class="label">Date</div><div>${escapeHtml(b.date || '—')}</div></div>
+      <h2>Ship To</h2>
+      <div class="line-items">${fmtAddress(b)}</div>
+      ${b.commodity_description ? `<h2>Commodity</h2><div class="line-items">${escapeHtml(b.commodity_description).replace(/\n/g, '<br>')}</div>` : ''}
+      <button class="btn btn-primary" id="pickup-btn">Confirm Pickup</button>
+    `;
+    document.getElementById('pickup-btn').addEventListener('click', confirmPickup);
+  }
+
+  async function confirmPickup() {
+    const btn = document.getElementById('pickup-btn');
+    btn.disabled = true; btn.textContent = 'Confirming…';
+    try {
+      const res = await fetch('/api/public/bol-pickup/' + encodeURIComponent(token), { method: 'POST' });
+      const data = await res.json();
+      if (!data.ok) { btn.disabled = false; btn.textContent = 'Confirm Pickup'; alert(data.error || 'Failed'); return; }
+      await load(); // re-fetch; stage should now be 'in_transit'
+    } catch {
+      btn.disabled = false; btn.textContent = 'Confirm Pickup';
+      alert('Network error. Please try again.');
+    }
+  }
+
+  // ── Stage 2: Delivery flow ────────────────────────────────────────────
+  let photoDataUrl = null;
+  let photoBase64 = null;
+
+  function renderDelivery() {
+    titleEl.textContent = 'Complete Delivery';
+    const b = currentBol;
+    contentEl.innerHTML = `
+      <div class="row"><div class="label">BOL #</div><div><strong>${escapeHtml(b.bol_number || '—')}</strong></div></div>
+      <div class="row"><div class="label">Ship To</div><div>${escapeHtml(b.ship_to_company || '—')}</div></div>
+
+      <label class="field">Delivery accepted?</label>
+      <div class="radio-group" id="accepted-group">
+        <label data-val="yes"><input type="radio" name="accepted" value="yes">Yes</label>
+        <label data-val="no"><input type="radio" name="accepted" value="no">No</label>
+        <label data-val="partial"><input type="radio" name="accepted" value="partial">Partial</label>
+      </div>
+
+      <label class="field">Any damages?</label>
+      <div class="radio-group" id="damages-group">
+        <label data-val="no"><input type="radio" name="damages" value="no" checked>No</label>
+        <label data-val="yes"><input type="radio" name="damages" value="yes">Yes</label>
+      </div>
+
+      <div id="damage-notes-wrap" style="display:none;">
+        <label class="field">Damage notes</label>
+        <textarea id="damage-notes" placeholder="Describe the damage…"></textarea>
+      </div>
+
+      <label class="field">Photo of signed BOL</label>
+      <div class="photo-area">
+        <input type="file" accept="image/*" capture="environment" id="photo-input" class="photo-input">
+        <button type="button" class="photo-btn" id="photo-btn">📷 Take Photo of Signed BOL</button>
+        <img id="photo-preview" class="photo-preview" alt="Signed BOL preview">
+      </div>
+
+      <button class="btn btn-success" id="submit-btn" disabled>Submit Delivery</button>
+    `;
+
+    // Wire radio styling
+    function bindRadioGroup(groupId) {
+      const group = document.getElementById(groupId);
+      group.querySelectorAll('label').forEach(lbl => {
+        lbl.addEventListener('click', () => {
+          group.querySelectorAll('label').forEach(l => l.classList.remove('checked'));
+          lbl.classList.add('checked');
+          lbl.querySelector('input').checked = true;
+          if (groupId === 'damages-group') {
+            document.getElementById('damage-notes-wrap').style.display = lbl.dataset.val === 'yes' ? 'block' : 'none';
+          }
+          updateSubmitState();
+        });
+      });
+    }
+    bindRadioGroup('accepted-group');
+    bindRadioGroup('damages-group');
+    // Pre-check "no damages"
+    document.querySelector('#damages-group label[data-val="no"]').click();
+
+    document.getElementById('photo-btn').addEventListener('click', () => {
+      document.getElementById('photo-input').click();
+    });
+    document.getElementById('photo-input').addEventListener('change', handlePhotoSelect);
+    document.getElementById('submit-btn').addEventListener('click', submitDelivery);
+  }
+
+  function getSelectedValue(groupId) {
+    const checked = document.querySelector('#' + groupId + ' input:checked');
+    return checked ? checked.value : null;
+  }
+
+  function updateSubmitState() {
+    const accepted = getSelectedValue('accepted-group');
+    const btn = document.getElementById('submit-btn');
+    if (btn) btn.disabled = !(accepted && photoBase64);
+  }
+
+  function handlePhotoSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      // Client-side resize to ~1024px max edge, JPEG quality 0.8.
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1024;
+        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        photoBase64 = photoDataUrl.split(',')[1];
+        const preview = document.getElementById('photo-preview');
+        preview.src = photoDataUrl;
+        preview.style.display = 'block';
+        document.getElementById('photo-btn').textContent = '📷 Retake Photo';
+        updateSubmitState();
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function submitDelivery() {
+    const accepted = getSelectedValue('accepted-group');
+    const damages = getSelectedValue('damages-group') === 'yes';
+    const damage_notes = damages ? (document.getElementById('damage-notes').value || '') : null;
+    if (!accepted || !photoBase64) return;
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true; btn.textContent = 'Uploading…';
+    try {
+      const res = await fetch('/api/public/bol-delivery/' + encodeURIComponent(token), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accepted, damages, damage_notes, signed_photo_base64: photoBase64 }),
+      });
+      const data = await res.json();
+      if (!data.ok) { btn.disabled = false; btn.textContent = 'Submit Delivery'; alert(data.error || 'Failed'); return; }
+      await load(); // stage now 'delivered'
+    } catch {
+      btn.disabled = false; btn.textContent = 'Submit Delivery';
+      alert('Network error during upload. Please try again.');
+    }
+  }
+
+  // ── Stage 3: Delivered ────────────────────────────────────────────────
+  function renderDelivered() {
+    titleEl.textContent = 'Delivery Complete';
+    contentEl.innerHTML = `
+      <div class="ok"><strong>✅ Delivery recorded.</strong><br>BOL #${escapeHtml(currentBol.bol_number || '—')} has been marked delivered. Thank you.</div>
+      <p class="muted" style="margin-top:12px;">You may close this page. This tracking link is now inactive.</p>
+    `;
+  }
+
+  load();
 })();
 </script>
 </body>

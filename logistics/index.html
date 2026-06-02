@@ -421,6 +421,12 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
       <input type="hidden" id="f-id">
       <input type="hidden" id="f-direction">
 
+      <div id="signed-bol-section" style="display:none;">
+        <h4 style="margin: 16px 0 4px 0; font-size: 14px; font-weight: 700; color: #374151;">Signed BOL (Proof of Delivery)</h4>
+        <img id="signed-bol-thumb" alt="Signed BOL" style="max-width: 100%; max-height: 240px; border: 1px solid #d1d5db; border-radius: 8px; cursor: zoom-in; background: #f3f4f6;">
+        <div id="signed-bol-meta" style="font-size: 12px; color: #6b7280; margin-top: 4px;"></div>
+      </div>
+
       <div id="logistics-photo-section" style="display:none;">
         <h4 style="margin: 16px 0 4px 0; font-size: 14px; font-weight: 700; color: #374151;">Loading Photos</h4>
         <div id="logistics-photo-gallery-mount"></div>
@@ -913,7 +919,7 @@ function openModal(direction, prefill) {
   document.getElementById('shipment-modal').classList.remove('hidden');
 }
 
-function openEdit(id) {
+async function openEdit(id) {
   const s = [...outboundData, ...inboundData].find(x => x.id === id);
   if (!s) return;
 
@@ -985,6 +991,28 @@ function openEdit(id) {
   } else if (photoSection) {
     photoSection.style.display = 'none';
     if (pgMount) pgMount.innerHTML = '';
+  }
+
+  // Signed BOL (P83) — show if the latest BOL for this shipment has an uploaded signed photo.
+  const signedSection = document.getElementById('signed-bol-section');
+  const signedThumb = document.getElementById('signed-bol-thumb');
+  const signedMeta = document.getElementById('signed-bol-meta');
+  if (signedSection) signedSection.style.display = 'none';
+  if (signedThumb) signedThumb.src = '';
+  if (signedMeta) signedMeta.textContent = '';
+  if (signedSection && signedThumb && s.job_id) {
+    try {
+      const { ok, data } = await api.get('/api/bols?job_id=' + encodeURIComponent(s.job_id));
+      if (ok && data?.bols) {
+        const signed = data.bols.find(b => b.signed_bol_photo_key);
+        if (signed) {
+          signedSection.style.display = '';
+          signedThumb.src = '/api/bols/' + encodeURIComponent(signed.id) + '/signed-photo';
+          if (signedMeta) signedMeta.textContent = signed.signed_bol_uploaded_at ? ('Uploaded ' + signed.signed_bol_uploaded_at) : '';
+          signedThumb.onclick = () => window.open(signedThumb.src, '_blank');
+        }
+      }
+    } catch {}
   }
 
   document.getElementById('shipment-modal').classList.remove('hidden');
@@ -1103,6 +1131,10 @@ function clearForm() {
   const pgMount = document.getElementById('logistics-photo-gallery-mount');
   if (photoSection) photoSection.style.display = 'none';
   if (pgMount) pgMount.innerHTML = '';
+  const signedSection = document.getElementById('signed-bol-section');
+  const signedThumb = document.getElementById('signed-bol-thumb');
+  if (signedSection) signedSection.style.display = 'none';
+  if (signedThumb) signedThumb.src = '';
 }
 
 function setDirection(dir, locked) {

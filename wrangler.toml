@@ -13,5 +13,13 @@ database_id = "21d6f47b-0be9-4006-8014-d154e41f91e8"
 binding = "DB"
 database_name = "DB"
 
+[[r2_buckets]]
+binding = "BOL_PHOTOS"
+bucket_name = "xpanda-bol-photos"
+
+[[env.production.r2_buckets]]
+binding = "BOL_PHOTOS"
+bucket_name = "xpanda-bol-photos"
+
 [vars]
 INCIDENT_TRACKER_JSON_URL = "https://docs.google.com/spreadsheets/d/1DRRJyyiSRMhBQIne5gTBri4HhiBPk4mCtvS0XWNGNu0/gviz/tq?tqx=out:json&gid=1547880443"
