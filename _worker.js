@@ -1,5 +1,92 @@
 // _worker.js — Pages Advanced Mode with SAFE error reporting
 
+// ─────────────────────────────────────────────────────────────────────────────
+// F2 — API ROUTE TABLE (Worker Router Abstraction)
+// Replaces the flat if/else dispatch chain. Match order = declaration order.
+// Match types:
+//   { path: '/api/x', handler: fn }                 — exact path match
+//   { prefix: '/api/x', handler: fn }               — exact OR startsWith(prefix + '/')
+//   { path: '/api/x', method: 'POST', handler: fn } — method-scoped exact match
+//
+// Adding a new route: add one row. Order matters only for prefix overlaps —
+// place more specific paths before more general prefixes.
+//
+// NOTE: Auth routes (/api/auth/*) and /api/push/vapid-public-key are NOT in
+// this table — they bypass the session gate and are handled inline above it.
+// ─────────────────────────────────────────────────────────────────────────────
+const API_ROUTES = [
+  // Admin
+  { prefix: '/api/users', handler: (req, env) => handleApiUsers(req, env) },
+  { prefix: '/api/roles', handler: (req, env) => handleApiRoles(req, env) },
+
+  // QC
+  { path: '/api/completions', handler: (req, env) => handleApiCompletions(req, env) },
+  { path: '/api/scrap-log',   handler: (req, env) => handleApiScrapLog(req, env) },
+
+  // Reports (scrap)
+  { path: '/api/reports/scrap-summary', handler: (req, env) => handleApiReportsScrapSummary(req, env) },
+  { path: '/api/reports/scrap-trend',   handler: (req, env) => handleApiReportsScrapTrend(req, env) },
+  { path: '/api/reports/scrap-reasons', handler: (req, env) => handleApiReportsScrapReasons(req, env) },
+
+  // Reports (incidents)
+  { path: '/api/reports/incidents-trend',   handler: (req, env) => handleIncidentTrend(req, env) },
+  { path: '/api/reports/incidents-summary', handler: (req, env) => handleIncidentSummary(req, env) },
+  { path: '/api/reports/incidents-list',    handler: (req, env) => handleIncidentList(req, env) },
+  { path: '/api/reports/incidents-detail',  handler: (req, env) => handleIncidentDetail(req, env) },
+
+  // Parts / production
+  { path: '/api/parts',             handler: (req, env) => handleApiParts(req, env) },
+  { path: '/api/combos',            handler: (req, env) => handleApiCombos(req, env) },
+  { path: '/api/bead-types',        handler: (req, env) => handleApiBeadTypes(req, env) },
+  { path: '/api/bead-stock',        handler: (req, env) => handleApiBeadStock(req, env) },
+  { path: '/api/block-inventory',   handler: (req, env) => handleApiBlockInventory(req, env) },
+  { path: '/api/molding-log',       handler: (req, env) => handleApiMoldingLog(req, env) },
+  { path: '/api/block-consumption', handler: (req, env) => handleApiBlockConsumption(req, env) },
+
+  // Jobs / shipments
+  { prefix: '/api/jobs',      handler: (req, env) => handleApiJobs(req, env) },
+  { path:   '/api/shipments', handler: (req, env) => handleApiShipments(req, env) },
+
+  // BOL / load builder (specific paths before their shared prefixes)
+  { path:   '/api/bol-customers/seed',     handler: (req, env) => handleApiBolCustomersSeed(req, env) },
+  { path:   '/api/bol-customers',          handler: (req, env) => handleApiBolCustomers(req, env) },
+  { path:   '/api/bol-carriers',           handler: (req, env) => handleApiBolCarriers(req, env) },
+  { prefix: '/api/bols',                   handler: (req, env) => handleApiBols(req, env) },
+  { path:   '/api/load-builder-skus/seed', handler: (req, env) => handleApiPartsSeed(req, env) },
+  { path:   '/api/load-builder-skus/all',  handler: (req, env) => handleApiLoadBuilderSkusDeleteAll(req, env) },
+  { prefix: '/api/load-builder-skus',      handler: (req, env) => handleApiLoadBuilderSkus(req, env) },
+  { prefix: '/api/saved-loads',            handler: (req, env) => handleApiSavedLoads(req, env) },
+
+  // Loading
+  { prefix: '/api/loading-bays',        handler: (req, env) => handleApiLoadingBays(req, env) },
+  { prefix: '/api/loading-assignments', handler: (req, env) => handleApiLoadingAssignments(req, env) },
+  { prefix: '/api/loading-photos',      handler: (req, env) => handleApiLoadingPhotos(req, env) },
+
+  // Platform
+  { prefix: '/api/activity-log',  handler: (req, env) => handleApiActivityLog(req, env) },
+  { prefix: '/api/notifications',  handler: (req, env) => handleApiNotifications(req, env) },
+
+  // Push (subscribe/unsubscribe — vapid-public-key stays inline above the session gate)
+  { path: '/api/push/subscribe',   handler: (req, env) => handleApiPushSubscribe(req, env) },
+  { path: '/api/push/unsubscribe', handler: (req, env) => handleApiPushUnsubscribe(req, env) },
+];
+
+async function dispatchApiRoute(request, env, url) {
+  const path = url.pathname;
+  const method = request.method;
+  for (const route of API_ROUTES) {
+    if (route.method && route.method !== method) continue;
+    if (route.path) {
+      if (path === route.path) return await route.handler(request, env);
+    } else if (route.prefix) {
+      if (path === route.prefix || path.startsWith(route.prefix + '/')) {
+        return await route.handler(request, env);
+      }
+    }
+  }
+  return null; // no match — falls through to static-asset / 404 handling
+}
+
 export default {
   async fetch(request, env, ctx) {
     try {
@@ -91,140 +178,9 @@ export default {
         }
       }
 
-      // 6) API routes
-      if (url.pathname === '/api/users' || url.pathname.startsWith('/api/users/')) {
-        return handleApiUsers(request, env);
-      }
-
-      if (url.pathname === '/api/roles' || url.pathname.startsWith('/api/roles/')) {
-        return handleApiRoles(request, env);
-      }
-
-      if (url.pathname === "/api/completions") {
-        return handleApiCompletions(request, env);
-      }
-
-      if (url.pathname === "/api/scrap-log") {
-        return handleApiScrapLog(request, env);
-      }
-
-      if (url.pathname === "/api/reports/scrap-summary") {
-        return handleApiReportsScrapSummary(request, env);
-      }
-      if (url.pathname === "/api/reports/scrap-trend") {
-        return handleApiReportsScrapTrend(request, env);
-      }
-
-      if (url.pathname === "/api/reports/scrap-reasons") {
-        return handleApiReportsScrapReasons(request, env);
-      }
-
-      if (url.pathname === "/api/reports/incidents-trend") {
-        return handleIncidentTrend(request, env);
-      }
-
-      if (url.pathname === "/api/reports/incidents-summary") {
-        return handleIncidentSummary(request, env);
-      }
-
-      if (url.pathname === "/api/reports/incidents-list") {
-        return handleIncidentList(request, env);
-      }
-
-      if (url.pathname === "/api/reports/incidents-detail") {
-        return handleIncidentDetail(request, env);
-      }
-
-      if (url.pathname === "/api/parts") {
-        return handleApiParts(request, env);
-      }
-
-      if (url.pathname === "/api/combos") {
-        return handleApiCombos(request, env);
-      }
-
-      if (url.pathname === "/api/jobs" || url.pathname.startsWith("/api/jobs/")) {
-        return handleApiJobs(request, env);
-      }
-
-      if (url.pathname === "/api/bead-types") {
-        return handleApiBeadTypes(request, env);
-      }
-
-      if (url.pathname === "/api/bead-stock") {
-        return handleApiBeadStock(request, env);
-      }
-
-      if (url.pathname === "/api/block-inventory") {
-        return handleApiBlockInventory(request, env);
-      }
-
-      if (url.pathname === "/api/molding-log") {
-        return handleApiMoldingLog(request, env);
-      }
-
-      if (url.pathname === "/api/block-consumption") {
-        return handleApiBlockConsumption(request, env);
-      }
-
-      if (url.pathname === "/api/shipments") {
-        return handleApiShipments(request, env);
-      }
-
-      if (url.pathname === "/api/bol-customers/seed") {
-        return handleApiBolCustomersSeed(request, env);
-      }
-
-      if (url.pathname === "/api/bol-customers") {
-        return handleApiBolCustomers(request, env);
-      }
-
-      if (url.pathname === "/api/bol-carriers") {
-        return handleApiBolCarriers(request, env);
-      }
-
-      if (url.pathname === "/api/bols" || url.pathname.startsWith("/api/bols/")) {
-        return handleApiBols(request, env);
-      }
-
-      if (url.pathname === "/api/load-builder-skus/seed") {
-        return handleApiPartsSeed(request, env);
-      }
-
-      if (url.pathname === "/api/load-builder-skus/all") {
-        return handleApiLoadBuilderSkusDeleteAll(request, env);
-      }
-
-      if (url.pathname === "/api/load-builder-skus" || url.pathname.startsWith("/api/load-builder-skus/")) {
-        return handleApiLoadBuilderSkus(request, env);
-      }
-
-      if (url.pathname === "/api/activity-log" || url.pathname.startsWith("/api/activity-log/")) {
-        return handleApiActivityLog(request, env);
-      }
-
-      if (url.pathname === "/api/saved-loads" || url.pathname.startsWith("/api/saved-loads/")) {
-        return handleApiSavedLoads(request, env);
-      }
-
-      if (url.pathname === "/api/loading-bays" || url.pathname.startsWith("/api/loading-bays/")) {
-        return handleApiLoadingBays(request, env);
-      }
-
-      if (url.pathname === "/api/loading-assignments" || url.pathname.startsWith("/api/loading-assignments/")) {
-        return handleApiLoadingAssignments(request, env);
-      }
-
-      if (url.pathname === "/api/loading-photos" || url.pathname.startsWith("/api/loading-photos/")) {
-        return handleApiLoadingPhotos(request, env);
-      }
-
-      if (url.pathname === "/api/notifications" || url.pathname.startsWith("/api/notifications/")) {
-        return handleApiNotifications(request, env);
-      }
-
-      if (url.pathname === "/api/push/subscribe") return handleApiPushSubscribe(request, env);
-      if (url.pathname === "/api/push/unsubscribe") return handleApiPushUnsubscribe(request, env);
+      // 6) API routes — dispatched via F2 router table (see API_ROUTES above export default).
+      const apiResult = await dispatchApiRoute(request, env, url);
+      if (apiResult) return apiResult;
 
       // 3) Static site passthrough (Pages assets binding)
       if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
