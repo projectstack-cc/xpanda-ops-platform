@@ -5170,7 +5170,22 @@ async function handleApiPublicBolDelivery(request, env) {
     `Delivery completed via driver QR — BOL #${bol.bol_number}`,
     { source: 'driver_qr', bol_number: bol.bol_number, accepted, damages, photo_key: r2Key }, null);
 
-  // TODO(P84): trigger push notification to subscribers of 'bol_delivered'.
+  // Push notification — reuse the existing 'loading.delivered' type.
+  // Distinguish QR-flow deliveries in the message so recipients see the signed BOL is available.
+  try {
+    // Look up customer + invoice number for a useful message (mirrors the manual mark-delivered dispatch).
+    const job = await db.prepare(
+      "SELECT customer, invoice_number FROM jobs WHERE id = ?"
+    ).bind(bol.job_id).first();
+    const customerName = job?.customer || 'shipment';
+    const invNum = job?.invoice_number || '';
+    const title = 'Delivery completed';
+    const message = `Delivery confirmed by driver — ${customerName}${invNum ? ' (INV# ' + invNum + ')' : ''}. Signed BOL is available to view.`;
+    await dispatchNotification(db, env, 'loading.delivered', title, message, 'shipment', shipment.id);
+  } catch (e) {
+    // Notification failure must NOT break the delivery confirmation response.
+    console.error('Push notification dispatch failed (delivery flow):', e);
+  }
 
   return json({ ok: true, stage: 'delivered' });
 }
