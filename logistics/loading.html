@@ -992,25 +992,20 @@ async function openShippingInfo(assignmentId) {
   body.innerHTML = '<div style="color:#6b7280;">Loading…</div>';
   modal.hidden = false;
 
-  try {
-    let job;
-    if (shippingInfoJobCache.has(a.job_id)) {
-      job = shippingInfoJobCache.get(a.job_id);
-    } else {
-      const res = await fetch('/api/jobs/' + encodeURIComponent(a.job_id));
-      const data = await res.json();
-      if (!data.ok || !data.job) {
-        body.innerHTML = '<div style="color:#b91c1c;">Could not load shipping information.</div>';
-        return;
-      }
-      job = data.job;
-      shippingInfoJobCache.set(a.job_id, job);
+  let job;
+  if (shippingInfoJobCache.has(a.job_id)) {
+    job = shippingInfoJobCache.get(a.job_id);
+  } else {
+    const { ok, data, error } = await api.get('/api/jobs/' + encodeURIComponent(a.job_id));
+    if (!ok || !data?.job) {
+      console.error('Failed to fetch shipping info:', error);
+      body.innerHTML = '<div style="color:#b91c1c;">Could not load shipping information.</div>';
+      return;
     }
-    populateShippingInfo(job, a);
-  } catch (e) {
-    console.error('Failed to fetch shipping info:', e);
-    body.innerHTML = '<div style="color:#b91c1c;">Error loading shipping information.</div>';
+    job = data.job;
+    shippingInfoJobCache.set(a.job_id, job);
   }
+  populateShippingInfo(job, a);
 }
 
 function closeShippingInfo() {

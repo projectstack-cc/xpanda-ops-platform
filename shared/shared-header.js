@@ -2,6 +2,12 @@
 // Consumed by every module via /<module>/<module>-header.js (thin shims).
 // TODO: replace document.write() with DOMContentLoaded + insertAdjacentHTML (deferred — separate refactor).
 
+// Auto-load companion shared modules.
+if (!window.__xpandaSharedApiLoaded) {
+  window.__xpandaSharedApiLoaded = true;
+  document.write('<script src="/shared/shared-api.js"><\/script>');
+}
+
 (function () {
   if (window.initXpandaHeader) return;
 
