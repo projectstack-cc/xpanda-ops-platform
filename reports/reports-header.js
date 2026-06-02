@@ -1,71 +1,27 @@
-(function(){
-
-const header = document.createElement("div");
-header.className = "topbar";
-header.style.position = "relative";
-
-header.innerHTML = `
-<a href="/" aria-label="Back to Operations Platform">
-<img class="logo" src="/logo/xpanda.png" alt="xPanda Logo">
-</a>
-
-<div class="header-center">
-
-<a class="badge reports-badge" href="/reports/" title="Back to Reports Dashboard">
-XPANDA FOAM • REPORTS
-</a>
-
-<h1 id="reports-page-title"></h1>
-
-<p>Select a reporting workflow to begin</p>
-
-</div>
-
-<div style="position:absolute;top:10px;right:16px;font-size:12px;color:#5b6472;display:flex;align-items:center;gap:8px;">
-  <span id="hdr-user-name"></span>
-  <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;">Sign Out</a>
-</div>
-`;
-
-document.body.prepend(header);
-
-// 401 handler
-const _origFetch = window.fetch;
-window.fetch = async function(...args) {
-  const res = await _origFetch.apply(this, args);
-  if (res.status === 401 && !window.location.pathname.startsWith('/login')) {
-    window.location.href = '/login.html';
-    return res;
-  }
-  return res;
-};
-
-fetch('/api/auth/me').then(r => r.json()).then(d => {
-  if (d.ok && d.user) {
-    const el = document.getElementById('hdr-user-name');
-    if (el) el.textContent = d.user.displayName || d.user.username;
-    if (d.user.simulatingRole) {
-      const simBanner = document.createElement('div');
-      simBanner.id = 'sim-role-banner';
-      simBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:#f59e0b;color:#000;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:14px;font-weight:600;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
-      simBanner.innerHTML = `<span>🔍 Testing as: ${d.user.simulatingRole.name}</span><button id="sim-stop-btn" style="background:#fff;color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">Stop Testing</button>`;
-      document.body.prepend(simBanner);
-      document.body.style.paddingTop = simBanner.offsetHeight + 'px';
-      document.getElementById('sim-stop-btn').addEventListener('click', async () => {
-        try {
-          const res = await fetch('/api/auth/simulate-role', { method: 'DELETE' });
-          const data = await res.json();
-          if (data.ok) { window.location.reload(); } else { alert('Failed to stop simulation: ' + (data.error || 'Unknown error')); }
-        } catch (e) { alert('Error stopping simulation: ' + e.message); }
-      });
-    }
-  }
-}).catch(() => {});
-
-document.getElementById('hdr-logout')?.addEventListener('click', async (e) => {
-  e.preventDefault();
-  await fetch('/api/auth/logout', { method: 'POST' });
-  window.location.href = '/login.html';
+// reports/reports-header.js — thin shim for F1a.
+// All header logic lives in /shared/shared-header.js.
+// Synchronous load of the shared module preserves document.write timing.
+//
+// NOTE: backLinkLabel is intentionally empty — the current reports header renders
+// no topbar back-link. Sub-page back-links are handled inline in each reports HTML.
+// NOTE: pageTitle is intentionally empty — each reports page sets its own title
+// via document.getElementById('reports-page-title').textContent = '...'.
+if (!window.__xpandaSharedHeaderLoaded) {
+  window.__xpandaSharedHeaderLoaded = true;
+  document.write('<script src="/shared/shared-header.js"><\/script>');
+}
+window.initXpandaHeader({
+  moduleKey:         'reports',
+  badgeText:         'XPANDA FOAM • REPORTS',
+  badgeClass:        'reports-badge',
+  badgeTitle:        'Back to Reports Dashboard',
+  dashboardPath:     '/reports/',
+  backLinkLabel:     '',
+  pageTitle:         '',
+  pageSubtitle:      'Select a reporting workflow to begin',
+  pageTitleId:       'reports-page-title',
+  pageSubtitleId:    'reports-page-subtitle',
+  footerClass:       'reports-platform-footer',
+  userBarLocation:   'topbar',
+  showNotifications: false,
 });
-
-})();
