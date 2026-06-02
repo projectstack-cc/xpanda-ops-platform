@@ -69,6 +69,9 @@ const API_ROUTES = [
   // Push (subscribe/unsubscribe — vapid-public-key stays inline above the session gate)
   { path: '/api/push/subscribe',   handler: (req, env) => handleApiPushSubscribe(req, env) },
   { path: '/api/push/unsubscribe', handler: (req, env) => handleApiPushUnsubscribe(req, env) },
+
+  // Public — no auth required (gated only by unguessable access_token).
+  { prefix: '/api/public/bol-lookup', handler: (req, env) => handleApiPublicBolLookup(req, env) },
 ];
 
 async function dispatchApiRoute(request, env, url) {
@@ -133,8 +136,17 @@ export default {
         return json({ ok: true, key: env.VAPID_PUBLIC_KEY || '' });
       }
 
+      // Public BOL tracking surface (no auth — drivers aren't platform users).
+      if (url.pathname === '/track' || url.pathname === '/track/' || url.pathname.startsWith('/track/')) {
+        return env.ASSETS.fetch(new Request(new URL('/track/index.html', url.origin).toString()));
+      }
+
+      // /api/public/* bypasses the session gate; the handler enforces its own
+      // access control via the unguessable access_token in the path.
+      const isPublicApi = url.pathname.startsWith('/api/public/');
+
       // 5) Session gate — redirect unauthenticated users
-      if (!isStaticAsset) {
+      if (!isStaticAsset && !isPublicApi) {
         const db = env.DB;
         if (db) {
           const user = await validateSession(db, request);
@@ -247,6 +259,12 @@ function json(body, status = 200, extraHeaders = {}) {
       ...extraHeaders,
     },
   });
+}
+
+function generateAccessToken() {
+  const bytes = new Uint8Array(16); // 128 bits
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
 async function logActivity(db, action, entityType, entityId, summary, detail, userId) {
@@ -3270,6 +3288,8 @@ async function handleApiBols(request, env) {
       }
     }
 
+    const access_token = generateAccessToken();
+
     try {
       await db.prepare(`
         INSERT INTO bols (
@@ -3279,8 +3299,8 @@ async function handleApiBols(request, env) {
           carrier_id, carrier_name, trailer_no, seal_number, scac, pro_no,
           freight_terms, is_scrap_pickup, third_party_bill_to, special_instructions, contact_info, is_master_bol,
           commodity_description, handling_unit_qty, handling_unit_type,
-          package_qty, package_type, weight, delivery_time, job_id, notes, render_overrides, created_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          package_qty, package_type, weight, delivery_time, job_id, notes, render_overrides, access_token, created_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, bol_number, date,
         payload.customer_id ? String(payload.customer_id).trim() : null,
@@ -3293,7 +3313,7 @@ async function handleApiBols(request, env) {
         s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),
         s("package_qty"), s("package_type"), s("weight"), s("delivery_time"),
         payload.job_id ? String(payload.job_id).trim() : null,
-        s("notes"), render_overrides, now
+        s("notes"), render_overrides, access_token, now
       ).run();
 
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();
@@ -3314,7 +3334,7 @@ async function handleApiBols(request, env) {
     try { payload = await request.json(); }
     catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
 
-    const existing = await db.prepare("SELECT id, render_overrides FROM bols WHERE id = ?").bind(bolId).first();
+    const existing = await db.prepare("SELECT id, render_overrides, access_token FROM bols WHERE id = ?").bind(bolId).first();
     if (!existing) return json({ ok: false, error: "BOL not found." }, 404);
 
     const s = (f) => String(payload[f] || "").trim();
@@ -3336,6 +3356,11 @@ async function handleApiBols(request, env) {
       render_overrides = existing.render_overrides ?? null;
     }
 
+    // Legacy BOLs without a token get one on next edit. Token is permanent —
+    // never overwritten once set, so printed QR codes remain valid.
+    let access_token = existing.access_token;
+    if (!access_token) access_token = generateAccessToken();
+
     try {
       await db.prepare(`
         UPDATE bols SET
@@ -3345,7 +3370,8 @@ async function handleApiBols(request, env) {
           carrier_id = ?, carrier_name = ?, trailer_no = ?, seal_number = ?, scac = ?, pro_no = ?,
           freight_terms = ?, is_scrap_pickup = ?, third_party_bill_to = ?, special_instructions = ?, contact_info = ?,
           is_master_bol = ?, commodity_description = ?, handling_unit_qty = ?, handling_unit_type = ?,
-          package_qty = ?, package_type = ?, weight = ?, delivery_time = ?, job_id = ?, notes = ?, render_overrides = ?
+          package_qty = ?, package_type = ?, weight = ?, delivery_time = ?, job_id = ?, notes = ?, render_overrides = ?,
+          access_token = ?
         WHERE id = ?
       `).bind(
         s("date"),
@@ -3359,7 +3385,7 @@ async function handleApiBols(request, env) {
         s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),
         s("package_qty"), s("package_type"), s("weight"), s("delivery_time"),
         payload.job_id ? String(payload.job_id).trim() : null,
-        s("notes"), render_overrides,
+        s("notes"), render_overrides, access_token,
         bolId
       ).run();
 
@@ -4964,4 +4990,45 @@ async function handleApiPushUnsubscribe(request, env) {
   } catch (e) {
     return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
   }
+}
+
+async function handleApiPublicBolLookup(request, env) {
+  const url = new URL(request.url);
+  const token = url.pathname.replace('/api/public/bol-lookup/', '').replace(/\/$/, '');
+  if (!token || token.length < 8) {
+    return json({ ok: false, error: 'Invalid token' }, 400);
+  }
+
+  const db = env.DB;
+  const bol = await db.prepare(`
+    SELECT bol_number, date, ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
+           ship_to_city, ship_to_state, ship_to_zip, commodity_description, delivery_time,
+           carrier_name, trailer_no, job_id, access_token
+    FROM bols WHERE access_token = ?
+  `).bind(token).first();
+
+  if (!bol) {
+    return json({ ok: false, error: 'expired_or_invalid' }, 404);
+  }
+
+  // Compute stage from the linked shipment's status (via job_id → shipments).
+  let stage = 'issued';
+  if (bol.job_id) {
+    const shipment = await db.prepare(
+      "SELECT status FROM shipments WHERE job_id = ? ORDER BY created_at DESC LIMIT 1"
+    ).bind(bol.job_id).first();
+    if (shipment) {
+      if (shipment.status === 'in_transit') stage = 'in_transit';
+      else if (shipment.status === 'delivered') stage = 'delivered';
+    }
+  }
+
+  // If delivered, return minimal completed payload (don't leak fresh details).
+  if (stage === 'delivered') {
+    return json({ ok: true, bol: { stage: 'delivered', bol_number: bol.bol_number } });
+  }
+
+  // Don't leak the token back; the caller already has it.
+  delete bol.access_token;
+  return json({ ok: true, bol: { ...bol, stage } });
 }

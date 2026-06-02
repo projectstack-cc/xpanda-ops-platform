@@ -420,6 +420,11 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
 
       <input type="hidden" id="f-id">
       <input type="hidden" id="f-direction">
+
+      <div id="logistics-photo-section" style="display:none;">
+        <h4 style="margin: 16px 0 4px 0; font-size: 14px; font-weight: 700; color: #374151;">Loading Photos</h4>
+        <div id="logistics-photo-gallery-mount"></div>
+      </div>
     </div>
 
     <div class="logistics-modal-footer">
@@ -972,6 +977,16 @@ function openEdit(id) {
   const jobNote = document.getElementById('job-linked-note');
   if (jobNote) jobNote.style.display = 'none';
 
+  const photoSection = document.getElementById('logistics-photo-section');
+  const pgMount = document.getElementById('logistics-photo-gallery-mount');
+  if (photoSection && pgMount && s.job_id) {
+    photoSection.style.display = '';
+    photoGallery.mount(pgMount, { jobId: s.job_id });
+  } else if (photoSection) {
+    photoSection.style.display = 'none';
+    if (pgMount) pgMount.innerHTML = '';
+  }
+
   document.getElementById('shipment-modal').classList.remove('hidden');
 }
 
@@ -1084,6 +1099,10 @@ function clearForm() {
   const liBody = document.getElementById('shipment-line-items-body');
   if (liContainer) liContainer.style.display = 'none';
   if (liBody) liBody.innerHTML = '';
+  const photoSection = document.getElementById('logistics-photo-section');
+  const pgMount = document.getElementById('logistics-photo-gallery-mount');
+  if (photoSection) photoSection.style.display = 'none';
+  if (pgMount) pgMount.innerHTML = '';
 }
 
 function setDirection(dir, locked) {

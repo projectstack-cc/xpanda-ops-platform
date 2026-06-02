@@ -11,6 +11,10 @@ if (!window.__xpandaSharedUtilsLoaded) {
   window.__xpandaSharedUtilsLoaded = true;
   document.write('<script src="/shared/shared-utils.js"><\/script>');
 }
+if (!window.__xpandaPhotoGalleryLoaded) {
+  window.__xpandaPhotoGalleryLoaded = true;
+  document.write('<script src="/shared/photo-gallery.js"><\/script>');
+}
 
 (function () {
   if (window.initXpandaHeader) return;

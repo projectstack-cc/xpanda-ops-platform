@@ -38,6 +38,9 @@ window.BolShared = (function() {
 
     // Commodity description (size/lineH set dynamically — see commodity render block)
     commodity:     { x: 55,  y: 380, size: 13, lineH: 28, maxW: 510, center: true },
+
+    // QR code — driver tracking link (P82). Drawn only when bol.access_token exists.
+    qrCode:        { x: 510, y: 50, size: 70 },  // bottom-right corner; size is total pt box (square)
   };
 
   const PAGE = { width: 612, height: 792 }; // template is fixed US Letter
@@ -202,6 +205,30 @@ window.BolShared = (function() {
       if (_commodityText) {
         const _tier = pickCommodityTier(String(_commodityText), font);
         drawMultiline(_commodityText, { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH });
+      }
+
+      // ── QR code (driver tracking link) ──
+      if (bol.access_token && typeof qrcode === 'function') {
+        const trackingUrl = `${window.location.origin}/track/${bol.access_token}`;
+        // Type 0 = auto-select smallest version that fits; 'M' = medium error correction.
+        const qr = qrcode(0, 'M');
+        qr.addData(trackingUrl);
+        qr.make();
+        const modules = qr.getModuleCount();
+        const cellSize = COORDS.qrCode.size / modules;
+        for (let r = 0; r < modules; r++) {
+          for (let c = 0; c < modules; c++) {
+            if (qr.isDark(r, c)) {
+              page.drawRectangle({
+                x: COORDS.qrCode.x + c * cellSize,
+                y: COORDS.qrCode.y + (modules - 1 - r) * cellSize, // flip Y (pdf-lib origin is bottom-left)
+                width: cellSize,
+                height: cellSize,
+                color: black,
+              });
+            }
+          }
+        }
       }
 
       // ── Copy page into combined PDF ──
