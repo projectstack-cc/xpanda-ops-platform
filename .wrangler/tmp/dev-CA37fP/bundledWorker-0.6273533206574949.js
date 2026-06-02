@@ -1,0 +1,5136 @@
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+
+// .wrangler/tmp/pages-atEn1G/bundledWorker-0.6273533206574949.mjs
+var __defProp2 = Object.defineProperty;
+var __name2 = /* @__PURE__ */ __name((target, value) => __defProp2(target, "name", { value, configurable: true }), "__name");
+var API_ROUTES = [
+  // Admin
+  { prefix: "/api/users", handler: /* @__PURE__ */ __name2((req, env) => handleApiUsers(req, env), "handler") },
+  { prefix: "/api/roles", handler: /* @__PURE__ */ __name2((req, env) => handleApiRoles(req, env), "handler") },
+  // QC
+  { path: "/api/completions", handler: /* @__PURE__ */ __name2((req, env) => handleApiCompletions(req, env), "handler") },
+  { path: "/api/scrap-log", handler: /* @__PURE__ */ __name2((req, env) => handleApiScrapLog(req, env), "handler") },
+  // Reports (scrap)
+  { path: "/api/reports/scrap-summary", handler: /* @__PURE__ */ __name2((req, env) => handleApiReportsScrapSummary(req, env), "handler") },
+  { path: "/api/reports/scrap-trend", handler: /* @__PURE__ */ __name2((req, env) => handleApiReportsScrapTrend(req, env), "handler") },
+  { path: "/api/reports/scrap-reasons", handler: /* @__PURE__ */ __name2((req, env) => handleApiReportsScrapReasons(req, env), "handler") },
+  // Reports (incidents)
+  { path: "/api/reports/incidents-trend", handler: /* @__PURE__ */ __name2((req, env) => handleIncidentTrend(req, env), "handler") },
+  { path: "/api/reports/incidents-summary", handler: /* @__PURE__ */ __name2((req, env) => handleIncidentSummary(req, env), "handler") },
+  { path: "/api/reports/incidents-list", handler: /* @__PURE__ */ __name2((req, env) => handleIncidentList(req, env), "handler") },
+  { path: "/api/reports/incidents-detail", handler: /* @__PURE__ */ __name2((req, env) => handleIncidentDetail(req, env), "handler") },
+  // Parts / production
+  { path: "/api/parts", handler: /* @__PURE__ */ __name2((req, env) => handleApiParts(req, env), "handler") },
+  { path: "/api/combos", handler: /* @__PURE__ */ __name2((req, env) => handleApiCombos(req, env), "handler") },
+  { path: "/api/bead-types", handler: /* @__PURE__ */ __name2((req, env) => handleApiBeadTypes(req, env), "handler") },
+  { path: "/api/bead-stock", handler: /* @__PURE__ */ __name2((req, env) => handleApiBeadStock(req, env), "handler") },
+  { path: "/api/block-inventory", handler: /* @__PURE__ */ __name2((req, env) => handleApiBlockInventory(req, env), "handler") },
+  { path: "/api/molding-log", handler: /* @__PURE__ */ __name2((req, env) => handleApiMoldingLog(req, env), "handler") },
+  { path: "/api/block-consumption", handler: /* @__PURE__ */ __name2((req, env) => handleApiBlockConsumption(req, env), "handler") },
+  // Jobs / shipments
+  { prefix: "/api/jobs", handler: /* @__PURE__ */ __name2((req, env) => handleApiJobs(req, env), "handler") },
+  { path: "/api/shipments", handler: /* @__PURE__ */ __name2((req, env) => handleApiShipments(req, env), "handler") },
+  // BOL / load builder (specific paths before their shared prefixes)
+  { path: "/api/bol-customers/seed", handler: /* @__PURE__ */ __name2((req, env) => handleApiBolCustomersSeed(req, env), "handler") },
+  { path: "/api/bol-customers", handler: /* @__PURE__ */ __name2((req, env) => handleApiBolCustomers(req, env), "handler") },
+  { path: "/api/bol-carriers", handler: /* @__PURE__ */ __name2((req, env) => handleApiBolCarriers(req, env), "handler") },
+  { prefix: "/api/bols", handler: /* @__PURE__ */ __name2((req, env) => handleApiBols(req, env), "handler") },
+  { path: "/api/load-builder-skus/seed", handler: /* @__PURE__ */ __name2((req, env) => handleApiPartsSeed(req, env), "handler") },
+  { path: "/api/load-builder-skus/all", handler: /* @__PURE__ */ __name2((req, env) => handleApiLoadBuilderSkusDeleteAll(req, env), "handler") },
+  { prefix: "/api/load-builder-skus", handler: /* @__PURE__ */ __name2((req, env) => handleApiLoadBuilderSkus(req, env), "handler") },
+  { prefix: "/api/saved-loads", handler: /* @__PURE__ */ __name2((req, env) => handleApiSavedLoads(req, env), "handler") },
+  // Loading
+  { prefix: "/api/loading-bays", handler: /* @__PURE__ */ __name2((req, env) => handleApiLoadingBays(req, env), "handler") },
+  { prefix: "/api/loading-assignments", handler: /* @__PURE__ */ __name2((req, env) => handleApiLoadingAssignments(req, env), "handler") },
+  { prefix: "/api/loading-photos", handler: /* @__PURE__ */ __name2((req, env) => handleApiLoadingPhotos(req, env), "handler") },
+  // Platform
+  { prefix: "/api/activity-log", handler: /* @__PURE__ */ __name2((req, env) => handleApiActivityLog(req, env), "handler") },
+  { prefix: "/api/notifications", handler: /* @__PURE__ */ __name2((req, env) => handleApiNotifications(req, env), "handler") },
+  // Push (subscribe/unsubscribe — vapid-public-key stays inline above the session gate)
+  { path: "/api/push/subscribe", handler: /* @__PURE__ */ __name2((req, env) => handleApiPushSubscribe(req, env), "handler") },
+  { path: "/api/push/unsubscribe", handler: /* @__PURE__ */ __name2((req, env) => handleApiPushUnsubscribe(req, env), "handler") }
+];
+async function dispatchApiRoute(request, env, url) {
+  const path = url.pathname;
+  const method = request.method;
+  for (const route of API_ROUTES) {
+    if (route.method && route.method !== method) continue;
+    if (route.path) {
+      if (path === route.path) return await route.handler(request, env);
+    } else if (route.prefix) {
+      if (path === route.prefix || path.startsWith(route.prefix + "/")) {
+        return await route.handler(request, env);
+      }
+    }
+  }
+  return null;
+}
+__name(dispatchApiRoute, "dispatchApiRoute");
+__name2(dispatchApiRoute, "dispatchApiRoute");
+var worker_default = {
+  async fetch(request, env, ctx) {
+    try {
+      const url = new URL(request.url);
+      if (url.pathname === "/training" || url.pathname === "/training/") {
+        return Response.redirect(`${url.origin}/safety/training/`, 301);
+      }
+      if (url.pathname === "/health") {
+        return new Response("FUNCTIONS_OK", { status: 200 });
+      }
+      const STATIC_EXT = /\.(png|jpe?g|gif|svg|ico|webp|css|js|woff2?|ttf|eot|map|pdf)$/i;
+      const STATIC_PREFIX = ["/logo/", "/assets/", "/logistics/assets/", "/qc-assets/"];
+      const isStaticAsset = STATIC_EXT.test(url.pathname) || STATIC_PREFIX.some((p) => url.pathname.startsWith(p));
+      if (url.pathname === "/api/auth/login") return handleAuthLogin(request, env);
+      if (url.pathname === "/api/auth/logout") return handleAuthLogout(request, env);
+      if (url.pathname === "/api/auth/me") return handleAuthMe(request, env);
+      if (url.pathname === "/api/auth/change-password") return handleAuthChangePassword(request, env);
+      if (url.pathname === "/api/auth/simulate-role" && request.method === "POST") return handleSimulateRoleStart(request, env);
+      if (url.pathname === "/api/auth/simulate-role" && request.method === "DELETE") return handleSimulateRoleStop(request, env);
+      if (url.pathname === "/login" || url.pathname === "/login.html") {
+        return env.ASSETS.fetch(request);
+      }
+      if (url.pathname === "/sw.js") {
+        return env.ASSETS.fetch(request);
+      }
+      if (url.pathname === "/manifest.json") {
+        return env.ASSETS.fetch(request);
+      }
+      if (url.pathname === "/api/push/vapid-public-key") {
+        return json({ ok: true, key: env.VAPID_PUBLIC_KEY || "" });
+      }
+      if (!isStaticAsset) {
+        const db = env.DB;
+        if (db) {
+          const user = await validateSession(db, request);
+          if (!user) {
+            if (url.pathname.startsWith("/api/")) {
+              return json({ ok: false, error: "Unauthorized" }, 401);
+            }
+            return Response.redirect(`${url.origin}/login.html`, 302);
+          }
+          const isApi = url.pathname.startsWith("/api/");
+          const permKey = getPermissionKey(url.pathname, isApi);
+          const ESCAPE_PREFIXES = ["/admin/", "/api/auth/", "/api/roles", "/api/users", "/api/activity-log", "/login"];
+          const isEscapePath = user.isRealAdmin && ESCAPE_PREFIXES.some((p) => url.pathname.startsWith(p));
+          if (permKey && !isEscapePath) {
+            const requiredAction = request.method === "GET" || request.method === "HEAD" ? "view" : "edit";
+            if (!hasPermission(user, permKey, requiredAction)) {
+              if (isApi) {
+                return json({ ok: false, error: "Access denied. Insufficient permissions." }, 403);
+              }
+              return Response.redirect(`${url.origin}/?access_denied=1`, 302);
+            }
+          }
+          request = new Request(request.url, {
+            method: request.method,
+            headers: new Headers([
+              ...request.headers.entries(),
+              ["X-User-Id", String(user.userId)],
+              ["X-User-Role", user.role],
+              ["X-User-Name", user.displayName || user.username],
+              ["X-User-Permissions", JSON.stringify(user.permissions)],
+              ["X-User-Is-Admin", user.isAdministrator ? "1" : "0"]
+            ]),
+            body: request.method !== "GET" && request.method !== "HEAD" ? request.body : null
+          });
+        }
+      }
+      const apiResult = await dispatchApiRoute(request, env, url);
+      if (apiResult) return apiResult;
+      if (!env || !env.ASSETS || typeof env.ASSETS.fetch !== "function") {
+        return new Response(
+          "Worker error: env.ASSETS is missing.\n\nThis usually means the deployment is not providing the Pages assets binding.\nConfirm _worker.js is at the deployment root next to index.html.\n",
+          {
+            status: 500,
+            headers: { "Content-Type": "text/plain; charset=utf-8" }
+          }
+        );
+      }
+      return await env.ASSETS.fetch(request);
+    } catch (err) {
+      const msg = err && (err.stack || err.message) ? err.stack || err.message : String(err);
+      return new Response("Worker crashed:\n\n" + msg, {
+        status: 500,
+        headers: { "Content-Type": "text/plain; charset=utf-8" }
+      });
+    }
+  }
+};
+function json(body, status = 200, extraHeaders = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...extraHeaders
+    }
+  });
+}
+__name(json, "json");
+__name2(json, "json");
+async function logActivity(db, action, entityType, entityId, summary, detail, userId) {
+  try {
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const detailStr = typeof detail === "string" ? detail : JSON.stringify(detail || {});
+    await db.prepare(
+      `INSERT INTO activity_log (id, timestamp, action, entity_type, entity_id, summary, detail, user_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id,
+      now,
+      action,
+      entityType,
+      String(entityId || ""),
+      String(summary || "").slice(0, 500),
+      detailStr.slice(0, 2e3),
+      userId || null,
+      now
+    ).run();
+  } catch (e) {
+    console.error("Activity log write failed:", e);
+  }
+}
+__name(logActivity, "logActivity");
+__name2(logActivity, "logActivity");
+function getSessionToken(request) {
+  const cookie = request.headers.get("Cookie") || "";
+  const match = cookie.match(/(?:^|;\s*)xpanda_session=([^;]+)/);
+  return match ? match[1] : null;
+}
+__name(getSessionToken, "getSessionToken");
+__name2(getSessionToken, "getSessionToken");
+async function validateSession(db, request) {
+  const token = getSessionToken(request);
+  if (!token) return null;
+  if (Math.random() < 0.01) {
+    db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind((/* @__PURE__ */ new Date()).toISOString()).run().catch(() => {
+    });
+  }
+  try {
+    const session = await db.prepare(`
+      SELECT s.id, s.user_id, s.expires_at, s.simulating_role_id,
+             u.id as uid, u.username, u.display_name, u.role, u.role_id, u.is_active, u.first_login
+      FROM sessions s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.id = ?
+    `).bind(token).first();
+    if (!session) return null;
+    if (!session.is_active) return null;
+    if (new Date(session.expires_at) < /* @__PURE__ */ new Date()) {
+      await db.prepare("DELETE FROM sessions WHERE id = ?").bind(token).run();
+      return null;
+    }
+    const roleRows = await db.prepare(`
+      SELECT r.id, r.name, r.permissions
+      FROM user_roles ur
+      JOIN roles r ON ur.role_id = r.id
+      WHERE ur.user_id = ?
+    `).bind(session.uid).all();
+    const userRoles = roleRows.results || [];
+    const isRealAdmin = userRoles.some((r) => r.id === "role-administrator") || session.role === "admin";
+    const mergedPermissions = {};
+    for (const role of userRoles) {
+      let perms = {};
+      try {
+        perms = JSON.parse(role.permissions || "{}");
+      } catch {
+      }
+      for (const [key, val] of Object.entries(perms)) {
+        if (!mergedPermissions[key]) mergedPermissions[key] = { view: false, edit: false };
+        if (val.view) mergedPermissions[key].view = true;
+        if (val.edit) mergedPermissions[key].edit = true;
+      }
+    }
+    if (userRoles.length === 0 && session.role_id) {
+      const fallbackRole = await db.prepare("SELECT * FROM roles WHERE id = ?").bind(session.role_id).first();
+      if (fallbackRole) {
+        try {
+          const perms = JSON.parse(fallbackRole.permissions || "{}");
+          for (const [key, val] of Object.entries(perms)) {
+            if (!mergedPermissions[key]) mergedPermissions[key] = { view: false, edit: false };
+            if (val.view) mergedPermissions[key].view = true;
+            if (val.edit) mergedPermissions[key].edit = true;
+          }
+        } catch {
+        }
+        userRoles.push(fallbackRole);
+      }
+    }
+    let simulatingRole = null;
+    let effectivePermissions = mergedPermissions;
+    let effectiveRole = userRoles.map((r) => r.name).join(", ") || session.role || "staff";
+    if (isRealAdmin && session.simulating_role_id) {
+      const simRole = await db.prepare("SELECT id, name, permissions FROM roles WHERE id = ?").bind(session.simulating_role_id).first();
+      if (simRole) {
+        simulatingRole = { id: simRole.id, name: simRole.name };
+        effectiveRole = simRole.name;
+        try {
+          effectivePermissions = JSON.parse(simRole.permissions || "{}");
+        } catch {
+          effectivePermissions = {};
+        }
+      }
+    }
+    const isSimulating = simulatingRole !== null;
+    return {
+      userId: session.uid,
+      username: session.username,
+      displayName: session.display_name,
+      role: effectiveRole,
+      roleIds: userRoles.map((r) => r.id),
+      roleNames: userRoles.map((r) => r.name),
+      firstLogin: session.first_login === 1,
+      sessionId: session.id,
+      isAdministrator: isRealAdmin && !isSimulating,
+      isRealAdmin,
+      permissions: effectivePermissions,
+      simulatingRole
+    };
+  } catch (e) {
+    console.error("Session validation failed:", e);
+    return null;
+  }
+}
+__name(validateSession, "validateSession");
+__name2(validateSession, "validateSession");
+async function createSession(db, userId) {
+  const sessionId = crypto.randomUUID();
+  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1e3).toISOString();
+  await db.prepare(
+    `INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)`
+  ).bind(sessionId, userId, expires).run();
+  return { sessionId, expires };
+}
+__name(createSession, "createSession");
+__name2(createSession, "createSession");
+function sessionCookie(sessionId, expires) {
+  const expDate = new Date(expires).toUTCString();
+  return `xpanda_session=${sessionId}; Path=/; Expires=${expDate}; HttpOnly; SameSite=Lax`;
+}
+__name(sessionCookie, "sessionCookie");
+__name2(sessionCookie, "sessionCookie");
+function clearSessionCookie() {
+  return `xpanda_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax`;
+}
+__name(clearSessionCookie, "clearSessionCookie");
+__name2(clearSessionCookie, "clearSessionCookie");
+var PATH_PERMISSION_MAP = [
+  { pattern: /^\/admin\//, key: "admin" },
+  { pattern: /^\/jobs\//, key: "jobs" },
+  { pattern: /^\/logistics\/bol-generator/, key: "logistics.bol" },
+  { pattern: /^\/logistics\/load-builder/, key: "logistics.load-builder" },
+  { pattern: /^\/logistics\/loading/, key: "logistics.loading" },
+  { pattern: /^\/logistics\//, key: "logistics.dashboard" },
+  { pattern: /^\/manufacturing\/cutting-dashboard/, key: "manufacturing.cutting" },
+  { pattern: /^\/manufacturing\//, key: "manufacturing.calculators" },
+  { pattern: /^\/production\//, key: "production.inventory" },
+  { pattern: /^\/qc\//, key: "qc" },
+  { pattern: /^\/safety\//, key: "safety" },
+  { pattern: /^\/reports\//, key: "reports" }
+];
+var API_PERMISSION_MAP = [
+  { pattern: /^\/api\/users/, key: "admin" },
+  { pattern: /^\/api\/roles/, key: "admin" },
+  { pattern: /^\/api\/activity-log/, key: "admin" },
+  { pattern: /^\/api\/jobs/, key: "jobs" },
+  { pattern: /^\/api\/bols/, key: "logistics.bol" },
+  { pattern: /^\/api\/bol-customers/, key: "logistics.bol" },
+  { pattern: /^\/api\/bol-carriers/, key: "logistics.bol" },
+  { pattern: /^\/api\/shipments/, key: "logistics.dashboard" },
+  { pattern: /^\/api\/load-builder-skus/, key: "logistics.load-builder" },
+  { pattern: /^\/api\/loading-bays/, key: "logistics.loading" },
+  { pattern: /^\/api\/loading-assignments/, key: "logistics.loading" },
+  { pattern: /^\/api\/loading-photos/, key: "logistics.loading" },
+  { pattern: /^\/api\/parts/, key: "manufacturing.calculators" },
+  { pattern: /^\/api\/combos/, key: "manufacturing.calculators" },
+  { pattern: /^\/api\/bead/, key: "production.inventory" },
+  { pattern: /^\/api\/block/, key: "production.inventory" },
+  { pattern: /^\/api\/molding-log/, key: "production.inventory" },
+  { pattern: /^\/api\/scrap-log/, key: "qc" },
+  { pattern: /^\/api\/completions/, key: "qc" },
+  { pattern: /^\/api\/reports/, key: "reports" }
+];
+function getPermissionKey(pathname, isApi) {
+  const map = isApi ? API_PERMISSION_MAP : PATH_PERMISSION_MAP;
+  for (const entry of map) {
+    if (entry.pattern.test(pathname)) return entry.key;
+  }
+  return null;
+}
+__name(getPermissionKey, "getPermissionKey");
+__name2(getPermissionKey, "getPermissionKey");
+function hasPermission(user, permKey, action) {
+  if (user.isAdministrator) return true;
+  if (!permKey) return true;
+  const perm = user.permissions[permKey];
+  if (!perm) return false;
+  if (action === "view") return perm.view === true;
+  if (action === "edit") return perm.edit === true;
+  return false;
+}
+__name(hasPermission, "hasPermission");
+__name2(hasPermission, "hasPermission");
+function isAdminAuthorized(request, env) {
+  const key = env.ADMIN_KEY;
+  if (!key) return false;
+  const auth = request.headers.get("Authorization") || "";
+  const match = auth.match(/^Bearer\s+(.+)$/i);
+  if (!match) return false;
+  return match[1] === key;
+}
+__name(isAdminAuthorized, "isAdminAuthorized");
+__name2(isAdminAuthorized, "isAdminAuthorized");
+function normalizeName(s) {
+  return String(s || "").trim().replace(/\s+/g, " ");
+}
+__name(normalizeName, "normalizeName");
+__name2(normalizeName, "normalizeName");
+async function hashIp(ip) {
+  if (!ip) return null;
+  try {
+    const data = new TextEncoder().encode(ip);
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
+  }
+}
+__name(hashIp, "hashIp");
+__name2(hashIp, "hashIp");
+async function handleApiCompletions(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const url = new URL(request.url);
+  if (request.method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const employee_name = normalizeName(payload.employee_name);
+    const block_id = String(payload.block_id || "").trim();
+    const block_title = String(payload.block_title || "").trim();
+    const attested = payload.attested === true;
+    if (!employee_name)
+      return json({ ok: false, error: "Name required." }, 400);
+    if (!block_id) return json({ ok: false, error: "block_id required." }, 400);
+    if (!block_title)
+      return json({ ok: false, error: "block_title required." }, 400);
+    if (!attested)
+      return json({ ok: false, error: "Attestation required." }, 400);
+    const ip = request.headers.get("CF-Connecting-IP");
+    const ip_hash = await hashIp(ip);
+    const user_agent = request.headers.get("User-Agent") || null;
+    try {
+      await db.prepare(
+        `
+        INSERT INTO completions
+        (employee_name, block_id, block_title, attested, ip_hash, user_agent)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `
+      ).bind(employee_name, block_id, block_title, 1, ip_hash, user_agent).run();
+      return json({ ok: true, message: "Completion recorded." }, 201);
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (/constraint/i.test(msg) || /unique/i.test(msg)) {
+        return json(
+          {
+            ok: false,
+            error: "Already submitted today.",
+            code: "DUPLICATE_TODAY"
+          },
+          409
+        );
+      }
+      return json({ ok: false, error: "Server error.", detail: msg }, 500);
+    }
+  }
+  if (request.method === "GET") {
+    if (!isAdminAuthorized(request, env)) {
+      return json({ ok: false, error: "Unauthorized" }, 401);
+    }
+    const params = url.searchParams;
+    const limit = Math.min(
+      Math.max(parseInt(params.get("limit") || "200", 10), 1),
+      2e3
+    );
+    const offset = Math.max(parseInt(params.get("offset") || "0", 10), 0);
+    const results = await db.prepare(
+      `
+      SELECT id, employee_name, block_id, block_title,
+             attested, submitted_at, submitted_date
+      FROM completions
+      ORDER BY submitted_at DESC
+      LIMIT ? OFFSET ?
+    `
+    ).bind(limit, offset).all();
+    return json({ ok: true, rows: results.results || [], limit, offset });
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiCompletions, "handleApiCompletions");
+__name2(handleApiCompletions, "handleApiCompletions");
+function getWeekNumberMondayStart(date) {
+  const d = new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  );
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const dayOffset = (yearStart.getUTCDay() + 6) % 7;
+  const diff = Math.floor((d - yearStart) / 864e5);
+  return Math.floor((diff + dayOffset) / 7) + 1;
+}
+__name(getWeekNumberMondayStart, "getWeekNumberMondayStart");
+__name2(getWeekNumberMondayStart, "getWeekNumberMondayStart");
+async function mirrorScrapLogToSheet(record, env) {
+  const url = env.SCRAP_MIRROR_URL;
+  if (!url) {
+    console.log("SCRAP_MIRROR_URL not set \u2014 skipping mirror.");
+    return { ok: false, skipped: true };
+  }
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(record)
+    });
+    const text = await resp.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
+    if (!resp.ok) {
+      console.log("Mirror HTTP error:", resp.status, text);
+      return { ok: false, error: "http_error", detail: data };
+    }
+    if (data && data.ok === false) {
+      console.log("Mirror app error:", data);
+      return { ok: false, error: "app_error", detail: data };
+    }
+    console.log("Mirror success:", record.id);
+    return { ok: true };
+  } catch (err) {
+    console.log("Mirror fetch failed:", err);
+    return { ok: false, error: "fetch_error", detail: String(err) };
+  }
+}
+__name(mirrorScrapLogToSheet, "mirrorScrapLogToSheet");
+__name2(mirrorScrapLogToSheet, "mirrorScrapLogToSheet");
+async function handleApiScrapLog(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  if (request.method !== "POST") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return json({ ok: false, error: "Invalid JSON" }, 400);
+  }
+  const allowedShifts = ["1", "2", "3"];
+  const allowedMachines = [
+    "Blue Line",
+    "Main Line",
+    "Cross Cutter",
+    "Hole Cutter"
+  ];
+  const allowedReasons = [
+    "Incorrect Cut",
+    "Hole Pass Issue",
+    "Dirty / Wet Foam",
+    "Equipment Issue",
+    "Setup Error"
+  ];
+  const event_date = String(payload.date || "").trim();
+  const shift = String(payload.shift || "").trim();
+  const operator_name = normalizeName(payload.operator);
+  const line_machine = String(payload.lineMachine || "").trim();
+  const inv_number = String(payload.invNumber || "").trim();
+  const part_product = String(payload.partProduct || "").trim();
+  const material_density = String(payload.materialDensity || "").trim();
+  const scrap_reason = String(payload.scrapReason || "").trim();
+  const notes = String(payload.notes || "").trim();
+  const scrap_cubic_in = Number(payload.scrapCubicIn);
+  if (!event_date) return json({ ok: false, error: "Date required." }, 400);
+  if (!allowedShifts.includes(shift))
+    return json({ ok: false, error: "Invalid shift." }, 400);
+  if (!operator_name)
+    return json({ ok: false, error: "Operator required." }, 400);
+  if (!allowedMachines.includes(line_machine))
+    return json({ ok: false, error: "Invalid line / machine." }, 400);
+  if (!inv_number) return json({ ok: false, error: "INV # required." }, 400);
+  if (!part_product)
+    return json({ ok: false, error: "Part / Product required." }, 400);
+  if (!material_density)
+    return json({ ok: false, error: "Material / Density required." }, 400);
+  if (!allowedReasons.includes(scrap_reason))
+    return json({ ok: false, error: "Invalid scrap reason." }, 400);
+  if (!Number.isFinite(scrap_cubic_in) || scrap_cubic_in <= 0) {
+    return json(
+      { ok: false, error: "Scrap Cubic In must be greater than 0." },
+      400
+    );
+  }
+  const parsedDate = /* @__PURE__ */ new Date(`${event_date}T00:00:00`);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return json({ ok: false, error: "Invalid date." }, 400);
+  }
+  const week_number = getWeekNumberMondayStart(parsedDate);
+  const month_name = parsedDate.toLocaleString("en-US", { month: "long" });
+  const scrap_board_ft = scrap_cubic_in / 144;
+  const id = crypto.randomUUID();
+  const created_at = (/* @__PURE__ */ new Date()).toISOString();
+  const record = {
+    id,
+    event_date,
+    week_number,
+    month_name,
+    shift,
+    operator_name,
+    line_machine,
+    inv_number,
+    part_product,
+    material_density,
+    scrap_reason,
+    notes,
+    scrap_cubic_in,
+    scrap_board_ft,
+    created_at
+  };
+  try {
+    await db.prepare(
+      `
+      INSERT INTO scrap_log (
+        id,
+        event_date,
+        week_number,
+        month_name,
+        shift,
+        operator_name,
+        line_machine,
+        inv_number,
+        part_product,
+        material_density,
+        scrap_reason,
+        notes,
+        scrap_cubic_in,
+        scrap_board_ft,
+        created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+    ).bind(
+      record.id,
+      record.event_date,
+      record.week_number,
+      record.month_name,
+      record.shift,
+      record.operator_name,
+      record.line_machine,
+      record.inv_number,
+      record.part_product,
+      record.material_density,
+      record.scrap_reason,
+      record.notes,
+      record.scrap_cubic_in,
+      record.scrap_board_ft,
+      record.created_at
+    ).run();
+    const mirrorResult = await mirrorScrapLogToSheet(record, env);
+    return json(
+      {
+        ok: true,
+        message: mirrorResult.ok ? "Scrap entry saved and mirrored." : "Scrap entry saved.",
+        mirror_ok: !!mirrorResult.ok,
+        mirror_result: mirrorResult.ok ? void 0 : mirrorResult,
+        record: {
+          id: record.id,
+          event_date: record.event_date,
+          week_number: record.week_number,
+          month_name: record.month_name,
+          scrap_board_ft: record.scrap_board_ft,
+          created_at: record.created_at
+        }
+      },
+      201
+    );
+  } catch (e) {
+    return json(
+      { ok: false, error: "Server error.", detail: String(e?.message || e) },
+      500
+    );
+  }
+}
+__name(handleApiScrapLog, "handleApiScrapLog");
+__name2(handleApiScrapLog, "handleApiScrapLog");
+async function handleApiReportsScrapSummary(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+  const url = new URL(request.url);
+  const month = String(url.searchParams.get("month") || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return json(
+      { ok: false, error: "Invalid or missing month. Use YYYY-MM" },
+      400
+    );
+  }
+  try {
+    const total = await db.prepare(
+      `
+      SELECT
+        COALESCE(SUM(scrap_board_ft),0) AS total_scrap_board_ft,
+        COUNT(*) AS entry_count
+      FROM scrap_log
+      WHERE strftime('%Y-%m', event_date) = ?
+    `
+    ).bind(month).first();
+    const byWeek = await db.prepare(
+      `
+      SELECT
+        week_number,
+        COALESCE(SUM(scrap_board_ft),0) AS scrap_board_ft
+      FROM scrap_log
+      WHERE strftime('%Y-%m', event_date) = ?
+      GROUP BY week_number
+      ORDER BY week_number
+    `
+    ).bind(month).all();
+    const byReason = await db.prepare(
+      `
+      SELECT
+        scrap_reason,
+        COALESCE(SUM(scrap_board_ft),0) AS scrap_board_ft
+      FROM scrap_log
+      WHERE strftime('%Y-%m', event_date) = ?
+      GROUP BY scrap_reason
+      ORDER BY scrap_board_ft DESC
+    `
+    ).bind(month).all();
+    return json({
+      ok: true,
+      month,
+      total_scrap_board_ft: total?.total_scrap_board_ft || 0,
+      entry_count: total?.entry_count || 0,
+      by_week: byWeek.results || [],
+      by_reason: byReason.results || []
+    });
+  } catch (e) {
+    return json(
+      {
+        ok: false,
+        error: "Server error",
+        detail: String(e?.message || e)
+      },
+      500
+    );
+  }
+}
+__name(handleApiReportsScrapSummary, "handleApiReportsScrapSummary");
+__name2(handleApiReportsScrapSummary, "handleApiReportsScrapSummary");
+async function handleApiReportsScrapTrend(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing DB binding" }, 500);
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+  const url = new URL(request.url);
+  const monthsRequested = Number(url.searchParams.get("months")) || 6;
+  try {
+    const rows = await db.prepare(
+      `
+      SELECT
+        strftime('%Y-%m', event_date) AS month,
+        ROUND(SUM(scrap_board_ft),2) AS total_scrap_board_ft
+      FROM scrap_log
+      GROUP BY month
+      ORDER BY month ASC
+    `
+    ).all();
+    let data = rows.results || [];
+    data = data.slice(-monthsRequested);
+    const latest = data[data.length - 1] || null;
+    const previous = data[data.length - 2] || null;
+    let delta = null;
+    if (latest && previous) {
+      const abs = latest.total_scrap_board_ft - previous.total_scrap_board_ft;
+      const pct = previous.total_scrap_board_ft === 0 ? null : abs / previous.total_scrap_board_ft * 100;
+      delta = {
+        absolute: Number(abs.toFixed(2)),
+        percent: pct !== null ? Number(pct.toFixed(2)) : null
+      };
+    }
+    return json({
+      ok: true,
+      range_months: monthsRequested,
+      months: data,
+      latest,
+      previous,
+      delta
+    });
+  } catch (e) {
+    return json(
+      {
+        ok: false,
+        error: "Server error",
+        detail: String(e?.message || e)
+      },
+      500
+    );
+  }
+}
+__name(handleApiReportsScrapTrend, "handleApiReportsScrapTrend");
+__name2(handleApiReportsScrapTrend, "handleApiReportsScrapTrend");
+async function handleApiReportsScrapReasons(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+  const url = new URL(request.url);
+  const month = String(url.searchParams.get("month") || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return json(
+      { ok: false, error: "Invalid or missing month. Use YYYY-MM" },
+      400
+    );
+  }
+  try {
+    const byReason = await db.prepare(
+      `
+      SELECT
+        scrap_reason,
+        ROUND(COALESCE(SUM(scrap_board_ft), 0), 2) AS scrap_board_ft,
+        COUNT(*) AS entry_count
+      FROM scrap_log
+      WHERE strftime('%Y-%m', event_date) = ?
+      GROUP BY scrap_reason
+      ORDER BY scrap_board_ft DESC, scrap_reason ASC
+    `
+    ).bind(month).all();
+    const total = await db.prepare(
+      `
+      SELECT
+        ROUND(COALESCE(SUM(scrap_board_ft), 0), 2) AS total_scrap_board_ft,
+        COUNT(*) AS entry_count
+      FROM scrap_log
+      WHERE strftime('%Y-%m', event_date) = ?
+    `
+    ).bind(month).first();
+    return json({
+      ok: true,
+      month,
+      total_scrap_board_ft: Number(total?.total_scrap_board_ft || 0),
+      entry_count: Number(total?.entry_count || 0),
+      by_reason: byReason.results || []
+    });
+  } catch (e) {
+    return json(
+      {
+        ok: false,
+        error: "Server error",
+        detail: String(e?.message || e)
+      },
+      500
+    );
+  }
+}
+__name(handleApiReportsScrapReasons, "handleApiReportsScrapReasons");
+__name2(handleApiReportsScrapReasons, "handleApiReportsScrapReasons");
+function parseIncidentRows(gvizData) {
+  const rows = gvizData?.table?.rows || [];
+  const cols = gvizData?.table?.cols || [];
+  function getCellText(cell) {
+    if (!cell) return "";
+    if (cell.f != null && String(cell.f).trim()) return String(cell.f).trim();
+    if (cell.v == null) return "";
+    return String(cell.v).trim();
+  }
+  __name(getCellText, "getCellText");
+  __name2(getCellText, "getCellText");
+  function normalizeLabel(label) {
+    return String(label || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+  __name(normalizeLabel, "normalizeLabel");
+  __name2(normalizeLabel, "normalizeLabel");
+  function normalizeIncidentMonth(value) {
+    const text = String(value || "").trim();
+    const dashMatch = text.match(/^(\d{4})-(\d{2})/);
+    if (dashMatch) return `${dashMatch[1]}-${dashMatch[2]}`;
+    const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashMatch) {
+      return `${slashMatch[3]}-${slashMatch[1].padStart(2, "0")}`;
+    }
+    return "";
+  }
+  __name(normalizeIncidentMonth, "normalizeIncidentMonth");
+  __name2(normalizeIncidentMonth, "normalizeIncidentMonth");
+  const labelToIndex = {};
+  cols.forEach((col, index) => {
+    const normalized = normalizeLabel(col?.label || col?.id || "");
+    if (normalized && labelToIndex[normalized] === void 0) {
+      labelToIndex[normalized] = index;
+    }
+  });
+  function getFieldValue(cells, labels, fallbackIndex) {
+    for (const label of labels) {
+      const index = labelToIndex[normalizeLabel(label)];
+      if (index !== void 0) {
+        const value = getCellText(cells[index]);
+        if (value) return value;
+      }
+    }
+    if (fallbackIndex !== void 0) {
+      return getCellText(cells[fallbackIndex]);
+    }
+    return "";
+  }
+  __name(getFieldValue, "getFieldValue");
+  __name2(getFieldValue, "getFieldValue");
+  return rows.map((r, index) => {
+    const cells = r.c || [];
+    const rawIncidentMonth = getFieldValue(
+      cells,
+      ["incidentmonth", "month", "reportmonth"],
+      11
+    );
+    const month = normalizeIncidentMonth(rawIncidentMonth);
+    const year = getFieldValue(cells, ["year"], 7) || (month ? month.slice(0, 4) : "");
+    return {
+      incident_id: `row-${index + 1}`,
+      sheet_row: index + 1,
+      // Core fields
+      customer: getFieldValue(cells, ["customer", "customername"], 1),
+      incident_type: getFieldValue(
+        cells,
+        ["incidentcategory", "incidenttype", "category", "type"],
+        2
+      ),
+      year,
+      risk_level: getFieldValue(cells, ["risklevel", "risk"], 13),
+      // Derived
+      month,
+      // Detail fields
+      date: getFieldValue(cells, ["date", "incidentdate", "reportdate"]) || rawIncidentMonth || "",
+      title: getFieldValue(cells, ["title", "incidenttitle", "subject"]),
+      summary: getFieldValue(cells, ["notes", "summary", "incidentsummary"], 3),
+      location: getFieldValue(cells, ["location"]),
+      reported_by: getFieldValue(
+        cells,
+        [
+          "reportingindividual",
+          "reportedby",
+          "personcompletingreport",
+          "personcompleting"
+        ]
+      ),
+      immediate_actions: getFieldValue(
+        cells,
+        ["immediateactions", "containmentactions", "actions"]
+      ),
+      root_cause: getFieldValue(
+        cells,
+        ["rootcausedescription", "rootcause"]
+      ),
+      corrective_action: getFieldValue(
+        cells,
+        ["correctiveactions", "correctiveaction"]
+      ),
+      injury: getFieldValue(cells, ["injury"]),
+      property_damage: getFieldValue(cells, ["propertydamage"]),
+      witnesses: getFieldValue(cells, ["witnesses", "witness"])
+    };
+  });
+}
+__name(parseIncidentRows, "parseIncidentRows");
+__name2(parseIncidentRows, "parseIncidentRows");
+async function fetchIncidentData(env) {
+  const sheetUrl = env.INCIDENT_TRACKER_JSON_URL;
+  if (!sheetUrl) {
+    throw new Error("Incident sheet URL not configured");
+  }
+  const res = await fetch(sheetUrl);
+  const text = await res.text();
+  const jsonText = text.replace("/*O_o*/", "").replace("google.visualization.Query.setResponse(", "").slice(0, -2);
+  return JSON.parse(jsonText);
+}
+__name(fetchIncidentData, "fetchIncidentData");
+__name2(fetchIncidentData, "fetchIncidentData");
+async function handleIncidentTrend(request, env) {
+  const url = new URL(request.url);
+  const year = url.searchParams.get("year");
+  if (!year) {
+    return json({ ok: false, error: "Missing year parameter" }, 400);
+  }
+  try {
+    const data = await fetchIncidentData(env);
+    const incidents = parseIncidentRows(data);
+    const incidentsForYear = incidents.filter((incident) => {
+      return incident.month && String(incident.year) === String(year);
+    });
+    const monthOrder = [
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "09",
+      "10",
+      "11",
+      "12"
+    ];
+    const counts = {};
+    monthOrder.forEach((m) => {
+      counts[m] = 0;
+    });
+    incidentsForYear.forEach((incident) => {
+      const monthPart = incident.month.split("-")[1];
+      if (counts[monthPart] !== void 0) {
+        counts[monthPart]++;
+      }
+    });
+    const result = monthOrder.map((m) => ({
+      month: `${year}-${m}`,
+      count: counts[m]
+    }));
+    return json({
+      ok: true,
+      year,
+      months: result,
+      total: result.reduce((sum, row) => sum + row.count, 0)
+    });
+  } catch (e) {
+    return json(
+      {
+        ok: false,
+        error: "Incident trend fetch failed",
+        detail: String(e?.message || e)
+      },
+      500
+    );
+  }
+}
+__name(handleIncidentTrend, "handleIncidentTrend");
+__name2(handleIncidentTrend, "handleIncidentTrend");
+async function handleIncidentSummary(request, env) {
+  const url = new URL(request.url);
+  const year = url.searchParams.get("year");
+  if (!year) {
+    return json({ ok: false, error: "Missing year parameter" }, 400);
+  }
+  try {
+    const data = await fetchIncidentData(env);
+    const incidents = parseIncidentRows(data);
+    const incidentsForYear = incidents.filter(
+      (incident) => String(incident.year) === String(year)
+    );
+    let total = 0;
+    let highRisk = 0;
+    const customerCounts = {};
+    const typeCounts = {
+      Fusion: 0,
+      Density: 0,
+      Tolerances: 0,
+      Packaging: 0,
+      Delivery: 0,
+      Other: 0
+    };
+    const riskCounts = {
+      "1 - Low Risk": 0,
+      "2 - Medium Risk": 0,
+      "3 - High Risk": 0,
+      Unspecified: 0
+    };
+    incidentsForYear.forEach((incident) => {
+      total++;
+      const customer = incident.customer || "Unspecified";
+      const type = incident.incident_type || "Other";
+      const risk = incident.risk_level || "Unspecified";
+      customerCounts[customer] = (customerCounts[customer] || 0) + 1;
+      if (Object.prototype.hasOwnProperty.call(typeCounts, type)) {
+        typeCounts[type]++;
+      } else {
+        typeCounts.Other++;
+      }
+      const normalizedRisk = Object.prototype.hasOwnProperty.call(
+        riskCounts,
+        risk
+      ) ? risk : "Unspecified";
+      riskCounts[normalizedRisk]++;
+      if (normalizedRisk === "3 - High Risk") {
+        highRisk++;
+      }
+    });
+    const uniqueCustomers = Object.keys(customerCounts).length;
+    const typeBreakdown = Object.entries(typeCounts).map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
+    const riskBreakdown = Object.entries(riskCounts).map(([risk, count]) => ({
+      risk,
+      count
+    }));
+    const customerBreakdown = Object.entries(customerCounts).map(([customer, count]) => ({ customer, count })).sort(
+      (a, b) => b.count - a.count || a.customer.localeCompare(b.customer)
+    );
+    const topType = typeBreakdown.length ? typeBreakdown[0].type : null;
+    return json({
+      ok: true,
+      year,
+      total,
+      highRisk,
+      uniqueCustomers,
+      topType,
+      typeBreakdown,
+      riskBreakdown,
+      customerBreakdown
+    });
+  } catch (e) {
+    return json(
+      {
+        ok: false,
+        error: "Incident summary fetch failed",
+        detail: String(e?.message || e)
+      },
+      500
+    );
+  }
+}
+__name(handleIncidentSummary, "handleIncidentSummary");
+__name2(handleIncidentSummary, "handleIncidentSummary");
+async function handleIncidentList(request, env) {
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+  const url = new URL(request.url);
+  const year = url.searchParams.get("year");
+  const type = (url.searchParams.get("type") || "").trim();
+  const month = (url.searchParams.get("month") || "").trim();
+  const risk = (url.searchParams.get("risk") || "").trim();
+  if (!year) {
+    return json({ ok: false, error: "Missing year parameter" }, 400);
+  }
+  try {
+    const data = await fetchIncidentData(env);
+    const incidents = parseIncidentRows(data);
+    const items = incidents.filter((incident) => {
+      if (String(incident.year) !== String(year)) return false;
+      if (type && incident.incident_type !== type) return false;
+      if (month && incident.month !== month) return false;
+      if (risk && incident.risk_level !== risk) return false;
+      return true;
+    }).map((incident) => ({
+      incident_id: incident.incident_id,
+      sheet_row: incident.sheet_row,
+      month: incident.month,
+      customer: incident.customer,
+      incident_type: incident.incident_type,
+      risk_level: incident.risk_level,
+      summary: incident.summary
+    }));
+    return json({
+      ok: true,
+      year,
+      filters: {
+        type,
+        month,
+        risk
+      },
+      count: items.length,
+      items
+    });
+  } catch (e) {
+    return json(
+      {
+        ok: false,
+        error: "Incident list fetch failed",
+        detail: String(e?.message || e)
+      },
+      500
+    );
+  }
+}
+__name(handleIncidentList, "handleIncidentList");
+__name2(handleIncidentList, "handleIncidentList");
+async function handleIncidentDetail(request, env) {
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+  const url = new URL(request.url);
+  const id = (url.searchParams.get("id") || "").trim();
+  if (!id) {
+    return json({ ok: false, error: "Missing id parameter" }, 400);
+  }
+  try {
+    const data = await fetchIncidentData(env);
+    const incidents = parseIncidentRows(data);
+    const incident = incidents.find((item) => item.incident_id === id);
+    if (!incident) {
+      return json({ ok: false, error: "Incident not found" }, 404);
+    }
+    return json({
+      ok: true,
+      item: {
+        incident_id: incident.incident_id,
+        date: incident.date,
+        month: incident.month,
+        year: incident.year,
+        customer: incident.customer,
+        incident_type: incident.incident_type,
+        risk_level: incident.risk_level,
+        summary: incident.summary
+      }
+    });
+  } catch (e) {
+    return json(
+      {
+        ok: false,
+        error: "Incident detail fetch failed",
+        detail: String(e?.message || e)
+      },
+      500
+    );
+  }
+}
+__name(handleIncidentDetail, "handleIncidentDetail");
+__name2(handleIncidentDetail, "handleIncidentDetail");
+function safeJsonParse(str, fallback) {
+  try {
+    return JSON.parse(str);
+  } catch {
+    return fallback;
+  }
+}
+__name(safeJsonParse, "safeJsonParse");
+__name2(safeJsonParse, "safeJsonParse");
+async function handleApiParts(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  if (request.method === "GET") {
+    try {
+      const rows = await db.prepare("SELECT * FROM parts ORDER BY category ASC, sort_order ASC, part_number ASC").all();
+      return json({ ok: true, parts: rows.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const part_number = String(payload.part_number || "").trim();
+    const name = String(payload.name || payload.part_number || "").trim();
+    const customer = String(payload.customer || "").trim();
+    const density_material = String(payload.density_material || "").trim();
+    const length_in = Number(payload.length_in);
+    const width_in = Number(payload.width_in);
+    const height_in = Number(payload.height_in);
+    const weight = Number.isFinite(Number(payload.weight)) ? Number(payload.weight) : 1;
+    const notes = String(payload.notes || "").trim();
+    const color = String(payload.color || "#D97706").trim();
+    const allow_rotation = payload.allow_rotation ? 1 : 0;
+    const sort_order = Number.isFinite(Number(payload.sort_order)) ? Number(payload.sort_order) : 0;
+    const category = String(payload.category || "").trim();
+    const parent_group = String(payload.parent_group || "").trim();
+    const bundle_qty = parseInt(payload.bundle_qty, 10) || 0;
+    if (!part_number) return json({ ok: false, error: "Part number is required." }, 400);
+    if (!Number.isFinite(length_in) || length_in <= 0) return json({ ok: false, error: "Length must be greater than 0." }, 400);
+    if (!Number.isFinite(width_in) || width_in <= 0) return json({ ok: false, error: "Width must be greater than 0." }, 400);
+    if (!Number.isFinite(height_in) || height_in <= 0) return json({ ok: false, error: "Height must be greater than 0." }, 400);
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      await db.prepare(
+        `INSERT INTO parts (id, part_number, name, customer, density_material, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group, bundle_qty, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(id, part_number, name, customer, density_material, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group, bundle_qty, now, now).run();
+      const part = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(id).first();
+      await logActivity(
+        db,
+        "create",
+        "part",
+        id,
+        `Created part ${part_number}`,
+        { part_number, customer, length_in, width_in, height_in }
+      );
+      return json({ ok: true, message: "Part created.", part }, 201);
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (/unique/i.test(msg) || /constraint/i.test(msg)) {
+        return json({ ok: false, error: "A part with that number already exists.", code: "DUPLICATE_PART_NUMBER" }, 409);
+      }
+      return json({ ok: false, error: "Server error.", detail: msg }, 500);
+    }
+  }
+  if (request.method === "PUT") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    const part_number = String(payload.part_number || "").trim();
+    const customer = String(payload.customer || "").trim();
+    const density_material = String(payload.density_material || "").trim();
+    const length_in = Number(payload.length_in);
+    const width_in = Number(payload.width_in);
+    const height_in = Number(payload.height_in);
+    const notes = String(payload.notes || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    if (!part_number) return json({ ok: false, error: "Part number is required." }, 400);
+    if (!Number.isFinite(length_in) || length_in <= 0) return json({ ok: false, error: "Length must be greater than 0." }, 400);
+    if (!Number.isFinite(width_in) || width_in <= 0) return json({ ok: false, error: "Width must be greater than 0." }, 400);
+    if (!Number.isFinite(height_in) || height_in <= 0) return json({ ok: false, error: "Height must be greater than 0." }, 400);
+    const existing = await db.prepare("SELECT id FROM parts WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Part not found." }, 404);
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      const bundle_qty_upd = payload.bundle_qty !== void 0 ? parseInt(payload.bundle_qty, 10) || 0 : void 0;
+      const updateSql = bundle_qty_upd !== void 0 ? `UPDATE parts SET part_number=?, customer=?, density_material=?, length_in=?, width_in=?, height_in=?, notes=?, bundle_qty=?, updated_at=? WHERE id=?` : `UPDATE parts SET part_number=?, customer=?, density_material=?, length_in=?, width_in=?, height_in=?, notes=?, updated_at=? WHERE id=?`;
+      const updateBinds = bundle_qty_upd !== void 0 ? [part_number, customer, density_material, length_in, width_in, height_in, notes, bundle_qty_upd, now, id] : [part_number, customer, density_material, length_in, width_in, height_in, notes, now, id];
+      await db.prepare(updateSql).bind(...updateBinds).run();
+      const part = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(id).first();
+      await logActivity(
+        db,
+        "update",
+        "part",
+        id,
+        `Updated part ${part_number}`,
+        { part_number, customer, length_in, width_in, height_in }
+      );
+      return json({ ok: true, message: "Part updated.", part });
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (/unique/i.test(msg) || /constraint/i.test(msg)) {
+        return json({ ok: false, error: "A part with that number already exists.", code: "DUPLICATE_PART_NUMBER" }, 409);
+      }
+      return json({ ok: false, error: "Server error.", detail: msg }, 500);
+    }
+  }
+  if (request.method === "DELETE") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM parts WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Part not found." }, 404);
+    try {
+      await db.prepare("DELETE FROM parts WHERE id = ?").bind(id).run();
+      await logActivity(db, "delete", "part", id, `Deleted part ${id}`, { id });
+      return json({ ok: true, message: "Part deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiParts, "handleApiParts");
+__name2(handleApiParts, "handleApiParts");
+async function handleApiCombos(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  if (request.method === "GET") {
+    try {
+      const rows = await db.prepare("SELECT * FROM saved_combos ORDER BY updated_at DESC").all();
+      const combos = (rows.results || []).map((r) => ({
+        ...r,
+        machines_active: safeJsonParse(r.machines_active, []),
+        primary_part_snapshot: safeJsonParse(r.primary_part_snapshot, {}),
+        secondary_parts_snapshot: safeJsonParse(r.secondary_parts_snapshot, []),
+        result_snapshot: safeJsonParse(r.result_snapshot, {})
+      }));
+      return json({ ok: true, combos });
+    } catch (e) {
+      return json(
+        { ok: false, error: "Server error.", detail: String(e?.message || e) },
+        500
+      );
+    }
+  }
+  if (request.method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const name = String(payload.name || "").trim();
+    const description = String(payload.description || "").trim();
+    const block_l = Number(payload.block_l);
+    const block_w = Number(payload.block_w);
+    const block_h = Number(payload.block_h);
+    const kerf = Number(payload.kerf ?? 0.079);
+    const orientation_mode = String(payload.orientation_mode || "auto").trim();
+    const machines_active = Array.isArray(payload.machines_active) ? payload.machines_active : ["cross_cutter", "main_line", "blue_line"];
+    const primary_part_id = payload.primary_part_id ? String(payload.primary_part_id).trim() : null;
+    const primary_part_snapshot = payload.primary_part_snapshot;
+    const secondary_parts_snapshot = Array.isArray(payload.secondary_parts_snapshot) ? payload.secondary_parts_snapshot : [];
+    const result_snapshot = payload.result_snapshot || {};
+    if (!name) return json({ ok: false, error: "Name is required." }, 400);
+    if (!Number.isFinite(block_l) || block_l <= 0)
+      return json({ ok: false, error: "Block Length must be greater than 0." }, 400);
+    if (!Number.isFinite(block_w) || block_w <= 0)
+      return json({ ok: false, error: "Block Width must be greater than 0." }, 400);
+    if (!Number.isFinite(block_h) || block_h <= 0)
+      return json({ ok: false, error: "Block Height must be greater than 0." }, 400);
+    if (!primary_part_snapshot || typeof primary_part_snapshot !== "object")
+      return json({ ok: false, error: "primary_part_snapshot is required." }, 400);
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      await db.prepare(
+        `INSERT INTO saved_combos
+           (id, name, description, block_l, block_w, block_h, kerf, orientation_mode,
+            machines_active, primary_part_id, primary_part_snapshot,
+            secondary_parts_snapshot, result_snapshot, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        id,
+        name,
+        description,
+        block_l,
+        block_w,
+        block_h,
+        kerf,
+        orientation_mode,
+        JSON.stringify(machines_active),
+        primary_part_id,
+        JSON.stringify(primary_part_snapshot),
+        JSON.stringify(secondary_parts_snapshot),
+        JSON.stringify(result_snapshot),
+        now,
+        now
+      ).run();
+      const row = await db.prepare("SELECT * FROM saved_combos WHERE id = ?").bind(id).first();
+      return json(
+        {
+          ok: true,
+          message: "Combination saved.",
+          combo: {
+            ...row,
+            machines_active: safeJsonParse(row.machines_active, []),
+            primary_part_snapshot: safeJsonParse(row.primary_part_snapshot, {}),
+            secondary_parts_snapshot: safeJsonParse(row.secondary_parts_snapshot, []),
+            result_snapshot: safeJsonParse(row.result_snapshot, {})
+          }
+        },
+        201
+      );
+    } catch (e) {
+      return json(
+        { ok: false, error: "Server error.", detail: String(e?.message || e) },
+        500
+      );
+    }
+  }
+  if (request.method === "DELETE") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM saved_combos WHERE id = ?").bind(id).first();
+    if (!existing)
+      return json({ ok: false, error: "Combination not found." }, 404);
+    try {
+      await db.prepare("DELETE FROM saved_combos WHERE id = ?").bind(id).run();
+      return json({ ok: true, message: "Combination deleted." });
+    } catch (e) {
+      return json(
+        { ok: false, error: "Server error.", detail: String(e?.message || e) },
+        500
+      );
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiCombos, "handleApiCombos");
+__name2(handleApiCombos, "handleApiCombos");
+async function handleApiJobs(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const url = new URL(request.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  const jobId = parts.length >= 3 ? parts[2] : null;
+  const subRoute = parts.length >= 4 ? parts[3] : null;
+  const JOB_LIST_COLS = `
+    j.id, j.status, j.customer, j.po_number, j.invoice_number, j.ship_date, j.ship_day,
+    j.location, j.delivery_time, j.method, j.carrier, j.load_count, j.total_bdft,
+    j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
+    j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
+    j.priority, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
+    j.packing_slip_filename, j.packing_slip_invoice, j.source,
+    CASE WHEN EXISTS (SELECT 1 FROM shipments s WHERE s.job_id = j.id AND s.direction = 'outbound') THEN 1 ELSE 0 END AS has_shipment
+  `;
+  if (request.method === "GET" && jobId && subRoute === "packing-slip") {
+    try {
+      const row = await db.prepare("SELECT packing_slip_pdf, packing_slip_filename FROM jobs WHERE id = ?").bind(jobId).first();
+      if (!row) return json({ ok: false, error: "Job not found." }, 404);
+      if (!row.packing_slip_pdf) return json({ ok: false, error: "No packing slip attached to this job." }, 404);
+      const binary = Uint8Array.from(atob(row.packing_slip_pdf), (c) => c.charCodeAt(0));
+      const filename = row.packing_slip_filename || "packing-slip.pdf";
+      return new Response(binary, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename="${filename.replace(/"/g, "")}"`,
+          "Cache-Control": "private, max-age=3600"
+        }
+      });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "GET" && jobId) {
+    try {
+      const row = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(jobId).first();
+      if (!row) return json({ ok: false, error: "Job not found." }, 404);
+      const liResult = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(jobId).all();
+      return json({
+        ok: true,
+        job: { ...row, processes: safeJsonParse(row.processes, []), line_items: liResult.results || [] }
+      });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "GET") {
+    const searchParam = (url.searchParams.get("search") || "").trim();
+    const weekParam = (url.searchParams.get("week") || "").trim();
+    const statusParam = (url.searchParams.get("status") || "").trim();
+    const includeArchived = url.searchParams.get("include_archived") === "1";
+    const limitParam = Math.min(parseInt(url.searchParams.get("limit") || "200", 10), 500);
+    let query, binds;
+    if (searchParam) {
+      const like = `%${searchParam}%`;
+      const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.customer LIKE ? OR j.po_number LIKE ? OR j.invoice_number LIKE ?)${archiveClause} ORDER BY j.ship_date DESC LIMIT ${limitParam}`;
+      binds = [like, like, like];
+    } else if (weekParam) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
+        return json({ ok: false, error: "Invalid week. Use YYYY-MM-DD (Monday of week)." }, 400);
+      }
+      const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.ship_date >= ? AND j.ship_date <= date(?, '+4 days')${archiveClause} ORDER BY j.ship_date ASC, j.created_at ASC LIMIT ${limitParam}`;
+      binds = [weekParam, weekParam];
+    } else if (statusParam) {
+      const statuses = statusParam.split(",").map((s) => s.trim()).filter(Boolean);
+      const valid = ["not_started", "in_production", "done", "loading", "shipped"];
+      for (const s of statuses) {
+        if (!valid.includes(s)) return json({ ok: false, error: `Invalid status: ${s}` }, 400);
+      }
+      const placeholders = statuses.map(() => "?").join(",");
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.status IN (${placeholders}) ORDER BY j.ship_date ASC, j.created_at ASC LIMIT ${limitParam}`;
+      binds = statuses;
+    } else if (includeArchived && !searchParam && !weekParam && !statusParam) {
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j ORDER BY j.ship_date DESC LIMIT ${limitParam}`;
+      binds = [];
+    } else {
+      const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.status != 'shipped' OR (j.status = 'shipped' AND j.ship_date >= date('now', '-7 days')))${archiveClause} ORDER BY j.ship_date ASC, j.created_at ASC LIMIT ${limitParam}`;
+      binds = [];
+    }
+    try {
+      const jobsResult = binds.length ? await db.prepare(query).bind(...binds).all() : await db.prepare(query).all();
+      const jobs = jobsResult.results || [];
+      const lineItemsMap = {};
+      if (jobs.length > 0) {
+        const ids = jobs.map((j) => j.id);
+        const ph = ids.map(() => "?").join(",");
+        const liResult = await db.prepare(`SELECT * FROM job_line_items WHERE job_id IN (${ph}) ORDER BY job_id, sort_order ASC`).bind(...ids).all();
+        for (const item of liResult.results || []) {
+          if (!lineItemsMap[item.job_id]) lineItemsMap[item.job_id] = [];
+          lineItemsMap[item.job_id].push(item);
+        }
+      }
+      const enriched = jobs.map((job) => ({
+        ...job,
+        processes: safeJsonParse(job.processes, []),
+        line_items: lineItemsMap[job.id] || []
+      }));
+      return json({ ok: true, jobs: enriched });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const customer = String(payload.customer || "").trim();
+    if (!customer) return json({ ok: false, error: "Customer is required." }, 400);
+    const ship_date = String(payload.ship_date || "").trim();
+    if (ship_date && !/^\d{4}-\d{2}-\d{2}$/.test(ship_date)) {
+      return json({ ok: false, error: "Invalid ship_date. Use YYYY-MM-DD." }, 400);
+    }
+    const validStatuses = ["not_started", "in_production", "done", "loading", "shipped"];
+    const status = String(payload.status || "not_started").trim();
+    if (!validStatuses.includes(status)) return json({ ok: false, error: "Invalid status." }, 400);
+    const validPriorities = ["normal", "rush"];
+    const priority = String(payload.priority || "normal").trim();
+    if (!validPriorities.includes(priority)) return json({ ok: false, error: "Invalid priority." }, 400);
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const po_number = String(payload.po_number || "").trim();
+    const invoice_number = String(payload.invoice_number || "").trim();
+    const ship_day = String(payload.ship_day || "").trim();
+    const location = String(payload.location || "").trim();
+    const delivery_time = String(payload.delivery_time || "").trim();
+    const method = String(payload.method || "").trim();
+    const carrier = String(payload.carrier || "").trim();
+    const scrap_pickup = String(payload.scrap_pickup || "").trim();
+    const sales_lead = String(payload.sales_lead || "").trim();
+    const bol_info = String(payload.bol_info || "").trim();
+    const payment_info = String(payload.payment_info || "").trim();
+    const notes = String(payload.notes || "").trim();
+    const packing_instructions = String(payload.packing_instructions || "").trim();
+    const contact_name = String(payload.contact_name || "").trim();
+    const contact_phone = String(payload.contact_phone || "").trim();
+    const ship_to_company = String(payload.ship_to_company || "").trim();
+    const ship_to_attention = String(payload.ship_to_attention || "").trim();
+    const ship_to_street = String(payload.ship_to_street || "").trim();
+    const ship_to_street2 = String(payload.ship_to_street2 || "").trim();
+    const ship_to_city = String(payload.ship_to_city || "").trim();
+    const ship_to_state = String(payload.ship_to_state || "").trim();
+    const ship_to_zip = String(payload.ship_to_zip || "").trim();
+    const combo_id = payload.combo_id ? String(payload.combo_id).trim() : null;
+    const load_count = Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1;
+    const total_bdft = Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0;
+    const confirmed_to_ship = payload.confirmed_to_ship ? 1 : 0;
+    const processes = Array.isArray(payload.processes) ? JSON.stringify(payload.processes) : "[]";
+    const packing_slip_pdf = payload.packing_slip_pdf ? String(payload.packing_slip_pdf) : null;
+    const packing_slip_filename = String(payload.packing_slip_filename || "").trim();
+    const packing_slip_invoice = String(payload.packing_slip_invoice || "").trim();
+    const source = ["manual", "packing_slip"].includes(String(payload.source || "").trim()) ? String(payload.source).trim() : "manual";
+    try {
+      await db.prepare(`
+        INSERT INTO jobs (
+          id, status, customer, po_number, invoice_number, ship_date, ship_day,
+          location, delivery_time, method, carrier, load_count, total_bdft,
+          scrap_pickup, sales_lead, bol_info, payment_info, notes,
+          packing_instructions, contact_name, contact_phone, combo_id,
+          priority, confirmed_to_ship, processes, created_at, updated_at,
+          packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
+          ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
+          ship_to_city, ship_to_state, ship_to_zip
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(
+        id,
+        status,
+        customer,
+        po_number,
+        invoice_number,
+        ship_date,
+        ship_day,
+        location,
+        delivery_time,
+        method,
+        carrier,
+        load_count,
+        total_bdft,
+        scrap_pickup,
+        sales_lead,
+        bol_info,
+        payment_info,
+        notes,
+        packing_instructions,
+        contact_name,
+        contact_phone,
+        combo_id,
+        priority,
+        confirmed_to_ship,
+        processes,
+        now,
+        now,
+        packing_slip_pdf,
+        packing_slip_filename,
+        packing_slip_invoice,
+        source,
+        ship_to_company,
+        ship_to_attention,
+        ship_to_street,
+        ship_to_street2,
+        ship_to_city,
+        ship_to_state,
+        ship_to_zip
+      ).run();
+      const lineItems = Array.isArray(payload.line_items) ? payload.line_items : [];
+      for (let i = 0; i < lineItems.length; i++) {
+        const li = lineItems[i];
+        await db.prepare(`
+          INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, sort_order)
+          VALUES (?,?,?,?,?,?,?,?)
+        `).bind(
+          crypto.randomUUID(),
+          id,
+          li.part_id ? String(li.part_id).trim() : null,
+          String(li.part_number || "").trim(),
+          String(li.description || "").trim(),
+          Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
+          String(li.dimensions || "").trim(),
+          i
+        ).run();
+      }
+      try {
+        const shipmentId = crypto.randomUUID();
+        await db.prepare(`
+          INSERT INTO shipments
+            (id, direction, job_id, customer, carrier, method, bol_number, origin,
+             destination, ship_date, status, total_bdft, load_count,
+             weight_lbs, bead_type, notes, trailer_number)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          shipmentId,
+          "outbound",
+          id,
+          customer,
+          carrier || "",
+          method || "",
+          "",
+          "XPanda Foam",
+          location || "",
+          ship_date || "",
+          "not_started",
+          total_bdft,
+          load_count,
+          0,
+          "",
+          "",
+          ""
+        ).run();
+      } catch (e) {
+        console.error("Auto-shipment creation failed:", String(e?.message || e));
+      }
+      try {
+        const loadCount = Math.max(load_count || 1, 1);
+        const now2 = (/* @__PURE__ */ new Date()).toISOString();
+        for (let n = 1; n <= loadCount; n++) {
+          const laId = crypto.randomUUID();
+          await db.prepare(`
+            INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, load_number, created_at, updated_at)
+            VALUES (?, ?, NULL, '', 'awaiting', NULL, '', ?, ?, ?)
+          `).bind(laId, id, n, now2, now2).run();
+        }
+      } catch (e) {
+        console.error("Auto-create loading assignment on job create failed:", String(e?.message || e));
+      }
+      const job = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
+      const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
+      await logActivity(
+        db,
+        "create",
+        "job",
+        id,
+        `Created job "${customer}" \u2014 ${lineItems.length} line items`,
+        { customer, status, po_number, line_items_count: lineItems.length }
+      );
+      return json({ ok: true, message: "Job created.", job: { ...job, has_shipment: true, processes: safeJsonParse(job.processes, []), line_items: liRows.results || [] } }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "PUT") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM jobs WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Job not found." }, 404);
+    const sets = [];
+    const binds = [];
+    if ("status" in payload) {
+      const v = String(payload.status).trim();
+      if (!["not_started", "in_production", "done", "loading", "shipped", "archived"].includes(v))
+        return json({ ok: false, error: "Invalid status." }, 400);
+      sets.push("status = ?");
+      binds.push(v);
+    }
+    if ("priority" in payload) {
+      const v = String(payload.priority).trim();
+      if (!["normal", "rush"].includes(v))
+        return json({ ok: false, error: "Invalid priority." }, 400);
+      sets.push("priority = ?");
+      binds.push(v);
+    }
+    const textFields = [
+      "customer",
+      "po_number",
+      "invoice_number",
+      "ship_date",
+      "ship_day",
+      "location",
+      "delivery_time",
+      "method",
+      "carrier",
+      "scrap_pickup",
+      "sales_lead",
+      "bol_info",
+      "payment_info",
+      "notes",
+      "packing_instructions",
+      "contact_name",
+      "contact_phone",
+      "packing_slip_filename",
+      "packing_slip_invoice",
+      "ship_to_company",
+      "ship_to_attention",
+      "ship_to_street",
+      "ship_to_street2",
+      "ship_to_city",
+      "ship_to_state",
+      "ship_to_zip"
+    ];
+    for (const f of textFields) {
+      if (f in payload) {
+        sets.push(`${f} = ?`);
+        binds.push(String(payload[f] || "").trim());
+      }
+    }
+    if ("load_count" in payload) {
+      sets.push("load_count = ?");
+      binds.push(Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1);
+    }
+    if ("total_bdft" in payload) {
+      sets.push("total_bdft = ?");
+      binds.push(Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0);
+    }
+    if ("confirmed_to_ship" in payload) {
+      sets.push("confirmed_to_ship = ?");
+      binds.push(payload.confirmed_to_ship ? 1 : 0);
+    }
+    if ("combo_id" in payload) {
+      sets.push("combo_id = ?");
+      binds.push(payload.combo_id ? String(payload.combo_id).trim() : null);
+    }
+    if ("processes" in payload) {
+      const v = Array.isArray(payload.processes) ? JSON.stringify(payload.processes) : "[]";
+      sets.push("processes = ?");
+      binds.push(v);
+    }
+    if ("source" in payload) {
+      const v = String(payload.source).trim();
+      if (!["manual", "packing_slip"].includes(v))
+        return json({ ok: false, error: "Invalid source." }, 400);
+      sets.push("source = ?");
+      binds.push(v);
+    }
+    if ("packing_slip_pdf" in payload) {
+      sets.push("packing_slip_pdf = ?");
+      binds.push(payload.packing_slip_pdf ? String(payload.packing_slip_pdf) : null);
+    }
+    sets.push("updated_at = ?");
+    binds.push((/* @__PURE__ */ new Date()).toISOString());
+    binds.push(id);
+    try {
+      await db.prepare(`UPDATE jobs SET ${sets.join(", ")} WHERE id = ?`).bind(...binds).run();
+      if (Array.isArray(payload.line_items)) {
+        await db.prepare("DELETE FROM job_line_items WHERE job_id = ?").bind(id).run();
+        for (let i = 0; i < payload.line_items.length; i++) {
+          const li = payload.line_items[i];
+          await db.prepare(`
+            INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, sort_order)
+            VALUES (?,?,?,?,?,?,?,?)
+          `).bind(
+            crypto.randomUUID(),
+            id,
+            li.part_id ? String(li.part_id).trim() : null,
+            String(li.part_number || "").trim(),
+            String(li.description || "").trim(),
+            Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
+            String(li.dimensions || "").trim(),
+            i
+          ).run();
+        }
+      }
+      const job = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
+      const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
+      if (payload.status) {
+        const JOB_TO_SHIPMENT_STATUS = {
+          not_started: "not_started",
+          in_production: "in_production",
+          done: "ready_to_ship"
+        };
+        const mappedStatus = JOB_TO_SHIPMENT_STATUS[payload.status];
+        if (mappedStatus) {
+          try {
+            const shipment = await db.prepare(
+              "SELECT id FROM shipments WHERE job_id = ? AND direction = 'outbound' LIMIT 1"
+            ).bind(id).first();
+            if (shipment) {
+              await db.prepare(
+                "UPDATE shipments SET status = ?, updated_at = datetime('now') WHERE id = ?"
+              ).bind(mappedStatus, shipment.id).run();
+            }
+          } catch (e) {
+            console.error("Job\u2192Shipment status sync failed:", e);
+          }
+        }
+      }
+      const SYNC_FIELDS_JOB_TO_SHIPMENT = {
+        customer: "customer",
+        carrier: "carrier",
+        method: "method",
+        ship_date: "ship_date",
+        location: "destination",
+        total_bdft: "total_bdft",
+        load_count: "load_count"
+      };
+      const syncSets = [];
+      const syncBinds = [];
+      for (const [jobField, shipField] of Object.entries(SYNC_FIELDS_JOB_TO_SHIPMENT)) {
+        if (jobField in payload) {
+          syncSets.push(`${shipField} = ?`);
+          if (["total_bdft", "load_count"].includes(jobField)) {
+            syncBinds.push(Number(payload[jobField]) || 0);
+          } else {
+            syncBinds.push(String(payload[jobField] || "").trim());
+          }
+        }
+      }
+      if (syncSets.length > 0) {
+        try {
+          const shipment = await db.prepare(
+            "SELECT id FROM shipments WHERE job_id = ? AND direction = 'outbound' LIMIT 1"
+          ).bind(id).first();
+          if (shipment) {
+            syncSets.push("updated_at = datetime('now')");
+            syncBinds.push(shipment.id);
+            await db.prepare(`UPDATE shipments SET ${syncSets.join(", ")} WHERE id = ?`).bind(...syncBinds).run();
+          }
+        } catch (e) {
+          console.error("Job\u2192Shipment field sync failed:", e);
+        }
+      }
+      await logActivity(
+        db,
+        "update",
+        "job",
+        id,
+        `Updated job "${payload.customer || ""}" \u2014 status: ${payload.status || ""}`,
+        { fields_updated: Object.keys(payload).filter((k) => k !== "id") }
+      );
+      return json({ ok: true, message: "Job updated.", job: { ...job, processes: safeJsonParse(job.processes, []), line_items: liRows.results || [] } });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "DELETE") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM jobs WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Job not found." }, 404);
+    try {
+      await db.prepare("DELETE FROM job_line_items WHERE job_id = ?").bind(id).run();
+      await db.prepare("DELETE FROM jobs WHERE id = ?").bind(id).run();
+      await logActivity(db, "delete", "job", id, `Deleted job ${id}`, { id });
+      return json({ ok: true, message: "Job deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiJobs, "handleApiJobs");
+__name2(handleApiJobs, "handleApiJobs");
+async function handleApiBeadTypes(request, env) {
+  const db = env.DB;
+  const method = request.method.toUpperCase();
+  if (method === "GET") {
+    try {
+      const { results } = await db.prepare("SELECT * FROM bead_types ORDER BY name ASC").all();
+      return json({ ok: true, data: results });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const name = String(payload.name || "").trim();
+    if (!name) return json({ ok: false, error: "name is required." }, 400);
+    const grade = String(payload.grade || "").trim();
+    const color = String(payload.color || "").trim();
+    const notes = String(payload.notes || "").trim();
+    const exists = await db.prepare("SELECT id FROM bead_types WHERE name = ?").bind(name).first();
+    if (exists) return json({ ok: false, error: "A bead type with that name already exists." }, 409);
+    const id = crypto.randomUUID();
+    try {
+      await db.prepare(
+        "INSERT INTO bead_types (id, name, grade, color, notes) VALUES (?, ?, ?, ?, ?)"
+      ).bind(id, name, grade, color, notes).run();
+      const row = await db.prepare("SELECT * FROM bead_types WHERE id = ?").bind(id).first();
+      return json({ ok: true, data: row }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "PUT") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM bead_types WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Bead type not found." }, 404);
+    const allowed = ["name", "grade", "color", "notes"];
+    const sets = [];
+    const vals = [];
+    for (const key of allowed) {
+      if (key in payload) {
+        sets.push(`${key} = ?`);
+        vals.push(String(payload[key] ?? "").trim());
+      }
+    }
+    if (sets.length === 0) return json({ ok: false, error: "No fields to update." }, 400);
+    if ("name" in payload) {
+      const conflict = await db.prepare("SELECT id FROM bead_types WHERE name = ? AND id != ?").bind(payload.name.trim(), id).first();
+      if (conflict) return json({ ok: false, error: "Name already in use." }, 409);
+    }
+    sets.push("updated_at = datetime('now')");
+    vals.push(id);
+    try {
+      await db.prepare(`UPDATE bead_types SET ${sets.join(", ")} WHERE id = ?`).bind(...vals).run();
+      const row = await db.prepare("SELECT * FROM bead_types WHERE id = ?").bind(id).first();
+      return json({ ok: true, data: row });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "DELETE") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM bead_types WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Bead type not found." }, 404);
+    try {
+      await db.prepare("DELETE FROM bead_types WHERE id = ?").bind(id).run();
+      return json({ ok: true, message: "Bead type deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiBeadTypes, "handleApiBeadTypes");
+__name2(handleApiBeadTypes, "handleApiBeadTypes");
+async function handleApiBeadStock(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const method = request.method.toUpperCase();
+  function enrichBead(r) {
+    return {
+      ...r,
+      total_weight_lbs: (r.bag_weight_lbs || 0) * (r.bags_on_hand || 0),
+      below_reorder: r.reorder_point_bags > 0 && r.bags_on_hand <= r.reorder_point_bags
+    };
+  }
+  __name(enrichBead, "enrichBead");
+  __name2(enrichBead, "enrichBead");
+  if (method === "GET") {
+    try {
+      const { results } = await db.prepare("SELECT * FROM bead_stock ORDER BY manufacturer ASC, bead_type ASC").all();
+      return json({ ok: true, data: (results || []).map(enrichBead) });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const manufacturer = String(payload.manufacturer || "").trim();
+    const bead_type = String(payload.bead_type || "").trim();
+    if (!manufacturer) return json({ ok: false, error: "manufacturer is required." }, 400);
+    if (!bead_type) return json({ ok: false, error: "bead_type is required." }, 400);
+    const bag_weight_lbs = Number(payload.bag_weight_lbs ?? 0);
+    if (!(bag_weight_lbs > 0)) return json({ ok: false, error: "bag_weight_lbs must be > 0." }, 400);
+    const bags_on_hand = Math.max(0, Math.round(Number(payload.bags_on_hand ?? 0)));
+    const reorder_point_bags = Math.max(0, Math.round(Number(payload.reorder_point_bags ?? 0)));
+    const notes = String(payload.notes || "").trim();
+    const exists = await db.prepare("SELECT id FROM bead_stock WHERE manufacturer = ? AND bead_type = ?").bind(manufacturer, bead_type).first();
+    if (exists) return json({ ok: false, error: "That manufacturer + bead type combination already exists." }, 409);
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      await db.prepare(
+        "INSERT INTO bead_stock (id, manufacturer, bead_type, bag_weight_lbs, bags_on_hand, reorder_point_bags, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(id, manufacturer, bead_type, bag_weight_lbs, bags_on_hand, reorder_point_bags, notes, now, now).run();
+      const row = await db.prepare("SELECT * FROM bead_stock WHERE id = ?").bind(id).first();
+      return json({ ok: true, data: enrichBead(row) }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "PUT") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM bead_stock WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Bead stock entry not found." }, 404);
+    const allowed = ["manufacturer", "bead_type", "bag_weight_lbs", "bags_on_hand", "reorder_point_bags", "notes"];
+    const sets = ["updated_at = datetime('now')"];
+    const vals = [];
+    for (const key of allowed) {
+      if (!(key in payload)) continue;
+      sets.push(`${key} = ?`);
+      if (["bags_on_hand", "reorder_point_bags"].includes(key)) {
+        vals.push(Math.max(0, Math.round(Number(payload[key] ?? 0))));
+      } else if (key === "bag_weight_lbs") {
+        vals.push(Number(payload[key] ?? 0));
+      } else {
+        vals.push(String(payload[key] || "").trim());
+      }
+    }
+    vals.push(id);
+    try {
+      await db.prepare(`UPDATE bead_stock SET ${sets.join(", ")} WHERE id = ?`).bind(...vals).run();
+      const row = await db.prepare("SELECT * FROM bead_stock WHERE id = ?").bind(id).first();
+      return json({ ok: true, data: enrichBead(row) });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "DELETE") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM bead_stock WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Bead stock entry not found." }, 404);
+    try {
+      await db.prepare("DELETE FROM bead_stock WHERE id = ?").bind(id).run();
+      return json({ ok: true, message: "Bead stock entry deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiBeadStock, "handleApiBeadStock");
+__name2(handleApiBeadStock, "handleApiBeadStock");
+async function handleApiBlockInventory(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const method = request.method.toUpperCase();
+  function enrichBlock(r) {
+    return {
+      ...r,
+      display: `${r.blocks_on_hand}\xD7 ${r.density_material} ${r.length_in}\xD7${r.width_in}\xD7${r.height_in}`
+    };
+  }
+  __name(enrichBlock, "enrichBlock");
+  __name2(enrichBlock, "enrichBlock");
+  if (method === "GET") {
+    try {
+      const { results } = await db.prepare("SELECT * FROM block_inventory ORDER BY density_material ASC, length_in ASC, width_in ASC, height_in ASC").all();
+      return json({ ok: true, data: (results || []).map(enrichBlock) });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const density_material = String(payload.density_material || "").trim();
+    if (!density_material) return json({ ok: false, error: "density_material is required." }, 400);
+    const length_in = Number(payload.length_in ?? 0);
+    const width_in = Number(payload.width_in ?? 0);
+    const height_in = Number(payload.height_in ?? 0);
+    if (!(length_in > 0)) return json({ ok: false, error: "length_in must be > 0." }, 400);
+    if (!(width_in > 0)) return json({ ok: false, error: "width_in must be > 0." }, 400);
+    if (!(height_in > 0)) return json({ ok: false, error: "height_in must be > 0." }, 400);
+    const blocks_on_hand = Math.max(0, Math.round(Number(payload.blocks_on_hand ?? 0)));
+    const notes = String(payload.notes || "").trim();
+    const exists = await db.prepare("SELECT id FROM block_inventory WHERE density_material = ? AND length_in = ? AND width_in = ? AND height_in = ?").bind(density_material, length_in, width_in, height_in).first();
+    if (exists) return json({ ok: false, error: "That density + dimensions combination already exists." }, 409);
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      await db.prepare(
+        "INSERT INTO block_inventory (id, density_material, length_in, width_in, height_in, blocks_on_hand, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(id, density_material, length_in, width_in, height_in, blocks_on_hand, notes, now, now).run();
+      const row = await db.prepare("SELECT * FROM block_inventory WHERE id = ?").bind(id).first();
+      return json({ ok: true, data: enrichBlock(row) }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "PUT") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM block_inventory WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Block inventory entry not found." }, 404);
+    const allowed = ["density_material", "length_in", "width_in", "height_in", "blocks_on_hand", "notes"];
+    const sets = ["updated_at = datetime('now')"];
+    const vals = [];
+    for (const key of allowed) {
+      if (!(key in payload)) continue;
+      sets.push(`${key} = ?`);
+      if (key === "blocks_on_hand") {
+        vals.push(Math.max(0, Math.round(Number(payload[key] ?? 0))));
+      } else if (["length_in", "width_in", "height_in"].includes(key)) {
+        vals.push(Number(payload[key] ?? 0));
+      } else {
+        vals.push(String(payload[key] || "").trim());
+      }
+    }
+    vals.push(id);
+    try {
+      await db.prepare(`UPDATE block_inventory SET ${sets.join(", ")} WHERE id = ?`).bind(...vals).run();
+      const row = await db.prepare("SELECT * FROM block_inventory WHERE id = ?").bind(id).first();
+      return json({ ok: true, data: enrichBlock(row) });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "DELETE") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM block_inventory WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Block inventory entry not found." }, 404);
+    try {
+      await db.prepare("DELETE FROM block_inventory WHERE id = ?").bind(id).run();
+      return json({ ok: true, message: "Block inventory entry deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiBlockInventory, "handleApiBlockInventory");
+__name2(handleApiBlockInventory, "handleApiBlockInventory");
+async function handleApiMoldingLog(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const method = request.method.toUpperCase();
+  if (method === "GET") {
+    const url = new URL(request.url);
+    const days = Math.max(1, parseInt(url.searchParams.get("days") || "30", 10));
+    try {
+      const { results } = await db.prepare(`
+        SELECT
+          m.*,
+          bs.manufacturer, bs.bead_type, bs.bag_weight_lbs,
+          bi.density_material, bi.length_in, bi.width_in, bi.height_in
+        FROM molding_log m
+        LEFT JOIN bead_stock      bs ON bs.id = m.bead_stock_id
+        LEFT JOIN block_inventory bi ON bi.id = m.block_inventory_id
+        WHERE m.created_at >= datetime('now', ? || ' days')
+        ORDER BY m.created_at DESC
+      `).bind(`-${days}`).all();
+      return json({ ok: true, data: results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const bead_stock_id = String(payload.bead_stock_id || "").trim();
+    const block_inventory_id = String(payload.block_inventory_id || "").trim();
+    const bags_consumed = Math.round(Number(payload.bags_consumed ?? 0));
+    const blocks_produced = Math.round(Number(payload.blocks_produced ?? 0));
+    const notes = String(payload.notes || "").trim();
+    if (!bead_stock_id) return json({ ok: false, error: "bead_stock_id is required." }, 400);
+    if (!block_inventory_id) return json({ ok: false, error: "block_inventory_id is required." }, 400);
+    if (!(bags_consumed > 0)) return json({ ok: false, error: "bags_consumed must be > 0." }, 400);
+    if (!(blocks_produced > 0)) return json({ ok: false, error: "blocks_produced must be > 0." }, 400);
+    const beadStock = await db.prepare("SELECT * FROM bead_stock WHERE id = ?").bind(bead_stock_id).first();
+    if (!beadStock) return json({ ok: false, error: "Bead stock entry not found." }, 404);
+    if (bags_consumed > beadStock.bags_on_hand) {
+      return json({ ok: false, error: `Not enough bags. Have ${beadStock.bags_on_hand}, need ${bags_consumed}.` }, 422);
+    }
+    const blockInv = await db.prepare("SELECT id FROM block_inventory WHERE id = ?").bind(block_inventory_id).first();
+    if (!blockInv) return json({ ok: false, error: "Block inventory entry not found." }, 404);
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      await db.batch([
+        db.prepare("UPDATE bead_stock SET bags_on_hand = bags_on_hand - ?, updated_at = datetime('now') WHERE id = ?").bind(bags_consumed, bead_stock_id),
+        db.prepare("UPDATE block_inventory SET blocks_on_hand = blocks_on_hand + ?, updated_at = datetime('now') WHERE id = ?").bind(blocks_produced, block_inventory_id),
+        db.prepare("INSERT INTO molding_log (id, bead_stock_id, block_inventory_id, bags_consumed, blocks_produced, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(id, bead_stock_id, block_inventory_id, bags_consumed, blocks_produced, notes, now)
+      ]);
+      return json({ ok: true, data: { id, bead_stock_id, block_inventory_id, bags_consumed, blocks_produced, notes, created_at: now } }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiMoldingLog, "handleApiMoldingLog");
+__name2(handleApiMoldingLog, "handleApiMoldingLog");
+async function handleApiBlockConsumption(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const method = request.method.toUpperCase();
+  if (method === "GET") {
+    const url = new URL(request.url);
+    const days = Math.max(1, parseInt(url.searchParams.get("days") || "30", 10));
+    const jobId = (url.searchParams.get("job_id") || "").trim();
+    const where = [`c.created_at >= datetime('now', ? || ' days')`];
+    const vals = [`-${days}`];
+    if (jobId) {
+      where.push("c.job_id = ?");
+      vals.push(jobId);
+    }
+    try {
+      const { results } = await db.prepare(`
+        SELECT
+          c.*,
+          bi.density_material, bi.length_in, bi.width_in, bi.height_in,
+          j.customer AS job_customer, j.invoice_number AS job_invoice
+        FROM block_consumption_log c
+        LEFT JOIN block_inventory bi ON bi.id = c.block_inventory_id
+        LEFT JOIN jobs             j  ON j.id  = c.job_id
+        WHERE ${where.join(" AND ")}
+        ORDER BY c.created_at DESC
+      `).bind(...vals).all();
+      return json({ ok: true, data: results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const block_inventory_id = String(payload.block_inventory_id || "").trim();
+    const blocks_consumed = Math.round(Number(payload.blocks_consumed ?? 0));
+    const job_id = payload.job_id ? String(payload.job_id).trim() : null;
+    const notes = String(payload.notes || "").trim();
+    if (!block_inventory_id) return json({ ok: false, error: "block_inventory_id is required." }, 400);
+    if (!(blocks_consumed > 0)) return json({ ok: false, error: "blocks_consumed must be > 0." }, 400);
+    const blockInv = await db.prepare("SELECT * FROM block_inventory WHERE id = ?").bind(block_inventory_id).first();
+    if (!blockInv) return json({ ok: false, error: "Block inventory entry not found." }, 404);
+    if (blocks_consumed > blockInv.blocks_on_hand) {
+      return json({ ok: false, error: `Not enough blocks. Have ${blockInv.blocks_on_hand}, need ${blocks_consumed}.` }, 422);
+    }
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      await db.batch([
+        db.prepare("UPDATE block_inventory SET blocks_on_hand = blocks_on_hand - ?, updated_at = datetime('now') WHERE id = ?").bind(blocks_consumed, block_inventory_id),
+        db.prepare("INSERT INTO block_consumption_log (id, block_inventory_id, job_id, blocks_consumed, notes, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(id, block_inventory_id, job_id, blocks_consumed, notes, now)
+      ]);
+      return json({ ok: true, data: { id, block_inventory_id, job_id, blocks_consumed, notes, created_at: now } }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiBlockConsumption, "handleApiBlockConsumption");
+__name2(handleApiBlockConsumption, "handleApiBlockConsumption");
+async function handleApiShipments(request, env) {
+  const db = env.DB;
+  const method = request.method.toUpperCase();
+  const url = new URL(request.url);
+  if (method === "GET") {
+    const direction = url.searchParams.get("direction");
+    const status = url.searchParams.get("status");
+    const jobId = url.searchParams.get("job_id");
+    const days = parseInt(url.searchParams.get("days") || "30", 10);
+    const week = url.searchParams.get("week");
+    const where = [];
+    const vals = [];
+    if (week) {
+      where.push("ship_date >= ? AND ship_date <= date(?, '+6 days')");
+      vals.push(week, week);
+    } else {
+      where.push("created_at >= datetime('now', ? || ' days')");
+      vals.push(`-${days}`);
+    }
+    if (direction) {
+      where.push("direction = ?");
+      vals.push(direction);
+    }
+    if (status) {
+      const statuses = status.split(",").map((s) => s.trim()).filter(Boolean);
+      if (statuses.length === 1) {
+        where.push("status = ?");
+        vals.push(statuses[0]);
+      } else if (statuses.length > 1) {
+        where.push(`status IN (${statuses.map(() => "?").join(",")})`);
+        vals.push(...statuses);
+      }
+    }
+    if (jobId) {
+      where.push("job_id = ?");
+      vals.push(jobId);
+    }
+    const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    try {
+      const { results } = await db.prepare(
+        `SELECT * FROM shipments ${clause} ORDER BY ship_date DESC, created_at DESC`
+      ).bind(...vals).all();
+      return json({ ok: true, data: results });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const direction = String(payload.direction || "").trim();
+    if (!["inbound", "outbound"].includes(direction)) {
+      return json({ ok: false, error: "direction must be 'inbound' or 'outbound'." }, 400);
+    }
+    const ship_date = String(payload.ship_date || "").trim();
+    if (ship_date && !/^\d{4}-\d{2}-\d{2}$/.test(ship_date)) {
+      return json({ ok: false, error: "ship_date must be YYYY-MM-DD." }, 400);
+    }
+    const validStatuses = ["awaiting", "not_started", "in_production", "ready_to_ship", "loading", "loaded", "in_transit", "delivered", "cancelled", "scheduled"];
+    const status = String(payload.status || "awaiting").trim();
+    if (!validStatuses.includes(status)) {
+      return json({ ok: false, error: `status must be one of: ${validStatuses.join(", ")}` }, 400);
+    }
+    const id = crypto.randomUUID();
+    const job_id = payload.job_id ? String(payload.job_id).trim() : null;
+    const customer = String(payload.customer || "").trim();
+    const carrier = String(payload.carrier || "").trim();
+    const method_val = String(payload.method || "").trim();
+    const bol_number = String(payload.bol_number || "").trim();
+    const origin = String(payload.origin || "").trim();
+    const destination = String(payload.destination || "").trim();
+    const total_bdft = Number(payload.total_bdft ?? 0);
+    const load_count = Math.max(1, parseInt(payload.load_count ?? 1, 10));
+    const weight_lbs = Number(payload.weight_lbs ?? 0);
+    const bead_type = String(payload.bead_type || "").trim();
+    const notes = String(payload.notes || "").trim();
+    const trailer_number = String(payload.trailer_number || "").trim();
+    try {
+      await db.prepare(`
+        INSERT INTO shipments
+          (id, direction, job_id, customer, carrier, method, bol_number, origin, destination,
+           ship_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id,
+        direction,
+        job_id,
+        customer,
+        carrier,
+        method_val,
+        bol_number,
+        origin,
+        destination,
+        ship_date,
+        status,
+        total_bdft,
+        load_count,
+        weight_lbs,
+        bead_type,
+        notes,
+        trailer_number
+      ).run();
+      if (direction === "inbound" && weight_lbs > 0 && payload.silo_id) {
+        const siloId = String(payload.silo_id).trim();
+        const silo = await db.prepare("SELECT * FROM silos WHERE id = ?").bind(siloId).first();
+        if (silo) {
+          const beadTypeId = payload.bead_type_id ? String(payload.bead_type_id).trim() : silo.bead_type_id;
+          const newLevel = silo.current_lbs + weight_lbs;
+          const txId = crypto.randomUUID();
+          await db.batch([
+            db.prepare("UPDATE silos SET current_lbs = ?, updated_at = datetime('now') WHERE id = ?").bind(newLevel, siloId),
+            db.prepare(`
+              INSERT INTO bead_transactions (id, silo_id, bead_type_id, type, quantity_lbs, reference, notes)
+              VALUES (?, ?, ?, 'receive', ?, ?, ?)
+            `).bind(txId, siloId, beadTypeId, weight_lbs, bol_number || id, `Auto-logged from inbound shipment ${id}`)
+          ]);
+        }
+      }
+      const row = await db.prepare("SELECT * FROM shipments WHERE id = ?").bind(id).first();
+      await logActivity(
+        db,
+        "create",
+        "shipment",
+        id,
+        `Created shipment for ${customer} \u2014 ${direction} ${status}`,
+        { customer, direction, status, ship_date }
+      );
+      return json({ ok: true, data: row }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "PUT") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM shipments WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Shipment not found." }, 404);
+    const allowed = [
+      "customer",
+      "carrier",
+      "method",
+      "bol_number",
+      "origin",
+      "destination",
+      "ship_date",
+      "status",
+      "total_bdft",
+      "load_count",
+      "weight_lbs",
+      "bead_type",
+      "notes",
+      "job_id",
+      "trailer_number"
+    ];
+    const sets = [];
+    const vals = [];
+    for (const key of allowed) {
+      if (!(key in payload)) continue;
+      sets.push(`${key} = ?`);
+      const raw = payload[key];
+      if (key === "job_id") {
+        vals.push(raw ? String(raw).trim() : null);
+      } else if (["total_bdft", "weight_lbs"].includes(key)) {
+        vals.push(Number(raw ?? 0));
+      } else if (key === "load_count") {
+        vals.push(Math.max(1, parseInt(raw ?? 1, 10)));
+      } else {
+        vals.push(String(raw ?? "").trim());
+      }
+    }
+    if (sets.length === 0) return json({ ok: false, error: "No fields to update." }, 400);
+    sets.push("updated_at = datetime('now')");
+    vals.push(id);
+    try {
+      await db.prepare(`UPDATE shipments SET ${sets.join(", ")} WHERE id = ?`).bind(...vals).run();
+      const row = await db.prepare("SELECT * FROM shipments WHERE id = ?").bind(id).first();
+      await logActivity(
+        db,
+        "update",
+        "shipment",
+        id,
+        `Updated shipment ${id} \u2014 status: ${payload.status || ""}`,
+        { fields_updated: Object.keys(payload).filter((k) => k !== "id") }
+      );
+      return json({ ok: true, data: row });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "DELETE") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM shipments WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Shipment not found." }, 404);
+    try {
+      await db.prepare("DELETE FROM shipments WHERE id = ?").bind(id).run();
+      await logActivity(db, "delete", "shipment", id, `Deleted shipment ${id}`, { id });
+      return json({ ok: true, message: "Shipment deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiShipments, "handleApiShipments");
+__name2(handleApiShipments, "handleApiShipments");
+async function handleApiBolCustomers(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const method = request.method;
+  if (method === "GET") {
+    const url = new URL(request.url);
+    const search = (url.searchParams.get("search") || "").trim();
+    const activeParam = url.searchParams.get("active");
+    let query = "SELECT * FROM bol_customers";
+    const conds = [];
+    const binds = [];
+    if (activeParam !== "0") {
+      conds.push("is_active = 1");
+    }
+    if (search) {
+      conds.push("(company LIKE ? OR attention LIKE ? OR city LIKE ?)");
+      binds.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    if (conds.length) query += " WHERE " + conds.join(" AND ");
+    query += " ORDER BY company ASC";
+    try {
+      const result = binds.length ? await db.prepare(query).bind(...binds).all() : await db.prepare(query).all();
+      return json({ ok: true, customers: result.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const company = String(payload.company || "").trim();
+    if (!company) return json({ ok: false, error: "company is required." }, 400);
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const attention = String(payload.attention || "").trim();
+    const street = String(payload.street || "").trim();
+    const street2 = String(payload.street2 || "").trim();
+    const city = String(payload.city || "").trim();
+    const state = String(payload.state || "").trim();
+    const zip = String(payload.zip || "").trim();
+    const phone = String(payload.phone || "").trim();
+    const email = String(payload.email || "").trim();
+    const contact_name = String(payload.contact_name || "").trim();
+    const notes = String(payload.notes || "").trim();
+    try {
+      await db.prepare(`
+        INSERT INTO bol_customers
+          (id, company, attention, street, street2, city, state, zip, phone, email, contact_name, notes, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(id, company, attention, street, street2, city, state, zip, phone, email, contact_name, notes, now, now).run();
+      const row = await db.prepare("SELECT * FROM bol_customers WHERE id = ?").bind(id).first();
+      await logActivity(
+        db,
+        "create",
+        "bol_customer",
+        id,
+        `Created customer "${company}"`,
+        { company, city, state }
+      );
+      return json({ ok: true, customer: row }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "PUT") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT id FROM bol_customers WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Customer not found." }, 404);
+    const textFields = ["company", "attention", "street", "street2", "city", "state", "zip", "phone", "email", "contact_name", "notes"];
+    const sets = [], binds = [];
+    for (const f of textFields) {
+      if (f in payload) {
+        sets.push(`${f} = ?`);
+        binds.push(String(payload[f] || "").trim());
+      }
+    }
+    if ("is_active" in payload) {
+      sets.push("is_active = ?");
+      binds.push(payload.is_active ? 1 : 0);
+    }
+    if (sets.length === 0) return json({ ok: false, error: "No fields to update." }, 400);
+    sets.push("updated_at = ?");
+    binds.push((/* @__PURE__ */ new Date()).toISOString(), id);
+    try {
+      await db.prepare(`UPDATE bol_customers SET ${sets.join(", ")} WHERE id = ?`).bind(...binds).run();
+      const row = await db.prepare("SELECT * FROM bol_customers WHERE id = ?").bind(id).first();
+      await logActivity(
+        db,
+        "update",
+        "bol_customer",
+        id,
+        `Updated customer "${payload.company || id}"`,
+        { fields_updated: Object.keys(payload).filter((k) => k !== "id") }
+      );
+      return json({ ok: true, customer: row });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "DELETE") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    try {
+      await db.prepare("UPDATE bol_customers SET is_active = 0, updated_at = ? WHERE id = ?").bind((/* @__PURE__ */ new Date()).toISOString(), id).run();
+      await logActivity(db, "delete", "bol_customer", id, `Deleted customer ${id}`, { id });
+      return json({ ok: true, message: "Customer deactivated." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiBolCustomers, "handleApiBolCustomers");
+__name2(handleApiBolCustomers, "handleApiBolCustomers");
+async function handleApiBolCustomersSeed(request, env) {
+  if (request.method !== "POST") return json({ ok: false, error: "Method Not Allowed" }, 405);
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const existing = await db.prepare("SELECT COUNT(*) as cnt FROM bol_customers").first();
+  if (existing && existing.cnt > 0) {
+    return json({ ok: false, error: "Seed already applied \u2014 table is not empty." });
+  }
+  const SEED = [
+    { company: "ABC Supply - Dunnellon #497", attention: "", street: "7975 W. Grover Cleveland Blvd.", city: "Homosassa", state: "FL", zip: "34446", contact_name: "Austin", phone: "352-564-8319" },
+    { company: "AF Barriers", attention: "Attn: Scott Fullerton", street: "4455 18th St. East", city: "Bradenton", state: "FL", zip: "34203", contact_name: "Kody Deiter", phone: "941-584-3906" },
+    { company: "All Florida Weatherproofing", attention: "Attn: Rick Fulford", street: "4231 112th Terrace North", city: "Clearwater", state: "FL", zip: "33762", contact_name: "Rick", phone: "352-702-5052" },
+    { company: "Accusolar", attention: "Attn: Trish Nicholson", street: "1800 SW 13th Ct.", city: "Pompano Beach", state: "FL", zip: "33069", contact_name: "Trish Nicholson", phone: "954-785-7557" },
+    { company: "Accudock", attention: "Attn: PM Nicholson", street: "1790 SW 13th Ct.", city: "Pompano Beach", state: "FL", zip: "33069", contact_name: "Trish Nicholson", phone: "954-785-7557" },
+    { company: "Alumflo Inc.", attention: "Attn: Mark Daniel", street: "2445 51st. Ave. N", city: "St. Petersburg", state: "FL", zip: "33714", contact_name: "Mark Daniel", phone: "" },
+    { company: "Architechtural Foam Fab, LLC", attention: "", street: "8360 Currency Dr., Ste 2", city: "West Palm Beach", state: "FL", zip: "33404", contact_name: "", phone: "" },
+    { company: "Atlantic Packaging Corp.", attention: "Attn: Ken Thorpe", street: "5301 W 5th St., Ste 1", city: "Jacksonville", state: "FL", zip: "32254", contact_name: "Ken Thorpe", phone: "904-409-3560" },
+    { company: "BMMI", attention: "Attn: Scott Reed", street: "8210 Manasota Key Rd.", city: "Englewood", state: "FL", zip: "34223", contact_name: "Kyle", phone: "863-990-8347" },
+    { company: "Bellingham Marine", attention: "Attn: Josh Hebert", street: "2014 Dennis St.", city: "Jacksonville", state: "FL", zip: "32204", contact_name: "Josh Hebert", phone: "" },
+    { company: "CG3 - Victory Mgmt. Sol. Inc.", attention: "Attn: Enrique Aranda", street: "2423 Ryan Blvd", city: "Punta Gorda", state: "FL", zip: "33950", contact_name: "Enrique Aranda", phone: "305-803-2256" },
+    { company: "Prestige Spa Covers (CORE)", attention: "Attn: Charline Fisher", street: "2875 MCI Dr.", city: "Pinellas Park", state: "FL", zip: "33782", contact_name: "Charline Fisher", phone: "" },
+    { company: "Collis Roofing, Inc.", attention: "", street: "485 Commerce Way", city: "Longwood", state: "FL", zip: "32750", contact_name: "", phone: "" },
+    { company: "Comfort Cover Systems Inc.", attention: "", street: "711 Turner St.", city: "Clearwater", state: "FL", zip: "33756", contact_name: "Bob", phone: "727-298-0955" },
+    { company: "Community Roofing", attention: "Attn: Joe Perrini", street: "14042 66th Street", city: "Largo", state: "FL", zip: "33771", contact_name: "Joe Perrini", phone: "352-410-0548" },
+    { company: "Coolstructures Inc.", attention: "", street: "7173 Gasparilla Rd.", city: "Port Charlotte", state: "FL", zip: "33981", contact_name: "Al", phone: "855-220-0240" },
+    { company: "Crown Packaging", attention: "", street: "2716 Hazelhurst Ave.", city: "Orlando", state: "FL", zip: "32804", contact_name: "", phone: "" },
+    { company: "Diversitech", attention: "Attn: Daniel Dees", street: "1632 3rd St.", city: "Leesburg", state: "FL", zip: "34748", contact_name: "Daniel Dees", phone: "352-530-4930" },
+    { company: "Foam World, LLC", attention: "Attn: Devin Angels", street: "3591 Work Dr. Bldg. B", city: "Fort Myers", state: "FL", zip: "33916", contact_name: "Devin Angels", phone: "" },
+    { company: "Gulfeagle Supply - #002", attention: "", street: "2649 Rosselle St.", city: "Jacksonville", state: "FL", zip: "32204", contact_name: "", phone: "" },
+    { company: "John Abell Corp.", attention: "attn: Jesus Quintana", street: "10500 SW 186 ST.", city: "Miami", state: "FL", zip: "33157", contact_name: "Jesus Quintana", phone: "" },
+    { company: "Lansing Building Products - Ocala", attention: "", street: "5371 SE Maricamp Rd.", city: "Ocala", state: "FL", zip: "34480", contact_name: "", phone: "" },
+    { company: "Lion TB Construction", attention: "Attn: Sam Kazmarek", street: "10020 US Hwy 301 N", city: "Tampa", state: "FL", zip: "33637", contact_name: "Sam Kazmarek", phone: "813-985-0850" },
+    { company: "New Panel Kits LLC", attention: "Attn: Jeanne Bishop", street: "510 Paul Morris Dr", city: "Englewood", state: "FL", zip: "34223", contact_name: "Brian Bishop", phone: "941-915-3090" },
+    { company: "Ocala Architechtural Foam, LLC", attention: "", street: "7175 S. Pine Ave. STE A", city: "Ocala", state: "FL", zip: "34480", contact_name: "Nicholas", phone: "" },
+    { company: "Precast & Foam Works", attention: "", street: "6612 Osteen Rd.", city: "New Port Richey", state: "FL", zip: "34653", contact_name: "Gabor", phone: "" },
+    { company: "Net Zero Building / Spray Rock Mnfg.", attention: "", street: "7980 SW Jack James Dr.", city: "Stuart", state: "FL", zip: "34997", contact_name: "John", phone: "954-205-9577" },
+    { company: "Supply One ORL", attention: "", street: "3505 NW 112th St.", city: "Miami", state: "FL", zip: "33167", contact_name: "", phone: "" },
+    { company: "Town & Country #816", attention: "Attn: Darcy Miller", street: "4311 Shader Rd. Ste 100", city: "Orlando", state: "FL", zip: "32808", contact_name: "Kosta", phone: "407-292-1517" },
+    { company: "Virginia Foam", attention: "attn: Alex Gonzalez", street: "1120 Summit St.", city: "Fredericksburg", state: "VA", zip: "22401", contact_name: "Alex Gonzalez", phone: "540-681-7665" },
+    { company: "Yanaex Inc.", attention: "Attn: Misha Gryb", street: "8802 Corporate Square Ct., Ste. #106-206", city: "Jacksonville", state: "FL", zip: "32216", contact_name: "Misha Gryb", phone: "" },
+    { company: "Spectrum Eng. & Mfg. Inc", attention: "", street: "11609 Pyramid Dr.", city: "Odessa", state: "FL", zip: "33556", contact_name: "", phone: "" }
+  ];
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  let inserted = 0;
+  for (const c of SEED) {
+    try {
+      await db.prepare(`
+        INSERT INTO bol_customers (id, company, attention, street, city, state, zip, phone, contact_name, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(
+        crypto.randomUUID(),
+        c.company,
+        c.attention,
+        c.street,
+        c.city,
+        c.state,
+        c.zip,
+        c.phone,
+        c.contact_name,
+        now,
+        now
+      ).run();
+      inserted++;
+    } catch {
+    }
+  }
+  const carrierRow = await db.prepare("SELECT COUNT(*) as cnt FROM bol_carriers").first();
+  let carriersInserted = 0;
+  if (!carrierRow || carrierRow.cnt === 0) {
+    const CARRIERS = ["LISMA Logistics", "LISMA Flatbed", "Xpanda Truck", "XP Co. Truck", "Customer Pickup (CPU)", "Priority1"];
+    for (const name of CARRIERS) {
+      try {
+        await db.prepare("INSERT INTO bol_carriers (id, name) VALUES (?,?)").bind(crypto.randomUUID(), name).run();
+        carriersInserted++;
+      } catch {
+      }
+    }
+  }
+  return json({ ok: true, message: `Seeded ${inserted} customers and ${carriersInserted} carriers.` });
+}
+__name(handleApiBolCustomersSeed, "handleApiBolCustomersSeed");
+__name2(handleApiBolCustomersSeed, "handleApiBolCustomersSeed");
+async function handleApiBolCarriers(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const method = request.method;
+  if (method === "GET") {
+    try {
+      const result = await db.prepare("SELECT * FROM bol_carriers WHERE is_active = 1 ORDER BY name ASC").all();
+      return json({ ok: true, carriers: result.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const name = String(payload.name || "").trim();
+    if (!name) return json({ ok: false, error: "name is required." }, 400);
+    const id = crypto.randomUUID();
+    const scac = String(payload.scac || "").trim();
+    const phone = String(payload.phone || "").trim();
+    try {
+      await db.prepare("INSERT INTO bol_carriers (id, name, scac, phone) VALUES (?,?,?,?)").bind(id, name, scac, phone).run();
+      const row = await db.prepare("SELECT * FROM bol_carriers WHERE id = ?").bind(id).first();
+      await logActivity(
+        db,
+        "create",
+        "bol_carrier",
+        id,
+        `Created carrier "${name}"`,
+        { name, scac, phone }
+      );
+      return json({ ok: true, carrier: row }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiBolCarriers, "handleApiBolCarriers");
+__name2(handleApiBolCarriers, "handleApiBolCarriers");
+async function handleApiBols(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const url = new URL(request.url);
+  const method = request.method;
+  const parts = url.pathname.split("/").filter(Boolean);
+  const bolId = parts.length >= 3 ? parts[2] : null;
+  if (method === "GET" && bolId) {
+    try {
+      const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(bolId).first();
+      if (!row) return json({ ok: false, error: "BOL not found." }, 404);
+      return json({ ok: true, bol: row });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "GET") {
+    const days = parseInt(url.searchParams.get("days") || "30", 10);
+    const customer_id = (url.searchParams.get("customer_id") || "").trim();
+    const search = (url.searchParams.get("search") || "").trim();
+    const jobIdsParam = (url.searchParams.get("job_ids") || "").trim();
+    const jobIds = jobIdsParam ? jobIdsParam.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    const jobId = (url.searchParams.get("job_id") || "").trim();
+    let query = "SELECT * FROM bols";
+    const conds = [];
+    const binds = [];
+    if (jobId) {
+      conds.push("job_id = ?");
+      binds.push(jobId);
+    } else if (jobIds.length) {
+      const ph = jobIds.map(() => "?").join(",");
+      conds.push(`job_id IN (${ph})`);
+      binds.push(...jobIds);
+    } else if (!customer_id && !search && days > 0) {
+      conds.push("date >= date('now', ?)");
+      binds.push(`-${days} days`);
+    }
+    if (customer_id) {
+      conds.push("customer_id = ?");
+      binds.push(customer_id);
+    }
+    if (search) {
+      conds.push("(ship_to_company LIKE ? OR CAST(bol_number AS TEXT) LIKE ?)");
+      binds.push(`%${search}%`, `%${search}%`);
+    }
+    if (conds.length) query += " WHERE " + conds.join(" AND ");
+    query += " ORDER BY bol_number DESC";
+    try {
+      const result = binds.length ? await db.prepare(query).bind(...binds).all() : await db.prepare(query).all();
+      return json({ ok: true, bols: result.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const date = String(payload.date || "").trim();
+    if (!date) return json({ ok: false, error: "date is required." }, 400);
+    const bol_number = payload.bol_number ? String(payload.bol_number).trim() || null : null;
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const s = /* @__PURE__ */ __name2((f) => String(payload[f] || "").trim(), "s");
+    const validTerms = ["prepaid", "collect", "3rd_party"];
+    const freight_terms = validTerms.includes(s("freight_terms")) ? s("freight_terms") : "prepaid";
+    const is_scrap_pickup = payload.is_scrap_pickup ? 1 : 0;
+    let render_overrides = null;
+    if (payload.render_overrides != null) {
+      if (typeof payload.render_overrides === "object") {
+        render_overrides = JSON.stringify(payload.render_overrides);
+      } else if (typeof payload.render_overrides === "string" && payload.render_overrides.trim()) {
+        try {
+          JSON.parse(payload.render_overrides);
+          render_overrides = payload.render_overrides;
+        } catch {
+          render_overrides = null;
+        }
+      }
+    }
+    try {
+      await db.prepare(`
+        INSERT INTO bols (
+          id, bol_number, date, customer_id,
+          ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
+          ship_to_city, ship_to_state, ship_to_zip, location_no,
+          carrier_id, carrier_name, trailer_no, seal_number, scac, pro_no,
+          freight_terms, is_scrap_pickup, third_party_bill_to, special_instructions, contact_info, is_master_bol,
+          commodity_description, handling_unit_qty, handling_unit_type,
+          package_qty, package_type, weight, delivery_time, job_id, notes, render_overrides, created_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(
+        id,
+        bol_number,
+        date,
+        payload.customer_id ? String(payload.customer_id).trim() : null,
+        s("ship_to_company"),
+        s("ship_to_attention"),
+        s("ship_to_street"),
+        s("ship_to_street2"),
+        s("ship_to_city"),
+        s("ship_to_state"),
+        s("ship_to_zip"),
+        s("location_no"),
+        payload.carrier_id ? String(payload.carrier_id).trim() : null,
+        s("carrier_name"),
+        s("trailer_no"),
+        s("seal_number"),
+        s("scac"),
+        s("pro_no"),
+        freight_terms,
+        is_scrap_pickup,
+        s("third_party_bill_to"),
+        s("special_instructions"),
+        s("contact_info"),
+        payload.is_master_bol ? 1 : 0,
+        s("commodity_description"),
+        s("handling_unit_qty"),
+        s("handling_unit_type"),
+        s("package_qty"),
+        s("package_type"),
+        s("weight"),
+        s("delivery_time"),
+        payload.job_id ? String(payload.job_id).trim() : null,
+        s("notes"),
+        render_overrides,
+        now
+      ).run();
+      const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();
+      await logActivity(
+        db,
+        "create",
+        "bol",
+        id,
+        `Created ${bol_number ? `BOL #${bol_number}` : "BOL"} for ${s("ship_to_company")}`,
+        { bol_number, ship_to_company: s("ship_to_company"), carrier_name: s("carrier_name"), date }
+      );
+      return json({ ok: true, message: "BOL created.", bol: row }, 201);
+    } catch (e) {
+      const msg = String(e?.message || e);
+      return json({ ok: false, error: "Server error.", detail: msg }, 500);
+    }
+  }
+  if (method === "PUT" && bolId) {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const existing = await db.prepare("SELECT id, render_overrides FROM bols WHERE id = ?").bind(bolId).first();
+    if (!existing) return json({ ok: false, error: "BOL not found." }, 404);
+    const s = /* @__PURE__ */ __name2((f) => String(payload[f] || "").trim(), "s");
+    const validTerms = ["prepaid", "collect", "3rd_party"];
+    const freight_terms = validTerms.includes(s("freight_terms")) ? s("freight_terms") : "prepaid";
+    const is_scrap_pickup = payload.is_scrap_pickup ? 1 : 0;
+    const hasOverridesField = Object.prototype.hasOwnProperty.call(payload, "render_overrides");
+    let render_overrides = null;
+    if (hasOverridesField) {
+      if (payload.render_overrides != null) {
+        if (typeof payload.render_overrides === "object") {
+          render_overrides = JSON.stringify(payload.render_overrides);
+        } else if (typeof payload.render_overrides === "string" && payload.render_overrides.trim()) {
+          try {
+            JSON.parse(payload.render_overrides);
+            render_overrides = payload.render_overrides;
+          } catch {
+            render_overrides = null;
+          }
+        }
+      }
+    } else {
+      render_overrides = existing.render_overrides ?? null;
+    }
+    try {
+      await db.prepare(`
+        UPDATE bols SET
+          date = ?, customer_id = ?,
+          ship_to_company = ?, ship_to_attention = ?, ship_to_street = ?, ship_to_street2 = ?,
+          ship_to_city = ?, ship_to_state = ?, ship_to_zip = ?, location_no = ?,
+          carrier_id = ?, carrier_name = ?, trailer_no = ?, seal_number = ?, scac = ?, pro_no = ?,
+          freight_terms = ?, is_scrap_pickup = ?, third_party_bill_to = ?, special_instructions = ?, contact_info = ?,
+          is_master_bol = ?, commodity_description = ?, handling_unit_qty = ?, handling_unit_type = ?,
+          package_qty = ?, package_type = ?, weight = ?, delivery_time = ?, job_id = ?, notes = ?, render_overrides = ?
+        WHERE id = ?
+      `).bind(
+        s("date"),
+        payload.customer_id ? String(payload.customer_id).trim() : null,
+        s("ship_to_company"),
+        s("ship_to_attention"),
+        s("ship_to_street"),
+        s("ship_to_street2"),
+        s("ship_to_city"),
+        s("ship_to_state"),
+        s("ship_to_zip"),
+        s("location_no"),
+        payload.carrier_id ? String(payload.carrier_id).trim() : null,
+        s("carrier_name"),
+        s("trailer_no"),
+        s("seal_number"),
+        s("scac"),
+        s("pro_no"),
+        freight_terms,
+        is_scrap_pickup,
+        s("third_party_bill_to"),
+        s("special_instructions"),
+        s("contact_info"),
+        payload.is_master_bol ? 1 : 0,
+        s("commodity_description"),
+        s("handling_unit_qty"),
+        s("handling_unit_type"),
+        s("package_qty"),
+        s("package_type"),
+        s("weight"),
+        s("delivery_time"),
+        payload.job_id ? String(payload.job_id).trim() : null,
+        s("notes"),
+        render_overrides,
+        bolId
+      ).run();
+      const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(bolId).first();
+      await logActivity(
+        db,
+        "update",
+        "bol",
+        bolId,
+        `Updated BOL #${payload.bol_number || bolId}`,
+        { fields_updated: Object.keys(payload).filter((k) => k !== "id") }
+      );
+      return json({ ok: true, message: "BOL updated.", bol: row });
+    } catch (e) {
+      const msg = String(e?.message || e);
+      return json({ ok: false, error: "Server error.", detail: msg }, 500);
+    }
+  }
+  if (method === "DELETE" && bolId) {
+    try {
+      const exists = await db.prepare("SELECT id, bol_number FROM bols WHERE id = ?").bind(bolId).first();
+      if (!exists) return json({ ok: false, error: "BOL not found." }, 404);
+      await db.prepare("DELETE FROM bols WHERE id = ?").bind(bolId).run();
+      await logActivity(
+        db,
+        "delete",
+        "bol",
+        bolId,
+        `Deleted BOL #${exists.bol_number || bolId}`,
+        { id: bolId }
+      );
+      return json({ ok: true, message: "BOL deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiBols, "handleApiBols");
+__name2(handleApiBols, "handleApiBols");
+function mapPartToSku(row) {
+  return {
+    id: row.id,
+    name: row.name || row.part_number,
+    sku: row.part_number,
+    length: row.length_in,
+    width: row.width_in,
+    height: row.height_in,
+    weight: row.weight,
+    notes: row.notes,
+    color: row.color,
+    allowRotation: row.allow_rotation === 1,
+    category: row.category || "",
+    parent_group: row.parent_group || "",
+    bundleQty: row.bundle_qty || 0
+  };
+}
+__name(mapPartToSku, "mapPartToSku");
+__name2(mapPartToSku, "mapPartToSku");
+var DEFAULT_PARTS = [
+  { part_number: "HB-01", name: "1in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 1, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
+  { part_number: "HB-01.25", name: "1.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 1.25, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
+  { part_number: "HB-1.5", name: "1.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 1.5, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
+  { part_number: "HB-1.75", name: "1.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 1.75, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "1in HB" },
+  { part_number: "HB-02", name: "2in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 2, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
+  { part_number: "HB-02.25", name: "2.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 2.25, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
+  { part_number: "HB-2.5", name: "2.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 2.5, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
+  { part_number: "HB-2.75", name: "2.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 2.75, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "2in HB" },
+  { part_number: "HB-03", name: "3in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 3, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
+  { part_number: "HB-03.25", name: "3.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 3.25, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
+  { part_number: "HB-3.5", name: "3.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 3.5, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
+  { part_number: "HB-3.75", name: "3.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 3.75, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "3in HB" },
+  { part_number: "HB-04", name: "4in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 4, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
+  { part_number: "HB-04.25", name: "4.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 4.25, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
+  { part_number: "HB-4.5", name: "4.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 4.5, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
+  { part_number: "HB-4.75", name: "4.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 4.75, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "4in HB" },
+  { part_number: "HB-05", name: "5in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 5, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
+  { part_number: "HB-05.25", name: "5.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 5.25, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
+  { part_number: "HB-5.5", name: "5.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 5.5, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
+  { part_number: "HB-5.75", name: "5.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 5.75, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "5in HB" },
+  { part_number: "HB-06", name: "6in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 6, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
+  { part_number: "HB-06.25", name: "6.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 6.25, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
+  { part_number: "HB-6.5", name: "6.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 6.5, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
+  { part_number: "HB-6.75", name: "6.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 6.75, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "6in HB" },
+  { part_number: "HB-07", name: "7in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 7, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
+  { part_number: "HB-07.25", name: "7.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 7.25, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
+  { part_number: "HB-7.5", name: "7.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 7.5, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
+  { part_number: "HB-7.75", name: "7.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 7.75, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "7in HB" },
+  { part_number: "HB-08", name: "8in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 8, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
+  { part_number: "HB-08.25", name: "8.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 8.25, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
+  { part_number: "HB-8.5", name: "8.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 8.5, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
+  { part_number: "HB-8.75", name: "8.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 8.75, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "8in HB" },
+  { part_number: "HB-09", name: "9in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 9, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
+  { part_number: "HB-09.25", name: "9.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 9.25, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
+  { part_number: "HB-9.5", name: "9.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 9.5, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
+  { part_number: "HB-9.75", name: "9.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 9.75, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "9in HB" },
+  { part_number: "HB-10", name: "10in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 10, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
+  { part_number: "HB-10.25", name: "10.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 10.25, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
+  { part_number: "HB-10.5", name: "10.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 10.5, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
+  { part_number: "HB-10.75", name: "10.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 10.75, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "10in HB" },
+  { part_number: "HB-11", name: "11in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 11, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
+  { part_number: "HB-11.25", name: "11.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 11.25, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
+  { part_number: "HB-11.5", name: "11.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 11.5, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
+  { part_number: "HB-11.75", name: "11.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 11.75, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "11in HB" },
+  { part_number: "HB-12", name: "12in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 12, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
+  { part_number: "HB-12.25", name: "12.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 12.25, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
+  { part_number: "HB-12.5", name: "12.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 12.5, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
+  { part_number: "HB-12.75", name: "12.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 12.75, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "12in HB" },
+  { part_number: "HB-13", name: "13in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 13, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
+  { part_number: "HB-13.25", name: "13.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 13.25, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
+  { part_number: "HB-13.5", name: "13.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 13.5, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
+  { part_number: "HB-13.75", name: "13.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 13.75, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "13in HB" },
+  { part_number: "HB-14", name: "14in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 14, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
+  { part_number: "HB-14.25", name: "14.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 14.25, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
+  { part_number: "HB-14.5", name: "14.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 14.5, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
+  { part_number: "HB-14.75", name: "14.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 14.75, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "14in HB" },
+  { part_number: "HB-15", name: "15in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 15, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
+  { part_number: "HB-15.25", name: "15.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 15.25, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
+  { part_number: "HB-15.5", name: "15.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 15.5, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
+  { part_number: "HB-15.75", name: "15.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 15.75, weight: 1, notes: "", color: "#A21CAF", category: "Holey Board", parent_group: "15in HB" },
+  { part_number: "HB-16", name: "16in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 16, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
+  { part_number: "HB-16.25", name: "16.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 16.25, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
+  { part_number: "HB-16.5", name: "16.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 16.5, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
+  { part_number: "HB-16.75", name: "16.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 16.75, weight: 1, notes: "", color: "#4338CA", category: "Holey Board", parent_group: "16in HB" },
+  { part_number: "HB-17", name: "17in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 17, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
+  { part_number: "HB-17.25", name: "17.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 17.25, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
+  { part_number: "HB-17.5", name: "17.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 17.5, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
+  { part_number: "HB-17.75", name: "17.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 17.75, weight: 1, notes: "", color: "#D97706", category: "Holey Board", parent_group: "17in HB" },
+  { part_number: "HB-18", name: "18in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 18, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
+  { part_number: "HB-18.25", name: "18.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 18.25, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
+  { part_number: "HB-18.5", name: "18.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 18.5, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
+  { part_number: "HB-18.75", name: "18.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 18.75, weight: 1, notes: "", color: "#0F766E", category: "Holey Board", parent_group: "18in HB" },
+  { part_number: "HB-19", name: "19in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 19, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
+  { part_number: "HB-19.25", name: "19.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 19.25, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
+  { part_number: "HB-19.5", name: "19.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 19.5, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
+  { part_number: "HB-19.75", name: "19.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 19.75, weight: 1, notes: "", color: "#2563EB", category: "Holey Board", parent_group: "19in HB" },
+  { part_number: "HB-20", name: "20in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 20, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
+  { part_number: "HB-20.25", name: "20.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 20.25, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
+  { part_number: "HB-20.5", name: "20.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 20.5, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
+  { part_number: "HB-20.75", name: "20.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 20.75, weight: 1, notes: "", color: "#7C3AED", category: "Holey Board", parent_group: "20in HB" },
+  { part_number: "HB-21", name: "21in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 21, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
+  { part_number: "HB-21.25", name: "21.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 21.25, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
+  { part_number: "HB-21.5", name: "21.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 21.5, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
+  { part_number: "HB-21.75", name: "21.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 21.75, weight: 1, notes: "", color: "#DC2626", category: "Holey Board", parent_group: "21in HB" },
+  { part_number: "HB-22", name: "22in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 22, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
+  { part_number: "HB-22.25", name: "22.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 22.25, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
+  { part_number: "HB-22.5", name: "22.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 22.5, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
+  { part_number: "HB-22.75", name: "22.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 22.75, weight: 1, notes: "", color: "#059669", category: "Holey Board", parent_group: "22in HB" },
+  { part_number: "HB-23", name: "23in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 23, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
+  { part_number: "HB-23.25", name: "23.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 23.25, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
+  { part_number: "HB-23.5", name: "23.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 23.5, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
+  { part_number: "HB-23.75", name: "23.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 23.75, weight: 1, notes: "", color: "#9333EA", category: "Holey Board", parent_group: "23in HB" },
+  { part_number: "HB-24", name: "24in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 24, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
+  { part_number: "HB-24.25", name: "24.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 24.25, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
+  { part_number: "HB-24.5", name: "24.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 24.5, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
+  { part_number: "HB-24.75", name: "24.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 24.75, weight: 1, notes: "", color: "#0891B2", category: "Holey Board", parent_group: "24in HB" },
+  { part_number: "HB-25", name: "25in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 25, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
+  { part_number: "HB-25.25", name: "25.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 25.25, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
+  { part_number: "HB-25.5", name: "25.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 25.5, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
+  { part_number: "HB-25.75", name: "25.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 25.75, weight: 1, notes: "", color: "#CA8A04", category: "Holey Board", parent_group: "25in HB" },
+  { part_number: "HB-26", name: "26in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 26, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
+  { part_number: "HB-26.25", name: "26.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 26.25, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
+  { part_number: "HB-26.5", name: "26.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 26.5, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
+  { part_number: "HB-26.75", name: "26.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 26.75, weight: 1, notes: "", color: "#4F46E5", category: "Holey Board", parent_group: "26in HB" },
+  { part_number: "HB-27", name: "27in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 27, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
+  { part_number: "HB-27.25", name: "27.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 27.25, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
+  { part_number: "HB-27.5", name: "27.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 27.5, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
+  { part_number: "HB-27.75", name: "27.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 27.75, weight: 1, notes: "", color: "#EA580C", category: "Holey Board", parent_group: "27in HB" },
+  { part_number: "HB-28", name: "28in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 28, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
+  { part_number: "HB-28.25", name: "28.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 28.25, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
+  { part_number: "HB-28.5", name: "28.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 28.5, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
+  { part_number: "HB-28.75", name: "28.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 28.75, weight: 1, notes: "", color: "#16A34A", category: "Holey Board", parent_group: "28in HB" },
+  { part_number: "HB-29", name: "29in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 29, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
+  { part_number: "HB-29.25", name: "29.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 29.25, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
+  { part_number: "HB-29.5", name: "29.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 29.5, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
+  { part_number: "HB-29.75", name: "29.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 29.75, weight: 1, notes: "", color: "#0284C7", category: "Holey Board", parent_group: "29in HB" },
+  { part_number: "HB-30", name: "30in block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 30, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
+  { part_number: "HB-30.25", name: "30.25in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 30.25, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
+  { part_number: "HB-30.5", name: "30.5in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 30.5, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
+  { part_number: "HB-30.75", name: "30.75in Block", customer: "", density_material: "1.0 RC", length: 48, width: 24, height: 30.75, weight: 1, notes: "", color: "#BE123C", category: "Holey Board", parent_group: "30in HB" },
+  { part_number: "H4040-4", name: "H4040-4", customer: "DiversiTech", density_material: "1.0 RC", length: 37.5, width: 37.5, height: 3.62, weight: 1, notes: "", color: "#D97706", category: "", parent_group: "" },
+  { part_number: "H1840-4", name: "H1840-4", customer: "DiversiTech", density_material: "1.0 RC", length: 37.5, width: 15.5, height: 3.62, weight: 1, notes: "", color: "#D97706", category: "", parent_group: "" },
+  { part_number: "H3232-4", name: "H3232-4", customer: "DiversiTech", density_material: "1.0 RC", length: 29.5, width: 29.5, height: 3.62, weight: 1, notes: "", color: "#D97706", category: "", parent_group: "" },
+  { part_number: "H2436-4", name: "H2436-4", customer: "DiversiTech", density_material: "1.0 RC", length: 33.5, width: 21.5, height: 3.62, weight: 1, notes: "", color: "#D97706", category: "", parent_group: "" }
+];
+async function handleApiSavedLoads(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const url = new URL(request.url);
+  const method = request.method;
+  const loadId = url.pathname.slice("/api/saved-loads".length).replace(/^\//, "") || null;
+  if (method === "GET" && !loadId) {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    await db.prepare("DELETE FROM saved_loads WHERE expires_at < ?").bind(now).run();
+    const result = await db.prepare(
+      "SELECT id, name, job_id, customer, trailer_type, created_at, updated_at FROM saved_loads ORDER BY updated_at DESC"
+    ).all();
+    return json({ ok: true, loads: result.results || [] });
+  }
+  if (method === "GET" && loadId) {
+    const row = await db.prepare("SELECT * FROM saved_loads WHERE id = ?").bind(loadId).first();
+    if (!row) return json({ ok: false, error: "Saved load not found." }, 404);
+    return json({ ok: true, load: row });
+  }
+  if (method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const expires_at = new Date(Date.now() + 90 * 24 * 60 * 60 * 1e3).toISOString();
+    await db.prepare(`
+      INSERT INTO saved_loads (id, name, job_id, customer, trailer_type, state_json, created_at, updated_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      String(payload.name || "").trim(),
+      payload.job_id ? String(payload.job_id).trim() : null,
+      String(payload.customer || "").trim(),
+      String(payload.trailer_type || "").trim(),
+      typeof payload.state_json === "string" ? payload.state_json : JSON.stringify(payload.state_json || {}),
+      now,
+      now,
+      expires_at
+    ).run();
+    await logActivity(
+      db,
+      "create",
+      "saved_load",
+      id,
+      `Saved load "${payload.name || id}" for ${payload.customer || ""}`,
+      { name: payload.name, customer: payload.customer, trailer_type: payload.trailer_type }
+    );
+    const row = await db.prepare("SELECT * FROM saved_loads WHERE id = ?").bind(id).first();
+    return json({ ok: true, load: row }, 201);
+  }
+  if (method === "PUT" && loadId) {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const existing = await db.prepare("SELECT id FROM saved_loads WHERE id = ?").bind(loadId).first();
+    if (!existing) return json({ ok: false, error: "Saved load not found." }, 404);
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const expires_at = new Date(Date.now() + 90 * 24 * 60 * 60 * 1e3).toISOString();
+    await db.prepare(`
+      UPDATE saved_loads SET
+        name = ?, job_id = ?, customer = ?, trailer_type = ?,
+        state_json = ?, updated_at = ?, expires_at = ?
+      WHERE id = ?
+    `).bind(
+      String(payload.name || "").trim(),
+      payload.job_id ? String(payload.job_id).trim() : null,
+      String(payload.customer || "").trim(),
+      String(payload.trailer_type || "").trim(),
+      typeof payload.state_json === "string" ? payload.state_json : JSON.stringify(payload.state_json || {}),
+      now,
+      expires_at,
+      loadId
+    ).run();
+    const row = await db.prepare("SELECT * FROM saved_loads WHERE id = ?").bind(loadId).first();
+    return json({ ok: true, load: row });
+  }
+  if (method === "DELETE" && loadId) {
+    const existing = await db.prepare("SELECT id, name, customer FROM saved_loads WHERE id = ?").bind(loadId).first();
+    if (!existing) return json({ ok: false, error: "Saved load not found." }, 404);
+    await db.prepare("DELETE FROM saved_loads WHERE id = ?").bind(loadId).run();
+    await logActivity(
+      db,
+      "delete",
+      "saved_load",
+      loadId,
+      `Deleted saved load "${existing.name || loadId}" for ${existing.customer || ""}`,
+      { name: existing.name, customer: existing.customer }
+    );
+    return json({ ok: true, message: "Saved load deleted." });
+  }
+  return json({ ok: false, error: "Method not allowed." }, 405);
+}
+__name(handleApiSavedLoads, "handleApiSavedLoads");
+__name2(handleApiSavedLoads, "handleApiSavedLoads");
+async function handleApiLoadBuilderSkus(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const url = new URL(request.url);
+  const pathId = url.pathname.slice("/api/load-builder-skus".length).replace(/^\//, "");
+  const skuId = pathId.length > 0 ? pathId : null;
+  if (request.method === "GET" && !skuId) {
+    const result = await db.prepare(
+      "SELECT * FROM parts ORDER BY sort_order ASC, height_in ASC, name ASC"
+    ).all();
+    return json((result.results || []).map(mapPartToSku));
+  }
+  if (request.method === "POST" && !skuId) {
+    let body;
+    try {
+      body = await request.json();
+    } catch (_) {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const { name, sku, length, width, height, weight = 1, notes = "", color = "#D97706", allowRotation = false, category = "", parent_group = "" } = body;
+    const bundle_qty_lb = parseInt(body.bundleQty || body.bundle_qty, 10) || 0;
+    if (!name) return json({ ok: false, error: "Name required." }, 400);
+    if (!sku) return json({ ok: false, error: "SKU code required." }, 400);
+    if (!length || !width || !height) return json({ ok: false, error: "Dimensions required." }, 400);
+    const newId = crypto.randomUUID();
+    const countRow = await db.prepare("SELECT COUNT(*) as cnt FROM parts").first();
+    const sortOrder = countRow?.cnt || 0;
+    await db.prepare(
+      "INSERT INTO parts (id, part_number, name, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group, bundle_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(newId, sku, name, +length, +width, +height, +weight || 1, notes || "", color || "#D97706", allowRotation ? 1 : 0, sortOrder, category || "", parent_group || "", bundle_qty_lb).run();
+    const created = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(newId).first();
+    return json(mapPartToSku(created), 201);
+  }
+  if (request.method === "PUT" && skuId) {
+    let body;
+    try {
+      body = await request.json();
+    } catch (_) {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const { name, sku, length, width, height, weight, notes, color, allowRotation, category, parent_group } = body;
+    const updates = [];
+    const binds = [];
+    if (name !== void 0) {
+      updates.push("name = ?");
+      binds.push(name);
+    }
+    if (sku !== void 0) {
+      updates.push("part_number = ?");
+      binds.push(sku);
+    }
+    if (length !== void 0) {
+      updates.push("length_in = ?");
+      binds.push(+length);
+    }
+    if (width !== void 0) {
+      updates.push("width_in = ?");
+      binds.push(+width);
+    }
+    if (height !== void 0) {
+      updates.push("height_in = ?");
+      binds.push(+height);
+    }
+    if (weight !== void 0) {
+      updates.push("weight = ?");
+      binds.push(+weight);
+    }
+    if (notes !== void 0) {
+      updates.push("notes = ?");
+      binds.push(notes);
+    }
+    if (color !== void 0) {
+      updates.push("color = ?");
+      binds.push(color);
+    }
+    if (allowRotation !== void 0) {
+      updates.push("allow_rotation = ?");
+      binds.push(allowRotation ? 1 : 0);
+    }
+    if (category !== void 0) {
+      updates.push("category = ?");
+      binds.push(category || "");
+    }
+    if (parent_group !== void 0) {
+      updates.push("parent_group = ?");
+      binds.push(parent_group || "");
+    }
+    if (body.bundleQty !== void 0) {
+      updates.push("bundle_qty = ?");
+      binds.push(parseInt(body.bundleQty, 10) || 0);
+    }
+    updates.push("updated_at = datetime('now')");
+    if (updates.length === 1) return json({ ok: false, error: "Nothing to update." }, 400);
+    await db.prepare(`UPDATE parts SET ${updates.join(", ")} WHERE id = ?`).bind(...binds, skuId).run();
+    const updated = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(skuId).first();
+    if (!updated) return json({ ok: false, error: "SKU not found." }, 404);
+    return json(mapPartToSku(updated));
+  }
+  if (request.method === "DELETE" && skuId) {
+    await db.prepare("DELETE FROM parts WHERE id = ?").bind(skuId).run();
+    return json({ success: true });
+  }
+  return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+__name(handleApiLoadBuilderSkus, "handleApiLoadBuilderSkus");
+__name2(handleApiLoadBuilderSkus, "handleApiLoadBuilderSkus");
+async function handleApiLoadBuilderSkusDeleteAll(request, env) {
+  if (request.method !== "DELETE") return json({ ok: false, error: "Method Not Allowed" }, 405);
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  await db.prepare("DELETE FROM parts").run();
+  return json({ success: true });
+}
+__name(handleApiLoadBuilderSkusDeleteAll, "handleApiLoadBuilderSkusDeleteAll");
+__name2(handleApiLoadBuilderSkusDeleteAll, "handleApiLoadBuilderSkusDeleteAll");
+async function handleApiPartsSeed(request, env) {
+  if (request.method !== "POST") return json({ ok: false, error: "Method Not Allowed" }, 405);
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  const countRow = await db.prepare("SELECT COUNT(*) as cnt FROM parts").first();
+  if ((countRow?.cnt || 0) > 0) return json({ seeded: false, message: "Parts already exist" });
+  for (let i = 0; i < DEFAULT_PARTS.length; i++) {
+    const s = DEFAULT_PARTS[i];
+    await db.prepare(
+      "INSERT INTO parts (id, part_number, name, customer, density_material, length_in, width_in, height_in, weight, notes, color, allow_rotation, sort_order, category, parent_group) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(crypto.randomUUID(), s.part_number, s.name, s.customer || "", s.density_material || "", s.length, s.width, s.height, s.weight, s.notes, s.color, 0, i, s.category || "", s.parent_group || "").run();
+  }
+  return json({ seeded: true, message: `Inserted ${DEFAULT_PARTS.length} default parts.` });
+}
+__name(handleApiPartsSeed, "handleApiPartsSeed");
+__name2(handleApiPartsSeed, "handleApiPartsSeed");
+async function handleApiActivityLog(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  if (request.method !== "GET") return json({ ok: false, error: "Method not allowed" }, 405);
+  const url = new URL(request.url);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "50"), 200);
+  const offset = parseInt(url.searchParams.get("offset") || "0");
+  const entityType = url.searchParams.get("entity_type") || "";
+  const action = url.searchParams.get("action") || "";
+  try {
+    let query = "SELECT * FROM activity_log";
+    const conditions = [];
+    const binds = [];
+    if (entityType) {
+      conditions.push("entity_type = ?");
+      binds.push(entityType);
+    }
+    if (action) {
+      conditions.push("action = ?");
+      binds.push(action);
+    }
+    if (conditions.length > 0) {
+      query += " WHERE " + conditions.join(" AND ");
+    }
+    query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?";
+    binds.push(limit, offset);
+    const rows = await db.prepare(query).bind(...binds).all();
+    let countQuery = "SELECT COUNT(*) as total FROM activity_log";
+    if (conditions.length > 0) {
+      countQuery += " WHERE " + conditions.join(" AND ");
+    }
+    const countBinds = binds.slice(0, -2);
+    const countRow = countBinds.length ? await db.prepare(countQuery).bind(...countBinds).first() : await db.prepare(countQuery).first();
+    return json({
+      ok: true,
+      entries: rows.results || [],
+      total: countRow?.total || 0,
+      limit,
+      offset
+    });
+  } catch (e) {
+    return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+  }
+}
+__name(handleApiActivityLog, "handleApiActivityLog");
+__name2(handleApiActivityLog, "handleApiActivityLog");
+async function handleAuthLogin(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "Invalid JSON" }, 400);
+  }
+  const username = String(body.username || "").trim();
+  const password = String(body.password || "");
+  if (!username || !password) return json({ ok: false, error: "Username and password required." }, 400);
+  try {
+    const user = await db.prepare(
+      `SELECT id, username, display_name, role, is_active, first_login, password
+       FROM users WHERE username = ? COLLATE NOCASE`
+    ).bind(username).first();
+    if (!user || !user.is_active) return json({ ok: false, error: "Invalid username or password." }, 401);
+    if (user.password !== password) return json({ ok: false, error: "Invalid username or password." }, 401);
+    const { sessionId, expires } = await createSession(db, user.id);
+    return json({
+      ok: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.display_name,
+        role: user.role,
+        firstLogin: user.first_login === 1
+      }
+    }, 200, { "Set-Cookie": sessionCookie(sessionId, expires) });
+  } catch (e) {
+    return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+  }
+}
+__name(handleAuthLogin, "handleAuthLogin");
+__name2(handleAuthLogin, "handleAuthLogin");
+async function handleAuthLogout(request, env) {
+  const db = env.DB;
+  if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
+  const token = getSessionToken(request);
+  if (token && db) {
+    try {
+      await db.prepare(`DELETE FROM sessions WHERE id = ?`).bind(token).run();
+    } catch {
+    }
+  }
+  return json({ ok: true }, 200, { "Set-Cookie": clearSessionCookie() });
+}
+__name(handleAuthLogout, "handleAuthLogout");
+__name2(handleAuthLogout, "handleAuthLogout");
+async function handleAuthMe(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  const user = await validateSession(db, request);
+  if (!user) return json({ ok: false, error: "Not authenticated" }, 401);
+  return json({
+    ok: true,
+    user: {
+      id: user.userId,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+      roleIds: user.roleIds,
+      roleNames: user.roleNames,
+      firstLogin: user.firstLogin,
+      isAdministrator: user.isAdministrator,
+      isRealAdmin: user.isRealAdmin || false,
+      permissions: user.permissions,
+      simulatingRole: user.simulatingRole || null
+    }
+  });
+}
+__name(handleAuthMe, "handleAuthMe");
+__name2(handleAuthMe, "handleAuthMe");
+async function handleAuthChangePassword(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
+  const user = await validateSession(db, request);
+  if (!user) return json({ ok: false, error: "Not authenticated" }, 401);
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "Invalid JSON" }, 400);
+  }
+  const newPassword = String(body.new_password || "");
+  if (newPassword.length < 4) return json({ ok: false, error: "Password must be at least 4 characters." }, 400);
+  try {
+    await db.prepare(
+      `UPDATE users SET password = ?, first_login = 0, updated_at = ? WHERE id = ?`
+    ).bind(newPassword, (/* @__PURE__ */ new Date()).toISOString(), user.userId).run();
+    return json({ ok: true });
+  } catch (e) {
+    return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+  }
+}
+__name(handleAuthChangePassword, "handleAuthChangePassword");
+__name2(handleAuthChangePassword, "handleAuthChangePassword");
+async function handleSimulateRoleStart(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  const user = await validateSession(db, request);
+  if (!user) return json({ ok: false, error: "Not authenticated" }, 401);
+  if (!user.isRealAdmin) return json({ ok: false, error: "Only administrators can simulate roles." }, 403);
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return json({ ok: false, error: "Invalid JSON" }, 400);
+  }
+  const roleId = String(payload.roleId || "").trim();
+  if (!roleId) return json({ ok: false, error: "roleId is required." }, 400);
+  if (roleId === "role-administrator") {
+    return json({ ok: false, error: "Cannot simulate the administrator role." }, 400);
+  }
+  const role = await db.prepare("SELECT id, name FROM roles WHERE id = ?").bind(roleId).first();
+  if (!role) return json({ ok: false, error: "Role not found." }, 404);
+  await db.prepare("UPDATE sessions SET simulating_role_id = ? WHERE id = ?").bind(roleId, user.sessionId).run();
+  await logActivity(
+    db,
+    "simulate_role_start",
+    "session",
+    user.sessionId,
+    `Testing as: ${role.name}`,
+    { simulatedRoleId: roleId, simulatedRoleName: role.name },
+    user.userId
+  );
+  return json({ ok: true, simulatingRole: { id: role.id, name: role.name } });
+}
+__name(handleSimulateRoleStart, "handleSimulateRoleStart");
+__name2(handleSimulateRoleStart, "handleSimulateRoleStart");
+async function handleSimulateRoleStop(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  const user = await validateSession(db, request);
+  if (!user) return json({ ok: false, error: "Not authenticated" }, 401);
+  if (!user.isRealAdmin) return json({ ok: false, error: "Only administrators can manage simulation." }, 403);
+  await db.prepare("UPDATE sessions SET simulating_role_id = NULL WHERE id = ?").bind(user.sessionId).run();
+  await logActivity(
+    db,
+    "simulate_role_stop",
+    "session",
+    user.sessionId,
+    "Stopped role simulation",
+    {},
+    user.userId
+  );
+  return json({ ok: true });
+}
+__name(handleSimulateRoleStop, "handleSimulateRoleStop");
+__name2(handleSimulateRoleStop, "handleSimulateRoleStop");
+async function handleApiUsers(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  const sessionUser = await validateSession(db, request);
+  if (!sessionUser) return json({ ok: false, error: "Unauthorized" }, 401);
+  if (!sessionUser.isRealAdmin) return json({ ok: false, error: "Forbidden" }, 403);
+  const url = new URL(request.url);
+  const pathParts = url.pathname.replace("/api/users", "").split("/").filter(Boolean);
+  const userId = pathParts[0] || null;
+  try {
+    if (request.method === "GET") {
+      const userRows = await db.prepare(
+        "SELECT id, username, display_name, password, role, role_id, is_active, first_login, created_at, updated_at FROM users ORDER BY username COLLATE NOCASE"
+      ).all();
+      const allAssignments = await db.prepare(
+        "SELECT ur.user_id, ur.role_id, r.name as role_name FROM user_roles ur JOIN roles r ON ur.role_id = r.id"
+      ).all();
+      const assignmentMap = {};
+      for (const a of allAssignments.results || []) {
+        if (!assignmentMap[a.user_id]) assignmentMap[a.user_id] = [];
+        assignmentMap[a.user_id].push({ role_id: a.role_id, role_name: a.role_name });
+      }
+      const enriched = (userRows.results || []).map((u) => ({
+        ...u,
+        roles: assignmentMap[u.id] || []
+      }));
+      return json({ ok: true, users: enriched });
+    }
+    if (request.method === "POST") {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ ok: false, error: "Invalid JSON" }, 400);
+      }
+      const username = String(body.username || "").trim().toLowerCase();
+      const displayName = String(body.display_name || body.displayName || "").trim();
+      const password = String(body.password || username);
+      const role_ids = Array.isArray(body.role_ids) ? body.role_ids : body.role_id ? [body.role_id] : ["role-staff"];
+      const legacyRoleId = role_ids[0] || "role-staff";
+      const legacyRole = legacyRoleId === "role-administrator" ? "admin" : legacyRoleId === "role-readonly" ? "readonly" : "staff";
+      if (!username) return json({ ok: false, error: "Username required." }, 400);
+      if (!displayName) return json({ ok: false, error: "Display name required." }, 400);
+      const newId = crypto.randomUUID();
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      await db.prepare(
+        `INSERT INTO users (id, username, display_name, password, role, role_id, is_active, first_login, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)`
+      ).bind(newId, username, displayName, password, legacyRole, legacyRoleId, now, now).run();
+      for (const rid of role_ids) {
+        await db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)").bind(newId, rid).run();
+      }
+      return json({ ok: true, id: newId }, 201);
+    }
+    if (request.method === "PUT") {
+      if (!userId) return json({ ok: false, error: "User ID required." }, 400);
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ ok: false, error: "Invalid JSON" }, 400);
+      }
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const fields = [];
+      const binds = [];
+      if (body.display_name !== void 0) {
+        fields.push("display_name = ?");
+        binds.push(String(body.display_name).trim());
+      }
+      if (body.role_ids !== void 0) {
+        const newRoleIds = Array.isArray(body.role_ids) ? body.role_ids : [body.role_ids];
+        await db.prepare("DELETE FROM user_roles WHERE user_id = ?").bind(userId).run();
+        for (const rid of newRoleIds) {
+          await db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)").bind(userId, rid).run();
+        }
+        const legacyRoleId = newRoleIds[0] || "role-staff";
+        const legacyRole = legacyRoleId === "role-administrator" ? "admin" : legacyRoleId === "role-readonly" ? "readonly" : "staff";
+        fields.push("role_id = ?");
+        binds.push(legacyRoleId);
+        fields.push("role = ?");
+        binds.push(legacyRole);
+      } else if (body.role_id !== void 0) {
+        const legacyRole = body.role_id === "role-administrator" ? "admin" : body.role_id === "role-readonly" ? "readonly" : "staff";
+        fields.push("role_id = ?");
+        binds.push(body.role_id);
+        fields.push("role = ?");
+        binds.push(legacyRole);
+      } else if (body.role !== void 0 && ["admin", "staff", "readonly"].includes(body.role)) {
+        fields.push("role = ?");
+        binds.push(body.role);
+      }
+      if (body.is_active !== void 0) {
+        fields.push("is_active = ?");
+        binds.push(body.is_active ? 1 : 0);
+      }
+      if (body.first_login !== void 0) {
+        fields.push("first_login = ?");
+        binds.push(body.first_login ? 1 : 0);
+      }
+      if (body.password !== void 0 && String(body.password).length >= 1) {
+        fields.push("password = ?");
+        binds.push(String(body.password));
+      }
+      if (fields.length === 0) return json({ ok: false, error: "Nothing to update." }, 400);
+      fields.push("updated_at = ?");
+      binds.push(now);
+      binds.push(userId);
+      await db.prepare(`UPDATE users SET ${fields.join(", ")} WHERE id = ?`).bind(...binds).run();
+      return json({ ok: true });
+    }
+    if (request.method === "DELETE") {
+      if (!userId) return json({ ok: false, error: "User ID required." }, 400);
+      if (userId === sessionUser.userId) return json({ ok: false, error: "Cannot delete your own account." }, 400);
+      await db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId).run();
+      await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
+      return json({ ok: true });
+    }
+    return json({ ok: false, error: "Method not allowed" }, 405);
+  } catch (e) {
+    if (String(e?.message || e).includes("UNIQUE")) {
+      return json({ ok: false, error: "Username already exists." }, 409);
+    }
+    return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+  }
+}
+__name(handleApiUsers, "handleApiUsers");
+__name2(handleApiUsers, "handleApiUsers");
+async function handleApiRoles(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "DB not available" }, 500);
+  const method = request.method;
+  if (method === "GET") {
+    try {
+      const rows = await db.prepare(
+        `SELECT r.*, COUNT(u.id) as user_count
+         FROM roles r LEFT JOIN users u ON u.role_id = r.id
+         GROUP BY r.id ORDER BY r.is_system DESC, r.name ASC`
+      ).all();
+      return json({ ok: true, roles: rows.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const name = String(payload.name || "").trim();
+    const description = String(payload.description || "").trim();
+    const permissions = payload.permissions || {};
+    if (!name) return json({ ok: false, error: "Role name is required." }, 400);
+    if (name.length < 2) return json({ ok: false, error: "Role name must be at least 2 characters." }, 400);
+    const id = "role-" + crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      await db.prepare(
+        `INSERT INTO roles (id, name, description, permissions, is_system, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?)`
+      ).bind(id, name, description, JSON.stringify(permissions), now, now).run();
+      const role = await db.prepare("SELECT * FROM roles WHERE id = ?").bind(id).first();
+      await logActivity(db, "create", "role", id, `Created role "${name}"`, { name, permissions });
+      return json({ ok: true, role }, 201);
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (/unique/i.test(msg)) return json({ ok: false, error: "Role name already exists." }, 409);
+      return json({ ok: false, error: "Server error.", detail: msg }, 500);
+    }
+  }
+  if (method === "PUT") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT * FROM roles WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Role not found." }, 404);
+    if (id === "role-administrator" && payload.name && payload.name !== existing.name) {
+      return json({ ok: false, error: "Cannot rename the Administrator role." }, 400);
+    }
+    const updates = [];
+    const binds = [];
+    if (payload.name !== void 0) {
+      updates.push("name = ?");
+      binds.push(String(payload.name).trim());
+    }
+    if (payload.description !== void 0) {
+      updates.push("description = ?");
+      binds.push(String(payload.description).trim());
+    }
+    if (payload.permissions !== void 0) {
+      updates.push("permissions = ?");
+      binds.push(JSON.stringify(payload.permissions));
+    }
+    if (payload.notification_types !== void 0) {
+      const nt = typeof payload.notification_types === "string" ? payload.notification_types : JSON.stringify(payload.notification_types);
+      updates.push("notification_types = ?");
+      binds.push(nt);
+    }
+    if (updates.length === 0) return json({ ok: false, error: "No fields to update." }, 400);
+    updates.push("updated_at = ?");
+    binds.push((/* @__PURE__ */ new Date()).toISOString());
+    binds.push(id);
+    try {
+      await db.prepare(`UPDATE roles SET ${updates.join(", ")} WHERE id = ?`).bind(...binds).run();
+      const role = await db.prepare("SELECT * FROM roles WHERE id = ?").bind(id).first();
+      await logActivity(db, "update", "role", id, `Updated role "${role.name}"`, { fields: Object.keys(payload).filter((k) => k !== "id") });
+      return json({ ok: true, role });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (method === "DELETE") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = String(payload.id || "").trim();
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT * FROM roles WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Role not found." }, 404);
+    if (existing.is_system) return json({ ok: false, error: "Cannot delete a system role. Edit its permissions instead." }, 400);
+    const usersWithRole = await db.prepare("SELECT COUNT(*) as cnt FROM users WHERE role_id = ?").bind(id).first();
+    if (usersWithRole && usersWithRole.cnt > 0) {
+      return json({ ok: false, error: `Cannot delete role \u2014 ${usersWithRole.cnt} user(s) are assigned to it. Reassign them first.` }, 400);
+    }
+    try {
+      await db.prepare("DELETE FROM roles WHERE id = ?").bind(id).run();
+      await logActivity(db, "delete", "role", id, `Deleted role "${existing.name}"`, { name: existing.name });
+      return json({ ok: true, message: "Role deleted." });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method not allowed" }, 405);
+}
+__name(handleApiRoles, "handleApiRoles");
+__name2(handleApiRoles, "handleApiRoles");
+async function handleApiLoadingBays(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  if (request.method === "GET") {
+    try {
+      const rows = await db.prepare(
+        "SELECT * FROM loading_bays WHERE is_active = 1 ORDER BY bay_number ASC"
+      ).all();
+      return json({ ok: true, bays: rows.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "PUT") {
+    const userPerms = JSON.parse(request.headers.get("X-User-Permissions") || "{}");
+    const isAdministrator = request.headers.get("X-User-Is-Admin") === "1";
+    if (!isAdministrator && !userPerms["logistics.loading.manage"]?.edit) {
+      return json({ ok: false, error: "Manager access required to update bay settings." }, 403);
+    }
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const { id, trailer_number, label } = payload;
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const updates = [];
+    const binds = [];
+    if (trailer_number !== void 0) {
+      updates.push("trailer_number = ?");
+      binds.push(String(trailer_number));
+    }
+    if (label !== void 0) {
+      updates.push("label = ?");
+      binds.push(String(label));
+    }
+    if (updates.length === 0) return json({ ok: false, error: "Nothing to update." }, 400);
+    updates.push("updated_at = ?");
+    binds.push((/* @__PURE__ */ new Date()).toISOString());
+    binds.push(id);
+    try {
+      await db.prepare(`UPDATE loading_bays SET ${updates.join(", ")} WHERE id = ?`).bind(...binds).run();
+      return json({ ok: true });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method not allowed" }, 405);
+}
+__name(handleApiLoadingBays, "handleApiLoadingBays");
+__name2(handleApiLoadingBays, "handleApiLoadingBays");
+async function handleApiLoadingAssignments(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  const url = new URL(request.url);
+  const pathParts = url.pathname.replace("/api/loading-assignments", "").split("/").filter(Boolean);
+  const assignmentId = pathParts[0] || null;
+  const userPerms = JSON.parse(request.headers.get("X-User-Permissions") || "{}");
+  const isAdministrator = request.headers.get("X-User-Is-Admin") === "1";
+  if (request.method === "GET") {
+    try {
+      const backfillJobs = await db.prepare(`
+        SELECT j.id, j.load_count,
+          (SELECT COUNT(*) FROM loading_assignments la WHERE la.job_id = j.id) AS existing_count
+        FROM jobs j
+        WHERE j.status IN ('done', 'loading', 'shipped')
+        AND (SELECT COUNT(*) FROM loading_assignments la WHERE la.job_id = j.id) < CASE WHEN j.load_count > 1 THEN j.load_count ELSE 1 END
+      `).all();
+      const backfill = backfillJobs.results || [];
+      if (backfill.length > 0) {
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        for (const bj of backfill) {
+          const targetCount = Math.max(bj.load_count || 1, 1);
+          for (let n = bj.existing_count + 1; n <= targetCount; n++) {
+            const laId = crypto.randomUUID();
+            await db.prepare(`
+              INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, load_number, created_at, updated_at)
+              VALUES (?, ?, NULL, '', 'awaiting', NULL, '', ?, ?, ?)
+            `).bind(laId, bj.id, n, now, now).run();
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Loading assignment backfill failed:", e);
+    }
+    try {
+      const includeArchived = url.searchParams.get("include_archived") === "1";
+      const bayId = url.searchParams.get("bay_id") || "";
+      let query = `
+        SELECT la.*, j.customer, j.invoice_number, j.po_number, j.ship_date, j.ship_to_company,
+               j.ship_to_city, j.ship_to_state, j.carrier, j.method, j.load_count,
+               lb.bay_number, lb.label as bay_label
+        FROM loading_assignments la
+        JOIN jobs j ON la.job_id = j.id
+        LEFT JOIN loading_bays lb ON la.bay_id = lb.id
+      `;
+      const conditions = [];
+      const binds = [];
+      if (!includeArchived) conditions.push("la.loading_status != 'archived'");
+      if (bayId) {
+        conditions.push("la.bay_id = ?");
+        binds.push(bayId);
+      }
+      if (conditions.length) query += " WHERE " + conditions.join(" AND ");
+      query += " ORDER BY la.created_at ASC";
+      const rows = await db.prepare(query).bind(...binds).all();
+      return json({ ok: true, assignments: rows.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "POST") {
+    if (!isAdministrator && !userPerms["logistics.loading.manage"]?.edit) {
+      return json({ ok: false, error: "Manager access required to assign jobs to loading." }, 403);
+    }
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    if (!payload.job_id) return json({ ok: false, error: "job_id is required." }, 400);
+    const job = await db.prepare("SELECT load_count FROM jobs WHERE id = ?").bind(payload.job_id).first();
+    if (!job) return json({ ok: false, error: "Job not found." }, 404);
+    const maxLoads = Math.max(job.load_count || 1, 1);
+    const existingCountRow = await db.prepare(
+      "SELECT COUNT(*) as cnt FROM loading_assignments WHERE job_id = ?"
+    ).bind(payload.job_id).first();
+    const currentCount = existingCountRow?.cnt || 0;
+    if (currentCount >= maxLoads) {
+      return json({ ok: false, error: `This job already has ${currentCount} of ${maxLoads} load assignment(s).` }, 400);
+    }
+    const loadNumber = currentCount + 1;
+    const id = crypto.randomUUID();
+    const loading_status = payload.bay_id ? "not_started" : "awaiting";
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      await db.prepare(`
+        INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, load_number, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id,
+        payload.job_id,
+        payload.bay_id || null,
+        payload.trailer_number || "",
+        loading_status,
+        request.headers.get("X-User-Id") || null,
+        payload.notes || "",
+        loadNumber,
+        now,
+        now
+      ).run();
+      try {
+        const shipment = await db.prepare(
+          "SELECT id FROM shipments WHERE job_id = ? AND direction = 'outbound' LIMIT 1"
+        ).bind(payload.job_id).first();
+        if (shipment) {
+          await db.prepare(
+            "UPDATE shipments SET status = ?, updated_at = datetime('now') WHERE id = ?"
+          ).bind(loading_status, shipment.id).run();
+        }
+      } catch (e) {
+        console.error("Shipment status sync on assignment creation failed:", e);
+      }
+      const job2 = await db.prepare("SELECT customer, invoice_number FROM jobs WHERE id = ?").bind(payload.job_id).first();
+      const customerName = job2?.customer || "Unknown";
+      const invNum = job2?.invoice_number || "";
+      await dispatchNotification(
+        db,
+        env,
+        "loading.assigned",
+        "Job Assigned to Loading",
+        `${customerName}${invNum ? " (INV# " + invNum + ")" : ""} assigned to ${payload.bay_id ? "Bay" : "awaiting queue"}`,
+        "loading_assignment",
+        id
+      );
+      await logActivity(
+        db,
+        "create",
+        "loading_assignment",
+        id,
+        `Assigned job to loading \u2014 ${loading_status}`,
+        { job_id: payload.job_id, bay_id: payload.bay_id },
+        request.headers.get("X-User-Id")
+      );
+      return json({ ok: true, id }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "PUT") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = payload.id || assignmentId;
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    const existing = await db.prepare("SELECT * FROM loading_assignments WHERE id = ?").bind(id).first();
+    if (!existing) return json({ ok: false, error: "Assignment not found." }, 404);
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const updates = [];
+    const binds = [];
+    if (payload.bay_id !== void 0) {
+      updates.push("bay_id = ?");
+      binds.push(payload.bay_id || null);
+    }
+    if (payload.trailer_number !== void 0) {
+      updates.push("trailer_number = ?");
+      binds.push(String(payload.trailer_number));
+    }
+    if (payload.notes !== void 0) {
+      updates.push("notes = ?");
+      binds.push(String(payload.notes));
+    }
+    if (payload.ready_checklist !== void 0) {
+      updates.push("ready_checklist = ?");
+      binds.push(typeof payload.ready_checklist === "string" ? payload.ready_checklist : JSON.stringify(payload.ready_checklist));
+    }
+    if (payload.loading_status) {
+      if (existing.loading_status === "awaiting" && payload.loading_status === "not_started" || payload.bay_id && payload.bay_id !== existing.bay_id) {
+        if (!isAdministrator && !userPerms["logistics.loading.manage"]?.edit) {
+          return json({ ok: false, error: "Manager access required for bay assignment." }, 403);
+        }
+      }
+      updates.push("loading_status = ?");
+      binds.push(payload.loading_status);
+      if (payload.loading_status === "loading" && !existing.started_at) {
+        updates.push("started_at = ?");
+        binds.push(now);
+      }
+      if (payload.loading_status === "loaded" && !existing.loaded_at) {
+        updates.push("loaded_at = ?");
+        binds.push(now);
+      }
+      if (payload.loading_status === "in_transit" && !existing.in_transit_at) {
+        updates.push("in_transit_at = ?");
+        binds.push(now);
+      }
+      if (payload.loading_status === "delivered" && !existing.delivered_at) {
+        updates.push("delivered_at = ?");
+        binds.push(now);
+      }
+      if (payload.loading_status !== existing.loading_status) {
+        const job = await db.prepare("SELECT customer, invoice_number FROM jobs WHERE id = ?").bind(existing.job_id).first();
+        const customerName = job?.customer || "Unknown";
+        const invNum = job?.invoice_number || "";
+        const trailerNum = payload.trailer_number || existing.trailer_number || "";
+        const typeMap = {
+          loading: "loading.started",
+          loaded: "loading.loaded",
+          in_transit: "loading.in_transit",
+          delivered: "loading.delivered"
+        };
+        const notifType = typeMap[payload.loading_status];
+        if (notifType) {
+          const messages = {
+            "loading.started": `Trailer${trailerNum ? " " + trailerNum : ""} has begun loading \u2014 ${customerName}`,
+            "loading.loaded": `Trailer${trailerNum ? " " + trailerNum : ""} is loaded \u2014 ${customerName}`,
+            "loading.in_transit": `Trailer${trailerNum ? " " + trailerNum : ""} has departed \u2014 ${customerName}`,
+            "loading.delivered": `Delivery confirmed \u2014 ${customerName}${invNum ? " (INV# " + invNum + ")" : ""}`
+          };
+          const notifTitle = notifType.split(".")[1].charAt(0).toUpperCase() + notifType.split(".")[1].slice(1).replace("_", " ");
+          await dispatchNotification(db, env, notifType, notifTitle, messages[notifType], "loading_assignment", id);
+        }
+      }
+    }
+    if (updates.length === 0) return json({ ok: false, error: "Nothing to update." }, 400);
+    updates.push("updated_at = ?");
+    binds.push(now);
+    binds.push(id);
+    try {
+      await db.prepare(`UPDATE loading_assignments SET ${updates.join(", ")} WHERE id = ?`).bind(...binds).run();
+      if (payload.loading_status && payload.loading_status !== existing.loading_status) {
+        try {
+          const shipment = await db.prepare(
+            "SELECT id FROM shipments WHERE job_id = ? AND direction = 'outbound' LIMIT 1"
+          ).bind(existing.job_id).first();
+          if (shipment) {
+            await db.prepare(
+              "UPDATE shipments SET status = ?, updated_at = datetime('now') WHERE id = ?"
+            ).bind(payload.loading_status, shipment.id).run();
+          }
+        } catch (e) {
+          console.error("Shipment status sync failed:", e);
+        }
+        await logActivity(
+          db,
+          "update",
+          "loading_assignment",
+          id,
+          `Loading status: ${existing.loading_status} \u2192 ${payload.loading_status}`,
+          { job_id: existing.job_id, bay_id: payload.bay_id || existing.bay_id },
+          request.headers.get("X-User-Id")
+        );
+      }
+      return json({ ok: true });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "DELETE") {
+    if (!isAdministrator && !userPerms["logistics.loading.manage"]?.edit) {
+      return json({ ok: false, error: "Manager access required to remove assignments." }, 403);
+    }
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    const id = payload.id || assignmentId;
+    if (!id) return json({ ok: false, error: "id is required." }, 400);
+    try {
+      await db.prepare("DELETE FROM loading_assignments WHERE id = ?").bind(id).run();
+      await logActivity(
+        db,
+        "delete",
+        "loading_assignment",
+        id,
+        "Removed loading assignment",
+        { id },
+        request.headers.get("X-User-Id")
+      );
+      return json({ ok: true });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method not allowed" }, 405);
+}
+__name(handleApiLoadingAssignments, "handleApiLoadingAssignments");
+__name2(handleApiLoadingAssignments, "handleApiLoadingAssignments");
+async function handleApiLoadingPhotos(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  const url = new URL(request.url);
+  const pathParts = url.pathname.replace("/api/loading-photos", "").split("/").filter(Boolean);
+  const photoId = pathParts[0] || null;
+  if (request.method === "GET") {
+    try {
+      if (photoId) {
+        const row = await db.prepare("SELECT * FROM loading_photos WHERE id = ?").bind(photoId).first();
+        if (!row) return json({ ok: false, error: "Photo not found." }, 404);
+        return json({ ok: true, photo: row });
+      }
+      const jobId = url.searchParams.get("job_id");
+      const assignmentId = url.searchParams.get("assignment_id");
+      let query = "SELECT id, assignment_id, job_id, filename, uploaded_by, created_at FROM loading_photos";
+      const conditions = [];
+      const binds = [];
+      if (jobId) {
+        conditions.push("job_id = ?");
+        binds.push(jobId);
+      }
+      if (assignmentId) {
+        conditions.push("assignment_id = ?");
+        binds.push(assignmentId);
+      }
+      if (conditions.length) query += " WHERE " + conditions.join(" AND ");
+      query += " ORDER BY created_at ASC";
+      const rows = await db.prepare(query).bind(...binds).all();
+      return json({ ok: true, photos: rows.results || [] });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "POST") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    if (!payload.assignment_id) return json({ ok: false, error: "assignment_id is required." }, 400);
+    if (!payload.job_id) return json({ ok: false, error: "job_id is required." }, 400);
+    if (!payload.photo_data) return json({ ok: false, error: "photo_data is required." }, 400);
+    if (payload.photo_data.length > 15e5) {
+      return json({ ok: false, error: "Photo too large. Maximum ~1MB after compression." }, 400);
+    }
+    const id = crypto.randomUUID();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      await db.prepare(`
+        INSERT INTO loading_photos (id, assignment_id, job_id, photo_data, filename, uploaded_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id,
+        payload.assignment_id,
+        payload.job_id,
+        payload.photo_data,
+        payload.filename || "",
+        request.headers.get("X-User-Id") || null,
+        now
+      ).run();
+      await logActivity(
+        db,
+        "create",
+        "loading_photo",
+        id,
+        `Uploaded loading photo for assignment ${payload.assignment_id}`,
+        { assignment_id: payload.assignment_id, job_id: payload.job_id },
+        request.headers.get("X-User-Id")
+      );
+      return json({ ok: true, id }, 201);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "DELETE" && photoId) {
+    const userPerms = JSON.parse(request.headers.get("X-User-Permissions") || "{}");
+    const isAdministrator = request.headers.get("X-User-Is-Admin") === "1";
+    if (!isAdministrator && !userPerms["logistics.loading.manage"]?.edit) {
+      return json({ ok: false, error: "Manager access required to delete photos." }, 403);
+    }
+    try {
+      const exists = await db.prepare("SELECT id FROM loading_photos WHERE id = ?").bind(photoId).first();
+      if (!exists) return json({ ok: false, error: "Photo not found." }, 404);
+      await db.prepare("DELETE FROM loading_photos WHERE id = ?").bind(photoId).run();
+      await logActivity(
+        db,
+        "delete",
+        "loading_photo",
+        photoId,
+        "Deleted loading photo",
+        {},
+        request.headers.get("X-User-Id")
+      );
+      return json({ ok: true });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method not allowed" }, 405);
+}
+__name(handleApiLoadingPhotos, "handleApiLoadingPhotos");
+__name2(handleApiLoadingPhotos, "handleApiLoadingPhotos");
+async function dispatchNotification(db, env, type, title, message, entityType, entityId) {
+  try {
+    const roles = await db.prepare("SELECT id, notification_types FROM roles").all();
+    const subscribedRoleIds = (roles.results || []).filter((r) => {
+      try {
+        return JSON.parse(r.notification_types || "[]").includes(type);
+      } catch {
+        return false;
+      }
+    }).map((r) => r.id);
+    if (!subscribedRoleIds.length) return;
+    const placeholders = subscribedRoleIds.map(() => "?").join(",");
+    const userRows = await db.prepare(
+      `SELECT DISTINCT ur.user_id FROM user_roles ur WHERE ur.role_id IN (${placeholders})`
+    ).bind(...subscribedRoleIds).all();
+    const userIds = (userRows.results || []).map((r) => r.user_id);
+    if (!userIds.length) return;
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    for (const userId of userIds) {
+      const nid = crypto.randomUUID();
+      await db.prepare(
+        `INSERT INTO notifications (id, user_id, type, title, message, entity_type, entity_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(nid, userId, type, title, message, entityType, entityId, now).run();
+    }
+    if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
+      for (const userId of userIds) {
+        const subs = await db.prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").bind(userId).all();
+        for (const sub of subs.results || []) {
+          try {
+            await sendPushNotification(env, sub, { title, body: message, type, entityType, entityId });
+          } catch (e) {
+            if (e.statusCode === 410 || e.statusCode === 404) {
+              await db.prepare("DELETE FROM push_subscriptions WHERE id = ?").bind(sub.id).run();
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Notification dispatch failed:", e);
+  }
+}
+__name(dispatchNotification, "dispatchNotification");
+__name2(dispatchNotification, "dispatchNotification");
+function base64UrlDecode(str) {
+  str = str.replace(/-/g, "+").replace(/_/g, "/");
+  while (str.length % 4) str += "=";
+  return Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+}
+__name(base64UrlDecode, "base64UrlDecode");
+__name2(base64UrlDecode, "base64UrlDecode");
+function base64UrlEncode(buf) {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+__name(base64UrlEncode, "base64UrlEncode");
+__name2(base64UrlEncode, "base64UrlEncode");
+function concatBuffers(...buffers) {
+  const total = buffers.reduce((sum, b) => sum + b.byteLength, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const buf of buffers) {
+    result.set(new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer), offset);
+    offset += buf.byteLength;
+  }
+  return result;
+}
+__name(concatBuffers, "concatBuffers");
+__name2(concatBuffers, "concatBuffers");
+async function importVapidPrivateKey(base64UrlPrivateKey) {
+  const rawPrivate = base64UrlDecode(base64UrlPrivateKey);
+  const pkcs8Prefix = new Uint8Array([
+    48,
+    65,
+    2,
+    1,
+    0,
+    48,
+    19,
+    6,
+    7,
+    42,
+    134,
+    72,
+    206,
+    61,
+    2,
+    1,
+    6,
+    8,
+    42,
+    134,
+    72,
+    206,
+    61,
+    3,
+    1,
+    7,
+    4,
+    39,
+    48,
+    37,
+    2,
+    1,
+    1,
+    4,
+    32
+  ]);
+  const pkcs8 = concatBuffers(pkcs8Prefix, rawPrivate);
+  return crypto.subtle.importKey(
+    "pkcs8",
+    pkcs8.buffer,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"]
+  );
+}
+__name(importVapidPrivateKey, "importVapidPrivateKey");
+__name2(importVapidPrivateKey, "importVapidPrivateKey");
+async function createVapidJwt(env, audience) {
+  const header = { typ: "JWT", alg: "ES256" };
+  const now = Math.floor(Date.now() / 1e3);
+  const payload = {
+    aud: audience,
+    exp: now + 86400,
+    sub: "mailto:ops@xpandafoam.com"
+  };
+  const enc = new TextEncoder();
+  const headerB64 = base64UrlEncode(enc.encode(JSON.stringify(header)));
+  const payloadB64 = base64UrlEncode(enc.encode(JSON.stringify(payload)));
+  const signingInput = `${headerB64}.${payloadB64}`;
+  const privateKey = await importVapidPrivateKey(env.VAPID_PRIVATE_KEY);
+  const signature = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    privateKey,
+    enc.encode(signingInput)
+  );
+  const sigBytes = new Uint8Array(signature);
+  let r, s;
+  if (sigBytes[0] === 48) {
+    let offset = 2;
+    const rLen = sigBytes[offset + 1];
+    r = sigBytes.slice(offset + 2, offset + 2 + rLen);
+    offset = offset + 2 + rLen;
+    const sLen = sigBytes[offset + 1];
+    s = sigBytes.slice(offset + 2, offset + 2 + sLen);
+    if (r.length > 32) r = r.slice(r.length - 32);
+    if (r.length < 32) {
+      const p = new Uint8Array(32);
+      p.set(r, 32 - r.length);
+      r = p;
+    }
+    if (s.length > 32) s = s.slice(s.length - 32);
+    if (s.length < 32) {
+      const p = new Uint8Array(32);
+      p.set(s, 32 - s.length);
+      s = p;
+    }
+  } else {
+    r = sigBytes.slice(0, 32);
+    s = sigBytes.slice(32, 64);
+  }
+  const rawSig = concatBuffers(r, s);
+  return `${signingInput}.${base64UrlEncode(rawSig)}`;
+}
+__name(createVapidJwt, "createVapidJwt");
+__name2(createVapidJwt, "createVapidJwt");
+async function encryptPushPayload(p256dhKey, authSecret, payloadText) {
+  const enc = new TextEncoder();
+  const payloadBytes = enc.encode(payloadText);
+  const subscriberPubBytes = base64UrlDecode(p256dhKey);
+  const subscriberPubKey = await crypto.subtle.importKey(
+    "raw",
+    subscriberPubBytes,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    []
+  );
+  const authBytes = base64UrlDecode(authSecret);
+  const localKeyPair = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveBits"]
+  );
+  const localPubBytes = new Uint8Array(
+    await crypto.subtle.exportKey("raw", localKeyPair.publicKey)
+  );
+  const sharedSecret = new Uint8Array(
+    await crypto.subtle.deriveBits(
+      { name: "ECDH", public: subscriberPubKey },
+      localKeyPair.privateKey,
+      256
+    )
+  );
+  const authKey = await crypto.subtle.importKey(
+    "raw",
+    authBytes,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const prk = new Uint8Array(
+    await crypto.subtle.sign("HMAC", authKey, sharedSecret)
+  );
+  const infoPrefix = enc.encode("WebPush: info\0");
+  const ikm_info = concatBuffers(infoPrefix, subscriberPubBytes, localPubBytes);
+  const ikm = await hkdfExpand(prk, ikm_info, 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const saltKey = await crypto.subtle.importKey(
+    "raw",
+    salt,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const prk2 = new Uint8Array(
+    await crypto.subtle.sign("HMAC", saltKey, ikm)
+  );
+  const cekInfo = enc.encode("Content-Encoding: aes128gcm\0");
+  const nonceInfo = enc.encode("Content-Encoding: nonce\0");
+  const cek = await hkdfExpand(prk2, cekInfo, 16);
+  const nonce = await hkdfExpand(prk2, nonceInfo, 12);
+  const padded = concatBuffers(payloadBytes, new Uint8Array([2]));
+  const aesKey = await crypto.subtle.importKey(
+    "raw",
+    cek,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt"]
+  );
+  const ciphertext = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: nonce },
+      aesKey,
+      padded
+    )
+  );
+  const rs = new Uint8Array(4);
+  new DataView(rs.buffer).setUint32(0, 4096);
+  const idlen = new Uint8Array([65]);
+  return concatBuffers(salt, rs, idlen, localPubBytes, ciphertext);
+}
+__name(encryptPushPayload, "encryptPushPayload");
+__name2(encryptPushPayload, "encryptPushPayload");
+async function hkdfExpand(prk, info, length) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    prk,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const input = concatBuffers(info, new Uint8Array([1]));
+  const output = new Uint8Array(
+    await crypto.subtle.sign("HMAC", key, input)
+  );
+  return output.slice(0, length);
+}
+__name(hkdfExpand, "hkdfExpand");
+__name2(hkdfExpand, "hkdfExpand");
+async function sendPushNotification(env, subscription, payload) {
+  try {
+    const endpointUrl = new URL(subscription.endpoint);
+    const audience = `${endpointUrl.protocol}//${endpointUrl.host}`;
+    const jwt = await createVapidJwt(env, audience);
+    const vapidPubBytes = base64UrlEncode(base64UrlDecode(env.VAPID_PUBLIC_KEY));
+    const payloadJson = JSON.stringify(payload);
+    const encryptedBody = await encryptPushPayload(
+      subscription.p256dh,
+      subscription.auth_key,
+      payloadJson
+    );
+    const res = await fetch(subscription.endpoint, {
+      method: "POST",
+      headers: {
+        "Authorization": `vapid t=${jwt}, k=${vapidPubBytes}`,
+        "Content-Encoding": "aes128gcm",
+        "Content-Type": "application/octet-stream",
+        "TTL": "86400",
+        "Urgency": "normal"
+      },
+      body: encryptedBody
+    });
+    if (res.status === 410 || res.status === 404) {
+      const err = new Error("Subscription expired");
+      err.statusCode = res.status;
+      throw err;
+    }
+    if (!res.ok) {
+      console.error("Push send failed:", res.status, await res.text());
+    }
+  } catch (e) {
+    if (e.statusCode === 410 || e.statusCode === 404) throw e;
+    console.error("Push notification error:", e);
+  }
+}
+__name(sendPushNotification, "sendPushNotification");
+__name2(sendPushNotification, "sendPushNotification");
+async function handleApiNotifications(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  const url = new URL(request.url);
+  const userId = request.headers.get("X-User-Id");
+  if (!userId) return json({ ok: false, error: "Unauthorized" }, 401);
+  if (request.method === "GET") {
+    try {
+      const unreadOnly = url.searchParams.get("unread") === "1";
+      let query = "SELECT * FROM notifications WHERE user_id = ?";
+      const binds = [userId];
+      if (unreadOnly) {
+        query += " AND is_read = 0";
+      }
+      query += " ORDER BY created_at DESC LIMIT 50";
+      const rows = await db.prepare(query).bind(...binds).all();
+      const countRow = await db.prepare(
+        "SELECT COUNT(*) as unread_count FROM notifications WHERE user_id = ? AND is_read = 0"
+      ).bind(userId).first();
+      return json({ ok: true, notifications: rows.results || [], unreadCount: countRow?.unread_count || 0 });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  if (request.method === "PUT" && url.pathname === "/api/notifications/read") {
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return json({ ok: false, error: "Invalid JSON" }, 400);
+    }
+    try {
+      if (payload.all) {
+        await db.prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ?").bind(userId).run();
+      } else if (Array.isArray(payload.ids)) {
+        for (const nid of payload.ids) {
+          await db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?").bind(nid, userId).run();
+        }
+      }
+      return json({ ok: true });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+  return json({ ok: false, error: "Method not allowed" }, 405);
+}
+__name(handleApiNotifications, "handleApiNotifications");
+__name2(handleApiNotifications, "handleApiNotifications");
+async function handleApiPushSubscribe(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  if (request.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
+  const userId = request.headers.get("X-User-Id");
+  if (!userId) return json({ ok: false, error: "Unauthorized" }, 401);
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return json({ ok: false, error: "Invalid JSON" }, 400);
+  }
+  const { endpoint, keys } = payload;
+  if (!endpoint) return json({ ok: false, error: "endpoint is required." }, 400);
+  try {
+    const id = crypto.randomUUID();
+    await db.prepare(
+      "INSERT OR REPLACE INTO push_subscriptions (id, user_id, endpoint, p256dh, auth_key) VALUES (?, ?, ?, ?, ?)"
+    ).bind(id, userId, endpoint, keys?.p256dh || "", keys?.auth || "").run();
+    return json({ ok: true });
+  } catch (e) {
+    return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+  }
+}
+__name(handleApiPushSubscribe, "handleApiPushSubscribe");
+__name2(handleApiPushSubscribe, "handleApiPushSubscribe");
+async function handleApiPushUnsubscribe(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding" }, 500);
+  if (request.method !== "DELETE") return json({ ok: false, error: "Method not allowed" }, 405);
+  const userId = request.headers.get("X-User-Id");
+  if (!userId) return json({ ok: false, error: "Unauthorized" }, 401);
+  try {
+    await db.prepare("DELETE FROM push_subscriptions WHERE user_id = ?").bind(userId).run();
+    return json({ ok: true });
+  } catch (e) {
+    return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+  }
+}
+__name(handleApiPushUnsubscribe, "handleApiPushUnsubscribe");
+__name2(handleApiPushUnsubscribe, "handleApiPushUnsubscribe");
+var drainBody = /* @__PURE__ */ __name2(async (request, env, _ctx, middlewareCtx) => {
+  try {
+    return await middlewareCtx.next(request, env);
+  } finally {
+    try {
+      if (request.body !== null && !request.bodyUsed) {
+        const reader = request.body.getReader();
+        while (!(await reader.read()).done) {
+        }
+      }
+    } catch (e) {
+      console.error("Failed to drain the unused request body.", e);
+    }
+  }
+}, "drainBody");
+var middleware_ensure_req_body_drained_default = drainBody;
+function reduceError(e) {
+  return {
+    name: e?.name,
+    message: e?.message ?? String(e),
+    stack: e?.stack,
+    cause: e?.cause === void 0 ? void 0 : reduceError(e.cause)
+  };
+}
+__name(reduceError, "reduceError");
+__name2(reduceError, "reduceError");
+var jsonError = /* @__PURE__ */ __name2(async (request, env, _ctx, middlewareCtx) => {
+  try {
+    return await middlewareCtx.next(request, env);
+  } catch (e) {
+    const error = reduceError(e);
+    return Response.json(error, {
+      status: 500,
+      headers: { "MF-Experimental-Error-Stack": "true" }
+    });
+  }
+}, "jsonError");
+var middleware_miniflare3_json_error_default = jsonError;
+var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
+  middleware_ensure_req_body_drained_default,
+  middleware_miniflare3_json_error_default
+];
+var middleware_insertion_facade_default = worker_default;
+var __facade_middleware__ = [];
+function __facade_register__(...args) {
+  __facade_middleware__.push(...args.flat());
+}
+__name(__facade_register__, "__facade_register__");
+__name2(__facade_register__, "__facade_register__");
+function __facade_invokeChain__(request, env, ctx, dispatch, middlewareChain) {
+  const [head, ...tail] = middlewareChain;
+  const middlewareCtx = {
+    dispatch,
+    next(newRequest, newEnv) {
+      return __facade_invokeChain__(newRequest, newEnv, ctx, dispatch, tail);
+    }
+  };
+  return head(request, env, ctx, middlewareCtx);
+}
+__name(__facade_invokeChain__, "__facade_invokeChain__");
+__name2(__facade_invokeChain__, "__facade_invokeChain__");
+function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
+  return __facade_invokeChain__(request, env, ctx, dispatch, [
+    ...__facade_middleware__,
+    finalMiddleware
+  ]);
+}
+__name(__facade_invoke__, "__facade_invoke__");
+__name2(__facade_invoke__, "__facade_invoke__");
+var __Facade_ScheduledController__ = class ___Facade_ScheduledController__ {
+  static {
+    __name(this, "___Facade_ScheduledController__");
+  }
+  constructor(scheduledTime, cron, noRetry) {
+    this.scheduledTime = scheduledTime;
+    this.cron = cron;
+    this.#noRetry = noRetry;
+  }
+  static {
+    __name2(this, "__Facade_ScheduledController__");
+  }
+  #noRetry;
+  noRetry() {
+    if (!(this instanceof ___Facade_ScheduledController__)) {
+      throw new TypeError("Illegal invocation");
+    }
+    this.#noRetry();
+  }
+};
+function wrapExportedHandler(worker) {
+  if (__INTERNAL_WRANGLER_MIDDLEWARE__ === void 0 || __INTERNAL_WRANGLER_MIDDLEWARE__.length === 0) {
+    return worker;
+  }
+  for (const middleware of __INTERNAL_WRANGLER_MIDDLEWARE__) {
+    __facade_register__(middleware);
+  }
+  const fetchDispatcher = /* @__PURE__ */ __name2(function(request, env, ctx) {
+    if (worker.fetch === void 0) {
+      throw new Error("Handler does not export a fetch() function.");
+    }
+    return worker.fetch(request, env, ctx);
+  }, "fetchDispatcher");
+  return {
+    ...worker,
+    fetch(request, env, ctx) {
+      const dispatcher = /* @__PURE__ */ __name2(function(type, init) {
+        if (type === "scheduled" && worker.scheduled !== void 0) {
+          const controller = new __Facade_ScheduledController__(
+            Date.now(),
+            init.cron ?? "",
+            () => {
+            }
+          );
+          return worker.scheduled(controller, env, ctx);
+        }
+      }, "dispatcher");
+      return __facade_invoke__(request, env, ctx, dispatcher, fetchDispatcher);
+    }
+  };
+}
+__name(wrapExportedHandler, "wrapExportedHandler");
+__name2(wrapExportedHandler, "wrapExportedHandler");
+function wrapWorkerEntrypoint(klass) {
+  if (__INTERNAL_WRANGLER_MIDDLEWARE__ === void 0 || __INTERNAL_WRANGLER_MIDDLEWARE__.length === 0) {
+    return klass;
+  }
+  for (const middleware of __INTERNAL_WRANGLER_MIDDLEWARE__) {
+    __facade_register__(middleware);
+  }
+  return class extends klass {
+    #fetchDispatcher = /* @__PURE__ */ __name2((request, env, ctx) => {
+      this.env = env;
+      this.ctx = ctx;
+      if (super.fetch === void 0) {
+        throw new Error("Entrypoint class does not define a fetch() function.");
+      }
+      return super.fetch(request);
+    }, "#fetchDispatcher");
+    #dispatcher = /* @__PURE__ */ __name2((type, init) => {
+      if (type === "scheduled" && super.scheduled !== void 0) {
+        const controller = new __Facade_ScheduledController__(
+          Date.now(),
+          init.cron ?? "",
+          () => {
+          }
+        );
+        return super.scheduled(controller);
+      }
+    }, "#dispatcher");
+    fetch(request) {
+      return __facade_invoke__(
+        request,
+        this.env,
+        this.ctx,
+        this.#dispatcher,
+        this.#fetchDispatcher
+      );
+    }
+  };
+}
+__name(wrapWorkerEntrypoint, "wrapWorkerEntrypoint");
+__name2(wrapWorkerEntrypoint, "wrapWorkerEntrypoint");
+var WRAPPED_ENTRY;
+if (typeof middleware_insertion_facade_default === "object") {
+  WRAPPED_ENTRY = wrapExportedHandler(middleware_insertion_facade_default);
+} else if (typeof middleware_insertion_facade_default === "function") {
+  WRAPPED_ENTRY = wrapWorkerEntrypoint(middleware_insertion_facade_default);
+}
+var middleware_loader_entry_default = WRAPPED_ENTRY;
+
+// ../../AppData/Roaming/npm/node_modules/wrangler/templates/middleware/middleware-ensure-req-body-drained.ts
+var drainBody2 = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx) => {
+  try {
+    return await middlewareCtx.next(request, env);
+  } finally {
+    try {
+      if (request.body !== null && !request.bodyUsed) {
+        const reader = request.body.getReader();
+        while (!(await reader.read()).done) {
+        }
+      }
+    } catch (e) {
+      console.error("Failed to drain the unused request body.", e);
+    }
+  }
+}, "drainBody");
+var middleware_ensure_req_body_drained_default2 = drainBody2;
+
+// ../../AppData/Roaming/npm/node_modules/wrangler/templates/middleware/middleware-miniflare3-json-error.ts
+function reduceError2(e) {
+  return {
+    name: e?.name,
+    message: e?.message ?? String(e),
+    stack: e?.stack,
+    cause: e?.cause === void 0 ? void 0 : reduceError2(e.cause)
+  };
+}
+__name(reduceError2, "reduceError");
+var jsonError2 = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx) => {
+  try {
+    return await middlewareCtx.next(request, env);
+  } catch (e) {
+    const error = reduceError2(e);
+    return Response.json(error, {
+      status: 500,
+      headers: { "MF-Experimental-Error-Stack": "true" }
+    });
+  }
+}, "jsonError");
+var middleware_miniflare3_json_error_default2 = jsonError2;
+
+// .wrangler/tmp/bundle-ID4Aot/middleware-insertion-facade.js
+var __INTERNAL_WRANGLER_MIDDLEWARE__2 = [
+  middleware_ensure_req_body_drained_default2,
+  middleware_miniflare3_json_error_default2
+];
+var middleware_insertion_facade_default2 = middleware_loader_entry_default;
+
+// ../../AppData/Roaming/npm/node_modules/wrangler/templates/middleware/common.ts
+var __facade_middleware__2 = [];
+function __facade_register__2(...args) {
+  __facade_middleware__2.push(...args.flat());
+}
+__name(__facade_register__2, "__facade_register__");
+function __facade_invokeChain__2(request, env, ctx, dispatch, middlewareChain) {
+  const [head, ...tail] = middlewareChain;
+  const middlewareCtx = {
+    dispatch,
+    next(newRequest, newEnv) {
+      return __facade_invokeChain__2(newRequest, newEnv, ctx, dispatch, tail);
+    }
+  };
+  return head(request, env, ctx, middlewareCtx);
+}
+__name(__facade_invokeChain__2, "__facade_invokeChain__");
+function __facade_invoke__2(request, env, ctx, dispatch, finalMiddleware) {
+  return __facade_invokeChain__2(request, env, ctx, dispatch, [
+    ...__facade_middleware__2,
+    finalMiddleware
+  ]);
+}
+__name(__facade_invoke__2, "__facade_invoke__");
+
+// .wrangler/tmp/bundle-ID4Aot/middleware-loader.entry.ts
+var __Facade_ScheduledController__2 = class ___Facade_ScheduledController__2 {
+  constructor(scheduledTime, cron, noRetry) {
+    this.scheduledTime = scheduledTime;
+    this.cron = cron;
+    this.#noRetry = noRetry;
+  }
+  static {
+    __name(this, "__Facade_ScheduledController__");
+  }
+  #noRetry;
+  noRetry() {
+    if (!(this instanceof ___Facade_ScheduledController__2)) {
+      throw new TypeError("Illegal invocation");
+    }
+    this.#noRetry();
+  }
+};
+function wrapExportedHandler2(worker) {
+  if (__INTERNAL_WRANGLER_MIDDLEWARE__2 === void 0 || __INTERNAL_WRANGLER_MIDDLEWARE__2.length === 0) {
+    return worker;
+  }
+  for (const middleware of __INTERNAL_WRANGLER_MIDDLEWARE__2) {
+    __facade_register__2(middleware);
+  }
+  const fetchDispatcher = /* @__PURE__ */ __name(function(request, env, ctx) {
+    if (worker.fetch === void 0) {
+      throw new Error("Handler does not export a fetch() function.");
+    }
+    return worker.fetch(request, env, ctx);
+  }, "fetchDispatcher");
+  return {
+    ...worker,
+    fetch(request, env, ctx) {
+      const dispatcher = /* @__PURE__ */ __name(function(type, init) {
+        if (type === "scheduled" && worker.scheduled !== void 0) {
+          const controller = new __Facade_ScheduledController__2(
+            Date.now(),
+            init.cron ?? "",
+            () => {
+            }
+          );
+          return worker.scheduled(controller, env, ctx);
+        }
+      }, "dispatcher");
+      return __facade_invoke__2(request, env, ctx, dispatcher, fetchDispatcher);
+    }
+  };
+}
+__name(wrapExportedHandler2, "wrapExportedHandler");
+function wrapWorkerEntrypoint2(klass) {
+  if (__INTERNAL_WRANGLER_MIDDLEWARE__2 === void 0 || __INTERNAL_WRANGLER_MIDDLEWARE__2.length === 0) {
+    return klass;
+  }
+  for (const middleware of __INTERNAL_WRANGLER_MIDDLEWARE__2) {
+    __facade_register__2(middleware);
+  }
+  return class extends klass {
+    #fetchDispatcher = /* @__PURE__ */ __name((request, env, ctx) => {
+      this.env = env;
+      this.ctx = ctx;
+      if (super.fetch === void 0) {
+        throw new Error("Entrypoint class does not define a fetch() function.");
+      }
+      return super.fetch(request);
+    }, "#fetchDispatcher");
+    #dispatcher = /* @__PURE__ */ __name((type, init) => {
+      if (type === "scheduled" && super.scheduled !== void 0) {
+        const controller = new __Facade_ScheduledController__2(
+          Date.now(),
+          init.cron ?? "",
+          () => {
+          }
+        );
+        return super.scheduled(controller);
+      }
+    }, "#dispatcher");
+    fetch(request) {
+      return __facade_invoke__2(
+        request,
+        this.env,
+        this.ctx,
+        this.#dispatcher,
+        this.#fetchDispatcher
+      );
+    }
+  };
+}
+__name(wrapWorkerEntrypoint2, "wrapWorkerEntrypoint");
+var WRAPPED_ENTRY2;
+if (typeof middleware_insertion_facade_default2 === "object") {
+  WRAPPED_ENTRY2 = wrapExportedHandler2(middleware_insertion_facade_default2);
+} else if (typeof middleware_insertion_facade_default2 === "function") {
+  WRAPPED_ENTRY2 = wrapWorkerEntrypoint2(middleware_insertion_facade_default2);
+}
+var middleware_loader_entry_default2 = WRAPPED_ENTRY2;
+export {
+  __INTERNAL_WRANGLER_MIDDLEWARE__2 as __INTERNAL_WRANGLER_MIDDLEWARE__,
+  middleware_loader_entry_default2 as default
+};
+//# sourceMappingURL=bundledWorker-0.6273533206574949.js.map

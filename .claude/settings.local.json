@@ -27,7 +27,15 @@
       "Bash(wrangler --version)",
       "Bash(wrangler d1 *)",
       "Bash(mv prompt-*.md \"Prompts/\")",
-      "Bash(mv *.sql \"DB Migrations/\")"
+      "Bash(mv *.sql \"DB Migrations/\")",
+      "Bash(curl -s -X DELETE http://localhost:8788/api/jobs -H 'Content-Type: application/json' -b session=test -d '{\"id\":\"test-id\"}')",
+      "Bash(curl -s -X POST http://localhost:8788/api/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"admin\"}')",
+      "Bash(curl -s -I https://xpanda-ops-platform.pages.dev/shared/shared-api.js)",
+      "Bash(curl -s -I https://xpanda-ops-platform.pages.dev/shared/shared-utils.js)",
+      "Bash(curl -s -I https://xpanda-ops-platform.pages.dev/shared/shared-header.js)",
+      "Bash(curl *)",
+      "Bash(sed -i 's|/production/production-shared.css|/manufacturing/manufacturing-shared.css|g; s|/production/production-header.js|/manufacturing/manufacturing-header.js|g; s|prod-page-title|mfg-page-title|g; s|prod-page-subtitle|mfg-page-subtitle|g; s|prod-platform-footer|mfg-platform-footer|g' \"C:/Users/scook/.dev/xpanda-ops-platform/manufacturing/block-calculator.html\")",
+      "Bash(sed -i 's|/production/production-shared.css|/manufacturing/manufacturing-shared.css|g; s|/production/production-header.js|/manufacturing/manufacturing-header.js|g; s|prod-page-title|mfg-page-title|g; s|prod-page-subtitle|mfg-page-subtitle|g; s|prod-platform-footer|mfg-platform-footer|g' \"C:/Users/scook/.dev/xpanda-ops-platform/manufacturing/holey-board-calculator.html\")"
     ]
   }
 }
