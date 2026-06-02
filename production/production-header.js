@@ -8,7 +8,7 @@ window.__xpandaHeaderConfig = {
   dashboardPath:     '/production/',
   backLinkLabel:     '← Back to Dashboard',
   pageTitle:         'Production Dashboard',
-  pageSubtitle:      'Production planning and manufacturing tools',
+  pageSubtitle:      'Inventory and production planning',
   pageTitleId:       'prod-page-title',
   pageSubtitleId:    'prod-page-subtitle',
   footerClass:       'prod-platform-footer',

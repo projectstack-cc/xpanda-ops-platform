@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>xPanda Manufacturing Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="/assets/img/favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+<link rel="stylesheet" href="/manufacturing/manufacturing-shared.css">
+</head>
+<body>
+<script src="/manufacturing/manufacturing-header.js"></script>
+<script>
+document.getElementById('mfg-page-title').textContent = 'Manufacturing Dashboard';
+document.getElementById('mfg-page-subtitle').textContent = 'Production calculators and cutting operations';
+</script>
+
+<div class="mfg-wrap">
+  <div class="mfg-section-intro">
+    <h1 class="mfg-section-title">Manufacturing Tools</h1>
+    <p class="mfg-section-subtitle">Select a tool to begin</p>
+  </div>
+
+  <a class="mfg-tile" href="/manufacturing/block-calculator.html">
+    <h2>Block Calculator</h2>
+    <p>Calculate parts per block, generate cut lists, and visualize cut layouts</p>
+  </a>
+
+  <a class="mfg-tile" href="/manufacturing/holey-board-calculator.html">
+    <h2>Holey Board Calculator</h2>
+    <p>Calculate chunks needed for board orders with thickness optimization</p>
+  </a>
+
+  <a class="mfg-tile" href="/manufacturing/cutting-dashboard.html">
+    <h2>Cutting Dashboard</h2>
+    <p>Live status of cutting operations across the floor — coming soon</p>
+  </a>
+</div>
+
+<script>
+function getUser() {
+  return new Promise(resolve => {
+    if (window.__xpandaUser !== undefined) return resolve(window.__xpandaUser);
+    let attempts = 0;
+    const check = setInterval(() => {
+      if (window.__xpandaUser !== undefined || ++attempts > 20) {
+        clearInterval(check);
+        resolve(window.__xpandaUser || null);
+      }
+    }, 50);
+  });
+}
+
+async function gateMfgNav() {
+  try {
+    const user = await getUser();
+    if (!user || user.isAdministrator) return;
+    const perms = user.permissions || {};
+    if (!perms['manufacturing.calculators']?.view) {
+      document.querySelectorAll('a[href*="block-calculator"], a[href*="holey-board"]').forEach(el => el.style.display = 'none');
+    }
+    if (!perms['manufacturing.cutting']?.view) {
+      document.querySelectorAll('a[href*="cutting-dashboard"]').forEach(el => el.style.display = 'none');
+    }
+  } catch {}
+}
+gateMfgNav();
+</script>
+</body>
+</html>
