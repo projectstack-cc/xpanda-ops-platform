@@ -7,6 +7,10 @@ if (!window.__xpandaSharedApiLoaded) {
   window.__xpandaSharedApiLoaded = true;
   document.write('<script src="/shared/shared-api.js"><\/script>');
 }
+if (!window.__xpandaSharedUtilsLoaded) {
+  window.__xpandaSharedUtilsLoaded = true;
+  document.write('<script src="/shared/shared-utils.js"><\/script>');
+}
 
 (function () {
   if (window.initXpandaHeader) return;
