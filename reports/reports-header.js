@@ -1,16 +1,9 @@
 // reports/reports-header.js — thin shim for F1a.
 // All header logic lives in /shared/shared-header.js.
-// Synchronous load of the shared module preserves document.write timing.
 //
-// NOTE: backLinkLabel is intentionally empty — the current reports header renders
-// no topbar back-link. Sub-page back-links are handled inline in each reports HTML.
-// NOTE: pageTitle is intentionally empty — each reports page sets its own title
-// via document.getElementById('reports-page-title').textContent = '...'.
-if (!window.__xpandaSharedHeaderLoaded) {
-  window.__xpandaSharedHeaderLoaded = true;
-  document.write('<script src="/shared/shared-header.js"><\/script>');
-}
-window.initXpandaHeader({
+// NOTE: backLinkLabel is empty — reports sub-page back-links are inline in each HTML.
+// NOTE: pageTitle is empty — each reports page sets its own via getElementById.
+window.__xpandaHeaderConfig = {
   moduleKey:         'reports',
   badgeText:         'XPANDA FOAM • REPORTS',
   badgeClass:        'reports-badge',
@@ -24,4 +17,11 @@ window.initXpandaHeader({
   footerClass:       'reports-platform-footer',
   userBarLocation:   'topbar',
   showNotifications: false,
-});
+};
+if (!window.__xpandaSharedHeaderLoaded) {
+  window.__xpandaSharedHeaderLoaded = true;
+  document.write('<script src="/shared/shared-header.js"><\/script>');
+} else {
+  window.initXpandaHeader(window.__xpandaHeaderConfig);
+  window.__xpandaHeaderConfig = null;
+}

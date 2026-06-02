@@ -1,11 +1,6 @@
 // qc/qc-header.js — thin shim for F1a.
 // All header logic lives in /shared/shared-header.js.
-// Synchronous load of the shared module preserves document.write timing.
-if (!window.__xpandaSharedHeaderLoaded) {
-  window.__xpandaSharedHeaderLoaded = true;
-  document.write('<script src="/shared/shared-header.js"><\/script>');
-}
-window.initXpandaHeader({
+window.__xpandaHeaderConfig = {
   moduleKey:         'qc',
   badgeText:         'XPANDA FOAM • QUALITY CONTROL',
   badgeClass:        'qc-badge',
@@ -19,4 +14,11 @@ window.initXpandaHeader({
   footerClass:       'qc-platform-footer',
   userBarLocation:   'topbar',
   showNotifications: false,
-});
+};
+if (!window.__xpandaSharedHeaderLoaded) {
+  window.__xpandaSharedHeaderLoaded = true;
+  document.write('<script src="/shared/shared-header.js"><\/script>');
+} else {
+  window.initXpandaHeader(window.__xpandaHeaderConfig);
+  window.__xpandaHeaderConfig = null;
+}

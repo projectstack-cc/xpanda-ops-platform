@@ -1,11 +1,6 @@
 // production/production-header.js — thin shim for F1a.
 // All header logic lives in /shared/shared-header.js.
-// Synchronous load of the shared module preserves document.write timing.
-if (!window.__xpandaSharedHeaderLoaded) {
-  window.__xpandaSharedHeaderLoaded = true;
-  document.write('<script src="/shared/shared-header.js"><\/script>');
-}
-window.initXpandaHeader({
+window.__xpandaHeaderConfig = {
   moduleKey:         'production',
   badgeText:         'XPANDA FOAM • PRODUCTION',
   badgeClass:        'prod-badge',
@@ -19,4 +14,11 @@ window.initXpandaHeader({
   footerClass:       'prod-platform-footer',
   userBarLocation:   'topbar',
   showNotifications: true,
-});
+};
+if (!window.__xpandaSharedHeaderLoaded) {
+  window.__xpandaSharedHeaderLoaded = true;
+  document.write('<script src="/shared/shared-header.js"><\/script>');
+} else {
+  window.initXpandaHeader(window.__xpandaHeaderConfig);
+  window.__xpandaHeaderConfig = null;
+}

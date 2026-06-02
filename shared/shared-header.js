@@ -269,4 +269,12 @@ ${backLinkHtml}
     });
   };
 
+  // Auto-call with any config the shim stored before triggering this load.
+  // The shim sets window.__xpandaHeaderConfig synchronously, then document.write's
+  // this script tag. By the time this IIFE runs, the config is ready.
+  if (window.__xpandaHeaderConfig) {
+    window.initXpandaHeader(window.__xpandaHeaderConfig);
+    window.__xpandaHeaderConfig = null;
+  }
+
 })();
