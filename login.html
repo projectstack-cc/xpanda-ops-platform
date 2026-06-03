@@ -9,12 +9,14 @@
   <link rel="apple-touch-icon" href="/assets/img/favicon.png">
   <link rel="icon" href="/assets/img/favicon.png" sizes="any">
   <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/shared/tokens.css">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: Arial, Helvetica, sans-serif;
-      background: #f0f2f5;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -30,9 +32,10 @@
     }
 
     .login-card {
-      background: #ffffff;
+      background: var(--card-bg);
       border-radius: 16px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--line);
       padding: 40px 36px 36px;
       width: 100%;
       max-width: 380px;
@@ -49,7 +52,7 @@
 
     h1 {
       font-size: 20px;
-      color: #111827;
+      color: var(--text);
       margin-bottom: 28px;
       font-weight: 700;
     }
@@ -59,45 +62,46 @@
       display: block;
       width: 100%;
       padding: 12px 14px;
-      border: 1px solid #d1d5db;
+      border: 1px solid var(--input-border);
       border-radius: 12px;
       font-size: 15px;
       margin-bottom: 12px;
       outline: none;
       font-family: inherit;
-      color: #111827;
+      color: var(--text);
+      background: var(--input-bg);
       transition: border-color 0.15s;
     }
 
-    input:focus { border-color: #94a3b8; }
+    input:focus { border-color: var(--primary-bg); box-shadow: 0 0 0 3px var(--accent-soft); }
 
     button {
       display: block;
       width: 100%;
-      background: #1e293b;
+      background: var(--primary-bg);
       color: #fff;
       border: none;
       border-radius: 12px;
       padding: 14px 0;
       font-size: 15px;
-      font-weight: 700;
+      font-weight: 600;
       cursor: pointer;
       font-family: inherit;
       transition: background 0.15s;
     }
 
-    button:hover { background: #334155; }
-    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    button:hover { background: var(--accent); }
+    button:disabled { background: var(--text-hint); cursor: not-allowed; }
 
     .error-msg {
-      color: #dc2626;
+      color: var(--danger-bg);
       font-size: 13px;
       margin-top: 12px;
       text-align: left;
     }
 
     .info-msg {
-      color: #2563eb;
+      color: var(--muted);
       font-size: 13px;
       margin-bottom: 16px;
       text-align: left;

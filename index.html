@@ -10,16 +10,9 @@
   <link rel="icon" href="/assets/img/favicon.png" sizes="any">
   <link rel="apple-touch-icon" href="/assets/img/favicon.png">
   <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/shared/tokens.css">
 <style>
   :root {
-    --bg: #f4f6f9;
-    --surface: #ffffff;
-    --surface-2: #f8f9fb;
-    --text: #111827;
-    --text-muted: #6b7280;
-    --text-hint: #9ca3af;
-    --border: #e5e7eb;
-    --radius: 12px;
     --max-w: 960px;
   }
 
@@ -38,7 +31,7 @@
   /* ── Header bar ─────────────────────────────── */
   .hp-header {
     background: var(--surface);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
     padding: 12px 20px;
     display: flex;
     align-items: center;
@@ -76,11 +69,12 @@
     position: relative;
   }
   .hp-header-right a {
-    color: #dc2626;
+    color: var(--muted);
     text-decoration: none;
     font-weight: 600;
     font-size: 12px;
   }
+  .hp-header-right a:hover { color: var(--text); }
 
   /* ── Card grid ──────────────────────────────── */
   .hp-grid-wrap {
@@ -96,13 +90,14 @@
   .hp-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(242px, 1fr));
-    gap: 15px;
+    gap: 14px;
+    align-items: stretch;
   }
 
   /* ── Card ────────────────────────────────────── */
   .hp-card {
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: 20px 18px;
     display: flex;
@@ -111,8 +106,8 @@
     transition: box-shadow 0.15s ease, border-color 0.15s ease;
   }
   .hp-card:hover {
-    border-color: #d1d5db;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border-color: var(--input-border);
+    box-shadow: var(--shadow-md);
   }
   .hp-card-head {
     display: flex;
@@ -130,8 +125,8 @@
     font-size: 22px;
   }
   .hp-card-title {
-    font-size: 17px;
-    font-weight: 700;
+    font-size: 16px;
+    font-weight: 600;
     color: var(--text);
   }
   .hp-card-desc {
@@ -159,23 +154,20 @@
     transition: opacity 0.15s;
     border: none;
   }
-  .hp-btn:hover { opacity: 0.85; }
+  .hp-btn:hover { opacity: 0.92; }
   .hp-btn-outline {
     background: var(--surface);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
+    color: var(--muted);
+    border: 1px solid var(--line);
   }
   .hp-btn-outline:hover { background: var(--surface-2); }
 
-  /* Module-specific button colors */
-  .hp-btn-safety     { background: #2563eb; color: #fff; }
-  .hp-btn-qc         { background: #dc2626; color: #fff; }
-  .hp-btn-reports    { background: #7c3aed; color: #fff; }
-  .hp-btn-jobs       { background: #0891b2; color: #fff; }
-  .hp-btn-logistics  { background: #475569; color: #fff; }
-  .hp-btn-loading    { background: #2563eb; color: #fff; }
-  .hp-btn-production { background: #d97706; color: #fff; }
-  .hp-btn-admin      { background: #475569; color: #fff; }
+  /* Module action buttons — unified slate primary */
+  .hp-btn-safety, .hp-btn-qc, .hp-btn-reports, .hp-btn-jobs,
+  .hp-btn-logistics, .hp-btn-loading, .hp-btn-production, .hp-btn-admin {
+    background: var(--primary-bg);
+    color: var(--primary-text);
+  }
 
   /* Module-specific icon backgrounds */
   .hp-icon-safety     { background: #dbeafe; color: #1e40af; }
@@ -187,6 +179,17 @@
   .hp-icon-production { background: #fef3c7; color: #92400e; }
   .hp-icon-admin      { background: #f1f5f9; color: #334155; }
 
+  @media (prefers-color-scheme: dark) {
+    .hp-icon-safety     { background: rgba(37,99,235,.18);  color: #93c5fd; }
+    .hp-icon-qc         { background: rgba(220,38,38,.18);  color: #fca5a5; }
+    .hp-icon-reports    { background: rgba(124,58,237,.18); color: #c4b5fd; }
+    .hp-icon-jobs       { background: rgba(8,145,178,.18);  color: #67e8f9; }
+    .hp-icon-logistics  { background: rgba(71,85,105,.30);  color: #cbd5e1; }
+    .hp-icon-loading    { background: rgba(37,99,235,.18);  color: #93c5fd; }
+    .hp-icon-production { background: rgba(217,119,6,.18);  color: #fcd34d; }
+    .hp-icon-admin      { background: rgba(71,85,105,.30);  color: #cbd5e1; }
+  }
+
   /* ── Notification dropdown (reused from existing) ── */
   .hp-notif-bell { position: relative; cursor: pointer; font-size: 18px; line-height: 1; }
   .hp-notif-badge {
@@ -196,7 +199,7 @@
   }
   .hp-notif-dropdown {
     display: none; position: absolute; top: 36px; right: 0; width: 340px; max-height: 420px;
-    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.12); overflow: hidden; z-index: 9999;
   }
 
@@ -218,6 +221,8 @@
   @media (max-width: 380px) {
     .hp-grid { grid-template-columns: 1fr; }
   }
+  html[data-mode="floor"] .hp-btn { min-height: 44px; padding: 10px 16px; font-size: 14px; }
+  html[data-mode="floor"] .hp-card { padding: 18px; }
 </style>
 </head>
 <body>
@@ -234,13 +239,13 @@
   <div class="hp-header-right">
     <span id="hdr-notif-bell" class="hp-notif-bell" onclick="toggleNotifDropdown()">🔔<span id="hdr-notif-badge" class="hp-notif-badge"></span></span>
     <div id="hdr-notif-dropdown" class="hp-notif-dropdown">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #e5e7eb;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);">
         <span style="font-weight:700;font-size:14px;">Notifications</span>
         <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
       </div>
-      <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:#eff6ff;border-bottom:1px solid #e5e7eb;cursor:pointer;" onclick="enablePushFromBanner()">
+      <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:var(--accent-soft);border-bottom:1px solid var(--line);cursor:pointer;" onclick="enablePushFromBanner()">
         <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 Enable push notifications</div>
-        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Tap to get alerts on this device</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">Tap to get alerts on this device</div>
       </div>
       <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
     </div>
@@ -478,12 +483,12 @@ async function loadNotifications() {
     }
     const list = document.getElementById('hdr-notif-list');
     if (!list) return;
-    if (!data.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">No notifications</div>'; return; }
+    if (!data.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-hint);font-size:13px;">No notifications</div>'; return; }
     list.innerHTML = data.notifications.map(n => `
-      <div style="padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;${n.is_read ? 'opacity:0.6;' : 'background:#eff6ff;'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')">
-        <div style="font-size:13px;font-weight:${n.is_read ? '400' : '600'};color:#111827;margin-bottom:2px;">${escN(n.title)}</div>
-        <div style="font-size:12px;color:#6b7280;">${escN(n.message)}</div>
-        <div style="font-size:10px;color:#9ca3af;margin-top:4px;">${fmtAgo(n.created_at)}</div>
+      <div style="padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;${n.is_read ? 'opacity:0.6;' : 'background:var(--accent-soft);'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')">
+        <div style="font-size:13px;font-weight:${n.is_read ? '400' : '600'};color:var(--text);margin-bottom:2px;">${escN(n.title)}</div>
+        <div style="font-size:12px;color:var(--muted);">${escN(n.message)}</div>
+        <div style="font-size:10px;color:var(--text-hint);margin-top:4px;">${fmtAgo(n.created_at)}</div>
       </div>`).join('');
   } catch {}
 }
