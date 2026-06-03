@@ -69,29 +69,33 @@ The platform has grown Logistics deep. Every other department (sales, AP/AR, sch
 
 Phases are ordered so each unlocks the next. Do not interleave new feature work between phases — that's how foundation projects die.
 
-### Phase F1 — Shared utilities (highest ROI, lowest risk)
+### Phase F1 — Shared utilities (highest ROI, lowest risk) — ✅ DONE
 
 The single best near-term move. Cheap, surgical, eliminates real bugs.
 
-- [ ] **F1a** — Extract `shared-header.js`: consolidate the six `*-header.js` files (jobs, logistics, production, qc, reports, etc.) into one module covering auth bar render, 401 interceptor, user cache, permission-based nav hiding. Each module's existing header file becomes a one-line include of the shared file (or is deleted entirely if no module-specific chrome remains).
-- [ ] **F1b** — Extract `shared-api.js`: one `api(path, method, body)` helper that handles the fetch + JSON parse + 401 redirect + error toast pattern duplicated across every module. Every existing fetch call gradually migrates to it (not in one prompt — pick one module per prompt).
-- [ ] **F1c** — Extract `shared-utils.js`: density calculation, unit conversion, dimension validation, date formatting. **Density calc is the canary** — it currently lives in at least `qc/scrap-log.html` and `qc/density-calculator.html`. Migrate it first, prove the pattern, then move other formulas in. Manufacturing risk: inconsistent formulas → inconsistent product.
+- [x] ~~**F1a** — Extract `shared-header.js`~~ — Prompt 74. Consolidated 5 module headers into one. Drift eliminated.
+- [x] ~~**F1b** — Extract `shared-api.js`~~ — Prompt 75. `window.api.get/post/put/del` helper + proof-of-pattern migration in `loading.html`.
+- [x] ~~**F1c** — Extract `shared-utils.js`~~ — Prompt 76. Density calc canary migrated + date helpers (`isoToUS`, `isoToShortDate`, `todayIso`) + `escHtml`/`truncate` ready for adoption.
 
-### Phase F2 — Worker router abstraction (precursor to modularization)
+**Open follow-up: bulk migration of existing `fetch` calls to `api.*` and inline calcs to `utils.*` across all modules.** The shared utilities exist platform-wide but most module code still uses raw `fetch` / inline formulas. Each module is one tight follow-up prompt. Defer or interleave with feature work — no blocking dependency.
 
-- [ ] **F2** — Refactor the 48 flat `if (url.pathname === ...)` checks in `_worker.js` into a route-table pattern, **inside the same file**. No deploy-architecture change yet. Outcome: every route is a named handler function in a lookup table. This alone makes the file legible, eliminates the "scroll past 37 if-blocks" problem, and makes Phase F4 mechanical instead of risky.
+### Phase F2 — Worker router abstraction — ✅ DONE
 
-### Phase F3 — Permissions audit pass
+- [x] ~~**F2** — Refactor flat `if/else` dispatch into `API_ROUTES` route table~~ — Prompt 77. 48 routes now in one declarative lookup; F5 modularization becomes mechanical.
 
-- [ ] **F3** — Read-only audit producing a markdown matrix of every API route × permission key × what enforces it. No code changes; the deliverable is a document at `/permissions-audit.md`. Surfaces any route that escaped `PATH_PERMISSION_MAP` / `API_PERMISSION_MAP`. Pairs naturally with F2 since both require looking at every route. Findings become individual fix prompts.
+### Phase F3 — Permissions audit pass — ✅ DONE
 
-### Phase F4 — R2 storage migration (phased per blob type)
+- [x] ~~**F3** — Read-only audit~~ — Prompt 78. `/permissions-audit.md` exists at repo root. **Read the Gaps section and ship one-line fixes** to `API_PERMISSION_MAP` for each gap (e.g. `/api/saved-loads` was the known-ahead-of-time example). Each gap-fix is a tiny prompt.
 
-D1's 500MB ceiling is the existential cliff. Base64 inflates files ~33%; packing slips, BOL PDFs, loading photos, and inspection records all live as base64 TEXT in D1 today. R2 bucket exists and is unused.
+### Phase F4 — R2 storage migration (phased per blob type) — 🟡 IN PROGRESS
 
-- [ ] **F4a** — Inventory: enumerate every base64/blob column in the schema (`packing_slips.pdf_base64`, `bols.pdf_base64` if persisted, loading-bay photos, inspection PDFs, anything else). Output: a doc listing column → row count → estimated bytes. Drives the migration order.
-- [ ] **F4b** — R2 upload/serve worker endpoints + auth gate. One-time infrastructure work.
-- [ ] **F4c through F4N** — Per blob type: migration script (export existing rows to R2, store keys), worker read-path swap, module read-path swap, null/drop the D1 column. Largest blob type first (likely packing slips). One prompt per blob type.
+D1's 500MB ceiling is the existential cliff. Base64 inflates files ~33%; packing slips, loading photos, completion PDFs all live as base64 TEXT in D1 today. R2 bucket established and proven via Prompt 83 (BOL tracking signed photos).
+
+- [x] ~~**F4b** — R2 binding + upload/serve worker pattern~~ — Established via Prompt 83 (`xpanda-bol-photos` bucket bound as `env.BOL_PHOTOS`; pattern proven with signed BOL photos).
+- [ ] **F4a** — Inventory: enumerate every remaining base64/blob column (`packing_slips.pdf_base64`, `loading_photos.photo_data`, `completions.pdf_base64` if used, anything else). Output: doc at `/r2-migration-inventory.md` listing column → row count → estimated bytes. Drives the migration order.
+- [ ] **F4c — Loading photos migration** — `loading_photos.photo_data` (base64) → R2. Likely largest D1 consumer. Pattern matches P83 exactly: `loading_photos.photo_key` column, write to R2 bucket (new binding or reuse `BOL_PHOTOS`), update photo gallery component (`/shared/photo-gallery.js`) to fetch from new endpoint, drop the base64 column.
+- [ ] **F4d — Packing slips migration** — `packing_slips.pdf_base64` → R2. Same pattern.
+- [ ] **F4e+** — Any other blob columns surfaced by F4a inventory.
 
 ### Phase F5 — Worker modularization (Pages Functions)
 
@@ -117,6 +121,9 @@ These are real business needs but every one of them deepens the existing debt. B
 - [x] ~~Activity log / audit trail~~ — Prompt 20, platform-wide logging + viewer at `/admin/activity-log.html`
 - [x] ~~User login / authentication system~~ — Prompts 21–22, session-based auth with first-login password flow
 - [x] ~~Role-based permissions~~ — Prompts 23–24, configurable roles with per-module view/edit toggles, admin bypass
+- [x] ~~New Manufacturing module + Cutting Dashboard placeholder~~ — Prompt 80. Block + Holey Board calculators moved out of Production; Production now inventory-only.
+- [x] ~~Shared photo-gallery component (loading photos viewer)~~ — Prompt 81. `/shared/photo-gallery.js` consumed by loading dashboard cards and logistics shipment modal.
+- [x] ~~BOL driver tracking system (QR + public flow + signed BOL to R2 + push notif)~~ — Prompts 82–84. Drivers scan QR → confirm pickup → complete delivery with signed-BOL photo → R2 storage → office push notification. QR coords nudged to bottom-left green-box position (commit `da1ad91`).
 
 ### Dropped
 

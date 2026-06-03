@@ -47,7 +47,11 @@ var API_ROUTES = [
   { prefix: "/api/notifications", handler: /* @__PURE__ */ __name((req, env) => handleApiNotifications(req, env), "handler") },
   // Push (subscribe/unsubscribe — vapid-public-key stays inline above the session gate)
   { path: "/api/push/subscribe", handler: /* @__PURE__ */ __name((req, env) => handleApiPushSubscribe(req, env), "handler") },
-  { path: "/api/push/unsubscribe", handler: /* @__PURE__ */ __name((req, env) => handleApiPushUnsubscribe(req, env), "handler") }
+  { path: "/api/push/unsubscribe", handler: /* @__PURE__ */ __name((req, env) => handleApiPushUnsubscribe(req, env), "handler") },
+  // Public — no auth required (gated only by unguessable access_token).
+  { prefix: "/api/public/bol-lookup", handler: /* @__PURE__ */ __name((req, env) => handleApiPublicBolLookup(req, env), "handler") },
+  { prefix: "/api/public/bol-pickup", handler: /* @__PURE__ */ __name((req, env) => handleApiPublicBolPickup(req, env), "handler") },
+  { prefix: "/api/public/bol-delivery", handler: /* @__PURE__ */ __name((req, env) => handleApiPublicBolDelivery(req, env), "handler") }
 ];
 async function dispatchApiRoute(request, env, url) {
   const path = url.pathname;
@@ -96,7 +100,11 @@ var worker_default = {
       if (url.pathname === "/api/push/vapid-public-key") {
         return json({ ok: true, key: env.VAPID_PUBLIC_KEY || "" });
       }
-      if (!isStaticAsset) {
+      if (url.pathname === "/track" || url.pathname === "/track/" || url.pathname.startsWith("/track/")) {
+        return env.ASSETS.fetch(new Request(new URL("/track/index.html", url.origin).toString()));
+      }
+      const isPublicApi = url.pathname.startsWith("/api/public/");
+      if (!isStaticAsset && !isPublicApi) {
         const db = env.DB;
         if (db) {
           const user = await validateSession(db, request);
@@ -165,6 +173,12 @@ function json(body, status = 200, extraHeaders = {}) {
   });
 }
 __name(json, "json");
+function generateAccessToken() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+__name(generateAccessToken, "generateAccessToken");
 async function logActivity(db, action, entityType, entityId, summary, detail, userId) {
   try {
     const id = crypto.randomUUID();
@@ -2840,6 +2854,22 @@ async function handleApiBols(request, env) {
   const method = request.method;
   const parts = url.pathname.split("/").filter(Boolean);
   const bolId = parts.length >= 3 ? parts[2] : null;
+  const signedPhotoMatch = url.pathname.match(/^\/api\/bols\/([^/]+)\/signed-photo$/);
+  if (signedPhotoMatch) {
+    const spBolId = signedPhotoMatch[1];
+    const row = await env.DB.prepare(
+      "SELECT signed_bol_photo_key FROM bols WHERE id = ?"
+    ).bind(spBolId).first();
+    if (!row?.signed_bol_photo_key) return new Response("Not found", { status: 404 });
+    const obj = await env.BOL_PHOTOS.get(row.signed_bol_photo_key);
+    if (!obj) return new Response("Not found", { status: 404 });
+    return new Response(obj.body, {
+      headers: {
+        "Content-Type": obj.httpMetadata?.contentType || "image/jpeg",
+        "Cache-Control": "private, max-age=300"
+      }
+    });
+  }
   if (method === "GET" && bolId) {
     try {
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(bolId).first();
@@ -2916,6 +2946,7 @@ async function handleApiBols(request, env) {
         }
       }
     }
+    const access_token = generateAccessToken();
     try {
       await db.prepare(`
         INSERT INTO bols (
@@ -2925,8 +2956,8 @@ async function handleApiBols(request, env) {
           carrier_id, carrier_name, trailer_no, seal_number, scac, pro_no,
           freight_terms, is_scrap_pickup, third_party_bill_to, special_instructions, contact_info, is_master_bol,
           commodity_description, handling_unit_qty, handling_unit_type,
-          package_qty, package_type, weight, delivery_time, job_id, notes, render_overrides, created_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          package_qty, package_type, weight, delivery_time, job_id, notes, render_overrides, access_token, created_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id,
         bol_number,
@@ -2962,6 +2993,7 @@ async function handleApiBols(request, env) {
         payload.job_id ? String(payload.job_id).trim() : null,
         s("notes"),
         render_overrides,
+        access_token,
         now
       ).run();
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();
@@ -2986,7 +3018,7 @@ async function handleApiBols(request, env) {
     } catch {
       return json({ ok: false, error: "Invalid JSON" }, 400);
     }
-    const existing = await db.prepare("SELECT id, render_overrides FROM bols WHERE id = ?").bind(bolId).first();
+    const existing = await db.prepare("SELECT id, render_overrides, access_token FROM bols WHERE id = ?").bind(bolId).first();
     if (!existing) return json({ ok: false, error: "BOL not found." }, 404);
     const s = /* @__PURE__ */ __name((f) => String(payload[f] || "").trim(), "s");
     const validTerms = ["prepaid", "collect", "3rd_party"];
@@ -3010,6 +3042,8 @@ async function handleApiBols(request, env) {
     } else {
       render_overrides = existing.render_overrides ?? null;
     }
+    let access_token = existing.access_token;
+    if (!access_token) access_token = generateAccessToken();
     try {
       await db.prepare(`
         UPDATE bols SET
@@ -3019,7 +3053,8 @@ async function handleApiBols(request, env) {
           carrier_id = ?, carrier_name = ?, trailer_no = ?, seal_number = ?, scac = ?, pro_no = ?,
           freight_terms = ?, is_scrap_pickup = ?, third_party_bill_to = ?, special_instructions = ?, contact_info = ?,
           is_master_bol = ?, commodity_description = ?, handling_unit_qty = ?, handling_unit_type = ?,
-          package_qty = ?, package_type = ?, weight = ?, delivery_time = ?, job_id = ?, notes = ?, render_overrides = ?
+          package_qty = ?, package_type = ?, weight = ?, delivery_time = ?, job_id = ?, notes = ?, render_overrides = ?,
+          access_token = ?
         WHERE id = ?
       `).bind(
         s("date"),
@@ -3054,6 +3089,7 @@ async function handleApiBols(request, env) {
         payload.job_id ? String(payload.job_id).trim() : null,
         s("notes"),
         render_overrides,
+        access_token,
         bolId
       ).run();
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(bolId).first();
@@ -4713,6 +4749,162 @@ async function handleApiPushUnsubscribe(request, env) {
   }
 }
 __name(handleApiPushUnsubscribe, "handleApiPushUnsubscribe");
+async function handleApiPublicBolLookup(request, env) {
+  const url = new URL(request.url);
+  const token = url.pathname.replace("/api/public/bol-lookup/", "").replace(/\/$/, "");
+  if (!token || token.length < 8) {
+    return json({ ok: false, error: "Invalid token" }, 400);
+  }
+  const db = env.DB;
+  const bol = await db.prepare(`
+    SELECT bol_number, date, ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
+           ship_to_city, ship_to_state, ship_to_zip, commodity_description, delivery_time,
+           carrier_name, trailer_no, job_id, access_token
+    FROM bols WHERE access_token = ?
+  `).bind(token).first();
+  if (!bol) {
+    return json({ ok: false, error: "expired_or_invalid" }, 404);
+  }
+  let stage = "issued";
+  if (bol.job_id) {
+    const shipment = await db.prepare(
+      "SELECT status FROM shipments WHERE job_id = ? ORDER BY created_at DESC LIMIT 1"
+    ).bind(bol.job_id).first();
+    if (shipment) {
+      if (shipment.status === "in_transit") stage = "in_transit";
+      else if (shipment.status === "delivered") stage = "delivered";
+    }
+  }
+  if (stage === "delivered") {
+    return json({ ok: true, bol: { stage: "delivered", bol_number: bol.bol_number } });
+  }
+  delete bol.access_token;
+  return json({ ok: true, bol: { ...bol, stage } });
+}
+__name(handleApiPublicBolLookup, "handleApiPublicBolLookup");
+async function handleApiPublicBolPickup(request, env) {
+  if (request.method !== "POST") return json({ ok: false, error: "POST required" }, 405);
+  const url = new URL(request.url);
+  const token = url.pathname.replace("/api/public/bol-pickup/", "").replace(/\/$/, "");
+  if (!token || token.length < 8) return json({ ok: false, error: "Invalid token" }, 400);
+  const db = env.DB;
+  const bol = await db.prepare("SELECT job_id, bol_number FROM bols WHERE access_token = ?").bind(token).first();
+  if (!bol) return json({ ok: false, error: "expired_or_invalid" }, 404);
+  const shipment = await db.prepare(
+    "SELECT id, status FROM shipments WHERE job_id = ? ORDER BY created_at DESC LIMIT 1"
+  ).bind(bol.job_id).first();
+  if (!shipment) return json({ ok: false, error: "no_shipment_linked" }, 404);
+  if (shipment.status === "in_transit" || shipment.status === "delivered") {
+    return json({ ok: true, stage: shipment.status, already: true });
+  }
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  await db.prepare(
+    "UPDATE shipments SET status = 'in_transit', in_transit_at = ?, updated_at = ? WHERE id = ?"
+  ).bind(now, now, shipment.id).run();
+  await db.prepare(
+    "UPDATE loading_assignments SET loading_status = 'in_transit', updated_at = ? WHERE job_id = ? AND loading_status != 'archived'"
+  ).bind(now, bol.job_id).run();
+  await logActivity(
+    db,
+    "pickup_confirmed",
+    "shipment",
+    shipment.id,
+    `Pickup confirmed via driver QR \u2014 BOL #${bol.bol_number}`,
+    { source: "driver_qr", bol_number: bol.bol_number },
+    null
+  );
+  return json({ ok: true, stage: "in_transit" });
+}
+__name(handleApiPublicBolPickup, "handleApiPublicBolPickup");
+async function handleApiPublicBolDelivery(request, env) {
+  if (request.method !== "POST") return json({ ok: false, error: "POST required" }, 405);
+  const url = new URL(request.url);
+  const token = url.pathname.replace("/api/public/bol-delivery/", "").replace(/\/$/, "");
+  if (!token || token.length < 8) return json({ ok: false, error: "Invalid token" }, 400);
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return json({ ok: false, error: "Invalid JSON" }, 400);
+  }
+  const accepted = payload.accepted;
+  if (!["yes", "no", "partial"].includes(accepted)) {
+    return json({ ok: false, error: "accepted must be yes|no|partial" }, 400);
+  }
+  const damages = !!payload.damages;
+  const damageNotes = damages ? String(payload.damage_notes || "").slice(0, 2e3) : null;
+  const photoBase64 = String(payload.signed_photo_base64 || "");
+  if (!photoBase64 || photoBase64.length < 100) {
+    return json({ ok: false, error: "signed_photo_base64 is required" }, 400);
+  }
+  if (photoBase64.length > 3 * 1024 * 1024) {
+    return json({ ok: false, error: "Photo too large; please retake." }, 413);
+  }
+  const db = env.DB;
+  const bol = await db.prepare("SELECT id, job_id, bol_number FROM bols WHERE access_token = ?").bind(token).first();
+  if (!bol) return json({ ok: false, error: "expired_or_invalid" }, 404);
+  const shipment = await db.prepare(
+    "SELECT id, status FROM shipments WHERE job_id = ? ORDER BY created_at DESC LIMIT 1"
+  ).bind(bol.job_id).first();
+  if (!shipment) return json({ ok: false, error: "no_shipment_linked" }, 404);
+  if (shipment.status === "delivered") {
+    return json({ ok: true, stage: "delivered", already: true });
+  }
+  if (shipment.status !== "in_transit") {
+    return json({ ok: false, error: "shipment must be in_transit before delivery" }, 409);
+  }
+  const photoBytes = Uint8Array.from(atob(photoBase64), (c) => c.charCodeAt(0));
+  const r2Key = `signed-bols/${bol.id}/${Date.now()}.jpg`;
+  try {
+    await env.BOL_PHOTOS.put(r2Key, photoBytes, {
+      httpMetadata: { contentType: "image/jpeg" }
+    });
+  } catch (e) {
+    return json({ ok: false, error: "photo_upload_failed", detail: String(e?.message || e) }, 500);
+  }
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  await db.prepare(`
+    UPDATE shipments SET
+      status = 'delivered',
+      delivered_at = ?,
+      delivery_accepted = ?,
+      delivery_damages = ?,
+      delivery_damage_notes = ?,
+      delivery_recorded_at = ?,
+      delivery_source = 'driver_qr',
+      updated_at = ?
+    WHERE id = ?
+  `).bind(now, accepted, damages ? 1 : 0, damageNotes, now, now, shipment.id).run();
+  await db.prepare(
+    "UPDATE bols SET signed_bol_photo_key = ?, signed_bol_uploaded_at = ? WHERE id = ?"
+  ).bind(r2Key, now, bol.id).run();
+  await db.prepare(
+    "UPDATE loading_assignments SET loading_status = 'delivered', updated_at = ? WHERE job_id = ? AND loading_status != 'archived'"
+  ).bind(now, bol.job_id).run();
+  await logActivity(
+    db,
+    "delivery_completed",
+    "shipment",
+    shipment.id,
+    `Delivery completed via driver QR \u2014 BOL #${bol.bol_number}`,
+    { source: "driver_qr", bol_number: bol.bol_number, accepted, damages, photo_key: r2Key },
+    null
+  );
+  try {
+    const job = await db.prepare(
+      "SELECT customer, invoice_number FROM jobs WHERE id = ?"
+    ).bind(bol.job_id).first();
+    const customerName = job?.customer || "shipment";
+    const invNum = job?.invoice_number || "";
+    const title = "Delivery completed";
+    const message = `Delivery confirmed by driver \u2014 ${customerName}${invNum ? " (INV# " + invNum + ")" : ""}. Signed BOL is available to view.`;
+    await dispatchNotification(db, env, "loading.delivered", title, message, "shipment", shipment.id);
+  } catch (e) {
+    console.error("Push notification dispatch failed (delivery flow):", e);
+  }
+  return json({ ok: true, stage: "delivered" });
+}
+__name(handleApiPublicBolDelivery, "handleApiPublicBolDelivery");
 
 // ../../AppData/Roaming/npm/node_modules/wrangler/templates/middleware/middleware-ensure-req-body-drained.ts
 var drainBody = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx) => {
@@ -4755,7 +4947,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx)
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-nm32y7/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-QhEfoG/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -4787,7 +4979,7 @@ function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-nm32y7/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-QhEfoG/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class ___Facade_ScheduledController__ {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;

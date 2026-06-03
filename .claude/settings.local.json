@@ -35,7 +35,10 @@
       "Bash(curl -s -I https://xpanda-ops-platform.pages.dev/shared/shared-header.js)",
       "Bash(curl *)",
       "Bash(sed -i 's|/production/production-shared.css|/manufacturing/manufacturing-shared.css|g; s|/production/production-header.js|/manufacturing/manufacturing-header.js|g; s|prod-page-title|mfg-page-title|g; s|prod-page-subtitle|mfg-page-subtitle|g; s|prod-platform-footer|mfg-platform-footer|g' \"C:/Users/scook/.dev/xpanda-ops-platform/manufacturing/block-calculator.html\")",
-      "Bash(sed -i 's|/production/production-shared.css|/manufacturing/manufacturing-shared.css|g; s|/production/production-header.js|/manufacturing/manufacturing-header.js|g; s|prod-page-title|mfg-page-title|g; s|prod-page-subtitle|mfg-page-subtitle|g; s|prod-platform-footer|mfg-platform-footer|g' \"C:/Users/scook/.dev/xpanda-ops-platform/manufacturing/holey-board-calculator.html\")"
+      "Bash(sed -i 's|/production/production-shared.css|/manufacturing/manufacturing-shared.css|g; s|/production/production-header.js|/manufacturing/manufacturing-header.js|g; s|prod-page-title|mfg-page-title|g; s|prod-page-subtitle|mfg-page-subtitle|g; s|prod-platform-footer|mfg-platform-footer|g' \"C:/Users/scook/.dev/xpanda-ops-platform/manufacturing/holey-board-calculator.html\")",
+      "Bash(git stash *)",
+      "Bash(git branch *)",
+      "Bash(git worktree *)"
     ]
   }
 }
