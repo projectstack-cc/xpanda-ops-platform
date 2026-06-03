@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
 /* shared/tokens.css — canonical platform design tokens (UI overhaul, Prompt 85).
    Single source of truth for color/surface/text/border/radius/shadow values.
    Keep existing variable names; values unified here. Light defaults + auto dark mode.
@@ -42,6 +44,10 @@
   --brand: #e31837;
   --brand-hover: #b31229;
 
+  /* Typography */
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
   /* Geometry / elevation */
   --radius: 12px;
   --tile-radius: 14px;
@@ -49,8 +55,9 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, .10), 0 2px 4px -1px rgba(0, 0, 0, .06);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+body { font-family: var(--font-sans); }
+
+:root[data-theme="dark"] {
     --bg: #0f1117;
     --surface: #1a1d29;
     --surface-2: #232634;
@@ -82,7 +89,6 @@
 
     --shadow: 0 1px 3px rgba(0, 0, 0, .40);
     --shadow-md: 0 4px 8px -1px rgba(0, 0, 0, .50), 0 2px 4px -1px rgba(0, 0, 0, .40);
-  }
 }
 
 /* Floor mode — larger touch targets + type for gloved/tablet use (Prompt 86).
