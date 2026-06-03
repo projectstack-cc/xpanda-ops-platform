@@ -164,7 +164,6 @@ if (!window.__xpandaPhotoGalleryLoaded) {
 
     document.write(`
 <header class="topbar">
-${backLinkHtml}
     <a href="/" aria-label="Back to Operations Platform">
         <img src="/logo/xpanda.png" alt="xPanda Logo" class="logo">
     </a>
@@ -186,6 +185,52 @@ ${backLinkHtml}
     window.__xpandaUpdateModeToggle(window.__xpandaGetUiMode ? window.__xpandaGetUiMode() : 'office');
     if (window.ThemeManager) window.ThemeManager.updateToggleUI();
 
+    // Module nav bar — single shared source, renders on every operational page.
+    (function () {
+      var _p = window.location.pathname;
+      var _mods = [
+        { label: 'Job board',     href: '/jobs/',         perm: 'jobs' },
+        { label: 'Logistics',     href: '/logistics/',     perm: 'logistics.dashboard' },
+        { label: 'Manufacturing', href: '/manufacturing/', perm: 'manufacturing.calculators' },
+        { label: 'Production',    href: '/production/',    perm: 'production.inventory' },
+        { label: 'QC',            href: '/qc/',            perm: 'qc' },
+        { label: 'Reports',       href: '/reports/',       perm: 'reports' },
+        { label: 'Safety',        href: '/safety/',        perm: 'safety' },
+        { label: 'Admin',         href: '/admin/',         perm: 'admin' },
+      ];
+      var _links = _mods.map(function (m) {
+        var active = _p.startsWith(m.href);
+        return '<a href="' + m.href + '" class="nav-link' + (active ? ' active' : '') + '" data-nav-perm="' + m.perm + '">' + m.label + '</a>';
+      }).join('');
+      var _ham = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>';
+      document.write(
+        '<style>' +
+        '.xpanda-module-nav{background:var(--surface);border-bottom:1px solid var(--line);font-family:var(--font-sans);}' +
+        '.xpanda-nav-inner{display:flex;align-items:center;padding:0 12px;min-height:44px;}' +
+        '.xpanda-nav-links{display:flex;align-items:center;flex:1;gap:2px;overflow-x:auto;scrollbar-width:none;}' +
+        '.xpanda-nav-links::-webkit-scrollbar{display:none;}' +
+        '.nav-link{display:inline-flex;align-items:center;padding:6px 12px;font-size:13px;font-weight:500;color:var(--muted);text-decoration:none;border-radius:8px;white-space:nowrap;min-height:36px;transition:color .15s,background .15s;}' +
+        '.nav-link:hover{background:var(--ghost-bg);color:var(--text);}' +
+        '.nav-link.active{color:var(--brand);background:rgba(227,24,55,.08);font-weight:600;}' +
+        '.nav-link:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}' +
+        '.xpanda-nav-menu-btn{display:none;align-items:center;justify-content:center;background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;color:var(--text);width:44px;height:44px;padding:0;margin-left:auto;flex-shrink:0;}' +
+        '.xpanda-nav-menu-btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}' +
+        '.xpanda-nav-drawer{background:var(--surface);border-bottom:1px solid var(--line);padding:6px 12px;display:flex;flex-direction:column;gap:2px;}' +
+        '.xpanda-nav-drawer[hidden]{display:none;}' +
+        '.xpanda-nav-drawer .nav-link{min-height:44px;width:100%;}' +
+        '@media(max-width:767px){.xpanda-nav-links{display:none;}.xpanda-nav-menu-btn{display:inline-flex;}}' +
+        '@media(min-width:768px){.xpanda-nav-drawer{display:none;}}' +
+        '</style>' +
+        '<nav class="xpanda-module-nav" id="xpanda-module-nav" aria-label="Module navigation">' +
+          '<div class="xpanda-nav-inner">' +
+            '<div class="xpanda-nav-links" id="xpanda-nav-links">' + _links + '</div>' +
+            '<button type="button" class="xpanda-nav-menu-btn" id="xpanda-nav-menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="xpanda-nav-drawer">' + _ham + '</button>' +
+          '</div>' +
+          '<div class="xpanda-nav-drawer" id="xpanda-nav-drawer" hidden>' + _links + '</div>' +
+        '</nav>'
+      );
+    })();
+
     window.addEventListener('DOMContentLoaded', function () {
 
       // Footer
@@ -204,6 +249,18 @@ ${backLinkHtml}
         footer.innerHTML = `<a href="/">← Back to Operations Platform</a>`;
       }
       document.body.appendChild(footer);
+
+      // Module nav hamburger toggle (mobile <768px).
+      const _navBtn = document.getElementById('xpanda-nav-menu-btn');
+      const _navDrawer = document.getElementById('xpanda-nav-drawer');
+      if (_navBtn && _navDrawer) {
+        _navBtn.addEventListener('click', function () {
+          const open = !_navDrawer.hidden;
+          _navDrawer.hidden = open;
+          _navBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+          _navBtn.setAttribute('aria-label', open ? 'Open menu' : 'Close menu');
+        });
+      }
 
       // 401 interceptor — guard prevents double-wrap if two shims are accidentally loaded.
       if (!window.__xpandaFetchWrapped) {
@@ -225,6 +282,18 @@ ${backLinkHtml}
         if (d.ok && d.user) {
           const el = document.getElementById('hdr-user-name');
           if (el) el.textContent = d.user.displayName || d.user.username;
+
+          // Nav permission filtering — 1:1 match with PATH_PERMISSION_MAP key per nav item.
+          if (!d.user.isAdministrator) {
+            const _navPerms = d.user.permissions || {};
+            document.querySelectorAll('[data-nav-perm]').forEach(function (link) {
+              const k = link.dataset.navPerm;
+              if (!(_navPerms[k] && _navPerms[k].view === true)) {
+                link.style.display = 'none';
+              }
+            });
+          }
+
           if (d.user.simulatingRole) {
             const simBanner = document.createElement('div');
             simBanner.id = 'sim-role-banner';
