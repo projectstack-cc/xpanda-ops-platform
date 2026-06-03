@@ -4,16 +4,15 @@
 
 ## Logistics
 
-### Soft Rollout Batch — Logistics + Loading Dashboard (test rats)
+### Soft Rollout Batch — Logistics + Loading Dashboard (test rats), Prompts 90–94
 
-- [ ] Logistics dashboard card header parity — INV# + load count primary, customer secondary truncated @20 (mirror loading.html cards) *(P85, with sort)*
-- [ ] Loading dashboard card sort — natural/numeric sort by INV# (NOT parseInt; must handle "3942-01" suffixes), default INV# ascending, + sort dropdown *(P85, with header parity)*
-- [ ] Delete job not working — root-cause (permission / FK cascade / route table) then surgical fix *(P86, with customer pickup — see Job Board)*
-- [ ] Customer Pickup must NOT create a bay-queue card — logistics dashboard only (delivery_method field; migration if absent) *(P86 — see Job Board)*
-- [ ] Status sync — logistics dashboard status change writes through to job (source of truth) → kanban + loading reflect; "ready to ship" returns card to queue, excludes customer pickup *(P87)*
-- [ ] The Yard — "Move to Yard" frees a bay while preserving the assignment; unbounded yard list with Mark Shipped / View BOL / photo actions (needs migration: `loading_bays.location`) *(P88)*
-- [ ] Load Builder: "Pull from Job" button — reuse Prompt 16 handoff, append job line items to current load *(P89, with BOL editor fix)*
-- [ ] Inline BOL editor renders tiny on Build Load page (works on BOL generator) — P69 port container/sizing bug; fix container, keep shared engine single-source *(P89, with pull-from-job)*
+Execution order is sequenced for dependencies: P91 (pickup exclusion) lands before P92 (re-queue must respect it); P92 (status write-through) lands before P93 (yard ships through it).
+
+- [x] ~~**P90**~~ — Logistics row header parity (INV# + load count primary, customer secondary `truncate(...,20)`, mirror `loading.html` `renderAssignmentCard`) **+** Loading dashboard sort by INV# natural/numeric (NOT parseInt; handle "3942-01") with sort dropdown. Frontend only.
+- [x] ~~**P91**~~ — Fix delete-job (handler only cleans `job_line_items`; must also delete `shipments` + `loading_assignments` + `loading_photos` + any other `job_id` children) **+** Customer Pickup exclusion (`jobs.method = 'customer pickup'` skips the two loading-assignment auto-create sites; still creates the shipment so it shows on logistics dashboard). No migration.
+- [x] ~~**P92**~~ — Status write-through: reverse sync in `handleApiShipments` PUT — logistics status change updates `jobs.status` (source of truth) + `loading_assignments`; kanban + loading reflect it; "ready to ship" re-queues the card (skips customer pickup). No migration.
+- [x] ~~**P93**~~ — The Yard: `location` flag on `loading_assignments` ('bay' | 'yard'); "Move to Yard" frees the bay (`bay_id = NULL`), preserves assignment; unbounded Yard section with Mark Shipped / View BOL / photo actions. **Needs migration** (`ALTER TABLE loading_assignments ADD COLUMN location`).
+- [x] ~~**P94**~~ — Load Builder "Pull from Job" button (reuse `prefillFromJob`, append, Done+Loading picker) **+** fix inline BOL editor rendering tiny on Build Load (`bol-editor.js:182` `clientWidth` collapses to 200px floor — size `#bol-review-editor-mount-lb` like `#bol-editor-host` + open after modal layout; do NOT touch the shared engine). No migration.
 
 ### Standing Logistics Backlog
 
@@ -59,8 +58,8 @@
 
 ## Job Board
 
-- [ ] Delete job not working — root-cause (permission / FK cascade / route table) then surgical fix *(P86, with customer pickup)*
-- [ ] Customer Pickup delivery method must NOT create a bay-queue card — show on logistics dashboard only; uses `delivery_method` on jobs (migration if field absent) *(P86)*
+- [ ] Delete job not working — root-caused: orphaned `shipments`/`loading_assignments`/`loading_photos` children block/orphan the delete *(P91, with pickup exclusion)*
+- [ ] Customer Pickup (`jobs.method = 'customer pickup'`) must NOT create a bay-queue card — logistics dashboard only; no migration (field exists) *(P91)*
 - [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy — blocked on Quickbase input formatting improvements)
 - [ ] Create packet feature with Bill of Materials (BOM)
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
@@ -100,17 +99,18 @@ The single best near-term move. Cheap, surgical, eliminates real bugs.
 
 ### Phase F3 — Permissions audit pass — ✅ DONE
 
-- [x] ~~**F3** — Read-only audit~~ — Prompt 78. `/permissions-audit.md` exists at repo root. **Read the Gaps section and ship one-line fixes** to `API_PERMISSION_MAP` for each gap (e.g. `/api/saved-loads` was the known-ahead-of-time example). Each gap-fix is a tiny prompt.
+- [x] ~~**F3** — Read-only audit~~ — Prompt 78. `/permissions-audit.md` exists at repo root.
+- [x] ~~**F3 gap-fix** — `/api/saved-loads` permission gap~~ — P95. Added `{ pattern: /^\/api\/saved-loads/, key: 'logistics.load-builder' }` to `API_PERMISSION_MAP`.
 
 ### Phase F4 — R2 storage migration (phased per blob type) — 🟡 IN PROGRESS
 
 D1's 500MB ceiling is the existential cliff. Base64 inflates files ~33%; packing slips, loading photos, completion PDFs all live as base64 TEXT in D1 today. R2 bucket established and proven via Prompt 83 (BOL tracking signed photos).
 
 - [x] ~~**F4b** — R2 binding + upload/serve worker pattern~~ — Established via Prompt 83 (`xpanda-bol-photos` bucket bound as `env.BOL_PHOTOS`; pattern proven with signed BOL photos).
-- [ ] **F4a** — Inventory: enumerate every remaining base64/blob column (`packing_slips.pdf_base64`, `loading_photos.photo_data`, `completions.pdf_base64` if used, anything else). Output: doc at `/r2-migration-inventory.md` listing column → row count → estimated bytes. Drives the migration order.
-- [ ] **F4c — Loading photos migration** — `loading_photos.photo_data` (base64) → R2. Likely largest D1 consumer. Pattern matches P83 exactly: `loading_photos.photo_key` column, write to R2 bucket (new binding or reuse `BOL_PHOTOS`), update photo gallery component (`/shared/photo-gallery.js`) to fetch from new endpoint, drop the base64 column.
-- [ ] **F4d — Packing slips migration** — `packing_slips.pdf_base64` → R2. Same pattern.
-- [ ] **F4e+** — Any other blob columns surfaced by F4a inventory.
+- [x] ~~**F4a** — Blob inventory~~ — P96. `/r2-migration-inventory.md` created. Two columns in D1: `loading_photos.photo_data` and `jobs.packing_slip_pdf`. No F4e needed.
+- [x] ~~**F4c — Loading photos migration**~~ — P97. `loading_photos.photo_key` column, R2 write/serve path with base64 fallback, `photo-gallery.js` updated to use `/api/loading-photos/:id/image`, admin backfill endpoint at `POST /api/admin/r2-backfill?type=loading-photos`. **Needs migration** (`add-photo-key-to-loading-photos.sql`).
+- [x] ~~**F4d — Packing slips migration**~~ — P98. `jobs.packing_slip_key` column, R2 write/serve path with base64 fallback, backfill via `POST /api/admin/r2-backfill?type=packing-slips`. **Needs migration** (`add-packing-slip-key-to-jobs.sql`).
+- [x] ~~**F4e+**~~ — No additional blob columns found during F4a inventory.
 
 ### Phase F5 — Worker modularization (Pages Functions)
 
