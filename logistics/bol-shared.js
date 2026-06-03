@@ -13,7 +13,7 @@ window.BolShared = (function() {
 
     // Top-right block
     date:          { x: 346, y: 712, size: 10 },
-    bolNumber:     { x: 404, y: 693, size: 14, bold: true },
+    bolNumber:     { x: 408, y: 690, size: 18, bold: true },
     carrierName:   { x: 389, y: 648, size: 10 },
     trailerNo:     { x: 365, y: 622, size: 10 },
 
