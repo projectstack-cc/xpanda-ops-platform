@@ -40,7 +40,7 @@ window.BolShared = (function() {
     commodity:     { x: 55,  y: 380, size: 13, lineH: 28, maxW: 510, center: true },
 
     // QR code — driver tracking link (P82). Drawn only when bol.access_token exists.
-    qrCode:        { x: 510, y: 50, size: 70 },  // bottom-right corner; size is total pt box (square)
+    qrCode:        { x: 55, y: 170, size: 60 },  // left margin, ~1/4 up page; tuned from P82 default
   };
 
   const PAGE = { width: 612, height: 792 }; // template is fixed US Letter
