@@ -2,40 +2,11 @@
 // Consumed by every module via /<module>/<module>-header.js (thin shims).
 // TODO: replace document.write() with DOMContentLoaded + insertAdjacentHTML (deferred — separate refactor).
 
-// ThemeManager — single shared dark-mode source (Phase 0b).
-// Default is dark; persists via localStorage key 'xpanda-theme'.
-(function () {
-  if (window.ThemeManager) return;
-  var STORAGE_KEY = 'xpanda-theme';
-  window.ThemeManager = {
-    init: function () {
-      var saved = null;
-      try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
-      this.set(saved || 'dark');
-    },
-    set: function (theme) {
-      document.documentElement.setAttribute('data-theme', theme);
-      try { localStorage.setItem(STORAGE_KEY, theme); } catch (e) {}
-      this.updateToggleUI(theme);
-    },
-    toggle: function () {
-      var current = document.documentElement.getAttribute('data-theme') || 'dark';
-      this.set(current === 'dark' ? 'light' : 'dark');
-    },
-    updateToggleUI: function (theme) {
-      var t = theme || document.documentElement.getAttribute('data-theme') || 'dark';
-      var btn = document.getElementById('hdr-theme-toggle');
-      if (!btn) return;
-      var isDark = t === 'dark';
-      btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
-      var sun = btn.querySelector('.theme-icon-sun');
-      var moon = btn.querySelector('.theme-icon-moon');
-      if (sun) sun.style.display = isDark ? '' : 'none';
-      if (moon) moon.style.display = isDark ? 'none' : '';
-    }
-  };
-  window.ThemeManager.init();
-})();
+// ThemeManager — loaded from /shared/theme.js so homepage and all module pages share one mechanism.
+if (!window.__xpandaThemeLoaded) {
+  window.__xpandaThemeLoaded = true;
+  document.write('<script src="/shared/theme.js"><\/script>');
+}
 
 // Auto-load companion shared modules.
 if (!window.__xpandaSharedApiLoaded) {
@@ -183,7 +154,7 @@ if (!window.__xpandaPhotoGalleryLoaded) {
 `);
 
     window.__xpandaUpdateModeToggle(window.__xpandaGetUiMode ? window.__xpandaGetUiMode() : 'office');
-    if (window.ThemeManager) window.ThemeManager.updateToggleUI();
+    // ThemeManager.updateToggleUI() is handled by DOMContentLoaded in /shared/theme.js.
 
     // Module nav bar — single shared source, renders on every operational page.
     (function () {

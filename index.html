@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('xpanda-theme') || 'dark');</script>
+  <script src="/shared/theme.js"></script>
   <meta charset="UTF-8" />
   <title>xPanda Operations Platform</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -99,16 +100,16 @@
   .hp-card {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--tile-radius);
     padding: 20px 18px;
     display: flex;
     flex-direction: column;
     gap: 11px;
-    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    transition: border-color 0.15s ease, transform 0.15s ease;
   }
   .hp-card:hover {
     border-color: var(--input-border);
-    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
   }
   .hp-card-head {
     display: flex;
@@ -123,7 +124,6 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    font-size: 22px;
   }
   .hp-card-title {
     font-size: 16px;
@@ -145,15 +145,17 @@
 
   /* ── Buttons ─────────────────────────────────── */
   .hp-btn {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     font-size: 13px;
     font-weight: 600;
-    padding: 6px 13px;
+    padding: 8px 14px;
     border-radius: 7px;
     text-decoration: none;
     cursor: pointer;
     transition: opacity 0.15s;
     border: none;
+    min-height: 36px;
   }
   .hp-btn:hover { opacity: 0.92; }
   .hp-btn-outline {
@@ -189,13 +191,22 @@
   [data-theme="dark"] .hp-icon-production { background: rgba(217,119,6,.18);  color: #fcd34d; }
   [data-theme="dark"] .hp-icon-admin      { background: rgba(71,85,105,.30);  color: #cbd5e1; }
 
-  /* ── Notification dropdown (reused from existing) ── */
-  .hp-notif-bell { position: relative; cursor: pointer; font-size: 18px; line-height: 1; }
+  /* ── Notification bell ─────────────────────────── */
+  .hp-notif-bell { position: relative; cursor: pointer; line-height: 1; display: inline-flex; align-items: center; color: var(--muted); }
+  .hp-notif-bell:hover { color: var(--text); }
   .hp-notif-badge {
     display: none; position: absolute; top: -4px; right: -6px;
-    background: #dc2626; color: #fff; font-size: 9px; font-weight: 700;
+    background: var(--danger-bg); color: #fff; font-size: 9px; font-weight: 700;
     border-radius: 50%; width: 16px; height: 16px; text-align: center; line-height: 16px;
   }
+  /* ── Theme toggle ──────────────────────────────── */
+  .hp-theme-toggle {
+    background: none; border: 1px solid var(--line); border-radius: 6px;
+    cursor: pointer; padding: 4px 8px; color: var(--muted);
+    display: inline-flex; align-items: center; line-height: 1;
+  }
+  .hp-theme-toggle:hover { color: var(--text); border-color: var(--input-border); }
+  .hp-theme-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
   .hp-notif-dropdown {
     display: none; position: absolute; top: 36px; right: 0; width: 340px; max-height: 420px;
     background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
@@ -203,8 +214,9 @@
   }
 
   /* ── Access denied banner ────────────────────── */
+  /* Note: light-red tints have no token equivalent; intentionally retained pending a semantic danger token. */
   .hp-denied-banner {
-    background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+    background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius);
     padding: 10px 18px; color: #991b1b; font-size: 13px; text-align: center;
     max-width: var(--max-w); margin: 16px auto 0;
   }
@@ -236,18 +248,19 @@
     </div>
   </div>
   <div class="hp-header-right">
-    <span id="hdr-notif-bell" class="hp-notif-bell" onclick="toggleNotifDropdown()">🔔<span id="hdr-notif-badge" class="hp-notif-badge"></span></span>
+    <span id="hdr-notif-bell" class="hp-notif-bell" onclick="toggleNotifDropdown()" aria-label="Notifications"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span id="hdr-notif-badge" class="hp-notif-badge"></span></span>
     <div id="hdr-notif-dropdown" class="hp-notif-dropdown">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);">
         <span style="font-weight:700;font-size:14px;">Notifications</span>
-        <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
+        <button onclick="markAllRead()" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
       </div>
       <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:var(--accent-soft);border-bottom:1px solid var(--line);cursor:pointer;" onclick="enablePushFromBanner()">
-        <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 Enable push notifications</div>
+        <div style="font-size:13px;font-weight:600;color:var(--accent);">Enable push notifications</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px;">Tap to get alerts on this device</div>
       </div>
       <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
     </div>
+    <button type="button" class="hp-theme-toggle" onclick="window.ThemeManager && window.ThemeManager.toggle()" aria-label="Toggle dark mode"><svg class="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="theme-icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
     <span id="user-display" style="font-size:13px;"></span>
     <a href="#" onclick="doLogout(); return false;">Sign Out</a>
   </div>
@@ -265,7 +278,7 @@
     <!-- Safety -->
     <article class="hp-card" data-permission="safety">
       <div class="hp-card-head">
-        <div class="hp-card-icon hp-icon-safety">🛡️</div>
+        <div class="hp-card-icon hp-icon-safety"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
         <div class="hp-card-title">Safety</div>
       </div>
       <div class="hp-card-desc">SDS library, multilingual training</div>
@@ -278,7 +291,7 @@
     <!-- QC -->
     <article class="hp-card" data-permission="qc">
       <div class="hp-card-head">
-        <div class="hp-card-icon hp-icon-qc">📋</div>
+        <div class="hp-card-icon hp-icon-qc"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg></div>
         <div class="hp-card-title">QC</div>
       </div>
       <div class="hp-card-desc">Inspections, incidents, scrap tracking</div>
@@ -290,7 +303,7 @@
     <!-- Reports -->
     <article class="hp-card" data-permission="reports">
       <div class="hp-card-head">
-        <div class="hp-card-icon hp-icon-reports">📊</div>
+        <div class="hp-card-icon hp-icon-reports"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
         <div class="hp-card-title">Reports</div>
       </div>
       <div class="hp-card-desc">Scrap dashboards, incident analytics</div>
@@ -302,7 +315,7 @@
     <!-- Job Board -->
     <article class="hp-card" data-permission="jobs">
       <div class="hp-card-head">
-        <div class="hp-card-icon hp-icon-jobs">📦</div>
+        <div class="hp-card-icon hp-icon-jobs"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></div>
         <div class="hp-card-title">Job Board</div>
       </div>
       <div class="hp-card-desc">Kanban tracking, order entry to shipment</div>
@@ -314,7 +327,7 @@
     <!-- Logistics (shipments, BOL, load builder — NOT loading dashboard) -->
     <article class="hp-card" data-permission="logistics.dashboard,logistics.bol,logistics.load-builder">
       <div class="hp-card-head">
-        <div class="hp-card-icon hp-icon-logistics">🚛</div>
+        <div class="hp-card-icon hp-icon-logistics"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
         <div class="hp-card-title">Logistics</div>
       </div>
       <div class="hp-card-desc">Shipments, BOL generator, load builder</div>
@@ -328,7 +341,7 @@
     <!-- Loading Dashboard (own card, own permission) -->
     <article class="hp-card" data-permission="logistics.loading">
       <div class="hp-card-head">
-        <div class="hp-card-icon hp-icon-loading">🏗️</div>
+        <div class="hp-card-icon hp-icon-loading"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
         <div class="hp-card-title">Loading</div>
       </div>
       <div class="hp-card-desc">Bay assignments, trailer loading status</div>
@@ -340,7 +353,7 @@
     <!-- Manufacturing -->
     <article class="hp-card" data-permission="manufacturing.calculators,manufacturing.cutting">
       <div class="hp-card-head">
-        <div class="hp-card-icon hp-icon-production">🏭</div>
+        <div class="hp-card-icon hp-icon-production"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
         <div class="hp-card-title">Manufacturing</div>
       </div>
       <div class="hp-card-desc">Block calculator, holey board calculator, cutting dashboard</div>
@@ -352,7 +365,7 @@
     <!-- Production -->
     <article class="hp-card" data-permission="production.inventory">
       <div class="hp-card-head">
-        <div class="hp-card-icon hp-icon-production">📦</div>
+        <div class="hp-card-icon hp-icon-production"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div>
         <div class="hp-card-title">Production</div>
       </div>
       <div class="hp-card-desc">Bead inventory, block inventory, molding log</div>
@@ -364,7 +377,7 @@
     <!-- Admin -->
     <article class="hp-card" data-permission="admin">
       <div class="hp-card-head">
-        <div class="hp-card-icon hp-icon-admin">⚙️</div>
+        <div class="hp-card-icon hp-icon-admin"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></div>
         <div class="hp-card-title">Admin</div>
       </div>
       <div class="hp-card-desc">Parts library, users, roles, activity log</div>
