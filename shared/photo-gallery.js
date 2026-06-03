@@ -20,15 +20,8 @@
     return data.photos; // [{ id, filename, uploaded_by, created_at, ... }]
   }
 
-  // ── Single-photo fetch (returns full row with photo_data) ──────────────
-  // Cached per-id to avoid refetching when navigating back/forward in lightbox.
-  const photoDataCache = new Map();
-  async function fetchPhoto(id) {
-    if (photoDataCache.has(id)) return photoDataCache.get(id);
-    const { ok, data } = await api.get('/api/loading-photos/' + encodeURIComponent(id));
-    if (!ok || !data?.photo) return null;
-    photoDataCache.set(id, data.photo);
-    return data.photo;
+  function photoSrc(id) {
+    return '/api/loading-photos/' + encodeURIComponent(id) + '/image';
   }
 
   // ── Thumbnail strip ────────────────────────────────────────────────────
@@ -45,25 +38,21 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap;padding:8px 0;">
         ${list.map((p, i) => `
           <div class="pg-thumb" data-photo-id="${utils.escHtml(p.id)}" data-index="${i}"
-               style="width:80px;height:80px;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;background:#f3f4f6;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;">
-            <div style="font-size:11px;color:#6b7280;text-align:center;padding:4px;">Loading…</div>
+               style="width:80px;height:80px;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;background:#f3f4f6;overflow:hidden;position:relative;">
           </div>
         `).join('')}
       </div>
     `;
 
-    // Lazy-load thumbnails — fetch each photo's base64 once visible.
-    const thumbs = container.querySelectorAll('.pg-thumb');
-    thumbs.forEach(async (thumb) => {
+    container.querySelectorAll('.pg-thumb').forEach((thumb) => {
       const id = thumb.dataset.photoId;
-      const photo = await fetchPhoto(id);
-      if (photo?.photo_data) {
-        // photo_data is base64; build a data URL.
-        const mime = photo.photo_data.startsWith('iVBOR') ? 'image/png' : 'image/jpeg';
-        thumb.innerHTML = `<img src="data:${mime};base64,${photo.photo_data}" style="width:100%;height:100%;object-fit:cover;">`;
-      } else {
-        thumb.innerHTML = '<div style="font-size:11px;color:#b91c1c;text-align:center;padding:4px;">Error</div>';
-      }
+      const img = document.createElement('img');
+      img.src = photoSrc(id);
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+      img.onerror = () => {
+        thumb.innerHTML = '<div style="font-size:11px;color:#b91c1c;text-align:center;padding:4px;display:flex;align-items:center;justify-content:center;height:100%;">Error</div>';
+      };
+      thumb.appendChild(img);
     });
 
     container.addEventListener('click', (e) => {
@@ -106,14 +95,11 @@
     const img = overlay.querySelector('.pg-image');
     const caption = overlay.querySelector('.pg-caption');
 
-    async function render() {
+    function render() {
       img.style.opacity = '0.3';
-      const p = await fetchPhoto(list[current].id);
-      if (p?.photo_data) {
-        const mime = p.photo_data.startsWith('iVBOR') ? 'image/png' : 'image/jpeg';
-        img.src = `data:${mime};base64,${p.photo_data}`;
-      }
-      img.style.opacity = '1';
+      img.src = photoSrc(list[current].id);
+      img.onload  = () => { img.style.opacity = '1'; };
+      img.onerror = () => { img.style.opacity = '1'; };
       const meta = list[current];
       caption.textContent = `${current + 1} of ${list.length}` +
         (meta.uploaded_by ? ` · ${meta.uploaded_by}` : '') +

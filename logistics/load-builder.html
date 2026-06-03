@@ -1389,6 +1389,10 @@ function renderLoadTab() {
   const savedLoadsBtn = h('button', { className: 'btn btn-white', style: { marginBottom: '12px' }, onClick: () => openLoadModal() }, 'SAVED LOADS');
   cont.appendChild(savedLoadsBtn);
 
+  // Pull from Job button
+  const pullJobBtn = h('button', { className: 'btn btn-white', style: { marginBottom: '12px', marginLeft: '8px' }, onClick: () => openPullJobPicker() }, 'PULL FROM JOB');
+  cont.appendChild(pullJobBtn);
+
   // Trailer type selector
   const typeCard = h('div', { className: 'card mb-18' });
   const typeRow = h('div', { className: 'flex items-center gap-10 flex-wrap' });
@@ -2996,14 +3000,18 @@ function handleReviewEditLB() {
   sel.parentNode.replaceChild(newSel, sel);
   newSel.addEventListener('change', (e) => {
     lbReviewActiveIndex = Number(e.target.value) || 0;
+    requestAnimationFrame(() => {
+      BolEditor.open(lbReviewBols[lbReviewActiveIndex],
+        document.getElementById('bol-review-editor-mount-lb'),
+        { onApply: lbEditorOnApply, onCancel: lbEditorOnCancel });
+    });
+  });
+
+  requestAnimationFrame(() => {
     BolEditor.open(lbReviewBols[lbReviewActiveIndex],
       document.getElementById('bol-review-editor-mount-lb'),
       { onApply: lbEditorOnApply, onCancel: lbEditorOnCancel });
   });
-
-  BolEditor.open(lbReviewBols[lbReviewActiveIndex],
-    document.getElementById('bol-review-editor-mount-lb'),
-    { onApply: lbEditorOnApply, onCancel: lbEditorOnCancel });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3082,6 +3090,42 @@ function showJobBanner(job, pieceCount) {
   else { mainContent.prepend(banner); }
 }
 
+async function openPullJobPicker() {
+  const modal = document.getElementById('pull-job-picker-modal');
+  const list  = document.getElementById('pull-job-list');
+  modal.style.display = 'flex';
+  list.innerHTML = '<div style="color:#6b7280;padding:12px;">Loading jobs…</div>';
+  try {
+    const res  = await fetch('/api/jobs?status=done,loading');
+    const data = await res.json();
+    const jobs = (data.jobs || data.data || []).filter(j => j.status === 'done' || j.status === 'loading');
+    if (!jobs.length) {
+      list.innerHTML = '<div style="color:#6b7280;padding:12px;">No Done or Loading jobs found.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    jobs.forEach(job => {
+      const item = document.createElement('div');
+      item.style.cssText = 'padding:10px 14px;cursor:pointer;border-bottom:1px solid #f3f4f6;';
+      item.onmouseenter = () => item.style.background = '#f9fafb';
+      item.onmouseleave = () => item.style.background = '';
+      const invPart = job.invoice_number ? ` — INV# ${job.invoice_number}` : '';
+      item.textContent = `${job.customer || '(no customer)'}${invPart}`;
+      item.onclick = () => {
+        closePullJobPicker();
+        prefillFromJob(job.id);
+      };
+      list.appendChild(item);
+    });
+  } catch (e) {
+    list.innerHTML = '<div style="color:#ef4444;padding:12px;">Failed to load jobs.</div>';
+  }
+}
+
+function closePullJobPicker() {
+  document.getElementById('pull-job-picker-modal').style.display = 'none';
+}
+
 async function prefillFromJob(jobId) {
   try {
     const res = await fetch('/api/jobs/' + encodeURIComponent(jobId));
@@ -3157,6 +3201,24 @@ initSkus().then(() => {
 });
 </script>
 
+<!-- Pull from Job Picker Modal -->
+<div id="pull-job-picker-modal" style="
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+  z-index:10001; align-items:center; justify-content:center;
+">
+  <div style="
+    background:#fff; border-radius:12px; width:90%; max-width:480px;
+    max-height:70vh; display:flex; flex-direction:column;
+    box-shadow:0 8px 32px rgba(0,0,0,0.2);
+  ">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #e5e7eb;">
+      <h3 style="margin:0; font-size:16px; font-weight:700; color:#111827;">Pull from Job</h3>
+      <button onclick="closePullJobPicker()" style="background:none; border:none; font-size:22px; cursor:pointer; color:#6b7280; padding:0; line-height:1;">&times;</button>
+    </div>
+    <div id="pull-job-list" style="overflow-y:auto; flex:1; font-size:14px; color:#111827;"></div>
+  </div>
+</div>
+
 <!-- BOL Review Modal -->
 <div id="bol-review-backdrop" style="
   position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;
@@ -3213,8 +3275,8 @@ initSkus().then(() => {
     <iframe id="bol-review-iframe" style="
       flex:1;border:none;border-radius:0 0 12px 12px;
     "></iframe>
-    <div id="bol-review-editor-host-lb" style="display:none; flex:1; overflow:auto; background:#f9fafb;">
-      <div id="bol-review-editor-mount-lb" style="position:relative;"></div>
+    <div id="bol-review-editor-host-lb" style="display:none; flex:1; overflow:auto; background:#f9fafb; flex-direction:column;">
+      <div id="bol-review-editor-mount-lb" style="position:relative; flex:1; min-width:0; width:100%;"></div>
     </div>
   </div>
 </div>

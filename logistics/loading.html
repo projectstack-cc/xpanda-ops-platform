@@ -47,6 +47,8 @@
     .ld-btn-archive { padding: 4px 10px; border: 1px solid #d1d5db; background: #fff; color: #6b7280; border-radius: 6px; font-size: 11px; cursor: pointer; }
     .ld-btn-bol { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
     .ld-btn-bol:hover { background: #e0f2fe; }
+    .ld-btn-yard { background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
+    .ld-btn-yard:hover { background: #fde68a; }
     .ld-btn-photos { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
     .ld-btn-photos:hover { background: #fde68a; }
     .ld-empty { color: #9ca3af; font-size: 12px; text-align: center; padding: 16px; }
@@ -120,6 +122,11 @@
       <button id="view-bay" class="ld-view-btn" onclick="setLdView('bay')">Loading Team View</button>
     </div>
     <select id="bay-selector" style="display:none;" onchange="selectBay(this.value)"></select>
+    <select id="ld-sort-select" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;cursor:pointer;" onchange="ldSortOrder=this.value;renderDashboard()">
+      <option value="inv_asc">INV# ↑</option>
+      <option value="inv_desc">INV# ↓</option>
+      <option value="date_asc">Date added</option>
+    </select>
     <button id="btn-pull-job" class="ld-btn-pull" onclick="openPullJobModal()" style="display:none;">+ Pull Job</button>
   </div>
 
@@ -134,6 +141,13 @@
     </div>
     <div class="ld-bays-scroll">
       <div id="ld-bays" class="ld-bays-grid"></div>
+    </div>
+    <div class="ld-section" data-section-key="yard">
+      <h3 class="ld-section-title" onclick="toggleSection('yard')" style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
+        <span class="ld-section-chevron" id="ld-chevron-yard">▾</span>
+        Yard
+      </h3>
+      <div id="ld-yard" class="ld-transit-grid"></div>
     </div>
     <div class="ld-section" data-section-key="transit">
       <h3 class="ld-section-title" onclick="toggleSection('transit')" style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
@@ -248,6 +262,25 @@ let selectedBayId = null;
 let currentLdView = window.innerWidth < 768 ? 'bay' : 'overview';
 let pullJobSelectedId = null;
 let pullJobSearchResults = [];
+let ldSortOrder = 'inv_asc';
+
+function sortAssignments(arr) {
+  const out = [...arr];
+  if (ldSortOrder === 'inv_asc' || ldSortOrder === 'inv_desc') {
+    out.sort((a, b) => {
+      const ai = a.invoice_number || '';
+      const bi = b.invoice_number || '';
+      if (!ai && !bi) return 0;
+      if (!ai) return 1;
+      if (!bi) return -1;
+      const cmp = ai.localeCompare(bi, undefined, { numeric: true, sensitivity: 'base' });
+      return ldSortOrder === 'inv_asc' ? cmp : -cmp;
+    });
+  } else {
+    out.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+  }
+  return out;
+}
 
 const LD_COLLAPSE_KEY = 'ld_section_collapsed_v1';
 
@@ -264,7 +297,7 @@ function saveCollapseState(state) {
 
 function applyCollapseState() {
   const state = loadCollapseState();
-  ['awaiting', 'transit', 'delivered'].forEach(key => {
+  ['awaiting', 'yard', 'transit', 'delivered'].forEach(key => {
     const section = document.querySelector(`.ld-section[data-section-key="${key}"]`);
     if (!section) return;
     const body = section.querySelector('.ld-queue, .ld-transit-grid');
@@ -340,15 +373,15 @@ function renderDashboard() {
 function renderOverview() {
   const user = window.__xpandaUser;
   const isManager = user && (user.isAdministrator || user.permissions?.['logistics.loading.manage']?.edit);
-  const awaiting = allAssignments.filter(a => a.loading_status === 'awaiting');
+  const awaiting = sortAssignments(allAssignments.filter(a => a.loading_status === 'awaiting'));
   document.getElementById('ld-awaiting').innerHTML = awaiting.length
     ? awaiting.map(a => renderAssignmentCard(a, false, false)).join('')
     : '<div class="ld-empty">No jobs awaiting assignment</div>';
 
   const baysHtml = allBays.map(bay => {
-    const bayAssignments = allAssignments.filter(a =>
+    const bayAssignments = sortAssignments(allAssignments.filter(a =>
       a.bay_id === bay.id && ['not_started', 'loading', 'loaded'].includes(a.loading_status)
-    );
+    ));
     return `
       <div class="ld-bay-col" data-bay-id="${bay.id}">
         <div class="ld-bay-header">
@@ -375,12 +408,17 @@ function renderOverview() {
   document.getElementById('ld-bays').innerHTML = baysHtml;
   initTouchDragForOverview();
 
-  const transit = allAssignments.filter(a => a.loading_status === 'in_transit');
+  const yard = sortAssignments(allAssignments.filter(a => a.location === 'yard'));
+  document.getElementById('ld-yard').innerHTML = yard.length
+    ? yard.map(a => renderAssignmentCard(a, false, false)).join('')
+    : '<div class="ld-empty">No trailers in the yard</div>';
+
+  const transit = sortAssignments(allAssignments.filter(a => a.loading_status === 'in_transit'));
   document.getElementById('ld-transit').innerHTML = transit.length
     ? transit.map(a => renderAssignmentCard(a, false, false)).join('')
     : '<div class="ld-empty">No trailers in transit</div>';
 
-  const delivered = allAssignments.filter(a => a.loading_status === 'delivered');
+  const delivered = sortAssignments(allAssignments.filter(a => a.loading_status === 'delivered'));
   document.getElementById('ld-delivered').innerHTML = delivered.length
     ? delivered.map(a => renderAssignmentCard(a, false, true)).join('')
     : '<div class="ld-empty">No recent deliveries</div>';
@@ -404,9 +442,9 @@ function renderBayView() {
   const bayAssignments = allAssignments.filter(a => a.bay_id === selectedBayId);
 
   const groups = [
-    { status: 'not_started', label: 'Not Started', assignments: bayAssignments.filter(a => a.loading_status === 'not_started') },
-    { status: 'loading',     label: 'Loading',     assignments: bayAssignments.filter(a => a.loading_status === 'loading') },
-    { status: 'loaded',      label: 'Loaded',      assignments: bayAssignments.filter(a => a.loading_status === 'loaded') },
+    { status: 'not_started', label: 'Not Started', assignments: sortAssignments(bayAssignments.filter(a => a.loading_status === 'not_started')) },
+    { status: 'loading',     label: 'Loading',     assignments: sortAssignments(bayAssignments.filter(a => a.loading_status === 'loading')) },
+    { status: 'loaded',      label: 'Loaded',      assignments: sortAssignments(bayAssignments.filter(a => a.loading_status === 'loaded')) },
   ];
 
   const html = `
@@ -539,6 +577,9 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
           ? `<button class="ld-btn-bol" onclick="viewBolForJob('${a.job_id}')">View BOL</button>`
           : ''}
         <button class="ld-btn-photos" onclick="photoGallery.openLightbox({ jobId: '${a.job_id}' })">📷 Photos</button>
+        ${a.bay_id && ['not_started','loading','loaded'].includes(a.loading_status)
+          ? `<button class="ld-btn-yard" onclick="moveToYard('${a.id}')">Move to Yard</button>`
+          : ''}
         ${showArchiveBtn ? `<button class="ld-btn-archive" onclick="archiveAssignment('${a.id}')">Archive</button>` : ''}
       </div>
     </div>
@@ -582,6 +623,24 @@ async function advanceStatus(assignmentId, newStatus) {
     }
   } catch (e) {
     console.error('Status advance failed:', e);
+  }
+}
+
+async function moveToYard(assignmentId) {
+  try {
+    const res = await fetch('/api/loading-assignments', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: assignmentId, location: 'yard', bay_id: null }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      loadDashboard();
+    } else {
+      alert(data.error || 'Failed to move to yard');
+    }
+  } catch (e) {
+    console.error('Move to yard failed:', e);
   }
 }
 

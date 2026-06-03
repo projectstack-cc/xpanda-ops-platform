@@ -57,6 +57,9 @@ const API_ROUTES = [
   { prefix: '/api/load-builder-skus',      handler: (req, env) => handleApiLoadBuilderSkus(req, env) },
   { prefix: '/api/saved-loads',            handler: (req, env) => handleApiSavedLoads(req, env) },
 
+  // Admin utilities
+  { path: '/api/admin/r2-backfill', method: 'POST', handler: (req, env) => handleApiAdminR2Backfill(req, env) },
+
   // Loading
   { prefix: '/api/loading-bays',        handler: (req, env) => handleApiLoadingBays(req, env) },
   { prefix: '/api/loading-assignments', handler: (req, env) => handleApiLoadingAssignments(req, env) },
@@ -447,6 +450,7 @@ const API_PERMISSION_MAP = [
   { pattern: /^\/api\/bol-carriers/,      key: 'logistics.bol' },
   { pattern: /^\/api\/shipments/,         key: 'logistics.dashboard' },
   { pattern: /^\/api\/load-builder-skus/, key: 'logistics.load-builder' },
+  { pattern: /^\/api\/saved-loads/,       key: 'logistics.load-builder' },
   { pattern: /^\/api\/loading-bays/,      key: 'logistics.loading' },
   { pattern: /^\/api\/loading-assignments/, key: 'logistics.loading' },
   { pattern: /^\/api\/loading-photos/, key: 'logistics.loading' },
@@ -1771,21 +1775,38 @@ async function handleApiJobs(request, env) {
   if (request.method === "GET" && jobId && subRoute === "packing-slip") {
     try {
       const row = await db
-        .prepare("SELECT packing_slip_pdf, packing_slip_filename FROM jobs WHERE id = ?")
+        .prepare("SELECT packing_slip_key, packing_slip_pdf, packing_slip_filename FROM jobs WHERE id = ?")
         .bind(jobId).first();
       if (!row) return json({ ok: false, error: "Job not found." }, 404);
-      if (!row.packing_slip_pdf) return json({ ok: false, error: "No packing slip attached to this job." }, 404);
 
-      const binary = Uint8Array.from(atob(row.packing_slip_pdf), c => c.charCodeAt(0));
       const filename = row.packing_slip_filename || "packing-slip.pdf";
-      return new Response(binary, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `inline; filename="${filename.replace(/"/g, '')}"`,
-          "Cache-Control": "private, max-age=3600",
-        },
-      });
+      const disposition = `inline; filename="${filename.replace(/"/g, '')}"`;
+
+      // Prefer R2 key; fall back to legacy base64 for un-backfilled rows
+      if (row.packing_slip_key) {
+        const obj = await env.BOL_PHOTOS.get(row.packing_slip_key);
+        if (!obj) return json({ ok: false, error: "Packing slip not found in storage." }, 404);
+        return new Response(obj.body, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": disposition,
+            "Cache-Control": "private, max-age=3600",
+          },
+        });
+      }
+      if (row.packing_slip_pdf) {
+        const binary = Uint8Array.from(atob(row.packing_slip_pdf), c => c.charCodeAt(0));
+        return new Response(binary, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": disposition,
+            "Cache-Control": "private, max-age=3600",
+          },
+        });
+      }
+      return json({ ok: false, error: "No packing slip attached to this job." }, 404);
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
@@ -1939,11 +1960,26 @@ async function handleApiJobs(request, env) {
     const processes            = Array.isArray(payload.processes) ? JSON.stringify(payload.processes) : '[]';
 
     // Packing slip fields (optional — present when job is created from an uploaded PDF)
-    const packing_slip_pdf      = payload.packing_slip_pdf ? String(payload.packing_slip_pdf) : null;
     const packing_slip_filename = String(payload.packing_slip_filename || "").trim();
     const packing_slip_invoice  = String(payload.packing_slip_invoice  || "").trim();
     const source = ["manual", "packing_slip"].includes(String(payload.source || "").trim())
       ? String(payload.source).trim() : "manual";
+
+    // Upload packing slip to R2 if present; on failure keep base64 in D1 so the slip isn't lost
+    let packing_slip_pdf  = payload.packing_slip_pdf ? String(payload.packing_slip_pdf) : null;
+    let packing_slip_key  = null;
+    if (packing_slip_pdf) {
+      try {
+        const slipBytes = Uint8Array.from(atob(packing_slip_pdf), c => c.charCodeAt(0));
+        const slipKey = `packing-slips/${id}.pdf`;
+        await env.BOL_PHOTOS.put(slipKey, slipBytes, { httpMetadata: { contentType: 'application/pdf' } });
+        packing_slip_key = slipKey;
+        packing_slip_pdf = null; // cleared from D1 now that it's on R2
+      } catch (e) {
+        console.error('Packing slip R2 upload failed — keeping in D1:', String(e?.message || e));
+        // packing_slip_pdf remains set; packing_slip_key stays null
+      }
+    }
 
     try {
       await db.prepare(`
@@ -1953,17 +1989,17 @@ async function handleApiJobs(request, env) {
           scrap_pickup, sales_lead, bol_info, payment_info, notes,
           packing_instructions, contact_name, contact_phone, combo_id,
           priority, confirmed_to_ship, processes, created_at, updated_at,
-          packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
+          packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
           ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
           ship_to_city, ship_to_state, ship_to_zip
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, status, customer, po_number, invoice_number, ship_date, ship_day,
         location, delivery_time, method, carrier, load_count, total_bdft,
         scrap_pickup, sales_lead, bol_info, payment_info, notes,
         packing_instructions, contact_name, contact_phone, combo_id,
         priority, confirmed_to_ship, processes, now, now,
-        packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
+        packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
         ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
         ship_to_city, ship_to_state, ship_to_zip,
       ).run();
@@ -2016,19 +2052,21 @@ async function handleApiJobs(request, env) {
         console.error('Auto-shipment creation failed:', String(e?.message || e));
       }
 
-      // Auto-create loading assignment
-      try {
-        const loadCount = Math.max(load_count || 1, 1);
-        const now2 = new Date().toISOString();
-        for (let n = 1; n <= loadCount; n++) {
-          const laId = crypto.randomUUID();
-          await db.prepare(`
-            INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, load_number, created_at, updated_at)
-            VALUES (?, ?, NULL, '', 'awaiting', NULL, '', ?, ?, ?)
-          `).bind(laId, id, n, now2, now2).run();
+      // Auto-create loading assignment (customer pickup jobs skip the bay queue)
+      if ((method || '').toLowerCase() !== 'customer pickup') {
+        try {
+          const loadCount = Math.max(load_count || 1, 1);
+          const now2 = new Date().toISOString();
+          for (let n = 1; n <= loadCount; n++) {
+            const laId = crypto.randomUUID();
+            await db.prepare(`
+              INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, load_number, created_at, updated_at)
+              VALUES (?, ?, NULL, '', 'awaiting', NULL, '', ?, ?, ?)
+            `).bind(laId, id, n, now2, now2).run();
+          }
+        } catch (e) {
+          console.error('Auto-create loading assignment on job create failed:', String(e?.message || e));
         }
-      } catch (e) {
-        console.error('Auto-create loading assignment on job create failed:', String(e?.message || e));
       }
 
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
@@ -2100,10 +2138,29 @@ async function handleApiJobs(request, env) {
         return json({ ok: false, error: "Invalid source." }, 400);
       sets.push("source = ?"); binds.push(v);
     }
-    // packing_slip_pdf is nullable — pass null to clear, base64 string to set
+    // packing_slip_pdf: try R2 upload; fall back to D1 base64 if R2 fails; null to clear
     if ("packing_slip_pdf" in payload) {
-      sets.push("packing_slip_pdf = ?");
-      binds.push(payload.packing_slip_pdf ? String(payload.packing_slip_pdf) : null);
+      if (payload.packing_slip_pdf) {
+        let uploadedKey = null;
+        try {
+          const slipBytes = Uint8Array.from(atob(String(payload.packing_slip_pdf)), c => c.charCodeAt(0));
+          const slipKey = `packing-slips/${id}.pdf`;
+          await env.BOL_PHOTOS.put(slipKey, slipBytes, { httpMetadata: { contentType: 'application/pdf' } });
+          uploadedKey = slipKey;
+        } catch (e) {
+          console.error('Packing slip R2 upload failed on PUT — keeping in D1:', String(e?.message || e));
+        }
+        if (uploadedKey) {
+          sets.push("packing_slip_key = ?"); binds.push(uploadedKey);
+          sets.push("packing_slip_pdf = ?"); binds.push(null);
+        } else {
+          sets.push("packing_slip_pdf = ?"); binds.push(String(payload.packing_slip_pdf));
+        }
+      } else {
+        // Explicit clear
+        sets.push("packing_slip_pdf = ?"); binds.push(null);
+        sets.push("packing_slip_key = ?"); binds.push(null);
+      }
     }
 
     sets.push("updated_at = ?");
@@ -2222,7 +2279,14 @@ async function handleApiJobs(request, env) {
     if (!existing) return json({ ok: false, error: "Job not found." }, 404);
 
     try {
-      // Explicit delete of line items (D1 FK cascade not guaranteed)
+      // Delete workflow children in child→parent order before deleting the job.
+      // Deliberately NOT deleting block_consumption_log — those rows are inventory
+      // accounting records; removing them would corrupt production yield history.
+      await db.prepare("DELETE FROM loading_photos WHERE job_id = ?").bind(id).run();
+      await db.prepare("DELETE FROM loading_assignments WHERE job_id = ?").bind(id).run();
+      await db.prepare("DELETE FROM bols WHERE job_id = ?").bind(id).run();
+      await db.prepare("DELETE FROM saved_loads WHERE job_id = ?").bind(id).run();
+      await db.prepare("DELETE FROM shipments WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM job_line_items WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM jobs WHERE id = ?").bind(id).run();
       await logActivity(db, 'delete', 'job', id, `Deleted job ${id}`, { id });
@@ -2912,6 +2976,61 @@ async function handleApiShipments(request, env) {
     try {
       await db.prepare(`UPDATE shipments SET ${sets.join(", ")} WHERE id = ?`).bind(...vals).run();
       const row = await db.prepare("SELECT * FROM shipments WHERE id = ?").bind(id).first();
+
+      // Reverse write-through: logistics dashboard status change → job + loading_assignments
+      if (payload.status && row.job_id) {
+        const SHIPMENT_TO_JOB_STATUS = {
+          not_started:   'not_started',
+          in_production: 'in_production',
+          ready_to_ship: 'done',
+          awaiting:      'loading',
+          in_transit:    'shipped',
+          delivered:     'shipped',
+        };
+        const mappedJobStatus = SHIPMENT_TO_JOB_STATUS[payload.status];
+
+        let jobRow = null;
+        try {
+          jobRow = await db.prepare("SELECT status, method FROM jobs WHERE id = ?").bind(row.job_id).first();
+        } catch (e) {
+          console.error('Shipment→Job lookup failed:', e);
+        }
+
+        if (mappedJobStatus && jobRow && jobRow.status !== mappedJobStatus) {
+          try {
+            await db.prepare(
+              "UPDATE jobs SET status = ?, updated_at = datetime('now') WHERE id = ?"
+            ).bind(mappedJobStatus, row.job_id).run();
+          } catch (e) {
+            console.error('Shipment→Job status sync failed:', e);
+          }
+        }
+
+        // Mirror in_transit/delivered directly to loading_assignments (same pattern as driver QR flow)
+        if (['in_transit', 'delivered'].includes(payload.status)) {
+          try {
+            const nowSync = new Date().toISOString();
+            await db.prepare(
+              "UPDATE loading_assignments SET loading_status = ?, updated_at = ? WHERE job_id = ? AND loading_status != 'archived'"
+            ).bind(payload.status, nowSync, row.job_id).run();
+          } catch (e) {
+            console.error('Shipment→LoadingAssignment status sync failed:', e);
+          }
+        }
+
+        // Re-queue: pulling back to ready_to_ship returns non-pickup card to awaiting queue
+        if (payload.status === 'ready_to_ship' && jobRow && (jobRow.method || '').toLowerCase() !== 'customer pickup') {
+          try {
+            const nowReq = new Date().toISOString();
+            await db.prepare(
+              "UPDATE loading_assignments SET loading_status = 'awaiting', bay_id = NULL, updated_at = ? WHERE job_id = ? AND loading_status != 'archived'"
+            ).bind(nowReq, row.job_id).run();
+          } catch (e) {
+            console.error('Shipment→LoadingAssignment re-queue failed:', e);
+          }
+        }
+      }
+
       await logActivity(db, 'update', 'shipment', id,
         `Updated shipment ${id} — status: ${payload.status || ''}`,
         { fields_updated: Object.keys(payload).filter(k => k !== 'id') }
@@ -4307,7 +4426,8 @@ async function handleApiLoadingAssignments(request, env) {
           (SELECT COUNT(*) FROM loading_assignments la WHERE la.job_id = j.id) AS existing_count
         FROM jobs j
         WHERE j.status IN ('done', 'loading', 'shipped')
-        AND (SELECT COUNT(*) FROM loading_assignments la WHERE la.job_id = j.id) < CASE WHEN j.load_count > 1 THEN j.load_count ELSE 1 END
+          AND COALESCE(j.method, '') != 'customer pickup'
+          AND (SELECT COUNT(*) FROM loading_assignments la WHERE la.job_id = j.id) < CASE WHEN j.load_count > 1 THEN j.load_count ELSE 1 END
       `).all();
       const backfill = backfillJobs.results || [];
       if (backfill.length > 0) {
@@ -4436,6 +4556,10 @@ async function handleApiLoadingAssignments(request, env) {
     const updates = [];
     const binds = [];
 
+    if (payload.location !== undefined) {
+      updates.push('location = ?');
+      binds.push(payload.location === 'yard' ? 'yard' : 'bay');
+    }
     if (payload.bay_id !== undefined) { updates.push('bay_id = ?'); binds.push(payload.bay_id || null); }
     if (payload.trailer_number !== undefined) { updates.push('trailer_number = ?'); binds.push(String(payload.trailer_number)); }
     if (payload.notes !== undefined) { updates.push('notes = ?'); binds.push(String(payload.notes)); }
@@ -4522,6 +4646,12 @@ async function handleApiLoadingAssignments(request, env) {
           { job_id: existing.job_id, bay_id: payload.bay_id || existing.bay_id },
           request.headers.get('X-User-Id'));
       }
+      if (payload.location === 'yard') {
+        await logActivity(db, 'update', 'loading_assignment', id,
+          'Moved to yard',
+          { job_id: existing.job_id },
+          request.headers.get('X-User-Id'));
+      }
       return json({ ok: true });
     } catch (e) {
       return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
@@ -4561,17 +4691,49 @@ async function handleApiLoadingPhotos(request, env) {
   const photoId = pathParts[0] || null;
 
   if (request.method === 'GET') {
+    // Image serve — must come before the single-row JSON branch
+    if (photoId && pathParts[1] === 'image') {
+      try {
+        const row = await db.prepare("SELECT photo_key, photo_data FROM loading_photos WHERE id = ?").bind(photoId).first();
+        if (!row) return new Response('Not found', { status: 404 });
+
+        if (row.photo_key) {
+          const obj = await env.BOL_PHOTOS.get(row.photo_key);
+          if (!obj) return new Response('Not found', { status: 404 });
+          return new Response(obj.body, {
+            headers: {
+              'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+              'Cache-Control': 'private, max-age=300',
+            },
+          });
+        }
+        // Legacy base64 fallback for un-backfilled rows
+        if (row.photo_data && row.photo_data.length > 10) {
+          const mime = row.photo_data.startsWith('iVBOR') ? 'image/png' : 'image/jpeg';
+          const bytes = Uint8Array.from(atob(row.photo_data), c => c.charCodeAt(0));
+          return new Response(bytes, {
+            headers: { 'Content-Type': mime, 'Cache-Control': 'private, max-age=300' },
+          });
+        }
+        return new Response('Not found', { status: 404 });
+      } catch (e) {
+        return new Response('Server error', { status: 500 });
+      }
+    }
+
     try {
       if (photoId) {
-        const row = await db.prepare("SELECT * FROM loading_photos WHERE id = ?").bind(photoId).first();
+        const row = await db.prepare(
+          "SELECT id, assignment_id, job_id, photo_key, filename, uploaded_by, created_at FROM loading_photos WHERE id = ?"
+        ).bind(photoId).first();
         if (!row) return json({ ok: false, error: 'Photo not found.' }, 404);
-        return json({ ok: true, photo: row });
+        return json({ ok: true, photo: { ...row, has_image: !!(row.photo_key || false) } });
       }
 
       const jobId = url.searchParams.get('job_id');
       const assignmentId = url.searchParams.get('assignment_id');
 
-      let query = "SELECT id, assignment_id, job_id, filename, uploaded_by, created_at FROM loading_photos";
+      let query = "SELECT id, assignment_id, job_id, photo_key, filename, uploaded_by, created_at FROM loading_photos";
       const conditions = [];
       const binds = [];
 
@@ -4595,19 +4757,34 @@ async function handleApiLoadingPhotos(request, env) {
     if (!payload.job_id) return json({ ok: false, error: 'job_id is required.' }, 400);
     if (!payload.photo_data) return json({ ok: false, error: 'photo_data is required.' }, 400);
 
-    if (payload.photo_data.length > 1500000) {
-      return json({ ok: false, error: 'Photo too large. Maximum ~1MB after compression.' }, 400);
+    // Raised from 1.5MB to ~10MB base64 (~7.5MB decoded) now that we store on R2
+    if (payload.photo_data.length > 10000000) {
+      return json({ ok: false, error: 'Photo too large. Maximum ~7MB.' }, 400);
     }
 
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
+    // Upload to R2 first — only insert DB row on success
+    const isPng = payload.photo_data.startsWith('iVBOR');
+    const ext = isPng ? 'png' : 'jpg';
+    const contentType = isPng ? 'image/png' : 'image/jpeg';
+    const r2Key = `loading-photos/${payload.assignment_id}/${id}.${ext}`;
+
     try {
+      const photoBytes = Uint8Array.from(atob(payload.photo_data), c => c.charCodeAt(0));
+      await env.BOL_PHOTOS.put(r2Key, photoBytes, { httpMetadata: { contentType } });
+    } catch (e) {
+      return json({ ok: false, error: 'photo_upload_failed', detail: String(e?.message || e) }, 500);
+    }
+
+    try {
+      // photo_data column is NOT NULL in schema; store '' sentinel when using R2 key
       await db.prepare(`
-        INSERT INTO loading_photos (id, assignment_id, job_id, photo_data, filename, uploaded_by, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO loading_photos (id, assignment_id, job_id, photo_key, photo_data, filename, uploaded_by, created_at)
+        VALUES (?, ?, ?, ?, '', ?, ?, ?)
       `).bind(
-        id, payload.assignment_id, payload.job_id, payload.photo_data,
+        id, payload.assignment_id, payload.job_id, r2Key,
         payload.filename || '', request.headers.get('X-User-Id') || null, now
       ).run();
 
@@ -4644,6 +4821,108 @@ async function handleApiLoadingPhotos(request, env) {
   }
 
   return json({ ok: false, error: 'Method not allowed' }, 405);
+}
+
+// =============================================================================
+// HANDLER: /api/admin/r2-backfill  (POST — admin only)
+// Migrates legacy D1 base64 blobs to R2 in small batches.
+// ?type=loading-photos | packing-slips
+// =============================================================================
+async function handleApiAdminR2Backfill(request, env) {
+  if (request.headers.get('X-User-Is-Admin') !== '1') {
+    return json({ ok: false, error: 'Administrator access required.' }, 403);
+  }
+
+  const db = env.DB;
+  const url = new URL(request.url);
+  const type = url.searchParams.get('type') || '';
+  const batchSize = Math.min(parseInt(url.searchParams.get('batch') || '50', 10), 100);
+
+  if (type === 'loading-photos') {
+    try {
+      const { results } = await db.prepare(`
+        SELECT id, assignment_id, photo_data FROM loading_photos
+        WHERE photo_key IS NULL AND LENGTH(photo_data) > 10
+        LIMIT ?
+      `).bind(batchSize).all();
+
+      const rows = results || [];
+      let migrated = 0;
+      for (const row of rows) {
+        try {
+          const isPng = row.photo_data.startsWith('iVBOR');
+          const ext = isPng ? 'png' : 'jpg';
+          const contentType = isPng ? 'image/png' : 'image/jpeg';
+          const r2Key = `loading-photos/${row.assignment_id}/${row.id}.${ext}`;
+          const bytes = Uint8Array.from(atob(row.photo_data), c => c.charCodeAt(0));
+          await env.BOL_PHOTOS.put(r2Key, bytes, { httpMetadata: { contentType } });
+          // Only clear D1 blob after confirmed R2 put
+          await db.prepare(
+            "UPDATE loading_photos SET photo_key = ?, photo_data = '' WHERE id = ?"
+          ).bind(r2Key, row.id).run();
+          migrated++;
+        } catch (e) {
+          console.error('Backfill failed for loading_photo', row.id, e);
+        }
+      }
+
+      const { remaining } = await db.prepare(`
+        SELECT COUNT(*) AS remaining FROM loading_photos
+        WHERE photo_key IS NULL AND LENGTH(photo_data) > 10
+      `).first();
+
+      await logActivity(db, 'update', 'r2_backfill', 'loading-photos',
+        `R2 backfill: migrated ${migrated} loading photos`,
+        { migrated, remaining });
+
+      return json({ ok: true, type, migrated, remaining });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  if (type === 'packing-slips') {
+    try {
+      const { results } = await db.prepare(`
+        SELECT id, packing_slip_pdf FROM jobs
+        WHERE packing_slip_key IS NULL AND packing_slip_pdf IS NOT NULL AND packing_slip_pdf != ''
+        LIMIT ?
+      `).bind(batchSize).all();
+
+      const rows = results || [];
+      let migrated = 0;
+      for (const row of rows) {
+        try {
+          const r2Key = `packing-slips/${row.id}.pdf`;
+          const bytes = Uint8Array.from(atob(row.packing_slip_pdf), c => c.charCodeAt(0));
+          await env.BOL_PHOTOS.put(r2Key, bytes, { httpMetadata: { contentType: 'application/pdf' } });
+          // Only clear D1 blob after confirmed R2 put
+          await db.prepare(
+            "UPDATE jobs SET packing_slip_key = ?, packing_slip_pdf = NULL WHERE id = ?"
+          ).bind(r2Key, row.id).run();
+          migrated++;
+        } catch (e) {
+          console.error('Backfill failed for packing slip job', row.id, e);
+        }
+      }
+
+      const remaining_row = await db.prepare(`
+        SELECT COUNT(*) AS remaining FROM jobs
+        WHERE packing_slip_key IS NULL AND packing_slip_pdf IS NOT NULL AND packing_slip_pdf != ''
+      `).first();
+      const remaining = remaining_row?.remaining ?? 0;
+
+      await logActivity(db, 'update', 'r2_backfill', 'packing-slips',
+        `R2 backfill: migrated ${migrated} packing slips`,
+        { migrated, remaining });
+
+      return json({ ok: true, type, migrated, remaining });
+    } catch (e) {
+      return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  return json({ ok: false, error: 'type must be loading-photos or packing-slips' }, 400);
 }
 
 // ========================
