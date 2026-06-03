@@ -266,7 +266,6 @@ textarea {
           <div class="pill" id="statusPill">Ready</div>
         </div>
         <div class="right">
-          <button class="btn ghost" type="button" id="themeToggleBtn">Dark Mode</button>
           <button class="btn ghost" type="button" id="resetBtn">Reset</button>
           <button class="btn ghost" type="button" id="addBatchBtn">Add Inspection to Batch</button>
           <button class="btn primary" type="button" id="submitBtn">Submit</button>
@@ -516,7 +515,6 @@ textarea {
     const repeatLastBtn = document.getElementById('repeatLastBtn');
     const nextSample = document.getElementById('nextSample');
 
-    const themeToggleBtn = document.getElementById('themeToggleBtn');
     const resetBtn = document.getElementById('resetBtn');
     const addBatchBtn = document.getElementById('addBatchBtn');
     const submitBtn = document.getElementById('submitBtn');
@@ -538,17 +536,6 @@ textarea {
       statusPill.className = 'pill ' + (cls || '');
     }
 
-    function applyTheme(theme) {
-      const isDark = theme === 'dark';
-      document.body.classList.toggle('dark', isDark);
-      themeToggleBtn.textContent = isDark ? 'Light Mode' : 'Dark Mode';
-      localStorage.setItem('xpandaTheme', isDark ? 'dark' : 'light');
-    }
-
-    function loadSavedTheme() {
-      const saved = localStorage.getItem('xpandaTheme') || 'light';
-      applyTheme(saved);
-    }
 
     function nowDate() {
       const d = new Date();
@@ -988,7 +975,6 @@ textarea {
 
     // ====== INIT ======
     (function init() {
-      loadSavedTheme();
       dateEl.value = nowDate();
       timeEl.value = nowTime();
       loadCustomers();
@@ -1034,11 +1020,6 @@ textarea {
       if (!sampleCount) return;
       saveActiveSampleFromUI();
       repeatLastMeasurement();
-    });
-
-    themeToggleBtn.addEventListener('click', () => {
-      const isDark = document.body.classList.contains('dark');
-      applyTheme(isDark ? 'light' : 'dark');
     });
 
     pfY.addEventListener('click', () => setPassFail('Y'));

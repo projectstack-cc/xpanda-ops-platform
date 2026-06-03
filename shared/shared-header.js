@@ -2,6 +2,41 @@
 // Consumed by every module via /<module>/<module>-header.js (thin shims).
 // TODO: replace document.write() with DOMContentLoaded + insertAdjacentHTML (deferred — separate refactor).
 
+// ThemeManager — single shared dark-mode source (Phase 0b).
+// Default is dark; persists via localStorage key 'xpanda-theme'.
+(function () {
+  if (window.ThemeManager) return;
+  var STORAGE_KEY = 'xpanda-theme';
+  window.ThemeManager = {
+    init: function () {
+      var saved = null;
+      try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+      this.set(saved || 'dark');
+    },
+    set: function (theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      try { localStorage.setItem(STORAGE_KEY, theme); } catch (e) {}
+      this.updateToggleUI(theme);
+    },
+    toggle: function () {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      this.set(current === 'dark' ? 'light' : 'dark');
+    },
+    updateToggleUI: function (theme) {
+      var t = theme || document.documentElement.getAttribute('data-theme') || 'dark';
+      var btn = document.getElementById('hdr-theme-toggle');
+      if (!btn) return;
+      var isDark = t === 'dark';
+      btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+      var sun = btn.querySelector('.theme-icon-sun');
+      var moon = btn.querySelector('.theme-icon-moon');
+      if (sun) sun.style.display = isDark ? '' : 'none';
+      if (moon) moon.style.display = isDark ? 'none' : '';
+    }
+  };
+  window.ThemeManager.init();
+})();
+
 // Auto-load companion shared modules.
 if (!window.__xpandaSharedApiLoaded) {
   window.__xpandaSharedApiLoaded = true;
@@ -102,6 +137,9 @@ if (!window.__xpandaPhotoGalleryLoaded) {
     // Mode toggle button — always rendered on every module header.
     const modeToggleHtml = `<button type="button" id="hdr-mode-toggle" class="xpanda-mode-toggle" aria-label="Toggle floor mode" aria-pressed="false" onclick="window.__xpandaSetUiMode(window.__xpandaGetUiMode()==='floor'?'office':'floor')" style="background:none;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;padding:4px 10px;color:#5b6472;display:inline-flex;align-items:center;gap:4px;line-height:1;"><span id="hdr-mode-label">Office</span></button>`;
 
+    // Theme toggle button — sun/moon SVG, no emoji.
+    const themeToggleHtml = `<button type="button" id="hdr-theme-toggle" aria-label="Toggle dark mode" onclick="window.ThemeManager&&window.ThemeManager.toggle()" style="background:none;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;padding:4px 8px;color:#5b6472;display:inline-flex;align-items:center;line-height:1;"><svg class="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="theme-icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>`;
+
     window.__xpandaUpdateModeToggle = function (mode) {
       var btn = document.getElementById('hdr-mode-toggle');
       var lbl = document.getElementById('hdr-mode-label');
@@ -110,10 +148,11 @@ if (!window.__xpandaPhotoGalleryLoaded) {
       btn.setAttribute('aria-pressed', mode === 'floor' ? 'true' : 'false');
     };
 
-    // Topbar user-bar div — always rendered (mode toggle appears on every page).
+    // Topbar user-bar div — always rendered (mode toggle + theme toggle on every page).
     const topbarUserBarHtml = `
     <div class="header-user-bar" style="position:absolute;top:10px;right:16px;font-size:12px;color:#5b6472;display:flex;align-items:center;gap:8px;">
       ${modeToggleHtml}
+      ${themeToggleHtml}
       ${notifBellHtml}
       ${topbarUserItemsHtml}
     </div>`;
@@ -145,6 +184,7 @@ ${backLinkHtml}
 `);
 
     window.__xpandaUpdateModeToggle(window.__xpandaGetUiMode ? window.__xpandaGetUiMode() : 'office');
+    if (window.ThemeManager) window.ThemeManager.updateToggleUI();
 
     window.addEventListener('DOMContentLoaded', function () {
 

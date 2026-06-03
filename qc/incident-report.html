@@ -178,7 +178,6 @@
           <div class="pill" id="statusPill">Ready</div>
         </div>
         <div class="right">
-          <button class="btn ghost" type="button" id="themeToggleBtn">Dark Mode</button>
           <button class="btn ghost" type="button" id="resetBtn">Reset</button>
           <button class="btn primary" type="button" id="submitBtn">Submit</button>
         </div>
@@ -333,7 +332,6 @@
 
       const riskLevel = document.getElementById('riskLevel');
       
-    const themeToggleBtn = document.getElementById('themeToggleBtn');
     const resetBtn = document.getElementById('resetBtn');
     const submitBtn = document.getElementById('submitBtn');
 
@@ -346,17 +344,6 @@
       statusPill.className = 'pill ' + (cls || '');
     }
 
-    function applyTheme(theme) {
-      const isDark = theme === 'dark';
-      document.body.classList.toggle('dark', isDark);
-      themeToggleBtn.textContent = isDark ? 'Light Mode' : 'Dark Mode';
-      localStorage.setItem('xpandaTheme', isDark ? 'dark' : 'light');
-    }
-
-    function loadSavedTheme() {
-      const saved = localStorage.getItem('xpandaTheme') || 'light';
-      applyTheme(saved);
-    }
 
     function nowDate() {
       const d = new Date();
@@ -430,17 +417,11 @@
 
     // ====== INIT ======
     (function init() {
-      loadSavedTheme();
       dateEl.value = nowDate();
       loadCustomers();
     })();
 
     // ====== EVENTS ======
-    themeToggleBtn.addEventListener('click', () => {
-      const isDark = document.body.classList.contains('dark');
-      applyTheme(isDark ? 'light' : 'dark');
-    });
-
     resetBtn.addEventListener('click', () => resetAll());
 
     addCustomerBtn.addEventListener('click', async () => {

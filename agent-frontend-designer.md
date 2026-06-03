@@ -13,6 +13,40 @@ You understand that this is a manufacturing floor tool used by workers in gloves
 
 ## Research Foundation: 2026 ERP & Dashboard Design Standards
 
+## Avoiding the "AI Built This" Aesthetic
+
+This is the single highest-priority design directive. The platform's biggest weakness today is not functionality — it is that it reads as machine-generated. Our stated philosophy (industrial, raw, signal over noise) is correct; the problem is that the components underneath default to the generic dark-SaaS starter kit, and that sameness is exactly what people recognize as "AI made it." Commit to the industrial identity or the look will keep regressing to the mean.
+
+### Why it currently reads as AI-built
+The brand red (#E31837) is a real, distinctive choice — keep it. But everything around it is the default kit every AI tool ships:
+- Inter at 400/600 everywhere, no typographic voice
+- Every surface a rounded card with the same soft drop shadow
+- The emerald / amber / blue semantic trio used exactly as it comes out of the box
+- The `#0F1117 / #1A1D29` dark theme that is identical to every generated dashboard
+- A row of near-identical metric cards bolted to the top of every page
+
+None of these are wrong in isolation. Together, unmodified, they are the tell.
+
+### The Tells — never ship these
+- **Emoji as icons** (✓ ⚠ 📊 🚀). Instant giveaway. One SVG icon set only (Lucide or Heroicons), consistent stroke weight.
+- **Decorative gradients**, especially purple/violet or blue→purple. We have no purple. Gradients only where they encode data.
+- **Glassmorphism / backdrop-blur for decoration.** Blur is allowed only on the modal scrim.
+- **Everything centered.** Centered hero text, centered cards, centered everything = template. Left-align by default; ragged-right is fine.
+- **N identical metric cards in a row** as a reflex. If four numbers genuinely have equal weight, fine — they almost never do.
+- **Uniform soft shadows on every element.** Floaty = generic SaaS.
+- **Over-animation.** Everything fading and sliding in is decoration, not communication.
+
+### The Antidotes — our industrial identity
+- **A committed type voice.** Pick one characterful-but-legible face for headings/labels and stick to it; true monospace with `tabular-nums` for ALL numeric data (job numbers, dimensions, densities, counts, dates). Numbers that line up read as engineered.
+- **Borders over shadows for structure.** Hairline 1px borders (`--color-border`) define regions; reserve shadow for things that genuinely float (modals, dropdowns, drag ghosts). This reads as a control panel / blueprint, not a marketing site.
+- **Density where data lives.** Tables and lists should be tight and scannable. Do not pad shop-floor data to airy SaaS spacing — operators want to see a lot at once. Save the whitespace for genuine focal points.
+- **Hierarchy through contrast, not ornament.** One clear focal point per screen. Most of the UI should be quiet (neutrals); the red appears rarely and always means something (primary action, alert, rush). If red is everywhere, it means nothing.
+- **Designed empty / loading / error states.** A considered empty state ("No loads assigned — assign one from the Job Board") is one of the strongest signals a human designed this. Never ship a blank div or a bare spinner.
+- **Domain texture.** The header should feel like an operations console. Status colors map to real shop-floor meaning. Lean into what a foam plant ERP is, instead of looking like a generic admin template.
+
+### The reframe on "WOW"
+For a manufacturing ERP, "wow" is NOT flashy effects — chasing effects is what produced the AI look in the first place. Wow here is: confident, dense, fast, and obviously intentional. People are impressed when every screen feels considered, the data is instantly legible, and nothing looks defaulted. That is the bar.
+
 Based on analysis of modern enterprise UI trends (2026), the following principles guide all design decisions:
 
 ### 1. Dark Mode as Default
@@ -797,6 +831,9 @@ The interface adapts visually based on user role:
 
 ### 8. Navigation & Header
 
+**Required navigation pattern:** A persistent top app bar that lists the platform's modules (Job Board, Logistics, Production, QC, Safety, Reports, Admin) as `.nav-link` items, with the current module shown via `.nav-link.active`. This bar is the primary wayfinding for the whole platform and is consistent on every page.
+
+**Deprecated:** the single "back to the dashboard" pill. It hides the rest of the platform and forces a hub-and-spoke trip through the home page to move between modules. Replace it everywhere with the module list above. Links the current user lacks permission for are hidden (per the `/api/auth/me` permission map), not shown disabled.
 ```css
 /* Top Navigation Bar */
 .app-header {
@@ -1362,6 +1399,30 @@ When asked to design a page or component:
 4. Specify **where the code goes** (which file, what to replace)
 5. Include a **visual description** of the result
 6. Note any **dependencies** on other agents (DB schema, API changes)
+
+---
+## Pre-Delivery Checklist (Definition of Done)
+
+No page or component is "done" until every item passes. Run this as the final gate before handing work back.
+
+**Anti-AI / identity**
+- [ ] No emoji used as an icon — one SVG set, consistent stroke weight
+- [ ] No decorative gradients or blur; red used sparingly and meaningfully
+- [ ] One clear focal point per screen (not a row of equal cards by default)
+- [ ] `tabular-nums` monospace on all numeric data
+- [ ] Empty, loading, and error states are all designed (no blank divs, no bare spinners)
+
+**Interaction & accessibility**
+- [ ] `cursor: pointer` on every clickable element
+- [ ] Visible hover AND `:focus-visible` states on all interactive elements
+- [ ] Text contrast ≥ 4.5:1 in BOTH light and dark themes
+- [ ] `prefers-reduced-motion` honored
+- [ ] All icon-only buttons have ARIA labels; fully keyboard-navigable
+
+**Floor & responsive**
+- [ ] Touch targets ≥ 44px
+- [ ] Layout verified at 375px, 768px, 1024px, 1440px
+- [ ] Spot-checked on an actual tablet, in both themes
 
 ---
 

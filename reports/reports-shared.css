@@ -7,25 +7,6 @@
     --section-gap: 14px;
 }
 
-body.dark {
-    --bg: #121212;
-    --card-bg: #1c1c1c;
-    --card-border: #333;
-    --text: #f1f1f1;
-    --muted: #c7c7c7;
-    --input-bg: #262626;
-    --input-border: #444;
-    --pill: #c7c7c7;
-    --ghost-bg: #2d2d2d;
-    --ghost-text: #f1f1f1;
-    --primary-bg: #3b82f6;
-    --primary-text: #fff;
-    --line: #333;
-    --accent: #f1f1f1;
-    --accent-soft: #262626;
-
-    --shadow: 0 1px 2px rgba(0,0,0,.28);
-}
 
 * {
     box-sizing: border-box;
@@ -37,7 +18,7 @@ html, body {
 }
 
 body {
-    font-family: Arial, sans-serif;
+    font-family: var(--font-sans);
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;

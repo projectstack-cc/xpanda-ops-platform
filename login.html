@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script>document.documentElement.setAttribute('data-theme', localStorage.getItem('xpanda-theme') || 'dark');</script>
   <meta charset="UTF-8" />
   <title>Sign In — xPanda Ops</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -14,7 +15,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: var(--font-sans);
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
