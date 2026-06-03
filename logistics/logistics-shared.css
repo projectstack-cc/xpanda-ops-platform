@@ -1,31 +1,13 @@
-:root {
-    --bg: #f0f2f5;
-    --card-bg: #ffffff;
-    --card-border: #dde3ec;
-    --text: #111827;
-    --muted: #4b5563;
-    --input-bg: #fff;
-    --input-border: #d1d5db;
-    --ghost-bg: #f3f4f6;
-    --ghost-text: #111827;
-    --primary-bg: #334155;
-    --primary-text: #ffffff;
-    --danger-bg: #dc2626;
-    --danger-text: #fff;
-    --success-bg: #16a34a;
-    --success-text: #fff;
-    --line: #e2e8f0;
-    --accent: #1e293b;
-    --accent-soft: #f1f5f9;
+@import url('/shared/tokens.css');
+@import url('/shared/components.css');
 
+:root {
     --status-awaiting: #6b7280;
     --status-in-transit: #d97706;
     --status-delivered: #16a34a;
     --status-cancelled: #9ca3af;
 
     --page-max: 1100px;
-    --radius: 12px;
-    --shadow: 0 1px 3px rgba(0,0,0,.07);
 }
 
 * { box-sizing: border-box; }

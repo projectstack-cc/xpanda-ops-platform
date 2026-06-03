@@ -1,0 +1,108 @@
+/* shared/tokens.css — canonical platform design tokens (UI overhaul, Prompt 85).
+   Single source of truth for color/surface/text/border/radius/shadow values.
+   Keep existing variable names; values unified here. Light defaults + auto dark mode.
+   Module-specific tokens (status colors, --page-max, --page-pad, --section-gap, --col-bg)
+   stay in each module's own *-shared.css. */
+
+:root {
+  /* Surfaces */
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --card-bg: #ffffff;
+  --card-border: #e5e7eb;
+  --line: #e5e7eb;
+
+  /* Text */
+  --text: #111827;
+  --muted: #4b5563;
+  --text-muted: #6b7280;
+  --text-hint: #9ca3af;
+
+  /* Inputs / ghost / pill */
+  --input-bg: #ffffff;
+  --input-border: #d1d5db;
+  --ghost-bg: #f3f4f6;
+  --ghost-text: #111827;
+  --pill: #475569;
+
+  /* Primary (slate) + accent */
+  --primary-bg: #1e293b;
+  --primary-text: #ffffff;
+  --accent: #0f172a;
+  --accent-soft: #f1f5f9;
+
+  /* Semantic */
+  --danger-bg: #dc2626;
+  --danger-text: #ffffff;
+  --success-bg: #16a34a;
+  --success-text: #ffffff;
+
+  /* Brand red — reserved for logo + true destructive/critical CTAs ONLY (use sparingly) */
+  --brand: #e31837;
+  --brand-hover: #b31229;
+
+  /* Geometry / elevation */
+  --radius: 12px;
+  --tile-radius: 14px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .08);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, .10), 0 2px 4px -1px rgba(0, 0, 0, .06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d29;
+    --surface-2: #232634;
+    --card-bg: #1a1d29;
+    --card-border: #2d3142;
+    --line: #2d3142;
+
+    --text: #f3f4f6;
+    --muted: #9ca3af;
+    --text-muted: #9ca3af;
+    --text-hint: #6b7280;
+
+    --input-bg: #232634;
+    --input-border: #3d4256;
+    --ghost-bg: #232634;
+    --ghost-text: #f3f4f6;
+    --pill: #64748b;
+
+    --primary-bg: #334155;
+    --primary-text: #ffffff;
+    --accent: #cbd5e1;
+    --accent-soft: #232634;
+
+    --danger-bg: #ef4444;
+    --success-bg: #22c55e;
+
+    --brand: #ef4356;
+    --brand-hover: #e31837;
+
+    --shadow: 0 1px 3px rgba(0, 0, 0, .40);
+    --shadow-md: 0 4px 8px -1px rgba(0, 0, 0, .50), 0 2px 4px -1px rgba(0, 0, 0, .40);
+  }
+}
+
+/* Floor mode — larger touch targets + type for gloved/tablet use (Prompt 86).
+   Office mode = no overrides (platform default density). */
+html[data-mode="floor"] {
+  font-size: 16.5px;
+}
+html[data-mode="floor"] button,
+html[data-mode="floor"] input,
+html[data-mode="floor"] select,
+html[data-mode="floor"] textarea,
+html[data-mode="floor"] a.btn,
+html[data-mode="floor"] [role="button"] {
+  min-height: 44px;
+}
+html[data-mode="floor"] input,
+html[data-mode="floor"] select,
+html[data-mode="floor"] textarea {
+  font-size: 16px; /* prevents iOS zoom-on-focus */
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-mode="floor"] * { transition-duration: .01ms !important; }
+}

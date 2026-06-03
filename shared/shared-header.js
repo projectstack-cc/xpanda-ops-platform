@@ -16,6 +16,37 @@ if (!window.__xpandaPhotoGalleryLoaded) {
   document.write('<script src="/shared/photo-gallery.js"><\/script>');
 }
 
+/* UI density mode (office | floor) — Prompt 86.
+   One responsive codebase; floor mode bumps touch targets + type via CSS keyed on
+   html[data-mode]. Auto-defaults by pointer/viewport, user-toggleable, remembered. */
+(function initXpandaUiMode() {
+  var KEY = 'xpanda-ui-mode';
+  function autoMode() {
+    var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    return (coarse && window.innerWidth < 1024) ? 'floor' : 'office';
+  }
+  function apply(mode) {
+    document.documentElement.setAttribute('data-mode', mode);
+    if (window.__xpandaUpdateModeToggle) window.__xpandaUpdateModeToggle(mode);
+  }
+  window.__xpandaSetUiMode = function (mode) {
+    try { localStorage.setItem(KEY, mode); } catch (e) {}
+    apply(mode);
+  };
+  window.__xpandaGetUiMode = function () {
+    return document.documentElement.getAttribute('data-mode') || 'office';
+  };
+  var saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (e) {}
+  apply(saved || autoMode());
+  if (!saved && window.matchMedia) {
+    window.matchMedia('(pointer: coarse)').addEventListener('change', function () {
+      var s = null; try { s = localStorage.getItem(KEY); } catch (e) {}
+      if (!s) apply(autoMode());
+    });
+  }
+})();
+
 (function () {
   if (window.initXpandaHeader) return;
 
@@ -68,13 +99,24 @@ if (!window.__xpandaPhotoGalleryLoaded) {
       <span id="hdr-user-name"></span>
       <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;">Sign Out</a>` : '';
 
-    // Topbar user-bar div — rendered when it has content.
-    const hasTopbarUserBar = config.showNotifications || config.userBarLocation !== 'footer';
-    const topbarUserBarHtml = hasTopbarUserBar ? `
+    // Mode toggle button — always rendered on every module header.
+    const modeToggleHtml = `<button type="button" id="hdr-mode-toggle" class="xpanda-mode-toggle" aria-label="Toggle floor mode" aria-pressed="false" onclick="window.__xpandaSetUiMode(window.__xpandaGetUiMode()==='floor'?'office':'floor')" style="background:none;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;padding:4px 10px;color:#5b6472;display:inline-flex;align-items:center;gap:4px;line-height:1;"><span id="hdr-mode-label">Office</span></button>`;
+
+    window.__xpandaUpdateModeToggle = function (mode) {
+      var btn = document.getElementById('hdr-mode-toggle');
+      var lbl = document.getElementById('hdr-mode-label');
+      if (!btn || !lbl) return;
+      lbl.textContent = mode === 'floor' ? 'Floor' : 'Office';
+      btn.setAttribute('aria-pressed', mode === 'floor' ? 'true' : 'false');
+    };
+
+    // Topbar user-bar div — always rendered (mode toggle appears on every page).
+    const topbarUserBarHtml = `
     <div class="header-user-bar" style="position:absolute;top:10px;right:16px;font-size:12px;color:#5b6472;display:flex;align-items:center;gap:8px;">
+      ${modeToggleHtml}
       ${notifBellHtml}
       ${topbarUserItemsHtml}
-    </div>` : '';
+    </div>`;
 
     // Back-link — rendered on non-dashboard pages when backLinkLabel is non-empty.
     const backLinkHtml = config.backLinkLabel && !isDashboard
@@ -101,6 +143,8 @@ ${backLinkHtml}
     ${topbarUserBarHtml}
 </header>
 `);
+
+    window.__xpandaUpdateModeToggle(window.__xpandaGetUiMode ? window.__xpandaGetUiMode() : 'office');
 
     window.addEventListener('DOMContentLoaded', function () {
 

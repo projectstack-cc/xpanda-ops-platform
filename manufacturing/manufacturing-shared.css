@@ -1,26 +1,10 @@
-:root {
-    --bg: #f7f7f7;
-    --card-bg: #ffffff;
-    --card-border: #ddd;
-    --text: #111;
-    --muted: #444;
-    --input-bg: #fff;
-    --input-border: #ccc;
-    --pill: #555;
-    --ghost-bg: #eee;
-    --ghost-text: #111;
-    --primary-bg: #d97706;
-    --primary-text: #fff;
-    --line: #e5e7eb;
-    --accent: #1f2937;
-    --accent-soft: #eef2f7;
+@import url('/shared/tokens.css');
+@import url('/shared/components.css');
 
+:root {
     --page-max: 900px;
-    --page-pad: 16px;
+    --page-pad: 12px;
     --section-gap: 14px;
-    --radius: 12px;
-    --tile-radius: 14px;
-    --shadow: 0 1px 2px rgba(0,0,0,.05);
 }
 
 body.dark {
@@ -371,10 +355,6 @@ textarea:focus-visible,
 /* MOBILE HEADER FIX */
 
 @media (max-width: 480px) {
-    :root {
-        --page-pad: 12px;
-    }
-
     .topbar {
         padding-top: 60px;
     }
