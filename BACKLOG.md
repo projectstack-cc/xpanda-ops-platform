@@ -4,6 +4,19 @@
 
 ## Logistics
 
+### Soft Rollout Batch — Logistics + Loading Dashboard (test rats)
+
+- [ ] Logistics dashboard card header parity — INV# + load count primary, customer secondary truncated @20 (mirror loading.html cards) *(P85, with sort)*
+- [ ] Loading dashboard card sort — natural/numeric sort by INV# (NOT parseInt; must handle "3942-01" suffixes), default INV# ascending, + sort dropdown *(P85, with header parity)*
+- [ ] Delete job not working — root-cause (permission / FK cascade / route table) then surgical fix *(P86, with customer pickup — see Job Board)*
+- [ ] Customer Pickup must NOT create a bay-queue card — logistics dashboard only (delivery_method field; migration if absent) *(P86 — see Job Board)*
+- [ ] Status sync — logistics dashboard status change writes through to job (source of truth) → kanban + loading reflect; "ready to ship" returns card to queue, excludes customer pickup *(P87)*
+- [ ] The Yard — "Move to Yard" frees a bay while preserving the assignment; unbounded yard list with Mark Shipped / View BOL / photo actions (needs migration: `loading_bays.location`) *(P88)*
+- [ ] Load Builder: "Pull from Job" button — reuse Prompt 16 handoff, append job line items to current load *(P89, with BOL editor fix)*
+- [ ] Inline BOL editor renders tiny on Build Load page (works on BOL generator) — P69 port container/sizing bug; fix container, keep shared engine single-source *(P89, with pull-from-job)*
+
+### Standing Logistics Backlog
+
 - [ ] Customer database (full CRUD)
 - [ ] Loading status indicator
 - [ ] Consider separate dashboards for staff vs. management (TV display)
@@ -46,6 +59,8 @@
 
 ## Job Board
 
+- [ ] Delete job not working — root-cause (permission / FK cascade / route table) then surgical fix *(P86, with customer pickup)*
+- [ ] Customer Pickup delivery method must NOT create a bay-queue card — show on logistics dashboard only; uses `delivery_method` on jobs (migration if field absent) *(P86)*
 - [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy — blocked on Quickbase input formatting improvements)
 - [ ] Create packet feature with Bill of Materials (BOM)
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
