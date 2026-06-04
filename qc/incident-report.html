@@ -401,8 +401,7 @@
       }
 
       try {
-        const res = await fetch(GAS_URL + "?action=getIncidentCustomers");
-        const list = await res.json();
+        const { data: list } = await window.api.get(GAS_URL + "?action=getIncidentCustomers");
 
         if (!Array.isArray(list)) {
           throw new Error('Invalid customer list response');
@@ -440,10 +439,9 @@
       setStatus('Adding customer...', '');
 
       try {
-        const res = await fetch(
+        const { data: list } = await window.api.get(
           GAS_URL + "?action=addIncidentCustomer&name=" + encodeURIComponent(name)
         );
-        const list = await res.json();
 
         if (!Array.isArray(list)) {
           throw new Error('Invalid add customer response');

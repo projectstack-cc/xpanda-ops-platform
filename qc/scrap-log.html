@@ -174,18 +174,10 @@
       }
 
       try {
-        const res = await fetch('/api/scrap-log', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
+        const { ok, data, error } = await window.api.post('/api/scrap-log', payload);
 
-        const data = await res.json();
-
-        if (!res.ok || !data.ok) {
-          throw new Error(data.error || 'Failed to save scrap entry.');
+        if (!ok) {
+          throw new Error(data?.error || error || 'Failed to save scrap entry.');
         }
 
         form.reset();

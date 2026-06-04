@@ -165,17 +165,18 @@ async function loadIncident() {
   status.classList.remove("error");
 
   try {
-    const res = await fetch(`/api/reports/incidents-detail?id=${encodeURIComponent(id)}`);
-    const data = await res.json();
+    const { ok, data, status: httpStatus } = await window.api.get(
+      `/api/reports/incidents-detail?id=${encodeURIComponent(id)}`
+    );
 
-    if (res.status === 404) {
+    if (httpStatus === 404) {
       status.style.display = "block";
       status.textContent = "Incident not found.";
       status.classList.add("error");
       return;
     }
 
-    if (!res.ok || !data.ok || !data.item) {
+    if (!ok || !data || !data.item) {
       status.style.display = "block";
       status.textContent = "Unable to load incident";
       status.classList.add("error");

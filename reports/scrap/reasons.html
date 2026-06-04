@@ -112,11 +112,10 @@ async function loadReasonReport() {
   status.classList.remove("error");
 
   try {
-    const res = await fetch(`/api/reports/scrap-reasons?month=${encodeURIComponent(month)}`);
-    const data = await res.json();
+    const { ok, data, error } = await window.api.get(`/api/reports/scrap-reasons?month=${encodeURIComponent(month)}`);
 
-    if (!res.ok || !data.ok) {
-      status.textContent = data.error || "Load failed";
+    if (!ok) {
+      status.textContent = data?.error || error || "Load failed";
       status.classList.add("error");
       return;
     }
