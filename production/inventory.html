@@ -410,18 +410,15 @@ function switchTab(tab) {
 async function initJobBanner() {
   if (!bannerJobId) return;
   const banner = document.getElementById('job-banner');
-  try {
-    const res  = await fetch(`/api/jobs?status=not_started,in_production,done,shipped`);
-    const body = await res.json();
-    if (body.ok) {
-      const job = body.jobs.find(j => String(j.id) === String(bannerJobId));
-      if (job) {
-        const label = `${job.customer}${job.invoice_number ? ' · ' + job.invoice_number : ''}`;
-        document.getElementById('job-banner-text').textContent = `Linked job: ${label}`;
-        banner.style.display = 'flex';
-      }
+  const r = await window.api.get(`/api/jobs?status=not_started,in_production,done,shipped`);
+  if (r.ok) {
+    const job = r.data.jobs.find(j => String(j.id) === String(bannerJobId));
+    if (job) {
+      const label = `${job.customer}${job.invoice_number ? ' · ' + job.invoice_number : ''}`;
+      document.getElementById('job-banner-text').textContent = `Linked job: ${label}`;
+      banner.style.display = 'flex';
     }
-  } catch { /* ignore */ }
+  }
 }
 function clearJobParam() {
   bannerJobId = null;
@@ -436,9 +433,8 @@ function openConsumeFromBanner() {
 /* ─── BEAD STOCK ──────────────────────────────────── */
 async function loadBeadStock() {
   try {
-    const res  = await fetch('/api/bead-stock');
-    const body = await res.json();
-    beadData = body.ok ? body.data : [];
+    const r = await window.api.get('/api/bead-stock');
+    beadData = r.ok ? r.data.data : [];
   } catch { beadData = []; }
   renderBeadStock();
 }
@@ -529,13 +525,11 @@ async function saveBeadStock() {
   const payload = { manufacturer: mfr, bead_type: type, bag_weight_lbs: weight, reorder_at_bags: reorder };
   if (id === '') payload.bags_on_hand = isNaN(bags) ? 0 : bags;
 
-  const method = id ? 'PUT' : 'POST';
-  const url    = id ? `/api/bead-stock?id=${id}` : '/api/bead-stock';
-
   try {
-    const res  = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    const body = await res.json();
-    if (!body.ok) return showErr(body.error || 'Save failed.');
+    const r = id
+      ? await window.api.put(`/api/bead-stock?id=${id}`, payload)
+      : await window.api.post('/api/bead-stock', payload);
+    if (!r.ok) return showErr(r.error || 'Save failed.');
     closeModal('bead-modal');
     await loadBeadStock();
   } catch { showErr('Network error.'); }
@@ -554,13 +548,8 @@ async function saveBagReceive() {
 
   const newBags = (r.bags_on_hand || 0) + bags;
   try {
-    const res  = await fetch(`/api/bead-stock?id=${beadId}`, {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ bags_on_hand: newBags })
-    });
-    const body = await res.json();
-    if (!body.ok) return showErr(body.error || 'Failed to update.');
+    const resp = await window.api.put(`/api/bead-stock?id=${beadId}`, { bags_on_hand: newBags });
+    if (!resp.ok) return showErr(resp.error || 'Failed to update.');
     closeModal('receive-modal');
     document.getElementById('rm-bags').value = '';
     await loadBeadStock();
@@ -570,9 +559,8 @@ async function saveBagReceive() {
 /* ─── BLOCK INVENTORY ─────────────────────────────── */
 async function loadBlockInventory() {
   try {
-    const res  = await fetch('/api/block-inventory');
-    const body = await res.json();
-    blockData = body.ok ? body.data : [];
+    const r = await window.api.get('/api/block-inventory');
+    blockData = r.ok ? r.data.data : [];
   } catch { blockData = []; }
   renderBlockInventory();
 }
@@ -654,13 +642,11 @@ async function saveBlockInventory() {
   const payload = { density_material: density, length_in: len, width_in: wid, height_in: hgt, notes: notes || null };
   if (id === '') payload.blocks_on_hand = isNaN(count) ? 0 : Math.max(0, count);
 
-  const method = id ? 'PUT' : 'POST';
-  const url    = id ? `/api/block-inventory?id=${id}` : '/api/block-inventory';
-
   try {
-    const res  = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    const body = await res.json();
-    if (!body.ok) return showErr(body.error || 'Save failed.');
+    const r = id
+      ? await window.api.put(`/api/block-inventory?id=${id}`, payload)
+      : await window.api.post('/api/block-inventory', payload);
+    if (!r.ok) return showErr(r.error || 'Save failed.');
     closeModal('block-modal');
     await loadBlockInventory();
   } catch { showErr('Network error.'); }
@@ -679,13 +665,8 @@ async function saveAddBlocks() {
 
   const newCount = (r.blocks_on_hand || 0) + count;
   try {
-    const res  = await fetch(`/api/block-inventory?id=${blockId}`, {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ blocks_on_hand: newCount })
-    });
-    const body = await res.json();
-    if (!body.ok) return showErr(body.error || 'Failed to update.');
+    const resp = await window.api.put(`/api/block-inventory?id=${blockId}`, { blocks_on_hand: newCount });
+    if (!resp.ok) return showErr(resp.error || 'Failed to update.');
     closeModal('add-blocks-modal');
     document.getElementById('abm-count').value = '';
     await loadBlockInventory();
@@ -727,13 +708,8 @@ async function saveConsumption() {
   if (jobId) payload.job_id = parseInt(jobId);
 
   try {
-    const res  = await fetch('/api/block-consumption', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    });
-    const body = await res.json();
-    if (!body.ok) return showErr(body.error || 'Failed to log consumption.');
+    const r = await window.api.post('/api/block-consumption', payload);
+    if (!r.ok) return showErr(r.error || 'Failed to log consumption.');
     closeModal('consume-modal');
     await loadBlockInventory();
   } catch { showErr('Network error.'); }
@@ -742,11 +718,9 @@ async function saveConsumption() {
 /* ─── MOLDING LOG ─────────────────────────────────── */
 async function loadMoldingLog() {
   const days = document.getElementById('molding-days').value;
-  const tbody = document.getElementById('molding-tbody');
   try {
-    const res  = await fetch(`/api/molding-log?days=${days}`);
-    const body = await res.json();
-    moldingData = body.ok ? body.data : [];
+    const r = await window.api.get(`/api/molding-log?days=${days}`);
+    moldingData = r.ok ? r.data.data : [];
   } catch { moldingData = []; }
   renderMoldingLog();
 }
@@ -781,19 +755,14 @@ async function submitMoldingRun() {
   if (isNaN(blocks) || blocks < 1) return showErr('Blocks produced must be at least 1.');
 
   try {
-    const res  = await fetch('/api/molding-log', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        bead_stock_id: parseInt(beadId),
-        bags_consumed: bags,
-        block_inventory_id: parseInt(blockId),
-        blocks_produced: blocks,
-        notes: notes || null
-      })
+    const r = await window.api.post('/api/molding-log', {
+      bead_stock_id: parseInt(beadId),
+      bags_consumed: bags,
+      block_inventory_id: parseInt(blockId),
+      blocks_produced: blocks,
+      notes: notes || null
     });
-    const body = await res.json();
-    if (!body.ok) return showErr(body.error || 'Failed to log run.');
+    if (!r.ok) return showErr(r.error || 'Failed to log run.');
     document.getElementById('qf-bags').value   = '';
     document.getElementById('qf-blocks').value = '';
     document.getElementById('qf-notes').value  = '';
@@ -804,9 +773,8 @@ async function submitMoldingRun() {
 /* ─── Open Jobs (for consume modal) ──────────────── */
 async function loadOpenJobs() {
   try {
-    const res  = await fetch('/api/jobs?status=not_started,in_production,done');
-    const body = await res.json();
-    openJobs = body.ok ? body.jobs : [];
+    const r = await window.api.get('/api/jobs?status=not_started,in_production,done');
+    openJobs = r.ok ? r.data.jobs : [];
   } catch { openJobs = []; }
 }
 

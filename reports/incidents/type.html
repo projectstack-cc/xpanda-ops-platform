@@ -201,11 +201,10 @@ async function loadTypeReport() {
   status.classList.remove("error");
 
   try {
-    const res = await fetch(`/api/reports/incidents-summary?year=${encodeURIComponent(year)}`);
-    const data = await res.json();
+    const { ok, data, error } = await window.api.get(`/api/reports/incidents-summary?year=${encodeURIComponent(year)}`);
 
-    if (!res.ok || !data.ok) {
-      status.textContent = data.error || "Load failed";
+    if (!ok) {
+      status.textContent = data?.error || error || "Load failed";
       status.classList.add("error");
       return;
     }

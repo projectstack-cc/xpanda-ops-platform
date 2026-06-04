@@ -751,19 +751,17 @@ let pendingJobId = null;
 
 // ── Data Loaders ───────────────────────────────────────────────────────────
 async function loadSilos() {
-  const res  = await fetch("/api/silos");
-  const body = await res.json();
-  if (!body.ok) return;
-  allSilos = body.data;
+  const r = await window.api.get("/api/silos");
+  if (!r.ok) return;
+  allSilos = r.data.data;
   renderSilos();
   populateSiloSelects();
 }
 
 async function loadBeadTypes() {
-  const res  = await fetch("/api/bead-types");
-  const body = await res.json();
-  if (!body.ok) return;
-  allBeadTypes = body.data;
+  const r = await window.api.get("/api/bead-types");
+  if (!r.ok) return;
+  allBeadTypes = r.data.data;
   populateTypeSelects();
 }
 
@@ -776,11 +774,10 @@ async function loadTransactions() {
   if (siloId) params.set("silo_id", siloId);
   if (type)   params.set("type", type);
 
-  const res  = await fetch(`/api/bead-transactions?${params}`);
-  const body = await res.json();
-  renderTransactions(body.ok ? body.data : []);
+  const r = await window.api.get(`/api/bead-transactions?${params}`);
+  renderTransactions(r.ok ? r.data.data : []);
   document.getElementById("stat-tx-count").textContent =
-    body.ok ? body.data.length : "—";
+    r.ok ? r.data.data.length : "—";
 }
 
 // ── Render Silos ───────────────────────────────────────────────────────────
@@ -956,18 +953,13 @@ async function saveTx() {
   btn.textContent = "Saving…";
 
   try {
-    const res  = await fetch("/api/bead-transactions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await res.json();
-    if (!body.ok) {
-      showError("tx-error", body.error || "Error saving transaction.");
+    const r = await window.api.post("/api/bead-transactions", payload);
+    if (!r.ok) {
+      showError("tx-error", r.error || "Error saving transaction.");
       return;
     }
     // Update local silo state
-    const updated = body.data.silo;
+    const updated = r.data.data.silo;
     const idx = allSilos.findIndex(s => s.id === updated.id);
     if (idx !== -1) allSilos[idx] = updated;
 
@@ -1076,19 +1068,16 @@ async function saveSilo() {
   };
   if (id) payload.id = id;
 
-  const res  = await fetch("/api/silos", {
-    method: id ? "PUT" : "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const body = await res.json();
-  if (!body.ok) { showError("silo-error", body.error || "Error saving silo."); return; }
+  const r = id
+    ? await window.api.put("/api/silos", payload)
+    : await window.api.post("/api/silos", payload);
+  if (!r.ok) { showError("silo-error", r.error || "Error saving silo."); return; }
 
   if (id) {
     const idx = allSilos.findIndex(s => s.id === id);
-    if (idx !== -1) allSilos[idx] = body.data;
+    if (idx !== -1) allSilos[idx] = r.data.data;
   } else {
-    allSilos.push(body.data);
+    allSilos.push(r.data.data);
   }
   cancelSiloForm();
   renderManageSilos();
@@ -1099,13 +1088,8 @@ async function saveSilo() {
 
 async function deleteSilo(id) {
   if (!confirm("Delete this silo? All transactions for this silo will also be removed.")) return;
-  const res  = await fetch("/api/silos", {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id }),
-  });
-  const body = await res.json();
-  if (!body.ok) { alert(body.error || "Error deleting silo."); return; }
+  const r = await window.api.raw("/api/silos", { method: "DELETE", body: { id } });
+  if (!r.ok) { alert(r.error || "Error deleting silo."); return; }
   allSilos = allSilos.filter(s => s.id !== id);
   renderManageSilos();
   renderSilos();
@@ -1181,19 +1165,16 @@ async function saveBeadType() {
   };
   if (id) payload.id = id;
 
-  const res  = await fetch("/api/bead-types", {
-    method: id ? "PUT" : "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const body = await res.json();
-  if (!body.ok) { showError("type-error", body.error || "Error saving bead type."); return; }
+  const r = id
+    ? await window.api.put("/api/bead-types", payload)
+    : await window.api.post("/api/bead-types", payload);
+  if (!r.ok) { showError("type-error", r.error || "Error saving bead type."); return; }
 
   if (id) {
     const idx = allBeadTypes.findIndex(t => t.id === id);
-    if (idx !== -1) allBeadTypes[idx] = body.data;
+    if (idx !== -1) allBeadTypes[idx] = r.data.data;
   } else {
-    allBeadTypes.push(body.data);
+    allBeadTypes.push(r.data.data);
   }
   cancelTypeForm();
   renderManageTypes();
@@ -1203,13 +1184,8 @@ async function saveBeadType() {
 
 async function deleteBeadType(id) {
   if (!confirm("Delete this bead type? Silos using it will become unassigned.")) return;
-  const res  = await fetch("/api/bead-types", {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id }),
-  });
-  const body = await res.json();
-  if (!body.ok) { alert(body.error || "Error deleting bead type."); return; }
+  const r = await window.api.raw("/api/bead-types", { method: "DELETE", body: { id } });
+  if (!r.ok) { alert(r.error || "Error deleting bead type."); return; }
   allBeadTypes = allBeadTypes.filter(t => t.id !== id);
   renderManageTypes();
   populateTypeSelects();

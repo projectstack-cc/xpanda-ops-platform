@@ -75,10 +75,9 @@ function num(v){
 
 async function loadTrend(){
 
-  const res = await fetch("/api/reports/scrap-trend?months=6");
-  const data = await res.json();
+  const { ok, data } = await window.api.get("/api/reports/scrap-trend?months=6");
 
-  if(!data.ok){
+  if(!ok){
     alert("Trend load failed");
     return;
   }

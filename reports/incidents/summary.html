@@ -265,14 +265,13 @@
         status.classList.remove("error");
 
         try {
-          const res = await fetch(
+          const { ok, data, error } = await window.api.get(
             `/api/reports/incidents-summary?year=${encodeURIComponent(year)}`,
           );
-          const data = await res.json();
 
-          if (!res.ok || !data.ok) {
+          if (!ok) {
             destroyCharts();
-            status.textContent = data.error || "Load failed";
+            status.textContent = data?.error || error || "Load failed";
             status.classList.add("error");
             return;
           }

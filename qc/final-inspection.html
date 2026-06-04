@@ -955,8 +955,7 @@ textarea {
 
     async function loadCustomers() {
       try {
-        const res = await fetch(GAS_URL + "?action=getCustomers");
-        const list = await res.json();
+        const { data: list } = await window.api.get(GAS_URL + "?action=getCustomers");
 
         customerSelect.innerHTML = '<option value="">Select customer...</option>';
 
@@ -1058,8 +1057,9 @@ textarea {
       setStatus('Adding customer...', '');
 
       try {
-        const res = await fetch(GAS_URL + "?action=addCustomer&name=" + encodeURIComponent(name));
-        const list = await res.json();
+        const { data: list } = await window.api.get(
+          GAS_URL + "?action=addCustomer&name=" + encodeURIComponent(name)
+        );
 
         newCustomerInput.value = '';
         customerSelect.innerHTML = '<option value="">Select customer...</option>';
