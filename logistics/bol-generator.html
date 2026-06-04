@@ -729,9 +729,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function prefillFromJob(jobId) {
   try {
-    const res  = await fetch('/api/jobs/' + encodeURIComponent(jobId));
-    const data = await res.json();
-    if (!data.ok || !data.job) return;
+    const res = await api.get('/api/jobs/' + encodeURIComponent(jobId));
+    if (!res.ok || !res.data.job) return;
+    const data = res.data;
     const job = data.job;
 
     prefilledJobId = jobId;
@@ -778,9 +778,9 @@ async function prefillFromJob(jobId) {
       if (hasStructuredAddr) {
         let matched = false;
         try {
-          const cRes  = await fetch('/api/bol-customers?search=' + encodeURIComponent(job.ship_to_company || job.customer));
-          const cData = await cRes.json();
-          const matches = cData.customers || [];
+          const cRes  = await api.get('/api/bol-customers?search=' + encodeURIComponent(job.ship_to_company || job.customer));
+          const cData = cRes.data;
+          const matches = (cData && cData.customers) || [];
           const exact = matches.find(c =>
             (c.company || '').toLowerCase() === (job.ship_to_company || job.customer || '').toLowerCase() &&
             (c.street  || '').toLowerCase() === (job.ship_to_street  || '').toLowerCase()
@@ -803,9 +803,9 @@ async function prefillFromJob(jobId) {
         }
       } else {
         try {
-          const cRes  = await fetch('/api/bol-customers?search=' + encodeURIComponent(job.customer));
-          const cData = await cRes.json();
-          const matches = cData.customers || [];
+          const cRes  = await api.get('/api/bol-customers?search=' + encodeURIComponent(job.customer));
+          const cData = cRes.data;
+          const matches = (cData && cData.customers) || [];
           if (matches.length === 1) {
             selectCustomer(matches[0]);
           } else {
@@ -832,18 +832,16 @@ function setTodayDate() {
 
 async function loadCarriers() {
   try {
-    const res  = await fetch('/api/bol-carriers');
-    const data = await res.json();
-    carriersCache = data.carriers || [];
+    const res = await api.get('/api/bol-carriers');
+    carriersCache = (res.data && res.data.carriers) || [];
   } catch { /* silent */ }
 }
 
 async function loadRecentBols() {
   const list = document.getElementById('recent-bols-list');
   try {
-    const res  = await fetch('/api/bols?days=90');
-    const data = await res.json();
-    const bols = (data.bols || []).slice(0, 10);
+    const res = await api.get('/api/bols?days=90');
+    const bols = ((res.data && res.data.bols) || []).slice(0, 10);
 
     if (!bols.length) {
       list.innerHTML = '<div class="bol-recent-empty">No recent BOLs</div>';
@@ -864,7 +862,7 @@ async function loadRecentBols() {
       item.querySelector('.bol-delete-btn').addEventListener('click', async (e) => {
         e.stopPropagation();
         if (!confirm(`Delete BOL #${b.bol_number}? This cannot be undone.`)) return;
-        const res = await fetch(`/api/bols/${b.id}`, { method: 'DELETE' });
+        const res = await api.del(`/api/bols/${b.id}`);
         if (res.ok) { item.remove(); } else { alert('Failed to delete BOL.'); }
       });
       item.addEventListener('click', () => loadBolIntoForm(b));
@@ -906,9 +904,8 @@ function setupCustomerSearch() {
 async function doCustomerSearch(q) {
   const drop = document.getElementById('customer-dropdown');
   try {
-    const res  = await fetch('/api/bol-customers?search=' + encodeURIComponent(q));
-    const data = await res.json();
-    renderCustomerDrop(data.customers || []);
+    const res = await api.get('/api/bol-customers?search=' + encodeURIComponent(q));
+    renderCustomerDrop((res.data && res.data.customers) || []);
   } catch {
     drop.innerHTML = '<div class="bol-search-item" style="color:var(--muted)">Search error</div>';
     drop.classList.add('open');
@@ -1195,9 +1192,9 @@ async function doGenerate(payload) {
     let packingSlipPdfBytes = null;
     if (prefilledJobId && document.getElementById('f-include-packing')?.checked) {
       try {
-        const res = await fetch('/api/jobs/' + encodeURIComponent(prefilledJobId));
-        const data = await res.json();
-        if (data.job?.packing_slip_pdf) {
+        const res = await api.get('/api/jobs/' + encodeURIComponent(prefilledJobId));
+        const data = res.data;
+        if (data && data.job?.packing_slip_pdf) {
           const b64 = data.job.packing_slip_pdf;
           const binary = atob(b64);
           const bytes = new Uint8Array(binary.length);
@@ -1271,14 +1268,12 @@ async function handleReviewApprove() {
 
   try {
     const isEdit = !!editingBolId;
-    const res = await fetch(isEdit ? `/api/bols/${editingBolId}` : '/api/bols', {
-      method: isEdit ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(pendingReviewPayload),
-    });
-    const data = await res.json();
-    if (!data.ok) {
-      setStatus(data.error || 'Save failed.', 'error');
+    const res = isEdit
+      ? await api.put(`/api/bols/${editingBolId}`, pendingReviewPayload)
+      : await api.post('/api/bols', pendingReviewPayload);
+    const data = res.data;
+    if (!res.ok) {
+      setStatus(res.error || 'Save failed.', 'error');
       closeBolReview();
       return;
     }
@@ -1343,13 +1338,11 @@ async function handleDraft() {
 
   try {
     const isEdit = !!editingBolId;
-    const res  = await fetch(isEdit ? `/api/bols/${editingBolId}` : '/api/bols', {
-      method:  isEdit ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!data.ok) { setStatus(data.error || 'Save failed.', 'error'); return; }
+    const res = isEdit
+      ? await api.put(`/api/bols/${editingBolId}`, payload)
+      : await api.post('/api/bols', payload);
+    const data = res.data;
+    if (!res.ok) { setStatus(res.error || 'Save failed.', 'error'); return; }
     showToast(data.bol.bol_number ? `${isEdit ? 'Updated' : 'Draft saved'} — BOL #${data.bol.bol_number}` : isEdit ? 'Updated' : 'Draft saved');
     loadRecentBols();
   } catch (e) {
@@ -1462,9 +1455,8 @@ async function loadAddrManager() {
   const tbody = document.getElementById('addr-tbody');
   tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px;">Loading…</td></tr>';
   try {
-    const res  = await fetch('/api/bol-customers?active=0');
-    const data = await res.json();
-    allAddresses = data.customers || [];
+    const res = await api.get('/api/bol-customers?active=0');
+    allAddresses = (res.data && res.data.customers) || [];
     renderAddrTable(allAddresses);
   } catch {
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#dc2626;padding:20px;">Failed to load</td></tr>';
@@ -1562,13 +1554,10 @@ async function saveAddrForm() {
   if (id) payload.id = id;
 
   try {
-    const res  = await fetch('/api/bol-customers', {
-      method:  id ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!data.ok) { document.getElementById('af-status').textContent = data.error || 'Save failed.'; return; }
+    const res = id
+      ? await api.put('/api/bol-customers', payload)
+      : await api.post('/api/bol-customers', payload);
+    if (!res.ok) { document.getElementById('af-status').textContent = res.error || 'Save failed.'; return; }
     closeAddrForm();
     showToast(id ? 'Customer updated.' : 'Customer added.');
     loadAddrManager();
@@ -1580,13 +1569,8 @@ async function saveAddrForm() {
 async function deactivateAddr(id, name) {
   if (!confirm(`Deactivate "${name}"? It will stop appearing in customer search.`)) return;
   try {
-    const res  = await fetch('/api/bol-customers', {
-      method:  'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ id }),
-    });
-    const data = await res.json();
-    if (!data.ok) { showToast('Error: ' + (data.error || 'Failed.')); return; }
+    const res = await api.raw('/api/bol-customers', { method: 'DELETE', body: { id } });
+    if (!res.ok) { showToast('Error: ' + (res.error || 'Failed.')); return; }
     showToast(name + ' deactivated.');
     loadAddrManager();
   } catch {

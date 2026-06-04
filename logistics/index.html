@@ -521,10 +521,9 @@ function weekInputToMonday(val) {
 
 // ── Data Loaders ───────────────────────────────────────────────────────────
 async function loadSilos() {
-  const res  = await fetch('/api/silos');
-  const body = await res.json();
-  if (body.ok) {
-    allSilos = body.data;
+  const { ok, data } = await api.get('/api/silos');
+  if (ok) {
+    allSilos = data.data;
     const siloOpts = allSilos.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
     document.getElementById('f-silo-id').innerHTML =
       `<option value="">— no silo (log separately) —</option>${siloOpts}`;
@@ -532,10 +531,9 @@ async function loadSilos() {
 }
 
 async function loadBeadTypes() {
-  const res  = await fetch('/api/bead-types');
-  const body = await res.json();
-  if (body.ok) {
-    allBeadTypes = body.data;
+  const { ok, data } = await api.get('/api/bead-types');
+  if (ok) {
+    allBeadTypes = data.data;
     const opts = allBeadTypes.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
     document.getElementById('f-bead-type-id').innerHTML =
       `<option value="">— select type —</option>${opts}`;
@@ -543,11 +541,10 @@ async function loadBeadTypes() {
 }
 
 async function loadOpenJobs() {
-  const res  = await fetch('/api/jobs?status=not_started,in_production,done,loading,shipped');
-  const body = await res.json();
-  if (body.ok) {
-    allOpenJobs = body.jobs;
-    jobPickerFull = body.jobs;
+  const { ok, data } = await api.get('/api/jobs?status=not_started,in_production,done,loading,shipped');
+  if (ok) {
+    allOpenJobs = data.jobs;
+    jobPickerFull = data.jobs;
     const opts = allOpenJobs.map(j => {
       const label = `${esc(j.customer)}${j.invoice_number ? ' · ' + esc(j.invoice_number) : ''}`;
       return `<option value="${j.id}">${label}</option>`;
@@ -559,9 +556,8 @@ async function loadOpenJobs() {
 
 async function loadBays() {
   try {
-    const res  = await fetch('/api/loading-bays');
-    const body = await res.json();
-    allLoadingBays = body.ok ? (body.bays || []).filter(b => b.is_active) : [];
+    const { ok, data } = await api.get('/api/loading-bays');
+    allLoadingBays = ok ? (data.bays || []).filter(b => b.is_active) : [];
   } catch {
     allLoadingBays = [];
   }
@@ -569,11 +565,10 @@ async function loadBays() {
 
 async function loadLoadingAssignments() {
   try {
-    const res  = await fetch('/api/loading-assignments');
-    const body = await res.json();
-    if (body.ok && body.assignments) {
+    const { ok, data } = await api.get('/api/loading-assignments');
+    if (ok && data.assignments) {
       loadingAssignmentsByJobId = {};
-      for (const la of body.assignments) {
+      for (const la of data.assignments) {
         if (!loadingAssignmentsByJobId[la.job_id]) {
           loadingAssignmentsByJobId[la.job_id] = la;
         }
@@ -587,17 +582,12 @@ async function loadLoadingAssignments() {
 async function assignBayFromDashboard(assignmentId, bayId) {
   if (!bayId) return;
   try {
-    const res = await fetch('/api/loading-assignments', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: assignmentId,
-        bay_id: bayId,
-        loading_status: 'not_started',
-      }),
+    const { ok, data } = await api.put('/api/loading-assignments', {
+      id: assignmentId,
+      bay_id: bayId,
+      loading_status: 'not_started',
     });
-    const data = await res.json();
-    if (data.ok) {
+    if (ok) {
       await loadLoadingAssignments();
       renderOutbound();
 
@@ -607,7 +597,7 @@ async function assignBayFromDashboard(assignmentId, bayId) {
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 3000);
     } else {
-      alert(data.error || 'Failed to assign bay');
+      alert(data?.error || 'Failed to assign bay');
     }
   } catch (e) {
     console.error('Bay assignment failed:', e);
@@ -628,9 +618,8 @@ async function loadOutbound() {
   if (status) params.set('status', status);
 
   try {
-    const res  = await fetch(`/api/shipments?${params}`);
-    const body = await res.json();
-    outboundData = body.ok ? body.data : [];
+    const { ok, data } = await api.get(`/api/shipments?${params}`);
+    outboundData = ok ? data.data : [];
   } catch {
     outboundData = [];
   }
@@ -645,9 +634,8 @@ async function loadInbound() {
   if (status) params.set('status', status);
 
   try {
-    const res  = await fetch(`/api/shipments?${params}`);
-    const body = await res.json();
-    inboundData = body.ok ? body.data : [];
+    const { ok, data } = await api.get(`/api/shipments?${params}`);
+    inboundData = ok ? data.data : [];
   } catch {
     inboundData = [];
   }
@@ -1003,9 +991,8 @@ function closeModal() {
 
 async function fetchJobForModal(jobId) {
   try {
-    const res = await fetch('/api/jobs/' + encodeURIComponent(jobId));
-    const data = await res.json();
-    if (!data.ok || !data.job) return;
+    const { ok, data } = await api.get('/api/jobs/' + encodeURIComponent(jobId));
+    if (!ok || !data?.job) return;
     const j = data.job;
     if (j.po_number)         document.getElementById('f-po-number').value = j.po_number;
     if (j.invoice_number)    document.getElementById('f-invoice-number').value = j.invoice_number;
@@ -1051,31 +1038,27 @@ async function fetchJobForModal(jobId) {
 
 async function syncJobFromModal(jobId) {
   try {
-    await fetch('/api/jobs/' + encodeURIComponent(jobId), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: jobId,
-        customer:          document.getElementById('f-customer').value.trim(),
-        carrier:           document.getElementById('f-carrier').value.trim(),
-        method:            document.getElementById('f-method').value,
-        ship_date:         document.getElementById('f-ship-date').value,
-        location:          document.getElementById('f-destination').value.trim(),
-        load_count:        parseInt(document.getElementById('f-load-count').value || 1, 10),
-        total_bdft:        parseFloat(document.getElementById('f-total-bdft').value) || 0,
-        ship_to_company:   document.getElementById('f-ship-to-company')?.value?.trim() || '',
-        ship_to_attention: document.getElementById('f-ship-to-attention')?.value?.trim() || '',
-        ship_to_street:    document.getElementById('f-ship-to-street')?.value?.trim() || '',
-        ship_to_city:      document.getElementById('f-ship-to-city')?.value?.trim() || '',
-        ship_to_state:     document.getElementById('f-ship-to-state')?.value?.trim() || '',
-        ship_to_zip:       document.getElementById('f-ship-to-zip')?.value?.trim() || '',
-        delivery_time:     document.getElementById('f-delivery-time')?.value?.trim() || '',
-        contact_name:      document.getElementById('f-contact-name')?.value?.trim() || '',
-        contact_phone:     document.getElementById('f-contact-phone')?.value?.trim() || '',
-        scrap_pickup:      document.getElementById('f-scrap-pickup')?.value || '',
-        po_number:         document.getElementById('f-po-number')?.value?.trim() || '',
-        invoice_number:    document.getElementById('f-invoice-number')?.value?.trim() || '',
-      }),
+    await api.put('/api/jobs/' + encodeURIComponent(jobId), {
+      id: jobId,
+      customer:          document.getElementById('f-customer').value.trim(),
+      carrier:           document.getElementById('f-carrier').value.trim(),
+      method:            document.getElementById('f-method').value,
+      ship_date:         document.getElementById('f-ship-date').value,
+      location:          document.getElementById('f-destination').value.trim(),
+      load_count:        parseInt(document.getElementById('f-load-count').value || 1, 10),
+      total_bdft:        parseFloat(document.getElementById('f-total-bdft').value) || 0,
+      ship_to_company:   document.getElementById('f-ship-to-company')?.value?.trim() || '',
+      ship_to_attention: document.getElementById('f-ship-to-attention')?.value?.trim() || '',
+      ship_to_street:    document.getElementById('f-ship-to-street')?.value?.trim() || '',
+      ship_to_city:      document.getElementById('f-ship-to-city')?.value?.trim() || '',
+      ship_to_state:     document.getElementById('f-ship-to-state')?.value?.trim() || '',
+      ship_to_zip:       document.getElementById('f-ship-to-zip')?.value?.trim() || '',
+      delivery_time:     document.getElementById('f-delivery-time')?.value?.trim() || '',
+      contact_name:      document.getElementById('f-contact-name')?.value?.trim() || '',
+      contact_phone:     document.getElementById('f-contact-phone')?.value?.trim() || '',
+      scrap_pickup:      document.getElementById('f-scrap-pickup')?.value || '',
+      po_number:         document.getElementById('f-po-number')?.value?.trim() || '',
+      invoice_number:    document.getElementById('f-invoice-number')?.value?.trim() || '',
     });
   } catch (e) {
     console.error('Job sync from logistics failed:', e);
@@ -1196,20 +1179,17 @@ async function saveShipment() {
   btn.textContent = 'Saving…';
 
   try {
-    const res  = await fetch('/api/shipments', {
-      method: editingId ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const body = await res.json();
+    const { ok, data } = editingId
+      ? await api.put('/api/shipments', payload)
+      : await api.post('/api/shipments', payload);
 
-    if (!body.ok) {
-      showError(body.error || 'Error saving shipment.');
+    if (!ok) {
+      showError(data?.error || 'Error saving shipment.');
       return;
     }
 
     // Check if delivered + has linked job → prompt to update job status
-    const saved = body.data;
+    const saved = data.data;
     const syncJobId = document.getElementById('f-job-id').value;
     if (syncJobId && dir === 'outbound') await syncJobFromModal(syncJobId);
     if (saved.status === 'delivered' && saved.job_id && !editingId) {
@@ -1231,13 +1211,8 @@ async function confirmDelete() {
   if (!editingId) return;
   if (!confirm('Delete this shipment? This cannot be undone.')) return;
 
-  const res  = await fetch('/api/shipments', {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: editingId }),
-  });
-  const body = await res.json();
-  if (!body.ok) { alert(body.error || 'Error deleting shipment.'); return; }
+  const { ok, data } = await api.raw('/api/shipments', { method: 'DELETE', body: { id: editingId } });
+  if (!ok) { alert(data?.error || 'Error deleting shipment.'); return; }
 
   closeModal();
   await Promise.all([loadOutbound(), loadInbound()]);
@@ -1252,11 +1227,10 @@ async function openShipJobPicker() {
   document.getElementById('job-picker-modal').classList.remove('hidden');
 
   try {
-    const res  = await fetch('/api/jobs?status=not_started,in_production,done');
-    const body = await res.json();
-    if (body.ok) {
-      jobPickerFull = body.jobs;
-      allOpenJobs   = body.jobs;
+    const { ok, data } = await api.get('/api/jobs?status=not_started,in_production,done');
+    if (ok) {
+      jobPickerFull = data.jobs;
+      allOpenJobs   = data.jobs;
       const opts = allOpenJobs.map(j => {
         const label = `${esc(j.customer)}${j.invoice_number ? ' · ' + esc(j.invoice_number) : ''}`;
         return `<option value="${j.id}">${label}</option>`;
@@ -1344,11 +1318,7 @@ async function promptYes() {
   dismissPrompt();
 
   try {
-    await fetch('/api/jobs', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: promptJobId, status: 'shipped' }),
-    });
+    await api.put('/api/jobs', { id: promptJobId, status: 'shipped' });
   } catch { /* silent */ }
 }
 
