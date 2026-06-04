@@ -327,11 +327,11 @@ const LD_STATUS_COLORS = {
 async function loadDashboard() {
   try {
     const [baysRes, assignRes] = await Promise.all([
-      fetch('/api/loading-bays').then(r => r.json()),
-      fetch('/api/loading-assignments').then(r => r.json()),
+      api.get('/api/loading-bays'),
+      api.get('/api/loading-assignments'),
     ]);
-    allBays = baysRes.bays || [];
-    allAssignments = assignRes.assignments || [];
+    allBays = baysRes.data?.bays || [];
+    allAssignments = assignRes.data?.assignments || [];
     renderDashboard();
   } catch (e) {
     console.error('Dashboard load failed:', e);
@@ -610,16 +610,11 @@ async function advanceStatus(assignmentId, newStatus) {
   }
 
   try {
-    const res = await fetch('/api/loading-assignments', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: assignmentId, loading_status: newStatus }),
-    });
-    const data = await res.json();
-    if (data.ok) {
+    const { ok, data } = await api.put('/api/loading-assignments', { id: assignmentId, loading_status: newStatus });
+    if (ok) {
       loadDashboard();
     } else {
-      alert(data.error || 'Failed to update status');
+      alert(data?.error || 'Failed to update status');
     }
   } catch (e) {
     console.error('Status advance failed:', e);
@@ -628,16 +623,11 @@ async function advanceStatus(assignmentId, newStatus) {
 
 async function moveToYard(assignmentId) {
   try {
-    const res = await fetch('/api/loading-assignments', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: assignmentId, location: 'yard', bay_id: null }),
-    });
-    const data = await res.json();
-    if (data.ok) {
+    const { ok, data } = await api.put('/api/loading-assignments', { id: assignmentId, location: 'yard', bay_id: null });
+    if (ok) {
       loadDashboard();
     } else {
-      alert(data.error || 'Failed to move to yard');
+      alert(data?.error || 'Failed to move to yard');
     }
   } catch (e) {
     console.error('Move to yard failed:', e);
@@ -645,11 +635,7 @@ async function moveToYard(assignmentId) {
 }
 
 async function updateBayTrailer(bayId, trailerNumber) {
-  await fetch('/api/loading-bays', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: bayId, trailer_number: trailerNumber }),
-  });
+  await api.put('/api/loading-bays', { id: bayId, trailer_number: trailerNumber });
 }
 
 async function archiveAssignment(assignmentId) {
@@ -683,17 +669,12 @@ async function confirmAssignBay() {
   if (!bayId) { alert('Select a bay'); return; }
 
   try {
-    const res = await fetch('/api/loading-assignments', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: assignBayTargetId, bay_id: bayId, loading_status: 'not_started' }),
-    });
-    const data = await res.json();
-    if (data.ok) {
+    const { ok, data } = await api.put('/api/loading-assignments', { id: assignBayTargetId, bay_id: bayId, loading_status: 'not_started' });
+    if (ok) {
       closeAssignBayModal();
       loadDashboard();
     } else {
-      alert(data.error || 'Failed to assign bay');
+      alert(data?.error || 'Failed to assign bay');
     }
   } catch (e) {
     console.error('Assign bay failed:', e);
@@ -714,16 +695,11 @@ async function onBayDrop(event, bayId) {
   if (!draggedAssignmentId) return;
 
   try {
-    const res = await fetch('/api/loading-assignments', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: draggedAssignmentId, bay_id: bayId, loading_status: 'not_started' }),
-    });
-    const data = await res.json();
-    if (data.ok) {
+    const { ok, data } = await api.put('/api/loading-assignments', { id: draggedAssignmentId, bay_id: bayId, loading_status: 'not_started' });
+    if (ok) {
       loadDashboard();
     } else {
-      alert(data.error || 'Failed to assign bay');
+      alert(data?.error || 'Failed to assign bay');
     }
   } catch (e) {
     console.error('Drop assign failed:', e);
@@ -867,9 +843,8 @@ function closePullJobModal() {
 async function searchJobsForPull(query) {
   if (query.length < 2) { document.getElementById('pull-job-results').innerHTML = ''; return; }
 
-  const res = await fetch('/api/jobs?search=' + encodeURIComponent(query));
-  const data = await res.json();
-  pullJobSearchResults = data.jobs || [];
+  const { data } = await api.get('/api/jobs?search=' + encodeURIComponent(query));
+  pullJobSearchResults = data?.jobs || [];
 
   document.getElementById('pull-job-results').innerHTML = pullJobSearchResults.map(j => `
     <div class="ld-job-result ${pullJobSelectedId === j.id ? 'selected' : ''}" onclick="selectPullJob('${j.id}', this)">
@@ -896,32 +871,22 @@ async function confirmPullJob() {
 
   // If called from "Assign Bay" button, update existing assignment
   if (existingAssignmentId) {
-    const res = await fetch('/api/loading-assignments', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: existingAssignmentId, bay_id: bayId, loading_status: 'not_started' }),
-    });
-    const data = await res.json();
-    if (data.ok) { closePullJobModal(); loadDashboard(); }
-    else alert(data.error || 'Failed to assign bay');
+    const { ok, data } = await api.put('/api/loading-assignments', { id: existingAssignmentId, bay_id: bayId, loading_status: 'not_started' });
+    if (ok) { closePullJobModal(); loadDashboard(); }
+    else alert(data?.error || 'Failed to assign bay');
     return;
   }
 
   // Pull job flow
   if (!pullJobSelectedId) { alert('Select a job first'); return; }
 
-  const res = await fetch('/api/loading-assignments', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ job_id: pullJobSelectedId, bay_id: bayId }),
-  });
-  const data = await res.json();
+  const { ok, data } = await api.post('/api/loading-assignments', { job_id: pullJobSelectedId, bay_id: bayId });
 
-  if (data.ok) {
+  if (ok) {
     closePullJobModal();
     loadDashboard();
   } else {
-    alert(data.error || 'Failed to pull job');
+    alert(data?.error || 'Failed to pull job');
   }
 }
 
@@ -999,10 +964,9 @@ let currentBolFilename = 'BOL.pdf';
 
 async function viewBolForJob(jobId) {
   try {
-    const res = await fetch('/api/bols?job_id=' + encodeURIComponent(jobId));
-    const data = await res.json();
+    const { ok, data } = await api.get('/api/bols?job_id=' + encodeURIComponent(jobId));
 
-    if (!data.ok || !data.bols || data.bols.length === 0) {
+    if (!ok || !data?.bols || data.bols.length === 0) {
       alert('No BOL found for this job. Generate a BOL first from the BOL Generator or Load Builder.');
       return;
     }
@@ -1235,18 +1199,13 @@ async function confirmLoadedChecklist() {
   btn.textContent = 'Saving…';
 
   try {
-    const res = await fetch('/api/loading-assignments', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: checklistAssignmentId,
-        loading_status: 'loaded',
-        ready_checklist: JSON.stringify(checklist),
-      }),
+    const { ok, data } = await api.put('/api/loading-assignments', {
+      id: checklistAssignmentId,
+      loading_status: 'loaded',
+      ready_checklist: JSON.stringify(checklist),
     });
-    const data = await res.json();
-    if (!data.ok) {
-      alert(data.error || 'Failed to mark as loaded');
+    if (!ok) {
+      alert(data?.error || 'Failed to mark as loaded');
       return;
     }
 
@@ -1257,15 +1216,11 @@ async function confirmLoadedChecklist() {
       for (const photo of pendingPhotos) {
         const base64 = photo.dataUrl.split(',')[1] || photo.dataUrl;
         try {
-          await fetch('/api/loading-photos', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              assignment_id: checklistAssignmentId,
-              job_id: jobId,
-              photo_data: base64,
-              filename: photo.filename,
-            }),
+          await api.post('/api/loading-photos', {
+            assignment_id: checklistAssignmentId,
+            job_id: jobId,
+            photo_data: base64,
+            filename: photo.filename,
           });
         } catch (e) {
           console.error('Photo upload failed:', e);

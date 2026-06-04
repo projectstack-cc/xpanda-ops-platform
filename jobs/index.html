@@ -539,15 +539,10 @@ async function loadJobs(params) {
   if (params && params.status) q.set('status', params.status);
   if (showArchived) q.set('include_archived', '1');
 
-  try {
-    const res  = await fetch('/api/jobs?' + q.toString());
-    const data = await res.json();
-    if (!data.ok) { showToast('Error loading jobs: ' + data.error); return; }
-    allJobs = data.jobs;
-    renderBoard(allJobs);
-  } catch {
-    showToast('Network error loading jobs.');
-  }
+  const r = await api.get('/api/jobs?' + q.toString());
+  if (!r.ok) { showToast('Error loading jobs: ' + r.error); return; }
+  allJobs = r.data.jobs;
+  renderBoard(allJobs);
 }
 
 /* ═══════════════════════════════════════════
@@ -586,15 +581,12 @@ function renderBoard(jobs) {
 }
 
 async function fetchJobBols(jobIds) {
-  try {
-    const res  = await fetch('/api/bols?job_ids=' + jobIds.map(encodeURIComponent).join(','));
-    const data = await res.json();
-    if (!data.ok) return;
-    for (const b of (data.bols || [])) {
-      const el = document.getElementById('bol-num-' + b.job_id);
-      if (el) el.textContent = (el.dataset.hasInv ? ' | BOL #' : 'BOL #') + b.bol_number;
-    }
-  } catch { /* silent — non-critical */ }
+  const r = await api.get('/api/bols?job_ids=' + jobIds.map(encodeURIComponent).join(','));
+  if (!r.ok) return;
+  for (const b of (r.data.bols || [])) {
+    const el = document.getElementById('bol-num-' + b.job_id);
+    if (el) el.textContent = (el.dataset.hasInv ? ' | BOL #' : 'BOL #') + b.bol_number;
+  }
 }
 
 /* ═══════════════════════════════════════════
@@ -791,49 +783,31 @@ function nextStatus(s) {
 }
 
 async function archiveJob(jobId, customerName) {
-  try {
-    const res = await fetch('/api/jobs', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: jobId, status: 'archived' }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      const card = document.querySelector(`.jobs-card[data-id="${jobId}"]`);
-      if (card) {
-        card.style.transition = 'opacity 0.3s, transform 0.3s';
-        card.style.opacity = '0';
-        card.style.transform = 'scale(0.95)';
-        setTimeout(() => {
-          allJobs = allJobs.filter(j => j.id !== jobId);
-          renderBoard(allJobs);
-        }, 300);
-      } else {
+  const r = await api.put('/api/jobs', { id: jobId, status: 'archived' });
+  if (r.ok) {
+    const card = document.querySelector(`.jobs-card[data-id="${jobId}"]`);
+    if (card) {
+      card.style.transition = 'opacity 0.3s, transform 0.3s';
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.95)';
+      setTimeout(() => {
         allJobs = allJobs.filter(j => j.id !== jobId);
         renderBoard(allJobs);
-      }
-      showArchiveToast(customerName || 'Job');
+      }, 300);
+    } else {
+      allJobs = allJobs.filter(j => j.id !== jobId);
+      renderBoard(allJobs);
     }
-  } catch (e) {
-    console.error('Archive failed:', e);
+    showArchiveToast(customerName || 'Job');
   }
 }
 
 async function unarchiveJob(jobId) {
-  try {
-    const res = await fetch('/api/jobs', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: jobId, status: 'shipped' }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      const job = allJobs.find(j => j.id === jobId);
-      if (job) job.status = 'shipped';
-      renderBoard(allJobs);
-    }
-  } catch (e) {
-    console.error('Unarchive failed:', e);
+  const r = await api.put('/api/jobs', { id: jobId, status: 'shipped' });
+  if (r.ok) {
+    const job = allJobs.find(j => j.id === jobId);
+    if (job) job.status = 'shipped';
+    renderBoard(allJobs);
   }
 }
 
@@ -1035,24 +1009,13 @@ async function moveCard(jobId, newStatus) {
   job.status = newStatus;
   renderBoard(allJobs);
 
-  try {
-    const res  = await fetch('/api/jobs', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: jobId, status: newStatus }),
-    });
-    const data = await res.json();
-    if (!data.ok) {
-      job.status = oldStatus;
-      renderBoard(allJobs);
-      showToast('Error: ' + (data.error || 'Could not move job.'));
-    } else if (newStatus === 'done') {
-      showBeadPrompt(jobId, job.customer);
-    }
-  } catch {
+  const r = await api.put('/api/jobs', { id: jobId, status: newStatus });
+  if (!r.ok) {
     job.status = oldStatus;
     renderBoard(allJobs);
-    showToast('Network error. Please try again.');
+    showToast('Error: ' + (r.error || 'Could not move job.'));
+  } else if (newStatus === 'done') {
+    showBeadPrompt(jobId, job.customer);
   }
 }
 
@@ -1166,14 +1129,10 @@ function closeModal() {
 
 async function getPartsLibrary() {
   if (partsCache) return partsCache;
-  try {
-    const res = await fetch('/api/parts');
-    const data = await res.json();
-    partsCache = data.parts || [];
-    return partsCache;
-  } catch {
-    return [];
-  }
+  const r = await api.get('/api/parts');
+  if (!r.ok) return [];
+  partsCache = r.data.parts || [];
+  return partsCache;
 }
 
 function parseDimensionValues(dimStr) {
@@ -1637,24 +1596,21 @@ async function saveJob() {
   try {
     if (editingJobId) payload.id = editingJobId;
 
-    const res  = await fetch('/api/jobs', {
-      method:  editingJobId ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    });
-    const data = await res.json();
+    const r = editingJobId
+      ? await api.put('/api/jobs', payload)
+      : await api.post('/api/jobs', payload);
 
-    if (!data.ok) {
-      setModalStatus(data.error || 'Save failed.', true);
+    if (!r.ok) {
+      setModalStatus(r.error || 'Save failed.', true);
       return;
     }
 
     if (editingJobId) {
       const idx = allJobs.findIndex(j => j.id === editingJobId);
-      if (idx !== -1) allJobs[idx] = data.job;
-      else allJobs.unshift(data.job);
+      if (idx !== -1) allJobs[idx] = r.data.job;
+      else allJobs.unshift(r.data.job);
     } else {
-      allJobs.unshift(data.job);
+      allJobs.unshift(r.data.job);
     }
 
     renderBoard(allJobs);
@@ -1674,22 +1630,13 @@ async function confirmDelete() {
   const name = job ? job.customer : 'this job';
   if (!confirm(`Delete job for "${name}"? This cannot be undone.`)) return;
 
-  try {
-    const res  = await fetch('/api/jobs', {
-      method:  'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ id: editingJobId }),
-    });
-    const data = await res.json();
-    if (!data.ok) { showToast('Error: ' + (data.error || 'Delete failed.')); return; }
+  const r = await api.raw('/api/jobs', { method: 'DELETE', body: { id: editingJobId } });
+  if (!r.ok) { showToast('Error: ' + (r.error || 'Delete failed.')); return; }
 
-    allJobs = allJobs.filter(j => j.id !== editingJobId);
-    renderBoard(allJobs);
-    closeModal();
-    showToast('Job deleted.');
-  } catch {
-    showToast('Network error. Please try again.');
-  }
+  allJobs = allJobs.filter(j => j.id !== editingJobId);
+  renderBoard(allJobs);
+  closeModal();
+  showToast('Job deleted.');
 }
 
 /* ═══════════════════════════════════════════
@@ -1726,14 +1673,12 @@ async function openPartsPicker() {
   document.getElementById('parts-picker').hidden = false;
 
   if (!partsCache) {
-    try {
-      const res  = await fetch('/api/parts');
-      const data = await res.json();
-      partsCache = data.parts || [];
-    } catch {
+    const r = await api.get('/api/parts');
+    if (!r.ok) {
       body.innerHTML = '<p style="padding:12px;color:var(--muted)">Failed to load parts.</p>';
       return;
     }
+    partsCache = r.data.parts || [];
   }
 
   partsAll = partsCache;
@@ -1782,14 +1727,12 @@ async function openComboPicker() {
   document.getElementById('combo-picker').hidden = false;
 
   if (!combosCache) {
-    try {
-      const res  = await fetch('/api/combos');
-      const data = await res.json();
-      combosCache = data.combos || [];
-    } catch {
+    const r = await api.get('/api/combos');
+    if (!r.ok) {
       body.innerHTML = '<p style="padding:12px;color:var(--muted)">Failed to load combos.</p>';
       return;
     }
+    combosCache = r.data.combos || [];
   }
 
   if (!combosCache.length) {
@@ -1838,24 +1781,12 @@ async function toggleProcessPill(jobId, processName) {
   proc.completed = !proc.completed;
   job.processes  = procs;
   renderBoard(allJobs);
-  try {
-    const res  = await fetch('/api/jobs', {
-      method:  'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ id: jobId, processes: procs }),
-    });
-    const data = await res.json();
-    if (!data.ok) {
-      proc.completed = !proc.completed;
-      job.processes  = procs;
-      renderBoard(allJobs);
-      showToast('Error: ' + (data.error || 'Could not update process.'));
-    }
-  } catch {
+  const r = await api.put('/api/jobs', { id: jobId, processes: procs });
+  if (!r.ok) {
     proc.completed = !proc.completed;
     job.processes  = procs;
     renderBoard(allJobs);
-    showToast('Network error. Please try again.');
+    showToast('Error: ' + (r.error || 'Could not update process.'));
   }
 }
 

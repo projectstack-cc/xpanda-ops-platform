@@ -1209,15 +1209,15 @@ function getDims() { return TRAILER_TYPES[state.trailerType]; }
 function getSortedSkus() { return sortByHeight(state.skus); }
 
 async function fetchSkusFromApi() {
-  const res = await fetch('/api/load-builder-skus');
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  const res = await api.get('/api/load-builder-skus');
+  if (!res.ok) throw new Error(res.error || `HTTP ${res.status}`);
+  return res.data;
 }
 
 async function addSku(payload) {
   state.skuMutating = true; render();
   try {
-    await fetch('/api/load-builder-skus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    await api.post('/api/load-builder-skus', payload);
     state.skus = sortByHeight(await fetchSkusFromApi());
     state.skuError = '';
   } catch (_) { state.skuError = 'Failed to save SKU. Changes are not persisted.'; }
@@ -1227,7 +1227,7 @@ async function addSku(payload) {
 async function updateSku(id, payload) {
   state.skuMutating = true; render();
   try {
-    await fetch(`/api/load-builder-skus/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    await api.put(`/api/load-builder-skus/${id}`, payload);
     state.skus = sortByHeight(await fetchSkusFromApi());
     state.skuError = '';
   } catch (_) { state.skuError = 'Failed to update SKU. Changes are not persisted.'; }
@@ -1237,7 +1237,7 @@ async function updateSku(id, payload) {
 async function deleteSku(id) {
   state.skuMutating = true; render();
   try {
-    await fetch(`/api/load-builder-skus/${id}`, { method: 'DELETE' });
+    await api.del(`/api/load-builder-skus/${id}`);
     state.skus = sortByHeight(await fetchSkusFromApi());
     state.cart = state.cart.filter(x => x.skuId !== id);
     state.skuError = '';
@@ -1248,8 +1248,8 @@ async function deleteSku(id) {
 async function resetSkus() {
   state.skuMutating = true; render();
   try {
-    await fetch('/api/load-builder-skus/all', { method: 'DELETE' });
-    await fetch('/api/load-builder-skus/seed', { method: 'POST' });
+    await api.del('/api/load-builder-skus/all');
+    await api.post('/api/load-builder-skus/seed', null);
     state.skus = sortByHeight(await fetchSkusFromApi());
     state.cart = [];
     state.skuError = '';
@@ -1261,7 +1261,7 @@ async function importSkus(rows) {
   state.skuMutating = true; render();
   try {
     for (const row of rows) {
-      await fetch('/api/load-builder-skus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(row) });
+      await api.post('/api/load-builder-skus', row);
     }
     state.skus = sortByHeight(await fetchSkusFromApi());
     state.skuError = '';
@@ -1274,7 +1274,7 @@ async function initSkus() {
   try {
     let skus = await fetchSkusFromApi();
     if (skus.length === 0) {
-      await fetch('/api/load-builder-skus/seed', { method: 'POST' });
+      await api.post('/api/load-builder-skus/seed', null);
       skus = await fetchSkusFromApi();
     }
     state.skus = sortByHeight(skus);
@@ -2432,9 +2432,9 @@ function renderBolModal() {
       bm.searchLoading = true; renderBolModal();
       try {
         const url = isJob ? `/api/jobs?search=${encodeURIComponent(q)}` : `/api/bol-customers?search=${encodeURIComponent(q)}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
+        const res = await api.get(url);
+        if (!res.ok) throw new Error(res.error || 'Search failed');
+        const data = res.data;
         bm.searchResults = isJob ? (data.jobs || []) : (data.customers || []);
       } catch (_) { bm.searchResults = []; }
       bm.searchLoading = false; renderBolModal();
@@ -2461,16 +2461,16 @@ function renderBolModal() {
           if (details.length) row.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-faint)', marginTop: '2px' } }, details.join(' \xb7 ')));
           row.addEventListener('click', async () => {
             try {
-              const res = await fetch(`/api/jobs/${item.id}`);
-              const data = await res.json();
+              const res = await api.get(`/api/jobs/${item.id}`);
+              const data = res.data;
               const job = data.job || data;
               td.jobId = job.id; td.shipToCompany = job.customer || '';
               if (job.location) { const p = job.location.split(',').map(s => s.trim()); td.shipToCity = p[0] || ''; td.shipToState = p[1] || ''; }
               td.carrierName = job.carrier || ''; td.poNumber = job.po_number || job.invoice_number || '';
               td.deliveryTime = job.delivery_time || ''; td.contactName = job.contact_name || ''; td.contactPhone = job.contact_phone || '';
               try {
-                const cr = await fetch(`/api/bol-customers?search=${encodeURIComponent(job.customer || '')}`);
-                const cd = await cr.json();
+                const cr = await api.get(`/api/bol-customers?search=${encodeURIComponent(job.customer || '')}`);
+                const cd = cr.data;
                 const custs = cd.customers || [];
                 if (custs.length === 1) {
                   const c = custs[0]; td.customerId = c.id;
@@ -2657,13 +2657,13 @@ async function saveLoad() {
   };
 
   try {
-    const method = state.currentSavedLoadId ? 'PUT' : 'POST';
-    const url    = state.currentSavedLoadId
+    const isUpdate = !!state.currentSavedLoadId;
+    const url = isUpdate
       ? '/api/saved-loads/' + encodeURIComponent(state.currentSavedLoadId)
       : '/api/saved-loads';
-    const res  = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    const data = await res.json();
-    if (!data.ok) { showToast('Failed to save load: ' + (data.error || 'Unknown error'), 'error'); return; }
+    const res = isUpdate ? await api.put(url, payload) : await api.post(url, payload);
+    const data = res.data;
+    if (!res.ok) { showToast('Failed to save load: ' + (res.error || 'Unknown error'), 'error'); return; }
     state.currentSavedLoadId = data.load.id;
     showToast('Load saved.', 'success');
   } catch {
@@ -2674,10 +2674,9 @@ async function saveLoad() {
 async function openLoadModal() {
   let loads = [];
   try {
-    const res  = await fetch('/api/saved-loads');
-    const data = await res.json();
-    if (!data.ok) { showToast('Failed to load saved loads.', 'error'); return; }
-    loads = data.loads || [];
+    const res = await api.get('/api/saved-loads');
+    if (!res.ok) { showToast('Failed to load saved loads.', 'error'); return; }
+    loads = res.data.loads || [];
   } catch {
     showToast('Network error loading saved loads.', 'error');
     return;
@@ -2706,10 +2705,9 @@ async function openLoadModal() {
       loadBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         try {
-          const res  = await fetch('/api/saved-loads/' + encodeURIComponent(load.id));
-          const data = await res.json();
-          if (!data.ok) { showToast('Failed to load: ' + (data.error || ''), 'error'); return; }
-          const s = JSON.parse(data.load.state_json || '{}');
+          const res = await api.get('/api/saved-loads/' + encodeURIComponent(load.id));
+          if (!res.ok) { showToast('Failed to load: ' + (res.error || ''), 'error'); return; }
+          const s = JSON.parse(res.data.load.state_json || '{}');
           if (s.trailerType)          state.trailerType          = s.trailerType;
           if (s.trailerInvNumbers)    state.trailerInvNumbers    = s.trailerInvNumbers;
           if (s.runnerHeight != null) state.runnerHeight         = s.runnerHeight;
@@ -2737,9 +2735,8 @@ async function openLoadModal() {
         e.stopPropagation();
         if (!confirm(`Delete saved load "${load.name || '(unnamed)'}"?`)) return;
         try {
-          const res  = await fetch('/api/saved-loads/' + encodeURIComponent(load.id), { method: 'DELETE' });
-          const data = await res.json();
-          if (!data.ok) { showToast('Delete failed.', 'error'); return; }
+          const res = await api.del('/api/saved-loads/' + encodeURIComponent(load.id));
+          if (!res.ok) { showToast('Delete failed.', 'error'); return; }
           row.remove();
           if (!list.children.length) list.appendChild(h('p', { style: { color: 'var(--text-muted)', fontSize: '14px' } }, 'No saved loads.'));
         } catch {
@@ -2797,9 +2794,9 @@ async function generateAllBols() {
         weight: String(td.totalWeight), delivery_time: td.deliveryTime,
         job_id: td.jobId || null, notes: '',
       };
-      const res = await fetch('/api/bols', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!res.ok) { const ed = await res.json().catch(() => ({})); throw new Error(ed.error || `HTTP ${res.status}`); }
-      const data = await res.json();
+      const res = await api.post('/api/bols', payload);
+      if (!res.ok) { throw new Error(res.error || `HTTP ${res.status}`); }
+      const data = res.data;
       if (td.poNumber) data.bol.po_number = data.bol.po_number || td.poNumber;
       savedBols.push(data.bol);
       bm.generateProgress[i] = { text: `✓ Trailer ${i + 1} — ${data.bol.bol_number ? `BOL #${data.bol.bol_number}` : 'BOL'} saved`, done: true, pending: false };
@@ -2913,11 +2910,7 @@ function showBolReviewLB(blobUrl, savedBols) {
     for (const bol of lbReviewBols) {
       if (bol._overrides) {
         try {
-          await fetch(`/api/bols/${bol.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...bol, render_overrides: bol._overrides }),
-          });
+          await api.put(`/api/bols/${bol.id}`, { ...bol, render_overrides: bol._overrides });
         } catch (e) { console.error('Failed to save overrides for BOL', bol.id, e); }
       }
     }
@@ -3053,12 +3046,12 @@ async function createPartOnTheFly(lineItem, dims, customerName) {
     parent_group: '',
   };
   try {
-    const res = await fetch('/api/parts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    const data = await res.json();
-    if (data.ok && data.part) return data.part;
-    if (data.error && /unique/i.test(data.error || data.detail || '')) {
-      const listRes = await fetch('/api/parts');
-      const listData = await listRes.json();
+    const res = await api.post('/api/parts', payload);
+    const data = res.data;
+    if (res.ok && data.part) return data.part;
+    if (data && data.error && /unique/i.test(data.error || data.detail || '')) {
+      const listRes = await api.get('/api/parts');
+      const listData = listRes.data;
       return (listData.parts || []).find(p => p.part_number === partNumber) || null;
     }
     return null;
@@ -3096,8 +3089,8 @@ async function openPullJobPicker() {
   modal.style.display = 'flex';
   list.innerHTML = '<div style="color:#6b7280;padding:12px;">Loading jobs…</div>';
   try {
-    const res  = await fetch('/api/jobs?status=done,loading');
-    const data = await res.json();
+    const res = await api.get('/api/jobs?status=done,loading');
+    const data = res.data;
     const jobs = (data.jobs || data.data || []).filter(j => j.status === 'done' || j.status === 'loading');
     if (!jobs.length) {
       list.innerHTML = '<div style="color:#6b7280;padding:12px;">No Done or Loading jobs found.</div>';
@@ -3128,9 +3121,9 @@ function closePullJobPicker() {
 
 async function prefillFromJob(jobId) {
   try {
-    const res = await fetch('/api/jobs/' + encodeURIComponent(jobId));
-    const data = await res.json();
-    if (!data.ok || !data.job) { console.warn('Could not load job', jobId); return; }
+    const res = await api.get('/api/jobs/' + encodeURIComponent(jobId));
+    const data = res.data;
+    if (!res.ok || !data.job) { console.warn('Could not load job', jobId); return; }
     const job = data.job;
     const lineItems = job.line_items || [];
     if (!lineItems.length) { console.warn('Job has no line items'); return; }
