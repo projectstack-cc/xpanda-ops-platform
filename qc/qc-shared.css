@@ -46,25 +46,7 @@ textarea {
 
 /* HEADER */
 
-.topbar {
-    position: relative;
-    background: var(--card-bg);
-    border-bottom: 1px solid var(--line);
-    padding: 18px 16px 14px;
-    text-align: center;
-}
-
-.logo {
-    position: absolute;
-    left: 14px;
-    top: 16px;
-    height: 34px;
-}
-
-.header-center {
-    max-width: 500px;
-    margin: 0 auto;
-}
+/* HEADER */
 
 .badge {
     display: inline-block;
@@ -95,17 +77,6 @@ textarea {
     font-weight: 700;
     line-height: 1.2;
     white-space: nowrap;
-}
-
-.topbar h1 {
-    margin: 0;
-    font-size: 24px;
-}
-
-.topbar p {
-    margin: 6px 0 0;
-    font-size: 13px;
-    color: var(--muted);
 }
 
 /* LAYOUT */
@@ -261,17 +232,6 @@ textarea:focus-visible,
 /* MOBILE HEADER FIX */
 
 @media (max-width: 480px) {
-    .topbar {
-        padding-top: 60px;
-    }
-
-    .logo {
-        left: 50%;
-        top: 14px;
-        transform: translateX(-50%);
-        height: 30px;
-    }
-
     .qc-section-title {
         font-size: 18px;
     }

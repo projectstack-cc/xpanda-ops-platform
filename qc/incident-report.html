@@ -345,15 +345,7 @@
     }
 
 
-    function nowDate() {
-      const d = new Date();
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    }
-
-    function getCheckedDepartments() {
+    function getCheckedDepartments
       return Array.from(document.querySelectorAll('.checks input[type="checkbox"]:checked'))
         .map(cb => cb.value);
     }
@@ -374,7 +366,7 @@
     }
 
     function resetAll() {
-      dateEl.value = nowDate();
+      dateEl.value = utils.todayIso();
       personCompleting.value = 'Stephen Cook';
       reportingIndividual.value = '';
       customerSelect.value = '';
@@ -416,7 +408,7 @@
 
     // ====== INIT ======
     (function init() {
-      dateEl.value = nowDate();
+      dateEl.value = utils.todayIso();
       loadCustomers();
     })();
 

@@ -31,27 +31,7 @@ button, input, select, textarea {
     transition: box-shadow .15s ease, border-color .15s ease;
 }
 
-/* ── Header ─────────────────────────────────────────────────────────────── */
-
-.topbar {
-    position: relative;
-    background: var(--card-bg);
-    border-bottom: 1px solid var(--line);
-    padding: 18px 16px 14px;
-    text-align: center;
-}
-
-.logo {
-    position: absolute;
-    left: 14px;
-    top: 16px;
-    height: 34px;
-}
-
-.header-center {
-    max-width: 500px;
-    margin: 0 auto;
-}
+/* ── Page Wrap ── */
 
 .badge {
     display: inline-block;
@@ -72,18 +52,6 @@ button, input, select, textarea {
     color: var(--accent);
     background: var(--accent-soft);
     border-color: var(--card-border);
-}
-
-.topbar h1 {
-    margin: 0 0 4px;
-    font-size: 20px;
-    color: var(--text);
-}
-
-.topbar p {
-    margin: 0;
-    font-size: 13px;
-    color: var(--muted);
 }
 
 /* ── Page Wrap ───────────────────────────────────────────────────────────── */
@@ -667,11 +635,6 @@ button, input, select, textarea {
 
     .logistics-table th:nth-child(n+5),
     .logistics-table td:nth-child(n+5) { display: none; }
-}
-
-@media (max-width: 480px) {
-    .topbar { padding-top: 60px; }
-    .logo { left: 50%; top: 14px; transform: translateX(-50%); height: 30px; }
 }
 
 :root[data-theme="dark"] { --dir-outbound: #22d3ee; }

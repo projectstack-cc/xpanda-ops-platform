@@ -537,14 +537,6 @@ textarea {
     }
 
 
-    function nowDate() {
-      const d = new Date();
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    }
-
     function nowTime() {
       const d = new Date();
       const hh = String(d.getHours()).padStart(2, '0');
@@ -562,7 +554,7 @@ textarea {
     }
 
     function nowBatchLabel() {
-      return `${dateEl.value || nowDate()} ${timeEl.value || nowTime()}`;
+      return `${dateEl.value || utils.todayIso()} ${timeEl.value || nowTime()}`;
     }
 
     function calcSampleSizeRequired(lotSize) {
@@ -764,7 +756,7 @@ textarea {
       productCut.value = '';
       totalPieces.value = '';
       inspector.value = 'Stephen Cook';
-      dateEl.value = nowDate();
+      dateEl.value = utils.todayIso();
       timeEl.value = nowTime();
       lotSizeEl.value = '';
       lotSizeManual = false;
@@ -792,7 +784,7 @@ textarea {
     function buildInspectionPayload(requiredCount) {
       return {
         jobId: jobId.value.trim(),
-        date: dateEl.value || nowDate(),
+        date: dateEl.value || utils.todayIso(),
         productCut: productCut.value.trim(),
         time: timeEl.value || nowTime(),
         totalPieces: totalPieces.value.trim(),
@@ -974,7 +966,7 @@ textarea {
 
     // ====== INIT ======
     (function init() {
-      dateEl.value = nowDate();
+      dateEl.value = utils.todayIso();
       timeEl.value = nowTime();
       loadCustomers();
       setNeutralSampleState();
