@@ -42,7 +42,27 @@
       "Bash(grep -rn \"#[0-9a-fA-F]\\\\{3,6\\\\}\\\\|rgb\\(\" /c/Users/scook/.dev/xpanda-ops-platform --include=\"*.css\")",
       "Bash(awk -F: '{print $1}')",
       "Bash(grep -oh \"#[0-9a-fA-F]\\\\{3,6\\\\}\\\\|rgb\\([^\\)]*\\)\" /c/Users/scook/.dev/xpanda-ops-platform/logistics/loading.html)",
-      "Bash(grep -oh \"#[0-9a-fA-F]\\\\{3,6\\\\}\\\\|rgb\\([^\\)]*\\)\" /c/Users/scook/.dev/xpanda-ops-platform/logistics/index.html)"
+      "Bash(grep -oh \"#[0-9a-fA-F]\\\\{3,6\\\\}\\\\|rgb\\([^\\)]*\\)\" /c/Users/scook/.dev/xpanda-ops-platform/logistics/index.html)",
+      "Bash(awk -F: '$1>=4143 && $1<=4614')",
+      "Bash(grep -n \"^async function handleApiLoadingAssignments\\\\|^async function handleApiLoadingPhotos\\\\|^// =============================================================================\\\\|^// ========================$\\\\|^// Notification Dispatch\\\\|^async function dispatchNotification\\\\|^// ── Web Push\\\\|^async function handleApiAdminR2Backfill\\\\|^// ========================$\\\\|^// Notifications API\" \"_worker.js/index.js\")",
+      "Bash(grep -n \"^async function handleApiNotifications\\\\|^// ========================$\" \"_worker.js/index.js\")",
+      "Bash(awk 'NR>=1539 && NR<=3687 && /^\\(function |async function |const [A-Z_]+ =\\)/' \"_worker.js/index.js\")",
+      "Bash(awk 'NR>=1539 && NR<=2852' \"_worker.js/index.js\")",
+      "Bash(awk 'NR>=2853 && NR<=3687' \"_worker.js/index.js\")",
+      "Bash(awk 'NR>=4336' \"_worker.js/index.js\")",
+      "Bash(awk 'NR>=321 && NR<=1263 && /^\\(function |async function [^h]|const [A-Z_]+ =\\)/' \"_worker.js/index.js\")",
+      "Bash(awk 'NR>=1264 && NR<=2045 && /^\\(function |async function [^h]|const [A-Z_]+ =\\)/' \"_worker.js/index.js\")",
+      "Bash(awk 'NR>=1264 && NR<=2045' \"_worker.js/index.js\")",
+      "Bash(awk 'NR>=296 && NR<=631' \"_worker.js/index.js\")",
+      "Bash(awk 'NR>=632 && NR<=1263' \"_worker.js/index.js\")",
+      "Bash(awk 'NR>=272 && NR<=510' \"_worker.js/index.js\")",
+      "Bash(awk 'NR>=301 && NR<=758' \"_worker.js/index.js\")",
+      "Bash(cd \"C:/Users/scook/.dev/xpanda-ops-platform\")",
+      "Bash(echo '__TRACKED_VAR__: __TRACKED_VAR__')",
+      "Bash(echo '=== __TRACKED_VAR__ ===')",
+      "Bash(echo \"=reverse grep P103 route files=\")",
+      "Bash(echo '-- __TRACKED_VAR__ --')",
+      "Bash(grep -oE '\\\\b\\(json|logActivity|validateSession|dispatchNotification|normalizeName|safeJsonParse|generateAccessToken\\)\\\\b' _worker.js/__TRACKED_VAR__)"
     ]
   }
 }
