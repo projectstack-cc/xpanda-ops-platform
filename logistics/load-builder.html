@@ -615,7 +615,13 @@ function buildDemand(cart, skus, dims) {
     if (!bestOrientation) return null;
 
     const effectiveSku = { ...sku, length: bestOrientation.length, width: bestOrientation.width, height: bestOrientation.height };
-    if (bestOrientation.label) effectiveSku.name = sku.name + bestOrientation.label;
+    // Physically-accurate orientation label (derived from result, not permutation index).
+    const sortedDims = [sku.length, sku.width, sku.height].sort((a, b) => a - b); // [min, mid, max]
+    let physLabel = '';
+    if (bestOrientation.height === sortedDims[2]) physLabel = ' (on end)';        // tallest dimension vertical = standing up
+    else if (bestOrientation.height === sortedDims[1]) physLabel = ' (on side)';  // middle dimension vertical
+    // smallest dimension vertical = lying flat → no label
+    if (physLabel) effectiveSku.name = sku.name + physLabel;
 
     return { skuId: sku.id, sku: effectiveSku, originalQty: c.qty, remaining: c.qty };
   }).filter(Boolean);
@@ -821,7 +827,7 @@ function calcLoading(cart, skus, dims, variant = 0, options = {}) {
     if (!sku) return;
     if (sku.length <= 0 || sku.width <= 0 || sku.height <= 0) {
       warnings.push(`"${sku.name}" has invalid dimensions and will be skipped.`);
-    } else if (sku.length > dims.length || sku.width > dims.width || sku.height > dims.height) {
+    } else if (!demand.some(d => d.skuId === sku.id)) {
       warnings.push(`"${sku.name}" exceeds trailer dimensions and will be skipped.`);
     }
   });
@@ -957,7 +963,7 @@ function calcLoading(cart, skus, dims, variant = 0, options = {}) {
   // Auto-downsize last trailer to 26ft Box Truck — repack using actual box truck dimensions
   if (!options.skipDownsize && state.autoDownsize && !state.forcedMode) {
     const boxTruckDims = TRAILER_TYPES["26ft Box Truck"];
-    if (trailers.length > 1 && dims.length > boxTruckDims.length) {
+    if (trailers.length >= 1 && dims.length > boxTruckDims.length) {
       const last = trailers[trailers.length - 1];
       const lastTrailerPieces = [];
       last.rows.forEach(row => {
@@ -975,7 +981,10 @@ function calcLoading(cart, skus, dims, variant = 0, options = {}) {
       });
       const allSkusFit = lastTrailerPieces.every(p => {
         const sku = skus.find(s => s.id === p.skuId);
-        return sku && sku.width <= boxTruckDims.width && sku.length <= boxTruckDims.length && sku.height <= boxTruckDims.height;
+        if (!sku) return false;
+        const a = [sku.length, sku.width, sku.height].sort((x, y) => x - y);
+        const b = [boxTruckDims.length, boxTruckDims.width, boxTruckDims.height].sort((x, y) => x - y);
+        return a[0] <= b[0] && a[1] <= b[1] && a[2] <= b[2];
       });
       if (allSkusFit && tempCart.length) {
         const boxResult = calcLoading(tempCart, skus, boxTruckDims, variant, { skipDownsize: true });
