@@ -119,42 +119,24 @@ if (!window.__xpandaPhotoGalleryLoaded) {
       btn.setAttribute('aria-pressed', mode === 'floor' ? 'true' : 'false');
     };
 
-    // Topbar user-bar div — always rendered (mode toggle + theme toggle on every page).
-    const topbarUserBarHtml = `
-    <div class="header-user-bar" style="position:absolute;top:10px;right:16px;font-size:12px;color:#5b6472;display:flex;align-items:center;gap:8px;">
-      ${modeToggleHtml}
-      ${themeToggleHtml}
-      ${notifBellHtml}
-      ${topbarUserItemsHtml}
-    </div>`;
+    // Settings popover (gear) — display-mode + theme toggles, relocated out of the nav row.
+    const gearSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+    const gearMenuHtml = `
+      <div class="xpanda-gear" id="hdr-gear">
+        <button type="button" id="hdr-gear-btn" class="xpanda-gear-btn" aria-label="Settings" aria-haspopup="true" aria-expanded="false" onclick="window.__xpandaToggleGear&&window.__xpandaToggleGear()">${gearSvg}</button>
+        <div class="xpanda-gear-popover" id="hdr-gear-popover" role="menu" hidden>
+          <div class="xpanda-gear-row"><span class="xpanda-gear-label">Display</span>${modeToggleHtml}</div>
+          <div class="xpanda-gear-row"><span class="xpanda-gear-label">Theme</span>${themeToggleHtml}</div>
+        </div>
+      </div>`;
+
+    // Nav actions cluster — notification bell + settings gear + user items, rendered inside the top nav.
+    const navActionsHtml = `${notifBellHtml}${gearMenuHtml}${topbarUserItemsHtml}`;
 
     // Back-link — rendered on non-dashboard pages when backLinkLabel is non-empty.
     const backLinkHtml = config.backLinkLabel && !isDashboard
       ? `\n    <a href="${config.dashboardPath}" class="${config.badgeClass.replace('-badge', '-back-link')}">${config.backLinkLabel}</a>\n`
       : '';
-
-    document.write(`
-<header class="topbar">
-    <a href="/" aria-label="Back to Operations Platform">
-        <img src="/logo/xpanda.png" alt="xPanda Logo" class="logo">
-    </a>
-
-    <div class="header-center">
-
-        <a href="${config.dashboardPath}" class="badge ${config.badgeClass}" title="${config.badgeTitle}">
-            ${config.badgeText}
-        </a>
-
-        <h1 id="${config.pageTitleId}">${config.pageTitle}</h1>
-        <p id="${config.pageSubtitleId}">${config.pageSubtitle}</p>
-
-    </div>
-    ${topbarUserBarHtml}
-</header>
-`);
-
-    window.__xpandaUpdateModeToggle(window.__xpandaGetUiMode ? window.__xpandaGetUiMode() : 'office');
-    // ThemeManager.updateToggleUI() is handled by DOMContentLoaded in /shared/theme.js.
 
     // Module nav bar — single shared source, renders on every operational page.
     (function () {
@@ -177,7 +159,7 @@ if (!window.__xpandaPhotoGalleryLoaded) {
       document.write(
         '<style>' +
         '.xpanda-module-nav{background:var(--surface);border-bottom:1px solid var(--line);font-family:var(--font-sans);}' +
-        '.xpanda-nav-inner{display:flex;align-items:center;padding:0 12px;min-height:44px;}' +
+        '.xpanda-nav-inner{display:flex;align-items:center;gap:6px;padding:0 12px;min-height:48px;}' +
         '.xpanda-nav-links{display:flex;align-items:center;flex:1;gap:2px;overflow-x:auto;scrollbar-width:none;}' +
         '.xpanda-nav-links::-webkit-scrollbar{display:none;}' +
         '.nav-link{display:inline-flex;align-items:center;padding:6px 12px;font-size:13px;font-weight:500;color:var(--muted);text-decoration:none;border-radius:8px;white-space:nowrap;min-height:36px;transition:color .15s,background .15s;}' +
@@ -189,18 +171,39 @@ if (!window.__xpandaPhotoGalleryLoaded) {
         '.xpanda-nav-drawer{background:var(--surface);border-bottom:1px solid var(--line);padding:6px 12px;display:flex;flex-direction:column;gap:2px;}' +
         '.xpanda-nav-drawer[hidden]{display:none;}' +
         '.xpanda-nav-drawer .nav-link{min-height:44px;width:100%;}' +
+        '.xpanda-nav-logo{display:inline-flex;align-items:center;flex-shrink:0;padding-right:4px;}' +
+        '.xpanda-nav-logo img{height:30px;width:auto;display:block;}' +
+        '.xpanda-nav-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}' +
+        '.xpanda-gear{position:relative;display:inline-flex;}' +
+        '.xpanda-gear-btn{background:none;border:1px solid var(--line);border-radius:6px;cursor:pointer;padding:5px 8px;color:var(--muted);display:inline-flex;align-items:center;line-height:1;}' +
+        '.xpanda-gear-btn:hover{color:var(--text);background:var(--ghost-bg);}' +
+        '.xpanda-gear-btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}' +
+        '.xpanda-gear-popover{position:absolute;top:40px;right:0;min-width:210px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-md);padding:10px;z-index:9999;display:flex;flex-direction:column;gap:10px;}' +
+        '.xpanda-gear-popover[hidden]{display:none;}' +
+        '.xpanda-gear-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}' +
+        '.xpanda-gear-label{font-size:12px;font-weight:600;color:var(--muted);}' +
+        '.xpanda-page-desc{text-align:center;padding:16px;background:var(--surface);border-bottom:1px solid var(--line);}' +
+        '.xpanda-page-desc h1{margin:0 0 4px;font-size:20px;font-weight:600;color:var(--text);}' +
+        '.xpanda-page-desc p{margin:0;font-size:13px;color:var(--muted);}' +
         '@media(max-width:767px){.xpanda-nav-links{display:none;}.xpanda-nav-menu-btn{display:inline-flex;}}' +
         '@media(min-width:768px){.xpanda-nav-drawer{display:none;}}' +
         '</style>' +
         '<nav class="xpanda-module-nav" id="xpanda-module-nav" aria-label="Module navigation">' +
           '<div class="xpanda-nav-inner">' +
+            '<a class="xpanda-nav-logo" href="/" aria-label="xPanda Operations Platform"><img src="/logo/xpanda.png" alt="xPanda"></a>' +
             '<div class="xpanda-nav-links" id="xpanda-nav-links">' + _links + '</div>' +
             '<button type="button" class="xpanda-nav-menu-btn" id="xpanda-nav-menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="xpanda-nav-drawer">' + _ham + '</button>' +
+            '<div class="xpanda-nav-actions">' + navActionsHtml + '</div>' +
           '</div>' +
           '<div class="xpanda-nav-drawer" id="xpanda-nav-drawer" hidden>' + _links + '</div>' +
-        '</nav>'
+        '</nav>' +
+        '<div class="xpanda-page-desc"><h1 id="' + config.pageTitleId + '">' + config.pageTitle + '</h1><p id="' + config.pageSubtitleId + '">' + config.pageSubtitle + '</p></div>'
       );
     })();
+
+    // Reflect current UI mode on the toggle now that the nav (and its toggle button) exist.
+    window.__xpandaUpdateModeToggle(window.__xpandaGetUiMode ? window.__xpandaGetUiMode() : 'office');
+    // ThemeManager.updateToggleUI() is handled by DOMContentLoaded in /shared/theme.js.
 
     window.addEventListener('DOMContentLoaded', function () {
 
@@ -232,6 +235,25 @@ if (!window.__xpandaPhotoGalleryLoaded) {
           _navBtn.setAttribute('aria-label', open ? 'Open menu' : 'Close menu');
         });
       }
+
+      // Settings gear popover toggle + click-outside-to-close.
+      window.__xpandaToggleGear = function () {
+        const pop = document.getElementById('hdr-gear-popover');
+        const btn = document.getElementById('hdr-gear-btn');
+        if (!pop || !btn) return;
+        const opening = pop.hasAttribute('hidden');
+        if (opening) { pop.removeAttribute('hidden'); btn.setAttribute('aria-expanded', 'true'); }
+        else { pop.setAttribute('hidden', ''); btn.setAttribute('aria-expanded', 'false'); }
+      };
+      document.addEventListener('click', function (e) {
+        const gear = document.getElementById('hdr-gear');
+        const pop = document.getElementById('hdr-gear-popover');
+        if (gear && pop && !pop.hasAttribute('hidden') && !gear.contains(e.target)) {
+          pop.setAttribute('hidden', '');
+          const b = document.getElementById('hdr-gear-btn');
+          if (b) b.setAttribute('aria-expanded', 'false');
+        }
+      });
 
       // 401 interceptor — guard prevents double-wrap if two shims are accidentally loaded.
       if (!window.__xpandaFetchWrapped) {

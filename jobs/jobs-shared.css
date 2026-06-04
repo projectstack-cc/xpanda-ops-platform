@@ -36,26 +36,6 @@ button, input, select, textarea { font: inherit; }
 
 /* ── HEADER ── */
 
-.topbar {
-    position: relative;
-    background: var(--card-bg);
-    border-bottom: 1px solid var(--line);
-    padding: 18px 16px 14px;
-    text-align: center;
-}
-
-.logo {
-    position: absolute;
-    left: 14px;
-    top: 16px;
-    height: 34px;
-}
-
-.header-center {
-    max-width: 500px;
-    margin: 0 auto;
-}
-
 .badge {
     display: inline-block;
     font-size: 11px;
@@ -82,9 +62,6 @@ button, input, select, textarea { font: inherit; }
     background: #0c4a6e;
     border-color: #0891b2;
 }
-
-.topbar h1 { margin: 0; font-size: 24px; }
-.topbar p { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
 
 .jobs-back-link {
     display: inline-block;
@@ -780,13 +757,6 @@ button, input, select, textarea { font: inherit; }
 }
 
 .jobs-platform-footer a:hover { text-decoration: underline; }
-
-/* ── MOBILE HEADER ── */
-
-@media (max-width: 480px) {
-    .topbar { padding-top: 60px; }
-    .logo { left: 50%; top: 14px; transform: translateX(-50%); height: 30px; }
-}
 
 /* ── MOBILE KANBAN ── */
 
