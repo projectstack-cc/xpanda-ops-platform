@@ -228,6 +228,26 @@ button, input, select, textarea {
 .logistics-table tr:hover td { background: var(--ghost-bg); cursor: pointer; }
 
 .logistics-customer-cell { font-weight: 700; }
+
+/* Shipment tables: fixed geometry so columns align across every date group,
+   and long customer names grow the row height instead of the column width. */
+.logistics-table--ship { table-layout: fixed; }
+.logistics-table--ship th:nth-child(1), .logistics-table--ship td:nth-child(1) { width: 20%; }
+.logistics-table--ship th:nth-child(2), .logistics-table--ship td:nth-child(2) { width: 12%; }
+.logistics-table--ship th:nth-child(3), .logistics-table--ship td:nth-child(3) { width: 8%; }
+.logistics-table--ship th:nth-child(4), .logistics-table--ship td:nth-child(4) { width: 6%; }
+.logistics-table--ship th:nth-child(5), .logistics-table--ship td:nth-child(5) { width: 9%; }
+.logistics-table--ship th:nth-child(6), .logistics-table--ship td:nth-child(6) { width: 8%; }
+.logistics-table--ship th:nth-child(7), .logistics-table--ship td:nth-child(7) { width: 11%; }
+.logistics-table--ship th:nth-child(8), .logistics-table--ship td:nth-child(8) { width: 7%; }
+.logistics-table--ship th:nth-child(9), .logistics-table--ship td:nth-child(9) { width: 19%; }
+.logistics-table--ship td, .logistics-table--ship th { overflow: hidden; }
+.logistics-table--ship td:first-child {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
 .logistics-job-link {
     display: inline-block;
     font-size: 11px;

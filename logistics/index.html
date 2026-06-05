@@ -95,7 +95,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
         <button onclick="changeShipCalMonth('outbound', -1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">←</button>
         <h3 id="outbound-cal-label" style="margin:0;font-size:18px;font-weight:700;min-width:180px;text-align:center;"></h3>
         <button onclick="changeShipCalMonth('outbound', 1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">→</button>
-        <button onclick="goToShipCalToday('outbound')" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
+        <button onclick="goToShipCalToday('outbound')" style="background:var(--ghost-bg);border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
       </div>
       <div id="outbound-cal-grid"></div>
     </div>
@@ -143,7 +143,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
         <button onclick="changeShipCalMonth('inbound', -1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">←</button>
         <h3 id="inbound-cal-label" style="margin:0;font-size:18px;font-weight:700;min-width:180px;text-align:center;"></h3>
         <button onclick="changeShipCalMonth('inbound', 1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">→</button>
-        <button onclick="goToShipCalToday('inbound')" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
+        <button onclick="goToShipCalToday('inbound')" style="background:var(--ghost-bg);border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
       </div>
       <div id="inbound-cal-grid"></div>
     </div>
@@ -331,11 +331,11 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
           <div class="logistics-field-section-label">Line Items</div>
           <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;">
             <thead>
-              <tr style="text-align:left;border-bottom:2px solid #e5e7eb;">
-                <th style="padding:6px 8px;font-weight:700;color:#374151;">Part #</th>
-                <th style="padding:6px 8px;font-weight:700;color:#374151;">Description</th>
-                <th style="padding:6px 8px;font-weight:700;color:#374151;text-align:right;">Qty</th>
-                <th style="padding:6px 8px;font-weight:700;color:#374151;">Dimensions</th>
+              <tr style="text-align:left;border-bottom:2px solid var(--line);">
+                <th style="padding:6px 8px;font-weight:700;color:var(--muted);">Part #</th>
+                <th style="padding:6px 8px;font-weight:700;color:var(--muted);">Description</th>
+                <th style="padding:6px 8px;font-weight:700;color:var(--muted);text-align:right;">Qty</th>
+                <th style="padding:6px 8px;font-weight:700;color:var(--muted);">Dimensions</th>
               </tr>
             </thead>
             <tbody id="shipment-line-items-body"></tbody>
@@ -722,7 +722,7 @@ function renderOutbound() {
       <div class="logistics-day-group">
         <p class="logistics-day-label">${label}</p>
         <div class="logistics-table-wrap">
-          <table class="logistics-table">
+          <table class="logistics-table logistics-table--ship">
             <thead>
               <tr>
                 <th>Customer</th>
@@ -762,7 +762,7 @@ function buildOutboundRow(s) {
   return `<tr onclick="openEdit('${s.id}')">
     <td class="logistics-customer-cell">
       ${linkedJob?.invoice_number
-        ? `<span style="font-weight:700;color:#111827;">INV# ${esc(linkedJob.invoice_number)}</span>`
+        ? `<span style="font-weight:700;color:var(--text);">INV# ${esc(linkedJob.invoice_number)}</span>`
         : '<span style="color:#94a3b8;">—</span>'}
       ${(s.load_count || 1) > 1
         ? `<span style="font-size:11px;font-weight:700;color:#6366f1;margin-left:6px;">Load count: ${s.load_count}</span>`
@@ -1020,9 +1020,9 @@ async function fetchJobForModal(jobId) {
     if (liContainer && liBody) {
       if (Array.isArray(j.line_items) && j.line_items.length > 0) {
         liBody.innerHTML = j.line_items.map(li => `<tr style="border-bottom:1px solid #f3f4f6;">
-          <td style="padding:6px 8px;font-weight:600;color:#111827;">${esc(li.part_number || '—')}</td>
-          <td style="padding:6px 8px;color:#374151;">${esc(li.description || '—')}</td>
-          <td style="padding:6px 8px;text-align:right;color:#111827;">${li.quantity || '—'}</td>
+          <td style="padding:6px 8px;font-weight:600;color:var(--text);">${esc(li.part_number || '—')}</td>
+          <td style="padding:6px 8px;color:var(--muted);">${esc(li.description || '—')}</td>
+          <td style="padding:6px 8px;text-align:right;color:var(--text);">${li.quantity || '—'}</td>
           <td style="padding:6px 8px;color:#6b7280;">${esc(li.dimensions || '—')}</td>
         </tr>`).join('');
         liContainer.style.display = '';

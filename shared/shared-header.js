@@ -88,12 +88,12 @@ if (!window.__xpandaPhotoGalleryLoaded) {
     // Bell + notification dropdown — only when showNotifications is true.
     const notifBellHtml = config.showNotifications ? `
       <span id="hdr-notif-bell" onclick="toggleNotifDropdown()" style="position:relative;cursor:pointer;font-size:18px;line-height:1;">🔔<span id="hdr-notif-badge" style="display:none;position:absolute;top:-4px;right:-6px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:16px;height:16px;text-align:center;line-height:16px;"></span></span>
-      <div id="hdr-notif-dropdown" style="display:none;position:absolute;top:36px;right:0;width:340px;max-height:420px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);overflow:hidden;z-index:9999;">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #e5e7eb;">
+      <div id="hdr-notif-dropdown" style="display:none;position:absolute;top:36px;right:0;width:340px;max-height:420px;background:var(--card-bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);overflow:hidden;z-index:9999;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);">
           <span style="font-weight:700;font-size:14px;">Notifications</span>
           <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
         </div>
-        <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:#eff6ff;border-bottom:1px solid #e5e7eb;cursor:pointer;" onclick="enablePushFromBanner()">
+        <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:#eff6ff;border-bottom:1px solid var(--line);cursor:pointer;" onclick="enablePushFromBanner()">
           <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 Enable push notifications</div>
           <div style="font-size:11px;color:#6b7280;margin-top:2px;">Tap to get alerts on this device</div>
         </div>
@@ -291,7 +291,7 @@ if (!window.__xpandaPhotoGalleryLoaded) {
             const simBanner = document.createElement('div');
             simBanner.id = 'sim-role-banner';
             simBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:#f59e0b;color:#000;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:14px;font-weight:600;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
-            simBanner.innerHTML = `<span>🔍 Testing as: ${d.user.simulatingRole.name}</span><button id="sim-stop-btn" style="background:#fff;color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">Stop Testing</button>`;
+            simBanner.innerHTML = `<span>🔍 Testing as: ${d.user.simulatingRole.name}</span><button id="sim-stop-btn" style="background:var(--card-bg);color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">Stop Testing</button>`;
             document.body.prepend(simBanner);
             document.body.style.paddingTop = simBanner.offsetHeight + 'px';
             document.getElementById('sim-stop-btn').addEventListener('click', async () => {
@@ -366,7 +366,7 @@ if (!window.__xpandaPhotoGalleryLoaded) {
             if (!data.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">No notifications</div>'; return; }
             list.innerHTML = data.notifications.map(n => `
         <div style="padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;${n.is_read ? 'opacity:0.6;' : 'background:#eff6ff;'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')">
-          <div style="font-size:13px;font-weight:${n.is_read ? '400' : '600'};color:#111827;margin-bottom:2px;">${notifEsc(n.title)}</div>
+          <div style="font-size:13px;font-weight:${n.is_read ? '400' : '600'};color:var(--text);margin-bottom:2px;">${notifEsc(n.title)}</div>
           <div style="font-size:12px;color:#6b7280;">${notifEsc(n.message)}</div>
           <div style="font-size:10px;color:#9ca3af;margin-top:4px;">${notifFmtAgo(n.created_at)}</div>
         </div>`).join('');
