@@ -1547,6 +1547,11 @@ async function saveJob() {
 
   const shipDate = document.getElementById('f-ship-date').value;
 
+  const loadCountVal = parseInt(document.getElementById('f-load-count').value, 10) || 1;
+  if (loadCountVal > 10 && !confirm('Are you sure you want more than 10 trailers?')) {
+    return;
+  }
+
   const payload = {
     customer,
     po_number:            document.getElementById('f-po-number').value.trim(),

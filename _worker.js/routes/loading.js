@@ -205,7 +205,14 @@ export async function handleApiLoadingAssignments(request, env) {
       binds.push(payload.location === 'yard' ? 'yard' : 'bay');
     }
     if (payload.bay_id !== undefined) { updates.push('bay_id = ?'); binds.push(payload.bay_id || null); }
-    if (payload.trailer_number !== undefined) { updates.push('trailer_number = ?'); binds.push(String(payload.trailer_number)); }
+    if (payload.trailer_number !== undefined) {
+      const trailerLockedStatuses = ['in_transit', 'delivered', 'archived'];
+      if (trailerLockedStatuses.includes(existing.loading_status) &&
+          String(payload.trailer_number) !== String(existing.trailer_number || '')) {
+        return json({ ok: false, error: 'Trailer # is locked once the load is in transit.' }, 409);
+      }
+      updates.push('trailer_number = ?'); binds.push(String(payload.trailer_number));
+    }
     if (payload.notes !== undefined) { updates.push('notes = ?'); binds.push(String(payload.notes)); }
     if (payload.ready_checklist !== undefined) {
       updates.push('ready_checklist = ?');
