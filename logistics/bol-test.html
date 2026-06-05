@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BOL Output Test — xPanda Logistics</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="/assets/img/favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+<link rel="stylesheet" href="/logistics/logistics-shared.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="/logistics/bol-shared.js"></script>
+<style>
+/* ── Page header ─────────────────────────────────────────────────────────── */
+.btest-page-header {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--line);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.btest-page-header-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btest-page-header h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.btest-page-header p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Wrap + columns ──────────────────────────────────────────────────────── */
+.btest-wrap {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+}
+
+.btest-cols {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .btest-cols { grid-template-columns: 1fr; }
+  .btest-preview-col { order: -1; }
+}
+
+/* ── Form card ───────────────────────────────────────────────────────────── */
+.btest-form-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.btest-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--muted);
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.btest-section-label:not(:first-child) {
+  margin-top: 18px;
+}
+
+.btest-field {
+  margin-bottom: 10px;
+}
+
+.btest-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.btest-field input[type="text"],
+.btest-field input[type="date"],
+.btest-field textarea {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--input-border, var(--line));
+  border-radius: 6px;
+  background: var(--input-bg, var(--bg));
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.btest-field input:focus,
+.btest-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.btest-field textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.btest-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.btest-checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.btest-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.btest-status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 18px;
+}
+
+.btest-status.error {
+  color: var(--danger-text, #991b1b);
+}
+
+/* ── Preview col ─────────────────────────────────────────────────────────── */
+.btest-preview-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 0;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  position: sticky;
+  top: 16px;
+}
+
+.btest-preview-card iframe {
+  display: block;
+  width: 100%;
+  height: 900px;
+  border: none;
+}
+</style>
+</head>
+<body>
+
+<div class="btest-page-header">
+  <div class="btest-page-header-inner">
+    <h1>BOL Output Test</h1>
+    <p>Dev harness — preview BOL rendering without saving records</p>
+  </div>
+</div>
+
+<div class="btest-wrap">
+  <div class="btest-cols">
+
+    <!-- Form column -->
+    <div class="btest-form-col">
+      <div class="btest-form-card">
+
+        <p class="btest-section-label">Delivery &amp; Identifiers</p>
+
+        <div class="btest-field">
+          <label for="bt-delivery-time">Delivery Time</label>
+          <input type="text" id="bt-delivery-time" placeholder="e.g. DELIVERY 8:00 AM">
+        </div>
+        <div class="btest-field">
+          <label for="bt-date">Date</label>
+          <input type="date" id="bt-date">
+        </div>
+        <div class="btest-field">
+          <label for="bt-bol-number">BOL Number</label>
+          <input type="text" id="bt-bol-number" placeholder="e.g. TEST-BOL-001">
+        </div>
+
+        <p class="btest-section-label">Carrier</p>
+
+        <div class="btest-field">
+          <label for="bt-carrier-name">Carrier</label>
+          <input type="text" id="bt-carrier-name" placeholder="e.g. ABC Carrier Co">
+        </div>
+        <div class="btest-field">
+          <label for="bt-trailer-no">Trailer #</label>
+          <input type="text" id="bt-trailer-no" placeholder="e.g. TRLR-9999">
+        </div>
+
+        <p class="btest-section-label">Ship To</p>
+
+        <div class="btest-field">
+          <label for="bt-ship-to-company">Company</label>
+          <input type="text" id="bt-ship-to-company">
+        </div>
+        <div class="btest-field">
+          <label for="bt-ship-to-attention">Attention</label>
+          <input type="text" id="bt-ship-to-attention">
+        </div>
+        <div class="btest-field">
+          <label for="bt-ship-to-street">Street</label>
+          <input type="text" id="bt-ship-to-street">
+        </div>
+        <div class="btest-field">
+          <label for="bt-ship-to-street2">Street 2</label>
+          <input type="text" id="bt-ship-to-street2">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 60px 80px;gap:8px;">
+          <div class="btest-field" style="margin-bottom:0;">
+            <label for="bt-ship-to-city">City</label>
+            <input type="text" id="bt-ship-to-city">
+          </div>
+          <div class="btest-field" style="margin-bottom:0;">
+            <label for="bt-ship-to-state">State</label>
+            <input type="text" id="bt-ship-to-state" maxlength="2">
+          </div>
+          <div class="btest-field" style="margin-bottom:10px;">
+            <label for="bt-ship-to-zip">Zip</label>
+            <input type="text" id="bt-ship-to-zip" maxlength="10">
+          </div>
+        </div>
+
+        <p class="btest-section-label">Contact &amp; Order</p>
+
+        <div class="btest-field">
+          <label for="bt-contact-name">Contact Name</label>
+          <input type="text" id="bt-contact-name">
+        </div>
+        <div class="btest-field">
+          <label for="bt-contact-phone">Contact Phone</label>
+          <input type="text" id="bt-contact-phone">
+        </div>
+        <div class="btest-field">
+          <label for="bt-po-number">PO Number</label>
+          <input type="text" id="bt-po-number">
+        </div>
+
+        <p class="btest-section-label">Commodity &amp; Instructions</p>
+
+        <div class="btest-field">
+          <label for="bt-commodity-description">Commodity Description</label>
+          <input type="text" id="bt-commodity-description">
+        </div>
+        <div class="btest-field">
+          <label for="bt-special-instructions">Special Instructions</label>
+          <textarea id="bt-special-instructions" rows="3"></textarea>
+        </div>
+
+        <label class="btest-checkbox-row">
+          <input type="checkbox" id="bt-is-scrap-pickup">
+          Scrap Pickup
+        </label>
+
+        <div class="btest-actions">
+          <button class="btn primary" id="btn-render">Render BOL</button>
+          <button class="btn" id="btn-reset">Reset to sample</button>
+        </div>
+        <div class="btest-status" id="btest-status"></div>
+
+      </div>
+    </div>
+
+    <!-- Preview column -->
+    <div class="btest-preview-col">
+      <div class="btest-preview-card">
+        <iframe id="btest-iframe" title="BOL Preview"></iframe>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const DUMMY = {
+  delivery_time:         'DELIVERY 8:00 AM',
+  date:                  '2026-06-05',
+  bol_number:            'TEST-BOL-001',
+  carrier_name:          'ABC Carrier Co',
+  trailer_no:            'TRLR-9999',
+  ship_to_company:       'ABC Company',
+  ship_to_attention:     'John Tester',
+  ship_to_street:        '123 Test St',
+  ship_to_street2:       'Suite 100',
+  ship_to_city:          'Testville',
+  ship_to_state:         'FL',
+  ship_to_zip:           '33000',
+  contact_name:          'Jane Tester',
+  contact_phone:         '555-0100',
+  po_number:             'PO-TEST-456',
+  commodity_description: 'TEST COMMODITY — Foam Blocks 12x12x12, Qty 40',
+  special_instructions:  'TEST special instructions line one\nTEST line two',
+  is_scrap_pickup:       true,
+  access_token:          'TESTTOKEN123',
+};
+
+function fillForm(data) {
+  document.getElementById('bt-delivery-time').value      = data.delivery_time;
+  document.getElementById('bt-date').value               = data.date;
+  document.getElementById('bt-bol-number').value         = data.bol_number;
+  document.getElementById('bt-carrier-name').value       = data.carrier_name;
+  document.getElementById('bt-trailer-no').value         = data.trailer_no;
+  document.getElementById('bt-ship-to-company').value    = data.ship_to_company;
+  document.getElementById('bt-ship-to-attention').value  = data.ship_to_attention;
+  document.getElementById('bt-ship-to-street').value     = data.ship_to_street;
+  document.getElementById('bt-ship-to-street2').value    = data.ship_to_street2;
+  document.getElementById('bt-ship-to-city').value       = data.ship_to_city;
+  document.getElementById('bt-ship-to-state').value      = data.ship_to_state;
+  document.getElementById('bt-ship-to-zip').value        = data.ship_to_zip;
+  document.getElementById('bt-contact-name').value       = data.contact_name;
+  document.getElementById('bt-contact-phone').value      = data.contact_phone;
+  document.getElementById('bt-po-number').value          = data.po_number;
+  document.getElementById('bt-commodity-description').value = data.commodity_description;
+  document.getElementById('bt-special-instructions').value  = data.special_instructions;
+  document.getElementById('bt-is-scrap-pickup').checked  = !!data.is_scrap_pickup;
+}
+
+function buildBol() {
+  return {
+    delivery_time:         document.getElementById('bt-delivery-time').value.trim(),
+    date:                  document.getElementById('bt-date').value,
+    bol_number:            document.getElementById('bt-bol-number').value.trim(),
+    carrier_name:          document.getElementById('bt-carrier-name').value.trim(),
+    trailer_no:            document.getElementById('bt-trailer-no').value.trim(),
+    ship_to_company:       document.getElementById('bt-ship-to-company').value.trim(),
+    ship_to_attention:     document.getElementById('bt-ship-to-attention').value.trim(),
+    ship_to_street:        document.getElementById('bt-ship-to-street').value.trim(),
+    ship_to_street2:       document.getElementById('bt-ship-to-street2').value.trim(),
+    ship_to_city:          document.getElementById('bt-ship-to-city').value.trim(),
+    ship_to_state:         document.getElementById('bt-ship-to-state').value.trim(),
+    ship_to_zip:           document.getElementById('bt-ship-to-zip').value.trim(),
+    contact_name:          document.getElementById('bt-contact-name').value.trim(),
+    contact_phone:         document.getElementById('bt-contact-phone').value.trim(),
+    po_number:             document.getElementById('bt-po-number').value.trim(),
+    commodity_description: document.getElementById('bt-commodity-description').value.trim(),
+    special_instructions:  document.getElementById('bt-special-instructions').value,
+    is_scrap_pickup:       document.getElementById('bt-is-scrap-pickup').checked,
+    access_token:          DUMMY.access_token,
+  };
+}
+
+let currentBlobUrl = null;
+
+async function renderBol() {
+  const statusEl = document.getElementById('btest-status');
+  const iframe   = document.getElementById('btest-iframe');
+  const btn      = document.getElementById('btn-render');
+
+  btn.disabled    = true;
+  btn.textContent = 'Rendering…';
+  statusEl.textContent = '';
+  statusEl.className   = 'btest-status';
+
+  try {
+    if (currentBlobUrl) {
+      URL.revokeObjectURL(currentBlobUrl);
+      currentBlobUrl = null;
+    }
+
+    const bol    = buildBol();
+    const result = await BolShared.generatePdf([bol], { previewOnly: true });
+
+    currentBlobUrl = result.blobUrl;
+    iframe.src     = currentBlobUrl;
+
+    statusEl.textContent = 'Rendered';
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + (err && err.message ? err.message : String(err));
+    statusEl.className   = 'btest-status error';
+    console.error('[bol-test] render error', err);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Render BOL';
+  }
+}
+
+document.getElementById('btn-render').addEventListener('click', renderBol);
+document.getElementById('btn-reset').addEventListener('click', () => {
+  fillForm(DUMMY);
+  renderBol();
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  fillForm(DUMMY);
+  renderBol();
+});
+</script>
+
+</body>
+</html>

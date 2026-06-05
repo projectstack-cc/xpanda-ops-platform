@@ -24,8 +24,8 @@
     .ld-section { margin-bottom: 20px; }
     .ld-section-title { font-size: 12px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px 0; }
     .ld-bays-scroll { overflow-x: auto; margin-bottom: 20px; padding-bottom: 8px; }
-    .ld-bays-grid { display: flex; gap: 12px; min-width: max-content; }
-    .ld-bay-col { width: 220px; min-width: 220px; background: #f9fafb; border-radius: 12px; border: 1px solid var(--line); }
+    .ld-bays-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+    .ld-bay-col { width: auto; min-width: 0; background: #f9fafb; border-radius: 12px; border: 1px solid var(--line); }
     .ld-bay-header { padding: 10px; border-bottom: 1px solid var(--line); text-align: center; }
     .ld-bay-number { font-weight: 700; font-size: 14px; margin-bottom: 6px; color: #111827; }
     .ld-trailer-input { width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; text-align: center; box-sizing: border-box; }
@@ -38,6 +38,7 @@
     .ld-inv-link:hover { color: #1e3a8a; }
     .ld-status-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; }
     .ld-card-meta { font-size: 10px; color: #6b7280; display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+    .ld-card-trailer-input { width: 100%; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 11px; box-sizing: border-box; margin-bottom: 4px; }
     .ld-card-actions { display: flex; gap: 4px; flex-wrap: wrap; }
     .ld-section-title { cursor: pointer; user-select: none; }
     .ld-section-chevron { display: inline-block; min-width: 14px; font-size: 12px; color: #6b7280; transition: transform 0.15s ease; }
@@ -85,7 +86,7 @@
     .ld-card[draggable="true"] { cursor: grab; user-select: none; -webkit-user-select: none; }
     .ld-card[draggable="true"]:active { cursor: grabbing; }
     @media (max-width: 768px) {
-      .ld-bays-grid { flex-direction: column; min-width: unset; }
+      .ld-bays-grid { grid-template-columns: 1fr; }
       .ld-bay-col { width: 100%; min-width: unset; }
       .ld-queue .ld-card, .ld-transit-grid .ld-card { width: 100%; }
     }
@@ -317,8 +318,8 @@ function toggleSection(key) {
 
 const LD_STATUS_COLORS = {
   awaiting:    { bg: '#f3f4f6', border: '#9ca3af', text: '#374151', label: 'Awaiting' },
-  not_started: { bg: '#fef3c7', border: '#f59e0b', text: '#92400e', label: 'Not Started' },
-  loading:     { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af', label: 'Loading' },
+  not_started: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b', label: 'Not Started' },
+  loading:     { bg: '#fef3c7', border: '#f59e0b', text: '#92400e', label: 'Loading' },
   loaded:      { bg: '#d1fae5', border: '#10b981', text: '#065f46', label: 'Loaded' },
   in_transit:  { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3', label: 'In Transit' },
   delivered:   { bg: '#f0fdf4', border: '#22c55e', text: '#166534', label: 'Delivered' },
@@ -386,13 +387,6 @@ function renderOverview() {
       <div class="ld-bay-col" data-bay-id="${bay.id}">
         <div class="ld-bay-header">
           <div class="ld-bay-number">Bay ${bay.bay_number}</div>
-          ${isManager
-            ? `<input class="ld-trailer-input" type="text" placeholder="Trailer #"
-                value="${escAttr(bay.trailer_number || '')}"
-                onchange="updateBayTrailer('${bay.id}', this.value)" />`
-            : bay.trailer_number
-              ? `<span style="font-size:13px;color:#6b7280;">Trailer: ${esc(bay.trailer_number)}</span>`
-              : ''}
         </div>
         <div class="ld-bay-body"
           ondragover="event.preventDefault(); this.style.background='#dbeafe';"
@@ -432,7 +426,7 @@ function renderBayView() {
 
   const sel = document.getElementById('bay-selector');
   sel.innerHTML = allBays.map(b =>
-    `<option value="${b.id}" ${b.id === selectedBayId ? 'selected' : ''}>Bay ${b.bay_number}${b.trailer_number ? ' — TR# ' + b.trailer_number : ''}</option>`
+    `<option value="${b.id}" ${b.id === selectedBayId ? 'selected' : ''}>Bay ${b.bay_number}</option>`
   ).join('');
 
   if (!selectedBayId) return;
@@ -455,13 +449,6 @@ function renderBayView() {
       ">← All Bays</button>
       <div class="ld-bay-single-header">
         <h3>Bay ${bay.bay_number}</h3>
-        ${isManager
-          ? `<input class="ld-trailer-input" type="text" placeholder="Trailer #" value="${escAttr(bay.trailer_number || '')}"
-              onchange="updateBayTrailer('${bay.id}', this.value)" style="max-width:140px;" />`
-          : bay.trailer_number
-            ? `<span style="font-size:13px;color:#6b7280;">Trailer: ${esc(bay.trailer_number)}</span>`
-            : ''
-        }
       </div>
       ${groups.map(g => `
         <div class="ld-bay-group ld-drop-zone" data-target-status="${g.status}">
@@ -500,7 +487,6 @@ function renderBayList() {
       " onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='#fff'">
         <div>
           <div style="font-weight:700;font-size:18px;color:var(--text);">Bay ${bay.bay_number}</div>
-          ${bay.trailer_number ? `<div style="font-size:13px;color:#6b7280;margin-top:2px;">Trailer: ${esc(bay.trailer_number)}</div>` : ''}
           ${activeJob
             ? `<div style="font-size:13px;color:var(--muted);margin-top:4px;">
                 ${esc(activeJob.customer || 'Unknown')}${activeJob.invoice_number ? ' — INV# ' + esc(activeJob.invoice_number) : ''}
@@ -545,6 +531,10 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
   const dragAttrs = a.loading_status === 'awaiting'
     ? `draggable="true" ondragstart="onCardDragStart(event, '${a.id}')"`
     : '';
+  const trailerEditable = isManager && a.bay_id && ['not_started', 'loading', 'loaded'].includes(a.loading_status);
+  const trailerHtml = trailerEditable
+    ? `<input class="ld-card-trailer-input" type="text" placeholder="Trailer #" value="${escAttr(a.trailer_number || '')}" onclick="event.stopPropagation();" onchange="updateAssignmentTrailer('${a.id}', this.value)" />`
+    : (a.trailer_number ? `<span>Trailer: ${esc(a.trailer_number)}</span>` : '');
 
   return `
     <div class="ld-card" ${dragAttrs} style="border-left:4px solid ${sc.border};background:${sc.bg};" data-assignment-id="${a.id}">
@@ -563,7 +553,7 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
         ${esc(truncate(a.customer || 'Unknown', 20))}
       </div>
       <div class="ld-card-meta">
-        ${a.trailer_number ? `<span>Trailer: ${esc(a.trailer_number)}</span>` : ''}
+        ${trailerHtml}
         ${a.ship_to_city ? `<span>${esc(a.ship_to_city)}${a.ship_to_state ? ', ' + esc(a.ship_to_state) : ''}</span>` : ''}
       </div>
       <div class="ld-card-actions">
@@ -634,8 +624,12 @@ async function moveToYard(assignmentId) {
   }
 }
 
-async function updateBayTrailer(bayId, trailerNumber) {
-  await api.put('/api/loading-bays', { id: bayId, trailer_number: trailerNumber });
+async function updateAssignmentTrailer(assignmentId, trailerNumber) {
+  const { ok, data } = await api.put('/api/loading-assignments', { id: assignmentId, trailer_number: trailerNumber });
+  if (!ok) {
+    alert(data?.error || 'Failed to update trailer #');
+    loadDashboard();
+  }
 }
 
 async function archiveAssignment(assignmentId) {
@@ -653,7 +647,7 @@ function openAssignBayModal(assignmentId) {
   assignBayTargetId = assignmentId;
   const sel = document.getElementById('assign-bay-select');
   sel.innerHTML = allBays.map(b =>
-    `<option value="${b.id}">Bay ${b.bay_number}${b.trailer_number ? ' — TR# ' + b.trailer_number : ''}</option>`
+    `<option value="${b.id}">Bay ${b.bay_number}</option>`
   ).join('');
   document.getElementById('assign-bay-modal').hidden = false;
 }
@@ -716,43 +710,10 @@ let touchStartX = 0;
 let touchMoved = false;
 
 function initTouchDragForBayView() {
-  const cards = document.querySelectorAll('#ld-single-bay .ld-card');
-  cards.forEach(card => {
-    card.setAttribute('draggable', 'true');
-
-    card.addEventListener('dragstart', (e) => {
-      touchDragId = card.dataset.assignmentId;
-      e.dataTransfer.effectAllowed = 'move';
-      card.style.opacity = '0.5';
-      card.addEventListener('dragend', () => { card.style.opacity = '1'; }, { once: true });
-    });
-
-    card.addEventListener('touchstart', (e) => {
-      if (e.touches.length !== 1) return;
-      touchDragEl = card;
-      touchDragId = card.dataset.assignmentId;
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-      touchMoved = false;
-    }, { passive: true });
-  });
-
-  const zones = document.querySelectorAll('#ld-single-bay .ld-drop-zone');
-  zones.forEach(zone => {
-    zone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      zone.style.background = '#dbeafe';
-    });
-    zone.addEventListener('dragleave', () => { zone.style.background = ''; });
-    zone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      zone.style.background = '';
-      if (touchDragId) {
-        const targetStatus = zone.dataset.targetStatus;
-        advanceStatus(touchDragId, targetStatus);
-        touchDragId = null;
-      }
-    });
+  // Drag-to-advance disabled: cards in a bay are not draggable. Status changes happen
+  // only via the card action buttons, to prevent accidental re-staging (mouse/touch misfires).
+  document.querySelectorAll('#ld-single-bay .ld-card').forEach(card => {
+    card.setAttribute('draggable', 'false');
   });
 }
 
@@ -832,7 +793,7 @@ async function openPullJobModal() {
 
   const baySelect = document.getElementById('pull-job-bay');
   baySelect.innerHTML = '<option value="">Awaiting Queue (no bay)</option>' +
-    allBays.map(b => `<option value="${b.id}">Bay ${b.bay_number}${b.trailer_number ? ` — TR# ${b.trailer_number}` : ''}</option>`).join('');
+    allBays.map(b => `<option value="${b.id}">Bay ${b.bay_number}</option>`).join('');
 }
 
 function closePullJobModal() {
@@ -1043,6 +1004,12 @@ function populateShippingInfo(job, a) {
     ? `<div style="display:flex;gap:8px;margin-bottom:6px;"><span style="min-width:110px;color:#6b7280;font-weight:600;">${esc(label)}:</span><span>${esc(value)}</span></div>`
     : '';
 
+  const fmtTs = (ts) => {
+    if (!ts) return '';
+    const d = new Date(String(ts).replace(' ', 'T'));
+    return isNaN(d.getTime()) ? '' : d.toLocaleString();
+  };
+
   const streetLine = [job.ship_to_street, job.ship_to_street2].filter(Boolean).join(', ');
   const cityStateZip = [job.ship_to_city, job.ship_to_state, job.ship_to_zip].filter(Boolean).join(', ');
 
@@ -1064,6 +1031,8 @@ function populateShippingInfo(job, a) {
     ${row('Delivery Time', job.delivery_time)}
     ${row('Carrier', job.carrier)}
     ${row('Method', job.method)}
+    ${row('Loading Started', fmtTs(a.started_at))}
+    ${row('Loading Completed', fmtTs(a.loaded_at))}
     ${row('Notes', job.notes)}
   `;
 }

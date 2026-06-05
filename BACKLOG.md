@@ -33,6 +33,32 @@ Execution order is sequenced for dependencies: P91 (pickup exclusion) lands befo
 - [ ] Explore: use Claude Chrome to navigate AppSheets apps for a "Load Dashboard" for loading team
 - [ ] Load count edit → loading card reconcile — editing `jobs.load_count` must reconcile `loading_assignments` so the loading dashboard card count matches the new value. Current state: create-time loop in `_worker.js/routes/jobs.js` builds N cards; loading GET backfill in `routes/loading.js` only *tops up* missing cards (done/loading/shipped, non-pickup) and never removes; job PUT writes the column but does no reconcile. Need: reconcile in job PUT — add up to target, and on decrease drop only surplus `awaiting`/unassigned cards (never delete a card that has a bay/trailer/photos). No migration. *(pairs with the >10 load count guard under Job Board)*
 
+### New Batch — Loading Dashboard + Driver + BOL Alignment (unsequenced, added 2026-06-05)
+
+Loading dashboard / driver:
+
+- [ ] Loading dashboard overview: reorganize bay cards into two rows — **6 on top, 5 on bottom**.
+- [ ] Card status color-coding: **Not Started → red**, **In Progress → yellow**.
+- [ ] Detail-view timestamps: capture & display **loading started** and **loading completed** times on the loading dashboard detail view.
+- [ ] **Lock card↔trailer assignment (critical).** Once a card is assigned to a trailer it is locked — no longer draggable bay→queue or bay→bay. Previously movable; drag-and-drop misfires cause accidental re-assignments. Counters human/mouse error.
+- [ ] Trailer # lifecycle: number moves with the card on assignment, **locked** while assigned/in-transit, and **released** (available again) once the card is marked **delivered**.
+- [ ] On **Mark In Transit**, clear the trailer input field on the loading dashboard.
+- [ ] **Human-error fallback:** if a driver scans the QR to begin transit while the trailer was **not** marked loaded, force the trailer card into **In Transit**.
+- [ ] Trailer-assigned indicator on the **job board card** — when a trailer is assigned (loading dashboard trigger), write a "Trailer Assigned" text/badge onto the job's kanban card. *(cross: loading dashboard → job board)*
+- [ ] Add a **"Yard"** card to the **loading team view**. *(extends P93, which added Yard to the manager dashboard only)*
+- [ ] Permission for the **"Move to Yard"** button. *(extends P93)*
+- [ ] DocuSign on the driver pages.
+- [ ] When a trailer number is assigned on the loading dashboard, propagate it onto the generated BOL. *(flag: may not be feasible — investigate)*
+
+Inline BOL (PDF) editor — extends the `bol-editor.js` overlay engine (P67–69):
+
+- [ ] Allow free **dragging** of text boxes in the inline PDF editor.
+- [ ] Change the **delivery-time** field to a **multi-line** text box.
+
+BOL Generator ↔ Load Builder alignment:
+
+- [ ] **Re-unify the BOL tooling.** `bol-generator.html` and the Build Load generator still aren't fully shared — features land in one and not the other (the `bol-shared.js` single-source goal is only partly realized). Align `bol-generator.html` to the **Build Load generator as the source of truth**, which also gives `bol-generator.html` **multi-trailer** functionality. *(pairs with the P67–69 editor port; resolves the long-standing partial-sharing drift)*
+
 ### Done
 
 - [x] ~~Add Loading BOL / Trailer assignment app into Ops Platform~~ — Load Builder integrated natively
@@ -68,12 +94,68 @@ Execution order is sequenced for dependencies: P91 (pickup exclusion) lands befo
 - [ ] Archive feature — when a job hits "Shipped" (final state), add an "Archive" button to the card + toast confirmation; archived jobs move off the kanban to reduce clutter
 - [ ] Label printing — DiversiTech and UL labels
 - [ ] Load count guard on job entry — confirm prompt when `load_count > 10` ("Are you sure you want more than 10 trailers?"); proceed on confirm, keep editing on cancel. Frontend only (`jobs/index.html`, `f-load-count`); no `max` clamp. *(pairs with the load-count reconcile item under Logistics)*
+- [ ] No duplicate INV# when creating a job — validate `invoice_number` uniqueness at job creation (reject/flag dupes). *(also a guard for QB auto-intake, where created/updated webhooks can fire repeatedly for the same invoice — dedupe on invoice number)*
 
 ### Done
 
 - [x] ~~Packing slip upload + parser~~ — PDF upload, client-side parsing, job prefill
 - [x] ~~Ship-to address carry-through~~ — covered by Prompt 15
 - [x] ~~Auto-generate outbound shipment record when a job is created~~ — completed
+
+---
+
+## QuickBooks Integration — Automated Job Intake · **SCOPED · TABLED (not today)**
+
+> **Status:** Fully scoped 2026-06-05, intentionally deferred. The legacy packing-slip parser (`/jobs/packing-slip-parser.js`) **remains the primary, production intake method** and works great — **do not refactor or replace it.** QB becomes intake only once this pipeline is proven; the parser then becomes the fallback path.
+
+**Goal:** QBO invoice created → webhook → fetch invoice → map → xPanda job auto-created → notify ops. No PDF generated, uploaded, or parsed.
+
+### Locked decisions / constraints
+
+- **All QB code is server-side in the worker** — `_worker.js/lib/quickbooks.js` (API client), `_worker.js/lib/qb-mapper.js` (invoice→job, pure fn), `_worker.js/routes/qb.js` (connect/callback/disconnect/webhook). **Not** in `/shared/*` or `/jobs/*` — those are browser-loaded; OAuth, the client secret, token refresh, and the webhook must never touch the client.
+- **Sandbox first, then prod cutover.** Base URL + keys are **env-driven** (`QB_ENV` flips `sandbox-quickbooks.api.intuit.com` ↔ `quickbooks.api.intuit.com`) so cutover is **config-only, never a code change.**
+- **Secrets** (Cloudflare secrets, *not* `wrangler.toml [vars]`): `QB_CLIENT_ID`, `QB_CLIENT_SECRET`, `QB_WEBHOOK_VERIFIER`, `QB_REDIRECT_URI`, `QB_ENV`. Realm ID + tokens live in a new D1 `qb_tokens` table.
+- **OAuth connect is a one-time action by the QBO admin/owner** — not Steve's QBO access level. Sequenced late (QB4) so the whole pipeline is proven before the higher-up is pulled in (their part is a ~2-min click).
+- **Webhook is CloudEvents v1.0** (old format retired May 15 2026). Payload is an **array of events** that can span **multiple companies** → iterate. Verify the `intuit-signature` HMAC against `QB_WEBHOOK_VERIFIER`. Endpoint **bypasses the session gate** like `/api/public/*` (Intuit's servers have no session).
+- **Tokens:** access ~60 min, refresh ~101 days (5-yr max). Refresh token **rotates on every refresh — persist the new one each time.**
+- **API quirks:** `Id` filters only `=`/`IN` and is not sortable (sort by `TxnDate`). Free **Builder tier** = 500k calls/mo, 10 req/s/realm — ample for one company.
+
+### ⚠️ Open risks (the unsolved parts)
+
+1. **Custom-field accessibility — must be probed before anything is built on it.** XPanda's 8 invoice custom fields are the *newer* Custom Fields platform. Standard read path is v3 REST `?minorversion=70&include=enhancedAllCustomFields`; the full Custom Fields **GraphQL** API is a **Gold/Platinum Premium** feature. **Customer-category** fields (Truck Loads, Total Board Foot, etc.) have a long history of returning **empty/unavailable** over the API. Several drive real job data (`load_count`, `total_bdft`) → **QB1 must empirically dump a real invoice and confirm which fields actually return values** before the mapper is designed. Fallbacks: default `load_count = 1`, blank/compute `total_bdft`.
+2. **Parts pull / line-item matching (main worry).** Open question whether QB invoice `Line[]` items reliably resolve into the unified `parts` library the way the parser does at parse time. The mapper must **reuse the parser's part-matching**, with on-the-fly part creation + human review for unmatched lines. Not yet validated — treat as unproven.
+
+### Field map (QBO invoice → xPanda job)
+
+| QBO field | Type | → job field |
+|---|---|---|
+| CustomerRef / BillAddr / ShipAddr | standard | `customer`, `ship_to_*` |
+| DocNumber | standard | `invoice_number` |
+| Line[] | standard | `line_items[]` (+ part match) |
+| TxnDate | standard | order/ship date |
+| PURCHASE ORDER | custom (Transaction) | `po_number` |
+| Truck Loads | custom (Customer ⚠️) | `load_count` |
+| Total Board Foot | custom (Customer ⚠️) | `total_bdft` |
+| PICK UP SCRAPS | custom (Customer ⚠️) | scrap-pickup flag (BOL) |
+| Shipment Contact | custom (Customer ⚠️) | ship-to contact |
+| Order Entry Date | custom (Customer ⚠️) | entry/order date |
+| Entry By | custom (Transaction) | created-by metadata |
+| PAYMENT METHOD | custom (Customer ⚠️) | metadata (likely unused for jobs) |
+
+⚠️ = at-risk via API per risk #1.
+
+### Build order (sequenced; labels are initiative-internal, not platform prompt numbers)
+
+- [ ] **QB1 — Connectivity + custom-field recon (sandbox).** `lib/quickbooks.js` (env-driven base URL + pasted OAuth-Playground token) + throwaway probe route `GET /api/qb/probe?invoiceId=X` that fetches with `include=enhancedAllCustomFields` and dumps raw JSON. **Gate:** produces the field-availability map that decides everything downstream.
+- [ ] **QB2 — Mapper.** `lib/qb-mapper.js`, pure fn built against QB1's real shape, explicit fallbacks for missing custom fields, reuses parser part-matching.
+- [ ] **QB3 — Job creation.** Extract `createJobFromPayload()` out of `handleApiJobs` POST so QB jobs route through the **same** path (shipment + loading-card creation identical). Feed mapper output in.
+- [ ] **QB4 — OAuth connect + token storage.** `qb_tokens` table (**needs migration**), `/api/qb/connect` `/callback` `/disconnect`, refresh-with-rotation. QBO admin does the one-time connect. Replaces the pasted token.
+- [ ] **QB5 — Webhook (CloudEvents).** `/api/qb/webhook` — session-gate bypass, HMAC verify, iterate events (multi-company), filter invoice created/updated, dedupe, fetch → map → create.
+- [ ] **QB6 — Notifications.** Reuse `lib/push.js` + notifications route to alert ops on each auto-created job.
+
+### Production-key gate (parallel, non-blocking)
+
+Private single-company use does **not** require App Store publishing/certification. To unlock production keys: app details + **App Assessment Questionnaire** (security Q&A), a production HTTPS **redirect URI**, **host/launch URL**, **disconnect URL**, and publicly hosted **privacy policy** + **EULA** pages (the one genuinely new deliverable — two static `/legal/*.html` pages). Can run in parallel with sandbox dev; cutover stays config-only.
 
 ---
 
