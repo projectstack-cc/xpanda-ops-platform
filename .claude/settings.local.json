@@ -62,7 +62,13 @@
       "Bash(echo '=== __TRACKED_VAR__ ===')",
       "Bash(echo \"=reverse grep P103 route files=\")",
       "Bash(echo '-- __TRACKED_VAR__ --')",
-      "Bash(grep -oE '\\\\b\\(json|logActivity|validateSession|dispatchNotification|normalizeName|safeJsonParse|generateAccessToken\\)\\\\b' _worker.js/__TRACKED_VAR__)"
+      "Bash(grep -oE '\\\\b\\(json|logActivity|validateSession|dispatchNotification|normalizeName|safeJsonParse|generateAccessToken\\)\\\\b' _worker.js/__TRACKED_VAR__)",
+      "Skill(agent-browser)",
+      "Bash(curl -s --max-time 15 \"https://xpanda-ops-platform.pages.dev/shared/shared-header.js\")",
+      "Read(//tmp/**)",
+      "Bash(git -C \"C:\\\\Users\\\\scook\\\\.dev\\\\xpanda-ops-platform\" status)",
+      "Bash(git -C \"C:\\\\Users\\\\scook\\\\.dev\\\\xpanda-ops-platform\" diff --stat)",
+      "Bash(git *)"
     ]
   }
 }
