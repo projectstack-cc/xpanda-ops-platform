@@ -75,12 +75,12 @@
 .jobs-view-btn.active { background: #1e293b; color: #fff; }
 .jobs-view-btn:hover:not(.active) { background: #f3f4f6; }
 /* ── Calendar View ── */
-.cal-header-row { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 2px solid #e5e7eb; }
+.cal-header-row { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 2px solid var(--line); }
 .cal-header-cell { padding: 8px 4px; text-align: center; font-size: 12px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
-.cal-body { border-left: 1px solid #e5e7eb; border-top: 1px solid #e5e7eb; }
+.cal-body { border-left: 1px solid var(--line); border-top: 1px solid var(--line); }
 .cal-row { display: grid; grid-template-columns: repeat(7, 1fr); }
-.cal-cell { min-height: 110px; border-right: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; padding: 4px; background: #fff; overflow: hidden; }
-.cal-cell-empty { background: #fafafa; min-height: 110px; border-right: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
+.cal-cell { min-height: 110px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 4px; background: #fff; overflow: hidden; }
+.cal-cell-empty { background: #fafafa; min-height: 110px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .cal-today { background: #eff6ff !important; }
 .cal-weekend { background: #fafafa; }
 .cal-day-num { font-size: 13px; font-weight: 600; color: #6b7280; margin-bottom: 4px; padding: 2px 4px; }
@@ -175,7 +175,7 @@
     <button onclick="changeMonth(-1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">←</button>
     <h3 id="calendar-month-label" style="margin:0;font-size:18px;font-weight:700;min-width:180px;text-align:center;"></h3>
     <button onclick="changeMonth(1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">→</button>
-    <button onclick="goToToday()" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
+    <button onclick="goToToday()" style="background:var(--ghost-bg);border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
   </div>
   <div id="calendar-grid"></div>
 </div>
