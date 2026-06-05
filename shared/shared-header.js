@@ -183,8 +183,8 @@ if (!window.__xpandaPhotoGalleryLoaded) {
         '.xpanda-gear-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}' +
         '.xpanda-gear-label{font-size:12px;font-weight:600;color:var(--muted);}' +
         '.xpanda-page-desc{text-align:center;padding:16px;background:var(--surface);border-bottom:1px solid var(--line);}' +
-        '.xpanda-page-desc h1{margin:0 0 4px;font-size:20px;font-weight:600;color:var(--text);}' +
-        '.xpanda-page-desc p{margin:0;font-size:13px;color:var(--muted);}' +
+        '.xpanda-page-desc h1{margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text);}' +
+        '.xpanda-page-desc p{margin:0;font-size:11px;color:var(--text-hint);}' +
         '@media(max-width:767px){.xpanda-nav-links{display:none;}.xpanda-nav-menu-btn{display:inline-flex;}}' +
         '@media(min-width:768px){.xpanda-nav-drawer{display:none;}}' +
         '</style>' +

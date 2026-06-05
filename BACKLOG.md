@@ -31,6 +31,7 @@ Execution order is sequenced for dependencies: P91 (pickup exclusion) lands befo
   - [ ] P68 — persistence: `render_overrides` JSON column on `bols`, worker INSERT/UPDATE wiring, `loadBolIntoForm` rehydrates overrides (needs migration)
   - [ ] P69 — port editor to load builder with multi-record (multi-BOL) navigation
 - [ ] Explore: use Claude Chrome to navigate AppSheets apps for a "Load Dashboard" for loading team
+- [ ] Load count edit → loading card reconcile — editing `jobs.load_count` must reconcile `loading_assignments` so the loading dashboard card count matches the new value. Current state: create-time loop in `_worker.js/routes/jobs.js` builds N cards; loading GET backfill in `routes/loading.js` only *tops up* missing cards (done/loading/shipped, non-pickup) and never removes; job PUT writes the column but does no reconcile. Need: reconcile in job PUT — add up to target, and on decrease drop only surplus `awaiting`/unassigned cards (never delete a card that has a bay/trailer/photos). No migration. *(pairs with the >10 load count guard under Job Board)*
 
 ### Done
 
@@ -66,6 +67,7 @@ Execution order is sequenced for dependencies: P91 (pickup exclusion) lands befo
 - [ ] Calendar view for job board
 - [ ] Archive feature — when a job hits "Shipped" (final state), add an "Archive" button to the card + toast confirmation; archived jobs move off the kanban to reduce clutter
 - [ ] Label printing — DiversiTech and UL labels
+- [ ] Load count guard on job entry — confirm prompt when `load_count > 10` ("Are you sure you want more than 10 trailers?"); proceed on confirm, keep editing on cancel. Frontend only (`jobs/index.html`, `f-load-count`); no `max` clamp. *(pairs with the load-count reconcile item under Logistics)*
 
 ### Done
 
