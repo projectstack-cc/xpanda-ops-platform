@@ -8,8 +8,8 @@ window.BolShared = (function() {
   // ═══════════════════════════════════════════════════════════════════
 
   const COORDS = {
-    // Delivery time — top-right, bold red
-    deliveryTime:  { x: 390, y: 758, size: 24 },
+    // Delivery time — top-right, bold red (multiline-capable via editor override; P122)
+    deliveryTime:  { x: 390, y: 758, size: 24, lineH: 28, maxW: 200 },
 
     // Top-right block
     date:          { x: 346, y: 712, size: 10 },
@@ -48,7 +48,7 @@ window.BolShared = (function() {
   // Field map — single source of truth for what is editable and how it renders.
   // type: 'single' | 'multiline' | 'shipto' | 'scrap'
   const FIELD_MAP = [
-    { key: 'deliveryTime',  type: 'single',    coord: COORDS.deliveryTime, overrideKey: 'deliveryTime' },
+    { key: 'deliveryTime',  type: 'multiline', coord: COORDS.deliveryTime, overrideKey: 'deliveryTime' },
     { key: 'date',          type: 'single',    coord: COORDS.date,         overrideKey: 'date' },
     { key: 'bolNumber',     type: 'single',    coord: COORDS.bolNumber,    overrideKey: 'bolNumber' },
     { key: 'carrierName',   type: 'single',    coord: COORDS.carrierName,  overrideKey: 'carrierName' },
@@ -143,14 +143,29 @@ window.BolShared = (function() {
 
       const _ov = bol._overrides || {};
 
-      // ── Delivery time (bold red, top right) ──
-      const _deliveryTimeVal = 'deliveryTime' in _ov ? _ov.deliveryTime : bol.delivery_time;
+      // ── Position overrides (P122 free-drag): per-field {dx,dy} deltas in PDF points ──
+      const _pos = (_ov && _ov._pos) || {};
+      const off = (key, coord) => {
+        const p = _pos[key];
+        if (!p) return coord;
+        return { ...coord, x: coord.x + (p.dx || 0), y: coord.y + (p.dy || 0) };
+      };
+
+      // ── Delivery time (bold red, top right; multiline-capable via override — P122) ──
+      const _deliveryTimeVal = ('deliveryTime' in _ov)
+        ? (Array.isArray(_ov.deliveryTime) ? _ov.deliveryTime.join('\n') : _ov.deliveryTime)
+        : bol.delivery_time;
       if (_deliveryTimeVal) {
-        page.drawText(String(_deliveryTimeVal), {
-          x: COORDS.deliveryTime.x, y: COORDS.deliveryTime.y,
-          size: COORDS.deliveryTime.size,
-          font: fontBold,
-          color: rgb(1, 0, 0),
+        const _dc = off('deliveryTime', COORDS.deliveryTime);
+        const _dLines = wrapText(String(_deliveryTimeVal), fontBold, _dc.size, _dc.maxW || 200);
+        _dLines.forEach((line, i) => {
+          page.drawText(line, {
+            x: _dc.x,
+            y: _dc.y - i * (_dc.lineH || 28),
+            size: _dc.size,
+            font: fontBold,
+            color: rgb(1, 0, 0),
+          });
         });
       }
 
@@ -162,20 +177,20 @@ window.BolShared = (function() {
       };
       const _rawDate = 'date' in _ov ? _ov.date : bol.date;
       const _displayDate = 'date' in _ov ? String(_rawDate) : formatBolDate(_rawDate);
-      drawText(_displayDate,                                                           COORDS.date);
-      drawText('bolNumber' in _ov   ? _ov.bolNumber   : String(bol.bol_number || ''), COORDS.bolNumber);
-      drawText('carrierName' in _ov ? _ov.carrierName : bol.carrier_name,             COORDS.carrierName);
-      drawText('trailerNo' in _ov   ? _ov.trailerNo   : bol.trailer_no,               COORDS.trailerNo);
+      drawText(_displayDate,                                                           off('date', COORDS.date));
+      drawText('bolNumber' in _ov   ? _ov.bolNumber   : String(bol.bol_number || ''), off('bolNumber', COORDS.bolNumber));
+      drawText('carrierName' in _ov ? _ov.carrierName : bol.carrier_name,             off('carrierName', COORDS.carrierName));
+      drawText('trailerNo' in _ov   ? _ov.trailerNo   : bol.trailer_no,               off('trailerNo', COORDS.trailerNo));
 
       // ── Ship-to address (up to 4 lines) ──
       const shipLines = Array.isArray(_ov.shipTo) ? _ov.shipTo : buildShipToLines(bol);
       const shipCoords = [COORDS.shipLine1, COORDS.shipLine2, COORDS.shipLine3, COORDS.shipLine4];
-      shipLines.forEach((line, i) => { if (shipCoords[i]) drawText(line, shipCoords[i]); });
+      shipLines.forEach((line, i) => { if (shipCoords[i]) drawText(line, off('shipTo', shipCoords[i])); });
 
       // ── Special Instructions ──
       drawMultiline(
         Array.isArray(_ov.specialInstr) ? _ov.specialInstr.join('\n') : bol.special_instructions,
-        COORDS.specialInstr);
+        off('specialInstr', COORDS.specialInstr));
 
       // ── Contact Info ──
       // Accept either contact_info (BOL generator) or contact_name/contact_phone (load builder).
@@ -186,25 +201,25 @@ window.BolShared = (function() {
             bol.contact_name ? ('POC: ' + bol.contact_name) : '',
             bol.contact_phone || '',
           ].filter(Boolean).join(' '));
-      if (_contactVal) drawMultiline(_contactVal, COORDS.contactInfo);
+      if (_contactVal) drawMultiline(_contactVal, off('contactInfo', COORDS.contactInfo));
 
       // ── PO / Invoice Number ──
       // Override arrives as literal lines — draw verbatim (no 'PO: ' prefix added).
       const _poVal = Array.isArray(_ov.poNumber)
         ? _ov.poNumber.join('\n')
         : (() => { const v = bol.po_number || bol.poNumber || ''; return v ? 'PO: ' + v : ''; })();
-      if (_poVal) drawMultiline(_poVal, COORDS.poNumber);
+      if (_poVal) drawMultiline(_poVal, off('poNumber', COORDS.poNumber));
 
       // ── Scrap Pick Up ──
       const _isScrap = typeof _ov.scrap === 'boolean' ? _ov.scrap
         : (bol.is_scrap_pickup === 1 || bol.is_scrap_pickup === true || bol.is_scrap_pickup === '1');
-      drawText('X', _isScrap ? COORDS.scrapYes : COORDS.scrapNo);
+      drawText('X', off('scrap', _isScrap ? COORDS.scrapYes : COORDS.scrapNo));
 
       // ── Commodity description (centered, auto-sized by wrapped line count) ──
       const _commodityText = Array.isArray(_ov.commodity) ? _ov.commodity.join('\n') : bol.commodity_description;
       if (_commodityText) {
         const _tier = pickCommodityTier(String(_commodityText), font);
-        drawMultiline(_commodityText, { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH });
+        drawMultiline(_commodityText, off('commodity', { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH }));
       }
 
       // ── QR code (driver tracking link) ──

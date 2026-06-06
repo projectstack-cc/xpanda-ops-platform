@@ -23,7 +23,6 @@ window.BolEditor = (function () {
 
     if (field.type === 'single') {
       const colMap = {
-        deliveryTime: 'delivery_time',
         date:         'date',
         bolNumber:    'bol_number',
         carrierName:  'carrier_name',
@@ -37,7 +36,8 @@ window.BolEditor = (function () {
     }
 
     if (field.type === 'multiline') {
-      if (k in ov) return ov[k].join('\n');
+      if (k in ov) return Array.isArray(ov[k]) ? ov[k].join('\n') : String(ov[k]);
+      if (k === 'deliveryTime') return bol.delivery_time || '';
       if (k === 'specialInstr') return bol.special_instructions || '';
       if (k === 'contactInfo')  return bol.contact_info || [
         bol.contact_name  ? ('POC: ' + bol.contact_name) : '',
@@ -143,7 +143,15 @@ window.BolEditor = (function () {
     // ── Build input elements ──
 
     const inputEls      = {}; // overrideKey → DOM element
+    const handleEls     = {}; // overrideKey → drag-handle element
     const initialValues = {}; // overrideKey → string | boolean
+
+    // P122: live working copy of position overrides (PDF-point deltas), seeded from saved _pos
+    const _savedPos = (bol._overrides && bol._overrides._pos) || {};
+    const posOverrides = {}; // overrideKey → { dx, dy }
+    for (const _k in _savedPos) {
+      if (_savedPos[_k]) posOverrides[_k] = { dx: _savedPos[_k].dx || 0, dy: _savedPos[_k].dy || 0 };
+    }
 
     for (const field of BolShared.FIELD_MAP) {
       const k       = field.overrideKey;
@@ -170,11 +178,68 @@ window.BolEditor = (function () {
 
       inputEls[k] = el;
       canvasWrap.appendChild(el);
+
+      // P122: per-field drag handle (drag to move; double-click to reset position)
+      const handle = document.createElement('div');
+      handle.title = 'Drag to move · double-click to reset';
+      handle.style.cssText = 'position:absolute;width:16px;height:16px;border-radius:4px;'
+        + 'background:#1e293b;color:#fff;font-size:11px;line-height:16px;text-align:center;'
+        + 'cursor:grab;z-index:5;box-shadow:0 1px 2px rgba(0,0,0,0.3);touch-action:none;user-select:none;';
+      handle.textContent = '✥';
+      attachDragHandle(handle, k);
+      handleEls[k] = handle;
+      canvasWrap.appendChild(handle);
     }
 
     // ── Render + position ──
 
     let _renderTask = null;
+    let _scale = 1; // px-per-PDF-point, updated each reflow; used to convert drag deltas
+
+    // P122: pointer-drag a field's box; commits a {dx,dy} point-delta into posOverrides
+    function attachDragHandle(handle, k) {
+      let startX = 0, startY = 0, baseDx = 0, baseDy = 0, dragging = false;
+
+      handle.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragging = true;
+        handle.setPointerCapture(e.pointerId);
+        handle.style.cursor = 'grabbing';
+        startX = e.clientX;
+        startY = e.clientY;
+        const cur = posOverrides[k] || { dx: 0, dy: 0 };
+        baseDx = cur.dx; baseDy = cur.dy;
+      });
+
+      handle.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const s = _scale || 1;
+        // screen px → PDF points; PDF y grows upward, screen y grows downward
+        const dx = baseDx + (e.clientX - startX) / s;
+        const dy = baseDy - (e.clientY - startY) / s;
+        posOverrides[k] = { dx: Math.round(dx), dy: Math.round(dy) };
+        positionAll(_scale);
+      });
+
+      const endDrag = (e) => {
+        if (!dragging) return;
+        dragging = false;
+        try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+        handle.style.cursor = 'grab';
+        if (posOverrides[k] && posOverrides[k].dx === 0 && posOverrides[k].dy === 0) delete posOverrides[k];
+      };
+      handle.addEventListener('pointerup', endDrag);
+      handle.addEventListener('pointercancel', endDrag);
+
+      // double-click → reset this field to its default coord
+      handle.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        delete posOverrides[k];
+        positionAll(_scale);
+      });
+    }
 
     function reflow() {
       if (_renderTask) { try { _renderTask.cancel(); } catch (_) {} _renderTask = null; }
@@ -182,6 +247,7 @@ window.BolEditor = (function () {
       const logicalW = Math.max(200, scrollArea.clientWidth - 24);
       const logicalH = Math.round(logicalW * BolShared.PAGE.height / BolShared.PAGE.width);
       const s        = logicalW / BolShared.PAGE.width;
+      _scale = s;
       const dpr      = window.devicePixelRatio || 1;
 
       canvas.width        = Math.round(logicalW * dpr);
@@ -248,6 +314,20 @@ window.BolEditor = (function () {
             b.style.fontSize = Math.round(c.size * s * 0.75) + 'px';
           });
         }
+
+        // P122: apply drag offset (PDF points → px; y inverted) then pin the handle
+        const _p = posOverrides[k];
+        if (_p) {
+          el.style.left = (parseFloat(el.style.left) + _p.dx * s) + 'px';
+          el.style.top  = (parseFloat(el.style.top)  - _p.dy * s) + 'px';
+        }
+        const _hx = parseFloat(el.style.left);
+        const _hy = parseFloat(el.style.top);
+        const _handle = handleEls[k];
+        if (_handle) {
+          _handle.style.left = Math.max(0, _hx - 2) + 'px';
+          _handle.style.top  = Math.max(0, _hy - 18) + 'px';
+        }
       }
     }
 
@@ -282,6 +362,14 @@ window.BolEditor = (function () {
           if (val !== initialValues[k]) overrides[k] = val;
         }
       }
+
+      // P122: attach position deltas (skip zero entries)
+      const _posOut = {};
+      for (const pk in posOverrides) {
+        const pv = posOverrides[pk];
+        if (pv && (pv.dx || pv.dy)) _posOut[pk] = { dx: pv.dx, dy: pv.dy };
+      }
+      if (Object.keys(_posOut).length > 0) overrides._pos = _posOut;
 
       if (Object.keys(overrides).length > 0) {
         bol._overrides = overrides;
