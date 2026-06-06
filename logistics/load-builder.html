@@ -1351,7 +1351,7 @@ function render() {
   renderSkusTab();
   renderResultsTab();
   document.querySelectorAll('.tab-content').forEach(el => el.classList.toggle('active', el.id === 'tab' + state.tab.charAt(0).toUpperCase() + state.tab.slice(1)));
-  renderBolModal();
+  BolCompose.render();
 }
 
 function renderTabs() {
@@ -2201,6 +2201,68 @@ function debounce(fn, ms) {
   return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
 }
 
+async function buildBolAppendBytes(bm) {
+  // Collect optional appended-PDF bytes (packing slip and/or loading diagram).
+  // bol-shared.js accepts a single packingSlipPdfBytes; if both are present we
+  // merge them into one PDF here so the generator stays untouched.
+  let packingSlipPdfBytes = null;
+  let loadingDiagramPdfBytes = null;
+
+  if (bm && bm.includePacking && state.prefillJobData?.id) {
+    try {
+      const slipRes = await fetch('/api/jobs/' + encodeURIComponent(state.prefillJobData.id) + '/packing-slip');
+      if (slipRes.ok) {
+        packingSlipPdfBytes = await slipRes.arrayBuffer();
+      }
+    } catch { /* packing slip unavailable */ }
+  }
+
+  if (bm && bm.includeLoadingDiagram) {
+    // BolShared.generatePdf is called once for all BOLs (not per-trailer), so we
+    // attach only the diagram for the currently-displayed trailer (currentPage).
+    // When GENERATE ALL BOLs is triggered from the last page, this is the last trailer.
+    try {
+      const idx = bm.currentPage;
+      const trailer = bm.trailers[idx];
+      const trailerDims = trailer.downsizedDims || getDims();
+      const trailerLabel = trailer.downsizedType || state.trailerType;
+      const packList = buildPackingList(trailer);
+      loadingDiagramPdfBytes = await buildLoadingDiagramPdfBytes(
+        trailer,
+        trailerDims,
+        trailerLabel,
+        idx + 1,
+        packList,
+        state.trailerInvNumbers[idx] || ''
+      );
+    } catch (e) {
+      console.error('Failed to build loading diagram PDF:', e);
+    }
+  }
+
+  // Combine: if both, merge into one. If only one, use it. Else null.
+  let combinedAppendBytes = null;
+  if (packingSlipPdfBytes && loadingDiagramPdfBytes) {
+    try {
+      const { PDFDocument } = PDFLib;
+      const combined = await PDFDocument.create();
+      const slipDoc = await PDFDocument.load(packingSlipPdfBytes);
+      const diagDoc = await PDFDocument.load(loadingDiagramPdfBytes);
+      const slipPages = await combined.copyPages(slipDoc, slipDoc.getPageIndices());
+      slipPages.forEach(p => combined.addPage(p));
+      const diagPages = await combined.copyPages(diagDoc, diagDoc.getPageIndices());
+      diagPages.forEach(p => combined.addPage(p));
+      combinedAppendBytes = await combined.save();
+    } catch (e) {
+      console.error('Failed to merge packing slip + loading diagram:', e);
+      combinedAppendBytes = packingSlipPdfBytes || loadingDiagramPdfBytes;
+    }
+  } else {
+    combinedAppendBytes = packingSlipPdfBytes || loadingDiagramPdfBytes;
+  }
+  return combinedAppendBytes;
+}
+
 function openBolModal(result) {
   const today = new Date().toISOString().slice(0, 10);
   const trailerData = result.trailers.map((trailer, i) => {
@@ -2267,730 +2329,13 @@ function openBolModal(result) {
       td.poNumber = prev.poNumber; td.deliveryTime = prev.deliveryTime;
     }
   }
-  state.bolModal = {
-    open: true, currentPage: 0, trailerCount: result.trailers.length, trailerData,
+  BolCompose.open({
+    trailerData,
+    trailerCount: result.trailers.length,
     trailers: result.trailers,
-    bolError: '', generating: false, generateProgress: [], bolSuccess: null,
-    searchQuery: '', searchResults: [], searchLoading: false, searchConfirm: '',
-    includePacking: false,
-    includeLoadingDiagram: false,
-  };
-  renderBolModal();
-}
-
-function renderBolModal() {
-  const existing = document.getElementById('bol-modal-backdrop');
-  if (existing) existing.remove();
-  if (!state.bolModal.open) return;
-
-  const bm = state.bolModal;
-  const td = bm.trailerData[bm.currentPage];
-
-  const backdrop = h('div', {
-    id: 'bol-modal-backdrop', className: 'bol-backdrop',
-  });
-  const modal = h('div', { className: 'bol-modal', onClick: e => e.stopPropagation() });
-
-  // Header
-  const header = h('div', { className: 'bol-modal-header' });
-  const hdrRow = h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } });
-  const hdrLeft = h('div');
-  hdrLeft.appendChild(h('div', { style: { color: 'var(--accent)', fontWeight: 900, fontSize: '18px' } }, `GENERATE BOL — Trailer ${bm.currentPage + 1} of ${bm.trailerCount}`));
-  hdrLeft.appendChild(h('div', { style: { fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 600 } }, `${td.trailerLabel} \xb7 ${td.totalPieces} pcs \xb7 ${td.totalStacks} stacks`));
-  hdrRow.appendChild(hdrLeft);
-  hdrRow.appendChild(h('button', { className: 'btn btn-white', style: { padding: '6px 12px' }, onClick: () => { state.bolModal.open = false; renderBolModal(); } }, '✕'));
-  header.appendChild(hdrRow);
-  modal.appendChild(header);
-
-  const body = h('div', { className: 'bol-modal-body' });
-
-  // Success view
-  if (bm.bolSuccess) {
-    body.appendChild(h('div', { style: { textAlign: 'center', marginBottom: '20px' } },
-      h('div', { style: { fontSize: '22px', fontWeight: 900, color: 'var(--green)' } }, '✓ BOLs Generated Successfully')
-    ));
-    const ul = h('ul', { className: 'bol-success-list' });
-    bm.bolSuccess.forEach((bol, i) => { ul.appendChild(h('li', {}, `Trailer ${i + 1} → ${bol.bol_number ? `BOL #${bol.bol_number}` : 'BOL'} — ${bol.ship_to_company || ''}`)); });
-    body.appendChild(ul);
-    if (bm.bolError) {
-      body.appendChild(h('div', { style: { color: 'var(--warn-text)', fontSize: '14px', fontWeight: 600, marginTop: '8px' } }, bm.bolError));
-    } else {
-      body.appendChild(h('div', { style: { fontSize: '14px', color: 'var(--text-muted)', marginTop: '12px' } }, 'PDF opened in new tab.'));
-    }
-    body.appendChild(h('button', { className: 'btn btn-dark', style: { marginTop: '16px' }, onClick: () => { state.bolModal.open = false; renderBolModal(); } }, 'Close'));
-    modal.appendChild(body);
-    backdrop.appendChild(modal);
-    document.body.appendChild(backdrop);
-    return;
-  }
-
-  // Generating view
-  if (bm.generating) {
-    body.appendChild(h('div', { style: { fontWeight: 800, fontSize: '16px', marginBottom: '16px' } }, 'Generating BOLs...'));
-    const ul = h('ul', { className: 'bol-progress-list' });
-    bm.generateProgress.forEach(p => {
-      ul.appendChild(h('li', { style: { color: p.done ? 'var(--green)' : p.pending ? 'var(--text-ghost)' : 'var(--text)' } }, p.text));
-    });
-    body.appendChild(ul);
-    if (bm.bolError) body.appendChild(h('div', { style: { color: 'var(--red-dark)', fontSize: '14px', fontWeight: 600, marginTop: '12px' } }, bm.bolError));
-    modal.appendChild(body);
-    backdrop.appendChild(modal);
-    document.body.appendChild(backdrop);
-    return;
-  }
-
-  // Error banner
-  if (bm.bolError) {
-    body.appendChild(h('div', { style: { marginBottom: '14px', color: 'var(--red-dark)', fontSize: '13px', border: '1px solid var(--red-border)', background: 'var(--red-bg)', padding: '10px 12px', borderRadius: 'var(--radius)', fontWeight: 600 } }, bm.bolError));
-  }
-
-  // Commodity description
-  const commPanel = h('div', { className: 'panel', style: { marginBottom: '14px' } });
-  commPanel.appendChild(h('div', { className: 'panel-title' }, 'COMMODITY DESCRIPTION'));
-  const commTA = h('textarea', { className: 'inp', style: { height: '90px', resize: 'vertical', fontFamily: 'var(--mono)', fontSize: '13px', lineHeight: '1.6' } });
-  commTA.value = td.commodityDescription || '';
-  commTA.addEventListener('input', e => {
-    td.commodityDescription = e.target.value;
-    if (!hideDimsCheck.checked) {
-      td.commodityDescriptionFull = e.target.value;
-    } else {
-      td.commodityDescriptionNoDims = e.target.value;
-    }
-  });
-  commPanel.appendChild(commTA);
-
-  const hideDimsLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6b7280', cursor: 'pointer', marginTop: '6px' } });
-  const hideDimsCheck = h('input', { type: 'checkbox' });
-  hideDimsCheck.addEventListener('change', e => {
-    const hide = e.target.checked;
-    td.commodityDescription = hide ? td.commodityDescriptionNoDims : td.commodityDescriptionFull;
-    commTA.value = td.commodityDescription;
-  });
-  hideDimsLabel.appendChild(hideDimsCheck);
-  hideDimsLabel.appendChild(document.createTextNode('Part # and qty only (hide dimensions)'));
-  commPanel.appendChild(hideDimsLabel);
-
-  body.appendChild(commPanel);
-
-  // Carry-over checkbox (pages 2+)
-  if (bm.currentPage > 0) {
-    const carryWrap = h('div', { style: { marginBottom: '14px' } });
-    const carryLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 600 } });
-    const carryChk = h('input', { type: 'checkbox' });
-    carryChk.checked = td.carryOver;
-    carryChk.addEventListener('change', e => {
-      td.carryOver = e.target.checked;
-      if (e.target.checked) {
-        const prev = bm.trailerData[bm.currentPage - 1];
-        td.customerId = prev.customerId; td.customerSource = prev.customerSource;
-        td.shipToCompany = prev.shipToCompany; td.shipToAttention = prev.shipToAttention;
-        td.shipToStreet = prev.shipToStreet; td.shipToStreet2 = prev.shipToStreet2;
-        td.shipToCity = prev.shipToCity; td.shipToState = prev.shipToState; td.shipToZip = prev.shipToZip;
-        td.contactName = prev.contactName; td.contactPhone = prev.contactPhone;
-        td.carrierName = prev.carrierName; td.freightTerms = prev.freightTerms;
-        td.specialInstructions = prev.specialInstructions;
-        td.poNumber = prev.poNumber; td.deliveryTime = prev.deliveryTime;
-        td.invNumber = prev.invNumber;
-      }
-      renderBolModal();
-    });
-    carryLabel.appendChild(carryChk);
-    carryLabel.appendChild(document.createTextNode(`Carry over address from Trailer ${bm.currentPage}`));
-    carryWrap.appendChild(carryLabel);
-    body.appendChild(carryWrap);
-  }
-
-  // Customer source tabs
-  const sourceTabs = h('div', { className: 'bol-source-tabs' });
-  [['job', 'Pull from Job'], ['customer', 'Search Customers'], ['manual', 'Manual Entry']].forEach(([val, lbl]) => {
-    sourceTabs.appendChild(h('button', {
-      className: `btn ${td.customerSource === val ? 'btn-dark' : 'btn-white'}`,
-      style: { fontSize: '13px', padding: '8px 14px' },
-      onClick: () => { td.customerSource = val; bm.searchQuery = ''; bm.searchResults = []; bm.searchLoading = false; bm.searchConfirm = ''; renderBolModal(); },
-    }, lbl));
-  });
-  body.appendChild(sourceTabs);
-
-  // Search UI for job and customer tabs
-  if (td.customerSource === 'job' || td.customerSource === 'customer') {
-    const isJob = td.customerSource === 'job';
-    const debouncedSearch = debounce(async (q) => {
-      if (!q.trim()) { bm.searchResults = []; bm.searchLoading = false; renderBolModal(); return; }
-      bm.searchLoading = true; renderBolModal();
-      try {
-        const url = isJob ? `/api/jobs?search=${encodeURIComponent(q)}` : `/api/bol-customers?search=${encodeURIComponent(q)}`;
-        const res = await api.get(url);
-        if (!res.ok) throw new Error(res.error || 'Search failed');
-        const data = res.data;
-        bm.searchResults = isJob ? (data.jobs || []) : (data.customers || []);
-      } catch (_) { bm.searchResults = []; }
-      bm.searchLoading = false; renderBolModal();
-    }, 300);
-
-    const searchWrap = h('div', { style: { position: 'relative', marginBottom: '14px' } });
-    const searchInp = h('input', { className: 'inp', placeholder: isJob ? 'Search by customer, PO, or invoice #...' : 'Search saved customers...' });
-    searchInp.value = bm.searchQuery || '';
-    searchInp.addEventListener('input', e => { bm.searchQuery = e.target.value; debouncedSearch(e.target.value); });
-    searchWrap.appendChild(searchInp);
-
-    if (bm.searchLoading) {
-      searchWrap.appendChild(h('div', { className: 'bol-search-results' }, h('div', { className: 'bol-search-item', style: { color: 'var(--text-faint)' } }, 'Searching...')));
-    } else if (bm.searchResults.length) {
-      const dropdown = h('div', { className: 'bol-search-results' });
-      bm.searchResults.forEach(item => {
-        const row = h('div', { className: 'bol-search-item' });
-        if (isJob) {
-          row.appendChild(h('div', { style: { fontWeight: 700 } }, item.customer || '(no customer)'));
-          const details = [];
-          if (item.ship_date) { const d = new Date(item.ship_date + 'T12:00:00'); details.push(d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })); }
-          if (item.po_number || item.invoice_number) details.push(`PO/Inv: ${item.po_number || item.invoice_number}`);
-          if (item.status) details.push(item.status);
-          if (details.length) row.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-faint)', marginTop: '2px' } }, details.join(' \xb7 ')));
-          row.addEventListener('click', async () => {
-            try {
-              const res = await api.get(`/api/jobs/${item.id}`);
-              const data = res.data;
-              const job = data.job || data;
-              td.jobId = job.id; td.shipToCompany = job.customer || '';
-              if (job.location) { const p = job.location.split(',').map(s => s.trim()); td.shipToCity = p[0] || ''; td.shipToState = p[1] || ''; }
-              td.carrierName = job.carrier || ''; td.poNumber = job.po_number || job.invoice_number || '';
-              td.deliveryTime = job.delivery_time || ''; td.contactName = job.contact_name || ''; td.contactPhone = job.contact_phone || '';
-              try {
-                const cr = await api.get(`/api/bol-customers?search=${encodeURIComponent(job.customer || '')}`);
-                const cd = cr.data;
-                const custs = cd.customers || [];
-                if (custs.length === 1) {
-                  const c = custs[0]; td.customerId = c.id;
-                  td.shipToCompany = c.company || td.shipToCompany; td.shipToAttention = c.attention || '';
-                  td.shipToStreet = c.street || ''; td.shipToStreet2 = c.street2 || '';
-                  td.shipToCity = c.city || td.shipToCity; td.shipToState = c.state || td.shipToState;
-                  td.shipToZip = c.zip || ''; td.contactName = c.contact_name || td.contactName; td.contactPhone = c.phone || td.contactPhone;
-                }
-              } catch (_) {}
-              if (bm.currentPage > 0) td.carryOver = false;
-              bm.searchResults = []; bm.searchQuery = ''; bm.searchConfirm = `✓ Loaded from job: ${job.customer || ''}`;
-              renderBolModal();
-            } catch (_) { bm.searchConfirm = 'Error loading job details.'; renderBolModal(); }
-          });
-        } else {
-          row.appendChild(h('div', { style: { fontWeight: 700 } }, item.company || ''));
-          const det = [[item.city, item.state].filter(Boolean).join(', '), item.contact_name].filter(Boolean).join(' \xb7 ');
-          if (det) row.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-faint)', marginTop: '2px' } }, det));
-          row.addEventListener('click', () => {
-            td.customerId = item.id; td.shipToCompany = item.company || ''; td.shipToAttention = item.attention || '';
-            td.shipToStreet = item.street || ''; td.shipToStreet2 = item.street2 || '';
-            td.shipToCity = item.city || ''; td.shipToState = item.state || ''; td.shipToZip = item.zip || '';
-            td.contactName = item.contact_name || ''; td.contactPhone = item.phone || '';
-            if (bm.currentPage > 0) td.carryOver = false;
-            bm.searchResults = []; bm.searchQuery = ''; bm.searchConfirm = `✓ Using saved address: ${item.company || ''}`;
-            renderBolModal();
-          });
-        }
-        dropdown.appendChild(row);
-      });
-      searchWrap.appendChild(dropdown);
-    }
-    body.appendChild(searchWrap);
-    if (bm.searchConfirm) body.appendChild(h('div', { className: 'bol-confirm-msg' }, bm.searchConfirm));
-  }
-
-  // Form fields
-  const fg = (label, el) => { const g = h('div', { className: 'bol-form-group' }); g.appendChild(h('div', { className: 'form-label' }, label)); g.appendChild(el); return g; };
-  const inp = (field, type = 'text', ph = '') => {
-    const el = h('input', { type, className: 'inp', placeholder: ph });
-    el.value = td[field] || '';
-    el.addEventListener('input', e => {
-      td[field] = e.target.value;
-      if (field === 'invNumber') {
-        state.trailerInvNumbers[bm.currentPage] = e.target.value;
-        if (bm.currentPage === 0) {
-          const val = td.invNumber.trim();
-          const match = val.match(/^(.+-)(\d+)$/);
-          if (match) {
-            const prefix = match[1], startNum = parseInt(match[2], 10);
-            for (let j = 1; j < bm.trailerData.length; j++) {
-              const nextTd = bm.trailerData[j];
-              if (!nextTd.invNumber || nextTd._invAutoFilled) {
-                const suffix = String(startNum + j).padStart(match[2].length, '0');
-                nextTd.invNumber = prefix + suffix;
-                nextTd._invAutoFilled = true;
-                state.trailerInvNumbers[j] = nextTd.invNumber;
-              }
-            }
-          }
-        }
-      }
-    });
-    return el;
-  };
-
-  body.appendChild(fg('BOL Date', inp('date', 'date')));
-  body.appendChild(fg('Company', inp('shipToCompany')));
-  body.appendChild(fg('Attention', inp('shipToAttention')));
-  body.appendChild(fg('Street', inp('shipToStreet')));
-  body.appendChild(fg('Street 2', inp('shipToStreet2')));
-
-  const cityWrap = h('div', { className: 'bol-form-group' });
-  cityWrap.appendChild(h('div', { className: 'form-label' }, 'City / State / Zip'));
-  const cityRow = h('div', { className: 'bol-city-row' });
-  ['shipToCity', 'shipToState', 'shipToZip'].forEach((f, i) => {
-    const el = h('input', { type: 'text', className: 'inp', placeholder: ['City', 'ST', 'Zip'][i] });
-    el.value = td[f] || ''; el.addEventListener('input', e => { td[f] = e.target.value; });
-    cityRow.appendChild(el);
-  });
-  cityWrap.appendChild(cityRow);
-  body.appendChild(cityWrap);
-
-  body.appendChild(fg('Contact Name', inp('contactName')));
-  body.appendChild(fg('Contact Phone', inp('contactPhone')));
-  body.appendChild(fg('Carrier', inp('carrierName')));
-  body.appendChild(fg('PO Number', inp('poNumber')));
-  body.appendChild(fg('INV #', inp('invNumber')));
-  body.appendChild(fg('Delivery Time', inp('deliveryTime')));
-
-  const ftWrap = h('div', { className: 'bol-form-group' });
-  ftWrap.appendChild(h('div', { className: 'form-label' }, 'Freight Terms'));
-  const ftRow = h('div', { className: 'bol-freight-row' });
-  [['prepaid', 'Prepaid'], ['collect', 'Collect'], ['3rd_party', '3rd Party']].forEach(([val, lbl]) => {
-    const lbl_el = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '14px' } });
-    const radio = h('input', { type: 'radio', name: `bol-freight-${bm.currentPage}`, value: val });
-    radio.checked = td.freightTerms === val;
-    radio.addEventListener('change', () => { td.freightTerms = val; });
-    lbl_el.appendChild(radio); lbl_el.appendChild(document.createTextNode(lbl));
-    ftRow.appendChild(lbl_el);
-  });
-  ftWrap.appendChild(ftRow);
-  body.appendChild(ftWrap);
-
-  const siTA = h('textarea', { className: 'inp', style: { minHeight: '70px', resize: 'vertical' } });
-  siTA.value = td.specialInstructions || '';
-  siTA.addEventListener('input', e => { td.specialInstructions = e.target.value; });
-  body.appendChild(fg('Special Instructions', siTA));
-
-  modal.appendChild(body);
-
-  // Footer
-  const footer = h('div', { className: 'bol-modal-footer' });
-  footer.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.bolModal.open = false; renderBolModal(); } }, 'Cancel'));
-  if (state.prefillJobData?.id) {
-    const packingLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer', color: 'var(--text-muted)' } });
-    const packingChk = h('input', { type: 'checkbox' });
-    packingChk.checked = state.bolModal.includePacking;
-    packingChk.addEventListener('change', e => { state.bolModal.includePacking = e.target.checked; });
-    packingLabel.appendChild(packingChk);
-    packingLabel.appendChild(document.createTextNode('Include packing slip'));
-    footer.appendChild(packingLabel);
-  }
-  {
-    const diagramLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer', color: 'var(--text-muted)' } });
-    const diagramChk = h('input', { type: 'checkbox' });
-    diagramChk.checked = state.bolModal.includeLoadingDiagram;
-    diagramChk.addEventListener('change', e => { state.bolModal.includeLoadingDiagram = e.target.checked; });
-    diagramLabel.appendChild(diagramChk);
-    diagramLabel.appendChild(document.createTextNode('Include Loading Diagram'));
-    footer.appendChild(diagramLabel);
-  }
-  const navRight = h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } });
-  const prevBtn = h('button', { className: 'btn btn-white', disabled: bm.currentPage === 0 });
-  prevBtn.textContent = '← Prev';
-  prevBtn.addEventListener('click', () => { bm.currentPage--; bm.searchQuery = ''; bm.searchResults = []; bm.searchConfirm = ''; renderBolModal(); });
-  navRight.appendChild(prevBtn);
-  navRight.appendChild(h('span', { style: { fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)' } }, `${bm.currentPage + 1}/${bm.trailerCount}`));
-  const isLastPage = bm.currentPage === bm.trailerCount - 1;
-  if (isLastPage) {
-    const genBtn = h('button', { className: 'btn btn-dark' });
-    genBtn.textContent = 'GENERATE ALL BOLs';
-    genBtn.addEventListener('click', generateAllBols);
-    navRight.appendChild(genBtn);
-  } else {
-    const nextBtn = h('button', { className: 'btn btn-dark' });
-    nextBtn.textContent = 'Next →';
-    nextBtn.addEventListener('click', () => { bm.currentPage++; bm.searchQuery = ''; bm.searchResults = []; bm.searchConfirm = ''; renderBolModal(); });
-    navRight.appendChild(nextBtn);
-  }
-  footer.appendChild(navRight);
-  modal.appendChild(footer);
-  backdrop.appendChild(modal);
-  document.body.appendChild(backdrop);
-}
-
-async function saveLoad() {
-  const customer = (state.prefillJobData?.customer || '').trim();
-  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const defaultName = customer ? `${customer} — ${dateStr}` : dateStr;
-  const name = prompt('Save load as:', state.currentSavedLoadId ? '' : defaultName);
-  if (name === null) return;
-
-  const stateJson = {
-    trailerType:           state.trailerType,
-    trailerInvNumbers:     state.trailerInvNumbers,
-    runnerHeight:          state.runnerHeight,
-    autoDownsize:          state.autoDownsize,
-    forcedTrailers:        state.forcedTrailers,
-    forcedMode:            state.forcedMode,
-    variant:               state.variant,
-    manualRowsByTrailer:   state.manualRowsByTrailer,
-    skus:                  state.skus,
-    cart:                  state.cart,
-    prefillJobId:          state.prefillJobId,
-  };
-
-  const payload = {
-    name:         name.trim() || defaultName,
-    job_id:       state.prefillJobId || null,
-    customer:     customer,
-    trailer_type: state.trailerType,
-    state_json:   JSON.stringify(stateJson),
-  };
-
-  try {
-    const isUpdate = !!state.currentSavedLoadId;
-    const url = isUpdate
-      ? '/api/saved-loads/' + encodeURIComponent(state.currentSavedLoadId)
-      : '/api/saved-loads';
-    const res = isUpdate ? await api.put(url, payload) : await api.post(url, payload);
-    const data = res.data;
-    if (!res.ok) { showToast('Failed to save load: ' + (res.error || 'Unknown error'), 'error'); return; }
-    state.currentSavedLoadId = data.load.id;
-    showToast('Load saved.', 'success');
-  } catch {
-    showToast('Network error saving load.', 'error');
-  }
-}
-
-async function openLoadModal() {
-  let loads = [];
-  try {
-    const res = await api.get('/api/saved-loads');
-    if (!res.ok) { showToast('Failed to load saved loads.', 'error'); return; }
-    loads = res.data.loads || [];
-  } catch {
-    showToast('Network error loading saved loads.', 'error');
-    return;
-  }
-
-  const backdrop = h('div', { style: { position: 'fixed', inset: '0', background: 'rgba(0,0,0,0.5)', zIndex: '9998', display: 'flex', alignItems: 'center', justifyContent: 'center' } });
-  const modal = h('div', { style: { background: '#fff', borderRadius: '12px', padding: '24px', width: '560px', maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' } });
-
-  const hdr = h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } });
-  hdr.appendChild(h('strong', { style: { fontSize: '16px' } }, 'Saved Loads'));
-  hdr.appendChild(h('button', { style: { background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }, onClick: () => backdrop.remove() }, '×'));
-  modal.appendChild(hdr);
-
-  if (!loads.length) {
-    modal.appendChild(h('p', { style: { color: 'var(--text-muted)', fontSize: '14px' } }, 'No saved loads.'));
-  } else {
-    const list = h('div', { style: { display: 'grid', gap: '8px' } });
-    for (const load of loads) {
-      const row = h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', background: '#f9fafb' } });
-      const info = h('div', { style: { flex: '1', minWidth: '0' } });
-      info.appendChild(h('div', { style: { fontWeight: '700', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, load.name || '(unnamed)'));
-      info.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-muted)' } }, `${load.customer || ''}${load.customer && load.trailer_type ? ' · ' : ''}${load.trailer_type || ''} · Saved ${new Date(load.updated_at).toLocaleDateString()}`));
-      row.appendChild(info);
-
-      const loadBtn = h('button', { className: 'btn btn-white', style: { padding: '6px 12px', fontSize: '12px', whiteSpace: 'nowrap' } }, 'Load');
-      loadBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        try {
-          const res = await api.get('/api/saved-loads/' + encodeURIComponent(load.id));
-          if (!res.ok) { showToast('Failed to load: ' + (res.error || ''), 'error'); return; }
-          const s = JSON.parse(res.data.load.state_json || '{}');
-          if (s.trailerType)          state.trailerType          = s.trailerType;
-          if (s.trailerInvNumbers)    state.trailerInvNumbers    = s.trailerInvNumbers;
-          if (s.runnerHeight != null) state.runnerHeight         = s.runnerHeight;
-          if (s.autoDownsize != null) state.autoDownsize         = s.autoDownsize;
-          if (s.forcedTrailers)       state.forcedTrailers       = s.forcedTrailers;
-          if (s.forcedMode != null)   state.forcedMode           = s.forcedMode;
-          if (s.variant != null)      state.variant              = s.variant;
-          if (s.manualRowsByTrailer)  state.manualRowsByTrailer  = s.manualRowsByTrailer;
-          if (s.skus)                 state.skus                 = s.skus;
-          if (s.cart)                 state.cart                 = s.cart;
-          if (s.prefillJobId != null) state.prefillJobId         = s.prefillJobId;
-          state.currentSavedLoadId = load.id;
-          state.editorTrailer = null;
-          backdrop.remove();
-          render();
-          showToast('Load restored.', 'success');
-        } catch {
-          showToast('Network error loading saved load.', 'error');
-        }
-      });
-      row.appendChild(loadBtn);
-
-      const delBtn = h('button', { className: 'btn btn-red-light', style: { padding: '6px 10px', fontSize: '12px', whiteSpace: 'nowrap' } }, '×');
-      delBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!confirm(`Delete saved load "${load.name || '(unnamed)'}"?`)) return;
-        try {
-          const res = await api.del('/api/saved-loads/' + encodeURIComponent(load.id));
-          if (!res.ok) { showToast('Delete failed.', 'error'); return; }
-          row.remove();
-          if (!list.children.length) list.appendChild(h('p', { style: { color: 'var(--text-muted)', fontSize: '14px' } }, 'No saved loads.'));
-        } catch {
-          showToast('Network error.', 'error');
-        }
-      });
-      row.appendChild(delBtn);
-      list.appendChild(row);
-    }
-    modal.appendChild(list);
-  }
-
-  backdrop.appendChild(modal);
-  document.body.appendChild(backdrop);
-}
-
-async function generateAllBols() {
-  const bm = state.bolModal;
-  bm.bolError = '';
-  for (let i = 0; i < bm.trailerData.length; i++) {
-    const td = bm.trailerData[i];
-    if (!td.date) { bm.currentPage = i; bm.bolError = `Trailer ${i + 1}: Date is required.`; renderBolModal(); return; }
-    if (!td.shipToCompany.trim()) { bm.currentPage = i; bm.bolError = `Trailer ${i + 1}: Company is required.`; renderBolModal(); return; }
-  }
-  const missingNumbers = bm.trailerData.some(td => !(td.invNumber || '').trim());
-  if (missingNumbers) {
-    const proceed = await BolShared.confirmNoBolNumber();
-    if (!proceed) return;
-  }
-  bm.generating = true; bm.bolError = '';
-  bm.generateProgress = bm.trailerData.map((_, i) => ({ text: `Trailer ${i + 1} — waiting...`, done: false, pending: true }));
-  renderBolModal();
-  const savedBols = [];
-  for (let i = 0; i < bm.trailerData.length; i++) {
-    const td = bm.trailerData[i];
-    bm.generateProgress[i] = { text: `⏳ Trailer ${i + 1} — saving...`, done: false, pending: false };
-    renderBolModal();
-    try {
-      const payload = {
-        bol_number: td.invNumber || null,
-        date: td.date, customer_id: td.customerId || null,
-        ship_to_company: td.shipToCompany, ship_to_attention: td.shipToAttention,
-        ship_to_street: td.shipToStreet, ship_to_street2: td.shipToStreet2,
-        ship_to_city: td.shipToCity, ship_to_state: td.shipToState, ship_to_zip: td.shipToZip,
-        location_no: '', carrier_id: null, carrier_name: td.carrierName,
-        trailer_no: '', seal_number: '', scac: '', pro_no: '',
-        freight_terms: td.freightTerms, is_scrap_pickup: 0, third_party_bill_to: '',
-        special_instructions: td.specialInstructions,
-        contact_info: [td.contactName ? ('POC: ' + td.contactName) : '', td.contactPhone || ''].filter(Boolean).join(' '),
-        po_number: td.poNumber || '',
-        is_master_bol: 0,
-        commodity_description: td.commodityDescription,
-        handling_unit_qty: String(td.totalStacks), handling_unit_type: 'stacks',
-        package_qty: String(td.totalPieces), package_type: 'pcs',
-        weight: String(td.totalWeight), delivery_time: td.deliveryTime,
-        job_id: td.jobId || null, notes: '',
-      };
-      const res = await api.post('/api/bols', payload);
-      if (!res.ok) { throw new Error(res.error || `HTTP ${res.status}`); }
-      const data = res.data;
-      if (td.poNumber) data.bol.po_number = data.bol.po_number || td.poNumber;
-      savedBols.push(data.bol);
-      bm.generateProgress[i] = { text: `✓ Trailer ${i + 1} — ${data.bol.bol_number ? `BOL #${data.bol.bol_number}` : 'BOL'} saved`, done: true, pending: false };
-      renderBolModal();
-    } catch (e) { bm.generating = false; bm.bolError = `Trailer ${i + 1}: ${e.message}`; renderBolModal(); return; }
-  }
-  bm.generateProgress.push({ text: 'Generating PDF...', done: false, pending: false });
-  renderBolModal();
-  try {
-    const blobUrl = await generateBolPdf(savedBols);
-    bm.generating = false;
-    renderBolModal();
-    showBolReviewLB(blobUrl, savedBols);
-  } catch (e) {
-    bm.generating = false; bm.bolSuccess = savedBols;
-    bm.bolError = e.popupBlocked ? 'PDF was generated but your browser blocked the popup. Please allow popups for this site.'
-      : e.message.includes('template') ? 'BOL PDF template not found. Contact admin.' : `PDF error: ${e.message}`;
-    renderBolModal();
-  }
-}
-
-async function generateBolPdf(bolRecords) {
-  // Collect optional appended-PDF bytes (packing slip and/or loading diagram).
-  // bol-shared.js accepts a single packingSlipPdfBytes; if both are present we
-  // merge them into one PDF here so the generator stays untouched.
-  let packingSlipPdfBytes = null;
-  let loadingDiagramPdfBytes = null;
-
-  if (state.bolModal.includePacking && state.prefillJobData?.id) {
-    try {
-      const slipRes = await fetch('/api/jobs/' + encodeURIComponent(state.prefillJobData.id) + '/packing-slip');
-      if (slipRes.ok) {
-        packingSlipPdfBytes = await slipRes.arrayBuffer();
-      }
-    } catch { /* packing slip unavailable */ }
-  }
-
-  if (state.bolModal.includeLoadingDiagram) {
-    // BolShared.generatePdf is called once for all BOLs (not per-trailer), so we
-    // attach only the diagram for the currently-displayed trailer (currentPage).
-    // When GENERATE ALL BOLs is triggered from the last page, this is the last trailer.
-    try {
-      const idx = state.bolModal.currentPage;
-      const trailer = state.bolModal.trailers[idx];
-      const trailerDims = trailer.downsizedDims || getDims();
-      const trailerLabel = trailer.downsizedType || state.trailerType;
-      const packList = buildPackingList(trailer);
-      loadingDiagramPdfBytes = await buildLoadingDiagramPdfBytes(
-        trailer,
-        trailerDims,
-        trailerLabel,
-        idx + 1,
-        packList,
-        state.trailerInvNumbers[idx] || ''
-      );
-    } catch (e) {
-      console.error('Failed to build loading diagram PDF:', e);
-    }
-  }
-
-  // Combine: if both, merge into one. If only one, use it. Else null.
-  let combinedAppendBytes = null;
-  if (packingSlipPdfBytes && loadingDiagramPdfBytes) {
-    try {
-      const { PDFDocument } = PDFLib;
-      const combined = await PDFDocument.create();
-      const slipDoc = await PDFDocument.load(packingSlipPdfBytes);
-      const diagDoc = await PDFDocument.load(loadingDiagramPdfBytes);
-      const slipPages = await combined.copyPages(slipDoc, slipDoc.getPageIndices());
-      slipPages.forEach(p => combined.addPage(p));
-      const diagPages = await combined.copyPages(diagDoc, diagDoc.getPageIndices());
-      diagPages.forEach(p => combined.addPage(p));
-      combinedAppendBytes = await combined.save();
-    } catch (e) {
-      console.error('Failed to merge packing slip + loading diagram:', e);
-      combinedAppendBytes = packingSlipPdfBytes || loadingDiagramPdfBytes;
-    }
-  } else {
-    combinedAppendBytes = packingSlipPdfBytes || loadingDiagramPdfBytes;
-  }
-
-  const result = await BolShared.generatePdf(bolRecords, { previewOnly: true, packingSlipPdfBytes: combinedAppendBytes });
-  return result.blobUrl;
-}
-
-let lbPendingBlobUrl    = null;
-let lbPendingBols       = null;
-let lbReviewBols        = [];
-let lbReviewActiveIndex = 0;
-
-function showBolReviewLB(blobUrl, savedBols) {
-  lbPendingBlobUrl    = blobUrl;
-  lbPendingBols       = savedBols;
-  lbReviewBols        = [...savedBols];
-  lbReviewActiveIndex = 0;
-
-  const backdrop = document.getElementById('bol-review-backdrop');
-  const iframe = document.getElementById('bol-review-iframe');
-  iframe.src = blobUrl;
-  iframe.style.display = '';
-  document.getElementById('bol-review-editor-host-lb').style.display = 'none';
-  backdrop.style.display = 'flex';
-
-  const approveBtn = document.getElementById('bol-review-approve');
-  const editBtn    = document.getElementById('bol-review-edit');
-  const closeBtn   = document.getElementById('bol-review-close-lb');
-
-  const newApprove = approveBtn.cloneNode(true);
-  approveBtn.parentNode.replaceChild(newApprove, approveBtn);
-  newApprove.addEventListener('click', async () => {
-    for (const bol of lbReviewBols) {
-      if (bol._overrides) {
-        try {
-          await api.put(`/api/bols/${bol.id}`, { ...bol, render_overrides: bol._overrides });
-        } catch (e) { console.error('Failed to save overrides for BOL', bol.id, e); }
-      }
-    }
-    BolShared.openPdf(lbPendingBlobUrl);
-    lbPendingBlobUrl = null;
-    const bols = [...lbReviewBols];
-    closeBolReviewLB();
-    state.bolModal.bolSuccess = bols;
-    renderBolModal();
-  });
-
-  const newEdit = editBtn.cloneNode(true);
-  editBtn.parentNode.replaceChild(newEdit, editBtn);
-  newEdit.addEventListener('click', handleReviewEditLB);
-
-  if (closeBtn) {
-    const newClose = closeBtn.cloneNode(true);
-    closeBtn.parentNode.replaceChild(newClose, closeBtn);
-    newClose.addEventListener('click', closeBolReviewLB);
-  }
-}
-
-function closeBolReviewLB() {
-  const backdrop = document.getElementById('bol-review-backdrop');
-  backdrop.style.display = 'none';
-  document.getElementById('bol-review-iframe').src = '';
-  document.getElementById('bol-review-iframe').style.display = '';
-  document.getElementById('bol-review-editor-host-lb').style.display = 'none';
-  document.getElementById('bol-review-picker-lb').style.display = 'none';
-  if (lbPendingBlobUrl) {
-    URL.revokeObjectURL(lbPendingBlobUrl);
-    lbPendingBlobUrl = null;
-  }
-  lbReviewBols        = [];
-  lbReviewActiveIndex = 0;
-}
-
-async function lbEditorOnApply(updatedBol) {
-  lbReviewBols[lbReviewActiveIndex] = updatedBol;
-  const editorHost = document.getElementById('bol-review-editor-host-lb');
-  const iframe     = document.getElementById('bol-review-iframe');
-  try {
-    const newBlobUrl = await generateBolPdf(lbReviewBols);
-    if (lbPendingBlobUrl) URL.revokeObjectURL(lbPendingBlobUrl);
-    lbPendingBlobUrl = newBlobUrl;
-    iframe.src = newBlobUrl;
-    editorHost.style.display = 'none';
-    iframe.style.display = '';
-    document.getElementById('bol-review-picker-lb').style.display = 'none';
-  } catch (e) {
-    console.error('Failed to regenerate BOL preview:', e);
-  }
-}
-
-function lbEditorOnCancel() {
-  document.getElementById('bol-review-editor-host-lb').style.display = 'none';
-  document.getElementById('bol-review-iframe').style.display = '';
-  document.getElementById('bol-review-picker-lb').style.display = 'none';
-}
-
-function handleReviewEditLB() {
-  const iframe     = document.getElementById('bol-review-iframe');
-  const editorHost = document.getElementById('bol-review-editor-host-lb');
-  iframe.style.display     = 'none';
-  editorHost.style.display = 'flex';
-  document.getElementById('bol-review-picker-lb').style.display = 'flex';
-
-  const sel = document.getElementById('bol-review-picker-select-lb');
-  sel.innerHTML = '';
-  lbReviewBols.forEach((b, i) => {
-    const opt = document.createElement('option');
-    opt.value = String(i);
-    const label = b.ship_to_company || b.bol_number || `BOL ${i + 1}`;
-    opt.textContent = `BOL ${i + 1} of ${lbReviewBols.length} — ${label}`;
-    sel.appendChild(opt);
-  });
-  sel.value = String(lbReviewActiveIndex);
-
-  const newSel = sel.cloneNode(true);
-  sel.parentNode.replaceChild(newSel, sel);
-  newSel.addEventListener('change', (e) => {
-    lbReviewActiveIndex = Number(e.target.value) || 0;
-    requestAnimationFrame(() => {
-      BolEditor.open(lbReviewBols[lbReviewActiveIndex],
-        document.getElementById('bol-review-editor-mount-lb'),
-        { onApply: lbEditorOnApply, onCancel: lbEditorOnCancel });
-    });
-  });
-
-  requestAnimationFrame(() => {
-    BolEditor.open(lbReviewBols[lbReviewActiveIndex],
-      document.getElementById('bol-review-editor-mount-lb'),
-      { onApply: lbEditorOnApply, onCancel: lbEditorOnCancel });
+    prefillJobData: state.prefillJobData,
+    trailerInvNumbers: state.trailerInvNumbers,
+    buildAppendBytes: buildBolAppendBytes,
   });
 }
 
@@ -3196,68 +2541,6 @@ initSkus().then(() => {
       <button onclick="closePullJobPicker()" style="background:none; border:none; font-size:22px; cursor:pointer; color:#6b7280; padding:0; line-height:1;">&times;</button>
     </div>
     <div id="pull-job-list" style="overflow-y:auto; flex:1; font-size:14px; color:#111827;"></div>
-  </div>
-</div>
-
-<!-- BOL Review Modal -->
-<div id="bol-review-backdrop" style="
-  position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;
-  display:none;align-items:center;justify-content:center;
-">
-  <div style="
-    background:#fff;border-radius:12px;width:95%;max-width:800px;
-    height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);
-  ">
-    <div style="
-      display:flex;justify-content:space-between;align-items:center;
-      padding:16px 20px;border-bottom:1px solid #e5e7eb;
-    ">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827;">Review BOL</h3>
-      <div style="display:flex;gap:8px;">
-        <button id="bol-review-close-lb" style="
-          padding: 8px 16px;
-          background: #ffffff;
-          color: #374151;
-          border: 1px solid #d1d5db;
-          border-radius: 6px;
-          font-weight: 600;
-          cursor: pointer;
-          font-size: 14px;
-        ">Close</button>
-        <button id="bol-review-edit" style="
-          padding:8px 20px;border-radius:8px;border:1px solid #d1d5db;
-          background:#fff;cursor:pointer;font-size:14px;font-weight:600;color:#111827;
-        ">Make Changes</button>
-        <button id="bol-review-approve" style="
-          padding:8px 20px;border-radius:8px;border:none;
-          background:#1e293b;color:#fff;cursor:pointer;font-size:14px;font-weight:600;
-        ">Approve</button>
-      </div>
-    </div>
-    <div id="bol-review-picker-lb" style="
-      display: none;
-      padding: 8px 16px;
-      border-bottom: 1px solid #e5e7eb;
-      background: #ffffff;
-      align-items: center;
-      gap: 8px;
-      font-size: 14px;
-      flex-shrink: 0;
-    ">
-      <label style="font-weight:600; color:#374151;">Editing BOL:</label>
-      <select id="bol-review-picker-select-lb" style="
-        padding: 4px 8px;
-        border: 1px solid #d1d5db;
-        border-radius: 4px;
-        font-size: 14px;
-      "></select>
-    </div>
-    <iframe id="bol-review-iframe" style="
-      flex:1;border:none;border-radius:0 0 12px 12px;
-    "></iframe>
-    <div id="bol-review-editor-host-lb" style="display:none; flex:1; overflow:auto; background:#f9fafb; flex-direction:column;">
-      <div id="bol-review-editor-mount-lb" style="position:relative; flex:1; min-width:0; width:100%;"></div>
-    </div>
   </div>
 </div>
 
