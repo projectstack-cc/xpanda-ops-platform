@@ -392,59 +392,13 @@
     .calc-btn-grid { grid-template-columns: 1fr; }
   }
 
-  /* BOL Modal ─────────────────────────────────────────────────── */
-  .bol-backdrop {
-    position: fixed; inset: 0; z-index: 9999;
-    background: rgba(15,23,42,0.5);
-    display: flex; align-items: center; justify-content: center;
-  }
-  .bol-modal {
-    background: var(--surface); border-radius: var(--radius-lg);
-    max-width: 680px; width: 95vw; max-height: 90vh; overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(15,23,42,0.3);
-    display: flex; flex-direction: column;
-  }
-  .bol-modal-header {
-    padding: 20px 24px 16px; border-bottom: 1px solid var(--border-light);
-    position: sticky; top: 0; background: var(--surface); z-index: 1; flex-shrink: 0;
-  }
-  .bol-modal-body { padding: 20px 24px; flex: 1; }
-  .bol-modal-footer {
-    padding: 14px 24px; border-top: 1px solid var(--border-light);
-    display: flex; align-items: center; justify-content: space-between;
-    position: sticky; bottom: 0; background: var(--surface); flex-shrink: 0;
-  }
-  .bol-source-tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
-  .bol-search-results {
-    border: 1px solid var(--border); border-radius: var(--radius);
-    background: var(--surface); box-shadow: 0 4px 16px rgba(15,23,42,0.1);
-    max-height: 200px; overflow-y: auto; margin-top: 4px;
-  }
-  .bol-search-item {
-    padding: 10px 14px; cursor: pointer;
-    border-bottom: 1px solid var(--border-light); font-size: 14px;
-  }
-  .bol-search-item:hover { background: var(--bg); }
-  .bol-search-item:last-child { border-bottom: none; }
-  .bol-confirm-msg { font-size: 13px; color: var(--green); font-weight: 600; margin-bottom: 12px; }
-  .bol-form-group { margin-bottom: 12px; }
-  .bol-form-group .form-label { display: block; margin-bottom: 4px; }
-  .bol-city-row { display: grid; grid-template-columns: 1fr 60px 90px; gap: 8px; }
-  .bol-freight-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
-  .bol-progress-list, .bol-success-list { list-style: none; padding: 0; margin: 12px 0; }
-  .bol-progress-list li, .bol-success-list li {
-    padding: 8px 0; font-size: 14px; border-bottom: 1px solid var(--border-light);
-  }
-  @media (max-width: 600px) {
-    .bol-modal { border-radius: 0; width: 100vw; max-height: 100vh; }
-    .bol-city-row { grid-template-columns: 1fr; }
-  }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="/logistics/bol-shared.js"></script>
 <script src="/logistics/bol-editor.js"></script>
+<script src="/logistics/bol-compose.js"></script>
 </head>
 <body>
 
