@@ -222,6 +222,7 @@ export async function handleApiLoadingAssignments(request, env) {
     if (payload.loading_status) {
       // Manager-only: assigning to bay (awaiting → not_started) or reassigning bays
       if ((existing.loading_status === 'awaiting' && payload.loading_status === 'not_started') ||
+          (payload.loading_status === 'awaiting' && existing.loading_status !== 'awaiting') ||
           (payload.bay_id && payload.bay_id !== existing.bay_id)) {
         if (!isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
           return json({ ok: false, error: 'Manager access required for bay assignment.' }, 403);
