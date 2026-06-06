@@ -37,11 +37,11 @@ Execution order is sequenced for dependencies: P91 (pickup exclusion) lands befo
 
 Loading dashboard / driver:
 
-- [ ] Loading dashboard overview: reorganize bay cards into two rows — **6 on top, 5 on bottom**.
-- [ ] Card status color-coding: **Not Started → red**, **In Progress → yellow**.
-- [ ] Detail-view timestamps: capture & display **loading started** and **loading completed** times on the loading dashboard detail view.
-- [ ] **Lock card↔trailer assignment (critical).** Once a card is assigned to a trailer it is locked — no longer draggable bay→queue or bay→bay. Previously movable; drag-and-drop misfires cause accidental re-assignments. Counters human/mouse error.
-- [ ] Trailer # lifecycle: number moves with the card on assignment, **locked** while assigned/in-transit, and **released** (available again) once the card is marked **delivered**.
+- [x] ~~**Loading dashboard overview: reorganize bay cards into two rows — 6 on top, 5 on bottom.**~~ — P115. Overview grid changed to `repeat(6, 1fr)`; bay columns fill tracks.
+- [x] ~~**Card status color-coding: Not Started → red, In Progress → yellow.**~~ — P115. `LD_STATUS_COLORS` updated: `not_started` → red (`#fee2e2`), `loading` → amber (`#fef3c7`).
+- [x] ~~**Detail-view timestamps: capture & display loading started and loading completed times on the loading dashboard detail view.**~~ — P116. `fmtTs()` helper + two rows in `populateShippingInfo` (hidden until timestamps exist).
+- [x] ~~**Lock card↔trailer assignment (critical).**~~ — P120+P121. Bay-view drag disabled entirely (P120 — button-only status changes). Overview: manager-only drag enabled for bay→bay and bay→queue reassignment with server guard (P121); non-managers cannot drag assigned cards.
+- [x] ~~**Trailer # lifecycle: number moves with the card on assignment, locked while assigned/in-transit, released once delivered.**~~ — P119. Trailer input on card (manager + bayed + not_started/loading/loaded); read-only text at in_transit+; server 409 guard. Bay headers no longer carry a trailer #.
 - [ ] On **Mark In Transit**, clear the trailer input field on the loading dashboard.
 - [ ] **Human-error fallback:** if a driver scans the QR to begin transit while the trailer was **not** marked loaded, force the trailer card into **In Transit**.
 - [ ] Trailer-assigned indicator on the **job board card** — when a trailer is assigned (loading dashboard trigger), write a "Trailer Assigned" text/badge onto the job's kanban card. *(cross: loading dashboard → job board)*
@@ -66,7 +66,8 @@ BOL Generator ↔ Load Builder alignment:
 - [x] ~~Load Builder column max fix~~ — 53ft Standard trailer height corrected from 108" to 109"
 - [x] ~~BOL text positioning fix~~ — Prompt 18, coords remapped to new template
 - [x] ~~Load Builder customize mode alerts~~ — completed
-- [x] ~~Add trailer number field on logistics dashboard~~ — already implemented
+- [x] ~~Add trailer number field on logistics dashboard~~ — bay-level trailer removed (P119); trailer now lives on the assignment card
+- [x] ~~BOL output test page~~ — P118. `logistics/bol-test.html` dev harness; calls `BolShared.generatePdf(..., { previewOnly: true })`; no API writes; not linked from any nav; reached by direct URL only.
 - [x] ~~Saved Loads button on Load Builder initial page~~ — Prompt 53
 - [x] ~~Trailer number backend permission guard~~ — Prompt 53, manager-only on PUT /api/loading-bays
 - [x] ~~BOL review/approve flow + stop auto-download of PDF~~ — Prompt 54
@@ -93,7 +94,7 @@ BOL Generator ↔ Load Builder alignment:
 - [ ] Calendar view for job board
 - [ ] Archive feature — when a job hits "Shipped" (final state), add an "Archive" button to the card + toast confirmation; archived jobs move off the kanban to reduce clutter
 - [ ] Label printing — DiversiTech and UL labels
-- [ ] Load count guard on job entry — confirm prompt when `load_count > 10` ("Are you sure you want more than 10 trailers?"); proceed on confirm, keep editing on cancel. Frontend only (`jobs/index.html`, `f-load-count`); no `max` clamp. *(pairs with the load-count reconcile item under Logistics)*
+- [x] ~~**Load count guard on job entry** — confirm prompt when `load_count > 10` ("Are you sure you want more than 10 trailers?"); proceed on confirm, keep editing on cancel.~~ — P117. `saveJob()` reads `f-load-count`, shows `confirm()` on >10; no `max` clamp added.
 - [ ] No duplicate INV# when creating a job — validate `invoice_number` uniqueness at job creation (reject/flag dupes). *(also a guard for QB auto-intake, where created/updated webhooks can fire repeatedly for the same invoice — dedupe on invoice number)*
 
 ### Done

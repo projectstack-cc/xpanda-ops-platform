@@ -83,6 +83,7 @@
     .ld-drop-zone { transition: background 0.15s; border-radius: 8px; padding: 4px; }
     .ld-drop-zone.ld-drop-hover { background: #dbeafe; }
     .ld-bay-body.ld-drop-hover { background: #dbeafe; }
+    .ld-queue.ld-drop-hover { background: #dbeafe; border-radius: 8px; outline: 2px dashed #3b82f6; outline-offset: 2px; }
     .ld-card[draggable="true"] { cursor: grab; user-select: none; -webkit-user-select: none; }
     .ld-card[draggable="true"]:active { cursor: grabbing; }
     @media (max-width: 768px) {
@@ -138,7 +139,7 @@
         <span class="ld-section-chevron" id="ld-chevron-awaiting">▾</span>
         Awaiting Trailer Assignment
       </h3>
-      <div id="ld-awaiting" class="ld-queue"></div>
+      <div id="ld-awaiting" class="ld-queue" ondragover="event.preventDefault(); this.classList.add('ld-drop-hover');" ondragleave="this.classList.remove('ld-drop-hover');" ondrop="onQueueDrop(event); this.classList.remove('ld-drop-hover');"></div>
     </div>
     <div class="ld-bays-scroll">
       <div id="ld-bays" class="ld-bays-grid"></div>
@@ -528,7 +529,8 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
   const next = getNextLoadingStatus(a.loading_status);
   const user = window.__xpandaUser;
   const isManager = user && (user.isAdministrator || user.permissions?.['logistics.loading.manage']?.edit);
-  const dragAttrs = a.loading_status === 'awaiting'
+  const reassignable = isManager && a.bay_id && ['not_started', 'loading', 'loaded'].includes(a.loading_status);
+  const dragAttrs = (a.loading_status === 'awaiting' || reassignable)
     ? `draggable="true" ondragstart="onCardDragStart(event, '${a.id}')"`
     : '';
   const trailerEditable = isManager && a.bay_id && ['not_started', 'loading', 'loaded'].includes(a.loading_status);
@@ -678,6 +680,7 @@ async function confirmAssignBay() {
 let draggedAssignmentId = null;
 
 function onCardDragStart(event, assignmentId) {
+  if (event.target.tagName === 'INPUT') { event.preventDefault(); return; }
   draggedAssignmentId = assignmentId;
   event.dataTransfer.effectAllowed = 'move';
   event.target.style.opacity = '0.5';
@@ -701,6 +704,23 @@ async function onBayDrop(event, bayId) {
   draggedAssignmentId = null;
 }
 
+async function onQueueDrop(event) {
+  event.preventDefault();
+  if (!draggedAssignmentId) return;
+
+  try {
+    const { ok, data } = await api.put('/api/loading-assignments', { id: draggedAssignmentId, bay_id: null, loading_status: 'awaiting' });
+    if (ok) {
+      loadDashboard();
+    } else {
+      alert(data?.error || 'Failed to move to queue');
+    }
+  } catch (e) {
+    console.error('Queue drop failed:', e);
+  }
+  draggedAssignmentId = null;
+}
+
 // Touch drag state
 let touchDragEl = null;
 let touchDragId = null;
@@ -718,10 +738,11 @@ function initTouchDragForBayView() {
 }
 
 function initTouchDragForOverview() {
-  const awaitingCards = document.querySelectorAll('#ld-awaiting .ld-card[draggable="true"]');
-  awaitingCards.forEach(card => {
+  const draggableCards = document.querySelectorAll('#ld-overview .ld-card[draggable="true"]');
+  draggableCards.forEach(card => {
     card.addEventListener('touchstart', (e) => {
       if (e.touches.length !== 1) return;
+      if (e.target.tagName === 'INPUT') return;
       touchDragEl = card;
       touchDragId = card.dataset.assignmentId;
       touchStartX = e.touches[0].clientX;
@@ -753,7 +774,7 @@ document.addEventListener('touchmove', (e) => {
 
   document.querySelectorAll('.ld-drop-zone, .ld-bay-body').forEach(z => z.classList.remove('ld-drop-hover'));
   const elUnder = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
-  const zone = elUnder?.closest('.ld-drop-zone') || elUnder?.closest('.ld-bay-body');
+  const zone = elUnder?.closest('.ld-drop-zone') || elUnder?.closest('.ld-bay-body') || elUnder?.closest('.ld-queue');
   if (zone) zone.classList.add('ld-drop-hover');
 }, { passive: true });
 
@@ -773,6 +794,11 @@ document.addEventListener('touchend', () => {
         draggedAssignmentId = touchDragId;
         onBayDrop(new Event('drop'), bayId);
       }
+    }
+    const hoveredQueue = document.querySelector('.ld-queue.ld-drop-hover');
+    if (hoveredQueue && touchDragId) {
+      draggedAssignmentId = touchDragId;
+      onQueueDrop(new Event('drop'));
     }
     touchClone.remove();
     touchClone = null;
