@@ -391,7 +391,9 @@
   .skp-rail-count { color: var(--text-ghost); font-size: 12px; font-weight: 700; }
   .skp-rail-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
   .skp-detail { flex: 1; min-width: 0; }
-  .skp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(184px, 1fr)); gap: 10px; }
+  .skp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(184px, 1fr)); gap: 10px; align-content: start; max-height: 46vh; overflow-y: auto; border: 1px solid var(--border-light); border-radius: var(--radius); padding: 10px; }
+  .skp-adv-toggle { margin-bottom: 18px; }
+  .skp-actionbar { position: sticky; bottom: 12px; z-index: 20; box-shadow: 0 -2px 16px rgba(15,23,42,0.10); }
   .skp-card { border: 1px solid var(--border-light); border-left: 3px solid transparent; background: var(--surface); padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; min-width: 0; transition: background 0.1s; }
   .skp-card-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
   .skp-card-code { font-family: var(--mono); font-size: 12px; color: var(--text-faint); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1440,7 +1442,10 @@ function renderLoadTab() {
   typeCard.appendChild(downsizeRow);
   cont.appendChild(typeCard);
 
-  // Forced trailer sizes panel
+  // Advanced — Force Trailer Sizes (collapsed by default to keep the page short)
+  const advToggle = h('button', { className: 'btn btn-white skp-adv-toggle', onClick: () => { state.showAdvanced = !state.showAdvanced; render(); } }, (state.showAdvanced ? '▾ ' : '▸ ') + 'ADVANCED · FORCE TRAILER SIZES');
+  cont.appendChild(advToggle);
+  if (state.showAdvanced) {
   const forcedCard = h('div', { className: 'card mb-18' });
   const forcedHdr = h('div', { className: 'flex items-center gap-10 flex-wrap' });
   forcedHdr.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 800, fontSize: '13px' } }, 'FORCE TRAILER SIZES'));
@@ -1470,6 +1475,7 @@ function renderLoadTab() {
     forcedCard.appendChild(forcedBody);
   }
   cont.appendChild(forcedCard);
+  }
 
   // Master-detail SKU picker (rail + card grid). Reuses state.cart / state.search.
   const isSearching = !!state.search.trim();
@@ -1554,7 +1560,7 @@ function renderLoadTab() {
 
   // Cart summary
   if (state.cart.length > 0) {
-    const cartCard = h('div', { className: 'card' });
+    const cartCard = h('div', { className: 'card skp-actionbar' });
     const cartHeader = h('div', { className: 'flex justify-between mb-12' });
     cartHeader.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 800, fontSize: '13px' } }, 'LOAD LIST'));
     cartHeader.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.cart = []; render(); } }, 'CLEAR'));
