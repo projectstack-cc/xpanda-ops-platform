@@ -15,6 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="/logistics/bol-shared.js"></script>
 <script src="/logistics/bol-editor.js"></script>
+<script src="/logistics/bol-compose.js"></script>
 <style>
 .logistics-back-link { display: none; }
 
@@ -1204,9 +1205,21 @@ async function doGenerate(payload) {
       } catch (e) { console.error('Failed to fetch packing slip:', e); }
     }
 
-    pendingPackingSlipBytes = packingSlipPdfBytes;
-    const result = await BolShared.generatePdf([tempBol], { previewOnly: true, packingSlipPdfBytes });
-    showBolReview(result.blobUrl, payload, tempBol);
+    await BolCompose.reviewRecords([tempBol], {
+      buildAppendBytes: () => packingSlipPdfBytes,
+      onApprove: async (recs) => {
+        const persistPayload = { ...payload, render_overrides: (recs[0] && recs[0]._overrides) || null };
+        const isEdit = !!editingBolId;
+        const res = isEdit
+          ? await api.put(`/api/bols/${editingBolId}`, persistPayload)
+          : await api.post('/api/bols', persistPayload);
+        if (!res.ok) throw new Error(res.error || 'Save failed.');
+        const bolLabel = res.data.bol.bol_number ? `BOL #${res.data.bol.bol_number}` : 'BOL';
+        showToast(`${bolLabel} ${isEdit ? 'updated' : 'generated'}`);
+        loadRecentBols();
+      },
+      onError: (e) => setStatus('Error: ' + (e.message || String(e)), 'error'),
+    });
   } catch (e) {
     setStatus('Error: ' + (e.message || String(e)), 'error');
   } finally {
@@ -1215,116 +1228,6 @@ async function doGenerate(payload) {
   }
 }
 
-let pendingReviewPayload    = null;
-let pendingReviewBlobUrl    = null;
-let pendingReviewBol        = null;
-let pendingPackingSlipBytes = null;
-
-function showBolReview(blobUrl, payload, bolForEditor) {
-  pendingReviewPayload = payload;
-  pendingReviewBlobUrl = blobUrl;
-  pendingReviewBol     = bolForEditor || null;
-
-  const backdrop = document.getElementById('bol-review-backdrop');
-  const iframe = document.getElementById('bol-review-iframe');
-  iframe.src = blobUrl;
-  backdrop.style.display = 'flex';
-
-  const approveBtn = document.getElementById('bol-review-approve');
-  const editBtn = document.getElementById('bol-review-edit');
-
-  const newApprove = approveBtn.cloneNode(true);
-  approveBtn.parentNode.replaceChild(newApprove, approveBtn);
-  newApprove.addEventListener('click', handleReviewApprove);
-
-  const newEdit = editBtn.cloneNode(true);
-  editBtn.parentNode.replaceChild(newEdit, editBtn);
-  newEdit.addEventListener('click', handleReviewEdit);
-
-  const closeBtn = document.getElementById('bol-review-close');
-  if (closeBtn) {
-    const newClose = closeBtn.cloneNode(true);
-    closeBtn.parentNode.replaceChild(newClose, closeBtn);
-    newClose.addEventListener('click', closeBolReview);
-  }
-}
-
-function closeBolReview() {
-  const backdrop = document.getElementById('bol-review-backdrop');
-  backdrop.style.display = 'none';
-  document.getElementById('bol-review-iframe').src = '';
-  if (pendingReviewBlobUrl) {
-    URL.revokeObjectURL(pendingReviewBlobUrl);
-    pendingReviewBlobUrl = null;
-  }
-}
-
-async function handleReviewApprove() {
-  if (!pendingReviewPayload) return;
-
-  const approveBtn = document.getElementById('bol-review-approve');
-  approveBtn.disabled = true;
-  approveBtn.textContent = 'Saving…';
-
-  try {
-    const isEdit = !!editingBolId;
-    const res = isEdit
-      ? await api.put(`/api/bols/${editingBolId}`, pendingReviewPayload)
-      : await api.post('/api/bols', pendingReviewPayload);
-    const data = res.data;
-    if (!res.ok) {
-      setStatus(res.error || 'Save failed.', 'error');
-      closeBolReview();
-      return;
-    }
-
-    BolShared.openPdf(pendingReviewBlobUrl);
-    pendingReviewBlobUrl = null;
-
-    const bolLabel = data.bol.bol_number ? `BOL #${data.bol.bol_number}` : 'BOL';
-    showToast(`${bolLabel} ${isEdit ? 'updated' : 'generated'}`);
-    loadRecentBols();
-    closeBolReview();
-  } catch (e) {
-    setStatus('Error: ' + (e.message || String(e)), 'error');
-    closeBolReview();
-  } finally {
-    approveBtn.disabled = false;
-    approveBtn.textContent = 'Approve & Save';
-  }
-}
-
-function handleReviewEdit() {
-  if (!pendingReviewBol) { closeBolReview(); return; }
-  const iframe     = document.getElementById('bol-review-iframe');
-  const editorHost = document.getElementById('bol-editor-host');
-  iframe.style.display     = 'none';
-  editorHost.style.display = 'flex';
-  BolEditor.open(pendingReviewBol, editorHost, {
-    onApply: async function (updatedBol) {
-      try {
-        editorHost.style.display = 'none';
-        iframe.style.display     = '';
-        iframe.src = '';
-        pendingReviewPayload.render_overrides = updatedBol._overrides || null;
-        const result = await BolShared.generatePdf([updatedBol], {
-          previewOnly: true,
-          packingSlipPdfBytes: pendingPackingSlipBytes,
-        });
-        if (pendingReviewBlobUrl) URL.revokeObjectURL(pendingReviewBlobUrl);
-        pendingReviewBlobUrl = result.blobUrl;
-        iframe.src = result.blobUrl;
-      } catch (e) {
-        setStatus('Error regenerating preview: ' + (e.message || String(e)), 'error');
-        closeBolReview();
-      }
-    },
-    onCancel: function () {
-      editorHost.style.display = 'none';
-      iframe.style.display     = '';
-    },
-  });
-}
 
 async function handleDraft() {
   const payload = collectPayload();
@@ -1605,47 +1508,6 @@ function showToast(msg) {
 }
 </script>
 
-<!-- BOL Review Modal -->
-<div id="bol-review-backdrop" style="
-  position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;
-  display:none;align-items:center;justify-content:center;
-">
-  <div style="
-    background:#fff;border-radius:12px;width:95%;max-width:800px;
-    height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);
-  ">
-    <div style="
-      display:flex;justify-content:space-between;align-items:center;
-      padding:16px 20px;border-bottom:1px solid #e5e7eb;
-    ">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827;">Review BOL</h3>
-      <div style="display:flex;gap:8px;">
-        <button id="bol-review-close" style="
-          padding: 8px 16px;
-          background: #ffffff;
-          color: #374151;
-          border: 1px solid #d1d5db;
-          border-radius: 6px;
-          font-weight: 600;
-          cursor: pointer;
-          font-size: 14px;
-        ">Close</button>
-        <button id="bol-review-edit" style="
-          padding:8px 20px;border-radius:8px;border:1px solid #d1d5db;
-          background:#fff;cursor:pointer;font-size:14px;font-weight:600;color:#111827;
-        ">Make Changes</button>
-        <button id="bol-review-approve" style="
-          padding:8px 20px;border-radius:8px;border:none;
-          background:#1e293b;color:#fff;cursor:pointer;font-size:14px;font-weight:600;
-        ">Approve &amp; Save</button>
-      </div>
-    </div>
-    <iframe id="bol-review-iframe" style="
-      flex:1;border:none;border-radius:0 0 12px 12px;
-    "></iframe>
-    <div id="bol-editor-host" style="flex:1;display:none;flex-direction:column;overflow:hidden;border-radius:0 0 12px 12px;"></div>
-  </div>
-</div>
 
 </body>
 </html>

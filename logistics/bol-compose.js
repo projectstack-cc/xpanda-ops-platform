@@ -714,6 +714,122 @@ function h(tag, attrs = {}, ...children) {
     });
   }
 
-  return { open, render, _h: h, _injectStyles: injectStyles };
+  // ── Standalone review surface (P127) ─────────────────────────────────────────
+  // For consumers that own persistence (e.g. bol-generator). Reuses the injected
+  // review modal + BolEditor; approve is DELEGATED via opts.onApprove, then the
+  // module opens the PDF and closes. Does not touch the authoring (open/BM) path.
+  //   reviewRecords(records, { buildAppendBytes, onApprove, onError }):
+  //     buildAppendBytes() -> async; extra PDF bytes to append, or null
+  //     onApprove(records) -> async; caller persists the (possibly edited) records
+  //     onError(err)       -> optional
+  let RR = null;
+
+  async function reviewRecords(records, opts) {
+    RR = { records: [...records], idx: 0, blobUrl: null, opts: opts || {} };
+    await rrRegenerate();
+    rrShow();
+  }
+
+  async function rrRegenerate() {
+    const append = RR.opts.buildAppendBytes ? await RR.opts.buildAppendBytes() : null;
+    const result = await BolShared.generatePdf(RR.records, { previewOnly: true, packingSlipPdfBytes: append });
+    if (RR.blobUrl) URL.revokeObjectURL(RR.blobUrl);
+    RR.blobUrl = result.blobUrl;
+  }
+
+  function rrShow() {
+    injectReviewModal();
+    const backdrop = document.getElementById('bol-review-backdrop');
+    const iframe   = document.getElementById('bol-review-iframe');
+    iframe.src = RR.blobUrl; iframe.style.display = '';
+    document.getElementById('bol-review-editor-host-lb').style.display = 'none';
+    document.getElementById('bol-review-picker-lb').style.display = 'none';
+    backdrop.style.display = 'flex';
+
+    const approveBtn = document.getElementById('bol-review-approve');
+    const editBtn    = document.getElementById('bol-review-edit');
+    const closeBtn   = document.getElementById('bol-review-close-lb');
+    const a = approveBtn.cloneNode(true); approveBtn.parentNode.replaceChild(a, approveBtn);
+    a.addEventListener('click', rrApprove);
+    const e = editBtn.cloneNode(true); editBtn.parentNode.replaceChild(e, editBtn);
+    e.addEventListener('click', rrEdit);
+    if (closeBtn) { const c = closeBtn.cloneNode(true); closeBtn.parentNode.replaceChild(c, closeBtn); c.addEventListener('click', rrClose); }
+  }
+
+  async function rrApprove() {
+    const btn = document.getElementById('bol-review-approve');
+    const label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      if (RR.opts.onApprove) await RR.opts.onApprove(RR.records);
+      if (RR.blobUrl) { BolShared.openPdf(RR.blobUrl); RR.blobUrl = null; }
+      rrClose();
+    } catch (err) {
+      if (RR.opts.onError) RR.opts.onError(err); else console.error(err);
+      btn.disabled = false; btn.textContent = label;
+    }
+  }
+
+  function rrClose() {
+    const backdrop = document.getElementById('bol-review-backdrop');
+    if (backdrop) backdrop.style.display = 'none';
+    const iframe = document.getElementById('bol-review-iframe');
+    if (iframe) { iframe.src = ''; iframe.style.display = ''; }
+    const host = document.getElementById('bol-review-editor-host-lb'); if (host) host.style.display = 'none';
+    const picker = document.getElementById('bol-review-picker-lb'); if (picker) picker.style.display = 'none';
+    if (RR && RR.blobUrl) { URL.revokeObjectURL(RR.blobUrl); RR.blobUrl = null; }
+    RR = null;
+  }
+
+  function rrEdit() {
+    const iframe     = document.getElementById('bol-review-iframe');
+    const editorHost = document.getElementById('bol-review-editor-host-lb');
+    iframe.style.display = 'none';
+    editorHost.style.display = 'flex';
+    const picker = document.getElementById('bol-review-picker-lb');
+    if (RR.records.length > 1) {
+      picker.style.display = 'flex';
+      const sel = document.getElementById('bol-review-picker-select-lb');
+      sel.innerHTML = '';
+      RR.records.forEach((b, i) => {
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = `BOL ${i + 1} of ${RR.records.length} — ${b.ship_to_company || b.bol_number || ('BOL ' + (i + 1))}`;
+        sel.appendChild(opt);
+      });
+      sel.value = String(RR.idx);
+      const ns = sel.cloneNode(true); sel.parentNode.replaceChild(ns, sel);
+      ns.addEventListener('change', (ev) => { RR.idx = Number(ev.target.value) || 0; rrOpenEditor(); });
+    } else {
+      picker.style.display = 'none';
+    }
+    rrOpenEditor();
+  }
+
+  function rrOpenEditor() {
+    requestAnimationFrame(() => {
+      BolEditor.open(RR.records[RR.idx], document.getElementById('bol-review-editor-mount-lb'),
+        { onApply: rrEditorApply, onCancel: rrEditorCancel });
+    });
+  }
+
+  async function rrEditorApply(updatedBol) {
+    RR.records[RR.idx] = updatedBol;
+    try {
+      await rrRegenerate();
+      document.getElementById('bol-review-editor-host-lb').style.display = 'none';
+      document.getElementById('bol-review-picker-lb').style.display = 'none';
+      const iframe = document.getElementById('bol-review-iframe');
+      iframe.src = RR.blobUrl; iframe.style.display = '';
+    } catch (e) { console.error('Failed to regenerate BOL preview:', e); }
+  }
+
+  function rrEditorCancel() {
+    document.getElementById('bol-review-editor-host-lb').style.display = 'none';
+    document.getElementById('bol-review-picker-lb').style.display = 'none';
+    document.getElementById('bol-review-iframe').style.display = '';
+  }
+
+  return { open, render, reviewRecords, _h: h, _injectStyles: injectStyles };
 
 })();
