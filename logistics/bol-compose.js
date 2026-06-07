@@ -154,7 +154,6 @@ function h(tag, attrs = {}, ...children) {
     wrap.innerHTML = REVIEW_HTML;
     while (wrap.firstChild) document.body.appendChild(wrap.firstChild);
   }
-  injectReviewModal();
 
   // ── Modal state (owned by this module; was load-builder's state.bolModal) ──
   let BM   = null;
@@ -168,6 +167,7 @@ function h(tag, attrs = {}, ...children) {
   //   opts.trailerInvNumbers — array reference; INV# edits write back into it
   //   opts.buildAppendBytes(bm) — async; returns extra PDF bytes to append (packing slip / loading diagram) or null
   function open(opts) {
+    injectReviewModal();
     OPTS = opts;
     BM = {
       open: true, currentPage: 0, trailerCount: opts.trailerCount, trailerData: opts.trailerData,
@@ -636,7 +636,7 @@ function h(tag, attrs = {}, ...children) {
     if (closeBtn) {
       const newClose = closeBtn.cloneNode(true);
       closeBtn.parentNode.replaceChild(newClose, closeBtn);
-      newClose.addEventListener('click', closeBolReviewLB);
+      newClose.addEventListener('click', closeReview);
     }
   }
 
