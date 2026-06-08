@@ -1391,6 +1391,10 @@ function renderTabs() {
     const btn = h('button', { className: `btn ${active ? 'btn-dark' : 'btn-white'}`, onClick: () => { state.tab = id; render(); } }, label);
     cont.appendChild(btn);
   });
+  if (state.tab === 'load') {
+    cont.appendChild(h('button', { className: 'btn btn-white', style: { marginLeft: 'auto' }, onClick: () => openLoadModal() }, 'SAVED LOADS'));
+    cont.appendChild(h('button', { className: 'btn btn-white', style: { marginLeft: '8px' }, onClick: () => openPullJobPicker() }, 'PULL FROM JOB'));
+  }
 }
 
 function renderLoadTab() {
@@ -1400,13 +1404,6 @@ function renderLoadTab() {
   const sorted = getSortedSkus();
   const filtered = getFiltered();
 
-  // Saved loads button
-  const savedLoadsBtn = h('button', { className: 'btn btn-white', style: { marginBottom: '12px' }, onClick: () => openLoadModal() }, 'SAVED LOADS');
-  cont.appendChild(savedLoadsBtn);
-
-  // Pull from Job button
-  const pullJobBtn = h('button', { className: 'btn btn-white', style: { marginBottom: '12px', marginLeft: '8px' }, onClick: () => openPullJobPicker() }, 'PULL FROM JOB');
-  cont.appendChild(pullJobBtn);
 
   // ── Options bar: trailer type + runners (dropdowns), auto-downsize + force-sizes (toggles) ──
   const optLabel = (txt) => h('span', { className: 'lb-opt-label' }, txt);
