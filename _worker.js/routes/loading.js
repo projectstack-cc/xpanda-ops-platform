@@ -98,7 +98,9 @@ export async function handleApiLoadingAssignments(request, env) {
       let query = `
         SELECT la.*, j.customer, j.invoice_number, j.po_number, j.ship_date, j.ship_to_company,
                j.ship_to_city, j.ship_to_state, j.carrier, j.method, j.load_count,
-               lb.bay_number, lb.label as bay_label
+               lb.bay_number, lb.label as bay_label,
+               (SELECT COUNT(*) FROM loading_photos lp WHERE lp.job_id = la.job_id) AS photo_count,
+               (SELECT COUNT(*) FROM bols b WHERE b.job_id = la.job_id) AS bol_count
         FROM loading_assignments la
         JOIN jobs j ON la.job_id = j.id
         LEFT JOIN loading_bays lb ON la.bay_id = lb.id

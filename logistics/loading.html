@@ -15,8 +15,8 @@
     .ld-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
     .ld-toolbar h2 { margin: 0; font-size: 20px; font-weight: 700; color: #111827; }
     .ld-view-toggle { display: flex; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; }
-    .ld-view-btn { padding: 6px 14px; font-size: 12px; font-weight: 600; border: none; background: #fff; color: #6b7280; cursor: pointer; }
-    .ld-view-btn.active { background: #1e293b; color: #fff; }
+    .ld-view-btn { padding: 6px 14px; font-size: 12px; font-weight: 600; border: none; background: var(--surface); color: var(--muted); cursor: pointer; }
+    .ld-view-btn.active { background: var(--accent); color: var(--bg); }
     .ld-view-btn:focus { outline: none; }
     #bay-selector { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; }
     .ld-btn-pull { padding: 8px 16px; background: #1e293b; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -25,15 +25,15 @@
     .ld-section-title { font-size: 12px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px 0; }
     .ld-bays-scroll { overflow-x: auto; margin-bottom: 20px; padding-bottom: 8px; }
     .ld-bays-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
-    .ld-bay-col { width: auto; min-width: 0; background: #f9fafb; border-radius: 12px; border: 1px solid var(--line); }
+    .ld-bay-col { width: auto; min-width: 0; background: var(--surface-2); border-radius: 12px; border: 1px solid var(--line); }
     .ld-bay-header { padding: 10px; border-bottom: 1px solid var(--line); text-align: center; }
     .ld-bay-number { font-weight: 700; font-size: 14px; margin-bottom: 6px; color: #111827; }
     .ld-trailer-input { width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; text-align: center; box-sizing: border-box; }
     .ld-bay-body { padding: 8px; min-height: 150px; }
-    .ld-card { padding: 6px 8px; border-radius: 6px; margin-bottom: 6px; border: 1px solid transparent; }
+    .ld-card { padding: 6px 8px; border-radius: 6px; margin-bottom: 6px; border: 1px solid var(--line); background: var(--surface); transition: background 0.1s; }
     .ld-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; gap: 6px; }
-    .ld-card-header strong { font-size: 12px; color: #111827; }
-    .ld-card-subtext { font-size: 10px; color: #6b7280; margin-bottom: 2px; }
+    .ld-card-header strong { font-size: 12px; color: var(--text); }
+    .ld-card-subtext { font-size: 10px; color: var(--muted); margin-bottom: 2px; }
     .ld-inv-link { color: #1e40af; text-decoration: underline; cursor: pointer; }
     .ld-inv-link:hover { color: #1e3a8a; }
     .ld-status-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; }
@@ -44,14 +44,16 @@
     .ld-section-chevron { display: inline-block; min-width: 14px; font-size: 12px; color: #6b7280; transition: transform 0.15s ease; }
     .ld-btn-advance { padding: 4px 10px; border: none; background: #1e293b; color: #fff; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; }
     .ld-btn-advance:hover { background: #334155; }
-    .ld-btn-assign { padding: 4px 10px; border: 1px solid #3b82f6; background: #eff6ff; color: #1e40af; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; }
+    .ld-btn-assign { padding: 4px 10px; border: 1px solid var(--line); background: var(--accent-soft); color: var(--text); border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; }
     .ld-btn-archive { padding: 4px 10px; border: 1px solid #d1d5db; background: #fff; color: #6b7280; border-radius: 6px; font-size: 11px; cursor: pointer; }
-    .ld-btn-bol { background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
-    .ld-btn-bol:hover { background: #e0f2fe; }
+    .ld-btn-bol { background: var(--ghost-bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .ld-btn-bol:hover { background: var(--surface-2); }
     .ld-btn-yard { background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
     .ld-btn-yard:hover { background: #fde68a; }
-    .ld-btn-photos { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
-    .ld-btn-photos:hover { background: #fde68a; }
+    .ld-btn-photos { background: var(--ghost-bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .ld-btn-photos:hover { background: var(--surface-2); }
+    .ld-btn-bol:disabled, .ld-btn-photos:disabled { opacity: 0.4; cursor: default; }
+    .ld-btn-bol:disabled:hover, .ld-btn-photos:disabled:hover { background: var(--ghost-bg); }
     .ld-empty { color: #9ca3af; font-size: 12px; text-align: center; padding: 16px; }
     .ld-empty-bay { color: #9ca3af; font-size: 12px; text-align: center; padding: 16px; }
     .ld-queue { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -78,12 +80,12 @@
     .ld-btn-confirm { padding: 8px 16px; background: #1e293b; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; }
     .ld-job-results { max-height: 250px; overflow-y: auto; }
     .ld-job-result { padding: 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
-    .ld-job-result:hover { background: #f3f4f6; }
+    .ld-job-result:hover { background: var(--ghost-bg); }
     .ld-job-result.selected { background: #eff6ff; border-color: #3b82f6; }
     .ld-drop-zone { transition: background 0.15s; border-radius: 8px; padding: 4px; }
-    .ld-drop-zone.ld-drop-hover { background: #dbeafe; }
-    .ld-bay-body.ld-drop-hover { background: #dbeafe; }
-    .ld-queue.ld-drop-hover { background: #dbeafe; border-radius: 8px; outline: 2px dashed #3b82f6; outline-offset: 2px; }
+    .ld-drop-zone.ld-drop-hover { background: var(--surface-2); }
+    .ld-bay-body.ld-drop-hover { background: var(--surface-2); }
+    .ld-queue.ld-drop-hover { background: var(--surface-2); border-radius: 8px; outline: 2px dashed #3b82f6; outline-offset: 2px; }
     .ld-card[draggable="true"] { cursor: grab; user-select: none; -webkit-user-select: none; }
     .ld-card[draggable="true"]:active { cursor: grabbing; }
     @media (max-width: 768px) {
@@ -396,7 +398,7 @@ function renderOverview() {
           <div class="ld-bay-number">Bay ${bay.bay_number}</div>
         </div>
         <div class="ld-bay-body"
-          ondragover="event.preventDefault(); this.style.background='#dbeafe';"
+          ondragover="event.preventDefault(); this.style.background='var(--surface-2)';"
           ondragleave="this.style.background='';"
           ondrop="onBayDrop(event, '${bay.id}'); this.style.background='';">
           ${bayAssignments.length
@@ -491,7 +493,7 @@ function renderBayList() {
         padding:16px; margin-bottom:8px; background:var(--card-bg);
         border:1px solid var(--line); border-radius:12px;
         cursor:pointer; transition:background 0.15s;
-      " onmouseenter="this.style.background='#f9fafb'" onmouseleave="this.style.background='#fff'">
+      " onmouseenter="this.style.background='var(--surface-2)'" onmouseleave="this.style.background='var(--card-bg)'">
         <div>
           <div style="font-weight:700;font-size:18px;color:var(--text);">Bay ${bay.bay_number}</div>
           ${activeJob
@@ -503,7 +505,7 @@ function renderBayList() {
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           ${jobCount > 0
-            ? `<span style="background:#dbeafe;color:#1e40af;font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;">${jobCount} job${jobCount > 1 ? 's' : ''}</span>`
+            ? `<span style="background:var(--ghost-bg);color:var(--text);font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;">${jobCount} job${jobCount > 1 ? 's' : ''}</span>`
             : ''
           }
           <span style="color:#9ca3af;font-size:18px;">›</span>
@@ -553,7 +555,7 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
     : (a.trailer_number ? `<span>Trailer: ${esc(a.trailer_number)}</span>` : '');
 
   return `
-    <div class="ld-card" ${dragAttrs} style="border-left:4px solid ${sc.border};background:${sc.bg};" data-assignment-id="${a.id}">
+    <div class="ld-card" ${dragAttrs} style="border-left:4px solid ${sc.border};background:linear-gradient(0deg, ${sc.border}1f, ${sc.border}1f), var(--surface);" data-assignment-id="${a.id}">
       <div class="ld-card-header">
         <strong>
           ${a.invoice_number
@@ -563,7 +565,7 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
             ? `<span style="font-weight:700;color:#6366f1;margin-left:6px;font-size:11px;">Load ${a.load_number || 1} of ${a.load_count}</span>`
             : ''}
         </strong>
-        <span class="ld-status-badge" style="color:${sc.text};">${sc.label}</span>
+        <span class="ld-status-badge" style="color:${sc.border};">${sc.label}</span>
       </div>
       <div class="ld-card-subtext" title="${escAttr(a.customer || 'Unknown')}">
         ${esc(truncate(a.customer || 'Unknown', 20))}
@@ -580,9 +582,9 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
           ? `<button class="ld-btn-advance" onclick="advanceStatus('${a.id}', '${next}')">${getAdvanceLabel(next)}</button>`
           : ''}
         ${a.loading_status !== 'awaiting'
-          ? `<button class="ld-btn-bol" onclick="viewBolForJob('${a.job_id}')">View BOL</button>`
+          ? `<button class="ld-btn-bol" ${(a.bol_count > 0) ? `onclick="viewBolForJob('${a.job_id}')"` : 'disabled title="No BOL generated"'}>View BOL</button>`
           : ''}
-        <button class="ld-btn-photos" onclick="photoGallery.openLightbox({ jobId: '${a.job_id}' })">📷 Photos</button>
+        <button class="ld-btn-photos" ${(a.photo_count > 0) ? `onclick="photoGallery.openLightbox({ jobId: '${a.job_id}' })"` : 'disabled title="No photos attached"'}>📷 Photos</button>
         ${a.bay_id && ['not_started','loading','loaded'].includes(a.loading_status)
           ? `<button class="ld-btn-yard" onclick="moveToYard('${a.id}')">Move to Yard</button>`
           : ''}
