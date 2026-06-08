@@ -181,6 +181,12 @@
         <div style="height:72px;background:var(--ghost-bg);border-radius:12px;margin-bottom:8px;animation:pulse 1.5s infinite;"></div>
       </div>
     </div>
+    <div class="ld-section" data-section-key="yard-team" style="margin-top:16px;">
+      <h3 class="ld-section-title" style="display:flex; align-items:center; gap:8px;">
+        Yard
+      </h3>
+      <div id="ld-yard-team" class="ld-transit-grid"></div>
+    </div>
   </div>
 </div>
 
@@ -507,6 +513,14 @@ function renderBayList() {
   }).join('');
 
   container.innerHTML = html;
+
+  const yard = sortAssignments(allAssignments.filter(a => a.location === 'yard'));
+  const yardEl = document.getElementById('ld-yard-team');
+  if (yardEl) {
+    yardEl.innerHTML = yard.length
+      ? yard.map(a => renderAssignmentCard(a, false, false)).join('')
+      : '<div class="ld-empty">No trailers in the yard</div>';
+  }
 }
 
 function drillIntoBay(bayId) {

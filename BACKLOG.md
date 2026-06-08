@@ -24,12 +24,13 @@ Execution order is sequenced for dependencies: P91 (pickup exclusion) lands befo
 - [ ] Load builder: non-holey-board parts rotation — maximize truck load by rotating parts any way possible unless they have a bundle qty
 - [ ] Load builder: make initial calculated load view larger, include the stacks visually
 - [ ] Load builder: fix/clarify customize mode drag-and-drop (move layers between columns)
+- [ ] Load builder Load tab polish (optional, post-P131) — tune SKU grid frame height (`46vh`); cap the sticky LOAD LIST height when a load has many line items; optional "In load (N)" entry pinned atop the category rail; indicate active forced-sizes state on the collapsed Advanced toggle.
 - [ ] Calendar view for shipments board
 - [ ] BOL COORDS refinement — center commodity text + auto-size by line count, enlarge delivery-time font, enlarge & recenter scrap pick-up X marks (Prompt 66, in progress)
-- [ ] Live BOL inline edit (WYSIWYG, render-override model) — review modal "Edit" now opens an overlay editor instead of returning to the form:
-  - [ ] P67 — shared overlay engine (`bol-editor.js`) + override render mode in `bol-shared.js`, BOL generator only, ephemeral (no persistence)
-  - [ ] P68 — persistence: `render_overrides` JSON column on `bols`, worker INSERT/UPDATE wiring, `loadBolIntoForm` rehydrates overrides (needs migration)
-  - [ ] P69 — port editor to load builder with multi-record (multi-BOL) navigation
+- [x] ~~Live BOL inline edit (WYSIWYG, render-override model)~~ — review modal "Edit" opens an overlay editor instead of returning to the form:
+  - [x] ~~P67 — shared overlay engine (`bol-editor.js`) + override render mode in `bol-shared.js`~~
+  - [x] ~~P68 — persistence: `render_overrides` JSON column on `bols`, worker INSERT/UPDATE wiring, `loadBolIntoForm` rehydrates overrides~~
+  - [x] ~~P69 — editor in load builder with multi-record (multi-BOL) navigation~~ — delivered via the BOL re-unification (P123–P127); the shared `BolCompose` review surface carries the multi-record picker.
 - [ ] Explore: use Claude Chrome to navigate AppSheets apps for a "Load Dashboard" for loading team
 - [ ] Load count edit → loading card reconcile — editing `jobs.load_count` must reconcile `loading_assignments` so the loading dashboard card count matches the new value. Current state: create-time loop in `_worker.js/routes/jobs.js` builds N cards; loading GET backfill in `routes/loading.js` only *tops up* missing cards (done/loading/shipped, non-pickup) and never removes; job PUT writes the column but does no reconcile. Need: reconcile in job PUT — add up to target, and on decrease drop only surplus `awaiting`/unassigned cards (never delete a card that has a bay/trailer/photos). No migration. *(pairs with the >10 load count guard under Job Board)*
 
@@ -52,15 +53,17 @@ Loading dashboard / driver:
 
 Inline BOL (PDF) editor — extends the `bol-editor.js` overlay engine (P67–69):
 
-- [ ] Allow free **dragging** of text boxes in the inline PDF editor.
-- [ ] Change the **delivery-time** field to a **multi-line** text box.
+- [x] ~~Allow free **dragging** of text boxes in the inline PDF editor.~~ — P122. Per-field `{dx,dy}` PDF-point deltas stored under a reserved `_pos` sub-key in `render_overrides` (no migration); drag handles + double-click reset.
+- [x] ~~Change the **delivery-time** field to a **multi-line** text box.~~ — P122. Override-only; FIELD_MAP single→multiline, rendered red-bold wrapped.
 
 BOL Generator ↔ Load Builder alignment:
 
-- [ ] **Re-unify the BOL tooling.** `bol-generator.html` and the Build Load generator still aren't fully shared — features land in one and not the other (the `bol-shared.js` single-source goal is only partly realized). Align `bol-generator.html` to the **Build Load generator as the source of truth**, which also gives `bol-generator.html` **multi-trailer** functionality. *(pairs with the P67–69 editor port; resolves the long-standing partial-sharing drift)*
+- [x] ~~**Re-unify the BOL tooling.**~~ — P123–P128. Extracted the entire BOL flow (modal + state + generate + save + review) out of `load-builder.html` into a self-contained `bol-compose.js` module: P123 scaffold (own `h()` + injected modal CSS), P125 moved the modal, P126 moved generate/save/review (load builder keeps only the packing-slip/loading-diagram pipeline via a `buildAppendBytes` callback), P127 pointed `bol-generator.html` at the shared `BolCompose.reviewRecords()` review surface (deleting its duplicate review modal/handlers; overrides preserved on re-save), P128 hotfix (lazy review-modal injection — was crashing at head-eval — + fixed a dangling `closeBolReviewLB` ref). Partial-sharing drift resolved; both consumers run one engine + one review surface.
+  - [ ] **Follow-on: `bol-generator.html` multi-trailer.** The shared review surface already navigates multiple records (the picker); `bol-generator.html` still collects a single ship-to set. Small lift: collect N records → `reviewRecords([...])`.
 
 ### Done
 
+- [x] ~~Load Builder SKU picker redesign~~ — P129–P131. Master-detail (category rail + card grid) replaced the long flat list (P129); CSS hotfix — dead `.load-builder-app` scope + `.sku-grid`/`.sku-card` collision → unscoped/renamed `skp-*` (P130); then condensed the Load tab (P131): fixed-height internally-scrolling grid, sticky LOAD LIST/Calculate bar, Force Trailer Sizes behind an Advanced disclosure. Cart + auto-pack engine untouched.
 - [x] ~~Add Loading BOL / Trailer assignment app into Ops Platform~~ — Load Builder integrated natively
 - [x] ~~Link BOL Generator to Load Builder~~ — covered by Prompts 16–17
 - [x] ~~Load Builder column max fix~~ — 53ft Standard trailer height corrected from 108" to 109"
