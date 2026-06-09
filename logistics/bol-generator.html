@@ -572,6 +572,10 @@ document.getElementById('logistics-page-subtitle').textContent = 'Generate Bills
       <label>Contact Info</label>
       <textarea id="f-contact-info" rows="2" placeholder="Additional contact details…"></textarea>
     </div>
+    <div class="bol-field">
+      <label>PO Number</label>
+      <input type="text" id="f-po-number" placeholder="Customer PO #">
+    </div>
   </div>
 
   <!-- Commodity Description -->
@@ -749,6 +753,7 @@ async function prefillFromJob(jobId) {
     // Date & delivery time
     if (job.ship_date)      document.getElementById('f-date').value          = job.ship_date;
     if (job.delivery_time)  document.getElementById('f-delivery-time').value = job.delivery_time;
+    if (job.po_number)      document.getElementById('f-po-number').value     = job.po_number;
 
     // Carrier — set text (ID unknown without matching against carrier list)
     if (job.carrier) document.getElementById('carrier-search').value = job.carrier;
@@ -1124,6 +1129,7 @@ function collectPayload() {
     contact_info:          contactParts.join('\n'),
     commodity_description: document.getElementById('f-commodity').value.trim(),
     delivery_time:         document.getElementById('f-delivery-time').value.trim(),
+    po_number:             document.getElementById('f-po-number').value.trim(),
     notes:                 document.getElementById('f-notes').value.trim(),
     job_id:                prefilledJobId || null,
   };
@@ -1271,7 +1277,7 @@ async function handleClear() {
     'carrier-search',
     'f-contact-name','f-contact-phone',
     'f-special-instructions','f-contact-info','f-commodity',
-    'f-delivery-time','f-notes','customer-search',
+    'f-delivery-time','f-notes','f-po-number','customer-search',
   ];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
@@ -1324,6 +1330,7 @@ function loadBolIntoForm(b) {
   set('carrier-search',          b.carrier_name);
   set('f-special-instructions',  b.special_instructions);
   set('f-contact-info',          b.contact_info);
+  set('f-po-number',             b.po_number);
   set('f-commodity',             b.commodity_description);
   set('f-notes',                 b.notes);
   document.getElementById('f-scrap-pickup').checked = !!b.is_scrap_pickup;

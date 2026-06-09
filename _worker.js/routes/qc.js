@@ -135,7 +135,6 @@ async function mirrorScrapLogToSheet(record, env) {
   const url = env.SCRAP_MIRROR_URL;
 
   if (!url) {
-    console.log("SCRAP_MIRROR_URL not set — skipping mirror.");
     return { ok: false, skipped: true };
   }
 
@@ -158,19 +157,18 @@ async function mirrorScrapLogToSheet(record, env) {
     }
 
     if (!resp.ok) {
-      console.log("Mirror HTTP error:", resp.status, text);
+      console.error("Mirror HTTP error:", resp.status, text);
       return { ok: false, error: "http_error", detail: data };
     }
 
     if (data && data.ok === false) {
-      console.log("Mirror app error:", data);
+      console.error("Mirror app error:", data);
       return { ok: false, error: "app_error", detail: data };
     }
 
-    console.log("Mirror success:", record.id);
     return { ok: true };
   } catch (err) {
-    console.log("Mirror fetch failed:", err);
+    console.error("Mirror fetch failed:", err);
     return { ok: false, error: "fetch_error", detail: String(err) };
   }
 }
