@@ -1444,6 +1444,11 @@ function renderShipmentCalendar(direction) {
   }
   html += '</div>';
   gridEl.innerHTML = html;
+  const todayCell = gridEl.querySelector('.cal-today');
+  if (todayCell) {
+    const row = todayCell.closest('.cal-row');
+    if (row) row.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
 }
 
 function showCalDay(direction, dateStr) {
