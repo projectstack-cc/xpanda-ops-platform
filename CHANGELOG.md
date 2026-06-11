@@ -60,6 +60,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P145** — Job board UX batch: (1) Status dropdown in job detail modal — shows Not Started / In Production / Done for the three main statuses; hidden for shipped/loading/archived; PUT payload includes new status on save. (2) View BOL button on kanban cards — revealed by `fetchJobBols()` when a BOL exists; inline PDF viewer via `pdf-lib` + `bol-shared.js` added to page; also available in the job modal via async BOL check on open. (3) Calendar scroll-to-week — `renderCalendar()` scrolls the row containing today to the top of the viewport after rendering (applies to both job board and logistics calendars). (e3e5a17, d021df6)
 - **P141** — Trailer-assigned badge on job board card: `assigned_trailers` GROUP_CONCAT subquery added to `JOB_LIST_COLS`; indigo pill badge ("🚛 Trailer Assigned") renders on the kanban card whenever a non-archived loading assignment has a trailer number. (5fd71d0)
 - **P117** — Load count guard: confirm dialog when `load_count > 10`; proceed on confirm, keep editing on cancel. (33b0433)
 - **P91** — Fix delete-job: handler now deletes `shipments`, `loading_assignments`, `loading_photos` children before deleting job; Customer Pickup exclusion (method='customer pickup' skips bay-queue card auto-create while still creating the shipment).
@@ -98,6 +99,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Admin / Platform
 
+- **P146** — PWA install prompt for mobile users: new `/shared/pwa-install.js` auto-loaded by `shared-header.js`. Android shows a dismissible bottom banner with one-tap install via `beforeinstallprompt`; iOS Safari shows "Share → Add to Home Screen" instructions. Skips if already installed (standalone mode) or previously dismissed (persisted in localStorage). Mobile-only (pointer:coarse or width < 1024). (3ca97e7)
 - **P114** — Shared header page-desc typography: h1 15px/700, subtitle 11px/text-hint. (855152c)
 - **P110–P113** — Shared header restructure; dark mode contrast sweep; load builder shared design tokens; logistics table alignment. (9841b06, a9fb1fa)
 - **P85–P87** — UI frontend redesign: SVG icons, IBM Plex font, `tokens.css`, theme toggle, nav bar. (ac6e151, 496e7de, e4aeb33, 0bbd12c)
