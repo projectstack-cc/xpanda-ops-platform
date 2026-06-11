@@ -585,7 +585,7 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
           ? `<button class="ld-btn-bol" ${(a.bol_count > 0) ? `onclick="viewBolForJob('${a.job_id}')"` : 'disabled title="No BOL generated"'}>View BOL</button>`
           : ''}
         <button class="ld-btn-photos" ${(a.photo_count > 0) ? `onclick="photoGallery.openLightbox({ jobId: '${a.job_id}' })"` : 'disabled title="No photos attached"'}>📷 Photos</button>
-        ${a.bay_id && ['not_started','loading','loaded'].includes(a.loading_status)
+        ${isManager && a.bay_id && ['not_started','loading','loaded'].includes(a.loading_status)
           ? `<button class="ld-btn-yard" onclick="moveToYard('${a.id}')">Move to Yard</button>`
           : ''}
         ${showArchiveBtn ? `<button class="ld-btn-archive" onclick="archiveAssignment('${a.id}')">Archive</button>` : ''}
