@@ -21,6 +21,10 @@ if (!window.__xpandaPhotoGalleryLoaded) {
   window.__xpandaPhotoGalleryLoaded = true;
   document.write('<script src="/shared/photo-gallery.js"><\/script>');
 }
+if (!window.__xpandaPwaInstallLoaded) {
+  window.__xpandaPwaInstallLoaded = true;
+  document.write('<script src="/shared/pwa-install.js"><\/script>');
+}
 
 /* UI density mode (office | floor) — Prompt 86.
    One responsive codebase; floor mode bumps touch targets + type via CSS keyed on
