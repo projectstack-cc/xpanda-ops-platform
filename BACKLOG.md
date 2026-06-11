@@ -47,9 +47,6 @@
 
 ## Job Board
 
-- [ ] **Status dropdown in job detail modal** — when clicking a job card to open its detail view, add a status dropdown (Not Started / In Production / Done) so users who live in the calendar view can move jobs without drag-and-drop. The PUT endpoint already supports `status` changes — this is a pure frontend addition to the existing modal.
-- [ ] **View BOL button on job cards** — once a BOL has been generated for a job, show a "View BOL" button on the kanban card. If there's no room on the card face, the button should appear inside the detail popup when clicking the card. The `bol_count` can be fetched via the existing `/api/loading-assignments` `bol_count` field, or a lightweight join added to `JOB_LIST_COLS`.
-- [ ] **Calendar always opens to current week** — on both the job board and the logistics board, the calendar view should default to the week containing today rather than whatever week was last selected or the month view's default. *(applies to both `jobs/index.html` and the logistics calendar toggle)*
 - [ ] **Mobile drag-and-drop scroll conflict** — on mobile, dragging a kanban card also triggers page scroll, making drag-and-drop unusable. Investigate `touch-action: none` on the drag handle / card element, or switch to a pointer-events approach that suppresses scroll during an active drag gesture.
 - [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy — blocked on Quickbase input formatting improvements)
 - [ ] Create packet feature with Bill of Materials (BOM)
