@@ -203,6 +203,9 @@ export async function handleApiLoadingAssignments(request, env) {
     const binds = [];
 
     if (payload.location !== undefined) {
+      if (payload.location === 'yard' && !isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
+        return json({ ok: false, error: 'Manager access required to move a trailer to the yard.' }, 403);
+      }
       updates.push('location = ?');
       binds.push(payload.location === 'yard' ? 'yard' : 'bay');
     }
@@ -306,6 +309,31 @@ export async function handleApiLoadingAssignments(request, env) {
           { job_id: existing.job_id },
           request.headers.get('X-User-Id'));
       }
+
+      // Back-write the assigned trailer onto the job's BOL (only when the trailer changed and the
+      // job has exactly one BOL — multi-BOL jobs are skipped; that's the multi-trailer item).
+      // Note: a manual trailer override in the BOL editor (render_overrides.trailerNo) will shadow
+      // this field at render time; that is acceptable and rare.
+      if (payload.trailer_number !== undefined &&
+          String(payload.trailer_number) !== String(existing.trailer_number || '')) {
+        try {
+          const bolCount = await db.prepare(
+            "SELECT COUNT(*) AS cnt FROM bols WHERE job_id = ?"
+          ).bind(existing.job_id).first();
+          if (Number(bolCount?.cnt || 0) === 1) {
+            await db.prepare(
+              "UPDATE bols SET trailer_no = ? WHERE job_id = ?"
+            ).bind(String(payload.trailer_number), existing.job_id).run();
+            await logActivity(db, 'update', 'bol', existing.job_id,
+              `Trailer # propagated to BOL: ${String(payload.trailer_number)}`,
+              { job_id: existing.job_id },
+              request.headers.get('X-User-Id'));
+          }
+        } catch (e) {
+          console.error('Trailer→BOL back-write failed:', String(e?.message || e));
+        }
+      }
+
       return json({ ok: true });
     } catch (e) {
       return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
