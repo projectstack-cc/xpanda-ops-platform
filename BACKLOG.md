@@ -21,25 +21,36 @@
 - [ ] Load builder Load tab polish (optional, post-P131) — tune SKU grid frame height (`46vh`); cap the sticky LOAD LIST height when a load has many line items; optional "In load (N)" entry pinned atop the category rail; indicate active forced-sizes state on the collapsed Advanced toggle.
 - [ ] BOL COORDS refinement — remaining: enlarge & recenter scrap pick-up X marks *(commodity centering + delivery-time enlargement already shipped as P66–P67)*
 - [ ] Explore: use Claude Chrome to navigate AppSheets apps for a "Load Dashboard" for loading team
-- [ ] Load count edit → loading card reconcile — editing `jobs.load_count` must reconcile `loading_assignments` so the loading dashboard card count matches the new value. Current state: create-time loop in `_worker.js/routes/jobs.js` builds N cards; loading GET backfill in `routes/loading.js` only *tops up* missing cards and never removes; job PUT writes the column but does no reconcile. Need: reconcile in job PUT — add up to target, and on decrease drop only surplus `awaiting`/unassigned cards (never delete a card that has a bay/trailer/photos). No migration. *(pairs with the >10 load count guard shipped as P117)*
 
 ### New Batch — Loading Dashboard + Driver + BOL Alignment
 
 - [ ] On **Mark In Transit**, clear the trailer input field on the loading dashboard.
 - [ ] **Human-error fallback:** if a driver scans the QR to begin transit while the trailer was **not** marked loaded, force the trailer card into **In Transit**.
-- [ ] Trailer-assigned indicator on the **job board card** — when a trailer is assigned (loading dashboard trigger), write a "Trailer Assigned" text/badge onto the job's kanban card. *(cross: loading dashboard → job board)*
-- [ ] Permission for the **"Move to Yard"** button. *(extends P93)*
 - [ ] DocuSign on the driver pages.
-- [ ] When a trailer number is assigned on the loading dashboard, propagate it onto the generated BOL. *(flag: may not be feasible — investigate)*
+
+### BOL Issues
+
+- [ ] **BOL download broken in Load Builder** — BOL generated from the load builder doesn't trigger a download; user has to Print → Save as PDF instead. Investigate whether the `BolCompose` save path is missing the download trigger that `bol-generator.html` uses. *(regression introduced somewhere in P123–P128 unification)*
+- [ ] **"Generate BOL" → "View BOL" on logistics dashboard** — once a BOL has been generated for a job, the "Generate BOL" button on the logistics row/card should change to "View BOL" (mirrors the loading-dashboard card behavior). The `bol_count` column is already returned by the loading-assignments query — same pattern can be applied to the logistics dashboard query.
+- [ ] **BOL print rendering bug** — when printing the BOL directly (without downloading), the "N" from "Bill of Lading No" and the "S" in "Customer Signature" are clipped/hidden. Likely a CSS `overflow: hidden` or `white-space` clip on the containing element interacting with the browser's print renderer. Needs print-preview investigation.
+- [ ] **Remove dimensions from BOL commodity block** — dimensions are already embedded in most line-item descriptions, so including them separately duplicates content. Add a toggle or remove the dimension column from the BOL commodity section entirely. *(coordinating change in `bol-shared.js` `drawCommodity` / commodity tier logic)*
 
 ### BOL Generator Follow-on
 
 - [ ] **`bol-generator.html` multi-trailer.** The shared review surface already navigates multiple records (the picker); `bol-generator.html` still collects a single ship-to set. Small lift: collect N records → `reviewRecords([...])`. *(follow-on to P123–P128)*
 
+### Logistics Calendar View
+
+- [ ] **Build Load + Generate BOL in logistics calendar popup** — users who prefer the calendar view on the logistics dashboard can't access "Build Load" or "Generate BOL" actions from the shipment popup card. Add those buttons to the popup, matching what's available in the list row. *(same permission gating as list view; `bol_count` drives "Generate BOL" vs "View BOL" once that item above ships)*
+
 ---
 
 ## Job Board
 
+- [ ] **Status dropdown in job detail modal** — when clicking a job card to open its detail view, add a status dropdown (Not Started / In Production / Done) so users who live in the calendar view can move jobs without drag-and-drop. The PUT endpoint already supports `status` changes — this is a pure frontend addition to the existing modal.
+- [ ] **View BOL button on job cards** — once a BOL has been generated for a job, show a "View BOL" button on the kanban card. If there's no room on the card face, the button should appear inside the detail popup when clicking the card. The `bol_count` can be fetched via the existing `/api/loading-assignments` `bol_count` field, or a lightweight join added to `JOB_LIST_COLS`.
+- [ ] **Calendar always opens to current week** — on both the job board and the logistics board, the calendar view should default to the week containing today rather than whatever week was last selected or the month view's default. *(applies to both `jobs/index.html` and the logistics calendar toggle)*
+- [ ] **Mobile drag-and-drop scroll conflict** — on mobile, dragging a kanban card also triggers page scroll, making drag-and-drop unusable. Investigate `touch-action: none` on the drag handle / card element, or switch to a pointer-events approach that suppresses scroll during an active drag gesture.
 - [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy — blocked on Quickbase input formatting improvements)
 - [ ] Create packet feature with Bill of Materials (BOM)
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
