@@ -46,6 +46,7 @@
 .jobs-slip-badge-file { font-size: 12px; color: #3b82f6; }
 .jobs-slip-badge-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; margin-top: 2px; }
 .jobs-card-trailer { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 9999px; background: rgba(99,102,241,.12); color: #4338ca; }
+.jobs-bol-view-btn { display: block; width: 100%; margin-top: 4px; padding: 3px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid #6366f1; background: rgba(99,102,241,.08); color: #4338ca; cursor: pointer; text-align: center; }
 .jobs-slip-remove { font-size: 12px; color: #ef4444; cursor: pointer; background: none; border: none; padding: 0; text-decoration: underline; font-family: inherit; }
 .jobs-slip-view { font-size: 12px; color: #1e40af; cursor: pointer; background: none; border: 1px solid #93c5fd; border-radius: 5px; padding: 3px 8px; font-family: inherit; font-weight: 600; }
 .jobs-card-slip { font-size: 11px; cursor: pointer; opacity: 0.7; margin-left: 3px; vertical-align: middle; }
@@ -191,6 +192,19 @@
     </div>
 
     <div class="jobs-modal-body">
+
+      <!-- Status + View BOL (edit mode only) -->
+      <div id="status-section" hidden style="margin-bottom:16px;display:flex;align-items:flex-end;gap:12px;">
+        <div class="jobs-field" style="flex:1;margin-bottom:0;">
+          <label for="f-status">Job Status</label>
+          <select id="f-status">
+            <option value="not_started">Not Started</option>
+            <option value="in_production">In Production</option>
+            <option value="done">Done</option>
+          </select>
+        </div>
+        <button id="modal-view-bol" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;">View BOL</button>
+      </div>
 
       <!-- Packing slip drop zone -->
       <div id="slip-dropzone" style="border:2px dashed #d1d5db;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;transition:all 0.2s;cursor:pointer;" onclick="document.getElementById('packing-slip-upload').click()">
@@ -494,6 +508,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    const bolModal = document.getElementById('jobs-bol-view-modal');
+    if (bolModal && !bolModal.hidden) { closeBolViewModal(); return; }
     if (!document.getElementById('parts-picker').hidden) {
       document.getElementById('parts-picker').hidden = true;
     } else if (!document.getElementById('combo-picker').hidden) {
@@ -587,6 +603,8 @@ async function fetchJobBols(jobIds) {
   for (const b of (r.data.bols || [])) {
     const el = document.getElementById('bol-num-' + b.job_id);
     if (el) el.textContent = (el.dataset.hasInv ? ' | BOL #' : 'BOL #') + b.bol_number;
+    const bolBtn = document.getElementById('bol-view-btn-' + b.job_id);
+    if (bolBtn) bolBtn.hidden = false;
   }
 }
 
@@ -690,6 +708,11 @@ function renderCalendar(jobs) {
   }
   html += '</div>';
   grid.innerHTML = html;
+  const todayCell = grid.querySelector('.cal-today');
+  if (todayCell) {
+    const row = todayCell.closest('.cal-row');
+    if (row) row.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
 }
 
 function openJobFromCalendar(jobId) {
@@ -761,6 +784,7 @@ function buildCard(job) {
     </div>
     ${procHtml}
     ${trailerBadge}
+    <button id="bol-view-btn-${esc(job.id)}" class="jobs-bol-view-btn" hidden onclick="event.stopPropagation();viewBolForJob('${esc(job.id)}')">View BOL</button>
     ${job.status === 'shipped' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
     ${job.status === 'archived' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to shipped">Unarchive</button>` : ''}
     <div class="jobs-card-actions">
@@ -1062,6 +1086,7 @@ function setupModal() {
   document.getElementById('modal-cancel').addEventListener('click', closeModal);
   document.getElementById('modal-save').addEventListener('click', saveJob);
   document.getElementById('modal-delete').addEventListener('click', confirmDelete);
+  document.getElementById('modal-view-bol').addEventListener('click', () => viewBolForJob(editingJobId));
 
   document.getElementById('f-ship-date').addEventListener('change', (e) => {
     document.getElementById('f-ship-day-display').textContent = getShipDay(e.target.value);
@@ -1119,6 +1144,19 @@ function openModal(jobId) {
   if (!isNew) {
     const job = allJobs.find(j => j.id === jobId);
     if (job) populateForm(job);
+  }
+
+  const curJob = isNew ? null : allJobs.find(j => j.id === jobId);
+  const editableStatus = curJob && ['not_started','in_production','done'].includes(curJob.status);
+  document.getElementById('status-section').hidden = !editableStatus;
+  document.getElementById('modal-view-bol').hidden = true;
+  if (!isNew) {
+    api.get('/api/bols?job_id=' + jobId).then(r => {
+      if (r.ok && r.data?.bols?.length > 0) {
+        const btn = document.getElementById('modal-view-bol');
+        if (btn) btn.hidden = false;
+      }
+    }).catch(() => {});
   }
 
   document.getElementById('jobs-modal').hidden = false;
@@ -1428,6 +1466,7 @@ function populateForm(job) {
   set('f-load-count',     job.load_count ?? 1);
   set('f-total-bdft',     job.total_bdft  ?? 0);
   set('f-scrap-pickup',   job.scrap_pickup);
+  set('f-status',         job.status || 'not_started');
   set('f-contact-name',   job.contact_name);
   set('f-contact-phone',  job.contact_phone);
   set('f-packing',        job.packing_instructions);
@@ -1604,7 +1643,12 @@ async function saveJob() {
   setModalStatus('');
 
   try {
-    if (editingJobId) payload.id = editingJobId;
+    if (editingJobId) {
+      payload.id = editingJobId;
+      if (!document.getElementById('status-section').hidden) {
+        payload.status = document.getElementById('f-status').value;
+      }
+    }
 
     const r = editingJobId
       ? await api.put('/api/jobs', payload)
@@ -1825,6 +1869,48 @@ function getUser() {
   });
 }
 
+/* ═══════════════════════════════════════════
+   BOL Viewer (job board)
+═══════════════════════════════════════════ */
+
+let _jobBolBlobUrl = null;
+let _jobBolFilename = 'BOL.pdf';
+
+async function viewBolForJob(jobId) {
+  if (!jobId) return;
+  try {
+    const { ok, data } = await api.get('/api/bols?job_id=' + encodeURIComponent(jobId));
+    if (!ok || !data?.bols?.length) { alert('No BOL found for this job.'); return; }
+    const bol = data.bols[data.bols.length - 1];
+    if (!window.BolShared) { alert('BOL viewer not ready — try again in a moment.'); return; }
+    const result = await BolShared.generatePdf([bol], { previewOnly: true });
+    if (_jobBolBlobUrl) { try { URL.revokeObjectURL(_jobBolBlobUrl); } catch {} }
+    _jobBolBlobUrl = result.blobUrl;
+    _jobBolFilename = `BOL_${bol.bol_number || bol.id}.pdf`;
+    document.getElementById('jobs-bol-view-iframe').src = _jobBolBlobUrl;
+    document.getElementById('jobs-bol-view-modal').hidden = false;
+  } catch (e) {
+    console.error('viewBolForJob failed:', e);
+    alert('Failed to load BOL. Please try again.');
+  }
+}
+
+function closeBolViewModal() {
+  document.getElementById('jobs-bol-view-modal').hidden = true;
+  document.getElementById('jobs-bol-view-iframe').src = '';
+  if (_jobBolBlobUrl) { try { URL.revokeObjectURL(_jobBolBlobUrl); } catch {} _jobBolBlobUrl = null; }
+}
+
+function downloadBolFromViewer() {
+  if (!_jobBolBlobUrl) return;
+  const a = document.createElement('a');
+  a.href = _jobBolBlobUrl;
+  a.download = _jobBolFilename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 async function gateJobsWrite() {
   try {
     const user = await getUser();
@@ -1839,6 +1925,23 @@ async function gateJobsWrite() {
 }
 gateJobsWrite();
 </script>
+
+<!-- BOL viewer modal (job board) -->
+<div id="jobs-bol-view-modal" class="jobs-modal-overlay" hidden onclick="if(event.target===this)closeBolViewModal()" style="z-index:1100;">
+  <div style="background:var(--card-bg);border-radius:12px;max-width:95vw;width:95vw;max-height:95vh;height:95vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:10px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <h3 style="margin:0;font-size:16px;font-weight:700;">Bill of Lading</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="downloadBolFromViewer()" class="btn ghost small">Download</button>
+        <button onclick="closeBolViewModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#6b7280;padding:0;line-height:1;">×</button>
+      </div>
+    </div>
+    <iframe id="jobs-bol-view-iframe" style="flex:1;width:100%;border:none;background:#525659;"></iframe>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="/logistics/bol-shared.js"></script>
 
 </body>
 </html>
