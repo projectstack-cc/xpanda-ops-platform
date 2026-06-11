@@ -10,6 +10,9 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P144** — Trailer→BOL back-write: when a trailer number is set/changed on a loading assignment, `bols.trailer_no` is updated automatically so it renders on next BOL view/download. Scoped to single-BOL jobs only; multi-BOL jobs silently skipped (multi-trailer matching is a separate backlog item). (4d684be)
+- **P143** — Load count reconcile on job PUT: increasing `load_count` inserts new `awaiting` loading-assignment cards; decreasing drops only surplus safe cards (unbayed + untrailered + awaiting + no photos). Customer-pickup jobs bypass. Resolves the loading-dashboard card drift. (5fd71d0)
+- **P142** — Gate "Move to Yard" behind `logistics.loading.manage`: button hidden for non-managers on the loading dashboard; server-side 403 guard on `location=yard` PUT. No new permission key — reuses `logistics.loading.manage`. (4d684be)
 - **P138** — Durable PO-number fix on BOL save: `po_number` column + migration, worker INSERT/UPDATE, bol-generator field wired end-to-end. (34621c8)
 - **P136** — Restore `saveLoad`/`openLoadModal` in Load Builder; un-sticky LOAD LIST header; preserve SKU grid scroll position on category-rail switch. (07cd40b)
 - **P135** — Move Saved Loads and Pull From Job into the tab nav row; remove the now-empty options bar. (55ebe05)
@@ -57,6 +60,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P141** — Trailer-assigned badge on job board card: `assigned_trailers` GROUP_CONCAT subquery added to `JOB_LIST_COLS`; indigo pill badge ("🚛 Trailer Assigned") renders on the kanban card whenever a non-archived loading assignment has a trailer number. (5fd71d0)
 - **P117** — Load count guard: confirm dialog when `load_count > 10`; proceed on confirm, keep editing on cancel. (33b0433)
 - **P91** — Fix delete-job: handler now deletes `shipments`, `loading_assignments`, `loading_photos` children before deleting job; Customer Pickup exclusion (method='customer pickup' skips bay-queue card auto-create while still creating the shipment).
 - **P40** — Job board simplification: 3-column layout; legacy loading/shipped jobs in Done column. (df8470e)
