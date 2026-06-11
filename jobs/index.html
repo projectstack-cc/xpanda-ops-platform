@@ -45,6 +45,7 @@
 .jobs-slip-badge-title { font-weight: 700; margin-bottom: 2px; }
 .jobs-slip-badge-file { font-size: 12px; color: #3b82f6; }
 .jobs-slip-badge-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; margin-top: 2px; }
+.jobs-card-trailer { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 9999px; background: rgba(99,102,241,.12); color: #4338ca; }
 .jobs-slip-remove { font-size: 12px; color: #ef4444; cursor: pointer; background: none; border: none; padding: 0; text-decoration: underline; font-family: inherit; }
 .jobs-slip-view { font-size: 12px; color: #1e40af; cursor: pointer; background: none; border: 1px solid #93c5fd; border-radius: 5px; padding: 3px 8px; font-family: inherit; font-weight: 600; }
 .jobs-card-slip { font-size: 11px; cursor: pointer; opacity: 0.7; margin-left: 3px; vertical-align: middle; }
@@ -741,6 +742,9 @@ function buildCard(job) {
   const shipmentIcon = job.has_shipment
     ? ` <span class="jobs-card-shipment" title="Outbound shipment record exists">🚚</span>`
     : '';
+  const trailerBadge = job.assigned_trailers
+    ? `<div class="jobs-card-trailer" title="Trailer ${esc(job.assigned_trailers)} assigned on the loading dashboard">🚛 Trailer Assigned</div>`
+    : '';
 
   card.innerHTML = `
     <div class="jobs-card-top">
@@ -756,6 +760,7 @@ function buildCard(job) {
       <span>${bdft} BDFT</span>
     </div>
     ${procHtml}
+    ${trailerBadge}
     ${job.status === 'shipped' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
     ${job.status === 'archived' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to shipped">Unarchive</button>` : ''}
     <div class="jobs-card-actions">

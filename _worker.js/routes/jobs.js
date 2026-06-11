@@ -17,7 +17,12 @@ export async function handleApiJobs(request, env) {
     j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
     j.priority, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
     j.packing_slip_filename, j.packing_slip_invoice, j.source,
-    CASE WHEN EXISTS (SELECT 1 FROM shipments s WHERE s.job_id = j.id AND s.direction = 'outbound') THEN 1 ELSE 0 END AS has_shipment
+    CASE WHEN EXISTS (SELECT 1 FROM shipments s WHERE s.job_id = j.id AND s.direction = 'outbound') THEN 1 ELSE 0 END AS has_shipment,
+    (SELECT GROUP_CONCAT(la.trailer_number, ', ')
+       FROM loading_assignments la
+      WHERE la.job_id = j.id
+        AND COALESCE(la.trailer_number, '') != ''
+        AND la.loading_status != 'archived') AS assigned_trailers
   `;
 
   // ── GET /api/jobs/:id/packing-slip ───────────────────────────────────────
@@ -436,6 +441,49 @@ export async function handleApiJobs(request, env) {
             String(li.dimensions  || "").trim(),
             i,
           ).run();
+        }
+      }
+
+      // Reconcile loading_assignments to the new load_count (only when load_count changed).
+      if ("load_count" in payload) {
+        try {
+          const reconRow = await db.prepare("SELECT load_count, method FROM jobs WHERE id = ?").bind(id).first();
+          const isPickup = (reconRow?.method || '').toLowerCase() === 'customer pickup';
+          if (reconRow && !isPickup) {
+            const target  = Math.max(Number(reconRow.load_count) || 1, 1);
+            const curRow  = await db.prepare(
+              "SELECT COUNT(*) AS cnt FROM loading_assignments WHERE job_id = ? AND loading_status != 'archived'"
+            ).bind(id).first();
+            const current = Number(curRow?.cnt || 0);
+
+            if (target > current) {
+              const nowR = new Date().toISOString();
+              for (let n = current + 1; n <= target; n++) {
+                await db.prepare(`
+                  INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, load_number, created_at, updated_at)
+                  VALUES (?, ?, NULL, '', 'awaiting', NULL, '', ?, ?, ?)
+                `).bind(crypto.randomUUID(), id, n, nowR, nowR).run();
+              }
+            } else if (target < current) {
+              // Drop only surplus, safe cards: unbayed, untrailered, awaiting, no photos.
+              const surplus = current - target;
+              const safe = await db.prepare(`
+                SELECT la.id FROM loading_assignments la
+                 WHERE la.job_id = ?
+                   AND la.loading_status = 'awaiting'
+                   AND la.bay_id IS NULL
+                   AND COALESCE(la.trailer_number, '') = ''
+                   AND NOT EXISTS (SELECT 1 FROM loading_photos lp WHERE lp.assignment_id = la.id)
+                 ORDER BY la.load_number DESC, la.created_at DESC
+                 LIMIT ?
+              `).bind(id, surplus).all();
+              for (const r of (safe?.results || [])) {
+                await db.prepare("DELETE FROM loading_assignments WHERE id = ?").bind(r.id).run();
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Load count reconcile failed:', String(e?.message || e));
         }
       }
 
