@@ -742,7 +742,7 @@ function buildCard(job) {
   card.className    = 'jobs-card';
   card.dataset.id   = job.id;
   card.dataset.status = job.status;
-  card.draggable    = job.status !== 'archived';
+  card.draggable    = job.status !== 'archived' && !window.matchMedia('(pointer: coarse)').matches;
 
   const dateStr  = formatShipDate(job.ship_date);
   const bdft     = job.total_bdft ? Number(job.total_bdft).toLocaleString() : '—';
