@@ -41,12 +41,10 @@
 
 ## Job Board
 
-- [ ] **Mobile drag-and-drop scroll conflict** — on mobile, dragging a kanban card also triggers page scroll, making drag-and-drop unusable. Investigate `touch-action: none` on the drag handle / card element, or switch to a pointer-events approach that suppresses scroll during an active drag gesture.
 - [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy — blocked on Quickbase input formatting improvements)
 - [ ] Create packet feature with Bill of Materials (BOM)
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
 - [ ] Label printing — DiversiTech and UL labels
-- [ ] No duplicate INV# when creating a job — validate `invoice_number` uniqueness at job creation (reject/flag dupes). *(also a guard for QB auto-intake, where created/updated webhooks can fire repeatedly for the same invoice — dedupe on invoice number)*
 
 ---
 
