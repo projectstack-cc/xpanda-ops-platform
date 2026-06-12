@@ -79,6 +79,49 @@ export async function handleApiPublicBolPickup(request, env) {
   return json({ ok: true, stage: 'in_transit' });
 }
 
+export async function handleApiPublicBolDocument(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'POST required' }, 405);
+  const url = new URL(request.url);
+  const token = url.pathname.replace('/api/public/bol-document/', '').replace(/\/$/, '');
+  if (!token || token.length < 8) return json({ ok: false, error: 'Invalid token' }, 400);
+
+  let payload;
+  try { payload = await request.json(); }
+  catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+
+  const docType = String(payload.doc_type || '');
+  if (!['driver_signed', 'customer_signed'].includes(docType)) {
+    return json({ ok: false, error: 'doc_type must be driver_signed|customer_signed' }, 400);
+  }
+  const pdfBase64 = String(payload.pdf_base64 || '');
+  if (!pdfBase64 || pdfBase64.length < 100) {
+    return json({ ok: false, error: 'pdf_base64 is required' }, 400);
+  }
+  if (pdfBase64.length > 8 * 1024 * 1024) {
+    return json({ ok: false, error: 'Document too large.' }, 413);
+  }
+
+  const db = env.DB;
+  const bol = await db.prepare("SELECT id FROM bols WHERE access_token = ?").bind(token).first();
+  if (!bol) return json({ ok: false, error: 'expired_or_invalid' }, 404);
+
+  const pdfBytes = Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0));
+  const r2Key = `signed-bols/${bol.id}/${docType}-${Date.now()}.pdf`;
+  try {
+    await env.BOL_PHOTOS.put(r2Key, pdfBytes, { httpMetadata: { contentType: 'application/pdf' } });
+  } catch (e) {
+    return json({ ok: false, error: 'upload_failed', detail: String(e?.message || e) }, 500);
+  }
+
+  const docId  = crypto.randomUUID();
+  const nowIso = new Date().toISOString();
+  await db.prepare(
+    "INSERT INTO bol_documents (id, bol_id, doc_type, r2_key, created_at) VALUES (?, ?, ?, ?, ?)"
+  ).bind(docId, bol.id, docType, r2Key, nowIso).run();
+
+  return json({ ok: true, data: { id: docId, doc_type: docType } });
+}
+
 export async function handleApiPublicBolDelivery(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'POST required' }, 405);
   const url = new URL(request.url);
