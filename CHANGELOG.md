@@ -10,6 +10,9 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P149** — BOL download on approve (Load Builder): the `showReview()` approve handler in `bol-compose.js` now triggers a real file download (`<a download>`) instead of opening the PDF in a new tab; blob URL revoked after 30 s. The `bol-generator.html` standalone path (`reviewRecords`/`rrApprove`) is unchanged. (298e71c)
+- **P148** — Build Load + BOL actions in the logistics edit modal: `#modal-actions` bar added at the top of the shipment modal body; populated by `buildActionButtons(s)` when a shipment is opened from calendar or list view; cleared in `clearForm()` for new-shipment modal. Requires P147 for accurate "View BOL" label. (451f934)
+- **P147** — "Generate BOL" → "View BOL" on logistics dashboard: correlated `bol_count` subquery added to the shipments GET query; `buildActionButtons()` reads "View BOL" when `bol_count > 0`, otherwise "Generate BOL". (451f934)
 - **P144** — Trailer→BOL back-write: when a trailer number is set/changed on a loading assignment, `bols.trailer_no` is updated automatically so it renders on next BOL view/download. Scoped to single-BOL jobs only; multi-BOL jobs silently skipped (multi-trailer matching is a separate backlog item). (4d684be)
 - **P143** — Load count reconcile on job PUT: increasing `load_count` inserts new `awaiting` loading-assignment cards; decreasing drops only surplus safe cards (unbayed + untrailered + awaiting + no photos). Customer-pickup jobs bypass. Resolves the loading-dashboard card drift. (5fd71d0)
 - **P142** — Gate "Move to Yard" behind `logistics.loading.manage`: button hidden for non-managers on the loading dashboard; server-side 403 guard on `location=yard` PUT. No new permission key — reuses `logistics.loading.manage`. (4d684be)

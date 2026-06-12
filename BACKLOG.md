@@ -30,18 +30,12 @@
 
 ### BOL Issues
 
-- [ ] **BOL download broken in Load Builder** — BOL generated from the load builder doesn't trigger a download; user has to Print → Save as PDF instead. Investigate whether the `BolCompose` save path is missing the download trigger that `bol-generator.html` uses. *(regression introduced somewhere in P123–P128 unification)*
-- [ ] **"Generate BOL" → "View BOL" on logistics dashboard** — once a BOL has been generated for a job, the "Generate BOL" button on the logistics row/card should change to "View BOL" (mirrors the loading-dashboard card behavior). The `bol_count` column is already returned by the loading-assignments query — same pattern can be applied to the logistics dashboard query.
 - [ ] **BOL print rendering bug** — when printing the BOL directly (without downloading), the "N" from "Bill of Lading No" and the "S" in "Customer Signature" are clipped/hidden. Likely a CSS `overflow: hidden` or `white-space` clip on the containing element interacting with the browser's print renderer. Needs print-preview investigation.
 - [ ] **Remove dimensions from BOL commodity block** — dimensions are already embedded in most line-item descriptions, so including them separately duplicates content. Add a toggle or remove the dimension column from the BOL commodity section entirely. *(coordinating change in `bol-shared.js` `drawCommodity` / commodity tier logic)*
 
 ### BOL Generator Follow-on
 
 - [ ] **`bol-generator.html` multi-trailer.** The shared review surface already navigates multiple records (the picker); `bol-generator.html` still collects a single ship-to set. Small lift: collect N records → `reviewRecords([...])`. *(follow-on to P123–P128)*
-
-### Logistics Calendar View
-
-- [ ] **Build Load + Generate BOL in logistics calendar popup** — users who prefer the calendar view on the logistics dashboard can't access "Build Load" or "Generate BOL" actions from the shipment popup card. Add those buttons to the popup, matching what's available in the list row. *(same permission gating as list view; `bol_count` drives "Generate BOL" vs "View BOL" once that item above ships)*
 
 ---
 
