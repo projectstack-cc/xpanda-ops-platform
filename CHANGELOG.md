@@ -10,6 +10,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P152** — BOL Signatures #1 — `bol_documents` foundation: new `bol_documents` table (migration `add-bol-documents.sql`); public token-scoped `POST /api/public/bol-document/:token` stores a signed PDF in R2 under `signed-bols/<bolId>/`; authed `GET /api/bols/documents/:docId` serves it; authed `GET /api/bols/:id/documents` lists stored copies. Does not touch the existing delivery-photo (`signed_bol_photo_key`) flow. **Run migration before deploying worker.** (997842c)
 - **P149** — BOL download on approve (Load Builder): the `showReview()` approve handler in `bol-compose.js` now triggers a real file download (`<a download>`) instead of opening the PDF in a new tab; blob URL revoked after 30 s. The `bol-generator.html` standalone path (`reviewRecords`/`rrApprove`) is unchanged. (298e71c)
 - **P148** — Build Load + BOL actions in the logistics edit modal: `#modal-actions` bar added at the top of the shipment modal body; populated by `buildActionButtons(s)` when a shipment is opened from calendar or list view; cleared in `clearForm()` for new-shipment modal. Requires P147 for accurate "View BOL" label. (451f934)
 - **P147** — "Generate BOL" → "View BOL" on logistics dashboard: correlated `bol_count` subquery added to the shipments GET query; `buildActionButtons()` reads "View BOL" when `bol_count > 0`, otherwise "Generate BOL". (451f934)
