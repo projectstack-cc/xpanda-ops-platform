@@ -621,7 +621,14 @@ function h(tag, attrs = {}, ...children) {
           } catch (e) { console.error('Failed to save overrides for BOL', bol.id, e); }
         }
       }
-      BolShared.openPdf(lbPendingBlobUrl);
+      // Trigger an actual download of the approved BOL (the review modal already showed the preview).
+      const dlUrl  = lbPendingBlobUrl;
+      const dlName = (lbReviewBols.length === 1 && lbReviewBols[0] && lbReviewBols[0].bol_number)
+        ? `BOL-${lbReviewBols[0].bol_number}.pdf` : 'BOL.pdf';
+      const dlA = document.createElement('a');
+      dlA.href = dlUrl; dlA.download = dlName;
+      document.body.appendChild(dlA); dlA.click(); dlA.remove();
+      setTimeout(() => { try { URL.revokeObjectURL(dlUrl); } catch (e) {} }, 30000);
       lbPendingBlobUrl = null;
       const bols = [...lbReviewBols];
       closeReview();
