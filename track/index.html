@@ -136,6 +136,7 @@
   let photoDataUrl = null;
   let photoBase64 = null;
   let driverSigPad = null;
+  let customerSigPad = null;
 
   // Signature stamp placement (pdf-lib origin = bottom-left; US Letter 612×792).
   // ⚠ Best-guess coords — TUNE against the real driver/customer templates after first render.
@@ -235,6 +236,12 @@
         <button type="button" class="sig-clear" id="driver-sig-clear">Clear</button>
       </div>
 
+      <label class="field">Customer signature</label>
+      <div class="sig-wrap">
+        <canvas id="customer-sig" class="sig-pad" width="600" height="180"></canvas>
+        <button type="button" class="sig-clear" id="customer-sig-clear">Clear</button>
+      </div>
+
       <button class="btn btn-success" id="submit-btn" disabled>Submit Delivery</button>
     `;
 
@@ -264,6 +271,8 @@
     document.getElementById('photo-input').addEventListener('change', handlePhotoSelect);
     driverSigPad = initSignaturePad(document.getElementById('driver-sig'), updateSubmitState);
     document.getElementById('driver-sig-clear').addEventListener('click', () => { driverSigPad.clear(); updateSubmitState(); });
+    customerSigPad = initSignaturePad(document.getElementById('customer-sig'), updateSubmitState);
+    document.getElementById('customer-sig-clear').addEventListener('click', () => { customerSigPad.clear(); updateSubmitState(); });
     document.getElementById('submit-btn').addEventListener('click', submitDelivery);
   }
 
@@ -275,7 +284,7 @@
   function updateSubmitState() {
     const accepted = getSelectedValue('accepted-group');
     const btn = document.getElementById('submit-btn');
-    if (btn) btn.disabled = !(accepted && photoBase64 && driverSigPad && !driverSigPad.isEmpty());
+    if (btn) btn.disabled = !(accepted && photoBase64 && driverSigPad && !driverSigPad.isEmpty() && customerSigPad && !customerSigPad.isEmpty());
   }
 
   function handlePhotoSelect(e) {
@@ -316,6 +325,7 @@
     btn.disabled = true; btn.textContent = 'Uploading…';
     try {
       await uploadSignedCopy('driver', driverSigPad);
+      await uploadSignedCopy('customer', customerSigPad);
       const res = await fetch('/api/public/bol-delivery/' + encodeURIComponent(token), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
