@@ -34,9 +34,15 @@
   .photo-preview { width: 100%; max-height: 320px; object-fit: contain; background: #f3f4f6; border-radius: 8px; display: none; }
   .photo-input { display: none; }
   .photo-btn { display: block; width: 100%; padding: 14px; border: 2px dashed var(--border); border-radius: 10px; text-align: center; background: #fafafa; cursor: pointer; font-weight: 600; color: var(--muted); }
+  .sig-wrap { margin-top: 8px; }
+  .sig-pad { width: 100%; height: 180px; border: 2px solid var(--border); border-radius: 10px; background: #fff; touch-action: none; display: block; }
+  .sig-clear { margin-top: 6px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; background: #fafafa; cursor: pointer; font-weight: 600; color: var(--muted); }
   .line-items { background: #f9fafb; padding: 12px; border-radius: 8px; font-size: 13px; }
   .line-items div { margin-bottom: 4px; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="/logistics/bol-shared.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -129,6 +135,67 @@
   // ── Stage 2: Delivery flow ────────────────────────────────────────────
   let photoDataUrl = null;
   let photoBase64 = null;
+  let driverSigPad = null;
+
+  // Signature stamp placement (pdf-lib origin = bottom-left; US Letter 612×792).
+  // ⚠ Best-guess coords — TUNE against the real driver/customer templates after first render.
+  const SIG_COORDS = {
+    driver:   { x: 80,  y: 95, w: 190, h: 55 },
+    customer: { x: 340, y: 95, w: 190, h: 55 },
+  };
+
+  function initSignaturePad(canvas, onEnd) {
+    const ctx = canvas.getContext('2d');
+    ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111';
+    let drawing = false, hasInk = false;
+    function pos(e) {
+      const r = canvas.getBoundingClientRect();
+      const t = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      return { x: (t.clientX - r.left) * (canvas.width / r.width), y: (t.clientY - r.top) * (canvas.height / r.height) };
+    }
+    function start(e) { drawing = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }
+    function move(e)  { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasInk = true; e.preventDefault(); }
+    function end()    { if (drawing && onEnd) onEnd(); drawing = false; }
+    canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+    canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', end);
+    return {
+      isEmpty: () => !hasInk,
+      clear:   () => { ctx.clearRect(0, 0, canvas.width, canvas.height); hasInk = false; },
+      dataUrl: () => canvas.toDataURL('image/png'),
+    };
+  }
+
+  async function stampSignature(basePdfBytes, sigDataUrl, c) {
+    const { PDFDocument } = PDFLib;
+    const doc = await PDFDocument.load(basePdfBytes);
+    const png = await doc.embedPng(sigDataUrl);
+    doc.getPages()[0].drawImage(png, { x: c.x, y: c.y, width: c.w, height: c.h });
+    return await doc.save();
+  }
+
+  function bytesToBase64(bytes) {
+    let bin = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(bin);
+  }
+
+  async function uploadSignedCopy(copyType, pad) {
+    if (!pad || pad.isEmpty()) return;
+    const bolForRender = { ...currentBol, access_token: token };
+    const { pdfBytes } = await BolShared.generatePdf([bolForRender], { copyType });
+    const coords  = copyType === 'driver' ? SIG_COORDS.driver : SIG_COORDS.customer;
+    const stamped = await stampSignature(pdfBytes, pad.dataUrl(), coords);
+    const docType = copyType === 'driver' ? 'driver_signed' : 'customer_signed';
+    const r = await fetch('/api/public/bol-document/' + encodeURIComponent(token), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doc_type: docType, pdf_base64: bytesToBase64(stamped) }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'signed copy upload failed');
+  }
 
   function renderDelivery() {
     titleEl.textContent = 'Complete Delivery';
@@ -162,6 +229,12 @@
         <img id="photo-preview" class="photo-preview" alt="Signed BOL preview">
       </div>
 
+      <label class="field">Driver signature</label>
+      <div class="sig-wrap">
+        <canvas id="driver-sig" class="sig-pad" width="600" height="180"></canvas>
+        <button type="button" class="sig-clear" id="driver-sig-clear">Clear</button>
+      </div>
+
       <button class="btn btn-success" id="submit-btn" disabled>Submit Delivery</button>
     `;
 
@@ -189,6 +262,8 @@
       document.getElementById('photo-input').click();
     });
     document.getElementById('photo-input').addEventListener('change', handlePhotoSelect);
+    driverSigPad = initSignaturePad(document.getElementById('driver-sig'), updateSubmitState);
+    document.getElementById('driver-sig-clear').addEventListener('click', () => { driverSigPad.clear(); updateSubmitState(); });
     document.getElementById('submit-btn').addEventListener('click', submitDelivery);
   }
 
@@ -200,7 +275,7 @@
   function updateSubmitState() {
     const accepted = getSelectedValue('accepted-group');
     const btn = document.getElementById('submit-btn');
-    if (btn) btn.disabled = !(accepted && photoBase64);
+    if (btn) btn.disabled = !(accepted && photoBase64 && driverSigPad && !driverSigPad.isEmpty());
   }
 
   function handlePhotoSelect(e) {
@@ -240,6 +315,7 @@
     const btn = document.getElementById('submit-btn');
     btn.disabled = true; btn.textContent = 'Uploading…';
     try {
+      await uploadSignedCopy('driver', driverSigPad);
       const res = await fetch('/api/public/bol-delivery/' + encodeURIComponent(token), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

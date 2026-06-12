@@ -10,10 +10,7 @@ export async function handleApiPublicBolLookup(request, env) {
 
   const db = env.DB;
   const bol = await db.prepare(`
-    SELECT bol_number, date, ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
-           ship_to_city, ship_to_state, ship_to_zip, commodity_description, delivery_time,
-           carrier_name, trailer_no, job_id, access_token
-    FROM bols WHERE access_token = ?
+    SELECT * FROM bols WHERE access_token = ?
   `).bind(token).first();
 
   if (!bol) {
