@@ -14,7 +14,7 @@ import { handleApiUsers, handleApiRoles, handleApiActivityLog } from './routes/a
 import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePassword,
          handleSimulateRoleStart, handleSimulateRoleStop } from './routes/auth.js';
 import { handleApiNotifications, handleApiPushSubscribe, handleApiPushUnsubscribe } from './routes/notifications.js';
-import { handleApiPublicBolLookup, handleApiPublicBolPickup, handleApiPublicBolDelivery } from './routes/public.js';
+import { handleApiPublicBolLookup, handleApiPublicBolPickup, handleApiPublicBolDelivery, handleApiPublicBolDocument } from './routes/public.js';
 
 // _worker.js — Pages Advanced Mode with SAFE error reporting
 
@@ -95,6 +95,7 @@ const API_ROUTES = [
   { prefix: '/api/public/bol-lookup',   handler: (req, env) => handleApiPublicBolLookup(req, env) },
   { prefix: '/api/public/bol-pickup',   handler: (req, env) => handleApiPublicBolPickup(req, env) },
   { prefix: '/api/public/bol-delivery', handler: (req, env) => handleApiPublicBolDelivery(req, env) },
+  { prefix: '/api/public/bol-document', handler: (req, env) => handleApiPublicBolDocument(req, env) },
 ];
 
 async function dispatchApiRoute(request, env, url) {

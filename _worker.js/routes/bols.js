@@ -280,6 +280,30 @@ export async function handleApiBols(request, env) {
     });
   }
 
+  // ── GET /api/bols/documents/:docId — serve a stored signed copy from R2 ────
+  const docServeMatch = url.pathname.match(/^\/api\/bols\/documents\/([^/]+)$/);
+  if (docServeMatch && request.method === 'GET') {
+    const dRow = await env.DB.prepare("SELECT r2_key FROM bol_documents WHERE id = ?").bind(docServeMatch[1]).first();
+    if (!dRow?.r2_key) return new Response('Not found', { status: 404 });
+    const dObj = await env.BOL_PHOTOS.get(dRow.r2_key);
+    if (!dObj) return new Response('Not found', { status: 404 });
+    return new Response(dObj.body, {
+      headers: {
+        'Content-Type': dObj.httpMetadata?.contentType || 'application/pdf',
+        'Cache-Control': 'private, max-age=300',
+      },
+    });
+  }
+
+  // ── GET /api/bols/:id/documents — list stored signed copies ───────────────
+  const docsListMatch = url.pathname.match(/^\/api\/bols\/([^/]+)\/documents$/);
+  if (docsListMatch && request.method === 'GET') {
+    const dRows = await env.DB.prepare(
+      "SELECT id, bol_id, doc_type, created_at FROM bol_documents WHERE bol_id = ? ORDER BY created_at DESC"
+    ).bind(docsListMatch[1]).all();
+    return json({ ok: true, data: dRows.results || [] });
+  }
+
   // ── GET /api/bols/:id ─────────────────────────────────────────────────────
   if (method === "GET" && bolId) {
     try {
