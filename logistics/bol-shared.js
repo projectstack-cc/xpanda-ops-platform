@@ -91,8 +91,13 @@ window.BolShared = (function() {
   async function generatePdf(bolRecords, opts = {}) {
     const { PDFDocument, StandardFonts, rgb } = PDFLib;
 
-    const templateResp = await fetch('/logistics/assets/BLANK_BOL_Xpanda.pdf');
-    if (!templateResp.ok) throw new Error('BOL template not found at /logistics/assets/BLANK_BOL_Xpanda.pdf');
+    const TEMPLATE_BY_COPY = {
+      driver:   '/logistics/assets/BLANK_BOL_Xpanda_driver.pdf',
+      customer: '/logistics/assets/BLANK_BOL_Xpanda_customer.pdf',
+    };
+    const templateUrl = TEMPLATE_BY_COPY[opts.copyType] || '/logistics/assets/BLANK_BOL_Xpanda.pdf';
+    const templateResp = await fetch(templateUrl);
+    if (!templateResp.ok) throw new Error(`BOL template not found at ${templateUrl}`);
     const templateBytes = await templateResp.arrayBuffer();
 
     const combinedPdf = await PDFDocument.create();
@@ -223,7 +228,7 @@ window.BolShared = (function() {
       }
 
       // ── QR code (driver tracking link) ──
-      if (bol.access_token && typeof qrcode === 'function') {
+      if (opts.copyType !== 'customer' && bol.access_token && typeof qrcode === 'function') {
         const trackingUrl = `${window.location.origin}/track/${bol.access_token}`;
         // Type 0 = auto-select smallest version that fits; 'M' = medium error correction.
         const qr = qrcode(0, 'M');
