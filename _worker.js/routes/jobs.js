@@ -235,6 +235,16 @@ export async function handleApiJobs(request, env) {
       }
     }
 
+    // Reject duplicate invoice numbers (also guards future QB auto-intake webhook re-fires).
+    if (invoice_number) {
+      const dupe = await db.prepare(
+        "SELECT id FROM jobs WHERE invoice_number = ? AND status != 'archived' LIMIT 1"
+      ).bind(invoice_number).first();
+      if (dupe) {
+        return json({ ok: false, error: `A job with invoice # ${invoice_number} already exists.`, code: 'duplicate_invoice' }, 409);
+      }
+    }
+
     try {
       await db.prepare(`
         INSERT INTO jobs (
