@@ -644,7 +644,7 @@ export async function handleApiShipments(request, env) {
 
     try {
       const { results } = await db.prepare(
-        `SELECT * FROM shipments ${clause} ORDER BY ship_date DESC, created_at DESC`
+        `SELECT *, (SELECT COUNT(*) FROM bols b WHERE b.job_id = shipments.job_id) AS bol_count FROM shipments ${clause} ORDER BY ship_date DESC, created_at DESC`
       ).bind(...vals).all();
       return json({ ok: true, data: results });
     } catch (e) {
