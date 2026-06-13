@@ -401,20 +401,24 @@ async function renderBol() {
     const copyType = document.getElementById('btest-copytype').value || undefined;
     const result   = await BolShared.generatePdf([bol], { copyType, previewOnly: true });
 
-    // Coord-tuning aid: stamp a "Signature" placeholder where track/ stamps the real signature.
-    // KEEP IN SYNC with SIG_COORDS in track/index.html.
-    const SIG_COORDS = {
-      driver:   { x: 80,  y: 95, w: 190, h: 55 },
-      customer: { x: 340, y: 95, w: 190, h: 55 },
+    // Coord-tuning aid: stamp Customer Sig / Carrier Sig / Date placeholders. All three go on
+    // BOTH copies at the SAME coords. KEEP IN SYNC with track/index.html.
+    const SLOTS = {
+      customer: { x: 380, y: 128, w: 160, h: 16 },  // Customer Signature line
+      carrier:  { x: 430, y: 30,  w: 110, h: 16 },  // Carrier Signature (bottom)
+      date:     { x: 548, y: 30,  w: 58,  h: 16 },  // Date Signed
     };
+    const LABELS = { customer: 'Customer Sig', carrier: 'Carrier Sig', date: 'Date Signed' };
     let blobUrl = result.blobUrl;
-    if (copyType && SIG_COORDS[copyType]) {
+    if (copyType) {
       const { PDFDocument, rgb } = PDFLib;
       const doc  = await PDFDocument.load(result.pdfBytes);
       const page = doc.getPages()[0];
-      const c    = SIG_COORDS[copyType];
-      page.drawRectangle({ x: c.x, y: c.y, width: c.w, height: c.h, borderColor: rgb(0.85, 0.1, 0.1), borderWidth: 1 });
-      page.drawText('Signature', { x: c.x + 6, y: c.y + (c.h / 2) - 6, size: 12, color: rgb(0.85, 0.1, 0.1) });
+      for (const key in SLOTS) {
+        const c = SLOTS[key];
+        page.drawRectangle({ x: c.x, y: c.y, width: c.w, height: c.h, borderColor: rgb(0.85, 0.1, 0.1), borderWidth: 1 });
+        page.drawText(LABELS[key], { x: c.x + 4, y: c.y + (c.h / 2) - 4, size: 9, color: rgb(0.85, 0.1, 0.1) });
+      }
       const bytes = await doc.save();
       blobUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
       URL.revokeObjectURL(result.blobUrl);
