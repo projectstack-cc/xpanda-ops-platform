@@ -284,6 +284,14 @@
           Scrap Pickup
         </label>
 
+        <label style="display:block;margin:8px 0;font-size:13px;">Copy type
+          <select id="btest-copytype" style="margin-left:8px;">
+            <option value="">Default</option>
+            <option value="driver">Driver (QR + sig)</option>
+            <option value="customer">Customer (sig, no QR)</option>
+          </select>
+        </label>
+
         <div class="btest-actions">
           <button class="btn primary" id="btn-render">Render BOL</button>
           <button class="btn" id="btn-reset">Reset to sample</button>
@@ -389,10 +397,30 @@ async function renderBol() {
       currentBlobUrl = null;
     }
 
-    const bol    = buildBol();
-    const result = await BolShared.generatePdf([bol], { previewOnly: true });
+    const bol      = buildBol();
+    const copyType = document.getElementById('btest-copytype').value || undefined;
+    const result   = await BolShared.generatePdf([bol], { copyType, previewOnly: true });
 
-    currentBlobUrl = result.blobUrl;
+    // Coord-tuning aid: stamp a "Signature" placeholder where track/ stamps the real signature.
+    // KEEP IN SYNC with SIG_COORDS in track/index.html.
+    const SIG_COORDS = {
+      driver:   { x: 80,  y: 95, w: 190, h: 55 },
+      customer: { x: 340, y: 95, w: 190, h: 55 },
+    };
+    let blobUrl = result.blobUrl;
+    if (copyType && SIG_COORDS[copyType]) {
+      const { PDFDocument, rgb } = PDFLib;
+      const doc  = await PDFDocument.load(result.pdfBytes);
+      const page = doc.getPages()[0];
+      const c    = SIG_COORDS[copyType];
+      page.drawRectangle({ x: c.x, y: c.y, width: c.w, height: c.h, borderColor: rgb(0.85, 0.1, 0.1), borderWidth: 1 });
+      page.drawText('Signature', { x: c.x + 6, y: c.y + (c.h / 2) - 6, size: 12, color: rgb(0.85, 0.1, 0.1) });
+      const bytes = await doc.save();
+      blobUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      URL.revokeObjectURL(result.blobUrl);
+    }
+
+    currentBlobUrl = blobUrl;
     iframe.src     = currentBlobUrl;
 
     statusEl.textContent = 'Rendered';
