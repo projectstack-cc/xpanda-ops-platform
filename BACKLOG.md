@@ -37,7 +37,7 @@
 - [ ] **BOL print rendering bug** — when printing the BOL directly (without downloading), the "N" from "Bill of Lading No" and the "S" in "Customer Signature" are clipped/hidden. Likely a CSS `overflow: hidden` or `white-space` clip on the containing element interacting with the browser's print renderer. Needs print-preview investigation.
 - [ ] **Remove dimensions from BOL commodity block** — dimensions are already embedded in most line-item descriptions, so including them separately duplicates content. Add a toggle or remove the dimension column from the BOL commodity section entirely. *(coordinating change in `bol-shared.js` `drawCommodity` / commodity tier logic)*
 - [ ] **Siplast toggle on BOL** — to be scoped with Claude. Likely a conditional section or checkbox on the BOL generator that includes/excludes Siplast-specific fields or language; exact field set and placement TBD.
-- [ ] **Archived-order logistics dashboard** — once a job is archived: hide the "Build Load" button; add a view to access the new signed BOL copies (driver + customer, from `bol_documents`) alongside the original generated BOL (already surfaced). *(depends on P152–P155 `bol_documents` pipeline being deployed and tested)*
+- [ ] **Archived-order logistics dashboard** — once a job is archived, hide the "Build Load" button (signed BOL copies are now surfaced via the Documents section shipped in P156).
 
 ### BOL Generator Follow-on
 
@@ -47,6 +47,7 @@
 
 ## Job Board
 
+- [ ] **Batch Packing Slip upload for job creation** — allow uploading multiple packing slips at once to create multiple jobs in bulk; likely a first feature of a planned Order Entry dashboard.
 - [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy — blocked on Quickbase input formatting improvements)
 - [ ] Create packet feature with Bill of Materials (BOM)
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
