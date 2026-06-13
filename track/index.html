@@ -140,9 +140,11 @@
 
   // Signature stamp placement (pdf-lib origin = bottom-left; US Letter 612×792).
   // ⚠ Best-guess coords — TUNE against the real driver/customer templates after first render.
-  const SIG_COORDS = {
-    driver:   { x: 80,  y: 95, w: 190, h: 55 },
-    customer: { x: 340, y: 95, w: 190, h: 55 },
+  // Stamp slots (pdf-lib points, bottom-left origin). Both copies stamp all three at the same coords.
+  const SLOTS = {
+    customer: { x: 380, y: 175, w: 160, h: 16 },
+    carrier:  { x: 390, y: 45,  w: 110, h: 16 },
+    date:     { x: 513, y: 45,  w: 58,  h: 16 },
   };
 
   function initSignaturePad(canvas, onEnd) {
@@ -166,11 +168,16 @@
     };
   }
 
-  async function stampSignature(basePdfBytes, sigDataUrl, c) {
-    const { PDFDocument } = PDFLib;
-    const doc = await PDFDocument.load(basePdfBytes);
-    const png = await doc.embedPng(sigDataUrl);
-    doc.getPages()[0].drawImage(png, { x: c.x, y: c.y, width: c.w, height: c.h });
+  async function stampCopy(basePdfBytes) {
+    const { PDFDocument, StandardFonts, rgb } = PDFLib;
+    const doc  = await PDFDocument.load(basePdfBytes);
+    const page = doc.getPages()[0];
+    const custPng = await doc.embedPng(customerSigPad.dataUrl());
+    page.drawImage(custPng, { x: SLOTS.customer.x, y: SLOTS.customer.y, width: SLOTS.customer.w, height: SLOTS.customer.h });
+    const carrPng = await doc.embedPng(driverSigPad.dataUrl());
+    page.drawImage(carrPng, { x: SLOTS.carrier.x, y: SLOTS.carrier.y, width: SLOTS.carrier.w, height: SLOTS.carrier.h });
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    page.drawText(new Date().toLocaleDateString('en-US'), { x: SLOTS.date.x + 2, y: SLOTS.date.y + 4, size: 11, font, color: rgb(0, 0, 0) });
     return await doc.save();
   }
 
@@ -183,12 +190,10 @@
     return btoa(bin);
   }
 
-  async function uploadSignedCopy(copyType, pad) {
-    if (!pad || pad.isEmpty()) return;
+  async function uploadSignedCopy(copyType) {
     const bolForRender = { ...currentBol, access_token: token };
     const { pdfBytes } = await BolShared.generatePdf([bolForRender], { copyType });
-    const coords  = copyType === 'driver' ? SIG_COORDS.driver : SIG_COORDS.customer;
-    const stamped = await stampSignature(pdfBytes, pad.dataUrl(), coords);
+    const stamped = await stampCopy(pdfBytes);
     const docType = copyType === 'driver' ? 'driver_signed' : 'customer_signed';
     const r = await fetch('/api/public/bol-document/' + encodeURIComponent(token), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -324,8 +329,8 @@
     const btn = document.getElementById('submit-btn');
     btn.disabled = true; btn.textContent = 'Uploading…';
     try {
-      await uploadSignedCopy('driver', driverSigPad);
-      await uploadSignedCopy('customer', customerSigPad);
+      await uploadSignedCopy('driver');
+      await uploadSignedCopy('customer');
       const res = await fetch('/api/public/bol-delivery/' + encodeURIComponent(token), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
