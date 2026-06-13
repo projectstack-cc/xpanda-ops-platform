@@ -162,6 +162,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
     <div class="logistics-modal-body">
       <div class="logistics-error" id="modal-error"></div>
       <div id="modal-actions" class="logistics-modal-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
+      <div id="modal-documents" style="margin-bottom:12px;"></div>
       <div id="job-linked-note" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#1e40af;"></div>
 
       <!-- Direction toggle — hidden when editing (direction is locked) -->
@@ -804,6 +805,44 @@ function buildBayCell(shipment, loadingAssignment) {
   return '—';
 }
 
+async function loadBolDocuments(s) {
+  const host = document.getElementById('modal-documents');
+  if (!host) return;
+  host.innerHTML = '';
+  if (!s || !s.job_id) return;
+  try {
+    const { ok, data } = await api.get('/api/bols?job_id=' + encodeURIComponent(s.job_id));
+    const bols = (ok && data && Array.isArray(data.bols)) ? data.bols : [];
+    if (!bols.length) return;
+
+    const labelFor = (t) => t === 'driver_signed'   ? 'Driver — signed'
+                          : t === 'customer_signed' ? 'Customer — signed' : t;
+    const blocks = [];
+    for (const bol of bols) {
+      let docs = [];
+      try {
+        const dRes = await api.get('/api/bols/' + encodeURIComponent(bol.id) + '/documents');
+        docs = (dRes.ok && Array.isArray(dRes.data)) ? dRes.data : [];
+      } catch (e) {}
+      const signedLinks = docs.map(d =>
+        `<a href="/api/bols/documents/${esc(d.id)}" target="_blank" rel="noopener" style="font-size:13px;">📄 ${esc(labelFor(d.doc_type))}</a>`
+      ).join('');
+      blocks.push(
+        `<div style="margin-bottom:8px;padding:8px;border:1px solid var(--border,#d1d5db);border-radius:8px;">
+          <div style="font-size:12px;color:var(--muted,#4b5563);margin-bottom:4px;">BOL ${esc(bol.bol_number || bol.id)}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;">
+            <a href="/logistics/bol-generator.html?job_id=${esc(s.job_id)}" target="_blank" rel="noopener" style="font-size:13px;">📄 View BOL</a>
+            ${signedLinks || '<span style="font-size:12px;color:var(--muted,#4b5563);">No signed copies yet</span>'}
+          </div>
+        </div>`
+      );
+    }
+    host.innerHTML = `<div style="font-weight:600;font-size:13px;margin:4px 0 6px;">Documents</div>${blocks.join('')}`;
+  } catch (e) {
+    host.innerHTML = '';
+  }
+}
+
 function buildActionButtons(shipment) {
   if (!shipment.job_id) return '';
   if (['delivered', 'cancelled'].includes(shipment.status)) return '';
@@ -895,6 +934,7 @@ async function openEdit(id) {
   currentDirection = s.direction;
   const _mab = document.getElementById('modal-actions');
   if (_mab) _mab.innerHTML = buildActionButtons(s);
+  loadBolDocuments(s);
 
   clearForm();
   setDirection(currentDirection, true); // locked
@@ -1071,6 +1111,7 @@ async function syncJobFromModal(jobId) {
 
 function clearForm() {
   const _mab = document.getElementById('modal-actions'); if (_mab) _mab.innerHTML = '';
+  const _mdoc = document.getElementById('modal-documents'); if (_mdoc) _mdoc.innerHTML = '';
   ['f-ship-date','f-carrier','f-bol-number','f-notes',
    'f-customer','f-destination','f-supplier','f-origin','f-trailer-number',
    'f-po-number','f-invoice-number','f-ship-to-company','f-ship-to-attention',
