@@ -732,7 +732,12 @@ function h(tag, attrs = {}, ...children) {
   let RR = null;
 
   async function reviewRecords(records, opts) {
-    RR = { records: [...records], idx: 0, blobUrl: null, opts: opts || {} };
+    const _me = (window.__xpandaUser && window.__xpandaUser.displayName) || '';
+    const prepared = records.map(r => {
+      const rec = r.access_token ? r : { ...r, access_token: crypto.randomUUID() };
+      return rec.shipper_name ? rec : { ...rec, shipper_name: _me };
+    });
+    RR = { records: prepared, idx: 0, blobUrl: null, opts: opts || {} };
     await rrRegenerate();
     rrShow();
   }
