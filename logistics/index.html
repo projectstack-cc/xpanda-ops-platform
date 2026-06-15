@@ -17,6 +17,24 @@
 </head>
 <body>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+<script src="/logistics/bol-shared.js"></script>
+
+<div id="log-bol-view-modal" hidden onclick="if(event.target===this) closeBolViewModal()" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;">
+  <div style="max-width:95vw;width:95vw;max-height:95vh;height:95vh;display:flex;flex-direction:column;background:#fff;border-radius:10px;overflow:hidden;">
+    <div style="padding:10px 16px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827;">Bill of Lading</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="downloadBolFromViewer()" style="padding:6px 12px;background:#f3f4f6;color:#4b5563;border:1px solid #d1d5db;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">Download</button>
+        <button onclick="closeBolViewModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#6b7280;padding:0;line-height:1;">×</button>
+      </div>
+    </div>
+    <iframe id="log-bol-view-iframe" style="flex:1;width:100%;border:none;background:#525659;"></iframe>
+  </div>
+</div>
+
 <script src="/logistics/logistics-header.js"></script>
 <script>
 document.getElementById('logistics-page-title').textContent = 'Logistics';
@@ -831,7 +849,7 @@ async function loadBolDocuments(s) {
         `<div style="margin-bottom:8px;padding:8px;border:1px solid var(--border,#d1d5db);border-radius:8px;">
           <div style="font-size:12px;color:var(--muted,#4b5563);margin-bottom:4px;">BOL ${esc(bol.bol_number || bol.id)}</div>
           <div style="display:flex;flex-wrap:wrap;gap:10px;">
-            <a href="/logistics/bol-generator.html?job_id=${esc(s.job_id)}" target="_blank" rel="noopener" style="font-size:13px;">📄 View BOL</a>
+            <a href="#" onclick="event.preventDefault();viewBolForJob('${esc(s.job_id)}')" style="font-size:13px;">📄 View BOL</a>
             ${signedLinks || '<span style="font-size:12px;color:var(--muted,#4b5563);">No signed copies yet</span>'}
           </div>
         </div>`
@@ -843,12 +861,62 @@ async function loadBolDocuments(s) {
   }
 }
 
+let currentBolBlobUrl = null;
+let currentBolFilename = 'BOL.pdf';
+
+async function viewBolForJob(jobId) {
+  if (!jobId) return;
+  try {
+    const { ok, data } = await api.get('/api/bols?job_id=' + encodeURIComponent(jobId));
+    if (!ok || !data?.bols?.length) { alert('No BOL found for this job.'); return; }
+    if (!window.BolShared || !window.PDFLib) { alert('BOL viewer not ready — try again in a moment.'); return; }
+    const bol = data.bols[data.bols.length - 1];
+
+    // Render the same combined output as Generate: original → driver → customer.
+    const { PDFDocument } = PDFLib;
+    const out = await PDFDocument.create();
+    for (const copyType of [undefined, 'driver', 'customer']) {
+      const r = await BolShared.generatePdf([bol], { previewOnly: true, copyType });
+      try { URL.revokeObjectURL(r.blobUrl); } catch (e) {}
+      const src = await PDFDocument.load(r.pdfBytes);
+      const pages = await out.copyPages(src, src.getPageIndices());
+      pages.forEach(p => out.addPage(p));
+    }
+    const bytes = await out.save();
+
+    if (currentBolBlobUrl) { try { URL.revokeObjectURL(currentBolBlobUrl); } catch (e) {} }
+    currentBolBlobUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    currentBolFilename = `BOL_${bol.bol_number || bol.id}.pdf`;
+    document.getElementById('log-bol-view-iframe').src = currentBolBlobUrl;
+    document.getElementById('log-bol-view-modal').hidden = false;
+  } catch (e) {
+    console.error('viewBolForJob failed:', e);
+    alert('Failed to load BOL. Please try again.');
+  }
+}
+
+function closeBolViewModal() {
+  document.getElementById('log-bol-view-modal').hidden = true;
+  document.getElementById('log-bol-view-iframe').src = '';
+  if (currentBolBlobUrl) { try { URL.revokeObjectURL(currentBolBlobUrl); } catch (e) {} currentBolBlobUrl = null; }
+}
+
+function downloadBolFromViewer() {
+  if (!currentBolBlobUrl) return;
+  const a = document.createElement('a');
+  a.href = currentBolBlobUrl; a.download = currentBolFilename;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
 function buildActionButtons(shipment) {
   if (!shipment.job_id) return '';
   if (['delivered', 'cancelled'].includes(shipment.status)) return '';
 
-  const bolLabel = Number(shipment.bol_count || 0) > 0 ? 'View BOL' : 'Generate BOL';
-  return `<a class="logistics-action-btn action-load" href="/logistics/load-builder.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Build Load</a> <a class="logistics-action-btn action-bol" href="/logistics/bol-generator.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">${bolLabel}</a>`;
+  const hasBol = Number(shipment.bol_count || 0) > 0;
+  const bolBtn = hasBol
+    ? `<a class="logistics-action-btn action-bol" href="#" onclick="event.stopPropagation();event.preventDefault();viewBolForJob('${shipment.job_id}')">View BOL</a>`
+    : `<a class="logistics-action-btn action-bol" href="/logistics/bol-generator.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Generate BOL</a>`;
+  return `<a class="logistics-action-btn action-load" href="/logistics/load-builder.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Build Load</a> ${bolBtn}`;
 }
 
 // ── Render Inbound ─────────────────────────────────────────────────────────
