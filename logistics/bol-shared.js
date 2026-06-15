@@ -41,6 +41,9 @@ window.BolShared = (function() {
 
     // QR code — driver tracking link (P82). Drawn only when bol.access_token exists.
     qrCode:        { x: 40, y: 222, size: 60 },
+    // Shipper signature — cursive (FRSCRIPT), auto-signed with the generating user's display name.
+    // PLACEHOLDER coords; tune in bol-test (#3).
+    shipperSignature: { x: 90, y: 48, size: 22 },
   };
 
   const PAGE = { width: 612, height: 792 }; // template is fixed US Letter
@@ -100,6 +103,13 @@ window.BolShared = (function() {
     if (!templateResp.ok) throw new Error(`BOL template not found at ${templateUrl}`);
     const templateBytes = await templateResp.arrayBuffer();
 
+    // Cursive font for the shipper signature, embedded via fontkit. Fetched once; null-safe.
+    let scriptFontBytes = null;
+    try {
+      const _ffResp = await fetch('/logistics/assets/FRSCRIPT.ttf');
+      if (_ffResp.ok) scriptFontBytes = await _ffResp.arrayBuffer();
+    } catch (_e) { scriptFontBytes = null; }
+
     const combinedPdf = await PDFDocument.create();
 
     for (const bol of bolRecords) {
@@ -107,6 +117,11 @@ window.BolShared = (function() {
       const page = templateDoc.getPages()[0];
       const font = await templateDoc.embedFont(StandardFonts.Helvetica);
       const fontBold = await templateDoc.embedFont(StandardFonts.HelveticaBold);
+      let cursive = null;
+      if (scriptFontBytes && window.fontkit) {
+        templateDoc.registerFontkit(window.fontkit);
+        cursive = await templateDoc.embedFont(scriptFontBytes);
+      }
       const black = rgb(0, 0, 0);
 
       const drawText = (text, coord, overrides = {}) => {
@@ -225,6 +240,17 @@ window.BolShared = (function() {
       if (_commodityText) {
         const _tier = pickCommodityTier(String(_commodityText), font);
         drawMultiline(_commodityText, off('commodity', { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH }));
+      }
+
+      // ── Shipper signature (cursive, all copies) ──
+      if (bol.shipper_name && cursive) {
+        page.drawText(String(bol.shipper_name), {
+          x: COORDS.shipperSignature.x,
+          y: COORDS.shipperSignature.y,
+          size: COORDS.shipperSignature.size || 22,
+          font: cursive,
+          color: black,
+        });
       }
 
       // ── QR code (driver tracking link) ──
