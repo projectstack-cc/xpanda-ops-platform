@@ -43,7 +43,7 @@ window.BolShared = (function() {
     qrCode:        { x: 40, y: 222, size: 60 },
     // Shipper signature — cursive (FRSCRIPT), auto-signed with the generating user's display name.
     // PLACEHOLDER coords; tune in bol-test (#3).
-    shipperSignature: { x: 35, y: 48, size: 22 },
+    shipperSignature: { x: 37, y: 48, size: 22 },
   };
 
   const PAGE = { width: 612, height: 792 }; // template is fixed US Letter
