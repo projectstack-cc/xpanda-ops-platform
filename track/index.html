@@ -193,7 +193,7 @@
 
   async function uploadSignedCopy(copyType) {
     const bolForRender = { ...currentBol, access_token: token };
-    const { pdfBytes } = await BolShared.generatePdf([bolForRender], { copyType });
+    const { pdfBytes } = await BolShared.generatePdf([bolForRender], { copyType, previewOnly: true });
     const stamped = await stampCopy(pdfBytes);
     const docType = copyType === 'driver' ? 'driver_signed' : 'customer_signed';
     const r = await fetch('/api/public/bol-document/' + encodeURIComponent(token), {
@@ -340,9 +340,10 @@
       const data = await res.json();
       if (!data.ok) { btn.disabled = false; btn.textContent = 'Submit Delivery'; alert(data.error || 'Failed'); return; }
       await load(); // stage now 'delivered'
-    } catch {
+    } catch (err) {
+      console.error('[track] submitDelivery failed', err);
       btn.disabled = false; btn.textContent = 'Submit Delivery';
-      alert('Network error during upload. Please try again.');
+      alert('Upload failed: ' + (err && err.message ? err.message : 'please try again.'));
     }
   }
 
