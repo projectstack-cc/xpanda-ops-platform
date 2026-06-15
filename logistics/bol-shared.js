@@ -104,10 +104,21 @@ window.BolShared = (function() {
     const templateBytes = await templateResp.arrayBuffer();
 
     // Cursive font for the shipper signature, embedded via fontkit. Fetched once; null-safe.
+    // Path is CASE-SENSITIVE on Cloudflare Pages — the asset is FRSCRIPT.TTF (uppercase). A wrong
+    // path returns the HTML app-shell at HTTP 200, so an "ok" response is NOT enough: require a real
+    // font signature before trusting the bytes, or embedFont() would crash every BOL.
     let scriptFontBytes = null;
     try {
-      const _ffResp = await fetch('/logistics/assets/FRSCRIPT.ttf');
-      if (_ffResp.ok) scriptFontBytes = await _ffResp.arrayBuffer();
+      const _ffResp = await fetch('/logistics/assets/FRSCRIPT.TTF');
+      const _ct = (_ffResp.headers.get('content-type') || '').toLowerCase();
+      if (_ffResp.ok && _ct.indexOf('text/html') === -1) {
+        const _buf = await _ffResp.arrayBuffer();
+        const _b = new Uint8Array(_buf.slice(0, 4));
+        const _tag = String.fromCharCode(_b[0], _b[1], _b[2], _b[3]);
+        const _isFont = (_b[0] === 0x00 && _b[1] === 0x01 && _b[2] === 0x00 && _b[3] === 0x00) // TrueType
+          || _tag === 'OTTO' || _tag === 'true' || _tag === 'ttcf' || _tag === 'wOFF' || _tag === 'wOF2';
+        if (_isFont) scriptFontBytes = _buf;
+      }
     } catch (_e) { scriptFontBytes = null; }
 
     const combinedPdf = await PDFDocument.create();
@@ -119,8 +130,10 @@ window.BolShared = (function() {
       const fontBold = await templateDoc.embedFont(StandardFonts.HelveticaBold);
       let cursive = null;
       if (scriptFontBytes && window.fontkit) {
-        templateDoc.registerFontkit(window.fontkit);
-        cursive = await templateDoc.embedFont(scriptFontBytes);
+        try {
+          templateDoc.registerFontkit(window.fontkit);
+          cursive = await templateDoc.embedFont(scriptFontBytes);
+        } catch (_fe) { cursive = null; }
       }
       const black = rgb(0, 0, 0);
 
