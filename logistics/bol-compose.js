@@ -588,10 +588,32 @@ function h(tag, attrs = {}, ...children) {
     }
   }
 
+  // ONE combined PDF with all three copies per BOL — original, driver, customer — then the packing
+  // slip once. Single source of truth so bol-generator and load-builder produce identical output.
+  async function generateCombinedCopies(records, append) {
+    const { PDFDocument } = PDFLib;
+    const out = await PDFDocument.create();
+    for (const copyType of [undefined, 'driver', 'customer']) {
+      const r = await BolShared.generatePdf(records, { previewOnly: true, copyType });
+      try { URL.revokeObjectURL(r.blobUrl); } catch (_e) {}
+      const src = await PDFDocument.load(r.pdfBytes);
+      const pages = await out.copyPages(src, src.getPageIndices());
+      pages.forEach(p => out.addPage(p));
+    }
+    if (append) {
+      const ap = await PDFDocument.load(append);
+      const apages = await out.copyPages(ap, ap.getPageIndices());
+      apages.forEach(p => out.addPage(p));
+    }
+    const pdfBytes = await out.save();
+    const blobUrl = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
+    return { blobUrl, pdfBytes };
+  }
+
   async function generateBolPdf(bolRecords, bm) {
     const append = (OPTS && OPTS.buildAppendBytes) ? await OPTS.buildAppendBytes(bm) : null;
-    const result = await BolShared.generatePdf(bolRecords, { previewOnly: true, packingSlipPdfBytes: append });
-    return result.blobUrl;
+    const { blobUrl } = await generateCombinedCopies(bolRecords, append);
+    return blobUrl;
   }
 
   function showReview(blobUrl, savedBols) {
@@ -744,7 +766,7 @@ function h(tag, attrs = {}, ...children) {
 
   async function rrRegenerate() {
     const append = RR.opts.buildAppendBytes ? await RR.opts.buildAppendBytes() : null;
-    const result = await BolShared.generatePdf(RR.records, { previewOnly: true, packingSlipPdfBytes: append });
+    const result = await generateCombinedCopies(RR.records, append);
     if (RR.blobUrl) URL.revokeObjectURL(RR.blobUrl);
     RR.blobUrl = result.blobUrl;
   }
