@@ -377,6 +377,7 @@ function buildBol() {
     special_instructions:  document.getElementById('bt-special-instructions').value,
     is_scrap_pickup:       document.getElementById('bt-is-scrap-pickup').checked,
     access_token:          DUMMY.access_token,
+    shipper_name:          (window.__xpandaUser && window.__xpandaUser.displayName) || 'Sample Shipper',
   };
 }
 
