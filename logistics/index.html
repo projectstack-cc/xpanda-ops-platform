@@ -22,7 +22,7 @@
 <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
 <script src="/logistics/bol-shared.js"></script>
 
-<div id="log-bol-view-modal" hidden onclick="if(event.target===this) closeBolViewModal()" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;">
+<div id="log-bol-view-modal" onclick="if(event.target===this) closeBolViewModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
   <div style="max-width:95vw;width:95vw;max-height:95vh;height:95vh;display:flex;flex-direction:column;background:#fff;border-radius:10px;overflow:hidden;">
     <div style="padding:10px 16px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
       <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827;">Bill of Lading</h3>
@@ -888,7 +888,7 @@ async function viewBolForJob(jobId) {
     currentBolBlobUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
     currentBolFilename = `BOL_${bol.bol_number || bol.id}.pdf`;
     document.getElementById('log-bol-view-iframe').src = currentBolBlobUrl;
-    document.getElementById('log-bol-view-modal').hidden = false;
+    document.getElementById('log-bol-view-modal').style.display = 'flex';
   } catch (e) {
     console.error('viewBolForJob failed:', e);
     alert('Failed to load BOL. Please try again.');
@@ -896,7 +896,7 @@ async function viewBolForJob(jobId) {
 }
 
 function closeBolViewModal() {
-  document.getElementById('log-bol-view-modal').hidden = true;
+  document.getElementById('log-bol-view-modal').style.display = 'none';
   document.getElementById('log-bol-view-iframe').src = '';
   if (currentBolBlobUrl) { try { URL.revokeObjectURL(currentBolBlobUrl); } catch (e) {} currentBolBlobUrl = null; }
 }
