@@ -388,6 +388,13 @@ export async function handleApiBols(request, env) {
 
     const access_token = generateAccessToken();
 
+    const shipperUserId = request.headers.get('X-User-Id') || '';
+    let shipper_name = '';
+    if (shipperUserId) {
+      const _su = await db.prepare("SELECT display_name FROM users WHERE id = ?").bind(shipperUserId).first();
+      shipper_name = (_su && _su.display_name) ? _su.display_name : '';
+    }
+
     try {
       await db.prepare(`
         INSERT INTO bols (
@@ -397,8 +404,8 @@ export async function handleApiBols(request, env) {
           carrier_id, carrier_name, trailer_no, seal_number, scac, pro_no,
           freight_terms, is_scrap_pickup, third_party_bill_to, special_instructions, contact_info, is_master_bol,
           commodity_description, handling_unit_qty, handling_unit_type,
-          package_qty, package_type, weight, delivery_time, job_id, notes, po_number, render_overrides, access_token, created_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          package_qty, package_type, weight, delivery_time, job_id, notes, po_number, render_overrides, access_token, shipper_name, created_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, bol_number, date,
         payload.customer_id ? String(payload.customer_id).trim() : null,
@@ -411,7 +418,7 @@ export async function handleApiBols(request, env) {
         s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),
         s("package_qty"), s("package_type"), s("weight"), s("delivery_time"),
         payload.job_id ? String(payload.job_id).trim() : null,
-        s("notes"), s("po_number"), render_overrides, access_token, now
+        s("notes"), s("po_number"), render_overrides, access_token, shipper_name, now
       ).run();
 
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();

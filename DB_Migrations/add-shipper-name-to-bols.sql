@@ -1,0 +1,1 @@
+ALTER TABLE bols ADD COLUMN shipper_name TEXT NOT NULL DEFAULT '';
