@@ -840,7 +840,8 @@ async function loadBolDocuments(s) {
       let docs = [];
       try {
         const dRes = await api.get('/api/bols/' + encodeURIComponent(bol.id) + '/documents');
-        docs = (dRes.ok && Array.isArray(dRes.data)) ? dRes.data : [];
+        const dArr = dRes.data && dRes.data.data;
+        docs = (dRes.ok && Array.isArray(dArr)) ? dArr : [];
       } catch (e) {}
       const signedLinks = docs.map(d =>
         `<a href="/api/bols/documents/${esc(d.id)}" target="_blank" rel="noopener" style="font-size:13px;">📄 ${esc(labelFor(d.doc_type))}</a>`
