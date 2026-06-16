@@ -206,6 +206,7 @@ function h(tag, attrs = {}, ...children) {
       searchQuery: '', searchResults: [], searchLoading: false, searchConfirm: '',
       includePacking: false,
       includeLoadingDiagram: false,
+      hideQr: false,
     };
     render();
   }
@@ -522,6 +523,15 @@ function h(tag, attrs = {}, ...children) {
       diagramLabel.appendChild(document.createTextNode('Include Loading Diagram'));
       footer.appendChild(diagramLabel);
     }
+    {
+      const qrLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', cursor: 'pointer', color: 'var(--text-muted)' } });
+      const qrChk = h('input', { type: 'checkbox' });
+      qrChk.checked = BM.hideQr;
+      qrChk.addEventListener('change', e => { BM.hideQr = e.target.checked; });
+      qrLabel.appendChild(qrChk);
+      qrLabel.appendChild(document.createTextNode('Hide tracking QR code'));
+      footer.appendChild(qrLabel);
+    }
     const navRight = h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } });
     const prevBtn = h('button', { className: 'btn btn-white', disabled: bm.currentPage === 0 });
     prevBtn.textContent = '← Prev';
@@ -630,11 +640,11 @@ function h(tag, attrs = {}, ...children) {
 
   // ONE combined PDF with all three copies per BOL — original, driver, customer — then the packing
   // slip once. Single source of truth so bol-generator and load-builder produce identical output.
-  async function generateCombinedCopies(records, append) {
+  async function generateCombinedCopies(records, append, hideQr) {
     const { PDFDocument } = PDFLib;
     const out = await PDFDocument.create();
     for (const copyType of [undefined, 'driver', 'customer']) {
-      const r = await BolShared.generatePdf(records, { previewOnly: true, copyType });
+      const r = await BolShared.generatePdf(records, { previewOnly: true, copyType, hideQr: !!hideQr });
       try { URL.revokeObjectURL(r.blobUrl); } catch (_e) {}
       const src = await PDFDocument.load(r.pdfBytes);
       const pages = await out.copyPages(src, src.getPageIndices());
@@ -652,7 +662,7 @@ function h(tag, attrs = {}, ...children) {
 
   async function generateBolPdf(bolRecords, bm) {
     const append = (OPTS && OPTS.buildAppendBytes) ? await OPTS.buildAppendBytes(bm) : null;
-    const { blobUrl } = await generateCombinedCopies(bolRecords, append);
+    const { blobUrl } = await generateCombinedCopies(bolRecords, append, BM && BM.hideQr);
     return blobUrl;
   }
 

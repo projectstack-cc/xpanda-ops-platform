@@ -270,7 +270,7 @@ window.BolShared = (function() {
       }
 
       // ── QR code (driver tracking link) ──
-      if (opts.copyType !== 'customer' && bol.access_token && typeof qrcode === 'function') {
+      if (opts.copyType !== 'customer' && !opts.hideQr && bol.access_token && typeof qrcode === 'function') {
         const trackingUrl = `${window.location.origin}/track/${bol.access_token}`;
         // Type 0 = auto-select smallest version that fits; 'M' = medium error correction.
         const qr = qrcode(0, 'M');
