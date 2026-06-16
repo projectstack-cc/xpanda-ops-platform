@@ -511,8 +511,43 @@ export async function handleApiBols(request, env) {
     }
   }
 
+  // ── DELETE /api/bols?job_id=:jobId — delete ALL BOLs for a job (manager-only) ──
+  const delJobId = url.searchParams.get('job_id');
+  if (method === "DELETE" && !bolId && delJobId) {
+    const userPerms = JSON.parse(request.headers.get('X-User-Permissions') || '{}');
+    const isAdministrator = request.headers.get('X-User-Is-Admin') === '1';
+    if (!isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
+      return json({ ok: false, error: 'Manager access required to delete BOLs.' }, 403);
+    }
+    try {
+      const rows = await db.prepare("SELECT id, bol_number FROM bols WHERE job_id = ?").bind(delJobId).all();
+      const bolRows = rows.results || [];
+      if (!bolRows.length) return json({ ok: true, message: "No BOLs to delete.", deleted: 0 });
+      for (const b of bolRows) {
+        const docs = await db.prepare("SELECT r2_key FROM bol_documents WHERE bol_id = ?").bind(b.id).all();
+        for (const d of (docs.results || [])) {
+          if (d.r2_key && env.BOL_PHOTOS) { try { await env.BOL_PHOTOS.delete(d.r2_key); } catch (_e) {} }
+        }
+        await db.prepare("DELETE FROM bol_documents WHERE bol_id = ?").bind(b.id).run();
+      }
+      await db.prepare("DELETE FROM bols WHERE job_id = ?").bind(delJobId).run();
+      await logActivity(db, 'delete', 'bol', delJobId,
+        `Deleted ${bolRows.length} BOL(s) for job ${delJobId}`,
+        { job_id: delJobId, count: bolRows.length }
+      );
+      return json({ ok: true, message: `Deleted ${bolRows.length} BOL(s).`, deleted: bolRows.length });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
   // ── DELETE /api/bols/:id ──────────────────────────────────────────────────
   if (method === "DELETE" && bolId) {
+    const userPerms = JSON.parse(request.headers.get('X-User-Permissions') || '{}');
+    const isAdministrator = request.headers.get('X-User-Is-Admin') === '1';
+    if (!isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
+      return json({ ok: false, error: 'Manager access required to delete BOLs.' }, 403);
+    }
     try {
       const exists = await db.prepare("SELECT id, bol_number FROM bols WHERE id = ?").bind(bolId).first();
       if (!exists) return json({ ok: false, error: "BOL not found." }, 404);

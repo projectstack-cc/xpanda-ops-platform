@@ -595,7 +595,7 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
         ${a.loading_status === 'awaiting' && isManager
           ? `<button class="ld-btn-assign" onclick="openAssignBayModal('${a.id}')">Assign Bay</button>`
           : ''}
-        ${next && a.loading_status !== 'awaiting'
+        ${next && a.loading_status !== 'awaiting' && (next !== 'in_transit' || isManager)
           ? `<button class="ld-btn-advance" onclick="advanceStatus('${a.id}', '${next}')">${getAdvanceLabel(next)}</button>`
           : ''}
         ${a.loading_status !== 'awaiting'

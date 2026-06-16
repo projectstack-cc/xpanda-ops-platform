@@ -234,6 +234,13 @@ export async function handleApiLoadingAssignments(request, env) {
         }
       }
 
+      // Manager-only: moving a trailer to In Transit. The loading team must not.
+      // The public driver QR-pickup path is a separate handler and is unaffected.
+      if (payload.loading_status === 'in_transit' && existing.loading_status !== 'in_transit'
+          && !isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
+        return json({ ok: false, error: 'Manager access required to mark a trailer In Transit.' }, 403);
+      }
+
       updates.push('loading_status = ?'); binds.push(payload.loading_status);
 
       if (payload.loading_status === 'loading' && !existing.started_at) {
