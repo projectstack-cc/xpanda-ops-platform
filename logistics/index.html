@@ -23,7 +23,7 @@
 <script src="/logistics/bol-shared.js"></script>
 <script src="/logistics/bol-compose.js"></script>
 
-<div id="log-bol-view-modal" onclick="if(event.target===this) closeBolViewModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+<div id="log-bol-view-modal" onclick="if(event.target===this) closeBolViewModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1100;align-items:center;justify-content:center;">
   <div style="max-width:95vw;width:95vw;max-height:95vh;height:95vh;display:flex;flex-direction:column;background:#fff;border-radius:10px;overflow:hidden;">
     <div style="padding:10px 16px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
       <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827;">Bill of Lading</h3>
@@ -82,7 +82,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
       <button class="logistics-btn logistics-btn-outbound" onclick="openModal('outbound')">+ New Shipment</button>
       <button class="logistics-btn logistics-btn-outline" onclick="openShipJobPicker()">Ship from Job…</button>
       <a class="logistics-btn logistics-btn-outline" href="/logistics/load-builder.html" style="text-decoration:none;">Load Builder</a>
-      <a class="logistics-btn logistics-btn-outline" href="/logistics/bol-generator.html" style="text-decoration:none;">BOL Generator</a>
+      <a class="logistics-btn logistics-btn-outline bol-generator-link" href="#" onclick="event.preventDefault();openBlankBolModal()" style="text-decoration:none;">BOL Generator</a>
       <a class="logistics-btn logistics-btn-outline" href="/logistics/loading.html" style="text-decoration:none;">Loading Dashboard</a>
 
       <div class="logistics-toolbar-right">
@@ -942,6 +942,29 @@ function buildActionButtons(shipment) {
 
 // Pop the shared BOL modal (same engine load-builder uses) for a job, with no
 // packed load. One record per load (load_count); the user fills quantities.
+function openBlankBolModal() {
+  if (typeof BolCompose === 'undefined') { alert('BOL tool failed to load. Refresh and try again.'); return; }
+  const today = new Date().toISOString().slice(0, 10);
+  const blank = {
+    commodityDescription: '', commodityDescriptionFull: '', commodityDescriptionNoDims: '',
+    totalStacks: '', totalPieces: '', totalWeight: '',
+    customerSource: 'manual', customerId: null, jobId: null,
+    shipToCompany: '', shipToAttention: '', shipToStreet: '', shipToStreet2: '',
+    shipToCity: '', shipToState: '', shipToZip: '',
+    contactName: '', contactPhone: '', carrierName: '',
+    poNumber: '', deliveryTime: '', invNumber: '',
+    date: today, freightTerms: 'prepaid', specialInstructions: '', carryOver: false,
+    trailerIndex: 0, trailerLabel: 'BOL',
+  };
+  BolCompose.open({
+    trailerData: [blank],
+    trailerCount: 1,
+    trailers: [],
+    trailerInvNumbers: [''],
+    buildAppendBytes: null,
+  });
+}
+
 async function openBolModalForJob(jobId) {
   if (typeof BolCompose === 'undefined') { alert('BOL tool failed to load. Refresh and try again.'); return; }
   try {
@@ -1728,7 +1751,7 @@ async function gateLogisticsNav() {
     const perms = user.permissions || {};
 
     if (!perms['logistics.bol']?.view) {
-      document.querySelectorAll('a[href*="bol-generator"]').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('a[href*="bol-generator"], .bol-generator-link').forEach(el => el.style.display = 'none');
     }
     if (!perms['logistics.load-builder']?.view) {
       document.querySelectorAll('a[href*="load-builder"]').forEach(el => el.style.display = 'none');
