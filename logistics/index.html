@@ -21,6 +21,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
 <script src="/logistics/bol-shared.js"></script>
+<script src="/logistics/bol-compose.js"></script>
 
 <div id="log-bol-view-modal" onclick="if(event.target===this) closeBolViewModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
   <div style="max-width:95vw;width:95vw;max-height:95vh;height:95vh;display:flex;flex-direction:column;background:#fff;border-radius:10px;overflow:hidden;">
@@ -916,8 +917,73 @@ function buildActionButtons(shipment) {
   const hasBol = Number(shipment.bol_count || 0) > 0;
   const bolBtn = hasBol
     ? `<a class="logistics-action-btn action-bol" href="#" onclick="event.stopPropagation();event.preventDefault();viewBolForJob('${shipment.job_id}')">View BOL</a>`
-    : `<a class="logistics-action-btn action-bol" href="/logistics/bol-generator.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Generate BOL</a>`;
+    : `<a class="logistics-action-btn action-bol" href="#" onclick="event.stopPropagation();event.preventDefault();openBolModalForJob('${shipment.job_id}')">Generate BOL</a>`;
   return `<a class="logistics-action-btn action-load" href="/logistics/load-builder.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Build Load</a> ${bolBtn}`;
+}
+
+// Pop the shared BOL modal (same engine load-builder uses) for a job, with no
+// packed load. One record per load (load_count); the user fills quantities.
+async function openBolModalForJob(jobId) {
+  if (typeof BolCompose === 'undefined') { alert('BOL tool failed to load. Refresh and try again.'); return; }
+  try {
+    const res = await api.get('/api/jobs/' + encodeURIComponent(jobId));
+    if (!res.ok || !res.data || !res.data.job) { alert('Could not load job for BOL.'); return; }
+    const job = res.data.job;
+    const today = new Date().toISOString().slice(0, 10);
+
+    let commodityFull = '';
+    if (Array.isArray(job.line_items) && job.line_items.length) {
+      commodityFull = job.line_items.map(li =>
+        [li.quantity ? li.quantity + ' ×' : '', li.part_number || '', li.description || '']
+          .filter(Boolean).join(' ')
+      ).join('\n');
+    }
+    const piecesGuess = Array.isArray(job.line_items)
+      ? job.line_items.reduce((sum, li) => sum + (Number(li.quantity) || 0), 0)
+      : '';
+
+    const loadCount = Math.max(1, Number(job.load_count) || 1);
+    const base = {
+      commodityDescription: commodityFull,
+      commodityDescriptionFull: commodityFull,
+      commodityDescriptionNoDims: commodityFull,
+      totalStacks: '', totalPieces: piecesGuess || '', totalWeight: '',
+      customerSource: 'job', customerId: null, jobId: job.id,
+      shipToCompany: job.ship_to_company || job.customer || '',
+      shipToAttention: job.ship_to_attention || '',
+      shipToStreet: job.ship_to_street || '',
+      shipToStreet2: job.ship_to_street2 || '',
+      shipToCity: job.ship_to_city || (job.location || '').split(',')[0]?.trim() || '',
+      shipToState: job.ship_to_state || (job.location || '').split(',')[1]?.trim() || '',
+      shipToZip: job.ship_to_zip || '',
+      contactName: job.contact_name || '', contactPhone: job.contact_phone || '',
+      carrierName: job.carrier || '',
+      poNumber: job.po_number || '', deliveryTime: job.delivery_time || '',
+      date: job.ship_date || today,
+      freightTerms: 'prepaid', specialInstructions: '', carryOver: true,
+    };
+
+    const trailerData = [];
+    for (let i = 0; i < loadCount; i++) {
+      trailerData.push(Object.assign({}, base, {
+        trailerIndex: i,
+        trailerLabel: loadCount > 1 ? ('Load ' + (i + 1) + ' of ' + loadCount) : 'BOL',
+        invNumber: i === 0 ? (job.invoice_number || '') : '',
+      }));
+    }
+
+    BolCompose.open({
+      trailerData,
+      trailerCount: loadCount,
+      trailers: [],
+      prefillJobData: job,
+      trailerInvNumbers: trailerData.map(t => t.invNumber || ''),
+      buildAppendBytes: null,
+    });
+  } catch (e) {
+    console.error('openBolModalForJob failed:', e);
+    alert('Could not open the BOL generator.');
+  }
 }
 
 // ── Render Inbound ─────────────────────────────────────────────────────────

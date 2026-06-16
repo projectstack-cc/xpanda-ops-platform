@@ -274,6 +274,24 @@ function h(tag, attrs = {}, ...children) {
 
     body.appendChild(commPanel);
 
+    // Quantities — editable so a BOL can be generated without a packed load.
+    // Load-builder pre-fills these from the pack; the dashboard launcher leaves
+    // them blank for the user to enter.
+    const qtyPanel = h('div', { className: 'panel', style: { marginBottom: '14px' } });
+    qtyPanel.appendChild(h('div', { className: 'panel-title' }, 'QUANTITIES'));
+    const qtyRow = h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' } });
+    [['Pieces', 'totalPieces'], ['Stacks', 'totalStacks'], ['Weight (lb)', 'totalWeight']].forEach(([lbl, field]) => {
+      const cell = h('div', {});
+      cell.appendChild(h('label', { style: { display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px', fontWeight: 600 } }, lbl));
+      const inp = h('input', { type: 'number', className: 'inp', min: '0' });
+      inp.value = (td[field] === 0 || td[field]) ? td[field] : '';
+      inp.addEventListener('input', e => { td[field] = e.target.value === '' ? '' : Number(e.target.value); });
+      cell.appendChild(inp);
+      qtyRow.appendChild(cell);
+    });
+    qtyPanel.appendChild(qtyRow);
+    body.appendChild(qtyPanel);
+
     // Carry-over checkbox (pages 2+)
     if (bm.currentPage > 0) {
       const carryWrap = h('div', { style: { marginBottom: '14px' } });
@@ -540,6 +558,13 @@ function h(tag, attrs = {}, ...children) {
     bm.generateProgress = bm.trailerData.map((_, i) => ({ text: `Trailer ${i + 1} — waiting...`, done: false, pending: true }));
     render();
     const savedBols = [];
+    // Link a multi-load BOL set with a shared group id so the trailers of one
+    // shipment are queryable/displayable as a set. Singles get no group id.
+    const bolGroupId = bm.trailerData.length > 1
+      ? ((typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : ('grp-' + Date.now() + '-' + Math.random().toString(36).slice(2)))
+      : null;
     for (let i = 0; i < bm.trailerData.length; i++) {
       const td = bm.trailerData[i];
       bm.generateProgress[i] = { text: `⏳ Trailer ${i + 1} — saving...`, done: false, pending: false };
@@ -558,6 +583,9 @@ function h(tag, attrs = {}, ...children) {
           contact_info: [td.contactName ? ('POC: ' + td.contactName) : '', td.contactPhone || ''].filter(Boolean).join(' '),
           po_number: td.poNumber || '',
           is_master_bol: 0,
+          bol_group_id: bolGroupId,
+          load_number: i + 1,
+          load_count: bm.trailerData.length,
           commodity_description: td.commodityDescription,
           handling_unit_qty: String(td.totalStacks), handling_unit_type: 'stacks',
           package_qty: String(td.totalPieces), package_type: 'pcs',
