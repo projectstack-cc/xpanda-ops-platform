@@ -331,7 +331,7 @@ const LD_STATUS_COLORS = {
   loading:     { bg: '#fef3c7', border: '#f59e0b', text: '#92400e', label: 'Loading' },
   loaded:      { bg: '#d1fae5', border: '#10b981', text: '#065f46', label: 'Loaded' },
   in_transit:  { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3', label: 'In Transit' },
-  delivered:   { bg: '#f0fdf4', border: '#22c55e', text: '#166534', label: 'Delivered' },
+  delivered:   { bg: '#ccfbf1', border: '#0d9488', text: '#115e59', label: 'Delivered' },
 };
 
 async function loadDashboard() {
@@ -456,8 +456,14 @@ function renderBayView() {
         background:none;border:none;color:#3b82f6;font-size:14px;font-weight:600;
         cursor:pointer;padding:0;margin-bottom:12px;display:flex;align-items:center;gap:4px;
       ">← All Bays</button>
-      <div class="ld-bay-single-header">
-        <h3>Bay ${bay.bay_number}</h3>
+      <div class="ld-bay-single-header" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        <h3 style="font-size:26px; margin:0;">Bay ${bay.bay_number}</h3>
+        ${(() => {
+          const aj = bayAssignments.find(a => a.loading_status === 'loading') || bayAssignments[0];
+          return aj && aj.trailer_number
+            ? `<span style="font-weight:700;font-size:16px;color:var(--text);background:var(--ghost-bg);padding:4px 12px;border-radius:6px;">🚛 ${esc(aj.trailer_number)}</span>`
+            : '';
+        })()}
       </div>
       ${groups.map(g => `
         <div class="ld-bay-group ld-drop-zone" data-target-status="${g.status}">
@@ -486,21 +492,32 @@ function renderBayList() {
     );
     const jobCount = bayAssignments.length;
     const activeJob = bayAssignments.find(a => a.loading_status === 'loading') || bayAssignments[0];
+    const sc = activeJob ? (LD_STATUS_COLORS[activeJob.loading_status] || LD_STATUS_COLORS.awaiting) : null;
+    const trailer = activeJob && activeJob.trailer_number ? activeJob.trailer_number : '';
 
     return `
       <div class="ld-bay-list-item" onclick="drillIntoBay('${bay.id}')" style="
         display:flex; align-items:center; justify-content:space-between;
-        padding:16px; margin-bottom:8px; background:var(--card-bg);
-        border:1px solid var(--line); border-radius:12px;
-        cursor:pointer; transition:background 0.15s;
-      " onmouseenter="this.style.background='var(--surface-2)'" onmouseleave="this.style.background='var(--card-bg)'">
+        padding:16px; margin-bottom:8px;
+        background:${sc ? `linear-gradient(0deg, ${sc.border}14, ${sc.border}14), var(--card-bg)` : 'var(--card-bg)'};
+        border:1px solid var(--line); border-left:5px solid ${sc ? sc.border : 'var(--line)'};
+        border-radius:12px; cursor:pointer; transition:background 0.15s;
+      ">
         <div>
-          <div style="font-weight:700;font-size:18px;color:var(--text);">Bay ${bay.bay_number}</div>
+          <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+            <span style="font-weight:700;font-size:22px;color:var(--text);">Bay ${bay.bay_number}</span>
+            ${trailer
+              ? `<span style="font-weight:700;font-size:15px;color:var(--text);background:var(--ghost-bg);padding:3px 10px;border-radius:6px;">🚛 ${esc(trailer)}</span>`
+              : ''}
+            ${sc
+              ? `<span class="ld-status-badge" style="font-size:12px;color:${sc.border};">${sc.label}</span>`
+              : ''}
+          </div>
           ${activeJob
-            ? `<div style="font-size:13px;color:var(--muted);margin-top:4px;">
+            ? `<div style="font-size:13px;color:var(--muted);margin-top:6px;">
                 ${esc(activeJob.customer || 'Unknown')}${activeJob.invoice_number ? ' — INV# ' + esc(activeJob.invoice_number) : ''}
               </div>`
-            : `<div style="font-size:13px;color:#9ca3af;margin-top:4px;">No active jobs</div>`
+            : `<div style="font-size:13px;color:#9ca3af;margin-top:6px;">No active jobs</div>`
           }
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
@@ -643,8 +660,15 @@ async function moveToYard(assignmentId) {
 }
 
 async function updateAssignmentTrailer(assignmentId, trailerNumber) {
-  const { ok, data } = await api.put('/api/loading-assignments', { id: assignmentId, trailer_number: trailerNumber });
-  if (!ok) {
+  const trimmed = (trailerNumber || '').trim();
+  const { ok, data } = await api.put('/api/loading-assignments', { id: assignmentId, trailer_number: trimmed });
+  if (ok) {
+    // Persist to the in-memory model so any re-render (drill in/out, bay switch,
+    // dashboard refresh) reflects the saved value — fixes the "needs two saves
+    // to stick" bug where the stale in-memory value overwrote the input.
+    const a = allAssignments.find(x => String(x.id) === String(assignmentId));
+    if (a) a.trailer_number = trimmed;
+  } else {
     alert(data?.error || 'Failed to update trailer #');
     loadDashboard();
   }
