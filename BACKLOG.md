@@ -22,16 +22,6 @@
 - [ ] BOL COORDS refinement — remaining: enlarge & recenter scrap pick-up X marks *(commodity centering + delivery-time enlargement already shipped as P66–P67)*
 - [ ] Explore: use Claude Chrome to navigate AppSheets apps for a "Load Dashboard" for loading team
 
-### New Batch — Loading Dashboard + Driver + BOL Alignment
-
-- [ ] On **Mark In Transit**, clear the trailer input field on the loading dashboard.
-- [ ] **Human-error fallback:** if a driver scans the QR to begin transit while the trailer was **not** marked loaded, force the trailer card into **In Transit**.
-- [ ] DocuSign on the driver pages.
-- [ ] **Bay coloring on Loading Team View** — color-code bays to reflect current loading status at a glance; surface the status label on each bay so all bay states are visible in one view.
-- [ ] **Trailer # in Loading Team View header** — move trailer number to the top header line alongside the other key fields; add appropriate spacing between all header fields for visual differentiation; increase header text size.
-- [ ] **Trailer number requires two inputs to stick (bay view bug)** — trailer number field on the bay card does not persist on the first save; user must enter it a second time. Investigate the save/blur handler and any optimistic-update race that might be discarding the first write.
-- [ ] **Status colors incomplete / ambiguous** — status badge colors don't always display correctly if the standard event sequence is not followed; some distinct statuses share the same color. Audit all status → color mappings and assign unique, unambiguous colors; add a guard so color is derived from status value only (not from prior UI state).
-
 ### BOL Issues
 
 - [ ] **BOL print rendering bug** — when printing the BOL directly (without downloading), the "N" from "Bill of Lading No" and the "S" in "Customer Signature" are clipped/hidden. Likely a CSS `overflow: hidden` or `white-space` clip on the containing element interacting with the browser's print renderer. Needs print-preview investigation.
