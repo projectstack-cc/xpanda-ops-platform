@@ -1325,7 +1325,6 @@ async function prefillForm(data) {
     for (const li of matchedLineItems) {
       const descParts = [li.description];
       if (li.label) descParts.push('– ' + li.label);
-      if (li.dimensions && !li.label) descParts.push(li.dimensions);
       const desc = descParts.filter(Boolean).join(' ').trim();
       const row = addLineItemRow({
         part_id:     li.part_id,

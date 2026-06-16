@@ -71,15 +71,18 @@ window.BolShared = (function() {
   function pickCommodityTier(text, pdfFont) {
     const tiers = [
       { size: 26, lineH: 32, maxLines: 2 },
-      { size: 22, lineH: 28, maxLines: 5 },
-      { size: 20, lineH: 24, maxLines: Infinity },
+      { size: 22, lineH: 28, maxLines: 4 },
+      { size: 18, lineH: 22, maxLines: 7 },
+      { size: 15, lineH: 18, maxLines: 11 },
+      { size: 12, lineH: 14, maxLines: 18 },
+      { size: 10, lineH: 12, maxLines: Infinity },
     ];
     for (const t of tiers) {
       if (wrapText(String(text), pdfFont, t.size, COORDS.commodity.maxW).length <= t.maxLines) {
         return { size: t.size, lineH: t.lineH };
       }
     }
-    return { size: 20, lineH: 24 };
+    return { size: 10, lineH: 12 };
   }
 
   // ═══════════════════════════════════════════════════════════════════
