@@ -345,7 +345,7 @@
     }
 
 
-    function getCheckedDepartments
+    function getCheckedDepartments() {
       return Array.from(document.querySelectorAll('.checks input[type="checkbox"]:checked'))
         .map(cb => cb.value);
     }
