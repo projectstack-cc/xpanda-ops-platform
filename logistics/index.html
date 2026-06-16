@@ -824,6 +824,20 @@ function buildBayCell(shipment, loadingAssignment) {
   return '—';
 }
 
+async function deleteAllBolsForJob(jobId, count) {
+  if (!confirm('Delete ALL ' + count + ' BOL(s) for this job, including any signed copies? This cannot be undone.')) return;
+  try {
+    const { ok, data } = await api.del('/api/bols?job_id=' + encodeURIComponent(jobId));
+    if (!ok) { alert((data && data.error) || 'Failed to delete BOLs.'); return; }
+    loadBolDocuments({ job_id: jobId });
+    if (typeof loadOutbound === 'function') loadOutbound();
+    if (typeof loadInbound === 'function') loadInbound();
+  } catch (e) {
+    console.error('deleteAllBolsForJob failed:', e);
+    alert('Failed to delete BOLs.');
+  }
+}
+
 async function loadBolDocuments(s) {
   const host = document.getElementById('modal-documents');
   if (!host) return;
@@ -857,7 +871,12 @@ async function loadBolDocuments(s) {
         </div>`
       );
     }
-    host.innerHTML = `<div style="font-weight:600;font-size:13px;margin:4px 0 6px;">Documents</div>${blocks.join('')}`;
+    const _u = window.__xpandaUser;
+    const _isMgr = _u && (_u.isAdministrator || (_u.permissions && _u.permissions['logistics.loading.manage'] && _u.permissions['logistics.loading.manage'].edit));
+    const delBtn = _isMgr
+      ? `<button onclick="deleteAllBolsForJob('${esc(s.job_id)}', ${bols.length})" style="margin-left:auto;font-size:12px;color:var(--danger,#ef4444);background:none;border:1px solid var(--danger,#ef4444);border-radius:6px;padding:2px 8px;cursor:pointer;">Delete all BOLs</button>`
+      : '';
+    host.innerHTML = `<div style="display:flex;align-items:center;font-weight:600;font-size:13px;margin:4px 0 6px;">Documents${delBtn}</div>${blocks.join('')}`;
   } catch (e) {
     host.innerHTML = '';
   }
