@@ -404,8 +404,9 @@ export async function handleApiBols(request, env) {
           carrier_id, carrier_name, trailer_no, seal_number, scac, pro_no,
           freight_terms, is_scrap_pickup, third_party_bill_to, special_instructions, contact_info, is_master_bol,
           commodity_description, handling_unit_qty, handling_unit_type,
-          package_qty, package_type, weight, delivery_time, job_id, notes, po_number, render_overrides, access_token, shipper_name, created_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          package_qty, package_type, weight, delivery_time, job_id, notes, po_number, render_overrides, access_token, shipper_name,
+          bol_group_id, load_number, load_count, created_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, bol_number, date,
         payload.customer_id ? String(payload.customer_id).trim() : null,
@@ -418,7 +419,11 @@ export async function handleApiBols(request, env) {
         s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),
         s("package_qty"), s("package_type"), s("weight"), s("delivery_time"),
         payload.job_id ? String(payload.job_id).trim() : null,
-        s("notes"), s("po_number"), render_overrides, access_token, shipper_name, now
+        s("notes"), s("po_number"), render_overrides, access_token, shipper_name,
+        payload.bol_group_id ? String(payload.bol_group_id).trim() : null,
+        payload.load_number != null ? Number(payload.load_number) : null,
+        payload.load_count  != null ? Number(payload.load_count)  : null,
+        now
       ).run();
 
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();
