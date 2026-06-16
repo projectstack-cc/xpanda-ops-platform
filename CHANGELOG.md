@@ -106,6 +106,8 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## QC
 
+- **P172** — Hotfix: repair malformed `getCheckedDepartments` function declaration in `qc/incident-report.html` (missing `() {`); a parse error at line 348 was aborting the entire inline script, leaving the customer dropdown stuck on "Loading Customers".
+
 *(QC module bootstrapped as part of the early foundation; no items with distinct prompt numbers. P137 is in Infra / Docs.)*
 
 ---
