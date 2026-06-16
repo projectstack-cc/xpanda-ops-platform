@@ -10,6 +10,8 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P168** — Double BOL signature stamp box height (16→32 pts) for customer and carrier slots in `track/index.html`; date slot unchanged; pdf-lib bottom-left origin means signatures grow upward from baseline `y`. (58447f7)
+- **P167** — Fix signed BOL copies never displaying in the Documents section: `/api/bols/:id/documents` returns `{ ok, data: [...] }` so the array lives at `res.data.data`, not `res.data`; `Array.isArray(dRes.data)` was always false, always returning `[]`. (7f419d0)
 - **P166** — Remove Recent BOLs sidebar from BOL generator: sidebar markup deleted, `.bol-columns` changed to `display:block` (full-width form), `loadRecentBols` function and all three call sites removed; `loadBolIntoForm` preserved. (0016cf9)
 - **P165** — Logistics dashboard "View BOL" renders the BOL inline (combined 3 copies) instead of navigating to the generator: pdf-lib/qrcode/fontkit/bol-shared loaded; `viewBolForJob()` fetches the latest BOL and renders original→driver→customer into an in-page modal with a Download button; calendar-popup and action-button links rerouted; "Generate BOL" link preserved for jobs without a BOL. (0016cf9)
 - **P164** — Combined 3-copy BOL output via shared `generateCombinedCopies` helper in `bol-compose.js`: iterates `[undefined, 'driver', 'customer']`, merges pages into one PDF, appends packing slip once; both `generateBolPdf` (load-builder) and `rrRegenerate` (bol-generator) route through it for output parity. (db971fe)
