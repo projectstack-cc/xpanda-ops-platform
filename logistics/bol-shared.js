@@ -252,7 +252,11 @@ window.BolShared = (function() {
       drawText('X', off('scrap', _isScrap ? COORDS.scrapYes : COORDS.scrapNo));
 
       // ── Commodity description (centered, auto-sized by wrapped line count) ──
-      const _commodityText = Array.isArray(_ov.commodity) ? _ov.commodity.join('\n') : bol.commodity_description;
+      let _commodityText = Array.isArray(_ov.commodity) ? _ov.commodity.join('\n') : bol.commodity_description;
+      if (_commodityText && bol.siplast) {
+        // Siplast products: prefix the SKU inside parens, e.g. (HB-10) -> (Siplast HB-10)
+        _commodityText = String(_commodityText).replace(/\(([^)]+)\)/g, '(Siplast $1)');
+      }
       if (_commodityText) {
         const _tier = pickCommodityTier(String(_commodityText), font);
         drawMultiline(_commodityText, off('commodity', { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH }));

@@ -12,26 +12,15 @@
 
 ### Standing Logistics Backlog
 
-- [ ] Customer database (full CRUD)
-- [ ] Loading status indicator
+- [ ] Customer database (full CRUD) — icebox: revisit once all orders are entered here first, or it becomes a necessity
 - [ ] Consider separate dashboards for staff vs. management (TV display)
 - [ ] Zoning support for deck systems
 - [ ] Load builder: make initial calculated load view larger, include the stacks visually
 - [ ] Load builder: fix/clarify customize mode drag-and-drop (move layers between columns)
-- [ ] Load builder Load tab polish (optional, post-P131) — tune SKU grid frame height (`46vh`); cap the sticky LOAD LIST height when a load has many line items; optional "In load (N)" entry pinned atop the category rail; indicate active forced-sizes state on the collapsed Advanced toggle.
-- [ ] BOL COORDS refinement — remaining: enlarge & recenter scrap pick-up X marks *(commodity centering + delivery-time enlargement already shipped as P66–P67)*
-- [ ] Explore: use Claude Chrome to navigate AppSheets apps for a "Load Dashboard" for loading team
 
 ### BOL Issues
 
-- [ ] **BOL print rendering bug** — when printing the BOL directly (without downloading), the "N" from "Bill of Lading No" and the "S" in "Customer Signature" are clipped/hidden. Likely a CSS `overflow: hidden` or `white-space` clip on the containing element interacting with the browser's print renderer. Needs print-preview investigation.
-- [ ] **Remove dimensions from BOL commodity block** — dimensions are already embedded in most line-item descriptions, so including them separately duplicates content. Add a toggle or remove the dimension column from the BOL commodity section entirely. *(coordinating change in `bol-shared.js` `drawCommodity` / commodity tier logic)*
-- [ ] **Siplast toggle on BOL** — to be scoped with Claude. Likely a conditional section or checkbox on the BOL generator that includes/excludes Siplast-specific fields or language; exact field set and placement TBD.
-- [ ] **Archived-order logistics dashboard** — once a job is archived, hide the "Build Load" button (signed BOL copies are now surfaced via the Documents section shipped in P156).
-
-### BOL Generator Follow-on
-
-- [ ] **`bol-generator.html` multi-trailer.** The shared review surface already navigates multiple records (the picker); `bol-generator.html` still collects a single ship-to set. Small lift: collect N records → `reviewRecords([...])`. *(follow-on to P123–P128)*
+- [ ] **BOL print rendering bug** — when printing the BOL directly (without downloading), the "N" from "Bill of Lading No" and the "S" in "Customer Signature" are clipped/hidden. Parked: root cause is the blank-template artwork + browser print scaling (not our drawn text); needs print-preview testing on a real printer.
 
 ---
 

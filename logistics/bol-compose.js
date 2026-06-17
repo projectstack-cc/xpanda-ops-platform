@@ -207,6 +207,7 @@ function h(tag, attrs = {}, ...children) {
       includePacking: false,
       includeLoadingDiagram: false,
       hideQr: false,
+      siplast: false,
     };
     render();
   }
@@ -302,6 +303,14 @@ function h(tag, attrs = {}, ...children) {
     hideDimsLabel.appendChild(hideDimsCheck);
     hideDimsLabel.appendChild(document.createTextNode('Part # and qty only (hide dimensions)'));
     commPanel.appendChild(hideDimsLabel);
+
+    const siplastLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6b7280', cursor: 'pointer', marginTop: '6px' } });
+    const siplastCheck = h('input', { type: 'checkbox' });
+    siplastCheck.checked = !!BM.siplast;
+    siplastCheck.addEventListener('change', e => { BM.siplast = e.target.checked; });
+    siplastLabel.appendChild(siplastCheck);
+    siplastLabel.appendChild(document.createTextNode('Siplast Product?'));
+    commPanel.appendChild(siplastLabel);
 
     body.appendChild(commPanel);
 
@@ -605,6 +614,7 @@ function h(tag, attrs = {}, ...children) {
           contact_info: [td.contactName ? ('POC: ' + td.contactName) : '', td.contactPhone || ''].filter(Boolean).join(' '),
           po_number: td.poNumber || '',
           is_master_bol: 0,
+          siplast: BM.siplast ? 1 : 0,
           bol_group_id: bolGroupId,
           load_number: i + 1,
           load_count: bm.trailerData.length,
