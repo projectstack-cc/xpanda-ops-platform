@@ -798,7 +798,7 @@ function buildOutboundRow(s) {
     <td>${esc(s.bol_number) || '—'}</td>
     <td>${statusBadge(s.status)}</td>
     <td>${bayHtml}</td>
-    <td style="text-align:right;">${actionsHtml}</td>
+    <td><div class="logistics-actions-cell">${actionsHtml}</div></td>
   </tr>`;
 }
 

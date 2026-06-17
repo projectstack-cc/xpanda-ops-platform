@@ -768,6 +768,18 @@ function buildCard(job) {
   const trailerBadge = job.assigned_trailers
     ? `<div class="jobs-card-trailer" title="Trailer ${esc(job.assigned_trailers)} assigned on the loading dashboard">🚛 Trailer Assigned</div>`
     : '';
+  const LOADING_BADGE = {
+    not_started: { label: 'Not Loaded',   color: '#ef4444' },
+    awaiting:    { label: 'Awaiting Bay',  color: '#6b7280' },
+    loading:     { label: 'Loading',       color: '#f59e0b' },
+    loaded:      { label: 'Loaded',        color: '#10b981' },
+    in_transit:  { label: 'In Transit',    color: '#6366f1' },
+    delivered:   { label: 'Delivered',     color: '#0d9488' },
+  };
+  const _ls = job.loading_status_indicator;
+  const loadingBadge = (_ls && LOADING_BADGE[_ls])
+    ? `<div class="jobs-card-loading" style="font-size:11px;font-weight:700;color:${LOADING_BADGE[_ls].color};margin-top:4px;">● ${LOADING_BADGE[_ls].label}</div>`
+    : '';
 
   card.innerHTML = `
     <div class="jobs-card-top">
@@ -784,6 +796,7 @@ function buildCard(job) {
     </div>
     ${procHtml}
     ${trailerBadge}
+    ${loadingBadge}
     <button id="bol-view-btn-${esc(job.id)}" class="jobs-bol-view-btn" hidden onclick="event.stopPropagation();viewBolForJob('${esc(job.id)}')">View BOL</button>
     ${job.status === 'shipped' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
     ${job.status === 'archived' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to shipped">Unarchive</button>` : ''}
