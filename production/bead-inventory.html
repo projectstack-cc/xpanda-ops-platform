@@ -156,7 +156,7 @@
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-hint);
 }
 .bead-reorder-badge {
   display: inline-block;
@@ -241,7 +241,7 @@
 .qty-negative { color: #dc2626; font-weight: 700; }
 .bead-empty-row td {
   text-align: center;
-  color: #94a3b8;
+  color: var(--text-hint);
   padding: 28px;
 }
 
@@ -509,7 +509,7 @@ document.getElementById('prod-page-subtitle').textContent = 'Raw bead tracking b
   <!-- Silo Cards -->
   <p class="bead-silos-heading">Silos</p>
   <div class="bead-silos-grid" id="silos-grid">
-    <div style="color:#94a3b8;font-size:14px;">Loading silos…</div>
+    <div style="color:var(--text-hint);font-size:14px;">Loading silos…</div>
   </div>
 
   <!-- Transaction History -->
@@ -784,7 +784,7 @@ async function loadTransactions() {
 function renderSilos() {
   const grid = document.getElementById("silos-grid");
   if (!allSilos.length) {
-    grid.innerHTML = `<div style="color:#94a3b8;font-size:14px;">No silos configured. Use Manage to add one.</div>`;
+    grid.innerHTML = `<div style="color:var(--text-hint);font-size:14px;">No silos configured. Use Manage to add one.</div>`;
     return;
   }
   grid.innerHTML = allSilos.map(s => {
@@ -1000,7 +1000,7 @@ function switchManageTab(tab, btn) {
 function renderManageSilos() {
   const list = document.getElementById("manage-silos-list");
   if (!allSilos.length) {
-    list.innerHTML = `<li style="color:#94a3b8;font-size:13px;padding:8px;">No silos yet.</li>`;
+    list.innerHTML = `<li style="color:var(--text-hint);font-size:13px;padding:8px;">No silos yet.</li>`;
     return;
   }
   list.innerHTML = allSilos.map(s => `
@@ -1102,7 +1102,7 @@ async function deleteSilo(id) {
 function renderManageTypes() {
   const list = document.getElementById("manage-types-list");
   if (!allBeadTypes.length) {
-    list.innerHTML = `<li style="color:#94a3b8;font-size:13px;padding:8px;">No bead types yet.</li>`;
+    list.innerHTML = `<li style="color:var(--text-hint);font-size:13px;padding:8px;">No bead types yet.</li>`;
     return;
   }
   list.innerHTML = allBeadTypes.map(t => `

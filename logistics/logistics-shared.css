@@ -634,7 +634,7 @@ button, input, select, textarea {
 .cal-pill { padding: 3px 6px; margin-bottom: 2px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity 0.15s; }
 .cal-pill:hover { opacity: 0.8; }
 .cal-more { padding: 2px 6px; font-size: 10px; font-weight: 600; color: var(--muted); cursor: pointer; }
-.cal-more:hover { color: #1e40af; text-decoration: underline; }
+.cal-more:hover { color: var(--link); text-decoration: underline; }
 
 .logistics-view-toggle { display: flex; border: 1px solid var(--input-border); border-radius: 8px; overflow: hidden; }
 .logistics-view-btn { padding: 5px 12px; font-size: 12px; font-weight: 600; border: none; background: var(--card-bg); color: var(--muted); cursor: pointer; }

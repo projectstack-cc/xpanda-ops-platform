@@ -38,7 +38,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap;padding:8px 0;">
         ${list.map((p, i) => `
           <div class="pg-thumb" data-photo-id="${utils.escHtml(p.id)}" data-index="${i}"
-               style="width:80px;height:80px;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;background:#f3f4f6;overflow:hidden;position:relative;">
+               style="width:80px;height:80px;border:1px solid var(--card-border);border-radius:6px;cursor:pointer;background:var(--surface-2);overflow:hidden;position:relative;">
           </div>
         `).join('')}
       </div>
@@ -50,7 +50,7 @@
       img.src = photoSrc(id);
       img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
       img.onerror = () => {
-        thumb.innerHTML = '<div style="font-size:11px;color:#b91c1c;text-align:center;padding:4px;display:flex;align-items:center;justify-content:center;height:100%;">Error</div>';
+        thumb.innerHTML = '<div style="font-size:11px;color:var(--danger-bg);text-align:center;padding:4px;display:flex;align-items:center;justify-content:center;height:100%;">Error</div>';
       };
       thumb.appendChild(img);
     });

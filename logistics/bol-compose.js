@@ -122,49 +122,49 @@ function h(tag, attrs = {}, ...children) {
   display:none;align-items:center;justify-content:center;
 ">
   <div style="
-    background:#fff;border-radius:12px;width:95%;max-width:800px;
+    background:var(--card-bg);border-radius:12px;width:95%;max-width:800px;
     height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.2);
   ">
     <div style="
       display:flex;justify-content:space-between;align-items:center;
-      padding:16px 20px;border-bottom:1px solid #e5e7eb;
+      padding:16px 20px;border-bottom:1px solid var(--line);
     ">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:#111827;">Review BOL</h3>
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--text);">Review BOL</h3>
       <div style="display:flex;gap:8px;">
         <button id="bol-review-close-lb" style="
           padding: 8px 16px;
-          background: #ffffff;
-          color: #374151;
-          border: 1px solid #d1d5db;
+          background: var(--card-bg);
+          color: var(--text);
+          border: 1px solid var(--input-border);
           border-radius: 6px;
           font-weight: 600;
           cursor: pointer;
           font-size: 14px;
         ">Close</button>
         <button id="bol-review-edit" style="
-          padding:8px 20px;border-radius:8px;border:1px solid #d1d5db;
-          background:#fff;cursor:pointer;font-size:14px;font-weight:600;color:#111827;
+          padding:8px 20px;border-radius:8px;border:1px solid var(--input-border);
+          background:var(--card-bg);cursor:pointer;font-size:14px;font-weight:600;color:var(--text);
         ">Make Changes</button>
         <button id="bol-review-approve" style="
           padding:8px 20px;border-radius:8px;border:none;
-          background:#1e293b;color:#fff;cursor:pointer;font-size:14px;font-weight:600;
+          background:var(--primary-bg);color:var(--primary-text);cursor:pointer;font-size:14px;font-weight:600;
         ">Approve</button>
       </div>
     </div>
     <div id="bol-review-picker-lb" style="
       display: none;
       padding: 8px 16px;
-      border-bottom: 1px solid #e5e7eb;
-      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+      background: var(--card-bg);
       align-items: center;
       gap: 8px;
       font-size: 14px;
       flex-shrink: 0;
     ">
-      <label style="font-weight:600; color:#374151;">Editing BOL:</label>
+      <label style="font-weight:600; color:var(--text);">Editing BOL:</label>
       <select id="bol-review-picker-select-lb" style="
         padding: 4px 8px;
-        border: 1px solid #d1d5db;
+        border: 1px solid var(--input-border);
         border-radius: 4px;
         font-size: 14px;
       "></select>
@@ -172,7 +172,7 @@ function h(tag, attrs = {}, ...children) {
     <iframe id="bol-review-iframe" style="
       flex:1;border:none;border-radius:0 0 12px 12px;
     "></iframe>
-    <div id="bol-review-editor-host-lb" style="display:none; flex:1; overflow:auto; background:#f9fafb; flex-direction:column;">
+    <div id="bol-review-editor-host-lb" style="display:none; flex:1; overflow:auto; background:var(--surface-2); flex-direction:column;">
       <div id="bol-review-editor-mount-lb" style="position:relative; flex:1; min-width:0; width:100%;"></div>
     </div>
   </div>
@@ -293,7 +293,7 @@ function h(tag, attrs = {}, ...children) {
     });
     commPanel.appendChild(commTA);
 
-    const hideDimsLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6b7280', cursor: 'pointer', marginTop: '6px' } });
+    const hideDimsLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', marginTop: '6px' } });
     const hideDimsCheck = h('input', { type: 'checkbox' });
     hideDimsCheck.addEventListener('change', e => {
       const hide = e.target.checked;
@@ -304,7 +304,7 @@ function h(tag, attrs = {}, ...children) {
     hideDimsLabel.appendChild(document.createTextNode('Part # and qty only (hide dimensions)'));
     commPanel.appendChild(hideDimsLabel);
 
-    const siplastLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6b7280', cursor: 'pointer', marginTop: '6px' } });
+    const siplastLabel = h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', marginTop: '6px' } });
     const siplastCheck = h('input', { type: 'checkbox' });
     siplastCheck.checked = !!BM.siplast;
     siplastCheck.addEventListener('change', e => { BM.siplast = e.target.checked; });

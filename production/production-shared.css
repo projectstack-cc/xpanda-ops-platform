@@ -62,9 +62,9 @@ textarea {
 }
 
 .prod-badge {
-    color: #92400e;
-    background: #fffbeb;
-    border-color: #fde68a;
+    color: var(--warn-text);
+    background: var(--warn-bg);
+    border-color: var(--warn-border);
 }
 
 .pill {
@@ -90,7 +90,7 @@ textarea {
     display: inline-block;
     margin-bottom: 8px;
     font-size: 14px;
-    color: #b45309;
+    color: var(--link);
     text-decoration: none;
     font-weight: bold;
 }
