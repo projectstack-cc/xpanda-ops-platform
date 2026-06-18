@@ -605,6 +605,9 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
         ${isManager && a.bay_id && ['not_started','loading','loaded'].includes(a.loading_status)
           ? `<button class="ld-btn-yard" onclick="moveToYard('${a.id}')">Move to Yard</button>`
           : ''}
+        ${isManager && a.loading_status === 'in_transit'
+          ? `<button class="ld-btn-yard" onclick="revertToBay('${a.id}')">Move back to bay</button>`
+          : ''}
         ${showArchiveBtn ? `<button class="ld-btn-archive" onclick="archiveAssignment('${a.id}')">Archive</button>` : ''}
       </div>
     </div>
@@ -656,6 +659,20 @@ async function moveToYard(assignmentId) {
     }
   } catch (e) {
     console.error('Move to yard failed:', e);
+  }
+}
+
+async function revertToBay(assignmentId) {
+  if (!confirm('Move this trailer back to a bay? This undoes "In Transit".')) return;
+  try {
+    const { ok, data } = await api.put('/api/loading-assignments', { id: assignmentId, loading_status: 'loaded', location: 'bay' });
+    if (ok) {
+      loadDashboard();
+    } else {
+      alert((data && data.error) || 'Failed to move back to bay.');
+    }
+  } catch (e) {
+    console.error('Revert to bay failed:', e);
   }
 }
 

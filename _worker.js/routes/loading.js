@@ -241,6 +241,17 @@ export async function handleApiLoadingAssignments(request, env) {
         return json({ ok: false, error: 'Manager access required to mark a trailer In Transit.' }, 403);
       }
 
+      // Manager-only: reverting a trailer backward out of In Transit (misclick recovery).
+      {
+        const FLOW = ['awaiting', 'not_started', 'loading', 'loaded', 'in_transit', 'delivered'];
+        const fromIdx = FLOW.indexOf(existing.loading_status);
+        const toIdx   = FLOW.indexOf(payload.loading_status);
+        if (existing.loading_status === 'in_transit' && toIdx > -1 && fromIdx > -1 && toIdx < fromIdx
+            && !isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
+          return json({ ok: false, error: 'Manager access required to move a trailer out of In Transit.' }, 403);
+        }
+      }
+
       updates.push('loading_status = ?'); binds.push(payload.loading_status);
 
       if (payload.loading_status === 'loading' && !existing.started_at) {
@@ -254,6 +265,9 @@ export async function handleApiLoadingAssignments(request, env) {
       }
       if (payload.loading_status === 'delivered' && !existing.delivered_at) {
         updates.push('delivered_at = ?'); binds.push(now);
+      }
+      if (existing.loading_status === 'in_transit' && payload.loading_status !== 'in_transit') {
+        updates.push('in_transit_at = ?'); binds.push(null);
       }
 
       // Dispatch notification on status transition
