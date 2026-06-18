@@ -95,11 +95,11 @@ if (!window.__xpandaPwaInstallLoaded) {
       <div id="hdr-notif-dropdown" style="display:none;position:absolute;top:36px;right:0;width:340px;max-height:420px;background:var(--card-bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);overflow:hidden;z-index:9999;">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);">
           <span style="font-weight:700;font-size:14px;">Notifications</span>
-          <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
+          <button onclick="markAllRead()" style="background:none;border:none;color:var(--link);font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
         </div>
-        <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:#eff6ff;border-bottom:1px solid var(--line);cursor:pointer;" onclick="enablePushFromBanner()">
-          <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 Enable push notifications</div>
-          <div style="font-size:11px;color:#6b7280;margin-top:2px;">Tap to get alerts on this device</div>
+        <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:var(--info-bg);border-bottom:1px solid var(--line);cursor:pointer;" onclick="enablePushFromBanner()">
+          <div style="font-size:13px;font-weight:600;color:var(--info-text);">🔔 Enable push notifications</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Tap to get alerts on this device</div>
         </div>
         <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
       </div>` : '';
@@ -110,10 +110,10 @@ if (!window.__xpandaPwaInstallLoaded) {
       <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;">Sign Out</a>` : '';
 
     // Mode toggle button — always rendered on every module header.
-    const modeToggleHtml = `<button type="button" id="hdr-mode-toggle" class="xpanda-mode-toggle" aria-label="Toggle floor mode" aria-pressed="false" onclick="window.__xpandaSetUiMode(window.__xpandaGetUiMode()==='floor'?'office':'floor')" style="background:none;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;padding:4px 10px;color:#5b6472;display:inline-flex;align-items:center;gap:4px;line-height:1;"><span id="hdr-mode-label">Office</span></button>`;
+    const modeToggleHtml = `<button type="button" id="hdr-mode-toggle" class="xpanda-mode-toggle" aria-label="Toggle floor mode" aria-pressed="false" onclick="window.__xpandaSetUiMode(window.__xpandaGetUiMode()==='floor'?'office':'floor')" style="background:none;border:1px solid var(--input-border);border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;padding:4px 10px;color:var(--muted);display:inline-flex;align-items:center;gap:4px;line-height:1;"><span id="hdr-mode-label">Office</span></button>`;
 
     // Theme toggle button — sun/moon SVG, no emoji.
-    const themeToggleHtml = `<button type="button" id="hdr-theme-toggle" aria-label="Toggle dark mode" onclick="window.ThemeManager&&window.ThemeManager.toggle()" style="background:none;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;padding:4px 8px;color:#5b6472;display:inline-flex;align-items:center;line-height:1;"><svg class="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="theme-icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>`;
+    const themeToggleHtml = `<button type="button" id="hdr-theme-toggle" aria-label="Toggle dark mode" onclick="window.ThemeManager&&window.ThemeManager.toggle()" style="background:none;border:1px solid var(--input-border);border-radius:6px;cursor:pointer;padding:4px 8px;color:var(--muted);display:inline-flex;align-items:center;line-height:1;"><svg class="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="theme-icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>`;
 
     window.__xpandaUpdateModeToggle = function (mode) {
       var btn = document.getElementById('hdr-mode-toggle');
@@ -216,7 +216,7 @@ if (!window.__xpandaPwaInstallLoaded) {
       footer.className = config.footerClass;
       if (config.userBarLocation === 'footer') {
         footer.innerHTML = `
-  <div id="footer-user-bar" style="margin-bottom:8px;font-size:12px;color:#6b7280;">
+  <div id="footer-user-bar" style="margin-bottom:8px;font-size:12px;color:var(--text-muted);">
     <span id="hdr-user-name"></span>
     <span style="margin:0 4px;">•</span>
     <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;font-size:12px;">Sign Out</a>
@@ -367,12 +367,12 @@ if (!window.__xpandaPwaInstallLoaded) {
             }
             const list = document.getElementById('hdr-notif-list');
             if (!list) return;
-            if (!data.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">No notifications</div>'; return; }
+            if (!data.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-hint);font-size:13px;">No notifications</div>'; return; }
             list.innerHTML = data.notifications.map(n => `
-        <div style="padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;${n.is_read ? 'opacity:0.6;' : 'background:#eff6ff;'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;${n.is_read ? 'opacity:0.6;' : 'background:var(--info-bg);'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')">
           <div style="font-size:13px;font-weight:${n.is_read ? '400' : '600'};color:var(--text);margin-bottom:2px;">${notifEsc(n.title)}</div>
-          <div style="font-size:12px;color:#6b7280;">${notifEsc(n.message)}</div>
-          <div style="font-size:10px;color:#9ca3af;margin-top:4px;">${notifFmtAgo(n.created_at)}</div>
+          <div style="font-size:12px;color:var(--text-muted);">${notifEsc(n.message)}</div>
+          <div style="font-size:10px;color:var(--text-hint);margin-top:4px;">${notifFmtAgo(n.created_at)}</div>
         </div>`).join('');
           } catch {}
         }

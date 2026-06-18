@@ -85,7 +85,7 @@ textarea {
     display: inline-block;
     margin-bottom: 8px;
     font-size: 14px;
-    color: #0074cc;
+    color: var(--link);
     text-decoration: none;
     font-weight: bold;
 }

@@ -96,7 +96,7 @@ Private single-company use does **not** require App Store publishing/certificati
 - [ ] Dashboard KPIs / metrics panel — homepage widget showing jobs by status, BOLs generated this week, shipments pending/in-transit/delivered, most-used parts *(adds new endpoints)*
 - [ ] Port language / i18n features from Safety portal to platform-wide use *(needs F1c shared utils as its home — now done)*
 - [ ] Scrap batch entry tool *(density calc now centralized in shared-utils.js — safe to add)*
-- [ ] **Dark mode font legibility** — audit all text, links, labels, muted text, and interactive elements in dark mode; ensure sufficient contrast against dark backgrounds throughout the platform (job board, logistics, loading dashboard, BOL pages, etc.).
+- [ ] **Dark mode Bucket A — remaining passes** — P184 audit identified Bucket A hits in Safety (0% token adoption — highest priority), `logistics/load-builder.html` (local token system, separate batch), and `track/index.html` (standalone, no tokens.css). P186 covered all other modules. These three remain for dedicated prompts.
 
 ---
 

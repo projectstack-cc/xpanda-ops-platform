@@ -122,7 +122,7 @@
     <button class="btn ghost small" id="btn-all-jobs">Show All</button>
   </div>
   <div class="jobs-toolbar-actions">
-    <div class="jobs-view-toggle" style="display:inline-flex;border:1px solid #d1d5db;border-radius:8px;overflow:hidden;">
+    <div class="jobs-view-toggle" style="display:inline-flex;border:1px solid var(--input-border);border-radius:8px;overflow:hidden;">
       <button id="view-list" class="jobs-view-btn active" onclick="setView('list')">List</button>
       <button id="view-kanban" class="jobs-view-btn" onclick="setView('kanban')">Kanban</button>
       <button id="view-calendar" class="jobs-view-btn" onclick="setView('calendar')">Calendar</button>
@@ -145,26 +145,26 @@
 <div id="list-container" style="padding:0 16px 24px;">
   <div id="list-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0;"></div>
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-    <input type="text" id="list-search" placeholder="Search customer or invoice…" oninput="listSearchChanged(this.value)" style="flex:1;min-width:220px;max-width:340px;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;">
-    <button id="list-week-btn" class="jobs-view-btn" style="border:1px solid #d1d5db;border-radius:8px;" onclick="toggleListWeek()">This Week</button>
+    <input type="text" id="list-search" placeholder="Search customer or invoice…" oninput="listSearchChanged(this.value)" style="flex:1;min-width:220px;max-width:340px;padding:8px 12px;border:1px solid var(--input-border);border-radius:8px;font-size:14px;">
+    <button id="list-week-btn" class="jobs-view-btn" style="border:1px solid var(--input-border);border-radius:8px;" onclick="toggleListWeek()">This Week</button>
   </div>
-  <div style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff;">
+  <div style="border:1px solid var(--card-border);border-radius:12px;overflow:hidden;background:var(--card-bg);">
     <table style="width:100%;border-collapse:collapse;">
       <thead>
-        <tr style="background:#f9fafb;">
-          <th onclick="sortList('invoice_number')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">INV#</th>
-          <th onclick="sortList('customer')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">Customer</th>
-          <th onclick="sortList('ship_date')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">Ship Date</th>
-          <th onclick="sortList('total_bdft')" style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">BDFT</th>
-          <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Status</th>
-          <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Loading</th>
+        <tr style="background:var(--surface-2);">
+          <th onclick="sortList('invoice_number')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">INV#</th>
+          <th onclick="sortList('customer')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">Customer</th>
+          <th onclick="sortList('ship_date')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">Ship Date</th>
+          <th onclick="sortList('total_bdft')" style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">BDFT</th>
+          <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Status</th>
+          <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Loading</th>
         </tr>
       </thead>
       <tbody id="list-tbody"></tbody>
     </table>
-    <div id="list-empty" style="display:none;padding:24px;text-align:center;color:#9ca3af;font-size:14px;">No jobs match.</div>
+    <div id="list-empty" style="display:none;padding:24px;text-align:center;color:var(--text-hint);font-size:14px;">No jobs match.</div>
   </div>
-  <div id="list-foot" style="margin-top:8px;font-size:12px;color:#9ca3af;"></div>
+  <div id="list-foot" style="margin-top:8px;font-size:12px;color:var(--text-hint);"></div>
 </div>
 
 <!-- Kanban board -->
@@ -201,10 +201,10 @@
 <!-- Calendar view -->
 <div id="calendar-container" style="display:none;padding:0 16px 24px;">
   <div id="calendar-nav" style="display:flex;align-items:center;justify-content:center;gap:16px;padding:12px 0;">
-    <button onclick="changeMonth(-1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">←</button>
+    <button onclick="changeMonth(-1)" style="background:none;border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">←</button>
     <h3 id="calendar-month-label" style="margin:0;font-size:18px;font-weight:700;min-width:180px;text-align:center;"></h3>
-    <button onclick="changeMonth(1)" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">→</button>
-    <button onclick="goToToday()" style="background:var(--ghost-bg);border:1px solid #d1d5db;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
+    <button onclick="changeMonth(1)" style="background:none;border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">→</button>
+    <button onclick="goToToday()" style="background:var(--ghost-bg);border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
   </div>
   <div id="calendar-grid"></div>
 </div>
@@ -234,11 +234,11 @@
       </div>
 
       <!-- Packing slip drop zone -->
-      <div id="slip-dropzone" style="border:2px dashed #d1d5db;border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;transition:all 0.2s;cursor:pointer;" onclick="document.getElementById('packing-slip-upload').click()">
-        <div style="font-size:14px;color:#6b7280;">
+      <div id="slip-dropzone" style="border:2px dashed var(--input-border);border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;transition:all 0.2s;cursor:pointer;" onclick="document.getElementById('packing-slip-upload').click()">
+        <div style="font-size:14px;color:var(--text-muted);">
           <span style="font-size:20px;">📄</span><br>
           Drag &amp; drop a packing slip PDF here<br>
-          <span style="font-size:12px;color:#9ca3af;">or click to browse</span>
+          <span style="font-size:12px;color:var(--text-hint);">or click to browse</span>
         </div>
       </div>
 
@@ -249,10 +249,10 @@
       <div id="slip-inline-viewer" hidden style="margin:8px 0 12px;">
         <div id="slip-viewer-toggle" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;margin-bottom:6px;">
           <span id="slip-viewer-chevron" style="font-size:12px;transition:transform 0.2s;">&#9658;</span>
-          <span style="font-size:13px;font-weight:600;color:#1e40af;">View Packing Slip</span>
+          <span style="font-size:13px;font-weight:600;color:var(--link);">View Packing Slip</span>
         </div>
         <div id="slip-viewer-content" hidden>
-          <iframe id="slip-viewer-iframe" style="width:100%;height:500px;border:1px solid #d1d5db;border-radius:8px;" src="about:blank"></iframe>
+          <iframe id="slip-viewer-iframe" style="width:100%;height:500px;border:1px solid var(--input-border);border-radius:8px;" src="about:blank"></iframe>
         </div>
       </div>
 
@@ -687,7 +687,7 @@ function renderListTabs() {
   el.innerHTML = STATUS_LIST_TABS.map(s => {
     const n  = s === 'all' ? active.length : active.filter(j => j.status === s).length;
     const on = listTab === s;
-    return `<button onclick="setListTab('${s}')" style="padding:6px 11px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;border:1px solid ${on ? '#9ca3af' : 'transparent'};background:${on ? '#f3f4f6' : 'transparent'};color:${on ? '#111827' : '#6b7280'};">${esc(listTabLabel(s))} <span style="opacity:.6;">${n}</span></button>`;
+    return `<button onclick="setListTab('${s}')" style="padding:6px 11px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;border:1px solid ${on ? 'var(--card-border)' : 'transparent'};background:${on ? 'var(--ghost-bg)' : 'transparent'};color:${on ? 'var(--text)' : 'var(--text-muted)'};">${esc(listTabLabel(s))} <span style="opacity:.6;">${n}</span></button>`;
   }).join('');
 }
 
@@ -718,17 +718,17 @@ function renderList(jobs) {
     }
     const loadStr     = job.load_count > 1 ? ` <span style="font-size:11px;color:#2563eb;font-weight:600;">&times; ${job.load_count}</span>` : '';
     const tr = document.createElement('tr');
-    tr.style.cssText = 'border-top:1px solid #f3f4f6;cursor:pointer;';
-    tr.onmouseover = () => { tr.style.background = '#f9fafb'; };
+    tr.style.cssText = 'border-top:1px solid var(--line);cursor:pointer;';
+    tr.onmouseover = () => { tr.style.background = 'var(--surface-2)'; };
     tr.onmouseout  = () => { tr.style.background = ''; };
     tr.onclick     = () => openModal(job.id);
     tr.innerHTML = `
       <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}</td>
       <td style="padding:9px 12px;font-size:13px;">${esc(job.customer || '')}</td>
-      <td style="padding:9px 12px;font-size:13px;color:#6b7280;">${esc(formatShipDate(job.ship_date)) || '—'}</td>
+      <td style="padding:9px 12px;font-size:13px;color:var(--text-muted);">${esc(formatShipDate(job.ship_date)) || '—'}</td>
       <td style="padding:9px 12px;font-size:13px;text-align:right;">${job.total_bdft ? Number(job.total_bdft).toLocaleString() : '—'}</td>
       <td style="padding:9px 12px;">${statusCell}</td>
-      <td style="padding:9px 12px;font-size:12px;color:#6b7280;">${lo ? `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:${lo.color};"></span>${lo.label}</span>` : '<span style="color:#d1d5db;">—</span>'}</td>
+      <td style="padding:9px 12px;font-size:12px;color:var(--text-muted);">${lo ? `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:${lo.color};"></span>${lo.label}</span>` : '<span style="color:var(--text-hint);">—</span>'}</td>
     `;
     tbody.appendChild(tr);
   }
@@ -1267,12 +1267,12 @@ function setupModal() {
   });
   dropzone.addEventListener('dragleave', (e) => {
     e.preventDefault();
-    dropzone.style.borderColor = '#d1d5db';
+    dropzone.style.borderColor = '';
     dropzone.style.backgroundColor = '';
   });
   dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
-    dropzone.style.borderColor = '#d1d5db';
+    dropzone.style.borderColor = '';
     dropzone.style.backgroundColor = '';
     const files = e.dataTransfer.files;
     if (files.length && files[0].type === 'application/pdf') {
@@ -1681,7 +1681,7 @@ function addLineItemRow(data) {
     <input type="text"   class="li-desc" placeholder="Description" value="${esc(data?.description  ?? '')}">
     <span style="display:flex;align-items:center;gap:4px;">
       <input type="number" class="li-qty"  placeholder="Qty" value="${data?.quantity ?? ''}" min="0" style="flex:1;">
-      ${isBdft ? '<span style="font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:3px;padding:1px 4px;white-space:nowrap;">BDFT</span>' : ''}
+      ${isBdft ? '<span style="font-size:10px;font-weight:700;background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);border-radius:3px;padding:1px 4px;white-space:nowrap;">BDFT</span>' : ''}
     </span>
     <input type="text"   class="li-dims" placeholder="Dims"        value="${esc(data?.dimensions   ?? '')}">
     <button type="button" class="jobs-li-remove" title="Remove">&times;</button>
@@ -2087,7 +2087,7 @@ gateJobsWrite();
       <h3 style="margin:0;font-size:16px;font-weight:700;">Bill of Lading</h3>
       <div style="display:flex;gap:8px;align-items:center;">
         <button onclick="downloadBolFromViewer()" class="btn ghost small">Download</button>
-        <button onclick="closeBolViewModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#6b7280;padding:0;line-height:1;">×</button>
+        <button onclick="closeBolViewModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);padding:0;line-height:1;">×</button>
       </div>
     </div>
     <iframe id="jobs-bol-view-iframe" style="flex:1;width:100%;border:none;background:#525659;"></iframe>
