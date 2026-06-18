@@ -40,6 +40,15 @@
   --success-bg: #16a34a;
   --success-text: #ffffff;
 
+  /* Links + banners */
+  --link: #0074cc;
+  --info-bg: #eff6ff;
+  --info-border: #bfdbfe;
+  --info-text: #1e40af;
+  --warn-bg: #fef3c7;
+  --warn-border: #fde68a;
+  --warn-text: #92400e;
+
   /* Brand red — reserved for logo + true destructive/critical CTAs ONLY (use sparingly) */
   --brand: #e31837;
   --brand-hover: #b31229;
@@ -83,6 +92,14 @@ body { font-family: var(--font-sans); }
 
     --danger-bg: #ef4444;
     --success-bg: #22c55e;
+
+    --link: #60a5fa;
+    --info-bg: rgba(59, 130, 246, 0.12);
+    --info-border: rgba(59, 130, 246, 0.35);
+    --info-text: #93c5fd;
+    --warn-bg: rgba(245, 158, 11, 0.12);
+    --warn-border: rgba(245, 158, 11, 0.35);
+    --warn-text: #fcd34d;
 
     --brand: #ef4356;
     --brand-hover: #e31837;
