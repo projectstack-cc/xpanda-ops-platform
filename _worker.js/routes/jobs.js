@@ -140,18 +140,25 @@ export async function handleApiJobs(request, env) {
 
       const jobs = jobsResult.results || [];
 
-      // Batch-fetch line items for all returned jobs
+      // Batch-fetch line items for all returned jobs.
+      // D1 caps bound parameters per statement, so chunk the id list. A single
+      // IN (?, ?, …) with one ? per job 500'd ("too many SQL variables") once
+      // the job count grew past the cap.
       const lineItemsMap = {};
       if (jobs.length > 0) {
         const ids = jobs.map(j => j.id);
-        const ph  = ids.map(() => "?").join(",");
-        const liResult = await db
-          .prepare(`SELECT * FROM job_line_items WHERE job_id IN (${ph}) ORDER BY job_id, sort_order ASC`)
-          .bind(...ids)
-          .all();
-        for (const item of (liResult.results || [])) {
-          if (!lineItemsMap[item.job_id]) lineItemsMap[item.job_id] = [];
-          lineItemsMap[item.job_id].push(item);
+        const CHUNK = 90;
+        for (let i = 0; i < ids.length; i += CHUNK) {
+          const slice = ids.slice(i, i + CHUNK);
+          const ph    = slice.map(() => "?").join(",");
+          const liResult = await db
+            .prepare(`SELECT * FROM job_line_items WHERE job_id IN (${ph}) ORDER BY job_id, sort_order ASC`)
+            .bind(...slice)
+            .all();
+          for (const item of (liResult.results || [])) {
+            if (!lineItemsMap[item.job_id]) lineItemsMap[item.job_id] = [];
+            lineItemsMap[item.job_id].push(item);
+          }
         }
       }
 
