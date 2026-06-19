@@ -126,6 +126,11 @@
       <button id="view-bay" class="ld-view-btn" onclick="setLdView('bay')">Loading Team View</button>
     </div>
     <select id="bay-selector" style="display:none;" onchange="selectBay(this.value)"></select>
+    <input type="text" id="ld-search" placeholder="INV#, customer, or PO"
+      oninput="ldSearchTerm=this.value;renderDashboard()" autocomplete="off"
+      style="padding:6px 10px;border:1px solid var(--input-border);border-radius:6px;font-size:13px;background:var(--card-bg);color:var(--text);min-width:180px;" />
+    <button id="ld-week-toggle" onclick="toggleLdShowAll()"
+      style="padding:6px 12px;border:1px solid var(--input-border);border-radius:6px;font-size:13px;background:var(--card-bg);color:var(--text);cursor:pointer;font-weight:600;">This Week</button>
     <select id="ld-sort-select" style="padding:6px 10px;border:1px solid var(--input-border);border-radius:6px;font-size:13px;background:var(--card-bg);cursor:pointer;" onchange="ldSortOrder=this.value;renderDashboard()">
       <option value="inv_asc">INV# ↑</option>
       <option value="inv_desc">INV# ↓</option>
@@ -273,6 +278,55 @@ let currentLdView = window.innerWidth < 768 ? 'bay' : 'overview';
 let pullJobSelectedId = null;
 let pullJobSearchResults = [];
 let ldSortOrder = 'inv_asc';
+let ldSearchTerm = '';
+let ldShowAll = false;
+
+// Current week, Monday 00:00:00 → Sunday 23:59:59 local (matches job board "This Week").
+function ldCurrentWeekRange() {
+  const now = new Date();
+  const day = now.getDay();                 // 0=Sun..6=Sat
+  const diffToMon = (day === 0 ? -6 : 1 - day);
+  const mon = new Date(now);
+  mon.setHours(0, 0, 0, 0);
+  mon.setDate(mon.getDate() + diffToMon);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  sun.setHours(23, 59, 59, 999);
+  return { start: mon, end: sun };
+}
+
+function ldInCurrentWeek(shipDate) {
+  if (!shipDate) return true;               // no ship_date → always visible (floor safety)
+  const d = new Date(shipDate);
+  if (isNaN(d.getTime())) return true;      // unparseable → don't hide it
+  const { start, end } = ldCurrentWeekRange();
+  return d >= start && d <= end;
+}
+
+function ldMatchesSearch(a) {
+  const q = ldSearchTerm.trim().toLowerCase();
+  if (!q) return true;
+  return [a.invoice_number, a.customer, a.po_number]
+    .some(v => String(v || '').toLowerCase().includes(q));
+}
+
+// The working set the Overview renders from. Search (when present) bypasses the week filter.
+function ldOverviewSet() {
+  const searching = ldSearchTerm.trim().length > 0;
+  return allAssignments.filter(a => {
+    if (!ldMatchesSearch(a)) return false;
+    if (searching) return true;             // search ignores week filter
+    if (ldShowAll) return true;
+    return ldInCurrentWeek(a.ship_date);
+  });
+}
+
+function toggleLdShowAll() {
+  ldShowAll = !ldShowAll;
+  const btn = document.getElementById('ld-week-toggle');
+  if (btn) btn.textContent = ldShowAll ? 'Show All' : 'This Week';
+  renderDashboard();
+}
 
 function sortAssignments(arr) {
   const out = [...arr];
@@ -383,13 +437,14 @@ function renderDashboard() {
 function renderOverview() {
   const user = window.__xpandaUser;
   const isManager = user && (user.isAdministrator || user.permissions?.['logistics.loading.manage']?.edit);
-  const awaiting = sortAssignments(allAssignments.filter(a => a.loading_status === 'awaiting'));
+  const ldSet = ldOverviewSet();
+  const awaiting = sortAssignments(ldSet.filter(a => a.loading_status === 'awaiting'));
   document.getElementById('ld-awaiting').innerHTML = awaiting.length
     ? awaiting.map(a => renderAssignmentCard(a, false, false)).join('')
     : '<div class="ld-empty">No jobs awaiting assignment</div>';
 
   const baysHtml = allBays.map(bay => {
-    const bayAssignments = sortAssignments(allAssignments.filter(a =>
+    const bayAssignments = sortAssignments(ldSet.filter(a =>
       a.bay_id === bay.id && ['not_started', 'loading', 'loaded'].includes(a.loading_status)
     ));
     return `
@@ -411,17 +466,17 @@ function renderOverview() {
   document.getElementById('ld-bays').innerHTML = baysHtml;
   initTouchDragForOverview();
 
-  const yard = sortAssignments(allAssignments.filter(a => a.location === 'yard'));
+  const yard = sortAssignments(ldSet.filter(a => a.location === 'yard'));
   document.getElementById('ld-yard').innerHTML = yard.length
     ? yard.map(a => renderAssignmentCard(a, false, false)).join('')
     : '<div class="ld-empty">No trailers in the yard</div>';
 
-  const transit = sortAssignments(allAssignments.filter(a => a.loading_status === 'in_transit'));
+  const transit = sortAssignments(ldSet.filter(a => a.loading_status === 'in_transit'));
   document.getElementById('ld-transit').innerHTML = transit.length
     ? transit.map(a => renderAssignmentCard(a, false, false)).join('')
     : '<div class="ld-empty">No trailers in transit</div>';
 
-  const delivered = sortAssignments(allAssignments.filter(a => a.loading_status === 'delivered'));
+  const delivered = sortAssignments(ldSet.filter(a => a.loading_status === 'delivered'));
   document.getElementById('ld-delivered').innerHTML = delivered.length
     ? delivered.map(a => renderAssignmentCard(a, false, true)).join('')
     : '<div class="ld-empty">No recent deliveries</div>';
