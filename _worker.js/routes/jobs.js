@@ -803,6 +803,8 @@ export async function handleApiShipments(request, env) {
           in_production: 'in_production',
           ready_to_ship: 'done',
           awaiting:      'loading',
+          loading:       'loading',
+          loaded:        'loading',
           in_transit:    'shipped',
           delivered:     'shipped',
         };
@@ -825,8 +827,10 @@ export async function handleApiShipments(request, env) {
           }
         }
 
-        // Mirror in_transit/delivered directly to loading_assignments (same pattern as driver QR flow)
-        if (['in_transit', 'delivered'].includes(payload.status)) {
+        // Mirror active loading-stage + transit statuses directly to loading_assignments
+        // (same pattern as the driver QR flow). loading/loaded keep the cards in sync when a
+        // manager advances status from the logistics dashboard instead of the loading board.
+        if (['loading', 'loaded', 'in_transit', 'delivered'].includes(payload.status)) {
           try {
             const nowSync = new Date().toISOString();
             await db.prepare(

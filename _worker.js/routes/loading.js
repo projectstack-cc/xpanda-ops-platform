@@ -108,6 +108,10 @@ export async function handleApiLoadingAssignments(request, env) {
 
       const conditions = [];
       const binds = [];
+      // Customer-pickup jobs are live loads — never surface them on the loading dashboard.
+      // (Matches the lowercase 'customer pickup' value stored by the jobs form. We hide here
+      // rather than deleting any existing loading_assignments rows.)
+      conditions.push("COALESCE(j.method, '') != 'customer pickup'");
       if (!includeArchived) conditions.push("la.loading_status != 'archived'");
       if (bayId) { conditions.push("la.bay_id = ?"); binds.push(bayId); }
       if (conditions.length) query += " WHERE " + conditions.join(" AND ");
