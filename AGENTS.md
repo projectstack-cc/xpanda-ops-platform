@@ -106,7 +106,8 @@ All APIs live inside `_worker.js`. No exceptions.
 |---|---|---|---|
 | **Jobs** | `/jobs/` | Kanban workflow — packing slip upload, job lifecycle, line items | `jobs/index.html`, `jobs/packing-slip-parser.js` |
 | **Logistics** | `/logistics/` | BOL generation, load building, shipment tracking | `logistics/bol-generator.html`, `logistics/load-builder.html`, `logistics/bol-shared.js`, `logistics/index.html` |
-| **Production** | `/production/` | Block calculator, holey board calculator, bead/block inventory | `production/block-calculator.html`, `production/holey-board-calculator.html`, `production/inventory.html`, `production/bead-inventory.html` |
+| **Manufacturing** | `/manufacturing/` | Block calculator, holey board calculator, Cutting Dashboard | `manufacturing/block-calculator.html`, `manufacturing/holey-board-calculator.html`, `manufacturing/cutting-dashboard.html` |
+| **Production** | `/production/` | Bead/block inventory, molding log (inventory-only) | `production/inventory.html`, `production/bead-inventory.html` |
 | **QC** | `/qc/` | Scrap log, final inspection, density calculator | `qc/` |
 | **Safety** | `/safety/` | SDS browser, i18n safety content, training | `safety/` |
 | **Reports** | `/reports/` | Read-only analytics dashboards (incidents, scrap) | `reports/` |
@@ -229,6 +230,8 @@ When implementing new features:
 8. Add permission key label to `admin/roles.html` if new
 
 Never build frontend pages that rely on APIs that do not exist yet.
+
+9. **Update BACKLOG.md and CHANGELOG.md** as part of the same change: add a `CHANGELOG.md` entry keyed to the prompt number (newest-first within the module section) and remove the completed item from `BACKLOG.md`. New follow-on work goes into `BACKLOG.md`. Docs-only and report-only prompts note themselves in `CHANGELOG.md` too.
 
 ---
 
