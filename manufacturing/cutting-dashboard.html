@@ -6,33 +6,491 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="icon" href="/assets/img/favicon.png" sizes="any">
 <link rel="apple-touch-icon" href="/assets/img/favicon.png">
 <link rel="stylesheet" href="/manufacturing/manufacturing-shared.css">
+
+<style>
+/* ── board outer wrap (full-width, no tile max-width) ──────────────────────── */
+.cd-outer {
+  padding: 12px 16px;
+}
+
+/* ── toolbar ───────────────────────────────────────────────────────────────── */
+.cd-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.cd-toolbar h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.cd-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cd-search {
+  padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--card-bg);
+  color: var(--text);
+  min-width: 180px;
+  min-height: 44px;
+}
+.cd-search:focus {
+  outline: none;
+  border-color: var(--primary-bg);
+  box-shadow: 0 0 0 2px rgba(30,41,59,0.12);
+}
+.cd-filter-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--card-bg);
+  color: var(--text);
+  cursor: pointer;
+  min-height: 44px;
+  white-space: nowrap;
+}
+.cd-filter-btn:hover { background: var(--ghost-bg); }
+.cd-filter-btn.active {
+  background: var(--primary-bg);
+  color: var(--primary-text);
+  border-color: var(--primary-bg);
+}
+.cd-last-updated {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* ── 5-column board ─────────────────────────────────────────────────────────── */
+.cd-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+/* ── lane ───────────────────────────────────────────────────────────────────── */
+.cd-lane {
+  background: var(--surface-2);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+}
+.cd-lane-header {
+  padding: 10px 12px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--card-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cd-lane-count {
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--primary-bg);
+  color: var(--primary-text);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+.cd-lane-cards {
+  padding: 8px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cd-empty {
+  text-align: center;
+  padding: 24px 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ── step card ──────────────────────────────────────────────────────────────── */
+.cd-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+.cd-card.is-completed {
+  opacity: 0.65;
+}
+.cd-card-invoice {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+  margin-bottom: 2px;
+}
+.cd-card-customer {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+.cd-card-date {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.cd-status-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 3px 8px;
+  margin-bottom: 8px;
+}
+.cd-status-queued    { background: var(--warn-bg);    color: var(--warn-text);    border: 1px solid var(--warn-border); }
+.cd-status-in_progress { background: var(--info-bg);  color: var(--info-text);    border: 1px solid var(--info-border); }
+.cd-status-completed { background: var(--success-bg); color: var(--success-text); border: 1px solid transparent; }
+
+.cd-operator-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.cd-operator-label {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.cd-operator-input {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--input-bg);
+  color: var(--text);
+  min-width: 0;
+  min-height: 36px;
+}
+.cd-operator-input:focus {
+  outline: none;
+  border-color: var(--primary-bg);
+}
+
+.cd-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cd-btn {
+  flex: 1;
+  padding: 10px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  min-height: 44px;
+  white-space: nowrap;
+}
+.cd-btn-start    { background: var(--primary-bg); color: var(--primary-text); }
+.cd-btn-start:hover { opacity: 0.88; }
+.cd-btn-complete { background: var(--success-bg); color: var(--success-text); }
+.cd-btn-complete:hover { opacity: 0.88; }
+.cd-btn-uncomplete {
+  background: var(--ghost-bg);
+  color: var(--muted);
+  border: 1px solid var(--card-border);
+  font-weight: 500;
+}
+.cd-btn-uncomplete:hover { background: var(--surface-2); }
+
+/* ── loading / error state ──────────────────────────────────────────────────── */
+.cd-loading {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+@media (max-width: 900px) {
+  .cd-board {
+    grid-template-columns: repeat(5, minmax(200px, 1fr));
+  }
+}
+</style>
 </head>
 <body>
 <script src="/manufacturing/manufacturing-header.js"></script>
-<script>
-document.getElementById('mfg-page-title').textContent = 'Cutting Dashboard';
-document.getElementById('mfg-page-subtitle').textContent = 'Live cutting floor status — coming soon';
-</script>
 
-<div class="mfg-wrap">
-  <div class="mfg-section-intro">
-    <h1 class="mfg-section-title">Cutting Dashboard</h1>
-    <p class="mfg-section-subtitle">Live cutting floor status — coming soon</p>
+<div class="cd-outer">
+  <!-- ── toolbar ─────────────────────────────────────────────────────────── -->
+  <div class="cd-toolbar">
+    <h2>Cutting Dashboard</h2>
+    <div class="cd-toolbar-controls">
+      <input id="cd-search" class="cd-search"
+        type="text" placeholder="INV#, customer, or PO"
+        oninput="cdSearchTerm=this.value;renderBoard()"
+        autocomplete="off">
+      <button id="cd-week-toggle" class="cd-filter-btn active" onclick="toggleCdShowAll()">This Week</button>
+      <button class="cd-filter-btn" onclick="loadData()" title="Refresh board">↻ Refresh</button>
+    </div>
+    <span id="cd-last-updated" class="cd-last-updated"></span>
   </div>
 
-  <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:48px 32px; text-align:center; max-width:720px; margin:0 auto;">
-    <div style="font-size:48px; margin-bottom:16px;">🪚</div>
-    <h2 style="margin:0 0 12px 0; color:#111827;">Coming Soon</h2>
-    <p style="color:#4b5563; line-height:1.6; margin:0 auto; max-width:480px;">
-      Real-time visibility into cutting operations: which blocks are on which cutter (cross, main, blue line),
-      cycle status, queue, operator assignments, and throughput. Designed for floor TVs and tablets.
-    </p>
+  <!-- ── 5-lane board ───────────────────────────────────────────────────── -->
+  <div id="cd-board" class="cd-board">
+    <div class="cd-loading">Loading cutting floor data…</div>
   </div>
 </div>
+
+<script>
+const LANES = [
+  { name: 'Cross Cutter', id: 'cross-cutter' },
+  { name: 'Hole Cutter',  id: 'hole-cutter'  },
+  { name: 'Main Line',    id: 'main-line'     },
+  { name: 'Blue Line',    id: 'blue-line'     },
+  { name: 'Laminate',     id: 'laminate'      },
+];
+
+const STATUS_ORDER = { in_progress: 0, queued: 1, completed: 2 };
+
+let allJobs = [];
+let cdSearchTerm = '';
+let cdShowAll = false;
+
+// ── filter helpers (P190 pattern) ──────────────────────────────────────────
+
+function cdCurrentWeekRange() {
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMon = (day === 0 ? -6 : 1 - day);
+  const mon = new Date(now);
+  mon.setHours(0, 0, 0, 0);
+  mon.setDate(mon.getDate() + diffToMon);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  sun.setHours(23, 59, 59, 999);
+  return { start: mon, end: sun };
+}
+
+function cdInCurrentWeek(shipDate) {
+  if (!shipDate) return true;
+  const d = new Date(shipDate);
+  if (isNaN(d.getTime())) return true;
+  const { start, end } = cdCurrentWeekRange();
+  return d >= start && d <= end;
+}
+
+function cdMatchesSearch(job) {
+  const q = cdSearchTerm.trim().toLowerCase();
+  if (!q) return true;
+  return [job.invoice_number, job.customer, job.po_number]
+    .some(v => String(v || '').toLowerCase().includes(q));
+}
+
+function cdFilteredJobs() {
+  const searching = cdSearchTerm.trim().length > 0;
+  return allJobs.filter(job => {
+    if (!cdMatchesSearch(job)) return false;
+    if (searching) return true;
+    if (cdShowAll) return true;
+    return cdInCurrentWeek(job.ship_date);
+  });
+}
+
+function toggleCdShowAll() {
+  cdShowAll = !cdShowAll;
+  const btn = document.getElementById('cd-week-toggle');
+  if (btn) {
+    btn.textContent = cdShowAll ? 'Show All' : 'This Week';
+    btn.classList.toggle('active', !cdShowAll);
+  }
+  renderBoard();
+}
+
+// ── rendering ─────────────────────────────────────────────────────────────
+
+function esc(v) {
+  return String(v || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return d;
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function renderBoard() {
+  const board = document.getElementById('cd-board');
+  const jobs = cdFilteredJobs();
+
+  // Build per-lane step lists (each step carries its job context)
+  const laneSteps = {};
+  for (const lane of LANES) laneSteps[lane.name] = [];
+
+  for (const job of jobs) {
+    for (const step of (job.steps || [])) {
+      if (laneSteps[step.process_name] !== undefined) {
+        laneSteps[step.process_name].push({ ...step, _job: job });
+      }
+    }
+  }
+
+  // Sort each lane: in_progress → queued → completed, then ship_date asc, then invoice asc
+  for (const lane of LANES) {
+    laneSteps[lane.name].sort((a, b) => {
+      const so = (STATUS_ORDER[a.step_status] ?? 9) - (STATUS_ORDER[b.step_status] ?? 9);
+      if (so !== 0) return so;
+      const da = a._job.ship_date || '';
+      const db = b._job.ship_date || '';
+      if (da !== db) return da < db ? -1 : 1;
+      return String(a._job.invoice_number || '').localeCompare(String(b._job.invoice_number || ''));
+    });
+  }
+
+  board.innerHTML = LANES.map(lane => {
+    const steps = laneSteps[lane.name];
+    const activeCount = steps.filter(s => s.step_status !== 'completed').length;
+    const cards = steps.length === 0
+      ? `<div class="cd-empty">No jobs</div>`
+      : steps.map(s => renderCard(s)).join('');
+
+    return `
+      <div class="cd-lane">
+        <div class="cd-lane-header">
+          ${esc(lane.name)}
+          ${activeCount > 0 ? `<span class="cd-lane-count">${activeCount}</span>` : ''}
+        </div>
+        <div class="cd-lane-cards">${cards}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderCard(s) {
+  const job = s._job;
+  const isQueued     = s.step_status === 'queued';
+  const isInProgress = s.step_status === 'in_progress';
+  const isCompleted  = s.step_status === 'completed';
+
+  // Show "Start Job" if the job has any queued steps and isn't started yet
+  const jobHasQueuedSteps = (job.steps || []).some(st => st.step_status === 'queued');
+  const jobNotStarted = job.status === 'not_started';
+  const showStart = isQueued && jobNotStarted && jobHasQueuedSteps;
+
+  const statusLabel = { queued: 'Queued', in_progress: 'In Progress', completed: 'Done' }[s.step_status] || s.step_status;
+
+  const actions = [];
+  if (showStart) {
+    actions.push(`<button class="cd-btn cd-btn-start" onclick="startJob('${esc(job.id)}')">Start Job</button>`);
+  }
+  if (isInProgress) {
+    actions.push(`<button class="cd-btn cd-btn-complete" onclick="completeStep('${esc(s.id)}')">Complete</button>`);
+  }
+  if (isCompleted) {
+    actions.push(`<button class="cd-btn cd-btn-uncomplete" onclick="uncompleteStep('${esc(s.id)}')">Un-complete</button>`);
+  }
+
+  return `
+    <div class="cd-card${isCompleted ? ' is-completed' : ''}" id="card-${esc(s.id)}">
+      <div class="cd-card-invoice">${esc(job.invoice_number || job.id)}</div>
+      <div class="cd-card-customer">${esc(job.customer)}</div>
+      <div class="cd-card-date">${job.ship_date ? 'Ships ' + fmtDate(job.ship_date) : 'No ship date'}</div>
+      <span class="cd-status-badge cd-status-${esc(s.step_status)}">${esc(statusLabel)}</span>
+      <div class="cd-operator-row">
+        <span class="cd-operator-label">Op:</span>
+        <input class="cd-operator-input" type="text"
+          placeholder="operator"
+          value="${esc(s.operator || '')}"
+          onblur="saveOperator('${esc(s.id)}', this.value)"
+          ${isCompleted ? 'disabled' : ''}>
+      </div>
+      ${actions.length > 0 ? `<div class="cd-card-actions">${actions.join('')}</div>` : ''}
+    </div>`;
+}
+
+// ── API actions ───────────────────────────────────────────────────────────
+
+async function startJob(jobId) {
+  const { ok, error } = await api.post('/api/cutting/start', { job_id: jobId });
+  if (!ok) { alert('Could not start job: ' + (error || 'unknown error')); return; }
+  await loadData();
+}
+
+async function completeStep(stepId) {
+  const { ok, error } = await api.put('/api/cutting/' + stepId, { step_status: 'completed' });
+  if (!ok) { alert('Could not complete step: ' + (error || 'unknown error')); return; }
+  await loadData();
+}
+
+async function uncompleteStep(stepId) {
+  const { ok, error } = await api.put('/api/cutting/' + stepId, { step_status: 'in_progress' });
+  if (!ok) { alert('Could not revert step: ' + (error || 'unknown error')); return; }
+  await loadData();
+}
+
+async function saveOperator(stepId, value) {
+  await api.put('/api/cutting/' + stepId, { operator: value });
+  // Quiet save — update local state without full reload
+  for (const job of allJobs) {
+    const step = (job.steps || []).find(s => s.id === stepId);
+    if (step) { step.operator = value; break; }
+  }
+}
+
+// ── data loading ──────────────────────────────────────────────────────────
+
+async function loadData() {
+  try {
+    const { ok, jobs, error } = await api.get('/api/cutting');
+    if (!ok) throw new Error(error || 'Server error');
+    allJobs = jobs || [];
+    renderBoard();
+    const el = document.getElementById('cd-last-updated');
+    if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  } catch (e) {
+    document.getElementById('cd-board').innerHTML =
+      `<div class="cd-loading" style="color:var(--danger-bg)">Failed to load: ${esc(String(e.message || e))}</div>`;
+  }
+}
+
+// ── init ──────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('mfg-page-title').textContent    = 'Cutting Dashboard';
+  document.getElementById('mfg-page-subtitle').textContent = 'Live cutting floor status';
+  loadData();
+  // Auto-refresh every 60 s for floor TV mode
+  setInterval(loadData, 60000);
+});
+</script>
 </body>
 </html>
