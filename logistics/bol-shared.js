@@ -44,7 +44,7 @@ window.BolShared = (function() {
     // Shipper signature — cursive (FRSCRIPT), auto-signed with the generating user's display name.
     // PLACEHOLDER coords; tune in bol-test (#3).
     shipperSignature: { x: 37, y: 48, size: 22 },
-    shipperDate:      { x: 107, y: 48, size: 10 },
+    shipperDate:      { x: 137, y: 48, size: 8 },
   };
 
   const PAGE = { width: 612, height: 792 }; // template is fixed US Letter
