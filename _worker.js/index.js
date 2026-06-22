@@ -5,6 +5,7 @@ import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers,
          handleApiPartsSeed, handleApiLoadBuilderSkusDeleteAll, handleApiLoadBuilderSkus,
          handleApiSavedLoads } from './routes/bols.js';
 import { handleApiJobs, handleApiShipments } from './routes/jobs.js';
+import { handleApiCutting } from './routes/cutting.js';
 import { handleApiParts, handleApiCombos, handleApiBeadTypes, handleApiBeadStock,
          handleApiBlockInventory, handleApiMoldingLog, handleApiBlockConsumption } from './routes/production.js';
 import { handleApiCompletions, handleApiScrapLog } from './routes/qc.js';
@@ -61,9 +62,10 @@ const API_ROUTES = [
   { path: '/api/molding-log',       handler: (req, env) => handleApiMoldingLog(req, env) },
   { path: '/api/block-consumption', handler: (req, env) => handleApiBlockConsumption(req, env) },
 
-  // Jobs / shipments
+  // Jobs / shipments / manufacturing
   { prefix: '/api/jobs',      handler: (req, env) => handleApiJobs(req, env) },
   { path:   '/api/shipments', handler: (req, env) => handleApiShipments(req, env) },
+  { prefix: '/api/cutting',   handler: (req, env) => handleApiCutting(req, env) },
 
   // BOL / load builder (specific paths before their shared prefixes)
   { path:   '/api/bol-customers/seed',     handler: (req, env) => handleApiBolCustomersSeed(req, env) },

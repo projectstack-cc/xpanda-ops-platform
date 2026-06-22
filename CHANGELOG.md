@@ -120,6 +120,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Production / Manufacturing
 
+- **P193** — Cutting Dashboard: data model + worker automation (C1). New `cutting_steps` table (`DB_Migrations/add-cutting-steps.sql`); helpers in `_worker.js/lib/cutting.js` (`reconcileCuttingSteps`, `mirrorProcessesToSteps`, `syncJobFromSteps`, `applyStepCompletionToProcesses`); `_worker.js/routes/cutting.js` — `GET /api/cutting` (board payload with steps), `POST /api/cutting/start` (queued→in_progress + job not_started→in_production), `PUT /api/cutting/:stepId` (step status/operator/notes + pill/job sync). `routes/jobs.js`: POST auto-creates steps from processes; PUT reconciles steps + mirrors pill↔step + syncs job status; DELETE cascades cutting_steps. Permission mapped in `API_PERMISSION_MAP`. **Run `add-cutting-steps.sql` in D1 before deploying worker.**
 - **P80** — New Manufacturing module: Block and Holey Board calculators moved out of Production; Cutting Dashboard placeholder added; Production repurposed as inventory-only. (7ddcf00)
 
 ---

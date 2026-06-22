@@ -1,4 +1,5 @@
 import { json, logActivity, safeJsonParse } from '../lib/core.js';
+import { reconcileCuttingSteps, mirrorProcessesToSteps, syncJobFromSteps } from '../lib/cutting.js';
 
 export async function handleApiJobs(request, env) {
   const db = env.DB;
@@ -347,6 +348,13 @@ export async function handleApiJobs(request, env) {
         }
       }
 
+      // Auto-create cutting steps from processes (non-blocking)
+      try {
+        await reconcileCuttingSteps(db, id, payload.processes || []);
+      } catch (e) {
+        console.error('Auto-create cutting steps on job create failed:', String(e?.message || e));
+      }
+
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
       const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
 
@@ -511,6 +519,17 @@ export async function handleApiJobs(request, env) {
         }
       }
 
+      // Reconcile cutting steps + bidirectional pill↔step sync (non-blocking)
+      if ("processes" in payload) {
+        try {
+          await reconcileCuttingSteps(db, id, payload.processes);
+          await mirrorProcessesToSteps(db, id, payload.processes);
+          await syncJobFromSteps(db, id);
+        } catch (e) {
+          console.error('Cutting steps reconcile/sync failed on PUT:', String(e?.message || e));
+        }
+      }
+
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
       const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
 
@@ -605,6 +624,7 @@ export async function handleApiJobs(request, env) {
       // accounting records; removing them would corrupt production yield history.
       await db.prepare("DELETE FROM loading_photos WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM loading_assignments WHERE job_id = ?").bind(id).run();
+      await db.prepare("DELETE FROM cutting_steps WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM bols WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM saved_loads WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM shipments WHERE job_id = ?").bind(id).run();
