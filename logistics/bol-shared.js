@@ -13,7 +13,7 @@ window.BolShared = (function() {
 
     // Top-right block
     date:          { x: 346, y: 712, size: 10 },
-    bolNumber:     { x: 408, y: 690, size: 18, bold: true },
+    bolNumber:     { x: 408, y: 690, size: 22, bold: true },
     carrierName:   { x: 389, y: 648, size: 10 },
     trailerNo:     { x: 365, y: 622, size: 10 },
 
@@ -27,7 +27,7 @@ window.BolShared = (function() {
     specialInstr:  { x: 315, y: 585, size: 9, lineH: 12, maxW: 255 },
 
     // Contact Info
-    contactInfo:   { x: 315, y: 495, size: 12, lineH: 13, maxW: 255 },
+    contactInfo:   { x: 315, y: 525, size: 12, lineH: 13, maxW: 255 },
 
     // PO / Invoice Number
     poNumber:      { x: 315, y: 468, size: 12, lineH: 13, maxW: 255 },
@@ -241,10 +241,21 @@ window.BolShared = (function() {
 
       // ── PO / Invoice Number ──
       // Override arrives as literal lines — draw verbatim (no 'PO: ' prefix added).
-      const _poVal = Array.isArray(_ov.poNumber)
-        ? _ov.poNumber.join('\n')
-        : (() => { const v = bol.po_number || bol.poNumber || ''; return v ? 'PO: ' + v : ''; })();
-      if (_poVal) drawMultiline(_poVal, off('poNumber', COORDS.poNumber));
+      // Default path: bold "PO:" label, regular PO number offset by the label width.
+      if (Array.isArray(_ov.poNumber)) {
+        const _poVal = _ov.poNumber.join('\n');
+        if (_poVal) drawMultiline(_poVal, off('poNumber', COORDS.poNumber));
+      } else {
+        const _poNum = bol.po_number || bol.poNumber || '';
+        if (_poNum) {
+          const _pc = off('poNumber', COORDS.poNumber);
+          const _poSize = _pc.size || 12;
+          const _poLabel = 'PO:';
+          page.drawText(_poLabel, { x: _pc.x, y: _pc.y, size: _poSize, font: fontBold, color: black });
+          const _poLabelW = fontBold.widthOfTextAtSize(_poLabel + ' ', _poSize);
+          page.drawText(String(_poNum), { x: _pc.x + _poLabelW, y: _pc.y, size: _poSize, font, color: black });
+        }
+      }
 
       // ── Scrap Pick Up ──
       const _isScrap = typeof _ov.scrap === 'boolean' ? _ov.scrap
