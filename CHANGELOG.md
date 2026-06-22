@@ -195,6 +195,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Infra / Docs
 
+- **P195** — Agent doc sync (docs only): `xpanda-ops-agents.md` — (1) added `manufacturing/` subtree to Repository Structure (block/holey calculators moved from `production/`); (2) added Manufacturing Agent row to Available Agents table; (3) added full `# 4a. Manufacturing Agent` section covering Cutting Dashboard, `cutting_steps`, `/api/cutting*` routes, and cross-refs to job-board-agent/db-api-agent; (4) trimmed Production Agent key files to inventory-only; (5) fixed `DB Migrations/` → `DB_Migrations/` (4 occurrences); (6) fixed `block-calculator.html` path in File Size Budget table. `AGENTS.md` — added Manufacturing row to Module Overview table, updated Production row to inventory-only, fixed calculator file paths. Both files — added BACKLOG/CHANGELOG discipline rule (Cross-Cutting Rules + Implementation Order step 9). No code changes.
 - **P137** — QC slop/spaghetti audit (report-only): `qc-slop-audit.md` inventories dead code, duplication, abandoned-migration sites, and roots the PO-to-PDF rendering bug in `bol-generator.html`. (untracked; no code changes)
 - **P124** — Doc sync: `xpanda-ops-agents.md` worker section updated to post-F2/F5 reality (file-split worker, `API_ROUTES`, ESM bundle). (89ed041)
 - **P51** — (see Logistics) Loading Dashboard link added to nav; Prompts/ and DB Migrations/ folders organized. (de867bb)

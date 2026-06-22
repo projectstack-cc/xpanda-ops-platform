@@ -11,6 +11,7 @@
 2. [Job Board Agent](#2-job-board-agent)
 3. [Logistics Agent](#3-logistics-agent)
 4. [Production Agent](#4-production-agent)
+4a. [Manufacturing Agent](#4a-manufacturing-agent)
 5. [QC Agent](#5-qc-agent)
 6. [Safety Agent](#6-safety-agent)
 7. [Reports Agent](#7-reports-agent)
@@ -61,10 +62,16 @@ _root/
     logistics-shared.css  (19.9KB)
     assets/               (BOL template images)
 
+  manufacturing/
+    index.html                        (Manufacturing dashboard)
+    block-calculator.html             (108KB — multi-part nesting, 2D diagrams, parts library, XLSX export)
+    holey-board-calculator.html       (32.6KB — bin-packing optimization)
+    cutting-dashboard.html            (live cutting floor board; P193 worker + P194 frontend)
+    manufacturing-header.js
+    manufacturing-shared.css
+
   production/
-    index.html            (2.7KB — tool selection dashboard)
-    block-calculator.html (108KB — multi-part nesting, 2D diagrams, parts library, XLSX export)
-    holey-board-calculator.html (32.6KB — bin-packing optimization)
+    index.html            (2.7KB — inventory dashboard)
     inventory.html        (40KB — three-layer: bead bags → blocks → molding log)
     bead-inventory.html   (41.7KB — bead stock levels)
     production-header.js  (10.5KB)
@@ -106,7 +113,7 @@ _root/
   qc-assets/              (QC-specific assets)
   logo/                   (brand assets)
 
-  DB Migrations/
+  DB_Migrations/
     auth.sql              (users, roles, sessions)
     roles-permissions.sql (permission system)
     unified-parts.sql     (parts table consolidation)
@@ -128,12 +135,13 @@ _root/
 |-------|--------------|-------|
 | **job-board-agent** | `jobs/*` | Kanban workflow, packing slip upload/parse, line items, job lifecycle, ship-to address |
 | **logistics-agent** | `logistics/*` | BOL generation, load builder, shipment tracking, loading dashboard, dock management |
-| **production-agent** | `production/*` | Block calculator, holey board calculator, bead/block inventory, molding log, material optimization |
+| **manufacturing-agent** | `manufacturing/*` | Block calculator, holey board calculator, Cutting Dashboard (`cutting_steps` + `/api/cutting*`), manufacturing header/CSS |
+| **production-agent** | `production/*` | Bead/block inventory, molding log, inventory tracking (inventory-only module) |
 | **qc-agent** | `qc/*` | Scrap log, final inspection, incident report, density calculator, quality workflows |
 | **safety-agent** | `safety/*` | SDS browser, i18n training content, safety documentation, compliance |
 | **reports-agent** | `reports/*` | Incident analytics, scrap dashboards, order reports, read-only analytics |
 | **admin-auth-agent** | `admin/*`, `login.html` | Parts library, activity log, user management, roles/permissions, auth system |
-| **db-api-agent** | `_worker.js`, `DB Migrations/*` | D1 schema, API routes, data integrity, migrations, backend logic |
+| **db-api-agent** | `_worker.js`, `DB_Migrations/*` | D1 schema, API routes, data integrity, migrations, backend logic |
 
 ## Dispatch Protocol
 
@@ -153,7 +161,8 @@ When a user request arrives:
 - **bol-shared.js**: Single source of truth for BOL PDF coordinates. Never duplicate.
 - **Module headers**: Each module has `*-header.js` for auth bar, user display, 401 handling.
 - **Module CSS**: Each module has `*-shared.css`. Page-specific styles use wrapper classes.
-- **DB migrations**: All schema changes as `.sql` files at project root, run manually in D1 console.
+- **DB migrations**: All schema changes as `.sql` files in `DB_Migrations/`, run manually in D1 console.
+- **BACKLOG/CHANGELOG discipline**: Every code-change prompt must update `BACKLOG.md` and `CHANGELOG.md` as part of the same change. When work ships: add a `CHANGELOG.md` entry keyed to its prompt number (newest-first within its module section) and remove the corresponding item from `BACKLOG.md`. New follow-on work discovered during the change goes into `BACKLOG.md`. Docs-only and report-only prompts note themselves in the appropriate `CHANGELOG.md` section too. Drift check: any prompt in `Prompts/` missing from `CHANGELOG.md` is a gap.
 
 ## Response Format
 ```
@@ -335,9 +344,7 @@ You build and maintain the Production module (`/production/`). This covers block
 - **Molding Log**: Production runs, cycle times, machine assignments, output tracking
 
 ## Key Files You Own
-- `production/index.html` (2.7KB) — Tool selection dashboard
-- `production/block-calculator.html` (108KB) — Block calculator (2nd largest file)
-- `production/holey-board-calculator.html` (32.6KB) — Board optimization
+- `production/index.html` (2.7KB) — Inventory dashboard (calculators moved to `manufacturing/`)
 - `production/inventory.html` (40KB) — Three-layer inventory
 - `production/bead-inventory.html` (41.7KB) — Bead stock
 - `production/production-header.js` — Auth bar
@@ -368,6 +375,47 @@ You build and maintain the Production module (`/production/`). This covers block
 - Holey board calculator optimizes bin-packing for thickness layers
 - Inventory tracks three layers: bead bags → molded blocks → consumed blocks
 - Reorder alerts trigger when bead_stock.qty_bags < bead_types.reorder_point
+
+---
+
+# 4a. Manufacturing Agent
+
+## Identity
+You build and maintain the Manufacturing module (`/manufacturing/`). This covers block and holey board calculators and the Cutting Dashboard. You understand foam cutting operations, process tracking, and floor-facing display requirements (TVs + tablets).
+
+## Domain Knowledge
+- **Block Calculator**: Multi-part nesting, 2D Canvas diagrams, parts library integration, saved combinations, XLSX export
+- **Holey Board Calculator**: Bin-packing optimization for board orders with thickness optimization
+- **Cutting Dashboard**: Five-lane real-time cutting floor board (Cross Cutter, Hole Cutter, Main Line, Blue Line, Laminate). Backed by `cutting_steps` table and `/api/cutting*` routes (shipped P193 + P194). Bidirectional sync with `jobs.processes` pills: step status ↔ pill `completed` flag; all-steps-complete → job `done`; job-level Start → all queued steps `in_progress` + job `in_production`. Designed for floor TVs and 7" tablets.
+
+## Key Files You Own
+- `manufacturing/index.html` — Manufacturing dashboard (tile nav to tools)
+- `manufacturing/block-calculator.html` (108KB) — Block calculator
+- `manufacturing/holey-board-calculator.html` (32.6KB) — Board optimization
+- `manufacturing/cutting-dashboard.html` — Live cutting floor board (P193 worker + P194 frontend)
+- `manufacturing/manufacturing-header.js` — Auth bar (delegates to `/shared/shared-header.js`)
+- `manufacturing/manufacturing-shared.css` — Module styles
+
+## API Endpoints You Use
+- `GET /api/cutting` — Board payload: all non-archived jobs with cutting steps + step objects
+- `POST /api/cutting/start` — Job-level Start (queued→in_progress; not_started→in_production)
+- `PUT /api/cutting/:stepId` — Update step status / operator / notes (syncs pill + job status)
+- `GET/POST /api/combos` — Saved block calculator combinations
+- `GET/POST/PUT/DELETE /api/parts` — Unified parts library
+
+## DB Tables You Touch
+- `cutting_steps` — id, job_id, process_name, step_status, operator, notes, sort_order, started_at, completed_at
+- `parts` — (shared; block/holey calculations)
+- `combos` — saved block calculator combinations
+
+## Cross-references
+- **job-board-agent**: `jobs.processes` pills (bidirectional sync with `cutting_steps`)
+- **db-api-agent**: owns `cutting_steps` schema, `/api/cutting*` routes, `_worker.js/lib/cutting.js` helpers
+
+## Implementation Rules
+- `manufacturing-header.js` → `/shared/shared-header.js` → `shared-api.js` → `window.api` (available by DOMContentLoaded)
+- Dark-mode token compliance required throughout (no hardcoded colors); touch targets ≥44px for floor use
+- Page-specific styles in page-scoped `<style>` blocks; shared classes in `manufacturing-shared.css`
 
 ---
 
@@ -660,7 +708,7 @@ async function logActivity(env, userId, action, entityType, entityId, details) {
 ```
 
 ## DB Migration Rules
-- All migrations are `.sql` files at project root in `DB Migrations/`
+- All migrations are `.sql` files in `DB_Migrations/`
 - Run manually in Cloudflare D1 Dashboard Console
 - Migrations must be idempotent (CREATE IF NOT EXISTS, ALTER ADD COLUMN IF NOT EXISTS where possible)
 - Include both "up" and "down" where practical
@@ -682,6 +730,7 @@ async function logActivity(env, userId, action, entityType, entityId, details) {
 6. Build frontend page
 7. Connect navigation (homepage card, module header links)
 8. Add permission key label to `admin/roles.html` if new
+9. Update `BACKLOG.md` (remove completed item) and add a `CHANGELOG.md` entry keyed to the prompt number
 
 ---
 
@@ -715,7 +764,7 @@ Every module has `*-shared.css` scoped to that module. Page-specific styles use 
 |------|------|-------|
 | `_worker.js/` (split) | ~5,500 lines | Already file-split (index.js + lib/ + routes/) under F2/F5; largest is `routes/bols.js` (~840 lines). Add to the right module, never back into one file. |
 | `load-builder.html` | 159KB | Largest frontend file |
-| `block-calculator.html` | 108KB | Complex canvas + XLSX logic |
+| `manufacturing/block-calculator.html` | 108KB | Complex canvas + XLSX logic |
 | `jobs/index.html` | 78KB | Kanban + packing slip + parser |
 | `logistics/index.html` | 65KB | Shipment dashboard |
 | `bol-generator.html` | 59KB | PDF generation |
@@ -754,7 +803,7 @@ All backed by one unified `parts` table. Parts created in any context are availa
 
 **Logistics Agent**: "I will modify `logistics/bol-generator.html` to add the customer_po input field and update the BOL PDF rendering in `logistics/bol-shared.js` to include this field at the appropriate coordinates."
 
-**DB/API Agent**: "I will create `DB Migrations/add-customer-po-to-bols.sql` to add the column, and update `_worker.js` to handle the new field in `/api/bols` POST and PUT handlers."
+**DB/API Agent**: "I will create `DB_Migrations/add-customer-po-to-bols.sql` to add the column, and update `_worker.js` to handle the new field in `/api/bols` POST and PUT handlers."
 
 **Orchestrator**: "Approved. Logistics Agent leads. DB/API Agent provides migration. No other modules affected."
 
