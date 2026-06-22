@@ -44,6 +44,7 @@ window.BolShared = (function() {
     // Shipper signature — cursive (FRSCRIPT), auto-signed with the generating user's display name.
     // PLACEHOLDER coords; tune in bol-test (#3).
     shipperSignature: { x: 37, y: 48, size: 22 },
+    shipperDate:      { x: 107, y: 48, size: 10 },
   };
 
   const PAGE = { width: 612, height: 792 }; // template is fixed US Letter
@@ -283,6 +284,9 @@ window.BolShared = (function() {
           color: black,
         });
       }
+
+      // ── Ship date next to shipper signature (auto-populated; regular font) ──
+      if (_displayDate) drawText(_displayDate, COORDS.shipperDate);
 
       // ── QR code (driver tracking link) ──
       if (opts.copyType !== 'customer' && !opts.hideQr && bol.access_token && typeof qrcode === 'function') {
