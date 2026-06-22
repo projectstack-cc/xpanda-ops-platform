@@ -15,7 +15,7 @@ window.BolShared = (function() {
     date:          { x: 346, y: 712, size: 10 },
     bolNumber:     { x: 408, y: 690, size: 22, bold: true },
     carrierName:   { x: 389, y: 648, size: 10 },
-    trailerNo:     { x: 365, y: 622, size: 10 },
+    trailerNo:     { x: 365, y: 622, size: 12, bold: true },
 
     // Ship-to address (4 lines, indented under label)
     shipLine1:     { x: 95,  y: 615, size: 10 },
