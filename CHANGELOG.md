@@ -156,6 +156,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Admin / Platform
 
+- **P199** — Temporary 302 redirect: `xpanda-ops-platform.pages.dev` → `https://www.xpandaops.com` in `_worker.js/index.js`. Path + query string preserved. Placed after the `/health` check (monitor-safe) and before static-asset passthrough. 302 not 301 — not hard-cached, removed cleanly once all links/bookmarks updated.
 - **P146** — PWA install prompt for mobile users: new `/shared/pwa-install.js` auto-loaded by `shared-header.js`. Android shows a dismissible bottom banner with one-tap install via `beforeinstallprompt`; iOS Safari shows "Share → Add to Home Screen" instructions. Skips if already installed (standalone mode) or previously dismissed (persisted in localStorage). Mobile-only (pointer:coarse or width < 1024). (3ca97e7)
 - **P114** — Shared header page-desc typography: h1 15px/700, subtitle 11px/text-hint. (855152c)
 - **P110–P113** — Shared header restructure; dark mode contrast sweep; load builder shared design tokens; logistics table alignment. (9841b06, a9fb1fa)
