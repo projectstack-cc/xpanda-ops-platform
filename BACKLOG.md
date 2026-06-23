@@ -114,10 +114,12 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 
 - [x] P196 — Route-tree reconcile, dev server green at `/v2/cutting`
 - [x] P197 — Worker build: `opennextjs-cloudflare` build green + local workerd preview boots
+- [x] P198 — Operator loop: queue with per-line state, clock-in/out, handoff notes, complete-line, job-done signal
 - [ ] Deploy + domain attach (Steve — requires wrangler auth + real hostname; workers.dev cannot host the cookie-shared `/v2/*` route)
-- [ ] Auth-bridge validation (requires real host after domain attach)
-- [ ] Queue → clock-in / handoff feature build
-- [ ] Block-calculator BOM wiring
+- [ ] Auth-bridge + operator loop validation (requires real host after domain attach; walk the full clock-in→handoff→complete→job-done loop)
+- [ ] Priority ordering for the queue (next prompt)
+- [ ] Block-calculator BOM wiring (`cutting_lines.qty_target`)
+- [ ] Kill `cutting_steps` / legacy `cutting-dashboard.html` once v2 is on the floor
 
 ---
 
