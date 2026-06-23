@@ -608,7 +608,7 @@ function h(tag, attrs = {}, ...children) {
           ship_to_street: td.shipToStreet, ship_to_street2: td.shipToStreet2,
           ship_to_city: td.shipToCity, ship_to_state: td.shipToState, ship_to_zip: td.shipToZip,
           location_no: '', carrier_id: null, carrier_name: td.carrierName,
-          trailer_no: '', seal_number: '', scac: '', pro_no: '',
+          trailer_no: td.trailerNo || '', seal_number: '', scac: '', pro_no: '',
           freight_terms: td.freightTerms, is_scrap_pickup: 0, third_party_bill_to: '',
           special_instructions: td.specialInstructions,
           contact_info: [td.contactName ? ('POC: ' + td.contactName) : '', td.contactPhone || ''].filter(Boolean).join(' '),

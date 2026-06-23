@@ -1006,12 +1006,25 @@ async function openBolModalForJob(jobId) {
       freightTerms: 'prepaid', specialInstructions: '', carryOver: true,
     };
 
+    // Fetch loading assignments to pre-populate trailer numbers on each load.
+    let assignmentsByLoad = {};
+    try {
+      const laRes = await api.get('/api/loading-assignments?job_id=' + encodeURIComponent(job.id));
+      if (laRes.ok && Array.isArray(laRes.data?.assignments)) {
+        for (const a of laRes.data.assignments) {
+          if (a.load_number) assignmentsByLoad[a.load_number] = a;
+        }
+      }
+    } catch (_) {}
+
     const trailerData = [];
     for (let i = 0; i < loadCount; i++) {
+      const assignment = assignmentsByLoad[i + 1] || {};
       trailerData.push(Object.assign({}, base, {
         trailerIndex: i,
         trailerLabel: loadCount > 1 ? ('Load ' + (i + 1) + ' of ' + loadCount) : 'BOL',
         invNumber: i === 0 ? (job.invoice_number || '') : '',
+        trailerNo: assignment.trailer_number || '',
       }));
     }
 
