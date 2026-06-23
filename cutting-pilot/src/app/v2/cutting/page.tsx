@@ -1,24 +1,16 @@
-// src/app/cutting/page.tsx
-// Served at /v2/cutting (basePath = /v2). Done-bar proof: this page only renders if the
-// shared session validated in middleware. It reads identity from the injected headers —
-// proving the auth bridge end to end before any real cutting UI is built.
+// src/app/v2/cutting/page.tsx  →  /v2/cutting
+// Server component shell: reads operator identity from middleware-injected headers,
+// passes it down to the client board so the board never needs a separate /me fetch.
 import { headers } from "next/headers";
+import CuttingBoard from "./CuttingBoard";
 
 export default async function CuttingPage() {
   const h = await headers();
-  const name = h.get("X-User-Name") ?? "unknown";
-  const role = h.get("X-User-Role") ?? "unknown";
+  const userId = h.get("X-User-Id") ?? "";
+  const userName = h.get("X-User-Name") ?? "";
+  const isAdmin = h.get("X-User-Is-Admin") === "1";
 
   return (
-    <main className="min-h-screen bg-bg p-6 font-sans text-text">
-      <h1 className="text-xl font-bold">Cutting Dashboard — v2 pilot</h1>
-      <p className="mt-2 text-muted">
-        Auth bridge live. Signed in as <strong>{name}</strong> ({role}) via the shared
-        xpanda_session — validated against the same D1 as the legacy app.
-      </p>
-      <p className="mt-4 text-text-hint">
-        Next: the clock-into-able queue (GET /api/v2/cutting/queue).
-      </p>
-    </main>
+    <CuttingBoard userId={userId} userName={userName} isAdmin={isAdmin} />
   );
 }
