@@ -1,0 +1,40 @@
+#:schema node_modules/wrangler/config-schema.json
+# Cutting React pilot — Next.js via OpenNext on Cloudflare Workers.
+# CRITICAL: same D1 database_id and same R2 bucket as the legacy Pages app.
+# That shared binding is what makes the strangler migration have no "integration day":
+# both apps read/write the identical tables and bucket.
+
+name = "xpanda-cutting-v2"
+main = ".open-next/worker.js"
+compatibility_date = "2026-03-17"
+compatibility_flags = ["nodejs_compat"]
+
+# OpenNext static assets
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# ── SAME D1 as legacy (do not create a new database) ───────────────────────────────
+[[d1_databases]]
+binding = "DB"
+database_name = "DB"
+database_id = "21d6f47b-0be9-4006-8014-d154e41f91e8"
+
+# ── SAME R2 bucket as legacy ────────────────────────────────────────────────────────
+[[r2_buckets]]
+binding = "BOL_PHOTOS"
+bucket_name = "xpanda-bol-photos"
+
+# ── Routing topology (the cookie has no Domain attr, so SAME HOST is mandatory) ─────
+# Set this Route in the Cloudflare dashboard (or here once the zone is confirmed):
+#   Zone: <your custom domain>
+#   Route: <your-domain>/v2/*   AND   <your-domain>/api/v2/*   → this Worker
+# Everything else stays on the legacy Pages app. A *.workers.dev subdomain will NOT
+# receive xpanda_session and will break the auth bridge — do not use one for the floor.
+#
+# [[routes]]
+# pattern = "yourdomain.com/v2/*"
+# zone_name = "yourdomain.com"
+# [[routes]]
+# pattern = "yourdomain.com/api/v2/*"
+# zone_name = "yourdomain.com"
