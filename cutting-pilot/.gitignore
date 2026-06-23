@@ -1,0 +1,14 @@
+# Next.js build output
+.next/
+
+# OpenNext/Cloudflare build output — do not commit
+.open-next/
+
+# Dependencies
+node_modules/
+
+# Wrangler local state
+.wrangler/
+
+# Local env secrets
+.dev.vars
