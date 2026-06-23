@@ -94,6 +94,7 @@ export async function handleApiLoadingAssignments(request, env) {
     try {
       const includeArchived = url.searchParams.get('include_archived') === '1';
       const bayId = url.searchParams.get('bay_id') || '';
+      const filterJobId = url.searchParams.get('job_id') || '';
 
       let query = `
         SELECT la.*, j.customer, j.invoice_number, j.po_number, j.ship_date, j.ship_to_company,
@@ -114,6 +115,7 @@ export async function handleApiLoadingAssignments(request, env) {
       conditions.push("COALESCE(j.method, '') != 'customer pickup'");
       if (!includeArchived) conditions.push("la.loading_status != 'archived'");
       if (bayId) { conditions.push("la.bay_id = ?"); binds.push(bayId); }
+      if (filterJobId) { conditions.push("la.job_id = ?"); binds.push(filterJobId); }
       if (conditions.length) query += " WHERE " + conditions.join(" AND ");
       query += " ORDER BY la.created_at ASC";
 
