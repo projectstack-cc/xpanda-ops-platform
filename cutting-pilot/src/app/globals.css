@@ -1,0 +1,116 @@
+/* Design tokens — copied from shared/tokens.css (P196). Do not import across boundary; copy values. */
+:root {
+  /* Surfaces */
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --card-bg: #ffffff;
+  --card-border: #e5e7eb;
+  --line: #e5e7eb;
+
+  /* Text */
+  --text: #111827;
+  --muted: #4b5563;
+  --text-muted: #6b7280;
+  --text-hint: #9ca3af;
+  --text-faint: #94a3b8;
+
+  /* Inputs / ghost / pill */
+  --input-bg: #ffffff;
+  --input-border: #d1d5db;
+  --ghost-bg: #f3f4f6;
+  --ghost-text: #111827;
+  --pill: #475569;
+
+  /* Primary (slate) + accent */
+  --primary-bg: #1e293b;
+  --primary-text: #ffffff;
+  --accent: #0f172a;
+  --accent-soft: #f1f5f9;
+
+  /* Semantic */
+  --danger-bg: #dc2626;
+  --danger-text: #ffffff;
+  --success-bg: #16a34a;
+  --success-text: #ffffff;
+
+  /* Links + banners */
+  --link: #0074cc;
+  --info-bg: #eff6ff;
+  --info-border: #bfdbfe;
+  --info-text: #1e40af;
+  --warn-bg: #fef3c7;
+  --warn-border: #fde68a;
+  --warn-text: #92400e;
+
+  /* Brand red */
+  --brand: #e31837;
+  --brand-hover: #b31229;
+
+  /* Aliases used by Tailwind config */
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+  --green: #22c55e;
+  --red: #ef4444;
+
+  /* Typography — IBM Plex stack */
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font: var(--font-sans);
+
+  /* Geometry / elevation */
+  --radius: 12px;
+  --tile-radius: 14px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .08);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, .10), 0 2px 4px -1px rgba(0, 0, 0, .06);
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f1117;
+  --surface: #1a1d29;
+  --surface-2: #232634;
+  --card-bg: #1a1d29;
+  --card-border: #2d3142;
+  --line: #2d3142;
+
+  --text: #f3f4f6;
+  --muted: #9ca3af;
+  --text-muted: #9ca3af;
+  --text-hint: #868e9f;
+  --text-faint: #6b7280;
+
+  --input-bg: #232634;
+  --input-border: #3d4256;
+  --ghost-bg: #232634;
+  --ghost-text: #f3f4f6;
+  --pill: #64748b;
+
+  --primary-bg: #334155;
+  --primary-text: #ffffff;
+  --accent: #cbd5e1;
+  --accent-soft: #232634;
+
+  --danger-bg: #ef4444;
+  --success-bg: #22c55e;
+
+  --link: #60a5fa;
+  --info-bg: rgba(59, 130, 246, 0.12);
+  --info-border: rgba(59, 130, 246, 0.35);
+  --info-text: #93c5fd;
+  --warn-bg: rgba(245, 158, 11, 0.12);
+  --warn-border: rgba(245, 158, 11, 0.35);
+  --warn-text: #fcd34d;
+
+  --brand: #ef4356;
+  --brand-hover: #e31837;
+
+  --border: #2d3142;
+  --border-light: #232634;
+
+  --shadow: 0 1px 3px rgba(0, 0, 0, .40);
+  --shadow-md: 0 4px 8px -1px rgba(0, 0, 0, .50), 0 2px 4px -1px rgba(0, 0, 0, .40);
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

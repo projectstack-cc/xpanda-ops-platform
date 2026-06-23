@@ -108,7 +108,16 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 
 ## Production / Manufacturing
 
-*(No open items — all shipped. See `CHANGELOG.md`.)*
+*(Cutting Dashboard legacy shipped — see `CHANGELOG.md`.)*
+
+### Cutting v2 React pilot (`cutting-pilot/`)
+
+- [x] P196 — Route-tree reconcile, dev server green at `/v2/cutting`
+- [ ] P197 — Worker build: `opennextjs-cloudflare build` + local workerd preview
+- [ ] Deploy + domain attach (Steve — requires wrangler auth + real hostname; workers.dev cannot host the cookie-shared `/v2/*` route)
+- [ ] Auth-bridge validation (requires real host after domain attach)
+- [ ] Queue → clock-in / handoff feature build
+- [ ] Block-calculator BOM wiring
 
 ---
 

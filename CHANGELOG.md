@@ -8,6 +8,12 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ---
 
+## Manufacturing / Cutting (React pilot)
+
+- **P196** — Cutting v2 pilot route-tree reconcile: removed double `/v2` prefix (basePath vs folder) that 404'd the dev server; moved `api/cutting/queue` under `app/v2/api/` so the whole v2 surface lives under one `/v2` prefix (single future zone route, no collision with legacy `/api/cutting`); middleware relocated already at `src/middleware.ts` with `matcher: ['/v2/:path*']`; `isApi` check updated to `/v2/api/` after move; `getCloudflareContext()` awaited correctly (async in v0.3.x); try/catch pass-through added for next dev edge-middleware limitation (dynamic wrangler import fails in webpack edge context — auth gate fully active in workerd); `db.ts` switched to `getCloudflareContext()` via async `getEnv()`; `open-next.config.ts` fixed to valid v0.3.x format (removed nonexistent `OpenNextConfig` import, added `middleware: external: true`); seeded `shared/tokens.css` `:root` vars + dark mode block into pilot `globals.css` with `--font` alias; token fallbacks added for Tailwind-config vars missing from tokens.css (`--border`, `--border-light`, `--green`, `--red`, `--text-faint`); validateSession/hasPermission port confirmed faithful to `_worker.js/lib/core.js`. Local dev green at `/v2/cutting`. No deploy, no migration, no legacy file touched.
+
+---
+
 ## Logistics
 
 - **P192** — Auto-populate ship date next to shipper signature: `shipperDate` coord added (`x: 157, y: 48, size: 8`); after the cursive shipper-signature block, `_displayDate` is drawn at that coord via the regular `drawText` helper. Reuses the already-computed `_displayDate` so the signature-area date always agrees with the top-right date and respects any `date` override. Renders on all copies (default/driver/customer). Frontend-only, `logistics/bol-shared.js`.
