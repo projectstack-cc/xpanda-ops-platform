@@ -131,6 +131,15 @@ export default {
         return new Response("FUNCTIONS_OK", { status: 200 });
       }
 
+      // TEMPORARY host redirect: old Pages domain → canonical domain.
+      // 302 (NOT 301) so it is not hard-cached and can be cleanly removed.
+      // REMOVE this block once all internal links/bookmarks point at the canonical host.
+      // NOTE: set CANONICAL_ORIGIN to the host where login sets xpanda_session (apex vs www).
+      if (url.hostname === "xpanda-ops-platform.pages.dev") {
+        const CANONICAL_ORIGIN = "https://www.xpandaops.com"; // ← confirm apex vs www
+        return Response.redirect(CANONICAL_ORIGIN + url.pathname + url.search, 302);
+      }
+
       // 2) Static asset passthrough — must come before session gate
       const STATIC_EXT = /\.(png|jpe?g|gif|svg|ico|webp|css|js|woff2?|ttf|eot|map|pdf)$/i;
       const STATIC_PREFIX = ['/logo/', '/assets/', '/logistics/assets/', '/qc-assets/'];
