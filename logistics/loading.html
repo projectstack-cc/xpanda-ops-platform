@@ -466,7 +466,7 @@ function renderOverview() {
   document.getElementById('ld-bays').innerHTML = baysHtml;
   initTouchDragForOverview();
 
-  const yard = sortAssignments(ldSet.filter(a => a.location === 'yard'));
+  const yard = sortAssignments(ldSet.filter(a => a.location === 'yard' && a.loading_status !== 'in_transit' && a.loading_status !== 'delivered'));
   document.getElementById('ld-yard').innerHTML = yard.length
     ? yard.map(a => renderAssignmentCard(a, false, false)).join('')
     : '<div class="ld-empty">No trailers in the yard</div>';
@@ -588,7 +588,7 @@ function renderBayList() {
 
   container.innerHTML = html;
 
-  const yard = sortAssignments(allAssignments.filter(a => a.location === 'yard'));
+  const yard = sortAssignments(allAssignments.filter(a => a.location === 'yard' && a.loading_status !== 'in_transit' && a.loading_status !== 'delivered'));
   const yardEl = document.getElementById('ld-yard-team');
   if (yardEl) {
     yardEl.innerHTML = yard.length
