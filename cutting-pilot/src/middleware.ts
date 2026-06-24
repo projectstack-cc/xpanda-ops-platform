@@ -19,7 +19,9 @@ import { validateSession, hasPermission } from "@/lib/session";
 const PERMISSION_KEY = "manufacturing.cutting";
 
 export const config = {
-  matcher: ["/v2/:path*"],
+  // Exclude _next/static, _next/image, and favicon from the auth gate so JS chunks
+  // and image assets are served without a session check. Real pages and /v2/api/* stay gated.
+  matcher: ["/v2/((?!_next/static|_next/image|favicon.ico).*)"],
 };
 
 export async function middleware(request: NextRequest) {
