@@ -337,23 +337,38 @@ export async function handleApiLoadingAssignments(request, env) {
           request.headers.get('X-User-Id'));
       }
 
-      // Back-write the assigned trailer onto the job's BOL (only when the trailer changed and the
-      // job has exactly one BOL — multi-BOL jobs are skipped; that's the multi-trailer item).
+      // Back-write the assigned trailer onto the matching BOL for this load. Each loading
+      // assignment maps 1:1 to a BOL via load_number (P170), so multi-load jobs now propagate
+      // the trailer to its own load's BOL instead of being skipped (the multi-trailer fix).
+      // Fallback: a legacy single-BOL job whose BOL predates load_number (NULL) is updated by
+      // job_id, but ONLY when the job has exactly one BOL — never blanket-stamp a multi-BOL job.
       // Note: a manual trailer override in the BOL editor (render_overrides.trailerNo) will shadow
       // this field at render time; that is acceptable and rare.
       if (payload.trailer_number !== undefined &&
           String(payload.trailer_number) !== String(existing.trailer_number || '')) {
         try {
-          const bolCount = await db.prepare(
-            "SELECT COUNT(*) AS cnt FROM bols WHERE job_id = ?"
-          ).bind(existing.job_id).first();
-          if (Number(bolCount?.cnt || 0) === 1) {
-            await db.prepare(
-              "UPDATE bols SET trailer_no = ? WHERE job_id = ?"
-            ).bind(String(payload.trailer_number), existing.job_id).run();
+          let propagated = false;
+          if (existing.load_number != null) {
+            const r = await db.prepare(
+              "UPDATE bols SET trailer_no = ? WHERE job_id = ? AND load_number = ?"
+            ).bind(String(payload.trailer_number), existing.job_id, existing.load_number).run();
+            propagated = Number(r?.meta?.changes || 0) > 0;
+          }
+          if (!propagated) {
+            const bolCount = await db.prepare(
+              "SELECT COUNT(*) AS cnt FROM bols WHERE job_id = ?"
+            ).bind(existing.job_id).first();
+            if (Number(bolCount?.cnt || 0) === 1) {
+              await db.prepare(
+                "UPDATE bols SET trailer_no = ? WHERE job_id = ?"
+              ).bind(String(payload.trailer_number), existing.job_id).run();
+              propagated = true;
+            }
+          }
+          if (propagated) {
             await logActivity(db, 'update', 'bol', existing.job_id,
               `Trailer # propagated to BOL: ${String(payload.trailer_number)}`,
-              { job_id: existing.job_id },
+              { job_id: existing.job_id, load_number: existing.load_number ?? null },
               request.headers.get('X-User-Id'));
           }
         } catch (e) {
