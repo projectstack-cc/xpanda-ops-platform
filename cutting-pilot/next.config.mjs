@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Folder-based routing places pages at /v2/cutting; assets must also live under /v2
-  // so the single Worker Route (www.xpandaops.com/v2/*) covers both pages and chunks.
-  // Do NOT also set basePath — that would double-prefix to /v2/v2/_next.
-  assetPrefix: "/v2",
+  // basePath scopes all pages, API routes, and asset URLs under /v2.
+  // App files live at app/cutting (no v2/ folder) — basePath provides the prefix.
+  // Do NOT also set assetPrefix — basePath already covers it; double-setting causes /v2/v2/_next.
+  basePath: "/v2",
 };
 
 export default nextConfig;
