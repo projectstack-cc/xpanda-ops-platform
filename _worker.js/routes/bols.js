@@ -386,7 +386,30 @@ export async function handleApiBols(request, env) {
       }
     }
 
-    const access_token = generateAccessToken();
+    let access_token = generateAccessToken();
+
+    // Regenerate-replaces-previous: when this BOL belongs to a job and a specific load, remove any
+    // prior BOL for that same job+load so regenerations don't pile up stale rows (and bloat D1).
+    // Preserve the most-recent prior access_token so a previously printed tracking QR still works.
+    if (payload.job_id && payload.load_number != null) {
+      try {
+        const priorRows = await db.prepare(
+          "SELECT id, access_token, created_at FROM bols WHERE job_id = ? AND load_number = ? ORDER BY created_at ASC"
+        ).bind(String(payload.job_id).trim(), Number(payload.load_number)).all();
+        const priors = priorRows.results || [];
+        for (const p of priors) {
+          if (p.access_token) access_token = p.access_token; // last (newest) prior token wins
+          const docs = await db.prepare("SELECT r2_key FROM bol_documents WHERE bol_id = ?").bind(p.id).all();
+          for (const d of (docs.results || [])) {
+            if (d.r2_key && env.BOL_PHOTOS) { try { await env.BOL_PHOTOS.delete(d.r2_key); } catch (_e) {} }
+          }
+          await db.prepare("DELETE FROM bol_documents WHERE bol_id = ?").bind(p.id).run();
+          await db.prepare("DELETE FROM bols WHERE id = ?").bind(p.id).run();
+        }
+      } catch (e) {
+        console.error('Regenerate-replace prior BOL failed:', String(e?.message || e));
+      }
+    }
 
     const shipperUserId = request.headers.get('X-User-Id') || '';
     let shipper_name = '';
