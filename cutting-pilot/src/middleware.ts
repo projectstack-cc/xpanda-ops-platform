@@ -19,9 +19,10 @@ import { validateSession, hasPermission } from "@/lib/session";
 const PERMISSION_KEY = "manufacturing.cutting";
 
 export const config = {
-  // Exclude _next/static, _next/image, and favicon from the auth gate so JS chunks
-  // and image assets are served without a session check. Real pages and /v2/api/* stay gated.
-  matcher: ["/v2/((?!_next/static|_next/image|favicon.ico).*)"],
+  // basePath: "/v2" in next.config.mjs prepends /v2 to every matcher automatically.
+  // Do NOT include /v2 here — that would compile to /v2/v2/... (double-prefix).
+  // Negative lookahead excludes _next/static, _next/image, and favicon from the auth gate.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
 
 export async function middleware(request: NextRequest) {
