@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "cf-build": "opennextjs-cloudflare",
-    "deploy": "wrangler deploy",
-    "preview": "wrangler dev",
+    "cf-build": "opennextjs-cloudflare && node scripts/fix-asset-prefix.mjs",
+    "deploy": "npm run cf-build && wrangler deploy",
+    "preview": "npm run cf-build && wrangler dev",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
