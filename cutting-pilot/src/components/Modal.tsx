@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, type ReactNode } from "react";
+import { X } from "lucide-react";
 
 interface Props {
   isOpen: boolean;
@@ -40,11 +41,12 @@ export default function Modal({ isOpen, onClose, title, children }: Props) {
             {title}
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="flex items-center justify-center min-w-[44px] min-h-[44px] text-2xl leading-none text-muted hover:text-text rounded-lg"
+            className="flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-text rounded-lg cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             aria-label="Close"
           >
-            ×
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
         {children}
