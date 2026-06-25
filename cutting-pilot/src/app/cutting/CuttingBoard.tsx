@@ -1,6 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
-import { AlertCircle, X } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { AlertCircle, Search, X } from "lucide-react";
 import Sheet from "@/components/Sheet";
 import JobRow from "./JobRow";
 import LineRow from "./LineRow";
@@ -24,6 +24,8 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin: _isAd
     line: string;
   } | null>(null);
   const [acting, setActing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [showAll, setShowAll] = useState(false);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -52,7 +54,23 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin: _isAd
     fetchQueue();
   }, []);
 
-  const selectedJob = queue.find((j) => j.id === selectedJobId) ?? null;
+  const filteredQueue = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (term) {
+      return queue.filter(
+        (j) =>
+          j.customer.toLowerCase().includes(term) ||
+          j.invoice_number.toLowerCase().includes(term)
+      );
+    }
+    if (showAll) return queue;
+    const { start, end } = thisWeekRange();
+    return queue.filter(
+      (j) => j.ship_date !== null && j.ship_date >= start && j.ship_date <= end
+    );
+  }, [queue, search, showAll]);
+
+  const selectedJob = filteredQueue.find((j) => j.id === selectedJobId) ?? null;
 
   async function clockIn(jobId: string, line: string) {
     setActing(true);
@@ -186,7 +204,38 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin: _isAd
           aria-label="Job list"
           className="w-full md:w-72 md:shrink-0 bg-surface md:border-r md:border-border overflow-y-auto"
         >
-          <QueueHeader count={queue.length} />
+          <QueueHeader count={filteredQueue.length} />
+
+          {/* Search + week filter toolbar */}
+          <div className="px-3 py-2 border-b border-border bg-surface space-y-2">
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search customer or invoice…"
+                aria-label="Search jobs"
+                className="w-full min-h-[44px] pl-8 pr-3 py-2 bg-[var(--input-bg)] border border-[var(--input-border)] rounded text-sm text-text placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              className={[
+                "min-h-[44px] w-full px-3 py-2 rounded text-sm font-semibold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                showAll
+                  ? "bg-[var(--ghost-bg)] text-text border border-border hover:bg-[var(--border-light)]"
+                  : "bg-[var(--primary-bg)] text-[var(--primary-text)] hover:opacity-90",
+              ].join(" ")}
+            >
+              {showAll ? "← This Week" : "Show All"}
+            </button>
+          </div>
 
           {/* Inline error with retry */}
           {error && (
@@ -211,14 +260,19 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin: _isAd
             </div>
           )}
 
-          {/* Designed empty state */}
+          {/* Designed empty states */}
           {!error && queue.length === 0 && (
             <p className="px-4 py-6 text-sm text-muted">
               No jobs need cutting — check the Job Board.
             </p>
           )}
+          {!error && queue.length > 0 && filteredQueue.length === 0 && (
+            <p className="px-4 py-6 text-sm text-muted">
+              No jobs match this week / your search — try Show All.
+            </p>
+          )}
 
-          {queue.map((job) => (
+          {filteredQueue.map((job) => (
             <JobRow
               key={job.id}
               job={job}
@@ -291,6 +345,19 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin: _isAd
       />
     </div>
   );
+}
+
+function thisWeekRange(): { start: string; end: string } {
+  const now = new Date();
+  const dow = now.getDay(); // 0=Sun … 6=Sat
+  const daysFromMon = dow === 0 ? 6 : dow - 1;
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - daysFromMon);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return { start: fmt(mon), end: fmt(sun) };
 }
 
 function AppHeader({ userName }: { userName: string }) {
