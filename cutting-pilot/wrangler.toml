@@ -26,15 +26,9 @@ binding = "BOL_PHOTOS"
 bucket_name = "xpanda-bol-photos"
 
 # ── Routing topology (the cookie has no Domain attr, so SAME HOST is mandatory) ─────
-# Set this Route in the Cloudflare dashboard (or here once the zone is confirmed):
-#   Zone: <your custom domain>
-#   Route: <your-domain>/v2/*   AND   <your-domain>/api/v2/*   → this Worker
-# Everything else stays on the legacy Pages app. A *.workers.dev subdomain will NOT
-# receive xpanda_session and will break the auth bridge — do not use one for the floor.
-#
-# [[routes]]
-# pattern = "yourdomain.com/v2/*"
-# zone_name = "yourdomain.com"
-# [[routes]]
-# pattern = "yourdomain.com/api/v2/*"
-# zone_name = "yourdomain.com"
+# Workers routes take priority over the legacy Pages app for /v2/*.
+# Everything else stays on Pages. *.workers.dev will NOT receive xpanda_session.
+
+[[routes]]
+pattern = "www.xpandaops.com/v2/*"
+zone_name = "xpandaops.com"
