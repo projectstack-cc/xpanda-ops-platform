@@ -8,6 +8,12 @@
 
 ---
 
+## Manufacturing / Cutting (React pilot)
+
+- [ ] Enable OpenNext skew protection on the v2 Worker (durable fix for hashed-asset 404s across deploys) — see https://opennext.js.org/cloudflare/howtos/skew
+
+---
+
 ## Logistics
 
 ### Standing Logistics Backlog
