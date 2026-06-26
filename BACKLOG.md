@@ -127,7 +127,7 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [x] P210 — Theme engine: `ThemeProvider`/`useTheme`, pre-hydration anti-flash script, token-audit fix (`--danger-text`/`--success-text` in dark block)
 - [x] P211 — `<ThemeToggle>` control consuming P210 engine, dropped into the v2 header
 - [x] P212 — `<PlatformHeader>` React port (replaces bare `AppHeader`)
-- [ ] P213 — Nav wiring + legacy visual-parity pass
+- [x] P213 — Nav wiring + legacy visual-parity pass
 - [ ] Cutting v2: port notifications bell + settings gear into `PlatformHeader` once v2 notification backend exists (deferred from P212)
 - [ ] Deploy + domain attach (Steve — requires wrangler auth + real hostname; workers.dev cannot host the cookie-shared `/v2/*` route)
 - [ ] Auth-bridge + operator loop validation (requires real host after domain attach; walk the full clock-in→handoff→complete→job-done loop)
