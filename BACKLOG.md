@@ -124,6 +124,10 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [x] P198 — Operator loop: queue with per-line state, clock-in/out, handoff notes, complete-line, job-done signal
 - [x] P206 — Cutting v2 UI redesign: tablet-first master-detail board (JobRow/LineRow/Sheet/StatusPill primitives, lucide icons, designed states)
 - [x] P209 — Queue toolbar: client-side search (customer + invoice #) and This-Week/Show-All filter
+- [x] P210 — Theme engine: `ThemeProvider`/`useTheme`, pre-hydration anti-flash script, token-audit fix (`--danger-text`/`--success-text` in dark block)
+- [ ] P211 — `<ThemeToggle>` control consuming P210 engine, dropped into the v2 header
+- [ ] P212 — `<PlatformHeader>` React port (replaces bare `<S>` header)
+- [ ] P213 — Nav wiring + legacy visual-parity pass
 - [ ] Deploy + domain attach (Steve — requires wrangler auth + real hostname; workers.dev cannot host the cookie-shared `/v2/*` route)
 - [ ] Auth-bridge + operator loop validation (requires real host after domain attach; walk the full clock-in→handoff→complete→job-done loop)
 - [ ] Priority ordering for the queue (next prompt)
