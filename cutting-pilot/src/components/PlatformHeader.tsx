@@ -8,12 +8,21 @@ const NAV_MODULES = [
   { label: "Job board",     href: "/jobs/",          perm: "jobs" },
   { label: "Logistics",     href: "/logistics/",      perm: "logistics.dashboard" },
   { label: "Manufacturing", href: "/manufacturing/",  perm: "manufacturing.calculators" },
+  // Future: if a dedicated Cutting link is surfaced, gate it behind perm: "manufacturing.cutting"
+  // and place it after Manufacturing. DO NOT add it now — cutting is reached via Manufacturing (legacy nesting).
   { label: "Production",    href: "/production/",     perm: "production.inventory" },
   { label: "QC",            href: "/qc/",             perm: "qc" },
   { label: "Reports",       href: "/reports/",        perm: "reports" },
   { label: "Safety",        href: "/safety/",         perm: "safety" },
   { label: "Admin",         href: "/admin/",          perm: "admin" },
 ] as const;
+
+// The v2 cutting board lives at /v2/cutting but belongs to the Manufacturing module.
+// Map it to the Manufacturing nav entry so operators see which module they're in.
+function isNavActive(href: string, currentPath: string): boolean {
+  if (currentPath.startsWith("/v2/cutting") && href === "/manufacturing/") return true;
+  return currentPath.startsWith(href);
+}
 
 interface PlatformHeaderProps {
   title?: string;
@@ -43,7 +52,7 @@ export default function PlatformHeader({
   }
 
   return (
-    <header className="shrink-0 bg-surface border-b border-border">
+    <header className="shrink-0 bg-surface border-b border-[var(--line)]">
       {/* Main nav row */}
       <div className="flex items-center px-3 min-h-[48px] gap-1">
         {/* Logo — plain <a> + <img>: basePath does NOT prefix these, which is correct for /logo/xpanda.png served by the legacy app on the same host */}
@@ -58,7 +67,7 @@ export default function PlatformHeader({
         {/* Desktop nav links (hidden below md) */}
         <div className="hidden md:flex items-center flex-1 gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {visibleModules.map((m) => {
-            const active = currentPath.startsWith(m.href);
+            const active = isNavActive(m.href, currentPath);
             return (
               <a
                 key={m.href}
@@ -88,7 +97,7 @@ export default function PlatformHeader({
           aria-label={drawerOpen ? "Close menu" : "Open menu"}
           aria-expanded={drawerOpen}
           aria-controls="platform-nav-drawer"
-          className="md:hidden inline-flex items-center justify-center w-[44px] h-[44px] rounded-lg border border-border bg-transparent text-text cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+          className="md:hidden inline-flex items-center justify-center w-[44px] h-[44px] rounded-lg border border-[var(--line)] bg-transparent text-text cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
         >
           {drawerOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
         </button>
@@ -114,10 +123,10 @@ export default function PlatformHeader({
       {drawerOpen && (
         <div
           id="platform-nav-drawer"
-          className="md:hidden flex flex-col border-t border-border bg-surface"
+          className="md:hidden flex flex-col border-t border-[var(--line)] bg-surface"
         >
           {visibleModules.map((m) => {
-            const active = currentPath.startsWith(m.href);
+            const active = isNavActive(m.href, currentPath);
             return (
               <a
                 key={m.href}
@@ -136,7 +145,7 @@ export default function PlatformHeader({
               </a>
             );
           })}
-          <div className="flex items-center gap-3 px-4 py-3 border-t border-border">
+          <div className="flex items-center gap-3 px-4 py-3 border-t border-[var(--line)]">
             <span className="text-xs font-mono tabular-nums text-muted">{userName}</span>
             <a
               href="/login.html"
@@ -150,7 +159,7 @@ export default function PlatformHeader({
       )}
 
       {/* Page title strip */}
-      <div className="px-4 h-9 flex items-center border-t border-border bg-[var(--surface-2)]">
+      <div className="px-4 h-9 flex items-center border-t border-[var(--line)] bg-[var(--surface-2)]">
         <h1 className="text-sm font-semibold text-text tracking-tight">{title}</h1>
       </div>
     </header>
