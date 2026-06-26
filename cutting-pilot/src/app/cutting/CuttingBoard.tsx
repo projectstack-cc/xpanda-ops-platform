@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { AlertCircle, Search, X } from "lucide-react";
+import { AlertCircle, Search, X, Package } from "lucide-react";
 import Sheet from "@/components/Sheet";
 import PlatformHeader from "@/components/PlatformHeader";
 import JobRow from "./JobRow";
 import LineRow from "./LineRow";
 import HandoffModal from "./HandoffModal";
 import CompleteLineModal from "./CompleteLineModal";
+import PartsPanel from "./PartsPanel";
 import type { CuttingJob } from "./types";
 
 interface Props {
@@ -33,6 +34,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   } | null>(null);
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [partsOpen, setPartsOpen] = useState(false);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -290,9 +292,11 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
               key={job.id}
               job={job}
               isActive={job.id === selectedJobId}
-              onClick={() =>
-                setSelectedJobId((prev) => (prev === job.id ? null : job.id))
-              }
+              onClick={() => {
+                const next = selectedJobId === job.id ? null : job.id;
+                setSelectedJobId(next);
+                setPartsOpen(next !== null);
+              }}
             />
           ))}
         </nav>
@@ -316,6 +320,15 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
                       {selectedJob.ship_date ? ` · Ships ${selectedJob.ship_date}` : ""}
                     </p>
                   </div>
+                  {/* Parts slide-over re-open */}
+                  <button
+                    type="button"
+                    onClick={() => setPartsOpen(true)}
+                    className="ml-auto shrink-0 inline-flex items-center gap-1.5 min-h-[36px] px-2.5 py-1.5 rounded-lg border border-border bg-[var(--ghost-bg)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--border-light)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                  >
+                    <Package size={14} aria-hidden="true" />
+                    Parts ({selectedJob.line_items.length})
+                  </button>
                   {/* Dismiss handle — narrow only; md+ has no sheet close affordance */}
                   <button
                     type="button"
@@ -347,6 +360,13 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
           )}
         </Sheet>
       </div>
+
+      {/* Parts slide-over — opens on job select */}
+      <PartsPanel
+        job={selectedJob}
+        isOpen={partsOpen && !!selectedJob}
+        onClose={() => setPartsOpen(false)}
+      />
 
       {/* Mark-complete modal */}
       <CompleteLineModal

@@ -108,6 +108,26 @@ export async function GET() {
       handoffByKey.set(`${row.job_id}:${row.line}`, row.handoff_note || "");
     }
 
+    // Line items (parts + qty) for each job — for the Parts slide-over.
+    // jobIds + placeholders are already in scope from the lines/sessions queries above.
+    const lineItemRows = await DB.prepare(
+      `SELECT job_id, part_number, description, quantity, dimensions
+       FROM job_line_items
+       WHERE job_id IN (${placeholders})
+       ORDER BY job_id, sort_order ASC`
+    ).bind(...jobIds).all<any>();
+
+    const lineItemsByJob = new Map<string, any[]>();
+    for (const row of (lineItemRows.results || [])) {
+      if (!lineItemsByJob.has(row.job_id)) lineItemsByJob.set(row.job_id, []);
+      lineItemsByJob.get(row.job_id)!.push({
+        part_number: row.part_number || "",
+        description: row.description || "",
+        quantity: row.quantity ?? null,
+        dimensions: row.dimensions || "",
+      });
+    }
+
     const queue = jobs.map((job: any) => {
       const jobLineMap = linesByJob.get(job.id) || new Map();
       const lines = job.requiredLines.map((lineName: string) => {
@@ -124,7 +144,7 @@ export async function GET() {
           last_handoff_note: handoffByKey.get(key) || "",
         };
       });
-      return { ...job, lines };
+      return { ...job, lines, line_items: lineItemsByJob.get(job.id) || [] };
     });
 
     return NextResponse.json({ ok: true, queue });
