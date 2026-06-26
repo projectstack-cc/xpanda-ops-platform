@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { AlertCircle, Search, X } from "lucide-react";
 import Sheet from "@/components/Sheet";
-import ThemeToggle from "@/components/ThemeToggle";
+import PlatformHeader from "@/components/PlatformHeader";
 import JobRow from "./JobRow";
 import LineRow from "./LineRow";
 import HandoffModal from "./HandoffModal";
@@ -12,9 +12,10 @@ interface Props {
   userId: string;
   userName: string;
   isAdmin: boolean;
+  permissions: Record<string, { view?: boolean; edit?: boolean }>;
 }
 
-export default function CuttingBoard({ userId: _userId, userName, isAdmin: _isAdmin }: Props) {
+export default function CuttingBoard({ userId: _userId, userName, isAdmin, permissions }: Props) {
   const [queue, setQueue] = useState<CuttingJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -162,7 +163,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin: _isAd
   if (loading) {
     return (
       <div className="h-screen flex flex-col bg-bg overflow-hidden">
-        <AppHeader userName={userName} />
+        <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Cutting · v2" />
         <div className="flex flex-1 overflow-hidden">
           <nav className="w-full md:w-72 md:shrink-0 bg-surface md:border-r md:border-border overflow-y-auto">
             <QueueHeader count={0} />
@@ -197,7 +198,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin: _isAd
         </div>
       )}
 
-      <AppHeader userName={userName} />
+      <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Cutting · v2" />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Job list — left column */}
@@ -359,18 +360,6 @@ function thisWeekRange(): { start: string; end: string } {
   const fmt = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   return { start: fmt(mon), end: fmt(sun) };
-}
-
-function AppHeader({ userName }: { userName: string }) {
-  return (
-    <header className="bg-surface border-b border-border px-4 h-14 flex items-center justify-between shrink-0">
-      <h1 className="text-sm font-semibold text-text tracking-tight">Cutting · v2</h1>
-      <div className="flex items-center gap-2">
-        <span className="font-mono tabular-nums text-xs text-muted">{userName}</span>
-        <ThemeToggle />
-      </div>
-    </header>
-  );
 }
 
 function QueueHeader({ count }: { count: number }) {
