@@ -91,7 +91,9 @@
   --accent-soft: #232634;
 
   --danger-bg: #ef4444;
+  --danger-text: #ffffff;
   --success-bg: #22c55e;
+  --success-text: #ffffff;
 
   --link: #60a5fa;
   --info-bg: rgba(59, 130, 246, 0.12);
