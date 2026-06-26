@@ -6,6 +6,7 @@ import PlatformHeader from "@/components/PlatformHeader";
 import JobRow from "./JobRow";
 import LineRow from "./LineRow";
 import HandoffModal from "./HandoffModal";
+import CompleteLineModal from "./CompleteLineModal";
 import type { CuttingJob } from "./types";
 
 interface Props {
@@ -26,6 +27,10 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
     line: string;
   } | null>(null);
   const [acting, setActing] = useState(false);
+  const [completeTarget, setCompleteTarget] = useState<{
+    jobId: string;
+    line: string;
+  } | null>(null);
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
 
@@ -132,14 +137,19 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
     }
   }
 
-  async function completeLine(jobId: string, line: string) {
-    if (!window.confirm(`Mark ${line} complete? This cannot be undone.`)) return;
+  function completeLine(jobId: string, line: string) {
+    setCompleteTarget({ jobId, line });
+  }
+
+  async function submitComplete(note: string) {
+    if (!completeTarget) return;
+    const { jobId, line } = completeTarget;
     setActing(true);
     try {
       const res = await fetch("/v2/api/cutting/complete-line", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: jobId, line }),
+        body: JSON.stringify({ job_id: jobId, line, handoff_note: note }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -148,6 +158,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
             ? `${line} complete — all lines done, job marked done.`
             : `${line} marked complete.`
         );
+        setCompleteTarget(null);
         await fetchQueue(true);
       } else {
         showToast(data.error || "Failed.", false);
@@ -336,6 +347,18 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
           )}
         </Sheet>
       </div>
+
+      {/* Mark-complete modal */}
+      <CompleteLineModal
+        lineLabel={completeTarget?.line ?? ""}
+        customer={selectedJob?.customer ?? ""}
+        invoice={selectedJob?.invoice_number ?? ""}
+        isLaminate={completeTarget?.line === "Laminate"}
+        isOpen={!!completeTarget}
+        onClose={() => setCompleteTarget(null)}
+        onSubmit={submitComplete}
+        acting={acting}
+      />
 
       {/* Clock-out handoff modal */}
       <HandoffModal
