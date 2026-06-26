@@ -128,6 +128,12 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [x] P211 — `<ThemeToggle>` control consuming P210 engine, dropped into the v2 header
 - [x] P212 — `<PlatformHeader>` React port (replaces bare `AppHeader`)
 - [x] P213 — Nav wiring + legacy visual-parity pass
+- [x] P214 — `<CompleteLineModal>`: replaced `window.confirm` with tokenized modal (completion note as `handoff_note`; scrap placeholder hidden on Laminate)
+- [ ] Wire scrap capture into `<CompleteLineModal>` once the native scrap DB lands (reason + cubic-in + shift + density; derive operator/inv/line/date from session+job; no Laminate scrap)
+- [ ] Material-consumption capture at line-complete — needs a job→block_inventory link + on-hand block picker (block_consumption_log decrements real stock)
+- [ ] Photo capture/upload at clock-out (R2; production-supervisor request)
+- [ ] Wire notifications into v2 cutting (depends on a v2 notification backend; triggers: job-done, andon/flag-for-help)
+- [ ] Read-only parts list surface under /v2/cutting → on-ramp to the cut list (cut list keys off cutting_lines.qty_target once block-calculator BOM feeds it)
 - [ ] Cutting v2: port notifications bell + settings gear into `PlatformHeader` once v2 notification backend exists (deferred from P212)
 - [ ] Deploy + domain attach (Steve — requires wrangler auth + real hostname; workers.dev cannot host the cookie-shared `/v2/*` route)
 - [ ] Auth-bridge + operator loop validation (requires real host after domain attach; walk the full clock-in→handoff→complete→job-done loop)
@@ -135,6 +141,30 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [ ] Nav link wiring (surface `/v2/cutting` in the platform shared header nav)
 - [ ] Block-calculator BOM wiring (`cutting_lines.qty_target`)
 - [ ] Kill `cutting_steps` / legacy `cutting-dashboard.html` once v2 is on the floor
+
+---
+
+## Scrap Database (native — replaces Google Sheets) · SCOPED, SEPARATE PROJECT
+
+> Move scrap off the Google-Sheets mirror (`mirrorScrapLogToSheet`) onto a first-class platform
+> database. Becomes the persistence target for the v2 CompleteLineModal scrap section.
+- [ ] Design the native scrap schema/UI (own dashboard + entry); decide whether to extend the
+      existing `scrap_log` table or supersede it
+- [ ] Add "Laminate" to the scrap line/machine options for cutting-floor capture (current QC enum
+      omits it)
+- [ ] Retire the Google-Sheets mirror; migrate existing scrap_log consumers (QC scrap-log form,
+      reports) to the native store
+- [ ] Wire v2 cutting CompleteLineModal scrap section to the native API
+
+---
+
+## Manufacturing ERP add-ons (icebox — fold in opportunistically)
+
+- [ ] Throughput / units-per-hour from cutting_sessions timestamps + qty_done_delta (near-free; no new capture)
+- [ ] Andon / flag-for-help button on a line → notifies supervisor (first real consumer of v2 notifications)
+- [ ] Downtime reason codes when a line stalls (material wait / changeover / machine) → OEE foundation
+- [ ] First-pass yield: qty_target vs qty_done vs scrap (after scrap DB + BOM wiring)
+- [ ] QR/barcode clock-in to a job (glove-friendly floor input)
 
 ---
 
