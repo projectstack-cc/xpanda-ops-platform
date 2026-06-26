@@ -1,16 +1,30 @@
 // src/app/v2/cutting/page.tsx  →  /v2/cutting
 // Server component shell: reads operator identity from middleware-injected headers,
-// passes it down to the client board so the board never needs a separate /me fetch.
+// calls validateSession() to obtain the full permission map, and passes both down
+// to the client board (no client /me fetch needed).
 import { headers } from "next/headers";
 import CuttingBoard from "./CuttingBoard";
+import { validateSession } from "@/lib/session";
+import { getEnv } from "@/lib/db";
 
 export default async function CuttingPage() {
   const h = await headers();
   const userId = h.get("X-User-Id") ?? "";
   const userName = h.get("X-User-Name") ?? "";
-  const isAdmin = h.get("X-User-Is-Admin") === "1";
+  const cookieHeader = h.get("cookie");
+
+  const { DB } = await getEnv();
+  const session = await validateSession(DB, cookieHeader);
+
+  const isAdmin = session?.isAdministrator ?? false;
+  const permissions = session?.permissions ?? {};
 
   return (
-    <CuttingBoard userId={userId} userName={userName} isAdmin={isAdmin} />
+    <CuttingBoard
+      userId={userId}
+      userName={userName}
+      isAdmin={isAdmin}
+      permissions={permissions}
+    />
   );
 }
