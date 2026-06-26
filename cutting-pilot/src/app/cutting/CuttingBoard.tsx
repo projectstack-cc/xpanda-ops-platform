@@ -9,6 +9,7 @@ import HandoffModal from "./HandoffModal";
 import CompleteLineModal from "./CompleteLineModal";
 import PartsPanel from "./PartsPanel";
 import type { CuttingJob } from "./types";
+import { formatDuration, lineLiveSeconds } from "@/lib/time";
 
 interface Props {
   userId: string;
@@ -33,6 +34,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
     line: string;
   } | null>(null);
   const [search, setSearch] = useState("");
+  const [now, setNow] = useState(() => Date.now());
   const [showAll, setShowAll] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
 
@@ -63,6 +65,12 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
     fetchQueue();
   }, []);
 
+  // Tick for live time-tracking display (minute resolution; 30s is plenty).
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
+
   const filteredQueue = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (term) {
@@ -80,6 +88,10 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   }, [queue, search, showAll]);
 
   const selectedJob = filteredQueue.find((j) => j.id === selectedJobId) ?? null;
+
+  const jobTotalSeconds = selectedJob
+    ? selectedJob.lines.reduce((sum, l) => sum + lineLiveSeconds(l, now), 0)
+    : 0;
 
   async function clockIn(jobId: string, line: string) {
     setActing(true);
@@ -319,6 +331,9 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
                       {selectedJob.po_number ? ` · PO ${selectedJob.po_number}` : ""}
                       {selectedJob.ship_date ? ` · Ships ${selectedJob.ship_date}` : ""}
                     </p>
+                    <p className="font-mono tabular-nums text-xs text-muted mt-1">
+                      Tracked: {formatDuration(jobTotalSeconds)}
+                    </p>
                   </div>
                   {/* Parts slide-over re-open */}
                   <button
@@ -353,6 +368,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
                     onClockIn={clockIn}
                     onClockOut={openClockOut}
                     onComplete={completeLine}
+                    now={now}
                   />
                 ))}
               </div>

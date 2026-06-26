@@ -134,6 +134,8 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [ ] Photo capture/upload at clock-out (R2; production-supervisor request)
 - [ ] Wire notifications into v2 cutting (depends on a v2 notification backend; triggers: job-done, andon/flag-for-help)
 - [ ] Wire "Blocks / chunks required" in the Parts slide-over once block-calculator BOM feeds cutting_lines.qty_target
+- [ ] Units/hour throughput once qty entry is routine (qty_done_delta + qty_target) — pair with first-pass yield
+- [ ] Throughput/time-tracking report surface (per-line bottleneck rollups across jobs/date range) if a separate analytics view is wanted beyond the on-board badges
 - [ ] Cutting v2: port notifications bell + settings gear into `PlatformHeader` once v2 notification backend exists (deferred from P212)
 - [ ] Deploy + domain attach (Steve — requires wrangler auth + real hostname; workers.dev cannot host the cookie-shared `/v2/*` route)
 - [ ] Auth-bridge + operator loop validation (requires real host after domain attach; walk the full clock-in→handoff→complete→job-done loop)
@@ -160,7 +162,7 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 
 ## Manufacturing ERP add-ons (icebox — fold in opportunistically)
 
-- [ ] Throughput / units-per-hour from cutting_sessions timestamps + qty_done_delta (near-free; no new capture)
+- [ ] Throughput / units-per-hour rate (qty_done_delta ÷ tracked time) — per-line/per-job **time** tracking shipped in P216; only the **rate** (units/hour) remains once qty entry is routine
 - [ ] Andon / flag-for-help button on a line → notifies supervisor (first real consumer of v2 notifications)
 - [ ] Downtime reason codes when a line stalls (material wait / changeover / machine) → OEE foundation
 - [ ] First-pass yield: qty_target vs qty_done vs scrap (after scrap DB + BOM wiring)

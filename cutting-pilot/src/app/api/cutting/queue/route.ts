@@ -67,7 +67,7 @@ export async function GET() {
 
     // One query for all currently open sessions on these jobs
     const openSessionRows = await DB.prepare(
-      `SELECT id, job_id, line, operator_name
+      `SELECT id, job_id, line, operator_name, started_at
        FROM cutting_sessions
        WHERE status = 'open' AND job_id IN (${placeholders})`
     ).bind(...jobIds).all<any>();
@@ -95,11 +95,15 @@ export async function GET() {
       linesByJob.get(row.job_id)!.set(row.line, row);
     }
 
-    const openByKey = new Map<string, { session_id: string; operator_name: string }>();
+    const openByKey = new Map<
+      string,
+      { session_id: string; operator_name: string; started_at: string }
+    >();
     for (const row of (openSessionRows.results || [])) {
       openByKey.set(`${row.job_id}:${row.line}`, {
         session_id: row.id,
         operator_name: row.operator_name,
+        started_at: row.started_at,
       });
     }
 
@@ -128,6 +132,21 @@ export async function GET() {
       });
     }
 
+    // Per-line tracked time (closed sessions only) — true time tracking.
+    // jobIds + placeholders already in scope from the queries above.
+    const durationRows = await DB.prepare(
+      `SELECT job_id, line,
+              COALESCE(SUM((julianday(ended_at) - julianday(started_at)) * 86400), 0) AS tracked_seconds
+       FROM cutting_sessions
+       WHERE status = 'closed' AND job_id IN (${placeholders})
+       GROUP BY job_id, line`
+    ).bind(...jobIds).all<any>();
+
+    const durByKey = new Map<string, number>();
+    for (const row of (durationRows.results || [])) {
+      durByKey.set(`${row.job_id}:${row.line}`, Math.round(Number(row.tracked_seconds) || 0));
+    }
+
     const queue = jobs.map((job: any) => {
       const jobLineMap = linesByJob.get(job.id) || new Map();
       const lines = job.requiredLines.map((lineName: string) => {
@@ -142,6 +161,8 @@ export async function GET() {
           open_session_id: open?.session_id ?? null,
           open_operator_name: open?.operator_name ?? null,
           last_handoff_note: handoffByKey.get(key) || "",
+          tracked_seconds: durByKey.get(key) || 0,
+          open_started_at: open?.started_at ?? null,
         };
       });
       return { ...job, lines, line_items: lineItemsByJob.get(job.id) || [] };
