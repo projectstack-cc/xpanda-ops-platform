@@ -1,6 +1,7 @@
 "use client";
 import { LineStatusPill } from "@/components/StatusPill";
 import type { CuttingLine } from "./types";
+import { formatDuration, lineLiveSeconds } from "@/lib/time";
 
 interface Props {
   lineObj: CuttingLine;
@@ -10,6 +11,7 @@ interface Props {
   onClockIn: (jobId: string, line: string) => void;
   onClockOut: (sessionId: string, line: string) => void;
   onComplete: (jobId: string, line: string) => void;
+  now: number;
 }
 
 export default function LineRow({
@@ -20,6 +22,7 @@ export default function LineRow({
   onClockIn,
   onClockOut,
   onComplete,
+  now,
 }: Props) {
   const mySession =
     lineObj.open_session_id && lineObj.open_operator_name === userName
@@ -32,7 +35,22 @@ export default function LineRow({
       {/* Line name + per-line status */}
       <div className="flex items-center justify-between gap-3 mb-2">
         <span className="font-medium text-sm text-text">{lineObj.line}</span>
-        <LineStatusPill status={lineObj.line_status} />
+        <div className="flex items-center gap-2 shrink-0">
+          {(() => {
+            const secs = lineLiveSeconds(lineObj, now);
+            return secs >= 1 ? (
+              <span
+                className={`font-mono tabular-nums text-xs ${
+                  lineObj.open_started_at ? "text-[var(--info-text)]" : "text-muted"
+                }`}
+                title="Tracked cutting time on this line"
+              >
+                {formatDuration(secs)}
+              </span>
+            ) : null;
+          })()}
+          <LineStatusPill status={lineObj.line_status} />
+        </div>
       </div>
 
       {/* Someone else's session */}

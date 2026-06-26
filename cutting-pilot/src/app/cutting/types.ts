@@ -5,6 +5,8 @@ export interface CuttingLine {
   open_session_id: string | null;
   open_operator_name: string | null;
   last_handoff_note: string;
+  tracked_seconds: number;
+  open_started_at: string | null;
 }
 
 export interface CuttingLineItem {

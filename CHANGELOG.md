@@ -10,6 +10,13 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P216** — Cutting v2 per-line/per-job time tracking: the queue payload now aggregates closed
+  `cutting_sessions` durations per (job, line) (`SUM(julianday diff)`) and surfaces `tracked_seconds`
+  + the open session's `open_started_at`. The board shows a tracked-time badge on each line (running
+  line ticks live via a 30s client clock, info-tinted) and a job total in the detail header. Time
+  helpers centralized in `src/lib/time.ts` (`lineLiveSeconds`, `formatDuration`). Time-only;
+  units/hour deferred (qty data still sparse). No migration, no session-write change. `tsc --noEmit`
+  + `cf-build` green.
 - **P215** — Cutting v2 Parts slide-over: selecting a job opens a right-anchored slide-over listing
   its parts (part #, description, dimensions, qty) from `job_line_items`, re-openable via a
   "Parts (N)" header button. New reusable `<SlideOver>` primitive (right-anchored on all
