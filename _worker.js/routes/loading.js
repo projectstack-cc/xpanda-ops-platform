@@ -146,6 +146,43 @@ export async function handleApiLoadingAssignments(request, env) {
 
     const currentCount = existingCountRow?.cnt || 0;
     if (currentCount >= maxLoads) {
+      // Job is already at its load_count of assignments (auto-created at job creation
+      // as 'awaiting' cards). If the user supplied a bay, adopt an existing unbayed
+      // awaiting card and place it in that bay rather than rejecting the request.
+      if (payload.bay_id) {
+        const adoptable = await db.prepare(
+          "SELECT id FROM loading_assignments WHERE job_id = ? AND loading_status = 'awaiting' AND (bay_id IS NULL OR bay_id = '') ORDER BY load_number ASC LIMIT 1"
+        ).bind(payload.job_id).first();
+
+        if (adoptable) {
+          const nowAdopt = new Date().toISOString();
+          await db.prepare(
+            "UPDATE loading_assignments SET bay_id = ?, loading_status = 'not_started', updated_at = ? WHERE id = ?"
+          ).bind(payload.bay_id, nowAdopt, adoptable.id).run();
+
+          // Sync the adopted card's new status to the linked outbound shipment.
+          try {
+            const shipment = await db.prepare(
+              "SELECT id FROM shipments WHERE job_id = ? AND direction = 'outbound' LIMIT 1"
+            ).bind(payload.job_id).first();
+            if (shipment) {
+              await db.prepare(
+                "UPDATE shipments SET status = 'not_started', updated_at = datetime('now') WHERE id = ?"
+              ).bind(shipment.id).run();
+            }
+          } catch (e) {
+            console.error('Shipment status sync on assignment adoption failed:', e);
+          }
+
+          await logActivity(db, 'update', 'loading_assignment', adoptable.id,
+            'Pulled job to loading bay (adopted awaiting card)', { job_id: payload.job_id, bay_id: payload.bay_id },
+            request.headers.get('X-User-Id'));
+          return json({ ok: true, id: adoptable.id, adopted: true }, 200);
+        }
+
+        return json({ ok: false, error: 'All loads for this job already have bays assigned.' }, 400);
+      }
+
       return json({ ok: false, error: `This job already has ${currentCount} of ${maxLoads} load assignment(s).` }, 400);
     }
 
