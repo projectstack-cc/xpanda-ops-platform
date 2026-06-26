@@ -6,7 +6,7 @@ interface Props {
   lineLabel: string;
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (note: string, qty?: number) => void;
+  onSubmit: (note: string, qty?: number, photo?: File | null) => void;
   acting: boolean;
 }
 
@@ -19,17 +19,19 @@ export default function HandoffModal({
 }: Props) {
   const [note, setNote] = useState("");
   const [qty, setQty] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setNote("");
       setQty("");
+      setPhoto(null);
     }
   }, [isOpen]);
 
   function handleSubmit() {
     const qtyNum = parseInt(qty, 10);
-    onSubmit(note, !isNaN(qtyNum) && qtyNum > 0 ? qtyNum : undefined);
+    onSubmit(note, !isNaN(qtyNum) && qtyNum > 0 ? qtyNum : undefined, photo);
   }
 
   return (
@@ -65,6 +67,22 @@ export default function HandoffModal({
             placeholder="0"
             className="w-28 rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text px-3 py-2 text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
           />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">
+            Cut-list photo
+            <span className="ml-1 text-xs text-muted font-normal">(optional)</span>
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+            className="block w-full text-sm text-muted file:mr-3 file:py-2 file:px-3 file:rounded file:border file:border-border file:bg-[var(--ghost-bg)] file:text-text file:text-sm file:font-semibold file:cursor-pointer"
+          />
+          {photo && (
+            <p className="mt-1 text-xs text-muted truncate">Selected: {photo.name}</p>
+          )}
         </div>
         <div className="flex gap-3 pt-1">
           <button

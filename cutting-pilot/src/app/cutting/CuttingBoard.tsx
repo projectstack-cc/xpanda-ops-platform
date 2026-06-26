@@ -6,6 +6,7 @@ import PlatformHeader from "@/components/PlatformHeader";
 import JobRow from "./JobRow";
 import LineRow from "./LineRow";
 import HandoffModal from "./HandoffModal";
+import PhotoViewer from "./PhotoViewer";
 import CompleteLineModal from "./CompleteLineModal";
 import PartsPanel from "./PartsPanel";
 import type { CuttingJob } from "./types";
@@ -24,6 +25,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   const [error, setError] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [photosJob, setPhotosJob] = useState<CuttingJob | null>(null);
   const [clockOutTarget, setClockOutTarget] = useState<{
     sessionId: string;
     line: string;
@@ -121,10 +123,26 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
     setClockOutTarget({ sessionId, line });
   }
 
-  async function submitClockOut(note: string, qty?: number) {
+  async function submitClockOut(note: string, qty?: number, photo?: File | null) {
     if (!clockOutTarget) return;
     setActing(true);
     try {
+      // Optional cut-list photo — best-effort, never blocks clock-out.
+      if (photo) {
+        try {
+          const fd = new FormData();
+          fd.append("session_id", clockOutTarget.sessionId);
+          fd.append("file", photo);
+          const pRes = await fetch("/v2/api/cutting/clock-out-photo", {
+            method: "POST",
+            body: fd,
+          });
+          if (!pRes.ok) showToast("Photo upload failed — clocking out anyway.", false);
+        } catch {
+          showToast("Photo upload failed — clocking out anyway.", false);
+        }
+      }
+
       const body: Record<string, unknown> = {
         session_id: clockOutTarget.sessionId,
         handoff_note: note,
@@ -304,6 +322,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
               key={job.id}
               job={job}
               isActive={job.id === selectedJobId}
+              onViewPhotos={() => setPhotosJob(job)}
               onClick={() => {
                 const next = selectedJobId === job.id ? null : job.id;
                 setSelectedJobId(next);
@@ -394,6 +413,13 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
         onClose={() => setCompleteTarget(null)}
         onSubmit={submitComplete}
         acting={acting}
+      />
+
+      {/* Cut-list photo viewer (opened from a job card) */}
+      <PhotoViewer
+        job={photosJob}
+        isOpen={!!photosJob}
+        onClose={() => setPhotosJob(null)}
       />
 
       {/* Clock-out handoff modal */}
