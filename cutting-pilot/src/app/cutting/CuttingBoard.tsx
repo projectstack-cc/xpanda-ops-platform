@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { AlertCircle, Search, X } from "lucide-react";
 import Sheet from "@/components/Sheet";
+import ThemeToggle from "@/components/ThemeToggle";
 import JobRow from "./JobRow";
 import LineRow from "./LineRow";
 import HandoffModal from "./HandoffModal";
@@ -364,7 +365,10 @@ function AppHeader({ userName }: { userName: string }) {
   return (
     <header className="bg-surface border-b border-border px-4 h-14 flex items-center justify-between shrink-0">
       <h1 className="text-sm font-semibold text-text tracking-tight">Cutting · v2</h1>
-      <span className="font-mono tabular-nums text-xs text-muted">{userName}</span>
+      <div className="flex items-center gap-2">
+        <span className="font-mono tabular-nums text-xs text-muted">{userName}</span>
+        <ThemeToggle />
+      </div>
     </header>
   );
 }
