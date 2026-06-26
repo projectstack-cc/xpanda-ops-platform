@@ -1,5 +1,5 @@
 "use client";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Camera } from "lucide-react";
 import { JobStatusPill } from "@/components/StatusPill";
 import type { CuttingJob } from "./types";
 
@@ -7,12 +7,14 @@ interface Props {
   job: CuttingJob;
   isActive: boolean;
   onClick: () => void;
+  onViewPhotos: () => void;
 }
 
-export default function JobRow({ job, isActive, onClick }: Props) {
+export default function JobRow({ job, isActive, onClick, onViewPhotos }: Props) {
   const hasHandoffNote = job.lines.some((l) => l.last_handoff_note);
 
   return (
+    <div className="relative">
     <button
       type="button"
       onClick={onClick}
@@ -54,5 +56,20 @@ export default function JobRow({ job, isActive, onClick }: Props) {
         </div>
       </div>
     </button>
+      {job.photos.length > 0 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewPhotos();
+          }}
+          aria-label={`View cut-list photos (${job.photos.length})`}
+          className="absolute bottom-2 right-2 z-10 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-border bg-surface text-muted text-xs font-mono tabular-nums cursor-pointer hover:text-text hover:bg-[var(--ghost-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+        >
+          <Camera size={13} aria-hidden="true" />
+          {job.photos.length}
+        </button>
+      )}
+    </div>
   );
 }

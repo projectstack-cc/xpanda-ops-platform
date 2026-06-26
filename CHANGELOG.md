@@ -10,6 +10,13 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P218** — Cutting v2 clock-out cut-list photo (optional, never blocks clock-out): capture field
+  in the handoff modal (`capture="environment"`), best-effort upload to R2 (`BOL_PHOTOS`,
+  `cutting-photos/<session>/…`) via new `POST /v2/api/cutting/clock-out-photo` before the existing
+  clock-out call; `cutting_sessions.photo_key` column (migration `add-cutting-session-photo.sql`).
+  Authed serve route `GET /v2/api/cutting/photo/[sessionId]` streams from R2. Queue payload surfaces
+  the latest photo per line per job; a camera badge on the job card opens a `<PhotoViewer>` (composes
+  `<Modal>`). `tsc --noEmit` + `cf-build` green. **Migration run required.**
 - **P216** — Cutting v2 per-line/per-job time tracking: the queue payload now aggregates closed
   `cutting_sessions` durations per (job, line) (`SUM(julianday diff)`) and surfaces `tracked_seconds`
   + the open session's `open_started_at`. The board shows a tracked-time badge on each line (running

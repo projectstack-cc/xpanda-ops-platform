@@ -26,5 +26,6 @@ export interface CuttingJob {
   priority: string;
   requiredLines: string[];
   lines: CuttingLine[];
+  photos: { session_id: string; line: string }[];
   line_items: CuttingLineItem[];
 }

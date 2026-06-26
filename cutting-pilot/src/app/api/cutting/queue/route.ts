@@ -74,7 +74,7 @@ export async function GET() {
 
     // One query for the most-recent closed session per (job_id, line) — the resume hint
     const lastHandoffRows = await DB.prepare(
-      `SELECT cs.job_id, cs.line, cs.handoff_note
+      `SELECT cs.id, cs.job_id, cs.line, cs.handoff_note, cs.photo_key
        FROM cutting_sessions cs
        INNER JOIN (
          SELECT job_id, line, MAX(ended_at) AS max_ended
@@ -110,6 +110,18 @@ export async function GET() {
     const handoffByKey = new Map<string, string>();
     for (const row of (lastHandoffRows.results || [])) {
       handoffByKey.set(`${row.job_id}:${row.line}`, row.handoff_note || "");
+    }
+
+    // Cut-list photos: latest closed session per line that carries a photo, grouped per job.
+    // Assigned onto each job object so the existing `{ ...job, ... }` return spreads it through.
+    const photosByJob = new Map<string, { session_id: string; line: string }[]>();
+    for (const row of (lastHandoffRows.results || [])) {
+      if (!row.photo_key) continue;
+      if (!photosByJob.has(row.job_id)) photosByJob.set(row.job_id, []);
+      photosByJob.get(row.job_id)!.push({ session_id: row.id, line: row.line });
+    }
+    for (const job of jobs) {
+      (job as any).photos = photosByJob.get(job.id) || [];
     }
 
     // Line items (parts + qty) for each job — for the Parts slide-over.
