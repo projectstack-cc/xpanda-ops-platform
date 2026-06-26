@@ -133,7 +133,7 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [ ] Material-consumption capture at line-complete — needs a job→block_inventory link + on-hand block picker (block_consumption_log decrements real stock)
 - [ ] Photo capture/upload at clock-out (R2; production-supervisor request)
 - [ ] Wire notifications into v2 cutting (depends on a v2 notification backend; triggers: job-done, andon/flag-for-help)
-- [ ] Read-only parts list surface under /v2/cutting → on-ramp to the cut list (cut list keys off cutting_lines.qty_target once block-calculator BOM feeds it)
+- [ ] Wire "Blocks / chunks required" in the Parts slide-over once block-calculator BOM feeds cutting_lines.qty_target
 - [ ] Cutting v2: port notifications bell + settings gear into `PlatformHeader` once v2 notification backend exists (deferred from P212)
 - [ ] Deploy + domain attach (Steve — requires wrangler auth + real hostname; workers.dev cannot host the cookie-shared `/v2/*` route)
 - [ ] Auth-bridge + operator loop validation (requires real host after domain attach; walk the full clock-in→handoff→complete→job-done loop)

@@ -10,6 +10,13 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P215** — Cutting v2 Parts slide-over: selecting a job opens a right-anchored slide-over listing
+  its parts (part #, description, dimensions, qty) from `job_line_items`, re-openable via a
+  "Parts (N)" header button. New reusable `<SlideOver>` primitive (right-anchored on all
+  breakpoints, scrim/Escape/close — distinct from `<Sheet>`). Queue payload (`/v2/api/cutting/queue`)
+  batch-fetches `line_items` per job (existing IN-list + map pattern; no migration). "Blocks /
+  chunks required" rendered as a reserved placeholder pending block-calculator BOM wiring.
+  Single-job-per-user kept as UX framing (no clock-in enforcement). `tsc --noEmit` + `cf-build` green.
 - **P214** — Cutting v2 custom `<CompleteLineModal>`: replaced the native `window.confirm` on Mark Complete with a tokenized modal composing the `<Modal>` primitive (completion note sent as the closing session's `handoff_note`; no route/SQL change). Scrap rendered as a disabled, clearly-labeled placeholder (anticipates reason + cubic-in + shift + density), hidden on Laminate; real persistence deferred to the native scrap-database project. Consumption out of scope. Mirrors `HandoffModal` styling, 44px targets, tokens-only. `tsc --noEmit` + `cf-build` green.
 - **P213** — Cutting v2 header active-state + parity close-out: the v2 cutting board now marks the Manufacturing nav entry active (`isNavActive` maps `/v2/cutting` → `/manufacturing/`), desktop and drawer, with the legacy soft-brand active background restored; dimension/typography swept to match `shared-header.js` exactly (nav 48px / link 13px·36px·rounded-lg, `--line` borders, logo 30px). No new nav link (cutting reached via Manufacturing, per legacy nesting); `manufacturing.cutting` gating recorded in-code for a future explicit Cutting link. Completes the P210–P213 theme/header sequence. `tsc --noEmit` + `cf-build` green.
 - **P212** — Cutting v2 `<PlatformHeader>` React port: replaced the bare `AppHeader` with a reusable platform header (logo, title, 8-link permission-gated module nav linking to legacy pages, user bar + Sign Out, embedded P211 `<ThemeToggle>`, mobile hamburger drawer). Per-link gating uses the session `permissions` map (admin bypass); `page.tsx` now calls `validateSession()` server-side to pass `permissions` down (read-only, no cookie writes). Logo served from `/logo/xpanda.png` (legacy app, same host; self-hosting under `/v2` deferred until asset pipeline handles `public/` prefix). Notifications bell + settings gear intentionally deferred (depend on push backend / redundant with ThemeToggle). `tsc --noEmit` + `cf-build` green.

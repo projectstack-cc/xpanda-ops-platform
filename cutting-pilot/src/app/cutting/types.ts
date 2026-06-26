@@ -7,6 +7,13 @@ export interface CuttingLine {
   last_handoff_note: string;
 }
 
+export interface CuttingLineItem {
+  part_number: string;
+  description: string;
+  quantity: number | null;
+  dimensions: string;
+}
+
 export interface CuttingJob {
   id: string;
   customer: string;
@@ -17,4 +24,5 @@ export interface CuttingJob {
   priority: string;
   requiredLines: string[];
   lines: CuttingLine[];
+  line_items: CuttingLineItem[];
 }
