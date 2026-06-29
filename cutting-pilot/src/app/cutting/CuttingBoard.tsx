@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { AlertCircle, Search, X, Package } from "lucide-react";
+import { AlertCircle, Search, X } from "lucide-react";
 import Sheet from "@/components/Sheet";
 import PlatformHeader from "@/components/PlatformHeader";
 import JobRow from "./JobRow";
@@ -38,7 +38,8 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   const [search, setSearch] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [showAll, setShowAll] = useState(false);
-  const [partsOpen, setPartsOpen] = useState(false);
+  const [checklistLine, setChecklistLine] = useState<string | null>(null);
+  const [checklistBusy, setChecklistBusy] = useState(false);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -94,6 +95,41 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   const jobTotalSeconds = selectedJob
     ? selectedJob.lines.reduce((sum, l) => sum + lineLiveSeconds(l, now), 0)
     : 0;
+
+  // Default the checklist to the operator's open line, else the first required line.
+  useEffect(() => {
+    if (!selectedJob) {
+      setChecklistLine(null);
+      return;
+    }
+    const openLine = selectedJob.lines.find((l) => l.open_session_id)?.line;
+    setChecklistLine(openLine || selectedJob.requiredLines[0] || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedJobId]);
+
+  async function toggleChecklistItem(lineItemId: string, completed: boolean) {
+    if (!selectedJob || !checklistLine) return;
+    setChecklistBusy(true);
+    try {
+      const res = await fetch("/v2/api/cutting/line-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_id: selectedJob.id,
+          line: checklistLine,
+          line_item_id: lineItemId,
+          completed,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) showToast(data.error || "Failed to update.", false);
+      await fetchQueue(true);
+    } catch {
+      showToast("Network error.", false);
+    } finally {
+      setChecklistBusy(false);
+    }
+  }
 
   async function clockIn(jobId: string, line: string) {
     setActing(true);
@@ -324,9 +360,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
               isActive={job.id === selectedJobId}
               onViewPhotos={() => setPhotosJob(job)}
               onClick={() => {
-                const next = selectedJobId === job.id ? null : job.id;
-                setSelectedJobId(next);
-                setPartsOpen(next !== null);
+                setSelectedJobId((prev) => (prev === job.id ? null : job.id));
               }}
             />
           ))}
@@ -354,15 +388,6 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
                       Tracked: {formatDuration(jobTotalSeconds)}
                     </p>
                   </div>
-                  {/* Parts slide-over re-open */}
-                  <button
-                    type="button"
-                    onClick={() => setPartsOpen(true)}
-                    className="ml-auto shrink-0 inline-flex items-center gap-1.5 min-h-[36px] px-2.5 py-1.5 rounded-lg border border-border bg-[var(--ghost-bg)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--border-light)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-                  >
-                    <Package size={14} aria-hidden="true" />
-                    Parts ({selectedJob.line_items.length})
-                  </button>
                   {/* Dismiss handle — narrow only; md+ has no sheet close affordance */}
                   <button
                     type="button"
@@ -375,8 +400,20 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
                 </div>
               </div>
 
-              {/* Line rows */}
+              {/* Per-line parts checklist (docked) + line rows */}
               <div className="flex-1 overflow-y-auto">
+                {checklistLine && (
+                  <div className="p-2 pb-0">
+                    <PartsPanel
+                      job={selectedJob}
+                      line={checklistLine}
+                      requiredLines={selectedJob.requiredLines}
+                      onSelectLine={setChecklistLine}
+                      onToggle={toggleChecklistItem}
+                      busy={checklistBusy}
+                    />
+                  </div>
+                )}
                 {selectedJob.lines.map((lineObj) => (
                   <LineRow
                     key={lineObj.line}
@@ -396,12 +433,6 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
         </Sheet>
       </div>
 
-      {/* Parts slide-over — opens on job select */}
-      <PartsPanel
-        job={selectedJob}
-        isOpen={partsOpen && !!selectedJob}
-        onClose={() => setPartsOpen(false)}
-      />
 
       {/* Mark-complete modal */}
       <CompleteLineModal

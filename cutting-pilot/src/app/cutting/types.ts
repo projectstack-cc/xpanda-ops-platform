@@ -10,6 +10,7 @@ export interface CuttingLine {
 }
 
 export interface CuttingLineItem {
+  id: string;
   part_number: string;
   description: string;
   quantity: number | null;
@@ -28,4 +29,5 @@ export interface CuttingJob {
   lines: CuttingLine[];
   photos: { session_id: string; line: string }[];
   line_items: CuttingLineItem[];
+  progress: Record<string, Record<string, { completed: boolean; completed_qty: number | null }>>;
 }

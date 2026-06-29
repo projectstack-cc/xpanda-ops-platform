@@ -11,6 +11,8 @@
 ## Manufacturing / Cutting (React pilot)
 
 - [ ] Enable OpenNext skew protection on the v2 Worker (durable fix for hashed-asset 404s across deploys) — see https://opennext.js.org/cloudflare/howtos/skew
+- [ ] Clock-out reconciliation: at clock-out, any unchecked checklist item on that line requires a quantity completed (even 0) → write completed_qty on cutting_line_progress
+- [ ] Cross Cutter / Hole Cutter chunk checklists (replace the shared parts list) once block-calc BOM feeds chunk counts
 
 ---
 
