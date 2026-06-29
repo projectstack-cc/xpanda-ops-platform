@@ -30,6 +30,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    // Guard: one open session per operator across the whole board (any job/line).
+    const mineOpen = await DB.prepare(
+      `SELECT line FROM cutting_sessions
+       WHERE operator_id = ? AND status = 'open' LIMIT 1`
+    ).bind(operatorId).first<{ line: string }>();
+    if (mineOpen) {
+      return NextResponse.json(
+        { ok: false, error: "already_clocked_in", line: mineOpen.line },
+        { status: 409 }
+      );
+    }
+
     // Guard: one operator per line at a time.
     const existing = await DB.prepare(
       `SELECT id, operator_name FROM cutting_sessions

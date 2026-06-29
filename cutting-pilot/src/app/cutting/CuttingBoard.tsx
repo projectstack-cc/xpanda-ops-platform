@@ -38,7 +38,6 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   const [search, setSearch] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [showAll, setShowAll] = useState(false);
-  const [checklistLine, setChecklistLine] = useState<string | null>(null);
   const [checklistBusy, setChecklistBusy] = useState(false);
 
   function showToast(msg: string, ok = true) {
@@ -96,30 +95,28 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
     ? selectedJob.lines.reduce((sum, l) => sum + lineLiveSeconds(l, now), 0)
     : 0;
 
-  // Default the checklist to the operator's open line, else the first required line.
-  useEffect(() => {
-    if (!selectedJob) {
-      setChecklistLine(null);
-      return;
+  // The operator's current open session across the whole board (one max — enforced server-side).
+  const myOpen = (() => {
+    for (const j of queue) {
+      const l = j.lines.find(
+        (ln) => ln.open_session_id && ln.open_operator_name === userName
+      );
+      if (l) return { jobId: j.id, line: l.line };
     }
-    const openLine = selectedJob.lines.find((l) => l.open_session_id)?.line;
-    setChecklistLine(openLine || selectedJob.requiredLines[0] || null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedJobId]);
+    return null;
+  })();
+  // The line whose checklist the sidebar shows — only when clocked into THIS job.
+  const myLineOnJob =
+    myOpen && selectedJob && myOpen.jobId === selectedJob.id ? myOpen.line : null;
 
-  async function toggleChecklistItem(lineItemId: string, completed: boolean) {
-    if (!selectedJob || !checklistLine) return;
+  async function toggleChecklistItem(line: string, lineItemId: string, completed: boolean) {
+    if (!selectedJob) return;
     setChecklistBusy(true);
     try {
       const res = await fetch("/v2/api/cutting/line-item", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          job_id: selectedJob.id,
-          line: checklistLine,
-          line_item_id: lineItemId,
-          completed,
-        }),
+        body: JSON.stringify({ job_id: selectedJob.id, line, line_item_id: lineItemId, completed }),
       });
       const data = await res.json();
       if (!data.ok) showToast(data.error || "Failed to update.", false);
@@ -145,6 +142,8 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
         await fetchQueue(true);
       } else if (data.error === "line_busy") {
         showToast(`${line} is already in use by ${data.operator}.`, false);
+      } else if (data.error === "already_clocked_in") {
+        showToast(`Finish your current line (${data.line}) before clocking into another.`, false);
       } else {
         showToast(data.error || "Clock-in failed.", false);
       }
@@ -400,33 +399,40 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
                 </div>
               </div>
 
-              {/* Per-line parts checklist (docked) + line rows */}
-              <div className="flex-1 overflow-y-auto">
-                {checklistLine && (
-                  <div className="p-2 pb-0">
+              {/* Line rows + docked parts sidebar (sidebar only once clocked into this job) */}
+              <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
+                <div className="md:flex-1 md:overflow-y-auto">
+                  {selectedJob.lines.map((lineObj) => (
+                    <LineRow
+                      key={lineObj.line}
+                      lineObj={lineObj}
+                      jobId={selectedJob.id}
+                      userName={userName}
+                      acting={acting}
+                      clockedInElsewhere={
+                        !!myOpen &&
+                        !(myOpen.jobId === selectedJob.id && myOpen.line === lineObj.line)
+                      }
+                      onClockIn={clockIn}
+                      onClockOut={openClockOut}
+                      onComplete={completeLine}
+                      now={now}
+                    />
+                  ))}
+                </div>
+
+                {myLineOnJob && (
+                  <aside className="shrink-0 md:w-80 border-t md:border-t-0 md:border-l border-border md:overflow-y-auto">
                     <PartsPanel
                       job={selectedJob}
-                      line={checklistLine}
-                      requiredLines={selectedJob.requiredLines}
-                      onSelectLine={setChecklistLine}
-                      onToggle={toggleChecklistItem}
+                      line={myLineOnJob}
+                      onToggle={(itemId, completed) =>
+                        toggleChecklistItem(myLineOnJob, itemId, completed)
+                      }
                       busy={checklistBusy}
                     />
-                  </div>
+                  </aside>
                 )}
-                {selectedJob.lines.map((lineObj) => (
-                  <LineRow
-                    key={lineObj.line}
-                    lineObj={lineObj}
-                    jobId={selectedJob.id}
-                    userName={userName}
-                    acting={acting}
-                    onClockIn={clockIn}
-                    onClockOut={openClockOut}
-                    onComplete={completeLine}
-                    now={now}
-                  />
-                ))}
               </div>
             </div>
           )}

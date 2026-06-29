@@ -10,6 +10,13 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P220** — Cutting v2 parts checklist moved into a docked right sidebar (md:w-80, border-l; stacks
+  on narrow) beside the line rows — no overlay. The sidebar shows only once the operator is clocked
+  into the job, and only their clocked-in line (line tabs/selector removed; `PartsPanel` simplified
+  to a single line). Enforced one-open-session-per-user: clock-in route 409s `already_clocked_in`
+  (returns the line in use) if the operator has any open session; `LineRow` disables Clock In on
+  every other line with a reason tooltip; `CuttingBoard` derives the user's open session across the
+  queue. `tsc --noEmit` + `cf-build` green.
 - **P219** — Cutting v2 parts sidebar reworked from a hovering slide-over into a **docked per-line
   checklist** at the top of the detail (coexists with the clock/complete buttons; no overlay).
   Each cutting line tracks its own completion of each part: new `cutting_line_progress` table
