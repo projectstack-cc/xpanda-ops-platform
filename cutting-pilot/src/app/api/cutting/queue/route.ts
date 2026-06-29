@@ -127,7 +127,7 @@ export async function GET() {
     // Line items (parts + qty) for each job — for the Parts slide-over.
     // jobIds + placeholders are already in scope from the lines/sessions queries above.
     const lineItemRows = await DB.prepare(
-      `SELECT job_id, part_number, description, quantity, dimensions
+      `SELECT id, job_id, part_number, description, quantity, dimensions
        FROM job_line_items
        WHERE job_id IN (${placeholders})
        ORDER BY job_id, sort_order ASC`
@@ -137,6 +137,7 @@ export async function GET() {
     for (const row of (lineItemRows.results || [])) {
       if (!lineItemsByJob.has(row.job_id)) lineItemsByJob.set(row.job_id, []);
       lineItemsByJob.get(row.job_id)!.push({
+        id: row.id,
         part_number: row.part_number || "",
         description: row.description || "",
         quantity: row.quantity ?? null,
@@ -157,6 +158,30 @@ export async function GET() {
     const durByKey = new Map<string, number>();
     for (const row of (durationRows.results || [])) {
       durByKey.set(`${row.job_id}:${row.line}`, Math.round(Number(row.tracked_seconds) || 0));
+    }
+
+    // Per-line checklist progress: (job, line, line_item) → completed (+ qty, reserved).
+    const progressRows = await DB.prepare(
+      `SELECT job_id, line, line_item_id, completed, completed_qty
+       FROM cutting_line_progress
+       WHERE job_id IN (${placeholders})`
+    ).bind(...jobIds).all<any>();
+
+    const progressByJob = new Map<
+      string,
+      Record<string, Record<string, { completed: boolean; completed_qty: number | null }>>
+    >();
+    for (const row of (progressRows.results || [])) {
+      if (!progressByJob.has(row.job_id)) progressByJob.set(row.job_id, {});
+      const byLine = progressByJob.get(row.job_id)!;
+      if (!byLine[row.line]) byLine[row.line] = {};
+      byLine[row.line][row.line_item_id] = {
+        completed: !!row.completed,
+        completed_qty: row.completed_qty ?? null,
+      };
+    }
+    for (const job of jobs) {
+      (job as any).progress = progressByJob.get(job.id) || {};
     }
 
     const queue = jobs.map((job: any) => {

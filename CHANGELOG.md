@@ -10,6 +10,15 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P219** — Cutting v2 parts sidebar reworked from a hovering slide-over into a **docked per-line
+  checklist** at the top of the detail (coexists with the clock/complete buttons; no overlay).
+  Each cutting line tracks its own completion of each part: new `cutting_line_progress` table
+  (UNIQUE job/line/line_item; `completed` + reserved `completed_qty`), upsert route
+  `POST /v2/api/cutting/line-item`, queue payload carries line-item `id` + a per-line `progress`
+  map. Line selector defaults to the operator's open line. `PartsPanel` repurposed; slide-over
+  wiring (`partsOpen`, auto-open, "Parts (N)" button, `Package` import) removed; `SlideOver`
+  primitive retained but unused by cutting. Same parts list across all lines for now (chunk counts
+  pending BOM). `tsc --noEmit` + `cf-build` green. **Migration run required.**
 - **P218** — Cutting v2 clock-out cut-list photo (optional, never blocks clock-out): capture field
   in the handoff modal (`capture="environment"`), best-effort upload to R2 (`BOL_PHOTOS`,
   `cutting-photos/<session>/…`) via new `POST /v2/api/cutting/clock-out-photo` before the existing
