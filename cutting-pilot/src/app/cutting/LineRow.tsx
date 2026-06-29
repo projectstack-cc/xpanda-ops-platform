@@ -8,6 +8,7 @@ interface Props {
   jobId: string;
   userName: string;
   acting: boolean;
+  clockedInElsewhere: boolean;
   onClockIn: (jobId: string, line: string) => void;
   onClockOut: (sessionId: string, line: string) => void;
   onComplete: (jobId: string, line: string) => void;
@@ -19,6 +20,7 @@ export default function LineRow({
   jobId,
   userName,
   acting,
+  clockedInElsewhere,
   onClockIn,
   onClockOut,
   onComplete,
@@ -81,7 +83,12 @@ export default function LineRow({
           {!lineObj.open_session_id && (
             <button
               type="button"
-              disabled={acting}
+              disabled={acting || clockedInElsewhere}
+              title={
+                clockedInElsewhere
+                  ? "Finish your current line before clocking into another."
+                  : undefined
+              }
               onClick={() => onClockIn(jobId, lineObj.line)}
               className="min-h-[44px] px-4 py-2 bg-[var(--primary-bg)] text-[var(--primary-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             >
