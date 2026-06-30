@@ -731,16 +731,20 @@ export async function handleApiShipments(request, env) {
     const bead_type     = String(payload.bead_type     || "").trim();
     const notes         = String(payload.notes         || "").trim();
     const trailer_number = String(payload.trailer_number || "").trim();
+    const delivery_incident       = payload.delivery_incident ? 1 : 0;
+    const delivery_incident_notes = String(payload.delivery_incident_notes || "").trim();
 
     try {
       await db.prepare(`
         INSERT INTO shipments
           (id, direction, job_id, customer, carrier, method, bol_number, origin, destination,
-           ship_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ship_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number,
+           delivery_incident, delivery_incident_notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         id, direction, job_id, customer, carrier, method_val, bol_number, origin, destination,
-        ship_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number
+        ship_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number,
+        delivery_incident, delivery_incident_notes
       ).run();
 
       // Auto-create bead receive transaction if inbound with silo
@@ -788,6 +792,7 @@ export async function handleApiShipments(request, env) {
       "customer", "carrier", "method", "bol_number", "origin", "destination",
       "ship_date", "status", "total_bdft", "load_count",
       "weight_lbs", "bead_type", "notes", "job_id", "trailer_number",
+      "delivery_incident", "delivery_incident_notes",
     ];
     const sets = [];
     const vals = [];
@@ -798,6 +803,8 @@ export async function handleApiShipments(request, env) {
       const raw = payload[key];
       if (key === "job_id") {
         vals.push(raw ? String(raw).trim() : null);
+      } else if (key === "delivery_incident") {
+        vals.push(raw ? 1 : 0);
       } else if (["total_bdft", "weight_lbs"].includes(key)) {
         vals.push(Number(raw ?? 0));
       } else if (key === "load_count") {
