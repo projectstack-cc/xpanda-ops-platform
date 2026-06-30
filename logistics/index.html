@@ -412,6 +412,17 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
         <textarea id="f-notes" rows="2" placeholder="optional notes"></textarea>
       </div>
 
+      <div class="logistics-field-section" id="delivery-incident-section" style="margin-top:4px;">
+        <label style="display:flex;align-items:center;gap:8px;min-height:44px;cursor:pointer;font-weight:600;color:var(--text);">
+          <input type="checkbox" id="f-delivery-incident" onchange="toggleDeliveryIncident()" style="width:18px;height:18px;">
+          Delivery incident?
+        </label>
+        <div id="delivery-incident-notes-wrap" style="display:none;margin-top:8px;">
+          <label>Incident details</label>
+          <textarea id="f-delivery-incident-notes" rows="3" placeholder="Describe what happened (damage, shortage, refusal, delay, etc.)"></textarea>
+        </div>
+      </div>
+
       <input type="hidden" id="f-id">
       <input type="hidden" id="f-direction">
 
@@ -1157,6 +1168,9 @@ async function openEdit(id) {
   document.getElementById('f-carrier').value      = s.carrier || '';
   document.getElementById('f-bol-number').value   = s.bol_number || '';
   document.getElementById('f-notes').value        = s.notes || '';
+  document.getElementById('f-delivery-incident').checked = !!s.delivery_incident;
+  document.getElementById('f-delivery-incident-notes').value = s.delivery_incident_notes || '';
+  toggleDeliveryIncident();
 
   if (currentDirection === 'outbound') {
     document.getElementById('f-customer').value       = s.customer || '';
@@ -1311,6 +1325,11 @@ async function syncJobFromModal(jobId) {
   }
 }
 
+function toggleDeliveryIncident() {
+  const checked = document.getElementById('f-delivery-incident').checked;
+  document.getElementById('delivery-incident-notes-wrap').style.display = checked ? '' : 'none';
+}
+
 function clearForm() {
   const _mab = document.getElementById('modal-actions'); if (_mab) _mab.innerHTML = '';
   const _mdoc = document.getElementById('modal-documents'); if (_mdoc) _mdoc.innerHTML = '';
@@ -1332,6 +1351,9 @@ function clearForm() {
   document.getElementById('f-bead-type-id').value = '';
   document.getElementById('f-silo-id').value = '';
   document.getElementById('f-id').value = '';
+  const _di = document.getElementById('f-delivery-incident'); if (_di) _di.checked = false;
+  const _din = document.getElementById('f-delivery-incident-notes'); if (_din) _din.value = '';
+  const _diw = document.getElementById('delivery-incident-notes-wrap'); if (_diw) _diw.style.display = 'none';
   const liContainer = document.getElementById('shipment-line-items');
   const liBody = document.getElementById('shipment-line-items-body');
   if (liContainer) liContainer.style.display = 'none';
@@ -1383,9 +1405,12 @@ async function saveShipment() {
   const carrier    = document.getElementById('f-carrier').value.trim();
   const bolNumber  = document.getElementById('f-bol-number').value.trim();
   const notes      = document.getElementById('f-notes').value.trim();
+  const deliveryIncident      = document.getElementById('f-delivery-incident').checked ? 1 : 0;
+  const deliveryIncidentNotes = document.getElementById('f-delivery-incident-notes').value.trim();
 
   const payload = { direction: dir, ship_date: shipDate,
-    status, method, carrier, bol_number: bolNumber, notes };
+    status, method, carrier, bol_number: bolNumber, notes,
+    delivery_incident: deliveryIncident, delivery_incident_notes: deliveryIncidentNotes };
 
   if (dir === 'outbound') {
     const customer = document.getElementById('f-customer').value.trim();
