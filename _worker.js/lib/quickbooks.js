@@ -96,3 +96,23 @@ export async function fetchInvoiceByDocNumber(token, realmId, docNumber, env) {
   if (!list?.length) throw new Error(`Invoice DocNumber ${docNumber} not found in QBO`);
   return list[0];
 }
+
+// Verifies the intuit-signature header on incoming webhook POSTs.
+// Intuit signs the raw body with HMAC-SHA256 using the webhook verifier token, base64-encoded.
+export async function verifyWebhookSignature(rawBody, signature, verifierToken) {
+  if (!signature || !verifierToken) return false;
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(verifierToken),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const mac     = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
+    const computed = btoa(String.fromCharCode(...new Uint8Array(mac)));
+    return computed === signature;
+  } catch {
+    return false;
+  }
+}
