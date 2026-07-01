@@ -16,6 +16,7 @@ import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePasswo
          handleSimulateRoleStart, handleSimulateRoleStop } from './routes/auth.js';
 import { handleApiNotifications, handleApiPushSubscribe, handleApiPushUnsubscribe } from './routes/notifications.js';
 import { handleApiPublicBolLookup, handleApiPublicBolPickup, handleApiPublicBolDelivery, handleApiPublicBolDocument } from './routes/public.js';
+import { handleApiQuickbooks } from './routes/quickbooks.js';
 
 // _worker.js — Pages Advanced Mode with SAFE error reporting
 
@@ -61,6 +62,9 @@ const API_ROUTES = [
   { path: '/api/block-inventory',   handler: (req, env) => handleApiBlockInventory(req, env) },
   { path: '/api/molding-log',       handler: (req, env) => handleApiMoldingLog(req, env) },
   { path: '/api/block-consumption', handler: (req, env) => handleApiBlockConsumption(req, env) },
+
+  // QuickBooks integration
+  { prefix: '/api/qb', handler: (req, env) => handleApiQuickbooks(req, env) },
 
   // Jobs / shipments / manufacturing
   { prefix: '/api/jobs',      handler: (req, env) => handleApiJobs(req, env) },
