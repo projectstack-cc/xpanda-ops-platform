@@ -249,6 +249,10 @@ export async function handleApiLoadingAssignments(request, env) {
       if (payload.location === 'yard' && !isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
         return json({ ok: false, error: 'Manager access required to move a trailer to the yard.' }, 403);
       }
+      if (payload.location === 'bay' && existing.location === 'yard'
+          && !isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
+        return json({ ok: false, error: 'Manager access required to move a trailer back to a bay.' }, 403);
+      }
       updates.push('location = ?');
       binds.push(payload.location === 'yard' ? 'yard' : 'bay');
     }
@@ -370,6 +374,12 @@ export async function handleApiLoadingAssignments(request, env) {
       if (payload.location === 'yard') {
         await logActivity(db, 'update', 'loading_assignment', id,
           'Moved to yard',
+          { job_id: existing.job_id },
+          request.headers.get('X-User-Id'));
+      }
+      if (payload.location === 'bay' && existing.location === 'yard') {
+        await logActivity(db, 'update', 'loading_assignment', id,
+          'Moved back to bay (returned to awaiting queue)',
           { job_id: existing.job_id },
           request.headers.get('X-User-Id'));
       }
