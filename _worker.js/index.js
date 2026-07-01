@@ -16,7 +16,7 @@ import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePasswo
          handleSimulateRoleStart, handleSimulateRoleStop } from './routes/auth.js';
 import { handleApiNotifications, handleApiPushSubscribe, handleApiPushUnsubscribe } from './routes/notifications.js';
 import { handleApiPublicBolLookup, handleApiPublicBolPickup, handleApiPublicBolDelivery, handleApiPublicBolDocument } from './routes/public.js';
-import { handleApiQuickbooks } from './routes/quickbooks.js';
+import { handleApiQuickbooks, handleApiQbWebhook } from './routes/quickbooks.js';
 
 // _worker.js — Pages Advanced Mode with SAFE error reporting
 
@@ -178,6 +178,11 @@ export default {
       // Public BOL tracking surface (no auth — drivers aren't platform users).
       if (url.pathname === '/track' || url.pathname === '/track/' || url.pathname.startsWith('/track/')) {
         return env.ASSETS.fetch(new Request(new URL('/track/index.html', url.origin).toString()));
+      }
+
+      // QBO webhook — bypasses session gate; verified by HMAC-SHA256 signature inside handler.
+      if (url.pathname === '/api/qb/webhook' && request.method === 'POST') {
+        return handleApiQbWebhook(request, env, ctx);
       }
 
       // /api/public/* bypasses the session gate; the handler enforces its own
