@@ -97,6 +97,38 @@ export async function fetchInvoiceByDocNumber(token, realmId, docNumber, env) {
   return list[0];
 }
 
+const QBO_AUTH_BASE   = 'https://appcenter.intuit.com/connect/oauth2';
+const QB_REDIRECT_URI = 'https://www.xpandaops.com/api/qb/callback';
+
+export function buildAuthUrl(state, env) {
+  const params = new URLSearchParams({
+    client_id:     env.QB_CLIENT_ID,
+    response_type: 'code',
+    scope:         'com.intuit.quickbooks.accounting',
+    redirect_uri:  QB_REDIRECT_URI,
+    state,
+  });
+  return `${QBO_AUTH_BASE}?${params}`;
+}
+
+export async function exchangeCodeForTokens(code, env) {
+  const resp = await fetch(QBO_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      Authorization:  `Basic ${btoa(`${env.QB_CLIENT_ID}:${env.QB_CLIENT_SECRET}`)}`,
+      Accept:         'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type:   'authorization_code',
+      code,
+      redirect_uri: QB_REDIRECT_URI,
+    }),
+  });
+  if (!resp.ok) throw new Error(`QB token exchange failed: ${resp.status} ${await resp.text()}`);
+  return resp.json();
+}
+
 // Verifies the intuit-signature header on incoming webhook POSTs.
 // Intuit signs the raw body with HMAC-SHA256 using the webhook verifier token, base64-encoded.
 export async function verifyWebhookSignature(rawBody, signature, verifierToken) {

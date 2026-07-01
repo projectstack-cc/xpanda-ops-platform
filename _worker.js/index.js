@@ -16,7 +16,7 @@ import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePasswo
          handleSimulateRoleStart, handleSimulateRoleStop } from './routes/auth.js';
 import { handleApiNotifications, handleApiPushSubscribe, handleApiPushUnsubscribe } from './routes/notifications.js';
 import { handleApiPublicBolLookup, handleApiPublicBolPickup, handleApiPublicBolDelivery, handleApiPublicBolDocument } from './routes/public.js';
-import { handleApiQuickbooks, handleApiQbWebhook } from './routes/quickbooks.js';
+import { handleApiQuickbooks, handleApiQbWebhook, handleApiQbOAuthCallback } from './routes/quickbooks.js';
 
 // _worker.js — Pages Advanced Mode with SAFE error reporting
 
@@ -183,6 +183,12 @@ export default {
       // QBO webhook — bypasses session gate; verified by HMAC-SHA256 signature inside handler.
       if (url.pathname === '/api/qb/webhook' && request.method === 'POST') {
         return handleApiQbWebhook(request, env, ctx);
+      }
+
+      // QBO OAuth callback — bypasses session gate; Intuit redirects here with auth code.
+      // State cookie set by /api/qb/oauth guards against CSRF.
+      if (url.pathname === '/api/qb/callback' && request.method === 'GET') {
+        return handleApiQbOAuthCallback(request, env);
       }
 
       // /api/public/* bypasses the session gate; the handler enforces its own

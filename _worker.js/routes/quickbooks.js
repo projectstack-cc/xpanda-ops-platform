@@ -1,5 +1,5 @@
 import { json, logActivity } from '../lib/core.js';
-import { getValidToken, saveConnection, fetchInvoice, fetchInvoiceByDocNumber, verifyWebhookSignature } from '../lib/quickbooks.js';
+import { getValidToken, saveConnection, fetchInvoice, fetchInvoiceByDocNumber, verifyWebhookSignature, buildAuthUrl, exchangeCodeForTokens } from '../lib/quickbooks.js';
 import { mapInvoiceToJob } from '../lib/qb-mapper.js';
 
 // ── Shared: create a job row + line items + shipment + loading assignment ─────
@@ -156,6 +156,20 @@ export async function handleApiQuickbooks(request, env) {
     return json({ ok: false, error: 'QB_REALM_ID env var not configured' }, 500);
   }
 
+  // ── GET /api/qb/oauth — initiate OAuth flow (admin only) ─────────────────
+  if (request.method === 'GET' && subRoute === 'oauth') {
+    if (!isAdmin) return json({ ok: false, error: 'Administrator access required.' }, 403);
+    if (!env.QB_CLIENT_ID) return json({ ok: false, error: 'QB_CLIENT_ID not configured' }, 500);
+    const state = crypto.randomUUID();
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location:     buildAuthUrl(state, env),
+        'Set-Cookie': `qb_oauth_state=${state}; HttpOnly; Secure; SameSite=Lax; Max-Age=300; Path=/`,
+      },
+    });
+  }
+
   // ── GET /api/qb/connection ────────────────────────────────────────────────
   if (request.method === 'GET' && subRoute === 'connection') {
     const conn = await db.prepare(
@@ -233,4 +247,65 @@ export async function handleApiQuickbooks(request, env) {
   }
 
   return json({ ok: false, error: 'Not found' }, 404);
+}
+
+// ── OAuth callback — public, bypasses session gate ────────────────────────
+// Intuit redirects here after the user authorizes in QBO.
+export async function handleApiQbOAuthCallback(request, env) {
+  const db  = env.DB;
+  const url = new URL(request.url);
+  const code    = url.searchParams.get('code');
+  const state   = url.searchParams.get('state');
+  const realmId = url.searchParams.get('realmId');
+  const error   = url.searchParams.get('error');
+
+  const html = (body, status = 200) => new Response(
+    `<!doctype html><html><head><meta charset="utf-8">
+     <style>body{font-family:sans-serif;max-width:500px;margin:80px auto;text-align:center;color:#1a1a1a}</style>
+     </head><body>${body}</body></html>`,
+    { status, headers: { 'Content-Type': 'text/html' } }
+  );
+
+  if (error) return html(`<h2>Authorization declined</h2><p>${error}</p>`, 400);
+  if (!code || !realmId) return html('<h2>Missing parameters from Intuit.</h2>', 400);
+
+  // Verify state cookie to guard against CSRF
+  const cookieHeader = request.headers.get('Cookie') || '';
+  const cookieState  = cookieHeader.split(';')
+    .map(c => c.trim())
+    .find(c => c.startsWith('qb_oauth_state='))
+    ?.slice('qb_oauth_state='.length);
+
+  if (!cookieState || cookieState !== state) {
+    return html('<h2>Invalid state.</h2><p>Please try again from the app.</p>', 403);
+  }
+
+  try {
+    const tokens = await exchangeCodeForTokens(code, env);
+    await saveConnection(db, {
+      realmId,
+      accessToken:  tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresIn:    tokens.expires_in || 3600,
+    });
+    await logActivity(db, 'create', 'qb_connection', realmId,
+      'QB OAuth connected via /api/qb/callback', { realm_id: realmId });
+  } catch (e) {
+    return html(`<h2>Connection failed</h2><p>${e.message}</p>`, 500);
+  }
+
+  return new Response(
+    `<!doctype html><html><head><meta charset="utf-8">
+     <style>body{font-family:sans-serif;max-width:500px;margin:80px auto;text-align:center;color:#1a1a1a}</style>
+     </head><body><h2>QuickBooks connected!</h2>
+     <p>XPanda Ops Platform is now connected to QuickBooks Online.</p>
+     <p>You can close this tab.</p></body></html>`,
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html',
+        'Set-Cookie': 'qb_oauth_state=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/',
+      },
+    }
+  );
 }
