@@ -949,8 +949,13 @@ async function openPullJobModal() {
   document.getElementById('pull-job-results').innerHTML = '';
 
   const baySelect = document.getElementById('pull-job-bay');
+  // If the modal is opened while drilled into a bay (Team View), default the
+  // dropdown to that bay. Gate on the drilled-in panel being visible — not on
+  // selectedBayId alone, since backToBayList() leaves selectedBayId stale.
+  const inBayView = document.getElementById('ld-bay-view').style.display !== 'none';
+  const defaultBayId = inBayView ? selectedBayId : '';
   baySelect.innerHTML = '<option value="">Awaiting Queue (no bay)</option>' +
-    allBays.map(b => `<option value="${b.id}">Bay ${b.bay_number}</option>`).join('');
+    allBays.map(b => `<option value="${b.id}" ${b.id === defaultBayId ? 'selected' : ''}>Bay ${b.bay_number}</option>`).join('');
 }
 
 function closePullJobModal() {
