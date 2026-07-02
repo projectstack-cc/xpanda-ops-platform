@@ -109,6 +109,20 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   const myLineOnJob =
     myOpen && selectedJob && myOpen.jobId === selectedJob.id ? myOpen.line : null;
 
+  // Unchecked parts on the line being clocked out — for the reconciliation section.
+  const clockOutItems =
+    clockOutTarget && selectedJob
+      ? (selectedJob.line_items ?? [])
+          .filter((it) => !selectedJob.progress?.[clockOutTarget.line]?.[it.id]?.completed)
+          .map((it) => ({
+            id: it.id,
+            label: it.part_number || it.description || "Part",
+            orderedQty: it.quantity,
+            completedQty:
+              selectedJob.progress?.[clockOutTarget.line]?.[it.id]?.completed_qty ?? null,
+          }))
+      : [];
+
   async function toggleChecklistItem(line: string, lineItemId: string, completed: boolean) {
     if (!selectedJob) return;
     setChecklistBusy(true);
@@ -158,10 +172,32 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
     setClockOutTarget({ sessionId, line });
   }
 
-  async function submitClockOut(note: string, qty?: number, photo?: File | null) {
+  async function submitClockOut(
+    note: string,
+    qty?: number,
+    photo?: File | null,
+    itemQtys?: { line_item_id: string; completed_qty: number }[]
+  ) {
     if (!clockOutTarget) return;
     setActing(true);
     try {
+      // Reconcile unchecked-part quantities — best-effort, never blocks clock-out.
+      if (itemQtys && itemQtys.length && selectedJob) {
+        try {
+          await fetch("/v2/api/cutting/line-progress", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              job_id: selectedJob.id,
+              line: clockOutTarget.line,
+              items: itemQtys,
+            }),
+          });
+        } catch {
+          showToast("Saving part quantities failed — clocking out anyway.", false);
+        }
+      }
+
       // Optional cut-list photo — best-effort, never blocks clock-out.
       if (photo) {
         try {
@@ -462,6 +498,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
       {/* Clock-out handoff modal */}
       <HandoffModal
         lineLabel={clockOutTarget?.line ?? ""}
+        items={clockOutItems}
         isOpen={!!clockOutTarget}
         onClose={() => setClockOutTarget(null)}
         onSubmit={submitClockOut}
