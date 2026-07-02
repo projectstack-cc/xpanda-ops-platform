@@ -10,6 +10,13 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P224** — Cutting v2 clock-out reconciliation: the clock-out modal now lists the line's unchecked
+  parts, each with a required quantity (0 allowed), pre-filled with the current `completed_qty`;
+  submit is gated until all are filled. Values (total completed for that part on this line) persist
+  via new batch route `POST /v2/api/cutting/line-progress` (upserts `completed_qty`, leaves the
+  `completed` flag untouched) — best-effort at submit, ordered reconcile → photo → clock-out. The
+  session-total "Pieces completed this session" field and optional photo are unchanged. No
+  migration. `tsc --noEmit` + `cf-build` green.
 - **P220** — Cutting v2 parts checklist moved into a docked right sidebar (md:w-80, border-l; stacks
   on narrow) beside the line rows — no overlay. The sidebar shows only once the operator is clocked
   into the job, and only their clocked-in line (line tabs/selector removed; `PartsPanel` simplified
