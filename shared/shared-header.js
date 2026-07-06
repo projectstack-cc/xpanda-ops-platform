@@ -309,11 +309,21 @@ if (!window.__xpandaPwaInstallLoaded) {
         }
       }).catch(() => { window.__xpandaUser = null; });
 
-      document.getElementById('hdr-logout')?.addEventListener('click', async (e) => {
-        e.preventDefault();
-        await fetch('/api/auth/logout', { method: 'POST' });
-        window.location.href = '/login.html';
-      });
+      // Sign Out — delegated + redirect-guaranteed. Delegation means the #hdr-logout link works
+      // whether it's rendered in the topbar or the footer, and the redirect fires in .finally so
+      // sign-out always completes even if the logout POST rejects/hangs (offline tablet, worker
+      // hiccup). Guarded so it binds at most once across accidental double-loads.
+      if (!window.__xpandaLogoutBound) {
+        window.__xpandaLogoutBound = true;
+        document.addEventListener('click', function (e) {
+          const link = e.target && e.target.closest && e.target.closest('#hdr-logout');
+          if (!link) return;
+          e.preventDefault();
+          fetch('/api/auth/logout', { method: 'POST' })
+            .catch(function () {})
+            .finally(function () { window.location.href = '/login.html'; });
+        });
+      }
 
       // Notifications — only installed when showNotifications is true.
       if (config.showNotifications) {
