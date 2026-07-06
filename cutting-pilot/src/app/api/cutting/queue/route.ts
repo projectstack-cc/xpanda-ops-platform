@@ -6,6 +6,10 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
 
 const PROCESS_ORDER = ["Cross Cutter", "Hole Cutter", "Main Line", "Blue Line", "Laminate"];
+// Lines whose work unit is a CHUNK (block→chunk). Their target needs the step-2 block-calc
+// engine + a per-job block-dimension source, so P225 leaves their qty_target NULL.
+// Every other required line is a PART line: target = total ordered units (no math needed).
+const CHUNK_LINES = new Set(["Cross Cutter", "Hole Cutter"]);
 
 export async function GET() {
   const { DB } = await getEnv();
@@ -145,6 +149,97 @@ export async function GET() {
       });
     }
 
+    // ── Cut-plan persistence (P225) ────────────────────────────────────────────────
+    // Instance cut plan per job + one cut_plan_lines row per required line.
+    // Part lines (Main/Blue/Laminate): qty_target = SUM of ordered units (from line items,
+    //   already in memory as lineItemsByJob). Chunk lines: qty_target NULL until step-2.
+    // Lazy INSERT OR IGNORE mirrors the cutting_lines reconcile above (idempotent per GET;
+    // does not overwrite an existing row, so staleness is a step-2 regenerate concern).
+    const planIdByJob = new Map<string, string>();
+    const partUnitsByJob = new Map<string, number>();
+    for (const job of jobs) {
+      const items = lineItemsByJob.get(job.id) || [];
+      const total = items.reduce(
+        (sum: number, it: any) => sum + (Number(it.quantity) > 0 ? Number(it.quantity) : 0),
+        0
+      );
+      partUnitsByJob.set(job.id, total);
+      planIdByJob.set(job.id, crypto.randomUUID());
+    }
+
+    const planStmts: ReturnType<typeof DB.prepare>[] = [];
+    for (const job of jobs) {
+      planStmts.push(
+        DB.prepare(
+          `INSERT OR IGNORE INTO cut_plans (id, job_id, source, created_at, updated_at)
+           VALUES (?, ?, 'auto', ?, ?)`
+        ).bind(planIdByJob.get(job.id), job.id, now, now)
+      );
+    }
+    for (const job of jobs) {
+      const planId = planIdByJob.get(job.id)!;
+      const partUnits = partUnitsByJob.get(job.id) ?? 0;
+      for (const line of job.requiredLines) {
+        const isChunk = CHUNK_LINES.has(line);
+        planStmts.push(
+          DB.prepare(
+            `INSERT OR IGNORE INTO cut_plan_lines
+               (id, cut_plan_id, job_id, line, unit, qty_target, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(
+            crypto.randomUUID(),
+            planId,
+            job.id,
+            line,
+            isChunk ? "chunk" : "part",
+            isChunk ? null : partUnits,
+            now,
+            now
+          )
+        );
+      }
+    }
+    // Same D1 batch-size guard (50) used for the cutting_lines reconcile above.
+    for (let i = 0; i < planStmts.length; i += 50) {
+      await DB.batch(planStmts.slice(i, i + 50));
+    }
+
+    // Read back the authoritative per-line plan values (covers pre-existing rows, not just
+    // the ones just inserted) for the payload.
+    const planLineRows = await DB.prepare(
+      `SELECT job_id, line, unit, qty_target
+       FROM cut_plan_lines
+       WHERE job_id IN (${placeholders})`
+    ).bind(...jobIds).all<any>();
+
+    const planByKey = new Map<string, { unit: "chunk" | "part"; qty_target: number | null }>();
+    for (const row of (planLineRows.results || [])) {
+      planByKey.set(`${row.job_id}:${row.line}`, {
+        unit: (row.unit === "chunk" ? "chunk" : "part"),
+        qty_target: row.qty_target ?? null,
+      });
+    }
+
+    // Mirror part-line targets into cutting_lines.qty_target where still NULL, so the existing
+    // column becomes meaningful for downstream throughput/yield without a schema change.
+    const mirrorStmts: ReturnType<typeof DB.prepare>[] = [];
+    for (const job of jobs) {
+      for (const line of job.requiredLines) {
+        if (CHUNK_LINES.has(line)) continue;
+        const plan = planByKey.get(`${job.id}:${line}`);
+        if (!plan || plan.qty_target == null) continue;
+        mirrorStmts.push(
+          DB.prepare(
+            `UPDATE cutting_lines SET qty_target = ?, updated_at = ?
+             WHERE job_id = ? AND line = ? AND qty_target IS NULL`
+          ).bind(plan.qty_target, now, job.id, line)
+        );
+      }
+    }
+    for (let i = 0; i < mirrorStmts.length; i += 50) {
+      if (mirrorStmts.length) await DB.batch(mirrorStmts.slice(i, i + 50));
+    }
+
     // Per-line tracked time (closed sessions only) — true time tracking.
     // jobIds + placeholders already in scope from the queries above.
     const durationRows = await DB.prepare(
@@ -200,6 +295,8 @@ export async function GET() {
           last_handoff_note: handoffByKey.get(key) || "",
           tracked_seconds: durByKey.get(key) || 0,
           open_started_at: open?.started_at ?? null,
+          unit: (planByKey.get(key)?.unit ?? "part") as "chunk" | "part",
+          qty_target: planByKey.get(key)?.qty_target ?? null,
         };
       });
       return { ...job, lines, line_items: lineItemsByJob.get(job.id) || [] };

@@ -10,6 +10,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P225** — Cutting v2 BOM cut-plan persistence + part-line targets: new instance tables `cut_plans` (one per job) + `cut_plan_lines` (one per job×line, `unit` chunk|part, `qty_target`), template `saved_combos` untouched. Queue route lazily upserts a cut plan per active job (mirroring the `cutting_lines` INSERT OR IGNORE reconcile): part-producing lines (Main Line / Blue Line / Laminate) get `qty_target` = total ordered units derived in-memory from `job_line_items` (no nesting math); chunk lines (Cross Cutter / Hole Cutter) get `unit='chunk'`, `qty_target` NULL pending the step-2 engine. Part-line targets mirrored into `cutting_lines.qty_target` where NULL. Queue payload + `CuttingLine` type now carry `unit` + `qty_target`; `PartsPanel` shows a real "parts to produce" target on part lines and narrows the "coming soon" note to chunk lines only — unblocking throughput/yield/progress for 3 of 5 lines. Reserved columns (`block_*`, `kerf`, `snapshot`, `taper_pair`, `detail`, `source`, `combo_id`) added for the step-2 nesting engine. **Run `add-cut-plans.sql` in D1 before deploying the worker.** `tsc --noEmit` + `cf-build` green.
 - **P224** — Cutting v2 clock-out reconciliation: the clock-out modal now lists the line's unchecked
   parts, each with a required quantity (0 allowed), pre-filled with the current `completed_qty`;
   submit is gated until all are filled. Values (total completed for that part on this line) persist

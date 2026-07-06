@@ -7,6 +7,8 @@ export interface CuttingLine {
   last_handoff_note: string;
   tracked_seconds: number;
   open_started_at: string | null;
+  unit: "chunk" | "part";
+  qty_target: number | null;
 }
 
 export interface CuttingLineItem {

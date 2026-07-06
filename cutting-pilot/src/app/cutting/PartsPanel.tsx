@@ -66,15 +66,35 @@ export default function PartsPanel({ job, line, onToggle, busy }: Props) {
         </ul>
       )}
 
-      <div className="m-3 rounded border border-dashed border-border px-3 py-2.5 opacity-70">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-          Blocks / chunks required — coming soon
-        </span>
-        <p className="text-xs text-muted mt-1">
-          Cross Cutter / Hole Cutter work in chunks; counts list here once the block-calculator BOM is
-          wired.
-        </p>
-      </div>
+      {(() => {
+        const lineRow = job.lines?.find((l) => l.line === line);
+        // Part lines carry a real target now; chunk lines still await the block-calc engine.
+        if (lineRow && lineRow.unit === "part" && lineRow.qty_target != null) {
+          return (
+            <div className="m-3 rounded border border-border px-3 py-2.5">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Target — parts to produce
+              </span>
+              <p className="font-mono tabular-nums text-sm text-text mt-1">
+                {lineRow.qty_target}
+              </p>
+            </div>
+          );
+        }
+        if (lineRow && lineRow.unit === "chunk") {
+          return (
+            <div className="m-3 rounded border border-dashed border-border px-3 py-2.5 opacity-70">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Chunks required — coming soon
+              </span>
+              <p className="text-xs text-muted mt-1">
+                {line} works in chunks; counts list here once the block-calculator engine is wired.
+              </p>
+            </div>
+          );
+        }
+        return null;
+      })()}
     </div>
   );
 }
