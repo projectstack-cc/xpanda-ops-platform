@@ -47,7 +47,11 @@ export default function PlatformHeader({
 
   async function handleSignOut(e: React.MouseEvent<HTMLAnchorElement>) {
     e.preventDefault();
-    await fetch("/api/auth/logout", { method: "POST" });
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ignore — redirect regardless so sign-out always completes
+    }
     window.location.href = "/login.html";
   }
 
