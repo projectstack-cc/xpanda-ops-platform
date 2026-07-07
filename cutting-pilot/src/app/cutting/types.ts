@@ -31,5 +31,7 @@ export interface CuttingJob {
   lines: CuttingLine[];
   photos: { session_id: string; line: string }[];
   line_items: CuttingLineItem[];
+  is_taper: boolean;
+  taper_yield: number | null;
   progress: Record<string, Record<string, { completed: boolean; completed_qty: number | null }>>;
 }

@@ -143,7 +143,10 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [ ] Auth-bridge + operator loop validation (requires real host after domain attach; walk the full clock-in→handoff→complete→job-done loop)
 - [ ] Priority ordering for the queue (next prompt)
 - [ ] Nav link wiring (surface `/v2/cutting` in the platform shared header nav)
-- [ ] Block-calc engine (step-2): chunk-line targets (Cross/Hole), per-job block dimensions source, ported+upgraded guillotine nesting (heterogeneous rectangular + 45° taper pairing), snapshot/detail population, regenerate-on-change. Contract + part-line targets landed in P225.
+- [ ] Block-calc engine (step-2): NON-taper chunk-line targets, per-job block dimensions source, ported+upgraded heterogeneous guillotine nesting, snapshot/detail population, regenerate-on-change. (Taper chunk targets landed in P227; non-taper Cross Cutter still shows the P225 placeholder.)
+- [ ] Taper blocks-needed (materials pull): compute `ceil(chunks ÷ chunks-per-block)` once a chunks-per-block datum exists.
+- [ ] Verify the live `job_line_items.dimensions` taper format matches the P227 regex; widen if needed.
+- [ ] Structured taper/chunk geometry capture (chunk L×W×H + kerf) to compute yield instead of manual entry.
 - [ ] v2 cut-plan: surface `qty_target` in throughput (units/hr), first-pass yield, and progress bars now that part lines carry targets (P225).
 - [ ] Kill `cutting_steps` / legacy `cutting-dashboard.html` once v2 is on the floor
 

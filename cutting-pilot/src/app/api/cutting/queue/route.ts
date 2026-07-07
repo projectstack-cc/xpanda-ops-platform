@@ -240,6 +240,61 @@ export async function GET() {
       if (mirrorStmts.length) await DB.batch(mirrorStmts.slice(i, i + 50));
     }
 
+    // ── Taper chunk targets (P227) ─────────────────────────────────────────────────
+    // Taper orders flow Cross Cutter (block→chunks) → Main Line (diagonal wire finishes parts).
+    // Main Line target = ordered parts (already set as a part line above). Here Cross Cutter's
+    // chunk target = ceil(taper parts ÷ yield-per-chunk). Taper line items are detected by the
+    // "A\">B\"" thickness-ramp pattern; yield is per-job (cut_plans.taper_yield) or the default.
+    const TAPER_RE = /(\d+(?:\.\d+)?)\s*"?\s*(?:->|→|>)\s*(\d+(?:\.\d+)?)\s*"?/;
+    const DEFAULT_TAPER_YIELD = 12;
+
+    const taperYieldRows = await DB.prepare(
+      `SELECT job_id, taper_yield FROM cut_plans WHERE job_id IN (${placeholders})`
+    ).bind(...jobIds).all<any>();
+    const taperYieldByJob = new Map<string, number | null>();
+    for (const row of (taperYieldRows.results || [])) {
+      taperYieldByJob.set(row.job_id, row.taper_yield ?? null);
+    }
+
+    const taperInfoByJob = new Map<string, { is_taper: boolean; yield: number | null }>();
+    const taperUpdateStmts: ReturnType<typeof DB.prepare>[] = [];
+    for (const job of jobs) {
+      const items = lineItemsByJob.get(job.id) || [];
+      const taperParts = items.reduce(
+        (sum: number, it: any) =>
+          sum +
+          (TAPER_RE.test(it.dimensions || "") && Number(it.quantity) > 0
+            ? Number(it.quantity)
+            : 0),
+        0
+      );
+      const isTaper = taperParts > 0;
+      const storedYield = taperYieldByJob.get(job.id) ?? null;
+      taperInfoByJob.set(job.id, { is_taper: isTaper, yield: storedYield });
+      if (!isTaper) continue;
+      if (!job.requiredLines.includes("Cross Cutter")) continue;
+      const yieldUsed = storedYield && storedYield > 0 ? storedYield : DEFAULT_TAPER_YIELD;
+      const chunks = Math.ceil(taperParts / yieldUsed);
+      // Cross Cutter chunk target — overwrite (parts/yield may change). Not NULL-guarded.
+      taperUpdateStmts.push(
+        DB.prepare(
+          `UPDATE cut_plan_lines SET qty_target = ?, updated_at = ?
+           WHERE job_id = ? AND line = 'Cross Cutter'`
+        ).bind(chunks, now, job.id)
+      );
+      taperUpdateStmts.push(
+        DB.prepare(
+          `UPDATE cutting_lines SET qty_target = ?, updated_at = ?
+           WHERE job_id = ? AND line = 'Cross Cutter'`
+        ).bind(chunks, now, job.id)
+      );
+      // Reflect immediately in the payload map built above.
+      planByKey.set(`${job.id}:Cross Cutter`, { unit: "chunk", qty_target: chunks });
+    }
+    for (let i = 0; i < taperUpdateStmts.length; i += 50) {
+      if (taperUpdateStmts.length) await DB.batch(taperUpdateStmts.slice(i, i + 50));
+    }
+
     // Per-line tracked time (closed sessions only) — true time tracking.
     // jobIds + placeholders already in scope from the queries above.
     const durationRows = await DB.prepare(
@@ -299,7 +354,13 @@ export async function GET() {
           qty_target: planByKey.get(key)?.qty_target ?? null,
         };
       });
-      return { ...job, lines, line_items: lineItemsByJob.get(job.id) || [] };
+      return {
+        ...job,
+        lines,
+        line_items: lineItemsByJob.get(job.id) || [],
+        is_taper: taperInfoByJob.get(job.id)?.is_taper ?? false,
+        taper_yield: taperInfoByJob.get(job.id)?.yield ?? null,
+      };
     });
 
     return NextResponse.json({ ok: true, queue });
