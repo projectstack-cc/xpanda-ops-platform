@@ -5,13 +5,14 @@ interface Props {
   job: CuttingJob;
   line: string;
   onToggle: (lineItemId: string, completed: boolean) => void;
+  onSetYield?: (yieldPerChunk: number) => void;
   busy: boolean;
 }
 
 // Docked parts checklist for a single cutting line (the operator's clocked-in line).
 // Cross Cutter / Hole Cutter really work in chunks; until the block-calc BOM is wired, every line
 // shows the same parts list and the chunk note below stands in.
-export default function PartsPanel({ job, line, onToggle, busy }: Props) {
+export default function PartsPanel({ job, line, onToggle, onSetYield, busy }: Props) {
   const items = job.line_items ?? [];
   const prog = job.progress?.[line] ?? {};
   const doneCount = items.filter((it) => prog[it.id]?.completed).length;
@@ -82,6 +83,38 @@ export default function PartsPanel({ job, line, onToggle, busy }: Props) {
           );
         }
         if (lineRow && lineRow.unit === "chunk") {
+          // Taper orders: Cross Cutter's chunk count derives from the per-job yield.
+          // Manual yield input (prefilled) + computed chunks-required from the line target.
+          if (job.is_taper && line === "Cross Cutter") {
+            return (
+              <div className="m-3 rounded border border-border px-3 py-2.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  Taper chunks
+                </span>
+                <div className="mt-2 flex items-center gap-2">
+                  <label className="text-xs text-muted">Yield / chunk</label>
+                  <input
+                    type="number"
+                    min={1}
+                    defaultValue={job.taper_yield ?? 12}
+                    disabled={busy}
+                    onBlur={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (v > 0 && v !== (job.taper_yield ?? 12)) onSetYield?.(v);
+                    }}
+                    className="w-16 rounded border border-border bg-surface px-2 py-1 font-mono tabular-nums text-sm text-text disabled:opacity-50"
+                  />
+                </div>
+                <p className="text-xs text-muted mt-2">
+                  Chunks required:{" "}
+                  <span className="font-mono tabular-nums text-sm text-text">
+                    {lineRow.qty_target ?? "—"}
+                  </span>
+                  {job.taper_yield == null && <span className="text-muted"> (default yield)</span>}
+                </p>
+              </div>
+            );
+          }
           return (
             <div className="m-3 rounded border border-dashed border-border px-3 py-2.5 opacity-70">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted">
