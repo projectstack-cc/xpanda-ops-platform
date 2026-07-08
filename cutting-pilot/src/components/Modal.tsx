@@ -7,11 +7,12 @@ interface Props {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  size?: "md" | "lg";
 }
 
 // Reusable modal primitive. Bottom-sheet on mobile, centered dialog on sm+.
 // Closes on Escape or backdrop click. Children own the action buttons.
-export default function Modal({ isOpen, onClose, title, children }: Props) {
+export default function Modal({ isOpen, onClose, title, children, size = "md" }: Props) {
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -29,7 +30,7 @@ export default function Modal({ isOpen, onClose, title, children }: Props) {
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-md bg-surface rounded-t-2xl sm:rounded-2xl shadow-xl p-6 space-y-4"
+        className={`w-full ${size === "lg" ? "sm:max-w-2xl" : "sm:max-w-md"} bg-surface rounded-t-2xl sm:rounded-2xl shadow-xl p-6 space-y-4`}
         style={{ boxShadow: "var(--shadow-md)" }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"

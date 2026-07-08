@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { AlertCircle, Search, X } from "lucide-react";
+import { AlertCircle, Calculator, Search, X } from "lucide-react";
 import Sheet from "@/components/Sheet";
 import PlatformHeader from "@/components/PlatformHeader";
 import JobRow from "./JobRow";
@@ -9,6 +9,7 @@ import HandoffModal from "./HandoffModal";
 import PhotoViewer from "./PhotoViewer";
 import CompleteLineModal from "./CompleteLineModal";
 import PartsPanel from "./PartsPanel";
+import BlockPlanner from "./BlockPlanner";
 import type { CuttingJob } from "./types";
 import { formatDuration, lineLiveSeconds } from "@/lib/time";
 
@@ -39,6 +40,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   const [now, setNow] = useState(() => Date.now());
   const [showAll, setShowAll] = useState(false);
   const [checklistBusy, setChecklistBusy] = useState(false);
+  const [plannerOpen, setPlannerOpen] = useState(false);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -449,6 +451,14 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
                         </span>
                       </p>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setPlannerOpen(true)}
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text hover:opacity-80 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                    >
+                      <Calculator size={14} aria-hidden="true" />
+                      Cut Plan
+                    </button>
                   </div>
                   {/* Dismiss handle — narrow only; md+ has no sheet close affordance */}
                   <button
@@ -503,6 +513,20 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
         </Sheet>
       </div>
 
+
+      {/* Block-calc planner */}
+      {selectedJob && (
+        <BlockPlanner
+          job={selectedJob}
+          isOpen={plannerOpen}
+          onClose={() => setPlannerOpen(false)}
+          onSaved={() => {
+            setPlannerOpen(false);
+            fetchQueue(true);
+            showToast("Cut plan saved.");
+          }}
+        />
+      )}
 
       {/* Mark-complete modal */}
       <CompleteLineModal
