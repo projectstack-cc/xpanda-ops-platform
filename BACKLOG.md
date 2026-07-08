@@ -131,7 +131,9 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [x] P212 — `<PlatformHeader>` React port (replaces bare `AppHeader`)
 - [x] P213 — Nav wiring + legacy visual-parity pass
 - [x] P214 — `<CompleteLineModal>`: replaced `window.confirm` with tokenized modal (completion note as `handoff_note`; scrap placeholder hidden on Laminate)
-- [ ] P229 — Block-calc planner screen (finalize part 2/2): React screen consuming `src/lib/blockEngine.ts` client-side — parts auto-loaded from the job, block/kerf/orientation inputs, primary + secondary selection, live results (blocks-needed, parts-per-block, utilization, surplus), manual Cross/Hole chunk inputs, Save → `POST /v2/api/cutting/cut-plan/save`. Plus navigation from the dashboard job detail. (2D canvas cut diagram optional / later.)
+- [ ] Block-calc planner: 2D canvas cut diagram (port the legacy Canvas render) — optional polish.
+- [ ] Block-calc planner: rehydrate saved plan into the form (read `cut_plans.snapshot`) so re-opening shows the last plan instead of blank inputs.
+- [ ] Non-taper Cross Cutter chunk model (replace manual entry with a real chunk/parts-per-chunk relationship; ties into the hole-cutter chunk-inventory idea).
 - [ ] Wire scrap capture into `<CompleteLineModal>` once the native scrap DB lands (reason + cubic-in + shift + density; derive operator/inv/line/date from session+job; no Laminate scrap)
 - [ ] Material-consumption capture at line-complete — needs a job→block_inventory link + on-hand block picker (block_consumption_log decrements real stock)
 - [ ] Cut-list photo polish if asked: multi-photo per session, lightbox zoom, delete/replace, retention cleanup
