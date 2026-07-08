@@ -33,5 +33,6 @@ export interface CuttingJob {
   line_items: CuttingLineItem[];
   is_taper: boolean;
   taper_yield: number | null;
+  blocks_needed: number | null;
   progress: Record<string, Record<string, { completed: boolean; completed_qty: number | null }>>;
 }
