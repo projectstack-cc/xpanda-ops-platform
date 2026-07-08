@@ -441,6 +441,14 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
                     <p className="font-mono tabular-nums text-xs text-muted mt-1">
                       Tracked: {formatDuration(jobTotalSeconds)}
                     </p>
+                    {selectedJob.blocks_needed != null && (
+                      <p className="font-mono tabular-nums text-xs text-muted mt-1">
+                        Blocks needed:{" "}
+                        <span className="text-text font-semibold">
+                          {selectedJob.blocks_needed}
+                        </span>
+                      </p>
+                    )}
                   </div>
                   {/* Dismiss handle — narrow only; md+ has no sheet close affordance */}
                   <button

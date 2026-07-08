@@ -249,11 +249,13 @@ export async function GET() {
     const DEFAULT_TAPER_YIELD = 12;
 
     const taperYieldRows = await DB.prepare(
-      `SELECT job_id, taper_yield FROM cut_plans WHERE job_id IN (${placeholders})`
+      `SELECT job_id, taper_yield, blocks_needed FROM cut_plans WHERE job_id IN (${placeholders})`
     ).bind(...jobIds).all<any>();
     const taperYieldByJob = new Map<string, number | null>();
+    const blocksNeededByJob = new Map<string, number | null>();
     for (const row of (taperYieldRows.results || [])) {
       taperYieldByJob.set(row.job_id, row.taper_yield ?? null);
+      blocksNeededByJob.set(row.job_id, row.blocks_needed ?? null);
     }
 
     const taperInfoByJob = new Map<string, { is_taper: boolean; yield: number | null }>();
@@ -360,6 +362,7 @@ export async function GET() {
         line_items: lineItemsByJob.get(job.id) || [],
         is_taper: taperInfoByJob.get(job.id)?.is_taper ?? false,
         taper_yield: taperInfoByJob.get(job.id)?.yield ?? null,
+        blocks_needed: blocksNeededByJob.get(job.id) ?? null,
       };
     });
 
