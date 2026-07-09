@@ -1,10 +1,10 @@
-// POST /v2/api/cutting/cut-plan/save — persist a block-calc plan for a job.
-// Server is authoritative: RECOMPUTE blocks_needed from submitted block+part dims via blockEngine;
-// never trust a client-sent total. Writes cut_plans (block dims, kerf, blocks_needed, snapshot) and,
-// when manual chunk counts are supplied (P229), the Cross/Hole cut_plan_lines + cutting_lines targets.
+// POST /v2/api/cutting/cut-plan/save — persist a MULTI-PART block-calc plan for a job.
+// Server authoritative: recompute each setup's blocks via blockEngine; cut_plans.blocks_needed is
+// the SUM across setups (the number the queue reads). cut_plan_setups (child, one row per part) is
+// replaced wholesale each save. Manual Cross/Hole chunk targets preserved.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
-import { runFullCalc, type BlockCalcInput } from "@/lib/blockEngine";
+import { runFullCalc } from "@/lib/blockEngine";
 
 export async function POST(request: NextRequest) {
   const { DB } = await getEnv();
@@ -16,55 +16,72 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const jobId = body?.job_id;
-    const b = body?.block;
-    const p = body?.primary;
-    if (
-      !jobId || !b || !p ||
-      !(Number(b.l) > 0) || !(Number(b.w) > 0) || !(Number(b.h) > 0) ||
-      !(Number(p.l) > 0) || !(Number(p.w) > 0) || !(Number(p.h) > 0)
-    ) {
+    if (!jobId) {
+      return NextResponse.json({ ok: false, error: "job_id is required." }, { status: 400 });
+    }
+    const rawSetups = Array.isArray(body?.setups) ? body.setups : [];
+    const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+
+    const computed = rawSetups
+      .map((s: any, i: number) => {
+        const b = s?.block;
+        const p = s?.part;
+        if (
+          !b || !p ||
+          !(Number(b.l) > 0) || !(Number(b.w) > 0) || !(Number(b.h) > 0) ||
+          !(Number(p.l) > 0) || !(Number(p.w) > 0) || !(Number(p.h) > 0)
+        ) {
+          return null;
+        }
+        const kerfN = Number(b.kerf);
+        const kerf = Number.isFinite(kerfN) && kerfN >= 0 ? kerfN : 0.079;
+        const mode = s?.mode === "fixed" ? "fixed" : "auto";
+        const res = runFullCalc({
+          bL: Number(b.l), bW: Number(b.w), bH: Number(b.h),
+          pL: Number(p.l), pW: Number(p.w), pH: Number(p.h),
+          kerf,
+          primaryQty: Number(p.qty) > 0 ? Math.floor(Number(p.qty)) : null,
+          mode,
+          secondaryParts: [],
+        });
+        return {
+          label: s.label ? String(s.label) : null,
+          block: { l: Number(b.l), w: Number(b.w), h: Number(b.h), kerf },
+          part: { l: Number(p.l), w: Number(p.w), h: Number(p.h), qty: Number(p.qty) > 0 ? Math.floor(Number(p.qty)) : null },
+          mode,
+          perBlock: res.primary.total,
+          blocks: res.blocksNeeded,
+          util: res.primary.utilPct,
+          sort: i,
+        };
+      })
+      .filter((x: any) => x !== null) as Array<{
+        label: string | null;
+        block: { l: number; w: number; h: number; kerf: number };
+        part: { l: number; w: number; h: number; qty: number | null };
+        mode: "auto" | "fixed";
+        perBlock: number;
+        blocks: number | null;
+        util: number;
+        sort: number;
+      }>;
+
+    if (computed.length === 0) {
       return NextResponse.json(
-        { ok: false, error: "job_id, block {l,w,h}, and primary {l,w,h} (all > 0) are required." },
+        { ok: false, error: "At least one valid setup (block + part dimensions) is required." },
         { status: 400 }
       );
     }
 
-    const kerf = Number(b.kerf);
-    const input: BlockCalcInput = {
-      bL: Number(b.l), bW: Number(b.w), bH: Number(b.h),
-      pL: Number(p.l), pW: Number(p.w), pH: Number(p.h),
-      kerf: Number.isFinite(kerf) && kerf >= 0 ? kerf : 0.079,
-      primaryQty: Number(p.qty) > 0 ? Math.floor(Number(p.qty)) : null,
-      mode: body?.mode === "fixed" ? "fixed" : "auto",
-      secondaryParts: Array.isArray(body?.secondaries)
-        ? body.secondaries
-            .filter((s: any) => Number(s?.l) > 0 && Number(s?.w) > 0 && Number(s?.h) > 0)
-            .map((s: any, i: number) => ({
-              id: String(s.id ?? i),
-              label: String(s.label ?? `Secondary ${i + 1}`),
-              L: Number(s.l), W: Number(s.w), H: Number(s.h),
-              qty: Number(s.qty) > 0 ? Math.floor(Number(s.qty)) : null,
-            }))
-        : [],
-    };
-
-    const result = runFullCalc(input);
-    const blocksNeeded = result.blocksNeeded;
-    const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+    const totalBlocks = computed.reduce((sum, c) => sum + (c.blocks ?? 0), 0);
+    const first = computed[0];
 
     const snapshot = JSON.stringify({
-      block: { l: input.bL, w: input.bW, h: input.bH },
-      kerf: input.kerf,
-      mode: input.mode,
-      primary: {
-        l: input.pL, w: input.pW, h: input.pH, qty: input.primaryQty,
-        perBlock: result.primary.total, utilPct: result.primary.utilPct,
-      },
-      secondaries: result.secondaries.map((s) => ({
-        label: s.label, dims: s._dims, qty: s._qty, perBlock: s.totalPieces,
+      setups: computed.map((c) => ({
+        label: c.label, block: c.block, part: c.part, mode: c.mode,
+        perBlock: c.perBlock, blocks: c.blocks, util: c.util,
       })),
-      blocksNeeded, totalProduced: result.totalProduced, surplus: result.surplus,
-      savedBy: operatorId, savedAt: now,
+      totalBlocks, savedBy: operatorId, savedAt: now,
     });
 
     await DB.prepare(
@@ -72,14 +89,34 @@ export async function POST(request: NextRequest) {
        VALUES (?, ?, 'manual', ?, ?)`
     ).bind(crypto.randomUUID(), jobId, now, now).run();
 
+    // cut_plans holds the aggregate the queue reads; block_l/w/h/kerf mirror the first setup.
     await DB.prepare(
       `UPDATE cut_plans
          SET block_l = ?, block_w = ?, block_h = ?, kerf = ?, blocks_needed = ?,
              snapshot = ?, source = 'manual', updated_at = ?
        WHERE job_id = ?`
-    ).bind(input.bL, input.bW, input.bH, input.kerf, blocksNeeded, snapshot, now, jobId).run();
+    ).bind(first.block.l, first.block.w, first.block.h, first.block.kerf, totalBlocks, snapshot, now, jobId).run();
 
-    // Optional manual chunk targets (Cross/Hole) — forward-compat for P229's screen.
+    // Replace child setups wholesale.
+    await DB.prepare(`DELETE FROM cut_plan_setups WHERE job_id = ?`).bind(jobId).run();
+    const inserts = computed.map((c) =>
+      DB.prepare(
+        `INSERT INTO cut_plan_setups
+           (id, job_id, label, block_l, block_w, block_h, kerf, mode,
+            part_l, part_w, part_h, qty, per_block, blocks_needed, util_pct, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        crypto.randomUUID(), jobId, c.label,
+        c.block.l, c.block.w, c.block.h, c.block.kerf, c.mode,
+        c.part.l, c.part.w, c.part.h, c.part.qty,
+        c.perBlock, c.blocks, c.util, c.sort, now, now
+      )
+    );
+    for (let i = 0; i < inserts.length; i += 50) {
+      await DB.batch(inserts.slice(i, i + 50));
+    }
+
+    // Optional manual chunk targets (Cross/Hole).
     const chunkUpdates: Array<[string, number]> = [];
     if (Number(body?.cross_cutter_chunks) > 0) {
       chunkUpdates.push(["Cross Cutter", Math.floor(Number(body.cross_cutter_chunks))]);
@@ -96,7 +133,7 @@ export async function POST(request: NextRequest) {
       ).bind(qty, now, jobId, line).run();
     }
 
-    return NextResponse.json({ ok: true, job_id: jobId, blocks_needed: blocksNeeded });
+    return NextResponse.json({ ok: true, job_id: jobId, blocks_needed: totalBlocks, setups: computed.length });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "Server error.", detail: String(e?.message || e) },
