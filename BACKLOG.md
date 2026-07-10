@@ -151,7 +151,9 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [ ] Taper blocks-needed (materials pull): compute `ceil(chunks ÷ chunks-per-block)` once a chunks-per-block datum exists.
 - [ ] Verify the live `job_line_items.dimensions` taper format matches the P227 regex; widen if needed.
 - [ ] Structured taper/chunk geometry capture (chunk L×W×H + kerf) to compute yield instead of manual entry.
-- [ ] v2 cut-plan: surface `qty_target` in throughput (units/hr), first-pass yield, and progress bars now that part lines carry targets (P225).
+- [x] P233 — Per-line throughput raw readout (`qty_done[/qty_target] unit · wall · active`) in v2 job-detail `LineRow`, using existing `qty_target` from P225.
+- [ ] v2 cut-plan: units/hr rate and progress bars still open (raw throughput numbers shipped in P233; the rate needs qty-entry to be routine first).
+- [ ] First-pass yield (v2) — blocked on native scrap DB (defect denominator)
 - [ ] Kill `cutting_steps` / legacy `cutting-dashboard.html` once v2 is on the floor
 
 ---

@@ -9,6 +9,9 @@ export interface CuttingLine {
   open_started_at: string | null;
   unit: "chunk" | "part";
   qty_target: number | null;
+  qty_done: number | null;
+  first_started_at: string | null;
+  done_at: string | null;
 }
 
 export interface CuttingLineItem {

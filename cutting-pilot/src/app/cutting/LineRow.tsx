@@ -1,7 +1,7 @@
 "use client";
 import { LineStatusPill } from "@/components/StatusPill";
 import type { CuttingLine } from "./types";
-import { formatDuration, lineLiveSeconds } from "@/lib/time";
+import { formatDuration, lineLiveSeconds, lineWallSeconds } from "@/lib/time";
 
 interface Props {
   lineObj: CuttingLine;
@@ -54,6 +54,29 @@ export default function LineRow({
           <LineStatusPill status={lineObj.line_status} />
         </div>
       </div>
+
+      {(() => {
+        const qd = lineObj.qty_done ?? 0;
+        if (qd <= 0) return null;
+        const wall = lineWallSeconds(lineObj, now);
+        const active = lineLiveSeconds(lineObj, now);
+        return (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs font-mono tabular-nums text-muted">
+            <span title="Units completed on this line">
+              {qd}
+              {lineObj.qty_target != null ? `/${lineObj.qty_target}` : ""} {lineObj.unit}
+            </span>
+            {wall >= 1 && (
+              <span title="Wall-clock: first clock-in to done">
+                wall {formatDuration(wall)}
+              </span>
+            )}
+            <span title="Active tracked cutting time">
+              active {formatDuration(active)}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Someone else's session */}
       {busyByOther && (
