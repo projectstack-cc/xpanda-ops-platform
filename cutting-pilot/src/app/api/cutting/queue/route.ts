@@ -78,7 +78,7 @@ export async function GET() {
 
     // One query for all cutting_lines of these jobs
     const linesRows = await allByJobIds(
-      (ph) => `SELECT id, job_id, line, line_status, sort_order
+      (ph) => `SELECT id, job_id, line, line_status, sort_order, qty_done
        FROM cutting_lines
        WHERE job_id IN (${ph})
        ORDER BY sort_order ASC`,
@@ -322,7 +322,8 @@ export async function GET() {
     // jobIds + placeholders already in scope from the queries above.
     const durationRows = await allByJobIds(
       (ph) => `SELECT job_id, line,
-              COALESCE(SUM((julianday(ended_at) - julianday(started_at)) * 86400), 0) AS tracked_seconds
+              COALESCE(SUM((julianday(ended_at) - julianday(started_at)) * 86400), 0) AS tracked_seconds,
+              MIN(started_at) AS first_started, MAX(ended_at) AS last_ended
        FROM cutting_sessions
        WHERE status = 'closed' AND job_id IN (${ph})
        GROUP BY job_id, line`,
@@ -330,8 +331,13 @@ export async function GET() {
     );
 
     const durByKey = new Map<string, number>();
+    const firstStartedByKey = new Map<string, string | null>();
+    const lastEndedByKey = new Map<string, string | null>();
     for (const row of (durationRows.results || [])) {
-      durByKey.set(`${row.job_id}:${row.line}`, Math.round(Number(row.tracked_seconds) || 0));
+      const k = `${row.job_id}:${row.line}`;
+      durByKey.set(k, Math.round(Number(row.tracked_seconds) || 0));
+      firstStartedByKey.set(k, (row.first_started as string | null) ?? null);
+      lastEndedByKey.set(k, (row.last_ended as string | null) ?? null);
     }
 
     // Per-line checklist progress: (job, line, line_item) → completed (+ qty, reserved).
@@ -374,6 +380,9 @@ export async function GET() {
           open_operator_name: open?.operator_name ?? null,
           last_handoff_note: handoffByKey.get(key) || "",
           tracked_seconds: durByKey.get(key) || 0,
+          qty_done: (lineRow?.qty_done ?? null) as number | null,
+          first_started_at: firstStartedByKey.get(key) ?? null,
+          done_at: lastEndedByKey.get(key) ?? null,
           open_started_at: open?.started_at ?? null,
           unit: (planByKey.get(key)?.unit ?? "part") as "chunk" | "part",
           qty_target: planByKey.get(key)?.qty_target ?? null,
