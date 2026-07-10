@@ -59,38 +59,56 @@ export async function GET() {
       await DB.batch(insertStmts.slice(i, i + 50));
     }
 
-    const placeholders = jobIds.map(() => "?").join(",");
+    // Chunk jobId-bound reads to stay under D1's 100-bound-parameter ceiling (cf. P187 in the
+    // legacy worker). jobIds are unique and sliced disjointly, so GROUP BY / MAX per (job_id, line)
+    // is unaffected — a job's rows all land in one chunk. Returns { results } to match callers.
+    const allByJobIds = async <T = any>(
+      sqlFor: (ph: string) => string,
+      ids: string[]
+    ): Promise<{ results: T[] }> => {
+      const results: T[] = [];
+      for (let i = 0; i < ids.length; i += 90) {
+        const chunk = ids.slice(i, i + 90);
+        const ph = chunk.map(() => "?").join(",");
+        const r = await DB.prepare(sqlFor(ph)).bind(...chunk).all<T>();
+        results.push(...(((r.results as T[]) || [])));
+      }
+      return { results };
+    };
 
     // One query for all cutting_lines of these jobs
-    const linesRows = await DB.prepare(
-      `SELECT id, job_id, line, line_status, sort_order
+    const linesRows = await allByJobIds(
+      (ph) => `SELECT id, job_id, line, line_status, sort_order
        FROM cutting_lines
-       WHERE job_id IN (${placeholders})
-       ORDER BY sort_order ASC`
-    ).bind(...jobIds).all<any>();
+       WHERE job_id IN (${ph})
+       ORDER BY sort_order ASC`,
+      jobIds
+    );
 
     // One query for all currently open sessions on these jobs
-    const openSessionRows = await DB.prepare(
-      `SELECT id, job_id, line, operator_name, started_at
+    const openSessionRows = await allByJobIds(
+      (ph) => `SELECT id, job_id, line, operator_name, started_at
        FROM cutting_sessions
-       WHERE status = 'open' AND job_id IN (${placeholders})`
-    ).bind(...jobIds).all<any>();
+       WHERE status = 'open' AND job_id IN (${ph})`,
+      jobIds
+    );
 
     // One query for the most-recent closed session per (job_id, line) — the resume hint
-    const lastHandoffRows = await DB.prepare(
-      `SELECT cs.id, cs.job_id, cs.line, cs.handoff_note, cs.photo_key
+    const lastHandoffRows = await allByJobIds(
+      (ph) => `SELECT cs.id, cs.job_id, cs.line, cs.handoff_note, cs.photo_key
        FROM cutting_sessions cs
        INNER JOIN (
          SELECT job_id, line, MAX(ended_at) AS max_ended
          FROM cutting_sessions
-         WHERE status = 'closed' AND job_id IN (${placeholders})
+         WHERE status = 'closed' AND job_id IN (${ph})
          GROUP BY job_id, line
        ) latest
          ON cs.job_id = latest.job_id
         AND cs.line = latest.line
         AND cs.ended_at = latest.max_ended
-       WHERE cs.status = 'closed'`
-    ).bind(...jobIds).all<any>();
+       WHERE cs.status = 'closed'`,
+      jobIds
+    );
 
     // Build lookup maps for O(1) assembly
     const linesByJob = new Map<string, Map<string, any>>();
@@ -130,12 +148,13 @@ export async function GET() {
 
     // Line items (parts + qty) for each job — for the Parts slide-over.
     // jobIds + placeholders are already in scope from the lines/sessions queries above.
-    const lineItemRows = await DB.prepare(
-      `SELECT id, job_id, part_number, description, quantity, dimensions
+    const lineItemRows = await allByJobIds(
+      (ph) => `SELECT id, job_id, part_number, description, quantity, dimensions
        FROM job_line_items
-       WHERE job_id IN (${placeholders})
-       ORDER BY job_id, sort_order ASC`
-    ).bind(...jobIds).all<any>();
+       WHERE job_id IN (${ph})
+       ORDER BY job_id, sort_order ASC`,
+      jobIds
+    );
 
     const lineItemsByJob = new Map<string, any[]>();
     for (const row of (lineItemRows.results || [])) {
@@ -206,11 +225,12 @@ export async function GET() {
 
     // Read back the authoritative per-line plan values (covers pre-existing rows, not just
     // the ones just inserted) for the payload.
-    const planLineRows = await DB.prepare(
-      `SELECT job_id, line, unit, qty_target
+    const planLineRows = await allByJobIds(
+      (ph) => `SELECT job_id, line, unit, qty_target
        FROM cut_plan_lines
-       WHERE job_id IN (${placeholders})`
-    ).bind(...jobIds).all<any>();
+       WHERE job_id IN (${ph})`,
+      jobIds
+    );
 
     const planByKey = new Map<string, { unit: "chunk" | "part"; qty_target: number | null }>();
     for (const row of (planLineRows.results || [])) {
@@ -248,9 +268,10 @@ export async function GET() {
     const TAPER_RE = /(\d+(?:\.\d+)?)\s*"?\s*(?:->|→|>)\s*(\d+(?:\.\d+)?)\s*"?/;
     const DEFAULT_TAPER_YIELD = 12;
 
-    const taperYieldRows = await DB.prepare(
-      `SELECT job_id, taper_yield, blocks_needed FROM cut_plans WHERE job_id IN (${placeholders})`
-    ).bind(...jobIds).all<any>();
+    const taperYieldRows = await allByJobIds(
+      (ph) => `SELECT job_id, taper_yield, blocks_needed FROM cut_plans WHERE job_id IN (${ph})`,
+      jobIds
+    );
     const taperYieldByJob = new Map<string, number | null>();
     const blocksNeededByJob = new Map<string, number | null>();
     for (const row of (taperYieldRows.results || [])) {
@@ -299,13 +320,14 @@ export async function GET() {
 
     // Per-line tracked time (closed sessions only) — true time tracking.
     // jobIds + placeholders already in scope from the queries above.
-    const durationRows = await DB.prepare(
-      `SELECT job_id, line,
+    const durationRows = await allByJobIds(
+      (ph) => `SELECT job_id, line,
               COALESCE(SUM((julianday(ended_at) - julianday(started_at)) * 86400), 0) AS tracked_seconds
        FROM cutting_sessions
-       WHERE status = 'closed' AND job_id IN (${placeholders})
-       GROUP BY job_id, line`
-    ).bind(...jobIds).all<any>();
+       WHERE status = 'closed' AND job_id IN (${ph})
+       GROUP BY job_id, line`,
+      jobIds
+    );
 
     const durByKey = new Map<string, number>();
     for (const row of (durationRows.results || [])) {
@@ -313,11 +335,12 @@ export async function GET() {
     }
 
     // Per-line checklist progress: (job, line, line_item) → completed (+ qty, reserved).
-    const progressRows = await DB.prepare(
-      `SELECT job_id, line, line_item_id, completed, completed_qty
+    const progressRows = await allByJobIds(
+      (ph) => `SELECT job_id, line, line_item_id, completed, completed_qty
        FROM cutting_line_progress
-       WHERE job_id IN (${placeholders})`
-    ).bind(...jobIds).all<any>();
+       WHERE job_id IN (${ph})`,
+      jobIds
+    );
 
     const progressByJob = new Map<
       string,
