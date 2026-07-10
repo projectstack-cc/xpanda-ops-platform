@@ -93,6 +93,21 @@ export async function handleApiJobs(request, env) {
 
   // ── GET ──────────────────────────────────────────────────────────────────
   if (request.method === "GET") {
+    // Cleanup-on-read: auto-archive abandoned jobs (real ship date >14 days old, not shipped or
+    // actively loading). Pages Advanced Mode has no cron, so this mirrors the saved-loads
+    // TTL-on-read pattern to keep active-job counts bounded. Best-effort — a sweep failure must
+    // never break the board. Idempotent: a no-op write when nothing is newly stale.
+    try {
+      await db.prepare(
+        `UPDATE jobs SET status = 'archived', updated_at = ?
+         WHERE status NOT IN ('archived','shipped','loading')
+           AND ship_date IS NOT NULL AND ship_date <> ''
+           AND ship_date < date('now','-14 days')`
+      ).bind(new Date().toISOString()).run();
+    } catch (e) {
+      console.error("stale-job auto-archive sweep failed:", e);
+    }
+
     const searchParam    = (url.searchParams.get("search") || "").trim();
     const weekParam      = (url.searchParams.get("week")   || "").trim();
     const statusParam    = (url.searchParams.get("status") || "").trim();
