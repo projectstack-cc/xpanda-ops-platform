@@ -857,39 +857,66 @@ async function loadBolDocuments(s) {
   if (!s || !s.job_id) return;
   try {
     const { ok, data } = await api.get('/api/bols?job_id=' + encodeURIComponent(s.job_id));
-    const bols = (ok && data && Array.isArray(data.bols)) ? data.bols : [];
-    if (!bols.length) return;
+    const all = (ok && data && Array.isArray(data.bols)) ? data.bols : [];
+    if (!all.length) return;
+
+    // Dedupe to the latest BOL per load_number (regenerations can leave stale rows), then
+    // order by load. Mirrors the rule viewBolForJob already uses. No load_number => key 0.
+    const byLoad = {};
+    for (const b of all) {
+      const ln = (b.load_number != null) ? Number(b.load_number) : 0;
+      const prev = byLoad[ln];
+      if (!prev || String(b.created_at || '') > String(prev.created_at || '')) byLoad[ln] = b;
+    }
+    const bols = Object.keys(byLoad).sort((a, c) => Number(a) - Number(c)).map(k => byLoad[k]);
 
     const labelFor = (t) => t === 'driver_signed'   ? 'Driver — signed'
                           : t === 'customer_signed' ? 'Customer — signed' : t;
-    const blocks = [];
-    for (const bol of bols) {
-      let docs = [];
+
+    // Fetch every BOL's stored copies in parallel. Tolerate either response envelope
+    // ({ data: { data: [] } } or { data: [] }); mark real failures instead of swallowing them.
+    const results = await Promise.all(bols.map(async (bol) => {
       try {
         const dRes = await api.get('/api/bols/' + encodeURIComponent(bol.id) + '/documents');
-        const dArr = dRes.data && dRes.data.data;
-        docs = (dRes.ok && Array.isArray(dArr)) ? dArr : [];
-      } catch (e) {}
+        const body = dRes && dRes.data;
+        const arr = Array.isArray(body) ? body
+                  : (body && Array.isArray(body.data)) ? body.data
+                  : null;
+        if (!arr) return { bol, docs: [], failed: true };
+        return { bol, docs: arr, failed: false };
+      } catch (e) {
+        console.error('loadBolDocuments: documents fetch failed for BOL', bol.id, e);
+        return { bol, docs: [], failed: true };
+      }
+    }));
+
+    const blocks = results.map(({ bol, docs, failed }) => {
+      const loadLabel = (bol.load_number != null && bol.load_count != null && Number(bol.load_count) > 1)
+        ? `Load ${esc(String(bol.load_number))} of ${esc(String(bol.load_count))} — `
+        : '';
       const signedLinks = docs.map(d =>
         `<a href="/api/bols/documents/${esc(d.id)}" target="_blank" rel="noopener" style="font-size:13px;">📄 ${esc(labelFor(d.doc_type))}</a>`
       ).join('');
-      blocks.push(
-        `<div style="margin-bottom:8px;padding:8px;border:1px solid var(--input-border);border-radius:8px;">
-          <div style="font-size:12px;color:var(--muted,#4b5563);margin-bottom:4px;">BOL ${esc(bol.bol_number || bol.id)}</div>
+      const fallback = failed
+        ? '<span style="font-size:12px;color:var(--danger,#ef4444);">Could not load signed copies</span>'
+        : '<span style="font-size:12px;color:var(--muted,#4b5563);">No signed copies yet</span>';
+      return `<div style="margin-bottom:8px;padding:8px;border:1px solid var(--input-border);border-radius:8px;">
+          <div style="font-size:12px;color:var(--muted,#4b5563);margin-bottom:4px;">${loadLabel}BOL ${esc(bol.bol_number || bol.id)}</div>
           <div style="display:flex;flex-wrap:wrap;gap:10px;">
             <a href="#" onclick="event.preventDefault();viewBolForJob('${esc(s.job_id)}')" style="font-size:13px;">📄 View BOL</a>
-            ${signedLinks || '<span style="font-size:12px;color:var(--muted,#4b5563);">No signed copies yet</span>'}
+            ${signedLinks || fallback}
           </div>
-        </div>`
-      );
-    }
+        </div>`;
+    });
+
     const _u = window.__xpandaUser;
     const _isMgr = _u && (_u.isAdministrator || (_u.permissions && _u.permissions['logistics.loading.manage'] && _u.permissions['logistics.loading.manage'].edit));
     const delBtn = _isMgr
-      ? `<button onclick="deleteAllBolsForJob('${esc(s.job_id)}', ${bols.length})" style="margin-left:auto;font-size:12px;color:var(--danger,#ef4444);background:none;border:1px solid var(--danger,#ef4444);border-radius:6px;padding:2px 8px;cursor:pointer;">Delete all BOLs</button>`
+      ? `<button onclick="deleteAllBolsForJob('${esc(s.job_id)}', ${all.length})" style="margin-left:auto;font-size:12px;color:var(--danger,#ef4444);background:none;border:1px solid var(--danger,#ef4444);border-radius:6px;padding:2px 8px;cursor:pointer;">Delete all BOLs</button>`
       : '';
     host.innerHTML = `<div style="display:flex;align-items:center;font-weight:600;font-size:13px;margin:4px 0 6px;">Documents${delBtn}</div>${blocks.join('')}`;
   } catch (e) {
+    console.error('loadBolDocuments failed:', e);
     host.innerHTML = '';
   }
 }
