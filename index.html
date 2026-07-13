@@ -167,7 +167,7 @@
 
   /* Module action buttons — unified slate primary */
   .hp-btn-safety, .hp-btn-qc, .hp-btn-reports, .hp-btn-jobs,
-  .hp-btn-logistics, .hp-btn-loading, .hp-btn-production, .hp-btn-admin {
+  .hp-btn-logistics, .hp-btn-loading, .hp-btn-production, .hp-btn-admin, .hp-btn-cutting {
     background: var(--primary-bg);
     color: var(--primary-text);
   }
@@ -180,6 +180,7 @@
   .hp-icon-logistics  { background: #f1f5f9; color: #334155; }
   .hp-icon-loading    { background: #dbeafe; color: #1e40af; }
   .hp-icon-production { background: #fef3c7; color: #92400e; }
+  .hp-icon-cutting    { background: #d1fae5; color: #065f46; }
   .hp-icon-admin      { background: #f1f5f9; color: #334155; }
 
   [data-theme="dark"] .hp-icon-safety     { background: rgba(37,99,235,.18);  color: #93c5fd; }
@@ -189,6 +190,7 @@
   [data-theme="dark"] .hp-icon-logistics  { background: rgba(71,85,105,.30);  color: #cbd5e1; }
   [data-theme="dark"] .hp-icon-loading    { background: rgba(37,99,235,.18);  color: #93c5fd; }
   [data-theme="dark"] .hp-icon-production { background: rgba(217,119,6,.18);  color: #fcd34d; }
+  [data-theme="dark"] .hp-icon-cutting    { background: rgba(16,185,129,.18); color: #6ee7b7; }
   [data-theme="dark"] .hp-icon-admin      { background: rgba(71,85,105,.30);  color: #cbd5e1; }
 
   /* ── Notification bell ─────────────────────────── */
@@ -357,6 +359,17 @@
       <div class="hp-card-desc">Block calculator, holey board calculator, cutting dashboard</div>
       <div class="hp-card-actions">
         <a class="hp-btn hp-btn-production" href="/manufacturing/">Open</a>
+      </div>
+    </article>
+
+    <article class="hp-card" data-permission="manufacturing.cutting">
+      <div class="hp-card-head">
+        <div class="hp-card-icon hp-icon-cutting"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg></div>
+        <div class="hp-card-title">Cutting</div>
+      </div>
+      <div class="hp-card-desc">Live cutting floor board — clock in, hand off, complete lines</div>
+      <div class="hp-card-actions">
+        <a class="hp-btn hp-btn-cutting" href="/v2/cutting">Open</a>
       </div>
     </article>
 
