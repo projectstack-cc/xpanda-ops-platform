@@ -159,7 +159,7 @@ export const PATH_PERMISSION_MAP = [
   { pattern: /^\/logistics\/load-builder/,                                    key: 'logistics.load-builder' },
   { pattern: /^\/logistics\/loading/,                                         key: 'logistics.loading' },
   { pattern: /^\/logistics\//,                                                key: 'logistics.dashboard' },
-  { pattern: /^\/manufacturing\/cutting-dashboard/,                           key: 'manufacturing.cutting' },
+  { pattern: /^\/manufacturing\/(_archived\/)?cutting-dashboard/,             key: 'manufacturing.cutting' },
   { pattern: /^\/manufacturing\//,                                            key: 'manufacturing.calculators' },
   { pattern: /^\/production\//,                                               key: 'production.inventory' },
   { pattern: /^\/qc\//,                                                       key: 'qc' },

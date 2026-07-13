@@ -35,9 +35,9 @@ document.getElementById('mfg-page-subtitle').textContent = 'Production calculato
     <p>Calculate chunks needed for board orders with thickness optimization</p>
   </a>
 
-  <a class="mfg-tile" href="/manufacturing/cutting-dashboard.html">
+  <a class="mfg-tile mfg-cutting-link" href="/v2/cutting">
     <h2>Cutting Dashboard</h2>
-    <p>Live status of cutting operations across the floor — coming soon</p>
+    <p>Live status of cutting operations across the floor — clock in, hand off, and complete lines</p>
   </a>
 </div>
 
@@ -64,7 +64,7 @@ async function gateMfgNav() {
       document.querySelectorAll('a[href*="block-calculator"], a[href*="holey-board"]').forEach(el => el.style.display = 'none');
     }
     if (!perms['manufacturing.cutting']?.view) {
-      document.querySelectorAll('a[href*="cutting-dashboard"]').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.mfg-cutting-link').forEach(el => el.style.display = 'none');
     }
   } catch {}
 }
