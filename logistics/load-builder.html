@@ -1900,7 +1900,30 @@ function planDissolve(result, srcTi) {
     row.totalUnits = row.columns.reduce((s, c) => s + c.stackCount, 0);
     row.totalWeight = row.columns.reduce((s, c) => s + c.totalWeight, 0);
   });
-  const srcRowsLeft = srcRows.filter(row => row.columns.length);
+  let srcRowsLeft = srcRows.filter(row => row.columns.length);
+
+  // Removing units in place leaves partially-emptied rows full of holes. Re-pack the
+  // leftovers through the untouched auto-pack (calcLoading) so the source trailer comes
+  // back dense. Bail to the fragmented rows if the re-pack doesn't reconcile exactly.
+  if (srcRowsLeft.length) {
+    const leftoverQty = new Map();
+    let leftoverPieces = 0;
+    srcRowsLeft.forEach(row => row.columns.forEach(col => col.layers.forEach(l => {
+      leftoverQty.set(l.skuId, (leftoverQty.get(l.skuId) || 0) + l.count);
+      leftoverPieces += l.count;
+    })));
+    const leftoverCart = [...leftoverQty.entries()].map(([skuId, qty]) => ({ skuId, qty }));
+    let repacked = null;
+    try {
+      repacked = calcLoading(leftoverCart, state.skus, dims, state.variant);
+    } catch (err) {
+      console.warn('dissolve: source re-pack failed, keeping fragmented rows', err);
+      repacked = null;
+    }
+    if (repacked && repacked.trailers.length === 1 && repacked.trailers[0].totalUnits === leftoverPieces) {
+      srcRowsLeft = repacked.trailers[0].rows;
+    }
+  }
 
   // Assemble survivors in original order; drop the source if fully dissolved.
   const survivors = [];
