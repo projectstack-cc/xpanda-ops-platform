@@ -230,6 +230,19 @@
             <option value="done">Done</option>
           </select>
         </div>
+        <div class="jobs-field" style="flex:1;margin-bottom:0;">
+          <label for="f-priority-level">Priority</label>
+          <select id="f-priority-level">
+            <option value="0">Normal</option>
+            <option value="1">Elevated</option>
+            <option value="2">High</option>
+            <option value="3">Critical</option>
+          </select>
+        </div>
+        <label for="f-rush" style="flex-shrink:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin-bottom:9px;cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" id="f-rush" style="width:18px;height:18px;cursor:pointer;" />
+          Rush
+        </label>
         <button id="modal-view-bol" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;">View BOL</button>
       </div>
 
@@ -697,6 +710,17 @@ function listStatusChange(jobId, newStatus) {
   moveCard(jobId, newStatus);
 }
 
+const PRIORITY_LABELS = ['', 'Elevated', 'High', 'Critical'];
+
+function priorityBadge(job) {
+  if (job.priority === 'rush') {
+    return ` <span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.03em;background:var(--danger-bg);color:var(--danger-text);">RUSH</span>`;
+  }
+  const lvl = Number(job.priority_level || 0);
+  if (lvl <= 0) return '';
+  return ` <span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.03em;background:var(--warn-bg);color:var(--warn-text);">${PRIORITY_LABELS[lvl]}</span>`;
+}
+
 function renderList(jobs) {
   renderListTabs();
   const tbody = document.getElementById('list-tbody');
@@ -723,7 +747,7 @@ function renderList(jobs) {
     tr.onmouseout  = () => { tr.style.background = ''; };
     tr.onclick     = () => openModal(job.id);
     tr.innerHTML = `
-      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}</td>
+      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}${priorityBadge(job)}</td>
       <td style="padding:9px 12px;font-size:13px;">${esc(job.customer || '')}</td>
       <td style="padding:9px 12px;font-size:13px;color:var(--text-muted);">${esc(formatShipDate(job.ship_date)) || '—'}</td>
       <td style="padding:9px 12px;font-size:13px;text-align:right;">${job.total_bdft ? Number(job.total_bdft).toLocaleString() : '—'}</td>
@@ -1621,6 +1645,9 @@ function populateForm(job) {
   set('f-total-bdft',     job.total_bdft  ?? 0);
   set('f-scrap-pickup',   job.scrap_pickup);
   set('f-status',         job.status || 'not_started');
+  set('f-priority-level', String(job.priority_level ?? 0));
+  const rushEl = document.getElementById('f-rush');
+  if (rushEl) rushEl.checked = (job.priority === 'rush');
   set('f-contact-name',   job.contact_name);
   set('f-contact-phone',  job.contact_phone);
   set('f-packing',        job.packing_instructions);
@@ -1801,6 +1828,8 @@ async function saveJob() {
       payload.id = editingJobId;
       if (!document.getElementById('status-section').hidden) {
         payload.status = document.getElementById('f-status').value;
+        payload.priority_level = Number(document.getElementById('f-priority-level').value);
+        payload.priority = document.getElementById('f-rush').checked ? 'rush' : 'normal';
       }
     }
 

@@ -16,7 +16,7 @@ export async function handleApiJobs(request, env) {
     j.location, j.delivery_time, j.method, j.carrier, j.load_count, j.total_bdft,
     j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
     j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
-    j.priority, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
+    j.priority, j.priority_level, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
     j.packing_slip_filename, j.packing_slip_invoice, j.source,
     CASE WHEN EXISTS (SELECT 1 FROM shipments s WHERE s.job_id = j.id AND s.direction = 'outbound') THEN 1 ELSE 0 END AS has_shipment,
     (SELECT GROUP_CONCAT(la.trailer_number, ', ')
@@ -410,6 +410,13 @@ export async function handleApiJobs(request, env) {
       if (!["normal", "rush"].includes(v))
         return json({ ok: false, error: "Invalid priority." }, 400);
       sets.push("priority = ?"); binds.push(v);
+    }
+
+    if ("priority_level" in payload) {
+      const n = Number(payload.priority_level);
+      if (!Number.isInteger(n) || n < 0 || n > 3)
+        return json({ ok: false, error: "Invalid priority level." }, 400);
+      sets.push("priority_level = ?"); binds.push(n);
     }
 
     const textFields = [
