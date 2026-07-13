@@ -3,6 +3,12 @@ import { MessageSquare, Camera } from "lucide-react";
 import { JobStatusPill } from "@/components/StatusPill";
 import type { CuttingJob } from "./types";
 
+const PRIORITY_LABELS: Record<1 | 2 | 3, string> = {
+  1: "Elevated",
+  2: "High",
+  3: "Critical",
+};
+
 interface Props {
   job: CuttingJob;
   isActive: boolean;
@@ -34,6 +40,15 @@ export default function JobRow({ job, isActive, onClick, onViewPhotos }: Props) 
             <span className="font-mono tabular-nums text-xs text-muted">
               {job.invoice_number}
             </span>
+            {job.priority === "rush" ? (
+              <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold tracking-wide bg-[var(--danger-bg)] text-[var(--danger-text)]">
+                RUSH
+              </span>
+            ) : (job.priority_level ?? 0) > 0 ? (
+              <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold tracking-wide bg-[var(--warn-bg)] text-[var(--warn-text)]">
+                {PRIORITY_LABELS[job.priority_level as 1 | 2 | 3]}
+              </span>
+            ) : null}
             {hasHandoffNote && (
               <MessageSquare
                 size={12}

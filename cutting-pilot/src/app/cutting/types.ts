@@ -30,6 +30,7 @@ export interface CuttingJob {
   ship_date: string | null;
   status: string;
   priority: string;
+  priority_level: number | null;
   requiredLines: string[];
   lines: CuttingLine[];
   photos: { session_id: string; line: string }[];

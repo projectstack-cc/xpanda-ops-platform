@@ -145,7 +145,6 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [ ] Cutting v2: port notifications bell + settings gear into `PlatformHeader` once v2 notification backend exists (deferred from P212)
 - [ ] Deploy + domain attach (Steve — requires wrangler auth + real hostname; workers.dev cannot host the cookie-shared `/v2/*` route)
 - [x] Auth-bridge + operator loop validation — validated end-to-end on the real host (clock-in→handoff→complete→job-done)
-- [ ] Priority ordering — v2 cutting queue sort + badge (P239; consumes P238's priority_level + rush)
 - [x] Nav/cutover surfacing — P234 repointed the Manufacturing tile at `/v2/cutting`; no separate header nav link (P213 deliberately decided against one; that decision stands)
 - [ ] Block-calc engine landed as a pure module in P228 (`blockEngine.ts`) + save route + `blocks_needed`. Remaining: the planner screen (P229), non-taper chunk model, per-job block-dimension defaults, regenerate-on-change.
 - [ ] Taper blocks-needed (materials pull): compute `ceil(chunks ÷ chunks-per-block)` once a chunks-per-block datum exists.
