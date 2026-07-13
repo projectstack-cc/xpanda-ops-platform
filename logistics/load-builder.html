@@ -1800,6 +1800,21 @@ function cloneRows(rows) {
   }));
 }
 
+// Reassign stored layout geometry (posFromFront / posY / rowWidthUsed) after rows or
+// columns have been added or removed. buildTopViewSVG + buildPrintSvg render from these
+// stored fields, so any structural mutation must reflow them or the diagram goes stale.
+function reflowRowGeometry(rows) {
+  let posFromFront = 0;
+  (rows || []).forEach(row => {
+    row.posFromFront = posFromFront;
+    let posY = 0;
+    row.columns.forEach(col => { col.posY = posY; posY += col.colWidth; });
+    row.rowWidthUsed = row.columns.reduce((s, c) => s + c.colWidth, 0);
+    posFromFront += row.rowLength;
+  });
+  return rows;
+}
+
 // Recompute a column's height/stacks/mixed/identity/label from its layers (NOT weight).
 function recomputeColumnGeom(col) {
   col.layers = mergeLayers(col.layers);
@@ -1901,6 +1916,7 @@ function planDissolve(result, srcTi) {
   const invMap = {};
   const oldToNew = {};
   const trailers = survivors.map((sv, newTi) => {
+    reflowRowGeometry(sv.rows);
     const stats = buildTrailerStats(sv.rows, dims);
     if (sv.carry.downsizedType) { stats.downsizedType = sv.carry.downsizedType; stats.downsizedDims = sv.carry.downsizedDims; }
     if (sv.carry.forcedType) stats.forcedType = sv.carry.forcedType;
