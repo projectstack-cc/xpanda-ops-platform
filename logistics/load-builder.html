@@ -2531,7 +2531,7 @@ function openBolModal(result) {
       freightTerms: 'prepaid', specialInstructions: '',
       carryOver: true,
     };
-    if (state.prefillJobData && i === 0) {
+    if (state.prefillJobData) {
       const job = state.prefillJobData;
       td.jobId          = job.id;
       td.shipToCompany  = job.ship_to_company  || job.customer || '';
@@ -2545,7 +2545,7 @@ function openBolModal(result) {
       td.contactName    = job.contact_name     || '';
       td.contactPhone   = job.contact_phone    || '';
       td.poNumber       = job.po_number        || '';
-      td.invNumber      = job.invoice_number   || job.packing_slip_invoice || '';
+      td.invNumber      = td.invNumber || job.invoice_number || job.packing_slip_invoice || '';
       td.deliveryTime   = job.delivery_time    || '';
       td.date           = job.ship_date        || today;
     }

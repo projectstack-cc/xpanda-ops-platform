@@ -388,6 +388,21 @@ export async function handleApiBols(request, env) {
 
     let access_token = generateAccessToken();
 
+    // P241 guard: a BOL arriving with no job_id but a known bol_group_id inherits the group's
+    // job link from a already-linked sibling. Belt-and-braces against any client path that
+    // fails to send job_id — and it re-arms the token-preserving dedupe below, which is gated
+    // on job_id and was therefore skipped entirely for orphaned rows (hence the duplicate rows).
+    if (!payload.job_id && payload.bol_group_id) {
+      try {
+        const sib = await db.prepare(
+          "SELECT job_id FROM bols WHERE bol_group_id = ? AND job_id IS NOT NULL LIMIT 1"
+        ).bind(String(payload.bol_group_id).trim()).first();
+        if (sib && sib.job_id) payload.job_id = sib.job_id;
+      } catch (e) {
+        console.error('bols POST: bol_group_id job link inheritance failed', e);
+      }
+    }
+
     // Regenerate-replaces-previous: when this BOL belongs to a job and a specific load, remove any
     // prior BOL for that same job+load so regenerations don't pile up stale rows (and bloat D1).
     // Preserve the most-recent prior access_token so a previously printed tracking QR still works.
