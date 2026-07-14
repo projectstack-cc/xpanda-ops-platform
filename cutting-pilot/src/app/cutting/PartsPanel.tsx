@@ -6,13 +6,14 @@ interface Props {
   line: string;
   onToggle: (lineItemId: string, completed: boolean) => void;
   onSetYield?: (yieldPerChunk: number) => void;
+  onSetChunkTarget?: (qtyTarget: number) => void;
   busy: boolean;
 }
 
 // Docked parts checklist for a single cutting line (the operator's clocked-in line).
 // Cross Cutter / Hole Cutter really work in chunks; until the block-calc BOM is wired, every line
 // shows the same parts list and the chunk note below stands in.
-export default function PartsPanel({ job, line, onToggle, onSetYield, busy }: Props) {
+export default function PartsPanel({ job, line, onToggle, onSetYield, onSetChunkTarget, busy }: Props) {
   const items = job.line_items ?? [];
   const prog = job.progress?.[line] ?? {};
   const doneCount = items.filter((it) => prog[it.id]?.completed).length;
@@ -115,14 +116,70 @@ export default function PartsPanel({ job, line, onToggle, onSetYield, busy }: Pr
               </div>
             );
           }
+          const isFabricator =
+            line === "Cross Cutter" && (job.requiredLines?.length ?? 0) === 1;
+          const unitWord = isFabricator ? "parts" : "chunks";
+          const blocks = job.blocks_needed;
+
+          if (line === "Cross Cutter") {
+            return (
+              <div className="m-3 rounded border border-border px-3 py-2.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  {isFabricator ? "Parts to cut" : "Chunks to cut"}
+                </span>
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="—"
+                    defaultValue={lineRow.qty_target ?? ""}
+                    disabled={busy}
+                    aria-label={`${unitWord} to cut`}
+                    onBlur={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (v > 0 && v !== lineRow.qty_target) onSetChunkTarget?.(v);
+                    }}
+                    className="w-24 min-h-[44px] rounded border border-border bg-surface px-2 py-1 font-mono tabular-nums text-sm text-text disabled:opacity-50"
+                  />
+                  <span className="text-xs text-muted">{unitWord}</span>
+                </div>
+                <p className="text-xs text-muted mt-2">
+                  {lineRow.qty_target != null && blocks != null ? (
+                    <>
+                      <span className="font-mono tabular-nums text-sm text-text">
+                        {lineRow.qty_target}
+                      </span>{" "}
+                      {unitWord} out of{" "}
+                      <span className="font-mono tabular-nums text-sm text-text">{blocks}</span>{" "}
+                      {blocks === 1 ? "block" : "blocks"}
+                    </>
+                  ) : blocks != null ? (
+                    <>
+                      <span className="font-mono tabular-nums text-sm text-text">{blocks}</span>{" "}
+                      {blocks === 1 ? "block" : "blocks"} needed — set the {unitWord} count
+                    </>
+                  ) : (
+                    <>Save a cut plan to see blocks needed.</>
+                  )}
+                </p>
+              </div>
+            );
+          }
+
+          // Hole Cutter: drills the chunks the Cross Cutter made — mirrors that target, read-only.
           return (
-            <div className="m-3 rounded border border-dashed border-border px-3 py-2.5 opacity-70">
+            <div className="m-3 rounded border border-border px-3 py-2.5">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Chunks required — coming soon
+                Chunks to drill
               </span>
-              <p className="text-xs text-muted mt-1">
-                {line} works in chunks; counts list here once the block-calculator engine is wired.
+              <p className="font-mono tabular-nums text-sm text-text mt-1">
+                {lineRow.qty_target ?? "—"}
               </p>
+              {lineRow.qty_target == null && (
+                <p className="text-xs text-muted mt-1">
+                  Set on the Cross Cutter — this line mirrors it.
+                </p>
+              )}
             </div>
           );
         }
