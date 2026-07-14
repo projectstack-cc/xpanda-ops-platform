@@ -163,6 +163,25 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
     }
   }
 
+  async function setChunkTarget(qtyTarget: number) {
+    if (!selectedJob) return;
+    setChecklistBusy(true);
+    try {
+      const res = await fetch("/v2/api/cutting/chunk-target", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: selectedJob.id, qty_target: qtyTarget }),
+      });
+      const data = await res.json();
+      if (!data.ok) showToast(data.error || "Failed to set chunk target.", false);
+      await fetchQueue(true);
+    } catch {
+      showToast("Network error.", false);
+    } finally {
+      setChecklistBusy(false);
+    }
+  }
+
   async function clockIn(jobId: string, line: string) {
     setActing(true);
     try {
@@ -503,6 +522,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
                         toggleChecklistItem(myLineOnJob, itemId, completed)
                       }
                       onSetYield={(y) => setTaperYield(y)}
+                      onSetChunkTarget={(q) => setChunkTarget(q)}
                       busy={checklistBusy}
                     />
                   </aside>

@@ -135,7 +135,7 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [ ] Block-calc planner: 2D canvas cut diagram (port the legacy Canvas render) — optional polish.
 - [ ] Block-calc: optional per-setup secondary/scrap nesting (small parts into a big part's block remnants) — the old single-part secondaries feature, re-expressed per setup, if yield demands it.
 - [ ] Block-calc: 2D cut diagram per setup (port the legacy Canvas) — optional polish.
-- [ ] Non-taper Cross Cutter chunk model (replace manual entry with a real chunk/parts-per-chunk relationship; ties into the hole-cutter chunk-inventory idea).
+- [ ] Cutting route is tribal knowledge (supervisor decides which line cuts which axis; Main Line can chunk, Blue Line can run standalone). Consider capturing the route on the job so chunk/part targets stop depending on unwritten context.
 - [ ] Wire scrap capture into `<CompleteLineModal>` once the native scrap DB lands (reason + cubic-in + shift + density; derive operator/inv/line/date from session+job; no Laminate scrap)
 - [ ] Material-consumption capture at line-complete — needs a job→block_inventory link + on-hand block picker (block_consumption_log decrements real stock)
 - [ ] Cut-list photo polish if asked: multi-photo per session, lightbox zoom, delete/replace, retention cleanup
