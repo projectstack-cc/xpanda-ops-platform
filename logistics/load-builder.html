@@ -583,7 +583,7 @@ function sortDemandPriority(demand, variant = 0) {
   });
 }
 
-function buildDemand(cart, skus, dims) {
+function buildDemand(cart, skus, dims, isFlatbed = false) {
   return cart.map(c => {
     const sku = skus.find(s => s.id === c.skuId);
     if (!sku) return null;
@@ -605,10 +605,20 @@ function buildDemand(cart, skus, dims) {
       { length: sku.height, width: sku.width,  height: sku.length, label: ' (stood up rotated)' },
     ];
 
+    // Flatbed only: the longest side must not run across the trailer width, or the load
+    // can't be strapped. Drop orientations whose across-width dimension is the longest side;
+    // fall back to the full set only if that would leave nothing (e.g. a cube).
+    let candidates = orientations;
+    if (isFlatbed) {
+      const maxSide = Math.max(sku.length, sku.width, sku.height);
+      const strappable = orientations.filter(o => o.width < maxSide);
+      if (strappable.length) candidates = strappable;
+    }
+
     let bestOrientation = null;
     let bestScore = -1;
 
-    for (const o of orientations) {
+    for (const o of candidates) {
       if (o.length > dims.length || o.width > dims.width || o.height > dims.height) continue;
       const columnsPerRow = Math.floor(dims.width / o.width);
       const rowsPerTrailer = Math.floor(dims.length / o.length);
@@ -829,7 +839,7 @@ function getFullTrailerThreshold(sku, dims) {
 
 function calcLoading(cart, skus, dims, variant = 0, options = {}) {
   if (!cart.length) return { trailers: [], warnings: [], totalWeight: 0, utilization: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 };
-  let demand = buildDemand(cart, skus, dims);
+  let demand = buildDemand(cart, skus, dims, options.isFlatbed === true);
   const warnings = [], floorArea = dims.length * dims.width, trailers = [];
   cart.forEach(c => {
     const sku = skus.find(s => s.id === c.skuId);
@@ -1313,7 +1323,7 @@ function getResult() {
   const dims = getDims();
   const effectiveDims = state.runnerHeight > 0 ? { ...dims, height: dims.height - state.runnerHeight } : dims;
   const sorted = getSortedSkus();
-  const autoResult = calcLoading(state.cart, sorted, effectiveDims, state.variant);
+  const autoResult = calcLoading(state.cart, sorted, effectiveDims, state.variant, { isFlatbed: state.trailerType === '48ft Flatbed' });
   if (!Object.keys(state.manualRowsByTrailer).length) return autoResult;
   const trailers = autoResult.trailers.map((t, i) => {
     const manualRows = state.manualRowsByTrailer[i];
@@ -1915,7 +1925,7 @@ function planDissolve(result, srcTi) {
     const leftoverCart = [...leftoverQty.entries()].map(([skuId, qty]) => ({ skuId, qty }));
     let repacked = null;
     try {
-      repacked = calcLoading(leftoverCart, state.skus, dims, state.variant);
+      repacked = calcLoading(leftoverCart, state.skus, dims, state.variant, { isFlatbed: state.trailerType === '48ft Flatbed' });
     } catch (err) {
       console.warn('dissolve: source re-pack failed, keeping fragmented rows', err);
       repacked = null;
