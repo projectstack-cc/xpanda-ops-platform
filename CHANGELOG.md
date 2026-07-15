@@ -183,6 +183,15 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P243** — Holey Board thickness→HB part matching at packing-slip intake. Parser
+  (`jobs/packing-slip-parser.js`) gains `extractThickness()` and emits `thickness` on Holey
+  Board / Insulperm line items (trailing inch value; parenthetical footprints stripped; foot
+  marks ignored). Matcher (`jobs/index.html` `matchLineItemToPart`) adds height-keyed **Pass 3b:
+  Holey Board by thickness** — matches `category === 'Holey Board'` parts by `height_in ≈
+  thickness` (±0.1), ignoring L/W (printed footprint is 24"x48", reversed vs catalog 48x24), with
+  a Siplast/1.0# tiebreak; method `holey_board_thickness`. Fixes real Siplast/GAF slips whose
+  `(24" x 48") x N"` layout broke the L×W×H regex so no HB pass fired. Existing Pass 3 retained as
+  fallback. Frontend-only; no DB/worker/migration.
 - **P238** — Dual-input job priority: base ship-date ordering plus a manual graded `priority_level` (0–3: Normal/Elevated/High/Critical, new column, migration `add-priority-level.sql`) and the **existing** `jobs.priority='rush'` reused as a pin-to-top flag (previously validated in the worker but surfaced in no UI). Worker exposes `priority_level` in `JOB_LIST_COLS` and validates it on PUT (POST untouched — new jobs take the schema default). Job board gains a Priority select + Rush checkbox in the edit-mode status section and a tokenized RUSH/level badge on the list view. No new permission key (`jobs` edit already gates the writes). Cutting-queue sort consumes this in P239. **Run `add-priority-level.sql` in D1 before deploying the worker.**
 - **P232** — Auto-archive abandoned jobs (cleanup-on-read): the jobs list GET now runs a best-effort sweep that sets `status='archived'` for jobs with a real `ship_date` more than 14 days old that aren't already `archived`/`shipped`/`loading`. Mirrors the saved-loads TTL-on-read pattern (Pages Advanced Mode has no cron); idempotent and wrapped in try/catch so a sweep failure can't break the board. Keeps active-job counts bounded — the upstream pressure behind the P231 queue-variable 500. `status`-only, no cascade, no schema change.
 - **P173** — Stop duplicating dimensions on BOL commodity: `jobs/index.html` parse-review no longer appends the structured `dimensions` field to the line-item description (the description already contains inline dims for SKU-less parts); `dimensions` field and Dims input are unchanged. Also extends `pickCommodityTier` ladder in `bol-shared.js` from 3 tiers (floor size 20) to 6 tiers (floor size 10, lineH 12) so long commodity lists shrink gracefully instead of overflowing the box. Affects new jobs only; existing merged descriptions are not backfilled.

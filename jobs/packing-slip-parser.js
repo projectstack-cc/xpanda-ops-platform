@@ -207,6 +207,19 @@ window.PackingSlipParser = (function () {
    * Handles diverse product types: Block Foam, Laminates, Holey Board, Plugs, etc.
    * Filters out "notes" pseudo-items and zero-quantity items.
    */
+  // Extract a Holey Board thickness (the trailing inch value) from an item's text.
+  // Strips parenthetical footprints like (24" x 48") first, then takes the LAST
+  // `x <num>"` token. Requires an inch mark (straight/curly/double-prime) so foot
+  // marks (2' x 4') are ignored. Returns a number or null.
+  function extractThickness(text) {
+    if (!text) return null;
+    const stripped = String(text).replace(/\([^)]*\)/g, ' ');
+    const m = [...stripped.matchAll(/[xX×]\s*(\d+(?:\.\d+)?)\s*["\u201C\u201D\u2033]/g)];
+    if (!m.length) return null;
+    const t = parseFloat(m[m.length - 1][1]);
+    return isNaN(t) ? null : t;
+  }
+
   function parseLineItems(groups, descriptionY) {
     const items = [];
     let current = null;
@@ -294,6 +307,12 @@ window.PackingSlipParser = (function () {
             .slice(0, 200);
         }
         item.qty_unit = /BDFT\s*per\s*piece/i.test(item._descLines.join(' ')) ? 'bdft' : 'pcs';
+        // Holey Board / Insulperm: capture trailing thickness for height-keyed part matching.
+        const _thkSrc = [item.category, item.description, ...(item._descLines || [])].join(' ');
+        if (/holey board|insulperm/i.test(_thkSrc)) {
+          const _thk = extractThickness(_thkSrc);
+          if (_thk != null) item.thickness = _thk;
+        }
         delete item._isNotes;
         delete item._descLines;
         return item;
