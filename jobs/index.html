@@ -1427,6 +1427,36 @@ function matchLineItemToPart(lineItem, partsLibrary) {
     }
   }
 
+  // Pass 3b: Holey Board by thickness (footprint-agnostic). HB is always 48x24 and the
+  // catalog is keyed by height_in, so a trailing thickness alone identifies the SKU. Prefer
+  // the parser-supplied lineItem.thickness; fall back to deriving it from the item text
+  // (parenthetical footprints stripped) so paren-wrapped slips still match. Match on
+  // height_in only — the printed footprint is often 24"x48" (reversed vs catalog).
+  {
+    const isHB = desc.includes('holey board') || desc.includes('insulperm') || /\bHB\b/i.test(desc) ||
+                 cat.includes('holey board') || /\bHB\b/i.test(cat);
+    let thickness = (typeof lineItem.thickness === 'number') ? lineItem.thickness : null;
+    if (isHB && thickness == null) {
+      const src = (dims + ' ' + desc + ' ' + cat).replace(/\([^)]*\)/g, ' ');
+      const tm = [...src.matchAll(/[xX×]\s*(\d+(?:\.\d+)?)\s*["\u201C\u201D\u2033]/g)];
+      if (tm.length) thickness = parseFloat(tm[tm.length - 1][1]);
+    }
+    if (isHB && thickness != null && !isNaN(thickness)) {
+      const hbByThk = partsLibrary.filter(p =>
+        p.category === 'Holey Board' && Math.abs(p.height_in - thickness) <= 0.1
+      );
+      if (hbByThk.length) {
+        const pref = hbByThk.find(p => {
+          const h = (p.name + ' ' + p.part_number + ' ' + p.customer + ' ' + p.density_material).toLowerCase();
+          if (desc.includes('siplast') || cat.includes('siplast')) return h.includes('siplast');
+          if (desc.includes('1.0') || cat.includes('1.0')) return h.includes('1.0');
+          return false;
+        });
+        return { part: (pref || hbByThk[0]), method: 'holey_board_thickness' };
+      }
+    }
+  }
+
   // Pass 3: Holey Board by height
   if ((desc.includes('holey board') || desc.includes('insulperm') || /\bHB\b/i.test(desc) ||
        cat.includes('holey board') || /\bHB\b/i.test(cat)) && parsedDims) {
