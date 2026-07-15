@@ -1525,7 +1525,12 @@ async function prefillForm(data) {
     const matchedLineItems = data.line_items.map(li => {
       const result = matchLineItemToPart(li, partsLibrary);
       if (result) {
-        return { ...li, part_id: result.part.id, part_number: result.part.part_number, matched_part_name: result.part.name || result.part.part_number, match_method: result.method };
+        const _pd = result.part;
+        const _num = (v) => (v == null || isNaN(v)) ? null : String(parseFloat(v));
+        const _partDims = [_num(_pd.length_in), _num(_pd.width_in), _num(_pd.height_in)].every(Boolean)
+          ? `${_num(_pd.length_in)}" x ${_num(_pd.width_in)}" x ${_num(_pd.height_in)}"`
+          : '';
+        return { ...li, part_id: result.part.id, part_number: result.part.part_number, matched_part_name: result.part.name || result.part.part_number, match_method: result.method, _partDims };
       }
       return { ...li, part_id: null, match_method: 'none' };
     });
@@ -1540,7 +1545,7 @@ async function prefillForm(data) {
         part_number: li.part_number || '',
         description: desc,
         quantity:    li.quantity ?? 1,
-        dimensions:  li.dimensions || '',
+        dimensions:  li.dimensions || li._partDims || '',
         qty_unit:    li.qty_unit || 'pcs',
       });
       row.querySelectorAll('input').forEach(inp => highlight(inp));
