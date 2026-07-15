@@ -429,6 +429,9 @@
         <div class="jobs-li-footer">
           <button type="button" class="btn ghost small" id="btn-add-li">+ Add Line Item</button>
           <button type="button" class="btn ghost small" id="btn-load-parts">From Parts Library</button>
+          <label class="jobs-checkbox-row" style="margin-left:auto;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;" title="Sales sometimes enters total board feet instead of a piece count. Uses each row's Dimensions to convert BDFT → pieces.">
+            <input type="checkbox" id="li-bdft-convert"> Qty entered as BDFT — convert to pieces
+          </label>
         </div>
       </div>
 
@@ -1272,6 +1275,8 @@ function setupModal() {
   });
 
   document.getElementById('btn-add-li').addEventListener('click', () => addLineItemRow());
+  const bdftConvertEl = document.getElementById('li-bdft-convert');
+  if (bdftConvertEl) bdftConvertEl.addEventListener('change', (e) => toggleBdftConvert(e.target.checked));
   document.getElementById('btn-load-parts').addEventListener('click', openPartsPicker);
   document.getElementById('btn-link-combo').addEventListener('click', openComboPicker);
 
@@ -1732,6 +1737,44 @@ function setModalStatus(msg, isError) {
 /* ═══════════════════════════════════════════
    Line items
 ═══════════════════════════════════════════ */
+
+// Board-foot → piece conversion for the job-entry line items.
+// BDFT per piece = (L × W × H) / 144 (inches). Needs all three dims; returns null otherwise.
+function liBdftPerPiece(dimStr) {
+  if (!dimStr) return null;
+  const parts = String(dimStr).replace(/[“”„‟""]/g, '"').split(/\s*[x×X]\s*/i);
+  if (parts.length < 3) return null;
+  const num = (s) => {
+    s = String(s).replace(/["'\s]/g, '').trim();
+    let m = s.match(/^(\d+)-(\d+)\/(\d+)$/); if (m) return +m[1] + (+m[2] / +m[3]);
+    m = s.match(/^(\d+)\/(\d+)$/);           if (m) return +m[1] / +m[2];
+    const n = parseFloat(s); return isNaN(n) ? null : n;
+  };
+  const L = num(parts[0]), W = num(parts[1]), H = num(parts[2]);
+  if ([L, W, H].some(v => v == null || v <= 0)) return null;
+  return (L * W * H) / 144;
+}
+
+// Toggle: on → convert each convertible row's Qty (interpreted as total BDFT) to pieces,
+// stashing the original on the row; off → restore originals. Rows without 3 dims or a Qty
+// are left untouched.
+function toggleBdftConvert(on) {
+  document.querySelectorAll('#li-container .jobs-li-row').forEach(row => {
+    const qtyEl = row.querySelector('.li-qty');
+    if (!qtyEl) return;
+    if (on) {
+      const bpp  = liBdftPerPiece(row.querySelector('.li-dims') ? row.querySelector('.li-dims').value : '');
+      const bdft = parseFloat(qtyEl.value);
+      if (bpp && bdft > 0) {
+        row.dataset.bdftOrig = qtyEl.value;
+        qtyEl.value = Math.round(bdft / bpp);
+      }
+    } else if (row.dataset.bdftOrig != null) {
+      qtyEl.value = row.dataset.bdftOrig;
+      delete row.dataset.bdftOrig;
+    }
+  });
+}
 
 function addLineItemRow(data) {
   const isBdft = data?.qty_unit === 'bdft';

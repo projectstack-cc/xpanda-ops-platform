@@ -183,6 +183,11 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P245** — Job-entry "Qty entered as BDFT — convert to pieces" checkbox in the line-items
+  footer. Bulk-converts each convertible row's Qty from total board feet to a piece count using
+  `pieces = round(BDFT ÷ ((L×W×H)/144))` from the row's Dimensions; reversible (unchecking
+  restores originals via `row.dataset.bdftOrig`); rows without three dimensions or a Qty are
+  skipped. New helpers `liBdftPerPiece`/`toggleBdftConvert`. Frontend-only, `jobs/index.html`.
 - **P244** — Backfill line-item Dimensions from the matched part when the packing-slip parser
   produced none. `prefillForm` now carries the matched part's canonical dims (`length_in` ×
   `width_in` × `height_in`, formatted `L" x W" x H"`) onto the mapped line item as `_partDims`,
