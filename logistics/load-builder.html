@@ -605,13 +605,15 @@ function buildDemand(cart, skus, dims, isFlatbed = false) {
       { length: sku.height, width: sku.width,  height: sku.length, label: ' (stood up rotated)' },
     ];
 
-    // Flatbed only: the longest side must not run across the trailer width, or the load
-    // can't be strapped. Drop orientations whose across-width dimension is the longest side;
-    // fall back to the full set only if that would leave nothing (e.g. a cube).
+    // Flatbed only (two rules): the longest side may run neither across the trailer width
+    // (can't strap it) nor vertically (can't stack it on its shortest side) — so it must lie
+    // along the trailer length. Drop any orientation whose across-width OR vertical axis is the
+    // longest side. Fall back to the full set only if that leaves nothing (cube / two equal
+    // longest sides), so the SKU is never dropped.
     let candidates = orientations;
     if (isFlatbed) {
       const maxSide = Math.max(sku.length, sku.width, sku.height);
-      const strappable = orientations.filter(o => o.width < maxSide);
+      const strappable = orientations.filter(o => o.width !== maxSide && o.height !== maxSide);
       if (strappable.length) candidates = strappable;
     }
 

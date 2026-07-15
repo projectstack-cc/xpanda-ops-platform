@@ -82,6 +82,12 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P247** — Load Builder flatbed stacking constraint (companion to P246): on `48ft Flatbed`
+  loads a part's longest side may no longer stand vertical (can't be stacked on its shortest
+  side). Extends the P246 flatbed orientation filter in `buildDemand` to drop orientations whose
+  across-width **or** vertical axis is the part's longest side — so the longest side must run
+  along the trailer length. Cube / two-equal-long-side fallback retained; scoring math,
+  `STORAGE_KEY`, and Holey Board unchanged. Frontend-only, `logistics/load-builder.html`.
 - **P246** — Load Builder flatbed strapping constraint: on `48ft Flatbed` loads, a part's longest
   side may no longer be oriented across the trailer width (can't be strapped otherwise). Additive,
   flatbed-only filter in `buildDemand` — narrows the candidate orientation set (drops orientations
