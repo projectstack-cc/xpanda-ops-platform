@@ -183,6 +183,12 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P244** — Backfill line-item Dimensions from the matched part when the packing-slip parser
+  produced none. `prefillForm` now carries the matched part's canonical dims (`length_in` ×
+  `width_in` × `height_in`, formatted `L" x W" x H"`) onto the mapped line item as `_partDims`,
+  and the row build uses `li.dimensions || li._partDims || ''`. Parsed dims still win when
+  present; fixes blank Dimensions on Holey Board rows matched by P243's thickness pass (whose
+  `(24" x 48") x N"` layout the L×W×H regex can't parse). Frontend-only, `jobs/index.html`.
 - **P243** — Holey Board thickness→HB part matching at packing-slip intake. Parser
   (`jobs/packing-slip-parser.js`) gains `extractThickness()` and emits `thickness` on Holey
   Board / Insulperm line items (trailing inch value; parenthetical footprints stripped; foot
