@@ -82,6 +82,14 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P248** — Correct the flatbed orientation rule (supersedes the P246/P247 filter): flatbed
+  parts are now forced to lie FLAT on their largest face — `buildDemand` keeps only the
+  orientation where `length === longest side` and `height (stacking axis) === shortest side`
+  (width = middle dim). P246/P247 only pinned the longest side to the length, leaving the on-edge
+  orientation legal (e.g. a 96×21×3 stacking on its 3″ edge); this pins all three axes so it lays
+  flat with the longest side down the trailer length. Orientation always exists → no SKU dropped;
+  scoring math, `STORAGE_KEY`, box-truck downsize, and Holey Board unchanged. Frontend-only,
+  `logistics/load-builder.html`.
 - **P247** — Load Builder flatbed stacking constraint (companion to P246): on `48ft Flatbed`
   loads a part's longest side may no longer stand vertical (can't be stacked on its shortest
   side). Extends the P246 flatbed orientation filter in `buildDemand` to drop orientations whose

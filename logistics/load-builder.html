@@ -605,15 +605,16 @@ function buildDemand(cart, skus, dims, isFlatbed = false) {
       { length: sku.height, width: sku.width,  height: sku.length, label: ' (stood up rotated)' },
     ];
 
-    // Flatbed only (two rules): the longest side may run neither across the trailer width
-    // (can't strap it) nor vertically (can't stack it on its shortest side) — so it must lie
-    // along the trailer length. Drop any orientation whose across-width OR vertical axis is the
-    // longest side. Fall back to the full set only if that leaves nothing (cube / two equal
-    // longest sides), so the SKU is never dropped.
+    // Flatbed only: lay every part FLAT on its largest face — shortest side vertical, longest
+    // side running the length of the trailer (never across the width, never standing on end).
+    // That is the only orientation that both straps and stacks: length === longest side AND
+    // height (stacking axis) === shortest side; the width then takes the middle dimension. Such
+    // an orientation always exists, so the fallback never fires and no SKU is dropped.
     let candidates = orientations;
     if (isFlatbed) {
       const maxSide = Math.max(sku.length, sku.width, sku.height);
-      const strappable = orientations.filter(o => o.width !== maxSide && o.height !== maxSide);
+      const minSide = Math.min(sku.length, sku.width, sku.height);
+      const strappable = orientations.filter(o => o.length === maxSide && o.height === minSide);
       if (strappable.length) candidates = strappable;
     }
 
