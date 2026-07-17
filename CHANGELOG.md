@@ -82,6 +82,20 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P250** — Multi-load BOL matching on loading bay cards. Each `loading_assignments` row
+  (one per load, `load_number`) maps 1:1 to a BOL via that same `load_number` (P170's contract,
+  with a NULL fallback for legacy single-BOL jobs) — but the card's View BOL button ignored it:
+  `viewBolForJob(a.job_id)` always grabbed `data.bols[data.bols.length - 1]`, so every card on a
+  multi-load job opened the same (last) BOL, and `bol_count` was computed per-job, so a card for
+  a load with no BOL of its own still showed an enabled button that found nothing.
+  `logistics/loading.html`: the button now passes the card's `load_number`
+  (`viewBolForJob(a.job_id, a.load_number ?? null)`); the function matches `data.bols` by that
+  `load_number`, falling back to a lone NULL-`load_number` legacy BOL, and alerts (no silent
+  wrong-BOL) if nothing matches. `_worker.js/routes/loading.js`: `bol_count` in the assignment
+  SELECT now counts only BOLs matching the assignment's own `load_number` (plus the same
+  lone-legacy fallback), so the button disables correctly per-load. No migration, no permission
+  change, trailer back-write/`bol-shared.js`/photo count untouched. `node --check` clean on
+  `loading.js`; anchors re-confirmed single-occurrence pre/post edit.
 - **P248** — Correct the flatbed orientation rule (supersedes the P246/P247 filter): flatbed
   parts are now forced to lie FLAT on their largest face — `buildDemand` keeps only the
   orientation where `length === longest side` and `height (stacking axis) === shortest side`
