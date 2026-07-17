@@ -2121,9 +2121,9 @@ function renderResultsTab() {
     if (result.trailers.length > 1) tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => openDissolvePreview(ti) }, 'DISSOLVE → OTHER'));
     tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => {
       const dense = repackTrailerDense(trailer.rows, trailerDims);
-      const beforeCols = (trailer.rows || []).reduce((s, r) => s + r.columns.length, 0);
-      const afterCols = (dense || []).reduce((s, r) => s + r.columns.length, 0);
-      if (dense === trailer.rows || afterCols >= beforeCols) { showToast('Load already compact — nothing to shift.', 'warn'); return; }
+      if (dense === trailer.rows) { showToast('Couldn’t compact this trailer — kept current layout.', 'warn'); return; }
+      const sig = rs => (rs || []).map(r => r.rowLength + '/' + r.columns.map(c => c.colWidth + ':' + c.layers.map(l => l.skuId + 'x' + l.count).join('+')).join('|')).join(';');
+      if (sig(dense) === sig(trailer.rows)) { showToast('Load already compact — nothing to shift.', 'warn'); return; }
       state.manualRowsByTrailer[ti] = dense;
       showToast('Load refreshed — pieces shifted to fill gaps.', 'success');
       render();
