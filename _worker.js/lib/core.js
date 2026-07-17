@@ -172,6 +172,7 @@ export const API_PERMISSION_MAP = [
   { pattern: /^\/api\/roles/,              key: 'admin' },
   { pattern: /^\/api\/activity-log/,       key: 'admin' },
   { pattern: /^\/api\/jobs/,              key: 'jobs' },
+  { pattern: /^\/api\/address/,           key: 'jobs' },
   { pattern: /^\/api\/bols/,              key: 'logistics.bol' },
   { pattern: /^\/api\/bol-customers/,     key: 'logistics.bol' },
   { pattern: /^\/api\/bol-carriers/,      key: 'logistics.bol' },

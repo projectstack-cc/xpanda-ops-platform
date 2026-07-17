@@ -4,7 +4,7 @@ import { handleApiLoadingBays, handleApiLoadingAssignments, handleApiLoadingPhot
 import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers, handleApiBols,
          handleApiPartsSeed, handleApiLoadBuilderSkusDeleteAll, handleApiLoadBuilderSkus,
          handleApiSavedLoads } from './routes/bols.js';
-import { handleApiJobs, handleApiShipments } from './routes/jobs.js';
+import { handleApiJobs, handleApiShipments, handleApiAddressValidate } from './routes/jobs.js';
 import { handleApiCutting } from './routes/cutting.js';
 import { handleApiParts, handleApiCombos, handleApiBeadTypes, handleApiBeadStock,
          handleApiBlockInventory, handleApiMoldingLog, handleApiBlockConsumption } from './routes/production.js';
@@ -67,6 +67,7 @@ const API_ROUTES = [
   { prefix: '/api/qb', handler: (req, env) => handleApiQuickbooks(req, env) },
 
   // Jobs / shipments / manufacturing
+  { path: '/api/address/validate', method: 'POST', handler: (req, env) => handleApiAddressValidate(req, env) },
   { prefix: '/api/jobs',      handler: (req, env) => handleApiJobs(req, env) },
   { path:   '/api/shipments', handler: (req, env) => handleApiShipments(req, env) },
   { prefix: '/api/cutting',   handler: (req, env) => handleApiCutting(req, env) },

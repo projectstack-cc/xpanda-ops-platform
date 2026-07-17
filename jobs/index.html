@@ -281,6 +281,7 @@
             <span id="ship-to-chevron" style="font-size:12px; transition:transform 0.2s;">&#9658;</span>
             <label style="cursor:pointer; font-weight:600; font-size:13px;">Ship-To Address</label>
             <span id="ship-to-summary" style="font-size:12px; color:var(--muted); margin-left:4px;"></span>
+            <span id="ship-to-verify-badge" style="margin-left:4px;"></span>
           </div>
           <div id="ship-to-fields" hidden>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
@@ -533,6 +534,7 @@ let calendarMonth    = new Date();
 let editingJobId     = null;
 let pendingSlip      = null;
 let pendingSlipRemoved = false;
+let originalShipTo   = null; // snapshot of loaded job's ship-to fields, for edit-change detection
 let selectedComboId  = null;
 let selectedComboName = '';
 let partsCache      = null;
@@ -724,6 +726,30 @@ function priorityBadge(job) {
   return ` <span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.03em;background:var(--warn-bg);color:var(--warn-text);">${PRIORITY_LABELS[lvl]}</span>`;
 }
 
+// Ship-to address verification (Lob) status pill. `unverified` (the pre-feature/never-validated
+// default) is suppressed on cards/list to avoid noise across every legacy job — it's still shown
+// on the edit form, where there's no such noise cost.
+const SHIP_TO_VERIFY_STYLES = {
+  verified:      { label: 'Verified',      bg: 'var(--success-bg)', text: 'var(--success-text)' },
+  corrected:     { label: 'Standardized',  bg: 'var(--info-bg)',    text: 'var(--info-text)', border: 'var(--info-border)' },
+  kept_original: { label: 'Kept Original', bg: 'var(--warn-bg)',    text: 'var(--warn-text)',  border: 'var(--warn-border)' },
+  unverifiable:  { label: 'Unverifiable',  bg: 'var(--warn-bg)',    text: 'var(--warn-text)',  border: 'var(--warn-border)' },
+  unverified:    { label: 'Unverified',    bg: 'var(--ghost-bg)',   text: 'var(--muted)',      border: 'var(--line)' },
+};
+
+function shipToVerifiedBadge(status, showUnverified) {
+  const s = SHIP_TO_VERIFY_STYLES[status];
+  if (!s) return '';
+  if (status === 'unverified' && !showUnverified) return '';
+  const border = s.border ? `border:1px solid ${s.border};` : '';
+  return ` <span style="display:inline-block;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.03em;background:${s.bg};color:${s.text};${border}">${s.label}</span>`;
+}
+
+function renderShipToVerifyBadge(status) {
+  const el = document.getElementById('ship-to-verify-badge');
+  if (el) el.innerHTML = shipToVerifiedBadge(status, true);
+}
+
 function renderList(jobs) {
   renderListTabs();
   const tbody = document.getElementById('list-tbody');
@@ -750,7 +776,7 @@ function renderList(jobs) {
     tr.onmouseout  = () => { tr.style.background = ''; };
     tr.onclick     = () => openModal(job.id);
     tr.innerHTML = `
-      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}${priorityBadge(job)}</td>
+      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}${priorityBadge(job)}${shipToVerifiedBadge(job.ship_to_verified)}</td>
       <td style="padding:9px 12px;font-size:13px;">${esc(job.customer || '')}</td>
       <td style="padding:9px 12px;font-size:13px;color:var(--text-muted);">${esc(formatShipDate(job.ship_date)) || '—'}</td>
       <td style="padding:9px 12px;font-size:13px;text-align:right;">${job.total_bdft ? Number(job.total_bdft).toLocaleString() : '—'}</td>
@@ -966,6 +992,7 @@ function buildCard(job) {
     ${procHtml}
     ${trailerBadge}
     ${loadingBadge}
+    ${shipToVerifiedBadge(job.ship_to_verified) ? `<div style="margin-top:4px;">${shipToVerifiedBadge(job.ship_to_verified)}</div>` : ''}
     <button id="bol-view-btn-${esc(job.id)}" class="jobs-bol-view-btn" hidden onclick="event.stopPropagation();viewBolForJob('${esc(job.id)}')">View BOL</button>
     ${job.status === 'shipped' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
     ${job.status === 'archived' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to shipped">Unarchive</button>` : ''}
@@ -1644,6 +1671,8 @@ function clearForm() {
   document.getElementById('ship-to-fields').hidden = true;
   document.getElementById('ship-to-chevron').style.transform = '';
   document.getElementById('ship-to-summary').textContent = '';
+  originalShipTo = null;
+  renderShipToVerifyBadge(null);
 
   document.getElementById('f-ship-day-display').textContent = '';
   document.getElementById('f-method').value       = '';
@@ -1704,6 +1733,16 @@ function populateForm(job) {
     document.getElementById('ship-to-fields').hidden = false;
     document.getElementById('ship-to-chevron').style.transform = 'rotate(90deg)';
   }
+
+  originalShipTo = {
+    company:   (job.ship_to_company   || '').trim(),
+    attention: (job.ship_to_attention || '').trim(),
+    street:    (job.ship_to_street    || '').trim(),
+    city:      (job.ship_to_city      || '').trim(),
+    state:     (job.ship_to_state     || '').trim(),
+    zip:       (job.ship_to_zip       || '').trim(),
+  };
+  renderShipToVerifyBadge(job.ship_to_verified);
 
   document.getElementById('f-ship-day-display').textContent = getShipDay(job.ship_date);
 
@@ -1837,6 +1876,65 @@ function showComboBadge(id, name) {
 }
 
 /* ═══════════════════════════════════════════
+   Ship-to address verification (Lob)
+═══════════════════════════════════════════ */
+
+// True when creating (no snapshot yet) or any ship-to field differs from the loaded job.
+function shipToChanged(current) {
+  if (!originalShipTo) return true;
+  const curCompany   = document.getElementById('f-ship-to-company').value.trim();
+  const curAttention = document.getElementById('f-ship-to-attention').value.trim();
+  return (
+    curCompany     !== originalShipTo.company   ||
+    curAttention   !== originalShipTo.attention ||
+    current.street !== originalShipTo.street    ||
+    current.city   !== originalShipTo.city      ||
+    current.state  !== originalShipTo.state     ||
+    current.zip    !== originalShipTo.zip
+  );
+}
+
+// Fail-open: any non-ok response or network error is treated as unverifiable so entry is never blocked.
+async function validateShipToAddress(fields) {
+  const r = await api.post('/api/address/validate', fields);
+  if (!r.ok || !r.data || !r.data.data) return { status: 'unverifiable' };
+  return r.data.data;
+}
+
+function formatAddressLines(a) {
+  const lines = [
+    [a.street, a.street2].filter(Boolean).join(' '),
+    [a.city, a.state, a.zip].filter(Boolean).join(', '),
+  ].filter(Boolean);
+  return lines.map(esc).join('<br>') || '<span style="color:var(--text-hint);">—</span>';
+}
+
+// Resolves 'use_suggested' or 'keep_original' once the operator picks a button.
+function openAddressCorrectionModal(entered, standardized) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('address-correct-modal');
+    document.getElementById('addr-correct-entered').innerHTML      = formatAddressLines(entered);
+    document.getElementById('addr-correct-standardized').innerHTML = formatAddressLines(standardized);
+
+    const useBtn  = document.getElementById('addr-correct-use');
+    const keepBtn = document.getElementById('addr-correct-keep');
+
+    const finish = (choice) => {
+      modal.hidden = true;
+      useBtn.removeEventListener('click', onUse);
+      keepBtn.removeEventListener('click', onKeep);
+      resolve(choice);
+    };
+    const onUse  = () => finish('use_suggested');
+    const onKeep = () => finish('keep_original');
+
+    useBtn.addEventListener('click', onUse);
+    keepBtn.addEventListener('click', onKeep);
+    modal.hidden = false;
+  });
+}
+
+/* ═══════════════════════════════════════════
    Save / Delete
 ═══════════════════════════════════════════ */
 
@@ -1894,6 +1992,46 @@ async function saveJob() {
     payload.packing_slip_pdf      = null;
     payload.packing_slip_filename = '';
     payload.packing_slip_invoice  = '';
+  }
+
+  // ── Ship-to address verification (Lob) ────────────────────────────────────
+  // Fires once per save: on create, or on edit only when a ship-to field changed
+  // vs. the loaded job (status is persisted, so unchanged addresses don't re-fire).
+  const shipToFields = {
+    street:  payload.ship_to_street,
+    street2: payload.ship_to_street2,
+    city:    payload.ship_to_city,
+    state:   payload.ship_to_state,
+    zip:     payload.ship_to_zip,
+  };
+  const hasShipToAddress   = !!(shipToFields.street && shipToFields.city && shipToFields.state && shipToFields.zip);
+  const shouldValidateShipTo = hasShipToAddress && (!editingJobId || shipToChanged(shipToFields));
+
+  if (shouldValidateShipTo) {
+    setModalStatus('Verifying ship-to address…');
+    const result = await validateShipToAddress(shipToFields);
+    let finalStatus = result.status;
+
+    if (result.status === 'corrected' && result.standardized) {
+      const choice = await openAddressCorrectionModal(shipToFields, result.standardized);
+      if (choice === 'use_suggested') {
+        payload.ship_to_street  = result.standardized.street  || payload.ship_to_street;
+        payload.ship_to_street2 = result.standardized.street2 || '';
+        payload.ship_to_city    = result.standardized.city    || payload.ship_to_city;
+        payload.ship_to_state   = result.standardized.state   || payload.ship_to_state;
+        payload.ship_to_zip     = result.standardized.zip     || payload.ship_to_zip;
+        finalStatus = 'corrected';
+      } else {
+        finalStatus = 'kept_original';
+      }
+    } else if (result.status === 'unverifiable') {
+      showToast("Address couldn't be verified — saved as entered.");
+    }
+
+    payload.ship_to_verified     = finalStatus;
+    payload.ship_to_standardized = result.standardized || null;
+    payload.ship_to_verified_at  = new Date().toISOString();
+    setModalStatus('');
   }
 
   const btn = document.getElementById('modal-save');
@@ -2198,6 +2336,34 @@ gateJobsWrite();
       </div>
     </div>
     <iframe id="jobs-bol-view-iframe" style="flex:1;width:100%;border:none;background:#525659;"></iframe>
+  </div>
+</div>
+
+<!-- Ship-to address verification: correction modal (Lob standardized vs entered) -->
+<div class="jobs-modal-overlay" id="address-correct-modal" hidden style="z-index:200;">
+  <div class="jobs-modal-panel" style="max-width:520px;" role="dialog" aria-modal="true" aria-labelledby="addr-correct-title">
+    <div class="jobs-modal-header">
+      <h2 id="addr-correct-title" style="font-size:16px;">Verify Ship-To Address</h2>
+    </div>
+    <div class="jobs-modal-body">
+      <p style="font-size:13px;color:var(--muted);margin:0 0 14px;">
+        The carrier's address verification suggests a standardized version of this address.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div>
+          <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin:0 0 4px;">Entered</p>
+          <p id="addr-correct-entered" style="font-size:13px;line-height:1.5;margin:0;"></p>
+        </div>
+        <div>
+          <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin:0 0 4px;">Standardized</p>
+          <p id="addr-correct-standardized" style="font-size:13px;line-height:1.5;margin:0;"></p>
+        </div>
+      </div>
+    </div>
+    <div class="jobs-modal-footer">
+      <button class="btn primary" id="addr-correct-use">Use suggested</button>
+      <button class="btn ghost" id="addr-correct-keep">Keep original</button>
+    </div>
   </div>
 </div>
 

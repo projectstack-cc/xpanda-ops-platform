@@ -17,7 +17,7 @@ export async function handleApiJobs(request, env) {
     j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
     j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
     j.priority, j.priority_level, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
-    j.packing_slip_filename, j.packing_slip_invoice, j.source,
+    j.packing_slip_filename, j.packing_slip_invoice, j.source, j.ship_to_verified,
     CASE WHEN EXISTS (SELECT 1 FROM shipments s WHERE s.job_id = j.id AND s.direction = 'outbound') THEN 1 ELSE 0 END AS has_shipment,
     (SELECT GROUP_CONCAT(la.trailer_number, ', ')
        FROM loading_assignments la
@@ -84,7 +84,12 @@ export async function handleApiJobs(request, env) {
         .bind(jobId).all();
       return json({
         ok:  true,
-        job: { ...row, processes: safeJsonParse(row.processes, []), line_items: liResult.results || [] },
+        job: {
+          ...row,
+          processes: safeJsonParse(row.processes, []),
+          ship_to_standardized: row.ship_to_standardized ? safeJsonParse(row.ship_to_standardized, null) : null,
+          line_items: liResult.results || [],
+        },
       });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -237,6 +242,10 @@ export async function handleApiJobs(request, env) {
     const ship_to_city         = String(payload.ship_to_city         || "").trim();
     const ship_to_state        = String(payload.ship_to_state        || "").trim();
     const ship_to_zip          = String(payload.ship_to_zip          || "").trim();
+    const ship_to_verified     = String(payload.ship_to_verified     || "unverified").trim();
+    const ship_to_standardized = payload.ship_to_standardized
+      ? JSON.stringify(payload.ship_to_standardized) : null;
+    const ship_to_verified_at  = payload.ship_to_verified_at ? String(payload.ship_to_verified_at) : null;
     const combo_id             = payload.combo_id ? String(payload.combo_id).trim() : null;
     const load_count           = Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1;
     const total_bdft           = Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0;
@@ -285,8 +294,9 @@ export async function handleApiJobs(request, env) {
           priority, confirmed_to_ship, processes, created_at, updated_at,
           packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
           ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
-          ship_to_city, ship_to_state, ship_to_zip
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ship_to_city, ship_to_state, ship_to_zip,
+          ship_to_verified, ship_to_standardized, ship_to_verified_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, status, customer, po_number, invoice_number, ship_date, ship_day,
         location, delivery_time, method, carrier, load_count, total_bdft,
@@ -296,6 +306,7 @@ export async function handleApiJobs(request, env) {
         packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
         ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
         ship_to_city, ship_to_state, ship_to_zip,
+        ship_to_verified, ship_to_standardized, ship_to_verified_at,
       ).run();
 
       // Insert line items
@@ -427,9 +438,15 @@ export async function handleApiJobs(request, env) {
       "packing_slip_filename", "packing_slip_invoice",
       "ship_to_company", "ship_to_attention", "ship_to_street", "ship_to_street2",
       "ship_to_city", "ship_to_state", "ship_to_zip",
+      "ship_to_verified", "ship_to_verified_at",
     ];
     for (const f of textFields) {
       if (f in payload) { sets.push(`${f} = ?`); binds.push(String(payload[f] || "").trim()); }
+    }
+
+    if ("ship_to_standardized" in payload) {
+      const v = payload.ship_to_standardized ? JSON.stringify(payload.ship_to_standardized) : null;
+      sets.push("ship_to_standardized = ?"); binds.push(v);
     }
 
     if ("load_count"        in payload) { sets.push("load_count = ?");        binds.push(Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1); }
@@ -660,6 +677,84 @@ export async function handleApiJobs(request, env) {
   }
 
   return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+
+// =============================================================================
+// HANDLER: /api/address/validate  (POST) — Lob US Verifications (CASS standardize)
+// =============================================================================
+
+export async function handleApiAddressValidate(request, env) {
+  if (!env.LOB_API_KEY) return json({ ok: false, error: 'LOB_API_KEY not configured' }, 500);
+
+  let payload;
+  try { payload = await request.json(); }
+  catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+  const street  = String(payload.street  || "").trim();
+  const street2 = String(payload.street2 || "").trim();
+  const city    = String(payload.city    || "").trim();
+  const state   = String(payload.state   || "").trim();
+  const zip     = String(payload.zip     || "").trim();
+  const db      = env.DB;
+
+  let status, standardized = null, deliverability = null, reason = null;
+
+  try {
+    const form = new URLSearchParams();
+    form.set('primary_line', street);
+    if (street2) form.set('secondary_line', street2);
+    form.set('city', city);
+    form.set('state', state);
+    form.set('zip_code', zip);
+
+    const resp = await fetch('https://api.lob.com/v1/us_verifications', {
+      method: 'POST',
+      headers: {
+        Authorization:  `Basic ${btoa(env.LOB_API_KEY + ':')}`,
+        Accept:         'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: form.toString(),
+    });
+
+    if (!resp.ok) throw new Error(`Lob ${resp.status}: ${await resp.text()}`);
+
+    const lob = await resp.json();
+    deliverability = lob.deliverability;
+
+    if (deliverability === 'undeliverable' || deliverability === 'no_match') {
+      status = 'unverifiable';
+    } else {
+      const components = lob.components || {};
+      standardized = {
+        street:  lob.primary_line   || '',
+        street2: lob.secondary_line || '',
+        city:    components.city            || '',
+        state:   components.state           || '',
+        zip:     components.zip_code        || '',
+        zip4:    components.zip_code_plus_4 || '',
+      };
+      const norm = (s) => String(s || '').trim().toLowerCase();
+      const isExact =
+        norm(standardized.street)  === norm(street)  &&
+        norm(standardized.street2) === norm(street2) &&
+        norm(standardized.city)    === norm(city)    &&
+        norm(standardized.state)   === norm(state)   &&
+        norm(standardized.zip)     === norm(zip);
+      status = isExact ? 'verified' : 'corrected';
+    }
+  } catch (e) {
+    console.error('Address validation (Lob) error — never blocks entry:', String(e?.message || e));
+    status = 'unverifiable';
+    reason = 'lob_error';
+  }
+
+  if (db) {
+    await logActivity(db, 'validate', 'address', null, `Address ${status}`, { city, state, zip, deliverability });
+  }
+
+  return json({ ok: true, data: { status, standardized, deliverability, reason } });
 }
 
 

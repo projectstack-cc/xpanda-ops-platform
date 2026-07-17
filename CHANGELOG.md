@@ -205,6 +205,28 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P249** — Ship-to address verification at job entry, via Lob US Verifications (CASS
+  standardize). New `POST /api/address/validate` (`_worker.js/routes/jobs.js`, gated by the
+  existing `jobs` permission — `/^\/api\/address/` added to `API_PERMISSION_MAP`) posts
+  `{street, street2, city, state, zip}` to Lob with HTTP Basic auth (`LOB_API_KEY` as username,
+  blank password), server-side only. Maps `deliverability`: `undeliverable`/`no_match` →
+  `unverifiable`; otherwise standardizes and compares (case-insensitive/trimmed) to the entered
+  address → `verified` (exact) or `corrected` (differs). Network/Lob errors are caught and
+  degrade to `unverifiable` — the route never blocks. `jobs/index.html` fires this once per save
+  (on create, or on edit only when a ship-to field changed vs. the loaded job — checked via a new
+  `originalShipTo` snapshot) before the existing job POST/PUT: `verified` proceeds silently;
+  `corrected` opens a new correction modal (`Use suggested` / `Keep original`, promise-based,
+  reuses the `.jobs-modal-overlay`/`.jobs-modal-panel` pattern); `unverifiable` shows a
+  non-blocking toast and keeps the entry verbatim. New `ship_to_verified` (enum, default
+  `unverified`), `ship_to_standardized` (JSON), `ship_to_verified_at` columns on `jobs`, threaded
+  through the INSERT/UPDATE paths and parsed back out on the single-job GET; `JOB_LIST_COLS` gains
+  `ship_to_verified` so a small status pill (`shipToVerifiedBadge`) can render on the kanban card,
+  the list-view row, and the edit-form ship-to header — the default `unverified` state is
+  suppressed on cards/list (legacy-job noise) but shown on the edit form. Legacy surface only, no
+  v2/React changes, no new permission key. **Run `DB_Migrations/address-verification.sql` in D1
+  before deploying the worker.** `LOB_API_KEY` Cloudflare Pages secret (production) set for this
+  prompt. `node --check` clean on `_worker.js/index.js`, `routes/jobs.js`, and the extracted
+  `jobs/index.html` script block.
 - **P245** — Job-entry "Qty entered as BDFT — convert to pieces" checkbox in the line-items
   footer. Bulk-converts each convertible row's Qty from total board feet to a piece count using
   `pieces = round(BDFT ÷ ((L×W×H)/144))` from the row's Dimensions; reversible (unchecking
