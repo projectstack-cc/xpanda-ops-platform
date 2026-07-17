@@ -1319,7 +1319,15 @@ async function initSkus() {
 function getResult() {
   const sig = dissolveSig();
   if (state.committedTrailers) {
-    if (state.committedSig === sig) return state.committedTrailers;
+    if (state.committedSig === sig) {
+      if (!Object.keys(state.manualRowsByTrailer).length) return state.committedTrailers;
+      const cDims = getDims();
+      const cTrailers = state.committedTrailers.trailers.map((t, i) => {
+        const manualRows = state.manualRowsByTrailer[i];
+        return manualRows ? buildTrailerStats(manualRows, cDims) : t;
+      });
+      return { ...state.committedTrailers, trailers: cTrailers };
+    }
     state.committedTrailers = null;
     state.committedSig = null;
   }
@@ -1841,6 +1849,33 @@ function recomputeColumnGeom(col) {
   return col;
 }
 
+// Densify one trailer by re-packing ITS OWN pieces through the untouched auto-pack (calcLoading),
+// shifting pieces to fill empties. Top-off only: never adds/removes pieces, never re-nests across
+// trailers, never touches the calcLoading algorithm. Returns dense rows, or the SAME rows reference
+// unchanged if the re-pack can't reconcile exactly (identical guard the dissolve source re-pack uses).
+function repackTrailerDense(rows, dims) {
+  const src = (rows || []).filter(row => row.columns && row.columns.length);
+  if (!src.length) return rows || [];
+  const qtyMap = new Map();
+  let pieces = 0;
+  src.forEach(row => row.columns.forEach(col => col.layers.forEach(l => {
+    qtyMap.set(l.skuId, (qtyMap.get(l.skuId) || 0) + l.count);
+    pieces += l.count;
+  })));
+  const cart = [...qtyMap.entries()].map(([skuId, qty]) => ({ skuId, qty }));
+  let repacked = null;
+  try {
+    repacked = calcLoading(cart, state.skus, dims, state.variant, { isFlatbed: state.trailerType === '48ft Flatbed' });
+  } catch (err) {
+    console.warn('repack: dense re-pack failed, keeping current rows', err);
+    return rows;
+  }
+  if (repacked && repacked.trailers.length === 1 && repacked.trailers[0].totalUnits === pieces) {
+    return repacked.trailers[0].rows;
+  }
+  return rows;
+}
+
 // Pure planner: returns the proposed post-dissolve result + move list. Mutates nothing in state.
 function planDissolve(result, srcTi) {
   const dims = getDims();
@@ -1915,28 +1950,9 @@ function planDissolve(result, srcTi) {
   });
   let srcRowsLeft = srcRows.filter(row => row.columns.length);
 
-  // Removing units in place leaves partially-emptied rows full of holes. Re-pack the
-  // leftovers through the untouched auto-pack (calcLoading) so the source trailer comes
-  // back dense. Bail to the fragmented rows if the re-pack doesn't reconcile exactly.
-  if (srcRowsLeft.length) {
-    const leftoverQty = new Map();
-    let leftoverPieces = 0;
-    srcRowsLeft.forEach(row => row.columns.forEach(col => col.layers.forEach(l => {
-      leftoverQty.set(l.skuId, (leftoverQty.get(l.skuId) || 0) + l.count);
-      leftoverPieces += l.count;
-    })));
-    const leftoverCart = [...leftoverQty.entries()].map(([skuId, qty]) => ({ skuId, qty }));
-    let repacked = null;
-    try {
-      repacked = calcLoading(leftoverCart, state.skus, dims, state.variant, { isFlatbed: state.trailerType === '48ft Flatbed' });
-    } catch (err) {
-      console.warn('dissolve: source re-pack failed, keeping fragmented rows', err);
-      repacked = null;
-    }
-    if (repacked && repacked.trailers.length === 1 && repacked.trailers[0].totalUnits === leftoverPieces) {
-      srcRowsLeft = repacked.trailers[0].rows;
-    }
-  }
+  // Densify the source trailer's leftovers via the shared re-pack helper (top-off only; keeps the
+  // fragmented rows if it can't reconcile exactly — identical behavior to the previous inline block).
+  if (srcRowsLeft.length) srcRowsLeft = repackTrailerDense(srcRowsLeft, dims);
 
   // Assemble survivors in original order; drop the source if fully dissolved.
   const survivors = [];
@@ -2103,6 +2119,15 @@ function renderResultsTab() {
     const tRight = h('div', { className: 'flex gap-8 flex-wrap items-center' });
     tRight.appendChild(h('button', { className: 'btn btn-blue-light', onClick: () => { state.editorTrailer = state.editorTrailer === ti ? null : ti; render(); } }, state.editorTrailer === ti ? 'CLOSE CUSTOMIZE' : 'CUSTOMIZE TRAILER'));
     if (result.trailers.length > 1) tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => openDissolvePreview(ti) }, 'DISSOLVE → OTHER'));
+    tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => {
+      const dense = repackTrailerDense(trailer.rows, trailerDims);
+      const beforeCols = (trailer.rows || []).reduce((s, r) => s + r.columns.length, 0);
+      const afterCols = (dense || []).reduce((s, r) => s + r.columns.length, 0);
+      if (dense === trailer.rows || afterCols >= beforeCols) { showToast('Load already compact — nothing to shift.', 'warn'); return; }
+      state.manualRowsByTrailer[ti] = dense;
+      showToast('Load refreshed — pieces shifted to fill gaps.', 'success');
+      render();
+    } }, 'REFRESH LOAD'));
     if (isManual) tRight.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { delete state.manualRowsByTrailer[ti]; render(); } }, 'CLEAR CUSTOM'));
     const invInput = h('input', { type: 'text', placeholder: 'BOL / INV #', value: state.trailerInvNumbers[ti] || '', className: 'inp', style: { width: '120px', padding: '8px 10px', fontSize: '13px' }, 'data-trailer-inv': String(ti), 'data-auto-filled': 'false' });
     invInput.addEventListener('input', () => {

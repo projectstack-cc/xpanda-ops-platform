@@ -82,6 +82,22 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P251** — Load Builder: customize now applies after DISSOLVE, plus a per-trailer REFRESH LOAD
+  top-off compaction button. Two bugs fixed and one new control:
+  (1) after committing a DISSOLVE, `getResult()` returned `state.committedTrailers` verbatim,
+  bypassing `state.manualRowsByTrailer` entirely — so opening CUSTOMIZE, editing, and applying on
+  a dissolved trailer silently discarded the edit. `getResult()` now layers manual rows over the
+  committed trailers (via `buildTrailerStats`) exactly like the auto-pack path already does.
+  (2) extracted `repackTrailerDense(rows, dims)` — a shared helper that densifies a trailer's
+  current pieces by re-packing them through the untouched `calcLoading` (top-off only: never
+  adds/removes pieces, never re-nests across trailers, bails to the unchanged rows if the re-pack
+  can't reconcile exactly) — from `planDissolve`'s inline source re-pack block. `planDissolve`'s
+  output is unchanged; only the inline block became a call to the helper. (3) new **REFRESH LOAD**
+  button next to DISSOLVE → OTHER on each trailer card: runs `repackTrailerDense` on the trailer's
+  current rows, writes the result to `state.manualRowsByTrailer[ti]`, and re-renders — shifts
+  pieces to fill the empty width lane left after removing a column, without a full re-nest or any
+  change to the auto-pack algorithm. Frontend-only: `logistics/load-builder.html`. No migration.
+
 - **P250** — Multi-load BOL matching on loading bay cards. Each `loading_assignments` row
   (one per load, `load_number`) maps 1:1 to a BOL via that same `load_number` (P170's contract,
   with a NULL fallback for legacy single-BOL jobs) — but the card's View BOL button ignored it:
