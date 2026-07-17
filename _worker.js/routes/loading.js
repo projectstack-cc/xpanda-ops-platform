@@ -101,7 +101,10 @@ export async function handleApiLoadingAssignments(request, env) {
                j.ship_to_city, j.ship_to_state, j.carrier, j.method, j.load_count,
                lb.bay_number, lb.label as bay_label,
                (SELECT COUNT(*) FROM loading_photos lp WHERE lp.job_id = la.job_id) AS photo_count,
-               (SELECT COUNT(*) FROM bols b WHERE b.job_id = la.job_id) AS bol_count
+               (SELECT COUNT(*) FROM bols b WHERE b.job_id = la.job_id
+                 AND (b.load_number = la.load_number
+                      OR (b.load_number IS NULL AND (SELECT COUNT(*) FROM bols b2 WHERE b2.job_id = la.job_id) = 1))
+               ) AS bol_count
         FROM loading_assignments la
         JOIN jobs j ON la.job_id = j.id
         LEFT JOIN loading_bays lb ON la.bay_id = lb.id

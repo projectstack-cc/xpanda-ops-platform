@@ -654,7 +654,7 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
           ? `<button class="ld-btn-advance" onclick="advanceStatus('${a.id}', '${next}')">${getAdvanceLabel(next)}</button>`
           : ''}
         ${a.loading_status !== 'awaiting'
-          ? `<button class="ld-btn-bol" ${(a.bol_count > 0) ? `onclick="viewBolForJob('${a.job_id}')"` : 'disabled title="No BOL generated"'}>View BOL</button>`
+          ? `<button class="ld-btn-bol" ${(a.bol_count > 0) ? `onclick="viewBolForJob('${a.job_id}', ${a.load_number ?? 'null'})"` : 'disabled title="No BOL generated"'}>View BOL</button>`
           : ''}
         <button class="ld-btn-photos" ${(a.photo_count > 0) ? `onclick="photoGallery.openLightbox({ jobId: '${a.job_id}' })"` : 'disabled title="No photos attached"'}>📷 Photos</button>
         ${isManager && a.bay_id && ['not_started','loading','loaded'].includes(a.loading_status)
@@ -1085,7 +1085,7 @@ window.addEventListener('DOMContentLoaded', () => {
 let currentBolBlobUrl = null;
 let currentBolFilename = 'BOL.pdf';
 
-async function viewBolForJob(jobId) {
+async function viewBolForJob(jobId, loadNumber) {
   try {
     const { ok, data } = await api.get('/api/bols?job_id=' + encodeURIComponent(jobId));
 
@@ -1094,7 +1094,14 @@ async function viewBolForJob(jobId) {
       return;
     }
 
-    const bol = data.bols[data.bols.length - 1];
+    // Assignment maps 1:1 to a BOL via load_number (P170). Match this card's load;
+    // fall back to a lone legacy BOL whose load_number predates the field (NULL).
+    let bol = data.bols.find(b => loadNumber != null && b.load_number === loadNumber);
+    if (!bol && data.bols.length === 1) bol = data.bols[0];
+    if (!bol) {
+      alert('No BOL found for this load. Generate its BOL from the Load Builder.');
+      return;
+    }
     const result = await BolShared.generatePdf([bol], { previewOnly: true });
 
     if (currentBolBlobUrl) {
