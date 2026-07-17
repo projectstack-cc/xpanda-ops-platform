@@ -82,6 +82,17 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P252** — Load Builder: fixed the REFRESH LOAD guard (from P251) — it compared column count
+  before/after the re-pack, but compaction manifests as a **shorter load** (rows consolidating
+  along trailer length), while columns-per-row stay flat or rise when the emptied lane gets filled.
+  That made the guard true in exactly the case it was meant to handle, so the button always
+  reported "already compact" and never shifted product. Replaced the column-count check with an
+  arrangement-signature comparison (row length + per-column width + per-layer SKU×count) so the
+  dense result applies whenever the actual arrangement changed; kept a distinct message for the
+  true bail (`repackTrailerDense` returning the same `rows` reference, i.e. couldn't reconcile) so
+  a genuine failure isn't mislabeled "already compact." `repackTrailerDense`, `trailerDims`, and
+  `calcLoading` untouched. Frontend-only: `logistics/load-builder.html`. No migration.
+
 - **P251** — Load Builder: customize now applies after DISSOLVE, plus a per-trailer REFRESH LOAD
   top-off compaction button. Two bugs fixed and one new control:
   (1) after committing a DISSOLVE, `getResult()` returned `state.committedTrailers` verbatim,
