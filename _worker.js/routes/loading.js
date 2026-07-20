@@ -247,6 +247,7 @@ export async function handleApiLoadingAssignments(request, env) {
     const now = new Date().toISOString();
     const updates = [];
     const binds = [];
+    let pendingNotification = null;
 
     if (payload.location !== undefined) {
       if (payload.location === 'yard' && !isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
@@ -343,7 +344,7 @@ export async function handleApiLoadingAssignments(request, env) {
             'loading.delivered': `Delivery confirmed — ${customerName}${invNum ? ' (INV# ' + invNum + ')' : ''}`,
           };
           const notifTitle = notifType.split('.')[1].charAt(0).toUpperCase() + notifType.split('.')[1].slice(1).replace('_', ' ');
-          await dispatchNotification(db, env, notifType, notifTitle, messages[notifType], 'loading_assignment', id);
+          pendingNotification = { type: notifType, title: notifTitle, message: messages[notifType] };
         }
       }
     }
@@ -356,6 +357,19 @@ export async function handleApiLoadingAssignments(request, env) {
 
     try {
       await db.prepare(`UPDATE loading_assignments SET ${updates.join(', ')} WHERE id = ?`).bind(...binds).run();
+      if (pendingNotification) {
+        try {
+          await dispatchNotification(
+            db, env,
+            pendingNotification.type,
+            pendingNotification.title,
+            pendingNotification.message,
+            'loading_assignment', id
+          );
+        } catch (e) {
+          console.error('Loading notification dispatch failed (non-fatal):', String(e?.message || e));
+        }
+      }
       if (payload.loading_status && payload.loading_status !== existing.loading_status) {
         try {
           const shipment = await db.prepare(

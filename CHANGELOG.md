@@ -82,6 +82,19 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P256** — Loading dashboard: hardened the status-transition notification dispatch in the
+  `loading_assignments` PUT handler (`_worker.js/routes/loading.js`). Previously the
+  `dispatchNotification` call ran **before** the `UPDATE loading_assignments` and was `await`ed with
+  no try/catch — a VAPID error, stale push subscription, or any transient dispatch failure would
+  throw, aborting the whole request and returning a 500 that dropped the status change itself, not
+  just the notification. The transition block now stashes the computed notification (type, title,
+  message) in a `pendingNotification` variable instead of dispatching immediately; the actual
+  `dispatchNotification` call moved to right after the `UPDATE` succeeds, inside its own try/catch
+  (mirroring the existing shipment-status-sync pattern in the same block), so a dispatch failure is
+  logged and swallowed and can never block the status change or the operator's response. No change
+  to `typeMap`, message strings, `notifTitle`, or which transitions notify; the QR/public path
+  (`routes/public.js`) and the POST-handler's `loading.assigned` dispatch are untouched.
+
 - **P253** — Driver QR scan: scoped transit/delivery to a single load, restored the In Transit
   notification. `_worker.js/routes/public.js`'s pickup/delivery handlers ignored `bols.load_number`
   entirely — scanning trailer 1's QR flipped **every** trailer on a multi-load job to In Transit
