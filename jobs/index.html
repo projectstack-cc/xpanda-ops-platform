@@ -1738,6 +1738,7 @@ function populateForm(job) {
     company:   (job.ship_to_company   || '').trim(),
     attention: (job.ship_to_attention || '').trim(),
     street:    (job.ship_to_street    || '').trim(),
+    street2:   (job.ship_to_street2   || '').trim(),
     city:      (job.ship_to_city      || '').trim(),
     state:     (job.ship_to_state     || '').trim(),
     zip:       (job.ship_to_zip       || '').trim(),
@@ -1976,7 +1977,6 @@ async function saveJob() {
     ship_to_company:      document.getElementById('f-ship-to-company').value.trim(),
     ship_to_attention:    document.getElementById('f-ship-to-attention').value.trim(),
     ship_to_street:       document.getElementById('f-ship-to-street').value.trim(),
-    ship_to_street2:      '',
     ship_to_city:         document.getElementById('f-ship-to-city').value.trim(),
     ship_to_state:        document.getElementById('f-ship-to-state').value.trim(),
     ship_to_zip:          document.getElementById('f-ship-to-zip').value.trim(),
@@ -1999,7 +1999,7 @@ async function saveJob() {
   // vs. the loaded job (status is persisted, so unchanged addresses don't re-fire).
   const shipToFields = {
     street:  payload.ship_to_street,
-    street2: payload.ship_to_street2,
+    street2: originalShipTo?.street2 || '',
     city:    payload.ship_to_city,
     state:   payload.ship_to_state,
     zip:     payload.ship_to_zip,
@@ -2025,7 +2025,15 @@ async function saveJob() {
         finalStatus = 'kept_original';
       }
     } else if (result.status === 'unverifiable') {
-      showToast("Address couldn't be verified — saved as entered.");
+      console.warn('Address verification diagnostic:', {
+        status: result.status, reason: result.reason, deliverability: result.deliverability,
+        key_mode: result.key_mode, error_detail: result.error_detail,
+      });
+      if (result.reason === 'lob_error') {
+        showToast('Address service unavailable — saved as entered.');
+      } else {
+        showToast('Address not found by USPS — saved as entered.');
+      }
     }
 
     payload.ship_to_verified     = finalStatus;

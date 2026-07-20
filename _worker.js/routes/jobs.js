@@ -18,6 +18,8 @@ export async function handleApiJobs(request, env) {
     j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
     j.priority, j.priority_level, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
     j.packing_slip_filename, j.packing_slip_invoice, j.source, j.ship_to_verified,
+    j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_street2,
+    j.ship_to_city, j.ship_to_state, j.ship_to_zip,
     CASE WHEN EXISTS (SELECT 1 FROM shipments s WHERE s.job_id = j.id AND s.direction = 'outbound') THEN 1 ELSE 0 END AS has_shipment,
     (SELECT GROUP_CONCAT(la.trailer_number, ', ')
        FROM loading_assignments la
@@ -698,7 +700,11 @@ export async function handleApiAddressValidate(request, env) {
   const zip     = String(payload.zip     || "").trim();
   const db      = env.DB;
 
-  let status, standardized = null, deliverability = null, reason = null;
+  let status, standardized = null, deliverability = null, reason = null, errorDetail = null;
+
+  const keyMode = env.LOB_API_KEY.startsWith('test_') ? 'test'
+    : env.LOB_API_KEY.startsWith('live_') ? 'live'
+    : 'unknown';
 
   try {
     const form = new URLSearchParams();
@@ -748,13 +754,15 @@ export async function handleApiAddressValidate(request, env) {
     console.error('Address validation (Lob) error — never blocks entry:', String(e?.message || e));
     status = 'unverifiable';
     reason = 'lob_error';
+    errorDetail = String(e?.message || e).slice(0, 500);
   }
 
   if (db) {
-    await logActivity(db, 'validate', 'address', null, `Address ${status}`, { city, state, zip, deliverability });
+    await logActivity(db, 'validate', 'address', null, `Address ${status}`,
+      { city, state, zip, deliverability, reason, key_mode: keyMode, error_detail: errorDetail });
   }
 
-  return json({ ok: true, data: { status, standardized, deliverability, reason } });
+  return json({ ok: true, data: { status, standardized, deliverability, reason, error_detail: errorDetail, key_mode: keyMode } });
 }
 
 
