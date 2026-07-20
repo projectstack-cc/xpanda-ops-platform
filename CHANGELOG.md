@@ -82,6 +82,27 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P253** — Driver QR scan: scoped transit/delivery to a single load, restored the In Transit
+  notification. `_worker.js/routes/public.js`'s pickup/delivery handlers ignored `bols.load_number`
+  entirely — scanning trailer 1's QR flipped **every** trailer on a multi-load job to In Transit
+  (and later Delivered) at once. Both handlers now select `load_number` and apply the P170
+  NULL-fallback match rule everywhere: a populated `load_number` scopes the `loading_assignments`
+  UPDATE (and sets `in_transit_at`/`delivered_at`) to that one load; a NULL `load_number` (legacy
+  single-BOL job) keeps the prior job-wide behavior. The job-level `shipments` flip to
+  `in_transit`/`delivered` is now gated on **all** non-archived assignments for the job having
+  reached that stage (a single count query after the write; zero assignments still counts as
+  complete). Idempotency guards on both handlers now read the **matched assignment's** status
+  instead of the job-level shipment, so a second driver's scan on a sibling trailer no longer
+  short-circuits with `already: true`. `bol-lookup` derives `stage` from the matched assignment
+  (falls back to job-level shipment if no assignment matches) so each trailer's QR page shows its
+  own stage. Added a `loading.in_transit` dispatch to the pickup handler (previously only fired
+  from the manual dashboard path) — message mirrors the manual path's voice, includes the trailer
+  number when known, wrapped in try/catch so a dispatch failure never breaks the driver response.
+  The existing `loading.delivered` dispatch now only fires once the job-level shipment actually
+  flips (last trailer) to avoid per-trailer spam. No migration — `loading_assignments.load_number`
+  (load-number.sql) and `in_transit_at`/`delivered_at` already existed. No DB migration, no
+  `access_token` handling change, `track/index.html`/`loading.js` untouched.
+
 - **P252** — Load Builder: fixed the REFRESH LOAD guard (from P251) — it compared column count
   before/after the re-pack, but compaction manifests as a **shorter load** (rows consolidating
   along trailer length), while columns-per-row stay flat or rise when the emptied lane gets filled.
@@ -245,6 +266,38 @@ Entries within each module are ordered by prompt # descending (newest first).
 ---
 
 ## Job Board
+
+- **P255** — Lob address verification diagnostic (observability only, no behavior change).
+  Every ship-to address was coming back `unverifiable`, but the handler collapsed two very
+  different failures into that one string: Lob answering `no_match`/`undeliverable` (Path A) vs.
+  the `fetch` throwing or Lob returning non-2xx (Path B, `reason: 'lob_error'`) — and discarded the
+  distinguishing detail to `console.error` only. `handleApiAddressValidate`
+  (`_worker.js/routes/jobs.js`) now captures the caught error into a sanitized `error_detail`
+  (truncated to 500 chars) and derives a `key_mode` (`'test'`/`'live'`/`'unknown'`) from the
+  `LOB_API_KEY` prefix — never the key itself, never logged/stored beyond that one word. Both are
+  added to the response payload (`{ status, standardized, deliverability, reason, error_detail,
+  key_mode }`, additive) and to the `logActivity` details object. `jobs/index.html` replaces the
+  single generic unverifiable toast with a reason-based one (`lob_error` → "Address service
+  unavailable — saved as entered."; otherwise → "Address not found by USPS — saved as entered.")
+  and `console.warn`s the full diagnostic object so Steve can read `key_mode`/`error_detail` from
+  a real save. Save behavior, verification decision logic, and non-blocking guarantee are
+  unchanged — leading hypothesis (test-mode key) to be confirmed from the console output.
+
+- **P254** — Fixed ship-to address silently wiping on every job edit-save. Root cause:
+  `JOB_LIST_COLS` (`_worker.js/routes/jobs.js`) selected `j.ship_to_verified` but never selected
+  the seven `ship_to_*` address columns, so every job object on the board (and thus the edit
+  form, populated from the list payload) was missing its address; saving then sent empty strings,
+  and the PUT handler's correct key-presence guard (`if (f in payload)`) wrote them over good
+  data. Fixed by widening `JOB_LIST_COLS` to include `ship_to_company/attention/street/street2/
+  city/state/zip`. Also fixed a secondary defect: `jobs/index.html` hardcoded
+  `ship_to_street2: ''` into every save payload (there's no street2 form input), destroying any
+  suite/unit line a Lob correction had written on the very next save — the hardcoded key is
+  removed; `shipToFields.street2` (used for the Lob verification call) now reads from the
+  `originalShipTo` snapshot (which gained a `street2` member, sourced from
+  `job.ship_to_street2`) instead, falling back to `''` on create. The one legitimate writer —
+  the address-correction accept branch setting `payload.ship_to_street2` from Lob's suggested
+  `standardized.street2` — is unchanged. No form field added (locked decision); no PUT
+  key-presence-guard change; no per-job GET added.
 
 - **P249** — Ship-to address verification at job entry, via Lob US Verifications (CASS
   standardize). New `POST /api/address/validate` (`_worker.js/routes/jobs.js`, gated by the

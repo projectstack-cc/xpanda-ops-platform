@@ -17,9 +17,25 @@ export async function handleApiPublicBolLookup(request, env) {
     return json({ ok: false, error: 'expired_or_invalid' }, 404);
   }
 
-  // Compute stage from the linked shipment's status (via job_id → shipments).
+  // Compute stage from the matched loading_assignment (per-load, P170 NULL-fallback match).
+  // Falls back to the job-level shipment when no matching assignment exists.
   let stage = 'issued';
+  let matchedAssignment = null;
   if (bol.job_id) {
+    if (bol.load_number != null) {
+      matchedAssignment = await db.prepare(
+        "SELECT loading_status FROM loading_assignments WHERE job_id = ? AND load_number = ? AND loading_status != 'archived'"
+      ).bind(bol.job_id, bol.load_number).first();
+    } else {
+      matchedAssignment = await db.prepare(
+        "SELECT loading_status FROM loading_assignments WHERE job_id = ? AND loading_status != 'archived'"
+      ).bind(bol.job_id).first();
+    }
+  }
+  if (matchedAssignment) {
+    if (matchedAssignment.loading_status === 'delivered') stage = 'delivered';
+    else if (matchedAssignment.loading_status === 'in_transit') stage = 'in_transit';
+  } else if (bol.job_id) {
     const shipment = await db.prepare(
       "SELECT status FROM shipments WHERE job_id = ? ORDER BY created_at DESC LIMIT 1"
     ).bind(bol.job_id).first();
@@ -46,7 +62,7 @@ export async function handleApiPublicBolPickup(request, env) {
   if (!token || token.length < 8) return json({ ok: false, error: 'Invalid token' }, 400);
 
   const db = env.DB;
-  const bol = await db.prepare("SELECT job_id, bol_number FROM bols WHERE access_token = ?").bind(token).first();
+  const bol = await db.prepare("SELECT job_id, bol_number, load_number FROM bols WHERE access_token = ?").bind(token).first();
   if (!bol) return json({ ok: false, error: 'expired_or_invalid' }, 404);
 
   const shipment = await db.prepare(
@@ -54,24 +70,62 @@ export async function handleApiPublicBolPickup(request, env) {
   ).bind(bol.job_id).first();
   if (!shipment) return json({ ok: false, error: 'no_shipment_linked' }, 404);
 
-  // Idempotency: already in_transit or beyond → return success but report current stage.
-  if (shipment.status === 'in_transit' || shipment.status === 'delivered') {
-    return json({ ok: true, stage: shipment.status, already: true });
+  // Resolve the matching loading_assignment for this load (P170 NULL-fallback match).
+  const matched = bol.load_number != null
+    ? await db.prepare(
+        "SELECT id, loading_status, trailer_number FROM loading_assignments WHERE job_id = ? AND load_number = ? AND loading_status != 'archived'"
+      ).bind(bol.job_id, bol.load_number).first()
+    : await db.prepare(
+        "SELECT id, loading_status, trailer_number FROM loading_assignments WHERE job_id = ? AND loading_status != 'archived'"
+      ).bind(bol.job_id).first();
+
+  // Idempotency (per-load): matched assignment already in_transit or beyond → return
+  // success reporting its stage, regardless of the job-level shipment status.
+  if (matched && (matched.loading_status === 'in_transit' || matched.loading_status === 'delivered')) {
+    return json({ ok: true, stage: matched.loading_status, already: true });
   }
 
   const now = new Date().toISOString();
-  await db.prepare(
-    "UPDATE shipments SET status = 'in_transit', in_transit_at = ?, updated_at = ? WHERE id = ?"
-  ).bind(now, now, shipment.id).run();
 
-  // Mirror to loading_assignments if present (Logistics dashboard surfaces this).
-  await db.prepare(
-    "UPDATE loading_assignments SET loading_status = 'in_transit', updated_at = ? WHERE job_id = ? AND loading_status != 'archived'"
-  ).bind(now, bol.job_id).run();
+  if (bol.load_number != null) {
+    await db.prepare(
+      "UPDATE loading_assignments SET loading_status = 'in_transit', in_transit_at = ?, updated_at = ? WHERE job_id = ? AND load_number = ? AND loading_status != 'archived'"
+    ).bind(now, now, bol.job_id, bol.load_number).run();
+  } else {
+    await db.prepare(
+      "UPDATE loading_assignments SET loading_status = 'in_transit', in_transit_at = ?, updated_at = ? WHERE job_id = ? AND loading_status != 'archived'"
+    ).bind(now, now, bol.job_id).run();
+  }
+
+  // Gate the job-level shipment flip: only once every non-archived assignment for the
+  // job has reached in_transit or beyond. Zero non-archived assignments counts as complete.
+  const remaining = await db.prepare(
+    "SELECT COUNT(*) AS remaining FROM loading_assignments WHERE job_id = ? AND loading_status NOT IN ('in_transit','delivered') AND loading_status != 'archived'"
+  ).bind(bol.job_id).first();
+  const isLastLoad = !remaining || remaining.remaining === 0;
+
+  if (isLastLoad) {
+    await db.prepare(
+      "UPDATE shipments SET status = 'in_transit', in_transit_at = ?, updated_at = ? WHERE id = ?"
+    ).bind(now, now, shipment.id).run();
+  }
 
   await logActivity(db, 'pickup_confirmed', 'shipment', shipment.id,
     `Pickup confirmed via driver QR — BOL #${bol.bol_number}`,
     { source: 'driver_qr', bol_number: bol.bol_number }, null);
+
+  // Push notification — mirrors the manual dashboard path's 'loading.in_transit' dispatch.
+  try {
+    const job = await db.prepare("SELECT customer, invoice_number FROM jobs WHERE id = ?").bind(bol.job_id).first();
+    const customerName = job?.customer || 'shipment';
+    const trailerNum = matched?.trailer_number || '';
+    const title = 'In transit';
+    const message = `Trailer${trailerNum ? ' ' + trailerNum : ''} has departed — ${customerName}`;
+    await dispatchNotification(db, env, 'loading.in_transit', title, message, 'shipment', shipment.id);
+  } catch (e) {
+    // Notification failure must NOT break the pickup confirmation response.
+    console.error('Push notification dispatch failed (pickup flow):', e);
+  }
 
   return json({ ok: true, stage: 'in_transit' });
 }
@@ -145,7 +199,7 @@ export async function handleApiPublicBolDelivery(request, env) {
   }
 
   const db = env.DB;
-  const bol = await db.prepare("SELECT id, job_id, bol_number FROM bols WHERE access_token = ?").bind(token).first();
+  const bol = await db.prepare("SELECT id, job_id, bol_number, load_number FROM bols WHERE access_token = ?").bind(token).first();
   if (!bol) return json({ ok: false, error: 'expired_or_invalid' }, 404);
 
   const shipment = await db.prepare(
@@ -153,11 +207,24 @@ export async function handleApiPublicBolDelivery(request, env) {
   ).bind(bol.job_id).first();
   if (!shipment) return json({ ok: false, error: 'no_shipment_linked' }, 404);
 
-  if (shipment.status === 'delivered') {
+  // Resolve the matching loading_assignment for this load (P170 NULL-fallback match).
+  // Falls back to the job-level shipment status when no matching assignment exists.
+  const matched = bol.load_number != null
+    ? await db.prepare(
+        "SELECT id, loading_status FROM loading_assignments WHERE job_id = ? AND load_number = ? AND loading_status != 'archived'"
+      ).bind(bol.job_id, bol.load_number).first()
+    : await db.prepare(
+        "SELECT id, loading_status FROM loading_assignments WHERE job_id = ? AND loading_status != 'archived'"
+      ).bind(bol.job_id).first();
+
+  const alreadyDelivered = matched ? matched.loading_status === 'delivered' : shipment.status === 'delivered';
+  const notInTransit = matched ? matched.loading_status !== 'in_transit' : shipment.status !== 'in_transit';
+
+  if (alreadyDelivered) {
     return json({ ok: true, stage: 'delivered', already: true });
   }
   // Must be in_transit before a delivery POST is valid.
-  if (shipment.status !== 'in_transit') {
+  if (notInTransit) {
     return json({ ok: false, error: 'shipment must be in_transit before delivery' }, 409);
   }
 
@@ -174,46 +241,63 @@ export async function handleApiPublicBolDelivery(request, env) {
 
   const now = new Date().toISOString();
 
-  await db.prepare(`
-    UPDATE shipments SET
-      status = 'delivered',
-      delivered_at = ?,
-      delivery_accepted = ?,
-      delivery_damages = ?,
-      delivery_damage_notes = ?,
-      delivery_recorded_at = ?,
-      delivery_source = 'driver_qr',
-      updated_at = ?
-    WHERE id = ?
-  `).bind(now, accepted, damages ? 1 : 0, damageNotes, now, now, shipment.id).run();
+  if (bol.load_number != null) {
+    await db.prepare(
+      "UPDATE loading_assignments SET loading_status = 'delivered', delivered_at = ?, updated_at = ? WHERE job_id = ? AND load_number = ? AND loading_status != 'archived'"
+    ).bind(now, now, bol.job_id, bol.load_number).run();
+  } else {
+    await db.prepare(
+      "UPDATE loading_assignments SET loading_status = 'delivered', delivered_at = ?, updated_at = ? WHERE job_id = ? AND loading_status != 'archived'"
+    ).bind(now, now, bol.job_id).run();
+  }
 
   await db.prepare(
     "UPDATE bols SET signed_bol_photo_key = ?, signed_bol_uploaded_at = ? WHERE id = ?"
   ).bind(r2Key, now, bol.id).run();
 
-  await db.prepare(
-    "UPDATE loading_assignments SET loading_status = 'delivered', updated_at = ? WHERE job_id = ? AND loading_status != 'archived'"
-  ).bind(now, bol.job_id).run();
+  // Gate the job-level shipment flip + dispatch: only once every non-archived assignment
+  // for the job has reached delivered. Zero non-archived assignments counts as complete.
+  const remaining = await db.prepare(
+    "SELECT COUNT(*) AS remaining FROM loading_assignments WHERE job_id = ? AND loading_status NOT IN ('delivered') AND loading_status != 'archived'"
+  ).bind(bol.job_id).first();
+  const isLastLoad = !remaining || remaining.remaining === 0;
+
+  if (isLastLoad) {
+    await db.prepare(`
+      UPDATE shipments SET
+        status = 'delivered',
+        delivered_at = ?,
+        delivery_accepted = ?,
+        delivery_damages = ?,
+        delivery_damage_notes = ?,
+        delivery_recorded_at = ?,
+        delivery_source = 'driver_qr',
+        updated_at = ?
+      WHERE id = ?
+    `).bind(now, accepted, damages ? 1 : 0, damageNotes, now, now, shipment.id).run();
+  }
 
   await logActivity(db, 'delivery_completed', 'shipment', shipment.id,
     `Delivery completed via driver QR — BOL #${bol.bol_number}`,
     { source: 'driver_qr', bol_number: bol.bol_number, accepted, damages, photo_key: r2Key }, null);
 
-  // Push notification — reuse the existing 'loading.delivered' type.
-  // Distinguish QR-flow deliveries in the message so recipients see the signed BOL is available.
-  try {
-    // Look up customer + invoice number for a useful message (mirrors the manual mark-delivered dispatch).
-    const job = await db.prepare(
-      "SELECT customer, invoice_number FROM jobs WHERE id = ?"
-    ).bind(bol.job_id).first();
-    const customerName = job?.customer || 'shipment';
-    const invNum = job?.invoice_number || '';
-    const title = 'Delivery completed';
-    const message = `Delivery confirmed by driver — ${customerName}${invNum ? ' (INV# ' + invNum + ')' : ''}. Signed BOL is available to view.`;
-    await dispatchNotification(db, env, 'loading.delivered', title, message, 'shipment', shipment.id);
-  } catch (e) {
-    // Notification failure must NOT break the delivery confirmation response.
-    console.error('Push notification dispatch failed (delivery flow):', e);
+  // Push notification — reuse the existing 'loading.delivered' type. Only fire once the
+  // job-level shipment has actually flipped (the last trailer) — per-trailer spam is not wanted.
+  if (isLastLoad) {
+    try {
+      // Look up customer + invoice number for a useful message (mirrors the manual mark-delivered dispatch).
+      const job = await db.prepare(
+        "SELECT customer, invoice_number FROM jobs WHERE id = ?"
+      ).bind(bol.job_id).first();
+      const customerName = job?.customer || 'shipment';
+      const invNum = job?.invoice_number || '';
+      const title = 'Delivery completed';
+      const message = `Delivery confirmed by driver — ${customerName}${invNum ? ' (INV# ' + invNum + ')' : ''}. Signed BOL is available to view.`;
+      await dispatchNotification(db, env, 'loading.delivered', title, message, 'shipment', shipment.id);
+    } catch (e) {
+      // Notification failure must NOT break the delivery confirmation response.
+      console.error('Push notification dispatch failed (delivery flow):', e);
+    }
   }
 
   return json({ ok: true, stage: 'delivered' });
