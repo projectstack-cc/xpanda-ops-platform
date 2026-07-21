@@ -106,10 +106,10 @@ export default function LineRow({
           {!lineObj.open_session_id && (
             <button
               type="button"
-              disabled={acting || clockedInElsewhere}
+              disabled={acting}
               title={
                 clockedInElsewhere
-                  ? "Finish your current line before clocking into another."
+                  ? "You're clocked in elsewhere — tap to clock out of your current line."
                   : undefined
               }
               onClick={() => onClockIn(jobId, lineObj.line)}

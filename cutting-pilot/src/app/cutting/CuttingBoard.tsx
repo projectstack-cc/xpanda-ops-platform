@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { AlertCircle, Calculator, Search, X } from "lucide-react";
 import Sheet from "@/components/Sheet";
+import Modal from "@/components/Modal";
 import PlatformHeader from "@/components/PlatformHeader";
 import JobRow from "./JobRow";
 import LineRow from "./LineRow";
@@ -30,6 +31,14 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   const [clockOutTarget, setClockOutTarget] = useState<{
     sessionId: string;
     line: string;
+    jobId: string;
+  } | null>(null);
+  // "You're clocked in elsewhere" confirm prompt (job # + session to resolve).
+  const [resolvePrompt, setResolvePrompt] = useState<{
+    sessionId: string;
+    line: string;
+    jobId: string;
+    invoice: string;
   } | null>(null);
   const [acting, setActing] = useState(false);
   const [completeTarget, setCompleteTarget] = useState<{
@@ -103,7 +112,13 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
       const l = j.lines.find(
         (ln) => ln.open_session_id && ln.open_operator_name === userName
       );
-      if (l) return { jobId: j.id, line: l.line };
+      if (l)
+        return {
+          jobId: j.id,
+          invoice: j.invoice_number,
+          line: l.line,
+          sessionId: l.open_session_id!,
+        };
     }
     return null;
   })();
@@ -112,16 +127,19 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
     myOpen && selectedJob && myOpen.jobId === selectedJob.id ? myOpen.line : null;
 
   // Unchecked parts on the line being clocked out — for the reconciliation section.
+  const clockOutJob = clockOutTarget
+    ? queue.find((j) => j.id === clockOutTarget.jobId) ?? null
+    : null;
   const clockOutItems =
-    clockOutTarget && selectedJob
-      ? (selectedJob.line_items ?? [])
-          .filter((it) => !selectedJob.progress?.[clockOutTarget.line]?.[it.id]?.completed)
+    clockOutTarget && clockOutJob
+      ? (clockOutJob.line_items ?? [])
+          .filter((it) => !clockOutJob.progress?.[clockOutTarget.line]?.[it.id]?.completed)
           .map((it) => ({
             id: it.id,
             label: it.part_number || it.description || "Part",
             orderedQty: it.quantity,
             completedQty:
-              selectedJob.progress?.[clockOutTarget.line]?.[it.id]?.completed_qty ?? null,
+              clockOutJob.progress?.[clockOutTarget.line]?.[it.id]?.completed_qty ?? null,
           }))
       : [];
 
@@ -183,6 +201,17 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   }
 
   async function clockIn(jobId: string, line: string) {
+    // Clocked in elsewhere? Don't fire a doomed clock-in. Surface which job the
+    // operator is on and offer to clock out of it (→ normal completion screen).
+    if (myOpen && !(myOpen.jobId === jobId && myOpen.line === line)) {
+      setResolvePrompt({
+        sessionId: myOpen.sessionId,
+        line: myOpen.line,
+        jobId: myOpen.jobId,
+        invoice: myOpen.invoice,
+      });
+      return;
+    }
     setActing(true);
     try {
       const res = await fetch("/v2/api/cutting/clock-in", {
@@ -209,7 +238,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   }
 
   function openClockOut(sessionId: string, line: string) {
-    setClockOutTarget({ sessionId, line });
+    setClockOutTarget({ sessionId, line, jobId: selectedJob?.id ?? "" });
   }
 
   async function submitClockOut(
@@ -222,13 +251,13 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
     setActing(true);
     try {
       // Reconcile unchecked-part quantities — best-effort, never blocks clock-out.
-      if (itemQtys && itemQtys.length && selectedJob) {
+      if (itemQtys && itemQtys.length) {
         try {
           await fetch("/v2/api/cutting/line-progress", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              job_id: selectedJob.id,
+              job_id: clockOutTarget.jobId,
               line: clockOutTarget.line,
               items: itemQtys,
             }),
@@ -576,6 +605,49 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
         onSubmit={submitClockOut}
         acting={acting}
       />
+
+      {/* "Already clocked in" resolver — surfaces which job, routes to clock-out */}
+      <Modal
+        isOpen={!!resolvePrompt}
+        onClose={() => setResolvePrompt(null)}
+        title="Already clocked in"
+      >
+        <p className="text-sm text-text">
+          You&apos;re clocked into{" "}
+          <span className="font-mono tabular-nums font-semibold">
+            #{resolvePrompt?.invoice}
+          </span>
+          . Clock out of{" "}
+          <span className="font-mono tabular-nums font-semibold">
+            #{resolvePrompt?.invoice}
+          </span>
+          ?
+        </p>
+        <div className="flex gap-2 justify-end">
+          <button
+            type="button"
+            onClick={() => setResolvePrompt(null)}
+            className="min-h-[44px] px-4 py-2 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!resolvePrompt) return;
+              setClockOutTarget({
+                sessionId: resolvePrompt.sessionId,
+                line: resolvePrompt.line,
+                jobId: resolvePrompt.jobId,
+              });
+              setResolvePrompt(null);
+            }}
+            className="min-h-[44px] px-4 py-2 bg-[var(--primary-bg)] text-[var(--primary-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          >
+            Clock Out
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
