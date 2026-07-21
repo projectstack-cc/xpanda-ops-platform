@@ -1,5 +1,6 @@
 import { json, logActivity } from '../lib/core.js';
 import { dispatchNotification } from '../lib/push.js';
+import { completeCuttingLinesForJob } from '../lib/cutting-lines.js';
 
 export async function handleApiPublicBolLookup(request, env) {
   const url = new URL(request.url);
@@ -249,6 +250,13 @@ export async function handleApiPublicBolDelivery(request, env) {
     await db.prepare(
       "UPDATE loading_assignments SET loading_status = 'delivered', delivered_at = ?, updated_at = ? WHERE job_id = ? AND loading_status != 'archived'"
     ).bind(now, now, bol.job_id).run();
+  }
+
+  // Data-integrity backstop: driver QR confirms delivery → cutting is provably done.
+  try {
+    await completeCuttingLinesForJob(db, bol.job_id, 'delivered');
+  } catch (e) {
+    console.error('Cutting-lines backfill failed (driver QR flow):', e);
   }
 
   await db.prepare(

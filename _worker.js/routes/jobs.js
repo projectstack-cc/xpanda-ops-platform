@@ -1,5 +1,6 @@
 import { json, logActivity, safeJsonParse } from '../lib/core.js';
 import { reconcileCuttingSteps, mirrorProcessesToSteps, syncJobFromSteps } from '../lib/cutting.js';
+import { completeCuttingLinesForJob } from '../lib/cutting-lines.js';
 
 export async function handleApiJobs(request, env) {
   const db = env.DB;
@@ -990,6 +991,16 @@ export async function handleApiShipments(request, env) {
             ).bind(payload.status, nowSync, row.job_id).run();
           } catch (e) {
             console.error('Shipment→LoadingAssignment status sync failed:', e);
+          }
+        }
+
+        // Data-integrity backstop: once the shipment is provably past cutting
+        // (loaded / in_transit / delivered), force any missed cutting lines complete.
+        if (['loaded', 'in_transit', 'delivered'].includes(payload.status)) {
+          try {
+            await completeCuttingLinesForJob(db, row.job_id, payload.status);
+          } catch (e) {
+            console.error('Cutting-lines backfill failed (shipment flow):', e);
           }
         }
 

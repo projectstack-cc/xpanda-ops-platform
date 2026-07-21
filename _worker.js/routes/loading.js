@@ -1,5 +1,6 @@
 import { json, logActivity } from '../lib/core.js';
 import { dispatchNotification } from '../lib/push.js';
+import { completeCuttingLinesForJob } from '../lib/cutting-lines.js';
 
 export async function handleApiLoadingBays(request, env) {
   const db = env.DB;
@@ -357,6 +358,16 @@ export async function handleApiLoadingAssignments(request, env) {
 
     try {
       await db.prepare(`UPDATE loading_assignments SET ${updates.join(', ')} WHERE id = ?`).bind(...binds).run();
+
+      // Data-integrity backstop: loaded / in_transit / delivered proves cutting is done.
+      if (['loaded', 'in_transit', 'delivered'].includes(payload.loading_status)) {
+        try {
+          await completeCuttingLinesForJob(db, existing.job_id, payload.loading_status);
+        } catch (e) {
+          console.error('Cutting-lines backfill failed (loading flow):', e);
+        }
+      }
+
       if (pendingNotification) {
         try {
           await dispatchNotification(

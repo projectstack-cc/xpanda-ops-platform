@@ -14,9 +14,10 @@ interface Props {
   isActive: boolean;
   onClick: () => void;
   onViewPhotos: () => void;
+  rank?: number;
 }
 
-export default function JobRow({ job, isActive, onClick, onViewPhotos }: Props) {
+export default function JobRow({ job, isActive, onClick, onViewPhotos, rank }: Props) {
   const hasHandoffNote = job.lines.some((l) => l.last_handoff_note);
 
   return (
@@ -37,6 +38,19 @@ export default function JobRow({ job, isActive, onClick, onViewPhotos }: Props) 
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
+            {rank != null && (
+              <span
+                className={[
+                  "shrink-0 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold tabular-nums",
+                  rank === 1
+                    ? "bg-[var(--accent)] text-[var(--primary-text)]"
+                    : "bg-[var(--ghost-bg)] text-muted border border-border",
+                ].join(" ")}
+                aria-label={`Work-queue rank ${rank}`}
+              >
+                {rank}
+              </span>
+            )}
             <span className="font-mono tabular-nums text-xs text-muted">
               {job.invoice_number}
             </span>
