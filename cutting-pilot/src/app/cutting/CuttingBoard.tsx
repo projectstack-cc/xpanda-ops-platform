@@ -6,6 +6,7 @@ import Modal from "@/components/Modal";
 import PlatformHeader from "@/components/PlatformHeader";
 import JobRow from "./JobRow";
 import LineRow from "./LineRow";
+import WorkQueue from "./WorkQueue";
 import HandoffModal from "./HandoffModal";
 import PhotoViewer from "./PhotoViewer";
 import CompleteLineModal from "./CompleteLineModal";
@@ -390,6 +391,13 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
           className="w-full md:w-72 md:shrink-0 bg-surface md:border-r md:border-border overflow-y-auto"
         >
           <QueueHeader count={filteredQueue.length} />
+
+          <WorkQueue
+            jobs={queue}
+            selectedJobId={selectedJobId}
+            onSelect={(id) => setSelectedJobId((prev) => (prev === id ? null : id))}
+            onViewPhotos={(job) => setPhotosJob(job)}
+          />
 
           {/* Search + week filter toolbar */}
           <div className="px-3 py-2 border-b border-border bg-surface space-y-2">
