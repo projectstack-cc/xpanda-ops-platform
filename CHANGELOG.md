@@ -133,9 +133,15 @@ Entries within each module are ordered by prompt # descending (newest first).
   to ~5s (`SheetNames` still lists everything; only the two requested sheets get decompressed/parsed).
   Added `[limits] cpu_ms = 60_000` in `wrangler.toml` as a safety margin on top (default is 30s; max
   allowed is 300s) — applies worker-wide (fetch + scheduled) but costs nothing unless actually used,
-  since Workers billing is metered on real CPU-ms consumed, not the configured ceiling. Cron interval
-  temporarily dropped to `*/5 * * * *` (was `*/15`) to iterate faster while verifying this — revert
-  once a poll is confirmed writing rows. `tsc --noEmit` + `cf-build` green.
+  since Workers billing is metered on real CPU-ms consumed, not the configured ceiling. First deploy
+  attempt with this config hard-failed at the Cloudflare API (error 100328): the account was on the
+  **Workers Free plan**, where `[limits] cpu_ms` isn't just defaulted lower — it's rejected outright,
+  and Free's Cron Trigger CPU budget is a fixed, non-configurable **10ms**, roughly 500x under even
+  the optimized parse. No amount of further optimization could have closed that gap. Steve upgraded to
+  Workers Paid ($5/mo, account-wide) specifically to unblock this. **Confirmed working end-to-end in
+  production 2026-07-22**: first successful poll wrote 48 rows with the correct day/week distribution
+  (verified directly against D1). Cron interval was temporarily dropped to `*/5 * * * *` during
+  verification and is now back to the normal `*/15 * * * *`. `tsc --noEmit` + `cf-build` green.
 - **P263** — `/v2/schedule` TV board UI (read-only wall display, no new API routes). Design read:
   a floor/office TV board for anyone glancing at the shipping schedule from across a room, dense +
   industrial, two-week stacked bands, no interaction. `src/app/schedule/page.tsx` (thin server shell,
