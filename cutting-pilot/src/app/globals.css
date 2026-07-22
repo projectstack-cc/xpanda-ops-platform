@@ -43,6 +43,16 @@
   --warn-border: #fde68a;
   --warn-text: #92400e;
 
+  /* Schedule-board status ladder — "loading"/"loaded" only; the other 4 states reuse
+     ghost/info/warn/success above. "loaded" matches the legacy loading-dashboard's
+     established color (logistics-shared.css) for platform-wide consistency. */
+  --loading-bg: #ecfeff;
+  --loading-border: #a5f3fc;
+  --loading-text: #0e7490;
+  --loaded-bg: #d1fae5;
+  --loaded-border: #6ee7b7;
+  --loaded-text: #065f46;
+
   /* Brand red */
   --brand: #e31837;
   --brand-hover: #b31229;
@@ -102,6 +112,13 @@
   --warn-bg: rgba(245, 158, 11, 0.12);
   --warn-border: rgba(245, 158, 11, 0.35);
   --warn-text: #fcd34d;
+
+  --loading-bg: rgba(6, 182, 212, 0.15);
+  --loading-border: rgba(6, 182, 212, 0.35);
+  --loading-text: #67e8f9;
+  --loaded-bg: rgba(16, 185, 129, 0.20);
+  --loaded-border: rgba(16, 185, 129, 0.40);
+  --loaded-text: #6ee7b7;
 
   --brand: #ef4356;
   --brand-hover: #e31837;

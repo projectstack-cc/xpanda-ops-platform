@@ -83,6 +83,95 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ---
 
+## Schedule Board (v2)
+
+- **P263** — `/v2/schedule` TV board UI (read-only wall display, no new API routes). Design read:
+  a floor/office TV board for anyone glancing at the shipping schedule from across a room, dense +
+  industrial, two-week stacked bands, no interaction. `src/app/schedule/page.tsx` (thin server shell,
+  same identity/permission pattern as `/v2/cutting`) renders `"use client"` `ScheduleBoard.tsx`, which
+  polls `GET /v2/api/schedule-board` every 60s and swaps data in place — on fetch failure it keeps the
+  last-good render and shows a subtle "stale" stamp instead of ever blanking the wall or spinning
+  forever. Layout: current week on top, next week below, both always visible (no auto-scroll, no
+  rotation); within each band `WeekBand.tsx` lays MONDAY–FRIDAY out as `DayColumn.tsx`s across, each
+  reusing one `OrderRow.tsx` (also reused for the PENDING strip below both bands — no copy-paste row
+  markup). Shrink-to-fit is two mechanisms working together: CSS `clamp()` continuously scales key text
+  between a TV-readable floor and a roomier ceiling tied to viewport height, while a `computeDensity()`
+  heuristic (`density.ts`, keyed off the tallest day column's row count) progressively trims secondary
+  fields (delivery time/location/method/carrier, then load count/scrap icon) before ever hitting the
+  font floor, and hard-clips a column past its row cap with a "+N more" chip rather than rendering
+  illegible microtext. `StatusBadge.tsx` maps the 6-state ladder to distinct hues — reused existing
+  ghost/info/warn/success tokens for 4 states and added two new ones, `--loading-`/`--loaded-*`
+  (globals.css, light+dark), pulling the `loaded` color directly from the legacy loading-dashboard's
+  established palette (`logistics-shared.css`) for platform consistency; `Cutting` intentionally reuses
+  the same blue already used for "Cutting · x/y" in `StatusPill.tsx` rather than the legacy loading
+  module's blue-for-"loading" convention, since the two conventions collide here and the in-project
+  precedent won. Unmatched rows render desaturated with a dashed "no job match" badge showing
+  `sheet_status`. New `src/types/schedule.ts` mirrors 3/5's response contract exactly (flagged to keep
+  in sync). No new nav link added — `schedule` isn't in the roles table yet (5/5), so a link would be
+  dead; backlogged. **Windows build fix (same commit):** `opennextjs-cloudflare`'s own build spawns a
+  transient `workerd` process for middleware validation that doesn't always release its handle on
+  `_next/static/**` before the post-build step runs, making `scripts/fix-asset-prefix.mjs`'s
+  `renameSync` fail `EPERM` even after the process exits — hardened with a copy+delete fallback on
+  `EPERM` (rename still tried first, fast path unchanged). `tsc --noEmit` + `cf-build` green; local
+  `wrangler dev` smoke confirms `/v2/schedule` redirects to legacy login when unauthenticated and a
+  `/v2/_next/static/*` chunk serves 200 (asset-prefix wiring intact). No UI polish pass against a real
+  TV yet — the density thresholds and clamp floors are engineering judgment, not measured against
+  hardware (flagged below).
+- **P262** — `GET /v2/api/schedule-board` read endpoint + live-status derivation (new
+  `src/app/api/schedule-board/route.ts`, read-only, no mutations). Reads `schedule_rows` for
+  `ship_week IN (currentTab, nextTab)` (reuses `schedule-ingest.ts`'s tab-name helper, no duplicated
+  date logic — PENDING rows carry a real `ship_week` in the DB but always merge into one output group
+  with `ship_week: null`, per the stable contract for 4/5), groups one entry per calendar date
+  (`ship_week`/`ship_date` key, so the same weekday in the two different ship weeks never collapses),
+  and orders chronologically with PENDING last. New `src/lib/schedule-status.ts` derives each matched
+  row's status via a precedence ladder — Shipped (`jobs.status`) → Loaded/Loading
+  (`loading_assignments.loading_status`, excluding `archived`) → Ready (all `cutting_lines` complete,
+  or `jobs.status='done'`) → Cutting (`in_progress` line or an open `cutting_sessions` row) → Not
+  Started — using 4 batched, ≤90-chunked `IN (...)` queries run in parallel (no N+1). Unmatched rows
+  (`match_job_id IS NULL`) skip derivation entirely: `status: null`, `unmatched: true`, `sheet_status`
+  passed through for the UI to grey/flag. Corrected the prompt's `loading_bays.status` reference to
+  the real schema — per-job loading state lives on `loading_assignments.loading_status`, not
+  `loading_bays` (that table is just the physical bay directory). Middleware generalized from one
+  hardcoded `manufacturing.cutting` permission for all of `/v2/*` to a path-keyed `PERMISSION_MAP`
+  (mirrors legacy `PATH_PERMISSION_MAP`) — `/v2/schedule` + `/v2/api/schedule-board` now require the
+  new `schedule` key (defined in 5/5; until then no one can be granted it — no hardcoded bypass),
+  cutting's behavior is unchanged. Matcher already covered the new route (no change needed). `tsc
+  --noEmit` + `cf-build` green; local `wrangler dev` smoke confirms the route/middleware chain is
+  wired (unauthenticated `GET /v2/api/schedule-board` → clean 401, `GET /v2/schedule` → redirect to
+  legacy login) — full grouped-payload/status-derivation behavior needs a real session + populated
+  `schedule_rows`/`jobs` data against the deployed host (Steve). No UI yet (4/5).
+- **P261** — v2 cron poller + Sheets API v4 ingestion into `schedule_rows` (unattended, no worker
+  route, no UI): a `*/15 * * * *` Cron Trigger on the v2 OpenNext worker reads the current and next
+  Monday-anchored ship-week tabs (`M-D-YY`, quoted A1 sheet names) via `values:batchGet`,
+  authenticating with a stored **OAuth refresh token** exchanged for an access token each run
+  (`src/lib/google-auth.ts` — service-account keys are blocked by org policy, so this is user OAuth,
+  never a JWT/key). `src/lib/schedule-ingest.ts` parses the day-section state machine (MONDAY..FRIDAY
+  + PENDING), extracts columns B–J per order row, derives `invoice_number` from col F via
+  `INV\s*(\d+)` (leading digit run, tolerant of suffixes like `-002`), treats `^^^` continuation
+  markers as NULL, and matches to `jobs.invoice_number` (chunked `IN (...)` lookups at ≤90 bound
+  params). Because `schedule_rows` (1/5) has no `UNIQUE(invoice_number, ship_week)` constraint, the
+  upsert is done in application code (select-then-insert/update) rather than SQL `ON CONFLICT`;
+  pruning is mark-and-sweep — every row touched this run shares one `last_seen_at`, and anything
+  older for a *successfully fetched* week is deleted, so a failed tab fetch never wipes that week's
+  board. Cron handler lives in a new `custom-worker.ts` (wrangler `main` now points here instead of
+  the raw `.open-next/worker.js`) that re-exports the generated `fetch` unchanged and adds
+  `scheduled()` alongside it — the sanctioned OpenNext custom-worker pattern, since the generated
+  output has no hook for a cron export and gets regenerated every build. New `[triggers]` +
+  `SCHEDULE_SHEET_ID` `[vars]` entry in `cutting-pilot/wrangler.toml`. No board read endpoint or UI
+  yet (3/5, 4/5). `tsc --noEmit` + `cf-build` green; `wrangler deploy --dry-run` confirms the custom
+  entry point bundles cleanly. **Requires the three `GOOGLE_OAUTH_*` secrets set via `wrangler secret
+  put` before deploy — see Manual steps.**
+- **P260** — `schedule_rows` migration (schema only, no worker/routes): new D1 table staging/holding
+  the human-managed Google-Sheet schedule for the floor-facing `/v2/schedule` TV board. Keyed on
+  `invoice_number` (parsed `INV \d+` from the sheet's DELIVERY TIME column), joining to the confirmed
+  `jobs.invoice_number` column. Stores the raw sheet fields (ship week/date, day, customer, load
+  count, method, location, delivery time, carrier, bdft, scrap pickup) plus `match_job_id` (TEXT,
+  mirroring `jobs.id`) and a `sheet_status` fallback used only for unmatched rows. Idempotent
+  (`CREATE TABLE IF NOT EXISTS`). New file `DB_Migrations/schedule-board.sql`. **Run in the D1
+  console before deploying the v2 cron poller (2/5).**
+
+---
+
 ## Logistics
 
 - **P256** — Loading dashboard: hardened the status-transition notification dispatch in the
