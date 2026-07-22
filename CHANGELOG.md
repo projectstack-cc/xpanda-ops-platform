@@ -122,6 +122,20 @@ Entries within each module are ordered by prompt # descending (newest first).
   both correctly reducing to base invoice 4203 under the `INV\s*(\d+)` regex — so the two-field key was
   silently dropping one of the two rows on every poll. Widened to
   `(invoice_number, ship_week, day_of_week)`, confirmed against live data (0 collisions, previously 1).
+- **P261 hotfix #2 — scheduled handler was hitting the Workers CPU time limit.** Even with the Drive/
+  XLSX fix (previous entry) and a corrected refresh token, `schedule_rows` still stayed empty after
+  redeploy. `wrangler tail` on the live worker caught the actual cron invocation this time:
+  `"*/5 * * * *" - Exceeded CPU Limit`. Root cause: the live workbook carries 190+ historical tabs (one
+  per ship-week back to late 2024, ~14 MB total), and `XLSX.read()` fully parses every sheet by
+  default — a local benchmark against the real file measured ~16s just to parse, only 2 of those 196
+  sheets are ever used. Fixed with SheetJS's `sheets` read option (`XLSX.read(bytes, { type: "array",
+  sheets: tabs })`), which restricts actual parsing to the requested tab names — cut the same benchmark
+  to ~5s (`SheetNames` still lists everything; only the two requested sheets get decompressed/parsed).
+  Added `[limits] cpu_ms = 60_000` in `wrangler.toml` as a safety margin on top (default is 30s; max
+  allowed is 300s) — applies worker-wide (fetch + scheduled) but costs nothing unless actually used,
+  since Workers billing is metered on real CPU-ms consumed, not the configured ceiling. Cron interval
+  temporarily dropped to `*/5 * * * *` (was `*/15`) to iterate faster while verifying this — revert
+  once a poll is confirmed writing rows. `tsc --noEmit` + `cf-build` green.
 - **P263** — `/v2/schedule` TV board UI (read-only wall display, no new API routes). Design read:
   a floor/office TV board for anyone glancing at the shipping schedule from across a room, dense +
   industrial, two-week stacked bands, no interaction. `src/app/schedule/page.tsx` (thin server shell,
