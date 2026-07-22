@@ -11,16 +11,20 @@ main = "custom-worker.ts"
 compatibility_date = "2026-03-17"
 compatibility_flags = ["nodejs_compat"]
 
-# NOTE: this account is on the Workers FREE plan. `[limits] cpu_ms` is a PAID-plan-only
-# feature — setting it here made every deploy hard-fail (Cloudflare API error 100328).
-# Free plan's Cron Trigger CPU budget is a fixed, non-configurable 10ms — no amount of
-# in-Worker parsing optimization can fit real XLSX parsing under that. See BACKLOG.md for
-# the architecture options being considered before re-attempting this cron.
+# Account upgraded to Workers Paid (2026-07-22) specifically to unblock this cron — Free
+# plan's Cron Trigger CPU budget is a fixed, non-configurable 10ms, which no amount of
+# in-Worker XLSX parsing could ever fit under. Paid's default is already 30s (comfortably
+# covers the ~5s optimized parse — see schedule-ingest.ts's `sheets: tabs` fix), this is
+# just extra headroom; costs nothing unless actually used (billed on real CPU-ms consumed).
+[limits]
+cpu_ms = 60_000
 
 # ── Schedule board cron (P261) ──────────────────────────────────────────────────────
 # Unattended ingestion of the Google-Sheet schedule into schedule_rows (see schedule-ingest.ts).
+# Temporarily 5 min (was 15) for one fast verification round post-upgrade — revert to 15
+# once a poll is confirmed writing rows.
 [triggers]
-crons = ["*/15 * * * *"]
+crons = ["*/5 * * * *"]
 
 [vars]
 SCHEDULE_SHEET_ID = "1X57jb_FWPlYTwi3fMJ9I_Yc_meS8AAe4"
