@@ -24,12 +24,12 @@
 - [x] P261 — v2 schedule cron poller — imports the Google-Sheet schedule into `schedule_rows`, matching rows to `jobs` on `invoice_number`
 - [x] P262 — `GET /v2/api/schedule-board` read endpoint — reads `schedule_rows` (+ matched job data) for the TV board, derives live status
 - [x] P263 — `/v2/schedule` TV board UI — two stacked week bands, shrink-to-fit day columns, live status badges
-- [ ] `schedule` permission key — P262 already wired `/v2/schedule` + `/v2/api/schedule-board` into the v2 middleware's `PERMISSION_MAP` requiring a `schedule` key, but the key doesn't exist in the `roles` table yet, so no one can be granted it. 5/5 needs to add it to D1 roles (+ `PERMISSION_LABELS` in `admin/roles.html` so the admin UI can toggle it).
+- [x] P264 — `schedule` permission key added to `PERMISSION_LABELS` (`admin/roles.html`) — the board is now grantable; an admin still needs to actually check the box for whichever role(s) should see it
 - [ ] **P261 follow-up — no `UNIQUE(invoice_number, ship_week)` on `schedule_rows`.** The 1/5 migration didn't add one, so the poller's upsert is done in application code (select-then-insert/update) rather than SQL `ON CONFLICT`. Works fine at 15-min-cron scale, but if `schedule_rows` ever gets a second writer, add the unique index and switch to a real upsert.
 - [ ] **P263 follow-up — verify shrink-to-fit against a real TV.** The `computeDensity()` row-count thresholds and the `clamp()` font floors in `schedule/*.tsx` are engineering judgment calls, not measured against actual hardware — check on a real wall-mounted TV at typical viewing distance and retune if the floor reads too small or a normal day still overflows into "+N more" too often.
 - [ ] **P263 follow-up — late/at-risk highlighting on the schedule board.** Explicitly out of scope for the first UI pass; would need a definition of "late"/"at-risk" (vs. `ship_date`? vs. status stalling?) before scoping.
 - [ ] **P263 follow-up — per-day totals on the schedule board** (load count / bdft sum per `DayColumn`) if useful once the board is in daily use.
-- [ ] **P263 follow-up — wire `/v2/schedule` into `PlatformHeader`'s nav list** once the `schedule` permission key exists in roles (5/5) — not added yet since it would be a dead link for everyone until then.
+- [ ] **P263 follow-up — wire `/v2/schedule` into `PlatformHeader`'s nav list.** The `schedule` permission key now exists (P264) so this is unblocked; still needs its own scoped change to `PlatformHeader.tsx`'s `NAV_MODULES` (§9b).
 
 ---
 
