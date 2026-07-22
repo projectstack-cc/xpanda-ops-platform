@@ -30,7 +30,9 @@ export interface ParsedRow {
 
 const DAY_NAMES = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"] as const;
 type DayName = (typeof DAY_NAMES)[number];
-type Section = DayName | "PENDING";
+// PENDING removed from the captured sections by request — see parseSchedule's PENDING
+// handling below. The sheet's own PENDING block stays the source of truth for that list.
+type Section = DayName;
 
 const INV_REGEX = /INV\s*(\d+)/i;
 const CONTINUATION_MARKER = "^^^";
@@ -154,7 +156,6 @@ function numOrNull(raw: string): number | null {
 }
 
 function shipDateFor(shipWeek: string, day: Section): string | null {
-  if (day === "PENDING") return null;
   const monday = parseTabName(shipWeek);
   if (!monday) return null;
   const offset = DAY_NAMES.indexOf(day);
@@ -168,8 +169,8 @@ function shipDateFor(shipWeek: string, day: Section): string | null {
 // LISTED's customer listed" — match that specific phrase instead.
 const PENDING_HEADER_PHRASE = "PENDING DATE OF DELIVERY";
 
-/** Section header if this row marks a day/PENDING block; otherwise null (an order row). */
-function sectionHeader(row: string[]): Section | null {
+/** A day-section header, the PENDING boundary, or null (an order row / anything else). */
+function sectionHeader(row: string[]): DayName | "PENDING" | null {
   for (const raw of row) {
     const v = (raw ?? "").toString().trim().toUpperCase();
     if (!v) continue;
@@ -180,10 +181,12 @@ function sectionHeader(row: string[]): Section | null {
 }
 
 /**
- * Section-header state machine: MONDAY..FRIDAY rows open a day section, a PENDING DATE OF
- * DELIVERY row opens the pending section, and order rows underneath belong to whichever
- * section is currently open. Rows with no parseable INV# are skipped — they can't join and
- * can't key `schedule_rows`.
+ * Section-header state machine: MONDAY..FRIDAY rows open a day section; order rows
+ * underneath belong to whichever section is currently open. A PENDING DATE OF DELIVERY row
+ * closes capture for the rest of the tab — those orders have no confirmed ship date and are
+ * intentionally not shown on the board (removed by request; the sheet itself stays the
+ * source of truth for that list). Rows with no parseable INV# are skipped — they can't join
+ * and can't key `schedule_rows`.
  */
 export function parseSchedule(rows: string[][], shipWeek: string): ParsedRow[] {
   const out: ParsedRow[] = [];
@@ -192,12 +195,16 @@ export function parseSchedule(rows: string[][], shipWeek: string): ParsedRow[] {
 
   for (const row of rows) {
     const header = sectionHeader(row);
+    if (header === "PENDING") {
+      currentSection = null; // stop capturing for the rest of this tab
+      continue;
+    }
     if (header) {
       currentSection = header;
       sortOrder = 0;
       continue;
     }
-    if (!currentSection) continue; // nothing captured before the first section header
+    if (!currentSection) continue; // nothing captured before the first section header, or past PENDING
 
     const rawDeliveryTime = cell(row, 5); // col F
     const invMatch = rawDeliveryTime.match(INV_REGEX);

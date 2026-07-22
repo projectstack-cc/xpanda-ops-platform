@@ -85,6 +85,19 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **PENDING date-of-delivery section removed (by request), across all three layers.**
+  `schedule-ingest.ts`'s `parseSchedule()` now treats the "PENDING DATE OF DELIVERY" row as a hard stop
+  — it clears `currentSection` instead of opening a `"PENDING"` one, so nothing after it gets captured
+  (and, critically, doesn't leak into whatever day section preceded it). `Section` narrowed to just the
+  five weekday names; `shipDateFor` lost its now-unreachable PENDING branch. The read endpoint
+  (`route.ts`) lost its `isPending` grouping branch — day-groups are now always keyed by
+  `ship_week::ship_date`, which was PENDING's special-cased fallback. `ScheduleBoard.tsx` lost the
+  compact horizontal strip below the two week bands entirely (dead `OrderRow` import removed with it).
+  Deleted the 9 stale PENDING rows already sitting in `schedule_rows` from the last poll directly via
+  `wrangler d1 execute --remote` rather than waiting up to 15 minutes for the next cron's mark-and-sweep
+  prune to catch them. Re-validated against the real spreadsheet: MONDAY–FRIDAY row counts per tab are
+  unchanged, zero PENDING rows captured, zero leakage into FRIDAY at the tab that has a real PENDING
+  block. `tsc --noEmit` + `cf-build` green.
 - **P261 hotfix — poller switched from Sheets API to Drive API + XLSX parsing.** Live diagnosis after
   deploy: `schedule_rows` stayed empty through every cron tick with no visible error. Isolated it with
   a standalone script replaying the poller's own token-refresh + first API call against the real

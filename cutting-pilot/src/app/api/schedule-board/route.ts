@@ -1,7 +1,9 @@
 // src/app/api/schedule-board/route.ts  →  GET /v2/api/schedule-board
-// Read-only: returns the current + next ship-week schedule (plus the PENDING block), grouped
-// one day-entry per calendar date, each row carrying a live-derived status. Ingestion (2/5)
-// already populated schedule_rows; this route never writes to it.
+// Read-only: returns the current + next ship-week schedule, grouped one day-entry per
+// calendar date, each row carrying a live-derived status. Ingestion (2/5) already populated
+// schedule_rows; this route never writes to it. (The PENDING/no-confirmed-date block was
+// captured and shown here originally — removed by request; schedule-ingest.ts no longer
+// captures those rows at all, the sheet itself stays the source of truth for that list.)
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
 import { currentAndNextShipWeekTabs } from "@/lib/schedule-ingest";
@@ -70,18 +72,17 @@ export async function GET() {
     );
     const statusByJobId = await deriveStatuses(DB, jobIds);
 
-    // Every day/PENDING section keyed once — PENDING rows always merge into a single group
-    // regardless of which of the two source tabs they came from (ship_week nulled in output).
+    // One entry per calendar date (ship_date is unique across the two fetched weeks — they
+    // never overlap — so this never collides two different weekdays together).
     const groups = new Map<string, DayGroup>();
     for (const row of rows) {
-      const isPending = row.day_of_week === "PENDING";
-      const key = isPending ? "PENDING" : `${row.ship_week}::${row.ship_date}`;
+      const key = `${row.ship_week}::${row.ship_date}`;
 
       if (!groups.has(key)) {
         groups.set(key, {
-          ship_week: isPending ? null : row.ship_week,
+          ship_week: row.ship_week,
           day_of_week: row.day_of_week,
-          ship_date: isPending ? null : row.ship_date,
+          ship_date: row.ship_date,
           rows: [],
         });
       }
@@ -104,13 +105,10 @@ export async function GET() {
       });
     }
 
-    // Chronological by calendar date; PENDING (no date) always last.
-    const days = Array.from(groups.values()).sort((a, b) => {
-      if (a.ship_date === null && b.ship_date === null) return 0;
-      if (a.ship_date === null) return 1;
-      if (b.ship_date === null) return -1;
-      return a.ship_date.localeCompare(b.ship_date);
-    });
+    // Chronological by calendar date.
+    const days = Array.from(groups.values()).sort((a, b) =>
+      (a.ship_date ?? "").localeCompare(b.ship_date ?? "")
+    );
 
     return NextResponse.json({
       generated_at: new Date().toISOString(),
