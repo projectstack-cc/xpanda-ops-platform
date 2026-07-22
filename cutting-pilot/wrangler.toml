@@ -5,9 +5,19 @@
 # both apps read/write the identical tables and bucket.
 
 name = "xpanda-cutting-v2"
-main = ".open-next/worker.js"
+# Custom worker entry (not the raw OpenNext output): re-exports the generated fetch handler
+# and adds the schedule-board cron `scheduled()` export. See custom-worker.ts.
+main = "custom-worker.ts"
 compatibility_date = "2026-03-17"
 compatibility_flags = ["nodejs_compat"]
+
+# ── Schedule board cron (P261) ──────────────────────────────────────────────────────
+# Unattended ingestion of the Google-Sheet schedule into schedule_rows (see schedule-ingest.ts).
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+SCHEDULE_SHEET_ID = "1X57jb_FWPlYTwi3fMJ9I_Yc_meS8AAe4"
 
 # OpenNext static assets
 [assets]

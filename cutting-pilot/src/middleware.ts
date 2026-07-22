@@ -1,7 +1,8 @@
 // src/middleware.ts
 // The strangler gate for the v2 surface. Runs on every /v2/* request,
 // reads the shared xpanda_session cookie, validates against the shared D1, and enforces
-// manufacturing.cutting. Mirrors the legacy session gate in _worker.js/index.js.
+// a per-path permission key (mirrors the legacy PATH_PERMISSION_MAP/API_PERMISSION_MAP in
+// _worker.js/lib/core.js — one permission key per feature, not one blanket key for all of /v2).
 //
 // In production (workerd): getCloudflareContext() returns real D1/R2 bindings.
 // In `next dev`: the edge runtime can't load wrangler via dynamic import, so the
@@ -16,12 +17,24 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { validateSession, hasPermission } from "@/lib/session";
 
-const PERMISSION_KEY = "manufacturing.cutting";
+// First matching prefix wins. A path with no match falls through with no permission gate
+// (still session-gated above) — same as an un-mapped path in the legacy PATH_PERMISSION_MAP.
+const PERMISSION_MAP: Array<{ prefix: string; key: string }> = [
+  { prefix: "/v2/api/schedule-board", key: "schedule" },
+  { prefix: "/v2/schedule", key: "schedule" },
+  { prefix: "/v2/api/cutting", key: "manufacturing.cutting" },
+  { prefix: "/v2/cutting", key: "manufacturing.cutting" },
+];
+
+function permissionKeyFor(pathname: string): string | null {
+  return PERMISSION_MAP.find((m) => pathname.startsWith(m.prefix))?.key ?? null;
+}
 
 export const config = {
   // basePath: "/v2" in next.config.mjs prepends /v2 to every matcher automatically.
   // Do NOT include /v2 here — that would compile to /v2/v2/... (double-prefix).
   // Negative lookahead excludes _next/static, _next/image, and favicon from the auth gate.
+  // This already covers /v2/api/schedule-board and /v2/schedule — no change needed here.
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
 
@@ -52,7 +65,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const action = request.method === "GET" || request.method === "HEAD" ? "view" : "edit";
-  if (!hasPermission(user, PERMISSION_KEY, action)) {
+  if (!hasPermission(user, permissionKeyFor(url.pathname), action)) {
     if (isApi) return NextResponse.json({ ok: false, error: "Access denied." }, { status: 403 });
     return NextResponse.redirect(new URL("/?access_denied=1", url.origin));
   }
