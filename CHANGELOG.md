@@ -85,6 +85,43 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P261 hotfix — poller switched from Sheets API to Drive API + XLSX parsing.** Live diagnosis after
+  deploy: `schedule_rows` stayed empty through every cron tick with no visible error. Isolated it with
+  a standalone script replaying the poller's own token-refresh + first API call against the real
+  credentials — OAuth was fine (200, valid access token), but the Sheets API `values:batchGet` call
+  itself returned `400 FAILED_PRECONDITION — "This operation is not supported for this document. The
+  document must not be an Office file."` The source file is an uploaded `.xlsx` kept in Drive's Office
+  compatibility mode, not a converted native Google Sheet — and Sheets API v4 refuses to read Office
+  files at all. Converting it once was the obvious fix, but the sheet's human updater habitually
+  re-uploads a fresh Excel file over the same document, which would revert it to Office format and
+  break ingestion again — so instead `fetchSheetTabs` (`src/lib/schedule-ingest.ts`) now downloads the
+  raw file bytes via the Drive API (`GET /drive/v3/files/{id}?alt=media`, format-agnostic — works
+  whether the file is native or Office) and parses them with SheetJS (`xlsx` — installed from
+  **SheetJS's own CDN, not the npm registry**: the npm-published `xlsx` package carries two unpatched
+  high-severity CVEs — prototype pollution `GHSA-4r6h-8v6p-xvw6` and ReDoS `GHSA-5pgg-2g8v-p4x9` — that
+  SheetJS stopped fixing on npm; their CDN tarball is the maintained, patched build).
+  `XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" })` reproduces the exact
+  `string[][]` shape the old Sheets API response gave, so `parseSchedule()` needed zero changes.
+  Bonus side effect: tab lookup is now per-sheet-name against one downloaded workbook instead of one
+  all-or-nothing API call, so a not-yet-created "next week" tab no longer takes down "this week" too.
+  `google-auth.ts` (the OAuth token exchange) is unchanged — only the *scope* baked into the refresh
+  token needs to change, not the exchange code. **Requires a new refresh token with the `drive.readonly`
+  scope (replacing `spreadsheets.readonly`)** and the Google Drive API enabled in the same Cloud
+  project — both manual steps for Steve, stated back in the conversation this shipped in (no separate
+  prompt file). `tsc --noEmit` + `cf-build` green;
+  `wrangler deploy --dry-run` confirms `xlsx` bundles cleanly (+~177 KB gzipped, 1.77 MB total — well
+  under Workers' size limit). **Validated against the real spreadsheet** (1000+ rows/tab) once a
+  `drive.readonly`-scoped refresh token existed, which surfaced two real bugs no synthetic test data
+  would have caught: (1) a totals/summary row sitting above the real MONDAY header reads "PENDING
+  DELIVERIES @ BOTTOM," which a bare `includes("PENDING")` in `sectionHeader()` matched as the PENDING
+  block opening — harmless today only because the real MONDAY header on the very next row immediately
+  overrides it before any order row is processed, but fragile; tightened the match to the real header's
+  actual phrase, "PENDING DATE OF DELIVERY." (2) The upsert key was `(invoice_number, ship_week)`, but
+  large orders routinely split their base invoice across multiple delivery days in the same
+  week — live data has "INV 4203-001 thru 003" on Tuesday and "INV 4203-004 thru 007" on Wednesday,
+  both correctly reducing to base invoice 4203 under the `INV\s*(\d+)` regex — so the two-field key was
+  silently dropping one of the two rows on every poll. Widened to
+  `(invoice_number, ship_week, day_of_week)`, confirmed against live data (0 collisions, previously 1).
 - **P263** — `/v2/schedule` TV board UI (read-only wall display, no new API routes). Design read:
   a floor/office TV board for anyone glancing at the shipping schedule from across a room, dense +
   industrial, two-week stacked bands, no interaction. `src/app/schedule/page.tsx` (thin server shell,
