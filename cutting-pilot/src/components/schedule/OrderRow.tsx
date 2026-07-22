@@ -1,5 +1,5 @@
 // src/components/schedule/OrderRow.tsx
-// One reusable order row for the TV board (day columns) AND the PENDING strip. Customer +
+// One reusable order row for each day column on the TV board. Customer +
 // INV# + status badge are always visible; every other field is trimmed progressively as
 // density tightens (compact drops delivery time/location/method/carrier, minimal also drops
 // load count + the scrap icon) — trimming fields is preferred over shrinking text below the

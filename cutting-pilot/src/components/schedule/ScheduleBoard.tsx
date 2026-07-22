@@ -9,7 +9,6 @@ import { AlertTriangle } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import type { ScheduleBoardResponse } from "@/types/schedule";
 import WeekBand from "./WeekBand";
-import OrderRow from "./OrderRow";
 import { computeDensity } from "./density";
 
 const POLL_MS = 60_000;
@@ -126,7 +125,6 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
   const [currentTab, nextTab] = data.weeks;
   const currentDays = data.days.filter((d) => d.ship_week === currentTab);
   const nextDays = data.days.filter((d) => d.ship_week === nextTab);
-  const pending = data.days.find((d) => d.day_of_week === "PENDING") ?? null;
 
   const maxColumnRows = Math.max(
     0,
@@ -174,21 +172,6 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
           rowCap={rowCap}
         />
       </div>
-
-      {pending && pending.rows.length > 0 && (
-        <div className="shrink-0 max-h-[14vh] flex flex-col border-t border-[var(--line)] bg-[var(--surface-2)]">
-          <h2 className="shrink-0 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
-            Pending date of delivery
-          </h2>
-          <div className="flex-1 min-h-0 overflow-x-auto flex gap-px bg-[var(--line)]">
-            {pending.rows.map((row, i) => (
-              <div key={`${row.invoice_number}-${row.job_id ?? i}`} className="w-44 shrink-0 bg-[var(--surface)]">
-                <OrderRow row={row} density="compact" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
