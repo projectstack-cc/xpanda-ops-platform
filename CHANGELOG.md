@@ -495,6 +495,16 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Admin / Platform
 
+- **P264** — New `schedule` permission key ("Schedule Board (TV)", own `Schedule` group) added to
+  `PERMISSION_LABELS` in `admin/roles.html` — the last piece of the schedule board (1–4/5): the v2
+  middleware (3/5) already enforces this key, but until it existed in the roles system no admin could
+  grant it. `permissions` is stored as an opaque JSON blob with no separate key whitelist anywhere in
+  `_worker.js` (confirmed — `routes/admin.js` just serializes whatever the client sends, and
+  `roles.html`'s render/toggle/save logic iterates `PERMISSION_LABELS` generically with no
+  hardcoded key list), so the label edit is the whole change — no `core.js` edit, no new
+  `PATH_PERMISSION_MAP`/`API_PERMISSION_MAP` entry (the board has no legacy path or `/api/schedule*`
+  route to map). No homepage card or legacy nav added — the board is a v2 wall display, linked to
+  directly. `node --check` clean on the extracted inline script.
 - **P235** — Dedicated Cutting card on the homepage, gated on `manufacturing.cutting`, opening `/v2/cutting` directly — gives the cutting team a one-tap, correctly-named entry point instead of routing through the Manufacturing card (both paths retained). New `hp-icon-cutting` swatch (emerald, light + dark) and `hp-btn-cutting` added to the shared primary-button rule; lucide scissors glyph. No JS change — the existing generic `.hp-card[data-permission]` gate (P48) picks the card up automatically. No new permission key, no migration.
 - **P226** — Fixed inert Sign Out button: both header implementations previously gated the `/login.html` redirect on the logout POST resolving, so a network blip, worker hiccup, or offline tablet left the `await` throwing and the user stuck. Legacy `shared/shared-header.js` now binds a single delegated `document` click listener (guarded by `window.__xpandaLogoutBound`) instead of a one-shot `getElementById('hdr-logout')?.addEventListener`, so it works regardless of DOM timing or whether the link is in the topbar or footer; redirect now fires in `.finally()` so sign-out always completes even if the POST rejects. v2 `cutting-pilot/src/components/PlatformHeader.tsx` gets the matching try/catch-then-redirect fix. Backend `/api/auth/logout` unchanged. `tsc --noEmit` + `cf-build` green.
 - **P199** — Temporary 302 redirect: `xpanda-ops-platform.pages.dev` → `https://www.xpandaops.com` in `_worker.js/index.js`. Path + query string preserved. Placed after the `/health` check (monitor-safe) and before static-asset passthrough. 302 not 301 — not hard-cached, removed cleanly once all links/bookmarks updated.
