@@ -11,23 +11,16 @@ main = "custom-worker.ts"
 compatibility_date = "2026-03-17"
 compatibility_flags = ["nodejs_compat"]
 
-# Default Workers CPU limit is 30s; the scheduled handler's XLSX parse of the schedule-board
-# spreadsheet was confirmed (live, via wrangler tail) to exceed it and get killed before any
-# D1 write happened. Real fix is scoping the parse to just the 2 needed tabs
-# (schedule-ingest.ts's `sheets: tabs` option — cut parse time ~3x), this is the safety
-# margin on top: max allowed is 300_000 (5 min); 60s is ~12x the observed selective-parse
-# time, generous headroom without reflexively maxing out. Applies to the whole worker (fetch
-# + scheduled) — a higher ceiling costs nothing unless actually used; billing is metered on
-# real CPU-ms consumed, not the limit.
-[limits]
-cpu_ms = 60_000
+# NOTE: this account is on the Workers FREE plan. `[limits] cpu_ms` is a PAID-plan-only
+# feature — setting it here made every deploy hard-fail (Cloudflare API error 100328).
+# Free plan's Cron Trigger CPU budget is a fixed, non-configurable 10ms — no amount of
+# in-Worker parsing optimization can fit real XLSX parsing under that. See BACKLOG.md for
+# the architecture options being considered before re-attempting this cron.
 
 # ── Schedule board cron (P261) ──────────────────────────────────────────────────────
 # Unattended ingestion of the Google-Sheet schedule into schedule_rows (see schedule-ingest.ts).
-# Temporarily 5 min (was 15) while verifying the P261 hotfix landed correctly — revert once
-# a poll is confirmed writing rows, no reason to poll Google 3x more often long-term.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/15 * * * *"]
 
 [vars]
 SCHEDULE_SHEET_ID = "1X57jb_FWPlYTwi3fMJ9I_Yc_meS8AAe4"
