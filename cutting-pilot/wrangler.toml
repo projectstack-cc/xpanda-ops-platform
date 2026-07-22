@@ -21,10 +21,10 @@ cpu_ms = 60_000
 
 # ── Schedule board cron (P261) ──────────────────────────────────────────────────────
 # Unattended ingestion of the Google-Sheet schedule into schedule_rows (see schedule-ingest.ts).
-# Temporarily 5 min (was 15) for one fast verification round post-upgrade — revert to 15
-# once a poll is confirmed writing rows.
+# Confirmed working end-to-end in production 2026-07-22 (48 rows written, correct
+# distribution across both ship weeks) — back to the normal 15-min interval.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/15 * * * *"]
 
 [vars]
 SCHEDULE_SHEET_ID = "1X57jb_FWPlYTwi3fMJ9I_Yc_meS8AAe4"
