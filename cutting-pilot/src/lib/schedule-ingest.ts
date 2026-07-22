@@ -3,6 +3,7 @@
 // DB_Migrations/schedule-board.sql). Runs unattended on a Cloudflare Cron Trigger — no
 // user session, no X-User-* identity, no cookies.
 import type { D1Database } from "@cloudflare/workers-types";
+import * as XLSX from "xlsx";
 import { getAccessToken, type GoogleAuthEnv } from "./google-auth";
 
 export interface ScheduleEnv extends GoogleAuthEnv {
@@ -71,12 +72,26 @@ function parseTabName(tab: string): Date | null {
   return new Date(Date.UTC(2000 + Number(yr), Number(mo) - 1, Number(da)));
 }
 
-// ─── Sheets API fetch ─────────────────────────────────────────────────────────
+// ─── Drive file fetch + XLSX parse ─────────────────────────────────────────────
+//
+// The source file is an uploaded Excel workbook kept in "Office compatibility mode" in
+// Drive (mimeType application/vnd.openxmlformats-officedocument.spreadsheetml.sheet), NOT a
+// converted native Google Sheet — confirmed live: Sheets API v4 flatly refuses it
+// (400 FAILED_PRECONDITION "must not be an Office file"). Converting the file once would
+// dodge that, but the sheet's human updater habitually re-uploads a fresh .xlsx over the
+// same file, which reverts it to Office format and would break the poller again. Reading
+// the raw bytes via the Drive API instead is format-agnostic — it doesn't care whether the
+// file is a native Sheet or an Office file, so it survives every future re-upload.
+// Requires the `drive.readonly` OAuth scope (broader than `spreadsheets.readonly` — see
+// google-auth.ts; the token-exchange code itself didn't need to change, only the scope
+// baked into the refresh token at consent time).
 
 /**
- * One `values:batchGet` call for both ship-week tabs (sheet names quoted — hyphens make
- * them non-simple A1 names). A failed request is logged and yields an empty map, so callers
- * skip pruning for both weeks rather than wiping the board on a transient Google error.
+ * One Drive API file download (`alt=media`) for the whole workbook, then each requested
+ * ship-week tab is looked up as a sheet name within it. A download/parse failure is logged
+ * and yields an empty map, so callers skip pruning for both weeks rather than wiping the
+ * board on a transient Google error. A single missing tab (e.g. next week not created yet)
+ * is NOT a failure — it's simply absent from the map, so only that week skips pruning.
  */
 export async function fetchSheetTabs(
   env: ScheduleEnv,
@@ -84,24 +99,31 @@ export async function fetchSheetTabs(
   tabs: string[]
 ): Promise<Map<string, string[][]>> {
   const result = new Map<string, string[][]>();
-  const ranges = tabs.map((t) => `ranges=${encodeURIComponent(`'${t}'`)}`).join("&");
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${env.SCHEDULE_SHEET_ID}/values:batchGet?${ranges}`;
+  const url = `https://www.googleapis.com/drive/v3/files/${env.SCHEDULE_SHEET_ID}?alt=media`;
 
   try {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    const text = await res.text();
     if (!res.ok) {
-      console.error(`schedule-ingest: Sheets API batchGet failed (${res.status}): ${text}`);
+      const text = await res.text();
+      console.error(`schedule-ingest: Drive file download failed (${res.status}): ${text}`);
       return result;
     }
 
-    const data: { valueRanges?: Array<{ values?: string[][] }> } = JSON.parse(text);
-    const valueRanges = data.valueRanges ?? [];
-    tabs.forEach((tab, i) => {
-      result.set(tab, valueRanges[i]?.values ?? []);
-    });
+    const bytes = await res.arrayBuffer();
+    const workbook = XLSX.read(bytes, { type: "array" });
+
+    for (const tab of tabs) {
+      const sheet = workbook.Sheets[tab];
+      if (!sheet) continue; // tab not created yet — absent from map, not a failure
+      const rows = XLSX.utils.sheet_to_json<string[]>(sheet, {
+        header: 1,
+        raw: false,
+        defval: "",
+      });
+      result.set(tab, rows);
+    }
   } catch (err) {
-    console.error("schedule-ingest: Sheets API batchGet threw", err);
+    console.error("schedule-ingest: Drive file download/parse threw", err);
   }
 
   return result;
@@ -132,13 +154,20 @@ function shipDateFor(shipWeek: string, day: Section): string | null {
   return addUtcDays(monday, offset).toISOString().slice(0, 10);
 }
 
+// Confirmed against live data: a totals row above the real MONDAY header reads "PENDING
+// DELIVERIES @ BOTTOM" — a bare `includes("PENDING")` matches that too. Harmless today (the
+// real MONDAY header on the very next row overrides it before any order row is processed),
+// but fragile. The real section header reads "PENDING DATE OF DELIVERY PER SALES LEAD
+// LISTED's customer listed" — match that specific phrase instead.
+const PENDING_HEADER_PHRASE = "PENDING DATE OF DELIVERY";
+
 /** Section header if this row marks a day/PENDING block; otherwise null (an order row). */
 function sectionHeader(row: string[]): Section | null {
   for (const raw of row) {
     const v = (raw ?? "").toString().trim().toUpperCase();
     if (!v) continue;
     if ((DAY_NAMES as readonly string[]).includes(v)) return v as DayName;
-    if (v.includes("PENDING")) return "PENDING";
+    if (v.includes(PENDING_HEADER_PHRASE)) return "PENDING";
   }
   return null;
 }
@@ -197,11 +226,16 @@ interface JobLookupRow {
 
 /**
  * Matches parsed rows to `jobs.invoice_number`, upserts into `schedule_rows` by
- * (invoice_number, ship_week), and prunes rows no longer present for weeks actually fetched
- * this run. `schedule_rows` has no UNIQUE(invoice_number, ship_week) constraint (see 1/5), so
- * the upsert is done in application code (select-then-insert/update) rather than SQL ON
- * CONFLICT. Pruning uses a mark-and-sweep: every row touched this run gets the same
- * `last_seen_at`; anything older for a fetched week is stale and deleted.
+ * (invoice_number, ship_week, day_of_week), and prunes rows no longer present for weeks
+ * actually fetched this run. The key includes `day_of_week` — NOT just (invoice_number,
+ * ship_week) — because a single large order routinely splits its base invoice across
+ * multiple delivery days within the same week (confirmed live: "INV 4203-001 thru 003" on
+ * Tuesday and "INV 4203-004 thru 007" on Wednesday both reduce to base invoice 4203 under the
+ * `INV\s*(\d+)` regex; a two-field key would have silently dropped one row every poll).
+ * `schedule_rows` has no UNIQUE constraint for this (see 1/5), so the upsert is done in
+ * application code (select-then-insert/update) rather than SQL ON CONFLICT. Pruning uses a
+ * mark-and-sweep: every row touched this run gets the same `last_seen_at`; anything older for
+ * a fetched week is stale and deleted.
  */
 export async function matchAndUpsert(
   db: D1Database,
@@ -250,8 +284,10 @@ async function upsertRow(
   lastSeenAt: string
 ): Promise<void> {
   const existing = await db
-    .prepare(`SELECT id FROM schedule_rows WHERE invoice_number = ? AND ship_week = ?`)
-    .bind(row.invoice_number, row.ship_week)
+    .prepare(
+      `SELECT id FROM schedule_rows WHERE invoice_number = ? AND ship_week = ? AND day_of_week = ?`
+    )
+    .bind(row.invoice_number, row.ship_week, row.day_of_week)
     .first<{ id: number }>();
 
   if (existing) {
