@@ -13,8 +13,10 @@ compatibility_flags = ["nodejs_compat"]
 
 # ── Schedule board cron (P261) ──────────────────────────────────────────────────────
 # Unattended ingestion of the Google-Sheet schedule into schedule_rows (see schedule-ingest.ts).
+# Temporarily 5 min (was 15) while verifying the P261 hotfix landed correctly — revert once
+# a poll is confirmed writing rows, no reason to poll Google 3x more often long-term.
 [triggers]
-crons = ["*/15 * * * *"]
+crons = ["*/5 * * * *"]
 
 [vars]
 SCHEDULE_SHEET_ID = "1X57jb_FWPlYTwi3fMJ9I_Yc_meS8AAe4"
