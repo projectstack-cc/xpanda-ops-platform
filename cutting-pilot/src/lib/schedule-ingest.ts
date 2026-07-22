@@ -85,6 +85,13 @@ function parseTabName(tab: string): Date | null {
 // Requires the `drive.readonly` OAuth scope (broader than `spreadsheets.readonly` — see
 // google-auth.ts; the token-exchange code itself didn't need to change, only the scope
 // baked into the refresh token at consent time).
+//
+// The live workbook carries 190+ historical tabs (one per ship-week back to late 2024).
+// XLSX.read() fully parses every sheet by default — confirmed live via wrangler tail: the
+// scheduled handler was hitting Cloudflare's CPU time limit and getting killed before a
+// single row was written, every single poll. The `sheets` read option restricts actual
+// parsing to the named tabs (SheetNames still lists everything, but only these two get
+// decompressed+parsed) — cut local benchmark parse time from ~16s to ~5s for the same file.
 
 /**
  * One Drive API file download (`alt=media`) for the whole workbook, then each requested
@@ -110,7 +117,7 @@ export async function fetchSheetTabs(
     }
 
     const bytes = await res.arrayBuffer();
-    const workbook = XLSX.read(bytes, { type: "array" });
+    const workbook = XLSX.read(bytes, { type: "array", sheets: tabs });
 
     for (const tab of tabs) {
       const sheet = workbook.Sheets[tab];
