@@ -9,6 +9,7 @@ import type { ScheduleBoardRow } from "@/types/schedule";
 import StatusBadge from "./StatusBadge";
 import type { Density } from "./density";
 import { formatLoadLabel } from "@/lib/truckType";
+import { SHOW_STATUS_BADGES } from "./flags";
 
 interface OrderRowProps {
   row: ScheduleBoardRow;
@@ -31,6 +32,10 @@ export default function OrderRow({ row, density }: OrderRowProps) {
   const showScrapIcon = density !== "minimal";
   const scrapYes = showScrapIcon && isScrapYes(row.scrap_pickup);
   const loadLabel = formatLoadLabel(row.method, row.load_count);
+  // Unmatched rows keep their flag regardless of the badge flag — it's the operator's only
+  // signal that a sheet row has no platform job, not a derived production status.
+  const showBadge = SHOW_STATUS_BADGES || row.unmatched;
+  const showSecondLine = showBadge || scrapYes || (showLoadCount && !!loadLabel);
 
   return (
     <div
@@ -47,19 +52,23 @@ export default function OrderRow({ row, density }: OrderRowProps) {
         </span>
       </div>
 
-      <div className="flex items-center justify-between gap-1 mt-0.5 min-w-0">
-        <div className="flex items-center gap-1 min-w-0">
-          <StatusBadge status={row.status} unmatched={row.unmatched} sheetStatus={row.sheet_status} />
-          {scrapYes && (
-            <Recycle size={11} className="shrink-0 text-[var(--warn-text)]" aria-label="Scrap pickup" />
+      {showSecondLine && (
+        <div className="flex items-center justify-between gap-1 mt-0.5 min-w-0">
+          <div className="flex items-center gap-1 min-w-0">
+            {showBadge && (
+              <StatusBadge status={row.status} unmatched={row.unmatched} sheetStatus={row.sheet_status} />
+            )}
+            {scrapYes && (
+              <Recycle size={11} className="shrink-0 text-[var(--warn-text)]" aria-label="Scrap pickup" />
+            )}
+          </div>
+          {showLoadCount && loadLabel && (
+            <span className="shrink-0 font-mono tabular-nums text-[10px] text-text-hint">
+              {loadLabel}
+            </span>
           )}
         </div>
-        {showLoadCount && loadLabel && (
-          <span className="shrink-0 font-mono tabular-nums text-[10px] text-text-hint">
-            {loadLabel}
-          </span>
-        )}
-      </div>
+      )}
 
       {showTiming && (row.delivery_time || row.location) && (
         <div className="mt-0.5 text-[10px] text-text-faint truncate">
