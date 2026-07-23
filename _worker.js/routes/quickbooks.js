@@ -9,7 +9,7 @@ async function createJobFromInvoice(db, invoice) {
 
   if (mapped.invoice_number) {
     const dupe = await db.prepare(
-      "SELECT id FROM jobs WHERE invoice_number = ? AND status != 'archived' LIMIT 1"
+      "SELECT id FROM jobs WHERE invoice_number = ? AND archived_at IS NULL LIMIT 1"
     ).bind(mapped.invoice_number).first();
     if (dupe) {
       return { ok: false, code: 'duplicate_invoice', job_id: dupe.id,

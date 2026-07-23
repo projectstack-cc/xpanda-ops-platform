@@ -503,6 +503,40 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P272** — Archive refactor (2/3): legacy archive semantics, worker + frontend in one commit
+  (splitting them would leave a window where the UI and API disagree about what archiving means,
+  since legacy auto-deploys on push). Archiving stops touching `jobs.status` entirely: manual
+  Archive/Unarchive (`jobs/index.html`) and the auto-archive sweep (`_worker.js/routes/jobs.js`)
+  now set/clear `archived_at` only. Manual Unarchive no longer hardcodes `'shipped'` — it just
+  clears `archived_at`, so the job returns to whatever its real, preserved status already is.
+  **Sweep tightened** (the actual operational bug this refactor targets): previously any job
+  >14 days stale that wasn't already shipped/loading got archived, including jobs still mid-cut —
+  since both cutting queues exclude archived jobs, a late in-progress order would silently vanish
+  from the floor. Now restricted to jobs that are actually finished: `status IN ('done','shipped')`,
+  or a delivered outbound `shipments` row as direct evidence even when `jobs.status` hasn't caught
+  up (the legacy dock board can advance `loading_assignments`/`shipments` without ever writing
+  `jobs.status` — status-write-site-inventory.md L23/L26). A late `not_started`/`in_production`/
+  `loading` job with no delivery evidence now stays visible, on the board and both cutting queues.
+  Every `jobs.status`-based archived filter across the worker moved to `archived_at IS NULL`
+  (`routes/jobs.js` list/search/week/status-param queries, the duplicate-invoice checks in
+  `routes/jobs.js` and `routes/quickbooks.js`, the legacy cutting dashboard exclusion in
+  `routes/cutting.js`) — confirmed exhaustive by grep, `loading_assignments.loading_status`
+  filters (L24, a different table/column, out of scope) untouched. `PUT /api/jobs` gained
+  `archived_at` field support and dropped `'archived'` from the settable `status` enum (archiving
+  now only happens via `archived_at`); `JOB_LIST_COLS` exposes `archived_at`. Frontend: Archive
+  button now requires `status === 'shipped' && !archived_at`; Unarchive now keys off `archived_at`
+  alone (a job can be archived at any real status); card `data-archived` attribute replaces the
+  `data-status="archived"` CSS hook so dimming still applies once status stops being overwritten;
+  cards are non-draggable while archived regardless of real status. Verified via a standalone
+  SQLite simulation of the write/sweep SQL: archiving mid-production preserves `in_production`;
+  unarchiving restores it exactly (not a hardcoded value); the sweep archives late done/shipped/
+  delivery-evidenced jobs but leaves late in-progress ones untouched; legacy `status='archived'`
+  rows still filter out via `archived_at IS NULL`. `node --check` clean on all touched files
+  (worker files + both inline `<script>` blocks in `jobs/index.html`). Two gaps found but left
+  out of this locked scope, logged to BACKLOG: `reports/orders/index.html` still filters/labels by
+  `status==='archived'` and will stop tracking new archives; unarchiving a legacy sentinel row
+  leaves `status` literally `'archived'` (no real prior value to restore).
+
 - **P271** — Archive refactor (1/3): schema step. `jobs.status` was carrying two orthogonal facts —
   lifecycle stage and whether the job's been filed away — so writing `'archived'` destroyed the
   first to record the second (the "Unarchive" button hardcoded `'shipped'` because the true prior

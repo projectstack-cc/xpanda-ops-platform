@@ -31,7 +31,7 @@ export async function handleApiCutting(request, env) {
                ) ORDER BY cs.sort_order ASC)
                FROM cutting_steps cs WHERE cs.job_id = j.id) AS steps_json
         FROM jobs j
-        WHERE j.status NOT IN ('archived')
+        WHERE j.archived_at IS NULL
           AND EXISTS (SELECT 1 FROM cutting_steps cs2 WHERE cs2.job_id = j.id)
         ORDER BY j.ship_date ASC, j.invoice_number ASC
       `).all();
