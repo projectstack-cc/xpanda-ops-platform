@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
+
+// Schedule board only (`autoHide` prop) — idle delay before the overlay nav auto-hides.
+const NAV_AUTO_HIDE_IDLE_MS = 5_000;
 
 const NAV_MODULES = [
   { label: "Job board",     href: "/jobs/",          perm: "jobs" },
@@ -30,6 +33,12 @@ interface PlatformHeaderProps {
   isAdmin: boolean;
   permissions: Record<string, { view?: boolean; edit?: boolean }>;
   currentPath?: string;
+  /**
+   * Overlay the nav instead of taking layout space: hidden by default, reveals on
+   * pointer/touch/key interaction or focus, auto-hides after `NAV_AUTO_HIDE_IDLE_MS` idle.
+   * Schedule board ONLY — every other caller omits this and keeps the normal in-flow nav.
+   */
+  autoHide?: boolean;
 }
 
 export default function PlatformHeader({
@@ -38,8 +47,30 @@ export default function PlatformHeader({
   isAdmin,
   permissions,
   currentPath = "/v2/cutting",
+  autoHide = false,
 }: PlatformHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [revealed, setRevealed] = useState(!autoHide);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const reveal = useCallback(() => {
+    setRevealed(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setRevealed(false), NAV_AUTO_HIDE_IDLE_MS);
+  }, []);
+
+  useEffect(() => {
+    if (!autoHide) return;
+    window.addEventListener("pointermove", reveal);
+    window.addEventListener("keydown", reveal);
+    window.addEventListener("touchstart", reveal, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", reveal);
+      window.removeEventListener("keydown", reveal);
+      window.removeEventListener("touchstart", reveal);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, [autoHide, reveal]);
 
   const visibleModules = NAV_MODULES.filter(
     (m) => isAdmin || permissions[m.perm]?.view
@@ -56,7 +87,35 @@ export default function PlatformHeader({
   }
 
   return (
-    <header className="shrink-0 bg-surface border-b border-[var(--line)]">
+    <>
+      {autoHide && (
+        <button
+          type="button"
+          onClick={reveal}
+          onPointerEnter={reveal}
+          onFocus={reveal}
+          aria-label="Show navigation"
+          className="fixed inset-x-0 top-0 z-50 h-11 flex items-start justify-center pt-1 bg-transparent border-0 cursor-pointer focus-visible:outline-none"
+        >
+          <span
+            aria-hidden="true"
+            className="h-1 w-14 rounded-full bg-[var(--line)] opacity-60"
+          />
+        </button>
+      )}
+      <header
+        onFocus={autoHide ? reveal : undefined}
+        className={[
+          "shrink-0 bg-surface border-b border-[var(--line)]",
+          autoHide
+            ? [
+                "fixed inset-x-0 top-0 z-40 transition-transform duration-300 ease-out",
+                "motion-reduce:transition-none focus-within:translate-y-0",
+                revealed ? "translate-y-0" : "-translate-y-full",
+              ].join(" ")
+            : "",
+        ].join(" ")}
+      >
       {/* Main nav row */}
       <div className="flex items-center px-3 min-h-[48px] gap-1">
         {/* Logo — plain <a> + <img>: basePath does NOT prefix these, which is correct for /logo/xpanda.png served by the legacy app on the same host */}
@@ -166,6 +225,7 @@ export default function PlatformHeader({
       <div className="px-4 h-9 flex items-center border-t border-[var(--line)] bg-[var(--surface-2)]">
         <h1 className="text-sm font-semibold text-text tracking-tight">{title}</h1>
       </div>
-    </header>
+      </header>
+    </>
   );
 }

@@ -28,12 +28,16 @@ async function allByJobIds<T>(
 
 /**
  * Precedence ladder (highest wins):
+ *   0. jobs.status = 'archived'                                      → Shipped
  *   1. jobs.status = 'shipped'                                       → Shipped
  *   2. any loading_assignments.loading_status = 'loaded' for the job → Loaded
  *   3. any loading_assignments row assigned to the job                → Loading
  *   4. all of the job's cutting_lines are 'complete' (or jobs.status = 'done') → Ready
  *   5. any cutting_lines 'in_progress', or an open cutting_sessions row → Cutting
  *   6. else                                                           → Not Started
+ * Archived is authoritative and terminal: it's a human "this is done and off my board"
+ * signal, so it outranks every floor-data signal even if cutting/loading was never fully
+ * ticked (see PXXX — archived jobs were showing stale mid-production status).
  * jobs.id (and every id here) is TEXT, never numeric.
  */
 export async function deriveStatuses(db: D1Database, jobIds: string[]): Promise<Map<string, ScheduleStatus>> {
@@ -99,7 +103,7 @@ function deriveOne(
   lineStatuses: string[],
   hasOpenSession: boolean
 ): ScheduleStatus {
-  if (jobStatus === "shipped") return "Shipped";
+  if (jobStatus === "archived" || jobStatus === "shipped") return "Shipped";
   if (assignmentStatuses.includes("loaded")) return "Loaded";
   if (assignmentStatuses.length > 0) return "Loading";
 

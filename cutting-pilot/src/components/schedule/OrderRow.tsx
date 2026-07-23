@@ -8,11 +8,17 @@ import { Recycle } from "lucide-react";
 import type { ScheduleBoardRow } from "@/types/schedule";
 import StatusBadge from "./StatusBadge";
 import type { Density } from "./density";
+import { formatLoadLabel } from "@/lib/truckType";
 
 interface OrderRowProps {
   row: ScheduleBoardRow;
   density: Density;
 }
+
+// Single definition shared by customer name and INV# so they read as one visual tier — a
+// later change to one moves both. font-mono/tabular-nums stacks on top for the invoice
+// number since it's numeric data, without touching the shared size/weight/color.
+const PRIMARY_LABEL_CLS = "text-[clamp(0.6875rem,1vh,0.8rem)] font-medium text-text";
 
 function isScrapYes(scrapPickup: string | null): boolean {
   return (scrapPickup ?? "").trim().toUpperCase().startsWith("Y");
@@ -24,19 +30,19 @@ export default function OrderRow({ row, density }: OrderRowProps) {
   const showLoadCount = density !== "minimal";
   const showScrapIcon = density !== "minimal";
   const scrapYes = showScrapIcon && isScrapYes(row.scrap_pickup);
+  const loadLabel = formatLoadLabel(row.method, row.load_count);
 
   return (
     <div
       className={[
-        "px-1.5 py-1 border-b border-[var(--border-light)] last:border-b-0",
+        "px-1.5 border-b border-[var(--border-light)] last:border-b-0",
+        density === "full" ? "py-1" : "py-0.5",
         row.unmatched ? "opacity-60 grayscale-[30%]" : "",
       ].join(" ")}
     >
       <div className="flex items-center justify-between gap-1 min-w-0">
-        <span className="truncate text-[clamp(0.6875rem,1vh,0.8rem)] font-medium text-text">
-          {row.customer || "—"}
-        </span>
-        <span className="shrink-0 font-mono tabular-nums text-[10px] text-text-hint">
+        <span className={`truncate ${PRIMARY_LABEL_CLS}`}>{row.customer || "—"}</span>
+        <span className={`shrink-0 font-mono tabular-nums ${PRIMARY_LABEL_CLS}`}>
           #{row.invoice_number}
         </span>
       </div>
@@ -48,9 +54,9 @@ export default function OrderRow({ row, density }: OrderRowProps) {
             <Recycle size={11} className="shrink-0 text-[var(--warn-text)]" aria-label="Scrap pickup" />
           )}
         </div>
-        {showLoadCount && row.load_count != null && (
+        {showLoadCount && loadLabel && (
           <span className="shrink-0 font-mono tabular-nums text-[10px] text-text-hint">
-            {row.load_count}
+            {loadLabel}
           </span>
         )}
       </div>

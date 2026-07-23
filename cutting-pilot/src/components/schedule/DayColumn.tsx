@@ -28,7 +28,7 @@ export default function DayColumn({ dayOfWeek, shipDate, rows, density, rowCap }
 
   return (
     <div className="min-h-0 min-w-0 flex flex-col bg-[var(--surface)]">
-      <div className="shrink-0 flex items-baseline justify-between gap-1 px-1.5 py-1 border-b border-[var(--line)]">
+      <div className="shrink-0 flex items-baseline justify-between gap-1 px-1.5 py-0.5 border-b border-[var(--line)]">
         <span className="font-mono tabular-nums text-[clamp(0.6875rem,1vh,0.8rem)] font-semibold text-text">
           {formatDayHeader(dayOfWeek, shipDate)}
         </span>
