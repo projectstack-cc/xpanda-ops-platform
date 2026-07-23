@@ -45,6 +45,10 @@
 
 ### Standing Logistics Backlog
 
+- [ ] **P271 follow-up — `loading_assignments.archived_at`.** Apply the same orthogonal-archive
+  treatment (P271) to `loading_assignments.loading_status = 'archived'` (site L24 in
+  `status-write-site-inventory.md`) — same two-facts-one-column defect, but lower-stakes since the
+  stage timestamps (`delivered_at`/`in_transit_at`/`loaded_at`) survive the overwrite independently.
 - [ ] Customer database (full CRUD) — icebox: revisit once all orders are entered here first, or it becomes a necessity
 - [ ] Consider separate dashboards for staff vs. management (TV display)
 - [ ] Zoning support for deck systems

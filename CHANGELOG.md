@@ -503,6 +503,36 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P271** — Archive refactor (1/3): schema step. `jobs.status` was carrying two orthogonal facts —
+  lifecycle stage and whether the job's been filed away — so writing `'archived'` destroyed the
+  first to record the second (the "Unarchive" button hardcoded `'shipped'` because the true prior
+  status was gone; a late-but-still-in-production job silently dropped off both cutting queues).
+  New migration `DB_Migrations/jobs-archived-at.sql` adds `jobs.archived_at` (nullable ISO
+  timestamp; NULL = active) and backfills it for existing `status='archived'` rows from
+  `updated_at`, falling back to `created_at`, falling back to `datetime('now')`. Existing
+  `status='archived'` rows are left exactly as-is — that prior lifecycle value is genuinely
+  unrecoverable, so the backfill does not guess/derive/fabricate a replacement; `'archived'`
+  remains a legal legacy sentinel meaning "archived, prior status unknown" and ages out naturally
+  as future archives (prompts 2/3, 3/3) start setting `archived_at` instead of overwriting
+  `status`. Schema-only — no worker or frontend change. `loading_assignments.loading_status =
+  'archived'` (site L24 in `status-write-site-inventory.md`) has the same defect but is
+  lower-stakes and explicitly out of scope, tracked in BACKLOG. **Migration must run in D1 before
+  the prompt 2/3 worker deploy.**
+
+- **P270** — Forward-only guard on the shipment→job reverse status sync (site L17,
+  `_worker.js/routes/jobs.js`). `PUT /api/shipments` writes a mapped status back onto the linked
+  `jobs.status` (e.g. `in_transit`/`delivered` → `shipped`) with no protection against regression —
+  unlike every other cascade on the same handler and in v2, which guard with a `WHERE status
+  IN (...)`-style check. Editing a shipment backward on the logistics dashboard could silently
+  regress `jobs.status`, including pulling a job back out of `shipped` or `archived`. Fixed with a
+  single `JOB_STATUS_RANK` ordering (`not_started` < `in_production` < `done` < `loading` <
+  `shipped`) defined once next to `SHIPMENT_TO_JOB_STATUS`; the `UPDATE` now applies only when the
+  mapped status ranks strictly higher than the job's current status, expressed as a SQL `WHERE`
+  clause (`CASE status … END < ?`) so the check is atomic with the write. `'shipped'` and
+  `'archived'` are additionally excluded via `status NOT IN (...)` — never moved by this path
+  regardless of rank. Standalone bug fix, no schema/frontend change, no dependency on the archive
+  refactor (P271). L15/L16/L18/L19/L20 on the same handler untouched.
+
 - **P255** — Lob address verification diagnostic (observability only, no behavior change).
   Every ship-to address was coming back `unverifiable`, but the handler collapsed two very
   different failures into that one string: Lob answering `no_match`/`undeliverable` (Path A) vs.
@@ -686,6 +716,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Infra / Docs
 
+- **P269** — Status write-site inventory (report-only, read-only recon, no code changes): `status-write-site-inventory.md` enumerates every write site for `jobs.status`/`jobs.processes`, `cutting_steps.step_status`, `cutting_lines.line_status`, `cutting_sessions.status`, `loading_assignments.loading_status`, `shipments.status` + delivery-confirmation fields, and `schedule_rows.sheet_status` across both `_worker.js/**` and `cutting-pilot/src/**`, classified into event-record / display-workflow-persisted / reconciliation-patch buckets per Steve's request ahead of an `archived`-replacement refactor. Confirms the legacy pill↔step bidirectional sync (`lib/cutting.js`) and the v2 `completeCuttingLinesForJob` backstop (`lib/cutting-lines.js`) are the reconciliation-patch guardrails a future fix would retire; flags the shipment→job reverse-sync's missing downgrade guard and the driver-QR-only population of `shipments.delivery_*` as open findings. Placed at repo root (not `Reports/`) to avoid a case-collision with the live `reports/` web module — matches the `qc-slop-audit.md`/`dark-mode-audit.md`/`permissions-audit.md` precedent. No refactor plan included (out of scope by design).
 - **P195** — Agent doc sync (docs only): `xpanda-ops-agents.md` — (1) added `manufacturing/` subtree to Repository Structure (block/holey calculators moved from `production/`); (2) added Manufacturing Agent row to Available Agents table; (3) added full `# 4a. Manufacturing Agent` section covering Cutting Dashboard, `cutting_steps`, `/api/cutting*` routes, and cross-refs to job-board-agent/db-api-agent; (4) trimmed Production Agent key files to inventory-only; (5) fixed `DB Migrations/` → `DB_Migrations/` (4 occurrences); (6) fixed `block-calculator.html` path in File Size Budget table. `AGENTS.md` — added Manufacturing row to Module Overview table, updated Production row to inventory-only, fixed calculator file paths. Both files — added BACKLOG/CHANGELOG discipline rule (Cross-Cutting Rules + Implementation Order step 9). No code changes.
 - **P137** — QC slop/spaghetti audit (report-only): `qc-slop-audit.md` inventories dead code, duplication, abandoned-migration sites, and roots the PO-to-PDF rendering bug in `bol-generator.html`. (untracked; no code changes)
 - **P124** — Doc sync: `xpanda-ops-agents.md` worker section updated to post-F2/F5 reality (file-split worker, `API_ROUTES`, ESM bundle). (89ed041)
