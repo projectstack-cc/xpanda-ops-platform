@@ -963,6 +963,15 @@ export async function handleApiShipments(request, env) {
         };
         const mappedJobStatus = SHIPMENT_TO_JOB_STATUS[payload.status];
 
+        // Single source of truth for jobs.status lifecycle rank (L17 forward-only guard below).
+        const JOB_STATUS_RANK = {
+          not_started:   0,
+          in_production: 1,
+          done:          2,
+          loading:       3,
+          shipped:       4,
+        };
+
         let jobRow = null;
         try {
           jobRow = await db.prepare("SELECT status, method FROM jobs WHERE id = ?").bind(row.job_id).first();
@@ -971,10 +980,21 @@ export async function handleApiShipments(request, env) {
         }
 
         if (mappedJobStatus && jobRow && jobRow.status !== mappedJobStatus) {
+          // Forward-only: a shipment edited backward must never silently regress the linked job
+          // (e.g. out of 'shipped' or 'archived'). WHERE-clause guard keeps the check atomic with
+          // the write. 'shipped'/'archived' are absolutely protected regardless of rank.
+          // Rank CASE is generated from JOB_STATUS_RANK — the ordering lives in exactly one place.
+          const mappedRank = JOB_STATUS_RANK[mappedJobStatus] ?? -1;
+          const rankCase = `CASE status ${
+            Object.entries(JOB_STATUS_RANK).map(([s, r]) => `WHEN '${s}' THEN ${r}`).join(' ')
+          } ELSE -1 END`;
           try {
-            await db.prepare(
-              "UPDATE jobs SET status = ?, updated_at = datetime('now') WHERE id = ?"
-            ).bind(mappedJobStatus, row.job_id).run();
+            await db.prepare(`
+              UPDATE jobs SET status = ?, updated_at = datetime('now')
+              WHERE id = ?
+                AND status NOT IN ('shipped', 'archived')
+                AND (${rankCase}) < ?
+            `).bind(mappedJobStatus, row.job_id, mappedRank).run();
           } catch (e) {
             console.error('Shipment→Job status sync failed:', e);
           }
