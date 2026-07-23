@@ -13,7 +13,7 @@ export async function handleApiJobs(request, env) {
 
   // Columns returned in list responses — packing_slip_pdf is intentionally excluded (too large)
   const JOB_LIST_COLS = `
-    j.id, j.status, j.customer, j.po_number, j.invoice_number, j.ship_date, j.ship_day,
+    j.id, j.status, j.archived_at, j.customer, j.po_number, j.invoice_number, j.ship_date, j.ship_day,
     j.location, j.delivery_time, j.method, j.carrier, j.load_count, j.total_bdft,
     j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
     j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
@@ -101,16 +101,29 @@ export async function handleApiJobs(request, env) {
 
   // ── GET ──────────────────────────────────────────────────────────────────
   if (request.method === "GET") {
-    // Cleanup-on-read: auto-archive abandoned jobs (real ship date >14 days old, not shipped or
-    // actively loading). Pages Advanced Mode has no cron, so this mirrors the saved-loads
-    // TTL-on-read pattern to keep active-job counts bounded. Best-effort — a sweep failure must
-    // never break the board. Idempotent: a no-op write when nothing is newly stale.
+    // Cleanup-on-read: auto-archive stale FINISHED jobs (real ship date >14 days old). Pages
+    // Advanced Mode has no cron, so this mirrors the saved-loads TTL-on-read pattern to keep
+    // active-job counts bounded. Sets archived_at only — never touches status (archive is
+    // orthogonal to lifecycle stage). Restricted to jobs that are actually finished: status
+    // done/shipped, or a delivered outbound shipment as direct evidence of completion even when
+    // jobs.status hasn't caught up (the legacy dock board can advance loading_assignments/
+    // shipments without ever writing jobs.status — see status-write-site-inventory.md L23/L26).
+    // A job that's merely not_started/in_production/loading with no delivery evidence is a
+    // genuinely open order and must stay visible on the board and both cutting queues.
+    // Best-effort — a sweep failure must never break the board. Idempotent via archived_at IS NULL.
     try {
       await db.prepare(
-        `UPDATE jobs SET status = 'archived', updated_at = ?
-         WHERE status NOT IN ('archived','shipped','loading')
+        `UPDATE jobs SET archived_at = ?
+         WHERE archived_at IS NULL
            AND ship_date IS NOT NULL AND ship_date <> ''
-           AND ship_date < date('now','-14 days')`
+           AND ship_date < date('now','-14 days')
+           AND (
+             status IN ('done', 'shipped')
+             OR EXISTS (
+               SELECT 1 FROM shipments s
+               WHERE s.job_id = jobs.id AND s.direction = 'outbound' AND s.status = 'delivered'
+             )
+           )`
       ).bind(new Date().toISOString()).run();
     } catch (e) {
       console.error("stale-job auto-archive sweep failed:", e);
@@ -126,14 +139,14 @@ export async function handleApiJobs(request, env) {
 
     if (searchParam) {
       const like = `%${searchParam}%`;
-      const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
+      const archiveClause = includeArchived ? "" : " AND j.archived_at IS NULL";
       query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.customer LIKE ? OR j.po_number LIKE ? OR j.invoice_number LIKE ?)${archiveClause} ORDER BY j.ship_date DESC LIMIT ${limitParam}`;
       binds = [like, like, like];
     } else if (weekParam) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
         return json({ ok: false, error: "Invalid week. Use YYYY-MM-DD (Monday of week)." }, 400);
       }
-      const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
+      const archiveClause = includeArchived ? "" : " AND j.archived_at IS NULL";
       // Monday through Friday of the requested week
       query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.ship_date >= ? AND j.ship_date <= date(?, '+4 days')${archiveClause} ORDER BY j.ship_date ASC, j.created_at ASC LIMIT ${limitParam}`;
       binds = [weekParam, weekParam];
@@ -144,7 +157,8 @@ export async function handleApiJobs(request, env) {
         if (!valid.includes(s)) return json({ ok: false, error: `Invalid status: ${s}` }, 400);
       }
       const placeholders = statuses.map(() => "?").join(",");
-      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.status IN (${placeholders}) ORDER BY j.ship_date ASC, j.created_at ASC LIMIT ${limitParam}`;
+      const archiveClause = includeArchived ? "" : " AND j.archived_at IS NULL";
+      query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE j.status IN (${placeholders})${archiveClause} ORDER BY j.ship_date ASC, j.created_at ASC LIMIT ${limitParam}`;
       binds = statuses;
     } else if (includeArchived && !searchParam && !weekParam && !statusParam) {
       // All jobs including archived — for reports
@@ -152,7 +166,7 @@ export async function handleApiJobs(request, env) {
       binds = [];
     } else {
       // Default: all active + shipped in last 7 days, excluding archived unless requested
-      const archiveClause = includeArchived ? "" : " AND j.status != 'archived'";
+      const archiveClause = includeArchived ? "" : " AND j.archived_at IS NULL";
       query = `SELECT ${JOB_LIST_COLS} FROM jobs j WHERE (j.status != 'shipped' OR (j.status = 'shipped' AND j.ship_date >= date('now', '-7 days')))${archiveClause} ORDER BY j.ship_date ASC, j.created_at ASC LIMIT ${limitParam}`;
       binds = [];
     }
@@ -280,7 +294,7 @@ export async function handleApiJobs(request, env) {
     // Reject duplicate invoice numbers (also guards future QB auto-intake webhook re-fires).
     if (invoice_number) {
       const dupe = await db.prepare(
-        "SELECT id FROM jobs WHERE invoice_number = ? AND status != 'archived' LIMIT 1"
+        "SELECT id FROM jobs WHERE invoice_number = ? AND archived_at IS NULL LIMIT 1"
       ).bind(invoice_number).first();
       if (dupe) {
         return json({ ok: false, error: `A job with invoice # ${invoice_number} already exists.`, code: 'duplicate_invoice' }, 409);
@@ -414,9 +428,19 @@ export async function handleApiJobs(request, env) {
 
     if ("status" in payload) {
       const v = String(payload.status).trim();
-      if (!["not_started", "in_production", "done", "loading", "shipped", "archived"].includes(v))
+      // 'archived' is intentionally not a settable status here — archiving is orthogonal to
+      // lifecycle status (see archived_at below). Legacy rows may still carry status='archived'
+      // as a finite, unrecoverable-prior-value sentinel (see DB_Migrations/jobs-archived-at.sql).
+      if (!["not_started", "in_production", "done", "loading", "shipped"].includes(v))
         return json({ ok: false, error: "Invalid status." }, 400);
       sets.push("status = ?"); binds.push(v);
+    }
+
+    // Archive/unarchive: set/clear archived_at only, never status. A job's real lifecycle status
+    // survives being filed away and is restored exactly as it was on unarchive.
+    if ("archived_at" in payload) {
+      const v = payload.archived_at ? String(payload.archived_at) : null;
+      sets.push("archived_at = ?"); binds.push(v);
     }
 
     if ("priority" in payload) {

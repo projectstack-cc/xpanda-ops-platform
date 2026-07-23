@@ -10,6 +10,18 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **P272 follow-up — v2 cutting queue's archived filter goes stale.**
+  `cutting-pilot/src/app/api/cutting/queue/route.ts:21` excludes jobs via
+  `j.status NOT IN ('archived','shipped')`. After P272, a job archived while genuinely finished
+  keeps its real `status` (`'done'`/`'shipped'`/whatever it actually was) instead of being
+  overwritten to `'archived'`, so this literal-status filter no longer reliably excludes archived
+  jobs — same class of bug P272 fixed in the legacy worker, but P272's scope was `_worker.js/**` +
+  `jobs/index.html` only (no v2), and P273 only touches `schedule-status.ts`, so nothing in this
+  three-prompt arc reaches it. Low real-world harm today (archived jobs are terminal, so the
+  incomplete-cutting-lines check mostly still excludes them) but the exact "dangling cutting line on
+  a done job" case the P258 backstop exists for is a real edge. Needs the same `archived_at`
+  (exposed via the queue's job SELECT — confirm it's already selected/joinable) swap once a v2
+  prompt touches this route.
 - [ ] Enrich the `already_clocked_in` 409 in `clock-in/route.ts` with `job_id` + `session_id` (P257) so the "already clocked in" resolver still works if the operator's session job has dropped out of the returned queue — §9a follow-on.
 - [ ] Hard enforcement on the Work Queue (P259) — block clock-in on lower-priority jobs while higher-priority ones sit incomplete. Deferred by decision; P259 is guide-only (every job stays clickable).
 - [ ] Enable OpenNext skew protection on the v2 Worker (durable fix for hashed-asset 404s across deploys) — see https://opennext.js.org/cloudflare/howtos/skew
@@ -65,6 +77,22 @@
 
 ## Job Board
 
+- [ ] **P272 follow-up — `reports/orders/index.html` still filters/labels archived by `status`.** The
+  Orders Report's Status dropdown ("Archived" option), stats (`stat-active`/`stat-archived`), and
+  `statusBadge()` all key off `j.status === 'archived'`, which was explicitly out of P272's locked
+  scope (`_worker.js/**` + `jobs/index.html` only). After P272, new archives no longer write
+  `status`, so this report will silently stop counting/labeling newly-archived jobs as "Archived" —
+  it'll only ever match the shrinking legacy population. Needs the same `archived_at` signal swap.
+- [ ] **P272 follow-up — unarchiving a legacy `status='archived'` row leaves it in a limbo state.**
+  Manual Unarchive now only clears `archived_at`, never writes `status` (P272, by design — a job's
+  real status should be restored exactly as it was). But for the finite legacy population backfilled
+  by P271 (real prior status unrecoverable), `status` is still literally the string `'archived'` —
+  unarchiving one of these clears `archived_at` but leaves `status='archived'`, which isn't a real
+  Kanban/list status (won't render in any Kanban column, shows a raw "archived" label in List view,
+  isn't in the editable-status set). Not destructive, and the legacy population shrinks over time as
+  new archives stop hitting this path — but if it comes up in practice, the fix is a small one-time
+  prompt (e.g. force such rows to a sane default like `'done'` on unarchive, with a toast explaining
+  why).
 - [ ] Re-run Lob ship-to address verification (P249) at BOL generation time, in case the ship-to was edited after job save without re-triggering verification, or verification wasn't yet available for older jobs.
 - [ ] Surface ZIP+4 (`ship_to_standardized.zip4`, captured by P249's Lob verification) onto the printed BOL.
 - [ ] **Lob verification: act on diagnostic outcome from P255.** P255 added `key_mode`/`error_detail` observability but changed no verification behavior. After deploy, Steve must save a job with a known-good address and read the browser console: `key_mode: 'test'` → swap the Worker secret to a `live_` key (hypothesis confirmed, no code change needed); `key_mode: 'live'` + `reason: 'lob_error'` → read `error_detail`'s Lob HTTP status (401 bad key / 429 rate limit / 5xx outage) and scope a follow-up fix from there; `key_mode: 'live'` + `no_match` on a verified-correct address → escalate to Lob (data/account issue, not a code bug).

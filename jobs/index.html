@@ -64,7 +64,7 @@
   font-size: 12px; padding: 5px 12px; border-radius: 6px; cursor: pointer;
 }
 .jobs-archive-toggle.active { background: #f0fdf4; border-color: #86efac; color: #166534; }
-.jobs-card[data-status="archived"] { opacity: 0.6; border-left: 3px solid #9ca3af; background: #f9fafb; }
+.jobs-card[data-archived="1"] { opacity: 0.6; border-left: 3px solid #9ca3af; background: #f9fafb; }
 @keyframes toastSlideUp {
   from { opacity: 0; transform: translateX(-50%) translateY(20px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -672,7 +672,7 @@ function sortList(key) {
   renderList(allJobs);
 }
 
-function listActiveJobs() { return (allJobs || []).filter(j => j.status !== 'archived'); }
+function listActiveJobs() { return (allJobs || []).filter(j => !j.archived_at); }
 
 function listFilteredJobs() {
   let r = listActiveJobs();
@@ -937,7 +937,8 @@ function buildCard(job) {
   card.className    = 'jobs-card';
   card.dataset.id   = job.id;
   card.dataset.status = job.status;
-  card.draggable    = job.status !== 'archived' && !window.matchMedia('(pointer: coarse)').matches;
+  card.dataset.archived = job.archived_at ? '1' : '0';
+  card.draggable    = !job.archived_at && !window.matchMedia('(pointer: coarse)').matches;
 
   const dateStr  = formatShipDate(job.ship_date);
   const bdft     = job.total_bdft ? Number(job.total_bdft).toLocaleString() : '—';
@@ -994,8 +995,8 @@ function buildCard(job) {
     ${loadingBadge}
     ${shipToVerifiedBadge(job.ship_to_verified) ? `<div style="margin-top:4px;">${shipToVerifiedBadge(job.ship_to_verified)}</div>` : ''}
     <button id="bol-view-btn-${esc(job.id)}" class="jobs-bol-view-btn" hidden onclick="event.stopPropagation();viewBolForJob('${esc(job.id)}')">View BOL</button>
-    ${job.status === 'shipped' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
-    ${job.status === 'archived' ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to shipped">Unarchive</button>` : ''}
+    ${(job.status === 'shipped' && !job.archived_at) ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
+    ${job.archived_at ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to its real status">Unarchive</button>` : ''}
     <div class="jobs-card-actions">
       ${prev
         ? `<button class="jobs-arrow-btn" data-dir="prev" data-id="${esc(job.id)}" title="Move to ${STATUS_LABELS[prev]}">←</button>`
@@ -1021,7 +1022,7 @@ function nextStatus(s) {
 }
 
 async function archiveJob(jobId, customerName) {
-  const r = await api.put('/api/jobs', { id: jobId, status: 'archived' });
+  const r = await api.put('/api/jobs', { id: jobId, archived_at: new Date().toISOString() });
   if (r.ok) {
     const card = document.querySelector(`.jobs-card[data-id="${jobId}"]`);
     if (card) {
@@ -1041,10 +1042,10 @@ async function archiveJob(jobId, customerName) {
 }
 
 async function unarchiveJob(jobId) {
-  const r = await api.put('/api/jobs', { id: jobId, status: 'shipped' });
+  const r = await api.put('/api/jobs', { id: jobId, archived_at: null });
   if (r.ok) {
     const job = allJobs.find(j => j.id === jobId);
-    if (job) job.status = 'shipped';
+    if (job) job.archived_at = null;
     renderBoard(allJobs);
   }
 }
