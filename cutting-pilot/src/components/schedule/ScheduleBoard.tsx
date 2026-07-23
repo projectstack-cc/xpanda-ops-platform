@@ -75,6 +75,7 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
           permissions={permissions}
           title="Schedule · v2"
           currentPath="/v2/schedule"
+          autoHide
         />
         <div className="flex-1 min-h-0 flex flex-col gap-px bg-[var(--line)] p-px">
           {[0, 1].map((i) => (
@@ -101,6 +102,7 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
           permissions={permissions}
           title="Schedule · v2"
           currentPath="/v2/schedule"
+          autoHide
         />
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
           <AlertTriangle size={28} className="text-[var(--warn-text)]" aria-hidden="true" />
@@ -141,9 +143,10 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
         permissions={permissions}
         title="Schedule · v2"
         currentPath="/v2/schedule"
+        autoHide
       />
 
-      <div className="shrink-0 flex items-center justify-between px-3 py-1 border-b border-[var(--line)] bg-bg">
+      <div className="shrink-0 flex items-center justify-between px-3 py-0.5 border-b border-[var(--line)] bg-bg">
         <h1 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
           Shipping Schedule
         </h1>

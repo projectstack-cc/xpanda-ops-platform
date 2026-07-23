@@ -85,6 +85,53 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P267** — Schedule board home-dashboard card: new `.hp-card[data-permission="schedule"]` on
+  root `index.html`, matching sibling markup exactly (inline SVG calendar icon, same viewBox/
+  stroke/`currentColor` convention, same `hp-card-head`/`-title`/`-desc`/`-actions` structure).
+  Gated through the existing `initHomepage()` mechanism (no parallel path) — hidden unless the
+  user's `/api/auth/me` permissions include `schedule` (added in P264) or they're an administrator.
+  Placed between the Cutting and Production cards, grouping the two `/v2/*` React-migration cards
+  together among the manufacturing/logistics operational cluster rather than after Admin. Icon
+  background uses the existing `--info-bg`/`--info-text` tokens (auto dark-mode via
+  `tokens.css`) instead of a new hardcoded hex pair — the one deliberate departure from the sibling
+  icons' hardcoded per-theme hex, chosen to keep this addition token-only. Button reuses the shared
+  unified-slate-primary selector (`var(--primary-bg)`/`var(--primary-text)`) alongside the other
+  module buttons — no new button color rule. Link is a plain relative `/v2/schedule` href, no
+  `target`, matching the existing Cutting card's same-host v2 crossover. No script block touched
+  (`initHomepage()`'s permission-hiding loop already covers any `.hp-card[data-permission]`
+  generically — zero JS changes required). All anchors (`hp-icon-schedule`, `hp-btn-schedule`,
+  `data-permission="schedule"`) verified against a fresh clone before use.
+- **P266** — Schedule board UI: truck-type load labels, INV# typography match, collapsible nav,
+  density follow-through. (A) New `src/lib/truckType.ts` maps the sheet's free-text `method` column
+  to `FB`/`TL`/`XP` (flatbed/dry van/XPanda truck, case-insensitive + whitespace-tolerant match) with
+  a raw-text fallback for anything else (CPU, HAND DELIVER, blank) — never invents a code, never
+  blanks it; `formatLoadLabel()` renders `<CODE> x<N>`, or the code alone when `load_count` is NULL
+  (continuation rows). `OrderRow.tsx`'s load-count span now calls it — one definition, no inline
+  duplication. (B) Customer name and INV# now share one `PRIMARY_LABEL_CLS` typography constant in
+  `OrderRow.tsx` (size/weight/color); INV# stacks `font-mono tabular-nums` on top for numeric
+  alignment without diverging from the shared tier. (C) `PlatformHeader.tsx` gained an opt-in
+  `autoHide` prop (schedule board only — every other caller omits it, so `/v2/cutting` etc. are
+  unaffected): the header becomes `position: fixed` (overlay, no reflow of the board underneath),
+  hidden by default, revealed on pointermove/touchstart/keydown or `:focus-within` (CSS, so
+  Tab-focusing into nav links reveals it even before the JS state catches up), and auto-hides after
+  `NAV_AUTO_HIDE_IDLE_MS` (5s) idle. A persistent 44px-tall tap/hover zone with a small pill indicator
+  stays fixed at the very top at all times so the affordance is discoverable even fully hidden.
+  (D) Density follow-through: `OrderRow`/`DayColumn` chrome tightened (`py-1`→`py-0.5` at
+  compact/minimal density, day-header padding trimmed) and `ScheduleBoard`'s own status strip
+  trimmed — paired with the nav now overlaying instead of consuming flex layout height, a day column
+  comfortably fits 8–9 orders at `compact` density (previously clipped silently inside
+  `DayColumn`'s `overflow-hidden` well before the existing `rowCap`/`+N more` safety valve engaged).
+  `computeDensity()` thresholds unchanged (rowCap already permitted 9 — the bug was visual capacity,
+  not the cap). `tsc --noEmit` + `cf-build` (+ `fix-asset-prefix.mjs`) green.
+- **P265** — Archived jobs resolve to `Shipped` on the schedule board, highest precedence in
+  `deriveStatuses` (`schedule-status.ts`): `jobs.status = 'archived'` (confirmed the only
+  representation — no separate boolean column) now short-circuits before the existing `shipped`
+  check, so a job archived off the legacy job board without every cutting line/loading-bay row
+  ticked no longer shows a stale mid-production status on the TV board. No new query — `jobs.status`
+  was already selected for the ladder. Confirmed archived jobs already reach the ladder: `matchAndUpsert`'s
+  `lookupJobIds` (`schedule-ingest.ts`) has no status filter on `jobs`, so archived jobs match by
+  invoice number exactly like any other job — no endpoint/poller filtering to fix. `tsc --noEmit` +
+  `cf-build` green.
 - **PENDING date-of-delivery section removed (by request), across all three layers.**
   `schedule-ingest.ts`'s `parseSchedule()` now treats the "PENDING DATE OF DELIVERY" row as a hard stop
   — it clears `currentSection` instead of opening a `"PENDING"` one, so nothing after it gets captured

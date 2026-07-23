@@ -167,7 +167,8 @@
 
   /* Module action buttons — unified slate primary */
   .hp-btn-safety, .hp-btn-qc, .hp-btn-reports, .hp-btn-jobs,
-  .hp-btn-logistics, .hp-btn-loading, .hp-btn-production, .hp-btn-admin, .hp-btn-cutting {
+  .hp-btn-logistics, .hp-btn-loading, .hp-btn-production, .hp-btn-admin, .hp-btn-cutting,
+  .hp-btn-schedule {
     background: var(--primary-bg);
     color: var(--primary-text);
   }
@@ -182,6 +183,9 @@
   .hp-icon-production { background: #fef3c7; color: #92400e; }
   .hp-icon-cutting    { background: #d1fae5; color: #065f46; }
   .hp-icon-admin      { background: #f1f5f9; color: #334155; }
+  /* Schedule reuses the --info-* tokens (rather than a new hardcoded hex pair) — it already
+     flips for dark mode via tokens.css, so no separate [data-theme="dark"] override is needed. */
+  .hp-icon-schedule   { background: var(--info-bg); color: var(--info-text); }
 
   [data-theme="dark"] .hp-icon-safety     { background: rgba(37,99,235,.18);  color: #93c5fd; }
   [data-theme="dark"] .hp-icon-qc         { background: rgba(220,38,38,.18);  color: #fca5a5; }
@@ -370,6 +374,18 @@
       <div class="hp-card-desc">Live cutting floor board — clock in, hand off, complete lines</div>
       <div class="hp-card-actions">
         <a class="hp-btn hp-btn-cutting" href="/v2/cutting">Open</a>
+      </div>
+    </article>
+
+    <!-- Schedule -->
+    <article class="hp-card" data-permission="schedule">
+      <div class="hp-card-head">
+        <div class="hp-card-icon hp-icon-schedule"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+        <div class="hp-card-title">Schedule</div>
+      </div>
+      <div class="hp-card-desc">Delivery schedule, live production &amp; loading status</div>
+      <div class="hp-card-actions">
+        <a class="hp-btn hp-btn-schedule" href="/v2/schedule">Open</a>
       </div>
     </article>
 
