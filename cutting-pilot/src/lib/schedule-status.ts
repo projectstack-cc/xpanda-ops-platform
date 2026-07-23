@@ -28,16 +28,22 @@ async function allByJobIds<T>(
 
 /**
  * Precedence ladder (highest wins):
- *   0. jobs.status = 'archived'                                      → Shipped
- *   1. jobs.status = 'shipped'                                       → Shipped
- *   2. any loading_assignments.loading_status = 'loaded' for the job → Loaded
- *   3. any loading_assignments row assigned to the job                → Loading
+ *   0. jobs.status = 'archived' (legacy sentinel only — see below)      → Shipped
+ *   1. jobs.status = 'shipped'                                         → Shipped
+ *   2. any loading_assignments.loading_status = 'loaded' for the job   → Loaded
+ *   3. any loading_assignments row assigned to the job                 → Loading
  *   4. all of the job's cutting_lines are 'complete' (or jobs.status = 'done') → Ready
  *   5. any cutting_lines 'in_progress', or an open cutting_sessions row → Cutting
- *   6. else                                                           → Not Started
- * Archived is authoritative and terminal: it's a human "this is done and off my board"
- * signal, so it outranks every floor-data signal even if cutting/loading was never fully
- * ticked (see PXXX — archived jobs were showing stale mid-production status).
+ *   6. else                                                            → Not Started
+ *
+ * Rung 0 is a legacy compatibility shim, not a general design rule. The archive refactor
+ * (DB_Migrations/jobs-archived-at.sql, 1/3) made archiving orthogonal to lifecycle status via a
+ * new archived_at column: jobs archived from that point on keep their real status and derive
+ * normally through rungs 1-6 like any other job — including one archived while still mid-
+ * production, which must NOT resolve to "Shipped". Only the finite, shrinking population of rows
+ * already archived before the refactor (real prior status unrecoverable, backfilled with
+ * archived_at but left at the literal status='archived') still needs rung 0 — without it those
+ * rows would fall through to "Not Started", misreporting an old completed order as untouched.
  * jobs.id (and every id here) is TEXT, never numeric.
  */
 export async function deriveStatuses(db: D1Database, jobIds: string[]): Promise<Map<string, ScheduleStatus>> {
@@ -103,7 +109,10 @@ function deriveOne(
   lineStatuses: string[],
   hasOpenSession: boolean
 ): ScheduleStatus {
-  if (jobStatus === "archived" || jobStatus === "shipped") return "Shipped";
+  // Legacy sentinel only (see docblock above) — not a general "archived is always Shipped" rule.
+  if (jobStatus === "archived") return "Shipped";
+
+  if (jobStatus === "shipped") return "Shipped";
   if (assignmentStatuses.includes("loaded")) return "Loaded";
   if (assignmentStatuses.length > 0) return "Loading";
 

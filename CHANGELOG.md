@@ -85,6 +85,28 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P273** — Archive refactor (3/3): schedule board drops the archived special-case.
+  `schedule-status.ts:deriveOne` used to short-circuit `jobStatus === "archived" || jobStatus ===
+  "shipped"` straight to `"Shipped"` — a workaround from when archiving destroyed a job's real
+  status, so derivation had nothing else to read. Now that P271/P272 made `archived_at` orthogonal
+  (jobs archived from here on keep their real status), that workaround would be wrong: it'd report
+  "Shipped" for a job archived while still mid-production. Split the check: `jobStatus ===
+  "shipped"` remains a legitimate top rung; the `archived` half is now scoped, commented, and
+  justified purely as a legacy-sentinel handler for the finite population of rows already archived
+  before the refactor (real prior status unrecoverable, backfilled `archived_at` but left at the
+  literal `status='archived'`) — without it those rows would misreport as "Not Started" instead of
+  "Shipped". New archives never reach that branch; they fall through to the normal 6-rung ladder
+  like any other job. Verified the query feeding `deriveStatuses`
+  (`app/api/schedule-board/route.ts`) and the ingest match query (`lib/schedule-ingest.ts
+  lookupJobIds`) both already match against `jobs` with no archived exclusion — matched rows keep
+  resolving, nothing to change there. `Map<string, ScheduleStatus>` / TEXT job-id typing / ≤90
+  chunking all preserved, no query shape change. Smoke-tested `deriveOne` standalone: a job
+  archived while `in_production` (with an open cutting session) now derives "Cutting", not
+  "Shipped"; a legacy `status='archived'` row still derives "Shipped"; a genuinely shipped job
+  still derives "Shipped". `tsc --noEmit` clean. Comment-and-logic-split only — no query/schema/UI
+  change. **`SHOW_STATUS_BADGES` (P268) is still `false`, so this isn't visible on the floor board
+  until that flag flips back — correctness first, the flip is a separate decision.**
+
 - **P268** — Schedule board production-status badges suppressed behind a flag ahead of the
   floor going live: new `SHOW_STATUS_BADGES` constant (`src/components/schedule/flags.ts`,
   `false`) — frontend-only, `schedule-status.ts`/the API route/ingest untouched, derivation keeps
