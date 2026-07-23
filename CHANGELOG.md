@@ -85,6 +85,20 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P268** — Schedule board production-status badges suppressed behind a flag ahead of the
+  floor going live: new `SHOW_STATUS_BADGES` constant (`src/components/schedule/flags.ts`,
+  `false`) — frontend-only, `schedule-status.ts`/the API route/ingest untouched, derivation keeps
+  running and `status` keeps flowing over the wire, it simply isn't rendered. `OrderRow.tsx` now
+  gates `<StatusBadge>` on `SHOW_STATUS_BADGES || row.unmatched` so **unmatched rows keep their
+  full existing treatment** (greyed/desaturated row + the dashed "no job match"/`sheet_status`
+  flag) regardless of the flag — that's the operator's only signal on those rows, not a derived
+  production status. When a matched row has nothing left to show on its second line (badge
+  suppressed, no scrap pickup, load count hided at this density), the line is skipped entirely
+  (`showSecondLine`) rather than rendering an empty flex row — no dangling gap/separator.
+  `<StatusBadge>` itself is unmodified and still in the tree. Density logic (`computeDensity`,
+  `OrderRow`/`DayColumn` padding from P266) deliberately left alone per scope — flipping the flag
+  back to `true` is a regression-free restore with zero other changes. `tsc --noEmit` + `cf-build`
+  green.
 - **P267** — Schedule board home-dashboard card: new `.hp-card[data-permission="schedule"]` on
   root `index.html`, matching sibling markup exactly (inline SVG calendar icon, same viewBox/
   stroke/`currentColor` convention, same `hp-card-head`/`-title`/`-desc`/`-actions` structure).
