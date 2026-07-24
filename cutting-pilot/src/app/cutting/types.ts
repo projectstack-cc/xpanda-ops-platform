@@ -3,6 +3,7 @@ export interface CuttingLine {
   line_status: "not_started" | "in_progress" | "complete";
   sort_order: number;
   open_session_id: string | null;
+  open_operator_id: string | null;
   open_operator_name: string | null;
   last_handoff_note: string;
   tracked_seconds: number;

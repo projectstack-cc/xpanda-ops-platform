@@ -6,6 +6,7 @@ import { formatDuration, lineLiveSeconds, lineWallSeconds } from "@/lib/time";
 interface Props {
   lineObj: CuttingLine;
   jobId: string;
+  userId: string;
   userName: string;
   acting: boolean;
   clockedInElsewhere: boolean;
@@ -18,6 +19,7 @@ interface Props {
 export default function LineRow({
   lineObj,
   jobId,
+  userId,
   userName,
   acting,
   clockedInElsewhere,
@@ -27,7 +29,7 @@ export default function LineRow({
   now,
 }: Props) {
   const mySession =
-    lineObj.open_session_id && lineObj.open_operator_name === userName
+    lineObj.open_session_id && !!userId && lineObj.open_operator_id === userId
       ? lineObj.open_session_id
       : null;
   const busyByOther = lineObj.open_session_id && !mySession;
