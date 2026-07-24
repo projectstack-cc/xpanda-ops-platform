@@ -427,6 +427,10 @@ Entries within each module are ordered by prompt # descending (newest first).
 - **P289** — the BOL ship-to attention line now renders its stored value verbatim instead of
   force-prefixing "attn: ", since the field is frequently used as a secondary address line.
   Applies everywhere via `bol-shared.js`. No data migration; existing values render as-is.
+  Follow-up: `track/index.html` (the public driver/customer QR tracking page) formats the ship-to
+  address independently of `bol-shared.js` and had its own hardcoded `'attn: ' + …` prefix — missed
+  by the original scope, which assumed `bol-shared.js` was the only render path. Same verbatim fix
+  applied there.
 
 - **P288** — BOL edits made in the review/approval flow now survive re-view. The override diff was
   always persisted to `bols.render_overrides` but stored-view paths passed the raw DB row (where it
