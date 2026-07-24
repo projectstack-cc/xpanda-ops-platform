@@ -19,6 +19,7 @@ export interface ScheduleBoardRow {
   unmatched: boolean;
   sheet_status: string | null;
   job_id: string | null;
+  trailer_group_id: string | null;
 }
 
 export interface ScheduleDayGroup {
