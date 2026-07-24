@@ -32,12 +32,18 @@ export async function POST(request: NextRequest) {
 
     // Guard: one open session per operator across the whole board (any job/line).
     const mineOpen = await DB.prepare(
-      `SELECT line FROM cutting_sessions
+      `SELECT id, job_id, line FROM cutting_sessions
        WHERE operator_id = ? AND status = 'open' LIMIT 1`
-    ).bind(operatorId).first<{ line: string }>();
+    ).bind(operatorId).first<{ id: string; job_id: string; line: string }>();
     if (mineOpen) {
       return NextResponse.json(
-        { ok: false, error: "already_clocked_in", line: mineOpen.line },
+        {
+          ok: false,
+          error: "already_clocked_in",
+          line: mineOpen.line,
+          job_id: mineOpen.job_id,
+          session_id: mineOpen.id,
+        },
         { status: 409 }
       );
     }
