@@ -445,6 +445,17 @@
         </div>
       </div>
 
+      <!-- Trailer Group (linked jobs sharing a trailer) -->
+      <div class="jobs-form-section" id="trailer-group-section" hidden>
+        <p class="jobs-form-section-title">Trailer Group</p>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px">Link this job to another job shipping on the same trailer (same ship date required). They'll appear as a linked set on the schedule board.</p>
+        <div class="jobs-combo-area" id="trailer-group-area">
+          <div id="trailer-group-members" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+          <button type="button" class="btn ghost small" id="btn-link-trailer-group">Link to Another Job</button>
+          <button type="button" class="btn ghost small" id="btn-unlink-trailer-group" hidden>Unlink from Trailer Group</button>
+        </div>
+      </div>
+
       <!-- Instructions -->
       <div class="jobs-form-section">
         <p class="jobs-form-section-title">Instructions</p>
@@ -493,6 +504,20 @@
       <button class="jobs-modal-close" id="combo-picker-close">&times;</button>
     </div>
     <div class="jobs-picker-body" id="combo-picker-body"></div>
+  </div>
+</div>
+
+<!-- Trailer group link picker -->
+<div class="jobs-picker-overlay" id="trailer-group-picker" hidden>
+  <div class="jobs-picker-panel">
+    <div class="jobs-picker-header">
+      <h3>Link to Job</h3>
+      <button class="jobs-modal-close" id="trailer-group-picker-close">&times;</button>
+    </div>
+    <div class="jobs-picker-search">
+      <input type="text" id="trailer-group-picker-search" placeholder="Search by customer or invoice #…">
+    </div>
+    <div class="jobs-picker-body" id="trailer-group-picker-body"></div>
   </div>
 </div>
 
@@ -564,6 +589,8 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('parts-picker').hidden = true;
     } else if (!document.getElementById('combo-picker').hidden) {
       document.getElementById('combo-picker').hidden = true;
+    } else if (!document.getElementById('trailer-group-picker').hidden) {
+      document.getElementById('trailer-group-picker').hidden = true;
     } else {
       closeModal();
     }
@@ -1307,6 +1334,8 @@ function setupModal() {
   if (bdftConvertEl) bdftConvertEl.addEventListener('change', (e) => toggleBdftConvert(e.target.checked));
   document.getElementById('btn-load-parts').addEventListener('click', openPartsPicker);
   document.getElementById('btn-link-combo').addEventListener('click', openComboPicker);
+  document.getElementById('btn-link-trailer-group').addEventListener('click', openTrailerGroupPicker);
+  document.getElementById('btn-unlink-trailer-group').addEventListener('click', unlinkTrailerGroup);
 
   document.getElementById('slip-viewer-toggle').addEventListener('click', () => {
     const content = document.getElementById('slip-viewer-content');
@@ -1689,6 +1718,7 @@ function clearForm() {
   document.getElementById('slip-dropzone').hidden = false;
 
   clearCombo();
+  clearTrailerGroup();
   hideSlipBadge();
   setModalStatus('');
 
@@ -1754,6 +1784,7 @@ function populateForm(job) {
   }
 
   if (job.combo_id) showComboBadge(job.combo_id, 'Linked Combo');
+  renderTrailerGroupSection(job);
 
   if (job.packing_slip_filename) {
     showSlipBadge(job.packing_slip_invoice || '', job.packing_slip_filename, true, job.id);
@@ -1875,6 +1906,143 @@ function showComboBadge(id, name) {
     </span>
   `;
   wrap.querySelector('.jobs-combo-clear').addEventListener('click', clearCombo);
+}
+
+/* ═══════════════════════════════════════════
+   Trailer group (linked jobs sharing a trailer)
+   trailer_group_id is a self-grouping id — NOT bols.bol_group_id (that's the inverse
+   relation: one job split across several trailers/BOLs). Link/unlink fire immediately
+   against the API (not deferred to Save Job) since they mutate a second job's row too.
+═══════════════════════════════════════════ */
+
+let trailerGroupCandidates = [];
+let trailerGroupMemberIds  = [];
+
+function clearTrailerGroup() {
+  document.getElementById('trailer-group-section').hidden = true;
+  document.getElementById('trailer-group-members').innerHTML = '';
+  document.getElementById('btn-link-trailer-group').hidden = false;
+  document.getElementById('btn-unlink-trailer-group').hidden = true;
+  trailerGroupMemberIds = [];
+}
+
+function renderTrailerGroupSection(job) {
+  const section = document.getElementById('trailer-group-section');
+  if (!job || job.archived_at) { clearTrailerGroup(); return; }
+  section.hidden = false;
+
+  const membersWrap = document.getElementById('trailer-group-members');
+  const linkBtn      = document.getElementById('btn-link-trailer-group');
+  const unlinkBtn    = document.getElementById('btn-unlink-trailer-group');
+
+  if (!job.trailer_group_id) {
+    membersWrap.innerHTML = '';
+    linkBtn.hidden   = false;
+    unlinkBtn.hidden = true;
+    trailerGroupMemberIds = [];
+    return;
+  }
+
+  linkBtn.hidden   = true;
+  unlinkBtn.hidden = false;
+  membersWrap.innerHTML = '<span style="font-size:12px;color:var(--muted);">Loading group…</span>';
+
+  api.get('/api/jobs/' + encodeURIComponent(job.id) + '/group').then(r => {
+    if (!r.ok) { membersWrap.innerHTML = ''; return; }
+    const members = r.data.members || [];
+    trailerGroupMemberIds = members.map(m => m.id);
+    const others = members.filter(m => m.id !== job.id);
+    if (others.length === 0) { membersWrap.innerHTML = ''; return; }
+    membersWrap.innerHTML = others.map(m =>
+      `<span class="jobs-combo-badge" title="${esc(m.customer || '')}">🚛 ${esc(m.invoice_number || m.customer || 'Job')}</span>`
+    ).join('');
+  }).catch(() => { membersWrap.innerHTML = ''; });
+}
+
+async function openTrailerGroupPicker() {
+  if (!editingJobId) return;
+  const job = allJobs.find(j => j.id === editingJobId);
+  if (!job) return;
+
+  document.getElementById('trailer-group-picker-search').value = '';
+  document.getElementById('trailer-group-picker').hidden = false;
+
+  trailerGroupCandidates = (allJobs || []).filter(j =>
+    j.id !== job.id &&
+    !j.archived_at &&
+    (j.ship_date || '') === (job.ship_date || '') &&
+    (!j.trailer_group_id || j.trailer_group_id === job.trailer_group_id)
+  );
+
+  renderTrailerGroupPickerList(trailerGroupCandidates);
+}
+
+function filterTrailerGroupPicker() {
+  const q = document.getElementById('trailer-group-picker-search').value.toLowerCase();
+  const filtered = q
+    ? trailerGroupCandidates.filter(j =>
+        (j.customer || '').toLowerCase().includes(q) || (j.invoice_number || '').toLowerCase().includes(q))
+    : trailerGroupCandidates;
+  renderTrailerGroupPickerList(filtered);
+}
+
+function renderTrailerGroupPickerList(candidates) {
+  const body = document.getElementById('trailer-group-picker-body');
+  if (!candidates.length) {
+    body.innerHTML = '<p style="padding:12px;color:var(--muted)">No eligible jobs on this ship date.</p>';
+    return;
+  }
+  body.innerHTML = '';
+  for (const j of candidates) {
+    const item = document.createElement('div');
+    item.className = 'jobs-picker-item';
+    item.innerHTML = `
+      <div style="font-weight:600;">${esc(j.customer || 'Untitled')}</div>
+      <div class="jobs-picker-item-sub">${esc(j.invoice_number || '—')} · ${esc(formatShipDate(j.ship_date))}</div>
+    `;
+    item.addEventListener('click', () => linkTrailerGroup(j.id));
+    body.appendChild(item);
+  }
+}
+
+async function linkTrailerGroup(targetJobId) {
+  document.getElementById('trailer-group-picker').hidden = true;
+  setModalStatus('Linking…');
+  const r = await api.put('/api/jobs', { id: editingJobId, trailer_group_id: targetJobId });
+  if (!r.ok) {
+    setModalStatus(r.error || 'Could not link job.', true);
+    return;
+  }
+  setModalStatus('');
+  const idx = allJobs.findIndex(j => j.id === editingJobId);
+  if (idx !== -1) allJobs[idx] = r.data.job;
+  const targetIdx = allJobs.findIndex(j => j.id === targetJobId);
+  if (targetIdx !== -1) allJobs[targetIdx] = { ...allJobs[targetIdx], trailer_group_id: r.data.job.trailer_group_id };
+  showToast('Jobs linked.');
+  renderTrailerGroupSection(r.data.job);
+}
+
+async function unlinkTrailerGroup() {
+  if (!editingJobId) return;
+  setModalStatus('Unlinking…');
+  const priorMembers = trailerGroupMemberIds.slice();
+  const r = await api.put('/api/jobs', { id: editingJobId, trailer_group_id: null });
+  if (!r.ok) {
+    setModalStatus(r.error || 'Could not unlink job.', true);
+    return;
+  }
+  setModalStatus('');
+  const idx = allJobs.findIndex(j => j.id === editingJobId);
+  if (idx !== -1) allJobs[idx] = r.data.job;
+  // A group of exactly 2 (self + 1 other) means the server also cleared the other member
+  // (never leave a group of one) — mirror that locally so the cache doesn't go stale.
+  if (priorMembers.length === 2) {
+    const otherId = priorMembers.find(mid => mid !== editingJobId);
+    const otherIdx = allJobs.findIndex(j => j.id === otherId);
+    if (otherIdx !== -1) allJobs[otherIdx] = { ...allJobs[otherIdx], trailer_group_id: null };
+  }
+  showToast('Job unlinked.');
+  renderTrailerGroupSection(r.data.job);
 }
 
 /* ═══════════════════════════════════════════
@@ -2124,6 +2292,16 @@ function setupPickers() {
     if (e.target === document.getElementById('combo-picker'))
       document.getElementById('combo-picker').hidden = true;
   });
+
+  // Trailer group
+  document.getElementById('trailer-group-picker-close').addEventListener('click', () => {
+    document.getElementById('trailer-group-picker').hidden = true;
+  });
+  document.getElementById('trailer-group-picker').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('trailer-group-picker'))
+      document.getElementById('trailer-group-picker').hidden = true;
+  });
+  document.getElementById('trailer-group-picker-search').addEventListener('input', filterTrailerGroupPicker);
 }
 
 let partsAll = [];

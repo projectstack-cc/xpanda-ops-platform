@@ -13,7 +13,7 @@ export async function handleApiJobs(request, env) {
 
   // Columns returned in list responses — packing_slip_pdf is intentionally excluded (too large)
   const JOB_LIST_COLS = `
-    j.id, j.status, j.archived_at, j.customer, j.po_number, j.invoice_number, j.ship_date, j.ship_day,
+    j.id, j.status, j.archived_at, j.trailer_group_id, j.customer, j.po_number, j.invoice_number, j.ship_date, j.ship_day,
     j.location, j.delivery_time, j.method, j.carrier, j.load_count, j.total_bdft,
     j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
     j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
@@ -72,6 +72,22 @@ export async function handleApiJobs(request, env) {
         });
       }
       return json({ ok: false, error: "No packing slip attached to this job." }, 404);
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+    }
+  }
+
+  // ── GET /api/jobs/:id/group — trailer_group_id membership, single query ────
+  if (request.method === "GET" && jobId && subRoute === "group") {
+    try {
+      const job = await db.prepare("SELECT trailer_group_id FROM jobs WHERE id = ?").bind(jobId).first();
+      if (!job) return json({ ok: false, error: "Job not found." }, 404);
+      if (!job.trailer_group_id) return json({ ok: true, group_id: null, members: [] });
+
+      const result = await db.prepare(
+        "SELECT id, customer, invoice_number, po_number, ship_date, status FROM jobs WHERE trailer_group_id = ? ORDER BY invoice_number ASC"
+      ).bind(job.trailer_group_id).all();
+      return json({ ok: true, group_id: job.trailer_group_id, members: result.results || [] });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
@@ -312,8 +328,8 @@ export async function handleApiJobs(request, env) {
           packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
           ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
           ship_to_city, ship_to_state, ship_to_zip,
-          ship_to_verified, ship_to_standardized, ship_to_verified_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ship_to_verified, ship_to_standardized, ship_to_verified_at, trailer_group_id
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, status, customer, po_number, invoice_number, ship_date, ship_day,
         location, delivery_time, method, carrier, load_count, total_bdft,
@@ -323,7 +339,7 @@ export async function handleApiJobs(request, env) {
         packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
         ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
         ship_to_city, ship_to_state, ship_to_zip,
-        ship_to_verified, ship_to_standardized, ship_to_verified_at,
+        ship_to_verified, ship_to_standardized, ship_to_verified_at, null,
       ).run();
 
       // Insert line items
@@ -420,8 +436,29 @@ export async function handleApiJobs(request, env) {
     const id = String(payload.id || "").trim();
     if (!id) return json({ ok: false, error: "id is required." }, 400);
 
-    const existing = await db.prepare("SELECT id FROM jobs WHERE id = ?").bind(id).first();
+    const existing = await db.prepare(
+      "SELECT id, ship_date, archived_at, trailer_group_id FROM jobs WHERE id = ?"
+    ).bind(id).first();
     if (!existing) return json({ ok: false, error: "Job not found." }, 404);
+
+    // Linked jobs must share a ship_date (see trailer_group_id block below). Changing ship_date
+    // on a linked job is rejected rather than silently applied to the whole group — a group-wide
+    // cascade from a single-job field edit is a bigger surprise than asking the user to unlink
+    // first. Allowed when the same payload also unlinks the job (trailer_group_id: null).
+    if ("ship_date" in payload && existing.trailer_group_id) {
+      const willUnlink = ("trailer_group_id" in payload) && !payload.trailer_group_id;
+      if (!willUnlink) {
+        const newShipDate = String(payload.ship_date || "").trim();
+        const curShipDate = String(existing.ship_date || "").trim();
+        if (newShipDate !== curShipDate) {
+          return json({
+            ok: false,
+            error: "This job is linked to a trailer group — unlink it before changing the ship date.",
+            code: 'linked_ship_date_locked',
+          }, 409);
+        }
+      }
+    }
 
     const sets  = [];
     const binds = [];
@@ -441,6 +478,71 @@ export async function handleApiJobs(request, env) {
     if ("archived_at" in payload) {
       const v = payload.archived_at ? String(payload.archived_at) : null;
       sets.push("archived_at = ?"); binds.push(v);
+    }
+
+    // Link/unlink to a trailer_group_id. trailer_group_id is a self-grouping id: N jobs share
+    // one value, NULL = unlinked. It is NOT bols.bol_group_id (that's the inverse relation — one
+    // job across several trailers/BOLs). No dedicated /link /unlink routes — this PUT is the one
+    // entry point, reused per prompt 2/3's "your call" allowance, since linking needs the same
+    // "job not found" / "id required" preamble this handler already has.
+    //
+    // The payload value is always the id of the job you want to join — never a raw group id you
+    // have to look up yourself. The server resolves what that actually means:
+    //   - target already grouped  -> join target's real group (target's row is untouched)
+    //   - target unlinked         -> form a brand-new group anchored on the target's own id
+    //                                (a follow-up UPDATE self-assigns that to the target's row)
+    //   - both already grouped, in DIFFERENT groups -> rejected (409 group_conflict); the entry
+    //     UI only ever offers unlinked jobs or jobs already in the group being joined as
+    //     candidates, so this only fires on a stale/racing client.
+    // Unlinking clears this job's own value; if that leaves exactly one other job holding the old
+    // group id, that job is cleared too in the same batch — a group of one is meaningless.
+    let unlinkedFromGroupId = null;
+    let linkTargetUpdate    = null;
+    if ("trailer_group_id" in payload) {
+      const raw = payload.trailer_group_id;
+      const targetJobId = raw ? String(raw).trim() : null;
+
+      if (targetJobId === null) {
+        if (existing.trailer_group_id) {
+          unlinkedFromGroupId = existing.trailer_group_id;
+          sets.push("trailer_group_id = ?"); binds.push(null);
+        }
+        // else: already unlinked — no-op.
+      } else {
+        if (targetJobId === id) {
+          return json({ ok: false, error: "A job cannot be linked to itself." }, 400);
+        }
+        if (existing.archived_at) {
+          return json({ ok: false, error: "Archived jobs cannot be linked to a trailer group.", code: 'job_archived' }, 409);
+        }
+
+        const target = await db.prepare(
+          "SELECT id, ship_date, archived_at, trailer_group_id FROM jobs WHERE id = ?"
+        ).bind(targetJobId).first();
+        if (!target) return json({ ok: false, error: "Target job not found.", code: 'target_not_found' }, 404);
+        if (target.archived_at) {
+          return json({ ok: false, error: "Archived jobs cannot be linked to a trailer group.", code: 'job_archived' }, 409);
+        }
+        if (existing.trailer_group_id && target.trailer_group_id && existing.trailer_group_id !== target.trailer_group_id) {
+          return json({ ok: false, error: "Both jobs are already in different trailer groups — unlink one first.", code: 'group_conflict' }, 409);
+        }
+
+        const ourShipDate   = String(payload.ship_date ?? existing.ship_date ?? '').trim();
+        const theirShipDate = String(target.ship_date || '').trim();
+        if (ourShipDate !== theirShipDate) {
+          return json({
+            ok: false,
+            error: `Cannot link: ship dates differ (this job ships ${ourShipDate || 'unset'}, target ships ${theirShipDate || 'unset'}).`,
+            code: 'ship_date_mismatch',
+          }, 409);
+        }
+
+        const resolvedGroupId = target.trailer_group_id || existing.trailer_group_id || targetJobId;
+        sets.push("trailer_group_id = ?"); binds.push(resolvedGroupId);
+        if (target.trailer_group_id !== resolvedGroupId) {
+          linkTargetUpdate = { id: targetJobId, groupId: resolvedGroupId };
+        }
+      }
     }
 
     if ("priority" in payload) {
@@ -520,7 +622,34 @@ export async function handleApiJobs(request, env) {
     binds.push(id); // WHERE clause value
 
     try {
-      await db.prepare(`UPDATE jobs SET ${sets.join(", ")} WHERE id = ?`).bind(...binds).run();
+      const mainUpdate = db.prepare(`UPDATE jobs SET ${sets.join(", ")} WHERE id = ?`).bind(...binds);
+      const nowTG = new Date().toISOString();
+
+      if (linkTargetUpdate) {
+        // Atomic with the main row: the target job must land on the same resolved group id.
+        await db.batch([
+          mainUpdate,
+          db.prepare("UPDATE jobs SET trailer_group_id = ?, updated_at = ? WHERE id = ?")
+            .bind(linkTargetUpdate.groupId, nowTG, linkTargetUpdate.id),
+        ]);
+      } else if (unlinkedFromGroupId) {
+        const remaining = await db.prepare(
+          "SELECT id FROM jobs WHERE trailer_group_id = ? AND id != ?"
+        ).bind(unlinkedFromGroupId, id).all();
+        const remainingRows = remaining.results || [];
+        if (remainingRows.length === 1) {
+          // Never leave a group of one — clear the last remaining member atomically too.
+          await db.batch([
+            mainUpdate,
+            db.prepare("UPDATE jobs SET trailer_group_id = NULL, updated_at = ? WHERE id = ?")
+              .bind(nowTG, remainingRows[0].id),
+          ]);
+        } else {
+          await mainUpdate.run();
+        }
+      } else {
+        await mainUpdate.run();
+      }
 
       // Replace line items if provided
       if (Array.isArray(payload.line_items)) {

@@ -77,13 +77,22 @@
 
 ## Job Board
 
-- [ ] **P275 sequence — linked jobs (trailer sharing), 2/3 and 3/3 remain.** 1/3 (P275) shipped
-  just the schema: `jobs.trailer_group_id` (nullable TEXT, indexed, no backfill) via
-  `DB_Migrations/jobs-trailer-group.sql` — **not yet run in D1, must run before 2/3 deploys**.
-  Still needed: 2/3 — worker support (`_worker.js/routes/jobs.js` read/write for
-  `trailer_group_id`, presumably a link/unlink action and grouped read) + legacy entry UI (some
-  way to mark 2+ jobs as sharing a trailer from the job board); 3/3 — `/v2/schedule` board rail
-  rendering linked jobs as a set. Recorded here so the sequence is recoverable if work pauses.
+- [ ] **P275/276 sequence — linked jobs (trailer sharing), 3/3 remains.** 1/3 (P275, migration)
+  and 2/3 (P276, worker + legacy entry UI) have shipped. Still needed: 3/3 — `/v2/schedule` board
+  rail rendering linked `trailer_group_id` jobs as a set (side-rail bracket spanning the group's
+  rows). Precondition (per prompt 3/3 itself): the measured-row-capacity TV-fit work must land
+  first — as of this writing that's still open (`P263 follow-up — verify shrink-to-fit against a
+  real TV`, this file) and 3/3 touches the same files (`density.ts`/`DayColumn.tsx`/
+  `ScheduleBoard.tsx`), so running them out of order risks a merge conflict and a broken clipping
+  rule. Recorded here so the sequence is recoverable if work pauses.
+- [ ] **P276 follow-up — deleting a linked job can leave its groupmates as a group of one.**
+  `DELETE /api/jobs` doesn't clear/cascade `trailer_group_id` on the deleted job's former
+  groupmates the way link/unlink do (Linking Rule 1: "never leave a group of one"). Deliberately
+  left out of P276's locked scope (Tasks A-E didn't mention DELETE). If a job with exactly one
+  groupmate gets deleted, that groupmate is left holding a now-meaningless solo
+  `trailer_group_id` until someone manually unlinks it. Low real-world odds (deleting a job that's
+  actively linked to a trailer group is an edge case) but worth a small follow-up: mirror the
+  same "remaining count === 1 → clear" cleanup from the PUT unlink path into the DELETE handler.
 - [ ] **P272 follow-up — `reports/orders/index.html` still filters/labels archived by `status`.** The
   Orders Report's Status dropdown ("Archived" option), stats (`stat-active`/`stat-archived`), and
   `statusBadge()` all key off `j.status === 'archived'`, which was explicitly out of P272's locked
