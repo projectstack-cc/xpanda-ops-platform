@@ -72,14 +72,13 @@
 - [x] P275/276/277 sequence — linked jobs (trailer sharing). 1/3 (P275, migration), 2/3 (P276,
   worker + legacy entry UI), 3/3 (P277, `/v2/schedule` side rail) have all shipped. **P277 still
   needs `wrangler deploy` from `cutting-pilot/` before the rail is live** — v2 doesn't auto-deploy.
-- [ ] **P276 follow-up — deleting a linked job can leave its groupmates as a group of one.**
-  `DELETE /api/jobs` doesn't clear/cascade `trailer_group_id` on the deleted job's former
-  groupmates the way link/unlink do (Linking Rule 1: "never leave a group of one"). Deliberately
-  left out of P276's locked scope (Tasks A-E didn't mention DELETE). If a job with exactly one
-  groupmate gets deleted, that groupmate is left holding a now-meaningless solo
-  `trailer_group_id` until someone manually unlinks it. Low real-world odds (deleting a job that's
-  actively linked to a trailer group is an edge case) but worth a small follow-up: mirror the
-  same "remaining count === 1 → clear" cleanup from the PUT unlink path into the DELETE handler.
+- [ ] **`DELETE /api/jobs` does not cascade the v2 cutting tables.** The child-delete list covers
+  legacy `cutting_steps` but not `cutting_lines` or `cutting_sessions`, so deleting a job that was
+  tracked in v2 orphans those rows. Impact is currently contained: P282's `my-session` route uses a
+  `LEFT JOIN` specifically so an operator whose job row was hard-deleted can still see and close
+  the session, and P258's backstop only ever runs from live delivery/loading write-points. Worth
+  adding both tables to the cascade in a scoped prompt — coordinate with §9a, since the cascade
+  lives in the legacy worker but the tables belong to v2.
 - [ ] **P272 follow-up — unarchiving a legacy `status='archived'` row leaves it in a limbo state.**
   Manual Unarchive now only clears `archived_at`, never writes `status` (P272, by design — a job's
   real status should be restored exactly as it was). But for the finite legacy population backfilled
