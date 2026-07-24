@@ -534,6 +534,45 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P276** — Linked jobs (2/3): worker + legacy entry UI, one commit (legacy auto-deploys on
+  push, so splitting worker/frontend would open a window where they disagree — same reasoning as
+  P272). `jobs.trailer_group_id` is a self-grouping id: N jobs share one value, NULL = unlinked.
+  **Not `bols.bol_group_id`** (that's the inverse relation — one job across several trailers).
+  **API design decision:** no dedicated `/link`/`/unlink` routes — linking is reused through the
+  existing `PUT /api/jobs`, since the payload's `trailer_group_id` value is always simply *the id
+  of the job you want to join* (never a raw group id the client has to resolve itself). The
+  server figures out what that means: joining an already-grouped job merges into that job's real
+  group (its row is untouched); joining a still-unlinked job forms a brand-new group anchored on
+  that job's own id (a follow-up `UPDATE`, batched atomically with the main write, self-assigns
+  it); two jobs already in *different* non-null groups is rejected 409 `group_conflict` (the
+  entry UI only ever offers unlinked jobs or jobs already in the target group, so this only fires
+  on a stale/racing client). Unlinking clears this job's own value and, in the same atomic batch,
+  clears the last remaining member's value too if that would otherwise leave a group of one
+  (Linking Rule 1 — never leave a group of one). Ship dates must match to link (409
+  `ship_date_mismatch`, names both conflicting dates); archived jobs can't be linked (409
+  `job_archived`, `archived_at IS NOT NULL` per P272's semantics — deliberately not
+  `status`-based). **Ship-date decision (Linking Rule 3):** changing a linked job's `ship_date` is
+  *rejected* (409 `linked_ship_date_locked`) rather than silently cascaded to the whole group — a
+  single-field edit silently rewriting other jobs' dates was judged a worse surprise than asking
+  the user to unlink first; allowed in the same call if that call is also unlinking. New
+  `GET /api/jobs/:id/group` resolves full group membership in one query (no N+1) for both the
+  entry UI and future consumers. `JOB_LIST_COLS` exposes `trailer_group_id`; POST always inserts
+  it as NULL (no linking at creation time). Verified the full resolution logic (link into new
+  group, link into existing group, ship-date mismatch, archived rejection, unlink from a 3-group,
+  unlink from a 2-group triggering cleanup, group-conflict rejection) against a standalone SQLite
+  simulation — all pass. Frontend: new "Trailer Group" section in the job edit modal (hidden for
+  new jobs and archived jobs), reusing the existing combo-badge/picker visual pattern (no new
+  CSS — `.jobs-combo-badge`/`.jobs-picker-*` are already token-based); link/unlink fire
+  immediately against the API rather than deferring to Save Job, since they mutate a second job's
+  row as a side effect and that shouldn't be bundled with unrelated field edits. The 409 error
+  text is surfaced verbatim in the modal status line, not swallowed into a generic failure.
+  `node --check` clean on both inline `<script>` blocks. Confirmed via `grep` that no
+  `jobs.status`-based archived filter was reintroduced (only the expected, out-of-scope
+  `loading_assignments.loading_status` hits remain) and that nothing under `cutting-pilot/` was
+  touched. **Deliberately deferred to BACKLOG** (out of this prompt's locked scope): `DELETE
+  /api/jobs` doesn't cascade the group-of-one cleanup the way link/unlink do. **Precondition
+  confirmed met**: `DB_Migrations/jobs-trailer-group.sql` (P275) has been run in D1.
+
 - **P275** — Linked jobs (1/3): schema step. New migration `DB_Migrations/jobs-trailer-group.sql`
   adds a nullable `jobs.trailer_group_id TEXT` (+ index) so Steve can mark two or more jobs as
   shipping on the **same trailer**, for the `/v2/schedule` board to draw as a linked set.
