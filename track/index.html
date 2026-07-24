@@ -91,7 +91,7 @@
   }
 
   function fmtAddress(b) {
-    const parts = [b.ship_to_company, b.ship_to_attention && ('attn: ' + b.ship_to_attention)].filter(Boolean);
+    const parts = [b.ship_to_company, b.ship_to_attention].filter(Boolean);
     const street = [b.ship_to_street, b.ship_to_street2].filter(Boolean).join(', ');
     if (street) parts.push(street);
     const csz = [b.ship_to_city, b.ship_to_state, b.ship_to_zip].filter(Boolean).join(', ');
