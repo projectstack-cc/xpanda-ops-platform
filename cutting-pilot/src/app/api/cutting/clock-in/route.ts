@@ -65,6 +65,12 @@ export async function POST(request: NextRequest) {
     const sessionId = crypto.randomUUID();
     const sortOrder = PROCESS_ORDER.indexOf(line);
 
+    // P280 added a partial UNIQUE index on cutting_sessions(operator_id) WHERE status='open'.
+    // The mineOpen guard above catches the common case with one read; this catches the true
+    // race (double-tap, two devices) that slips between the guard's SELECT and this INSERT.
+    // Narrow try on purpose: cutting_lines has its own UNIQUE constraint, and a violation
+    // there must NOT be reported as already_clocked_in.
+    try {
     await DB.batch([
       // Open the session
       DB.prepare(
@@ -93,6 +99,30 @@ export async function POST(request: NextRequest) {
          WHERE id = ? AND status = 'not_started'`
       ).bind(now, job_id),
     ]);
+    } catch (batchErr: any) {
+      const msg = String(batchErr?.message || batchErr);
+      if (!msg.includes("idx_cutting_sessions_one_open_per_operator")
+          && !(msg.includes("UNIQUE constraint failed") && msg.includes("cutting_sessions"))) {
+        throw batchErr;
+      }
+      // Lost the race. Re-read the winning session so the client gets the same
+      // enriched 409 shape the mineOpen guard returns.
+      const raced = await DB.prepare(
+        `SELECT id, job_id, line FROM cutting_sessions
+         WHERE operator_id = ? AND status = 'open'
+         ORDER BY started_at ASC LIMIT 1`
+      ).bind(operatorId).first<{ id: string; job_id: string; line: string }>();
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "already_clocked_in",
+          line: raced?.line ?? null,
+          job_id: raced?.job_id ?? null,
+          session_id: raced?.id ?? null,
+        },
+        { status: 409 }
+      );
+    }
 
     // Activity log (shared D1 table, same schema as legacy)
     await DB.prepare(
