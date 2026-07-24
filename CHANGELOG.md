@@ -424,6 +424,14 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P288** — BOL edits made in the review/approval flow now survive re-view. The override diff was
+  always persisted to `bols.render_overrides` but stored-view paths passed the raw DB row (where it
+  is a JSON string) into `generatePdf`, which only reads the parsed `_overrides` — so re-view always
+  rendered the original. Fixed with a single hydration step at the top of the `generatePdf` render
+  loop (string → `_overrides`), fixing all three `viewBolForJob` callers at once with no caller
+  changes. Note the no-clobber guard (approve path already sets the object) and fail-safe JSON
+  parse.
+
 - **P256** — Loading dashboard: hardened the status-transition notification dispatch in the
   `loading_assignments` PUT handler (`_worker.js/routes/loading.js`). Previously the
   `dispatchNotification` call ran **before** the `UPDATE loading_assignments` and was `await`ed with

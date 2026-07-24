@@ -127,7 +127,25 @@ window.BolShared = (function() {
 
     const combinedPdf = await PDFDocument.create();
 
-    for (const bol of bolRecords) {
+    for (const _bolRaw of bolRecords) {
+      // Hydrate persisted overrides. The approve path passes `_overrides` already as an object;
+      // the stored-view path passes a DB row whose `render_overrides` is a JSON STRING and has no
+      // `_overrides`. Every render funnels through here, so this one step fixes all view callers
+      // (viewBolForJob in logistics/index.html, logistics/loading.html, jobs/index.html) without
+      // touching any of them. Fail safe to base fields on malformed JSON; never clobber an
+      // already-present object; bind a per-iteration local so repeated passes stay idempotent.
+      let bol = _bolRaw;
+      if (!bol._overrides && bol.render_overrides) {
+        let _parsed = null;
+        if (typeof bol.render_overrides === 'object') {
+          _parsed = bol.render_overrides;
+        } else if (typeof bol.render_overrides === 'string' && bol.render_overrides.trim()) {
+          try { _parsed = JSON.parse(bol.render_overrides); } catch (_e) { _parsed = null; }
+        }
+        if (_parsed && typeof _parsed === 'object') {
+          bol = Object.assign({}, bol, { _overrides: _parsed });
+        }
+      }
       const templateDoc = await PDFDocument.load(templateBytes);
       const page = templateDoc.getPages()[0];
       const font = await templateDoc.embedFont(StandardFonts.Helvetica);
