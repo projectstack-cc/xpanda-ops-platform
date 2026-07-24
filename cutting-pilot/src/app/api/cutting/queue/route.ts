@@ -90,7 +90,7 @@ export async function GET() {
 
     // One query for all currently open sessions on these jobs
     const openSessionRows = await allByJobIds(
-      (ph) => `SELECT id, job_id, line, operator_name, started_at
+      (ph) => `SELECT id, job_id, line, operator_id, operator_name, started_at
        FROM cutting_sessions
        WHERE status = 'open' AND job_id IN (${ph})`,
       jobIds
@@ -122,11 +122,12 @@ export async function GET() {
 
     const openByKey = new Map<
       string,
-      { session_id: string; operator_name: string; started_at: string }
+      { session_id: string; operator_id: string; operator_name: string; started_at: string }
     >();
     for (const row of (openSessionRows.results || [])) {
       openByKey.set(`${row.job_id}:${row.line}`, {
         session_id: row.id,
+        operator_id: row.operator_id,
         operator_name: row.operator_name,
         started_at: row.started_at,
       });
@@ -380,6 +381,7 @@ export async function GET() {
             "not_started" | "in_progress" | "complete",
           sort_order: PROCESS_ORDER.indexOf(lineName),
           open_session_id: open?.session_id ?? null,
+          open_operator_id: open?.operator_id ?? null,
           open_operator_name: open?.operator_name ?? null,
           last_handoff_note: handoffByKey.get(key) || "",
           tracked_seconds: durByKey.get(key) || 0,

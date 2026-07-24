@@ -22,7 +22,7 @@ interface Props {
   permissions: Record<string, { view?: boolean; edit?: boolean }>;
 }
 
-export default function CuttingBoard({ userId: _userId, userName, isAdmin, permissions }: Props) {
+export default function CuttingBoard({ userId, userName, isAdmin, permissions }: Props) {
   const [queue, setQueue] = useState<CuttingJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +111,8 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
   const myOpen = (() => {
     for (const j of queue) {
       const l = j.lines.find(
-        (ln) => ln.open_session_id && ln.open_operator_name === userName
+        (ln) =>
+          ln.open_session_id && !!userId && ln.open_operator_id === userId
       );
       if (l)
         return {
@@ -536,6 +537,7 @@ export default function CuttingBoard({ userId: _userId, userName, isAdmin, permi
                       key={lineObj.line}
                       lineObj={lineObj}
                       jobId={selectedJob.id}
+                      userId={userId}
                       userName={userName}
                       acting={acting}
                       clockedInElsewhere={
