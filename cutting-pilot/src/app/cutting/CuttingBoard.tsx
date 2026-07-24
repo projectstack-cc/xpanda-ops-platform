@@ -12,6 +12,7 @@ import PhotoViewer from "./PhotoViewer";
 import CompleteLineModal from "./CompleteLineModal";
 import PartsPanel from "./PartsPanel";
 import BlockPlanner from "./BlockPlanner";
+import ClockedInBar from "@/components/ClockedInBar";
 import type { CuttingJob } from "./types";
 import { formatDuration, lineLiveSeconds } from "@/lib/time";
 
@@ -51,6 +52,18 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
   const [showAll, setShowAll] = useState(false);
   const [checklistBusy, setChecklistBusy] = useState(false);
   const [plannerOpen, setPlannerOpen] = useState(false);
+  // Authoritative "am I clocked in?" — bypasses the queue's job-status filter, so it survives
+  // an archived/shipped/dropped job that myOpen (queue-derived) would silently lose.
+  const [mySession, setMySession] = useState<{
+    session_id: string;
+    job_id: string;
+    line: string;
+    started_at: string;
+    invoice_number: string | null;
+    customer: string | null;
+    job_status: string | null;
+    orphaned: boolean;
+  } | null>(null);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -72,6 +85,14 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       setError("Network error — check connection.");
     } finally {
       if (!silent) setLoading(false);
+    }
+    // Same refresh cycle as the queue — the sticky bar's source of truth, unfiltered by job status.
+    try {
+      const sRes = await fetch("/v2/api/cutting/my-session");
+      const sData = await sRes.json();
+      if (sData.ok) setMySession(sData.session);
+    } catch {
+      // best-effort — the bar just won't update this cycle
     }
   }
 
@@ -228,7 +249,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       } else if (data.error === "line_busy") {
         showToast(`${line} is already in use by ${data.operator}.`, false);
       } else if (data.error === "already_clocked_in") {
-        showToast(`Finish your current line (${data.line}) before clocking into another.`, false);
+        showToast(`Still clocked into ${data.line} — clock out from the bar at the bottom first.`, false);
       } else {
         showToast(data.error || "Clock-in failed.", false);
       }
@@ -239,8 +260,8 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
     }
   }
 
-  function openClockOut(sessionId: string, line: string) {
-    setClockOutTarget({ sessionId, line, jobId: selectedJob?.id ?? "" });
+  function openClockOut(sessionId: string, line: string, jobId?: string) {
+    setClockOutTarget({ sessionId, line, jobId: jobId ?? selectedJob?.id ?? "" });
   }
 
   async function submitClockOut(
@@ -572,6 +593,20 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
         </Sheet>
       </div>
 
+      {/* Sticky clocked-in bar — reads mySession (unfiltered), not myOpen (queue-derived) */}
+      {mySession && (
+        <ClockedInBar
+          invoice={mySession.invoice_number}
+          customer={mySession.customer}
+          line={mySession.line}
+          startedAt={mySession.started_at}
+          orphaned={mySession.orphaned}
+          onClockOut={() =>
+            openClockOut(mySession.session_id, mySession.line, mySession.job_id)
+          }
+          disabled={acting}
+        />
+      )}
 
       {/* Block-calc planner */}
       {selectedJob && (

@@ -10,6 +10,11 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **P282 follow-up — elapsed-time readout on `ClockedInBar`.** Deferred: `formatDuration` lives
+  in `src/lib/time.ts` (shared, in scope), but the UTC-timestamp parser it depends on
+  (`parseUtc`) is a module-private function in that same file, and `src/lib/time.ts` was out of
+  scope for P282. Export `parseUtc` (or an elapsed-seconds wrapper) from `src/lib/time.ts`, then
+  wire `mySession.started_at` through it in `ClockedInBar.tsx` — no new duration logic needed.
 - [ ] **P272 follow-up — v2 cutting queue's archived filter goes stale.**
   `cutting-pilot/src/app/api/cutting/queue/route.ts:21` excludes jobs via
   `j.status NOT IN ('archived','shipped')`. After P272, a job archived while genuinely finished
@@ -22,7 +27,6 @@
   a done job" case the P258 backstop exists for is a real edge. Needs the same `archived_at`
   (exposed via the queue's job SELECT — confirm it's already selected/joinable) swap once a v2
   prompt touches this route.
-- [ ] Enrich the `already_clocked_in` 409 in `clock-in/route.ts` with `job_id` + `session_id` (P257) so the "already clocked in" resolver still works if the operator's session job has dropped out of the returned queue — §9a follow-on.
 - [ ] **P280 follow-up — catch the `UNIQUE constraint failed` from `idx_cutting_sessions_one_open_per_operator` in `clock-in/route.ts`.** The partial unique index (P280) now enforces one open session per operator at the DB layer, but the route still does a bare INSERT — a race that used to silently create an orphaned second session will now 500 instead. Catch the constraint violation and return the existing 409 `already_clocked_in` response, closing the race properly at the application layer — §9a follow-on.
 - [ ] Hard enforcement on the Work Queue (P259) — block clock-in on lower-priority jobs while higher-priority ones sit incomplete. Deferred by decision; P259 is guide-only (every job stays clickable).
 - [ ] Enable OpenNext skew protection on the v2 Worker (durable fix for hashed-asset 404s across deploys) — see https://opennext.js.org/cloudflare/howtos/skew
