@@ -18,7 +18,8 @@ export async function GET() {
       `SELECT j.id, j.customer, j.invoice_number, j.po_number, j.ship_date,
               j.status, j.priority, j.priority_level, j.processes
        FROM jobs j
-       WHERE j.status NOT IN ('archived','shipped')
+       WHERE j.archived_at IS NULL
+         AND j.status NOT IN ('archived','shipped')
        ORDER BY CASE WHEN j.priority = 'rush' THEN 0 ELSE 1 END ASC,
                 COALESCE(j.priority_level, 0) DESC,
                 j.ship_date ASC,

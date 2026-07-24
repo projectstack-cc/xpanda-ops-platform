@@ -15,18 +15,6 @@
   (`parseUtc`) is a module-private function in that same file, and `src/lib/time.ts` was out of
   scope for P282. Export `parseUtc` (or an elapsed-seconds wrapper) from `src/lib/time.ts`, then
   wire `mySession.started_at` through it in `ClockedInBar.tsx` — no new duration logic needed.
-- [ ] **P272 follow-up — v2 cutting queue's archived filter goes stale.**
-  `cutting-pilot/src/app/api/cutting/queue/route.ts:21` excludes jobs via
-  `j.status NOT IN ('archived','shipped')`. After P272, a job archived while genuinely finished
-  keeps its real `status` (`'done'`/`'shipped'`/whatever it actually was) instead of being
-  overwritten to `'archived'`, so this literal-status filter no longer reliably excludes archived
-  jobs — same class of bug P272 fixed in the legacy worker, but P272's scope was `_worker.js/**` +
-  `jobs/index.html` only (no v2), and P273 only touches `schedule-status.ts`, so nothing in this
-  three-prompt arc reaches it. Low real-world harm today (archived jobs are terminal, so the
-  incomplete-cutting-lines check mostly still excludes them) but the exact "dangling cutting line on
-  a done job" case the P258 backstop exists for is a real edge. Needs the same `archived_at`
-  (exposed via the queue's job SELECT — confirm it's already selected/joinable) swap once a v2
-  prompt touches this route.
 - [ ] Hard enforcement on the Work Queue (P259) — block clock-in on lower-priority jobs while higher-priority ones sit incomplete. Deferred by decision; P259 is guide-only (every job stays clickable).
 - [ ] Enable OpenNext skew protection on the v2 Worker (durable fix for hashed-asset 404s across deploys) — see https://opennext.js.org/cloudflare/howtos/skew
 - [ ] Surface completed_qty in the checklist/reports (progress bars per part, first-pass yield) once qty data accrues
