@@ -534,6 +534,22 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P275** — Linked jobs (1/3): schema step. New migration `DB_Migrations/jobs-trailer-group.sql`
+  adds a nullable `jobs.trailer_group_id TEXT` (+ index) so Steve can mark two or more jobs as
+  shipping on the **same trailer**, for the `/v2/schedule` board to draw as a linked set.
+  Self-grouping id (N jobs share one value) — a `linked_job_id` pointer was rejected as
+  asymmetric, breaks down past two jobs, and orphans siblings when the "parent" is unlinked.
+  **Not `bols.bol_group_id`**: that column (`add-bol-group-linking.sql`) models the inverse
+  cardinality — ONE job split across SEVERAL trailers/BOLs. This is SEVERAL jobs on ONE trailer.
+  Different table, different cardinality — do not merge them. No backfill: there's no existing
+  signal to derive historical trailer-sharing from, so every existing row stays NULL (mirrors the
+  no-guessing backfill decision on `jobs.archived_at`, P271). Migration written as bare SQL with
+  no header comment, per Steve's standing instruction (2026-07-23) that `DB_Migrations/*.sql`
+  files carry no explanatory comments since he copy-pastes them directly into the D1 console —
+  this changelog entry carries the context instead. Migration-only: no worker/frontend code in
+  this prompt. **Must run in the D1 console before prompt 2/3 (worker + legacy entry UI) is
+  deployed** — legacy auto-deploys on push, so 2/3 goes live the moment it's pushed.
+
 - **P272** — Archive refactor (2/3): legacy archive semantics, worker + frontend in one commit
   (splitting them would leave a window where the UI and API disagree about what archiving means,
   since legacy auto-deploys on push). Archiving stops touching `jobs.status` entirely: manual
