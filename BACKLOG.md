@@ -77,6 +77,13 @@
 
 ## Job Board
 
+- [ ] **P275 sequence — linked jobs (trailer sharing), 2/3 and 3/3 remain.** 1/3 (P275) shipped
+  just the schema: `jobs.trailer_group_id` (nullable TEXT, indexed, no backfill) via
+  `DB_Migrations/jobs-trailer-group.sql` — **not yet run in D1, must run before 2/3 deploys**.
+  Still needed: 2/3 — worker support (`_worker.js/routes/jobs.js` read/write for
+  `trailer_group_id`, presumably a link/unlink action and grouped read) + legacy entry UI (some
+  way to mark 2+ jobs as sharing a trailer from the job board); 3/3 — `/v2/schedule` board rail
+  rendering linked jobs as a set. Recorded here so the sequence is recoverable if work pauses.
 - [ ] **P272 follow-up — `reports/orders/index.html` still filters/labels archived by `status`.** The
   Orders Report's Status dropdown ("Archived" option), stats (`stat-active`/`stat-archived`), and
   `statusBadge()` all key off `j.status === 'archived'`, which was explicitly out of P272's locked
