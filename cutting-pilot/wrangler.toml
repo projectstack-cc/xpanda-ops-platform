@@ -22,9 +22,11 @@ cpu_ms = 60_000
 # ── Schedule board cron (P261) ──────────────────────────────────────────────────────
 # Unattended ingestion of the Google-Sheet schedule into schedule_rows (see schedule-ingest.ts).
 # Confirmed working end-to-end in production 2026-07-22 (48 rows written, correct
-# distribution across both ship weeks) — back to the normal 15-min interval.
+# distribution across both ship weeks). Interval tightened 15 → 10 min (P274) for fresher
+# floor data; the ~5s parse sits far inside the Paid CPU budget above, so this is an
+# interval change only — no capacity implication.
 [triggers]
-crons = ["*/15 * * * *"]
+crons = ["*/10 * * * *"]
 
 [vars]
 SCHEDULE_SHEET_ID = "1X57jb_FWPlYTwi3fMJ9I_Yc_meS8AAe4"
