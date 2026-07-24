@@ -810,7 +810,7 @@ export async function handleApiJobs(request, env) {
     const id = String(payload.id || "").trim();
     if (!id) return json({ ok: false, error: "id is required." }, 400);
 
-    const existing = await db.prepare("SELECT id FROM jobs WHERE id = ?").bind(id).first();
+    const existing = await db.prepare("SELECT id, trailer_group_id FROM jobs WHERE id = ?").bind(id).first();
     if (!existing) return json({ ok: false, error: "Job not found." }, 404);
 
     try {
@@ -825,6 +825,25 @@ export async function handleApiJobs(request, env) {
       await db.prepare("DELETE FROM shipments WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM job_line_items WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM jobs WHERE id = ?").bind(id).run();
+
+      // Linking Rule 1 — never leave a group of one. The deleted job may have been half of a
+      // two-job trailer group; if exactly one member survives, its group id is now meaningless.
+      // Mirrors the PUT unlink path. Best-effort: a cleanup failure must not fail the delete,
+      // which has already succeeded and cannot be rolled back at this point.
+      if (existing.trailer_group_id) {
+        try {
+          const survivors = await db.prepare(
+            "SELECT id FROM jobs WHERE trailer_group_id = ?"
+          ).bind(existing.trailer_group_id).all();
+          const survivorRows = survivors.results || [];
+          if (survivorRows.length === 1) {
+            await db.prepare(
+              "UPDATE jobs SET trailer_group_id = NULL, updated_at = ? WHERE id = ?"
+            ).bind(new Date().toISOString().replace('T', ' ').slice(0, 19), survivorRows[0].id).run();
+          }
+        } catch { /* non-fatal: the job is already deleted */ }
+      }
+
       await logActivity(db, 'delete', 'job', id, `Deleted job ${id}`, { id });
       return json({ ok: true, message: "Job deleted." });
     } catch (e) {

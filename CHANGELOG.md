@@ -621,6 +621,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P286** — `DELETE /api/jobs` now mirrors the PUT unlink path's Linking Rule 1 cleanup ("never leave a group of one"): the pre-flight SELECT now also reads `trailer_group_id`, and after the delete commits, a best-effort check counts the surviving group members and clears `trailer_group_id` on the lone survivor. Deliberately omits the PUT path's `AND id != ?` exclusion — the row is already gone by the time this runs, so a bare `WHERE trailer_group_id = ?` returns exactly the survivors. Wrapped in try/catch since the delete has already succeeded and cannot be rolled back. Found (not fixed) a related gap: the DELETE cascade doesn't touch v2's `cutting_lines`/`cutting_sessions` — logged to `BACKLOG.md`.
 - **P276** — Linked jobs (2/3): worker + legacy entry UI, one commit (legacy auto-deploys on
   push, so splitting worker/frontend would open a window where they disagree — same reasoning as
   P272). `jobs.trailer_group_id` is a self-grouping id: N jobs share one value, NULL = unlinked.
