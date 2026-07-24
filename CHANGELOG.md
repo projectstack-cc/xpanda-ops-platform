@@ -85,6 +85,15 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P274** — Schedule ingest cron tightened 15 → 10 minutes (`cutting-pilot/wrangler.toml`
+  `[triggers] crons`) for fresher floor data. Pure interval change — headroom was never in
+  question (Workers Paid, `[limits] cpu_ms = 60_000`, optimized parse runs ~5s), so no capacity
+  implication. Updated the narrating comment above `[triggers]` so it no longer contradicts the
+  config beneath it. `schedule-ingest.ts`, `custom-worker.ts`, `[limits]`, and
+  `schedule-status.ts` untouched. `tsc --noEmit` + `cf-build` green. **v2 does not auto-deploy —
+  needs an explicit `wrangler deploy` from `cutting-pilot/` before the new interval takes effect**
+  (cron triggers register at deploy time).
+
 - **P273** — Archive refactor (3/3): schedule board drops the archived special-case.
   `schedule-status.ts:deriveOne` used to short-circuit `jobStatus === "archived" || jobStatus ===
   "shipped"` straight to `"Shipped"` — a workaround from when archiving destroyed a job's real
