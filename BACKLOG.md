@@ -27,7 +27,6 @@
   a done job" case the P258 backstop exists for is a real edge. Needs the same `archived_at`
   (exposed via the queue's job SELECT — confirm it's already selected/joinable) swap once a v2
   prompt touches this route.
-- [ ] **P280 follow-up — catch the `UNIQUE constraint failed` from `idx_cutting_sessions_one_open_per_operator` in `clock-in/route.ts`.** The partial unique index (P280) now enforces one open session per operator at the DB layer, but the route still does a bare INSERT — a race that used to silently create an orphaned second session will now 500 instead. Catch the constraint violation and return the existing 409 `already_clocked_in` response, closing the race properly at the application layer — §9a follow-on.
 - [ ] Hard enforcement on the Work Queue (P259) — block clock-in on lower-priority jobs while higher-priority ones sit incomplete. Deferred by decision; P259 is guide-only (every job stays clickable).
 - [ ] Enable OpenNext skew protection on the v2 Worker (durable fix for hashed-asset 404s across deploys) — see https://opennext.js.org/cloudflare/howtos/skew
 - [ ] Surface completed_qty in the checklist/reports (progress bars per part, first-pass yield) once qty data accrues
