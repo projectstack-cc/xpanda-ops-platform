@@ -424,6 +424,10 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P289** — the BOL ship-to attention line now renders its stored value verbatim instead of
+  force-prefixing "attn: ", since the field is frequently used as a secondary address line.
+  Applies everywhere via `bol-shared.js`. No data migration; existing values render as-is.
+
 - **P288** — BOL edits made in the review/approval flow now survive re-view. The override diff was
   always persisted to `bols.render_overrides` but stored-view paths passed the raw DB row (where it
   is a JSON string) into `generatePdf`, which only reads the parsed `_overrides` — so re-view always

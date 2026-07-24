@@ -382,7 +382,7 @@ window.BolShared = (function() {
   function buildShipToLines(bol) {
     const lines = [];
     if (bol.ship_to_company)   lines.push(bol.ship_to_company);
-    if (bol.ship_to_attention) lines.push('attn: ' + bol.ship_to_attention);
+    if (bol.ship_to_attention) lines.push(bol.ship_to_attention);
     const streetLine = [bol.ship_to_street, bol.ship_to_street2].filter(Boolean).join(', ');
     if (streetLine) lines.push(streetLine);
     const cityStateZip = [bol.ship_to_city, bol.ship_to_state, bol.ship_to_zip].filter(Boolean).join(', ');
