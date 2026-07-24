@@ -117,8 +117,11 @@ async function loadReport() {
     // Client-side filters (status, date range)
     let filtered = allJobs;
 
-    if (status) {
-      filtered = filtered.filter(j => j.status === status);
+    if (status === 'archived') {
+      filtered = filtered.filter(j => isArchived(j));
+    } else if (status) {
+      // Non-archived selections must not surface archived jobs whose real status now survives.
+      filtered = filtered.filter(j => j.status === status && !isArchived(j));
     }
     if (dateFrom) {
       filtered = filtered.filter(j => j.ship_date && j.ship_date >= dateFrom);
@@ -134,11 +137,18 @@ async function loadReport() {
   }
 }
 
+// Archive is an orthogonal fact (P271/P272): `archived_at` is the signal. The literal
+// status === 'archived' term is a fallback for the finite legacy population backfilled
+// before archive and status were separated. Never remove the fallback.
+function isArchived(j) {
+  return !!j.archived_at || j.status === 'archived';
+}
+
 function updateStats(jobs) {
   document.getElementById('stat-total').textContent    = jobs.length;
-  document.getElementById('stat-active').textContent   = jobs.filter(j => !['shipped','archived'].includes(j.status)).length;
+  document.getElementById('stat-active').textContent   = jobs.filter(j => j.status !== 'shipped' && !isArchived(j)).length;
   document.getElementById('stat-shipped').textContent  = jobs.filter(j => j.status === 'shipped').length;
-  document.getElementById('stat-archived').textContent = jobs.filter(j => j.status === 'archived').length;
+  document.getElementById('stat-archived').textContent = jobs.filter(j => isArchived(j)).length;
 }
 
 function sortBy(col) {
@@ -200,7 +210,7 @@ function renderTable(jobs) {
               <td>${esc(j.invoice_number || '—')}</td>
               <td>${esc(j.po_number || '—')}</td>
               <td>${j.ship_date ? formatDate(j.ship_date) : '—'}</td>
-              <td>${statusBadge(j.status)}</td>
+              <td>${statusBadge(j)}</td>
               <td style="font-size:11px;color:#6b7280;">${esc(j.source || 'manual')}</td>
               <td style="font-size:11px;color:#6b7280;">${j.created_at ? formatDate(j.created_at.slice(0,10)) : '—'}</td>
             </tr>
@@ -220,7 +230,8 @@ function clearFilters() {
   loadReport();
 }
 
-function statusBadge(status) {
+function statusBadge(j) {
+  const status = isArchived(j) ? 'archived' : j.status;
   const labels = {
     not_started: 'Not Started', in_production: 'In Production', done: 'Done',
     loading: 'Loading', shipped: 'Shipped', archived: 'Archived',

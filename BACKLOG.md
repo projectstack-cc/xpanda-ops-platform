@@ -80,12 +80,6 @@
   `trailer_group_id` until someone manually unlinks it. Low real-world odds (deleting a job that's
   actively linked to a trailer group is an edge case) but worth a small follow-up: mirror the
   same "remaining count === 1 → clear" cleanup from the PUT unlink path into the DELETE handler.
-- [ ] **P272 follow-up — `reports/orders/index.html` still filters/labels archived by `status`.** The
-  Orders Report's Status dropdown ("Archived" option), stats (`stat-active`/`stat-archived`), and
-  `statusBadge()` all key off `j.status === 'archived'`, which was explicitly out of P272's locked
-  scope (`_worker.js/**` + `jobs/index.html` only). After P272, new archives no longer write
-  `status`, so this report will silently stop counting/labeling newly-archived jobs as "Archived" —
-  it'll only ever match the shrinking legacy population. Needs the same `archived_at` signal swap.
 - [ ] **P272 follow-up — unarchiving a legacy `status='archived'` row leaves it in a limbo state.**
   Manual Unarchive now only clears `archived_at`, never writes `status` (P272, by design — a job's
   real status should be restored exactly as it was). But for the finite legacy population backfilled
@@ -166,7 +160,6 @@ Private single-company use does **not** require App Store publishing/certificati
 ## Admin / Platform
 
 - [ ] Remove temporary `pages.dev` → `xpandaops.com` redirect from `_worker.js/index.js` once all internal links/bookmarks confirmed updated.
-- [ ] Hide `packing-slip-test.html` from any navigation/discovery surface (tiny housekeeping — can ship anytime, doesn't block anything)
 - [ ] Breakdown job board permissions into more granular sub-modules *(easier after F3 audit + F1a shared header — both now done)*
 - [ ] Dashboard KPIs / metrics panel — homepage widget showing jobs by status, BOLs generated this week, shipments pending/in-transit/delivered, most-used parts *(adds new endpoints)*
 - [ ] Port language / i18n features from Safety portal to platform-wide use *(needs F1c shared utils as its home — now done)*
