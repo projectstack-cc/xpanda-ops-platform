@@ -857,6 +857,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Reports
 
+- **P285** — Orders Report now treats `archived_at` as the archive signal (P271/P272) instead of `status === 'archived'`, via a shared `isArchived()` predicate used by the Status filter, both stat tiles, and the status badge. The literal-status term is retained inside `isArchived()` as a fallback for the legacy backfilled population; non-archived filter selections now exclude archived jobs, since a job's real status survives archiving post-P272 and would otherwise bleed into e.g. a "Done" filter. Also dropped a stale `BACKLOG.md` item to hide `packing-slip-test.html` from navigation (not implemented — the page isn't linked from anywhere, so nobody stumbles onto it). Read-only filter/label logic only, no API/schema change.
 - **P52** — Orders Report page; jobs API improvements. (1b4d2f0)
 
 ---
