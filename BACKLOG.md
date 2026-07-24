@@ -41,7 +41,6 @@
 - [x] P263 follow-up — verify shrink-to-fit against a real TV. Steve confirmed 2026-07-24: fits the real wall-mounted TV. Unblocks P277 (linked-jobs 3/3 side rail), which required this to have landed first since it touches the same density/DayColumn/ScheduleBoard files.
 - [ ] **P263 follow-up — late/at-risk highlighting on the schedule board.** Explicitly out of scope for the first UI pass; would need a definition of "late"/"at-risk" (vs. `ship_date`? vs. status stalling?) before scoping.
 - [ ] **P263 follow-up — per-day totals on the schedule board** (load count / bdft sum per `DayColumn`) if useful once the board is in daily use.
-- [ ] **P263 follow-up — wire `/v2/schedule` into `PlatformHeader`'s nav list.** The `schedule` permission key now exists (P264) so this is unblocked; still needs its own scoped change to `PlatformHeader.tsx`'s `NAV_MODULES` (§9b).
 
 ---
 

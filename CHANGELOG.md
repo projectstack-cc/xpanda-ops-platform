@@ -90,6 +90,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P287** — `/v2/schedule` added to `PlatformHeader`'s `NAV_MODULES`, gated on the `schedule` permission key from P264, placed between Manufacturing and Production. Both the desktop nav and the mobile drawer pick it up automatically from the shared array — no render-branch change. `isNavActive` needed no change (default `startsWith` behavior already resolves `/v2/schedule` correctly, unlike `/v2/cutting`'s special-cased mapping to the Manufacturing entry). The P213 no-dedicated-Cutting-link decision and its explanatory comment stand untouched. Not live until `wrangler deploy` from `cutting-pilot/`.
 - **P279** — Fixed the `/v2/schedule` auto-hide nav swallowing header clicks while revealed.
   Reported as "the theme toggle does nothing" — theme system (`theme.tsx`, `layout.tsx`,
   `globals.css`) verified clean; real cause was `PlatformHeader.tsx`'s `autoHide` reveal strip
