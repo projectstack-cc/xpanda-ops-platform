@@ -85,6 +85,22 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P279** — Fixed the `/v2/schedule` auto-hide nav swallowing header clicks while revealed.
+  Reported as "the theme toggle does nothing" — theme system (`theme.tsx`, `layout.tsx`,
+  `globals.css`) verified clean; real cause was `PlatformHeader.tsx`'s `autoHide` reveal strip
+  (`fixed inset-x-0 top-0 z-50 h-11`), a full-width transparent button that sits above the
+  `z-40` header and covers its top 44px **at all times, including while revealed** — every
+  pointer event aimed at that band hit the strip's `reveal()` handler instead of the header
+  content underneath. Fixed by driving `pointer-events` off `revealed` (`pointer-events-none`
+  once revealed, `pointer-events-auto` while hidden) and pulling the strip out of tab order
+  when inert (`tabIndex={-1}`, `aria-hidden`) rather than unmounting it, so the grab-handle
+  affordance doesn't flicker and the reveal transition stays smooth. Scope wider than the
+  reported symptom: this also restores Sign Out, the logo link, every desktop nav link, and the
+  mobile hamburger on the schedule board — all were being swallowed by the same strip, not just
+  the theme toggle. `z-50`/`z-40` relationship and the non-`autoHide` in-flow render path
+  untouched. `tsc --noEmit` clean, `cf-build` green. **Not yet live** — v2 requires an explicit
+  `wrangler deploy` from `cutting-pilot/`.
+
 - **P278** — Fixed `deriveStatuses()` (`src/lib/schedule-status.ts`) and restored the floor
   status badges (`SHOW_STATUS_BADGES` → `true`, `flags.ts`). Three defects found auditing the
   ladder against the actual write sites: (1) rung 3 (`assignmentStatuses.length > 0 → "Loading"`)

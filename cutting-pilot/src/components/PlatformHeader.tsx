@@ -95,7 +95,12 @@ export default function PlatformHeader({
           onPointerEnter={reveal}
           onFocus={reveal}
           aria-label="Show navigation"
-          className="fixed inset-x-0 top-0 z-50 h-11 flex items-start justify-center pt-1 bg-transparent border-0 cursor-pointer focus-visible:outline-none"
+          aria-hidden={revealed}
+          tabIndex={revealed ? -1 : 0}
+          className={[
+            "fixed inset-x-0 top-0 z-50 h-11 flex items-start justify-center pt-1 bg-transparent border-0 cursor-pointer focus-visible:outline-none",
+            revealed ? "pointer-events-none" : "pointer-events-auto",
+          ].join(" ")}
         >
           <span
             aria-hidden="true"
