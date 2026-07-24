@@ -4,7 +4,7 @@
 // density tightens (compact drops delivery time/location/method/carrier, minimal also drops
 // load count + the scrap icon) — trimming fields is preferred over shrinking text below the
 // legibility floor.
-import { Recycle } from "lucide-react";
+import { Link2, Recycle } from "lucide-react";
 import type { ScheduleBoardRow } from "@/types/schedule";
 import StatusBadge from "./StatusBadge";
 import type { Density } from "./density";
@@ -14,6 +14,17 @@ import { SHOW_STATUS_BADGES } from "./flags";
 interface OrderRowProps {
   row: ScheduleBoardRow;
   density: Density;
+  // True when this row belongs to a trailer_group_id but none of its groupmates are visible in
+  // this same day column (DayColumn computes this — the group is split across days, not just
+  // clipped: DayColumn never partially clips a group). A rail can't span two day columns, so
+  // this renders a link chip instead, on the row's always-present first line so it survives
+  // every density tier without adding a line of height.
+  orphanedGroup?: boolean;
+  // True only for the last row actually rendered in the column. Grouped rows sit inside their
+  // own wrapper div now (for the rail border), so a plain `last:` CSS selector would scope to
+  // that wrapper and drop the border under the last member of every group, not just the column's
+  // true last row. DayColumn computes this explicitly instead.
+  isLastInColumn?: boolean;
 }
 
 // Single definition shared by customer name and INV# so they read as one visual tier — a
@@ -25,7 +36,7 @@ function isScrapYes(scrapPickup: string | null): boolean {
   return (scrapPickup ?? "").trim().toUpperCase().startsWith("Y");
 }
 
-export default function OrderRow({ row, density }: OrderRowProps) {
+export default function OrderRow({ row, density, orphanedGroup, isLastInColumn }: OrderRowProps) {
   const showTiming = density === "full";
   const showMethodCarrier = density === "full";
   const showLoadCount = density !== "minimal";
@@ -40,15 +51,25 @@ export default function OrderRow({ row, density }: OrderRowProps) {
   return (
     <div
       className={[
-        "px-1.5 border-b border-[var(--border-light)] last:border-b-0",
+        "px-1.5",
+        isLastInColumn ? "" : "border-b border-[var(--border-light)]",
         density === "full" ? "py-1" : "py-0.5",
         row.unmatched ? "opacity-60 grayscale-[30%]" : "",
       ].join(" ")}
     >
       <div className="flex items-center justify-between gap-1 min-w-0">
         <span className={`truncate ${PRIMARY_LABEL_CLS}`}>{row.customer || "—"}</span>
-        <span className={`shrink-0 font-mono tabular-nums ${PRIMARY_LABEL_CLS}`}>
-          #{row.invoice_number}
+        <span className="shrink-0 flex items-center gap-0.5">
+          {orphanedGroup && (
+            <Link2
+              size={10}
+              className="shrink-0 text-[var(--brand)]"
+              aria-label="Linked to a job on another day"
+            />
+          )}
+          <span className={`font-mono tabular-nums ${PRIMARY_LABEL_CLS}`}>
+            #{row.invoice_number}
+          </span>
         </span>
       </div>
 

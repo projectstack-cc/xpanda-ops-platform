@@ -46,7 +46,7 @@
 - [ ] **P268 follow-up — restore schedule board status badges.** Flip `SHOW_STATUS_BADGES` back to `true` in `src/components/schedule/flags.ts` once the platform-wide status-routing rework lands and the derived statuses are trusted again. Don't let this linger — it was meant to be temporary.
 - [ ] **P268 follow-up — reclaimed row space with badges hidden.** With `SHOW_STATUS_BADGES` false, matched rows are visibly narrower/shorter than before; density/shrink-to-fit sizing was deliberately left untouched (badges are coming back). If the board runs with badges suppressed for a while, consider whether the extra room is worth using, but re-tune together with the badge restore, not separately.
 - [ ] **P261 follow-up — no `UNIQUE(invoice_number, ship_week, day_of_week)` on `schedule_rows`.** The 1/5 migration didn't add one, so the poller's upsert is done in application code (select-then-insert/update) rather than SQL `ON CONFLICT`. Works fine at 15-min-cron scale, but if `schedule_rows` ever gets a second writer, add the unique index and switch to a real upsert.
-- [ ] **P263 follow-up — verify shrink-to-fit against a real TV.** P266 retuned `computeDensity()`/row chrome so 8–9 orders fit per the code-level analysis, but this is still not measured against actual wall-mounted TV hardware at typical viewing distance — confirm the legibility floor reads fine and retune further if needed.
+- [x] P263 follow-up — verify shrink-to-fit against a real TV. Steve confirmed 2026-07-24: fits the real wall-mounted TV. Unblocks P277 (linked-jobs 3/3 side rail), which required this to have landed first since it touches the same density/DayColumn/ScheduleBoard files.
 - [ ] **P263 follow-up — late/at-risk highlighting on the schedule board.** Explicitly out of scope for the first UI pass; would need a definition of "late"/"at-risk" (vs. `ship_date`? vs. status stalling?) before scoping.
 - [ ] **P263 follow-up — per-day totals on the schedule board** (load count / bdft sum per `DayColumn`) if useful once the board is in daily use.
 - [ ] **P263 follow-up — wire `/v2/schedule` into `PlatformHeader`'s nav list.** The `schedule` permission key now exists (P264) so this is unblocked; still needs its own scoped change to `PlatformHeader.tsx`'s `NAV_MODULES` (§9b).
@@ -77,14 +77,9 @@
 
 ## Job Board
 
-- [ ] **P275/276 sequence — linked jobs (trailer sharing), 3/3 remains.** 1/3 (P275, migration)
-  and 2/3 (P276, worker + legacy entry UI) have shipped. Still needed: 3/3 — `/v2/schedule` board
-  rail rendering linked `trailer_group_id` jobs as a set (side-rail bracket spanning the group's
-  rows). Precondition (per prompt 3/3 itself): the measured-row-capacity TV-fit work must land
-  first — as of this writing that's still open (`P263 follow-up — verify shrink-to-fit against a
-  real TV`, this file) and 3/3 touches the same files (`density.ts`/`DayColumn.tsx`/
-  `ScheduleBoard.tsx`), so running them out of order risks a merge conflict and a broken clipping
-  rule. Recorded here so the sequence is recoverable if work pauses.
+- [x] P275/276/277 sequence — linked jobs (trailer sharing). 1/3 (P275, migration), 2/3 (P276,
+  worker + legacy entry UI), 3/3 (P277, `/v2/schedule` side rail) have all shipped. **P277 still
+  needs `wrangler deploy` from `cutting-pilot/` before the rail is live** — v2 doesn't auto-deploy.
 - [ ] **P276 follow-up — deleting a linked job can leave its groupmates as a group of one.**
   `DELETE /api/jobs` doesn't clear/cascade `trailer_group_id` on the deleted job's former
   groupmates the way link/unlink do (Linking Rule 1: "never leave a group of one"). Deliberately

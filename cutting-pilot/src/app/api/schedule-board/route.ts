@@ -5,9 +5,32 @@
 // captured and shown here originally — removed by request; schedule-ingest.ts no longer
 // captures those rows at all, the sheet itself stays the source of truth for that list.)
 import { NextResponse } from "next/server";
+import type { D1Database } from "@cloudflare/workers-types";
 import { getEnv } from "@/lib/db";
 import { currentAndNextShipWeekTabs } from "@/lib/schedule-ingest";
 import { deriveStatuses, type ScheduleStatus } from "@/lib/schedule-status";
+
+const GROUP_CHUNK = 90; // D1 100-bound-param ceiling — same approach as deriveStatuses' allByJobIds
+
+// jobs.trailer_group_id, resolved for the matched job set in one batch (chunked), alongside
+// status derivation — not from schedule_rows, which doesn't carry it. Local to this route
+// (mirrors deriveStatuses' chunking rather than importing it — schedule-status.ts is untouched
+// by this prompt).
+async function fetchGroupIds(db: D1Database, jobIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (let i = 0; i < jobIds.length; i += GROUP_CHUNK) {
+    const chunk = jobIds.slice(i, i + GROUP_CHUNK);
+    const placeholders = chunk.map(() => "?").join(",");
+    const { results } = await db
+      .prepare(
+        `SELECT id, trailer_group_id FROM jobs WHERE id IN (${placeholders}) AND trailer_group_id IS NOT NULL`
+      )
+      .bind(...chunk)
+      .all<{ id: string; trailer_group_id: string }>();
+    for (const row of results ?? []) out.set(row.id, row.trailer_group_id);
+  }
+  return out;
+}
 
 interface ScheduleRowDb {
   invoice_number: string;
@@ -41,6 +64,7 @@ interface ScheduleBoardRow {
   unmatched: boolean;
   sheet_status: string | null;
   job_id: string | null;
+  trailer_group_id: string | null;
 }
 
 interface DayGroup {
@@ -70,7 +94,10 @@ export async function GET() {
     const jobIds = Array.from(
       new Set(rows.map((r) => r.match_job_id).filter((id): id is string => !!id))
     );
-    const statusByJobId = await deriveStatuses(DB, jobIds);
+    const [statusByJobId, groupIdByJobId] = await Promise.all([
+      deriveStatuses(DB, jobIds),
+      fetchGroupIds(DB, jobIds),
+    ]);
 
     // One entry per calendar date (ship_date is unique across the two fetched weeks — they
     // never overlap — so this never collides two different weekdays together).
@@ -102,6 +129,7 @@ export async function GET() {
         unmatched,
         sheet_status: row.sheet_status,
         job_id: row.match_job_id,
+        trailer_group_id: unmatched ? null : groupIdByJobId.get(row.match_job_id!) ?? null,
       });
     }
 

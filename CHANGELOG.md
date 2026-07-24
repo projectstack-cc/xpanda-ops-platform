@@ -85,6 +85,42 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P277** — Linked jobs (3/3): `/v2/schedule` side rail for jobs sharing a `trailer_group_id`.
+  `GET /v2/api/schedule-board` (`app/api/schedule-board/route.ts`) now resolves `trailer_group_id`
+  for the matched job set in one batched, chunked query (mirrors `deriveStatuses`' `allByJobIds`
+  approach locally rather than importing it — `schedule-status.ts` is untouched by this prompt)
+  alongside status derivation; surfaced on `ScheduleBoardRow` (both the route's local interface
+  and `types/schedule.ts`) as nullable `trailer_group_id`. **The rail is derived strictly from
+  `trailer_group_id`, never from sheet `sort_order` adjacency** — Steve confirmed the sheet
+  already stacks linked orders next to each other in practice, but deriving the rail from that
+  adjacency would inherit the sheet's unreliability (the whole reason this board reads live
+  platform state instead of trusting the sheet) and could bracket two unrelated customers the
+  first time the updater doesn't stack them. `DayColumn.tsx`: `withGroupsAdjacent` pulls a
+  group's rows contiguous (anchored at the first member's existing position — a no-op in the
+  normal case), `buildBlocks` turns contiguous runs into grouped/single blocks, and
+  `selectVisible` implements Steve's locked slot-priority rule — **grouped blocks always win a
+  slot and are never partially clipped** (rendered in full regardless of `rowCap`; only ungrouped
+  rows absorb the clipping into `+N more`, which now counts blocks actually dropped rather than
+  `rows.length - visible.length`, since a full group can legitimately push the visible count past
+  `rowCap` without anything having been dropped). This is the third override on top of the
+  sheet's `sort_order` (after group adjacency and the rail itself) — commented in-code so a
+  future reader doesn't mistake reordered rows for a bug and "fix" it back. A group whose members
+  land in two different day columns (sheet disagrees about the ship date) can't be spanned by a
+  rail; each orphaned member gets a small link-chip instead (`OrderRow`'s new `orphanedGroup`
+  prop, a `Link2` icon on the row's always-rendered first line so it costs no height and survives
+  every density tier, same as the rail itself). Rail styling is a `border-l-2 border-[var(--brand)]`
+  wrapper around the grouped block — no new CSS, no hardcoded hex, no height cost. Unmatched-row
+  greyed/flagged treatment (P268) and `SHOW_STATUS_BADGES = false` (also P268, still `false`)
+  both left untouched. Verified the reorder/block/clip algorithm against a standalone simulation
+  (already-adjacent no-op, sheet-disagreement reorder, orphan-stays-ungrouped, slot-priority with
+  overflow accounting, a group larger than `rowCap` still rendering whole) — all pass.
+  `tsc --noEmit` clean, `cf-build` green. **Precondition met**: the TV-fit measurement work
+  (`P263` follow-up) was confirmed against real hardware before this prompt started, avoiding the
+  `density.ts`/`DayColumn.tsx`/`ScheduleBoard.tsx` merge-conflict risk the prompt itself flagged.
+  **Not yet visible on the floor board** — `SHOW_STATUS_BADGES` is `false` but that only affects
+  status pills, not the rail; the rail *will* render once this deploys. **v2 requires an explicit
+  `wrangler deploy` from `cutting-pilot/` — this does not ship on push.**
+
 - **P274** — Schedule ingest cron tightened 15 → 10 minutes (`cutting-pilot/wrangler.toml`
   `[triggers] crons`) for fresher floor data. Pure interval change — headroom was never in
   question (Workers Paid, `[limits] cpu_ms = 60_000`, optimized parse runs ~5s), so no capacity
