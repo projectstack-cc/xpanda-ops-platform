@@ -85,6 +85,36 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P278** — Fixed `deriveStatuses()` (`src/lib/schedule-status.ts`) and restored the floor
+  status badges (`SHOW_STATUS_BADGES` → `true`, `flags.ts`). Three defects found auditing the
+  ladder against the actual write sites: (1) rung 3 (`assignmentStatuses.length > 0 → "Loading"`)
+  fired on the mere existence of a `loading_assignments` row, but a row is seeded at
+  `loading_status='awaiting'` the moment a job is created (`load_count` expansion in
+  `_worker.js/routes/jobs.js`) — so almost every job with `load_count >= 1` read "Loading"
+  regardless of real dock activity, and Ready/Cutting/Not Started were unreachable underneath it.
+  Fixed by requiring `loading_status='loading'` specifically for the Loading rung; `awaiting`/
+  `not_started` now fall through to the cutting rungs instead of being read as dock signals. (2)
+  `in_transit` and `delivered` (written by both the driver QR flow and the manual dock-board
+  button) weren't in the ladder at all and fell to the old rung 3 → "Loading," so a delivered
+  order still read as sitting on the dock. Both now resolve to **Shipped** (Steve's call:
+  `in_transit` doesn't get its own badge — once the truck has left, it reads the same as
+  delivered). (3) Confirmed `cutting_lines`/`cutting_sessions` (v2) are the only source for the
+  Ready/Cutting rungs — **no legacy `cutting_steps` fallback, by design**: that model was never
+  finished and is scheduled for retirement, and reading it would import wrong data, not missing
+  data. One accepted residual, not a caveat: a job that's never surfaced in the v2 cutting queue
+  has zero `cutting_lines` rows (created lazily by the queue read's `INSERT OR IGNORE`), so it
+  reads "Not Started" until a loading assignment reaches `loading` — correct for a job with no
+  cutting work; if it's wrong for a job that should be cutting, that's a queue-reconciliation bug,
+  not this ladder. New precedence, highest wins: archived (legacy sentinel) → shipped →
+  delivered → in_transit → loaded → loading → all cutting_lines complete/`status='done'` (Ready)
+  → any cutting_lines in_progress or open cutting_sessions (Cutting) → Not Started. `StatusBadge.tsx`
+  needed no change (still the same 6-value `ScheduleStatus`, confirmed by reading it before
+  concluding). `SHOW_STATUS_BADGES` flag itself kept in place (not inlined/deleted) as a one-line
+  kill switch. Verified: `tsc --noEmit` clean, `cf-build` green, `CHUNK = 90` chunking intact,
+  scope confirmed to `schedule-status.ts`/`flags.ts` only — nothing under `_worker.js/` touched.
+  **Not yet live** — v2 requires an explicit `wrangler deploy` from `cutting-pilot/`; badges won't
+  appear on the floor TV until that runs.
+
 - **P277** — Linked jobs (3/3): `/v2/schedule` side rail for jobs sharing a `trailer_group_id`.
   `GET /v2/api/schedule-board` (`app/api/schedule-board/route.ts`) now resolves `trailer_group_id`
   for the matched job set in one batched, chunked query (mirrors `deriveStatuses`' `allByJobIds`
