@@ -34,7 +34,7 @@ export default function ClockedInBar({
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-text truncate">
-            Clocked in — {invoice ? `#${invoice}` : "Job"}
+            Running — {invoice ? `#${invoice}` : "Job"}
           </p>
           <p className="text-xs text-muted truncate">
             {customer ? `${customer} · ` : ""}
@@ -47,7 +47,7 @@ export default function ClockedInBar({
           onClick={onClockOut}
           className="shrink-0 min-h-[44px] px-4 py-2 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
         >
-          Clock Out
+          Stop
         </button>
       </div>
     </div>

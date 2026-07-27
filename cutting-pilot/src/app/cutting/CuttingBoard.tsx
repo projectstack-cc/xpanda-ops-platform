@@ -244,12 +244,12 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       });
       const data = await res.json();
       if (data.ok) {
-        showToast(`Clocked in to ${line}.`);
+        showToast(`Started ${line}.`);
         await fetchQueue(true);
       } else if (data.error === "line_busy") {
         showToast(`${line} is already in use by ${data.operator}.`, false);
       } else if (data.error === "already_clocked_in") {
-        showToast(`Still clocked into ${data.line} — clock out from the bar at the bottom first.`, false);
+        showToast(`Still running ${data.line} — stop from the bar at the bottom first.`, false);
       } else {
         showToast(data.error || "Clock-in failed.", false);
       }
@@ -319,7 +319,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       });
       const data = await res.json();
       if (data.ok) {
-        showToast(`Clocked out of ${clockOutTarget.line}.`);
+        showToast(`Stopped ${clockOutTarget.line}.`);
         setClockOutTarget(null);
         await fetchQueue(true);
       } else {
@@ -655,14 +655,14 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       <Modal
         isOpen={!!resolvePrompt}
         onClose={() => setResolvePrompt(null)}
-        title="Already clocked in"
+        title="Already running"
       >
         <p className="text-sm text-text">
-          You&apos;re clocked into{" "}
+          You&apos;re running{" "}
           <span className="font-mono tabular-nums font-semibold">
             #{resolvePrompt?.invoice}
           </span>
-          . Clock out of{" "}
+          . Stop{" "}
           <span className="font-mono tabular-nums font-semibold">
             #{resolvePrompt?.invoice}
           </span>
@@ -689,7 +689,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
             }}
             className="min-h-[44px] px-4 py-2 bg-[var(--primary-bg)] text-[var(--primary-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
           >
-            Clock Out
+            Stop
           </button>
         </div>
       </Modal>

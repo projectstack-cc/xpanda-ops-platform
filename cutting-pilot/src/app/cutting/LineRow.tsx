@@ -117,7 +117,7 @@ export default function LineRow({
               onClick={() => onClockIn(jobId, lineObj.line)}
               className="min-h-[44px] px-4 py-2 bg-[var(--primary-bg)] text-[var(--primary-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             >
-              Clock In
+              Start
             </button>
           )}
           {mySession && (
@@ -128,7 +128,7 @@ export default function LineRow({
                 onClick={() => onClockOut(mySession, lineObj.line)}
                 className="min-h-[44px] px-4 py-2 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               >
-                Clock Out
+                Stop
               </button>
               <button
                 type="button"

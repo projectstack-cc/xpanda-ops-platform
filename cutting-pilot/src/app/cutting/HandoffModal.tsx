@@ -63,7 +63,7 @@ export default function HandoffModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Clock Out — ${lineLabel}`}>
+    <Modal isOpen={isOpen} onClose={onClose} title={`Stop — ${lineLabel}`}>
       <div className="space-y-4">
         <div>
           <label htmlFor="handoff-note" className="block text-sm font-medium text-text mb-1">
@@ -152,7 +152,7 @@ export default function HandoffModal({
             onClick={handleSubmit}
             className="flex-1 min-h-[44px] bg-[var(--primary-bg)] text-[var(--primary-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
           >
-            {acting ? "Saving…" : "Clock Out"}
+            {acting ? "Saving…" : "Stop"}
           </button>
           <button
             type="button"
