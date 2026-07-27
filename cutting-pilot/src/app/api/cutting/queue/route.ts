@@ -19,14 +19,10 @@ export async function GET() {
               j.status, j.priority, j.priority_level, j.processes
        FROM jobs j
        WHERE j.archived_at IS NULL
-         AND j.status NOT IN ('archived','shipped')
-       -- P290: priority sorting TEMPORARILY DISABLED for soft rollout — flat ship-date order.
-       -- To restore priority, delete the two active ORDER BY lines below and un-comment these:
-       --   ORDER BY CASE WHEN j.priority = 'rush' THEN 0 ELSE 1 END ASC,
-       --            COALESCE(j.priority_level, 0) DESC,
-       --            j.ship_date ASC,
-       --            j.invoice_number ASC
-       ORDER BY j.ship_date ASC,
+         AND j.status IN ('not_started','in_production')
+       ORDER BY CASE WHEN j.priority = 'rush' THEN 0 ELSE 1 END ASC,
+                COALESCE(j.priority_level, 0) DESC,
+                j.ship_date ASC,
                 j.invoice_number ASC`
     ).all<any>();
 
