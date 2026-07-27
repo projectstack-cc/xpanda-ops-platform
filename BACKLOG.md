@@ -19,8 +19,13 @@
 - [ ] Enable OpenNext skew protection on the v2 Worker (durable fix for hashed-asset 404s across deploys) — see https://opennext.js.org/cloudflare/howtos/skew
 - [ ] Surface completed_qty in the checklist/reports (progress bars per part, first-pass yield) once qty data accrues
 - [ ] Cross Cutter / Hole Cutter chunk checklists (replace the shared parts list) once block-calc BOM feeds chunk counts
-- [ ] P295: strip CC/HC/Laminate from /v2/cutting
 - [ ] P297: surface the CC/HC board from the Manufacturing tile (two links)
+- [ ] **Cleanup: remove dormant chunk branches + dead endpoints** (`chunk-target`, `taper-yield`,
+  `cut-plan`, `CHUNK_LINES`, taper Cross Cutter derivation) from `/v2/cutting` once the standalone
+  board (P292–P294) is proven.
+- [ ] Taper Cross Cutter chunk auto-derivation (`taper_yield`) no longer feeds any board — Cross
+  Cutter tasks are now assigned manually on `/v2/cutting/crosscutter`. Revisit if auto-derivation is
+  wanted there.
 
 ---
 

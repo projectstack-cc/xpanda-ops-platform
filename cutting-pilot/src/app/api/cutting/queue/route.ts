@@ -5,7 +5,10 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
 
-const PROCESS_ORDER = ["Cross Cutter", "Hole Cutter", "Main Line", "Blue Line", "Laminate"];
+// P295: /v2/cutting is now Main Line / Blue Line only. Cross Cutter + Hole Cutter moved to the
+// standalone /v2/cutting/crosscutter board (P292–P294); Laminate dropped from v2 cutting.
+// Chunk branches below (CHUNK_LINES, taper Cross Cutter derivation) are left dormant on purpose.
+const PROCESS_ORDER = ["Main Line", "Blue Line"];
 // Lines whose work unit is a CHUNK (block→chunk). Their target needs the step-2 block-calc
 // engine + a per-job block-dimension source, so P225 leaves their qty_target NULL.
 // Every other required line is a PART line: target = total ordered units (no math needed).
