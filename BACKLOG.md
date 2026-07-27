@@ -19,6 +19,7 @@
 - [ ] Enable OpenNext skew protection on the v2 Worker (durable fix for hashed-asset 404s across deploys) — see https://opennext.js.org/cloudflare/howtos/skew
 - [ ] Surface completed_qty in the checklist/reports (progress bars per part, first-pass yield) once qty data accrues
 - [ ] Cross Cutter / Hole Cutter chunk checklists (replace the shared parts list) once block-calc BOM feeds chunk counts
+- [ ] P293 API + P294 UI for standalone CC/HC chunk boards (tables landed in P292)
 
 ---
 

@@ -10,6 +10,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P292** — Added `DB_Migrations/chunk-boards.sql`: standalone `cc_assignments`, `hc_slots` (seeded 8-hole/10-hole), `chunk_sessions` for the new Cross Cutter/Hole Cutter task board. Decoupled from jobs; manual D1 run required before P293 deploy.
 - **P291** — Restored priority sorting in the v2 cutting work queue (reverts P290) and restricted the queue to active jobs (`status IN not_started, in_production`) so shipped/delivered/loaded/in_transit/done jobs no longer surface as work. Fixes stale-job pollution seen in soft rollout.
 - **P290** — Temporarily disabled priority sorting in the v2 cutting work queue; queue now orders flat by ship_date then invoice_number. Original ordering preserved as an in-place comment for manual revert.
 - **P284** — v2 cutting queue now excludes archived jobs via `j.archived_at IS NULL` (P271/P272's orthogonal archive signal) rather than relying solely on a literal `status='archived'` that post-P272 archives no longer write; the literal term is retained as a fallback for the legacy backfilled population, and `shipped` remains a genuine status test, untouched. `my-session` (P282) intentionally keeps no status filter, so an operator clocked into a now-excluded job can still clock out via the sticky bar. WHERE-clause-only change. `tsc --noEmit` clean; `cf-build` green.
