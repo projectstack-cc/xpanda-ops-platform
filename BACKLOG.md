@@ -211,6 +211,7 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [ ] v2 cut-plan: units/hr rate and progress bars still open (raw throughput numbers shipped in P233; the rate needs qty-entry to be routine first).
 - [ ] First-pass yield (v2) — blocked on native scrap DB (defect denominator)
 - [ ] Retire cutting_steps + /api/cutting* + routes/cutting.js + lib/cutting.js (legacy page already archived in P234; the worker/table still drive jobs.processes pill sync — needs its own prompt)
+- [ ] Re-enable / rework cutting queue priority sorting (temporarily disabled in P290 for soft rollout; flat ship-date order in the interim)
 
 ---
 
