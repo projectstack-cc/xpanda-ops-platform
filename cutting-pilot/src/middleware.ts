@@ -22,6 +22,7 @@ import { validateSession, hasPermission } from "@/lib/session";
 const PERMISSION_MAP: Array<{ prefix: string; key: string }> = [
   { prefix: "/v2/api/schedule-board", key: "schedule" },
   { prefix: "/v2/schedule", key: "schedule" },
+  { prefix: "/v2/api/cutting/manage", key: "manufacturing.cutting.manage" },
   { prefix: "/v2/api/cutting", key: "manufacturing.cutting" },
   { prefix: "/v2/cutting", key: "manufacturing.cutting" },
 ];
@@ -75,6 +76,10 @@ export async function middleware(request: NextRequest) {
   headers.set("X-User-Role", user.role);
   headers.set("X-User-Name", user.displayName || user.username);
   headers.set("X-User-Is-Admin", user.isAdministrator ? "1" : "0");
+  headers.set(
+    "X-User-Can-Manage-Cutting",
+    hasPermission(user, "manufacturing.cutting.manage", "edit") ? "1" : "0"
+  );
 
   return NextResponse.next({ request: { headers } });
 }
