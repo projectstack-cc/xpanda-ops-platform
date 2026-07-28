@@ -105,6 +105,7 @@
     display: flex;
     flex-direction: column;
     gap: 11px;
+    container-type: inline-size; /* P299: enables card-width-based button layout */
     transition: border-color 0.15s ease, transform 0.15s ease;
   }
   .hp-card:hover {
@@ -141,6 +142,23 @@
     flex-wrap: wrap;
     margin-top: auto;
     padding-top: 4px;
+  }
+  /* P299: two-button cards stay side by side and shrink together based on the CARD's width
+     (container query), stacking only when the card is genuinely too narrow. The :has() guard
+     leaves single-button cards (a lone "Open") untouched. */
+  .hp-card-actions:has(.hp-btn + .hp-btn) .hp-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+    text-align: center;
+  }
+  @container (max-width: 200px) {
+    .hp-card-actions:has(.hp-btn + .hp-btn) {
+      flex-direction: column;
+    }
+    .hp-card-actions:has(.hp-btn + .hp-btn) .hp-btn {
+      flex: 1 1 auto;
+    }
   }
 
   /* ── Buttons ─────────────────────────────────── */

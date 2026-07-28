@@ -890,6 +890,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Admin / Platform
 
+- **P299** — Home page: two-button cards now stay side by side and shrink together via a container query (based on card width), stacking only when the card is truly narrow. Fixes buttons wrapping on maximized screens. Single-button cards unaffected.
 - **P298** — Split the homepage Cutting card into two links: Main / Blue Line (`/v2/cutting`) and Cross / Hole Cutter (`/v2/cutting/crosscutter`), mirroring the existing primary + `hp-btn-outline` two-button pattern (Safety, Logistics, Admin cards). Single card, single `data-permission="manufacturing.cutting"` gate — both links show/hide together, no permission change. `index.html` only; no inline `<script>` touched, so no `node --check` was needed.
 - **P264** — New `schedule` permission key ("Schedule Board (TV)", own `Schedule` group) added to
   `PERMISSION_LABELS` in `admin/roles.html` — the last piece of the schedule board (1–4/5): the v2
