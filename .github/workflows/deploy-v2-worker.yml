@@ -31,6 +31,12 @@ jobs:
         run: npx tsc --noEmit
       - name: OpenNext build (+ asset-prefix fix)
         run: npm run cf-build
+      - name: Typecheck custom-worker.ts (post-build)
+        # custom-worker.ts imports the OpenNext-generated .open-next/worker.js, which doesn't
+        # exist until the build step above runs — excluded from the main tsconfig.json (and the
+        # Typecheck step's tsc --noEmit) for that reason. Check it here, once the real generated
+        # file exists, via tsconfig.worker.json.
+        run: npx tsc --noEmit -p tsconfig.worker.json
       - name: Upload build output
         uses: actions/upload-artifact@v4
         with:

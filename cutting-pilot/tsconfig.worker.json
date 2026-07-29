@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["custom-worker.ts"],
+  "exclude": ["node_modules"]
+}
