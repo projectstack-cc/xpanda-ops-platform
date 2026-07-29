@@ -48,6 +48,7 @@ interface ScheduleRowDb {
   scrap_pickup: string | null;
   sheet_status: string | null;
   match_job_id: string | null;
+  last_seen_at: string;
 }
 
 interface ScheduleBoardRow {
@@ -82,7 +83,7 @@ export async function GET() {
     const { results } = await DB.prepare(
       `SELECT invoice_number, ship_week, ship_date, day_of_week, sort_order, customer,
               load_count, method, location, delivery_time, carrier, total_bdft,
-              scrap_pickup, sheet_status, match_job_id
+              scrap_pickup, sheet_status, match_job_id, last_seen_at
        FROM schedule_rows
        WHERE ship_week IN (?, ?)
        ORDER BY ship_week ASC, sort_order ASC`
@@ -91,6 +92,12 @@ export async function GET() {
       .all<ScheduleRowDb>();
 
     const rows = results ?? [];
+
+    // Real sheet-pull time, distinct from generated_at (render/response time below).
+    let sourceUpdatedAt: string | null = null;
+    for (const row of rows) {
+      if (!sourceUpdatedAt || row.last_seen_at > sourceUpdatedAt) sourceUpdatedAt = row.last_seen_at;
+    }
     const jobIds = Array.from(
       new Set(rows.map((r) => r.match_job_id).filter((id): id is string => !!id))
     );
@@ -140,6 +147,7 @@ export async function GET() {
 
     return NextResponse.json({
       generated_at: new Date().toISOString(),
+      source_updated_at: sourceUpdatedAt,
       weeks: [currentTab, nextTab],
       days,
     });

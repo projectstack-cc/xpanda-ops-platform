@@ -10,6 +10,9 @@ import PlatformHeader from "@/components/PlatformHeader";
 import type { ScheduleBoardResponse } from "@/types/schedule";
 import WeekBand from "./WeekBand";
 import { computeDensity } from "./density";
+import FreshnessClock from "./FreshnessClock";
+import PixelShiftLayer from "./PixelShiftLayer";
+import LogoSweep from "./LogoSweep";
 
 const POLL_MS = 60_000;
 
@@ -23,14 +26,6 @@ function formatWeekLabel(tab: string | undefined, prefix: string): string {
   const m = tab?.match(/^(\d{1,2})-(\d{1,2})-(\d{2})$/);
   if (!m) return prefix;
   return `${prefix} — ${Number(m[1])}/${Number(m[2])}`;
-}
-
-function formatUpdatedStamp(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return "—";
-  }
 }
 
 export default function ScheduleBoard({ userName, isAdmin, permissions }: ScheduleBoardProps) {
@@ -146,35 +141,38 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
         autoHide
       />
 
-      <div className="shrink-0 flex items-center justify-between px-3 py-0.5 border-b border-[var(--line)] bg-bg">
-        <h1 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-          Shipping Schedule
-        </h1>
-        <span
-          className={[
-            "font-mono tabular-nums text-[10px]",
-            stale ? "text-[var(--warn-text)]" : "text-text-faint",
-          ].join(" ")}
-        >
-          {stale ? "stale — last updated " : "updated "}
-          {formatUpdatedStamp(data.generated_at)}
-        </span>
-      </div>
+      <PixelShiftLayer>
+        <div className="shrink-0 flex items-center justify-between px-3 py-0.5 border-b border-[var(--line)] bg-bg">
+          <h1 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+            Shipping Schedule
+          </h1>
+          <div className="flex items-center gap-2">
+            {stale && (
+              <span className="font-mono text-[10px] text-[var(--warn-text)]">
+                showing last loaded data
+              </span>
+            )}
+            <FreshnessClock sourceUpdatedAt={data.source_updated_at} />
+          </div>
+        </div>
 
-      <div className="flex-1 min-h-0 flex flex-col gap-px bg-[var(--line)]">
-        <WeekBand
-          weekLabel={formatWeekLabel(currentTab, "THIS WEEK")}
-          days={currentDays}
-          density={density}
-          rowCap={rowCap}
-        />
-        <WeekBand
-          weekLabel={formatWeekLabel(nextTab, "NEXT WEEK")}
-          days={nextDays}
-          density={density}
-          rowCap={rowCap}
-        />
-      </div>
+        <div className="flex-1 min-h-0 flex flex-col gap-px bg-[var(--line)]">
+          <WeekBand
+            weekLabel={formatWeekLabel(currentTab, "THIS WEEK")}
+            days={currentDays}
+            density={density}
+            rowCap={rowCap}
+          />
+          <WeekBand
+            weekLabel={formatWeekLabel(nextTab, "NEXT WEEK")}
+            days={nextDays}
+            density={density}
+            rowCap={rowCap}
+          />
+        </div>
+      </PixelShiftLayer>
+
+      <LogoSweep />
     </div>
   );
 }

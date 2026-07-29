@@ -31,6 +31,7 @@ export interface ScheduleDayGroup {
 
 export interface ScheduleBoardResponse {
   generated_at: string;
+  source_updated_at: string | null;
   weeks: string[];
   days: ScheduleDayGroup[];
 }
