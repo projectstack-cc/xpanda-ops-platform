@@ -11,7 +11,6 @@ import type { ScheduleBoardResponse } from "@/types/schedule";
 import WeekBand from "./WeekBand";
 import { computeDensity } from "./density";
 import FreshnessClock from "./FreshnessClock";
-import PixelShiftLayer from "./PixelShiftLayer";
 import LogoSweep from "./LogoSweep";
 
 const POLL_MS = 60_000;
@@ -141,36 +140,38 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
         autoHide
       />
 
-      <PixelShiftLayer>
-        <div className="shrink-0 flex items-center justify-between px-3 py-0.5 border-b border-[var(--line)] bg-bg">
-          <h1 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-            Shipping Schedule
-          </h1>
-          <div className="flex items-center gap-2">
-            {stale && (
-              <span className="font-mono text-[10px] text-[var(--warn-text)]">
-                showing last loaded data
-              </span>
-            )}
-            <FreshnessClock sourceUpdatedAt={data.source_updated_at} />
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-col">
+          <div className="shrink-0 flex items-center justify-between px-3 py-0.5 border-b border-[var(--line)] bg-bg">
+            <h1 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+              Shipping Schedule
+            </h1>
+            <div className="flex items-center gap-2">
+              {stale && (
+                <span className="font-mono text-[10px] text-[var(--warn-text)]">
+                  showing last loaded data
+                </span>
+              )}
+              <FreshnessClock sourceUpdatedAt={data.source_updated_at} />
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 flex flex-col gap-px bg-[var(--line)]">
+            <WeekBand
+              weekLabel={formatWeekLabel(currentTab, "THIS WEEK")}
+              days={currentDays}
+              density={density}
+              rowCap={rowCap}
+            />
+            <WeekBand
+              weekLabel={formatWeekLabel(nextTab, "NEXT WEEK")}
+              days={nextDays}
+              density={density}
+              rowCap={rowCap}
+            />
           </div>
         </div>
-
-        <div className="flex-1 min-h-0 flex flex-col gap-px bg-[var(--line)]">
-          <WeekBand
-            weekLabel={formatWeekLabel(currentTab, "THIS WEEK")}
-            days={currentDays}
-            density={density}
-            rowCap={rowCap}
-          />
-          <WeekBand
-            weekLabel={formatWeekLabel(nextTab, "NEXT WEEK")}
-            days={nextDays}
-            density={density}
-            rowCap={rowCap}
-          />
-        </div>
-      </PixelShiftLayer>
+      </div>
 
       <LogoSweep />
     </div>

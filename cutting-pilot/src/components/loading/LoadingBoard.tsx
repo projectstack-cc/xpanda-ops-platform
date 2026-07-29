@@ -6,8 +6,9 @@
 //
 // Self-contained TV hardening (mirrors /v2/schedule's technique, deliberately NOT imported from
 // components/schedule/ — see BACKLOG.md follow-up to extract a shared components/tv/ later):
-// a FreshnessClock, a continuous pixel-shift wrapper, and a periodic logo sweep, all local to
-// this file. Keyframes live in the inline <style> tag below (no other file is touched).
+// a FreshnessClock and a periodic logo sweep, both local to this file. Keyframes live in the
+// inline <style> tag below (no other file is touched). Pixel-shift removed in P304 (motion
+// discomfort) on both TV boards — freshness clock + logo sweep are unaffected.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Clock } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
@@ -39,8 +40,12 @@ export interface LoadingBoardBay {
 
 interface LoadingBoardResponse {
   generated_at: string;
+  board_note?: string;
   bays: LoadingBoardBay[];
 }
+
+// Mirrors the server-side cap in src/app/api/loading-board/route.ts.
+const NOTES_MAX_LEN = 2000;
 
 interface LoadingBoardProps {
   userName: string;
@@ -135,21 +140,6 @@ function LogoSweep() {
 
 // Scoped keyframes for this board only — deliberately not shared with components/schedule/.
 const TV_HARDENING_STYLE = `
-  .xp-loading-shift {
-    position: absolute;
-    inset: -12px;
-    animation: xp-loading-shift-kf 70s ease-in-out infinite;
-  }
-  @keyframes xp-loading-shift-kf {
-    0% { transform: translate(0, 0); }
-    25% { transform: translate(6px, -5px); }
-    55% { transform: translate(-5px, 6px); }
-    80% { transform: translate(5px, 4px); }
-    100% { transform: translate(0, 0); }
-  }
-  @media (max-width: 1023px) {
-    .xp-loading-shift { animation: none; inset: 0; }
-  }
   .xp-loading-sweep {
     animation-name: xp-loading-sweep-kf;
     animation-timing-function: ease-in-out;
@@ -162,7 +152,7 @@ const TV_HARDENING_STYLE = `
     100% { transform: translate(120vw, -50%); opacity: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .xp-loading-shift, .xp-loading-sweep { animation: none !important; }
+    .xp-loading-sweep { animation: none !important; }
   }
 `;
 
@@ -200,6 +190,34 @@ export default function LoadingBoard({ userName, isAdmin, permissions }: Loading
     const id = setInterval(fetchBoard, POLL_MS);
     return () => clearInterval(id);
   }, [fetchBoard]);
+
+  const canEditNotes = isAdmin || permissions?.["logistics.loading.tv"]?.edit === true;
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteDirty, setNoteDirty] = useState(false);
+  const [noteFocused, setNoteFocused] = useState(false);
+
+  // Only adopt the polled note when the field isn't being actively edited — never clobber an
+  // in-progress edit out from under the person typing it.
+  useEffect(() => {
+    if (noteFocused || noteDirty) return;
+    setNoteDraft(data?.board_note ?? "");
+  }, [data?.board_note, noteFocused, noteDirty]);
+
+  const handleSaveNote = useCallback(async () => {
+    try {
+      const res = await fetch("/v2/api/loading-board", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: noteDraft }),
+      });
+      if (res.ok) {
+        setNoteDirty(false);
+        fetchBoard();
+      }
+    } catch {
+      // Leave dirty — the Save button stays enabled so the user can retry.
+    }
+  }, [noteDraft, fetchBoard]);
 
   const tvStyle = <style>{TV_HARDENING_STYLE}</style>;
 
@@ -272,7 +290,7 @@ export default function LoadingBoard({ userName, isAdmin, permissions }: Loading
       />
 
       <div className="relative flex-1 min-h-0 overflow-hidden">
-        <div className="xp-loading-shift flex flex-col">
+        <div className="flex flex-col">
           <div className="shrink-0 flex items-center justify-between px-3 py-0.5 border-b border-[var(--line)] bg-bg">
             <h1 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
               Loading Dashboard
@@ -286,6 +304,43 @@ export default function LoadingBoard({ userName, isAdmin, permissions }: Loading
               <FreshnessClock lastSuccessAt={lastSuccessAt} fetchStale={stale} />
             </div>
           </div>
+
+          {(canEditNotes || !!data.board_note?.trim()) && (
+            <div className="shrink-0 px-3 py-1 border-b border-[var(--line)] bg-[var(--surface-2)]">
+              {canEditNotes ? (
+                <div className="flex items-start gap-2">
+                  <textarea
+                    value={noteDraft}
+                    onFocus={() => setNoteFocused(true)}
+                    onChange={(e) => {
+                      setNoteDraft(e.target.value);
+                      setNoteDirty(true);
+                    }}
+                    onBlur={() => {
+                      setNoteFocused(false);
+                      if (noteDirty) handleSaveNote();
+                    }}
+                    rows={2}
+                    maxLength={NOTES_MAX_LEN}
+                    placeholder="Board note (visible to everyone viewing this board)…"
+                    className="flex-1 resize-none rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-[clamp(0.75rem,1.3vh,0.95rem)] px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveNote}
+                    disabled={!noteDirty}
+                    className="shrink-0 px-3 py-1.5 rounded-md text-xs font-semibold bg-[var(--primary-bg)] text-[var(--primary-text)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                  >
+                    Save
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[clamp(0.8rem,1.5vh,1.05rem)] font-medium text-text whitespace-pre-wrap">
+                  {data.board_note}
+                </p>
+              )}
+            </div>
+          )}
 
           <div
             className="flex-1 min-h-0 grid gap-2 p-2 overflow-hidden"

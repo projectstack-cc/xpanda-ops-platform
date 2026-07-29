@@ -1,7 +1,8 @@
-// src/app/api/loading-board/route.ts  →  GET /v2/api/loading-board
-// Read-only: all active loading bays, each with its currently-active load(s) (statuses
-// not_started/loading/loaded — matches logistics/loading.html's bay-card logic). One JOIN query,
-// no per-bay round-trips. Never writes.
+// src/app/api/loading-board/route.ts  →  GET/PUT /v2/api/loading-board
+// GET: all active loading bays, each with its currently-active load(s) (statuses
+// not_started/loading/loaded — matches logistics/loading.html's bay-card logic; one JOIN query,
+// no per-bay round-trips) plus the board-wide note. PUT: upserts the singleton note only —
+// middleware already gates PUT on logistics.loading.tv's edit action, not re-checked here.
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
 
@@ -36,22 +37,29 @@ interface LoadingBoardBay {
   loads: LoadingBoardLoad[];
 }
 
+const NOTES_MAX_LEN = 2000;
+
 export async function GET() {
   const { DB } = await getEnv();
   try {
-    const { results } = await DB.prepare(
-      `SELECT lb.id AS bay_id, lb.bay_number, lb.label,
-              la.id AS assignment_id, j.customer, j.invoice_number, la.trailer_number,
-              la.loading_status, la.load_number, j.load_count
-       FROM loading_bays lb
-       LEFT JOIN loading_assignments la
-         ON la.bay_id = lb.id AND la.loading_status IN (${ACTIVE_STATUSES.map(() => "?").join(",")})
-       LEFT JOIN jobs j ON la.job_id = j.id
-       WHERE lb.is_active = 1
-       ORDER BY lb.bay_number ASC, la.load_number ASC`
-    )
-      .bind(...ACTIVE_STATUSES)
-      .all<LoadingBoardRowDb>();
+    const [{ results }, noteRow] = await Promise.all([
+      DB.prepare(
+        `SELECT lb.id AS bay_id, lb.bay_number, lb.label,
+                la.id AS assignment_id, j.customer, j.invoice_number, la.trailer_number,
+                la.loading_status, la.load_number, j.load_count
+         FROM loading_bays lb
+         LEFT JOIN loading_assignments la
+           ON la.bay_id = lb.id AND la.loading_status IN (${ACTIVE_STATUSES.map(() => "?").join(",")})
+         LEFT JOIN jobs j ON la.job_id = j.id
+         WHERE lb.is_active = 1
+         ORDER BY lb.bay_number DESC, la.load_number ASC`
+      )
+        .bind(...ACTIVE_STATUSES)
+        .all<LoadingBoardRowDb>(),
+      DB.prepare(`SELECT notes FROM loading_board_notes WHERE id = 'singleton'`).first<{
+        notes: string;
+      }>(),
+    ]);
 
     const bays = new Map<string, LoadingBoardBay>();
     for (const row of results ?? []) {
@@ -77,8 +85,43 @@ export async function GET() {
 
     return NextResponse.json({
       generated_at: new Date().toISOString(),
+      board_note: noteRow?.notes ?? "",
       bays: Array.from(bays.values()),
     });
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: "Server error.", detail: String(e?.message || e) },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(request: Request) {
+  const { DB } = await getEnv();
+  try {
+    const body = await request.json().catch(() => null);
+    const notes = typeof body?.notes === "string" ? body.notes : null;
+    if (notes === null) {
+      return NextResponse.json({ error: "notes must be a string." }, { status: 400 });
+    }
+    if (notes.length > NOTES_MAX_LEN) {
+      return NextResponse.json(
+        { error: `notes must be ${NOTES_MAX_LEN} characters or fewer.` },
+        { status: 400 }
+      );
+    }
+
+    const updatedBy = request.headers.get("X-User-Name") || request.headers.get("X-User-Id");
+
+    await DB.prepare(
+      `INSERT INTO loading_board_notes (id, notes, updated_at, updated_by)
+       VALUES ('singleton', ?, datetime('now'), ?)
+       ON CONFLICT(id) DO UPDATE SET notes = excluded.notes, updated_at = excluded.updated_at, updated_by = excluded.updated_by`
+    )
+      .bind(notes, updatedBy)
+      .run();
+
+    return NextResponse.json({ ok: true, notes });
   } catch (e: any) {
     return NextResponse.json(
       { error: "Server error.", detail: String(e?.message || e) },

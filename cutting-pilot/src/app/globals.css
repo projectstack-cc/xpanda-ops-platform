@@ -135,33 +135,8 @@
 @tailwind utilities;
 
 /* /v2/schedule burn-in mitigation (prompt-301) — wall TV runs this board 24/7. Desktop/TV only
-   (min-width 1024px); both respect prefers-reduced-motion. Single definition for each concern:
-   --pixel-shift-px is the only place the drift amplitude is set. */
-:root {
-  --pixel-shift-px: 8px;
-}
-
-.xpanda-pixel-shift-layer {
-  position: absolute;
-  /* Overscan exceeds the max translate distance below (1x --pixel-shift-px) so the moving edge
-     never touches the clipped boundary — no exposed gap at full excursion. */
-  inset: calc(var(--pixel-shift-px) * -1.5);
-}
-
-@media (min-width: 1024px) {
-  .xpanda-pixel-shift-layer {
-    animation: xpanda-pixel-shift 80s ease-in-out infinite;
-  }
-}
-
-@keyframes xpanda-pixel-shift {
-  0% { transform: translate(0, 0); }
-  20% { transform: translate(var(--pixel-shift-px), calc(var(--pixel-shift-px) * -0.6)); }
-  45% { transform: translate(calc(var(--pixel-shift-px) * -0.8), var(--pixel-shift-px)); }
-  70% { transform: translate(calc(var(--pixel-shift-px) * 0.6), calc(var(--pixel-shift-px) * 0.8)); }
-  100% { transform: translate(0, 0); }
-}
-
+   (min-width 1024px); respects prefers-reduced-motion. Pixel-shift removed in P304 (motion
+   discomfort, both TV boards) — logo sweep is unaffected. */
 .xpanda-logo-sweep {
   animation-name: xpanda-logo-sweep;
   animation-timing-function: ease-in-out;
@@ -176,7 +151,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .xpanda-pixel-shift-layer,
   .xpanda-logo-sweep {
     animation: none !important;
   }

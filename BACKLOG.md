@@ -48,8 +48,9 @@
 
 ## Loading Board (v2)
 
+- [x] P304 — Board-wide notes (view→text, edit→textbox, gated on `logistics.loading.tv`'s `edit` action) on `/v2/loading`; bays reversed to high→low (30…20) to match the physical dock; pixel-shift removed from both TV boards (motion discomfort) — logo sweep + freshness clock kept on both.
 - [x] P303 — View-only Loading TV board at `/v2/loading` (new `logistics.loading.tv` permission, all active bays on one screen, bay tint from dominant active load status, self-contained freshness/pixel-shift/logo-sweep hardening); home page Loading card gained a "TV Board" button.
-- [ ] Extract a shared `components/tv/` (pixel-shift, logo-sweep, freshness-clock) used by both `/v2/schedule` and `/v2/loading` — currently each board is self-contained.
+- [ ] Extract a shared `components/tv/` (logo-sweep, freshness-clock) used by both `/v2/schedule` and `/v2/loading` — currently each board is self-contained. (The pixel-shift half of this item is moot as of P304 — removed from both boards entirely.)
 - [ ] **P261 follow-up — no `UNIQUE(invoice_number, ship_week, day_of_week)` on `schedule_rows`.** The 1/5 migration didn't add one, so the poller's upsert is done in application code (select-then-insert/update) rather than SQL `ON CONFLICT`. Works fine at 15-min-cron scale, but if `schedule_rows` ever gets a second writer, add the unique index and switch to a real upsert.
 - [x] P263 follow-up — verify shrink-to-fit against a real TV. Steve confirmed 2026-07-24: fits the real wall-mounted TV. Unblocks P277 (linked-jobs 3/3 side rail), which required this to have landed first since it touches the same density/DayColumn/ScheduleBoard files.
 - [ ] **P263 follow-up — late/at-risk highlighting on the schedule board.** Explicitly out of scope for the first UI pass; would need a definition of "late"/"at-risk" (vs. `ship_date`? vs. status stalling?) before scoping.
