@@ -22,6 +22,8 @@ import { validateSession, hasPermission } from "@/lib/session";
 const PERMISSION_MAP: Array<{ prefix: string; key: string }> = [
   { prefix: "/v2/api/schedule-board", key: "schedule" },
   { prefix: "/v2/schedule", key: "schedule" },
+  { prefix: "/v2/api/loading-board", key: "logistics.loading.tv" },
+  { prefix: "/v2/loading", key: "logistics.loading.tv" },
   { prefix: "/v2/api/cutting/manage", key: "manufacturing.cutting.manage" },
   { prefix: "/v2/api/cutting", key: "manufacturing.cutting" },
   { prefix: "/v2/cutting", key: "manufacturing.cutting" },

@@ -45,6 +45,11 @@
 - [x] P268 follow-up — reclaimed row space with badges hidden. No longer applicable — badges are restored (P278), so the "hidden" premise this item was tracking is gone. `density.ts` was untouched by P278 (out of scope); no retune was needed since rows are back to their pre-P268 content.
 - [x] P300 — `source_updated_at` (real sheet-pull time, `max(last_seen_at)`) added to `GET /v2/api/schedule-board`, alongside the unchanged `generated_at`.
 - [x] P301 — Honest freshness clock (relative + absolute, ticks on its own, amber past 20 min, explicit "no data") sourced from `source_updated_at`, replacing the old render-time stamp; plus 24/7-TV burn-in mitigation (continuous pixel-shift + 5-min branded logo sweep).
+
+## Loading Board (v2)
+
+- [x] P303 — View-only Loading TV board at `/v2/loading` (new `logistics.loading.tv` permission, all active bays on one screen, bay tint from dominant active load status, self-contained freshness/pixel-shift/logo-sweep hardening); home page Loading card gained a "TV Board" button.
+- [ ] Extract a shared `components/tv/` (pixel-shift, logo-sweep, freshness-clock) used by both `/v2/schedule` and `/v2/loading` — currently each board is self-contained.
 - [ ] **P261 follow-up — no `UNIQUE(invoice_number, ship_week, day_of_week)` on `schedule_rows`.** The 1/5 migration didn't add one, so the poller's upsert is done in application code (select-then-insert/update) rather than SQL `ON CONFLICT`. Works fine at 15-min-cron scale, but if `schedule_rows` ever gets a second writer, add the unique index and switch to a real upsert.
 - [x] P263 follow-up — verify shrink-to-fit against a real TV. Steve confirmed 2026-07-24: fits the real wall-mounted TV. Unblocks P277 (linked-jobs 3/3 side rail), which required this to have landed first since it touches the same density/DayColumn/ScheduleBoard files.
 - [ ] **P263 follow-up — late/at-risk highlighting on the schedule board.** Explicitly out of scope for the first UI pass; would need a definition of "late"/"at-risk" (vs. `ship_date`? vs. status stalling?) before scoping.
