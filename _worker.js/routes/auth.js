@@ -1,4 +1,4 @@
-import { json, logActivity, validateSession } from '../lib/core.js';
+import { json, logActivity, validateSession, getSessionToken } from '../lib/core.js';
 
 async function createSession(db, userId) {
   const sessionId = crypto.randomUUID();
@@ -61,10 +61,15 @@ export async function handleAuthLogout(request, env) {
   const db = env.DB;
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, 405);
 
-  const token = getSessionToken(request);
-  if (token && db) {
-    try { await db.prepare(`DELETE FROM sessions WHERE id = ?`).bind(token).run(); } catch {}
-  }
+  // Best-effort server-side session teardown. This must NEVER throw before the
+  // clear-cookie header is emitted — a prior bug (unexported helper) made logout
+  // 500 and left the cookie alive ("signs out, then refreshes back in", P305).
+  try {
+    const token = getSessionToken(request);
+    if (token && db) {
+      await db.prepare(`DELETE FROM sessions WHERE id = ?`).bind(token).run();
+    }
+  } catch {}
 
   return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
 }

@@ -41,7 +41,7 @@ export async function logActivity(db, action, entityType, entityId, summary, det
 // Auth Helpers
 // ========================
 
-function getSessionToken(request) {
+export function getSessionToken(request) {
   const cookie = request.headers.get('Cookie') || '';
   const match = cookie.match(/(?:^|;\s*)xpanda_session=([^;]+)/);
   return match ? match[1] : null;
