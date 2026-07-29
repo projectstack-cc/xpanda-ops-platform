@@ -305,8 +305,24 @@ export default function LoadingBoard({ userName, isAdmin, permissions }: Loading
             </div>
           </div>
 
+          <div
+            className="flex-1 min-h-0 grid gap-2 p-2 overflow-hidden"
+            style={{
+              gridTemplateColumns: `repeat(auto-fit, minmax(${minTileWidthPx(data.bays.length)}px, 1fr))`,
+              gridAutoRows: "1fr",
+            }}
+          >
+            {data.bays.length === 0 ? (
+              <div className="col-span-full flex items-center justify-center text-sm text-text-faint italic">
+                No active bays.
+              </div>
+            ) : (
+              data.bays.map((bay) => <BayTile key={bay.bay_id} bay={bay} />)
+            )}
+          </div>
+
           {(canEditNotes || !!data.board_note?.trim()) && (
-            <div className="shrink-0 px-3 py-1 border-b border-[var(--line)] bg-[var(--surface-2)]">
+            <div className="shrink-0 px-3 py-1 border-t border-[var(--line)] bg-[var(--surface-2)]">
               {canEditNotes ? (
                 <div className="flex items-start gap-2">
                   <textarea
@@ -341,22 +357,6 @@ export default function LoadingBoard({ userName, isAdmin, permissions }: Loading
               )}
             </div>
           )}
-
-          <div
-            className="flex-1 min-h-0 grid gap-2 p-2 overflow-hidden"
-            style={{
-              gridTemplateColumns: `repeat(auto-fit, minmax(${minTileWidthPx(data.bays.length)}px, 1fr))`,
-              gridAutoRows: "1fr",
-            }}
-          >
-            {data.bays.length === 0 ? (
-              <div className="col-span-full flex items-center justify-center text-sm text-text-faint italic">
-                No active bays.
-              </div>
-            ) : (
-              data.bays.map((bay) => <BayTile key={bay.bay_id} bay={bay} />)
-            )}
-          </div>
         </div>
       </div>
 
