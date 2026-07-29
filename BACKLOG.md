@@ -182,8 +182,8 @@ Private single-company use does **not** require App Store publishing/certificati
 
 ## Infra / CI-CD
 
-- [x] P302 — GitHub Actions CI/CD for the v2 Worker (`.github/workflows/deploy-v2-worker.yml`): auto build+typecheck on `cutting-pilot/**` pushes, deploy gated behind a manual approval (`production` environment).
-- [ ] Optional: drop the deploy approval gate for full push-to-deploy once migration discipline is comfortable.
+- [x] P302 — GitHub Actions CI/CD for the v2 Worker (`.github/workflows/deploy-v2-worker.yml`): auto build+typecheck on `cutting-pilot/**` pushes.
+- [x] Dropped the deploy approval gate — full auto-deploy on green build, no required reviewer. Steve is enforcing "never push code that depends on a migration before running that migration in the D1 console" as a human rule (updating `AGENTS.md`/`xpanda-ops-agents.md` himself) rather than a CI checkpoint.
 - [ ] Optional: evaluate Cloudflare Workers Builds as the native alternative to this Action.
 
 ---

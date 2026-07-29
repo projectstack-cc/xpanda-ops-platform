@@ -48,7 +48,8 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    environment: production   # protection (required reviewer) is what gates the deploy
+    # Full auto-deploy — no approval gate. Migration discipline (never push code that depends on
+    # a migration before running that migration in the D1 console) is a human rule, not a CI one.
     defaults:
       run:
         working-directory: cutting-pilot
