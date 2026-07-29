@@ -1,0 +1,67 @@
+name: Deploy v2 Worker (cutting-pilot)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cutting-pilot/**"
+      - ".github/workflows/deploy-v2-worker.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-v2-worker
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cutting-pilot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cutting-pilot/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: OpenNext build (+ asset-prefix fix)
+        run: npm run cf-build
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-next
+          path: cutting-pilot/.open-next
+          include-hidden-files: true
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production   # protection (required reviewer) is what gates the deploy
+    defaults:
+      run:
+        working-directory: cutting-pilot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cutting-pilot/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Restore build output
+        uses: actions/download-artifact@v4
+        with:
+          name: open-next
+          path: cutting-pilot/.open-next
+      - name: Deploy Worker
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

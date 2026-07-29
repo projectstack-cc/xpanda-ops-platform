@@ -180,6 +180,14 @@ Private single-company use does **not** require App Store publishing/certificati
 
 ---
 
+## Infra / CI-CD
+
+- [x] P302 — GitHub Actions CI/CD for the v2 Worker (`.github/workflows/deploy-v2-worker.yml`): auto build+typecheck on `cutting-pilot/**` pushes, deploy gated behind a manual approval (`production` environment).
+- [ ] Optional: drop the deploy approval gate for full push-to-deploy once migration discipline is comfortable.
+- [ ] Optional: evaluate Cloudflare Workers Builds as the native alternative to this Action.
+
+---
+
 ## Foundation Roadmap — ✅ All phases complete
 
 All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Foundation Roadmap section) for entries.
