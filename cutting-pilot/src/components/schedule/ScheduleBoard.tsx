@@ -141,7 +141,7 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
       />
 
       <div className="relative flex-1 min-h-0 overflow-hidden">
-        <div className="flex flex-col">
+        <div className="absolute inset-0 flex flex-col">
           <div className="shrink-0 flex items-center justify-between px-3 py-0.5 border-b border-[var(--line)] bg-bg">
             <h1 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
               Shipping Schedule
