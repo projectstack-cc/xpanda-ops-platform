@@ -29,6 +29,7 @@ export interface CuttingJob {
   invoice_number: string;
   po_number: string | null;
   ship_date: string | null;
+  cutting_instructions: string | null;
   status: string;
   priority: string;
   priority_level: number | null;

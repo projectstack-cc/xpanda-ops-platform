@@ -19,7 +19,7 @@ export async function GET() {
   try {
     const jobRows = await DB.prepare(
       `SELECT j.id, j.customer, j.invoice_number, j.po_number, j.ship_date,
-              j.status, j.priority, j.priority_level, j.processes
+              j.status, j.priority, j.priority_level, j.processes, j.cutting_instructions
        FROM jobs j
        WHERE j.archived_at IS NULL
          AND j.status IN ('not_started','in_production')

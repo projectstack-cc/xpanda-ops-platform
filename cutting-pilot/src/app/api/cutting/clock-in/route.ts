@@ -1,7 +1,9 @@
 // src/app/v2/api/cutting/clock-in/route.ts  →  POST /v2/api/cutting/clock-in
 // Clocks an operator into a cutting line. Operator identity comes from middleware-injected
 // X-User-* headers — never from the request body.
-// Returns 409 if an open session already exists for this (job_id, line).
+// P309: operators may hold open sessions on multiple different jobs concurrently — there is no
+// longer a one-open-session-per-operator limit. Returns 409 only if an open session already
+// exists for THIS (job_id, line) — one operator per line at a time, unchanged.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 
@@ -33,24 +35,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    // Guard: one open session per operator across the whole board (any job/line).
-    const mineOpen = await DB.prepare(
-      `SELECT id, job_id, line FROM cutting_sessions
-       WHERE operator_id = ? AND status = 'open' LIMIT 1`
-    ).bind(operatorId).first<{ id: string; job_id: string; line: string }>();
-    if (mineOpen) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "already_clocked_in",
-          line: mineOpen.line,
-          job_id: mineOpen.job_id,
-          session_id: mineOpen.id,
-        },
-        { status: 409 }
-      );
-    }
-
     // Guard: one operator per line at a time.
     const existing = await DB.prepare(
       `SELECT id, operator_name FROM cutting_sessions
@@ -68,12 +52,9 @@ export async function POST(request: NextRequest) {
     const sessionId = crypto.randomUUID();
     const sortOrder = PROCESS_ORDER.indexOf(line);
 
-    // P280 added a partial UNIQUE index on cutting_sessions(operator_id) WHERE status='open'.
-    // The mineOpen guard above catches the common case with one read; this catches the true
-    // race (double-tap, two devices) that slips between the guard's SELECT and this INSERT.
-    // Narrow try on purpose: cutting_lines has its own UNIQUE constraint, and a violation
-    // there must NOT be reported as already_clocked_in.
-    try {
+    // P309: the operator-index race path is dead (P280's partial UNIQUE index dropped).
+    // Any error here — including a cutting_lines UNIQUE violation — propagates to the outer
+    // catch as a genuine 500; there is no longer a session conflict to swallow.
     await DB.batch([
       // Open the session
       DB.prepare(
@@ -102,30 +83,6 @@ export async function POST(request: NextRequest) {
          WHERE id = ? AND status = 'not_started'`
       ).bind(now, job_id),
     ]);
-    } catch (batchErr: any) {
-      const msg = String(batchErr?.message || batchErr);
-      if (!msg.includes("idx_cutting_sessions_one_open_per_operator")
-          && !(msg.includes("UNIQUE constraint failed") && msg.includes("cutting_sessions"))) {
-        throw batchErr;
-      }
-      // Lost the race. Re-read the winning session so the client gets the same
-      // enriched 409 shape the mineOpen guard returns.
-      const raced = await DB.prepare(
-        `SELECT id, job_id, line FROM cutting_sessions
-         WHERE operator_id = ? AND status = 'open'
-         ORDER BY started_at ASC LIMIT 1`
-      ).bind(operatorId).first<{ id: string; job_id: string; line: string }>();
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "already_clocked_in",
-          line: raced?.line ?? null,
-          job_id: raced?.job_id ?? null,
-          session_id: raced?.id ?? null,
-        },
-        { status: 409 }
-      );
-    }
 
     // Activity log (shared D1 table, same schema as legacy)
     await DB.prepare(

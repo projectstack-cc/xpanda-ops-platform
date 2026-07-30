@@ -1,6 +1,8 @@
 // src/app/v2/api/cutting/my-session/route.ts  →  GET /v2/api/cutting/my-session
 // Authoritative "am I clocked in?" check — no job-status filtering, unlike the queue. A session
 // survives here even if its job is archived, shipped, or otherwise dropped off the board.
+// P309: operators may hold multiple open sessions concurrently (across different jobs) — returns
+// EVERY open session for the operator, not just one. Sole consumer is CuttingBoard.tsx.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 
@@ -12,17 +14,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const row = await DB.prepare(
+    const rows = await DB.prepare(
       `SELECT cs.id AS session_id, cs.job_id, cs.line, cs.started_at,
               j.invoice_number, j.customer, j.status AS job_status
        FROM cutting_sessions cs
        LEFT JOIN jobs j ON j.id = cs.job_id
        WHERE cs.operator_id = ? AND cs.status = 'open'
-       ORDER BY cs.started_at ASC
-       LIMIT 1`
+       ORDER BY cs.started_at ASC`
     )
       .bind(operatorId)
-      .first<{
+      .all<{
         session_id: string;
         job_id: string;
         line: string;
@@ -32,25 +33,18 @@ export async function GET(request: NextRequest) {
         job_status: string | null;
       }>();
 
-    if (!row) {
-      return NextResponse.json({ ok: true, session: null });
-    }
+    const sessions = (rows.results || []).map((row) => ({
+      session_id: row.session_id,
+      job_id: row.job_id,
+      line: row.line,
+      started_at: row.started_at,
+      invoice_number: row.invoice_number,
+      customer: row.customer,
+      job_status: row.job_status,
+      orphaned: row.job_status == null || ["archived", "shipped"].includes(row.job_status),
+    }));
 
-    const orphaned = row.job_status == null || ["archived", "shipped"].includes(row.job_status);
-
-    return NextResponse.json({
-      ok: true,
-      session: {
-        session_id: row.session_id,
-        job_id: row.job_id,
-        line: row.line,
-        started_at: row.started_at,
-        invoice_number: row.invoice_number,
-        customer: row.customer,
-        job_status: row.job_status,
-        orphaned,
-      },
-    });
+    return NextResponse.json({ ok: true, sessions });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "Server error.", detail: String(e?.message || e) },

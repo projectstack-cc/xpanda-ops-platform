@@ -2,7 +2,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { AlertCircle, Calculator, Search, X } from "lucide-react";
 import Sheet from "@/components/Sheet";
-import Modal from "@/components/Modal";
 import PlatformHeader from "@/components/PlatformHeader";
 import JobRow from "./JobRow";
 import LineRow from "./LineRow";
@@ -35,13 +34,6 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
     line: string;
     jobId: string;
   } | null>(null);
-  // "You're clocked in elsewhere" confirm prompt (job # + session to resolve).
-  const [resolvePrompt, setResolvePrompt] = useState<{
-    sessionId: string;
-    line: string;
-    jobId: string;
-    invoice: string;
-  } | null>(null);
   const [acting, setActing] = useState(false);
   const [completeTarget, setCompleteTarget] = useState<{
     jobId: string;
@@ -53,17 +45,20 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
   const [checklistBusy, setChecklistBusy] = useState(false);
   const [plannerOpen, setPlannerOpen] = useState(false);
   // Authoritative "am I clocked in?" — bypasses the queue's job-status filter, so it survives
-  // an archived/shipped/dropped job that myOpen (queue-derived) would silently lose.
-  const [mySession, setMySession] = useState<{
-    session_id: string;
-    job_id: string;
-    line: string;
-    started_at: string;
-    invoice_number: string | null;
-    customer: string | null;
-    job_status: string | null;
-    orphaned: boolean;
-  } | null>(null);
+  // an archived/shipped/dropped job that queue-derived state would silently lose. P309: an
+  // operator may hold several open sessions at once (different jobs), so this is an array.
+  const [mySessions, setMySessions] = useState<
+    {
+      session_id: string;
+      job_id: string;
+      line: string;
+      started_at: string;
+      invoice_number: string | null;
+      customer: string | null;
+      job_status: string | null;
+      orphaned: boolean;
+    }[]
+  >([]);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -90,7 +85,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
     try {
       const sRes = await fetch("/v2/api/cutting/my-session");
       const sData = await sRes.json();
-      if (sData.ok) setMySession(sData.session);
+      if (sData.ok) setMySessions(sData.sessions ?? []);
     } catch {
       // best-effort — the bar just won't update this cycle
     }
@@ -128,26 +123,14 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
     ? selectedJob.lines.reduce((sum, l) => sum + lineLiveSeconds(l, now), 0)
     : 0;
 
-  // The operator's current open session across the whole board (one max — enforced server-side).
-  const myOpen = (() => {
-    for (const j of queue) {
-      const l = j.lines.find(
-        (ln) =>
-          ln.open_session_id && !!userId && ln.open_operator_id === userId
-      );
-      if (l)
-        return {
-          jobId: j.id,
-          invoice: j.invoice_number,
-          line: l.line,
-          sessionId: l.open_session_id!,
-        };
-    }
-    return null;
-  })();
-  // The line whose checklist the sidebar shows — only when clocked into THIS job.
+  // The line whose checklist the sidebar shows — only when clocked into THIS job. P309: an
+  // operator can be clocked into lines on several different jobs at once, so this must be
+  // derived from the selected job's own lines, not a single board-wide "current" session.
   const myLineOnJob =
-    myOpen && selectedJob && myOpen.jobId === selectedJob.id ? myOpen.line : null;
+    (selectedJob &&
+      !!userId &&
+      selectedJob.lines.find((ln) => ln.open_operator_id === userId)?.line) ||
+    null;
 
   // Unchecked parts on the line being clocked out — for the reconciliation section.
   const clockOutJob = clockOutTarget
@@ -224,17 +207,6 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
   }
 
   async function clockIn(jobId: string, line: string) {
-    // Clocked in elsewhere? Don't fire a doomed clock-in. Surface which job the
-    // operator is on and offer to clock out of it (→ normal completion screen).
-    if (myOpen && !(myOpen.jobId === jobId && myOpen.line === line)) {
-      setResolvePrompt({
-        sessionId: myOpen.sessionId,
-        line: myOpen.line,
-        jobId: myOpen.jobId,
-        invoice: myOpen.invoice,
-      });
-      return;
-    }
     setActing(true);
     try {
       const res = await fetch("/v2/api/cutting/clock-in", {
@@ -248,8 +220,6 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
         await fetchQueue(true);
       } else if (data.error === "line_busy") {
         showToast(`${line} is already in use by ${data.operator}.`, false);
-      } else if (data.error === "already_clocked_in") {
-        showToast(`Still running ${data.line} — stop from the bar at the bottom first.`, false);
       } else {
         showToast(data.error || "Clock-in failed.", false);
       }
@@ -518,6 +488,12 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
                       {selectedJob.po_number ? ` · PO ${selectedJob.po_number}` : ""}
                       {selectedJob.ship_date ? ` · Ships ${selectedJob.ship_date}` : ""}
                     </p>
+                    {selectedJob.cutting_instructions?.trim() && (
+                      <p className="text-sm bg-[var(--info-bg)] text-[var(--info-text)] border border-[var(--info-border)] rounded px-3 py-2 mt-2 whitespace-pre-wrap">
+                        <span className="font-medium">Cutting Instructions: </span>
+                        {selectedJob.cutting_instructions}
+                      </p>
+                    )}
                     <p className="font-mono tabular-nums text-xs text-muted mt-1">
                       Tracked: {formatDuration(jobTotalSeconds)}
                     </p>
@@ -561,10 +537,9 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
                       userId={userId}
                       userName={userName}
                       acting={acting}
-                      clockedInElsewhere={
-                        !!myOpen &&
-                        !(myOpen.jobId === selectedJob.id && myOpen.line === lineObj.line)
-                      }
+                      // P309: operators may hold sessions on other jobs concurrently — that's
+                      // no longer a reason to flag this line, so this is always false now.
+                      clockedInElsewhere={false}
                       onClockIn={clockIn}
                       onClockOut={openClockOut}
                       onComplete={completeLine}
@@ -593,19 +568,29 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
         </Sheet>
       </div>
 
-      {/* Sticky clocked-in bar — reads mySession (unfiltered), not myOpen (queue-derived) */}
-      {mySession && (
-        <ClockedInBar
-          invoice={mySession.invoice_number}
-          customer={mySession.customer}
-          line={mySession.line}
-          startedAt={mySession.started_at}
-          orphaned={mySession.orphaned}
-          onClockOut={() =>
-            openClockOut(mySession.session_id, mySession.line, mySession.job_id)
-          }
-          disabled={acting}
-        />
+      {/* Sticky clocked-in bar(s) — reads mySessions (unfiltered), not queue-derived state.
+          P309: an operator may have several open sessions; stack one bar per session. This
+          wrapper owns the fixed/bottom-anchored positioning — ClockedInBar itself is layout-neutral. */}
+      {mySessions.length > 0 && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 flex flex-col"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
+          {mySessions.map((session) => (
+            <ClockedInBar
+              key={session.session_id}
+              invoice={session.invoice_number}
+              customer={session.customer}
+              line={session.line}
+              startedAt={session.started_at}
+              orphaned={session.orphaned}
+              onClockOut={() =>
+                openClockOut(session.session_id, session.line, session.job_id)
+              }
+              disabled={acting}
+            />
+          ))}
+        </div>
       )}
 
       {/* Block-calc planner */}
@@ -650,49 +635,6 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
         onSubmit={submitClockOut}
         acting={acting}
       />
-
-      {/* "Already clocked in" resolver — surfaces which job, routes to clock-out */}
-      <Modal
-        isOpen={!!resolvePrompt}
-        onClose={() => setResolvePrompt(null)}
-        title="Already running"
-      >
-        <p className="text-sm text-text">
-          You&apos;re running{" "}
-          <span className="font-mono tabular-nums font-semibold">
-            #{resolvePrompt?.invoice}
-          </span>
-          . Stop{" "}
-          <span className="font-mono tabular-nums font-semibold">
-            #{resolvePrompt?.invoice}
-          </span>
-          ?
-        </p>
-        <div className="flex gap-2 justify-end">
-          <button
-            type="button"
-            onClick={() => setResolvePrompt(null)}
-            className="min-h-[44px] px-4 py-2 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!resolvePrompt) return;
-              setClockOutTarget({
-                sessionId: resolvePrompt.sessionId,
-                line: resolvePrompt.line,
-                jobId: resolvePrompt.jobId,
-              });
-              setResolvePrompt(null);
-            }}
-            className="min-h-[44px] px-4 py-2 bg-[var(--primary-bg)] text-[var(--primary-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-          >
-            Stop
-          </button>
-        </div>
-      </Modal>
     </div>
   );
 }

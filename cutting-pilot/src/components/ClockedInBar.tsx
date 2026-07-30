@@ -13,6 +13,9 @@ type Props = {
 // Elapsed-time readout deferred: the UTC-parsing helper backing formatDuration() is a
 // module-private fn in @/lib/time.ts, and that file is out of scope for this prompt — see
 // BACKLOG.md rather than duplicating the parser here.
+// P309: layout-neutral by design — an operator may hold several open sessions at once, so the
+// parent (CuttingBoard.tsx) owns the fixed/bottom-anchored stacking container and this component
+// just renders one row's content.
 export default function ClockedInBar({
   invoice,
   customer,
@@ -22,10 +25,7 @@ export default function ClockedInBar({
   disabled,
 }: Props) {
   return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-40 bg-[var(--card-bg)] border-t border-border"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-    >
+    <div className="bg-[var(--card-bg)] border-t border-border">
       {orphaned && (
         <div className="px-4 py-1.5 text-xs bg-[var(--warn-bg)] border-b border-[var(--warn-border)] text-[var(--warn-text)]">
           This job is no longer on the board — clocking out will close the session only.
