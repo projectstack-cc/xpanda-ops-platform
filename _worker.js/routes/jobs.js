@@ -16,7 +16,7 @@ export async function handleApiJobs(request, env) {
     j.id, j.status, j.archived_at, j.trailer_group_id, j.customer, j.po_number, j.invoice_number, j.ship_date, j.ship_day,
     j.location, j.delivery_time, j.method, j.carrier, j.load_count, j.total_bdft,
     j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
-    j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
+    j.cutting_instructions, j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
     j.priority, j.priority_level, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
     j.packing_slip_filename, j.packing_slip_invoice, j.source, j.ship_to_verified,
     j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_street2,
@@ -265,6 +265,7 @@ export async function handleApiJobs(request, env) {
     const bol_info             = String(payload.bol_info             || "").trim();
     const payment_info         = String(payload.payment_info         || "").trim();
     const notes                = String(payload.notes                || "").trim();
+    const cutting_instructions = String(payload.cutting_instructions || "").trim();
     const packing_instructions = String(payload.packing_instructions || "").trim();
     const contact_name         = String(payload.contact_name         || "").trim();
     const contact_phone        = String(payload.contact_phone        || "").trim();
@@ -323,18 +324,18 @@ export async function handleApiJobs(request, env) {
           id, status, customer, po_number, invoice_number, ship_date, ship_day,
           location, delivery_time, method, carrier, load_count, total_bdft,
           scrap_pickup, sales_lead, bol_info, payment_info, notes,
-          packing_instructions, contact_name, contact_phone, combo_id,
+          cutting_instructions, packing_instructions, contact_name, contact_phone, combo_id,
           priority, confirmed_to_ship, processes, created_at, updated_at,
           packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
           ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
           ship_to_city, ship_to_state, ship_to_zip,
           ship_to_verified, ship_to_standardized, ship_to_verified_at, trailer_group_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, status, customer, po_number, invoice_number, ship_date, ship_day,
         location, delivery_time, method, carrier, load_count, total_bdft,
         scrap_pickup, sales_lead, bol_info, payment_info, notes,
-        packing_instructions, contact_name, contact_phone, combo_id,
+        cutting_instructions, packing_instructions, contact_name, contact_phone, combo_id,
         priority, confirmed_to_ship, processes, now, now,
         packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
         ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
@@ -563,7 +564,7 @@ export async function handleApiJobs(request, env) {
       "customer", "po_number", "invoice_number", "ship_date", "ship_day",
       "location", "delivery_time", "method", "carrier", "scrap_pickup",
       "sales_lead", "bol_info", "payment_info", "notes",
-      "packing_instructions", "contact_name", "contact_phone",
+      "cutting_instructions", "packing_instructions", "contact_name", "contact_phone",
       "packing_slip_filename", "packing_slip_invoice",
       "ship_to_company", "ship_to_attention", "ship_to_street", "ship_to_street2",
       "ship_to_city", "ship_to_state", "ship_to_zip",

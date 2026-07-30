@@ -392,6 +392,13 @@ button, input, select, textarea { font: inherit; }
     max-height: calc(100vh - 40px);
 }
 
+/* P307: job-entry modal widened ~20% (700 -> 840) for the new Cutting Instructions field —
+   scoped to the job-entry modal only, other .jobs-modal-panel consumers (parts/combo/trailer
+   pickers, BOL view) keep the 700px base. */
+#jobs-modal .jobs-modal-panel {
+    max-width: 840px;
+}
+
 .jobs-modal-header {
     display: flex;
     align-items: center;
