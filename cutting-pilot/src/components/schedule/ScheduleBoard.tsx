@@ -11,7 +11,6 @@ import type { ScheduleBoardResponse } from "@/types/schedule";
 import WeekBand from "./WeekBand";
 import { computeDensity } from "./density";
 import FreshnessClock from "./FreshnessClock";
-import LogoSweep from "./LogoSweep";
 
 const POLL_MS = 60_000;
 
@@ -141,7 +140,13 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
       />
 
       <div className="relative flex-1 min-h-0 overflow-hidden">
-        <div className="absolute inset-0 flex flex-col">
+        {/* TV-safe inset (not a bug fix): consumer TV/HDMI overscan crops the outer edge of the
+            picture on many displays, independent of anything this app renders — confirmed by
+            P306 measuring this container pixel-exact against the browser viewport with zero
+            clipping. `--tv-safe-inset` (globals.css) pulls the content in from the true edge so
+            any hardware crop eats background color, not schedule data. Do not "simplify" this
+            back to inset-0 thinking it's leftover pixel-shift cruft. */}
+        <div className="absolute flex flex-col" style={{ inset: "var(--tv-safe-inset)" }}>
           <div className="shrink-0 flex items-center justify-between px-3 py-0.5 border-b border-[var(--line)] bg-bg">
             <h1 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
               Shipping Schedule
@@ -172,8 +177,6 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
           </div>
         </div>
       </div>
-
-      <LogoSweep />
     </div>
   );
 }

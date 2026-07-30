@@ -12,3 +12,6 @@ node_modules/
 
 # Local env secrets
 .dev.vars
+
+# TypeScript incremental build info
+*.tsbuildinfo

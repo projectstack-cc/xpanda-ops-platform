@@ -6,9 +6,10 @@
 //
 // Self-contained TV hardening (mirrors /v2/schedule's technique, deliberately NOT imported from
 // components/schedule/ — see BACKLOG.md follow-up to extract a shared components/tv/ later):
-// a FreshnessClock and a periodic logo sweep, both local to this file. Keyframes live in the
-// inline <style> tag below (no other file is touched). Pixel-shift removed in P304 (motion
-// discomfort) on both TV boards — freshness clock + logo sweep are unaffected.
+// a FreshnessClock, local to this file. Pixel-shift removed in P304 (motion discomfort) on both
+// TV boards; logo sweep removed in P306 (same motion-discomfort complaint — it was the only
+// motion left after P304). TV-safe edge inset (hardware-overscan accommodation, not a bug fix)
+// added in P306 via the shared `--tv-safe-inset` token in globals.css.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Clock } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
@@ -19,8 +20,6 @@ const POLL_MS = 30_000;
 const CLOCK_TICK_MS = 15_000;
 // A handful of missed 30s polls before the clock goes amber.
 const STALE_AGE_THRESHOLD_MS = 2 * 60 * 1000;
-const LOGO_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
-const LOGO_SWEEP_DURATION_MS = 3_800;
 
 export interface LoadingBoardLoad {
   customer: string | null;
@@ -114,48 +113,6 @@ function FreshnessClock({
   );
 }
 
-function LogoSweep() {
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), LOGO_SWEEP_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div
-      aria-hidden="true"
-      className="hidden min-[1024px]:block fixed inset-0 z-30 overflow-hidden pointer-events-none motion-reduce:hidden"
-    >
-      <img
-        key={tick}
-        alt=""
-        src="/logo/xpanda.png"
-        className="xp-loading-sweep absolute top-1/2 h-[18vh] w-auto opacity-90 drop-shadow-lg"
-        style={{ animationDuration: `${LOGO_SWEEP_DURATION_MS}ms` }}
-      />
-    </div>
-  );
-}
-
-// Scoped keyframes for this board only — deliberately not shared with components/schedule/.
-const TV_HARDENING_STYLE = `
-  .xp-loading-sweep {
-    animation-name: xp-loading-sweep-kf;
-    animation-timing-function: ease-in-out;
-    animation-fill-mode: forwards;
-  }
-  @keyframes xp-loading-sweep-kf {
-    0% { transform: translate(-20vw, -50%); opacity: 0; }
-    8% { opacity: 1; }
-    92% { opacity: 1; }
-    100% { transform: translate(120vw, -50%); opacity: 0; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .xp-loading-sweep { animation: none !important; }
-  }
-`;
-
 export default function LoadingBoard({ userName, isAdmin, permissions }: LoadingBoardProps) {
   const [data, setData] = useState<LoadingBoardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -219,12 +176,9 @@ export default function LoadingBoard({ userName, isAdmin, permissions }: Loading
     }
   }, [noteDraft, fetchBoard]);
 
-  const tvStyle = <style>{TV_HARDENING_STYLE}</style>;
-
   if (loading) {
     return (
       <div className="h-screen flex flex-col bg-bg overflow-hidden">
-        {tvStyle}
         <PlatformHeader
           userName={userName}
           isAdmin={isAdmin}
@@ -248,7 +202,6 @@ export default function LoadingBoard({ userName, isAdmin, permissions }: Loading
   if (error && !data) {
     return (
       <div className="h-screen flex flex-col bg-bg overflow-hidden">
-        {tvStyle}
         <PlatformHeader
           userName={userName}
           isAdmin={isAdmin}
@@ -279,7 +232,6 @@ export default function LoadingBoard({ userName, isAdmin, permissions }: Loading
 
   return (
     <div className="h-screen flex flex-col bg-bg overflow-hidden">
-      {tvStyle}
       <PlatformHeader
         userName={userName}
         isAdmin={isAdmin}
@@ -290,7 +242,13 @@ export default function LoadingBoard({ userName, isAdmin, permissions }: Loading
       />
 
       <div className="relative flex-1 min-h-0 overflow-hidden">
-        <div className="absolute inset-0 flex flex-col">
+        {/* TV-safe inset (not a bug fix): consumer TV/HDMI overscan crops the outer edge of the
+            picture on many displays, independent of anything this app renders — confirmed by
+            P306 measuring this container pixel-exact against the browser viewport with zero
+            clipping. `--tv-safe-inset` (globals.css) pulls the content in from the true edge so
+            any hardware crop eats background color, not bay data. Do not "simplify" this back
+            to inset-0 thinking it's leftover pixel-shift cruft. */}
+        <div className="absolute flex flex-col" style={{ inset: "var(--tv-safe-inset)" }}>
           <div className="shrink-0 flex items-center justify-between px-3 py-0.5 border-b border-[var(--line)] bg-bg">
             <h1 className="text-[11px] font-semibold uppercase tracking-wide text-muted">
               Loading Dashboard
@@ -359,8 +317,6 @@ export default function LoadingBoard({ userName, isAdmin, permissions }: Loading
           )}
         </div>
       </div>
-
-      <LogoSweep />
     </div>
   );
 }
