@@ -78,19 +78,24 @@
 .jobs-view-btn:hover:not(.active) { background: #f3f4f6; }
 /* ── Calendar View ── */
 .cal-header-row { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 2px solid var(--line); }
-.cal-header-cell { padding: 8px 4px; text-align: center; font-size: 12px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+.cal-header-cell { padding: 8px 4px; text-align: center; font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .cal-body { border-left: 1px solid var(--line); border-top: 1px solid var(--line); }
 .cal-row { display: grid; grid-template-columns: repeat(7, 1fr); }
-.cal-cell { min-height: 110px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 4px; background: #fff; overflow: hidden; }
-.cal-cell-empty { background: #fafafa; min-height: 110px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.cal-today { background: #eff6ff !important; }
-.cal-weekend { background: #fafafa; }
-.cal-day-num { font-size: 13px; font-weight: 600; color: #6b7280; margin-bottom: 4px; padding: 2px 4px; }
-.cal-day-today { color: #fff; background: #1e293b; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.cal-cell { min-height: 110px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 4px; background: var(--card-bg); overflow: hidden; }
+.cal-cell-empty { background: var(--surface-2); min-height: 110px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.cal-today { background: var(--info-bg) !important; }
+.cal-weekend { background: var(--surface-2); }
+.cal-day-num { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; padding: 2px 4px; }
+.cal-day-today { color: var(--primary-text); background: var(--primary-bg); border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
 .cal-pill { padding: 3px 6px; margin-bottom: 2px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity 0.15s; }
 .cal-pill:hover { opacity: 0.8; }
-.cal-more { padding: 2px 6px; font-size: 10px; font-weight: 600; color: #6b7280; cursor: pointer; }
-.cal-more:hover { color: #1e40af; text-decoration: underline; }
+.cal-more { padding: 2px 6px; font-size: 10px; font-weight: 600; color: var(--text-muted); cursor: pointer; }
+.cal-more:hover { color: var(--link); text-decoration: underline; }
+/* P312: calendar nav controls were invisible in dark mode — the buttons set background:none but no
+   color, so the ← / → / Today glyphs fell back to UA ButtonText. Bind them to the text token. */
+#calendar-nav button { color: var(--text); }
+#calendar-nav button:hover { background: var(--ghost-bg); }
+#calendar-nav h3 { color: var(--text); }
 @media (max-width: 768px) {
   .cal-cell { min-height: 70px; padding: 2px; }
   .cal-header-cell { font-size: 10px; padding: 6px 2px; }
@@ -207,6 +212,19 @@
     <button onclick="goToToday()" style="background:var(--ghost-bg);border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
   </div>
   <div id="calendar-grid"></div>
+
+  <!-- P312: day-detail modal — lists all jobs for a calendar day. Replaces the old
+       "+N more" → Kanban bounce. Reuses the shared .jobs-modal-* classes (token-driven,
+       so it is dark-mode-correct with no new CSS). -->
+  <div class="jobs-modal-overlay" id="day-jobs-modal" hidden onclick="if(event.target===this)closeDayJobsModal()" style="z-index:150;">
+    <div class="jobs-modal-panel" role="dialog" aria-modal="true" aria-labelledby="day-jobs-title">
+      <div class="jobs-modal-header">
+        <h2 id="day-jobs-title">Jobs</h2>
+        <button class="jobs-modal-close" aria-label="Close" onclick="closeDayJobsModal()">&times;</button>
+      </div>
+      <div class="jobs-modal-body" id="day-jobs-body"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ══ Job Modal ══ -->
@@ -587,6 +605,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    const dayJobsModal = document.getElementById('day-jobs-modal');
+    if (dayJobsModal && !dayJobsModal.hidden) { closeDayJobsModal(); return; }
     const bolModal = document.getElementById('jobs-bol-view-modal');
     if (bolModal && !bolModal.hidden) { closeBolViewModal(); return; }
     if (!document.getElementById('parts-picker').hidden) {
@@ -946,13 +966,53 @@ function openJobFromCalendar(jobId) {
 }
 
 function showDayJobs(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  const mondayStr = monday.toISOString().slice(0, 10);
-  document.getElementById('week-filter').value = mondayStr;
-  setView('kanban');
-  loadJobs({ week: mondayStr });
+  // Gather all jobs whose ship_date normalizes to this calendar day (same normalization as
+  // renderCalendar's jobsByDate).
+  const dayJobs = (allJobs || []).filter(job => {
+    if (!job.ship_date) return false;
+    let d = job.ship_date;
+    if (d.includes('/')) {
+      const p = d.split('/');
+      d = `${p[2]}-${p[0].padStart(2,'0')}-${p[1].padStart(2,'0')}`;
+    }
+    return d === dateStr;
+  });
+
+  const dt = new Date(dateStr + 'T00:00:00');
+  const wd = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
+  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
+  document.getElementById('day-jobs-title').textContent =
+    `${wd}, ${mo} ${dt.getDate()} — ${dayJobs.length} job${dayJobs.length === 1 ? '' : 's'}`;
+
+  const body = document.getElementById('day-jobs-body');
+  if (!dayJobs.length) {
+    body.innerHTML = '<p style="padding:12px;color:var(--muted);margin:0;">No jobs on this day.</p>';
+  } else {
+    body.innerHTML = dayJobs.map(job => {
+      const sc    = STATUS_COLORS[job.status] || STATUS_COLORS.not_started;
+      const label = (STATUS_LABELS[job.status] || job.status || '').toString();
+      return `<button type="button" class="day-jobs-row" onclick="openJobFromDayModal('${esc(job.id)}')" `
+        + `style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;`
+        + `margin-bottom:6px;border:1px solid var(--card-border);border-radius:8px;background:var(--card-bg);`
+        + `color:var(--text);cursor:pointer;font-size:14px;">`
+        + `<span style="flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:${sc.border};"></span>`
+        + `<span style="flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(job.customer || 'Untitled')}</span>`
+        + `<span style="flex:0 0 auto;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;`
+        + `background:${sc.bg};color:${sc.text};">${esc(label)}</span>`
+        + `</button>`;
+    }).join('');
+  }
+
+  document.getElementById('day-jobs-modal').hidden = false;
+}
+
+function openJobFromDayModal(jobId) {
+  closeDayJobsModal();
+  openModal(jobId);
+}
+
+function closeDayJobsModal() {
+  document.getElementById('day-jobs-modal').hidden = true;
 }
 
 function esc(str) {
