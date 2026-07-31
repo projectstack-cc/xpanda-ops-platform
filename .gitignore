@@ -1,10 +1,15 @@
 
 vscode.deb
-bead_inventory.sql
-job_board.sql
-logistics.sql
-seed-parts.sql
 Prompts/
 
 # OAuth client secret downloads — never commit, values are stored as Worker secrets
 client_secret_*.json
+
+# Security remediation (2026-07-31): DB_Migrations/ has contained plaintext employee/admin
+# credentials (seed-employees.sql, auth.sql) and employee_roster.md contained real employee
+# names/roles. Full git history was purged of both paths (git filter-repo) and force-pushed.
+# Migration .sql files still live locally and are still authored/run manually per AGENTS.md —
+# they are just no longer committed to version control. Never remove these two lines without
+# auditing new migration files for secrets/PII first.
+DB_Migrations/
+employee_roster.md

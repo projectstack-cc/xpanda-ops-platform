@@ -174,7 +174,7 @@ When a user request arrives:
 - **bol-shared.js**: Single source of truth for BOL PDF coordinates. Never duplicate.
 - **Module headers**: Each module has `*-header.js` for auth bar, user display, 401 handling.
 - **Module CSS**: Each module has `*-shared.css`. Page-specific styles use wrapper classes.
-- **DB migrations**: All schema changes as `.sql` files in `DB_Migrations/`, run manually in D1 console.
+- **DB migrations**: All schema changes as `.sql` files in `DB_Migrations/`, run manually in D1 console. **`DB_Migrations/` is gitignored, not committed (as of 2026-07-31)** — past migration files leaked plaintext employee/admin credentials, so the folder (and git history containing it) was purged. Files are still created there for Steve to run manually; they just never get committed. Confirm `.gitignore` still covers it before writing a new migration file.
 - **BACKLOG/CHANGELOG discipline**: Every code-change prompt must update `BACKLOG.md` and `CHANGELOG.md` as part of the same change. When work ships: add a `CHANGELOG.md` entry keyed to its prompt number (newest-first within its module section) and remove the corresponding item from `BACKLOG.md`. New follow-on work discovered during the change goes into `BACKLOG.md`. Docs-only and report-only prompts note themselves in the appropriate `CHANGELOG.md` section too. Drift check: any prompt in `Prompts/` missing from `CHANGELOG.md` is a gap.
 
 ## Response Format
@@ -728,7 +728,10 @@ async function logActivity(env, userId, action, entityType, entityId, details) {
 ## DB Migration Rules
 - **Never push a schema-dependent change before its migration is confirmed run** (see the Orchestrator's Migration-before-push HARD RULE): migration in the D1 console FIRST, confirmed by Steve, THEN push the code that references it.
 - Standalone chunk-board tables (`DB_Migrations/chunk-boards.sql`): `cc_assignments`, `hc_slots` (seeded `8_hole`/`10_hole`), `chunk_sessions`. Fully decoupled — no `job_id`, no `jobs.status` writes; back the `/v2/cutting/crosscutter` board only.
-- All migrations are `.sql` files in `DB_Migrations/`
+- All migrations are `.sql` files in `DB_Migrations/`. **This folder is gitignored, not committed
+  (as of 2026-07-31)** — past files leaked plaintext employee/admin credentials, so the folder and
+  the git history containing it were purged (`git filter-repo` + force-push). Files are still
+  created locally for Steve to run manually; never re-track the folder or a file inside it.
 - Run manually in Cloudflare D1 Dashboard Console
 - Migrations must be idempotent (CREATE IF NOT EXISTS, ALTER ADD COLUMN IF NOT EXISTS where possible)
 - Include both "up" and "down" where practical

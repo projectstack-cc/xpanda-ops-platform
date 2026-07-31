@@ -170,7 +170,8 @@ Agents must NOT speculatively add features. If it's not in the prompt, don't bui
 - **D1 (SQLite)** is the primary data store for all operational records
 - Small file attachments (e.g., packing slip PDFs) → **base64 in D1**. Do NOT introduce Cloudflare R2 unless explicitly requested.
 - `localStorage` keys for client-side state are **versioned** (e.g., `foam_trailer_loader_v31`). Preserve existing keys exactly — do not rename or reset.
-- Database migrations are `.sql` files at the project root, run manually in the **Cloudflare D1 Dashboard Console**. Agents must create migration files and instruct Steve to run them.
+- Database migrations are `.sql` files in `DB_Migrations/`, run manually in the **Cloudflare D1 Dashboard Console**. Agents must create migration files and instruct Steve to run them.
+- **`DB_Migrations/` is gitignored, not committed (as of 2026-07-31).** Past migration files included plaintext employee/admin credentials (seed data), so the whole folder — and history containing it — was purged from git. Agents still create `.sql` files there for Steve to run manually; they just never get committed. Before writing a migration file, confirm `DB_Migrations/` is still in `.gitignore` — do not re-track it.
 - Saved loads have a 90-day TTL with auto-cleanup on read.
 
 ---
