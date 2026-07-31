@@ -276,6 +276,7 @@ let allAssignments = [];
 let selectedBayId = null;
 let currentLdView = window.innerWidth < 768 ? 'bay' : 'overview';
 let pullJobSelectedId = null;
+let pullJobSelectedAssignmentId = null;
 let pullJobSearchResults = [];
 let ldSortOrder = 'inv_asc';
 let ldSearchTerm = '';
@@ -945,6 +946,7 @@ async function openPullJobModal() {
   document.getElementById('pull-job-modal').hidden = false;
   document.getElementById('pull-job-modal').dataset.assignmentId = '';
   pullJobSelectedId = null;
+  pullJobSelectedAssignmentId = null;
   document.getElementById('pull-job-search').value = '';
   document.getElementById('pull-job-results').innerHTML = '';
 
@@ -969,20 +971,57 @@ async function searchJobsForPull(query) {
   const { data } = await api.get('/api/jobs?search=' + encodeURIComponent(query));
   pullJobSearchResults = data?.jobs || [];
 
-  document.getElementById('pull-job-results').innerHTML = pullJobSearchResults.map(j => `
-    <div class="ld-job-result ${pullJobSelectedId === j.id ? 'selected' : ''}" onclick="selectPullJob('${j.id}', this)">
-      <strong>${esc(j.customer || 'Unknown')}</strong>
-      <span style="font-size:12px;color:#6b7280;">
-        ${j.invoice_number ? 'INV# ' + esc(j.invoice_number) : ''}
-        ${j.po_number ? '| PO: ' + esc(j.po_number) : ''}
-        ${j.status ? '| ' + j.status.replace('_', ' ') : ''}
-      </span>
-    </div>
-  `).join('');
+  // Expand each matched job into one selectable row PER LOAD, joined to the
+  // loading_assignments already in memory (allAssignments) by job_id. Each load row
+  // carries its assignment id so confirmPullJob can place THAT specific load on the
+  // chosen bay (P311). A job with no in-memory assignments (e.g. customer-pickup,
+  // which is intentionally hidden from the board) falls back to a single job-level
+  // row = prior auto-pick behavior.
+  const html = pullJobSearchResults.map(j => {
+    const meta = `${j.invoice_number ? 'INV# ' + esc(j.invoice_number) : ''}` +
+      `${j.po_number ? ' | PO: ' + esc(j.po_number) : ''}`;
+
+    const loads = allAssignments
+      .filter(a => String(a.job_id) === String(j.id))
+      .sort((a, b) => (a.load_number || 1) - (b.load_number || 1));
+
+    if (!loads.length) {
+      const sel = pullJobSelectedId === j.id ? 'selected' : '';
+      return `
+        <div class="ld-job-result ${sel}" data-kind="job" data-job-id="${escAttr(j.id)}" onclick="selectPullRow(this)">
+          <strong>${esc(j.customer || 'Unknown')}</strong>
+          <span style="font-size:12px;color:#6b7280;">${meta}${j.status ? ' | ' + esc(j.status.replace('_', ' ')) : ''}</span>
+        </div>`;
+    }
+
+    const loadCount = loads.length;
+    return loads.map(a => {
+      const sel = pullJobSelectedAssignmentId === a.id ? 'selected' : '';
+      const badge = loadCount > 1
+        ? `<span style="font-weight:700;color:#6366f1;margin-left:6px;font-size:11px;">Load ${a.load_number || 1} of ${a.load_count || loadCount}</span>`
+        : '';
+      const placement = (a.bay_id && a.bay_number != null)
+        ? `On Bay ${esc(a.bay_number)} · ${esc((a.loading_status || '').replace('_', ' '))}`
+        : 'Awaiting';
+      return `
+        <div class="ld-job-result ${sel}" data-kind="load" data-assignment-id="${escAttr(a.id)}" onclick="selectPullRow(this)">
+          <strong>${esc(j.customer || 'Unknown')}${badge}</strong>
+          <span style="font-size:12px;color:#6b7280;">${meta} | ${placement}</span>
+        </div>`;
+    }).join('');
+  }).join('');
+
+  document.getElementById('pull-job-results').innerHTML = html;
 }
 
-function selectPullJob(jobId, el) {
-  pullJobSelectedId = jobId;
+function selectPullRow(el) {
+  if (el.dataset.kind === 'load') {
+    pullJobSelectedAssignmentId = el.dataset.assignmentId;
+    pullJobSelectedId = null;
+  } else {
+    pullJobSelectedId = el.dataset.jobId;
+    pullJobSelectedAssignmentId = null;
+  }
   document.querySelectorAll('.ld-job-result').forEach(e => e.classList.remove('selected'));
   el.classList.add('selected');
 }
@@ -1000,8 +1039,17 @@ async function confirmPullJob() {
     return;
   }
 
-  // Pull job flow
-  if (!pullJobSelectedId) { alert('Select a job first'); return; }
+  // Per-load pull: place the selected load's existing assignment on the bay (P311).
+  if (pullJobSelectedAssignmentId) {
+    const { ok, data } = await api.put('/api/loading-assignments', { id: pullJobSelectedAssignmentId, bay_id: bayId, loading_status: 'not_started' });
+    if (ok) { closePullJobModal(); loadDashboard(); }
+    else alert(data?.error || 'Failed to assign load');
+    return;
+  }
+
+  // Fallback: job-level pull (backend auto-picks the next awaiting load) for jobs
+  // with no in-memory per-load assignments.
+  if (!pullJobSelectedId) { alert('Select a load first'); return; }
 
   const { ok, data } = await api.post('/api/loading-assignments', { job_id: pullJobSelectedId, bay_id: bayId });
 

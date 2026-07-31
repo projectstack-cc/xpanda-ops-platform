@@ -447,6 +447,18 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P311** — The loading dashboard's "Pull Job" search now expands multi-load jobs into one
+  selectable row per load, joined from `allAssignments` (already in memory) by `job_id`. Each row
+  shows "Load N of M" plus current placement (`Awaiting` or `On Bay {n} · {status}`); selecting a
+  load and a bay routes through the existing `PUT /api/loading-assignments { id, bay_id,
+  loading_status }` path to place that specific load's assignment on the chosen bay, rather than
+  the prior job-level auto-pick. Single-load jobs render one plain row (no "Load 1 of 1"
+  clutter); jobs with no in-memory assignments (e.g. customer-pickup, intentionally hidden from
+  the board) fall back to the prior job-level `POST` auto-pick behavior unchanged. `selectPullJob`
+  replaced by `selectPullRow`, which branches on `data-kind` (`job` vs `load`) to set either
+  `pullJobSelectedId` or the new `pullJobSelectedAssignmentId`. The "Assign Bay" existing-assignment
+  branch of `confirmPullJob` is untouched. Frontend-only — no worker, route, or migration changes.
+
 - **P310** — Collapsed BOL PDF output to a single copy: the driver and customer copy pages are
   removed, leaving just the original page (which already carried the QR code and shipper
   signature — no coordinate or signature changes needed). The `for (const copyType of [undefined,
