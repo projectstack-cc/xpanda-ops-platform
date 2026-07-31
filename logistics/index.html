@@ -943,10 +943,10 @@ async function viewBolForJob(jobId) {
       .sort((a, c) => Number(a) - Number(c))
       .map(k => byLoad[k]);
 
-    // Render the same combined output as Generate: original → driver → customer.
+    // Render a single BOL page per record (driver + customer copies removed, P310).
     const { PDFDocument } = PDFLib;
     const out = await PDFDocument.create();
-    for (const copyType of [undefined, 'driver', 'customer']) {
+    for (const copyType of [undefined]) {
       const r = await BolShared.generatePdf(bolsToRender, { previewOnly: true, copyType });
       try { URL.revokeObjectURL(r.blobUrl); } catch (e) {}
       const src = await PDFDocument.load(r.pdfBytes);

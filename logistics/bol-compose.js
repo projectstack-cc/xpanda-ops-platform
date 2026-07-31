@@ -648,12 +648,12 @@ function h(tag, attrs = {}, ...children) {
     }
   }
 
-  // ONE combined PDF with all three copies per BOL — original, driver, customer — then the packing
-  // slip once. Single source of truth so bol-generator and load-builder produce identical output.
+  // ONE combined PDF: a single BOL page per record (driver + customer copies removed, P310), then
+  // the packing slip once. Single source of truth so bol-generator and load-builder match.
   async function generateCombinedCopies(records, append, hideQr) {
     const { PDFDocument } = PDFLib;
     const out = await PDFDocument.create();
-    for (const copyType of [undefined, 'driver', 'customer']) {
+    for (const copyType of [undefined]) {
       const r = await BolShared.generatePdf(records, { previewOnly: true, copyType, hideQr: !!hideQr });
       try { URL.revokeObjectURL(r.blobUrl); } catch (_e) {}
       const src = await PDFDocument.load(r.pdfBytes);

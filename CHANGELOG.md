@@ -447,6 +447,16 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P310** — Collapsed BOL PDF output to a single copy: the driver and customer copy pages are
+  removed, leaving just the original page (which already carried the QR code and shipper
+  signature — no coordinate or signature changes needed). The `for (const copyType of [undefined,
+  'driver', 'customer'])` loop in both `logistics/bol-compose.js` and `logistics/index.html` now
+  iterates `[undefined]` only. `bol-shared.js`'s dead `TEMPLATE_BY_COPY` map (driver/customer
+  template PDFs) and the customer-copy QR suppression gate were stripped, since `opts.copyType` is
+  no longer read anywhere in that file. Template PDF assets (`BLANK_BOL_Xpanda_driver.pdf`,
+  `BLANK_BOL_Xpanda_customer.pdf`) are left in place — deletion tracked as a follow-up in
+  `BACKLOG.md`.
+
 - **P289** — the BOL ship-to attention line now renders its stored value verbatim instead of
   force-prefixing "attn: ", since the field is frequently used as a secondary address line.
   Applies everywhere via `bol-shared.js`. No data migration; existing values render as-is.
