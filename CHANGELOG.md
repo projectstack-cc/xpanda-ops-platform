@@ -448,6 +448,15 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P314** — Logistics dashboard calendar/list fix: the outbound/inbound calendar view now always
+  shows all shipments regardless of the list view's week filter or "Show All" state.
+  `setOutboundView`/`setInboundView` previously only re-rendered stale in-memory data on toggle;
+  they now call `loadOutbound()`/`loadInbound()`, which already branch correctly (calendar mode
+  drops the week filter and fetches `days=365`) — the toggle just wasn't invoking that branch.
+  Also added **This Week** / **Next Week** quick buttons to the outbound list toolbar (next to
+  "Show All"), via a new `setOutboundWeekOffset(weeks)` helper mirroring `setCurrentWeek()`'s
+  week-input format. Inbound has no week input, so it's out of scope. Frontend-only,
+  `logistics/index.html`. No migration, no API/permission change.
 - **P311** — The loading dashboard's "Pull Job" search now expands multi-load jobs into one
   selectable row per load, joined from `allAssignments` (already in memory) by `job_id`. Each row
   shows "Load N of M" plus current placement (`Awaiting` or `On Bay {n} · {status}`); selecting a

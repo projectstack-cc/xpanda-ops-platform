@@ -100,6 +100,8 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
             <option value="delivered">Delivered</option>
             <option value="cancelled">Cancelled</option>
           </select>
+          <button class="logistics-btn logistics-btn-outline" onclick="setOutboundWeekOffset(0)">This Week</button>
+          <button class="logistics-btn logistics-btn-outline" onclick="setOutboundWeekOffset(1)">Next Week</button>
           <button class="logistics-btn logistics-btn-outline" onclick="clearOutboundWeek()">Show All</button>
         </div>
       </div>
@@ -715,6 +717,19 @@ function switchTab(tab, btn) {
 
 function clearOutboundWeek() {
   document.getElementById('outbound-week-input').value = '';
+  loadOutbound();
+}
+
+// Set the outbound week input to this week (weeks=0) or a relative week, then reload the list.
+function setOutboundWeekOffset(weeks) {
+  const input = document.getElementById('outbound-week-input');
+  if (!input) return;
+  const base = new Date();
+  const day  = base.getDay();            // 0 = Sun
+  const diff = day === 0 ? -6 : 1 - day; // back to Monday
+  const mon  = new Date(base);
+  mon.setDate(base.getDate() + diff + (weeks * 7));
+  input.value = `${mon.getFullYear()}-W${String(getISOWeek(mon)).padStart(2, '0')}`;
   loadOutbound();
 }
 
@@ -1643,7 +1658,7 @@ function setOutboundView(view) {
   document.getElementById('outbound-calendar').style.display = view === 'calendar' ? '' : 'none';
   const filterRow = document.querySelector('#tab-outbound .logistics-toolbar-right');
   if (filterRow) filterRow.style.display = view === 'list' ? '' : 'none';
-  if (view === 'calendar') renderShipmentCalendar('outbound');
+  loadOutbound();
 }
 
 function setInboundView(view) {
@@ -1654,7 +1669,7 @@ function setInboundView(view) {
   document.getElementById('inbound-calendar').style.display = view === 'calendar' ? '' : 'none';
   const filterRow = document.querySelector('#tab-inbound .logistics-toolbar-right');
   if (filterRow) filterRow.style.display = view === 'list' ? '' : 'none';
-  if (view === 'calendar') renderShipmentCalendar('inbound');
+  loadInbound();
 }
 
 function changeShipCalMonth(direction, delta) {
