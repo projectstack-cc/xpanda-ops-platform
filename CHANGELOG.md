@@ -448,6 +448,18 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **P318** — Per-load ship date for split-shipment support (multi-load jobs shipping across several
+  days). New nullable `loading_assignments.ship_date` column (NULL = "ships on the job's date");
+  `jobs.ship_date` is never auto-touched — purely additive. New manager-gated batch write
+  `PUT /api/loading-assignments/load-days` (`{ job_id, days: [{ load_number, ship_date }] }`,
+  dispatched via the existing `/api/loading-assignments` prefix, no new `index.js` route row) —
+  validates `YYYY-MM-DD` per load, updates `loading_assignments` by `(job_id, load_number)`, logs
+  one activity entry per call. Jobs-list `loads_summary` aggregate added to `JOB_LIST_COLS`
+  (`json_group_array` of `{n: load_number, d: ship_date, s: loading_status}` per non-archived load)
+  so the job board can render the split badge without an extra fetch. New migration
+  `DB_Migrations/add-ship-date-to-loading-assignments.sql` (single `ALTER TABLE ADD COLUMN`) —
+  **manual D1 console run required before this deploys**; not committed (folder gitignored). First
+  of three (P319 job board, P320 logistics). `node --check` clean.
 - **P315** — `shipments` now persists `delivery_time` + `scrap_pickup` (previously dropped on every
   write path, so neither the logistics board nor a shipment-sourced BOL ever saw them, despite the
   logistics shipment modal already sending both). `_worker.js/routes/jobs.js`: the job-create

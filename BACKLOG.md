@@ -68,6 +68,8 @@
 
 ### Standing Logistics Backlog
 
+- [ ] **P320 — loading card day label + BOL date prefill.** Consumes P318's per-load
+  `ship_date`: show the assigned day on the loading card and prefill the BOL date from it.
 - [ ] **P271 follow-up — `loading_assignments.archived_at`.** Apply the same orthogonal-archive
   treatment (P271) to `loading_assignments.loading_status = 'archived'` (site L24 in
   `status-write-site-inventory.md`) — same two-facts-one-column defect, but lower-stakes since the
@@ -91,6 +93,8 @@
 
 ## Job Board
 
+- [ ] **P319 — job-card split modal + badge.** Consumes P318's `loads_summary` aggregate: a split
+  badge on multi-load job cards plus a modal to view/edit per-load ship days.
 - [x] P275/276/277 sequence — linked jobs (trailer sharing). 1/3 (P275, migration), 2/3 (P276,
   worker + legacy entry UI), 3/3 (P277, `/v2/schedule` side rail) have all shipped. **P277 still
   needs `wrangler deploy` from `cutting-pilot/` before the rail is live** — v2 doesn't auto-deploy.

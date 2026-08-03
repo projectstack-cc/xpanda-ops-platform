@@ -33,7 +33,10 @@ export async function handleApiJobs(request, env) {
       ORDER BY CASE la.loading_status
         WHEN 'loading' THEN 1 WHEN 'not_started' THEN 2 WHEN 'awaiting' THEN 3
         WHEN 'loaded' THEN 4 WHEN 'in_transit' THEN 5 WHEN 'delivered' THEN 6 ELSE 7 END
-      LIMIT 1) AS loading_status_indicator
+      LIMIT 1) AS loading_status_indicator,
+    (SELECT json_group_array(json_object('n', la.load_number, 'd', la.ship_date, 's', la.loading_status))
+       FROM loading_assignments la
+      WHERE la.job_id = j.id AND la.loading_status != 'archived') AS loads_summary
   `;
 
   // ── GET /api/jobs/:id/packing-slip ───────────────────────────────────────
