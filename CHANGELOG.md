@@ -475,6 +475,13 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P320** — Split-shipment: per-load ship-day pill on loading cards (`renderAssignmentCard` in
+  `logistics/loading.html`, reading P318's `loading_assignments.ship_date` via the existing `la.*`
+  read path); per-load BOL `date` prefilled from `ship_date` in `logistics/index.html`'s
+  `openBolModalForJob` (`Object.assign`-ed over `base`, so unsplit loads keep `base.date` unchanged
+  and split loads inherit their own day). Reuses the BOL's existing `date` field — `bol-shared.js`
+  untouched, no coordinate change. Bay-view card render and shipping-info render parity deferred to
+  `BACKLOG.md`. `node --check` clean on both files' extracted inline `<script>` blocks.
 - **P317** — Reverted P310 (restored the 3-copy printed BOL: original/driver/customer) — the
   supervisor's actual complaint was the **signed-copy viewer** on the logistics dashboard showing
   two signed copies (Driver + Customer), which P310 never touched; the printed-BOL collapse was

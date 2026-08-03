@@ -1094,6 +1094,7 @@ async function openBolModalForJob(jobId) {
         trailerLabel: loadCount > 1 ? ('Load ' + (i + 1) + ' of ' + loadCount) : 'BOL',
         invNumber: i === 0 ? (job.invoice_number || '') : '',
         trailerNo: assignment.trailer_number || '',
+        date: assignment.ship_date || base.date,
       }));
     }
 
