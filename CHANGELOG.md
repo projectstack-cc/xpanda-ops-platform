@@ -448,6 +448,14 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P316** — BOL compose now carries Scrap Pickup from the job instead of hardcoding
+  `is_scrap_pickup: 0` on every composed BOL. `logistics/bol-compose.js`'s internal job-picker path
+  now reads `job.scrap_pickup` onto `td.scrapPickup`, and the payload maps it
+  (`td.scrapPickup === 'YES' → is_scrap_pickup: 1`, else `0`) instead of the hardcoded literal.
+  `logistics/index.html` carries `scrapPickup` on the from-job entry (`openBolModalForJob`) and
+  seeds it on the blank/manual template so the map reads `'' → 0` cleanly — mirrors how
+  `delivery_time`/`deliveryTime` already carry. `bol-shared.js` (rendering) untouched — populate-only
+  fix. No manual override at compose time yet (tracked in `BACKLOG.md`). No migration.
 - **P314** — Logistics dashboard calendar/list fix: the outbound/inbound calendar view now always
   shows all shipments regardless of the list view's week filter or "Show All" state.
   `setOutboundView`/`setInboundView` previously only re-rendered stale in-memory data on toggle;

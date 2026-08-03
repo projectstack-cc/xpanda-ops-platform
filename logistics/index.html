@@ -1017,7 +1017,7 @@ function openBlankBolModal() {
     shipToCompany: '', shipToAttention: '', shipToStreet: '', shipToStreet2: '',
     shipToCity: '', shipToState: '', shipToZip: '',
     contactName: '', contactPhone: '', carrierName: '',
-    poNumber: '', deliveryTime: '', invNumber: '',
+    poNumber: '', deliveryTime: '', scrapPickup: '', invNumber: '',
     date: today, freightTerms: 'prepaid', specialInstructions: '', carryOver: false,
     trailerIndex: 0, trailerLabel: 'BOL',
   };
@@ -1065,7 +1065,7 @@ async function openBolModalForJob(jobId) {
       shipToZip: job.ship_to_zip || '',
       contactName: job.contact_name || '', contactPhone: job.contact_phone || '',
       carrierName: job.carrier || '',
-      poNumber: job.po_number || '', deliveryTime: job.delivery_time || '',
+      poNumber: job.po_number || '', deliveryTime: job.delivery_time || '', scrapPickup: job.scrap_pickup || '',
       date: job.ship_date || today,
       freightTerms: 'prepaid', specialInstructions: '', carryOver: true,
     };

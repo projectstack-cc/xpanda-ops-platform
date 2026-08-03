@@ -397,6 +397,7 @@ function h(tag, attrs = {}, ...children) {
                 if (job.location) { const p = job.location.split(',').map(s => s.trim()); td.shipToCity = p[0] || ''; td.shipToState = p[1] || ''; }
                 td.carrierName = job.carrier || ''; td.poNumber = job.po_number || job.invoice_number || '';
                 td.deliveryTime = job.delivery_time || ''; td.contactName = job.contact_name || ''; td.contactPhone = job.contact_phone || '';
+                td.scrapPickup = job.scrap_pickup || '';
                 try {
                   const cr = await api.get(`/api/bol-customers?search=${encodeURIComponent(job.customer || '')}`);
                   const cd = cr.data;
@@ -609,7 +610,7 @@ function h(tag, attrs = {}, ...children) {
           ship_to_city: td.shipToCity, ship_to_state: td.shipToState, ship_to_zip: td.shipToZip,
           location_no: '', carrier_id: null, carrier_name: td.carrierName,
           trailer_no: td.trailerNo || '', seal_number: '', scac: '', pro_no: '',
-          freight_terms: td.freightTerms, is_scrap_pickup: 0, third_party_bill_to: '',
+          freight_terms: td.freightTerms, is_scrap_pickup: (td.scrapPickup === 'YES' ? 1 : 0), third_party_bill_to: '',
           special_instructions: td.specialInstructions,
           contact_info: [td.contactName ? ('POC: ' + td.contactName) : '', td.contactPhone || ''].filter(Boolean).join(' '),
           po_number: td.poNumber || '',
