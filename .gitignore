@@ -1,6 +1,9 @@
 
 vscode.deb
 Prompts/
+logistics/assets/Master copies/
+qc-slop-audit.md
+status-write-site-inventory.md
 
 # OAuth client secret downloads — never commit, values are stored as Worker secrets
 client_secret_*.json
