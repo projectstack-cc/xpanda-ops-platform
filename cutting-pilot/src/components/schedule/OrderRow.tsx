@@ -1,9 +1,9 @@
 // src/components/schedule/OrderRow.tsx
 // One reusable order row for each day column on the TV board. Customer +
-// INV# + status badge are always visible; every other field is trimmed progressively as
-// density tightens (compact drops delivery time/location/method/carrier, minimal also drops
-// load count + the scrap icon) — trimming fields is preferred over shrinking text below the
-// legibility floor.
+// INV# + status badge are always visible; the load count + scrap icon trim out at minimal
+// density — trimming fields is preferred over shrinking text below the legibility floor.
+// Delivery time/location and method/carrier are intentionally NOT displayed on the board:
+// those sheet cells are pulled for matching/sorting only (P313).
 import { Link2, Recycle } from "lucide-react";
 import type { ScheduleBoardRow } from "@/types/schedule";
 import StatusBadge from "./StatusBadge";
@@ -37,8 +37,6 @@ function isScrapYes(scrapPickup: string | null): boolean {
 }
 
 export default function OrderRow({ row, density, orphanedGroup, isLastInColumn }: OrderRowProps) {
-  const showTiming = density === "full";
-  const showMethodCarrier = density === "full";
   const showLoadCount = density !== "minimal";
   const showScrapIcon = density !== "minimal";
   const scrapYes = showScrapIcon && isScrapYes(row.scrap_pickup);
@@ -88,18 +86,6 @@ export default function OrderRow({ row, density, orphanedGroup, isLastInColumn }
               {loadLabel}
             </span>
           )}
-        </div>
-      )}
-
-      {showTiming && (row.delivery_time || row.location) && (
-        <div className="mt-0.5 text-[10px] text-text-faint truncate">
-          {[row.delivery_time, row.location].filter(Boolean).join(" · ")}
-        </div>
-      )}
-
-      {showMethodCarrier && (row.method || row.carrier) && (
-        <div className="text-[10px] text-text-faint truncate">
-          {[row.method, row.carrier].filter(Boolean).join(" / ")}
         </div>
       )}
     </div>
