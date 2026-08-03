@@ -77,9 +77,6 @@
 - [ ] Zoning support for deck systems
 - [ ] Load builder: make initial calculated load view larger, include the stacks visually
 - [ ] Load builder: fix/clarify customize mode drag-and-drop (move layers between columns)
-- [ ] **P310 follow-up (low priority)** — Delete unused BOL copy template assets
-  `logistics/assets/BLANK_BOL_Xpanda_driver.pdf` and `BLANK_BOL_Xpanda_customer.pdf` (dead after
-  P310 collapsed BOL output to a single copy).
 
 ### BOL Issues
 

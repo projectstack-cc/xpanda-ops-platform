@@ -463,6 +463,26 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P317** — Reverted P310 (restored the 3-copy printed BOL: original/driver/customer) — the
+  supervisor's actual complaint was the **signed-copy viewer** on the logistics dashboard showing
+  two signed copies (Driver + Customer), which P310 never touched; the printed-BOL collapse was
+  the wrong fix for that. Restored via `git revert b8bb420` (code auto-merged cleanly on top of
+  P311–P313; only `CHANGELOG.md`/`BACKLOG.md` conflicted and were discarded in favor of this entry)
+  — `logistics/bol-compose.js`, `logistics/bol-shared.js` (`TEMPLATE_BY_COPY`), `logistics/index.html`
+  all back to their pre-P310 3-copy form. Existing driver/customer copy PDF assets untouched (never
+  deleted by P310 in the first place).
+  Real fix, Part B: delivery now captures a **single** signed copy of record — `track/index.html`'s
+  `uploadSignedCopy` renders the plain `original` template (`copyType` `undefined`) and stores it as
+  `doc_type = 'original_signed'` (driver/customer stamps only if explicitly requested elsewhere);
+  the delivery-submit flow calls `uploadSignedCopy('original')` once instead of the old
+  driver-then-customer double upload. `_worker.js/routes/public.js`'s doc-type validator accepts
+  `original_signed` alongside the legacy `driver_signed`/`customer_signed` (kept for backward
+  compatibility — no data migrated/deleted). The dashboard signed-copy viewer
+  (`logistics/index.html`) now shows **one** link per BOL via `pickSignedDoc()` — prefers
+  `original_signed`, falls back to the newest doc (API returns newest-first) so legacy
+  driver/customer-only shipments still show a copy. No DB migration — `bol_documents.doc_type` is
+  an unconstrained `TEXT` column (confirmed no `CHECK` constraint). `node --check` clean on
+  `bol-compose.js`, `public.js`, and both edited inline `<script>`s.
 - **P316** — BOL compose now carries Scrap Pickup from the job instead of hardcoding
   `is_scrap_pickup: 0` on every composed BOL. `logistics/bol-compose.js`'s internal job-picker path
   now reads `job.scrap_pickup` onto `td.scrapPickup`, and the payload maps it

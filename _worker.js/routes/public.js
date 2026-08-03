@@ -142,8 +142,8 @@ export async function handleApiPublicBolDocument(request, env) {
   catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
 
   const docType = String(payload.doc_type || '');
-  if (!['driver_signed', 'customer_signed'].includes(docType)) {
-    return json({ ok: false, error: 'doc_type must be driver_signed|customer_signed' }, 400);
+  if (!['original_signed', 'driver_signed', 'customer_signed'].includes(docType)) {
+    return json({ ok: false, error: 'doc_type must be original_signed|driver_signed|customer_signed' }, 400);
   }
   const pdfBase64 = String(payload.pdf_base64 || '');
   if (!pdfBase64 || pdfBase64.length < 100) {

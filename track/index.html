@@ -193,9 +193,12 @@
 
   async function uploadSignedCopy(copyType) {
     const bolForRender = { ...currentBol, access_token: token };
-    const { pdfBytes } = await BolShared.generatePdf([bolForRender], { copyType, previewOnly: true });
+    const renderCopy = (copyType === 'driver' || copyType === 'customer') ? copyType : undefined;
+    const { pdfBytes } = await BolShared.generatePdf([bolForRender], { copyType: renderCopy, previewOnly: true });
     const stamped = await stampCopy(pdfBytes);
-    const docType = copyType === 'driver' ? 'driver_signed' : 'customer_signed';
+    const docType = renderCopy === 'driver'   ? 'driver_signed'
+                  : renderCopy === 'customer' ? 'customer_signed'
+                  : 'original_signed';
     const r = await fetch('/api/public/bol-document/' + encodeURIComponent(token), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ doc_type: docType, pdf_base64: bytesToBase64(stamped) }),
@@ -330,8 +333,7 @@
     const btn = document.getElementById('submit-btn');
     btn.disabled = true; btn.textContent = 'Uploading…';
     try {
-      await uploadSignedCopy('driver');
-      await uploadSignedCopy('customer');
+      await uploadSignedCopy('original');
       const res = await fetch('/api/public/bol-delivery/' + encodeURIComponent(token), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
