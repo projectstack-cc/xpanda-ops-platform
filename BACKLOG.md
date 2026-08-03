@@ -93,8 +93,10 @@
 
 ## Job Board
 
-- [ ] **P319 — job-card split modal + badge.** Consumes P318's `loads_summary` aggregate: a split
-  badge on multi-load job cards plus a modal to view/edit per-load ship days.
+- [ ] **P319 follow-up — split badge parity on jobs list/table view and calendar day-detail
+  modal.** P319 only added the split-day-groups badge + Partially-shipped indicator to the Kanban
+  card render; the list/table view (`jobs/index.html` ~line 823) and the calendar day-detail modal
+  (~line 991) don't show it yet.
 - [x] P275/276/277 sequence — linked jobs (trailer sharing). 1/3 (P275, migration), 2/3 (P276,
   worker + legacy entry UI), 3/3 (P277, `/v2/schedule` side rail) have all shipped. **P277 still
   needs `wrangler deploy` from `cutting-pilot/` before the rail is live** — v2 doesn't auto-deploy.

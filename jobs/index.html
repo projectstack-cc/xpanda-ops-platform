@@ -227,6 +227,25 @@
   </div>
 </div>
 
+<!-- ══ Split Ship-Days Modal (P319) ══ -->
+<div class="jobs-modal-overlay" id="split-days-modal" hidden onclick="if(event.target===this)closeSplitDaysModal()" style="z-index:160;">
+  <div class="jobs-modal-panel" role="dialog" aria-modal="true" aria-labelledby="split-days-title" style="max-width:420px;">
+    <div class="jobs-modal-header">
+      <h2 id="split-days-title">Assign Ship Days</h2>
+      <button class="jobs-modal-close" aria-label="Close" onclick="closeSplitDaysModal()">&times;</button>
+    </div>
+    <div class="jobs-modal-body">
+      <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px;">Set the ship day for each load. Leave blank to use the job&rsquo;s ship date. Loads on different days show as a split on the board.</p>
+      <div id="split-days-rows"></div>
+      <div id="split-days-error" style="color:#ef4444;font-size:13px;margin-top:8px;" hidden></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+        <button class="btn ghost small" onclick="closeSplitDaysModal()">Cancel</button>
+        <button class="btn small" id="split-days-save" onclick="saveSplitDays()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ Job Modal ══ -->
 <div class="jobs-modal-overlay" id="jobs-modal" hidden>
   <div class="jobs-modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -262,6 +281,7 @@
           Rush
         </label>
         <button id="modal-view-bol" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;">View BOL</button>
+        <button id="modal-split-days" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;">Assign Ship Days</button>
       </div>
 
       <!-- Packing slip drop zone -->
@@ -1063,6 +1083,25 @@ function buildCard(job) {
     in_transit:  { label: 'In Transit',    color: '#6366f1' },
     delivered:   { label: 'Delivered',     color: '#0d9488' },
   };
+  let splitBadge = '';
+  try {
+    const _loads = job.loads_summary ? JSON.parse(job.loads_summary) : [];
+    const _dated = _loads.filter(l => l && l.d);
+    if (_dated.length && new Set(_dated.map(l => l.d)).size > 1) {
+      const _byDay = {};
+      _dated.forEach(l => { (_byDay[l.d] = _byDay[l.d] || []).push(Number(l.n)); });
+      const _parts = Object.keys(_byDay).sort().map(d => {
+        const nums = _byDay[d].sort((a, b) => a - b).map(n => String(n).padStart(2, '0'));
+        return `${esc(formatShipDate(d))}: ${nums.join(', ')}`;
+      });
+      splitBadge += `<div class="jobs-card-split" style="font-size:11px;font-weight:600;color:var(--text-muted);margin-top:4px;border-top:1px dashed var(--input-border);padding-top:4px;">🗓️ ${_parts.join(' • ')}</div>`;
+    }
+    const _SHIPPED = new Set(['in_transit', 'delivered']);
+    const _shipped = _loads.filter(l => l && _SHIPPED.has(l.s)).length;
+    if (_loads.length > 1 && _shipped > 0 && _shipped < _loads.length) {
+      splitBadge += `<div class="jobs-card-partial" style="font-size:11px;font-weight:700;color:#f59e0b;margin-top:4px;">◐ Partially shipped (${_shipped}/${_loads.length})</div>`;
+    }
+  } catch (e) {}
   const _ls = job.loading_status_indicator;
   const loadingBadge = (_ls && LOADING_BADGE[_ls])
     ? `<div class="jobs-card-loading" style="font-size:11px;font-weight:700;color:${LOADING_BADGE[_ls].color};margin-top:4px;">● ${LOADING_BADGE[_ls].label}</div>`
@@ -1084,6 +1123,7 @@ function buildCard(job) {
     ${procHtml}
     ${trailerBadge}
     ${loadingBadge}
+    ${splitBadge}
     ${shipToVerifiedBadge(job.ship_to_verified) ? `<div style="margin-top:4px;">${shipToVerifiedBadge(job.ship_to_verified)}</div>` : ''}
     <button id="bol-view-btn-${esc(job.id)}" class="jobs-bol-view-btn" hidden onclick="event.stopPropagation();viewBolForJob('${esc(job.id)}')">View BOL</button>
     ${(job.status === 'shipped' && !job.archived_at) ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
@@ -1388,6 +1428,7 @@ function setupModal() {
   document.getElementById('modal-save').addEventListener('click', saveJob);
   document.getElementById('modal-delete').addEventListener('click', confirmDelete);
   document.getElementById('modal-view-bol').addEventListener('click', () => viewBolForJob(editingJobId));
+  document.getElementById('modal-split-days').addEventListener('click', () => openSplitDaysModal(editingJobId));
 
   document.getElementById('f-ship-date').addEventListener('change', (e) => {
     document.getElementById('f-ship-day-display').textContent = getShipDay(e.target.value);
@@ -1435,6 +1476,61 @@ function setupModal() {
   });
 }
 
+async function openSplitDaysModal(jobId) {
+  const job = allJobs.find(j => j.id === jobId);
+  if (!job) return;
+  const loadCount = Math.max(Number(job.load_count) || 1, 1);
+  const rows = document.getElementById('split-days-rows');
+  const err  = document.getElementById('split-days-error');
+  err.hidden = true;
+  rows.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Loading…</div>';
+  const modal = document.getElementById('split-days-modal');
+  modal.dataset.jobId = jobId;
+  modal.hidden = false;
+  const byLoad = {};
+  try {
+    const r = await api.get('/api/loading-assignments?job_id=' + encodeURIComponent(jobId));
+    if (r.ok && Array.isArray(r.data?.assignments)) {
+      r.data.assignments.forEach(a => { if (a.load_number) byLoad[a.load_number] = a; });
+    }
+  } catch (e) {}
+  let html = '';
+  for (let n = 1; n <= loadCount; n++) {
+    const a = byLoad[n] || {};
+    html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span style="min-width:70px;font-weight:600;font-size:13px;">Load ${String(n).padStart(2, '0')}</span>
+      <input type="date" data-load="${n}" value="${esc(a.ship_date || '')}" style="flex:1;padding:8px;border:1px solid var(--input-border);border-radius:8px;font-size:14px;" />
+    </div>`;
+  }
+  rows.innerHTML = html;
+}
+
+function closeSplitDaysModal() {
+  document.getElementById('split-days-modal').hidden = true;
+}
+
+async function saveSplitDays() {
+  const modal = document.getElementById('split-days-modal');
+  const jobId = modal.dataset.jobId;
+  const err   = document.getElementById('split-days-error');
+  const btn   = document.getElementById('split-days-save');
+  const days  = Array.prototype.map.call(
+    modal.querySelectorAll('input[data-load]'),
+    inp => ({ load_number: Number(inp.dataset.load), ship_date: inp.value || null })
+  );
+  btn.disabled = true;
+  try {
+    const r = await api.put('/api/loading-assignments/load-days', { job_id: jobId, days });
+    if (!r.ok) { err.textContent = r.error || 'Save failed.'; err.hidden = false; btn.disabled = false; return; }
+    closeSplitDaysModal();
+    await loadJobs();
+  } catch (e) {
+    err.textContent = 'Save failed.'; err.hidden = false; btn.disabled = false;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function openModal(jobId) {
   editingJobId     = jobId;
   selectedComboId  = null;
@@ -1455,6 +1551,12 @@ function openModal(jobId) {
   const editableStatus = curJob && ['not_started','in_production','done'].includes(curJob.status);
   document.getElementById('status-section').hidden = !editableStatus;
   document.getElementById('modal-view-bol').hidden = true;
+  {
+    const _u = window.__xpandaUser;
+    const _canManage = _u && (_u.isAdministrator || _u.permissions?.['logistics.loading.manage']?.edit);
+    const _job = allJobs.find(j => j.id === jobId);
+    document.getElementById('modal-split-days').hidden = !(_canManage && _job && (Number(_job.load_count) || 1) > 1);
+  }
   if (!isNew) {
     api.get('/api/bols?job_id=' + jobId).then(r => {
       if (r.ok && r.data?.bols?.length > 0) {

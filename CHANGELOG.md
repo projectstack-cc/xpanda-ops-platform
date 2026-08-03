@@ -748,6 +748,13 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P319** — Split-shipment: manager-only Assign-Ship-Days modal on the job card, per-load date
+  inputs writing `/api/loading-assignments/load-days`; Kanban card badge showing day groups
+  (`Fri Aug 8: 01, 02, 03 • Mon Aug 11: 04…`) plus a derived Partially-shipped indicator. Depends on
+  P318's `loads_summary` aggregate and `load-days` endpoint. Author surface is the job card only —
+  list/table view and the calendar day-detail modal are unchanged (parity follow-up in
+  `BACKLOG.md`); load builder untouched. `node --check` clean on both extracted inline `<script>`
+  blocks.
 - **P312** — Calendar: `+N more` now opens a day-detail modal listing all jobs for that day (each row opens the job); dark-mode sweep of the calendar view (nav controls, headers, day cells, day numbers, `+N more`). Pills unchanged.
 - **P307** — New "Cutting Instructions" field on the job-entry modal (above Packing Instructions) — cutting-floor-facing routing/taper/batch notes, mirrored end-to-end alongside the existing `packing_instructions` field: `_worker.js/routes/jobs.js` (GET SELECT, POST payload/INSERT, PUT `textFields`), new `jobs.cutting_instructions` TEXT column (`DB_Migrations/add-cutting-instructions-to-jobs.sql`, run via `wrangler d1 execute --remote` against production D1), and `jobs/index.html`'s field-id array/load/save wiring. Job-entry modal widened ~20% (700px → 840px) via a scoped `#jobs-modal .jobs-modal-panel` override in `jobs/jobs-shared.css` — the shared 700px base rule is untouched, so the parts/combo/trailer-picker and BOL-view modals (also `.jobs-modal-panel`) are unaffected. Read-only display on `/v2/cutting` is P308. `node --check` clean on the worker route and both extracted inline `<script>` blocks.
 - **P286** — `DELETE /api/jobs` now mirrors the PUT unlink path's Linking Rule 1 cleanup ("never leave a group of one"): the pre-flight SELECT now also reads `trailer_group_id`, and after the delete commits, a best-effort check counts the surviving group members and clears `trailer_group_id` on the lone survivor. Deliberately omits the PUT path's `AND id != ?` exclusion — the row is already gone by the time this runs, so a bare `WHERE trailer_group_id = ?` returns exactly the survivors. Wrapped in try/catch since the delete has already succeeded and cannot be rolled back. Found (not fixed) a related gap: the DELETE cascade doesn't touch v2's `cutting_lines`/`cutting_sessions` — logged to `BACKLOG.md`.
