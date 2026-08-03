@@ -446,6 +446,21 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ---
 
+## Database / API
+
+- **P315** — `shipments` now persists `delivery_time` + `scrap_pickup` (previously dropped on every
+  write path, so neither the logistics board nor a shipment-sourced BOL ever saw them, despite the
+  logistics shipment modal already sending both). `_worker.js/routes/jobs.js`: the job-create
+  handler's auto-shipment INSERT now binds the already-parsed `delivery_time`/`scrap_pickup` consts;
+  `POST /api/shipments` parses both from the payload (mirroring the existing `trailer_number`
+  pattern) and includes them in its INSERT; the `PUT /api/shipments/:id` allowlist gained both keys
+  (fall through to the default `String(raw ?? "").trim()` branch, no special handling). `GET`
+  already does `SELECT *`, so both surface to the frontend with no read-path change. New migration
+  `DB_Migrations/add-shipment-delivery-scrap-columns.sql` (two `ALTER TABLE ADD COLUMN`s) —
+  **manual D1 console run required before this deploys**; not committed (folder gitignored per the
+  2026-07-31 policy). The BOL-compose scrap-pickup fix is the separate, independent P316.
+  `node --check` clean.
+
 ## Logistics
 
 - **P316** — BOL compose now carries Scrap Pickup from the job instead of hardcoding

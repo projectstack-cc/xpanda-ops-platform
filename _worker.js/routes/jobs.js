@@ -368,8 +368,8 @@ export async function handleApiJobs(request, env) {
           INSERT INTO shipments
             (id, direction, job_id, customer, carrier, method, bol_number, origin,
              destination, ship_date, status, total_bdft, load_count,
-             weight_lbs, bead_type, notes, trailer_number)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             weight_lbs, bead_type, notes, trailer_number, delivery_time, scrap_pickup)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           shipmentId, 'outbound', id,
           customer,
@@ -386,6 +386,8 @@ export async function handleApiJobs(request, env) {
           '',
           '',
           '',
+          delivery_time,
+          scrap_pickup,
         ).run();
       } catch (e) {
         console.error('Auto-shipment creation failed:', String(e?.message || e));
@@ -1030,6 +1032,8 @@ export async function handleApiShipments(request, env) {
     const bead_type     = String(payload.bead_type     || "").trim();
     const notes         = String(payload.notes         || "").trim();
     const trailer_number = String(payload.trailer_number || "").trim();
+    const delivery_time  = String(payload.delivery_time  || "").trim();
+    const scrap_pickup   = String(payload.scrap_pickup   || "").trim();
     const delivery_incident       = payload.delivery_incident ? 1 : 0;
     const delivery_incident_notes = String(payload.delivery_incident_notes || "").trim();
 
@@ -1038,12 +1042,12 @@ export async function handleApiShipments(request, env) {
         INSERT INTO shipments
           (id, direction, job_id, customer, carrier, method, bol_number, origin, destination,
            ship_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number,
-           delivery_incident, delivery_incident_notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           delivery_time, scrap_pickup, delivery_incident, delivery_incident_notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         id, direction, job_id, customer, carrier, method_val, bol_number, origin, destination,
         ship_date, status, total_bdft, load_count, weight_lbs, bead_type, notes, trailer_number,
-        delivery_incident, delivery_incident_notes
+        delivery_time, scrap_pickup, delivery_incident, delivery_incident_notes
       ).run();
 
       // Auto-create bead receive transaction if inbound with silo
@@ -1091,6 +1095,7 @@ export async function handleApiShipments(request, env) {
       "customer", "carrier", "method", "bol_number", "origin", "destination",
       "ship_date", "status", "total_bdft", "load_count",
       "weight_lbs", "bead_type", "notes", "job_id", "trailer_number",
+      "delivery_time", "scrap_pickup",
       "delivery_incident", "delivery_incident_notes",
     ];
     const sets = [];
