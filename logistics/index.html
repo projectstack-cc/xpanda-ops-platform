@@ -486,6 +486,7 @@ let outboundData    = [];
 let inboundData     = [];
 let allLoadingBays  = [];
 let loadingAssignmentsByJobId = {};
+let loadsByJobId = {};
 let outboundCalView = 'list';
 let inboundCalView  = 'list';
 let outboundCalMonth = new Date();
@@ -603,14 +604,17 @@ async function loadLoadingAssignments() {
     const { ok, data } = await api.get('/api/loading-assignments');
     if (ok && data.assignments) {
       loadingAssignmentsByJobId = {};
+      loadsByJobId = {};
       for (const la of data.assignments) {
         if (!loadingAssignmentsByJobId[la.job_id]) {
           loadingAssignmentsByJobId[la.job_id] = la;
         }
+        (loadsByJobId[la.job_id] = loadsByJobId[la.job_id] || []).push(la);
       }
     }
   } catch {
     loadingAssignmentsByJobId = {};
+    loadsByJobId = {};
   }
 }
 
@@ -658,8 +662,8 @@ async function loadOutbound() {
   } catch {
     outboundData = [];
   }
+  await loadLoadingAssignments();
   renderOutbound();
-  loadLoadingAssignments();
 }
 
 async function loadInbound() {
@@ -744,12 +748,26 @@ function renderOutbound() {
     return;
   }
 
-  // Group by ship_date
+  // Group by ship_date. Orders whose loads carry differing per-load ship dates
+  // are split into one entry per day (P326), each carrying that day's load numbers.
   const groups = {};
-  for (const s of outboundData) {
-    const key = s.ship_date || 'No Date';
+  const pushEntry = (key, s, dayLoads) => {
     if (!groups[key]) groups[key] = [];
-    groups[key].push(s);
+    groups[key].push(dayLoads ? Object.assign({}, s, { _dayLoads: dayLoads }) : s);
+  };
+  for (const s of outboundData) {
+    const loads = (s.job_id && loadsByJobId[s.job_id]) ? loadsByJobId[s.job_id] : [];
+    const distinctDays = new Set(loads.filter(l => l && l.load_ship_date).map(l => l.load_ship_date));
+    if (distinctDays.size > 1) {
+      const byDay = {};
+      loads.forEach(l => {
+        const key = l.load_ship_date || s.ship_date || 'No Date';
+        (byDay[key] = byDay[key] || []).push(l.load_number);
+      });
+      Object.keys(byDay).forEach(key => pushEntry(key, s, byDay[key].slice().sort((a, b) => a - b)));
+    } else {
+      pushEntry(s.ship_date || 'No Date', s, null);
+    }
   }
 
   const sortedDates = Object.keys(groups).sort((a, b) => {
@@ -820,7 +838,9 @@ function buildOutboundRow(s) {
     </td>
     <td>${esc(methodCarrier) || '—'}</td>
     <td>${esc(s.trailer_number) || '—'}</td>
-    <td>${s.load_count || 1}</td>
+    <td>${s._dayLoads
+      ? s._dayLoads.map(n => (linkedJob?.invoice_number ? esc(linkedJob.invoice_number) + '-' : '') + String(n).padStart(2, '0')).join(', ')
+      : (s.load_count || 1)}</td>
     <td>${bdft}</td>
     <td>${esc(s.bol_number) || '—'}</td>
     <td>${statusBadge(s.status)}</td>

@@ -88,6 +88,11 @@
   (`loading.html` ~line 1001) and shipping-info render (~line 1236) don't show it yet.
 - [ ] **P325 follow-up — harden `/api/loading-assignments/load-days`** to return matched-row count
   and warn on 0-row saves.
+- [ ] **P326 follow-up — outbound calendar view: mirror the per-load day split.** Only the outbound
+  table splits by per-load ship date; the calendar view still groups by the order's `ship_date`.
+- [ ] **P326 follow-up — optional: suppress order-total "Load count" badge on split day-rows.** Split
+  day-rows currently repeat the order's Trailer/BOL/Status/Bay columns (acceptable v1); consider
+  whether the Loads-column count itself should be de-emphasized once a row shows a day's suffixes.
 - [ ] **P271 follow-up — `loading_assignments.archived_at`.** Apply the same orthogonal-archive
   treatment (P271) to `loading_assignments.loading_status = 'archived'` (site L24 in
   `status-write-site-inventory.md`) — same two-facts-one-column defect, but lower-stakes since the

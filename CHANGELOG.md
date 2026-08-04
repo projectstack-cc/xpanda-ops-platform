@@ -566,6 +566,17 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P326** — Logistics dashboard outbound view now splits an order across day groups by per-load
+  ship date, one row per day listing the loads' BOL suffixes (`1234-01`). `renderOutbound` groups by
+  the new per-load `load_ship_date` (P325) instead of just the order's `ship_date`: when a job's
+  loads span more than one distinct day, its shipment entry is duplicated into one row per day
+  (`_dayLoads` carries that day's load numbers), each showing its own suffixes in the Loads column;
+  orders that aren't split render exactly as before. New `loadsByJobId` map (full per-load list,
+  populated alongside the existing first-load-only `loadingAssignmentsByJobId` — that map and
+  `buildBayCell` are untouched) fetched via `loadLoadingAssignments()` before `renderOutbound()` now
+  runs (previously fired in parallel, so the split data wasn't available on first paint). Load counts
+  are trusted from job entry — no `load_count` back-write. Outbound table only; calendar, inbound,
+  and the dock board are out of scope. `node --check` clean on the extracted inline `<script>`.
 - **P320** — Split-shipment: per-load ship-day pill on loading cards (`renderAssignmentCard` in
   `logistics/loading.html`, reading P318's `loading_assignments.ship_date` via the existing `la.*`
   read path); per-load BOL `date` prefilled from `ship_date` in `logistics/index.html`'s
