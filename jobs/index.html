@@ -307,6 +307,9 @@
         </div>
       </div>
 
+      <!-- Print Cut List (P329, edit mode only) -->
+      <button type="button" id="btn-print-cutlist" hidden class="btn ghost small" style="margin-bottom:16px;min-height:44px;" onclick="printCutList()">🖨 Print Cut List</button>
+
       <!-- Customer & Order -->
       <div class="jobs-form-section">
         <p class="jobs-form-section-title">Customer &amp; Order</p>
@@ -1552,6 +1555,7 @@ function openModal(jobId) {
   const editableStatus = curJob && ['not_started','in_production','done'].includes(curJob.status);
   document.getElementById('status-section').hidden = !editableStatus;
   document.getElementById('modal-view-bol').hidden = true;
+  document.getElementById('btn-print-cutlist').hidden = isNew;
   {
     const _u = window.__xpandaUser;
     const _canManage = _u && (_u.isAdministrator || _u.permissions?.['logistics.loading.manage']?.edit);
@@ -2050,6 +2054,156 @@ function collectLineItems() {
       sort_order:  i,
     }))
     .filter(li => li.description || li.part_number);
+}
+
+/* ═══════════════════════════════════════════
+   Cut List PDF (P329)
+═══════════════════════════════════════════ */
+
+// Renders a raw "LxWxH" (or "LxW") line-item dims string as "L × W × H in",
+// blanking whichever slot is missing rather than guessing — mirrors the
+// data-edge handling the prompt calls out ("76 × 38 × in").
+function formatCutListDims(dimStr) {
+  if (!dimStr || !String(dimStr).trim()) return '';
+  // Packing-slip-matched rows store dims with inch marks (e.g. 76" x 38" x 12"); parts-picker
+  // rows don't. Strip marks/quotes so both render the same "L × W × H in" shape.
+  const [l = '', w = '', h = ''] = String(dimStr).replace(/[×xX]/g, 'x').split(/\s*x\s*/i)
+    .map(p => p.replace(/["'\s]/g, ''));
+  return `${[l, w, h].join(' × ').trimEnd()} in`;
+}
+
+function formatCutListAddress(job) {
+  return [
+    job.ship_to_company,
+    job.ship_to_attention,
+    job.ship_to_street,
+    job.ship_to_street2,
+    [job.ship_to_city, job.ship_to_state, job.ship_to_zip].filter(Boolean).join(', '),
+  ].filter(v => v && String(v).trim());
+}
+
+async function buildCutListPdf(job) {
+  const { PDFDocument, StandardFonts, rgb } = PDFLib;
+  const doc  = await PDFDocument.create();
+  const page = doc.addPage([612, 792]); // US Letter portrait (points)
+  const font     = await doc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const black = rgb(0.06, 0.09, 0.16);
+  const gray  = rgb(0.45, 0.48, 0.52);
+  const rule  = rgb(0.82, 0.84, 0.87);
+  const margin = 40;
+  const pageW  = 612;
+  const right  = pageW - margin;
+
+  const drawRight = (text, size, f, color, yPos) => {
+    page.drawText(text, { x: right - f.widthOfTextAtSize(text, size), y: yPos, size, font: f, color });
+  };
+  const hr = (yPos) => page.drawLine({ start: { x: margin, y: yPos }, end: { x: right, y: yPos }, thickness: 1, color: rule });
+
+  let y = 792 - margin;
+
+  try {
+    const logoBytes = await fetch('/logo/xpanda.png').then(r => r.arrayBuffer());
+    const logoImg   = await doc.embedPng(logoBytes);
+    const logoH = 34;
+    const logoW = logoImg.width * (logoH / logoImg.height);
+    page.drawImage(logoImg, { x: margin, y: y - logoH, width: logoW, height: logoH });
+  } catch (e) {
+    console.error('Cut list: logo embed failed', e);
+  }
+
+  drawRight('Cut list', 18, fontBold, black, y - 15);
+  drawRight(`Inv #${job.invoice_number || ''}`, 11, font, gray, y - 33);
+  drawRight(`Ship date: ${formatShipDate(job.ship_date)}`, 11, font, gray, y - 47);
+
+  y -= 62;
+  hr(y);
+  y -= 18;
+
+  page.drawText('CUSTOMER', { x: margin, y, size: 9, font: fontBold, color: gray });
+  y -= 15;
+  page.drawText(job.customer || '', { x: margin, y, size: 12, font: fontBold, color: black });
+  y -= 16;
+  for (const line of formatCutListAddress(job)) {
+    page.drawText(line, { x: margin, y, size: 10, font, color: gray });
+    y -= 13;
+  }
+
+  y -= 6;
+  hr(y);
+  y -= 18;
+
+  const colDensityX = 300;
+  const colDimsX    = 380;
+  page.drawText('ITEM',       { x: margin,        y, size: 9, font: fontBold, color: gray });
+  page.drawText('DENSITY',    { x: colDensityX,    y, size: 9, font: fontBold, color: gray });
+  page.drawText('DIMENSIONS', { x: colDimsX,        y, size: 9, font: fontBold, color: gray });
+  drawRight('QTY', 9, fontBold, gray, y);
+  y -= 8;
+  hr(y);
+  y -= 17;
+
+  // Single-page scope (locked): once a row wouldn't leave room for the description line, the
+  // rule, and the total below it, stop and note the overflow rather than drawing off-page —
+  // the total-pieces figure is the one number the floor cross-checks, it must never be the
+  // thing that silently goes missing.
+  const ROW_FLOOR = 90;
+  const items = Array.isArray(job.line_items) ? job.line_items : [];
+  let totalQty = 0;
+  let shown = 0;
+  for (const li of items) {
+    if (y < ROW_FLOOR) break;
+    const partLabel = (li.part_number && String(li.part_number).trim()) || 'Foam';
+    page.drawText(partLabel, { x: margin, y, size: 11, font: fontBold, color: black });
+    page.drawText(li.density ? String(li.density) : '', { x: colDensityX, y, size: 10, font, color: black });
+    page.drawText(formatCutListDims(li.dimensions), { x: colDimsX, y, size: 10, font, color: black });
+    const qty = Number(li.quantity) || 0;
+    totalQty += qty;
+    drawRight(String(qty), 10, font, black, y);
+    y -= 13;
+    if (li.description) {
+      page.drawText(String(li.description), { x: margin, y, size: 9, font, color: gray });
+    }
+    y -= 17;
+    shown += 1;
+  }
+  // Quantities on any rows that didn't fit still count toward the printed total, so it stays
+  // an honest sum even though not every line was drawn.
+  for (const li of items.slice(shown)) totalQty += Number(li.quantity) || 0;
+  if (shown < items.length) {
+    page.drawText(`+ ${items.length - shown} more item${items.length - shown === 1 ? '' : 's'} — see job record`, { x: margin, y, size: 9, font, color: gray });
+    y -= 17;
+  }
+
+  y -= 3;
+  hr(y);
+  y -= 16;
+  page.drawText('Total pieces', { x: colDimsX, y, size: 10, font: fontBold, color: black });
+  drawRight(String(totalQty), 11, fontBold, black, y);
+
+  return await doc.save();
+}
+
+async function printCutList() {
+  const job = allJobs.find(j => j.id === editingJobId);
+  if (!job) return;
+  const btn = document.getElementById('btn-print-cutlist');
+  btn.disabled = true;
+  try {
+    const pdfBytes = await buildCutListPdf(job);
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cut-list-${job.invoice_number || job.id}.pdf`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (e) {
+    console.error('Cut list PDF failed:', e);
+    showToast('Could not generate cut list.');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* ═══════════════════════════════════════════

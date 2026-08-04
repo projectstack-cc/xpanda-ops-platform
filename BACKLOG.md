@@ -121,9 +121,9 @@
 
 ## Job Board
 
-- [ ] **P329 — Cut-list PDF generator + "Print Cut List" button.** Depends on P328's new
-  `job_line_items.density` field (must land + migration confirmed run before starting). Client-side
-  `pdf-lib` Letter-portrait cut list from the job detail view.
+- [ ] **P329 follow-up — cut-list PDF pagination.** Shipped single-page only (locked scope); a job
+  with enough line items to overflow one Letter page currently just runs past the bottom margin
+  instead of paginating. Add multi-page support if a real job hits this.
 - [ ] **P319 follow-up — split badge parity on jobs list/table view and calendar day-detail
   modal.** P319 only added the split-day-groups badge + Partially-shipped indicator to the Kanban
   card render; the list/table view (`jobs/index.html` ~line 823) and the calendar day-detail modal

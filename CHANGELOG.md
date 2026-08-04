@@ -857,6 +857,30 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P329** — "Print Cut List" button on the job edit modal (directly under the packing-slip upload
+  block, edit-mode only — mirrors the existing `modal-view-bol`/`modal-split-days` visibility
+  pattern), generating a one-page Letter-portrait PDF client-side via `pdf-lib` (reused the existing
+  CDN load already in `jobs/index.html`, no new script tag). Pulls the job's already-loaded data from
+  `allJobs`/`editingJobId` — no new fetch. Layout: `/logo/xpanda.png` top-left (the platform's shared
+  header logo, embedded via `embedPng`); right-aligned "Cut list" / `Inv #<invoice_number>` /
+  `Ship date: <ship date>` (reuses the existing `formatShipDate` helper, blank-safe); customer block
+  (`job.customer`, then a multi-line ship-to address assembled from the discrete
+  `ship_to_company/attention/street/street2/city/state/zip` columns — there's no single
+  `ship_to_address` field on this schema); line-item table (Item — part number bold, "Foam" fallback
+  when absent, description below; Density from P328; Dimensions reformatted from the line item's raw
+  free-text `"LxWxH"` string via a new `formatCutListDims` — strips inch marks (packing-slip-matched
+  rows store dims as `76" x 38" x 12"`, parts-picker rows don't, both now render identically) and
+  blanks a missing slot rather than guessing, e.g. `76 × 38 × in`, deliberately not reusing
+  `parseDimensionValues`'s existing height-defaults-to-width fallback since that would misrepresent a
+  genuinely missing height; Qty right-aligned); Total pieces sum under a rule. Single page only, no
+  pagination (locked scope) — but the row loop now clamps at a fixed Y floor and prints "+N more
+  items" instead of drawing past the bottom margin, so an oversized job can never push the one number
+  the floor cross-checks (Total pieces) off the visible page; overflow logged to `BACKLOG.md` as a
+  pagination follow-up. Delivery is a real file download (`<a download>` off an object URL), not
+  `window.open` — opening a tab after an `await` loses the user-gesture context and gets silently
+  popup-blocked in Chrome/Safari. No DB/API change — reads only what `/api/jobs` (list) already
+  returns, per P328; **reads last-saved data, not the in-progress form** — a job whose density was
+  just typed but not yet saved won't show it on the printed sheet.
 - **P328** — New free-text `density` field on job line items. `DB_Migrations/add-line-item-density.sql`
   (manual, gitignored) adds nullable `job_line_items.density TEXT`; existing rows read NULL and render
   blank. `_worker.js/routes/jobs.js`'s two `job_line_items` write sites (create INSERT, update
