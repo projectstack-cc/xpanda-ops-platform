@@ -10,6 +10,17 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **P323 — Block nesting: XLSX PO parser + editable grid + per-density block-size inputs.**
+  Input half of `/v2/blocks` (P322 scaffold): upload PO spreadsheet → parse SKUs (taper format
+  `A x (B x C) x D - E#`) → editable correction grid → per-density block dimensions → typed
+  hand-off stub for P324's nester.
+- [ ] **P324 — Block nesting: offcut-recursive nester + cut-sheet renderer.** Completes
+  `/v2/blocks`: nesting engine (pair tapers → chunk into faces → recursive offcut re-pooling →
+  pack fixed-length molds) + cut-sheet table/SVG side-elevation renderer, replacing P323's
+  `onCompute` stub.
+- [ ] **Block-nesting width step-down end-cap view** (deferred unless testing requires) — P324's
+  `ChunkElevation.tsx` surfaces width step-downs only in the table's `Part W×L` column; a true
+  end-cap (front-face) diagram is a follow-on, not built in P322-324.
 - [ ] **P282 follow-up — elapsed-time readout on `ClockedInBar`.** Deferred: `formatDuration` lives
   in `src/lib/time.ts` (shared, in scope), but the UTC-timestamp parser it depends on
   (`parseUtc`) is a module-private function in that same file, and `src/lib/time.ts` was out of
