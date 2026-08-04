@@ -1,14 +1,13 @@
 // Guarded dev self-check for the PO parser (P323). Not part of the production build path —
 // invoked once from BlocksApp in a NODE_ENV !== "production" effect and logged to console.
 //
-// IMPORTANT LIMITATION: the real "PO#1" spreadsheet this format was hand-validated against
-// (expected per-density baseline: 1# = 18 SKUs / 302 pcs, 1.5# = 13 SKUs / 74 pcs,
-// 2# = 16 SKUs / 59 pcs) is not present in this repo. This self-check verifies every messy
-// variant case called out in the P323 prompt text, plus the combine/normalize behavior those
-// counts depend on, against hand-built fixtures — it does NOT reproduce the exact PO#1 totals,
-// and does not claim to. Feed the real PO#1 file through the parser once available to confirm
-// the baseline numbers.
+// Verifies every messy-variant case called out in the P323 prompt text against hand-built
+// fixtures, PLUS the real PO#1 baseline (all 57 real line items from
+// xPanda_PO1_Nesting_Map.xlsx, via po1Fixture.ts — provided by Steve, 2026-08-04): parsing every
+// real raw description and reconciling to the manager-hand-checked per-density SKU/piece counts
+// (1# = 18/302, 1.5# = 13/74, 2# = 16/59).
 import { parsePoRows, parseSkuDescription } from "./poParser";
+import { PO1_ROWS, PO1_EXPECTED } from "./po1Fixture";
 
 interface CheckResult {
   name: string;
@@ -114,13 +113,23 @@ export function runPoParserSelfCheck(): { pass: boolean; results: CheckResult[] 
     JSON.stringify(withUnparsed)
   );
 
-  // --- PO#1 exact baseline (1# = 18/302, 1.5# = 13/74, 2# = 16/59) — NOT checked here.
-  // See the file-level comment: the real PO#1 spreadsheet isn't available in this repo.
+  // --- Real PO#1 baseline: parse all 57 real line items, reconcile per density ---
+  const po1Parsed = parsePoRows(PO1_ROWS);
   check(
-    "PO#1 baseline reconciliation (18/302, 13/74, 16/59)",
-    true,
-    "SKIPPED — real PO#1 file not available; not asserted against fabricated data"
+    "PO#1: zero unparsed rows across all 57 real line items",
+    po1Parsed.every((l) => l.parsed),
+    `unparsed: ${po1Parsed.filter((l) => !l.parsed).map((l) => l.raw).join(" | ")}`
   );
+  for (const densityKey of Object.keys(PO1_EXPECTED)) {
+    const exp = PO1_EXPECTED[densityKey];
+    const lines = po1Parsed.filter((l) => l.parsed && String(l.density) === densityKey);
+    const parts = lines.reduce((s, l) => s + l.qty, 0);
+    check(
+      `PO#1 @ ${densityKey}#: ${exp.skus} SKUs / ${exp.parts} parts`,
+      lines.length === exp.skus && parts === exp.parts,
+      `got ${lines.length} SKUs / ${parts} parts`
+    );
+  }
 
   return { pass: results.every((r) => r.pass), results };
 }

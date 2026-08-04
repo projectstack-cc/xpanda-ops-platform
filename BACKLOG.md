@@ -10,26 +10,18 @@
 
 ## Manufacturing / Cutting (React pilot)
 
-- [ ] **P323 follow-up — verify parser against the real PO#1 spreadsheet.** The dev self-check
-  (`src/lib/poParser.selfcheck.ts`) covers every messy-variant case by hand-built fixture but could
-  not assert the real baseline (1# = 18 SKUs/302 pcs, 1.5# = 13/74, 2# = 16/59) — the source file
-  isn't in this repo. Feed it through once available and fold the result into the self-check.
-- [ ] **P324 follow-up — verify the nester against the real PO#1 spreadsheet.** The dev self-check
-  (`src/lib/blockNester.selfcheck.ts`) verifies reconciliation, scrap-wedge counting,
-  `blocksNeeded >= ceil(volumeFloor)`, and `offcut <= greedy` (including a constructed case
-  proving the offcut lever can strictly win) against synthetic fixtures — it does not and cannot
-  assert the real baseline (1# = 302 parts/10 molds/floor 6.31, 1.5# = 74/3/2.03, 2# = 59/3/2.09,
-  0 scrap wedges) without the source file. Feed PO#1 through once available; if the real baseline
-  isn't hit, the gap is almost certainly the two scoped-out offcut sources below, not a
-  reconciliation bug (that invariant is asserted and holds).
-- [ ] **P324 follow-up — width-strip and length-end offcut are not re-pooled.** `blockNester.ts`
-  only re-harvests each chunk's own height-leftover void (global best-fit-decreasing with
-  width-trim admission). The block-level width strip (`block.width - chunk.width`, running that
-  chunk's whole length) and the per-band length-end (`chunkLength - partLength` for a band
-  shorter than its chunk) are computed/displayed (`NestChunkLine.partWidth/partLength`,
-  `ChunkElevation`'s "→ pool" shading) but never fed back into the packer as additional capacity.
-  Closing this gap would need full 2D/3D guillotine bin-packing across the block's width×length
-  plane — likely the next lever to pull if the real PO#1 baseline mold counts aren't hit.
+- [ ] **P324 follow-up — width-strip and length-end offcut are not re-pooled.** `blockNester.ts`'s
+  Greedy tier only re-harvests each chunk's own height-leftover void (global width-sorted pass
+  with width-trim admission) — this matches the real PO#1 baseline exactly as-is (10/3/3 molds,
+  confirmed 2026-08-04), so this is a genuine yield improvement opportunity, not a correctness
+  gap. The block-level width strip (`block.width - chunk.width`, running that chunk's whole
+  length) and the per-band length-end (`chunkLength - partLength` for a band shorter than its
+  chunk) are computed/displayed (`NestChunkLine.partWidth/partLength`, `ChunkElevation`'s
+  "→ pool" shading) but never fed back into the packer as additional capacity. Closing this gap
+  would need full 2D/3D guillotine bin-packing across the block's width×length plane — the
+  reference spreadsheet's own "Method & Assumptions" sheet calls this same gap out explicitly
+  ("the true offcut-recursive optimum sits between [floor and greedy]"), so it's unbuilt by the
+  domain expert too, not just this engine.
 - [ ] **Block-nesting width step-down end-cap view** (deferred unless testing requires) — P324's
   `ChunkElevation.tsx` surfaces width step-downs only in the table's `Part W×L` column; a true
   end-cap (front-face) diagram is a follow-on, not built in P322-324.

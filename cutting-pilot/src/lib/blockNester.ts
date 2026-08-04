@@ -1,35 +1,44 @@
-// Offcut-recursive block nester for the Block Nesting module (/v2/blocks). Pure engine — no
-// DOM, no Cloudflare context, client+server safe. Separate from and does NOT touch the legacy
-// src/lib/blockEngine.ts (still used by the cutting dashboard).
+// Block nester for the Block Nesting module (/v2/blocks). Pure engine — no DOM, no Cloudflare
+// context, client+server safe. Separate from and does NOT touch the legacy src/lib/blockEngine.ts
+// (still used by the cutting dashboard).
+//
+// Validated exactly (blocksNeeded, volumeFloor, scrapWedges — all three densities) against the
+// real hand-checked PO#1 reference (xPanda_PO1_Nesting_Map.xlsx): 1# = 10 molds/6.31 floor/0
+// scrap, 1.5# = 3/2.03/0, 2# = 3/2.09/3. That file's own "Method & Assumptions" sheet documents
+// three tiers — Strict (no reuse at all), Greedy (height-leftover reuse via width-only trimming,
+// what's implemented here), and a true offcut-recursive optimum that additionally re-pools
+// width-strip and length-end voids, which the reference spreadsheet itself states is NOT yet
+// computed ("the true offcut-recursive optimum sits between [floor and greedy]"). This engine
+// matches their Greedy tier exactly; the further optimum is out of scope here too (see the
+// scoped-limitation note below), same boundary the domain expert's own hand analysis drew.
 //
 // Algorithm, per density (density never mixes — a mold is one density):
 //   1. Pair tapers: each SKU's qty pairs into ceil(qty/2) rectangles of height tlo+thi+0.25"
-//      (kerf for the 3 face cuts: flat-taper-flat). Odd qty leaves one scrap complement wedge
-//      (tracked; a wedge isn't a rectangular offcut, so it is not geometrically re-poolable).
-//   2. A chunk has one WIDTH and stacks rectangles up block.height (the taper wire cuts each
-//      height band in one pass across the chunk's full width). Rectangles sharing a width can
-//      share a chunk even when their LENGTHS differ — the chunk's own length is the max native
-//      length among its resident bands; a shorter band leaves a "length end" gap
-//      (chunkLength - partLength), reported per-line via NestChunkLine.partLength but NOT
-//      further re-packed (see the scoped-limitation note below).
-//   3. Offcut recursion (buildChunksOffcut): a global best-fit-decreasing pass that additionally
-//      allows a rectangle to be admitted into an EXISTING chunk of a different (smaller-or-equal)
-//      width, by trimming its width down to exactly that chunk's width, when there's remaining
-//      height for it — "any part may be trimmed down ... to fill available offcut" applied to
-//      each chunk's own height-leftover void. This is the buildChunksFfd (per-width, height-FFD)
-//      baseline's designated yield lever.
-//      SCOPED LIMITATION: two of the three offcut sources the prompt lists are NOT re-harvested
-//      here: the block-level *width strip* (block.width - chunk.width, running that chunk's
-//      whole length) and the per-band *length end* described above. Re-pooling those would
-//      require full 2D/3D guillotine bin-packing across the block's whole width×length plane;
-//      this engine only re-harvests the per-chunk HEIGHT-leftover void. Backlogged in
-//      BACKLOG.md — see the P324 CHANGELOG entry for why this line was drawn here.
+//      (kerf for the 3 face cuts: flat-taper-flat). Odd qty leaves one scrap complement wedge —
+//      a genuine extra unit of that same size, set aside for a future order or eventually
+//      scrapped (tracked as a count; not itself a rectangular offcut, so not geometrically
+//      re-poolable by this engine).
+//   2. Strict tier (buildChunksStrict): group rectangles by exact native width, height-FFD-bin
+//      each width group into chunks. No cross-SKU reuse at all — the naive floor.
+//   3. Greedy tier (buildChunksGreedy — the required baseline, "MUST hit the PO#1 numbers"): a
+//      chunk's width is set by whichever rectangle opens it. Process rectangles WIDEST-first
+//      (ties by native footprint area descending); a narrower rectangle may be admitted into an
+//      existing chunk's remaining height, its width trimmed down to exactly that chunk's
+//      established width (trimmedFrom flagged only when strictly narrower — an exact width match
+//      needs no trim). LENGTH is never forced to match: a chunk's length is the max native length
+//      among its residents, and a shorter resident just leaves an unrecovered "length end" gap
+//      (reported per-line via NestChunkLine.partLength, not re-packed).
+//      SCOPED LIMITATION (matches the reference spreadsheet's own stated scope): the block-level
+//      *width strip* (block.width - chunk.width, running that chunk's whole length) and the
+//      per-band *length end* above are computed/displayed but never fed back into the packer as
+//      additional capacity — that would need full 2D/3D guillotine bin-packing across the block's
+//      whole width×length plane. Backlogged in BACKLOG.md.
 //   4. Pack chunks into fixed-length blocks (molds): block.length is fixed capacity — every mold
-//      is full length whether used or not. Each internal cross-cut between chunks sharing a
-//      block costs 0.25/3" (0.0833"), charged as (n-1) per block. FFD by chunk length.
-//   Offcut vs. greedy: both are computed in full and the smaller-or-equal block count wins by
-//   explicit comparison, so "never regress below the greedy baseline" is a hard guarantee, not a
-//   heuristic hope.
+//      is full length whether used or not. Each internal cross-cut between chunks sharing a block
+//      costs 0.25/3" (0.0833"), charged as (n-1) per block. FFD by chunk length.
+//   Strict vs. greedy: both are computed in full and the smaller-or-equal block count wins by
+//   explicit comparison, so "never regress below the strict floor" is a hard guarantee (greedy
+//   has strictly more admission freedom than strict, so it always wins in practice).
 import type {
   BlockSize,
   BlockSizes,
@@ -103,9 +112,9 @@ function computeVolumeFloor(lines: SkuLine[], block: BlockSize): number {
   return totalVolume / blockVolume;
 }
 
-// Greedy baseline: group by WIDTH only (not length — see file header), height-FFD per width
-// group. Never trims: every rect keeps its own native width/length.
-function buildChunksFfd(rects: Rect[], block: BlockSize): Chunk[] {
+// Strict tier: group by EXACT native width, height-FFD per width group. Never trims — every rect
+// keeps its own native width/length. This is the naive floor with no cross-SKU reuse at all.
+function buildChunksStrict(rects: Rect[], block: BlockSize): Chunk[] {
   const groups = new Map<number, Rect[]>();
   for (const r of rects) {
     const g = groups.get(r.nativeWidth);
@@ -131,12 +140,22 @@ function buildChunksFfd(rects: Rect[], block: BlockSize): Chunk[] {
   return chunks;
 }
 
-// Offcut-recursive: global best-fit-decreasing over ALL rectangles regardless of native width.
-// A rectangle may be admitted into an existing chunk of a smaller-or-equal width (trimmed down
-// to exactly that chunk's width) if there's remaining height for it. Length is never trimmed —
-// a naturally shorter band just leaves a length-end gap (reported, not re-packed).
-function buildChunksOffcut(rects: Rect[], block: BlockSize): Chunk[] {
-  const sorted = [...rects].sort((a, b) => b.height - a.height);
+// Greedy tier (the prompt's required baseline): a chunk's width is established by whichever
+// rectangle opens it — process rectangles WIDEST-first (ties broken by native footprint area
+// descending) so a chunk's width ceiling is always set before anything narrower is considered
+// for it. A narrower rectangle may then be admitted into an existing chunk's remaining height,
+// its width trimmed down to exactly that chunk's established width (flagged via trimmedFrom
+// only when strictly narrower — width equal to the chunk needs no trim). Length is never
+// forced to match: a chunk's length is the max native length among its residents, and a
+// shorter resident simply leaves an unrecovered "length end" gap (reported per-line via
+// NestChunkLine.partLength, not re-packed — see the scoped-limitation note in the file header).
+// A rectangle WIDER than every open chunk (or that fits nowhere by height) anchors a new chunk
+// at its own native width.
+function buildChunksGreedy(rects: Rect[], block: BlockSize): Chunk[] {
+  const sorted = [...rects].sort((a, b) => {
+    if (b.nativeWidth !== a.nativeWidth) return b.nativeWidth - a.nativeWidth;
+    return b.nativeWidth * b.nativeLength - a.nativeWidth * a.nativeLength;
+  });
   const chunks: Chunk[] = [];
 
   for (const r of sorted) {
@@ -145,7 +164,7 @@ function buildChunksOffcut(rects: Rect[], block: BlockSize): Chunk[] {
     for (let i = 0; i < chunks.length; i++) {
       const c = chunks[i];
       const remaining = block.height - c.usedHeight;
-      const fits = r.nativeWidth >= c.width - EPS && r.height <= remaining + EPS;
+      const fits = r.nativeWidth <= c.width + EPS && r.height <= remaining + EPS;
       if (fits && remaining < bestRemaining) {
         bestRemaining = remaining;
         bestIdx = i;
@@ -158,7 +177,7 @@ function buildChunksOffcut(rects: Rect[], block: BlockSize): Chunk[] {
     }
 
     const c = chunks[bestIdx];
-    const trimmed = r.nativeWidth > c.width + EPS;
+    const trimmed = r.nativeWidth < c.width - EPS;
     c.rects.push(
       trimmed ? { ...r, trimmedFrom: { width: r.nativeWidth, length: r.nativeLength } } : { ...r }
     );
@@ -223,15 +242,17 @@ export function nestDensity(lines: SkuLine[], block: BlockSize): DensityNestResu
   const { rects, scrapWedges } = buildRectangles(lines);
   const volumeFloor = computeVolumeFloor(lines, block);
 
-  const greedyChunks = buildChunksFfd(rects, block);
+  const strictChunks = buildChunksStrict(rects, block);
+  const strictBlocks = packChunksIntoBlocks(strictChunks, block);
+
+  const greedyChunks = buildChunksGreedy(rects, block);
   const greedyBlocks = packChunksIntoBlocks(greedyChunks, block);
 
-  const offcutChunks = buildChunksOffcut(rects, block);
-  const offcutBlocks = packChunksIntoBlocks(offcutChunks, block);
-
-  // Never regress below the greedy baseline: pick whichever block count is smaller-or-equal.
-  const useOffcut = offcutBlocks.length <= greedyBlocks.length;
-  const finalBlocks = useOffcut ? offcutBlocks : greedyBlocks;
+  // Never regress below the strict baseline: pick whichever block count is smaller-or-equal.
+  // (Greedy has strictly more admission freedom than strict, so it wins by construction in
+  // every case we've observed — this comparison makes that a hard guarantee, not an assumption.)
+  const useGreedy = greedyBlocks.length <= strictBlocks.length;
+  const finalBlocks = useGreedy ? greedyBlocks : strictBlocks;
 
   const blocks: NestBlock[] = finalBlocks.map((chunkList) => ({
     chunks: chunkList.map(chunkToNestChunk),
@@ -260,11 +281,11 @@ export function nest(skuLines: SkuLine[], sizes: BlockSizes): NestResult {
   return result;
 }
 
-// Exposed for the dev self-check only (verifying "offcut <= greedy" is structural, not assumed).
+// Exposed for the dev self-check only (verifying "greedy <= strict" is structural, not assumed).
 export const __internal = {
   buildRectangles,
-  buildChunksFfd,
-  buildChunksOffcut,
+  buildChunksStrict,
+  buildChunksGreedy,
   packChunksIntoBlocks,
   computeVolumeFloor,
   chunkLength,

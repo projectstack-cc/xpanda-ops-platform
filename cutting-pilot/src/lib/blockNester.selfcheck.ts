@@ -1,18 +1,15 @@
 // Guarded dev self-check for the block nester (P324). Not part of the production build path —
 // invoked once from BlocksApp in a NODE_ENV !== "production" effect and logged to console.
 //
-// IMPORTANT LIMITATION: the real "PO#1" ground-truth baseline (1# = 302 parts/10 molds/floor
-// 6.31, 1.5# = 74/3/2.03, 2# = 59/3/2.09, 0 scrap wedges) cannot be asserted here — the source
-// spreadsheet isn't in this repo, and fabricating SKU data to hit those exact numbers would prove
-// nothing about the real engine (mold count and volume floor are functions of the real
-// dimensional distribution, not of aggregate piece counts). This self-check instead verifies the
-// STRUCTURAL invariants the prompt lists as checkable independent of that file:
-//   - every density's summed finished parts reconciles to the input qty totals
-//   - offcut-recursive block count is never worse than the greedy baseline
-//   - block count is never below the physical volume floor
-//   - odd qty produces exactly one scrap wedge per SKU, even qty produces none
+// Verifies structural invariants against synthetic fixtures (reconciliation, scrap-wedge
+// counting, strict >= greedy, blocksNeeded >= ceil(volumeFloor)), PLUS the real PO#1 baseline
+// (via po1Fixture.ts — provided by Steve, 2026-08-04): parsing all 57 real line items and nesting
+// them reproduces the manager-hand-checked exact numbers for every density (blocksNeeded,
+// volumeFloor, scrapWedges — see xPanda_PO1_Nesting_Map.xlsx's Summary sheet).
 import type { SkuLine, BlockSize } from "./blockTypes";
 import { nest, nestDensity, __internal } from "./blockNester";
+import { parsePoRows } from "./poParser";
+import { PO1_ROWS, PO1_EXPECTED } from "./po1Fixture";
 
 interface CheckResult {
   name: string;
@@ -78,7 +75,7 @@ export function runBlockNesterSelfCheck(): { pass: boolean; results: CheckResult
   const { scrapWedges: scrapWedges2 } = __internal.buildRectangles(bothOdd);
   check("scrap wedges: two odd-qty SKUs -> 2 wedges", scrapWedges2 === 2, `got ${scrapWedges2}`);
 
-  // --- offcut <= greedy, block count >= ceil(volumeFloor), across several density mixes ---
+  // --- greedy <= strict, block count >= ceil(volumeFloor), across several density mixes ---
   const mixes: SkuLine[][] = [
     lines.filter((l) => l.density === 1.5),
     lines.filter((l) => l.density === 2),
@@ -90,16 +87,16 @@ export function runBlockNesterSelfCheck(): { pass: boolean; results: CheckResult
   ];
 
   for (const [i, mix] of mixes.map((m, idx) => [idx, m] as const)) {
-    const greedyChunks = __internal.buildChunksFfd(__internal.buildRectangles(mix).rects, block);
+    const strictChunks = __internal.buildChunksStrict(__internal.buildRectangles(mix).rects, block);
+    const strictBlocks = __internal.packChunksIntoBlocks(strictChunks, block);
+    const greedyChunks = __internal.buildChunksGreedy(__internal.buildRectangles(mix).rects, block);
     const greedyBlocks = __internal.packChunksIntoBlocks(greedyChunks, block);
-    const offcutChunks = __internal.buildChunksOffcut(__internal.buildRectangles(mix).rects, block);
-    const offcutBlocks = __internal.packChunksIntoBlocks(offcutChunks, block);
     const floor = __internal.computeVolumeFloor(mix, block);
     const dResult = nestDensity(mix, block);
 
     check(
-      `mix ${i}: offcut blocks (${offcutBlocks.length}) <= greedy blocks (${greedyBlocks.length})`,
-      offcutBlocks.length <= greedyBlocks.length
+      `mix ${i}: greedy blocks (${greedyBlocks.length}) <= strict blocks (${strictBlocks.length})`,
+      greedyBlocks.length <= strictBlocks.length
     );
     check(
       `mix ${i}: final blocksNeeded (${dResult.blocksNeeded}) >= ceil(volumeFloor) (${Math.ceil(floor)})`,
@@ -107,40 +104,53 @@ export function runBlockNesterSelfCheck(): { pass: boolean; results: CheckResult
       `floor=${floor}`
     );
     check(
-      `mix ${i}: final blocksNeeded never worse than greedy`,
-      dResult.blocksNeeded <= greedyBlocks.length
+      `mix ${i}: final blocksNeeded never worse than strict`,
+      dResult.blocksNeeded <= strictBlocks.length
     );
   }
 
-  // --- Prove the offcut lever actually engages (strictly beats greedy at least once), not just
+  // --- Prove the greedy lever actually engages (strictly beats strict at least once), not just
   // ties. A narrow-length block (100") forces one chunk per block; two footprints that each
-  // leave a large per-chunk height leftover in greedy consolidate into fewer chunks (and
-  // therefore fewer blocks) once cross-footprint trimming is allowed. ---
+  // leave a large per-chunk height leftover under strict consolidate into fewer chunks (and
+  // therefore fewer blocks) once cross-footprint width-trim admission is allowed. ---
   const narrowBlock: BlockSize = { width: 50, height: 50, length: 100 };
   const leverMix: SkuLine[] = [
     line({ item: "A", width: 10, length: 90, tlo: 2, thi: 4, density: 1, qty: 18 }),
     line({ item: "B", width: 12, length: 90, tlo: 1, thi: 1.5, density: 1, qty: 18 }),
   ];
-  const leverGreedy = __internal.packChunksIntoBlocks(
-    __internal.buildChunksFfd(__internal.buildRectangles(leverMix).rects, narrowBlock),
+  const leverStrict = __internal.packChunksIntoBlocks(
+    __internal.buildChunksStrict(__internal.buildRectangles(leverMix).rects, narrowBlock),
     narrowBlock
   );
-  const leverOffcut = __internal.packChunksIntoBlocks(
-    __internal.buildChunksOffcut(__internal.buildRectangles(leverMix).rects, narrowBlock),
+  const leverGreedy = __internal.packChunksIntoBlocks(
+    __internal.buildChunksGreedy(__internal.buildRectangles(leverMix).rects, narrowBlock),
     narrowBlock
   );
   check(
-    `offcut lever: strictly beats greedy on a constructed case (offcut=${leverOffcut.length} < greedy=${leverGreedy.length})`,
-    leverOffcut.length < leverGreedy.length,
-    `greedy=${leverGreedy.length} offcut=${leverOffcut.length}`
+    `greedy lever: strictly beats strict on a constructed case (greedy=${leverGreedy.length} < strict=${leverStrict.length})`,
+    leverGreedy.length < leverStrict.length,
+    `strict=${leverStrict.length} greedy=${leverGreedy.length}`
   );
 
-  // --- PO#1 ground-truth baseline — NOT checked here. See file-level comment. ---
-  check(
-    "PO#1 baseline (302/10/6.31, 74/3/2.03, 59/3/2.09, 0 scrap)",
-    true,
-    "SKIPPED — real PO#1 file not available; not asserted against fabricated data"
-  );
+  // --- Real PO#1 baseline: parse + nest all 57 real line items, compare to the exact manager-
+  // hand-checked numbers (blocksNeeded, volumeFloor, scrapWedges) for every density. ---
+  const po1Lines = parsePoRows(PO1_ROWS);
+  const po1Sizes = { "1": block, "1.5": block, "2": block };
+  const po1Result = nest(po1Lines, po1Sizes);
+  for (const densityKey of Object.keys(PO1_EXPECTED)) {
+    const exp = PO1_EXPECTED[densityKey];
+    const got = po1Result[densityKey];
+    check(
+      `PO#1 @ ${densityKey}#: ${exp.molds} molds, floor ${exp.floor}, ${exp.scrap} scrap wedges`,
+      !!got &&
+        got.blocksNeeded === exp.molds &&
+        Math.abs(got.volumeFloor - exp.floor) < 0.005 &&
+        got.scrapWedges === exp.scrap,
+      got
+        ? `got molds=${got.blocksNeeded} floor=${got.volumeFloor.toFixed(2)} scrap=${got.scrapWedges}`
+        : "no result for this density"
+    );
+  }
 
   return { pass: results.every((r) => r.pass), results };
 }
