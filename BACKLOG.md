@@ -10,10 +10,10 @@
 
 ## Manufacturing / Cutting (React pilot)
 
-- [ ] **P323 — Block nesting: XLSX PO parser + editable grid + per-density block-size inputs.**
-  Input half of `/v2/blocks` (P322 scaffold): upload PO spreadsheet → parse SKUs (taper format
-  `A x (B x C) x D - E#`) → editable correction grid → per-density block dimensions → typed
-  hand-off stub for P324's nester.
+- [ ] **P323 follow-up — verify parser against the real PO#1 spreadsheet.** The dev self-check
+  (`src/lib/poParser.selfcheck.ts`) covers every messy-variant case by hand-built fixture but could
+  not assert the real baseline (1# = 18 SKUs/302 pcs, 1.5# = 13/74, 2# = 16/59) — the source file
+  isn't in this repo. Feed it through once available and fold the result into the self-check.
 - [ ] **P324 — Block nesting: offcut-recursive nester + cut-sheet renderer.** Completes
   `/v2/blocks`: nesting engine (pair tapers → chunk into faces → recursive offcut re-pooling →
   pack fixed-length molds) + cut-sheet table/SVG side-elevation renderer, replacing P323's

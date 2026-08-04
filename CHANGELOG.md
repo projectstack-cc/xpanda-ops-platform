@@ -10,6 +10,27 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P323** — Block nesting input half (`/v2/blocks`, P322 scaffold): `src/lib/blockTypes.ts` (shared
+  `SkuLine`/`BlockSize`/`BlockSizes`/`DEFAULT_BLOCK` contract, shared with P324's nester) and
+  `src/lib/poParser.ts` (`parsePoRows`) decode the `A x (B x C) x D - E#` taper SKU format —
+  case-insensitive `x`, missing-`x`-before-length, missing `#`/dash, and trailing
+  notes/newlines/`(MISC)` suffixes after the density number all tolerated per the prompt's messy-
+  variant list; rows that don't decode are flagged unparsed and kept (never dropped); rows that
+  decode identically after taper-order normalization (`tlo = min`, `thi = max`, so `4>2` and `2>4`
+  combine) have their qty summed. `BlocksApp.tsx` replaces the P322 placeholder: client-side SheetJS
+  upload (auto-detects Item/Description/Qty columns by header alias, falls back to a sheet+column
+  picker modal — composes the existing `<Modal>` primitive, no copy-paste), a fully editable grid
+  (add/delete rows, unparsed rows highlighted via `--warn-bg`), one width×height×length block-size
+  input set per density discovered in the parsed rows (defaults to `DEFAULT_BLOCK`, nothing
+  hardcoded in logic), and a **Reload cut sheet** button that validates + assembles
+  `{ skuLines, blockSizes }` into a stub `onCompute` (renders "Nester lands in P324" + the payload)
+  that P324 will swap for the real nester. **Verification note:** the real "PO#1" spreadsheet this
+  format was hand-validated against (baseline: 1# = 18 SKUs/302 pcs, 1.5# = 13/74, 2# = 16/59) is
+  not present in this repo. The dev self-check (`src/lib/poParser.selfcheck.ts`, guarded to non-
+  production, logged from a `BlocksApp` effect) verifies every messy-variant case from the prompt
+  text plus the taper-order combine/normalize behavior and the unparsed-row-kept guarantee against
+  hand-built fixtures — it does **not** assert the PO#1 baseline counts, and says so explicitly
+  rather than fabricating data to make that assertion pass. `tsc --noEmit` + `cf-build` green.
 - **P322** — Scaffolded the new **Block Nesting** module at `/v2/blocks` (successor to legacy
   `manufacturing/block-calculator.html`, which stays live/untouched). New `manufacturing.blocks`
   permission (GET→view, mutate→edit), no manager-only tier. `src/app/blocks/page.tsx` (server
