@@ -1499,7 +1499,7 @@ async function openSplitDaysModal(jobId) {
     const a = byLoad[n] || {};
     html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
       <span style="min-width:70px;font-weight:600;font-size:13px;">Load ${String(n).padStart(2, '0')}</span>
-      <input type="date" data-load="${n}" value="${esc(a.ship_date || '')}" style="flex:1;padding:8px;border:1px solid var(--input-border);border-radius:8px;font-size:14px;" />
+      <input type="date" data-load="${n}" value="${esc(a.load_ship_date || '')}" style="flex:1;padding:8px;border:1px solid var(--input-border);border-radius:8px;font-size:14px;" />
     </div>`;
   }
   rows.innerHTML = html;

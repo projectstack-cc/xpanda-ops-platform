@@ -518,6 +518,17 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **P325** — Hotfix: per-load `ship_date` was shadowed by `j.ship_date` in the loading-assignments
+  GET (duplicate select key — `la.*` emits `ship_date`, then the explicit `j.ship_date` selected
+  after it overwrote it in the returned row object, so every read of `/api/loading-assignments`
+  showed the job's date instead of the per-load one, no matter how many times a per-load day was
+  saved). `_worker.js/routes/loading.js`: exposed the per-load value under a non-colliding alias
+  `la.ship_date AS load_ship_date`, leaving the shadowed `ship_date` key (= job's date) alone so
+  `logistics/loading.html`'s `ldInCurrentWeek(a.ship_date)` week filter keeps its existing behavior.
+  Repointed the three per-load consumers to the new alias: `jobs/index.html`'s split modal date
+  inputs, `logistics/loading.html`'s per-load ship-day card label, and `logistics/index.html`'s
+  per-load BOL date prefill. No migration (column already existed from P318). `node --check` clean
+  on `loading.js` and all three edited files' extracted inline `<script>` blocks.
 - **P321** — Worker now serves `.js`/`.css` and `/sw.js` with `Cache-Control: no-cache` (ETag
   revalidation via `env.ASSETS.fetch`) instead of the prior 4-hour `max-age`, ending the
   shared-JS staleness window that let floor tablets keep running pre-deploy code for up to 4 hours

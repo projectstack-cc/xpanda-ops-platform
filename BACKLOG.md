@@ -86,6 +86,8 @@
 - [ ] **P320 follow-up — ship-day label parity on loading bay-view and shipping-info renders.**
   P320 only added the ship-day pill to `renderAssignmentCard`; the bay-view card render
   (`loading.html` ~line 1001) and shipping-info render (~line 1236) don't show it yet.
+- [ ] **P325 follow-up — harden `/api/loading-assignments/load-days`** to return matched-row count
+  and warn on 0-row saves.
 - [ ] **P271 follow-up — `loading_assignments.archived_at`.** Apply the same orthogonal-archive
   treatment (P271) to `loading_assignments.loading_status = 'archived'` (site L24 in
   `status-write-site-inventory.md`) — same two-facts-one-column defect, but lower-stakes since the
