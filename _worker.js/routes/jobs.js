@@ -351,8 +351,8 @@ export async function handleApiJobs(request, env) {
       for (let i = 0; i < lineItems.length; i++) {
         const li = lineItems[i];
         await db.prepare(`
-          INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, sort_order)
-          VALUES (?,?,?,?,?,?,?,?)
+          INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order)
+          VALUES (?,?,?,?,?,?,?,?,?)
         `).bind(
           crypto.randomUUID(), id,
           li.part_id ? String(li.part_id).trim() : null,
@@ -360,6 +360,7 @@ export async function handleApiJobs(request, env) {
           String(li.description || "").trim(),
           Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
           String(li.dimensions  || "").trim(),
+          li.density ? String(li.density).trim() : null,
           i,
         ).run();
       }
@@ -663,8 +664,8 @@ export async function handleApiJobs(request, env) {
         for (let i = 0; i < payload.line_items.length; i++) {
           const li = payload.line_items[i];
           await db.prepare(`
-            INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, sort_order)
-            VALUES (?,?,?,?,?,?,?,?)
+            INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order)
+            VALUES (?,?,?,?,?,?,?,?,?)
           `).bind(
             crypto.randomUUID(), id,
             li.part_id ? String(li.part_id).trim() : null,
@@ -672,6 +673,7 @@ export async function handleApiJobs(request, env) {
             String(li.description || "").trim(),
             Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
             String(li.dimensions  || "").trim(),
+            li.density ? String(li.density).trim() : null,
             i,
           ).run();
         }

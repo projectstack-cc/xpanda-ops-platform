@@ -456,11 +456,12 @@
       <div class="jobs-form-section">
         <p class="jobs-form-section-title">Line Items</p>
         <div class="jobs-li-scroll">
-          <div class="jobs-li-header">
+          <div class="jobs-li-header" style="grid-template-columns:90px 1fr 58px 88px 70px 30px;min-width:450px;">
             <span>Part #</span>
             <span>Description</span>
             <span>Qty</span>
             <span>Dimensions</span>
+            <span>Density</span>
             <span></span>
           </div>
           <div id="li-container"></div>
@@ -1947,7 +1948,7 @@ function populateForm(job) {
 
   document.getElementById('li-container').innerHTML = '';
   if (Array.isArray(job.line_items)) {
-    job.line_items.forEach(li => addLineItemRow(li));
+    job.line_items.forEach(li => addLineItemRow({ ...li, density: li.density ?? '' }));
   }
 
   if (job.combo_id) showComboBadge(job.combo_id, 'Linked Combo');
@@ -2019,6 +2020,7 @@ function addLineItemRow(data) {
   const isBdft = data?.qty_unit === 'bdft';
   const row = document.createElement('div');
   row.className = 'jobs-li-row';
+  row.style.gridTemplateColumns = '90px 1fr 58px 88px 70px 30px';
   row.dataset.partId = data?.part_id ?? '';
   row.innerHTML = `
     <input type="text"   class="li-part" placeholder="Part #"      value="${esc(data?.part_number  ?? '')}">
@@ -2028,6 +2030,7 @@ function addLineItemRow(data) {
       ${isBdft ? '<span style="font-size:10px;font-weight:700;background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);border-radius:3px;padding:1px 4px;white-space:nowrap;">BDFT</span>' : ''}
     </span>
     <input type="text"   class="li-dims" placeholder="Dims"        value="${esc(data?.dimensions   ?? '')}">
+    <input type="text"   class="li-density" placeholder="Density"  value="${esc(data?.density ?? '1.0 RC')}">
     <button type="button" class="jobs-li-remove" title="Remove">&times;</button>
   `;
   row.querySelector('.jobs-li-remove').addEventListener('click', () => row.remove());
@@ -2043,6 +2046,7 @@ function collectLineItems() {
       description: row.querySelector('.li-desc').value.trim(),
       quantity:    parseInt(row.querySelector('.li-qty').value,  10) || 0,
       dimensions:  row.querySelector('.li-dims').value.trim(),
+      density:     row.querySelector('.li-density').value.trim(),
       sort_order:  i,
     }))
     .filter(li => li.description || li.part_number);

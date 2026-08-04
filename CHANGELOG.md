@@ -857,6 +857,26 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P328** — New free-text `density` field on job line items. `DB_Migrations/add-line-item-density.sql`
+  (manual, gitignored) adds nullable `job_line_items.density TEXT`; existing rows read NULL and render
+  blank. `_worker.js/routes/jobs.js`'s two `job_line_items` write sites (create INSERT, update
+  replace-INSERT) now bind `density` alongside `dimensions`, mirroring the existing sibling-field
+  pattern (`NULL` when absent/empty — the UI supplies the default, not the API); both read paths
+  already used `SELECT *`, so no read-side change was needed. `jobs/index.html`'s line-item editor row
+  gained a `.li-density` text input (not a dropdown) between Dims and the remove button. Default
+  `1.0 RC` applies to any freshly-built row (blank "+ Add Line Item", packing-slip parse, parts-picker
+  add) since none of those pass a `density` key; loading a saved job's line items explicitly coerces a
+  legacy NULL to `''` before the same default logic runs, so pre-migration rows render blank instead of
+  being defaulted — matches the migration's own stated intent. Grid widened via inline
+  `grid-template-columns` overrides on the header div and each row element (JS-set style, not a CSS
+  file edit — P328 is scoped away from `jobs/jobs-shared.css`); inputs share the existing
+  `.jobs-li-row input` sizing (not individually widened to the ≥44px touch-target guidance — doing so
+  without a CSS-file edit would look inconsistent with the four sibling inputs, flagged as a follow-up
+  if floor/tablet use finds it cramped). Third existing `job_line_items` write site
+  (`_worker.js/routes/quickbooks.js` QB auto-intake INSERT) deliberately left untouched — its column
+  list simply omits `density`, which is schema-safe (nullable column, no `NOT NULL`/default
+  constraint) and correct behavior (QBO has no density data to offer). Depends-on for P329 (cut-list
+  PDF). Migration run against production D1 via `wrangler d1 execute --remote` before push.
 - **P319** — Split-shipment: manager-only Assign-Ship-Days modal on the job card, per-load date
   inputs writing `/api/loading-assignments/load-days`; Kanban card badge showing day groups
   (`Fri Aug 8: 01, 02, 03 • Mon Aug 11: 04…`) plus a derived Partially-shipped indicator. Depends on
