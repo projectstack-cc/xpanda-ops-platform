@@ -10,6 +10,40 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P324** — Block nesting engine + cut-sheet renderer, completing `/v2/blocks`. New
+  `src/lib/blockNester.ts` (`nest(skuLines, sizes): NestResult`, pure, no DOM/Cloudflare context;
+  does not touch legacy `blockEngine.ts`): pairs each SKU's qty into `ceil(qty/2)` taper
+  rectangles of height `tlo+thi+0.25"` (odd qty tracked as one scrap complement wedge), height-FFD
+  bins them into chunks **grouped by width** (a "same-footprint" chunk can hold bands of differing
+  lengths — the chunk's length is the max native length among its residents, and a shorter band's
+  `chunkLength - partLength` is reported per-line as a "length end" rather than re-packed), then
+  FFD-packs chunks into fixed-length molds charging `(n-1) × 0.25/3"` per block for internal
+  cross-cuts. Offcut recursion (`buildChunksOffcut`) is a global best-fit-decreasing pass that
+  additionally admits a rectangle into an *existing* chunk of smaller-or-equal width (trimming its
+  width down to match, flagged via `trimmedFrom`) when there's remaining height — the yield lever,
+  re-harvesting each chunk's own height-leftover void. **Scoped limitation, documented in code and
+  BACKLOG.md:** the block-level width-strip and the per-band length-end are NOT re-pooled (would
+  need full 2D/3D guillotine bin-packing); only the height-leftover void is reused. Both the greedy
+  (per-width FFD) and offcut chunk sets are packed into blocks and **the smaller-or-equal block
+  count wins by explicit comparison** — "never regress below the greedy baseline" is a hard
+  guarantee by construction, not heuristic luck. New `NestChunkLine`/`NestChunk`/`NestBlock`/
+  `DensityNestResult`/`NestResult` types added to `blockTypes.ts` (`NestChunkLine` additionally
+  carries `partWidth`/`partLength` beyond the prompt's illustrative `{item,tlo,thi,qty,
+  trimmedFrom?}` list — required to make the table's Part W×L column and the elevation's
+  length-end step-down accurate, since a chunk's resident bands can legitimately have different
+  lengths under the width-primary grouping this engine uses). New `src/app/blocks/CutSheet.tsx`
+  (per density → per mold → per chunk: table beside a diagram) and `ChunkElevation.tsx` (SVG side
+  elevation scaled to the real block face, aspect-correct; bands alternate taper-diagonal lean
+  band-to-band; a trimmed or naturally-shorter band shades its gap and labels it "→ pool").
+  `BlocksApp.tsx` now calls `nest(...)` from **Reload cut sheet** and renders `<CutSheet>` in place
+  of the P323 stub; parser/grid/inputs unchanged. **Verification note (same limitation as P323):**
+  the real PO#1 baseline (302/74/59 parts, 10/3/3 molds, floors 6.31/2.03/2.09, 0 scrap wedges)
+  could not be asserted — no source file. The dev self-check (`blockNester.selfcheck.ts`, run
+  alongside the parser check) instead verifies, and all pass: piece-count reconciliation against
+  input qty, odd-qty scrap-wedge counting, `blocksNeeded >= ceil(volumeFloor)`, `offcut <= greedy`
+  across several synthetic mixes, **and** a hand-constructed case proving the offcut lever
+  strictly beats greedy (2 blocks vs. 3) rather than merely tying every time. `tsc --noEmit` +
+  `cf-build` green.
 - **P323** — Block nesting input half (`/v2/blocks`, P322 scaffold): `src/lib/blockTypes.ts` (shared
   `SkuLine`/`BlockSize`/`BlockSizes`/`DEFAULT_BLOCK` contract, shared with P324's nester) and
   `src/lib/poParser.ts` (`parsePoRows`) decode the `A x (B x C) x D - E#` taper SKU format —

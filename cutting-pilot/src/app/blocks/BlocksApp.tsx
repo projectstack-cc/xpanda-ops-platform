@@ -1,15 +1,17 @@
 "use client";
-// Block Nesting — input half (P323): upload a PO spreadsheet, parse SKUs, correct via an
-// editable grid (the safety net for mis-parses), set per-density block dimensions, then
-// "Reload cut sheet" hands the assembled payload to the compute step. P324 replaces the
-// onCompute stub below with the real nester + <CutSheet>; the payload shape stays stable.
+// Block Nesting: upload a PO spreadsheet, parse SKUs, correct via an editable grid (the safety
+// net for mis-parses), set per-density block dimensions, then "Reload cut sheet" nests and
+// renders the cut sheet (P324's nest() + <CutSheet>).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Upload, Plus, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
 import * as XLSX from "xlsx";
 import Modal from "@/components/Modal";
-import { DEFAULT_BLOCK, type BlockSize, type BlockSizes, type SkuLine } from "@/lib/blockTypes";
+import { DEFAULT_BLOCK, type BlockSize, type BlockSizes, type NestResult, type SkuLine } from "@/lib/blockTypes";
 import { parsePoRows, type PoInputRow } from "@/lib/poParser";
 import { runPoParserSelfCheck } from "@/lib/poParser.selfcheck";
+import { nest } from "@/lib/blockNester";
+import { runBlockNesterSelfCheck } from "@/lib/blockNester.selfcheck";
+import CutSheet from "./CutSheet";
 
 const ITEM_ALIASES = ["item", "sku", "part", "part#", "partno", "itemno", "itemnumber", "code"];
 const DESC_ALIASES = ["description", "desc", "itemdescription", "partdescription"];
@@ -35,11 +37,6 @@ function parseNum(v: string): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
-interface ComputePayload {
-  skuLines: SkuLine[];
-  blockSizes: BlockSizes;
-}
-
 export default function BlocksApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
@@ -47,7 +44,8 @@ export default function BlocksApp() {
   const [blockSizes, setBlockSizes] = useState<BlockSizes>({});
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [computeError, setComputeError] = useState<string | null>(null);
-  const [computePayload, setComputePayload] = useState<ComputePayload | null>(null);
+  const [nestResult, setNestResult] = useState<NestResult | null>(null);
+  const [nestedBlockSizes, setNestedBlockSizes] = useState<BlockSizes>({});
 
   // Column/sheet picker — only shown when the first sheet's headers don't auto-match.
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -59,11 +57,17 @@ export default function BlocksApp() {
 
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
-    const { pass, results } = runPoParserSelfCheck();
+    const parserCheck = runPoParserSelfCheck();
     // eslint-disable-next-line no-console
-    console[pass ? "log" : "warn"](
-      `[blocks] PO parser self-check: ${pass ? "PASS" : "FAIL"}`,
-      results
+    console[parserCheck.pass ? "log" : "warn"](
+      `[blocks] PO parser self-check: ${parserCheck.pass ? "PASS" : "FAIL"}`,
+      parserCheck.results
+    );
+    const nesterCheck = runBlockNesterSelfCheck();
+    // eslint-disable-next-line no-console
+    console[nesterCheck.pass ? "log" : "warn"](
+      `[blocks] Nester self-check: ${nesterCheck.pass ? "PASS" : "FAIL"}`,
+      nesterCheck.results
     );
   }, []);
 
@@ -84,7 +88,7 @@ export default function BlocksApp() {
     const parsed = parsePoRows(inputRows);
     setSkuLines(parsed);
     setUploadError(null);
-    setComputePayload(null);
+    setNestResult(null);
     setComputeError(null);
     setPickerOpen(false);
 
@@ -202,14 +206,9 @@ export default function BlocksApp() {
     }));
   }
 
-  function onCompute(payload: ComputePayload) {
-    // Stub — P324 replaces this with the real nest(...) call + <CutSheet>.
-    setComputePayload(payload);
-  }
-
   function handleReload() {
     setComputeError(null);
-    setComputePayload(null);
+    setNestResult(null);
 
     const usable = skuLines.filter((l) => l.qty > 0);
     if (usable.length === 0) {
@@ -224,7 +223,8 @@ export default function BlocksApp() {
       }
     }
 
-    onCompute({ skuLines, blockSizes });
+    setNestResult(nest(skuLines, blockSizes));
+    setNestedBlockSizes(blockSizes);
   }
 
   return (
@@ -391,27 +391,11 @@ export default function BlocksApp() {
           </div>
         )}
 
-        {/* Compute stub — P324 replaces this block with <CutSheet result={...} /> */}
-        {computePayload && (
-          <div className="border border-border rounded p-4 space-y-3">
-            <p className="text-sm font-semibold text-text">Nester lands in P324</p>
-            <p className="text-xs text-muted">Assembled payload (per-density SKU/pc counts):</p>
-            <ul className="text-sm text-text space-y-1">
-              {presentDensities.map((d) => {
-                const lines = computePayload.skuLines.filter((l) => l.parsed && l.density === d);
-                const pcs = lines.reduce((sum, l) => sum + l.qty, 0);
-                return (
-                  <li key={d} className="font-mono tabular-nums">
-                    {d}#: {lines.length} SKUs / {pcs} pcs
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="overflow-x-auto">
-              <pre className="text-xs text-muted whitespace-pre-wrap break-all">
-                {JSON.stringify(computePayload, null, 2)}
-              </pre>
-            </div>
+        {/* Cut sheet */}
+        {nestResult && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-text">Cut sheet</h3>
+            <CutSheet result={nestResult} blockSizes={nestedBlockSizes} />
           </div>
         )}
       </div>
