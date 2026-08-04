@@ -165,7 +165,10 @@ export default {
       }
 
       if (url.pathname === '/sw.js') {
-        return env.ASSETS.fetch(request);
+        const swResp = await env.ASSETS.fetch(request);
+        const swHeaders = new Headers(swResp.headers);
+        swHeaders.set('Cache-Control', 'no-cache');
+        return new Response(swResp.body, { status: swResp.status, statusText: swResp.statusText, headers: swHeaders });
       }
 
       if (url.pathname === '/manifest.json') {
@@ -258,7 +261,15 @@ export default {
         );
       }
 
-      return await env.ASSETS.fetch(request);
+      {
+        const assetResp = await env.ASSETS.fetch(request);
+        if (/\.(?:js|css)$/i.test(url.pathname)) {
+          const assetHeaders = new Headers(assetResp.headers);
+          assetHeaders.set('Cache-Control', 'no-cache');
+          return new Response(assetResp.body, { status: assetResp.status, statusText: assetResp.statusText, headers: assetHeaders });
+        }
+        return assetResp;
+      }
     } catch (err) {
       const msg =
         err && (err.stack || err.message)

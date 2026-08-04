@@ -448,6 +448,16 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **P321** — Worker now serves `.js`/`.css` and `/sw.js` with `Cache-Control: no-cache` (ETag
+  revalidation via `env.ASSETS.fetch`) instead of the prior 4-hour `max-age`, ending the
+  shared-JS staleness window that let floor tablets keep running pre-deploy code for up to 4 hours
+  after a push. Root cause of the "3 master BOL copies" report: after P317 shipped, tablets still
+  holding the cached pre-P317 `bol-shared.js` (no `TEMPLATE_BY_COPY`) rendered three master copies
+  while production/edge were correct. One-time `?v=317` flush of every non-archived
+  `bol-shared.js`/`bol-compose.js` `<script src>` include (the two files P317 actually changed)
+  unsticks tablets already sitting on a stale cached copy; no future JS/CSS deploy should ever be
+  stale on the floor after this. `node --check` clean; `logistics/_archived/bol-generator.html`
+  confirmed untouched.
 - **P318** — Per-load ship date for split-shipment support (multi-load jobs shipping across several
   days). New nullable `loading_assignments.ship_date` column (NULL = "ships on the job's date");
   `jobs.ship_date` is never auto-touched — purely additive. New manager-gated batch write
