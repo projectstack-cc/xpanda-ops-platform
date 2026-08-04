@@ -10,6 +10,11 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **P327 follow-up — homepage card for Taper Block Calculator.** P327 only linked `/v2/blocks`
+  into the Manufacturing dashboard tile grid (`manufacturing/index.html`); the platform homepage
+  (`index.html`) still has no direct entry point (per-prompt scope: Manufacturing section only).
+  Mirror the existing pattern used for the Cutting card (P235/P298) — a dedicated `data-permission`
+  gated card/button — once Steve wants a home-page shortcut.
 - [ ] **P324 follow-up — width-strip and length-end offcut are not re-pooled.** `blockNester.ts`'s
   Greedy tier only re-harvests each chunk's own height-leftover void (global width-sorted pass
   with width-trim admission) — this matches the real PO#1 baseline exactly as-is (10/3/3 molds,
