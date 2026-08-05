@@ -88,6 +88,10 @@
 
 ### Standing Logistics Backlog
 
+- [ ] **P332 follow-up — periodic reconcile/health-check for orphaned loading cards.** Consider a
+  lightweight periodic job that flags any job whose non-archived `loading_assignments` count exceeds
+  its `load_count`, so future regressions in the reconcile/backfill/adopt paths surface proactively
+  instead of silently accumulating orphan `awaiting` cards again.
 - [ ] **P320 follow-up — ship-day label parity on loading bay-view and shipping-info renders.**
   P320 only added the ship-day pill to `renderAssignmentCard`; the bay-view card render
   (`loading.html` ~line 1001) and shipping-info render (~line 1236) don't show it yet.

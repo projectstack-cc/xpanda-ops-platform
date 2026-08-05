@@ -687,7 +687,7 @@ export async function handleApiJobs(request, env) {
           if (reconRow && !isPickup) {
             const target  = Math.max(Number(reconRow.load_count) || 1, 1);
             const curRow  = await db.prepare(
-              "SELECT COUNT(*) AS cnt FROM loading_assignments WHERE job_id = ? AND loading_status != 'archived'"
+              "SELECT COUNT(*) AS cnt FROM loading_assignments WHERE job_id = ?"
             ).bind(id).first();
             const current = Number(curRow?.cnt || 0);
 

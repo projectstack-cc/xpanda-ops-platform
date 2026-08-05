@@ -70,7 +70,7 @@ export async function handleApiLoadingAssignments(request, env) {
         SELECT j.id, j.load_count,
           (SELECT COUNT(*) FROM loading_assignments la WHERE la.job_id = j.id) AS existing_count
         FROM jobs j
-        WHERE j.status IN ('done', 'loading', 'shipped')
+        WHERE j.status IN ('done', 'loading')
           AND COALESCE(j.method, '') != 'customer pickup'
           AND (SELECT COUNT(*) FROM loading_assignments la WHERE la.job_id = j.id) < CASE WHEN j.load_count > 1 THEN j.load_count ELSE 1 END
       `).all();
@@ -142,6 +142,37 @@ export async function handleApiLoadingAssignments(request, env) {
 
     const job = await db.prepare("SELECT load_count FROM jobs WHERE id = ?").bind(payload.job_id).first();
     if (!job) return json({ ok: false, error: 'Job not found.' }, 404);
+
+    // P332: adopt-first. If a bay is being assigned, always reuse an existing unbayed 'awaiting'
+    // card for this job before creating a new row — prevents an orphan awaiting card coexisting
+    // with a freshly-created bayed card (a source of duplicate loading cards).
+    if (payload.bay_id) {
+      const adoptFirst = await db.prepare(
+        "SELECT id FROM loading_assignments WHERE job_id = ? AND loading_status = 'awaiting' AND (bay_id IS NULL OR bay_id = '') ORDER BY load_number ASC LIMIT 1"
+      ).bind(payload.job_id).first();
+      if (adoptFirst) {
+        const nowAdopt = new Date().toISOString();
+        await db.prepare(
+          "UPDATE loading_assignments SET bay_id = ?, loading_status = 'not_started', updated_at = ? WHERE id = ?"
+        ).bind(payload.bay_id, nowAdopt, adoptFirst.id).run();
+        try {
+          const shipment = await db.prepare(
+            "SELECT id FROM shipments WHERE job_id = ? AND direction = 'outbound' LIMIT 1"
+          ).bind(payload.job_id).first();
+          if (shipment) {
+            await db.prepare(
+              "UPDATE shipments SET status = 'not_started', updated_at = datetime('now') WHERE id = ?"
+            ).bind(shipment.id).run();
+          }
+        } catch (e) {
+          console.error('Shipment status sync on adopt-first failed:', e);
+        }
+        await logActivity(db, 'update', 'loading_assignment', adoptFirst.id,
+          'Pulled job to loading bay (adopt-first)', { job_id: payload.job_id, bay_id: payload.bay_id },
+          request.headers.get('X-User-Id'));
+        return json({ ok: true, id: adoptFirst.id, adopted: true }, 200);
+      }
+    }
 
     const maxLoads = Math.max(job.load_count || 1, 1);
     const existingCountRow = await db.prepare(

@@ -566,6 +566,9 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P332** — Fix duplicate/phantom loading cards at the source: load_count reconcile now counts
+  archived/completed loads as filled slots; dashboard backfill no longer regenerates awaiting cards for
+  shipped jobs; bay assignment now adopts an existing awaiting card before creating a new one.
 - **P330** — Loading dashboard: manager/admin-only **Send back to queue** action on Delivered cards
   (reverts to awaiting queue, clears bay + milestone timestamps) for mis-delivered/stuck orders.
 - **P326** — Logistics dashboard outbound view now splits an order across day groups by per-load
