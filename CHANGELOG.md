@@ -859,6 +859,23 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P331** — Cut-list PDF: real multi-page pagination, replacing the P329 single-page "+N more
+  rows" stub. `buildCutListPdf` in `jobs/index.html` now loops, adding a new Letter-portrait page
+  per batch of line items instead of clamping at a fixed Y floor. Page 1 keeps the full P329
+  header (logo, title block, customer/ship-to address); page 2+ uses a compact single-line header
+  (`Cut list — Inv #<invoice_number> (cont.)` + the column header row only — no logo, no customer
+  block). Row capacity per page is a **fixed constant, not measured**: `ROWS_PAGE_1 = 14` (sized
+  conservatively for the taller page-1 header, assuming a worst-case 5-line ship-to address) and
+  `ROWS_PAGE_CONT = 20` (compact header leaves more room). Every line item now renders as a real
+  row on some page — the "+N more items — see job record" stub is gone entirely. Total pieces
+  still renders once, right-aligned under a top rule, on the last page only; if the final page's
+  last row wouldn't leave clean room for it (`MIN_Y_FOR_TOTAL = 70`), the total is pushed to its
+  own trailing page instead of crowding the bottom margin. No footer ("Page X of Y") — not
+  requested. Data-edge handling (missing part number → "Foam", missing density/ship date/dimension
+  slots render blank) is untouched from P329. These row-capacity constants are estimated from the
+  known layout geometry, not from a rendered/measured page — if real jobs show noticeably empty or
+  cramped continuation pages, nudge the two constants; exact-fill via measured text height is a
+  separate follow-on (logged to `BACKLOG.md`). Client-side `pdf-lib` only, no DB/API change.
 - **P329** — "Print Cut List" button on the job edit modal (directly under the packing-slip upload
   block, edit-mode only — mirrors the existing `modal-view-bol`/`modal-split-days` visibility
   pattern), generating a one-page Letter-portrait PDF client-side via `pdf-lib` (reused the existing

@@ -2085,7 +2085,6 @@ function formatCutListAddress(job) {
 async function buildCutListPdf(job) {
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
   const doc  = await PDFDocument.create();
-  const page = doc.addPage([612, 792]); // US Letter portrait (points)
   const font     = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
   const black = rgb(0.06, 0.09, 0.16);
@@ -2093,93 +2092,134 @@ async function buildCutListPdf(job) {
   const rule  = rgb(0.82, 0.84, 0.87);
   const margin = 40;
   const pageW  = 612;
+  const pageH  = 792; // US Letter portrait (points)
   const right  = pageW - margin;
+  const colDensityX = 300;
+  const colDimsX    = 380;
 
-  const drawRight = (text, size, f, color, yPos) => {
+  // Fixed row-capacity constants (not measured) — sized conservatively for Letter portrait so
+  // rows never run past the bottom margin. ROWS_PAGE_1 assumes a worst-case 5-line ship-to
+  // address under the full header; ROWS_PAGE_CONT assumes the shorter compact header. Both leave
+  // clean bottom margin even when the final page also needs to carry the total-pieces block.
+  const ROWS_PAGE_1    = 14;
+  const ROWS_PAGE_CONT = 20;
+  const MIN_Y_FOR_TOTAL = 70; // below this, push the total-pieces block to its own trailing page
+
+  const drawRight = (page, text, size, f, color, yPos) => {
     page.drawText(text, { x: right - f.widthOfTextAtSize(text, size), y: yPos, size, font: f, color });
   };
-  const hr = (yPos) => page.drawLine({ start: { x: margin, y: yPos }, end: { x: right, y: yPos }, thickness: 1, color: rule });
+  const hr = (page, yPos) => page.drawLine({ start: { x: margin, y: yPos }, end: { x: right, y: yPos }, thickness: 1, color: rule });
 
-  let y = 792 - margin;
-
+  let logoImg = null;
   try {
     const logoBytes = await fetch('/logo/xpanda.png').then(r => r.arrayBuffer());
-    const logoImg   = await doc.embedPng(logoBytes);
-    const logoH = 34;
-    const logoW = logoImg.width * (logoH / logoImg.height);
-    page.drawImage(logoImg, { x: margin, y: y - logoH, width: logoW, height: logoH });
+    logoImg = await doc.embedPng(logoBytes);
   } catch (e) {
     console.error('Cut list: logo embed failed', e);
   }
 
-  drawRight('Cut list', 18, fontBold, black, y - 15);
-  drawRight(`Inv #${job.invoice_number || ''}`, 11, font, gray, y - 33);
-  drawRight(`Ship date: ${formatShipDate(job.ship_date)}`, 11, font, gray, y - 47);
+  const drawColumnHeader = (page, yStart) => {
+    let y = yStart;
+    page.drawText('ITEM',       { x: margin,     y, size: 9, font: fontBold, color: gray });
+    page.drawText('DENSITY',    { x: colDensityX, y, size: 9, font: fontBold, color: gray });
+    page.drawText('DIMENSIONS', { x: colDimsX,    y, size: 9, font: fontBold, color: gray });
+    drawRight(page, 'QTY', 9, fontBold, gray, y);
+    y -= 8;
+    hr(page, y);
+    y -= 17;
+    return y;
+  };
 
-  y -= 62;
-  hr(y);
-  y -= 18;
+  // Page 1: unchanged full header — logo, title block, customer/ship-to address.
+  const drawPage1Header = (page) => {
+    let y = pageH - margin;
+    if (logoImg) {
+      const logoH = 34;
+      const logoW = logoImg.width * (logoH / logoImg.height);
+      page.drawImage(logoImg, { x: margin, y: y - logoH, width: logoW, height: logoH });
+    }
+    drawRight(page, 'Cut list', 18, fontBold, black, y - 15);
+    drawRight(page, `Inv #${job.invoice_number || ''}`, 11, font, gray, y - 33);
+    drawRight(page, `Ship date: ${formatShipDate(job.ship_date)}`, 11, font, gray, y - 47);
+    y -= 62;
+    hr(page, y);
+    y -= 18;
+    page.drawText('CUSTOMER', { x: margin, y, size: 9, font: fontBold, color: gray });
+    y -= 15;
+    page.drawText(job.customer || '', { x: margin, y, size: 12, font: fontBold, color: black });
+    y -= 16;
+    for (const line of formatCutListAddress(job)) {
+      page.drawText(line, { x: margin, y, size: 10, font, color: gray });
+      y -= 13;
+    }
+    y -= 6;
+    hr(page, y);
+    y -= 18;
+    return drawColumnHeader(page, y);
+  };
 
-  page.drawText('CUSTOMER', { x: margin, y, size: 9, font: fontBold, color: gray });
-  y -= 15;
-  page.drawText(job.customer || '', { x: margin, y, size: 12, font: fontBold, color: black });
-  y -= 16;
-  for (const line of formatCutListAddress(job)) {
-    page.drawText(line, { x: margin, y, size: 10, font, color: gray });
-    y -= 13;
-  }
+  // Page 2+: compact single-line header — no logo, no customer block.
+  const drawContTitle = (page) => {
+    const y = pageH - margin;
+    page.drawText(`Cut list — Inv #${job.invoice_number || ''} (cont.)`, { x: margin, y: y - 13, size: 13, font: fontBold, color: black });
+    return y - 30;
+  };
+  const drawContHeader = (page) => {
+    const y = drawContTitle(page);
+    hr(page, y);
+    return drawColumnHeader(page, y - 18);
+  };
 
-  y -= 6;
-  hr(y);
-  y -= 18;
-
-  const colDensityX = 300;
-  const colDimsX    = 380;
-  page.drawText('ITEM',       { x: margin,        y, size: 9, font: fontBold, color: gray });
-  page.drawText('DENSITY',    { x: colDensityX,    y, size: 9, font: fontBold, color: gray });
-  page.drawText('DIMENSIONS', { x: colDimsX,        y, size: 9, font: fontBold, color: gray });
-  drawRight('QTY', 9, fontBold, gray, y);
-  y -= 8;
-  hr(y);
-  y -= 17;
-
-  // Single-page scope (locked): once a row wouldn't leave room for the description line, the
-  // rule, and the total below it, stop and note the overflow rather than drawing off-page —
-  // the total-pieces figure is the one number the floor cross-checks, it must never be the
-  // thing that silently goes missing.
-  const ROW_FLOOR = 90;
-  const items = Array.isArray(job.line_items) ? job.line_items : [];
-  let totalQty = 0;
-  let shown = 0;
-  for (const li of items) {
-    if (y < ROW_FLOOR) break;
+  const drawRow = (page, li, yStart) => {
+    let y = yStart;
     const partLabel = (li.part_number && String(li.part_number).trim()) || 'Foam';
     page.drawText(partLabel, { x: margin, y, size: 11, font: fontBold, color: black });
     page.drawText(li.density ? String(li.density) : '', { x: colDensityX, y, size: 10, font, color: black });
     page.drawText(formatCutListDims(li.dimensions), { x: colDimsX, y, size: 10, font, color: black });
-    const qty = Number(li.quantity) || 0;
-    totalQty += qty;
-    drawRight(String(qty), 10, font, black, y);
+    drawRight(page, String(Number(li.quantity) || 0), 10, font, black, y);
     y -= 13;
     if (li.description) {
       page.drawText(String(li.description), { x: margin, y, size: 9, font, color: gray });
     }
     y -= 17;
-    shown += 1;
-  }
-  // Quantities on any rows that didn't fit still count toward the printed total, so it stays
-  // an honest sum even though not every line was drawn.
-  for (const li of items.slice(shown)) totalQty += Number(li.quantity) || 0;
-  if (shown < items.length) {
-    page.drawText(`+ ${items.length - shown} more item${items.length - shown === 1 ? '' : 's'} — see job record`, { x: margin, y, size: 9, font, color: gray });
-    y -= 17;
+    return y;
+  };
+
+  const drawTotal = (page, yStart, totalQty) => {
+    let y = yStart - 3;
+    hr(page, y);
+    y -= 16;
+    page.drawText('Total pieces', { x: colDimsX, y, size: 10, font: fontBold, color: black });
+    drawRight(page, String(totalQty), 11, fontBold, black, y);
+  };
+
+  const items = Array.isArray(job.line_items) ? job.line_items : [];
+  const totalQty = items.reduce((sum, li) => sum + (Number(li.quantity) || 0), 0);
+
+  let idx = 0;
+  let pageCount = 0;
+  let lastPage = null;
+  let lastY = 0;
+  while (idx < items.length || pageCount === 0) {
+    const page = doc.addPage([pageW, pageH]);
+    pageCount += 1;
+    let y = pageCount === 1 ? drawPage1Header(page) : drawContHeader(page);
+    const cap = pageCount === 1 ? ROWS_PAGE_1 : ROWS_PAGE_CONT;
+    for (const li of items.slice(idx, idx + cap)) {
+      y = drawRow(page, li, y);
+    }
+    idx += cap;
+    lastPage = page;
+    lastY = y;
   }
 
-  y -= 3;
-  hr(y);
-  y -= 16;
-  page.drawText('Total pieces', { x: colDimsX, y, size: 10, font: fontBold, color: black });
-  drawRight(String(totalQty), 11, fontBold, black, y);
+  if (lastY >= MIN_Y_FOR_TOTAL) {
+    drawTotal(lastPage, lastY, totalQty);
+  } else {
+    const page = doc.addPage([pageW, pageH]);
+    const y = drawContTitle(page);
+    drawTotal(page, y, totalQty);
+  }
 
   return await doc.save();
 }
