@@ -96,6 +96,42 @@ export async function handleApiJobs(request, env) {
     }
   }
 
+  // P333: job assignments (multi-assignee). Manager-gated writes.
+  if (jobId && subRoute === "assignments") {
+    if (request.method === "GET") {
+      const rows = await db.prepare(
+        `SELECT ja.user_id, u.display_name AS name
+           FROM job_assignments ja JOIN users u ON u.id = ja.user_id
+          WHERE ja.job_id = ? ORDER BY u.display_name COLLATE NOCASE`
+      ).bind(jobId).all();
+      return json({ ok: true, assignees: rows.results || [] });
+    }
+    const isAdministrator = request.headers.get("X-User-Is-Admin") === "1";
+    const userPerms = JSON.parse(request.headers.get("X-User-Permissions") || "{}");
+    if (!isAdministrator && !(userPerms["jobs.manage"]?.edit)) {
+      return json({ ok: false, error: "Manager access required to assign production." }, 403);
+    }
+    const actorId = request.headers.get("X-User-Id");
+    if (request.method === "POST") {
+      let body; try { body = await request.json(); } catch { return json({ ok:false, error:"Invalid JSON" }, 400); }
+      const userId = body?.user_id;
+      if (!userId) return json({ ok:false, error:"user_id required" }, 400);
+      await db.prepare(
+        `INSERT OR IGNORE INTO job_assignments (id, job_id, user_id, assigned_by, created_at)
+         VALUES (?, ?, ?, ?, datetime('now'))`
+      ).bind(crypto.randomUUID(), jobId, userId, actorId || null).run();
+      await logActivity(db, "assign", "job", jobId, `Assigned user ${userId}`, { user_id: userId }, actorId);
+      return json({ ok: true });
+    }
+    if (request.method === "DELETE") {
+      const targetUser = parts[4] || null; // /api/jobs/:id/assignments/:userId
+      if (!targetUser) return json({ ok:false, error:"user_id required in path" }, 400);
+      await db.prepare(`DELETE FROM job_assignments WHERE job_id = ? AND user_id = ?`).bind(jobId, targetUser).run();
+      await logActivity(db, "unassign", "job", jobId, `Unassigned user ${targetUser}`, { user_id: targetUser }, actorId);
+      return json({ ok: true });
+    }
+  }
+
   // ── GET /api/jobs/:id ─────────────────────────────────────────────────────
   if (request.method === "GET" && jobId) {
     try {
@@ -219,10 +255,31 @@ export async function handleApiJobs(request, env) {
         }
       }
 
+      // P333: attach assignees to each job (chunked for D1 param ceiling)
+      const assigneesMap = {};
+      if (jobs.length > 0) {
+        const ids = jobs.map(j => j.id);
+        const CHUNK = 90;
+        for (let i = 0; i < ids.length; i += CHUNK) {
+          const slice = ids.slice(i, i + CHUNK);
+          const ph    = slice.map(() => "?").join(",");
+          const ar = await db.prepare(
+            `SELECT ja.job_id, ja.user_id, u.display_name AS name
+               FROM job_assignments ja JOIN users u ON u.id = ja.user_id
+              WHERE ja.job_id IN (${ph})`
+          ).bind(...slice).all();
+          for (const a of (ar.results || [])) {
+            if (!assigneesMap[a.job_id]) assigneesMap[a.job_id] = [];
+            assigneesMap[a.job_id].push({ user_id: a.user_id, name: a.name });
+          }
+        }
+      }
+
       const enriched = jobs.map(job => ({
         ...job,
         processes:  safeJsonParse(job.processes, []),
         line_items: lineItemsMap[job.id] || [],
+        assignees:  assigneesMap[job.id] || [],
       }));
 
       return json({ ok: true, jobs: enriched });
@@ -1251,6 +1308,28 @@ export async function handleApiShipments(request, env) {
   }
 
   return json({ ok: false, error: "Method Not Allowed" }, 405);
+}
+
+// P333: assignable users = active members of the "cutting team" role (by name, not hardcoded id).
+export async function handleApiAssignableUsers(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+  if (request.method !== "GET") return json({ ok: false, error: "Method not allowed" }, 405);
+  try {
+    const rows = await db.prepare(
+      `SELECT DISTINCT u.id, u.display_name AS name, u.username
+         FROM users u
+         LEFT JOIN user_roles ur ON ur.user_id = u.id
+         LEFT JOIN roles r1 ON r1.id = ur.role_id
+         LEFT JOIN roles r2 ON r2.id = u.role_id
+        WHERE u.is_active = 1
+          AND (LOWER(r1.name) = 'cutting team' OR LOWER(r2.name) = 'cutting team')
+        ORDER BY u.display_name COLLATE NOCASE`
+    ).all();
+    return json({ ok: true, users: rows.results || [] });
+  } catch (e) {
+    return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+  }
 }
 
 

@@ -862,6 +862,42 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P334** — Job board UI for P333's multi-assignee production assignment. `jobs/index.html` only.
+  Read-only assignee chips (`assigneeChips(assignees)`) render on each list-view job row next to the
+  invoice number/priority/ship-to-verify badges — visible to everyone, empty `assignees` renders
+  nothing. New "Assigned to" section in the edit modal (below the status row, edit-mode only): chips
+  with a remove `×` plus an "Add team member…" `<select>` (fetches `GET /api/assignable-users` once,
+  cached in `_assignableUsersCache`), gated on `jobs.manage` edit (mirrors the exact
+  `isAdministrator || permissions?.[...]?.edit` accessor already used for `modal-split-days`, key
+  swapped). Non-managers still see the chips (read-only), just no add/remove control. Add/remove call
+  `POST`/`DELETE /api/jobs/:id/assignments`, then `refreshAssignments()` re-fetches
+  `GET /api/jobs/:id/assignments`, patches the in-memory `allJobs` entry, and calls the existing
+  `renderBoard(allJobs)` so both the modal chips and the list-row chips update without a full reload
+  — no new global refresh path needed, reused the pattern every other job mutation in this file
+  already follows. Kanban card view intentionally not touched (only one row template in this file
+  builds badges around `job.invoice_number`/`priorityBadge`/`shipToVerifiedBadge`, at the list-view
+  row — verified via grep before editing). `node --check` clean on the extracted inline `<script>`
+  region. **Migration-gated (P333)** — held from push until Steve confirmed the migration ran.
+- **P333** — Multi-assignee production assignment: new join table `job_assignments` (`id, job_id,
+  user_id, assigned_by, created_at`, `UNIQUE(job_id, user_id)`), fully decoupled from `jobs.status` —
+  no cascade, no lifecycle coupling. `_worker.js/routes/jobs.js` gained a job-scoped sub-route
+  `GET/POST/DELETE /api/jobs/:id/assignments` (GET open to any `jobs`-view user; POST/DELETE gated on
+  new `jobs.manage` edit permission, mirroring the exact manager-gate pattern already used for
+  `logistics.loading.manage` in `routes/loading.js`) plus a new standalone export
+  `handleApiAssignableUsers` (`GET /api/assignable-users`, registered as its own `API_ROUTES` prefix
+  in `index.js` — deliberately not nested under `/api/jobs`) resolving active "cutting team" members
+  by role **name** (covers both the multi-role `user_roles` table and the legacy `users.role_id` FK,
+  case-insensitive — never a hardcoded role id). The job list GET now attaches
+  `job.assignees = [{user_id, name}]` per job via a batch query chunked at 90 ids, mirroring the
+  file's existing `job_line_items` batch-fetch pattern (same D1 100-bound-parameter ceiling). New
+  `jobs.manage` permission labeled in `admin/roles.html` (`Job Board — Assign Production (manager)`)
+  — assignable per role from Admin → Roles; not added to `PATH_PERMISSION_MAP`/`API_PERMISSION_MAP`
+  since it's a manual in-route gate only, same as its `logistics.loading.manage` precedent. All
+  mutations call `logActivity` (`assign`/`unassign`, actor from `X-User-Id`). `DB_Migrations/
+  job-assignments.sql` written locally (gitignored, never committed) — **run directly against
+  production D1 via `wrangler d1 execute --remote`** (Steve's explicit instruction this session).
+  `node --check` clean on both edited worker files. Sets up P334 (job board assign UI) and
+  P335/P336 (v2 cutting Work Queue per-user rewire).
 - **P331** — Cut-list PDF: real multi-page pagination, replacing the P329 single-page "+N more
   rows" stub. `buildCutListPdf` in `jobs/index.html` now loops, adding a new Letter-portrait page
   per batch of line items instead of clamping at a fixed Y floor. Page 1 keeps the full P329

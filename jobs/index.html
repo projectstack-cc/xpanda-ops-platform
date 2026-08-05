@@ -284,6 +284,17 @@
         <button id="modal-split-days" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;">Assign Ship Days</button>
       </div>
 
+      <!-- Assigned to (P334): read-only chips always visible; add/remove is manager-only (jobs.manage) -->
+      <div id="assign-section" hidden style="margin-bottom:16px;">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Assigned to</label>
+        <div id="assign-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+        <div id="assign-add-wrap" hidden style="display:flex;gap:8px;">
+          <select id="assign-user-select" style="flex:1;min-height:44px;" onchange="onAssignSelectChange(this)">
+            <option value="">Add team member…</option>
+          </select>
+        </div>
+      </div>
+
       <!-- Packing slip drop zone -->
       <div id="slip-dropzone" style="border:2px dashed var(--input-border);border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;transition:all 0.2s;cursor:pointer;" onclick="document.getElementById('packing-slip-upload').click()">
         <div style="font-size:14px;color:var(--text-muted);">
@@ -820,6 +831,12 @@ function shipToVerifiedBadge(status, showUnverified) {
   return ` <span style="display:inline-block;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.03em;background:${s.bg};color:${s.text};${border}">${s.label}</span>`;
 }
 
+// P334: read-only assignee chips (job.assignees = [{user_id, name}]). Empty/absent → nothing.
+function assigneeChips(assignees) {
+  if (!Array.isArray(assignees) || !assignees.length) return '';
+  return assignees.map(a => ` <span style="display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">${esc(a.name || '')}</span>`).join('');
+}
+
 function renderShipToVerifyBadge(status) {
   const el = document.getElementById('ship-to-verify-badge');
   if (el) el.innerHTML = shipToVerifiedBadge(status, true);
@@ -851,7 +868,7 @@ function renderList(jobs) {
     tr.onmouseout  = () => { tr.style.background = ''; };
     tr.onclick     = () => openModal(job.id);
     tr.innerHTML = `
-      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}${priorityBadge(job)}${shipToVerifiedBadge(job.ship_to_verified)}</td>
+      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}${priorityBadge(job)}${shipToVerifiedBadge(job.ship_to_verified)}${assigneeChips(job.assignees)}</td>
       <td style="padding:9px 12px;font-size:13px;">${esc(job.customer || '')}</td>
       <td style="padding:9px 12px;font-size:13px;color:var(--text-muted);">${esc(formatShipDate(job.ship_date)) || '—'}</td>
       <td style="padding:9px 12px;font-size:13px;text-align:right;">${job.total_bdft ? Number(job.total_bdft).toLocaleString() : '—'}</td>
@@ -1562,6 +1579,16 @@ function openModal(jobId) {
     const _job = allJobs.find(j => j.id === jobId);
     document.getElementById('modal-split-days').hidden = !(_canManage && _job && (Number(_job.load_count) || 1) > 1);
   }
+  {
+    const _u = window.__xpandaUser;
+    const _canManageAssign = _u && (_u.isAdministrator || _u.permissions?.['jobs.manage']?.edit);
+    const _job = allJobs.find(j => j.id === jobId);
+    const assignSection = document.getElementById('assign-section');
+    if (assignSection) {
+      assignSection.hidden = isNew;
+      if (!isNew && _job) setupAssignSection(_job, _canManageAssign);
+    }
+  }
   if (!isNew) {
     api.get('/api/bols?job_id=' + jobId).then(r => {
       if (r.ok && r.data?.bols?.length > 0) {
@@ -1580,6 +1607,96 @@ function closeModal() {
   editingJobId       = null;
   pendingSlip        = null;
   pendingSlipRemoved = false;
+}
+
+/* ═══════════════════════════════════════════
+   Job Assignments (P334) — manager-only add/remove, chips always visible
+═══════════════════════════════════════════ */
+
+let _assignableUsersCache = null;
+
+async function fetchAssignableUsers() {
+  if (_assignableUsersCache) return _assignableUsersCache;
+  try {
+    const r = await api.get('/api/assignable-users');
+    _assignableUsersCache = (r.ok && r.data?.users) ? r.data.users : [];
+  } catch (e) {
+    _assignableUsersCache = [];
+  }
+  return _assignableUsersCache;
+}
+
+function renderAssignChips(assignees, canManage) {
+  const wrap = document.getElementById('assign-chips');
+  if (!wrap) return;
+  if (!Array.isArray(assignees) || !assignees.length) {
+    wrap.innerHTML = '<span style="font-size:12px;color:var(--text-hint);">No one assigned</span>';
+    return;
+  }
+  wrap.innerHTML = assignees.map(a => `
+    <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">
+      ${esc(a.name || '')}
+      ${canManage ? `<button type="button" onclick="removeAssignee('${esc(a.user_id)}')" title="Remove" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:700;font-size:13px;padding:0;line-height:1;">&times;</button>` : ''}
+    </span>
+  `).join('');
+}
+
+async function setupAssignSection(job, canManage) {
+  renderAssignChips(job.assignees, canManage);
+  const addWrap = document.getElementById('assign-add-wrap');
+  if (addWrap) addWrap.hidden = !canManage;
+  if (!canManage) return;
+
+  const users = await fetchAssignableUsers();
+  const select = document.getElementById('assign-user-select');
+  if (!select) return;
+  const assignedIds = new Set((job.assignees || []).map(a => a.user_id));
+  select.innerHTML = '<option value="">Add team member…</option>' +
+    users.filter(u => !assignedIds.has(u.id))
+      .map(u => `<option value="${esc(u.id)}">${esc(u.name || u.username || '')}</option>`).join('');
+}
+
+function onAssignSelectChange(select) {
+  const userId = select.value;
+  if (!userId) return;
+  select.value = '';
+  addAssignee(userId);
+}
+
+async function addAssignee(userId) {
+  if (!userId || !editingJobId) return;
+  try {
+    const r = await api.post(`/api/jobs/${encodeURIComponent(editingJobId)}/assignments`, { user_id: userId });
+    if (!r.ok) { showToast(r.error || 'Failed to assign.'); return; }
+    await refreshAssignments();
+  } catch (e) {
+    showToast('Failed to assign.');
+  }
+}
+
+async function removeAssignee(userId) {
+  if (!userId || !editingJobId) return;
+  try {
+    const r = await api.del(`/api/jobs/${encodeURIComponent(editingJobId)}/assignments/${encodeURIComponent(userId)}`);
+    if (!r.ok) { showToast(r.error || 'Failed to unassign.'); return; }
+    await refreshAssignments();
+  } catch (e) {
+    showToast('Failed to unassign.');
+  }
+}
+
+async function refreshAssignments() {
+  if (!editingJobId) return;
+  try {
+    const r = await api.get(`/api/jobs/${encodeURIComponent(editingJobId)}/assignments`);
+    const assignees = (r.ok && r.data?.assignees) ? r.data.assignees : [];
+    const job = allJobs.find(j => j.id === editingJobId);
+    if (job) job.assignees = assignees;
+    const _u = window.__xpandaUser;
+    const canManage = _u && (_u.isAdministrator || _u.permissions?.['jobs.manage']?.edit);
+    setupAssignSection(job || { assignees }, canManage);
+    renderBoard(allJobs);
+  } catch (e) {}
 }
 
 async function getPartsLibrary() {
