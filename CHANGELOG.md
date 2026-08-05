@@ -566,6 +566,8 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P330** — Loading dashboard: manager/admin-only **Send back to queue** action on Delivered cards
+  (reverts to awaiting queue, clears bay + milestone timestamps) for mis-delivered/stuck orders.
 - **P326** — Logistics dashboard outbound view now splits an order across day groups by per-load
   ship date, one row per day listing the loads' BOL suffixes (`1234-01`). `renderOutbound` groups by
   the new per-load `load_ship_date` (P325) instead of just the order's `ship_date`: when a job's

@@ -353,6 +353,13 @@ export async function handleApiLoadingAssignments(request, env) {
         updates.push('in_transit_at = ?'); binds.push(null);
       }
 
+      // P330: reverting a card to the awaiting queue (e.g. Delivered → queue misclick recovery)
+      // clears all milestone timestamps so the order is a clean, unshipped queue entry again.
+      if (payload.loading_status === 'awaiting' && existing.loading_status !== 'awaiting') {
+        updates.push('started_at = ?', 'loaded_at = ?', 'in_transit_at = ?', 'delivered_at = ?');
+        binds.push(null, null, null, null);
+      }
+
       // Dispatch notification on status transition
       if (payload.loading_status !== existing.loading_status) {
         const job = await db.prepare("SELECT customer, invoice_number FROM jobs WHERE id = ?").bind(existing.job_id).first();

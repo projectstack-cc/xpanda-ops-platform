@@ -670,6 +670,9 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
         ${isManager && a.location === 'yard' && !['in_transit','delivered','archived'].includes(a.loading_status)
           ? `<button class="ld-btn-yard" onclick="revertYardToBay('${a.id}')">Move back to bay</button>`
           : ''}
+        ${isManager && a.loading_status === 'delivered'
+          ? `<button class="ld-btn-yard" onclick="sendBackToQueue('${a.id}')">Send back to queue</button>`
+          : ''}
         ${showArchiveBtn ? `<button class="ld-btn-archive" onclick="archiveAssignment('${a.id}')">Archive</button>` : ''}
       </div>
     </div>
@@ -737,6 +740,22 @@ async function revertYardToBay(assignmentId) {
     }
   } catch (e) {
     console.error('Revert yard to bay failed:', e);
+  }
+}
+
+async function sendBackToQueue(assignmentId) {
+  if (!confirm('Send this order back to the loading queue? This undoes "Delivered", clears the bay, and marks it unshipped.')) return;
+  try {
+    const { ok, data } = await api.put('/api/loading-assignments', {
+      id: assignmentId, location: 'bay', bay_id: null, loading_status: 'awaiting'
+    });
+    if (ok) {
+      loadDashboard();
+    } else {
+      alert((data && data.error) || 'Failed to send back to queue.');
+    }
+  } catch (e) {
+    console.error('Send back to queue failed:', e);
   }
 }
 
