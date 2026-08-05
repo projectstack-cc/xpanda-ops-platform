@@ -41,4 +41,5 @@ export interface CuttingJob {
   taper_yield: number | null;
   blocks_needed: number | null;
   progress: Record<string, Record<string, { completed: boolean; completed_qty: number | null }>>;
+  assigned_to_me?: boolean;
 }

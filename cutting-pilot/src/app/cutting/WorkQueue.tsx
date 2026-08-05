@@ -12,23 +12,25 @@ interface Props {
 }
 
 // Ranked "work next" shortlist. Reads the already-priority-sorted queue, keeps only jobs
-// that still have incomplete cutting lines, and shows the top few so the floor works
-// top-down instead of cherry-picking. Guide only — every job stays clickable here and in
-// the full list below.
+// that still have incomplete cutting lines. P335/P336: per-user — if the current user has
+// any incomplete assigned jobs, show all of them ("My Queue"); otherwise fall back to the
+// top few of the global priority sort ("Work Queue") so the floor works top-down instead of
+// cherry-picking. Guide only — every job stays clickable here and in the full list below.
 export default function WorkQueue({ jobs, selectedJobId, onSelect, onViewPhotos }: Props) {
-  const queued = jobs
-    .filter((j) => j.lines.some((l) => l.line_status !== "complete"))
-    .slice(0, WORK_QUEUE_SIZE);
+  const incomplete = jobs.filter((j) => j.lines.some((l) => l.line_status !== "complete"));
+  const mine = incomplete.filter((j) => j.assigned_to_me);
+  const assignedMode = mine.length > 0;
+  const queued = assignedMode ? mine : incomplete.slice(0, WORK_QUEUE_SIZE);
 
   return (
     <section aria-label="Priority work queue" className="border-b border-border">
       <div className="px-4 py-2 bg-[var(--surface-2)] flex items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-          Work Queue
+          {assignedMode ? "My Queue" : "Work Queue"}
         </span>
         {queued.length > 0 && (
           <span className="font-mono tabular-nums text-xs text-muted">
-            top {queued.length}
+            {assignedMode ? `${queued.length} assigned` : `top ${queued.length}`}
           </span>
         )}
       </div>

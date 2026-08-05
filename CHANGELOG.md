@@ -10,6 +10,23 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P336** — `/v2/cutting` Work Queue band goes per-user, with fallback. `WorkQueue.tsx` only.
+  Rewired the `queued` derivation: `incomplete` = jobs with any non-complete line; `mine` = the
+  subset with `job.assigned_to_me` (P335); `assignedMode = mine.length > 0`. In assigned mode the
+  band shows **all** of the user's incomplete assigned jobs (no `WORK_QUEUE_SIZE` cap) labeled
+  "My Queue" with a `N assigned` count badge; with no assignments it's byte-identical to the prior
+  behavior — top-5 of the global priority sort, labeled "Work Queue", `top N` badge.
+  `CuttingBoard.tsx`, the full list, `JobRow`, and the queue API are untouched — same `onSelect`/
+  `onViewPhotos`/rank wiring, tokens only. `tsc --noEmit` + `npx opennextjs-cloudflare build` green.
+- **P335** — `/v2/cutting` queue API tags each job with `assigned_to_me` (purely additive — no
+  ordering/filtering change, P336 decides how to use it). `queue/route.ts`'s `GET` now reads the
+  request (`GET(request: Request)`, was zero-arg) for `X-User-Id`, batch-fetches the current user's
+  rows in `job_assignments` (P333) among the returned `jobIds` via a small inline chunked loop
+  (`bind(userId, ...chunk)`, 90 per chunk — `allByJobIds` only binds the id chunk, so it couldn't
+  carry the leading `user_id` bind) into a `Set`, and stamps `assigned_to_me: assignedSet.has(job.id)`
+  on each returned queue object. `types.ts` gained `assigned_to_me?: boolean` on `CuttingJob`. No
+  DB/migration change (reads P333's `job_assignments`, already migrated). `tsc --noEmit` +
+  `npx opennextjs-cloudflare build` green.
 - **P324** — Block nesting engine + cut-sheet renderer, completing `/v2/blocks`. New
   `src/lib/blockNester.ts` (`nest(skuLines, sizes): NestResult`, pure, no DOM/Cloudflare context;
   does not touch legacy `blockEngine.ts`): pairs each SKU's qty into `ceil(qty/2)` taper

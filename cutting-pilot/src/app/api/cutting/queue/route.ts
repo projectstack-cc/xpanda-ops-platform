@@ -14,8 +14,9 @@ const PROCESS_ORDER = ["Main Line", "Blue Line"];
 // Every other required line is a PART line: target = total ordered units (no math needed).
 const CHUNK_LINES = new Set(["Cross Cutter", "Hole Cutter"]);
 
-export async function GET() {
+export async function GET(request: Request) {
   const { DB } = await getEnv();
+  const userId = request.headers.get("X-User-Id");
   try {
     const jobRows = await DB.prepare(
       `SELECT j.id, j.customer, j.invoice_number, j.po_number, j.ship_date,
@@ -45,6 +46,21 @@ export async function GET() {
 
     const now = new Date().toISOString().replace("T", " ").slice(0, 19);
     const jobIds = jobs.map((j: any) => j.id);
+
+    // P335: tag each job with whether it's assigned to the current user (job_assignments, P333).
+    // allByJobIds only binds the id chunk, so this needs its own small chunked loop for the
+    // leading user_id bind.
+    const assignedSet = new Set<string>();
+    if (userId) {
+      for (let i = 0; i < jobIds.length; i += 90) {
+        const chunk = jobIds.slice(i, i + 90);
+        const ph = chunk.map(() => "?").join(",");
+        const ar = await DB.prepare(
+          `SELECT job_id FROM job_assignments WHERE user_id = ? AND job_id IN (${ph})`
+        ).bind(userId, ...chunk).all<{ job_id: string }>();
+        for (const r of (ar.results || [])) assignedSet.add(r.job_id);
+      }
+    }
 
     // Lazy reconcile: ensure a cutting_lines row exists for every required (job, line).
     // INSERT OR IGNORE is idempotent — safe to run on every GET.
@@ -404,6 +420,7 @@ export async function GET() {
         is_taper: taperInfoByJob.get(job.id)?.is_taper ?? false,
         taper_yield: taperInfoByJob.get(job.id)?.yield ?? null,
         blocks_needed: blocksNeededByJob.get(job.id) ?? null,
+        assigned_to_me: assignedSet.has(job.id),
       };
     });
 
