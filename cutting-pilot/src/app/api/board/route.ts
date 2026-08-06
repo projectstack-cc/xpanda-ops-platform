@@ -1,6 +1,10 @@
 // src/app/api/board/route.ts  →  GET /v2/api/board
 // Read-only board payload: active (non-archived) jobs + assignees + cutting/loading flags,
-// and Open/Cutting/Loading counts. Gated on `jobs` (view). No writes (P343).
+// and Open/Cutting/Loading counts. Gated on `jobs` (view). No writes here — see [id]/route.ts
+// (P343) for the PUT endpoint.
+// P343 additive extension: a few more read-only columns (invoice_number, notes, cutting/packing
+// instructions, full ship-to) for the board's row-expand "Order spec" read-only block — the
+// board table itself (P342) still only renders the original field set.
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
 
@@ -13,8 +17,10 @@ export async function GET() {
     // (dead row). There is no 'shipped' value on this column (that's jobs.status, a different
     // table) — do not filter on it here.
     const jobsRows = await DB.prepare(`
-      SELECT j.id, j.customer, j.po_number, j.status, j.priority, j.priority_level,
-             j.ship_date, j.ship_to_city, j.ship_to_state,
+      SELECT j.id, j.customer, j.po_number, j.invoice_number, j.status, j.priority, j.priority_level,
+             j.ship_date, j.notes, j.cutting_instructions, j.packing_instructions,
+             j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_city,
+             j.ship_to_state, j.ship_to_zip,
              EXISTS (SELECT 1 FROM cutting_lines cl
                        WHERE cl.job_id = j.id AND cl.line_status = 'in_progress') AS in_cutting,
              EXISTS (SELECT 1 FROM loading_assignments la

@@ -1,26 +1,43 @@
 "use client";
 // src/components/board/ProductionBoard.tsx
-// Read-only production board consuming GET /v2/api/board. Rows are read-only in this prompt —
-// inline Edit and Assign land in P343 (the trailing actions cell below is an inert placeholder).
-import { useCallback, useEffect, useRef, useState } from "react";
+// Production board consuming GET /v2/api/board. Board rows themselves stay read-only; Edit
+// expands an inline panel (BoardRowEdit, P343) scoped to the locked editable subset (ship_date,
+// priority(+level), notes, status) plus assignment — everything else on the order is read-only
+// here and edited in /v2/orders.
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import PlatformHeader from "@/components/PlatformHeader";
 import StatusCards, { type StatusBucket } from "./StatusCards";
 import StatusModal from "./StatusModal";
+import BoardRowEdit from "./BoardRowEdit";
 import { JobStatusBadge, PriorityBadge } from "./badges";
 
 export interface BoardJob {
   id: string;
   customer: string | null;
   po_number: string | null;
+  invoice_number: string | null;
   status: string;
   priority: string | null;
   priority_level: number | null;
   ship_date: string | null;
+  notes: string | null;
+  cutting_instructions: string | null;
+  packing_instructions: string | null;
+  ship_to_company: string | null;
+  ship_to_attention: string | null;
+  ship_to_street: string | null;
   ship_to_city: string | null;
   ship_to_state: string | null;
+  ship_to_zip: string | null;
   in_cutting: boolean;
   is_loading: boolean;
   assignees: string[];
+}
+
+interface AssignableUser {
+  id: string;
+  name: string;
+  username: string;
 }
 
 interface BoardResponse {
@@ -44,6 +61,8 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   const [loading, setLoading] = useState(true);
   const [activeBucket, setActiveBucket] = useState<StatusBucket | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
 
   const load = useCallback(async () => {
@@ -66,6 +85,24 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   useEffect(() => {
     load();
   }, [load]);
+
+  async function toggleExpand(jobId: string) {
+    if (expandedId === jobId) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(jobId);
+    // Lazy, cached once — the assignable-users list rarely changes within a session.
+    if (assignableUsers.length === 0) {
+      try {
+        const res = await fetch("/api/assignable-users");
+        const data = await res.json();
+        if (res.ok && data.ok) setAssignableUsers(data.users || []);
+      } catch {
+        // Non-fatal — the panel still allows removing existing assignees without this list.
+      }
+    }
+  }
 
   function bucketJobs(bucket: StatusBucket): BoardJob[] {
     if (!data) return [];
@@ -132,43 +169,58 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                     </tr>
                   )}
                   {data.jobs.map((job) => (
-                    <tr
-                      key={job.id}
-                      ref={(el) => {
-                        rowRefs.current[job.id] = el;
-                      }}
-                      className={`border-b border-[var(--line)] last:border-0 transition-colors ${
-                        highlightedId === job.id ? "bg-[var(--info-bg)]" : ""
-                      }`}
-                    >
-                      <td className="px-3 py-2">
-                        <div className="font-medium text-text">{job.customer || "—"}</div>
-                        <div className="text-xs text-muted">{job.po_number ? `PO ${job.po_number}` : "No PO"}</div>
-                      </td>
-                      <td className="px-3 py-2 text-muted">
-                        {job.ship_to_city ? `${job.ship_to_city}${job.ship_to_state ? `, ${job.ship_to_state}` : ""}` : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-muted font-mono tabular-nums">{job.ship_date || "—"}</td>
-                      <td className="px-3 py-2">
-                        <PriorityBadge priority={job.priority} priorityLevel={job.priority_level} />
-                      </td>
-                      <td className="px-3 py-2 text-muted">
-                        {job.assignees.length ? job.assignees.join(", ") : "Unassigned"}
-                      </td>
-                      <td className="px-3 py-2">
-                        <JobStatusBadge status={job.status} />
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          disabled
-                          title="Edit — coming in P343"
-                          className="min-h-[36px] px-3 rounded-md border border-[var(--input-border)] text-muted text-xs font-semibold cursor-not-allowed opacity-50"
-                        >
-                          Edit
-                        </button>
-                      </td>
-                    </tr>
+                    <Fragment key={job.id}>
+                      <tr
+                        ref={(el) => {
+                          rowRefs.current[job.id] = el;
+                        }}
+                        className={`border-b border-[var(--line)] last:border-0 transition-colors ${
+                          highlightedId === job.id ? "bg-[var(--info-bg)]" : ""
+                        }`}
+                      >
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-text">{job.customer || "—"}</div>
+                          <div className="text-xs text-muted">{job.po_number ? `PO ${job.po_number}` : "No PO"}</div>
+                        </td>
+                        <td className="px-3 py-2 text-muted">
+                          {job.ship_to_city ? `${job.ship_to_city}${job.ship_to_state ? `, ${job.ship_to_state}` : ""}` : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-muted font-mono tabular-nums">{job.ship_date || "—"}</td>
+                        <td className="px-3 py-2">
+                          <PriorityBadge priority={job.priority} priorityLevel={job.priority_level} />
+                        </td>
+                        <td className="px-3 py-2 text-muted">
+                          {job.assignees.length ? job.assignees.join(", ") : "Unassigned"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <JobStatusBadge status={job.status} />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpand(job.id)}
+                            className="min-h-[36px] px-3 rounded-md border border-[var(--input-border)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
+                          >
+                            {expandedId === job.id ? "Close" : "Edit"}
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedId === job.id && (
+                        <tr>
+                          <td colSpan={7} className="p-0">
+                            <BoardRowEdit
+                              job={job}
+                              assignableUsers={assignableUsers}
+                              onCancel={() => setExpandedId(null)}
+                              onSaved={() => {
+                                setExpandedId(null);
+                                load();
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

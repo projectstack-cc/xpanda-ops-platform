@@ -56,11 +56,19 @@
 
 ## Orders (v2)
 
-> **Status:** Phase 1 (order entry) complete as of P340. Phase 2 (production board): P341 shipped
-> the `/v2/board` scaffold + read-only `/v2/api/board`; P342 shipped the read-only board UI
-> (status cards, table, modals). P343 (inline edit + assign) and P344 (cutover) still pending.
-> Reuses the existing `jobs` + `job_line_items` tables — no new schema.
+> **Status:** Phase 1 (order entry) complete as of P340. Phase 2 (production board): P341
+> (scaffold + read API), P342 (read-only UI), P343 (inline edit + assign + deep-link) all
+> shipped. P344 (cutover — repoint home/nav to `/v2/board`) still pending, and is explicitly
+> gated on Steve confirming `/v2/board` parity on the floor before that push. Reuses the existing
+> `jobs` + `job_line_items` tables — no new schema.
 
+- [ ] Board: manager-flag header for assign gating (avoid the 403 round-trip) — `BoardRowEdit.tsx`
+  currently discovers manager status by attempting the legacy assign/unassign call and reading a
+  403, same as the P333 job-board UI. A dedicated header (mirroring
+  `X-User-Can-Manage-Cutting`) would let the UI hide the add-picker/remove buttons up front.
+- [ ] Order entry: load-existing-order-for-edit deep link — `/v2/orders` only creates new orders
+  (P339 scope). The board's "Open in order entry" link (P343) goes to the module, not a specific
+  order; once order entry supports loading an existing job for edit, deep-link to it directly.
 - [ ] Wire v2 ship-to address verification (Lob) into order entry — the `/v2/orders` form's Verify
   button is stubbed disabled (P339) since no v2 Lob endpoint exists yet.
 - [ ] Packing-slip parser rewrite (anchor-relative extraction + per-vendor template registry) —

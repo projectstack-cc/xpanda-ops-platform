@@ -186,6 +186,33 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P343 — Phase 2, 3/4: board inline edit (subset) + assign + order-entry deep-link.** New
+  `cutting-pilot/src/app/api/board/[id]/route.ts` — `PUT /v2/api/board/:id` updates ONLY
+  `ship_date`, `priority`(+`priority_level`), `notes`, `status`; a status guard blocks any change
+  away from `loading`/`shipped` (400) — deliberately narrower than the legacy `PUT /api/jobs`,
+  which allows all 5 states unconditionally on that endpoint; this is the board's own, more
+  conservative rule per the locked editable-subset scoping, not a claim that legacy already
+  enforces it. Activity-log write corrected to the real 9-column schema (same fix as P338/P341).
+  Gated by the existing `/v2/api/board` middleware prefix — no new permission key. **Assignment
+  reuses the legacy P333 endpoint as instructed, not rebuilt**: `GET/POST/DELETE
+  /api/jobs/:id/assignments` (same host, session cookie travels — confirmed the exact response
+  shapes, including the real `u.display_name` column, by reading `_worker.js/routes/jobs.js`
+  before wiring) plus `GET /api/assignable-users` for the add-picker (`{id, name, username}`,
+  cutting-team members only, lazy-fetched once per board session). A `403` from either surfaces
+  "Manager access required to assign." inline rather than failing silently. New
+  `cutting-pilot/src/components/board/BoardRowEdit.tsx` — the row-expand panel (replaces P342's
+  disabled Edit placeholder): the four editable fields, assignee chips with remove (×) + an add
+  picker, and a **locked, read-only "Order spec" block** (PO, invoice #, ship-to, cutting/packing
+  instructions) with an "Open in order entry →" link to `/v2/orders`. Status select disables
+  itself client-side when the job is already `loading`/`shipped` (any edit would be rejected by
+  the guard anyway). **Additive, non-breaking extension to `GET /v2/api/board`** (P341): the
+  query now also selects `invoice_number`, `notes`, `cutting_instructions`,
+  `packing_instructions`, and the remaining `ship_to_*` columns — needed for the read-only order-
+  spec block, which P341/P342 never fetched; existing consumers are unaffected (additive columns
+  only, no removed/renamed fields). On successful save or assign/unassign, the board **refetches**
+  `/v2/api/board` so counts and rows stay correct. No migration; no widening of the editable
+  subset beyond the four fields; the legacy assignments endpoint was reused, not rebuilt. `tsc
+  --noEmit` + `opennextjs-cloudflare build` green.
 - **P342 — Phase 2, 2/4: read-only production board UI at `/v2/board`.** Replaces the P341
   placeholder. New `cutting-pilot/src/components/board/`: `ProductionBoard.tsx` (`"use client"`
   shell — fetches `GET /v2/api/board`, renders `PlatformHeader` + three status cards + the board
