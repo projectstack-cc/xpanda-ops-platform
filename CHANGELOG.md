@@ -186,6 +186,40 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P340 — End of Phase 1.** Packing-slip upload → client-side parse → prefill above the
+  `/v2/orders` form. New `cutting-pilot/src/lib/packingSlip.ts` ports `jobs/packing-slip-parser.js`
+  **as-is** (behavioral parity, not the anchor-relative rewrite — same y-coordinate grouping,
+  x-gap line reconstruction, BILL TO/SHIP TO column-split, item-header/quantity detection, and
+  every extraction regex, byte-for-byte) into a typed module, using the npm `pdfjs-dist` package
+  (pinned exactly to `4.4.168`, the same version the legacy CDN `<script>` loads) instead of a
+  CDN import. Field mapping onto `OrderPayload` is ported from `jobs/index.html`'s
+  `prefillForm()` — confirmed by reading it, not assumed: **customer and all `ship_to_*` fields
+  come from the parsed SHIP TO block, not BILL TO**; `ship_date` converts `MM/DD/YYYY` →
+  `YYYY-MM-DD`. Part-number matching against the parts library (`matchLineItemToPart`/
+  `getPartsLibrary` in `jobs/index.html`) is legacy-job-board-specific and was **not** ported —
+  outside P340's scope; prefilled line items carry a blank `part_number` for manual entry, same
+  as an unmatched legacy row. **Worker-loading snag and fix**: routing the worker through
+  webpack's `new URL(..., import.meta.url)` asset-module pattern (the usual pdfjs-dist+webpack
+  integration) broke the build — Next's Terser pass tries to minify the emitted `.mjs` as a
+  non-module script and chokes on its own `import`/`export` statements. Fixed by **not** bundling
+  the worker at all: new postbuild `scripts/copy-pdf-worker.mjs` copies
+  `node_modules/pdfjs-dist/build/pdf.worker.min.mjs` straight into
+  `.open-next/assets/v2/pdf.worker.min.mjs` (bypassing the JS pipeline entirely, chained into
+  `cf-build` after `fix-asset-prefix.mjs`), and `workerSrc` is the literal `/v2/pdf.worker.min.mjs`
+  string — confirmed physically present at that path in `.open-next/assets/` post-build, matching
+  the Cloudflare Workers asset binding's literal path serving (same "asset PATH must match the
+  asset URL" discipline as P205's `_next` relocation). `OrderEntryForm.tsx` gained the dropzone
+  (top of form, `packingSlipFilename`/`parsing`/`parseError` state): on parse failure shows
+  "Couldn't read that slip — enter the order manually" inline and never blocks manual entry; on
+  success, `packing_slip_filename` and (when an invoice number is present) `packing_slip_invoice`
+  are carried into the `POST /v2/api/orders` payload — both already accepted by the P338 API, no
+  contract change. `source` stays hardcoded `"manual"` in P338 as instructed — tagging parsed
+  orders `source='packing_slip'` is deliberately deferred to `BACKLOG.md`, not built here. No
+  migration, no board work, legacy `jobs/packing-slip-parser.js` untouched. `tsc --noEmit` +
+  `opennextjs-cloudflare build` green; confirmed `pdf.worker.min.mjs` lands under
+  `.open-next/assets/v2/`, not stray outside `/v2`. **This is the end of Phase 1** — Steve
+  confirmed proceeding straight to Phase 2 (P341+) in this same session rather than waiting on
+  floor validation first.
 - **P339** — Manual order-entry form live at `/v2/orders`, replacing the P337 placeholder. New
   `cutting-pilot/src/components/orders/OrderEntryForm.tsx` (`"use client"`): single-column form,
   five sections top→bottom (Customer & order / Ship-to / Shipping / Line items / Instructions) per

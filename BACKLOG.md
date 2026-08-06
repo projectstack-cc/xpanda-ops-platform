@@ -56,15 +56,21 @@
 
 ## Orders (v2)
 
-> **Status:** Orders/Production-board rework in progress. P337 shipped the `/v2/orders` scaffold.
-> P338 shipped the `/v2/api/orders` create+list handler. P339 shipped the manual order-entry form
-> + nav entry. P340 (packing-slip prefill) still pending. Reuses the existing `jobs` +
-> `job_line_items` tables — no new schema.
+> **Status:** Phase 1 (order entry) complete as of P340 — `/v2/orders` scaffold (P337), API
+> (P338), manual form (P339), packing-slip prefill (P340) all shipped. Phase 2 (production board,
+> P341+) follows. Reuses the existing `jobs` + `job_line_items` tables — no new schema.
 
-- [ ] **P340 — Packing-slip parser move.** Port `jobs/packing-slip-parser.js`'s extraction as-is
-  into a v2 upload → parse → prefill flow above the `/v2/orders` form.
 - [ ] Wire v2 ship-to address verification (Lob) into order entry — the `/v2/orders` form's Verify
   button is stubbed disabled (P339) since no v2 Lob endpoint exists yet.
+- [ ] Packing-slip parser rewrite (anchor-relative extraction + per-vendor template registry) —
+  P340 ported the existing y-coordinate/x-gap heuristic parser as-is into v2; the more robust
+  rewrite is still a separate, future effort (applies to both legacy and v2 copies).
+- [ ] Tag orders created via packing-slip prefill with `source='packing_slip'` in
+  `/v2/api/orders` — deferred out of P338/P340 to keep those prompts single-purpose; currently
+  every v2-created order is hardcoded `source: "manual"` regardless of how it was filled in.
+- [ ] Port packing-slip line-item → parts-library matching (`matchLineItemToPart`/
+  `getPartsLibrary` in `jobs/index.html`) into `/v2/orders` — P340 only ported raw extraction;
+  prefilled line items currently carry a blank `part_number` for manual entry.
 
 ---
 

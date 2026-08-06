@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "cf-build": "opennextjs-cloudflare && node scripts/fix-asset-prefix.mjs",
+    "cf-build": "opennextjs-cloudflare && node scripts/fix-asset-prefix.mjs && node scripts/copy-pdf-worker.mjs",
     "deploy": "npm run cf-build && wrangler deploy",
     "preview": "npm run cf-build && wrangler dev",
     "cf-typegen": "wrangler types"
@@ -13,6 +13,7 @@
   "dependencies": {
     "lucide-react": "^1.21.0",
     "next": "14.2.5",
+    "pdfjs-dist": "4.4.168",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"

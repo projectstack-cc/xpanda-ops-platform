@@ -1,10 +1,12 @@
 "use client";
 // src/components/orders/OrderEntryForm.tsx
 // Manual order-entry form for /v2/orders. Single-column, section by section, posts to the
-// P338 contract at POST /v2/api/orders. Manual entry only — packing-slip prefill is P340.
-import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+// P338 contract at POST /v2/api/orders. A packing-slip dropzone (P340) parses a PDF client-side
+// and prefills form state — parsing failures never block manual entry.
+import { useRef, useState } from "react";
+import { FileUp, Plus, Trash2 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
+import { parsePackingSlip } from "@/lib/packingSlip";
 
 export interface OrderLineItem {
   part_number: string;
@@ -32,6 +34,8 @@ export interface OrderPayload {
   cutting_instructions: string;
   packing_instructions: string;
   notes: string;
+  packing_slip_filename?: string;
+  packing_slip_invoice?: string;
   line_items: Array<{
     part_number: string;
     description: string;
@@ -134,9 +138,44 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
   const [packingInstructions, setPackingInstructions] = useState("");
   const [notes, setNotes] = useState("");
 
+  const [packingSlipFilename, setPackingSlipFilename] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+
+  async function handleSlipFile(file: File | undefined | null) {
+    if (!file) return;
+    setParseError(null);
+    setParsing(true);
+    try {
+      const result = await parsePackingSlip(file);
+      if (!result.success) {
+        setParseError("Couldn't read that slip — enter the order manually.");
+        return;
+      }
+      const { data } = result;
+      setPackingSlipFilename(result.filename);
+      if (data.customer) setCustomer(data.customer);
+      if (data.po_number) setPoNumber(data.po_number);
+      if (data.invoice_number) setInvoiceNumber(data.invoice_number);
+      if (data.ship_to_company) setShipToCompany(data.ship_to_company);
+      if (data.ship_to_attention) setShipToAttention(data.ship_to_attention);
+      if (data.ship_to_street) setShipToStreet(data.ship_to_street);
+      if (data.ship_to_city) setShipToCity(data.ship_to_city);
+      if (data.ship_to_state) setShipToState(data.ship_to_state);
+      if (data.ship_to_zip) setShipToZip(data.ship_to_zip);
+      if (data.ship_date) setShipDate(data.ship_date);
+      if (data.line_items && data.line_items.length) setLineItems(data.line_items);
+    } catch {
+      setParseError("Couldn't read that slip — enter the order manually.");
+    } finally {
+      setParsing(false);
+    }
+  }
 
   function updateLine(idx: number, patch: Partial<OrderLineItem>) {
     setLineItems((prev) => prev.map((li, i) => (i === idx ? { ...li, ...patch } : li)));
@@ -168,6 +207,9 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
     setCuttingInstructions("");
     setPackingInstructions("");
     setNotes("");
+    setPackingSlipFilename("");
+    setParseError(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setError(null);
     setSavedId(null);
   }
@@ -201,6 +243,8 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
       cutting_instructions: cuttingInstructions.trim(),
       packing_instructions: packingInstructions.trim(),
       notes: notes.trim(),
+      ...(packingSlipFilename ? { packing_slip_filename: packingSlipFilename } : {}),
+      ...(packingSlipFilename && invoiceNumber.trim() ? { packing_slip_invoice: invoiceNumber.trim() } : {}),
       line_items: lineItems
         .filter((li) => li.part_number.trim() || li.description.trim())
         .map((li) => ({
@@ -267,6 +311,34 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
 
       <form onSubmit={handleSubmit} className="flex-1 w-full max-w-2xl mx-auto px-4 py-6 space-y-6">
         <h1 className="text-xl font-semibold text-text">New order</h1>
+
+        {/* Packing-slip upload — client-side parse + prefill; never blocks manual entry */}
+        <section>
+          <label
+            htmlFor="packing-slip-input"
+            className="flex flex-col items-center justify-center gap-2 min-h-[96px] rounded-lg border-2 border-dashed border-[var(--input-border)] bg-[var(--surface-2)] text-center px-4 py-6 cursor-pointer hover:border-[var(--brand)] transition-colors"
+          >
+            <FileUp size={22} className="text-muted" aria-hidden="true" />
+            <span className="text-sm font-medium text-text">
+              {parsing
+                ? "Parsing packing slip…"
+                : packingSlipFilename
+                  ? `Loaded: ${packingSlipFilename} — drop another to replace`
+                  : "Drop a packing slip to prefill, or click to browse"}
+            </span>
+            <input
+              ref={fileInputRef}
+              id="packing-slip-input"
+              type="file"
+              accept="application/pdf,.pdf"
+              className="sr-only"
+              onChange={(e) => handleSlipFile(e.target.files?.[0])}
+            />
+          </label>
+          {parseError && (
+            <p className="text-sm text-[var(--warn-text)] mt-2">{parseError}</p>
+          )}
+        </section>
 
         {error && (
           <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
