@@ -56,16 +56,21 @@
 
 ## Orders (v2)
 
-> **Status:** Orders/Production-board rework complete — Phase 1 (P337–P340, order entry) and
-> Phase 2 (P341–P344, production board) both shipped. `/v2/board` is now the primary
-> production-board link from the home page and both platform nav bars (legacy `shared-header.js`
-> and v2 `PlatformHeader.tsx`); the legacy Kanban stays reachable at `/jobs/` via an outline
-> button/link until retired (see the legacy-board retirement item below). Reuses the existing
-> `jobs` + `job_line_items` tables throughout — no new schema.
+> **Status:** Orders/Production-board rework built — Phase 1 (P337–P340, order entry) and
+> Phase 2 (P341–P344, production board) are all coded, deployed, and reachable by direct URL.
+> **The P344 cutover was reverted same-day** — home page and both nav bars (legacy
+> `shared-header.js` and v2 `PlatformHeader.tsx`) point at `/jobs/` again; `/v2/board` is
+> unlinked pending Steve's testing. Reuses the existing `jobs` + `job_line_items` tables
+> throughout — no new schema.
 
+- [ ] **Re-link `/v2/board` (re-run the P344 cutover)** — home-page Job Board card, v2
+  `PlatformHeader.tsx` nav, `shared/shared-header.js` legacy nav, and `OrderEntryForm.tsx`'s
+  post-save link all need to be repointed from `/jobs/` back to `/v2/board` once Steve has
+  tested it on the floor and confirms it's ready. Do not do this speculatively — see the new v2
+  visibility-gate HARD RULE in `xpanda-ops-agents.md`.
 - [ ] **Retire legacy `jobs/index.html` board** (+ `jobs-header.js`, `jobs-shared.css` if unused)
-  once `/v2/board` parity is confirmed on the floor — post-cutover cleanup. Pairs with the
-  already-noted `_worker.js/routes/quickbooks.js` removal for the same cleanup pass.
+  once `/v2/board` is re-linked and confirmed at parity on the floor — post-cutover cleanup.
+  Pairs with the already-noted `_worker.js/routes/quickbooks.js` removal for the same cleanup pass.
 - [ ] Board: manager-flag header for assign gating (avoid the 403 round-trip) — `BoardRowEdit.tsx`
   currently discovers manager status by attempting the legacy assign/unassign call and reading a
   403, same as the P333 job-board UI. A dedicated header (mirroring

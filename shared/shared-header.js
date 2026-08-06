@@ -146,7 +146,7 @@ if (!window.__xpandaPwaInstallLoaded) {
     (function () {
       var _p = window.location.pathname;
       var _mods = [
-        { label: 'Job board',     href: '/v2/board',      perm: 'jobs' },
+        { label: 'Job board',     href: '/jobs/',         perm: 'jobs' },
         { label: 'Logistics',     href: '/logistics/',     perm: 'logistics.dashboard' },
         { label: 'Manufacturing', href: '/manufacturing/', perm: 'manufacturing.calculators' },
         { label: 'Production',    href: '/production/',    perm: 'production.inventory' },

@@ -165,6 +165,19 @@ When a user request arrives:
 
 ## Cross-Cutting Rules (Enforced by Orchestrator)
 - **Migration-before-push (HARD RULE — highest priority)**: `main` is production and auto-deploys — legacy Pages ships instantly on push; the v2 Worker ships via the gated GitHub Action (`.github/workflows/deploy-v2-worker.yml`). NEVER push or merge to `main` while any change depends on an unrun D1 migration. Any prompt that adds/edits a `DB_Migrations/*.sql` file, or references a new column/table, MUST (1) call out the migration as a manual step, and (2) be held from push until **Steve has explicitly confirmed the migration was run in the D1 console**. The Orchestrator flags such prompts and must not advise pushing until Steve confirms. Order is always: migration in console → then push/deploy code that references it. Out-of-order deploys have caused platform-wide 500s.
+- **v2 visibility gate (HARD RULE)**: building and deploying a new `/v2/*` module is NOT the same
+  action as making it visible. A module may be built, pushed, and reachable by direct URL (still
+  permission-gated) as soon as it's green — but wiring it into the home-page card, the v2
+  `PlatformHeader.tsx` nav, or any legacy nav link ("the cutover") is a **separate, later step**
+  that must not happen in the same prompt/session as the initial build, and must not happen at
+  all until **Steve has explicitly tested it and confirmed it's complete**. Default state for any
+  new v2 module is build-and-deploy-but-unlinked; treat "wire it into nav" as requiring the same
+  explicit go-ahead as a migration, not something to bundle into a "scaffold + cutover" prompt
+  sequence just because both were asked for. (Learned 2026-08-06: the P341–P344 production-board
+  work correctly built `/v2/board`, but P344's cutover — repointing home/nav — went out same
+  session without waiting for floor testing, and had to be reverted the same day once Steve found
+  the board needed more work. The board route/API/UI itself was left in place; only the links to
+  it were reverted.)
 - **CI/CD (v2 Worker)**: pushes touching `cutting-pilot/**` trigger the deploy workflow — auto build + `tsc --noEmit` + OpenNext build, then a **fully automatic deploy** (the `production`-environment manual-approval gate was removed — no required reviewer anymore). The Migration-before-push rule is now enforced purely as a human discipline (confirm the migration ran in D1 before pushing), not by any CI gate. Legacy Pages is unchanged (instant deploy on push). The pipeline never runs D1 migrations.
 - **Frameworks — vanilla by default, React only on the migration surface**: React, Vue, Angular, Svelte are forbidden in every **legacy** module (vanilla JS only). The SOLE sanctioned exception is the React/Next.js migration surface (`cutting-pilot/` and future `/v2/*` projects), owned by §9a/§9b. Legacy agents must not adopt frameworks; migration agents must not touch legacy modules outside their `/v2` scope.
 - **NO build tools in legacy**: No webpack, vite, rollup, parcel for legacy static HTML. (The migration surface uses `next build` + OpenNext — that is the exception, scoped to `/v2`.)

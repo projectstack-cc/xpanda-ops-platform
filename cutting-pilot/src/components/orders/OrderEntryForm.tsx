@@ -293,10 +293,10 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
                 New order
               </button>
               <a
-                href="/v2/board"
+                href="/jobs/"
                 className="min-h-[44px] inline-flex items-center px-5 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold no-underline hover:bg-[var(--ghost-bg)]"
               >
-                Go to production board
+                Go to job board
               </a>
             </div>
           </div>

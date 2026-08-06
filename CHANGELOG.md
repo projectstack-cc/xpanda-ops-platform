@@ -186,8 +186,20 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
-- **P344 — Phase 2, 4/4 (final): cutover — production board → `/v2/board`, legacy kept
-  reachable.** `/v2/board` is now the primary production-board link everywhere the platform
+- **Hotfix (2026-08-06, same session as P344) — reverted the P344 cutover.** Steve tested
+  `/v2/board` and found it needs more work before going in front of the floor; explicit new
+  standing policy: **a v2 module must not be linked from anywhere until Steve has tested and
+  confirmed it's complete** (now documented as a HARD RULE in `xpanda-ops-agents.md`'s
+  Cross-Cutting Rules). Reverted exactly the four link changes P344 made — `index.html`'s home
+  Job Board card back to a single `Open` → `/jobs/` button (dropped the `/v2/board` primary +
+  "Legacy board" secondary split), `PlatformHeader.tsx`'s "Job board" nav entry back to `/jobs/`,
+  `shared/shared-header.js`'s legacy module nav back to `/jobs/`, and `OrderEntryForm.tsx`'s
+  post-save link back to `/jobs/` / "Go to job board". **Nothing else from P341–P344 was
+  touched** — `/v2/board`'s route, `/v2/api/board` (+ `[id]`), and every board component stay
+  fully built and deployed, just unreached from any nav/home link; Steve can still reach it
+  directly by URL to keep testing. `tsc --noEmit` + `opennextjs-cloudflare build` green.
+- **P344 — Phase 2, 4/4 (final, later reverted same day — see the hotfix entry above): cutover
+  — production board → `/v2/board`, legacy kept reachable.** `/v2/board` is now the primary production-board link everywhere the platform
   points at "the board": home-page Job Board card (`index.html`, title unchanged, description
   reframed to "Production board — view, assign, status. Orders are created in Orders.", primary
   button → `/v2/board`, new outline **Legacy board** button → `/jobs/`); v2 `PlatformHeader.tsx`'s
