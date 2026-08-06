@@ -186,6 +186,23 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P341 — Phase 2, 1/4: `/v2/board` scaffold + read-only `GET /v2/api/board`.** New middleware
+  entries (`/v2/api/board`, `/v2/board`) reuse the existing **`jobs`** permission key — no new
+  key. New `cutting-pilot/src/app/api/board/route.ts`: one query over active (non-archived,
+  non-terminal-status) `jobs`, each row carrying `in_cutting` (`EXISTS` against `cutting_lines
+  .line_status = 'in_progress'`) and `is_loading` (`EXISTS` against `loading_assignments
+  .loading_status NOT IN (...)`), plus a batched (90-per-chunk) assignee-name lookup and
+  Open/Cutting/Loading counts. **Two live-schema corrections against the prompt's own draft,
+  confirmed by reading `_worker.js/routes/jobs.js` before writing the query**: the assignee join
+  column is `u.display_name`, not `u.name` (`u.name` doesn't exist on `users`) — matches the
+  exact pattern already used by `GET /api/jobs`'s own assignee enrichment and P335's cutting
+  queue tagging; and the `loading_status` terminal-exclusion set is `NOT IN ('delivered',
+  'archived')`, not `NOT IN ('archived','shipped')` — `'shipped'` isn't a value on this column at
+  all (that's `jobs.status`, a different field), and the real terminal value the draft missed is
+  `'delivered'`. New `cutting-pilot/src/app/board/page.tsx` — placeholder server shell, same
+  `validateSession`/`X-User-Name` pattern as every other v2 page; full UI is P342. No migration,
+  no write endpoints (P343), no home/nav cutover (P344). `tsc --noEmit` +
+  `opennextjs-cloudflare build` green.
 - **P340 — End of Phase 1.** Packing-slip upload → client-side parse → prefill above the
   `/v2/orders` form. New `cutting-pilot/src/lib/packingSlip.ts` ports `jobs/packing-slip-parser.js`
   **as-is** (behavioral parity, not the anchor-relative rewrite — same y-coordinate grouping,
