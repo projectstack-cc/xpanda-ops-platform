@@ -9,6 +9,7 @@ import PlatformHeader from "@/components/PlatformHeader";
 import StatusCards, { type StatusBucket } from "./StatusCards";
 import StatusModal from "./StatusModal";
 import OrderDetailModal from "./OrderDetailModal";
+import CalendarView from "./CalendarView";
 import BoardRowEdit from "./BoardRowEdit";
 import { JobStatusBadge, PriorityBadge } from "./badges";
 
@@ -64,6 +65,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "calendar">("list");
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
 
@@ -149,6 +151,24 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
           <>
             <StatusCards counts={data.counts} onSelect={setActiveBucket} />
 
+            <div className="inline-flex rounded-lg border border-[var(--input-border)] overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setView("list")}
+                className={`min-h-[40px] px-4 text-sm font-semibold cursor-pointer ${view === "list" ? "bg-[var(--info-bg)] text-[var(--info-text)]" : "text-text hover:bg-[var(--ghost-bg)]"}`}
+              >
+                List
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("calendar")}
+                className={`min-h-[40px] px-4 text-sm font-semibold cursor-pointer border-l border-[var(--input-border)] ${view === "calendar" ? "bg-[var(--info-bg)] text-[var(--info-text)]" : "text-text hover:bg-[var(--ghost-bg)]"}`}
+              >
+                Calendar
+              </button>
+            </div>
+
+            {view === "list" && (
             <div className="overflow-x-auto rounded-xl border border-[var(--card-border)] bg-surface">
               <table className="w-full text-sm">
                 <thead>
@@ -228,6 +248,11 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                 </tbody>
               </table>
             </div>
+            )}
+
+            {view === "calendar" && (
+              <CalendarView jobs={data.jobs} onSelectJob={setDetailId} />
+            )}
           </>
         )}
       </div>

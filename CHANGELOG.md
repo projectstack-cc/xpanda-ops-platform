@@ -186,6 +186,16 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P346 — production board: calendar view (list/calendar toggle).** New `CalendarView.tsx`, a
+  client-side month grid keyed on `ship_date`, ported from legacy `jobs/index.html`'s
+  `renderCalendar(jobs)`: normalizes `M/D/YYYY` → `YYYY-MM-DD`, leading-blank cells, today
+  highlight, up to 4 status-colored pills/day, "+N more" → a day-detail list composing the shared
+  `Modal` primitive. `ProductionBoard.tsx` gains a List/Calendar toggle above the table; clicking a
+  pill or day-list row opens the existing P345 `OrderDetailModal` via the same `setDetailId`.
+  `STATUS_VARIANTS` exported from `badges.tsx` so calendar pill colors stay tokenized and in sync
+  with the list/status-modal badges. Reuses `data.jobs` already fetched by `GET /v2/api/board` — no
+  API change, no migration, no new permission key. `tsc --noEmit` + `npx opennextjs-cloudflare build`
+  green. No `BACKLOG.md` item existed for this — nothing removed there.
 - **P345 — production board cleanup: order-detail modal, INV# on rows, wider list.** `/v2/board`
   rows now show **INV#** instead of PO (PO is BOL-only) and are clickable, opening a new
   `OrderDetailModal.tsx` (composes the shared `Modal` primitive, same as `StatusModal`): header

@@ -37,7 +37,7 @@ export function PriorityBadge({
   return <span className={`${badgeBase} border border-[var(--border)] text-[var(--text-hint)]`}>Normal</span>;
 }
 
-const STATUS_VARIANTS: Record<string, { label: string; cls: string }> = {
+export const STATUS_VARIANTS: Record<string, { label: string; cls: string }> = {
   not_started: { label: "Not started", cls: "border border-[var(--border)] text-[var(--text-hint)]" },
   in_production: {
     label: "In production",
