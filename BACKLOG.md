@@ -56,14 +56,15 @@
 
 ## Orders (v2)
 
-> **Status:** Orders/Production-board rework in progress. P337 shipped the `/v2/orders` scaffold
-> (route + `orders` permission key + home-page card, placeholder only). P338 shipped the
-> `/v2/api/orders` create+list handler. P339 (order entry form) and P340 (packing-slip prefill)
-> still pending. Reuses the existing `jobs` + `job_line_items` tables — no new schema.
+> **Status:** Orders/Production-board rework in progress. P337 shipped the `/v2/orders` scaffold.
+> P338 shipped the `/v2/api/orders` create+list handler. P339 shipped the manual order-entry form
+> + nav entry. P340 (packing-slip prefill) still pending. Reuses the existing `jobs` +
+> `job_line_items` tables — no new schema.
 
-- [ ] **P339 — Order entry form.** Real UI for `/v2/orders/page.tsx` (currently a P337 placeholder),
-  packing-slip prefill, `PlatformHeader` nav entry.
-- [ ] **P340 — Packing-slip parser move.** Migrate the relevant parsing logic to the v2 surface.
+- [ ] **P340 — Packing-slip parser move.** Port `jobs/packing-slip-parser.js`'s extraction as-is
+  into a v2 upload → parse → prefill flow above the `/v2/orders` form.
+- [ ] Wire v2 ship-to address verification (Lob) into order entry — the `/v2/orders` form's Verify
+  button is stubbed disabled (P339) since no v2 Lob endpoint exists yet.
 
 ---
 

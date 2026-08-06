@@ -9,6 +9,7 @@ const NAV_AUTO_HIDE_IDLE_MS = 5_000;
 
 const NAV_MODULES = [
   { label: "Job board",     href: "/jobs/",          perm: "jobs" },
+  { label: "Orders",        href: "/v2/orders",      perm: "orders" },
   { label: "Logistics",     href: "/logistics/",      perm: "logistics.dashboard" },
   { label: "Manufacturing", href: "/manufacturing/",  perm: "manufacturing.calculators" },
   // Future: if a dedicated Cutting link is surfaced, gate it behind perm: "manufacturing.cutting"

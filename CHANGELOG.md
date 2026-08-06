@@ -186,6 +186,23 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P339** — Manual order-entry form live at `/v2/orders`, replacing the P337 placeholder. New
+  `cutting-pilot/src/components/orders/OrderEntryForm.tsx` (`"use client"`): single-column form,
+  five sections top→bottom (Customer & order / Ship-to / Shipping / Line items / Instructions) per
+  the locked design, posting the typed `OrderPayload` to `POST /v2/api/orders` (P338's fixed
+  contract). Ship-to's **Verify** button is a disabled stub (`title="Address verification —
+  coming"`) — no Lob endpoint exists in the live tree, so none was invented; tracked in
+  `BACKLOG.md`. Line items are an editable table (part number / description / quantity /
+  dimensions / density, add/remove rows) with a derived **Total BDFT** readout —
+  `bdftPerPiece()` ports the exact `(L × W × H) / 144` "L x W x H" free-text parser (fractions
+  included) from `jobs/index.html`'s `liBdftPerPiece`, summed × quantity per line, unparseable
+  rows contribute 0 rather than blocking submit. On success shows a saved state with **New
+  order** (resets the form) and a link to the legacy job board; `!ok` errors surface inline, never
+  an infinite spinner. `cutting-pilot/src/app/orders/page.tsx` now renders `<OrderEntryForm>` in
+  place of the placeholder (server shell — `validateSession` + `X-User-Name` — unchanged from
+  P337). New "Orders" entry in `PlatformHeader.tsx`'s `NAV_MODULES`, gated on `orders`, directly
+  below Job board. No `/v2/api/orders` contract change, no migration, no packing-slip work (P340).
+  `tsc --noEmit` + `opennextjs-cloudflare build` green.
 - **P338** — `/v2/api/orders` handler (create + list). New `cutting-pilot/src/app/api/orders/
   route.ts`: `GET` returns the 100 most-recent non-archived jobs (id/customer/po_number/
   invoice_number/status/ship_date/source/created_at) for the entry module's own use; `POST`
