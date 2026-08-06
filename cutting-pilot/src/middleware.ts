@@ -27,6 +27,8 @@ const PERMISSION_MAP: Array<{ prefix: string; key: string }> = [
   { prefix: "/v2/api/cutting/manage", key: "manufacturing.cutting.manage" },
   { prefix: "/v2/api/cutting", key: "manufacturing.cutting" },
   { prefix: "/v2/cutting", key: "manufacturing.cutting" },
+  { prefix: "/v2/api/orders", key: "orders" },
+  { prefix: "/v2/orders", key: "orders" },
   { prefix: "/v2/api/blocks", key: "manufacturing.blocks" },
   { prefix: "/v2/blocks", key: "manufacturing.blocks" },
 ];

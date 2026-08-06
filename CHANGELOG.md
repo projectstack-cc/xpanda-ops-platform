@@ -184,6 +184,24 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ---
 
+## Orders (v2)
+
+- **P337** — Scaffold for `/v2/orders` (Orders/Production-board rework, prompt 1 of 4 — P338 API,
+  P339 form, P340 packing-slip parser move to follow). New `orders` permission key: registered in
+  `middleware.ts`'s `PERMISSION_MAP` (`/v2/api/orders` and `/v2/orders`, first-match-wins, GET→view/
+  mutate→edit via the existing `hasPermission` logic — no other middleware change) and labeled in
+  `admin/roles.html`'s `PERMISSION_LABELS` ("Order Entry"). New `cutting-pilot/src/app/orders/
+  page.tsx` — server shell mirroring `schedule/page.tsx` (`validateSession` + `X-User-Name`), renders
+  a placeholder only (no form, no API call, no `PlatformHeader` nav entry — deferred to P339). New
+  home-page "Orders" card in `index.html` (`data-permission="orders"`, placed before Logistics),
+  linking to `/v2/orders`. **No D1 migration** — order entry reuses the existing `jobs` +
+  `job_line_items` tables; `orders` is a permissions-blob key only. `tsc --noEmit` +
+  `opennextjs-cloudflare build` green. **Manual step for Steve:** grant the new Order Entry (`orders`)
+  permission to the appropriate roles in the admin role editor — until then the card is hidden and
+  `/v2/orders` 403s for everyone except admins.
+
+---
+
 ## Schedule Board (v2)
 
 - **P313** — Schedule v2: removed delivery time/location and method/carrier lines from order cards (sheet cells retained for matching/sorting, display-only removal). `OrderRow.tsx`'s two faint text lines below the status-pill row (`delivery_time · location` and `method / carrier`, full density only) and their gating consts (`showTiming`, `showMethodCarrier`) are gone; `row.method` stays referenced in `formatLoadLabel`/`loadLabel` for the load-count line, and the API route/`ScheduleBoardRow` type are untouched — those columns are still selected/returned for matching/sorting. `tsc --noEmit` + `cf-build` green.
