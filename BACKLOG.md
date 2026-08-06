@@ -57,12 +57,10 @@
 ## Orders (v2)
 
 > **Status:** Orders/Production-board rework in progress. P337 shipped the `/v2/orders` scaffold
-> (route + `orders` permission key + home-page card, placeholder only). P338 (`/v2/api/orders`
-> handler), P339 (order entry form + packing-slip prefill), and P340 (packing-slip parser move) to
-> follow. Reuses the existing `jobs` + `job_line_items` tables — no new schema.
+> (route + `orders` permission key + home-page card, placeholder only). P338 shipped the
+> `/v2/api/orders` create+list handler. P339 (order entry form) and P340 (packing-slip prefill)
+> still pending. Reuses the existing `jobs` + `job_line_items` tables — no new schema.
 
-- [ ] **P338 — `/v2/api/orders` handler.** Backend for order create/edit, gated on the `orders`
-  permission (already wired in `middleware.ts`).
 - [ ] **P339 — Order entry form.** Real UI for `/v2/orders/page.tsx` (currently a P337 placeholder),
   packing-slip prefill, `PlatformHeader` nav entry.
 - [ ] **P340 — Packing-slip parser move.** Migrate the relevant parsing logic to the v2 surface.

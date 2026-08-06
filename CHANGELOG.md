@@ -186,6 +186,22 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P338** — `/v2/api/orders` handler (create + list). New `cutting-pilot/src/app/api/orders/
+  route.ts`: `GET` returns the 100 most-recent non-archived jobs (id/customer/po_number/
+  invoice_number/status/ship_date/source/created_at) for the entry module's own use; `POST`
+  creates a job + line items, porting the exact `jobs` INSERT column list and side-effects from
+  `_worker.js/routes/jobs.js`'s POST branch (auto outbound `shipments` row, auto
+  `loading_assignments` rows skipped for `customer pickup`) — **except** legacy
+  `reconcileCuttingSteps()`/`cutting_steps` creation, deliberately dropped (v2 `cutting_lines`
+  reconcile lazily on the cutting queue read, per P337's ground truth). Activity-log write
+  corrected against the **live** schema found in `_worker.js/lib/core.js`'s `logActivity()` (and
+  matching every existing v2 route, e.g. `cutting/clock-in/route.ts`) —
+  `(id, timestamp, action, entity_type, entity_id, summary, detail, user_id, created_at)` — not
+  the 7-column shape sketched in the prompt's own example, which the prompt explicitly flagged as
+  needing live-tree verification. Actor identity from `X-User-Id`/`X-User-Name` headers only,
+  never the body. Gated on the existing `orders` permission (P337): GET→view, POST→edit. No
+  migration, no form UI (P339), no `/v2/api/orders` contract deviation from what P339/P340 will
+  consume. `tsc --noEmit` + `opennextjs-cloudflare build` green.
 - **P337** — Scaffold for `/v2/orders` (Orders/Production-board rework, prompt 1 of 4 — P338 API,
   P339 form, P340 packing-slip parser move to follow). New `orders` permission key: registered in
   `middleware.ts`'s `PERMISSION_MAP` (`/v2/api/orders` and `/v2/orders`, first-match-wins, GET→view/
