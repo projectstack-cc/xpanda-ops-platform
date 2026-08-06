@@ -800,6 +800,16 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P347** — BOL Email Queue backend: `GET /api/bol-email/candidates` + `POST /api/bol-email/send`.
+  New `_worker.js/routes/bol-email.js`, gated under the existing `logistics.bol` permission (no new
+  key). Candidates: tomorrow's (America/New_York) Lisma BOLs (`carrier_name LIKE 'LISMA%'`, matching
+  both LISMA Logistics and LISMA Flatbed), joined against `jobs`/`loading_assignments`/`loading_bays`,
+  matched on `date(COALESCE(loading_assignments.ship_date, jobs.ship_date))` so both date-only and
+  datetime-stored values compare correctly. Returns full `bols` rows — the client (P348) feeds them
+  straight into the existing `BolShared.generatePdf`. Send is a thin server-side Resend relay
+  (`fetch` to `api.resend.com/emails`, no SDK); subject/body are built server-side from `ship_date` +
+  `delivery_count`, never trusted from the client. No DB migration — no send log, by product decision.
+  The Resend API key is a Worker secret (`RESEND_API_KEY`), never exposed to the browser.
 - **P332** — Fix duplicate/phantom loading cards at the source: load_count reconcile now counts
   archived/completed loads as filled slots; dashboard backfill no longer regenerates awaiting cards for
   shipped jobs; bay assignment now adopts an existing awaiting card before creating a new one.

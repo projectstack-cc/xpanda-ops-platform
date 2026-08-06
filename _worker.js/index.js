@@ -17,6 +17,7 @@ import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePasswo
 import { handleApiNotifications, handleApiPushSubscribe, handleApiPushUnsubscribe } from './routes/notifications.js';
 import { handleApiPublicBolLookup, handleApiPublicBolPickup, handleApiPublicBolDelivery, handleApiPublicBolDocument } from './routes/public.js';
 import { handleApiQuickbooks, handleApiQbWebhook, handleApiQbOAuthCallback } from './routes/quickbooks.js';
+import { handleApiBolEmail } from './routes/bol-email.js';
 
 // _worker.js — Pages Advanced Mode with SAFE error reporting
 
@@ -71,6 +72,7 @@ const API_ROUTES = [
   { prefix: '/api/jobs',      handler: (req, env) => handleApiJobs(req, env) },
   { prefix: '/api/assignable-users', handler: (req, env) => handleApiAssignableUsers(req, env) },
   { path:   '/api/shipments', handler: (req, env) => handleApiShipments(req, env) },
+  { prefix: '/api/bol-email', handler: (req, env) => handleApiBolEmail(req, env) },
   { prefix: '/api/cutting',   handler: (req, env) => handleApiCutting(req, env) },
 
   // BOL / load builder (specific paths before their shared prefixes)
