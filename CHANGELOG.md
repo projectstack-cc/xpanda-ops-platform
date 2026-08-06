@@ -800,6 +800,16 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P348** — BOL Email Queue page (`logistics/bol-email.html`), linked from the logistics
+  dashboard. Loads tomorrow's Lisma candidates from P347's `GET /api/bol-email/candidates`
+  (checked by default; non-Lisma badge if a manually-added row's `carrier_name` doesn't match
+  `^LISMA`), lets the manager add any BOL via the existing `GET /api/bols?search=` and remove rows
+  before sending. Each selected BOL renders to its own PDF client-side via the existing
+  `BolShared.generatePdf([record], { previewOnly:true, copyType:'driver' })` — one attachment per
+  load, no merging, `bol-shared.js` untouched. A confirm modal shows the recipient (prefilled from
+  `localStorage`), count, and filenames before posting base64 attachments to P347's
+  `POST /api/bol-email/send`; recipient is remembered in `localStorage` on success. No new
+  permission key (gated by the `logistics.bol` path rule P347 added), no migration.
 - **P347** — BOL Email Queue backend: `GET /api/bol-email/candidates` + `POST /api/bol-email/send`.
   New `_worker.js/routes/bol-email.js`, gated under the existing `logistics.bol` permission (no new
   key). Candidates: tomorrow's (America/New_York) Lisma BOLs (`carrier_name LIKE 'LISMA%'`, matching

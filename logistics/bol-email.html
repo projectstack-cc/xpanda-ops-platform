@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BOL Email Queue — xPanda Operations</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.json">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link rel="icon" href="/assets/img/favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+
+<link rel="stylesheet" href="/logistics/logistics-shared.css">
+<style>
+  .bol-email-wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 20px 16px 60px;
+  }
+  .bol-email-intro {
+    color: var(--muted);
+    margin: 0 0 18px;
+    font-size: 14px;
+  }
+  .bol-email-toolbar {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .bol-email-toolbar input[type="text"] {
+    flex: 1;
+    min-width: 220px;
+    padding: 10px 12px;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 14px;
+    min-height: 44px;
+  }
+  .bol-email-search-results {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--card-bg);
+    margin: -8px 0 16px;
+    max-height: 260px;
+    overflow-y: auto;
+    display: none;
+  }
+  .bol-email-search-results.open { display: block; }
+  .bol-email-search-row {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .bol-email-search-row:last-child { border-bottom: none; }
+  .bol-email-search-row:hover { background: var(--bg); }
+  .bol-email-list {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--card-bg);
+    overflow: hidden;
+  }
+  .bol-email-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .bol-email-row:last-child { border-bottom: none; }
+  .bol-email-row input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    cursor: pointer;
+  }
+  .bol-email-row-label {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .bol-email-row-label .muted { color: var(--muted); }
+  .bol-email-badge-warn {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #92400e;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .bol-email-remove-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px 8px;
+    min-height: 44px;
+  }
+  .bol-email-empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--text-hint);
+    font-size: 14px;
+  }
+  .bol-email-send-bar {
+    margin-top: 18px;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .bol-email-modal-list {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 12px 0;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .bol-email-modal-list div { padding: 3px 0; }
+  .bol-email-modal-body label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .bol-email-modal-body input[type="email"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 14px;
+    min-height: 44px;
+  }
+</style>
+</head>
+<body>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+<script src="/logistics/bol-shared.js?v=317"></script>
+
+<script src="/logistics/logistics-header.js"></script>
+<script>
+document.getElementById('logistics-page-title').textContent = 'BOL Email Queue';
+document.getElementById('logistics-page-subtitle').textContent = "Tomorrow's Lisma shipments";
+</script>
+
+<div class="bol-email-wrap">
+  <p class="bol-email-intro" id="bol-email-intro">BOL Email Queue — tomorrow's Lisma shipments</p>
+
+  <div class="bol-email-toolbar">
+    <input type="text" id="bol-email-search-input" placeholder="Add a BOL manually — search by customer or BOL #…" autocomplete="off">
+  </div>
+  <div class="bol-email-search-results" id="bol-email-search-results"></div>
+
+  <div class="bol-email-list" id="bol-email-list">
+    <div class="bol-email-empty" id="bol-email-empty">Loading…</div>
+  </div>
+
+  <div class="bol-email-send-bar">
+    <button class="logistics-btn logistics-btn-primary" id="bol-email-send-btn" onclick="openSendConfirm()" disabled>Send</button>
+  </div>
+</div>
+
+<!-- Confirm-send modal -->
+<div class="logistics-modal-overlay hidden" id="bol-email-confirm-modal">
+  <div class="logistics-modal-panel" style="max-width:480px;">
+    <div class="logistics-modal-header">
+      <h3 style="margin:0;font-size:16px;">Send BOLs to carrier</h3>
+      <button class="logistics-modal-close" onclick="closeSendConfirm()">×</button>
+    </div>
+    <div class="logistics-modal-body">
+      <label for="bol-email-recipient">Recipient email</label>
+      <input type="email" id="bol-email-recipient" placeholder="carrier@example.com">
+      <p id="bol-email-confirm-count" style="margin:14px 0 4px;font-size:13px;color:var(--muted);"></p>
+      <div class="bol-email-modal-list" id="bol-email-confirm-filenames"></div>
+    </div>
+    <div class="logistics-modal-footer">
+      <button class="logistics-btn logistics-btn-outline" onclick="closeSendConfirm()">Cancel</button>
+      <button class="logistics-btn logistics-btn-primary" id="bol-email-confirm-send-btn" onclick="confirmSend()">Confirm &amp; Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const LISMA_RE = /^LISMA/i;
+  const RECIPIENT_KEY = 'xpanda_lisma_email';
+
+  let shipDate = '';
+  // rows: Map<id, { record, checked, nonLisma }>
+  const rows = new Map();
+  let renderCache = new Map(); // id -> { pdfBytes, filename }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function fieldOr(v) {
+    return (v === null || v === undefined || v === '') ? '—' : esc(v);
+  }
+
+  function isNonLisma(record) {
+    return !LISMA_RE.test(String(record.carrier_name || ''));
+  }
+
+  function labelFor(record) {
+    const customer = fieldOr(record.customer);
+    const invBol = fieldOr(record.invoice_number || record.bol_number);
+    const load = fieldOr(record.load_number);
+    const trailer = fieldOr(record.trailer_number);
+    const bay = fieldOr(record.bay_number || record.bay_label);
+    return `${customer} <span class="muted">·</span> ${invBol} <span class="muted">· Load ${load} · Trailer ${trailer} · Bay ${bay}</span>`;
+  }
+
+  function renderList() {
+    const listEl = document.getElementById('bol-email-list');
+    const emptyEl = document.getElementById('bol-email-empty');
+    const sendBtn = document.getElementById('bol-email-send-btn');
+
+    if (rows.size === 0) {
+      listEl.innerHTML = '';
+      listEl.appendChild(emptyElNode());
+      sendBtn.disabled = true;
+      return;
+    }
+
+    listEl.innerHTML = '';
+    let anyChecked = false;
+    for (const [id, entry] of rows) {
+      if (entry.checked) anyChecked = true;
+      const row = document.createElement('div');
+      row.className = 'bol-email-row';
+      row.innerHTML = `
+        <input type="checkbox" data-id="${esc(id)}" ${entry.checked ? 'checked' : ''}>
+        <div class="bol-email-row-label">${labelFor(entry.record)}${entry.nonLisma ? '<span class="bol-email-badge-warn">Not Lisma</span>' : ''}</div>
+        <button class="bol-email-remove-btn" data-remove="${esc(id)}" title="Remove">×</button>
+      `;
+      listEl.appendChild(row);
+    }
+
+    listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.dataset.id;
+        if (rows.has(id)) rows.get(id).checked = cb.checked;
+        renderList();
+      });
+    });
+    listEl.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        rows.delete(btn.dataset.remove);
+        renderList();
+      });
+    });
+
+    sendBtn.disabled = !anyChecked;
+  }
+
+  function emptyElNode() {
+    const div = document.createElement('div');
+    div.className = 'bol-email-empty';
+    div.id = 'bol-email-empty';
+    div.textContent = `No Lisma BOLs found for tomorrow (${shipDate || '—'}).`;
+    return div;
+  }
+
+  async function loadCandidates() {
+    const { ok, data, error } = await window.api.get('/api/bol-email/candidates');
+    if (!ok) {
+      document.getElementById('bol-email-list').innerHTML = '';
+      document.getElementById('bol-email-list').appendChild(Object.assign(document.createElement('div'), {
+        className: 'bol-email-empty', textContent: 'Failed to load candidates: ' + (error || 'unknown error'),
+      }));
+      return;
+    }
+    shipDate = data.ship_date || '';
+    document.getElementById('bol-email-intro').textContent = `BOL Email Queue — Lisma shipments for ${shipDate}`;
+    rows.clear();
+    for (const record of (data.candidates || [])) {
+      rows.set(record.id, { record, checked: true, nonLisma: isNonLisma(record) });
+    }
+    renderList();
+  }
+
+  // ── Add BOL manually (search) ──────────────────────────────────────────
+  let searchTimer = null;
+  const searchInput = document.getElementById('bol-email-search-input');
+  const searchResults = document.getElementById('bol-email-search-results');
+
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const term = searchInput.value.trim();
+    if (!term) {
+      searchResults.classList.remove('open');
+      searchResults.innerHTML = '';
+      return;
+    }
+    searchTimer = setTimeout(() => runSearch(term), 250);
+  });
+
+  async function runSearch(term) {
+    const { ok, data } = await window.api.get('/api/bols?search=' + encodeURIComponent(term));
+    if (!ok || !data || !Array.isArray(data.bols)) {
+      searchResults.innerHTML = '';
+      searchResults.classList.remove('open');
+      return;
+    }
+    const results = data.bols.slice(0, 20);
+    if (results.length === 0) {
+      searchResults.innerHTML = '<div class="bol-email-search-row">No matches.</div>';
+      searchResults.classList.add('open');
+      return;
+    }
+    searchResults.innerHTML = results.map(r => `
+      <div class="bol-email-search-row" data-add="${esc(r.id)}">${labelFor(r)}</div>
+    `).join('');
+    searchResults.classList.add('open');
+    searchResults.querySelectorAll('[data-add]').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.dataset.add;
+        const record = results.find(r => String(r.id) === String(id));
+        if (record && !rows.has(record.id)) {
+          rows.set(record.id, { record, checked: true, nonLisma: isNonLisma(record) });
+          renderList();
+        }
+        searchInput.value = '';
+        searchResults.classList.remove('open');
+        searchResults.innerHTML = '';
+      });
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!searchResults.contains(e.target) && e.target !== searchInput) {
+      searchResults.classList.remove('open');
+    }
+  });
+
+  // ── Send flow ───────────────────────────────────────────────────────────
+  function bytesToBase64(bytes) {
+    let bin = '';
+    const CH = 0x8000;
+    for (let i = 0; i < bytes.length; i += CH) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+    }
+    return btoa(bin);
+  }
+
+  function filenameFor(record) {
+    const inv = record.invoice_number || record.bol_number || record.id;
+    const cust = String(record.customer || '').replace(/[^\w-]+/g, '_');
+    return `BOL-${inv}-${cust}.pdf`;
+  }
+
+  window.openSendConfirm = async function () {
+    if (!window.BolShared || !window.PDFLib) {
+      alert('BOL renderer failed to load. Refresh the page and try again.');
+      return;
+    }
+
+    const selected = [...rows.values()].filter(e => e.checked);
+    if (selected.length === 0) return;
+
+    const sendBtn = document.getElementById('bol-email-send-btn');
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Rendering…';
+
+    renderCache = new Map();
+    try {
+      for (const entry of selected) {
+        const { pdfBytes } = await window.BolShared.generatePdf([entry.record], { previewOnly: true, copyType: 'driver' });
+        renderCache.set(entry.record.id, { pdfBytes, filename: filenameFor(entry.record) });
+      }
+    } catch (e) {
+      console.error('BOL render failed:', e);
+      alert('Failed to render one or more BOLs: ' + (e?.message || e));
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send';
+      return;
+    }
+
+    sendBtn.textContent = 'Send';
+    sendBtn.disabled = false;
+
+    document.getElementById('bol-email-recipient').value = localStorage.getItem(RECIPIENT_KEY) || '';
+    document.getElementById('bol-email-confirm-count').textContent = `${renderCache.size} BOL${renderCache.size === 1 ? '' : 's'} will be sent as separate attachments:`;
+    document.getElementById('bol-email-confirm-filenames').innerHTML =
+      [...renderCache.values()].map(v => `<div>${esc(v.filename)}</div>`).join('');
+
+    document.getElementById('bol-email-confirm-modal').classList.remove('hidden');
+  };
+
+  window.closeSendConfirm = function () {
+    document.getElementById('bol-email-confirm-modal').classList.add('hidden');
+  };
+
+  window.confirmSend = async function () {
+    const to = document.getElementById('bol-email-recipient').value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      alert('Enter a valid recipient email.');
+      return;
+    }
+
+    const attachments = [...renderCache.values()].map(v => ({
+      filename: v.filename,
+      content: bytesToBase64(v.pdfBytes),
+    }));
+
+    const confirmBtn = document.getElementById('bol-email-confirm-send-btn');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Sending…';
+
+    const { ok, data, error } = await window.api.post('/api/bol-email/send', {
+      to,
+      ship_date: shipDate,
+      delivery_count: attachments.length,
+      attachments,
+    });
+
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Confirm & Send';
+
+    if (!ok) {
+      alert('Send failed: ' + (data?.error || error || 'Unknown error') + (data?.detail ? '\n' + data.detail : ''));
+      return;
+    }
+
+    localStorage.setItem(RECIPIENT_KEY, to);
+    closeSendConfirm();
+
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:10000;';
+    toast.innerHTML = `<span style="color:#34d399;">✓</span> Sent ${data.sent} BOL${data.sent === 1 ? '' : 's'}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+
+    loadCandidates();
+  };
+
+  loadCandidates();
+})();
+</script>
+
+</body>
+</html>
