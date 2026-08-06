@@ -56,12 +56,16 @@
 
 ## Orders (v2)
 
-> **Status:** Phase 1 (order entry) complete as of P340. Phase 2 (production board): P341
-> (scaffold + read API), P342 (read-only UI), P343 (inline edit + assign + deep-link) all
-> shipped. P344 (cutover — repoint home/nav to `/v2/board`) still pending, and is explicitly
-> gated on Steve confirming `/v2/board` parity on the floor before that push. Reuses the existing
-> `jobs` + `job_line_items` tables — no new schema.
+> **Status:** Orders/Production-board rework complete — Phase 1 (P337–P340, order entry) and
+> Phase 2 (P341–P344, production board) both shipped. `/v2/board` is now the primary
+> production-board link from the home page and both platform nav bars (legacy `shared-header.js`
+> and v2 `PlatformHeader.tsx`); the legacy Kanban stays reachable at `/jobs/` via an outline
+> button/link until retired (see the legacy-board retirement item below). Reuses the existing
+> `jobs` + `job_line_items` tables throughout — no new schema.
 
+- [ ] **Retire legacy `jobs/index.html` board** (+ `jobs-header.js`, `jobs-shared.css` if unused)
+  once `/v2/board` parity is confirmed on the floor — post-cutover cleanup. Pairs with the
+  already-noted `_worker.js/routes/quickbooks.js` removal for the same cleanup pass.
 - [ ] Board: manager-flag header for assign gating (avoid the 403 round-trip) — `BoardRowEdit.tsx`
   currently discovers manager status by attempting the legacy assign/unassign call and reading a
   403, same as the P333 job-board UI. A dedicated header (mirroring

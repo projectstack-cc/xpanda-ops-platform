@@ -186,6 +186,30 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P344 — Phase 2, 4/4 (final): cutover — production board → `/v2/board`, legacy kept
+  reachable.** `/v2/board` is now the primary production-board link everywhere the platform
+  points at "the board": home-page Job Board card (`index.html`, title unchanged, description
+  reframed to "Production board — view, assign, status. Orders are created in Orders.", primary
+  button → `/v2/board`, new outline **Legacy board** button → `/jobs/`); v2 `PlatformHeader.tsx`'s
+  "Job board" nav entry (`/jobs/` → `/v2/board`, no `isNavActive()` special-case needed since the
+  href now literally equals the target path — unlike the `/v2/cutting → /manufacturing/`
+  cross-mapping); and the **legacy** shared module-header nav (`shared/shared-header.js`'s own
+  `_mods` array, rendered on every legacy module page via `document.write` — found by grepping
+  the whole repo for other primary "Job board" links per the prompt's own instruction, not
+  mentioned in the prompt file itself). Also repointed `OrderEntryForm.tsx`'s post-save "Go to
+  job board" link (now "Go to production board" → `/v2/board`) since it means the same generic
+  "go see the board" as the other primary links. **Left alone, deliberately**: `logistics/
+  index.html`'s `buildOutboundRow` "Job linked ↗" link, which deep-links to one *specific* job
+  record via `/jobs/?job_id=...` — `/v2/board` has no per-job query-param deep-link yet (tracked
+  as a P343 follow-up), so repointing it would break the link rather than repoint it; and
+  `jobs/jobs-header.js`'s own `dashboardPath: '/jobs/'` (its own "back to dashboard" self-link,
+  unrelated to the primary-board-entry concern). **`jobs/index.html` itself is completely
+  untouched** — still fully reachable at `/jobs/`, not slimmed or gutted; a `BACKLOG.md` item
+  tracks its eventual retirement once floor parity is confirmed. No migration, no new permission
+  key (board stays on `jobs`), no `_worker.js` change. `tsc --noEmit` +
+  `opennextjs-cloudflare build` green. **This closes out the Orders/Production-board rework**
+  (P337–P344) — Steve confirmed pushing straight through both phase gates in this session rather
+  than waiting on floor validation between phases.
 - **P343 — Phase 2, 3/4: board inline edit (subset) + assign + order-entry deep-link.** New
   `cutting-pilot/src/app/api/board/[id]/route.ts` — `PUT /v2/api/board/:id` updates ONLY
   `ship_date`, `priority`(+`priority_level`), `notes`, `status`; a status guard blocks any change
