@@ -56,11 +56,10 @@
 
 ## Orders (v2)
 
-> **Status:** Phase 1 (order entry) complete as of P340 — `/v2/orders` scaffold (P337), API
-> (P338), manual form (P339), packing-slip prefill (P340) all shipped. Phase 2 (production
-> board): P341 shipped the `/v2/board` scaffold + read-only `/v2/api/board`. P342 (board UI),
-> P343 (inline edit + assign), P344 (cutover) still pending. Reuses the existing `jobs` +
-> `job_line_items` tables — no new schema.
+> **Status:** Phase 1 (order entry) complete as of P340. Phase 2 (production board): P341 shipped
+> the `/v2/board` scaffold + read-only `/v2/api/board`; P342 shipped the read-only board UI
+> (status cards, table, modals). P343 (inline edit + assign) and P344 (cutover) still pending.
+> Reuses the existing `jobs` + `job_line_items` tables — no new schema.
 
 - [ ] Wire v2 ship-to address verification (Lob) into order entry — the `/v2/orders` form's Verify
   button is stubbed disabled (P339) since no v2 Lob endpoint exists yet.

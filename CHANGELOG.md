@@ -186,6 +186,29 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P342 — Phase 2, 2/4: read-only production board UI at `/v2/board`.** Replaces the P341
+  placeholder. New `cutting-pilot/src/components/board/`: `ProductionBoard.tsx` (`"use client"`
+  shell — fetches `GET /v2/api/board`, renders `PlatformHeader` + three status cards + the board
+  table, `!ok`/network errors surface inline with a Retry button, never an infinite spinner),
+  `StatusCards.tsx` (Open/Cutting/Loading counts, each opening the bucket modal), `StatusModal.tsx`
+  (**one** reusable modal parameterized by bucket + job list, composing `@/components/Modal` — no
+  copy-paste modal per card), `badges.tsx` (`PriorityBadge`/`JobStatusBadge`, shared by both the
+  table rows and the modal rows so the two badge renderings can't drift). Table columns:
+  Customer/PO, Ship-to (city, state), Ship date, Priority badge, Assigned (name list or
+  "Unassigned"), Status badge, trailing Actions cell — the Edit button is rendered disabled
+  (`title="Edit — coming in P343"`), genuinely inert, not wired. Sort mirrors the API
+  (`priority_level` desc, `ship_date` asc) — no client re-sort. **Modal row → board row
+  linking**: clicking a job in a status modal closes the modal, scrolls the matching table row
+  into view, and briefly highlights it — there's no per-job v2 detail page to deep-link to yet
+  (that's the order-entry edit deep-link, tracked as a P343 follow-up), so this is the correctly
+  scoped interpretation of "linking to its board row" for a read-only prompt. Badge taxonomy is
+  new (job `status` has 5 states / `priority`+`priority_level` differ from the existing
+  `StatusPill.tsx`'s 3-state cutting-line vocabulary), confirmed against `jobs/index.html`'s
+  actual field values before building it: `priority` is `'rush'`/`'normal'`, `priority_level` is
+  `0`–`3` (Normal/Elevated/High/Critical). `cutting-pilot/src/app/board/page.tsx` now renders
+  `<ProductionBoard>` in place of the P341 placeholder. No `/v2/api/board` contract change, no
+  write endpoints (P343), no migration, home/nav still point at the legacy board (P344). `tsc
+  --noEmit` + `opennextjs-cloudflare build` green.
 - **P341 — Phase 2, 1/4: `/v2/board` scaffold + read-only `GET /v2/api/board`.** New middleware
   entries (`/v2/api/board`, `/v2/board`) reuse the existing **`jobs`** permission key — no new
   key. New `cutting-pilot/src/app/api/board/route.ts`: one query over active (non-archived,
