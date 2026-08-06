@@ -186,6 +186,25 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P345 — production board cleanup: order-detail modal, INV# on rows, wider list.** `/v2/board`
+  rows now show **INV#** instead of PO (PO is BOL-only) and are clickable, opening a new
+  `OrderDetailModal.tsx` (composes the shared `Modal` primitive, same as `StatusModal`): header
+  summary, a line-items table (part #/description/qty/dimensions/density), the attached packing
+  slip embedded inline via `<iframe src="/api/jobs/:id/packing-slip">` (legacy R2/base64-backed
+  endpoint, same host — no new slip endpoint) or a muted empty state, and a **Print cut list**
+  button. New `GET /v2/api/board/:id` (alongside the existing PUT) returns the job header +
+  `job_line_items` + a `has_packing_slip` flag. Cut-list PDF generator ported **verbatim in logic**
+  from `jobs/index.html`'s prompt-328/329 `buildCutListPdf`/`printCutList` into new
+  `src/lib/cutList.ts` (TypeScript, `PDFLib` global → `import { PDFDocument, ... } from "pdf-lib"`,
+  a new `cutting-pilot` dependency) — same fixed-row-capacity pagination, same coordinates, no
+  layout change; `downloadCutList(job)` triggers the same `<a download>` Blob-URL pattern as
+  legacy. Row click opens the modal; the Actions cell's Edit button stops propagation so inline
+  edit (`BoardRowEdit`) is unaffected. List widened (`max-w-6xl` → `max-w-screen-2xl`) and row
+  cells bumped `py-2` → `py-3` for breathing room. **Known gap, not fixed here**: v2-entered orders
+  (`/v2/api/orders`) still insert `null` for `packing_slip_key`/`packing_slip_pdf`, so the modal
+  only shows a slip for legacy/imported jobs — tracked in `BACKLOG.md`. No D1 migration, no new
+  permission key (still gated on `jobs`), `/v2/api/board`'s list contract and inline-edit behavior
+  untouched. `tsc --noEmit` + `npm run cf-build` green.
 - **Hotfix (2026-08-06, same session as P344) — reverted the P344 cutover.** Steve tested
   `/v2/board` and found it needs more work before going in front of the floor; explicit new
   standing policy: **a v2 module must not be linked from anywhere until Steve has tested and

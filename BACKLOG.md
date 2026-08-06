@@ -89,6 +89,10 @@
 - [ ] Port packing-slip line-item → parts-library matching (`matchLineItemToPart`/
   `getPartsLibrary` in `jobs/index.html`) into `/v2/orders` — P340 only ported raw extraction;
   prefilled line items currently carry a blank `part_number` for manual entry.
+- [ ] Persist the order-entry packing slip to R2 on save (mirror legacy `jobs.js` R2 upload) —
+  `cutting-pilot/src/app/api/orders/route.ts` currently inserts `null` for
+  `packing_slip_key`/`packing_slip_pdf`, so v2-entered orders don't carry their uploaded slip into
+  the board's order-detail modal (P345) — only legacy/imported jobs show one there today.
 
 ---
 

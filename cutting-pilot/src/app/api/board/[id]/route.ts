@@ -8,6 +8,32 @@ import { getEnv } from "@/lib/db";
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const STATUSES = ["not_started", "in_production", "done", "loading", "shipped"];
 
+export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const { DB } = await getEnv();
+  try {
+    const job = await DB.prepare(`
+      SELECT id, customer, invoice_number, status, ship_date,
+             ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
+             ship_to_city, ship_to_state, ship_to_zip,
+             (packing_slip_key IS NOT NULL OR packing_slip_pdf IS NOT NULL) AS has_packing_slip
+        FROM jobs WHERE id = ?
+    `).bind(id).first<any>();
+    if (!job) return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 });
+    const li = await DB.prepare(`
+      SELECT part_number, description, quantity, dimensions, density
+        FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC
+    `).bind(id).all();
+    return NextResponse.json({
+      ok: true,
+      job: { ...job, has_packing_slip: !!job.has_packing_slip },
+      line_items: li.results ?? [],
+    });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, { status: 500 });
+  }
+}
+
 export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const { DB } = await getEnv();

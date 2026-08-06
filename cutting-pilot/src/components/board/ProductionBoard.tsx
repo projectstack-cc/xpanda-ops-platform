@@ -8,6 +8,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import PlatformHeader from "@/components/PlatformHeader";
 import StatusCards, { type StatusBucket } from "./StatusCards";
 import StatusModal from "./StatusModal";
+import OrderDetailModal from "./OrderDetailModal";
 import BoardRowEdit from "./BoardRowEdit";
 import { JobStatusBadge, PriorityBadge } from "./badges";
 
@@ -62,6 +63,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   const [activeBucket, setActiveBucket] = useState<StatusBucket | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
 
@@ -129,7 +131,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
     <div className="min-h-screen flex flex-col bg-bg">
       <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Production board · v2" currentPath="/v2/board" />
 
-      <div className="flex-1 w-full max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="flex-1 w-full max-w-screen-2xl mx-auto px-4 py-6 space-y-6">
         <h1 className="text-xl font-semibold text-text">Production board</h1>
 
         {error && (
@@ -151,7 +153,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--line)] text-left text-xs font-semibold text-muted">
-                    <th className="px-3 py-2">Customer / PO</th>
+                    <th className="px-3 py-2">Customer</th>
                     <th className="px-3 py-2">Ship-to</th>
                     <th className="px-3 py-2">Ship date</th>
                     <th className="px-3 py-2">Priority</th>
@@ -174,28 +176,29 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                         ref={(el) => {
                           rowRefs.current[job.id] = el;
                         }}
-                        className={`border-b border-[var(--line)] last:border-0 transition-colors ${
+                        className={`border-b border-[var(--line)] last:border-0 transition-colors cursor-pointer hover:bg-[var(--ghost-bg)] ${
                           highlightedId === job.id ? "bg-[var(--info-bg)]" : ""
                         }`}
+                        onClick={() => setDetailId(job.id)}
                       >
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-3">
                           <div className="font-medium text-text">{job.customer || "—"}</div>
-                          <div className="text-xs text-muted">{job.po_number ? `PO ${job.po_number}` : "No PO"}</div>
+                          <div className="text-xs text-muted">{job.invoice_number ? `INV# ${job.invoice_number}` : "No INV#"}</div>
                         </td>
-                        <td className="px-3 py-2 text-muted">
+                        <td className="px-3 py-3 text-muted">
                           {job.ship_to_city ? `${job.ship_to_city}${job.ship_to_state ? `, ${job.ship_to_state}` : ""}` : "—"}
                         </td>
-                        <td className="px-3 py-2 text-muted font-mono tabular-nums">{job.ship_date || "—"}</td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-3 text-muted font-mono tabular-nums">{job.ship_date || "—"}</td>
+                        <td className="px-3 py-3">
                           <PriorityBadge priority={job.priority} priorityLevel={job.priority_level} />
                         </td>
-                        <td className="px-3 py-2 text-muted">
+                        <td className="px-3 py-3 text-muted">
                           {job.assignees.length ? job.assignees.join(", ") : "Unassigned"}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-3">
                           <JobStatusBadge status={job.status} />
                         </td>
-                        <td className="px-3 py-2 text-right">
+                        <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
                             onClick={() => toggleExpand(job.id)}
@@ -238,6 +241,8 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
           onSelectJob={handleSelectFromModal}
         />
       )}
+
+      <OrderDetailModal jobId={detailId} onClose={() => setDetailId(null)} />
     </div>
   );
 }
