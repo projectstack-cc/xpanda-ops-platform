@@ -24,6 +24,7 @@ export interface CutListJob {
   ship_to_city: string | null;
   ship_to_state: string | null;
   ship_to_zip: string | null;
+  carrier: string | null;
   line_items: CutListLineItem[];
 }
 
@@ -112,7 +113,8 @@ export async function buildCutListPdf(job: CutListJob): Promise<Uint8Array> {
     drawRight(page, "Cut list", 18, fontBold, black, y - 15);
     drawRight(page, `Inv #${job.invoice_number || ""}`, 11, font, gray, y - 33);
     drawRight(page, `Ship date: ${formatShipDate(job.ship_date)}`, 11, font, gray, y - 47);
-    y -= 62;
+    drawRight(page, `Ship Via: ${job.carrier || ""}`, 11, font, gray, y - 61);
+    y -= 76;
     hr(page, y);
     y -= 18;
     page.drawText("CUSTOMER", { x: margin, y, size: 9, font: fontBold, color: gray });

@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
   const { DB } = await getEnv();
   try {
     const job = await DB.prepare(`
-      SELECT id, customer, invoice_number, status, ship_date,
+      SELECT id, customer, invoice_number, status, ship_date, carrier,
              ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
              ship_to_city, ship_to_state, ship_to_zip,
              (packing_slip_key IS NOT NULL OR packing_slip_pdf IS NOT NULL) AS has_packing_slip

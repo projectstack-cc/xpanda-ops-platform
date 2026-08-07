@@ -13,6 +13,7 @@ interface DetailJob {
   invoice_number: string | null;
   status: string;
   ship_date: string | null;
+  carrier: string | null;
   ship_to_company: string | null;
   ship_to_attention: string | null;
   ship_to_street: string | null;

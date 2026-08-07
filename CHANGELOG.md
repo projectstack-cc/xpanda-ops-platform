@@ -186,6 +186,17 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P349 — Ship Via on the cut list, bilateral (legacy + v2).** `cutting-pilot/src/lib/cutList.ts`
+  is a **separate TypeScript port** of the legacy `buildCutListPdf` (not a shared generator — ported
+  verbatim in logic, P345), so it needed its own edit: `CutListJob` gained `carrier: string | null`
+  and `buildPage1Header` draws `Ship Via: <carrier>` under `Ship date`, same coordinates/style as
+  legacy. The v2 job payload did **not** already carry carrier, so it was threaded through: `GET
+  /v2/api/board/:id`'s `SELECT` now includes `jobs.carrier` (no migration — column already exists),
+  `OrderDetailModal.tsx`'s `DetailJob` interface gained `carrier`, and the existing `{ ...data.job }`
+  spread into `downloadCutList()` carries it through with no other call-site change. Same `carrier`
+  key as the legacy surface (`job.carrier`, D1 column `jobs.carrier`). `tsc --noEmit` +
+  `npx opennextjs-cloudflare build` (via `npm run cf-build`) green. See also the paired legacy entry
+  in **Job Board**.
 - **P346 — production board: calendar view (list/calendar toggle).** New `CalendarView.tsx`, a
   client-side month grid keyed on `ship_date`, ported from legacy `jobs/index.html`'s
   `renderCalendar(jobs)`: normalizes `M/D/YYYY` → `YYYY-MM-DD`, leading-blank cells, today
@@ -1116,6 +1127,13 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P349 — Ship Via on the cut list, bilateral (legacy + v2).** `Ship Via: <carrier>` line added to
+  the cut-list PDF header, right under `Ship date`, same right-aligned style — read-through from the
+  existing `job.carrier` field (the Carrier input under SHIPPING; no migration, no new column).
+  Legacy `buildCutListPdf` in `jobs/index.html` draws the line directly from the already-loaded job
+  object. Blank carrier renders the `Ship Via:` label with an empty value rather than hiding it.
+  `node --check` clean on the extracted inline `<script>`. See also the paired v2 entry in
+  **Orders (v2)** for the `cutting-pilot/` side of this change.
 - **P334** — Job board UI for P333's multi-assignee production assignment. `jobs/index.html` only.
   Read-only assignee chips (`assigneeChips(assignees)`) render on each list-view job row next to the
   invoice number/priority/ship-to-verify badges — visible to everyone, empty `assignees` renders
