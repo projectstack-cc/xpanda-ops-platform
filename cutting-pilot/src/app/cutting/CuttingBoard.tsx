@@ -103,19 +103,31 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
 
   const filteredQueue = useMemo(() => {
     const term = search.trim().toLowerCase();
+    let result: typeof queue;
     if (term) {
-      return queue.filter(
+      result = queue.filter(
         (j) =>
           j.customer.toLowerCase().includes(term) ||
           j.invoice_number.toLowerCase().includes(term)
       );
+    } else if (showAll) {
+      result = queue;
+    } else {
+      const { start, end } = thisWeekRange();
+      result = queue.filter(
+        (j) => j.ship_date !== null && j.ship_date >= start && j.ship_date <= end
+      );
     }
-    if (showAll) return queue;
-    const { start, end } = thisWeekRange();
-    return queue.filter(
-      (j) => j.ship_date !== null && j.ship_date >= start && j.ship_date <= end
-    );
-  }, [queue, search, showAll]);
+    // The operator's open-session jobs must always be visible, regardless of week/search —
+    // otherwise the in-progress job vanishes from the list after a refresh (only the bottom
+    // strip remains). Only jobs actually present in `queue` apply; orphaned sessions (job
+    // archived/shipped, not in `queue`) stay handled by the strip's own orphaned banner.
+    const myOpenJobIds = new Set(mySessions.map((s) => s.job_id));
+    if (myOpenJobIds.size === 0) return result;
+    const present = new Set(result.map((j) => j.id));
+    const missing = queue.filter((j) => myOpenJobIds.has(j.id) && !present.has(j.id));
+    return missing.length ? [...result, ...missing] : result;
+  }, [queue, search, showAll, mySessions]);
 
   const selectedJob = queue.find((j) => j.id === selectedJobId) ?? null;
 
@@ -583,6 +595,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
               onClockOut={() =>
                 openClockOut(session.session_id, session.line, session.job_id)
               }
+              onOpen={session.orphaned ? undefined : () => setSelectedJobId(session.job_id)}
               disabled={acting}
             />
           ))}

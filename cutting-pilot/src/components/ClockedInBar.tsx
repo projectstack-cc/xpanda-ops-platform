@@ -7,6 +7,7 @@ type Props = {
   startedAt: string;
   orphaned: boolean;
   onClockOut: () => void;
+  onOpen?: () => void;
   disabled?: boolean;
 };
 
@@ -22,6 +23,7 @@ export default function ClockedInBar({
   line,
   orphaned,
   onClockOut,
+  onOpen,
   disabled,
 }: Props) {
   return (
@@ -32,15 +34,31 @@ export default function ClockedInBar({
         </div>
       )}
       <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-text truncate">
-            Running — {invoice ? `#${invoice}` : "Job"}
-          </p>
-          <p className="text-xs text-muted truncate">
-            {customer ? `${customer} · ` : ""}
-            {line}
-          </p>
-        </div>
+        {onOpen ? (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="touch-manipulation min-w-0 text-left min-h-[44px] rounded hover:bg-[var(--border-light)] -mx-1 px-1"
+          >
+            <p className="text-sm font-semibold text-text truncate">
+              Running — {invoice ? `#${invoice}` : "Job"}
+            </p>
+            <p className="text-xs text-muted truncate">
+              {customer ? `${customer} · ` : ""}
+              {line}
+            </p>
+          </button>
+        ) : (
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-text truncate">
+              Running — {invoice ? `#${invoice}` : "Job"}
+            </p>
+            <p className="text-xs text-muted truncate">
+              {customer ? `${customer} · ` : ""}
+              {line}
+            </p>
+          </div>
+        )}
         <button
           type="button"
           disabled={disabled}

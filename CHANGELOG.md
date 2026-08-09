@@ -10,6 +10,19 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P352 — keep the operator's active job visible across refresh (#2) + clocked-in strip opens
+  the order (#7).** **#2:** `CuttingBoard.tsx`'s `filteredQueue` now unions in any `queue` job the
+  operator holds an open session on (`myOpenJobIds` from `mySessions`, added to the `useMemo` deps)
+  after the existing search/week filter runs, deduped and appended — so a job whose ship week
+  isn't "this week" (or that a search term doesn't match) no longer drops off the list after a
+  refresh with Show All off. Only jobs actually present in `queue` are unioned in; orphaned
+  sessions (job archived/shipped) are still handled solely by the strip's orphaned banner. **#7:**
+  `ClockedInBar.tsx` gained an optional `onOpen?: () => void` — when provided, the left info block
+  (invoice/customer/line text) becomes a `touch-manipulation` button distinct from the sibling
+  Stop button; `CuttingBoard.tsx` passes `onOpen={() => setSelectedJobId(session.job_id)}` for
+  each non-orphaned session (omitted for orphaned ones — nothing to open). Relies on P350's
+  `selectedJob` resolving against the full `queue`, so this opens the detail Sheet even with the
+  week filter active. `tsc --noEmit` + `npx opennextjs-cloudflare build` green.
 - **P351 — handoff author on the resume hint (#1) + derive line qty_done from per-item sums
   (#3).** **#1:** `queue/route.ts`'s closed-session query now also selects `cs.operator_name`; a
   parallel `handoffByByKey` map (keyed identically to the existing `handoffByKey`, same
