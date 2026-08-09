@@ -75,7 +75,7 @@ export async function handleApiUsers(request, env) {
   try {
     if (request.method === 'GET') {
       const userRows = await db.prepare(
-        "SELECT id, username, display_name, password, role, role_id, is_active, first_login, created_at, updated_at FROM users ORDER BY username COLLATE NOCASE"
+        "SELECT id, username, display_name, password, role, role_id, shift, is_active, first_login, created_at, updated_at FROM users ORDER BY username COLLATE NOCASE"
       ).all();
 
       const allAssignments = await db.prepare(
@@ -106,6 +106,8 @@ export async function handleApiUsers(request, env) {
       const role_ids = Array.isArray(body.role_ids) ? body.role_ids : (body.role_id ? [body.role_id] : ['role-staff']);
       const legacyRoleId = role_ids[0] || 'role-staff';
       const legacyRole = legacyRoleId === 'role-administrator' ? 'admin' : (legacyRoleId === 'role-readonly' ? 'readonly' : 'staff');
+      // P356: user's home shift — nullable, admin-editable.
+      const shift = ['1st', '2nd', '3rd'].includes(body.shift) ? body.shift : null;
 
       if (!username) return json({ ok: false, error: 'Username required.' }, 400);
       if (!displayName) return json({ ok: false, error: 'Display name required.' }, 400);
@@ -114,9 +116,9 @@ export async function handleApiUsers(request, env) {
       const now = new Date().toISOString();
 
       await db.prepare(
-        `INSERT INTO users (id, username, display_name, password, role, role_id, is_active, first_login, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)`
-      ).bind(newId, username, displayName, password, legacyRole, legacyRoleId, now, now).run();
+        `INSERT INTO users (id, username, display_name, password, role, role_id, shift, is_active, first_login, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?)`
+      ).bind(newId, username, displayName, password, legacyRole, legacyRoleId, shift, now, now).run();
 
       for (const rid of role_ids) {
         await db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)").bind(newId, rid).run();
@@ -151,6 +153,10 @@ export async function handleApiUsers(request, env) {
         fields.push('role = ?'); binds.push(legacyRole);
       } else if (body.role !== undefined && ['admin', 'staff', 'readonly'].includes(body.role)) {
         fields.push('role = ?'); binds.push(body.role);
+      }
+      if (body.shift !== undefined) {
+        const v = ['1st', '2nd', '3rd'].includes(body.shift) ? body.shift : null;
+        fields.push('shift = ?'); binds.push(v);
       }
       if (body.is_active !== undefined) { fields.push('is_active = ?'); binds.push(body.is_active ? 1 : 0); }
       if (body.first_login !== undefined) { fields.push('first_login = ?'); binds.push(body.first_login ? 1 : 0); }

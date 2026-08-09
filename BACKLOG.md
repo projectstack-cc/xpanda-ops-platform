@@ -10,6 +10,10 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **P356 follow-up — v2 cutting queue: label/filter by shift.** P356 added `job_shifts`
+  (job → 1st/2nd/3rd assignment) and `users.shift` on the legacy job board only — it does not yet
+  make `/v2/cutting`'s queue route or UI aware of shift (no filter, no label). Deliberate split
+  per Steve's decision flag 2; needs its own prompt (queue route + `WorkQueue.tsx`/`JobRow.tsx`).
 - [ ] **P327 follow-up — homepage card for Taper Block Calculator.** P327 only linked `/v2/blocks`
   into the Manufacturing dashboard tile grid (`manufacturing/index.html`); the platform homepage
   (`index.html`) still has no direct entry point (per-prompt scope: Manufacturing section only).

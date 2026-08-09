@@ -1194,6 +1194,37 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P356 — shift assignment on the job board (1st/2nd/3rd), mirroring multi-assignee (#5).**
+  New `job_shifts` table (`id, job_id, shift, assigned_by, created_at`, `UNIQUE(job_id, shift)`,
+  indexed on `job_id`) mirrors `job_assignments` (P333) exactly, plus a nullable `users.shift`
+  column — the user's home shift. **Migration run directly against production D1 by Claude via
+  `wrangler d1 execute DB --remote`** (Steve's explicit instruction this session overriding the
+  normal hold-for-confirmation rule): checked `PRAGMA table_info(users)` first to confirm no
+  pre-existing `shift` column, then ran the full `DB_Migrations/add-job-shifts.sql` in one
+  execute (3 queries, 6 rows written); verified after via `sqlite_master` + `PRAGMA table_info`
+  before writing any code against it. File was never committed (`DB_Migrations/` stays
+  gitignored). **Endpoints** in `_worker.js/routes/jobs.js` mirror the P333 assignments block:
+  `GET/POST/DELETE /api/jobs/:id/shifts` (manager-gated on `jobs.manage` edit, same 403 as
+  assignments; `POST` validates `shift ∈ {1st,2nd,3rd}`, 400 otherwise); the job-list GET batch-
+  attaches `shifts: string[]` per job the same chunked way as assignees. **Job board UI**
+  (`jobs/index.html`): a parallel "Shift" section in the edit modal (`shift-chips`/`shift-select`,
+  mirrors `assign-chips`/`assign-user-select` structure/CSS exactly), a `shiftChips()` renderer on
+  list rows next to `assigneeChips()`, and `addShift`/`removeShift`/`refreshShifts` mirroring
+  `addAssignee`/`removeAssignee`/`refreshAssignments`. **Scope deviation, documented:** the P333
+  assignee queries (`jobs.js`'s `assignments` GET + the list batch-attach) were also extended to
+  select `u.shift` and the job-board chip renderers (`assigneeChips`, `renderAssignChips`) now
+  show it alongside the assignee's name (e.g. "John (2nd)") — required by decision flag 3
+  ("surfaced next to the assignee's name where assignees are listed") but touches lines outside
+  the assignment endpoints proper. **Second scope deviation:** `/api/users` is NOT in
+  `_worker.js/routes/jobs.js` as the prompt's file list implied — it lives in
+  `_worker.js/routes/admin.js` (`handleApiUsers`), so that file was touched instead (GET SELECT,
+  POST INSERT, PUT UPDATE all gained `shift`, validated against `{1st,2nd,3rd}` or null) — without
+  this the users.html field would be inert. `admin/users.html` gained a Shift `<select>` in the
+  create/edit modal, wired into `openModal`/`saveUser`. **Decision flags, as specified (not
+  re-litigated):** shift set `1st`/`2nd`/`3rd` as given; v2 cutting board does NOT yet
+  filter/label by shift (follow-on added to `BACKLOG.md`); `users.shift` stored + editable +
+  surfaced only, drives no automatic behavior yet. `node --check` clean on `jobs.js`, `admin.js`,
+  and both edited HTML files' extracted inline `<script>` blocks. Single commit.
 - **P354 — job → "Not Started" auto-resets the v2 cutting progress, backward-only (#4).**
   `_worker.js/routes/jobs.js`'s PUT handler: a new best-effort block, gated on
   `payload.status === 'not_started'`, added right after the existing legacy `cutting_steps`

@@ -377,6 +377,15 @@
       <label>Roles</label>
       <div id="f-role-checks" style="max-height:200px;overflow-y:auto;border:1px solid #d1d5db;border-radius:8px;padding:8px;"></div>
     </div>
+    <div class="form-group">
+      <label>Shift</label>
+      <select id="m-shift">
+        <option value="">— None —</option>
+        <option value="1st">1st Shift</option>
+        <option value="2nd">2nd Shift</option>
+        <option value="3rd">3rd Shift</option>
+      </select>
+    </div>
     <div class="modal-error" id="modal-error"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -504,6 +513,7 @@ function openModal(idx) {
   document.getElementById('m-username').readOnly = false;
   document.getElementById('m-display-name').value = '';
   document.getElementById('m-password').value = '';
+  document.getElementById('m-shift').value = '';
   document.getElementById('modal-error').textContent = '';
   document.getElementById('m-password-group').style.display = '';
 
@@ -515,6 +525,7 @@ function openModal(idx) {
     document.getElementById('m-username').readOnly = true;
     document.getElementById('m-display-name').value = u.display_name;
     document.getElementById('m-password').value = u.password || '';
+    document.getElementById('m-shift').value = u.shift || '';
     const selectedIds = (u.roles && u.roles.length > 0)
       ? u.roles.map(r => r.role_id)
       : (u.role_id ? [u.role_id] : ['role-staff']);
@@ -534,6 +545,7 @@ async function saveUser() {
   const username = document.getElementById('m-username').value.trim().toLowerCase();
   const displayName = document.getElementById('m-display-name').value.trim();
   const password = document.getElementById('m-password').value;
+  const shift = document.getElementById('m-shift').value;
   const role_ids = getSelectedRoleIds();
   const errEl = document.getElementById('modal-error');
   errEl.textContent = '';
@@ -548,7 +560,7 @@ async function saveUser() {
   try {
     let res;
     if (editingId) {
-      const body = { display_name: displayName, role_ids };
+      const body = { display_name: displayName, role_ids, shift: shift || null };
       if (password) body.password = password;
       res = await fetch(`/api/users/${editingId}`, {
         method: 'PUT',
@@ -556,7 +568,7 @@ async function saveUser() {
         body: JSON.stringify(body),
       });
     } else {
-      const body = { username, display_name: displayName, role_ids };
+      const body = { username, display_name: displayName, role_ids, shift: shift || null };
       if (password) body.password = password;
       res = await fetch('/api/users', {
         method: 'POST',

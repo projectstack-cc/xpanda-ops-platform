@@ -100,7 +100,7 @@ export async function handleApiJobs(request, env) {
   if (jobId && subRoute === "assignments") {
     if (request.method === "GET") {
       const rows = await db.prepare(
-        `SELECT ja.user_id, u.display_name AS name
+        `SELECT ja.user_id, u.display_name AS name, u.shift AS shift
            FROM job_assignments ja JOIN users u ON u.id = ja.user_id
           WHERE ja.job_id = ? ORDER BY u.display_name COLLATE NOCASE`
       ).bind(jobId).all();
@@ -128,6 +128,41 @@ export async function handleApiJobs(request, env) {
       if (!targetUser) return json({ ok:false, error:"user_id required in path" }, 400);
       await db.prepare(`DELETE FROM job_assignments WHERE job_id = ? AND user_id = ?`).bind(jobId, targetUser).run();
       await logActivity(db, "unassign", "job", jobId, `Unassigned user ${targetUser}`, { user_id: targetUser }, actorId);
+      return json({ ok: true });
+    }
+  }
+
+  // P356: job shifts (1st/2nd/3rd assignment), mirrors the P333 assignments block above.
+  const VALID_SHIFTS = ["1st", "2nd", "3rd"];
+  if (jobId && subRoute === "shifts") {
+    if (request.method === "GET") {
+      const rows = await db.prepare(
+        `SELECT shift FROM job_shifts WHERE job_id = ? ORDER BY shift`
+      ).bind(jobId).all();
+      return json({ ok: true, shifts: (rows.results || []).map(r => r.shift) });
+    }
+    const isAdministrator = request.headers.get("X-User-Is-Admin") === "1";
+    const userPerms = JSON.parse(request.headers.get("X-User-Permissions") || "{}");
+    if (!isAdministrator && !(userPerms["jobs.manage"]?.edit)) {
+      return json({ ok: false, error: "Manager access required to assign production." }, 403);
+    }
+    const actorId = request.headers.get("X-User-Id");
+    if (request.method === "POST") {
+      let body; try { body = await request.json(); } catch { return json({ ok:false, error:"Invalid JSON" }, 400); }
+      const shift = body?.shift;
+      if (!VALID_SHIFTS.includes(shift)) return json({ ok:false, error:"shift must be one of 1st, 2nd, 3rd" }, 400);
+      await db.prepare(
+        `INSERT OR IGNORE INTO job_shifts (id, job_id, shift, assigned_by, created_at)
+         VALUES (?, ?, ?, ?, datetime('now'))`
+      ).bind(crypto.randomUUID(), jobId, shift, actorId || null).run();
+      await logActivity(db, "assign_shift", "job", jobId, `Assigned ${shift} shift`, { shift }, actorId);
+      return json({ ok: true });
+    }
+    if (request.method === "DELETE") {
+      const targetShift = parts[4] || null; // /api/jobs/:id/shifts/:shift
+      if (!targetShift) return json({ ok:false, error:"shift required in path" }, 400);
+      await db.prepare(`DELETE FROM job_shifts WHERE job_id = ? AND shift = ?`).bind(jobId, targetShift).run();
+      await logActivity(db, "unassign_shift", "job", jobId, `Unassigned ${targetShift} shift`, { shift: targetShift }, actorId);
       return json({ ok: true });
     }
   }
@@ -264,13 +299,31 @@ export async function handleApiJobs(request, env) {
           const slice = ids.slice(i, i + CHUNK);
           const ph    = slice.map(() => "?").join(",");
           const ar = await db.prepare(
-            `SELECT ja.job_id, ja.user_id, u.display_name AS name
+            `SELECT ja.job_id, ja.user_id, u.display_name AS name, u.shift AS shift
                FROM job_assignments ja JOIN users u ON u.id = ja.user_id
               WHERE ja.job_id IN (${ph})`
           ).bind(...slice).all();
           for (const a of (ar.results || [])) {
             if (!assigneesMap[a.job_id]) assigneesMap[a.job_id] = [];
-            assigneesMap[a.job_id].push({ user_id: a.user_id, name: a.name });
+            assigneesMap[a.job_id].push({ user_id: a.user_id, name: a.name, shift: a.shift });
+          }
+        }
+      }
+
+      // P356: attach assigned shifts to each job (chunked for D1 param ceiling)
+      const shiftsMap = {};
+      if (jobs.length > 0) {
+        const ids = jobs.map(j => j.id);
+        const CHUNK = 90;
+        for (let i = 0; i < ids.length; i += CHUNK) {
+          const slice = ids.slice(i, i + CHUNK);
+          const ph    = slice.map(() => "?").join(",");
+          const sr = await db.prepare(
+            `SELECT job_id, shift FROM job_shifts WHERE job_id IN (${ph})`
+          ).bind(...slice).all();
+          for (const s of (sr.results || [])) {
+            if (!shiftsMap[s.job_id]) shiftsMap[s.job_id] = [];
+            shiftsMap[s.job_id].push(s.shift);
           }
         }
       }
@@ -280,6 +333,7 @@ export async function handleApiJobs(request, env) {
         processes:  safeJsonParse(job.processes, []),
         line_items: lineItemsMap[job.id] || [],
         assignees:  assigneesMap[job.id] || [],
+        shifts:     shiftsMap[job.id] || [],
       }));
 
       return json({ ok: true, jobs: enriched });

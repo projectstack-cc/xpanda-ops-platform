@@ -295,6 +295,17 @@
         </div>
       </div>
 
+      <!-- Shift (P356): mirrors "Assigned to" — read-only chips always visible; add/remove is manager-only (jobs.manage) -->
+      <div id="shift-section" hidden style="margin-bottom:16px;">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Shift</label>
+        <div id="shift-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+        <div id="shift-add-wrap" hidden style="display:flex;gap:8px;">
+          <select id="shift-select" style="flex:1;min-height:44px;" onchange="onShiftSelectChange(this)">
+            <option value="">Add shift…</option>
+          </select>
+        </div>
+      </div>
+
       <!-- Packing slip drop zone -->
       <div id="slip-dropzone" style="border:2px dashed var(--input-border);border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;transition:all 0.2s;cursor:pointer;" onclick="document.getElementById('packing-slip-upload').click()">
         <div style="font-size:14px;color:var(--text-muted);">
@@ -831,10 +842,14 @@ function shipToVerifiedBadge(status, showUnverified) {
   return ` <span style="display:inline-block;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.03em;background:${s.bg};color:${s.text};${border}">${s.label}</span>`;
 }
 
-// P334: read-only assignee chips (job.assignees = [{user_id, name}]). Empty/absent → nothing.
+// P334: read-only assignee chips (job.assignees = [{user_id, name, shift}]). Empty/absent → nothing.
+// P356: shift (per decision flag 3) shown alongside the name when the assignee's home shift is set.
 function assigneeChips(assignees) {
   if (!Array.isArray(assignees) || !assignees.length) return '';
-  return assignees.map(a => ` <span style="display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">${esc(a.name || '')}</span>`).join('');
+  return assignees.map(a => {
+    const shiftSuffix = a.shift ? ` (${esc(a.shift)})` : '';
+    return ` <span style="display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">${esc(a.name || '')}${shiftSuffix}</span>`;
+  }).join('');
 }
 
 function renderShipToVerifyBadge(status) {
@@ -868,7 +883,7 @@ function renderList(jobs) {
     tr.onmouseout  = () => { tr.style.background = ''; };
     tr.onclick     = () => openModal(job.id);
     tr.innerHTML = `
-      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}${priorityBadge(job)}${shipToVerifiedBadge(job.ship_to_verified)}${assigneeChips(job.assignees)}</td>
+      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}${priorityBadge(job)}${shipToVerifiedBadge(job.ship_to_verified)}${assigneeChips(job.assignees)}${shiftChips(job.shifts)}</td>
       <td style="padding:9px 12px;font-size:13px;">${esc(job.customer || '')}</td>
       <td style="padding:9px 12px;font-size:13px;color:var(--text-muted);">${esc(formatShipDate(job.ship_date)) || '—'}</td>
       <td style="padding:9px 12px;font-size:13px;text-align:right;">${job.total_bdft ? Number(job.total_bdft).toLocaleString() : '—'}</td>
@@ -1588,6 +1603,11 @@ function openModal(jobId) {
       assignSection.hidden = isNew;
       if (!isNew && _job) setupAssignSection(_job, _canManageAssign);
     }
+    const shiftSection = document.getElementById('shift-section');
+    if (shiftSection) {
+      shiftSection.hidden = isNew;
+      if (!isNew && _job) setupShiftSection(_job, _canManageAssign);
+    }
   }
   if (!isNew) {
     api.get('/api/bols?job_id=' + jobId).then(r => {
@@ -1635,7 +1655,7 @@ function renderAssignChips(assignees, canManage) {
   }
   wrap.innerHTML = assignees.map(a => `
     <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">
-      ${esc(a.name || '')}
+      ${esc(a.name || '')}${a.shift ? ` (${esc(a.shift)})` : ''}
       ${canManage ? `<button type="button" onclick="removeAssignee('${esc(a.user_id)}')" title="Remove" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:700;font-size:13px;padding:0;line-height:1;">&times;</button>` : ''}
     </span>
   `).join('');
@@ -1695,6 +1715,89 @@ async function refreshAssignments() {
     const _u = window.__xpandaUser;
     const canManage = _u && (_u.isAdministrator || _u.permissions?.['jobs.manage']?.edit);
     setupAssignSection(job || { assignees }, canManage);
+    renderBoard(allJobs);
+  } catch (e) {}
+}
+
+/* ═══════════════════════════════════════════
+   Job Shift assignment (P356) — mirrors P334 assignments above
+═══════════════════════════════════════════ */
+
+const SHIFT_LABELS = { '1st': '1st Shift', '2nd': '2nd Shift', '3rd': '3rd Shift' };
+
+function shiftChips(shifts) {
+  if (!Array.isArray(shifts) || !shifts.length) return '';
+  return shifts.map(s => ` <span style="display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">${esc(SHIFT_LABELS[s] || s)}</span>`).join('');
+}
+
+function renderShiftChips(shifts, canManage) {
+  const wrap = document.getElementById('shift-chips');
+  if (!wrap) return;
+  if (!Array.isArray(shifts) || !shifts.length) {
+    wrap.innerHTML = '<span style="font-size:12px;color:var(--text-hint);">No shift assigned</span>';
+    return;
+  }
+  wrap.innerHTML = shifts.map(s => `
+    <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">
+      ${esc(SHIFT_LABELS[s] || s)}
+      ${canManage ? `<button type="button" onclick="removeShift('${esc(s)}')" title="Remove" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:700;font-size:13px;padding:0;line-height:1;">&times;</button>` : ''}
+    </span>
+  `).join('');
+}
+
+function setupShiftSection(job, canManage) {
+  renderShiftChips(job.shifts, canManage);
+  const addWrap = document.getElementById('shift-add-wrap');
+  if (addWrap) addWrap.hidden = !canManage;
+  if (!canManage) return;
+
+  const select = document.getElementById('shift-select');
+  if (!select) return;
+  const assigned = new Set(job.shifts || []);
+  select.innerHTML = '<option value="">Add shift…</option>' +
+    Object.keys(SHIFT_LABELS).filter(s => !assigned.has(s))
+      .map(s => `<option value="${esc(s)}">${esc(SHIFT_LABELS[s])}</option>`).join('');
+}
+
+function onShiftSelectChange(select) {
+  const shift = select.value;
+  if (!shift) return;
+  select.value = '';
+  addShift(shift);
+}
+
+async function addShift(shift) {
+  if (!shift || !editingJobId) return;
+  try {
+    const r = await api.post(`/api/jobs/${encodeURIComponent(editingJobId)}/shifts`, { shift });
+    if (!r.ok) { showToast(r.error || 'Failed to assign shift.'); return; }
+    await refreshShifts();
+  } catch (e) {
+    showToast('Failed to assign shift.');
+  }
+}
+
+async function removeShift(shift) {
+  if (!shift || !editingJobId) return;
+  try {
+    const r = await api.del(`/api/jobs/${encodeURIComponent(editingJobId)}/shifts/${encodeURIComponent(shift)}`);
+    if (!r.ok) { showToast(r.error || 'Failed to unassign shift.'); return; }
+    await refreshShifts();
+  } catch (e) {
+    showToast('Failed to unassign shift.');
+  }
+}
+
+async function refreshShifts() {
+  if (!editingJobId) return;
+  try {
+    const r = await api.get(`/api/jobs/${encodeURIComponent(editingJobId)}/shifts`);
+    const shifts = (r.ok && r.data?.shifts) ? r.data.shifts : [];
+    const job = allJobs.find(j => j.id === editingJobId);
+    if (job) job.shifts = shifts;
+    const _u = window.__xpandaUser;
+    const canManage = _u && (_u.isAdministrator || _u.permissions?.['jobs.manage']?.edit);
+    setupShiftSection(job || { shifts }, canManage);
     renderBoard(allJobs);
   } catch (e) {}
 }
