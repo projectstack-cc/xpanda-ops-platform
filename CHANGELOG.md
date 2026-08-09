@@ -1571,6 +1571,20 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Admin / Platform
 
+- **P355 — hide the Manufacturing home tile for the cutting team (#10).** `index.html`'s
+  Manufacturing card gate changed from `data-permission="manufacturing.calculators,manufacturing.cutting"`
+  to `data-permission="manufacturing.calculators"` — the dedicated Cutting card
+  (`data-permission="manufacturing.cutting"`, Main/Blue Line + Cross/Hole Cutter links) is
+  untouched and remains the cutting team's entry point. **Role-config assumption verified** via a
+  read-only `wrangler d1 execute --remote` query of the live `roles` table: the "Cutting Team" role
+  holds `manufacturing.cutting: {view:true,edit:true}` and `manufacturing.calculators:
+  {view:false,edit:false}` — confirmed they lose the tile and nothing else changes for roles that
+  legitimately hold `.calculators`. **Direct-URL follow-on checked, no gap found** (not added to
+  `BACKLOG.md`): `PATH_PERMISSION_MAP` in `_worker.js/lib/core.js` already gates
+  `/manufacturing/(_archived/)?cutting-dashboard` on `manufacturing.cutting` but everything else
+  under `/manufacturing/` (including bare `/manufacturing/`) on `manufacturing.calculators` — a
+  cutting-only user is already blocked from reaching it by direct URL via the existing session
+  gate, so there's nothing to flag. One-line attribute change, no migration, no build step.
 - **P305** — Fixed broken sign-out: `handleAuthLogout` (`_worker.js/routes/auth.js`) called `getSessionToken(request)` on its first line, but the helper was defined (not exported) in `_worker.js/lib/core.js` and `auth.js` only imported `{ json, logActivity, validateSession }` — a `ReferenceError` 500'd `/api/auth/logout` before the session row was deleted or the clear-cookie header was emitted, so the `xpanda_session` cookie survived and the next request re-validated it ("click sign out, it signs out, then refreshes back as signed in"). Fix: exported `getSessionToken` from `core.js` and imported it in `auth.js` (the actual bug); also wrapped the teardown body in `try {} catch {}` so the clear-cookie header is emitted even if session teardown throws for any future reason. Backend-only, no migration, no permission change; v2 middleware only reads the cookie so `cutting-pilot/` is unaffected. `node --check` clean on both files.
 - **P299** — Home page: two-button cards now stay side by side and shrink together via a container query (based on card width), stacking only when the card is truly narrow. Fixes buttons wrapping on maximized screens. Single-button cards unaffected.
 - **P298** — Split the homepage Cutting card into two links: Main / Blue Line (`/v2/cutting`) and Cross / Hole Cutter (`/v2/cutting/crosscutter`), mirroring the existing primary + `hp-btn-outline` two-button pattern (Safety, Logistics, Admin cards). Single card, single `data-permission="manufacturing.cutting"` gate — both links show/hide together, no permission change. `index.html` only; no inline `<script>` touched, so no `node --check` was needed.
