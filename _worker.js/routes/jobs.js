@@ -555,7 +555,7 @@ export async function handleApiJobs(request, env) {
     if (!id) return json({ ok: false, error: "id is required." }, 400);
 
     const existing = await db.prepare(
-      "SELECT id, ship_date, archived_at, trailer_group_id FROM jobs WHERE id = ?"
+      "SELECT id, status, ship_date, archived_at, trailer_group_id FROM jobs WHERE id = ?"
     ).bind(id).first();
     if (!existing) return json({ ok: false, error: "Job not found." }, 404);
 
@@ -851,7 +851,12 @@ export async function handleApiJobs(request, env) {
       // (P351) truly reads 0 rather than showing stale completed-piece counts on a "not started"
       // line. Best-effort — a reset failure must never fail the job PUT. Separate, clearly-labeled
       // block from the legacy cutting_steps reconcile above; does not touch that model.
-      if (payload.status === 'not_started') {
+      // Guard is a real transition, not just "the payload happened to carry not_started" — the
+      // job-edit modal's save resends payload.status = f-status.value on EVERY save whenever the
+      // status-section is visible (any not_started/in_production/done job), so gating on
+      // payload.status alone would wipe live cutting progress on unrelated field edits (e.g.
+      // notes) to an already-not_started job.
+      if (existing.status !== 'not_started' && payload.status === 'not_started') {
         try {
           await db.batch([
             db.prepare(

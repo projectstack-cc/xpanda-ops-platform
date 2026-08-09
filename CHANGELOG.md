@@ -1226,10 +1226,19 @@ Entries within each module are ordered by prompt # descending (newest first).
   surfaced only, drives no automatic behavior yet. `node --check` clean on `jobs.js`, `admin.js`,
   and both edited HTML files' extracted inline `<script>` blocks. Single commit.
 - **P354 — job → "Not Started" auto-resets the v2 cutting progress, backward-only (#4).**
-  `_worker.js/routes/jobs.js`'s PUT handler: a new best-effort block, gated on
-  `payload.status === 'not_started'`, added right after the existing legacy `cutting_steps`
-  reconcile/sync block (kept as a separate, clearly-labeled block — the legacy model is untouched).
-  On the explicit `→ not_started` transition it (1) closes any open `cutting_sessions` for the job,
+  `_worker.js/routes/jobs.js`'s PUT handler: a new best-effort block, gated on a **real
+  transition** — `existing.status !== 'not_started' && payload.status === 'not_started'` (the
+  initial `existing` SELECT at the top of the handler gained `status` to support this) — added
+  right after the existing legacy `cutting_steps` reconcile/sync block (kept as a separate,
+  clearly-labeled block — the legacy model is untouched). **Correctness fix caught before push:**
+  the job-edit modal's save resends `payload.status = f-status.value` on *every* save whenever the
+  status-section is visible (any `not_started`/`in_production`/`done` job) — gating on
+  `payload.status === 'not_started'` alone (the first version written) would have wiped a
+  `not_started` job's live cutting session/progress on an unrelated field edit (e.g. notes) with
+  no error surfaced. Verified against `jobs/index.html`'s save payload (`payload.status` is set
+  conditionally at `if (!document.getElementById('status-section').hidden)`, independent of
+  whether the dropdown value actually changed) before shipping the fix. On the explicit
+  `→ not_started` transition it (1) closes any open `cutting_sessions` for the job,
   (2) resets all `cutting_lines` to `not_started` with `qty_done=0`, (3) clears
   `cutting_line_progress` (`completed=0, completed_qty=0`) for the job, and (4) logs a
   `cutting_reset` activity entry. **Full reset, per Steve's decision** (not shallow/status-only) —
