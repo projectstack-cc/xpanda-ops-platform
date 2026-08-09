@@ -10,6 +10,18 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P353 — in-process jobs own the top of the Work Queue + highlight + "In Process" badge (#6).**
+  Client-only, no API change — in-process is derivable from data the queue already returns:
+  `isInProcess(job) = job.lines.some(l => l.line_status === "in_progress" || l.open_session_id != null)`.
+  `WorkQueue.tsx`: a stable `byInProcessFirst` partition (not a comparator) runs on the base
+  `incomplete` array **before** the assigned/top-N slice, so in-process jobs are guaranteed at the
+  top of both "My Queue" and "Work Queue" while priority order within each group is preserved.
+  `JobRow.tsx`: an **"In Process"** pill (`--info` tokens) renders alongside RUSH/priority-level
+  pills whenever `isInProcess(job)`; non-active in-process rows get an info-colored left border
+  (`border-l-[var(--info-border)]`) instead of transparent, so they stand out without competing
+  with `isActive`'s accent styling (active wins when both apply). The predicate is duplicated as a
+  small inline helper in both files rather than a new shared module, per prompt scope.
+  `tsc --noEmit` + `npx opennextjs-cloudflare build` green.
 - **P352 — keep the operator's active job visible across refresh (#2) + clocked-in strip opens
   the order (#7).** **#2:** `CuttingBoard.tsx`'s `filteredQueue` now unions in any `queue` job the
   operator holds an open session on (`myOpenJobIds` from `mySessions`, added to the `useMemo` deps)

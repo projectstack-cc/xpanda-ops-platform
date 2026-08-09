@@ -4,6 +4,18 @@ import type { CuttingJob } from "./types";
 
 const WORK_QUEUE_SIZE = 5;
 
+// Shift-handoff continuity: a job with any line already in progress (or holding an open
+// session) must be obvious to the next operator so they know exactly where to resume.
+// (Duplicated in JobRow.tsx — prompt scope says no new shared module for this.)
+const isInProcess = (j: CuttingJob) =>
+  j.lines.some((l) => l.line_status === "in_progress" || l.open_session_id != null);
+
+// Stable partition — preserves the existing priority order within each group.
+const byInProcessFirst = (arr: CuttingJob[]) => [
+  ...arr.filter(isInProcess),
+  ...arr.filter((j) => !isInProcess(j)),
+];
+
 interface Props {
   jobs: CuttingJob[]; // already priority-sorted by the queue API
   selectedJobId: string | null;
@@ -17,7 +29,9 @@ interface Props {
 // top few of the global priority sort ("Work Queue") so the floor works top-down instead of
 // cherry-picking. Guide only — every job stays clickable here and in the full list below.
 export default function WorkQueue({ jobs, selectedJobId, onSelect, onViewPhotos }: Props) {
-  const incomplete = jobs.filter((j) => j.lines.some((l) => l.line_status !== "complete"));
+  const incomplete = byInProcessFirst(
+    jobs.filter((j) => j.lines.some((l) => l.line_status !== "complete"))
+  );
   const mine = incomplete.filter((j) => j.assigned_to_me);
   const assignedMode = mine.length > 0;
   const queued = assignedMode ? mine : incomplete.slice(0, WORK_QUEUE_SIZE);

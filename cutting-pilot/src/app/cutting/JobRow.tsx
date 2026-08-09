@@ -9,6 +9,12 @@ const PRIORITY_LABELS: Record<1 | 2 | 3, string> = {
   3: "Critical",
 };
 
+// Shift-handoff continuity: a job with any line already in progress (or holding an open
+// session) must be obvious to the next operator so they know exactly where to resume.
+// (Duplicated in WorkQueue.tsx — prompt scope says no new shared module for this.)
+const isInProcess = (job: CuttingJob) =>
+  job.lines.some((l) => l.line_status === "in_progress" || l.open_session_id != null);
+
 interface Props {
   job: CuttingJob;
   isActive: boolean;
@@ -19,6 +25,7 @@ interface Props {
 
 export default function JobRow({ job, isActive, onClick, onViewPhotos, rank }: Props) {
   const hasHandoffNote = job.lines.some((l) => l.last_handoff_note);
+  const inProcess = isInProcess(job);
 
   return (
     <div className="relative">
@@ -32,7 +39,9 @@ export default function JobRow({ job, isActive, onClick, onViewPhotos, rank }: P
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]",
         isActive
           ? "bg-[var(--accent-soft)] border-l-[var(--accent)]"
-          : "hover:bg-[var(--ghost-bg)] border-l-transparent",
+          : inProcess
+            ? "hover:bg-[var(--ghost-bg)] border-l-[var(--info-border)]"
+            : "hover:bg-[var(--ghost-bg)] border-l-transparent",
       ].join(" ")}
     >
       <div className="flex items-start justify-between gap-2">
@@ -63,6 +72,11 @@ export default function JobRow({ job, isActive, onClick, onViewPhotos, rank }: P
                 {PRIORITY_LABELS[job.priority_level as 1 | 2 | 3]}
               </span>
             ) : null}
+            {inProcess && (
+              <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold tracking-wide bg-[var(--info-bg)] text-[var(--info-text)]">
+                In Process
+              </span>
+            )}
             {hasHandoffNote && (
               <MessageSquare
                 size={12}
