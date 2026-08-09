@@ -45,6 +45,20 @@ export async function POST(request: NextRequest) {
       );
 
     if (stmts.length) await DB.batch(stmts);
+
+    // Recompute the derived line-level count from the per-item sum — completed_qty is the
+    // source of truth (P351); cutting_lines.qty_done stays a synced cache, not an increment.
+    if (stmts.length) {
+      await DB.prepare(
+        `UPDATE cutting_lines
+         SET qty_done = (
+           SELECT COALESCE(SUM(completed_qty), 0) FROM cutting_line_progress
+           WHERE job_id = ? AND line = ?
+         ), updated_at = ?
+         WHERE job_id = ? AND line = ?`
+      ).bind(job_id, line, now, job_id, line).run();
+    }
+
     return NextResponse.json({ ok: true, count: stmts.length });
   } catch (e: any) {
     return NextResponse.json(

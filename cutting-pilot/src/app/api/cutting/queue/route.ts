@@ -118,7 +118,7 @@ export async function GET(request: Request) {
 
     // One query for the most-recent closed session per (job_id, line) — the resume hint
     const lastHandoffRows = await allByJobIds(
-      (ph) => `SELECT cs.id, cs.job_id, cs.line, cs.handoff_note, cs.photo_key
+      (ph) => `SELECT cs.id, cs.job_id, cs.line, cs.handoff_note, cs.photo_key, cs.operator_name
        FROM cutting_sessions cs
        INNER JOIN (
          SELECT job_id, line, MAX(ended_at) AS max_ended
@@ -154,8 +154,11 @@ export async function GET(request: Request) {
     }
 
     const handoffByKey = new Map<string, string>();
+    const handoffByByKey = new Map<string, string>();
     for (const row of (lastHandoffRows.results || [])) {
-      handoffByKey.set(`${row.job_id}:${row.line}`, row.handoff_note || "");
+      const key = `${row.job_id}:${row.line}`;
+      handoffByKey.set(key, row.handoff_note || "");
+      handoffByByKey.set(key, row.operator_name || "");
     }
 
     // Cut-list photos: latest closed session per line that carries a photo, grouped per job.
@@ -404,6 +407,7 @@ export async function GET(request: Request) {
           open_operator_id: open?.operator_id ?? null,
           open_operator_name: open?.operator_name ?? null,
           last_handoff_note: handoffByKey.get(key) || "",
+          last_handoff_by: handoffByByKey.get(key) || "",
           tracked_seconds: durByKey.get(key) || 0,
           qty_done: (lineRow?.qty_done ?? null) as number | null,
           first_started_at: firstStartedByKey.get(key) ?? null,

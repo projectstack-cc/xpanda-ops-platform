@@ -10,6 +10,33 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P351 — handoff author on the resume hint (#1) + derive line qty_done from per-item sums
+  (#3).** **#1:** `queue/route.ts`'s closed-session query now also selects `cs.operator_name`; a
+  parallel `handoffByByKey` map (keyed identically to the existing `handoffByKey`, same
+  most-recent-wins session rows) feeds a new `last_handoff_by` field on the `CuttingLine` type and
+  payload. `LineRow.tsx` prefixes the resume-hint banner with the author when present:
+  `Handoff — {name}: {note}` (name segment omitted when blank), same `--warn` styling. **#3:**
+  removed the redundant "Pieces completed this session" number field from `HandoffModal.tsx` (its
+  `qty`/`setQty` state, the `useEffect` reset, and the `qty` argument from `onSubmit`/
+  `handleSubmit`/`CuttingBoard.tsx`'s `submitClockOut` callsite) — the "Unchecked parts — total
+  completed" per-item list stays as the sole source of truth. `clock-out/route.ts` no longer
+  increments `cutting_lines.qty_done` from `qty_done_delta` (still accepts/stores
+  `qty_done_delta` on the session row itself if present — null-tolerant, not an error to omit).
+  **Derivation placed in `line-progress/route.ts`, not `line-item/route.ts` as the prompt named**
+  — verified by grep that `line-item/route.ts` (checkbox toggle) never writes `completed_qty`
+  (its `ON CONFLICT` clause excludes that column); the actual per-item qty writer used by the Stop
+  reconciliation flow is its sibling `line-progress/route.ts`, so the recompute
+  (`qty_done = SUM(completed_qty) WHERE job_id=? AND line=?`) was added there instead, after the
+  batch write, gated on `stmts.length` so an empty reconciliation is a no-op. **`qty_done` readers
+  grepped across `cutting-pilot/src`:** `queue/route.ts` (display, read-only), `LineRow.tsx`
+  (display), `CuttingBoard.tsx`'s old `body.qty_done_delta` send (removed), and
+  `clock-out/route.ts`'s increment (removed). The crosscutter board's `qty_done` hits
+  (`cc-assignments`, `ChunkBoard.tsx`, `ChunkStopModal.tsx`, `chunk-session/stop/route.ts`) are a
+  **different table** (`cc_assignments`, standalone chunk-board queue count) — untouched, out of
+  scope. **Historical-count caveat:** existing jobs' `cutting_lines.qty_done` won't retroactively
+  match their per-item sums until an item on that line is next touched via the Stop reconciliation
+  flow — not backfilled here, flagging per the prompt's instruction not to backfill silently.
+  `tsc --noEmit` + `npx opennextjs-cloudflare build` green.
 - **P350 — floor hotfix: Android Start/Stop taps + Work Queue click-through (#8, #9).**
   **#8 (Android taps unresponsive):** confirmed root cause is the **missing `touch-action`**
   — none of `LineRow.tsx`'s Start/Stop buttons or `HandoffModal.tsx`'s Stop submit had

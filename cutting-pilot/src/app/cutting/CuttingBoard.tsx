@@ -236,7 +236,6 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
 
   async function submitClockOut(
     note: string,
-    qty?: number,
     photo?: File | null,
     itemQtys?: { line_item_id: string; completed_qty: number }[]
   ) {
@@ -276,16 +275,13 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
         }
       }
 
-      const body: Record<string, unknown> = {
-        session_id: clockOutTarget.sessionId,
-        handoff_note: note,
-      };
-      if (qty !== undefined) body.qty_done_delta = qty;
-
       const res = await fetch("/v2/api/cutting/clock-out", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          session_id: clockOutTarget.sessionId,
+          handoff_note: note,
+        }),
       });
       const data = await res.json();
       if (data.ok) {

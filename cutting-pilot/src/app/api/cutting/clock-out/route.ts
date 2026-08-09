@@ -66,16 +66,6 @@ export async function POST(request: NextRequest) {
           ).bind(now, handoff_note, session_id),
     ];
 
-    if (hasQty && qtyVal) {
-      stmts.push(
-        DB.prepare(
-          `UPDATE cutting_lines
-           SET qty_done = COALESCE(qty_done, 0) + ?, updated_at = ?
-           WHERE job_id = ? AND line = ?`
-        ).bind(qtyVal, now, session.job_id, session.line)
-      );
-    }
-
     await DB.batch(stmts);
 
     await DB.prepare(

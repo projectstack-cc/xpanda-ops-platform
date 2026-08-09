@@ -97,7 +97,9 @@ export default function LineRow({
       {/* Last handoff note as resume hint */}
       {lineObj.last_handoff_note && (
         <div className="text-sm bg-[var(--warn-bg)] border border-[var(--warn-border)] rounded px-3 py-2 mb-3">
-          <span className="font-medium text-[var(--warn-text)]">Handoff: </span>
+          <span className="font-medium text-[var(--warn-text)]">
+            Handoff{lineObj.last_handoff_by ? ` — ${lineObj.last_handoff_by}` : ""}:{" "}
+          </span>
           <span className="text-[var(--warn-text)]">{lineObj.last_handoff_note}</span>
         </div>
       )}

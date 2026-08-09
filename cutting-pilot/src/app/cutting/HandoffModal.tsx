@@ -16,7 +16,6 @@ interface Props {
   onClose: () => void;
   onSubmit: (
     note: string,
-    qty: number | undefined,
     photo: File | null,
     itemQtys: { line_item_id: string; completed_qty: number }[]
   ) => void;
@@ -32,14 +31,12 @@ export default function HandoffModal({
   acting,
 }: Props) {
   const [note, setNote] = useState("");
-  const [qty, setQty] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [qtys, setQtys] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (isOpen) {
       setNote("");
-      setQty("");
       setPhoto(null);
       const seed: Record<string, string> = {};
       for (const it of items) seed[it.id] = String(it.completedQty ?? 0);
@@ -54,12 +51,11 @@ export default function HandoffModal({
   });
 
   function handleSubmit() {
-    const qtyNum = parseInt(qty, 10);
     const itemQtys = items.map((it) => ({
       line_item_id: it.id,
       completed_qty: Math.max(0, parseInt(qtys[it.id], 10) || 0),
     }));
-    onSubmit(note, !isNaN(qtyNum) && qtyNum > 0 ? qtyNum : undefined, photo, itemQtys);
+    onSubmit(note, photo, itemQtys);
   }
 
   return (
@@ -79,22 +75,6 @@ export default function HandoffModal({
             rows={4}
             placeholder="e.g. Stopped at 3rd stack — glue needs to cure. Watch blade tension."
             className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] resize-none"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="handoff-qty" className="block text-sm font-medium text-text mb-1">
-            Pieces completed this session
-            <span className="ml-1 text-xs text-muted font-normal">(optional)</span>
-          </label>
-          <input
-            id="handoff-qty"
-            type="number"
-            min="0"
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            placeholder="0"
-            className="w-28 rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text px-3 py-2 text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
           />
         </div>
 

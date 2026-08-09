@@ -6,6 +6,7 @@ export interface CuttingLine {
   open_operator_id: string | null;
   open_operator_name: string | null;
   last_handoff_note: string;
+  last_handoff_by: string;
   tracked_seconds: number;
   open_started_at: string | null;
   unit: "chunk" | "part";
