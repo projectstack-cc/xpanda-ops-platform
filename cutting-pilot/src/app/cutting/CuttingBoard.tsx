@@ -117,7 +117,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
     );
   }, [queue, search, showAll]);
 
-  const selectedJob = filteredQueue.find((j) => j.id === selectedJobId) ?? null;
+  const selectedJob = queue.find((j) => j.id === selectedJobId) ?? null;
 
   const jobTotalSeconds = selectedJob
     ? selectedJob.lines.reduce((sum, l) => sum + lineLiveSeconds(l, now), 0)

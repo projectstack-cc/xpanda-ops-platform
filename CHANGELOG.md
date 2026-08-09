@@ -10,6 +10,21 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P350 — floor hotfix: Android Start/Stop taps + Work Queue click-through (#8, #9).**
+  **#8 (Android taps unresponsive):** confirmed root cause is the **missing `touch-action`**
+  — none of `LineRow.tsx`'s Start/Stop buttons or `HandoffModal.tsx`'s Stop submit had
+  `touch-manipulation`, so Android Chromium's double-tap-zoom gesture could swallow/delay the
+  first tap (iPad's WebKit doesn't have this failure mode, matching the reported iPad-fine /
+  Android-flaky split). Added Tailwind `touch-manipulation` to all three buttons. The other two
+  investigated leads were **ruled out, no change made**: rows are stably keyed
+  (`key={lineObj.line}`) and there is no polling `setInterval` on this board (only a 30s
+  display-only tick for elapsed-time text) — no remount race exists to fix; `acting` is reset in
+  a `finally` in every one of `clockIn`/`submitClockOut`/`submitComplete`, so there's no stranded
+  `disabled` path. **#9 (Work Queue click-through requires "Show All"):** `CuttingBoard.tsx`'s
+  `selectedJob` now resolves against the full unfiltered `queue` instead of `filteredQueue`, so
+  tapping a Work Queue job opens its detail `<Sheet>` regardless of the week/search filter.
+  `WorkQueue.tsx`/`JobRow.tsx` untouched — the fix is entirely in `CuttingBoard.tsx`.
+  `tsc --noEmit` + `npx opennextjs-cloudflare build` green.
 - **P336** — `/v2/cutting` Work Queue band goes per-user, with fallback. `WorkQueue.tsx` only.
   Rewired the `queued` derivation: `incomplete` = jobs with any non-complete line; `mine` = the
   subset with `job.assigned_to_me` (P335); `assignedMode = mine.length > 0`. In assigned mode the

@@ -150,7 +150,7 @@ export default function HandoffModal({
               missingQty ? "Enter a quantity for each unchecked part (0 is fine)." : undefined
             }
             onClick={handleSubmit}
-            className="flex-1 min-h-[44px] bg-[var(--primary-bg)] text-[var(--primary-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
+            className="touch-manipulation flex-1 min-h-[44px] bg-[var(--primary-bg)] text-[var(--primary-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
           >
             {acting ? "Saving…" : "Stop"}
           </button>
