@@ -1194,6 +1194,24 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P354 — job → "Not Started" auto-resets the v2 cutting progress, backward-only (#4).**
+  `_worker.js/routes/jobs.js`'s PUT handler: a new best-effort block, gated on
+  `payload.status === 'not_started'`, added right after the existing legacy `cutting_steps`
+  reconcile/sync block (kept as a separate, clearly-labeled block — the legacy model is untouched).
+  On the explicit `→ not_started` transition it (1) closes any open `cutting_sessions` for the job,
+  (2) resets all `cutting_lines` to `not_started` with `qty_done=0`, (3) clears
+  `cutting_line_progress` (`completed=0, completed_qty=0`) for the job, and (4) logs a
+  `cutting_reset` activity entry. **Full reset, per Steve's decision** (not shallow/status-only) —
+  a status-only reset would leave "not started" lines still showing completed piece counts, since
+  P351 now derives `qty_done` from `cutting_line_progress` sums. Column names confirmed against
+  the live v2 route files (`queue/route.ts`, `line-progress/route.ts`) built in P350–P353 this
+  session: `cutting_lines(job_id, line, line_status, qty_done, updated_at)`,
+  `cutting_sessions(job_id, status, ended_at)`, `cutting_line_progress(job_id, line, line_item_id,
+  completed, completed_qty, updated_at)`. This is the **one deliberate backward path** the v2
+  cutting board's otherwise one-directional (lines-complete → `jobs.status='done'`) signal gets —
+  no other status transition touches cutting. Best-effort try/catch, mirrors the neighboring
+  side-effect blocks' style — a reset failure never fails the job PUT. `node --check` clean on a
+  named temp copy. No migration.
 - **P349 — Ship Via on the cut list, bilateral (legacy + v2).** `Ship Via: <carrier>` line added to
   the cut-list PDF header, right under `Ship date`, same right-aligned style — read-through from the
   existing `job.carrier` field (the Carrier input under SHIPPING; no migration, no new column).

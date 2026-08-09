@@ -790,6 +790,35 @@ export async function handleApiJobs(request, env) {
         }
       }
 
+      // P354 — v2 cutting reset on the explicit `→ not_started` transition (backward-only; the
+      // v2 board signals one-directional done→jobs.status, so forcing a job back to not_started
+      // otherwise leaves the v2 board stale). Full reset (Steve's decision, not shallow): closes
+      // open sessions, resets lines, AND clears per-item completions so the derived qty_done
+      // (P351) truly reads 0 rather than showing stale completed-piece counts on a "not started"
+      // line. Best-effort — a reset failure must never fail the job PUT. Separate, clearly-labeled
+      // block from the legacy cutting_steps reconcile above; does not touch that model.
+      if (payload.status === 'not_started') {
+        try {
+          await db.batch([
+            db.prepare(
+              "UPDATE cutting_sessions SET status='closed', ended_at=datetime('now') WHERE job_id=? AND status='open'"
+            ).bind(id),
+            db.prepare(
+              "UPDATE cutting_lines SET line_status='not_started', qty_done=0, updated_at=datetime('now') WHERE job_id=?"
+            ).bind(id),
+            db.prepare(
+              "UPDATE cutting_line_progress SET completed=0, completed_qty=0, updated_at=datetime('now') WHERE job_id=?"
+            ).bind(id),
+          ]);
+          await logActivity(db, 'cutting_reset', 'job', id,
+            `Job reset to Not Started — v2 cutting progress cleared`,
+            { trigger: 'status_to_not_started' }
+          );
+        } catch (e) {
+          console.error('v2 cutting reset failed on PUT:', String(e?.message || e));
+        }
+      }
+
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
       const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
 
