@@ -16,9 +16,203 @@
 <link rel="stylesheet" href="/logistics/logistics-shared.css">
 <style>
   .bol-email-wrap {
-    max-width: 860px;
+    max-width: 1180px;
     margin: 0 auto;
     padding: 20px 16px 60px;
+  }
+  .bol-email-columns {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+  .bol-email-col-main {
+    flex: 1 1 640px;
+    min-width: 0;
+  }
+  .bol-email-col-side {
+    flex: 0 0 320px;
+    min-width: 0;
+  }
+  @media (max-width: 820px) {
+    .bol-email-columns {
+      flex-direction: column;
+    }
+    .bol-email-col-side {
+      flex: 1 1 auto;
+      width: 100%;
+    }
+  }
+  .bol-email-panel {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--card-bg);
+    padding: 14px;
+  }
+  .bol-email-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .bol-email-panel-header h3 {
+    margin: 0;
+    font-size: 15px;
+    color: var(--text);
+  }
+  .bol-email-small-btn {
+    background: none;
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 10px;
+    min-height: 44px;
+    cursor: pointer;
+  }
+  .bol-email-recipients-list {
+    max-height: 340px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .bol-email-recipient-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--line);
+    min-height: 44px;
+  }
+  .bol-email-recipient-row:last-child { border-bottom: none; }
+  .bol-email-recipient-row label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .bol-email-recipient-row input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    cursor: pointer;
+  }
+  .bol-email-recipient-actions {
+    display: flex;
+    gap: 4px;
+  }
+  .bol-email-recipient-actions button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 6px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .bol-email-recipient-edit-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .bol-email-recipient-edit-row input {
+    padding: 8px 10px;
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    min-height: 40px;
+  }
+  .bol-email-recipient-edit-row .bol-email-edit-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .bol-email-add-recipient {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .bol-email-add-recipient input {
+    padding: 8px 10px;
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    min-height: 40px;
+  }
+  .bol-email-holidays {
+    margin-top: 20px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--card-bg);
+    padding: 4px 14px 14px;
+  }
+  .bol-email-holidays > summary {
+    cursor: pointer;
+    padding: 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .bol-email-holiday-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--text);
+    min-height: 44px;
+  }
+  .bol-email-holiday-row .muted { color: var(--muted); }
+  .bol-email-holiday-row button {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 6px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .bol-email-add-holiday {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+  }
+  .bol-email-add-holiday input[type="date"],
+  .bol-email-add-holiday input[type="text"] {
+    padding: 8px 10px;
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    min-height: 40px;
+  }
+  .bol-email-add-holiday input[type="text"] { flex: 1; min-width: 140px; }
+  .bol-email-sendinfo {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0 auto 0 0;
+    align-self: center;
   }
   .bol-email-intro {
     color: var(--muted);
@@ -119,35 +313,6 @@
     display: flex;
     justify-content: flex-end;
   }
-  .bol-email-modal-list {
-    max-height: 220px;
-    overflow-y: auto;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 8px 12px;
-    margin: 12px 0;
-    font-size: 13px;
-    color: var(--muted);
-  }
-  .bol-email-modal-list div { padding: 3px 0; }
-  .bol-email-modal-body label {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 6px;
-  }
-  .bol-email-modal-body input[type="email"] {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 10px 12px;
-    border: 1px solid var(--input-border);
-    border-radius: 8px;
-    background: var(--card-bg);
-    color: var(--text);
-    font-size: 14px;
-    min-height: 44px;
-  }
 </style>
 </head>
 <body>
@@ -160,55 +325,66 @@
 <script src="/logistics/logistics-header.js"></script>
 <script>
 document.getElementById('logistics-page-title').textContent = 'BOL Email Queue';
-document.getElementById('logistics-page-subtitle').textContent = "Tomorrow's Lisma shipments";
+document.getElementById('logistics-page-subtitle').textContent = "Next shipping day's Lisma shipments";
 </script>
 
 <div class="bol-email-wrap">
-  <p class="bol-email-intro" id="bol-email-intro">BOL Email Queue — tomorrow's Lisma shipments</p>
+  <p class="bol-email-intro" id="bol-email-intro">BOL Email Queue — next shipping day's Lisma shipments</p>
 
-  <div class="bol-email-toolbar">
-    <input type="text" id="bol-email-search-input" placeholder="Add a BOL manually — search by customer or BOL #…" autocomplete="off">
-  </div>
-  <div class="bol-email-search-results" id="bol-email-search-results"></div>
+  <div class="bol-email-columns">
+    <div class="bol-email-col-main">
+      <div class="bol-email-toolbar">
+        <input type="text" id="bol-email-search-input" placeholder="Add a BOL manually — search by customer or BOL #…" autocomplete="off">
+      </div>
+      <div class="bol-email-search-results" id="bol-email-search-results"></div>
 
-  <div class="bol-email-list" id="bol-email-list">
-    <div class="bol-email-empty" id="bol-email-empty">Loading…</div>
-  </div>
+      <div class="bol-email-list" id="bol-email-list">
+        <div class="bol-email-empty" id="bol-email-empty">Loading…</div>
+      </div>
 
-  <div class="bol-email-send-bar">
-    <button class="logistics-btn logistics-btn-primary" id="bol-email-send-btn" onclick="openSendConfirm()" disabled>Send</button>
-  </div>
-</div>
-
-<!-- Confirm-send modal -->
-<div class="logistics-modal-overlay hidden" id="bol-email-confirm-modal">
-  <div class="logistics-modal-panel" style="max-width:480px;">
-    <div class="logistics-modal-header">
-      <h3 style="margin:0;font-size:16px;">Send BOLs to carrier</h3>
-      <button class="logistics-modal-close" onclick="closeSendConfirm()">×</button>
+      <div class="bol-email-send-bar">
+        <span class="bol-email-sendinfo" id="bol-email-sendinfo"></span>
+        <button class="logistics-btn logistics-btn-primary" id="bol-email-send-btn" onclick="sendNow()" disabled>Send</button>
+      </div>
     </div>
-    <div class="logistics-modal-body">
-      <label for="bol-email-recipient">Recipient email</label>
-      <input type="email" id="bol-email-recipient" placeholder="carrier@example.com">
-      <p id="bol-email-confirm-count" style="margin:14px 0 4px;font-size:13px;color:var(--muted);"></p>
-      <div class="bol-email-modal-list" id="bol-email-confirm-filenames"></div>
-    </div>
-    <div class="logistics-modal-footer">
-      <button class="logistics-btn logistics-btn-outline" onclick="closeSendConfirm()">Cancel</button>
-      <button class="logistics-btn logistics-btn-primary" id="bol-email-confirm-send-btn" onclick="confirmSend()">Confirm &amp; Send</button>
+
+    <div class="bol-email-col-side">
+      <div class="bol-email-panel">
+        <div class="bol-email-panel-header">
+          <h3>Recipients</h3>
+          <button class="bol-email-small-btn" id="bol-email-edit-toggle" onclick="toggleRecipientEdit()">Edit</button>
+        </div>
+        <div class="bol-email-recipients-list" id="bol-email-recipients"></div>
+      </div>
     </div>
   </div>
+
+  <details class="bol-email-holidays">
+    <summary>Plant closures (skipped when picking the ship day)</summary>
+    <div id="bol-email-holidays-list"></div>
+    <div class="bol-email-add-holiday">
+      <input type="date" id="bol-email-holiday-date">
+      <input type="text" id="bol-email-holiday-label" placeholder="Label (e.g. Thanksgiving)">
+      <button class="bol-email-small-btn" onclick="submitAddHoliday()">Add</button>
+    </div>
+  </details>
 </div>
 
 <script>
 (function () {
   const LISMA_RE = /^LISMA/i;
-  const RECIPIENT_KEY = 'xpanda_lisma_email';
 
   let shipDate = '';
   // rows: Map<id, { record, checked, nonLisma }>
   const rows = new Map();
   let renderCache = new Map(); // id -> { pdfBytes, filename }
+
+  // ── Recipients + holidays state ────────────────────────────────────────
+  let recipients = [];
+  const checkedRecipientIds = new Set();
+  let editMode = false;
+  let editingRecipientId = null;
+  let holidays = [];
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -233,20 +409,16 @@ document.getElementById('logistics-page-subtitle').textContent = "Tomorrow's Lis
 
   function renderList() {
     const listEl = document.getElementById('bol-email-list');
-    const emptyEl = document.getElementById('bol-email-empty');
-    const sendBtn = document.getElementById('bol-email-send-btn');
 
     if (rows.size === 0) {
       listEl.innerHTML = '';
       listEl.appendChild(emptyElNode());
-      sendBtn.disabled = true;
+      updateSendBar();
       return;
     }
 
     listEl.innerHTML = '';
-    let anyChecked = false;
     for (const [id, entry] of rows) {
-      if (entry.checked) anyChecked = true;
       const row = document.createElement('div');
       row.className = 'bol-email-row';
       row.innerHTML = `
@@ -271,15 +443,26 @@ document.getElementById('logistics-page-subtitle').textContent = "Tomorrow's Lis
       });
     });
 
-    sendBtn.disabled = !anyChecked;
+    updateSendBar();
   }
 
   function emptyElNode() {
     const div = document.createElement('div');
     div.className = 'bol-email-empty';
     div.id = 'bol-email-empty';
-    div.textContent = `No Lisma BOLs found for tomorrow (${shipDate || '—'}).`;
+    div.textContent = `No Lisma BOLs found for the next shipping day (${shipDate || '—'}).`;
     return div;
+  }
+
+  function updateSendBar() {
+    const sendBtn = document.getElementById('bol-email-send-btn');
+    const info = document.getElementById('bol-email-sendinfo');
+    const bolCount = [...rows.values()].filter(e => e.checked).length;
+    const recCount = checkedRecipientIds.size;
+    if (info) {
+      info.textContent = `Shipping ${shipDate || '—'} · ${bolCount} BOL${bolCount === 1 ? '' : 's'} · ${recCount} recipient${recCount === 1 ? '' : 's'}`;
+    }
+    if (sendBtn) sendBtn.disabled = bolCount === 0 || recCount === 0;
   }
 
   async function loadCandidates() {
@@ -354,7 +537,217 @@ document.getElementById('logistics-page-subtitle').textContent = "Tomorrow's Lis
     }
   });
 
-  // ── Send flow ───────────────────────────────────────────────────────────
+  // ── Recipients ──────────────────────────────────────────────────────────
+  function renderRecipients() {
+    const el = document.getElementById('bol-email-recipients');
+    el.innerHTML = '';
+
+    for (const r of recipients) {
+      if (editMode && editingRecipientId === r.id) {
+        const editRow = document.createElement('div');
+        editRow.className = 'bol-email-recipient-edit-row';
+        editRow.innerHTML = `
+          <input type="text" id="bol-email-edit-name-${r.id}" value="${esc(r.name)}" placeholder="Name">
+          <input type="email" id="bol-email-edit-email-${r.id}" value="${esc(r.email)}" placeholder="email@example.com">
+          <div class="bol-email-edit-actions">
+            <button class="bol-email-small-btn" data-save-rid="${r.id}">Save</button>
+            <button class="bol-email-small-btn" data-cancel-edit-rid>Cancel</button>
+          </div>
+        `;
+        el.appendChild(editRow);
+        continue;
+      }
+
+      const row = document.createElement('div');
+      row.className = 'bol-email-recipient-row';
+      const checked = checkedRecipientIds.has(r.id);
+      const displayName = r.name ? `${esc(r.name)} — ` : '';
+      row.innerHTML = `
+        <label>
+          <input type="checkbox" data-rid="${r.id}" ${checked ? 'checked' : ''}>
+          <span>${displayName}${esc(r.email)}</span>
+        </label>
+        ${editMode ? `<div class="bol-email-recipient-actions">
+          <button data-edit-rid="${r.id}" title="Edit">&#9998;</button>
+          <button data-remove-rid="${r.id}" title="Remove">&times;</button>
+        </div>` : ''}
+      `;
+      el.appendChild(row);
+    }
+
+    el.querySelectorAll('input[type="checkbox"][data-rid]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = Number(cb.dataset.rid);
+        if (cb.checked) checkedRecipientIds.add(id); else checkedRecipientIds.delete(id);
+        updateSendBar();
+      });
+    });
+
+    if (editMode) {
+      el.querySelectorAll('[data-edit-rid]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          editingRecipientId = Number(btn.dataset.editRid);
+          renderRecipients();
+        });
+      });
+      el.querySelectorAll('[data-remove-rid]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (confirm('Remove this recipient?')) deleteRecipient(Number(btn.dataset.removeRid));
+        });
+      });
+      el.querySelectorAll('[data-save-rid]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = Number(btn.dataset.saveRid);
+          const name = document.getElementById(`bol-email-edit-name-${id}`).value.trim();
+          const email = document.getElementById(`bol-email-edit-email-${id}`).value.trim();
+          editingRecipientId = null;
+          updateRecipient(id, email, name);
+        });
+      });
+      el.querySelectorAll('[data-cancel-edit-rid]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          editingRecipientId = null;
+          renderRecipients();
+        });
+      });
+
+      const addRow = document.createElement('div');
+      addRow.className = 'bol-email-add-recipient';
+      addRow.innerHTML = `
+        <input type="text" id="bol-email-new-name" placeholder="Name (optional)">
+        <input type="email" id="bol-email-new-email" placeholder="email@example.com">
+        <button class="bol-email-small-btn" id="bol-email-new-save">+ Add recipient</button>
+      `;
+      el.appendChild(addRow);
+      document.getElementById('bol-email-new-save').addEventListener('click', () => {
+        const name = document.getElementById('bol-email-new-name').value.trim();
+        const email = document.getElementById('bol-email-new-email').value.trim();
+        addRecipient(email, name);
+      });
+    }
+
+    updateSendBar();
+  }
+
+  window.toggleRecipientEdit = function () {
+    editMode = !editMode;
+    editingRecipientId = null;
+    document.getElementById('bol-email-edit-toggle').textContent = editMode ? 'Done' : 'Edit';
+    renderRecipients();
+  };
+
+  async function loadRecipients() {
+    const { ok, data, error } = await window.api.get('/api/bol-email/recipients');
+    if (!ok) {
+      alert('Failed to load recipients: ' + (error || 'unknown error'));
+      return;
+    }
+    const prevIds = new Set(recipients.map(r => r.id));
+    recipients = data.recipients || [];
+    for (const r of recipients) {
+      if (!prevIds.has(r.id)) {
+        if (r.is_selected) checkedRecipientIds.add(r.id); else checkedRecipientIds.delete(r.id);
+      }
+    }
+    renderRecipients();
+  }
+
+  async function addRecipient(email, name) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      alert('Enter a valid email.');
+      return;
+    }
+    const { ok, data, error } = await window.api.post('/api/bol-email/recipients', { email, name });
+    if (!ok) {
+      alert('Failed to add recipient: ' + (data?.error || error || 'Unknown error'));
+      return;
+    }
+    await loadRecipients();
+  }
+
+  async function updateRecipient(id, email, name) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      alert('Enter a valid email.');
+      renderRecipients();
+      return;
+    }
+    const { ok, data, error } = await window.api.put(`/api/bol-email/recipients/${id}`, { email, name });
+    if (!ok) {
+      alert('Failed to update recipient: ' + (data?.error || error || 'Unknown error'));
+    }
+    await loadRecipients();
+  }
+
+  async function deleteRecipient(id) {
+    const { ok, data, error } = await window.api.del(`/api/bol-email/recipients/${id}`);
+    if (!ok) {
+      alert('Failed to remove recipient: ' + (data?.error || error || 'Unknown error'));
+      return;
+    }
+    checkedRecipientIds.delete(id);
+    await loadRecipients();
+  }
+
+  // ── Plant holidays ──────────────────────────────────────────────────────
+  function renderHolidays() {
+    const el = document.getElementById('bol-email-holidays-list');
+    if (holidays.length === 0) {
+      el.innerHTML = '<div class="bol-email-holiday-row"><span class="muted">No plant closures listed.</span></div>';
+      return;
+    }
+    el.innerHTML = holidays.map(h => `
+      <div class="bol-email-holiday-row">
+        <span>${esc(h.holiday_date)}</span>
+        <span class="muted">${h.label ? esc(h.label) : ''}</span>
+        <button data-remove-hid="${h.id}" title="Remove">&times;</button>
+      </div>
+    `).join('');
+    el.querySelectorAll('[data-remove-hid]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (confirm('Remove this plant closure date?')) deleteHoliday(Number(btn.dataset.removeHid));
+      });
+    });
+  }
+
+  async function loadHolidays() {
+    const { ok, data, error } = await window.api.get('/api/bol-email/holidays');
+    if (!ok) {
+      alert('Failed to load plant closures: ' + (error || 'unknown error'));
+      return;
+    }
+    holidays = data.holidays || [];
+    renderHolidays();
+  }
+
+  window.submitAddHoliday = async function () {
+    const date = document.getElementById('bol-email-holiday-date').value;
+    const label = document.getElementById('bol-email-holiday-label').value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      alert('Pick a date.');
+      return;
+    }
+    const { ok, data, error } = await window.api.post('/api/bol-email/holidays', { holiday_date: date, label });
+    if (!ok) {
+      alert('Failed to add closure: ' + (data?.error || error || 'Unknown error'));
+      return;
+    }
+    document.getElementById('bol-email-holiday-date').value = '';
+    document.getElementById('bol-email-holiday-label').value = '';
+    await loadHolidays();
+    loadCandidates();
+  };
+
+  async function deleteHoliday(id) {
+    const { ok, data, error } = await window.api.del(`/api/bol-email/holidays/${id}`);
+    if (!ok) {
+      alert('Failed to remove closure: ' + (data?.error || error || 'Unknown error'));
+      return;
+    }
+    await loadHolidays();
+    loadCandidates();
+  }
+
+  // ── Send flow (no modal) ───────────────────────────────────────────────
   function bytesToBase64(bytes) {
     let bin = '';
     const CH = 0x8000;
@@ -370,14 +763,20 @@ document.getElementById('logistics-page-subtitle').textContent = "Tomorrow's Lis
     return `BOL-${inv}-${cust}.pdf`;
   }
 
-  window.openSendConfirm = async function () {
+  window.sendNow = async function () {
+    const selected = [...rows.values()].filter(e => e.checked);
+    if (selected.length === 0) {
+      alert('Select at least one BOL to send.');
+      return;
+    }
+    if (checkedRecipientIds.size === 0) {
+      alert('Select at least one recipient.');
+      return;
+    }
     if (!window.BolShared || !window.PDFLib) {
       alert('BOL renderer failed to load. Refresh the page and try again.');
       return;
     }
-
-    const selected = [...rows.values()].filter(e => e.checked);
-    if (selected.length === 0) return;
 
     const sendBtn = document.getElementById('bol-email-send-btn');
     sendBtn.disabled = true;
@@ -397,65 +796,41 @@ document.getElementById('logistics-page-subtitle').textContent = "Tomorrow's Lis
       return;
     }
 
-    sendBtn.textContent = 'Send';
-    sendBtn.disabled = false;
-
-    document.getElementById('bol-email-recipient').value = localStorage.getItem(RECIPIENT_KEY) || '';
-    document.getElementById('bol-email-confirm-count').textContent = `${renderCache.size} BOL${renderCache.size === 1 ? '' : 's'} will be sent as separate attachments:`;
-    document.getElementById('bol-email-confirm-filenames').innerHTML =
-      [...renderCache.values()].map(v => `<div>${esc(v.filename)}</div>`).join('');
-
-    document.getElementById('bol-email-confirm-modal').classList.remove('hidden');
-  };
-
-  window.closeSendConfirm = function () {
-    document.getElementById('bol-email-confirm-modal').classList.add('hidden');
-  };
-
-  window.confirmSend = async function () {
-    const to = document.getElementById('bol-email-recipient').value.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
-      alert('Enter a valid recipient email.');
-      return;
-    }
-
     const attachments = [...renderCache.values()].map(v => ({
       filename: v.filename,
       content: bytesToBase64(v.pdfBytes),
     }));
 
-    const confirmBtn = document.getElementById('bol-email-confirm-send-btn');
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Sending…';
+    sendBtn.textContent = 'Sending…';
 
     const { ok, data, error } = await window.api.post('/api/bol-email/send', {
-      to,
       ship_date: shipDate,
       delivery_count: attachments.length,
       attachments,
+      recipient_ids: [...checkedRecipientIds],
     });
 
-    confirmBtn.disabled = false;
-    confirmBtn.textContent = 'Confirm & Send';
+    sendBtn.textContent = 'Send';
+    sendBtn.disabled = false;
 
     if (!ok) {
       alert('Send failed: ' + (data?.error || error || 'Unknown error') + (data?.detail ? '\n' + data.detail : ''));
       return;
     }
 
-    localStorage.setItem(RECIPIENT_KEY, to);
-    closeSendConfirm();
-
     const toast = document.createElement('div');
     toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:10000;';
-    toast.innerHTML = `<span style="color:#34d399;">✓</span> Sent ${data.sent} BOL${data.sent === 1 ? '' : 's'}`;
+    toast.innerHTML = `<span style="color:#34d399;">✓</span> Sent ${data.sent} BOL${data.sent === 1 ? '' : 's'} to ${data.recipients} recipient${data.recipients === 1 ? '' : 's'}`;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
 
     loadCandidates();
+    loadRecipients();
   };
 
   loadCandidates();
+  loadRecipients();
+  loadHolidays();
 })();
 </script>
 

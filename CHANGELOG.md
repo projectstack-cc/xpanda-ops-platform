@@ -878,6 +878,29 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P358** — BOL Email Queue: recipient book UI + plant closures editor + no-modal multi-send (page).
+  Reworked `logistics/bol-email.html` against P357's endpoints: two-column layout (BOL list/search
+  left, scrollable Recipients panel right, checkbox per recipient showing `name — email`, checked
+  from server `is_selected`), collapsing to single-column ≤820px. Edit mode toggle adds inline
+  add/edit/remove controls to the recipients panel (`+ Add recipient` row, per-row Edit swaps to an
+  inline name/email form, Remove confirms then deletes) — a `checkedRecipientIds` Set is the single
+  source of truth for checkbox state so toggling Edit never loses the current selection, and reloads
+  after add/edit/remove only re-seed a recipient's checked state from the server the first time that
+  id is seen (preserves in-session choices, still picks up the server's remembered selection on a
+  fresh page load). New collapsible `<details>` "Plant closures" editor (date + label, list, remove)
+  — add/remove both call `loadCandidates()` after so the resolved ship day picks up the change
+  immediately. **Confirm-send modal removed entirely** (`openSendConfirm`/`closeSendConfirm`/
+  `confirmSend`, the `localStorage` `xpanda_lisma_email` recipient key, and the modal's now-dead CSS)
+  — `sendNow()` renders checked BOLs to PDFs client-side exactly as before, then posts
+  `recipient_ids` (from the checked-set) alongside `attachments` directly to P357's
+  `POST /api/bol-email/send`; a `#bol-email-sendinfo` line next to Send shows live
+  "Shipping {date} · {N} BOLs · {M} recipients" counts, and Send stays disabled until both a BOL and
+  a recipient are checked. Success toast now reports recipient count too; reloads candidates AND
+  recipients afterward so the server-persisted "remembered" selection round-trips visibly. Page
+  intro/subtitle copy updated from "tomorrow's" to "next shipping day's" Lisma shipments. Touch
+  targets on all new recipient/holiday row controls sized ≥44px. `bol-shared.js` untouched;
+  `loadCandidates`/`renderList`/`runSearch`/`bytesToBase64`/`filenameFor` all kept intact. `node
+  --check` clean on the extracted inline `<script>` bodies.
 - **P357** — BOL Email Queue: recipient address book + plant holidays + next-shipping-day (backend).
   New D1 tables `bol_email_recipients` (`id, email, name, is_selected, created_at, updated_at`,
   seeded with the 9 known addresses, blank names for Steve to fill in) and `plant_holidays`
