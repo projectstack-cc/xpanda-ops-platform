@@ -1319,6 +1319,19 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P363 — cut-list PDF: horizontal row dividers between line items (bilateral, legacy + v2).**
+  A thin light-gray hairline rule now draws between each line-item row in the cut-list generator
+  — horizontal only, no vertical/column separators, full table width, reusing the existing `hr()`
+  helper and `rule` gray already used for the header underline and Total-pieces top rule. Applied
+  identically to both generators: legacy `buildCutListPdf()` in `jobs/index.html` (job-board-agent)
+  and its pixel-parity v2 TypeScript port `cutting-pilot/src/lib/cutList.ts` (react-component-agent)
+  — same one-line change in both: track `isFirstRowOnPage` in the per-page row loop and draw
+  `hr(page, y + 8)` before every row after the first, landing the rule mid-gap between the previous
+  row's description line and the next row's item line. Works on multi-page output — dividers appear
+  between rows on page 2+ too, since each page's loop resets the first-row flag. No migration, no
+  API change, `bol-shared.js` untouched. Gates: `node --check` on `jobs/index.html`'s extracted
+  inline scripts clean; v2 `npx tsc --noEmit` and `npm run cf-build` (opennextjs-cloudflare) both
+  green. Single commit.
 - **P356 — shift assignment on the job board (1st/2nd/3rd), mirroring multi-assignee (#5).**
   New `job_shifts` table (`id, job_id, shift, assigned_by, created_at`, `UNIQUE(job_id, shift)`,
   indexed on `job_id`) mirrors `job_assignments` (P333) exactly, plus a nullable `users.shift`

@@ -2426,8 +2426,11 @@ async function buildCutListPdf(job) {
     pageCount += 1;
     let y = pageCount === 1 ? drawPage1Header(page) : drawContHeader(page);
     const cap = pageCount === 1 ? ROWS_PAGE_1 : ROWS_PAGE_CONT;
+    let isFirstRowOnPage = true;
     for (const li of items.slice(idx, idx + cap)) {
+      if (!isFirstRowOnPage) hr(page, y + 8);
       y = drawRow(page, li, y);
+      isFirstRowOnPage = false;
     }
     idx += cap;
     lastPage = page;
