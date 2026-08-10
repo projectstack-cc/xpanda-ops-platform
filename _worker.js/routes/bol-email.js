@@ -25,7 +25,7 @@ async function handleCandidates(request, env) {
       LEFT JOIN loading_assignments la
              ON la.job_id = b.job_id AND la.load_number = b.load_number
       LEFT JOIN loading_bays lb ON la.bay_id = lb.id
-      WHERE b.carrier_name LIKE 'LISMA%'
+      WHERE (b.carrier_name LIKE 'LISMA%' OR b.carrier_name LIKE 'SEAL%')
         AND date(COALESCE(la.ship_date, j.ship_date)) = date(?)
       ORDER BY j.customer ASC, b.load_number ASC
     `).bind(shipDate).all();

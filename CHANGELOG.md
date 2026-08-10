@@ -944,6 +944,22 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P362** — BOL Email Queue candidates: also match Seal Express (Lisma rebrand). Lisma rebranded to
+  Seal Express; `handleCandidates`' SQL in `_worker.js/routes/bol-email.js` now matches
+  `WHERE (b.carrier_name LIKE 'LISMA%' OR b.carrier_name LIKE 'SEAL%')` (parenthesized so the OR
+  doesn't break the following `AND` date filter) so BOLs land in the queue under either carrier
+  name during the transition, until all legacy LISMA-named BOLs are phased out. **Verified against
+  live data before shipping**: `SELECT DISTINCT carrier_name FROM bols WHERE carrier_name LIKE
+  'SEAL%'` returns only `Seal Express - Dry Van`/`Seal Express - Flatbed` — no other carrier's
+  BOLs get pulled into this queue by the broader prefix. **Scope note / known cosmetic gap**: this
+  prompt only touched `bol-email.js`'s server-side match — `logistics/bol-email.html`'s client-side
+  "Not Lisma" badge (`LISMA_RE = /^LISMA/i` in `isNonLisma()`) runs on every server-returned
+  candidate, not just manual adds, so **every** Seal Express BOL the server now correctly returns
+  will render with a `Not Lisma` warning badge until that regex is updated too — a false alarm on
+  the primary/intended workflow once the rebrand completes, not an edge case. Doesn't affect which
+  BOLs are sent, who receives them, or the attachments; flagged for Steve as a one-line follow-up
+  to `LISMA_RE` in `bol-email.html`, out of this prompt's scoped file list. `node --check` clean;
+  the anchor was verified at exactly 1 match before editing.
 - **P358** — BOL Email Queue: recipient book UI + plant closures editor + no-modal multi-send (page).
   Reworked `logistics/bol-email.html` against P357's endpoints: two-column layout (BOL list/search
   left, scrollable Recipients panel right, checkbox per recipient showing `name — email`, checked
