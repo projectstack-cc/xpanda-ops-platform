@@ -828,6 +828,28 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ---
 
+## Shift Notes (v2)
+
+- **P359 — Shift Notes v2 backend: `shift_notes` table + `/v2/api/notes[/mark-viewed|/unviewed-count]` + `notes`/`notes.manage` gate.**
+  New standalone D1 table `shift_notes` (`id, subject, body, author_id, author_name, created_at,
+  viewed_at, viewed_by_id, viewed_by_name` — no `job_id`, no FK), migration run directly against
+  production D1 via `wrangler d1 execute --remote` (Steve's explicit instruction this session),
+  schema verified via `PRAGMA table_info` before and after. **Create-only / immutable** — no
+  edit/delete endpoints in v1. New `cutting-pilot/src/middleware.ts` permission rows: `notes.manage`
+  (mark-viewed prefix, placed above the general `notes` prefix so it wins first-match) and `notes`
+  (view/create), plus an `X-User-Can-Manage-Notes` header injected alongside the existing
+  `X-User-Can-Manage-Cutting` one. New route handlers under `src/app/api/notes/`: `GET/POST /v2/api/notes`
+  (list newest-100, create), `POST /v2/api/notes/mark-viewed` (manager-gated by middleware; **global
+  viewed model** — `UPDATE ... WHERE viewed_at IS NULL` so the first manager to mark a note viewed
+  wins and it's never overwritten platform-wide), `GET /v2/api/notes/unviewed-count` (tiny
+  `{ unviewed_count, latest_subject }` payload for the homepage poller shipped in P361). Actor
+  identity always comes from `X-User-Id`/`X-User-Name` headers, never the request body. No
+  `logActivity()` — that helper is legacy-worker-only; v2 doesn't write the legacy activity log
+  (flagged as a BACKLOG follow-up if Steve wants audit trail later). `tsc --noEmit` + `npm run
+  cf-build` green.
+
+---
+
 ## Database / API
 
 - **P325** — Hotfix: per-load `ship_date` was shadowed by `j.ship_date` in the loading-assignments

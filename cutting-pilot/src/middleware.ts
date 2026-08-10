@@ -31,6 +31,9 @@ const PERMISSION_MAP: Array<{ prefix: string; key: string }> = [
   { prefix: "/v2/board", key: "jobs" },
   { prefix: "/v2/api/orders", key: "orders" },
   { prefix: "/v2/orders", key: "orders" },
+  { prefix: "/v2/api/notes/mark-viewed", key: "notes.manage" },
+  { prefix: "/v2/api/notes", key: "notes" },
+  { prefix: "/v2/notes", key: "notes" },
   { prefix: "/v2/api/blocks", key: "manufacturing.blocks" },
   { prefix: "/v2/blocks", key: "manufacturing.blocks" },
 ];
@@ -87,6 +90,10 @@ export async function middleware(request: NextRequest) {
   headers.set(
     "X-User-Can-Manage-Cutting",
     hasPermission(user, "manufacturing.cutting.manage", "edit") ? "1" : "0"
+  );
+  headers.set(
+    "X-User-Can-Manage-Notes",
+    hasPermission(user, "notes.manage", "edit") ? "1" : "0"
   );
 
   return NextResponse.next({ request: { headers } });

@@ -8,6 +8,19 @@
 
 ---
 
+## Shift Notes (v2)
+
+- [ ] **P360 — Shift Notes UI.** Blog-style accordion list + composer + manager Mark-viewed at
+  `/v2/notes`, against P359's API. See `Prompts/prompt-360-notes-2-ui.md`.
+- [ ] **P361 — Shift Notes roles labels + homepage indicator.** `notes`/`notes.manage` labels in
+  `admin/roles.html` + a Shift Notes homepage card with unviewed bubble/pulse, polling
+  `GET /v2/api/notes/unviewed-count`. See `Prompts/prompt-361-notes-3-admin-homepage.md`.
+- [ ] **P359 follow-up — v2 activity-log parity for notes.** `logActivity()` is legacy-worker-only;
+  v2's `/v2/api/notes` POST/mark-viewed don't write to the shared `activity_log` table. Revisit if
+  Steve wants an audit trail for shift notes.
+
+---
+
 ## Manufacturing / Cutting (React pilot)
 
 - [ ] **P356 follow-up — v2 cutting queue: label/filter by shift.** P356 added `job_shifts`
