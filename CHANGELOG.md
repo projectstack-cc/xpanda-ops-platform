@@ -830,6 +830,28 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Shift Notes (v2)
 
+- **P360 — Shift Notes v2 UI: blog-style accordion list, Modal-composed composer, manager Mark-viewed with global clear + "viewed by" display.**
+  New `/v2/notes` route mirroring `app/cutting/crosscutter/page.tsx`'s server-shell pattern exactly
+  (`headers()` → `validateSession()` → `PlatformHeader` + client board). `ShiftNotesBoard.tsx` fetches
+  `GET /v2/api/notes` on mount, renders skeleton rows while loading and a dismissible error strip
+  (never an infinite spinner) on failure, plus an inviting empty state ("No shift notes yet. Add the
+  first one.") per CDS content voice. `NoteRow.tsx` is a single-tap accordion (`aria-expanded`,
+  ≥44px touch target): unviewed rows get a danger-tinted background + a small "● new" marker,
+  viewed rows are flat surface with a "✓ viewed by {name}" meta suffix; the manager-only **Mark
+  viewed** button lives inside the expanded panel and only renders when `canManage && !viewed_at`
+  (disabled mid-flight, inline error on failure — never silent). `NoteComposer.tsx` composes the
+  shared `<Modal>` (no copy-paste modal); both fields validate on submit rather than disabling the
+  button, per CDS "avoid disabled buttons"; no author field — identity comes from the server. Date
+  formatting is a small local `Intl.DateTimeFormat` helper kept in the feature folder (`lib/time.ts`
+  had no matching formatter to reuse — it's duration/elapsed-seconds only). **Caught during the
+  build-gate pass, not assumed**: Tailwind's `bg-[var(--danger-bg)]/10` opacity-modifier syntax
+  silently compiled to a fully-opaque `background-color: var(--danger-bg)` in this project's
+  Tailwind 3.4.4 setup (confirmed by grepping the compiled CSS output for `color-mix` — none was
+  generated) instead of a 10% tint — would have shipped unviewed rows as solid, hard-to-read red.
+  Fixed with an inline `style={{ backgroundColor: "color-mix(in srgb, var(--danger-bg) 10%,
+  transparent)" }}` on the row, which derives the tint from the same existing token at runtime
+  (no new color value, bypasses Tailwind's JIT parsing of that class entirely) — confirmed present
+  in the compiled client chunk after the fix. `tsc --noEmit` + `npm run cf-build` green.
 - **P359 — Shift Notes v2 backend: `shift_notes` table + `/v2/api/notes[/mark-viewed|/unviewed-count]` + `notes`/`notes.manage` gate.**
   New standalone D1 table `shift_notes` (`id, subject, body, author_id, author_name, created_at,
   viewed_at, viewed_by_id, viewed_by_name` — no `job_id`, no FK), migration run directly against
