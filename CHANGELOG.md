@@ -878,6 +878,26 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P357** — BOL Email Queue: recipient address book + plant holidays + next-shipping-day (backend).
+  New D1 tables `bol_email_recipients` (`id, email, name, is_selected, created_at, updated_at`,
+  seeded with the 9 known addresses, blank names for Steve to fill in) and `plant_holidays`
+  (`id, holiday_date, label`) — migration run directly against production D1 via
+  `wrangler d1 execute --remote` (Steve's explicit instruction this session), schema/seed verified
+  via `PRAGMA table_info` + a row dump before and after. `_worker.js/routes/bol-email.js` extended,
+  same `logistics.bol` permission (no `core.js` change, no new key): candidates now resolve
+  **next shipping day** (`nextShippingDateStr` — soonest future weekday that isn't a `plant_holidays`
+  row, degrades to weekdays-only if the table is briefly unreachable) instead of hardcoded
+  "tomorrow"; new `GET/POST/PUT/DELETE /api/bol-email/recipients[/:id]` and
+  `GET/POST/DELETE /api/bol-email/holidays[/:id]` CRUD handlers; `POST /api/bol-email/send` now
+  takes `recipient_ids` (multi-recipient `to` array) instead of a single `to` string, and persists
+  the selection back to `bol_email_recipients.is_selected` so "remembered from last time" is
+  shared across devices rather than per-browser `localStorage`. Body copy changed from "tomorrow's
+  loads" to "the loads shipping {date}" since Friday's next shipping day is Monday, not tomorrow
+  (Steve approved). Dispatcher now routes on path segments rather than exact-matching two literal
+  paths, so `/api/bol-email/{recipients,holidays}` sub-paths route without any `index.js` change
+  (the `/api/bol-email` prefix mapping already covers them). `node --check` clean; both anchors
+  re-verified at exactly 1 match before editing. **P358 (recipient/holiday UI, no-modal send)
+  ships in the same session** — see below.
 - **P348** — BOL Email Queue page (`logistics/bol-email.html`), linked from the logistics
   dashboard. Loads tomorrow's Lisma candidates from P347's `GET /api/bol-email/candidates`
   (checked by default; non-Lisma badge if a manually-added row's `carrier_name` doesn't match
