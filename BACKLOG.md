@@ -10,9 +10,6 @@
 
 ## Shift Notes (v2)
 
-- [ ] **P361 — Shift Notes roles labels + homepage indicator.** `notes`/`notes.manage` labels in
-  `admin/roles.html` + a Shift Notes homepage card with unviewed bubble/pulse, polling
-  `GET /v2/api/notes/unviewed-count`. See `Prompts/prompt-361-notes-3-admin-homepage.md`.
 - [ ] **P359 follow-up — v2 activity-log parity for notes.** `logActivity()` is legacy-worker-only;
   v2's `/v2/api/notes` POST/mark-viewed don't write to the shared `activity_log` table. Revisit if
   Steve wants an audit trail for shift notes.

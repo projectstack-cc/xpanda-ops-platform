@@ -830,6 +830,28 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Shift Notes (v2)
 
+- **P361 — Shift Notes roles labels + homepage card with unviewed bubble, border pulse, and "New: {subject}" subtitle polling `/v2/api/notes/unviewed-count` (60s, 403-safe).**
+  `admin/roles.html` `PERMISSION_LABELS` gained `notes`/`notes.manage` rows (new "Shift Notes" group,
+  auto-renders in the two existing toggle loops — no other roles.html change). `index.html` gained a
+  Shift Notes card (`data-permission="notes"`, `/v2/notes`) after the Cutting card, plus
+  `.hp-card-badge`/`.hp-card.has-new` CSS reusing the existing `--danger-bg` token (same one
+  `.hp-notif-badge` already uses) — no new color values, `prefers-reduced-motion` respected. Poller
+  fetches `unviewed-count` cache-busted + `no-store` every 60s, sets the bubble count + "New:
+  {subject}" subtitle + border pulse, and no-ops silently on any error/non-OK response (never a
+  console-facing failure, never shows the indicator on error). **Deviated from the prompt's literal
+  snippet in Task 4**: the prompt's insert block was fenced in its own `<script>...</script>` tags,
+  but the anchor (`initHomepage(); setTimeout(loadNotifications, 500);`) sits in the *middle* of
+  `index.html`'s one continuous existing `<script>` block (lines 480–662, confirmed by grepping every
+  `<script>`/`</script>` tag in the file) — pasting literal `<script>` tags there would be raw text
+  inside an already-open script context, i.e. a JS syntax error (`Unexpected token '<'`), not a new
+  nested script block. Inserted the function body and its two `setTimeout`/`setInterval` calls
+  directly instead, with no wrapper tags — confirmed by extracting the file's actual inline
+  `<script>` bodies and running `node --check` on the result (clean) before and after. All four
+  `grep -Fc` anchors (roles.html label insert, index.html card/CSS/script anchors) verified at
+  exactly 1 match each before editing. Manually confirmed the new card sits inside the `.hp-grid`
+  container (opens line 312, well before the card at line ~426, closes before `</main>`) and the
+  bubble is hidden by default via the base `.hp-card-badge{display:none}` rule. Legacy, no v2 build
+  needed for this prompt.
 - **P360 — Shift Notes v2 UI: blog-style accordion list, Modal-composed composer, manager Mark-viewed with global clear + "viewed by" display.**
   New `/v2/notes` route mirroring `app/cutting/crosscutter/page.tsx`'s server-shell pattern exactly
   (`headers()` → `validateSession()` → `PlatformHeader` + client board). `ShiftNotesBoard.tsx` fetches

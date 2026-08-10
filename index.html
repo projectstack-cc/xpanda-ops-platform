@@ -112,6 +112,19 @@
     border-color: var(--input-border);
     transform: translateY(-2px);
   }
+  .hp-card-badge {
+    display: none; margin-left: auto; min-width: 20px; height: 20px;
+    padding: 0 6px; border-radius: 10px; background: var(--danger-bg);
+    color: #fff; font-size: 11px; font-weight: 700; line-height: 20px;
+    text-align: center; box-sizing: border-box;
+  }
+  .hp-card.has-new { border-color: var(--danger-bg); animation: hp-note-pulse 2s ease-in-out infinite; }
+  .hp-card.has-new .hp-card-desc { color: var(--danger-bg); }
+  @keyframes hp-note-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 transparent; }
+    50%      { box-shadow: 0 0 0 3px var(--danger-bg); }
+  }
+  @media (prefers-reduced-motion: reduce) { .hp-card.has-new { animation: none; } }
   .hp-card-head {
     display: flex;
     align-items: center;
@@ -409,6 +422,19 @@
       </div>
     </article>
 
+    <!-- Shift Notes -->
+    <article class="hp-card" id="hp-card-notes" data-permission="notes">
+      <div class="hp-card-head">
+        <div class="hp-card-icon hp-icon-cutting"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></div>
+        <div class="hp-card-title">Shift Notes</div>
+        <span id="hp-notes-bubble" class="hp-card-badge" aria-hidden="true"></span>
+      </div>
+      <div class="hp-card-desc" id="hp-notes-desc">Shift log — wire breaks, air line issues, anything worth flagging</div>
+      <div class="hp-card-actions">
+        <a class="hp-btn hp-btn-cutting" href="/v2/notes">Open</a>
+      </div>
+    </article>
+
     <!-- Schedule -->
     <article class="hp-card" data-permission="schedule">
       <div class="hp-card-head">
@@ -510,6 +536,32 @@ if (new URLSearchParams(window.location.search).get('access_denied')) {
 
 initHomepage();
 setTimeout(loadNotifications, 500);
+
+async function refreshShiftNotesIndicator() {
+  const card = document.getElementById('hp-card-notes');
+  if (!card || card.style.display === 'none') return;
+  const bubble = document.getElementById('hp-notes-bubble');
+  const desc = document.getElementById('hp-notes-desc');
+  const baseDesc = 'Shift log — wire breaks, air line issues, anything worth flagging';
+  try {
+    const res = await fetch('/v2/api/notes/unviewed-count?_=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) { card.classList.remove('has-new'); bubble.style.display = 'none'; desc.textContent = baseDesc; return; }
+    const data = await res.json();
+    const count = data && data.ok ? (data.unviewed_count || 0) : 0;
+    if (count > 0) {
+      card.classList.add('has-new');
+      bubble.style.display = 'inline-block';
+      bubble.textContent = count > 99 ? '99+' : String(count);
+      desc.textContent = data.latest_subject ? ('New: ' + data.latest_subject) : (count + ' new note' + (count > 1 ? 's' : '') + ' need review');
+    } else {
+      card.classList.remove('has-new');
+      bubble.style.display = 'none';
+      desc.textContent = baseDesc;
+    }
+  } catch { card.classList.remove('has-new'); bubble.style.display = 'none'; desc.textContent = baseDesc; }
+}
+setTimeout(refreshShiftNotesIndicator, 700);
+setInterval(refreshShiftNotesIndicator, 60000);
 
 // ── Notification system (unchanged) ──────────────────────
 let notifDropdownOpen = false;
