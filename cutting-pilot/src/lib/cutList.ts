@@ -205,14 +205,3 @@ export async function buildCutListPdf(job: CutListJob): Promise<Uint8Array> {
 
   return await doc.save();
 }
-
-export async function downloadCutList(job: CutListJob): Promise<void> {
-  const pdfBytes = await buildCutListPdf(job);
-  const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `cut-list-${job.invoice_number || job.id}.pdf`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 30000);
-}

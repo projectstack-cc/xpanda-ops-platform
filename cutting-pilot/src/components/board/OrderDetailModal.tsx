@@ -3,9 +3,10 @@
 // Order-detail modal for a production-board row: line items, embedded packing slip (legacy
 // R2/base64-backed PDF, same host, no new v2 endpoint), and a "Print cut list" button reusing
 // the prompt-328/329 generator ported to src/lib/cutList.ts.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/Modal";
-import { downloadCutList, type CutListLineItem } from "@/lib/cutList";
+import PdfViewer from "@/components/PdfViewer";
+import { buildCutListPdf, type CutListLineItem } from "@/lib/cutList";
 
 interface DetailJob {
   id: string;
@@ -36,12 +37,29 @@ interface OrderDetailModalProps {
   onClose: () => void;
 }
 
+type ViewerDoc = { src: string; filename: string; kind: "slip" | "cutlist" } | null;
+
 export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalProps) {
   const [data, setData] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [viewerDoc, setViewerDoc] = useState<ViewerDoc>(null);
+  const [cutListError, setCutListError] = useState<string | null>(null);
+  const cutListBlobUrlRef = useRef<string | null>(null);
 
+  // Reset per job-context change (opening a different order, or closing) — mirrors legacy
+  // clearForm()-on-openModal(): revoke any previous cut-list blob and default the shared viewer
+  // back to the packing slip once the new job's data resolves. Deliberately keyed on `jobId`
+  // alone (not `data`) so a later refetch of the same job can't silently revoke a blob URL out
+  // from under a cut list the user is actively viewing.
   useEffect(() => {
+    if (cutListBlobUrlRef.current) {
+      try { URL.revokeObjectURL(cutListBlobUrlRef.current); } catch {}
+      cutListBlobUrlRef.current = null;
+    }
+    setCutListError(null);
+    setViewerDoc(null);
+
     if (!jobId) {
       setData(null);
       return;
@@ -51,8 +69,16 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
     setData(null);
     fetch(`/v2/api/board/${jobId}`)
       .then((res) => res.json())
-      .then((json) => {
-        if (!cancelled) setData(json);
+      .then((json: DetailResponse) => {
+        if (cancelled) return;
+        setData(json);
+        if (json.ok && json.job) {
+          setViewerDoc(
+            json.job.has_packing_slip
+              ? { src: `/api/jobs/${json.job.id}/packing-slip`, filename: `packing-slip-${json.job.id}.pdf`, kind: "slip" }
+              : null
+          );
+        }
       })
       .catch(() => {
         if (!cancelled) setData({ ok: false, error: "Network error — couldn't reach the server." });
@@ -68,10 +94,19 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
   async function handlePrintCutList() {
     if (!data?.job) return;
     setPrinting(true);
+    setCutListError(null);
     try {
-      await downloadCutList({ ...data.job, line_items: data.line_items ?? [] });
+      const pdfBytes = await buildCutListPdf({ ...data.job, line_items: data.line_items ?? [] });
+      const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
+      if (cutListBlobUrlRef.current) {
+        try { URL.revokeObjectURL(cutListBlobUrlRef.current); } catch {}
+      }
+      const url = URL.createObjectURL(blob);
+      cutListBlobUrlRef.current = url;
+      setViewerDoc({ src: url, filename: `cut-list-${data.job.invoice_number || data.job.id}.pdf`, kind: "cutlist" });
     } catch (e) {
       console.error("Cut list PDF failed:", e);
+      setCutListError("Couldn't generate the cut list. Please try again.");
     } finally {
       setPrinting(false);
     }
@@ -80,7 +115,7 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
   const job = data?.job;
 
   return (
-    <Modal isOpen={!!jobId} onClose={onClose} title={job ? job.customer || "Order detail" : "Order detail"} size="lg">
+    <Modal isOpen={!!jobId} onClose={onClose} title={job ? job.customer || "Order detail" : "Order detail"} size="xl">
       {loading && <p className="text-sm text-muted py-4">Loading order…</p>}
 
       {!loading && data && !data.ok && (
@@ -133,16 +168,20 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
           </div>
 
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-text">Packing slip</h3>
-            {job.has_packing_slip ? (
-              <iframe
-                src={`/api/jobs/${job.id}/packing-slip`}
-                title="Packing slip"
-                className="w-full rounded-lg border border-[var(--card-border)]"
-                style={{ height: 420 }}
+            <h3 className="text-sm font-semibold text-text">
+              {viewerDoc?.kind === "cutlist" ? "Cut list" : "Packing slip"}
+            </h3>
+            {viewerDoc ? (
+              <PdfViewer
+                src={viewerDoc.src}
+                filename={viewerDoc.filename}
+                title={viewerDoc.kind === "cutlist" ? "Cut list" : "Packing slip"}
               />
             ) : (
               <p className="text-sm text-muted">No packing slip attached.</p>
+            )}
+            {cutListError && (
+              <p className="text-sm text-[var(--warn-text)]">{cutListError}</p>
             )}
           </div>
 

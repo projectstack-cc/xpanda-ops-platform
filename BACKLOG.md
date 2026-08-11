@@ -179,6 +179,12 @@
 
 ## Job Board
 
+- [ ] **P364 follow-up — legacy BOL viewer modal (`jobs-bol-view-modal`) has no explicit Print
+  button.** It only has Download (relies on the browser's native in-frame PDF toolbar for print).
+  P364 gave the v2 shared `PdfViewer` explicit Download + Print controls instead of relying on that
+  native toolbar (unreliable on tablets); the legacy BOL modal is now the odd one out. Low priority
+  — add an explicit Print button (`iframe.contentWindow.print()`, same pattern as v2) if it comes up
+  on the floor.
 - [ ] **P331 follow-up — cut-list PDF measured-fill pagination.** P331 paginates with fixed,
   unmeasured row-capacity constants (`ROWS_PAGE_1 = 14`, `ROWS_PAGE_CONT = 20`) chosen
   conservatively for worst-case header height. If a real job's continuation pages look noticeably

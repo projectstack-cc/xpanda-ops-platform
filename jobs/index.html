@@ -2107,6 +2107,7 @@ function clearForm() {
   document.getElementById('slip-viewer-chevron').style.transform = '';
   document.getElementById('slip-viewer-iframe').src = 'about:blank';
   document.getElementById('slip-dropzone').hidden = false;
+  if (_cutListBlobUrl) { try { URL.revokeObjectURL(_cutListBlobUrl); } catch {} _cutListBlobUrl = null; }
 
   clearCombo();
   clearTrailerGroup();
@@ -2448,6 +2449,8 @@ async function buildCutListPdf(job) {
   return await doc.save();
 }
 
+let _cutListBlobUrl = null;
+
 async function printCutList() {
   const job = allJobs.find(j => j.id === editingJobId);
   if (!job) return;
@@ -2456,12 +2459,12 @@ async function printCutList() {
   try {
     const pdfBytes = await buildCutListPdf(job);
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-    const url  = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `cut-list-${job.invoice_number || job.id}.pdf`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    if (_cutListBlobUrl) { try { URL.revokeObjectURL(_cutListBlobUrl); } catch {} }
+    _cutListBlobUrl = URL.createObjectURL(blob);
+    document.getElementById('slip-inline-viewer').hidden = false;
+    document.getElementById('slip-viewer-content').hidden = false;
+    document.getElementById('slip-viewer-chevron').style.transform = 'rotate(90deg)';
+    document.getElementById('slip-viewer-iframe').src = _cutListBlobUrl;
   } catch (e) {
     console.error('Cut list PDF failed:', e);
     showToast('Could not generate cut list.');

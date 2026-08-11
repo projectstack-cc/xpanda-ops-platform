@@ -1319,6 +1319,40 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P364 — cut list opens in the inline PDF viewer, not a download; v2 viewer gains print/download
+  controls + wider order-detail modal (bilateral, legacy + v2).** Both surfaces auto-downloaded the
+  cut list PDF; both now open it in the existing inline viewer instead. **Legacy
+  (`jobs/index.html`, job-board-agent):** `printCutList()` no longer builds an `<a download>` and
+  clicks it — it loads the generated blob into the same collapsible packing-slip viewer
+  (`#slip-inline-viewer`/`#slip-viewer-iframe`) already used to show attached packing slips,
+  force-expanding it (`hidden = false`, chevron rotated) instead of building a second viewer. A new
+  `_cutListBlobUrl` tracks the blob so it's revoked both on the next cut-list print and in
+  `clearForm()` (fired on every `openModal()`), preventing leaks. **v2 (`cutting-pilot/src/**`,
+  react-component-agent):** new shared `src/components/PdfViewer.tsx` — iframe plus explicit
+  Download and Print buttons (`iframe.contentWindow.print()`, `<a download>` on the same `src`).
+  Explicit custom controls were chosen over the browser's native in-frame PDF toolbar because that
+  toolbar is unreliable on the tablets this platform targets (some mobile browsers don't render
+  PDFs inline at all) — matches the floor-grade/mobile-first mandate. `OrderDetailModal.tsx` now
+  routes both the packing slip (`/api/jobs/:id/packing-slip`) and the cut list (blob URL from
+  `buildCutListPdf`, exported from `src/lib/cutList.ts`) through this one `PdfViewer` instance
+  (`viewerDoc` state, keyed by job/document kind) instead of forking a cut-list-only viewer — same
+  "one definition, many call sites" rule as every other v2 component. The now-dead
+  `downloadCutList()` export was removed from `cutList.ts` (no call sites left). Cut-list
+  generation failures now set a visible `cutListError` message instead of only logging to the
+  console. **Modal widened ~25%:** `Modal.tsx` gained a new `size="xl"` (`min(52.5rem, 92vw)`, up
+  from `lg`'s `42rem`/`672px` to `840px`, capped so it never overflows a 7"–10" tablet in portrait)
+  used only by `OrderDetailModal`; other `size="lg"` modals (`StatusModal`, `BlockPlanner`,
+  `BlocksApp`) are unaffected. The v2 job-context reset effect is keyed on `jobId` alone (not on
+  the fetched `data` object) so a same-job refetch can never revoke a cut-list blob URL out from
+  under a viewer the user is actively looking at — mirrors legacy's `clearForm()`-on-`openModal()`
+  lifecycle 1:1. **Known UX quirk, not a bug, left as-is (legacy only):** the "View Packing Slip"
+  toggle label doesn't change when a cut list is loaded into the same viewer region; for a job with
+  an attached packing slip, clicking that toggle after viewing a cut list will swap the frame back
+  to the slip (its `{once:true}` load-slip listener is still pending until the toggle is actually
+  clicked) — consistent with what the label says, and reopening the job modal always resets to a
+  clean state. No migration, no API change, no permission key, `bol-shared.js` untouched. Gates:
+  `node --check` on `jobs/index.html`'s extracted inline script clean; v2 `npx tsc --noEmit` and
+  `npm run cf-build` (opennextjs-cloudflare) both green. Single commit.
 - **P363 — cut-list PDF: horizontal row dividers between line items (bilateral, legacy + v2).**
   A thin light-gray hairline rule now draws between each line-item row in the cut-list generator
   — horizontal only, no vertical/column separators, full table width, reusing the existing `hr()`
