@@ -14,6 +14,13 @@ import FreshnessClock from "./FreshnessClock";
 
 const POLL_MS = 60_000;
 
+// Mirrors PlatformHeader's own NAV_AUTO_HIDE_IDLE_MS. PlatformHeader is a shared component used
+// by every /v2/* page and its `revealed` reveal state is local, unexposed React state — per the
+// P365 scope boundary this schedule-only push effect must not alter that shared component or its
+// overlay behavior for other routes, so the reveal trigger is duplicated here rather than adding
+// a signal prop to PlatformHeader. Keep this in sync if PlatformHeader's idle delay changes.
+const NAV_AUTO_HIDE_IDLE_MS = 5_000;
+
 interface ScheduleBoardProps {
   userName: string;
   isAdmin: boolean;
@@ -32,6 +39,50 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const hasGoodDataRef = useRef(false);
+
+  // Push-down state: the auto-hide header is an overlay (`fixed`), so revealing it doesn't move
+  // this board on its own. `headerRevealed` drives a spacer sized to the header's own rendered
+  // height (`headerHeight`, measured live off the DOM — no hardcoded/magic number) so the board
+  // reflows down in sync with the header instead of being covered by it. No pointer input (the
+  // wall TV) never fires these listeners, so `headerRevealed` stays false and the board renders
+  // full-bleed with zero offset, unchanged from before.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [headerRevealed, setHeaderRevealed] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const navPush = headerRevealed ? headerHeight : 0;
+
+  const revealHeader = useCallback(() => {
+    setHeaderRevealed(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setHeaderRevealed(false), NAV_AUTO_HIDE_IDLE_MS);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("pointermove", revealHeader);
+    window.addEventListener("keydown", revealHeader);
+    window.addEventListener("touchstart", revealHeader, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", revealHeader);
+      window.removeEventListener("keydown", revealHeader);
+      window.removeEventListener("touchstart", revealHeader);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, [revealHeader]);
+
+  // Measures the header actually rendered inside this component's own subtree (never queries
+  // outside `rootRef`) — re-runs whenever the board swaps render branches (loading/error/data),
+  // since each branch mounts its own header instance.
+  useEffect(() => {
+    const headerEl = rootRef.current?.querySelector<HTMLElement>("header");
+    if (!headerEl) return;
+    setHeaderHeight(headerEl.getBoundingClientRect().height);
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setHeaderHeight(entry.target.getBoundingClientRect().height);
+    });
+    observer.observe(headerEl);
+    return () => observer.disconnect();
+  }, [loading, error, data]);
 
   const fetchBoard = useCallback(async () => {
     try {
@@ -61,7 +112,7 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
 
   if (loading) {
     return (
-      <div className="h-screen flex flex-col bg-bg overflow-hidden">
+      <div ref={rootRef} className="h-screen flex flex-col bg-bg overflow-hidden">
         <PlatformHeader
           userName={userName}
           isAdmin={isAdmin}
@@ -69,6 +120,11 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
           title="Schedule · v2"
           currentPath="/v2/schedule"
           autoHide
+        />
+        <div
+          aria-hidden="true"
+          className="shrink-0 transition-[height] duration-300 ease-out motion-reduce:transition-none"
+          style={{ height: navPush }}
         />
         <div className="flex-1 min-h-0 flex flex-col gap-px bg-[var(--line)] p-px">
           {[0, 1].map((i) => (
@@ -88,7 +144,7 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
 
   if (error && !data) {
     return (
-      <div className="h-screen flex flex-col bg-bg overflow-hidden">
+      <div ref={rootRef} className="h-screen flex flex-col bg-bg overflow-hidden">
         <PlatformHeader
           userName={userName}
           isAdmin={isAdmin}
@@ -96,6 +152,11 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
           title="Schedule · v2"
           currentPath="/v2/schedule"
           autoHide
+        />
+        <div
+          aria-hidden="true"
+          className="shrink-0 transition-[height] duration-300 ease-out motion-reduce:transition-none"
+          style={{ height: navPush }}
         />
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
           <AlertTriangle size={28} className="text-[var(--warn-text)]" aria-hidden="true" />
@@ -129,7 +190,7 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
   const { density, rowCap } = computeDensity(maxColumnRows);
 
   return (
-    <div className="h-screen flex flex-col bg-bg overflow-hidden">
+    <div ref={rootRef} className="h-screen flex flex-col bg-bg overflow-hidden">
       <PlatformHeader
         userName={userName}
         isAdmin={isAdmin}
@@ -137,6 +198,11 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
         title="Schedule · v2"
         currentPath="/v2/schedule"
         autoHide
+      />
+      <div
+        aria-hidden="true"
+        className="shrink-0 transition-[height] duration-300 ease-out motion-reduce:transition-none"
+        style={{ height: navPush }}
       />
 
       <div className="relative flex-1 min-h-0 overflow-hidden">
