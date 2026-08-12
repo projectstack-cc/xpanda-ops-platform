@@ -1,9 +1,12 @@
 "use client";
 // src/components/board/OrderDetailModal.tsx
-// Order-detail modal for a production-board row: line items, embedded packing slip (legacy
-// R2/base64-backed PDF, same host, no new v2 endpoint), and a "Print cut list" button reusing
-// the prompt-328/329 generator ported to src/lib/cutList.ts.
+// Order-detail modal for a production-board row: line items, and two independent inline PDF
+// viewers — packing slip (legacy R2/base64-backed PDF, same host, no new v2 endpoint) and cut
+// list (prompt-328/329 generator ported to src/lib/cutList.ts). P366: each is its own labeled
+// dropdown-link toggle over its own PdfViewer instance/state — opening one must never replace
+// or hijack the other (P364 had them sharing one `viewerDoc` slot, which crossed them).
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import Modal from "@/components/Modal";
 import PdfViewer from "@/components/PdfViewer";
 import { buildCutListPdf, type CutListLineItem } from "@/lib/cutList";
@@ -37,28 +40,32 @@ interface OrderDetailModalProps {
   onClose: () => void;
 }
 
-type ViewerDoc = { src: string; filename: string; kind: "slip" | "cutlist" } | null;
+type CutListDoc = { src: string; filename: string } | null;
 
 export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalProps) {
   const [data, setData] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [printing, setPrinting] = useState(false);
-  const [viewerDoc, setViewerDoc] = useState<ViewerDoc>(null);
+  const [slipOpen, setSlipOpen] = useState(false);
+  const [cutListOpen, setCutListOpen] = useState(false);
+  const [cutListLoading, setCutListLoading] = useState(false);
+  const [cutListDoc, setCutListDoc] = useState<CutListDoc>(null);
   const [cutListError, setCutListError] = useState<string | null>(null);
   const cutListBlobUrlRef = useRef<string | null>(null);
 
   // Reset per job-context change (opening a different order, or closing) — mirrors legacy
-  // clearForm()-on-openModal(): revoke any previous cut-list blob and default the shared viewer
-  // back to the packing slip once the new job's data resolves. Deliberately keyed on `jobId`
-  // alone (not `data`) so a later refetch of the same job can't silently revoke a blob URL out
-  // from under a cut list the user is actively viewing.
+  // clearForm()-on-openModal(): revoke any previous cut-list blob and collapse both viewers so
+  // the next order starts clean. Deliberately keyed on `jobId` alone (not `data`) so a later
+  // refetch of the same job can't silently revoke a blob URL out from under a cut list the user
+  // is actively viewing.
   useEffect(() => {
     if (cutListBlobUrlRef.current) {
       try { URL.revokeObjectURL(cutListBlobUrlRef.current); } catch {}
       cutListBlobUrlRef.current = null;
     }
     setCutListError(null);
-    setViewerDoc(null);
+    setCutListDoc(null);
+    setCutListOpen(false);
+    setSlipOpen(false);
 
     if (!jobId) {
       setData(null);
@@ -72,13 +79,6 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
       .then((json: DetailResponse) => {
         if (cancelled) return;
         setData(json);
-        if (json.ok && json.job) {
-          setViewerDoc(
-            json.job.has_packing_slip
-              ? { src: `/api/jobs/${json.job.id}/packing-slip`, filename: `packing-slip-${json.job.id}.pdf`, kind: "slip" }
-              : null
-          );
-        }
       })
       .catch(() => {
         if (!cancelled) setData({ ok: false, error: "Network error — couldn't reach the server." });
@@ -91,9 +91,14 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
     };
   }, [jobId]);
 
-  async function handlePrintCutList() {
-    if (!data?.job) return;
-    setPrinting(true);
+  // Toggles the cut-list section open/closed; builds the PDF lazily on first open only (mirrors
+  // legacy's `{ once: true }` load-on-first-click), so re-toggling never rebuilds or re-touches
+  // the packing-slip viewer's own state.
+  async function handleToggleCutList() {
+    const opening = !cutListOpen;
+    setCutListOpen(opening);
+    if (!opening || cutListDoc || !data?.job) return;
+    setCutListLoading(true);
     setCutListError(null);
     try {
       const pdfBytes = await buildCutListPdf({ ...data.job, line_items: data.line_items ?? [] });
@@ -103,16 +108,19 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
       }
       const url = URL.createObjectURL(blob);
       cutListBlobUrlRef.current = url;
-      setViewerDoc({ src: url, filename: `cut-list-${data.job.invoice_number || data.job.id}.pdf`, kind: "cutlist" });
+      setCutListDoc({ src: url, filename: `cut-list-${data.job.invoice_number || data.job.id}.pdf` });
     } catch (e) {
       console.error("Cut list PDF failed:", e);
       setCutListError("Couldn't generate the cut list. Please try again.");
     } finally {
-      setPrinting(false);
+      setCutListLoading(false);
     }
   }
 
   const job = data?.job;
+  const slipDoc = job?.has_packing_slip
+    ? { src: `/api/jobs/${job.id}/packing-slip`, filename: `packing-slip-${job.id}.pdf` }
+    : null;
 
   return (
     <Modal isOpen={!!jobId} onClose={onClose} title={job ? job.customer || "Order detail" : "Order detail"} size="xl">
@@ -167,22 +175,49 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
             </table>
           </div>
 
+          {/* Packing Slip — independent dropdown-link viewer, own PdfViewer instance/state */}
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-text">
-              {viewerDoc?.kind === "cutlist" ? "Cut list" : "Packing slip"}
-            </h3>
-            {viewerDoc ? (
-              <PdfViewer
-                src={viewerDoc.src}
-                filename={viewerDoc.filename}
-                title={viewerDoc.kind === "cutlist" ? "Cut list" : "Packing slip"}
-              />
-            ) : (
-              <p className="text-sm text-muted">No packing slip attached.</p>
+            <button
+              type="button"
+              onClick={() => setSlipOpen((v) => !v)}
+              disabled={!slipDoc}
+              className="flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-[var(--link)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-expanded={slipOpen}
+            >
+              {slipOpen ? (
+                <ChevronDown size={16} className="shrink-0" aria-hidden="true" />
+              ) : (
+                <ChevronRight size={16} className="shrink-0" aria-hidden="true" />
+              )}
+              Packing Slip
+            </button>
+            {!slipDoc && <p className="text-sm text-muted">No packing slip attached.</p>}
+            {slipOpen && slipDoc && (
+              <PdfViewer src={slipDoc.src} filename={slipDoc.filename} title="Packing slip" />
             )}
-            {cutListError && (
-              <p className="text-sm text-[var(--warn-text)]">{cutListError}</p>
+          </div>
+
+          {/* Cut List — independent dropdown-link viewer, own PdfViewer instance/state; builds
+              lazily on first open and never touches the packing-slip viewer above. */}
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={handleToggleCutList}
+              disabled={cutListLoading}
+              className="flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-[var(--link)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-expanded={cutListOpen}
+            >
+              {cutListOpen ? (
+                <ChevronDown size={16} className="shrink-0" aria-hidden="true" />
+              ) : (
+                <ChevronRight size={16} className="shrink-0" aria-hidden="true" />
+              )}
+              {cutListLoading ? "Generating Cut List…" : "Cut List"}
+            </button>
+            {cutListOpen && cutListDoc && (
+              <PdfViewer src={cutListDoc.src} filename={cutListDoc.filename} title="Cut list" />
             )}
+            {cutListError && <p className="text-sm text-[var(--warn-text)]">{cutListError}</p>}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
@@ -192,14 +227,6 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
               className="min-h-[44px] px-4 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
             >
               Close
-            </button>
-            <button
-              type="button"
-              onClick={handlePrintCutList}
-              disabled={printing}
-              className="min-h-[44px] px-4 rounded-md bg-[var(--brand)] text-white text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {printing ? "Printing…" : "Print cut list"}
             </button>
           </div>
         </div>

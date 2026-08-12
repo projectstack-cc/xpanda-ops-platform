@@ -329,8 +329,17 @@
         </div>
       </div>
 
-      <!-- Print Cut List (P329, edit mode only) -->
-      <button type="button" id="btn-print-cutlist" hidden class="btn ghost small" style="margin-bottom:16px;min-height:44px;" onclick="printCutList()">🖨 Print Cut List</button>
+      <!-- Inline cut list viewer (P366: own dropdown link + own iframe/blob, independent of the
+           packing-slip viewer above — do not share state between the two) -->
+      <div id="cutlist-inline-viewer" hidden style="margin:8px 0 12px;">
+        <div id="cutlist-viewer-toggle" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;margin-bottom:6px;">
+          <span id="cutlist-viewer-chevron" style="font-size:12px;transition:transform 0.2s;">&#9658;</span>
+          <span id="cutlist-viewer-label" style="font-size:13px;font-weight:600;color:var(--link);">View Cut List</span>
+        </div>
+        <div id="cutlist-viewer-content" hidden>
+          <iframe id="cutlist-viewer-iframe" style="width:100%;height:500px;border:1px solid var(--input-border);border-radius:8px;" src="about:blank"></iframe>
+        </div>
+      </div>
 
       <!-- Customer & Order -->
       <div class="jobs-form-section">
@@ -1486,6 +1495,14 @@ function setupModal() {
     chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
   });
 
+  document.getElementById('cutlist-viewer-toggle').addEventListener('click', () => {
+    const content = document.getElementById('cutlist-viewer-content');
+    const chevron = document.getElementById('cutlist-viewer-chevron');
+    const isHidden = content.hidden;
+    content.hidden = !isHidden;
+    chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
+  });
+
   const dropzone = document.getElementById('slip-dropzone');
   dropzone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -1587,7 +1604,12 @@ function openModal(jobId) {
   const editableStatus = curJob && ['not_started','in_production','done'].includes(curJob.status);
   document.getElementById('status-section').hidden = !editableStatus;
   document.getElementById('modal-view-bol').hidden = true;
-  document.getElementById('btn-print-cutlist').hidden = isNew;
+  document.getElementById('cutlist-inline-viewer').hidden = isNew;
+  if (!isNew) {
+    document.getElementById('cutlist-viewer-toggle').addEventListener('click', function loadCutList() {
+      loadCutListIntoViewer();
+    }, { once: true });
+  }
   {
     const _u = window.__xpandaUser;
     const _canManage = _u && (_u.isAdministrator || _u.permissions?.['logistics.loading.manage']?.edit);
@@ -2107,6 +2129,11 @@ function clearForm() {
   document.getElementById('slip-viewer-chevron').style.transform = '';
   document.getElementById('slip-viewer-iframe').src = 'about:blank';
   document.getElementById('slip-dropzone').hidden = false;
+
+  document.getElementById('cutlist-inline-viewer').hidden = true;
+  document.getElementById('cutlist-viewer-content').hidden = true;
+  document.getElementById('cutlist-viewer-chevron').style.transform = '';
+  document.getElementById('cutlist-viewer-iframe').src = 'about:blank';
   if (_cutListBlobUrl) { try { URL.revokeObjectURL(_cutListBlobUrl); } catch {} _cutListBlobUrl = null; }
 
   clearCombo();
@@ -2451,25 +2478,30 @@ async function buildCutListPdf(job) {
 
 let _cutListBlobUrl = null;
 
-async function printCutList() {
+// P366: lazily builds the cut-list PDF into its own inline viewer/iframe, wired via the
+// cutlist-viewer-toggle {once:true} listener in openModal() — mirrors the packing-slip
+// viewer's lazy-load pattern (showSlipBadge's loadSlip). The generic cutlist-viewer-toggle
+// click listener (registered once at DOMContentLoaded) handles expanding/collapsing
+// #cutlist-viewer-content; this only needs to populate the iframe src on first open.
+// Guarded against re-entry (a modal reopened without ever clicking the toggle stacks a second
+// {once:true} listener) the same way showSlipBadge's loadSlip guards on iframe.src.
+async function loadCutListIntoViewer() {
+  if (_cutListBlobUrl) return;
   const job = allJobs.find(j => j.id === editingJobId);
   if (!job) return;
-  const btn = document.getElementById('btn-print-cutlist');
-  btn.disabled = true;
+  const label = document.getElementById('cutlist-viewer-label');
+  label.textContent = 'Generating Cut List…';
   try {
     const pdfBytes = await buildCutListPdf(job);
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     if (_cutListBlobUrl) { try { URL.revokeObjectURL(_cutListBlobUrl); } catch {} }
     _cutListBlobUrl = URL.createObjectURL(blob);
-    document.getElementById('slip-inline-viewer').hidden = false;
-    document.getElementById('slip-viewer-content').hidden = false;
-    document.getElementById('slip-viewer-chevron').style.transform = 'rotate(90deg)';
-    document.getElementById('slip-viewer-iframe').src = _cutListBlobUrl;
+    document.getElementById('cutlist-viewer-iframe').src = _cutListBlobUrl;
   } catch (e) {
     console.error('Cut list PDF failed:', e);
     showToast('Could not generate cut list.');
   } finally {
-    btn.disabled = false;
+    label.textContent = 'View Cut List';
   }
 }
 

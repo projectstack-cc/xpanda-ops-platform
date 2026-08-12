@@ -1320,6 +1320,36 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P366 — split Packing Slip & Cut List into two independent inline viewers, fixing the P364
+  crossover (bilateral, legacy + v2).** P364 routed both documents through one shared
+  viewer/blob slot, which crossed them: legacy's "View Packing Slip" toggle showed whichever
+  document loaded last (documented as a "known UX quirk" in the P364 entry below — it wasn't a
+  quirk, it was the bug this prompt fixes), and v2's single `viewerDoc` state meant opening the
+  cut list replaced the packing slip with no way back. **Legacy (`jobs/index.html`,
+  job-board-agent):** added a second, fully independent inline viewer block —
+  `#cutlist-inline-viewer` / `#cutlist-viewer-toggle` / `#cutlist-viewer-chevron` /
+  `#cutlist-viewer-content` / `#cutlist-viewer-iframe` — mirroring the existing packing-slip
+  viewer's chevron-toggle markup and its generic-toggle + `{once:true}`-lazy-load JS pattern
+  exactly (`showSlipBadge`'s `loadSlip` ↔ the new `loadCutListIntoViewer`, wired from
+  `openModal()`). The `btn-print-cutlist` button is gone; "View Cut List" is now a dropdown link
+  like "View Packing Slip", each toggling its own content region and holding its own
+  `_cutListBlobUrl` / iframe — the packing-slip iframe is never touched by cut-list code again.
+  `clearForm()` now resets both viewers (hidden, content collapsed, chevron reset, iframe
+  blanked) independently. **v2 (`cutting-pilot/src/**`, react-component-agent):**
+  `OrderDetailModal.tsx`'s single `viewerDoc` state (keyed `"slip" | "cutlist"`) is replaced with
+  two independent toggle states (`slipOpen`, `cutListOpen`) plus `cutListDoc` (built lazily, once,
+  on first "Cut List" click — mirrors legacy's `{once:true}`); each renders its own `PdfViewer`
+  instance (**same shared component, two call sites, per-instance props/state** — no fork, per
+  §9b doctrine). The packing-slip doc is derived straight from `job.has_packing_slip` (no fetch
+  needed) so its toggle is always available the moment job data loads, independent of whether the
+  cut list has been generated. The footer "Print cut list" button is gone — "Cut List" is now a
+  chevron dropdown-link matching "Packing Slip", same UX as legacy. Both P364 gains preserved:
+  `PdfViewer`'s explicit Print/Download controls (untouched) on both instances, and `Modal`
+  `size="xl"` (untouched). No migration, no API change, no permission key, `bol-shared.js`
+  untouched. Gates: `node --check` on `jobs/index.html`'s extracted inline scripts clean; v2
+  `npx tsc --noEmit` and `npm run cf-build` (opennextjs-cloudflare, per the project's actual build
+  script — the bare `opennextjs-cloudflare build` positional form errors on this project's CLI
+  version) both green. Single commit.
 - **P364 — cut list opens in the inline PDF viewer, not a download; v2 viewer gains print/download
   controls + wider order-detail modal (bilateral, legacy + v2).** Both surfaces auto-downloaded the
   cut list PDF; both now open it in the existing inline viewer instead. **Legacy
