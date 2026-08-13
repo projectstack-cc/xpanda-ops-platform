@@ -895,6 +895,24 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ---
 
+## Carrier View (v2)
+
+- **P368 — carrier-facing read-only 2-day view (`/v2/carrier`).** Rolling today+tomorrow (literal
+  ET calendar days) list of outgoing loads for the Lisma/Seal Express carrier (`j.carrier LIKE
+  'LISMA%' OR 'SEAL%'`), assigned-only (bay + trailer, excl. `archived`). Read route
+  `/v2/api/carrier` (jobs ⋈ loading_assignments ⋈ loading_bays; ET dates via `etDateStr`;
+  `COALESCE(la.ship_date, j.ship_date)`). `middleware.ts` gains `/v2/carrier` + `/v2/api/carrier`
+  on `logistics.carrier_view` (registered in P367). Client board buckets Today/Tomorrow, 60s
+  refetch, 4-state status pill (Not ready / Ready / In transit / Delivered) via a new local
+  `CarrierStatusPill` — `components/StatusPill.tsx`'s existing variants are job/line cutting
+  states, a different domain, so a small local pill was added in the carrier folder instead of
+  forcing a fit. Mobile-first (single column, ≥44px touch targets), slim carrier-only header
+  (brand + sign-out via legacy `/api/auth/logout`) — does not render the full `PlatformHeader`.
+  Error state with retry, per-group empty state. No migration. `tsc --noEmit` + `opennextjs-
+  cloudflare build` green.
+
+---
+
 ## Database / API
 
 - **P325** — Hotfix: per-load `ship_date` was shadowed by `j.ship_date` in the loading-assignments

@@ -36,6 +36,8 @@ const PERMISSION_MAP: Array<{ prefix: string; key: string }> = [
   { prefix: "/v2/notes", key: "notes" },
   { prefix: "/v2/api/blocks", key: "manufacturing.blocks" },
   { prefix: "/v2/blocks", key: "manufacturing.blocks" },
+  { prefix: "/v2/api/carrier", key: "logistics.carrier_view" },
+  { prefix: "/v2/carrier", key: "logistics.carrier_view" },
 ];
 
 function permissionKeyFor(pathname: string): string | null {

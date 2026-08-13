@@ -8,6 +8,12 @@
 
 ---
 
+## Carrier View (v2)
+
+- [ ] **P368 follow-up — appointment/ETA time column + per-bay dock instructions (deferred).**
+  `/v2/carrier` ships invoice/customer/city-state/bay/trailer/status only. Revisit if the carrier
+  needs scheduling detail beyond the day-level view.
+
 ## Shift Notes (v2)
 
 - [ ] **P359 follow-up — v2 activity-log parity for notes.** `logActivity()` is legacy-worker-only;
