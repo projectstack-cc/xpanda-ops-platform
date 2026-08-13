@@ -133,6 +133,25 @@
   </div>
 
 <script>
+function landingForUser(u) {
+  const perms = (u && u.permissions) || {};
+  const viewKeys = Object.keys(perms).filter(k => perms[k] && perms[k].view === true);
+  const carrierOnly = u && !u.isAdministrator
+    && viewKeys.length === 1
+    && viewKeys[0] === 'logistics.carrier_view';
+  return carrierOnly ? '/v2/carrier' : '/';
+}
+
+async function goToLanding() {
+  let dest = '/';
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    if (data.ok && data.user) dest = landingForUser(data.user);
+  } catch {}
+  window.location.href = dest;
+}
+
 async function checkAuth() {
   try {
     const res = await fetch('/api/auth/me');
@@ -141,7 +160,7 @@ async function checkAuth() {
       if (data.user.firstLogin) {
         showPasswordForm();
       } else {
-        window.location.href = '/';
+        window.location.href = landingForUser(data.user);
       }
     }
   } catch {}
@@ -175,7 +194,7 @@ async function doLogin() {
       if (data.user.firstLogin) {
         showPasswordForm();
       } else {
-        window.location.href = '/';
+        await goToLanding();
       }
     } else {
       errEl.textContent = data.error || 'Login failed.';
@@ -224,7 +243,7 @@ async function doChangePassword() {
     const data = await res.json();
 
     if (data.ok) {
-      window.location.href = '/';
+      await goToLanding();
     } else {
       errEl.textContent = data.error || 'Failed to set password.';
       errEl.hidden = false;

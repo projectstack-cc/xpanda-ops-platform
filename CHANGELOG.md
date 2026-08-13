@@ -1814,6 +1814,12 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Admin / Platform
 
+- **P367 — carrier view permission key + permission-based login landing.** New grantable key
+  `logistics.carrier_view` added to `admin/roles.html` `PERMISSION_LABELS` (Logistics group).
+  `login.html` gains `landingForUser`/`goToLanding`: a non-admin user whose only `view` permission
+  is `logistics.carrier_view` is routed to `/v2/carrier` on login / already-authed / post-password-
+  change; all other users keep `/`. No PATH/API_PERMISSION_MAP entry — carrier is v2-only, gated in
+  `middleware.ts` (P368). No migration.
 - **P355 — hide the Manufacturing home tile for the cutting team (#10).** `index.html`'s
   Manufacturing card gate changed from `data-permission="manufacturing.calculators,manufacturing.cutting"`
   to `data-permission="manufacturing.calculators"` — the dedicated Cutting card
