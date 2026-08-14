@@ -599,45 +599,40 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
                   ))}
                 </div>
               </div>
+
+              {dockLine && (
+                <section
+                  aria-label="Cut list"
+                  className="shrink-0 border-t border-border bg-surface max-h-[38vh] overflow-y-auto"
+                  style={
+                    mySessions.length > 0
+                      ? { paddingBottom: `calc(${mySessions.length * 76}px + env(safe-area-inset-bottom))` }
+                      : undefined
+                  }
+                >
+                  <PartsPanel
+                    job={selectedJob}
+                    line={dockLine}
+                    readOnly={dockReadOnly}
+                    onToggle={(itemId, completed) => {
+                      if (completed) {
+                        const it = selectedJob?.line_items?.find((li) => li.id === itemId);
+                        const label = [it?.part_number, it?.description].filter(Boolean).join(" — ");
+                        setPendingComplete({ line: dockLine, itemId, label });
+                      } else {
+                        toggleChecklistItem(dockLine, itemId, false);
+                      }
+                    }}
+                    onSetYield={(y) => setTaperYield(y)}
+                    onSetChunkTarget={(q) => setChunkTarget(q)}
+                    busy={checklistBusy}
+                  />
+                </section>
+              )}
             </div>
           )}
         </Sheet>
       </div>
-
-      {/* Persistent bottom cut-list dock — shown whenever a job is selected, spans the full
-          board width, own scroll. Read-only unless clocked into the shown line. shrink-0 keeps
-          the flex-col root from squeezing it; bottom padding clears the fixed clocked-in bar(s)
-          stacked on top of it (each ~76px) so the last rows stay reachable via the dock's own
-          scroll rather than hidden under the bar. */}
-      {selectedJob && dockLine && (
-        <section
-          aria-label="Cut list"
-          className="shrink-0 border-t border-border bg-surface max-h-[38vh] overflow-y-auto"
-          style={
-            mySessions.length > 0
-              ? { paddingBottom: `calc(${mySessions.length * 76}px + env(safe-area-inset-bottom))` }
-              : undefined
-          }
-        >
-          <PartsPanel
-            job={selectedJob}
-            line={dockLine}
-            readOnly={dockReadOnly}
-            onToggle={(itemId, completed) => {
-              if (completed) {
-                const it = selectedJob?.line_items?.find((li) => li.id === itemId);
-                const label = [it?.part_number, it?.description].filter(Boolean).join(" — ");
-                setPendingComplete({ line: dockLine, itemId, label });
-              } else {
-                toggleChecklistItem(dockLine, itemId, false);
-              }
-            }}
-            onSetYield={(y) => setTaperYield(y)}
-            onSetChunkTarget={(q) => setChunkTarget(q)}
-            busy={checklistBusy}
-          />
-        </section>
-      )}
 
       <ConfirmCompleteModal
         isOpen={!!pendingComplete}

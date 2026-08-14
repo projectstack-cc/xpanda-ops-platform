@@ -10,6 +10,10 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P374 — bound the bottom cut-list dock to the detail surface.** Fix: bottom cut-list dock
+  moved inside the detail `<Sheet>` column so it's bounded by the detail surface and stops at the
+  left job list, instead of spanning full board width and underlapping the nav. Pure relocation —
+  read-only gating, confirm-modal wiring, and clocked-in-bar clearance unchanged.
 - **P373 — kick control on a line held by another operator.** New `KickModal.tsx` (composes
   `@/components/Modal`) — confirms "Remove {operator} from {line}? ... does not change any cut
   progress or quantities" before posting. `LineRow.tsx` gained `canOverride`/`onKick` props: a
