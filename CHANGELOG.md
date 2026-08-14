@@ -10,6 +10,17 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P370 — persistent bottom cut-list dock.** `PartsPanel` moved off the Start-gated side `<aside>`
+  inside the `<Sheet>` drawer into a new `<section>` sibling rendered outside the Sheet, at the
+  bottom of the whole board (`CuttingBoard.tsx`), spanning full width with its own scroll
+  (`max-h-[38vh] overflow-y-auto`). Shows whenever a job is selected — no longer gated on being
+  clocked in. Line shown: the operator's clocked-in line if any (`myLineOnJob`), else the job's
+  first required line (`dockLine`). `PartsPanel` gained a `readOnly` prop gating every mutating
+  control (checklist checkbox, taper yield input, chunk-target input) — interactive only when
+  `dockLine` is the operator's own clocked-in line, else visible-but-disabled with a "Start this
+  line to edit" hint, preserving `updated_by` provenance. Start/Stop drawer and line rows
+  untouched. `onToggle(itemId, completed)` contract preserved unchanged for P371 to intercept.
+  `tsc --noEmit` + `cf-build` green.
 - **P353 — in-process jobs own the top of the Work Queue + highlight + "In Process" badge (#6).**
   Client-only, no API change — in-process is derivable from data the queue already returns:
   `isInProcess(job) = job.lines.some(l => l.line_status === "in_progress" || l.open_session_id != null)`.

@@ -24,6 +24,10 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **P370 follow-up — bottom cut-list dock: optional per-line tabs for multi-line jobs.**
+  Currently shows the operator's clocked-in line, else the job's first required line
+  (`dockLine` in `CuttingBoard.tsx`) — no way to view/check a different line's parts without
+  clocking into it.
 - [ ] **P356 follow-up — v2 cutting queue: label/filter by shift.** P356 added `job_shifts`
   (job → 1st/2nd/3rd assignment) and `users.shift` on the legacy job board only — it does not yet
   make `/v2/cutting`'s queue route or UI aware of shift (no filter, no label). Deliberate split

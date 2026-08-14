@@ -144,6 +144,15 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       selectedJob.lines.find((ln) => ln.open_operator_id === userId)?.line) ||
     null;
 
+  // The line the bottom cut-list dock shows: the operator's clocked-in line if any, else the
+  // first required line. Only interactive when it's the operator's own clocked-in line.
+  const dockLine =
+    myLineOnJob ??
+    selectedJob?.requiredLines?.[0] ??
+    selectedJob?.lines?.[0]?.line ??
+    null;
+  const dockReadOnly = !myLineOnJob || myLineOnJob !== dockLine;
+
   // Unchecked parts on the line being clocked out — for the reconciliation section.
   const clockOutJob = clockOutTarget
     ? queue.find((j) => j.id === clockOutTarget.jobId) ?? null
@@ -534,7 +543,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
                 </div>
               </div>
 
-              {/* Line rows + docked parts sidebar (sidebar only once clocked into this job) */}
+              {/* Line rows — the cut list is a persistent bottom dock, rendered outside the Sheet. */}
               <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
                 <div className="md:flex-1 md:overflow-y-auto">
                   {selectedJob.lines.map((lineObj) => (
@@ -555,26 +564,30 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
                     />
                   ))}
                 </div>
-
-                {myLineOnJob && (
-                  <aside className="shrink-0 md:w-80 border-t md:border-t-0 md:border-l border-border md:overflow-y-auto">
-                    <PartsPanel
-                      job={selectedJob}
-                      line={myLineOnJob}
-                      onToggle={(itemId, completed) =>
-                        toggleChecklistItem(myLineOnJob, itemId, completed)
-                      }
-                      onSetYield={(y) => setTaperYield(y)}
-                      onSetChunkTarget={(q) => setChunkTarget(q)}
-                      busy={checklistBusy}
-                    />
-                  </aside>
-                )}
               </div>
             </div>
           )}
         </Sheet>
       </div>
+
+      {/* Persistent bottom cut-list dock — shown whenever a job is selected, spans the full
+          board width, own scroll. Read-only unless clocked into the shown line. */}
+      {selectedJob && dockLine && (
+        <section
+          aria-label="Cut list"
+          className="border-t border-border bg-surface max-h-[38vh] overflow-y-auto"
+        >
+          <PartsPanel
+            job={selectedJob}
+            line={dockLine}
+            readOnly={dockReadOnly}
+            onToggle={(itemId, completed) => toggleChecklistItem(dockLine, itemId, completed)}
+            onSetYield={(y) => setTaperYield(y)}
+            onSetChunkTarget={(q) => setChunkTarget(q)}
+            busy={checklistBusy}
+          />
+        </section>
+      )}
 
       {/* Sticky clocked-in bar(s) — reads mySessions (unfiltered), not queue-derived state.
           P309: an operator may have several open sessions; stack one bar per session. This

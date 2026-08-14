@@ -8,12 +8,21 @@ interface Props {
   onSetYield?: (yieldPerChunk: number) => void;
   onSetChunkTarget?: (qtyTarget: number) => void;
   busy: boolean;
+  readOnly?: boolean;
 }
 
 // Docked parts checklist for a single cutting line (the operator's clocked-in line).
 // Cross Cutter / Hole Cutter really work in chunks; until the block-calc BOM is wired, every line
 // shows the same parts list and the chunk note below stands in.
-export default function PartsPanel({ job, line, onToggle, onSetYield, onSetChunkTarget, busy }: Props) {
+export default function PartsPanel({
+  job,
+  line,
+  onToggle,
+  onSetYield,
+  onSetChunkTarget,
+  busy,
+  readOnly,
+}: Props) {
   const items = job.line_items ?? [];
   const prog = job.progress?.[line] ?? {};
   const doneCount = items.filter((it) => prog[it.id]?.completed).length;
@@ -24,8 +33,13 @@ export default function PartsPanel({ job, line, onToggle, onSetYield, onSetChunk
         <span className="text-xs font-semibold uppercase tracking-wide text-muted">
           {line} — parts
         </span>
-        <span className="font-mono tabular-nums text-xs text-muted">
-          {doneCount}/{items.length}
+        <span className="flex items-center gap-2">
+          {readOnly && (
+            <span className="text-xs text-muted">Start this line to edit</span>
+          )}
+          <span className="font-mono tabular-nums text-xs text-muted">
+            {doneCount}/{items.length}
+          </span>
         </span>
       </div>
 
@@ -41,7 +55,7 @@ export default function PartsPanel({ job, line, onToggle, onSetYield, onSetChunk
                   <input
                     type="checkbox"
                     checked={checked}
-                    disabled={busy}
+                    disabled={busy || readOnly}
                     onChange={(e) => onToggle(it.id, e.target.checked)}
                     className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--accent)] cursor-pointer disabled:opacity-50"
                   />
@@ -98,7 +112,7 @@ export default function PartsPanel({ job, line, onToggle, onSetYield, onSetChunk
                     type="number"
                     min={1}
                     defaultValue={job.taper_yield ?? 12}
-                    disabled={busy}
+                    disabled={busy || readOnly}
                     onBlur={(e) => {
                       const v = parseInt(e.target.value, 10);
                       if (v > 0 && v !== (job.taper_yield ?? 12)) onSetYield?.(v);
@@ -133,7 +147,7 @@ export default function PartsPanel({ job, line, onToggle, onSetYield, onSetChunk
                     min={1}
                     placeholder="—"
                     defaultValue={lineRow.qty_target ?? ""}
-                    disabled={busy}
+                    disabled={busy || readOnly}
                     aria-label={`${unitWord} to cut`}
                     onBlur={(e) => {
                       const v = parseInt(e.target.value, 10);
