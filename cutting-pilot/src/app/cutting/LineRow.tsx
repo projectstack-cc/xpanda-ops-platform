@@ -14,6 +14,8 @@ interface Props {
   onClockOut: (sessionId: string, line: string) => void;
   onComplete: (jobId: string, line: string) => void;
   now: number;
+  canOverride: boolean;
+  onKick: (sessionId: string, line: string, operatorName: string) => void;
 }
 
 export default function LineRow({
@@ -27,6 +29,8 @@ export default function LineRow({
   onClockOut,
   onComplete,
   now,
+  canOverride,
+  onKick,
 }: Props) {
   const mySession =
     lineObj.open_session_id && !!userId && lineObj.open_operator_id === userId
@@ -82,9 +86,18 @@ export default function LineRow({
 
       {/* Someone else's session */}
       {busyByOther && (
-        <p className="text-sm bg-[var(--info-bg)] text-[var(--info-text)] border border-[var(--info-border)] rounded px-3 py-2 mb-2">
-          Running — {lineObj.open_operator_name}
-        </p>
+        <div className="flex items-center justify-between gap-2 text-sm bg-[var(--info-bg)] text-[var(--info-text)] border border-[var(--info-border)] rounded px-3 py-2 mb-2">
+          <span>Running — {lineObj.open_operator_name}</span>
+          {canOverride && lineObj.open_session_id && (
+            <button
+              type="button"
+              onClick={() => onKick(lineObj.open_session_id!, lineObj.line, lineObj.open_operator_name ?? "")}
+              className="min-h-[44px] px-3 rounded-md border border-border text-sm font-medium text-text hover:opacity-80 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            >
+              Kick
+            </button>
+          )}
+        </div>
       )}
 
       {/* My active session */}

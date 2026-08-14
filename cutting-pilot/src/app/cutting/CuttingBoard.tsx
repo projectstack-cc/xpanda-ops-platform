@@ -11,6 +11,7 @@ import PhotoViewer from "./PhotoViewer";
 import CompleteLineModal from "./CompleteLineModal";
 import PartsPanel from "./PartsPanel";
 import ConfirmCompleteModal from "./ConfirmCompleteModal";
+import KickModal from "./KickModal";
 import BlockPlanner from "./BlockPlanner";
 import ClockedInBar from "@/components/ClockedInBar";
 import type { CuttingJob } from "./types";
@@ -46,6 +47,9 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
   const [checklistBusy, setChecklistBusy] = useState(false);
   const [pendingComplete, setPendingComplete] =
     useState<{ line: string; itemId: string; label: string } | null>(null);
+  const [kickTarget, setKickTarget] =
+    useState<{ sessionId: string; line: string; operatorName: string } | null>(null);
+  const [kicking, setKicking] = useState(false);
   const [plannerOpen, setPlannerOpen] = useState(false);
   // Authoritative "am I clocked in?" — bypasses the queue's job-status filter, so it survives
   // an archived/shipped/dropped job that queue-derived state would silently lose. P309: an
@@ -156,6 +160,8 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
     null;
   const dockReadOnly = !myLineOnJob || myLineOnJob !== dockLine;
 
+  const canOverride = isAdmin || !!permissions["manufacturing.cutting.override"]?.edit;
+
   // Unchecked parts on the line being clocked out — for the reconciliation section.
   const clockOutJob = clockOutTarget
     ? queue.find((j) => j.id === clockOutTarget.jobId) ?? null
@@ -227,6 +233,27 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       showToast("Network error.", false);
     } finally {
       setChecklistBusy(false);
+    }
+  }
+
+  async function doKick() {
+    if (!kickTarget) return;
+    setKicking(true);
+    try {
+      const res = await fetch("/v2/api/cutting/kick", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: kickTarget.sessionId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Kick failed.");
+      showToast(`Freed ${kickTarget.line}.`);
+      setKickTarget(null);
+      await fetchQueue(true);
+    } catch (e: any) {
+      showToast(e.message || "Kick failed.", false);
+    } finally {
+      setKicking(false);
     }
   }
 
@@ -564,6 +591,10 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
                       onClockOut={openClockOut}
                       onComplete={completeLine}
                       now={now}
+                      canOverride={canOverride}
+                      onKick={(sessionId, line, operatorName) =>
+                        setKickTarget({ sessionId, line, operatorName })
+                      }
                     />
                   ))}
                 </div>
@@ -608,6 +639,15 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
           if (pendingComplete) toggleChecklistItem(pendingComplete.line, pendingComplete.itemId, true);
           setPendingComplete(null);
         }}
+      />
+
+      <KickModal
+        isOpen={!!kickTarget}
+        operatorName={kickTarget?.operatorName}
+        line={kickTarget?.line}
+        busy={kicking}
+        onCancel={() => setKickTarget(null)}
+        onConfirm={doKick}
       />
 
       {/* Sticky clocked-in bar(s) — reads mySessions (unfiltered), not queue-derived state.

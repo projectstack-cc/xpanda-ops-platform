@@ -10,6 +10,15 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P373 — kick control on a line held by another operator.** New `KickModal.tsx` (composes
+  `@/components/Modal`) — confirms "Remove {operator} from {line}? ... does not change any cut
+  progress or quantities" before posting. `LineRow.tsx` gained `canOverride`/`onKick` props: a
+  **Kick** button now renders next to the "Running — {operator}" banner, shown only when
+  `busyByOther && canOverride`. `CuttingBoard.tsx` derives `canOverride = isAdmin ||
+  permissions["manufacturing.cutting.override"]?.edit` from the props already passed by the
+  server shell — no new header/client plumbing. `doKick()` posts `{ session_id }` to
+  `POST /v2/api/cutting/kick` (P372), reuses the board's existing `fetchQueue(true)` refetch and
+  `showToast` error surface (never swallowed). `tsc --noEmit` + `cf-build` green.
 - **P372 — kick backend: `manufacturing.cutting.override` + kick route.** New permission
   `manufacturing.cutting.override` (distinct from the crosscutter-scoped
   `manufacturing.cutting.manage`), mirrored in `middleware.ts`'s `PERMISSION_MAP` (above the
