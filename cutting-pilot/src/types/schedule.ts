@@ -3,7 +3,7 @@
 // src/app/api/schedule-board/route.ts + src/lib/schedule-status.ts). Keep in sync: a field
 // change on either side must change both. Flag it here if you find drift.
 
-export type ScheduleStatus = "Shipped" | "Loaded" | "Loading" | "Ready" | "Cutting" | "Not Started";
+export type ScheduleStatus = "Shipped" | "Loaded" | "Loading" | "Ready" | "In Production" | "Cutting" | "Not Started";
 
 export interface ScheduleBoardRow {
   invoice_number: string;
@@ -16,6 +16,7 @@ export interface ScheduleBoardRow {
   total_bdft: number | null;
   scrap_pickup: string | null;
   status: ScheduleStatus | null;
+  progress_pct: number | null;
   unmatched: boolean;
   sheet_status: string | null;
   job_id: string | null;

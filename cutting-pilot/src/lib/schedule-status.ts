@@ -4,7 +4,12 @@
 // status column, which is only ever a fallback for unmatched rows (see schedule-ingest.ts).
 import type { D1Database } from "@cloudflare/workers-types";
 
-export type ScheduleStatus = "Shipped" | "Loaded" | "Loading" | "Ready" | "Cutting" | "Not Started";
+export type ScheduleStatus = "Shipped" | "Loaded" | "Loading" | "Ready" | "In Production" | "Cutting" | "Not Started";
+
+export interface DerivedStatus {
+  status: ScheduleStatus;
+  progressPct: number | null;
+}
 
 const CHUNK = 90; // D1 100-bound-param ceiling
 
@@ -35,8 +40,8 @@ async function allByJobIds<T>(
  *   4. any loading_assignments.loading_status = 'loaded'                → Loaded
  *   5. any loading_assignments.loading_status = 'loading'                → Loading
  *   6. all of the job's cutting_lines are 'complete' (or jobs.status = 'done') → Ready
- *   7. any cutting_lines 'in_progress', or an open cutting_sessions row → Cutting
- *   8. else                                                            → Not Started
+ *   7. open session → Cutting; else in_progress → In Production (X% = checked items ÷
+ *      items×lines); else Not Started
  *
  * Rung 0 is a legacy compatibility shim, not a general design rule. The archive refactor
  * (DB_Migrations/jobs-archived-at.sql, 1/3) made archiving orthogonal to lifecycle status via a
@@ -65,12 +70,12 @@ async function allByJobIds<T>(
  * no cutting work; if it's wrong for a job that should be cutting, the bug is in queue
  * reconciliation, not this ladder.
  */
-export async function deriveStatuses(db: D1Database, jobIds: string[]): Promise<Map<string, ScheduleStatus>> {
-  const statuses = new Map<string, ScheduleStatus>();
+export async function deriveStatuses(db: D1Database, jobIds: string[]): Promise<Map<string, DerivedStatus>> {
+  const statuses = new Map<string, DerivedStatus>();
   const distinctIds = Array.from(new Set(jobIds));
   if (distinctIds.length === 0) return statuses;
 
-  const [jobRows, assignmentRows, lineRows, openSessionRows] = await Promise.all([
+  const [jobRows, assignmentRows, lineRows, openSessionRows, itemCountRows, doneCountRows] = await Promise.all([
     allByJobIds<{ id: string; status: string }>(
       db,
       distinctIds,
@@ -93,6 +98,18 @@ export async function deriveStatuses(db: D1Database, jobIds: string[]): Promise<
       distinctIds,
       (ph) => `SELECT DISTINCT job_id FROM cutting_sessions WHERE status = 'open' AND job_id IN (${ph})`
     ),
+    allByJobIds<{ job_id: string; n: number }>(
+      db,
+      distinctIds,
+      (ph) => `SELECT job_id, COUNT(*) AS n FROM job_line_items WHERE job_id IN (${ph}) GROUP BY job_id`
+    ),
+    allByJobIds<{ job_id: string; n: number }>(
+      db,
+      distinctIds,
+      (ph) =>
+        `SELECT job_id, COUNT(*) AS n FROM cutting_line_progress
+         WHERE completed = 1 AND job_id IN (${ph}) GROUP BY job_id`
+    ),
   ]);
 
   const jobStatusById = new Map<string, string>();
@@ -112,11 +129,28 @@ export async function deriveStatuses(db: D1Database, jobIds: string[]): Promise<
 
   const openSessionJobIds = new Set(openSessionRows.map((r) => r.job_id));
 
+  const itemCountByJob = new Map<string, number>();
+  for (const row of itemCountRows) itemCountByJob.set(row.job_id, row.n);
+
+  const doneByJob = new Map<string, number>();
+  for (const row of doneCountRows) doneByJob.set(row.job_id, row.n);
+
   for (const jobId of distinctIds) {
-    statuses.set(
-      jobId,
-      deriveOne(jobStatusById.get(jobId) ?? null, assignmentsByJob.get(jobId) ?? [], linesByJob.get(jobId) ?? [], openSessionJobIds.has(jobId))
+    const status = deriveOne(
+      jobStatusById.get(jobId) ?? null,
+      assignmentsByJob.get(jobId) ?? [],
+      linesByJob.get(jobId) ?? [],
+      openSessionJobIds.has(jobId)
     );
+    let progressPct: number | null = null;
+    if (status === "In Production") {
+      const itemCount = itemCountByJob.get(jobId) ?? 0;
+      const lineCount = (linesByJob.get(jobId) ?? []).length;
+      const denom = itemCount * lineCount;
+      const done = doneByJob.get(jobId) ?? 0;
+      progressPct = denom > 0 ? Math.min(100, Math.floor((done / denom) * 100)) : null;
+    }
+    statuses.set(jobId, { status, progressPct });
   }
 
   return statuses;
@@ -140,7 +174,8 @@ function deriveOne(
   const allLinesComplete = lineStatuses.length > 0 && lineStatuses.every((s) => s === "complete");
   if (jobStatus === "done" || allLinesComplete) return "Ready";
 
-  if (lineStatuses.some((s) => s === "in_progress") || hasOpenSession) return "Cutting";
+  if (hasOpenSession) return "Cutting";
+  if (lineStatuses.some((s) => s === "in_progress")) return "In Production";
 
   return "Not Started";
 }

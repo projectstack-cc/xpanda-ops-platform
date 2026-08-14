@@ -62,6 +62,7 @@ interface ScheduleBoardRow {
   total_bdft: number | null;
   scrap_pickup: string | null;
   status: ScheduleStatus | null;
+  progress_pct: number | null;
   unmatched: boolean;
   sheet_status: string | null;
   job_id: string | null;
@@ -122,6 +123,7 @@ export async function GET() {
       }
 
       const unmatched = !row.match_job_id;
+      const derived = unmatched ? null : statusByJobId.get(row.match_job_id!) ?? null;
       groups.get(key)!.rows.push({
         invoice_number: row.invoice_number,
         customer: row.customer,
@@ -132,7 +134,8 @@ export async function GET() {
         carrier: row.carrier,
         total_bdft: row.total_bdft,
         scrap_pickup: row.scrap_pickup,
-        status: unmatched ? null : statusByJobId.get(row.match_job_id!) ?? "Not Started",
+        status: unmatched ? null : (derived?.status ?? "Not Started"),
+        progress_pct: derived?.progressPct ?? null,
         unmatched,
         sheet_status: row.sheet_status,
         job_id: row.match_job_id,

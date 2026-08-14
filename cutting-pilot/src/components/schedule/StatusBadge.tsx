@@ -12,6 +12,10 @@ const STATUS_VARIANTS: Record<ScheduleStatus, { label: string; cls: string }> = 
     label: "Cutting",
     cls: "bg-[var(--info-bg)] text-[var(--info-text)] border border-[var(--info-border)]",
   },
+  "In Production": {
+    label: "In Production",
+    cls: "bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent)]",
+  },
   Ready: {
     label: "Ready",
     cls: "bg-[var(--warn-bg)] text-[var(--warn-text)] border border-[var(--warn-border)]",
@@ -34,9 +38,10 @@ interface StatusBadgeProps {
   status: ScheduleStatus | null;
   unmatched: boolean;
   sheetStatus: string | null;
+  progressPct?: number | null;
 }
 
-export default function StatusBadge({ status, unmatched, sheetStatus }: StatusBadgeProps) {
+export default function StatusBadge({ status, unmatched, sheetStatus, progressPct }: StatusBadgeProps) {
   const base =
     "inline-flex items-center px-1.5 py-[1px] rounded text-[10px] leading-tight font-medium whitespace-nowrap";
 
@@ -53,5 +58,9 @@ export default function StatusBadge({ status, unmatched, sheetStatus }: StatusBa
   }
 
   const variant = STATUS_VARIANTS[status] ?? STATUS_VARIANTS["Not Started"];
-  return <span className={`${base} ${variant.cls}`}>{variant.label}</span>;
+  const label =
+    status === "In Production" && progressPct != null
+      ? `In Production – ${progressPct}%`
+      : variant.label;
+  return <span className={`${base} ${variant.cls}`}>{label}</span>;
 }

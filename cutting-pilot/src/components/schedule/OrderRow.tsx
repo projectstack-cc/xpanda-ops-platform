@@ -75,7 +75,12 @@ export default function OrderRow({ row, density, orphanedGroup, isLastInColumn }
         <div className="flex items-center justify-between gap-1 mt-0.5 min-w-0">
           <div className="flex items-center gap-1 min-w-0">
             {showBadge && (
-              <StatusBadge status={row.status} unmatched={row.unmatched} sheetStatus={row.sheet_status} />
+              <StatusBadge
+                status={row.status}
+                unmatched={row.unmatched}
+                sheetStatus={row.sheet_status}
+                progressPct={row.progress_pct}
+              />
             )}
             {scrapYes && (
               <Recycle size={11} className="shrink-0 text-[var(--warn-text)]" aria-label="Scrap pickup" />
