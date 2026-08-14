@@ -10,6 +10,18 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P372 — kick backend: `manufacturing.cutting.override` + kick route.** New permission
+  `manufacturing.cutting.override` (distinct from the crosscutter-scoped
+  `manufacturing.cutting.manage`), mirrored in `middleware.ts`'s `PERMISSION_MAP` (above the
+  general `/v2/api/cutting` prefix, first-match-wins) and a new `X-User-Can-Override-Cutting`
+  header, same defense-in-depth pattern as `.manage`. New `POST /v2/api/cutting/kick` closes a
+  stuck-open `cutting_sessions` row (`status='closed', ended_at=now`) so a new Start succeeds —
+  writes no qty/handoff and never touches `cutting_lines.line_status` or `jobs.status` (can't
+  attest to what the kicked operator actually cut). Audited to `activity_log` only, attributing
+  the action to the kicker and recording the kicked operator/line/job in `detail`. No D1
+  migration. `admin/roles.html` gained the `manufacturing.cutting.override` `PERMISSION_LABELS`
+  entry ("Cutting — Override (kick operators)"), assignable per role like any other key.
+  `tsc --noEmit` + `cf-build` green.
 - **P371 — "Confirm Completed" modal on checking a cut-list item.** New
   `ConfirmCompleteModal.tsx` (composes the shared `@/components/Modal`) — checking a cut-list
   item now defers the write behind an OK/Cancel confirmation ("Mark this part as completed?" +
