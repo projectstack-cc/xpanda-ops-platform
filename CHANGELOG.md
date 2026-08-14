@@ -49,6 +49,13 @@ Entries within each module are ordered by prompt # descending (newest first).
   `dockLine` is the operator's own clocked-in line, else visible-but-disabled with a "Start this
   line to edit" hint, preserving `updated_by` provenance. Start/Stop drawer and line rows
   untouched. `onToggle(itemId, completed)` contract preserved unchanged for P371 to intercept.
+  **Pre-push `advisor()` follow-up (same session, folded into this file's diff before push):**
+  the dock's default `flex-shrink: 1` let the `flex-1` line-rows column above it squeeze it down
+  on small viewports (the `<aside>` it replaced had `shrink-0`) — added `shrink-0`. Also the
+  fixed `ClockedInBar` stack (`z-40`, bottom-anchored) sits on top of the dock's own last rows
+  whenever the operator has open session(s) — the dock now adds bottom padding
+  (`sessions.length * 76px + env(safe-area-inset-bottom)`) in that case so those rows stay
+  reachable via the dock's own scroll.
   `tsc --noEmit` + `cf-build` green.
 - **P353 — in-process jobs own the top of the Work Queue + highlight + "In Process" badge (#6).**
   Client-only, no API change — in-process is derivable from data the queue already returns:
