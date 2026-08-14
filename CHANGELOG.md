@@ -10,6 +10,14 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P371 — "Confirm Completed" modal on checking a cut-list item.** New
+  `ConfirmCompleteModal.tsx` (composes the shared `@/components/Modal`) — checking a cut-list
+  item now defers the write behind an OK/Cancel confirmation ("Mark this part as completed?" +
+  the part number/description); Cancel writes nothing, the box stays unchecked. Unchecking an
+  already-complete item is unaffected — a correction, writes immediately, no modal. Wired into
+  the P370 bottom dock's `onToggle`: `CuttingBoard.tsx` holds `pendingComplete` state, only
+  calling `toggleChecklistItem` on confirm. `PartsPanel`'s `onToggle(itemId, completed)` contract
+  is unchanged. `tsc --noEmit` + `cf-build` green.
 - **P370 — persistent bottom cut-list dock.** `PartsPanel` moved off the Start-gated side `<aside>`
   inside the `<Sheet>` drawer into a new `<section>` sibling rendered outside the Sheet, at the
   bottom of the whole board (`CuttingBoard.tsx`), spanning full width with its own scroll

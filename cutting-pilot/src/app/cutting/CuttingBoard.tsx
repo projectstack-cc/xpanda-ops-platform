@@ -10,6 +10,7 @@ import HandoffModal from "./HandoffModal";
 import PhotoViewer from "./PhotoViewer";
 import CompleteLineModal from "./CompleteLineModal";
 import PartsPanel from "./PartsPanel";
+import ConfirmCompleteModal from "./ConfirmCompleteModal";
 import BlockPlanner from "./BlockPlanner";
 import ClockedInBar from "@/components/ClockedInBar";
 import type { CuttingJob } from "./types";
@@ -43,6 +44,8 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
   const [now, setNow] = useState(() => Date.now());
   const [showAll, setShowAll] = useState(false);
   const [checklistBusy, setChecklistBusy] = useState(false);
+  const [pendingComplete, setPendingComplete] =
+    useState<{ line: string; itemId: string; label: string } | null>(null);
   const [plannerOpen, setPlannerOpen] = useState(false);
   // Authoritative "am I clocked in?" — bypasses the queue's job-status filter, so it survives
   // an archived/shipped/dropped job that queue-derived state would silently lose. P309: an
@@ -581,13 +584,31 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
             job={selectedJob}
             line={dockLine}
             readOnly={dockReadOnly}
-            onToggle={(itemId, completed) => toggleChecklistItem(dockLine, itemId, completed)}
+            onToggle={(itemId, completed) => {
+              if (completed) {
+                const it = selectedJob?.line_items?.find((li) => li.id === itemId);
+                const label = [it?.part_number, it?.description].filter(Boolean).join(" — ");
+                setPendingComplete({ line: dockLine, itemId, label });
+              } else {
+                toggleChecklistItem(dockLine, itemId, false);
+              }
+            }}
             onSetYield={(y) => setTaperYield(y)}
             onSetChunkTarget={(q) => setChunkTarget(q)}
             busy={checklistBusy}
           />
         </section>
       )}
+
+      <ConfirmCompleteModal
+        isOpen={!!pendingComplete}
+        itemLabel={pendingComplete?.label}
+        onCancel={() => setPendingComplete(null)}
+        onConfirm={() => {
+          if (pendingComplete) toggleChecklistItem(pendingComplete.line, pendingComplete.itemId, true);
+          setPendingComplete(null);
+        }}
+      />
 
       {/* Sticky clocked-in bar(s) — reads mySessions (unfiltered), not queue-derived state.
           P309: an operator may have several open sessions; stack one bar per session. This
