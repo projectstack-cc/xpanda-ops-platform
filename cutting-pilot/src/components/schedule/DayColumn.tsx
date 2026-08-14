@@ -11,6 +11,7 @@
 import type { ScheduleBoardRow } from "@/types/schedule";
 import OrderRow from "./OrderRow";
 import type { Density } from "./density";
+import type { Birthday } from "@/types/schedule";
 
 function formatDayHeader(dayOfWeek: string, shipDate: string | null): string {
   const short = dayOfWeek.slice(0, 3);
@@ -27,6 +28,7 @@ interface DayColumnProps {
   rows: ScheduleBoardRow[];
   density: Density;
   rowCap: number;
+  birthdays: Birthday[];
 }
 
 // Only a trailer_group_id with >=2 rows PRESENT IN THIS COLUMN counts as a local group. A count
@@ -122,7 +124,7 @@ function selectVisible(blocks: RowBlock[], rowCap: number): { visible: RowBlock[
   return { visible, overflow: dropped };
 }
 
-export default function DayColumn({ dayOfWeek, shipDate, rows, density, rowCap }: DayColumnProps) {
+export default function DayColumn({ dayOfWeek, shipDate, rows, density, rowCap, birthdays }: DayColumnProps) {
   const localCount = countLocalGroups(rows);
   const ordered = withGroupsAdjacent(rows, localCount);
   const blocks = buildBlocks(ordered, localCount);
@@ -171,6 +173,21 @@ export default function DayColumn({ dayOfWeek, shipDate, rows, density, rowCap }
           </div>
         )}
       </div>
+
+      {birthdays.length > 0 && (
+        <div className="shrink-0 border-t border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-1">
+          {birthdays.map((b) => (
+            <div
+              key={`${b.name}-${b.month}-${b.day}`}
+              className="flex items-center gap-1 leading-tight text-[clamp(0.625rem,0.95vh,0.75rem)] font-semibold text-text"
+            >
+              <span aria-hidden="true">🎂</span>
+              <span className="min-w-0 truncate">{b.name}</span>
+              <span aria-hidden="true">🎉</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

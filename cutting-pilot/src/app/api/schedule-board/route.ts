@@ -148,11 +148,18 @@ export async function GET() {
       (a.ship_date ?? "").localeCompare(b.ship_date ?? "")
     );
 
+    const { results: birthdayRows } = await DB.prepare(
+      `SELECT name, birth_month AS month, birth_day AS day
+       FROM employee_birthdays
+       ORDER BY birth_month, birth_day`
+    ).all<{ name: string; month: number; day: number }>();
+
     return NextResponse.json({
       generated_at: new Date().toISOString(),
       source_updated_at: sourceUpdatedAt,
       weeks: [currentTab, nextTab],
       days,
+      birthdays: birthdayRows ?? [],
     });
   } catch (e: any) {
     return NextResponse.json(

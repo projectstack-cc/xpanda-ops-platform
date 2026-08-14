@@ -532,6 +532,30 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P375 — Birthday cards on `/v2/schedule`.** When a day column's calendar date matches an
+  employee's birthday, a small `🎂 {Name} 🎉` card pins to the bottom of that column (multiple
+  people on the same day stack in one card) — not a list view, and never clipped by the column's
+  row overflow since it's a sibling of the clipped content div. New `employee_birthdays` table
+  (month/day only, no birth year — a floor TV never needs age), seeded with 31 employees. Matching
+  is entirely client-side against the full birthday set, riding the existing 60s
+  `GET /v2/api/schedule-board` poll — no new endpoint, no second fetch, no new permission key
+  (still gated by `schedule`). New `birthdays.ts` helper derives each column's calendar date as
+  `weekMonday + dayIndex` (UTC, matching the Monday-anchored `M-D-YY` ship-week tab) and, since the
+  board only ever renders Monday–Friday but the plant's birthdays don't skip weekends, Friday's
+  column additionally absorbs that week's Saturday and Sunday. Threaded `weekTab` +
+  `birthdaysForColumn(...)` down through `WeekBand.tsx` into `DayColumn.tsx`. Deviated from the
+  prompt's literal instruction to create a "Schedule (React pilot)" section — that section doesn't
+  exist; this module already has a "Schedule Board (v2)" section (P369 etc.), so the entry was
+  added there instead, newest-first. **Three seeded rows carry an unverified-name/date flag from
+  the prompt's own draft, not yet confirmed with Steve**: `Angelaure Insere` (Jan 1 — looks like a
+  placeholder dummy date + surname), `Garry Insert` (Sept 8 — "Insert" looks like a placeholder
+  surname), `Jean Jean Paul` (Nov 9 — name order inferred from "Jean Paul, Jean", may be reversed).
+  If any are wrong, fix/remove via `DELETE FROM employee_birthdays WHERE name = '...'` (or a manual
+  UPDATE) in the D1 console — do not silently leave a wrong name/date live on the wall TV.
+  `data.birthdays ?? []` guard added at both `WeekBand` call sites in `ScheduleBoard.tsx` (deploy-
+  skew/cached-response safety, not in the prompt's snippet) so a birthdays-less response degrades
+  to no cards instead of an uncaught render throw blanking the whole board. `tsc --noEmit` +
+  `cf-build` green.
 - **P369 — Schedule status now distinguishes actively-cutting from started-then-stopped.**
   `deriveStatuses` (`schedule-status.ts`) splits the old collapsed "Cutting" rung: an open
   `cutting_sessions` row → **Cutting** (someone is actively cutting right now); a line

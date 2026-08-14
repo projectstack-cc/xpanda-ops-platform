@@ -30,9 +30,16 @@ export interface ScheduleDayGroup {
   rows: ScheduleBoardRow[];
 }
 
+export interface Birthday {
+  name: string;
+  month: number; // 1..12
+  day: number;   // 1..31
+}
+
 export interface ScheduleBoardResponse {
   generated_at: string;
   source_updated_at: string | null;
   weeks: string[];
   days: ScheduleDayGroup[];
+  birthdays: Birthday[];
 }

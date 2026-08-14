@@ -3,19 +3,24 @@
 // across. Always renders all five day slots (even with zero rows) so the two bands line up.
 import type { ScheduleDayGroup } from "@/types/schedule";
 import DayColumn from "./DayColumn";
+import type { Birthday } from "@/types/schedule";
+import { parseWeekMonday, birthdaysForColumn } from "./birthdays";
 import type { Density } from "./density";
 
 const DAY_ORDER = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"] as const;
 
 interface WeekBandProps {
   weekLabel: string;
+  weekTab: string | undefined;
   days: ScheduleDayGroup[];
   density: Density;
   rowCap: number;
+  birthdays: Birthday[];
 }
 
-export default function WeekBand({ weekLabel, days, density, rowCap }: WeekBandProps) {
+export default function WeekBand({ weekLabel, weekTab, days, density, rowCap, birthdays }: WeekBandProps) {
   const byDay = new Map(days.map((d) => [d.day_of_week, d]));
+  const weekMonday = parseWeekMonday(weekTab);
 
   return (
     <section className="flex-1 min-h-0 flex flex-col">
@@ -23,7 +28,7 @@ export default function WeekBand({ weekLabel, days, density, rowCap }: WeekBandP
         {weekLabel}
       </h2>
       <div className="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-5 gap-px bg-[var(--line)]">
-        {DAY_ORDER.map((day) => {
+        {DAY_ORDER.map((day, dayIndex) => {
           const group = byDay.get(day);
           return (
             <DayColumn
@@ -33,6 +38,7 @@ export default function WeekBand({ weekLabel, days, density, rowCap }: WeekBandP
               rows={group?.rows ?? []}
               density={density}
               rowCap={rowCap}
+              birthdays={birthdaysForColumn(birthdays, weekMonday, dayIndex)}
             />
           );
         })}

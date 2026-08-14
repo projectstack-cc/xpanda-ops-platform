@@ -230,15 +230,19 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
           <div className="flex-1 min-h-0 flex flex-col gap-px bg-[var(--line)]">
             <WeekBand
               weekLabel={formatWeekLabel(currentTab, "THIS WEEK")}
+              weekTab={currentTab}
               days={currentDays}
               density={density}
               rowCap={rowCap}
+              birthdays={data.birthdays ?? []}
             />
             <WeekBand
               weekLabel={formatWeekLabel(nextTab, "NEXT WEEK")}
+              weekTab={nextTab}
               days={nextDays}
               density={density}
               rowCap={rowCap}
+              birthdays={data.birthdays ?? []}
             />
           </div>
         </div>
