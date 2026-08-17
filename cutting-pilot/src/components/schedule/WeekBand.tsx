@@ -9,6 +9,22 @@ import type { Density } from "./density";
 
 const DAY_ORDER = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"] as const;
 
+// The header date must not depend on a day having loads. `weekMonday` (already parsed for the
+// P375 birthday feature) + dayIndex yields the column's calendar date whether or not it has
+// rows, as `YYYY-MM-DD` — the same shape `formatDayHeader` parses and the same UTC arithmetic
+// ingest uses to derive `ship_date` (shipDateFor). So populated days are byte-identical; only
+// empty days change (from bare day name to day + date). Null tab → null → bare day name (the
+// pre-P376 fallback), preserved.
+function columnDate(weekMonday: Date | null, dayIndex: number): string | null {
+  if (!weekMonday) return null;
+  const d = new Date(weekMonday);
+  d.setUTCDate(d.getUTCDate() + dayIndex);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 interface WeekBandProps {
   weekLabel: string;
   weekTab: string | undefined;
@@ -34,7 +50,7 @@ export default function WeekBand({ weekLabel, weekTab, days, density, rowCap, bi
             <DayColumn
               key={day}
               dayOfWeek={day}
-              shipDate={group?.ship_date ?? null}
+              shipDate={group?.ship_date ?? columnDate(weekMonday, dayIndex)}
               rows={group?.rows ?? []}
               density={density}
               rowCap={rowCap}

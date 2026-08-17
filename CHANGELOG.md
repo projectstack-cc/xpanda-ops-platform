@@ -532,6 +532,17 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P376 — Empty schedule-board day columns now show their calendar date.** Previously the day
+  header (`MON 8/24`) only showed a date when that day had loads — the date came from the loads
+  themselves (`group?.ship_date`), so an empty day (`group` undefined) fell back to a bare day name
+  (`TUE`, `THU`, `FRI`). Added `columnDate(weekMonday, dayIndex)` in `WeekBand.tsx`, deriving the
+  column's `YYYY-MM-DD` from `weekMonday` (already parsed for the P375 birthday feature) +
+  `dayIndex` — the same anchor and UTC arithmetic ingest uses to derive `ship_date`
+  (`shipDateFor` in `schedule-ingest.ts`), so populated days are byte-identical and only empty days
+  change. Used only as the fallback (`group?.ship_date ?? columnDate(...)`); a null `weekTab` still
+  yields `null` → bare day name, unchanged. Presentation-only, one file
+  (`cutting-pilot/src/components/schedule/WeekBand.tsx`), no migration/API/permission change.
+  `tsc --noEmit` + `cf-build` green.
 - **P375 — Birthday cards on `/v2/schedule`.** When a day column's calendar date matches an
   employee's birthday, a small `🎂 {Name} 🎉` card pins to the bottom of that column (multiple
   people on the same day stack in one card) — not a list view, and never clipped by the column's
