@@ -234,6 +234,21 @@
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
 - [ ] Label printing — DiversiTech and UL labels
 
+**Holey Board chunk engine follow-ons (P379 shipped the backend foundation only):**
+- [ ] **Order-entry chunk UI (next legacy prompt):** live preview call to
+  `/api/holey-chunks/preview` + chunks-required display + per-chunk cut-list breakdown into the
+  P366 cut-list viewer in `jobs/index.html`. **Mockup-first.**
+- [ ] **v2 chunk consumption (§9a/§9b):** TS port of the nester (or read
+  `jobs.hb_chunks_required`); seed `cut_plan_lines.qty_target` via `COALESCE(manual override,
+  jobs.hb_chunks_required)` with manual override winning; flip HB Main/Blue Line to `unit='chunk'`
+  on `/v2/cutting`; surface the effective chunk count on the `/v2/schedule` order card.
+- [ ] Optional: map `/api/holey-chunks` → `jobs` in `API_PERMISSION_MAP` (currently unmapped ⇒
+  authenticated-allowed; fine for compute-only, tidy later).
+- [ ] Optional: surface the 51" chunk-height selection at order entry (nester already
+  parameterized).
+- [ ] Optional: converge `holey-board-calculator.html` onto the shared endpoint (kill the last
+  client-side copy of the packing math).
+
 ---
 
 ## QuickBooks Integration — Automated Job Intake · **SCOPED · TABLED (not today)**

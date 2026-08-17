@@ -1,6 +1,39 @@
 import { json, logActivity, safeJsonParse } from '../lib/core.js';
 import { reconcileCuttingSteps, mirrorProcessesToSteps, syncJobFromSteps } from '../lib/cutting.js';
 import { completeCuttingLinesForJob } from '../lib/cutting-lines.js';
+import { nestHoleyChunks } from '../lib/holey-nester.js';
+
+// P379: compute + persist the Holey Board chunk requirement for a job (server-authoritative).
+// Reads the just-saved line items, resolves HB thickness from the parts catalog, runs the FFD
+// nester, writes jobs.hb_chunks_required + hb_chunk_breakdown, and mutates the in-memory `job`
+// so the response carries fresh values. Non-HB jobs (no HB line items) get NULL / NULL.
+async function computeAndPersistHoleyChunks(db, jobId, job) {
+  const rows = await db.prepare(
+    `SELECT jli.quantity AS qty, p.height_in AS thickness
+       FROM job_line_items jli
+       JOIN parts p ON p.id = jli.part_id
+      WHERE jli.job_id = ? AND p.category = 'Holey Board' AND p.height_in > 0`
+  ).bind(jobId).all();
+
+  const items = (rows.results || []).map(r => ({ thickness: Number(r.thickness), qty: Number(r.qty) }));
+
+  let chunksRequired = null;
+  let breakdownJson = null;
+  if (items.length) {
+    const res = nestHoleyChunks(items);   // defaults: height 50, kerf 0.079
+    chunksRequired = res.chunks_required;
+    breakdownJson = JSON.stringify(res);
+  }
+
+  await db.prepare(
+    `UPDATE jobs SET hb_chunks_required = ?, hb_chunk_breakdown = ? WHERE id = ?`
+  ).bind(chunksRequired, breakdownJson, jobId).run();
+
+  if (job) {
+    job.hb_chunks_required = chunksRequired;
+    job.hb_chunk_breakdown = breakdownJson;
+  }
+}
 
 export async function handleApiJobs(request, env) {
   const db = env.DB;
@@ -539,6 +572,7 @@ export async function handleApiJobs(request, env) {
         `Created job "${customer}" — ${lineItems.length} line items`,
         { customer, status, po_number, line_items_count: lineItems.length }
       );
+      await computeAndPersistHoleyChunks(db, id, job);
       return json({ ok: true, message: "Job created.", job: { ...job, has_shipment: true, processes: safeJsonParse(job.processes, []), line_items: liRows.results || [] } }, 201);
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -948,6 +982,7 @@ export async function handleApiJobs(request, env) {
         `Updated job "${payload.customer || ''}" — status: ${payload.status || ''}`,
         { fields_updated: Object.keys(payload).filter(k => k !== 'id') }
       );
+      await computeAndPersistHoleyChunks(db, id, job);
       return json({ ok: true, message: "Job updated.", job: { ...job, processes: safeJsonParse(job.processes, []), line_items: liRows.results || [] } });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -1420,4 +1455,22 @@ export async function handleApiAssignableUsers(request, env) {
   }
 }
 
+// P379: POST /api/holey-chunks/preview — compute-only chunk preview for order entry.
+// Body: { items:[{thickness,qty}], height?, kerf? }. No DB writes, no persistence. Order entry posts
+// already-resolved {thickness,qty} (it knows the matched HB part heights client-side); the
+// authoritative persist path (computeAndPersistHoleyChunks) resolves from stored parts on save.
+// Unmapped in API_PERMISSION_MAP ⇒ allowed for any authenticated session (compute-only, exposes no
+// stored data — see lib/core.js line ~209 `if (!permKey) return true`).
+export async function handleHoleyChunksPreview(request, env) {
+  const db = env.DB; // unused today; kept for signature parity with other handlers
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, 405);
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
+  const items = Array.isArray(body && body.items) ? body.items : [];
+  const opts = {};
+  if (Number.isFinite(Number(body && body.height))) opts.height = Number(body.height);
+  if (Number.isFinite(Number(body && body.kerf)))   opts.kerf   = Number(body.kerf);
+  const result = nestHoleyChunks(items, opts);
+  return json({ ok: true, ...result });
+}
 

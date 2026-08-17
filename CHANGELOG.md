@@ -1031,6 +1031,25 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **P379** — Holey Board chunk nester + job persistence + preview endpoint (db-api-agent). New
+  `jobs.hb_chunks_required` (INTEGER) + `hb_chunk_breakdown` (TEXT, JSON) columns — geometry output
+  persisted on the job so order-entry display, `/v2/cutting` chunk target, and `/v2/schedule` order
+  card all eventually read one server-authoritative number. New pure `_worker.js/lib/holey-nester.js`
+  — a faithful FFD (first-fit-decreasing) port of `holey-board-calculator.html`'s `binPack`: chunk =
+  48×24×**50**", kerf **0.079**" charged on every board including the last, pattern-agnostic (8-hole
+  vs 10-hole doesn't affect the horizontal guillotine cut). New `computeAndPersistHoleyChunks(db,
+  jobId, job)` in `_worker.js/routes/jobs.js`, called on both job CREATE and UPDATE after line items
+  are written: resolves HB thickness via `job_line_items.part_id → parts` where `parts.category =
+  'Holey Board'`, runs the nester, writes both columns (NULL/NULL for non-HB jobs), and mutates the
+  in-memory `job` so the response carries fresh values. New compute-only `POST
+  /api/holey-chunks/preview` (`handleHoleyChunksPreview`, registered in `_worker.js/index.js`) for
+  live order-entry feedback — no DB writes, unmapped in `API_PERMISSION_MAP` (authenticated-allowed,
+  compute-only, exposes no stored data). **Migration-before-push**: `DB_Migrations/add-hb-chunks.sql`
+  (two `ALTER TABLE jobs ADD COLUMN` statements) run manually in the D1 console and confirmed by
+  Steve before this push — gitignored, not committed. `node --check` clean on `holey-nester.js`,
+  `jobs.js`, and `index.js`; nester sanity-checked numerically against the floor calculator. Scope:
+  backend/data foundation only — order-entry UI, cut-list breakdown, and v2 consumption are separate
+  later prompts.
 - **P325** — Hotfix: per-load `ship_date` was shadowed by `j.ship_date` in the loading-assignments
   GET (duplicate select key — `la.*` emits `ship_date`, then the explicit `j.ship_date` selected
   after it overwrote it in the returned row object, so every read of `/api/loading-assignments`
