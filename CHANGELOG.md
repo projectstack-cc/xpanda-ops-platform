@@ -1079,6 +1079,23 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P378** — Load Builder DISSOLVE preview: per-line checkboxes to exclude moves. The
+  `DISSOLVE → OTHER` confirmation modal (P204) now renders each proposed move-group with an
+  auto-checked checkbox; unchecking a line keeps those pieces on the **source** trailer instead of
+  relocating them. **Subtractive** — the checked moves land exactly where previewed (no
+  re-optimization on toggle), so weight/height caps stay satisfied by construction. `planDissolve`
+  was split into a pure **proposal** phase (now returns `{ moves, totalSrcUnits, srcTi }`, each move
+  carrying its source key + chosen receiver column `toTi/recRi/recCi`) and a new **assembly** phase
+  `assembleDissolve(result, srcTi, moves, excludedKeys)` that re-applies only the selected subset
+  onto fresh receiver clones and returns `{ resultAfter, invMap, oldToNew, placedCount, srcDissolved }`.
+  Shared new `buildReceivers()` drives both phases so receiver caps can't drift. The modal holds an
+  `excluded` Set of group keys and re-assembles + re-renders summary/labels/approve-state on every
+  toggle (destination `→ Trailer N` labels stay accurate via the recomputed `oldToNew`); APPROVE
+  commits the assembled subset. `commitDissolve`, `dissolveSig`, and the UNDO path unchanged. Reuses
+  `repackTrailerDense`/`buildTrailerStats`/`mergeLayers`/`recomputeColumnGeom`/`reflowRowGeometry`
+  only — **auto-pack (`calcLoading`), `STORAGE_KEY` (`foam_trailer_loader_v31`), and column/row
+  footprints untouched.** Frontend-only, `logistics/load-builder.html`. Inline `<script>` verified
+  with `node --check` against a real temp file.
 - **P362** — BOL Email Queue candidates: also match Seal Express (Lisma rebrand). Lisma rebranded to
   Seal Express; `handleCandidates`' SQL in `_worker.js/routes/bol-email.js` now matches
   `WHERE (b.carrier_name LIKE 'LISMA%' OR b.carrier_name LIKE 'SEAL%')` (parenthesized so the OR

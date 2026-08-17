@@ -1876,7 +1876,25 @@ function repackTrailerDense(rows, dims) {
   return rows;
 }
 
-// Pure planner: returns the proposed post-dissolve result + move list. Mutates nothing in state.
+function dissolveGroupKey(m) { return `${m.skuCode}|${m.unitHeight}|${m.toTi}`; }
+
+// Build the mutable receiving trailers (everything except the source). Shared by the proposal
+// planner and the assembler so receiver caps/geometry can never drift between the two phases.
+function buildReceivers(result, srcTi, dims, runner) {
+  return result.trailers.map((t, ti) => {
+    if (ti === srcTi) return null;
+    const tDims = t.downsizedDims || dims;
+    const heightCap = (t.downsizedDims ? t.downsizedDims.height : dims.height) - runner;
+    return { ti, maxWeight: tDims.maxWeight, heightCap, runWeight: t.usedWeight || 0, rows: cloneRows(t.rows) };
+  });
+}
+
+// Phase 1 — pure proposal. Runs the (unchanged) greedy top-off placement and returns the full move
+// list WITHOUT committing a result. Each move records its source key (srcRi/srcCi/srcLi) and the
+// receiver column it was placed into (toTi/recRi/recCi in the ORIGINAL receiver geometry — indices
+// are stable because placement only pushes layers into existing columns, never adds/removes
+// rows/columns), so any selected subset can be re-applied deterministically by assembleDissolve.
+// Mutates nothing in state.
 function planDissolve(result, srcTi) {
   const dims = getDims();
   const skuById = new Map(state.skus.map(s => [s.id, s]));
@@ -1895,23 +1913,18 @@ function planDissolve(result, srcTi) {
     }
   })));
 
-  // Mutable receiving trailers (everything except the source).
-  const receivers = result.trailers.map((t, ti) => {
-    if (ti === srcTi) return null;
-    const tDims = t.downsizedDims || dims;
-    const heightCap = (t.downsizedDims ? t.downsizedDims.height : dims.height) - runner;
-    return { ti, maxWeight: tDims.maxWeight, heightCap, runWeight: t.usedWeight || 0, rows: cloneRows(t.rows) };
-  });
+  const receivers = buildReceivers(result, srcTi, dims, runner);
 
   const moves = [];
-  const placedKeys = [];
   for (const u of units) {
     let placed = false;
     for (const rec of receivers) {
       if (!rec) continue;
-      for (const row of rec.rows) {
+      for (let rIdx = 0; rIdx < rec.rows.length; rIdx++) {
+        const row = rec.rows[rIdx];
         if (row.rowLength !== u.length) continue;
-        for (const col of row.columns) {
+        for (let cIdx = 0; cIdx < row.columns.length; cIdx++) {
+          const col = row.columns[cIdx];
           if (col.colWidth !== u.width) continue;
           if ((rec.heightCap - col.totalHeight) < u.unitHeight) continue;
           if (rec.runWeight + u.weight > rec.maxWeight) continue;
@@ -1921,8 +1934,12 @@ function planDissolve(result, srcTi) {
           row.totalUnits += 1;
           row.totalWeight += u.weight;
           rec.runWeight += u.weight;
-          moves.push({ skuCode: u.skuCode, skuName: u.skuName, unitHeight: u.unitHeight, toTrailer: rec.ti });
-          placedKeys.push(`${u.ri}|${u.ci}|${u.li}`);
+          moves.push({
+            skuId: u.skuId, skuName: u.skuName, skuCode: u.skuCode, color: u.color,
+            unitHeight: u.unitHeight, weight: u.weight,
+            srcRi: u.ri, srcCi: u.ci, srcLi: u.li,
+            toTi: rec.ti, recRi: rIdx, recCi: cIdx,
+          });
           placed = true; break;
         }
         if (placed) break;
@@ -1931,9 +1948,44 @@ function planDissolve(result, srcTi) {
     }
   }
 
-  // Shrink the source trailer: subtract placed units, drop empties.
+  return { moves, totalSrcUnits: units.length, srcTi };
+}
+
+// Phase 2 — assemble a concrete post-dissolve result from a SELECTED subset of the proposal's moves
+// (all moves whose group key is not in excludedKeys). Re-applies each selected move to its
+// originally-chosen receiver column on fresh clones, shrinks the source by only those units,
+// densifies leftovers via the shared re-pack, and returns the committable result. Subtractive:
+// never adds moves beyond phase 1, so receiver caps stay satisfied. Mutates nothing in state.
+function assembleDissolve(result, srcTi, moves, excludedKeys) {
+  const dims = getDims();
+  const skuById = new Map(state.skus.map(s => [s.id, s]));
+  const runner = state.runnerHeight > 0 ? state.runnerHeight : 0;
+  const excluded = excludedKeys || new Set();
+  const selected = moves.filter(m => !excluded.has(dissolveGroupKey(m)));
+
+  const receivers = buildReceivers(result, srcTi, dims, runner);
+  const recByTi = new Map(receivers.filter(Boolean).map(r => [r.ti, r]));
+
   const placedCounts = {};
-  placedKeys.forEach(k => { placedCounts[k] = (placedCounts[k] || 0) + 1; });
+  for (const m of selected) {
+    const rec = recByTi.get(m.toTi);
+    if (!rec) continue;
+    const row = rec.rows[m.recRi];
+    if (!row) continue;
+    const col = row.columns[m.recCi];
+    if (!col) continue;
+    col.layers.push({ skuId: m.skuId, skuName: m.skuName, skuCode: m.skuCode, color: m.color, unitHeight: m.unitHeight, count: 1 });
+    recomputeColumnGeom(col);
+    col.totalWeight += m.weight;
+    row.totalUnits += 1;
+    row.totalWeight += m.weight;
+    rec.runWeight += m.weight;
+    const k = `${m.srcRi}|${m.srcCi}|${m.srcLi}`;
+    placedCounts[k] = (placedCounts[k] || 0) + 1;
+  }
+
+  // Shrink the source trailer: subtract only the applied units, drop empties.
+  const src = result.trailers[srcTi];
   const srcRows = cloneRows(src.rows);
   srcRows.forEach((row, ri) => row.columns.forEach((col, ci) => {
     col.layers.forEach((layer, li) => { layer.count -= (placedCounts[`${ri}|${ci}|${li}`] || 0); });
@@ -1949,18 +2001,15 @@ function planDissolve(result, srcTi) {
     row.totalWeight = row.columns.reduce((s, c) => s + c.totalWeight, 0);
   });
   let srcRowsLeft = srcRows.filter(row => row.columns.length);
-
-  // Densify the source trailer's leftovers via the shared re-pack helper (top-off only; keeps the
-  // fragmented rows if it can't reconcile exactly — identical behavior to the previous inline block).
   if (srcRowsLeft.length) srcRowsLeft = repackTrailerDense(srcRowsLeft, dims);
 
-  // Assemble survivors in original order; drop the source if fully dissolved.
+  // Assemble survivors in original order; drop the source only if fully emptied.
   const survivors = [];
   result.trailers.forEach((t, ti) => {
     if (ti === srcTi) {
       if (srcRowsLeft.length) survivors.push({ oldTi: ti, rows: srcRowsLeft, carry: t });
     } else {
-      const rec = receivers.find(r => r && r.ti === ti);
+      const rec = recByTi.get(ti);
       survivors.push({ oldTi: ti, rows: rec.rows, carry: t });
     }
   });
@@ -1988,7 +2037,7 @@ function planDissolve(result, srcTi) {
   trailers.forEach((t, i) => { if (t.usedWeight / dims.maxWeight > 0.95) warnings.push(`Trailer ${i + 1} is near weight limit.`); });
 
   const resultAfter = { trailers, warnings, totalWeight, utilization, totalUnits, totalStacks, mixedStacks };
-  return { resultAfter, invMap, oldToNew, moves, placedCount: moves.length, leftoverCount: units.length - moves.length, srcDissolved: !srcRowsLeft.length, srcTi };
+  return { resultAfter, invMap, oldToNew, selected, placedCount: selected.length, srcDissolved: !srcRowsLeft.length, srcTi };
 }
 
 function commitDissolve(plan) {
@@ -2001,29 +2050,71 @@ function commitDissolve(plan) {
 }
 
 function openDissolvePreview(srcTi) {
-  const plan = planDissolve(getResult(), srcTi);
+  const proposal = planDissolve(getResult(), srcTi);
+  const excluded = new Set();
+
+  // Fixed set of proposed move-groups (stable regardless of check state).
+  const groups = [];
+  const gIndex = {};
+  proposal.moves.forEach(m => {
+    const key = dissolveGroupKey(m);
+    if (!gIndex[key]) { gIndex[key] = { key, skuCode: m.skuCode, skuName: m.skuName, unitHeight: m.unitHeight, toTi: m.toTi, n: 0 }; groups.push(gIndex[key]); }
+    gIndex[key].n++;
+  });
+
   const backdrop = h('div', { style: { position: 'fixed', inset: '0', background: 'rgba(0,0,0,0.5)', zIndex: '4000', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' } });
   const box = h('div', { className: 'card', style: { maxWidth: '520px', width: '100%', maxHeight: '80vh', overflowY: 'auto' } });
   box.appendChild(h('div', { style: { fontWeight: 900, fontSize: '18px', marginBottom: '10px', color: 'var(--accent)' } }, `DISSOLVE TRAILER ${srcTi + 1}`));
-  const summary = plan.srcDissolved
-    ? `All ${plan.placedCount} pcs relocated — Trailer ${srcTi + 1} will be removed.`
-    : (plan.placedCount
-        ? `${plan.placedCount} pcs relocated · ${plan.leftoverCount} pcs stay on Trailer ${srcTi + 1} (no compatible space).`
-        : `No compatible space on other trailers — nothing can be moved.`);
-  box.appendChild(h('div', { style: { fontSize: '14px', marginBottom: '12px', color: 'var(--text-muted)', fontWeight: 600 } }, summary));
-  if (plan.moves.length) {
-    const agg = {};
-    plan.moves.forEach(m => { const k = `${m.skuCode}|${m.unitHeight}|${m.toTrailer}`; agg[k] = agg[k] || { ...m, n: 0 }; agg[k].n++; });
-    const list = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '14px' } });
-    Object.values(agg).forEach(m => list.appendChild(h('div', { style: { fontSize: '13px' } }, `${m.n} × ${m.unitHeight}" ${m.skuName} (${m.skuCode}) → Trailer ${(plan.oldToNew[m.toTrailer] ?? m.toTrailer) + 1}`)));
-    box.appendChild(list);
-  }
+
+  const summaryEl = h('div', { style: { fontSize: '14px', marginBottom: '12px', color: 'var(--text-muted)', fontWeight: 600 } });
+  box.appendChild(summaryEl);
+
+  const listEl = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '14px' } });
+  box.appendChild(listEl);
+
   const btns = h('div', { className: 'flex gap-10 justify-end' });
   btns.appendChild(h('button', { className: 'btn btn-white', onClick: () => backdrop.remove() }, 'CANCEL'));
-  const approve = h('button', { className: 'btn btn-dark', onClick: () => { backdrop.remove(); commitDissolve(plan); } }, 'APPROVE & COMMIT');
-  if (!plan.placedCount) approve.disabled = true;
+  const approve = h('button', { className: 'btn btn-dark' }, 'APPROVE & COMMIT');
   btns.appendChild(approve);
   box.appendChild(btns);
+
+  function rebuild() {
+    const plan = assembleDissolve(getResult(), srcTi, proposal.moves, excluded);
+    const stays = proposal.totalSrcUnits - plan.placedCount;
+
+    if (!proposal.moves.length) {
+      summaryEl.textContent = `No compatible space on other trailers — nothing can be moved.`;
+    } else if (plan.srcDissolved) {
+      summaryEl.textContent = `All ${plan.placedCount} pcs relocated — Trailer ${srcTi + 1} will be removed.`;
+    } else if (plan.placedCount) {
+      summaryEl.textContent = `${plan.placedCount} pcs relocated · ${stays} pcs stay on Trailer ${srcTi + 1}.`;
+    } else {
+      summaryEl.textContent = `Nothing selected — all ${proposal.totalSrcUnits} pcs stay on Trailer ${srcTi + 1}.`;
+    }
+
+    listEl.innerHTML = '';
+    groups.forEach(g => {
+      const checked = !excluded.has(g.key);
+      const destNew = (plan.oldToNew[g.toTi] ?? g.toTi) + 1;
+      const cb = h('input', { type: 'checkbox' });
+      cb.checked = checked;
+      Object.assign(cb.style, { width: '18px', height: '18px', flex: '0 0 auto', cursor: 'pointer' });
+      cb.addEventListener('change', () => {
+        if (cb.checked) excluded.delete(g.key); else excluded.add(g.key);
+        rebuild();
+      });
+      const label = h('label', { style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', minHeight: '40px', opacity: checked ? '1' : '0.5' } },
+        cb,
+        h('span', {}, `${g.n} × ${g.unitHeight}" ${g.skuName} (${g.skuCode}) → Trailer ${destNew}`)
+      );
+      listEl.appendChild(label);
+    });
+
+    approve.disabled = plan.placedCount === 0;
+    approve.onclick = () => { backdrop.remove(); commitDissolve(plan); };
+  }
+
+  rebuild();
   backdrop.appendChild(box);
   backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
   document.body.appendChild(backdrop);
