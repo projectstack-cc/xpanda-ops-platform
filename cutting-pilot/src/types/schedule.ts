@@ -17,6 +17,8 @@ export interface ScheduleBoardRow {
   scrap_pickup: string | null;
   status: ScheduleStatus | null;
   progress_pct: number | null;
+  loads_done: number | null;
+  loads_total: number | null;
   unmatched: boolean;
   sheet_status: string | null;
   job_id: string | null;

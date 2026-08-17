@@ -39,9 +39,11 @@ interface StatusBadgeProps {
   unmatched: boolean;
   sheetStatus: string | null;
   progressPct?: number | null;
+  loadsDone?: number | null;
+  loadsTotal?: number | null;
 }
 
-export default function StatusBadge({ status, unmatched, sheetStatus, progressPct }: StatusBadgeProps) {
+export default function StatusBadge({ status, unmatched, sheetStatus, progressPct, loadsDone, loadsTotal }: StatusBadgeProps) {
   const base =
     "inline-flex items-center px-1.5 py-[1px] rounded text-[10px] leading-tight font-medium whitespace-nowrap";
 
@@ -58,9 +60,14 @@ export default function StatusBadge({ status, unmatched, sheetStatus, progressPc
   }
 
   const variant = STATUS_VARIANTS[status] ?? STATUS_VARIANTS["Not Started"];
-  const label =
-    status === "In Production" && progressPct != null
-      ? `In Production – ${progressPct}%`
-      : variant.label;
+  let label = variant.label;
+  if (status === "In Production" && progressPct != null) {
+    label = `In Production – ${progressPct}%`;
+  } else if (status === "Loading" && loadsTotal != null && loadsTotal > 1) {
+    // Multi-load progress (P377). loadsDone falls back to 0 so a just-started multi-load order
+    // reads "Loading 0 of Y" rather than dropping the suffix. Single-load orders (loadsTotal <= 1)
+    // keep the plain "Loading" label.
+    label = `Loading ${loadsDone ?? 0} of ${loadsTotal}`;
+  }
   return <span className={`${base} ${variant.cls}`}>{label}</span>;
 }

@@ -80,6 +80,8 @@ export default function OrderRow({ row, density, orphanedGroup, isLastInColumn }
                 unmatched={row.unmatched}
                 sheetStatus={row.sheet_status}
                 progressPct={row.progress_pct}
+                loadsDone={row.loads_done}
+                loadsTotal={row.loads_total}
               />
             )}
             {scrapYes && (

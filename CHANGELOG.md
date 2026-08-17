@@ -532,6 +532,22 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P377 — "Loading X of Y" for multi-load orders on `/v2/schedule`.** A multi-load order
+  previously flipped to "Loaded" the moment a **single** one of its loads was marked loaded (same
+  flaw on the `in_transit`/`delivered` → Shipped rungs — one departed truck flipped a partly-loaded
+  order to Shipped), because `deriveOne` (`schedule-status.ts`) tested each stage with
+  `assignmentStatuses.includes(...)`. Made the loading→shipping band proportion-based over the
+  order's real dock loads: Y (`loadsTotal`) = all non-archived `loading_assignments` rows for the
+  order (including seeded `awaiting`/`not_started` slots, so the denominator is stable as loads
+  reach the dock); X (`loadsDone`) = loads at loaded-or-beyond (`loaded | in_transit | delivered`).
+  All loads shipped → Shipped; all loaded-or-beyond → Loaded; else any dock activity
+  (`loading|loaded|in_transit|delivered`) → Loading, carrying X/Y; `awaiting`/`not_started` alone
+  still falls through to the cutting rungs unchanged. `StatusBadge.tsx` shows the "of Y" suffix
+  only when Y > 1, so single-load orders render plain "Loading"/"Loaded" exactly as before.
+  `DerivedStatus`/`deriveOne` now return `loadsDone`/`loadsTotal` alongside `status`; threaded as
+  additive nullable fields through `schedule-board/route.ts` → `types/schedule.ts` → `OrderRow.tsx`
+  → `StatusBadge.tsx`. Derivation-only, no migration, no new permission, no API-contract break.
+  `tsc --noEmit` + `cf-build` green.
 - **P376 — Empty schedule-board day columns now show their calendar date.** Previously the day
   header (`MON 8/24`) only showed a date when that day had loads — the date came from the loads
   themselves (`group?.ship_date`), so an empty day (`group` undefined) fell back to a bare day name

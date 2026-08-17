@@ -9,6 +9,10 @@ export type ScheduleStatus = "Shipped" | "Loaded" | "Loading" | "Ready" | "In Pr
 export interface DerivedStatus {
   status: ScheduleStatus;
   progressPct: number | null;
+  // P377: multi-load "Loading X of Y". Non-null only when status === "Loading". loadsTotal (Y) is
+  // the order's full load count; loadsDone (X) is loads at loaded-or-beyond. Null otherwise.
+  loadsDone: number | null;
+  loadsTotal: number | null;
 }
 
 const CHUNK = 90; // D1 100-bound-param ceiling
@@ -136,12 +140,13 @@ export async function deriveStatuses(db: D1Database, jobIds: string[]): Promise<
   for (const row of doneCountRows) doneByJob.set(row.job_id, row.n);
 
   for (const jobId of distinctIds) {
-    const status = deriveOne(
+    const one = deriveOne(
       jobStatusById.get(jobId) ?? null,
       assignmentsByJob.get(jobId) ?? [],
       linesByJob.get(jobId) ?? [],
       openSessionJobIds.has(jobId)
     );
+    const status = one.status;
     let progressPct: number | null = null;
     if (status === "In Production") {
       const itemCount = itemCountByJob.get(jobId) ?? 0;
@@ -150,32 +155,55 @@ export async function deriveStatuses(db: D1Database, jobIds: string[]): Promise<
       const done = doneByJob.get(jobId) ?? 0;
       progressPct = denom > 0 ? Math.min(100, Math.floor((done / denom) * 100)) : null;
     }
-    statuses.set(jobId, { status, progressPct });
+    statuses.set(jobId, { status, progressPct, loadsDone: one.loadsDone, loadsTotal: one.loadsTotal });
   }
 
   return statuses;
 }
+
+type OneResult = { status: ScheduleStatus; loadsDone: number | null; loadsTotal: number | null };
 
 function deriveOne(
   jobStatus: string | null,
   assignmentStatuses: string[],
   lineStatuses: string[],
   hasOpenSession: boolean
-): ScheduleStatus {
-  // Legacy sentinel only (see docblock above) — not a general "archived is always Shipped" rule.
-  if (jobStatus === "archived") return "Shipped";
+): OneResult {
+  const plain = (status: ScheduleStatus): OneResult => ({ status, loadsDone: null, loadsTotal: null });
 
-  if (jobStatus === "shipped") return "Shipped";
-  if (assignmentStatuses.includes("delivered")) return "Shipped";
-  if (assignmentStatuses.includes("in_transit")) return "Shipped";
-  if (assignmentStatuses.includes("loaded")) return "Loaded";
-  if (assignmentStatuses.includes("loading")) return "Loading";
+  // Legacy sentinel only (see docblock above) — not a general "archived is always Shipped" rule.
+  if (jobStatus === "archived") return plain("Shipped");
+  if (jobStatus === "shipped") return plain("Shipped");
+
+  // Count-aware loading→shipping band (P377). Previously each rung used `.includes(...)`, so a
+  // SINGLE loaded/in_transit/delivered load flipped the whole order to Loaded/Shipped. Now the
+  // band is proportion-based over the order's real dock loads:
+  //   Y (loadsTotal) = all non-archived loads for the order (assignment rows, incl. awaiting slots)
+  //   X (loadsDone)  = loads at loaded-or-beyond (loaded | in_transit | delivered)
+  // all loads shipped → Shipped; all loaded-or-beyond → Loaded; else if any dock activity →
+  // "Loading X of Y". 'awaiting'/'not_started' are seeded slots, NOT dock activity (see docblock),
+  // so an order with only those falls through to the cutting rungs exactly as before — but they
+  // still count toward Y so the denominator is stable as loads reach the dock. Single-load orders
+  // (Y === 1) render as plain "Loading"/"Loaded"; the badge only shows the "of Y" suffix when Y > 1.
+  const total = assignmentStatuses.length;
+  if (total > 0) {
+    const shipped = assignmentStatuses.filter((s) => s === "in_transit" || s === "delivered").length;
+    const loadedOrBeyond = assignmentStatuses.filter(
+      (s) => s === "loaded" || s === "in_transit" || s === "delivered"
+    ).length;
+    const anyDock = assignmentStatuses.some(
+      (s) => s === "loading" || s === "loaded" || s === "in_transit" || s === "delivered"
+    );
+    if (shipped === total) return plain("Shipped");
+    if (loadedOrBeyond === total) return plain("Loaded");
+    if (anyDock) return { status: "Loading", loadsDone: loadedOrBeyond, loadsTotal: total };
+  }
 
   const allLinesComplete = lineStatuses.length > 0 && lineStatuses.every((s) => s === "complete");
-  if (jobStatus === "done" || allLinesComplete) return "Ready";
+  if (jobStatus === "done" || allLinesComplete) return plain("Ready");
 
-  if (hasOpenSession) return "Cutting";
-  if (lineStatuses.some((s) => s === "in_progress")) return "In Production";
+  if (hasOpenSession) return plain("Cutting");
+  if (lineStatuses.some((s) => s === "in_progress")) return plain("In Production");
 
-  return "Not Started";
+  return plain("Not Started");
 }
