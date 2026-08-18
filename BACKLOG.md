@@ -24,6 +24,13 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **P385 follow-up — fully decouple loading/delivery from cutting completion (option B).**
+  P385 fixed `completeCuttingLinesForJob`'s backstop to only fire when truly no
+  `loading_assignment` is pre-loaded, but the backstop itself (loading/delivery → completing
+  dangling cutting lines) is still in place. Option B: loading and driver-QR events should not
+  force cutting-line completion at all; cutting completes solely via the v2 cutting board's own
+  one-directional signal. Removes the loading→cutting backstop entirely once v2 clock-out
+  coverage is trusted on the floor.
 - [ ] **P370 follow-up — bottom cut-list dock: optional per-line tabs for multi-line jobs.**
   Currently shows the operator's clocked-in line, else the job's first required line
   (`dockLine` in `CuttingBoard.tsx`) — no way to view/check a different line's parts without

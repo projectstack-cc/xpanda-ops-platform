@@ -16,6 +16,20 @@ export async function completeCuttingLinesForJob(db, jobId, reason) {
   if (!jobId) return;
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
+  // P385: Only complete cutting when the job is provably, FULLY past cutting — i.e. NO
+  // loading_assignment is still pre-loaded. A single loaded trailer on a multi-trailer job used to
+  // force-complete every cutting line here (and auto-close the operator's open session via the
+  // block below), stopping "Start" mid-run. 'archived' rows are ignored; loaded/in_transit/delivered
+  // all count as past cutting. Zero assignments → vacuously past cutting, preserving the job-level
+  // status caller's whole-job semantics (it mirrors all assignments before calling). This makes the
+  // backstop honor its own "provably past cutting" contract for every caller — the per-trailer
+  // loading and driver-QR callers now no-op until the LAST trailer, without any caller-side change.
+  const gate = await db.prepare(
+    `SELECT COUNT(*) AS pending FROM loading_assignments
+     WHERE job_id = ? AND loading_status NOT IN ('loaded','in_transit','delivered','archived')`
+  ).bind(jobId).first();
+  if ((gate?.pending ?? 0) > 0) return;
+
   // Complete any not-yet-complete lines.
   const res = await db.prepare(
     `UPDATE cutting_lines SET line_status = 'complete', updated_at = ?

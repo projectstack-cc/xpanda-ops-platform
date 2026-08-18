@@ -1101,6 +1101,22 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **P385** — Fix: a single loaded trailer force-completes cutting on multi-trailer jobs
+  (db-api-agent). `completeCuttingLinesForJob(db, jobId, reason)` in `_worker.js/lib/cutting-
+  lines.js` claimed to fire "once a job is provably past cutting" but didn't enforce it — on a
+  multi-trailer job the first `loading_assignment` to reach `loaded`/`in_transit`/`delivered`
+  force-completed every `cutting_lines` row for the job and auto-closed the operator's open
+  `cutting_sessions` row, so "Start" could no longer be tapped mid-run (real incident: job
+  `300fbac2-a71a-4418-bec7-663b7d1bdbb8`, CFS Roofing, `load_count=10`, 1/10 trailers loaded).
+  Added a guard at the top of the helper: count the job's `loading_assignments` whose
+  `loading_status` is NOT IN `('loaded','in_transit','delivered','archived')`; if any are still
+  pending, return early and do nothing. The per-trailer loading caller (`routes/loading.js`) and
+  the driver-QR delivery caller (`routes/public.js`) now no-op until the last trailer clears,
+  firing the completion exactly once; the job-level status caller (`routes/jobs.js`) is unchanged
+  since it mirrors all assignments to the new status before calling, so it always sees zero
+  pending. Guard lives inside the shared helper, not in the three call sites, so it's correct for
+  any future caller too. No schema change, no migration. `_worker.js/lib/cutting-lines.js` only;
+  `node --check` (as `.mjs`) green.
 - **P379** — Holey Board chunk nester + job persistence + preview endpoint (db-api-agent). New
   `jobs.hb_chunks_required` (INTEGER) + `hb_chunk_breakdown` (TEXT, JSON) columns — geometry output
   persisted on the job so order-entry display, `/v2/cutting` chunk target, and `/v2/schedule` order
