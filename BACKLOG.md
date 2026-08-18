@@ -246,6 +246,8 @@ order-entry chunk UI):**
   parameterized).
 - [ ] Optional: converge `holey-board-calculator.html` onto the shared endpoint (kill the last
   client-side copy of the packing math).
+- [ ] When the hole-cutter dashboard reaches the floor, switch `/v2/schedule`'s chunk display from
+  required to on-hand vs cut (`hc_slots`).
 
 ---
 

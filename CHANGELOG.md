@@ -10,6 +10,15 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P383 — `/v2/schedule` payload: effective chunks per order (next-platform-agent §9a).** New
+  `fetchChunksByJob` helper in `schedule-board/route.ts`, mirroring the existing `fetchGroupIds`
+  batching pattern (same `GROUP_CHUNK`=90 chunking, run alongside `deriveStatuses`/`fetchGroupIds`
+  in the same `Promise.all`) — one query per batch: `chunks_required = COALESCE(cut_plan_lines
+  manual override on Main/Blue, jobs.hb_chunks_required)`. Injected as `chunks_required` on each
+  matched `ScheduleBoardRow` (`null` for unmatched sheet rows or non-HB jobs); added to the shared
+  `@/types/schedule.ts` contract so P384's `OrderRow` reads it type-safely. No migration beyond the
+  `cut_plan_lines.source` column added in P382 (this route only reads it). `npx tsc --noEmit` +
+  `npx opennextjs-cloudflare build` green.
 - **P382 — HB chunk-unit flip on `/v2/cutting` + manager override endpoint (next-platform-agent
   §9a).** For Holey Board jobs only (`jobs.hb_chunks_required IS NOT NULL`), `queue/route.ts` now
   converts Main Line/Blue Line to `unit='chunk'` with `qty_target = COALESCE(manual override,

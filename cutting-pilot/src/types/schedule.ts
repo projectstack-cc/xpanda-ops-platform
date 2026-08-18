@@ -23,6 +23,7 @@ export interface ScheduleBoardRow {
   sheet_status: string | null;
   job_id: string | null;
   trailer_group_id: string | null;
+  chunks_required: number | null;
 }
 
 export interface ScheduleDayGroup {

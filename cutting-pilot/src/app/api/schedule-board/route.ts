@@ -32,6 +32,35 @@ async function fetchGroupIds(db: D1Database, jobIds: string[]): Promise<Map<stri
   return out;
 }
 
+// P383: effective HB chunks required per matched job = COALESCE(manual guillotine override,
+// geometry). Mirrors fetchGroupIds' chunking; local to this route.
+async function fetchChunksByJob(db: D1Database, jobIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  for (let i = 0; i < jobIds.length; i += GROUP_CHUNK) {
+    const chunk = jobIds.slice(i, i + GROUP_CHUNK);
+    const placeholders = chunk.map(() => "?").join(",");
+    const { results } = await db
+      .prepare(
+        `SELECT j.id AS job_id,
+                COALESCE(
+                  (SELECT cpl.qty_target FROM cut_plan_lines cpl
+                    WHERE cpl.job_id = j.id AND cpl.line IN ('Main Line','Blue Line')
+                      AND cpl.source = 'manual' AND cpl.qty_target IS NOT NULL
+                    LIMIT 1),
+                  j.hb_chunks_required
+                ) AS chunks
+           FROM jobs j
+          WHERE j.id IN (${placeholders})`
+      )
+      .bind(...chunk)
+      .all<{ job_id: string; chunks: number | null }>();
+    for (const row of results ?? []) {
+      if (row.chunks != null) out.set(row.job_id, Number(row.chunks));
+    }
+  }
+  return out;
+}
+
 interface ScheduleRowDb {
   invoice_number: string;
   ship_week: string;
@@ -69,6 +98,7 @@ interface ScheduleBoardRow {
   sheet_status: string | null;
   job_id: string | null;
   trailer_group_id: string | null;
+  chunks_required: number | null;
 }
 
 interface DayGroup {
@@ -104,9 +134,10 @@ export async function GET() {
     const jobIds = Array.from(
       new Set(rows.map((r) => r.match_job_id).filter((id): id is string => !!id))
     );
-    const [statusByJobId, groupIdByJobId] = await Promise.all([
+    const [statusByJobId, groupIdByJobId, chunksByJobId] = await Promise.all([
       deriveStatuses(DB, jobIds),
       fetchGroupIds(DB, jobIds),
+      fetchChunksByJob(DB, jobIds),
     ]);
 
     // One entry per calendar date (ship_date is unique across the two fetched weeks — they
@@ -144,6 +175,7 @@ export async function GET() {
         sheet_status: row.sheet_status,
         job_id: row.match_job_id,
         trailer_group_id: unmatched ? null : groupIdByJobId.get(row.match_job_id!) ?? null,
+        chunks_required: unmatched ? null : chunksByJobId.get(row.match_job_id!) ?? null,
       });
     }
 
