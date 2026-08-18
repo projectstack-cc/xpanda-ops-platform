@@ -329,6 +329,18 @@
         </div>
       </div>
 
+      <!-- P381: live Holey Board chunk requirement (shown only when the order has HB line items) -->
+      <div id="holey-chunks-summary" hidden style="margin:8px 0 12px;padding:10px 12px;border:1px solid var(--input-border);border-radius:8px;">
+        <div style="display:flex;align-items:baseline;gap:8px;">
+          <span style="font-size:13px;font-weight:600;color:var(--text);">Chunks required</span>
+          <span id="holey-chunks-count" style="font-size:18px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;">—</span>
+          <span id="holey-chunks-meta" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+          48×24×50 chunk · 0.079" kerf · live estimate; the value saved on the order is authoritative.
+        </div>
+      </div>
+
       <!-- Inline cut list viewer (P366: own dropdown link + own iframe/blob, independent of the
            packing-slip viewer above — do not share state between the two) -->
       <div id="cutlist-inline-viewer" hidden style="margin:8px 0 12px;">
@@ -1480,6 +1492,13 @@ function setupModal() {
   });
 
   document.getElementById('btn-add-li').addEventListener('click', () => addLineItemRow());
+  (function wireHoleyPreview(){
+    const host = document.getElementById('li-container');
+    let t = null;
+    const kick = () => { clearTimeout(t); t = setTimeout(updateHoleyChunkPreview, 250); };
+    if (host) host.addEventListener('input', kick);
+    document.getElementById('btn-add-li').addEventListener('click', kick);
+  })();
   const bdftConvertEl = document.getElementById('li-bdft-convert');
   if (bdftConvertEl) bdftConvertEl.addEventListener('change', (e) => toggleBdftConvert(e.target.checked));
   document.getElementById('btn-load-parts').addEventListener('click', openPartsPicker);
@@ -1605,6 +1624,7 @@ function openModal(jobId) {
   document.getElementById('status-section').hidden = !editableStatus;
   document.getElementById('modal-view-bol').hidden = true;
   document.getElementById('cutlist-inline-viewer').hidden = isNew;
+  updateHoleyChunkPreview();
   if (!isNew) {
     document.getElementById('cutlist-viewer-toggle').addEventListener('click', function loadCutList() {
       loadCutListIntoViewer();
@@ -2130,6 +2150,7 @@ function clearForm() {
   document.getElementById('slip-viewer-iframe').src = 'about:blank';
   document.getElementById('slip-dropzone').hidden = false;
 
+  document.getElementById('holey-chunks-summary').hidden = true;
   document.getElementById('cutlist-inline-viewer').hidden = true;
   document.getElementById('cutlist-viewer-content').hidden = true;
   document.getElementById('cutlist-viewer-chevron').style.transform = '';
@@ -2288,6 +2309,50 @@ function addLineItemRow(data) {
   row.querySelector('.jobs-li-remove').addEventListener('click', () => row.remove());
   document.getElementById('li-container').appendChild(row);
   return row;
+}
+
+// P381: live Holey Board chunk preview. Resolves each line-item part_number against the parts
+// library (category 'Holey Board' → thickness = height_in), posts {thickness,qty} to the
+// compute-only preview endpoint, renders chunks-required + a short summary. Best-effort; the
+// value saved on the order (P379) is authoritative.
+let _holeyPreviewSeq = 0;
+async function updateHoleyChunkPreview() {
+  const box = document.getElementById('holey-chunks-summary');
+  const countEl = document.getElementById('holey-chunks-count');
+  const metaEl  = document.getElementById('holey-chunks-meta');
+  if (!box) return;
+
+  let catalog = partsCache;
+  if (!catalog) { try { catalog = await getPartsLibrary(); } catch { catalog = []; } }
+  const byNum = new Map((catalog || []).map(p => [String(p.part_number || '').trim(), p]));
+
+  const items = [];
+  document.querySelectorAll('#li-container .jobs-li-row').forEach(row => {
+    const partEl = row.querySelector('.li-part');
+    const qtyEl  = row.querySelector('.li-qty');
+    if (!partEl || !qtyEl) return;
+    const p = byNum.get(String(partEl.value || '').trim());
+    const qty = parseInt(qtyEl.value, 10);
+    if (p && p.category === 'Holey Board' && Number(p.height_in) > 0 && qty >= 1) {
+      items.push({ thickness: Number(p.height_in), qty });
+    }
+  });
+
+  if (!items.length) { box.hidden = true; return; }
+
+  const seq = ++_holeyPreviewSeq;
+  try {
+    const r = await api.post('/api/holey-chunks/preview', { items });
+    if (seq !== _holeyPreviewSeq) return;   // drop stale responses
+    if (!r.ok) throw new Error(r.error || 'preview failed');
+    const d = r.data;
+    box.hidden = false;
+    countEl.textContent = d.chunks_required ?? '—';
+    metaEl.textContent = `${d.total_boards} board${d.total_boards === 1 ? '' : 's'} · ${d.avg_util}% avg fill`;
+  } catch {
+    if (seq !== _holeyPreviewSeq) return;
+    box.hidden = false; countEl.textContent = '—'; metaEl.textContent = 'preview unavailable';
+  }
 }
 
 function collectLineItems() {
@@ -2471,6 +2536,30 @@ async function buildCutListPdf(job) {
     const page = doc.addPage([pageW, pageH]);
     const y = drawContTitle(page);
     drawTotal(page, y, totalQty);
+  }
+
+  // P381: Holey Board chunk breakdown page (from persisted geometry). Skipped for non-HB jobs.
+  if (job.hb_chunk_breakdown) {
+    let parsed = null;
+    try { parsed = JSON.parse(job.hb_chunk_breakdown); } catch {}
+    if (parsed && Array.isArray(parsed.breakdown) && parsed.breakdown.length) {
+      let p = doc.addPage([pageW, pageH]);
+      let y = pageH - margin;
+      p.drawText('CHUNK BREAKDOWN', { x: margin, y, size: 12, font: fontBold, color: black });
+      y -= 6; hr(p, y); y -= 18;
+      p.drawText(`${parsed.chunks_required} chunk${parsed.chunks_required === 1 ? '' : 's'} · 48×24×${parsed.height}" · ${parsed.kerf}" kerf`,
+        { x: margin, y, size: 10, font, color: gray }); y -= 20;
+      for (const ch of parsed.breakdown) {
+        const tally = {};
+        for (const t of ch.boards) { const k = Number(t).toFixed(3); tally[k] = (tally[k] || 0) + 1; }
+        const parts = Object.keys(tally).sort((a,b)=>Number(b)-Number(a)).map(k => `${tally[k]}× ${k}"`).join('   +   ');
+        if (y < MIN_Y_FOR_TOTAL) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText(`Chunk ${ch.index}`, { x: margin, y, size: 10, font: fontBold, color: black });
+        p.drawText(parts, { x: margin + 70, y, size: 10, font, color: black });
+        drawRight(p, `rem ${ch.remnant}"`, 9, font, gray, y);
+        y -= 15;
+      }
+    }
   }
 
   return await doc.save();

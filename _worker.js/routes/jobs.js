@@ -51,6 +51,7 @@ export async function handleApiJobs(request, env) {
     j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
     j.cutting_instructions, j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
     j.priority, j.priority_level, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
+    j.hb_chunks_required, j.hb_chunk_breakdown,
     j.packing_slip_filename, j.packing_slip_invoice, j.source, j.ship_to_verified,
     j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_street2,
     j.ship_to_city, j.ship_to_state, j.ship_to_zip,

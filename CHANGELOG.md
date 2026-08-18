@@ -1490,6 +1490,25 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P381 — order-entry chunk preview + cut-list chunk breakdown (job-board-agent).** New
+  `#holey-chunks-summary` box in the order-entry modal, shown only when the order has at least one
+  Holey Board line item (matched via the parts library's `category === 'Holey Board'`): debounced
+  (250ms) live preview posts `{thickness,qty}` pairs to P379's compute-only
+  `POST /api/holey-chunks/preview`, rendering chunks-required + a board-count/avg-fill summary;
+  stale-response guard (`_holeyPreviewSeq`) so a fast edit can't render an out-of-order result.
+  Best-effort — the value persisted on save (P379's `computeAndPersistHoleyChunks`) remains
+  authoritative. Cut-list PDF (`buildCutListPdf`) gains a trailing "Chunk Breakdown" page — one
+  line per chunk (board tally + remnant) — parsed from the job's persisted `hb_chunk_breakdown`
+  JSON; skipped entirely for non-HB jobs. **Deviated from the prompt's literal identifiers**
+  (verified by grep before writing, not assumed): the line-item row class is `.jobs-li-row`, not
+  `.line-item-row`; the parts-library accessor is `getPartsLibrary()`, not `getPartsCache()`; the
+  input-wiring anchor is a one-time `setupModal()` init block (`#li-container`), not a per-row
+  `#lineItems` host. **Real gap found and fixed outside the prompt's declared file scope**: neither
+  `hb_chunks_required` nor `hb_chunk_breakdown` was in `_worker.js/routes/jobs.js`'s
+  `JOB_LIST_COLS` — `allJobs` (and therefore `buildCutListPdf`, which reads `job` from `allJobs`)
+  never carried the breakdown, so the new Chunk Breakdown page would have silently never rendered
+  for any job. Added both columns to `JOB_LIST_COLS`; no migration (P379 already added the
+  columns). `node --check` clean on extracted inline scripts and the modified route file.
 - **P366 — split Packing Slip & Cut List into two independent inline viewers, fixing the P364
   crossover (bilateral, legacy + v2).** P364 routed both documents through one shared
   viewer/blob slot, which crossed them: legacy's "View Packing Slip" toggle showed whichever
