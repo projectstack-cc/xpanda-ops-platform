@@ -9,6 +9,9 @@ interface Props {
   onSetChunkTarget?: (qtyTarget: number) => void;
   busy: boolean;
   readOnly?: boolean;
+  // P384: manager-gate for the HB guillotine (Main/Blue) manual chunk override — independent of
+  // `readOnly` (clock-in state), since a manager sets this without being clocked into the line.
+  canManageChunks?: boolean;
 }
 
 // Docked parts checklist for a single cutting line (the operator's clocked-in line).
@@ -22,6 +25,7 @@ export default function PartsPanel({
   onSetChunkTarget,
   busy,
   readOnly,
+  canManageChunks,
 }: Props) {
   const items = job.line_items ?? [];
   const prog = job.progress?.[line] ?? {};
@@ -134,8 +138,26 @@ export default function PartsPanel({
             line === "Cross Cutter" && (job.requiredLines?.length ?? 0) === 1;
           const unitWord = isFabricator ? "parts" : "chunks";
           const blocks = job.blocks_needed;
+          // P382/P384: HB guillotine (Main/Blue) chunk lines — manual override is manager-only,
+          // independent of clock-in (`readOnly`). No block-calc BOM applies here (that's the
+          // taper/Cross-Cutter concept), so no "out of N blocks" line.
+          const isHbGuillotine =
+            (line === "Main Line" || line === "Blue Line") && job.hb_chunks_required != null;
 
-          if (line === "Cross Cutter") {
+          if (line === "Cross Cutter" || isHbGuillotine) {
+            if (isHbGuillotine && !canManageChunks) {
+              return (
+                <div className="m-3 rounded border border-border px-3 py-2.5">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    Chunks to cut
+                  </span>
+                  <p className="font-mono tabular-nums text-sm text-text mt-1">
+                    {lineRow.qty_target ?? "—"}
+                  </p>
+                </div>
+              );
+            }
+            const inputDisabled = isHbGuillotine ? busy : busy || readOnly;
             return (
               <div className="m-3 rounded border border-border px-3 py-2.5">
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted">
@@ -147,7 +169,7 @@ export default function PartsPanel({
                     min={1}
                     placeholder="—"
                     defaultValue={lineRow.qty_target ?? ""}
-                    disabled={busy || readOnly}
+                    disabled={inputDisabled}
                     aria-label={`${unitWord} to cut`}
                     onBlur={(e) => {
                       const v = parseInt(e.target.value, 10);
@@ -157,30 +179,35 @@ export default function PartsPanel({
                   />
                   <span className="text-xs text-muted">{unitWord}</span>
                 </div>
-                <p className="text-xs text-muted mt-2">
-                  {lineRow.qty_target != null && blocks != null ? (
-                    <>
-                      <span className="font-mono tabular-nums text-sm text-text">
-                        {lineRow.qty_target}
-                      </span>{" "}
-                      {unitWord} out of{" "}
-                      <span className="font-mono tabular-nums text-sm text-text">{blocks}</span>{" "}
-                      {blocks === 1 ? "block" : "blocks"}
-                    </>
-                  ) : blocks != null ? (
-                    <>
-                      <span className="font-mono tabular-nums text-sm text-text">{blocks}</span>{" "}
-                      {blocks === 1 ? "block" : "blocks"} needed — set the {unitWord} count
-                    </>
-                  ) : (
-                    <>Save a cut plan to see blocks needed.</>
-                  )}
-                </p>
+                {isHbGuillotine ? (
+                  <p className="text-xs text-muted mt-2">Manual override — overrides the computed chunk count from order entry.</p>
+                ) : (
+                  <p className="text-xs text-muted mt-2">
+                    {lineRow.qty_target != null && blocks != null ? (
+                      <>
+                        <span className="font-mono tabular-nums text-sm text-text">
+                          {lineRow.qty_target}
+                        </span>{" "}
+                        {unitWord} out of{" "}
+                        <span className="font-mono tabular-nums text-sm text-text">{blocks}</span>{" "}
+                        {blocks === 1 ? "block" : "blocks"}
+                      </>
+                    ) : blocks != null ? (
+                      <>
+                        <span className="font-mono tabular-nums text-sm text-text">{blocks}</span>{" "}
+                        {blocks === 1 ? "block" : "blocks"} needed — set the {unitWord} count
+                      </>
+                    ) : (
+                      <>Save a cut plan to see blocks needed.</>
+                    )}
+                  </p>
+                )}
               </div>
             );
           }
 
-          // Hole Cutter: drills the chunks the Cross Cutter made — mirrors that target, read-only.
+          // Hole Cutter (and any other non-Cross-Cutter, non-HB-guillotine chunk line): mirrors
+          // the Cross Cutter target, read-only.
           return (
             <div className="m-3 rounded border border-border px-3 py-2.5">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted">

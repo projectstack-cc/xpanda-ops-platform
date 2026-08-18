@@ -161,6 +161,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
   const dockReadOnly = !myLineOnJob || myLineOnJob !== dockLine;
 
   const canOverride = isAdmin || !!permissions["manufacturing.cutting.override"]?.edit;
+  const canManageChunks = isAdmin || !!permissions["manufacturing.cutting.manage"]?.edit;
 
   // Unchecked parts on the line being clocked out — for the reconciliation section.
   const clockOutJob = clockOutTarget
@@ -221,7 +222,15 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
     if (!selectedJob) return;
     setChecklistBusy(true);
     try {
-      const res = await fetch("/v2/api/cutting/chunk-target", {
+      // P382/P384: HB guillotine lines (Main/Blue) route to the manager-only override endpoint
+      // instead of the Cross/Hole Cutter chunk-target route.
+      const isHbGuillotine =
+        selectedJob.hb_chunks_required != null &&
+        (dockLine === "Main Line" || dockLine === "Blue Line");
+      const url = isHbGuillotine
+        ? "/v2/api/cutting/manage/hb-chunk-override"
+        : "/v2/api/cutting/chunk-target";
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ job_id: selectedJob.id, qty_target: qtyTarget }),
@@ -625,6 +634,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
                     }}
                     onSetYield={(y) => setTaperYield(y)}
                     onSetChunkTarget={(q) => setChunkTarget(q)}
+                    canManageChunks={canManageChunks}
                     busy={checklistBusy}
                   />
                 </section>

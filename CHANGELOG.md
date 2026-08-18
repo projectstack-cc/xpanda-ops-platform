@@ -10,6 +10,31 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P384 — v2 UI: HB chunk override wiring + schedule chunk badge (react-component-agent §9b).**
+  `CuttingBoard.tsx`'s `setChunkTarget` now branches on `dockLine`: HB guillotine lines (Main/Blue,
+  `selectedJob.hb_chunks_required != null`) POST to P382's manager-only
+  `/v2/api/cutting/manage/hb-chunk-override` instead of `/v2/api/cutting/chunk-target`; a new
+  `canManageChunks` flag (`isAdmin || permissions["manufacturing.cutting.manage"]?.edit`, same
+  props-derived pattern P373 used for `canOverride` — no new header/client plumbing) gates the
+  input, passed through to `PartsPanel`. New `/v2/schedule` chunk badge (`OrderRow.tsx`): a
+  neutral `{n}c` chip in the always-visible header-row right cluster, next to the INV# span —
+  `--chip-bg` (named in the prompt) doesn't exist as a token, used the same neutral ghost tokens
+  (`--ghost-bg`/`--text-hint`/`--border`) `StatusBadge`'s "Not Started" variant already uses.
+  **Real gap found and fixed, not just labeled**: the prompt's own "why" claimed `PartsPanel`
+  "already renders a chunk-target input for `unit==='chunk'` lines" — false. That editable branch
+  was gated on `line === "Cross Cutter"` specifically; every other chunk-unit line (which, after
+  P382, now includes HB Main/Blue) fell through to the Hole-Cutter-only mirror block — read-only,
+  no input, and the misleading "Set on the Cross Cutter — this line mirrors it" copy. Since `/v2/
+  cutting`'s queue is Main/Blue-only (Cross/Hole Cutter moved to `/v2/cutting/crosscutter` at
+  P295), every HB job on this board would have hit that dead branch. Restructured the branch
+  condition to `line === "Cross Cutter" || isHbGuillotine` instead of a copy-only tweak: HB
+  guillotine lines get their own editable path (manager-gated via the new `canManageChunks` prop,
+  independent of the existing clock-in `readOnly` gate — a manager can set this without being
+  clocked into the line), a non-manager sees a plain read-only value (no disabled-but-clickable-
+  looking input), and the "out of N blocks" line is skipped (that's a taper/block-calc BOM concept
+  that doesn't apply to HB). Copy avoids ever claiming a clear-to-geometry action exists — the
+  input has no empty/clear affordance yet (deferred to BACKLOG per the prompt's own optional-scope
+  note). `npx tsc --noEmit` + `npx opennextjs-cloudflare build` green.
 - **P383 — `/v2/schedule` payload: effective chunks per order (next-platform-agent §9a).** New
   `fetchChunksByJob` helper in `schedule-board/route.ts`, mirroring the existing `fetchGroupIds`
   batching pattern (same `GROUP_CHUNK`=90 chunking, run alongside `deriveStatuses`/`fetchGroupIds`

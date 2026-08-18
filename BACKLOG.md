@@ -234,12 +234,12 @@
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
 - [ ] Label printing — DiversiTech and UL labels
 
-**Holey Board chunk engine follow-ons (P379 shipped the backend foundation only, P381 closed the
-order-entry chunk UI):**
-- [ ] **v2 chunk consumption (§9a/§9b):** TS port of the nester (or read
-  `jobs.hb_chunks_required`); seed `cut_plan_lines.qty_target` via `COALESCE(manual override,
-  jobs.hb_chunks_required)` with manual override winning; flip HB Main/Blue Line to `unit='chunk'`
-  on `/v2/cutting`; surface the effective chunk count on the `/v2/schedule` order card.
+**Holey Board chunk engine follow-ons (P379 shipped the backend foundation; P381 closed the
+order-entry chunk UI; P382–P384 closed v2 chunk consumption — unit flip, manager override,
+schedule badge):**
+- [ ] Explicit clear-to-geometry control on the HB override input (`PartsPanel.tsx`'s guillotine
+  chunk-target field has no empty/clear affordance yet; the backend already supports
+  `qty_target: null` via `hb-chunk-override`).
 - [ ] Optional: map `/api/holey-chunks` → `jobs` in `API_PERMISSION_MAP` (currently unmapped ⇒
   authenticated-allowed; fine for compute-only, tidy later).
 - [ ] Optional: surface the 51" chunk-height selection at order entry (nester already

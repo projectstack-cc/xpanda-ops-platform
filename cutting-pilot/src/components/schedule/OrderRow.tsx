@@ -65,6 +65,14 @@ export default function OrderRow({ row, density, orphanedGroup, isLastInColumn }
               aria-label="Linked to a job on another day"
             />
           )}
+          {row.chunks_required != null && (
+            <span
+              className="shrink-0 rounded px-1 text-[10px] leading-tight font-semibold tabular-nums bg-[var(--ghost-bg)] text-[var(--text-hint)] border border-[var(--border)]"
+              title="Chunks required"
+            >
+              {row.chunks_required}c
+            </span>
+          )}
           <span className={`font-mono tabular-nums ${PRIMARY_LABEL_CLS}`}>
             #{row.invoice_number}
           </span>
