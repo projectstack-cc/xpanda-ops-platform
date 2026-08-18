@@ -10,6 +10,30 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P382 — HB chunk-unit flip on `/v2/cutting` + manager override endpoint (next-platform-agent
+  §9a).** For Holey Board jobs only (`jobs.hb_chunks_required IS NOT NULL`), `queue/route.ts` now
+  converts Main Line/Blue Line to `unit='chunk'` with `qty_target = COALESCE(manual override,
+  jobs.hb_chunks_required)` — geometry seeds the target, a manager's manual floor override wins
+  and is never silently overwritten. Modeled on the existing P227 taper section: an additive block
+  that runs after `cut_plan_lines`/`planByKey` are built, mirrors the effective target into
+  `cutting_lines.qty_target`. Cross Cutter/Hole Cutter and non-HB jobs are untouched — did **not**
+  add Main/Blue to `CHUNK_LINES` (that ternary is global, would have wrongly flipped every job).
+  New manager-only `POST /v2/api/cutting/manage/hb-chunk-override` (`{job_id, qty_target}`,
+  `qty_target: null` reverts to geometry) — gated by the existing `/v2/api/cutting/manage` prefix
+  (`manufacturing.cutting.manage`) plus the standard `X-User-Can-Manage-Cutting` defense-in-depth
+  header check, mirroring `cc-assignments`' conventions. **Real schema gap found and fixed before
+  any code shipped**: the prompt's design (and this project's own memory) claimed the manual-vs-
+  geometry marker reuses an existing `cut_plan_lines.source` column "already written as 'manual' by
+  the P229 cut-plan save path" — verified live via `wrangler d1 execute --remote PRAGMA
+  table_info(cut_plan_lines)` that **no such column exists**; only the parent `cut_plans` table has
+  a `source` column, and it's written 'manual' by the unrelated block-calc BOM save path
+  (`cut-plan/save/route.ts`), not per-line. Confirmed via `advisor()` this wasn't safe to route
+  around with a private convention on the reserved `detail` column — asked Steve directly
+  (`AskUserQuestion`); he chose to add the column. Ran `ALTER TABLE cut_plan_lines ADD COLUMN
+  source TEXT` via `wrangler d1 execute --remote` (mirrors `cut_plans.source` exactly), verified
+  present after via `PRAGMA table_info`. Also verified P379's `jobs.hb_chunks_required`/
+  `hb_chunk_breakdown` are live before writing any P382 code that reads them. `npx tsc --noEmit` +
+  `npx opennextjs-cloudflare build` green.
 - **P374 — bound the bottom cut-list dock to the detail surface.** Fix: bottom cut-list dock
   moved inside the detail `<Sheet>` column so it's bounded by the detail surface and stops at the
   left job list, instead of spanning full board width and underlapping the nav. Pure relocation —

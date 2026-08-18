@@ -13,6 +13,8 @@ const PROCESS_ORDER = ["Main Line", "Blue Line"];
 // engine + a per-job block-dimension source, so P225 leaves their qty_target NULL.
 // Every other required line is a PART line: target = total ordered units (no math needed).
 const CHUNK_LINES = new Set(["Cross Cutter", "Hole Cutter"]);
+// P382: guillotine lines that become chunk-unit for Holey Board jobs (per-job, not global).
+const GUILLOTINE_LINES = new Set(["Main Line", "Blue Line"]);
 
 export async function GET(request: Request) {
   const { DB } = await getEnv();
@@ -20,7 +22,8 @@ export async function GET(request: Request) {
   try {
     const jobRows = await DB.prepare(
       `SELECT j.id, j.customer, j.invoice_number, j.po_number, j.ship_date,
-              j.status, j.priority, j.priority_level, j.processes, j.cutting_instructions
+              j.status, j.priority, j.priority_level, j.processes, j.cutting_instructions,
+              j.hb_chunks_required
        FROM jobs j
        WHERE j.archived_at IS NULL
          AND j.status IN ('not_started','in_production')
@@ -253,17 +256,21 @@ export async function GET(request: Request) {
     // Read back the authoritative per-line plan values (covers pre-existing rows, not just
     // the ones just inserted) for the payload.
     const planLineRows = await allByJobIds(
-      (ph) => `SELECT job_id, line, unit, qty_target
+      (ph) => `SELECT job_id, line, unit, qty_target, source
        FROM cut_plan_lines
        WHERE job_id IN (${ph})`,
       jobIds
     );
 
-    const planByKey = new Map<string, { unit: "chunk" | "part"; qty_target: number | null }>();
+    const planByKey = new Map<
+      string,
+      { unit: "chunk" | "part"; qty_target: number | null; source: string | null }
+    >();
     for (const row of (planLineRows.results || [])) {
       planByKey.set(`${row.job_id}:${row.line}`, {
         unit: (row.unit === "chunk" ? "chunk" : "part"),
         qty_target: row.qty_target ?? null,
+        source: (row.source ?? null),
       });
     }
 
@@ -339,10 +346,56 @@ export async function GET(request: Request) {
         ).bind(chunks, now, job.id)
       );
       // Reflect immediately in the payload map built above.
-      planByKey.set(`${job.id}:Cross Cutter`, { unit: "chunk", qty_target: chunks });
+      planByKey.set(`${job.id}:Cross Cutter`, {
+        unit: "chunk",
+        qty_target: chunks,
+        source: planByKey.get(`${job.id}:Cross Cutter`)?.source ?? null,
+      });
     }
     for (let i = 0; i < taperUpdateStmts.length; i += 50) {
       if (taperUpdateStmts.length) await DB.batch(taperUpdateStmts.slice(i, i + 50));
+    }
+
+    // ── Holey Board chunk targets (P382) ───────────────────────────────────────────
+    // HB jobs cut in chunks on the guillotine (Main/Blue). Geometry seeds the target from
+    // jobs.hb_chunks_required; a manual floor override (cut_plan_lines.source='manual') wins and is
+    // never overwritten. Convert the line to unit='chunk' and mirror the effective target into
+    // cutting_lines.qty_target (overwrite — geometry can change between reads).
+    const hbStmts: ReturnType<typeof DB.prepare>[] = [];
+    for (const job of jobs) {
+      const geo = (job as any).hb_chunks_required;
+      if (geo == null) continue; // not an HB job
+      for (const line of job.requiredLines) {
+        if (!GUILLOTINE_LINES.has(line)) continue;
+        const plan = planByKey.get(`${job.id}:${line}`);
+        const manual = plan && plan.source === "manual" ? plan.qty_target : null;
+        const effective = manual != null ? manual : geo;
+        // cut_plan_lines: always chunk unit; only (re)seed qty_target when not a manual override.
+        hbStmts.push(
+          manual != null
+            ? DB.prepare(
+                `UPDATE cut_plan_lines SET unit='chunk', updated_at=? WHERE job_id=? AND line=?`
+              ).bind(now, job.id, line)
+            : DB.prepare(
+                `UPDATE cut_plan_lines SET unit='chunk', qty_target=?, updated_at=? WHERE job_id=? AND line=?`
+              ).bind(effective, now, job.id, line)
+        );
+        // cutting_lines: mirror effective target (overwrite).
+        hbStmts.push(
+          DB.prepare(
+            `UPDATE cutting_lines SET qty_target=?, updated_at=? WHERE job_id=? AND line=?`
+          ).bind(effective, now, job.id, line)
+        );
+        // reflect in the in-memory plan map so the payload carries the right unit/target.
+        planByKey.set(`${job.id}:${line}`, {
+          unit: "chunk",
+          qty_target: effective,
+          source: plan?.source ?? null,
+        });
+      }
+    }
+    for (let i = 0; i < hbStmts.length; i += 50) {
+      if (hbStmts.length) await DB.batch(hbStmts.slice(i, i + 50));
     }
 
     // Per-line tracked time (closed sessions only) — true time tracking.

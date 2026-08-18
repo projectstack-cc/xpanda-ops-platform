@@ -43,4 +43,5 @@ export interface CuttingJob {
   blocks_needed: number | null;
   progress: Record<string, Record<string, { completed: boolean; completed_qty: number | null }>>;
   assigned_to_me?: boolean;
+  hb_chunks_required: number | null;
 }
