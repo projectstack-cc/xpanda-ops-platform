@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cutting Line Activity — xPanda</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="/reports/reports-shared.css">
+<style>
+.cutting-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+}
+.cutting-filters .reports-field {
+  margin-bottom: 0;
+  min-width: 150px;
+}
+.cutting-filters-actions {
+  margin-left: auto;
+}
+
+.cutting-op-summary {
+  margin-bottom: 12px;
+}
+.cutting-op-summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cutting-op-summary-item {
+  background: var(--surface-2);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-width: 120px;
+}
+.cutting-op-summary-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.cutting-op-summary-hours {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.cutting-day-section {
+  margin-bottom: 20px;
+}
+.cutting-day-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 4px;
+  border-bottom: 2px solid var(--card-border);
+  margin-bottom: 6px;
+}
+.cutting-day-date {
+  font-size: 15px;
+  font-weight: 700;
+}
+.cutting-day-totals {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.cutting-muted {
+  font-size: 12px;
+  color: var(--muted);
+}
+.cutting-italic {
+  font-style: italic;
+}
+
+.pill-open {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.cutting-error {
+  color: var(--danger-bg);
+}
+
+@media print {
+  .reports-back-link,
+  .cutting-filters,
+  .reports-platform-footer {
+    display: none !important;
+  }
+  .cutting-day-section {
+    page-break-inside: avoid;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<script src="/reports/reports-header.js"></script>
+<script>
+document.getElementById('reports-page-title').textContent = 'Cutting Line Activity';
+</script>
+
+<div class="reports-wrap">
+
+  <a href="/reports/" class="reports-back-link">← Back to Reports</a>
+
+  <div class="reports-section-intro">
+    <h2 class="reports-section-title">Cutting Line Activity</h2>
+    <p class="reports-section-subtitle">Operator start/stop activity and the order or work item cut, across Main Line, Blue Line, Cross Cutter, and Hole Cutter.</p>
+  </div>
+
+  <!-- Filters -->
+  <div class="card cutting-filters">
+
+    <div class="reports-field">
+      <label>From</label>
+      <input type="date" id="f-from">
+    </div>
+
+    <div class="reports-field">
+      <label>To</label>
+      <input type="date" id="f-to">
+    </div>
+
+    <div class="reports-field">
+      <label>Operator</label>
+      <select id="f-operator">
+        <option value="">All Operators</option>
+      </select>
+    </div>
+
+    <div class="reports-field">
+      <label>Board</label>
+      <select id="f-board">
+        <option value="">All</option>
+        <option value="Main Line">Main Line</option>
+        <option value="Blue Line">Blue Line</option>
+        <option value="Cross Cutter">Cross Cutter</option>
+        <option value="Hole Cutter">Hole Cutter</option>
+      </select>
+    </div>
+
+    <div class="cutting-filters-actions">
+      <button class="btn ghost" onclick="window.print()">Print</button>
+    </div>
+
+  </div>
+
+  <div id="operator-summary"></div>
+  <div id="results-wrap"></div>
+
+  <div class="reports-platform-footer">
+    <a href="/reports/">← Back to Reports</a>
+  </div>
+
+</div>
+
+<script>
+const ET_TZ = 'America/New_York';
+const etDayFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: ET_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+const etTimeFormatter = new Intl.DateTimeFormat('en-US', { timeZone: ET_TZ, hour: 'numeric', minute: '2-digit', hour12: true });
+const etWeekdayFormatter = new Intl.DateTimeFormat('en-US', { timeZone: ET_TZ, weekday: 'short' });
+const dayLabelFormatter = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+let allSessions = [];
+let knownOperators = new Set();
+let lastRangeKey = '';
+
+function parseUtc(str) {
+  if (!str) return null;
+  const iso = str.includes('Z') ? str : str.replace(' ', 'T') + 'Z';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function etDateKey(str) {
+  const d = parseUtc(str);
+  if (!d) return null;
+  return etDayFormatter.format(d);
+}
+
+function etTimeLabel(str) {
+  const d = parseUtc(str);
+  if (!d) return '—';
+  return etTimeFormatter.format(d);
+}
+
+function currentEtWeekRange() {
+  const now = new Date();
+  const todayEt = etDayFormatter.format(now);
+  const weekdayStr = etWeekdayFormatter.format(now);
+  const weekdayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const dow = weekdayMap[weekdayStr];
+  const diffToMonday = dow === 0 ? -6 : 1 - dow;
+  const [y, m, d] = todayEt.split('-').map(Number);
+  const monday = new Date(Date.UTC(y, m - 1, d + diffToMonday));
+  const sunday = new Date(Date.UTC(y, m - 1, d + diffToMonday + 6));
+  const fmt = (dt) => `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+  return { from: fmt(monday), to: fmt(sunday) };
+}
+
+function formatDayLabel(dayStr) {
+  const [y, m, d] = dayStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dayLabelFormatter.format(dt);
+}
+
+function durationSeconds(session) {
+  const start = parseUtc(session.started_at);
+  if (!start) return 0;
+  const isOpen = session.status === 'open' || !session.ended_at;
+  const end = isOpen ? new Date() : parseUtc(session.ended_at);
+  if (!end) return 0;
+  return Math.max(0, Math.floor((end - start) / 1000));
+}
+
+function formatDuration(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
+function escAttr(s) {
+  return esc(s).replace(/"/g, '&quot;');
+}
+
+async function loadReport() {
+  const from = document.getElementById('f-from').value;
+  const to = document.getElementById('f-to').value;
+
+  if (!from || !to) return;
+
+  const rangeKey = from + '_' + to;
+  if (rangeKey !== lastRangeKey) {
+    knownOperators = new Set();
+    lastRangeKey = rangeKey;
+    document.getElementById('f-operator').value = '';
+  }
+
+  const operator = document.getElementById('f-operator').value;
+
+  const wrap = document.getElementById('results-wrap');
+  wrap.innerHTML = '<p class="report-empty">Loading…</p>';
+
+  try {
+    let url = `/api/reports/cutting-sessions?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+    if (operator) url += `&operator=${encodeURIComponent(operator)}`;
+
+    const { ok, data } = await window.api.get(url);
+    if (!ok) {
+      wrap.innerHTML = '<p class="report-empty cutting-error">Error loading cutting sessions.</p>';
+      return;
+    }
+
+    const raw = (data && data.sessions) || [];
+
+    allSessions = raw
+      .map((s) => ({ ...s, etDay: etDateKey(s.started_at) }))
+      .filter((s) => s.etDay && s.etDay >= from && s.etDay <= to);
+
+    allSessions.forEach((s) => {
+      if (s.operator) knownOperators.add(s.operator);
+    });
+    populateOperatorOptions(operator);
+
+    render();
+  } catch (e) {
+    wrap.innerHTML = '<p class="report-empty cutting-error">Network error.</p>';
+  }
+}
+
+function populateOperatorOptions(selected) {
+  const sel = document.getElementById('f-operator');
+  const names = Array.from(knownOperators).sort((a, b) => a.localeCompare(b));
+  sel.innerHTML = '<option value="">All Operators</option>' +
+    names.map((n) => `<option value="${escAttr(n)}">${esc(n)}</option>`).join('');
+  if (selected && names.includes(selected)) sel.value = selected;
+}
+
+function render() {
+  const board = document.getElementById('f-board').value;
+  const filtered = board ? allSessions.filter((s) => s.board === board) : allSessions;
+
+  renderOperatorSummary(filtered);
+  renderDayGroups(filtered);
+}
+
+function renderOperatorSummary(sessions) {
+  const el = document.getElementById('operator-summary');
+  if (!sessions.length) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const totals = {};
+  sessions.forEach((s) => {
+    const name = s.operator || 'Unknown';
+    totals[name] = (totals[name] || 0) + durationSeconds(s);
+  });
+
+  const rows = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+
+  el.innerHTML = `
+    <div class="card cutting-op-summary">
+      <h2>Operator Hours (range total)</h2>
+      <div class="cutting-op-summary-grid">
+        ${rows.map(([name, secs]) => `
+          <div class="cutting-op-summary-item">
+            <div class="cutting-op-summary-name">${esc(name)}</div>
+            <div class="cutting-op-summary-hours">${formatDuration(secs)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderDayGroups(sessions) {
+  const wrap = document.getElementById('results-wrap');
+  if (!sessions.length) {
+    wrap.innerHTML = '<p class="report-empty">No cutting activity found for this range.</p>';
+    return;
+  }
+
+  const byDay = {};
+  sessions.forEach((s) => {
+    (byDay[s.etDay] = byDay[s.etDay] || []).push(s);
+  });
+
+  const days = Object.keys(byDay).sort().reverse();
+
+  wrap.innerHTML = days.map((day) => {
+    const daySessions = byDay[day].sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
+    const totalSecs = daySessions.reduce((sum, s) => sum + durationSeconds(s), 0);
+
+    return `
+      <div class="cutting-day-section">
+        <div class="cutting-day-header">
+          <span class="cutting-day-date">${formatDayLabel(day)}</span>
+          <span class="cutting-day-totals">${daySessions.length} session${daySessions.length !== 1 ? 's' : ''} · ${formatDuration(totalSecs)}</span>
+        </div>
+        <div class="report-table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Operator</th>
+                <th>Board</th>
+                <th>Order/Work</th>
+                <th>Start</th>
+                <th>Stop</th>
+                <th>Duration</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${daySessions.map(rowHtml).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function rowHtml(s) {
+  const isOpen = s.status === 'open' || !s.ended_at;
+  const stopCell = isOpen ? '<span class="pill-open">In progress</span>' : etTimeLabel(s.ended_at);
+  const orderWork = s.session_source === 'line' ? lineOrderCell(s) : chunkWorkCell(s);
+
+  return `
+    <tr>
+      <td>${esc(s.operator || '—')}</td>
+      <td>${esc(s.board || '—')}</td>
+      <td>${orderWork}</td>
+      <td>${etTimeLabel(s.started_at)}</td>
+      <td>${stopCell}</td>
+      <td>${formatDuration(durationSeconds(s))}</td>
+      <td>${esc(s.handoff_note || '')}</td>
+    </tr>
+  `;
+}
+
+function lineOrderCell(s) {
+  const customer = String(s.order_customer || '').trim();
+  const po = String(s.order_po || '').trim();
+  const custHtml = customer ? `<strong>${esc(customer)}</strong>` : '<span class="cutting-muted">—</span>';
+  const poHtml = po ? `<div class="cutting-muted">${esc(po)}</div>` : '';
+  return `${custHtml}${poHtml}`;
+}
+
+function chunkWorkCell(s) {
+  const label = String(s.work_item || '').trim() || '—';
+  return `<span class="cutting-muted cutting-italic">${esc(label)}</span>`;
+}
+
+// Init — default to This Week (ET)
+const defaultRange = currentEtWeekRange();
+document.getElementById('f-from').value = defaultRange.from;
+document.getElementById('f-to').value = defaultRange.to;
+
+document.getElementById('f-from').addEventListener('change', loadReport);
+document.getElementById('f-to').addEventListener('change', loadReport);
+document.getElementById('f-operator').addEventListener('change', loadReport);
+document.getElementById('f-board').addEventListener('change', render);
+
+loadReport();
+</script>
+
+</body>
+</html>

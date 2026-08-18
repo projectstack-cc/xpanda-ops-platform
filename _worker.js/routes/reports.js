@@ -585,6 +585,72 @@ export async function handleIncidentList(request, env) {
   }
 }
 
+export async function handleCuttingSessionsReport(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+
+  const url = new URL(request.url);
+  const from = String(url.searchParams.get("from") || "").trim();
+  const to = String(url.searchParams.get("to") || "").trim();
+  const operator = String(url.searchParams.get("operator") || "").trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return json(
+      { ok: false, error: "Invalid or missing from/to. Use YYYY-MM-DD" },
+      400,
+    );
+  }
+
+  try {
+    const sessions = await db
+      .prepare(
+        `
+      SELECT 'line' AS session_source,
+             cs.operator_name AS operator,
+             cs.line          AS board,
+             j.customer       AS order_customer,
+             j.po_number      AS order_po,
+             NULL             AS work_item,
+             cs.started_at, cs.ended_at, cs.status, cs.handoff_note
+      FROM cutting_sessions cs
+      LEFT JOIN jobs j ON j.id = cs.job_id
+      WHERE date(cs.started_at) BETWEEN date(?, '-1 day') AND date(?, '+1 day')
+        AND (? = '' OR cs.operator_name = ?)
+      UNION ALL
+      SELECT 'chunk',
+             ch.operator_name,
+             CASE ch.board WHEN 'cc' THEN 'Cross Cutter' WHEN 'hc' THEN 'Hole Cutter' ELSE ch.board END,
+             NULL, NULL,
+             COALESCE(cca.label, hcs.label, ch.ref_id),
+             ch.started_at, ch.ended_at, ch.status, NULL
+      FROM chunk_sessions ch
+      LEFT JOIN cc_assignments cca ON ch.board = 'cc' AND cca.id = ch.ref_id
+      LEFT JOIN hc_slots       hcs ON ch.board = 'hc' AND hcs.slot_key = ch.ref_id
+      WHERE date(ch.started_at) BETWEEN date(?, '-1 day') AND date(?, '+1 day')
+        AND (? = '' OR ch.operator_name = ?)
+      ORDER BY started_at DESC
+    `,
+      )
+      .bind(from, to, operator, operator, from, to, operator, operator)
+      .all();
+
+    return json({ ok: true, sessions: sessions.results || [] });
+  } catch (e) {
+    return json(
+      {
+        ok: false,
+        error: "Server error",
+        detail: String(e?.message || e),
+      },
+      500,
+    );
+  }
+}
+
 export async function handleIncidentDetail(request, env) {
   if (request.method !== "GET") {
     return json({ ok: false, error: "Method Not Allowed" }, 405);

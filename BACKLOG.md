@@ -413,6 +413,9 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 
 ## Reports
 
+- [ ] **P380 follow-up — Cutting report: capture per-session qty cut.** `cutting_sessions.qty_done_delta`
+  is currently unpopulated in production; once it's populated, surface it on the Cutting Line
+  Activity report to enable throughput totals.
 - [ ] Reports copy cleanup
 - [ ] Consistent subtitles across report pages
 - [ ] Inspection trends report
