@@ -24,6 +24,10 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **P386 follow-up — inline grouped chunk breakdown in `/v2/cutting`'s `PartsPanel`/
+  `OrderDetailModal`.** Currently the grouped recipe breakdown only exists in the cut-list PDF
+  (both surfaces, per P386). Surfacing it inline on the board would need `hb_chunk_breakdown` on
+  the `/v2/cutting` queue payload (`queue/route.ts`), which doesn't select it today.
 - [ ] **P385 follow-up — fully decouple loading/delivery from cutting completion (option B).**
   P385 fixed `completeCuttingLinesForJob`'s backstop to only fire when truly no
   `loading_assignment` is pre-loaded, but the backstop itself (loading/delivery → completing

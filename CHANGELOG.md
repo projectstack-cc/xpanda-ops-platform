@@ -1576,6 +1576,23 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P386 — cut-list chunk breakdown: group by recipe + fix v2 bilateral gap (BILATERAL FIX —
+  job-board-agent + react-component-agent §9b).** Two real bugs, confirmed live. (1) P381's
+  cut-list "CHUNK BREAKDOWN" page rendered one row per individual chunk — for a real HB order
+  (Inv 4272: 339 chunks) that's 339 unusable rows. Rewrote the render in `jobs/index.html`'s
+  `buildCutListPdf` to group by identical chunk composition (recipe → count): tally each chunk's
+  board sizes into a signature string, count occurrences per signature, sort by first-seen order.
+  4272's 339 chunks collapse to 12 recipe rows (e.g. `70×` → `6× 8"`, `83×` → `7× 7"`). (2) P381
+  only patched the legacy builder — the v2 cut-list PDF is a separate verbatim port at
+  `cutting-pilot/src/lib/cutList.ts` (used by `/v2/cutting`'s `OrderDetailModal`), which never got
+  the breakdown at all, a bilateral-change miss. Added the identical grouped block to `cutList.ts`
+  (plus `hb_chunk_breakdown?: string | null` on the `CutListJob` type — `OrderDetailModal` already
+  spreads `data.job` into the builder, so the runtime value was reaching it; the field was just
+  untyped) so both surfaces render the same grouped page from the same persisted
+  `jobs.hb_chunk_breakdown` JSON. Shipped in one commit so legacy and v2 can never disagree. No
+  schema change, no migration. Gates: legacy inline script block extracted to a real named temp
+  `.js` and `node --check`'d green; v2 `npx tsc --noEmit` and `npm run cf-build`
+  (`opennextjs-cloudflare` + asset-prefix fix) both green.
 - **P381 — order-entry chunk preview + cut-list chunk breakdown (job-board-agent).** New
   `#holey-chunks-summary` box in the order-entry modal, shown only when the order has at least one
   Holey Board line item (matched via the parts library's `category === 'Holey Board'`): debounced

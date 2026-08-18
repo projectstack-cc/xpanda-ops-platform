@@ -2538,26 +2538,38 @@ async function buildCutListPdf(job) {
     drawTotal(page, y, totalQty);
   }
 
-  // P381: Holey Board chunk breakdown page (from persisted geometry). Skipped for non-HB jobs.
+  // P386: Holey Board chunk breakdown — GROUPED by identical chunk composition (recipe → count),
+  // replacing the per-chunk listing that produced one row per chunk (e.g. 339 rows for Inv 4272).
   if (job.hb_chunk_breakdown) {
     let parsed = null;
-    try { parsed = JSON.parse(job.hb_chunk_breakdown); } catch {}
+    try { parsed = JSON.parse(job.hb_chunk_breakdown); } catch (e) {}
     if (parsed && Array.isArray(parsed.breakdown) && parsed.breakdown.length) {
+      const groups = new Map();
+      parsed.breakdown.forEach((ch, i) => {
+        const tally = {};
+        for (const t of ch.boards) { const k = String(t); tally[k] = (tally[k] || 0) + 1; }
+        const sig = Object.keys(tally).map(Number).sort((a, b) => b - a)
+          .map(k => `${tally[String(k)]}× ${k}"`).join('   +   ');
+        const g = groups.get(sig);
+        if (g) g.count++; else groups.set(sig, { count: 1, sig, order: i });
+      });
+      const rows = Array.from(groups.values()).sort((a, b) => a.order - b.order);
+
       let p = doc.addPage([pageW, pageH]);
       let y = pageH - margin;
       p.drawText('CHUNK BREAKDOWN', { x: margin, y, size: 12, font: fontBold, color: black });
       y -= 6; hr(p, y); y -= 18;
-      p.drawText(`${parsed.chunks_required} chunk${parsed.chunks_required === 1 ? '' : 's'} · 48×24×${parsed.height}" · ${parsed.kerf}" kerf`,
-        { x: margin, y, size: 10, font, color: gray }); y -= 20;
-      for (const ch of parsed.breakdown) {
-        const tally = {};
-        for (const t of ch.boards) { const k = Number(t).toFixed(3); tally[k] = (tally[k] || 0) + 1; }
-        const parts = Object.keys(tally).sort((a,b)=>Number(b)-Number(a)).map(k => `${tally[k]}× ${k}"`).join('   +   ');
+      p.drawText(`${parsed.chunks_required} chunk${parsed.chunks_required === 1 ? '' : 's'} · 48×24×${parsed.height}" · ${parsed.kerf}" kerf · ${parsed.avg_util}% avg fill`,
+        { x: margin, y, size: 10, font, color: gray });
+      y -= 8; hr(p, y); y -= 18;
+      p.drawText('CHUNKS', { x: margin, y, size: 9, font: fontBold, color: gray });
+      p.drawText('CUT EACH INTO', { x: margin + 70, y, size: 9, font: fontBold, color: gray });
+      y -= 16;
+      for (const r of rows) {
         if (y < MIN_Y_FOR_TOTAL) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
-        p.drawText(`Chunk ${ch.index}`, { x: margin, y, size: 10, font: fontBold, color: black });
-        p.drawText(parts, { x: margin + 70, y, size: 10, font, color: black });
-        drawRight(p, `rem ${ch.remnant}"`, 9, font, gray, y);
-        y -= 15;
+        p.drawText(`${r.count}×`, { x: margin, y, size: 11, font: fontBold, color: black });
+        p.drawText(r.sig, { x: margin + 70, y, size: 10, font, color: black });
+        y -= 16;
       }
     }
   }

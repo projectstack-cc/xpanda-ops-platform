@@ -26,6 +26,7 @@ export interface CutListJob {
   ship_to_zip: string | null;
   carrier: string | null;
   line_items: CutListLineItem[];
+  hb_chunk_breakdown?: string | null;
 }
 
 function formatShipDate(dateStr: string | null): string {
@@ -201,6 +202,42 @@ export async function buildCutListPdf(job: CutListJob): Promise<Uint8Array> {
     const page = doc.addPage([pageW, pageH]);
     const y = drawContTitle(page);
     drawTotal(page, y, totalQty);
+  }
+
+  // P386: Holey Board chunk breakdown — GROUPED by identical chunk composition (recipe → count),
+  // replacing the per-chunk listing that produced one row per chunk (e.g. 339 rows for Inv 4272).
+  if (job.hb_chunk_breakdown) {
+    let parsed: any = null;
+    try { parsed = JSON.parse(job.hb_chunk_breakdown); } catch (e) {}
+    if (parsed && Array.isArray(parsed.breakdown) && parsed.breakdown.length) {
+      const groups = new Map();
+      parsed.breakdown.forEach((ch: any, i: number) => {
+        const tally: any = {};
+        for (const t of ch.boards) { const k = String(t); tally[k] = (tally[k] || 0) + 1; }
+        const sig = Object.keys(tally).map(Number).sort((a, b) => b - a)
+          .map(k => `${tally[String(k)]}× ${k}"`).join('   +   ');
+        const g = groups.get(sig);
+        if (g) g.count++; else groups.set(sig, { count: 1, sig, order: i });
+      });
+      const rows = Array.from(groups.values()).sort((a: any, b: any) => a.order - b.order);
+
+      let p = doc.addPage([pageW, pageH]);
+      let y = pageH - margin;
+      p.drawText('CHUNK BREAKDOWN', { x: margin, y, size: 12, font: fontBold, color: black });
+      y -= 6; hr(p, y); y -= 18;
+      p.drawText(`${parsed.chunks_required} chunk${parsed.chunks_required === 1 ? '' : 's'} · 48×24×${parsed.height}" · ${parsed.kerf}" kerf · ${parsed.avg_util}% avg fill`,
+        { x: margin, y, size: 10, font, color: gray });
+      y -= 8; hr(p, y); y -= 18;
+      p.drawText('CHUNKS', { x: margin, y, size: 9, font: fontBold, color: gray });
+      p.drawText('CUT EACH INTO', { x: margin + 70, y, size: 9, font: fontBold, color: gray });
+      y -= 16;
+      for (const r of rows as any[]) {
+        if (y < MIN_Y_FOR_TOTAL) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText(`${r.count}×`, { x: margin, y, size: 11, font: fontBold, color: black });
+        p.drawText(r.sig, { x: margin + 70, y, size: 10, font, color: black });
+        y -= 16;
+      }
+    }
   }
 
   return await doc.save();
