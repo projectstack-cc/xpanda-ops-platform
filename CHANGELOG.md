@@ -34,7 +34,19 @@ Entries within each module are ordered by prompt # descending (newest first).
   looking input), and the "out of N blocks" line is skipped (that's a taper/block-calc BOM concept
   that doesn't apply to HB). Copy avoids ever claiming a clear-to-geometry action exists — the
   input has no empty/clear affordance yet (deferred to BACKLOG per the prompt's own optional-scope
-  note). `npx tsc --noEmit` + `npx opennextjs-cloudflare build` green.
+  note). **Pre-push `advisor()` follow-up (same session, folded into this file's diff before
+  push)**: caught a third false premise — the prompt's "operator flow (check off by chunks cut)
+  works with no new components" claim, since `LineRow.tsx`'s top-tier summary renders
+  `qty_done/qty_target {unit}` verbatim, and `qty_done` on an HB Main/Blue line is still completed
+  **parts** (P351's `SUM(cutting_line_progress.completed_qty)` over the job's line items), not
+  completed chunks — would have shown a nonsensical fraction like "150/7 chunks" the first time an
+  operator worked an HB job. Since `unit==='chunk'` on this board (Main/Blue only, post-P295)
+  unambiguously means an HB guillotine line, fixed by branching the display: HB chunk lines show
+  the target alone ("target N chunks"), everything else keeps the original done/target fraction
+  unchanged. Also flagged, not changed: the schedule chunk badge sits in the always-visible first
+  row's `shrink-0` cluster, so it takes width from the truncating customer name at minimal density
+  on the TV board — defensible per the prompt's explicit "always-visible header tier" instruction,
+  worth Steve eyeballing on the floor rather than a silent risk.
 - **P383 — `/v2/schedule` payload: effective chunks per order (next-platform-agent §9a).** New
   `fetchChunksByJob` helper in `schedule-board/route.ts`, mirroring the existing `fetchGroupIds`
   batching pattern (same `GROUP_CHUNK`=90 chunking, run alongside `deriveStatuses`/`fetchGroupIds`

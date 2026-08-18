@@ -63,15 +63,27 @@ export default function LineRow({
 
       {(() => {
         const qd = lineObj.qty_done ?? 0;
-        if (qd <= 0) return null;
+        // P382/P384: on this board, unit==='chunk' only ever means an HB guillotine line
+        // (Main/Blue — Cross/Hole Cutter live on the separate crosscutter board). qty_done there
+        // is completed PARTS off the checklist (P351's SUM(cutting_line_progress.completed_qty)),
+        // not completed chunks — pairing it with the chunk qty_target would be a unit mismatch.
+        // Show the chunk target alone instead of a fabricated "done/target" fraction.
+        const isHbChunkLine = lineObj.unit === "chunk";
+        if (isHbChunkLine ? lineObj.qty_target == null : qd <= 0) return null;
         const wall = lineWallSeconds(lineObj, now);
         const active = lineLiveSeconds(lineObj, now);
         return (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs font-mono tabular-nums text-muted">
-            <span title="Units completed on this line">
-              {qd}
-              {lineObj.qty_target != null ? `/${lineObj.qty_target}` : ""} {lineObj.unit}
-            </span>
+            {isHbChunkLine ? (
+              <span title="Chunk target — manual override wins over the computed value">
+                target {lineObj.qty_target} chunks
+              </span>
+            ) : (
+              <span title="Units completed on this line">
+                {qd}
+                {lineObj.qty_target != null ? `/${lineObj.qty_target}` : ""} {lineObj.unit}
+              </span>
+            )}
             {wall >= 1 && (
               <span title="Wall-clock: first clock-in to done">
                 wall {formatDuration(wall)}
