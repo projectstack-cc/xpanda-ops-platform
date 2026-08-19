@@ -4,7 +4,7 @@ import { handleApiLoadingBays, handleApiLoadingAssignments, handleApiLoadingPhot
 import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers, handleApiBols,
          handleApiPartsSeed, handleApiLoadBuilderSkusDeleteAll, handleApiLoadBuilderSkus,
          handleApiSavedLoads } from './routes/bols.js';
-import { handleApiJobs, handleApiShipments, handleApiAddressValidate, handleApiAssignableUsers, handleHoleyChunksPreview } from './routes/jobs.js';
+import { handleApiJobs, handleApiShipments, handleApiAddressValidate, handleApiAssignableUsers, handleHoleyChunksPreview, handleHoleyChunksBackfill } from './routes/jobs.js';
 import { handleApiCutting } from './routes/cutting.js';
 import { handleApiParts, handleApiCombos, handleApiBeadTypes, handleApiBeadStock,
          handleApiBlockInventory, handleApiMoldingLog, handleApiBlockConsumption } from './routes/production.js';
@@ -73,6 +73,7 @@ const API_ROUTES = [
   { path: '/api/address/validate', method: 'POST', handler: (req, env) => handleApiAddressValidate(req, env) },
   { prefix: '/api/jobs',      handler: (req, env) => handleApiJobs(req, env) },
   { path: '/api/holey-chunks/preview', method: 'POST', handler: (req, env) => handleHoleyChunksPreview(req, env) },
+  { path: '/api/holey-chunks/backfill', method: 'POST', handler: (req, env) => handleHoleyChunksBackfill(req, env) },
   { prefix: '/api/assignable-users', handler: (req, env) => handleApiAssignableUsers(req, env) },
   { path:   '/api/shipments', handler: (req, env) => handleApiShipments(req, env) },
   { prefix: '/api/bol-email', handler: (req, env) => handleApiBolEmail(req, env) },

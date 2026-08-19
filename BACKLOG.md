@@ -201,6 +201,9 @@
 
 ## Job Board
 
+- [ ] **P390 follow-up — HB chunk backfill doesn't clear `hb_chunks_required` on jobs that lost
+  all HB line items.** The recompute endpoint only touches jobs that still have HB items; a job
+  edited to remove its last HB line keeps its stale persisted chunk count until resaved.
 - [ ] **P387 follow-up — alias table for made-to-order / customer-worded parts.** Packing-slip
   match audit corpus still has unresolved lines needing a dedicated alias table (Spa Cover `ITEM#`
   keys, block variants, laminate) — separate prompt, not touched by P387/P389.

@@ -195,7 +195,7 @@
     <div class="field">
       <label>Chunk Height</label>
       <div class="height-toggle">
-        <button type="button" class="height-opt active" onclick="setChunkHeight(50, this)">50"</button>
+        <button type="button" class="height-opt active" onclick="setChunkHeight(50.5, this)">50.5"</button>
         <button type="button" class="height-opt" onclick="setChunkHeight(51, this)">51"</button>
       </div>
       <p class="help-text">All chunks are 48" × 24". Select the available height.</p>
@@ -291,7 +291,7 @@
 <script>
 
 // ── state ──────────────────────────────────────────────────────────────────────
-let chunkHeight = 50;
+let chunkHeight = 50.5;
 let lineItemId = 0;
 
 // stored after each calculate() run so showAllChunks() can reference them
@@ -318,10 +318,10 @@ function updateQuickCalc() {
   const t = parseFloat(document.getElementById('quickThickness').value);
   const kerf = getKerf();
   const el = document.getElementById('quickResultVal');
-  if (!t || t <= 0 || t + kerf > chunkHeight) {
+  if (!t || t <= 0 || t > chunkHeight) {
     el.textContent = '—';
   } else {
-    el.textContent = String(Math.floor(chunkHeight / (t + kerf)));
+    el.textContent = String(Math.floor((chunkHeight + kerf) / (t + kerf)));
   }
 }
 
@@ -386,27 +386,27 @@ function getLineItems() {
 //   2. For each board, iterate existing chunks and place it in the FIRST chunk
 //      that has enough remaining height.  If none exists, open a new chunk.
 //
-// Kerf is included in the height consumed by every cut (including the last board
-// in a chunk) for simplicity and to provide a small safety margin.
+// Kerf is charged BETWEEN boards only (interior cuts — n boards need n−1 cuts); the
+// first board in a chunk incurs no kerf.
 function binPack(boards, height, kerf) {
   const chunks = [];
 
   for (const thickness of boards) {
-    const effective = thickness + kerf;
     let placed = false;
 
     for (const chunk of chunks) {
+      // adding to a non-empty chunk needs one interior kerf before this board
       // Small epsilon guards against floating-point drift when remaining ≈ 0
-      if (chunk.remaining >= effective - 1e-9) {
+      if (chunk.remaining >= thickness + kerf - 1e-9) {
         chunk.boards.push(thickness);
-        chunk.remaining -= effective;
+        chunk.remaining -= (thickness + kerf);
         placed = true;
         break;
       }
     }
 
     if (!placed) {
-      chunks.push({ boards: [thickness], remaining: height - effective, totalHeight: height });
+      chunks.push({ boards: [thickness], remaining: height - thickness, totalHeight: height });   // first board: no kerf
     }
   }
 
@@ -502,10 +502,9 @@ function calculate() {
   }
 
   for (const it of items) {
-    if (it.thickness + kerf > chunkHeight) {
+    if (it.thickness > chunkHeight) {
       showError(
-        `Thickness ${it.thickness}" + kerf ${kerf}" = ${(it.thickness + kerf).toFixed(3)}" ` +
-        `exceeds the chunk height of ${chunkHeight}".`
+        `Thickness ${it.thickness}" exceeds the chunk height of ${chunkHeight}".`
       );
       return;
     }
@@ -561,7 +560,7 @@ function renderResults(chunks, items, colorMap, kerf) {
 
   let soloTotal = 0;
   for (const it of items) {
-    const bpc = Math.floor(chunkHeight / (it.thickness + kerf));
+    const bpc = Math.floor((chunkHeight + kerf) / (it.thickness + kerf));
     const solo = bpc > 0 ? Math.ceil(it.qty / bpc) : 0;
     soloTotal += solo;
     const sw = `<span class="swatch" style="background:${colorMap[it.thickness]};"></span>`;

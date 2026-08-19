@@ -1101,6 +1101,43 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **P390 — corrected chunk nester geometry (block height + interior-cuts kerf); recompute
+  endpoint (db-api-agent).** Two confirmed geometry errors in the P379 nester
+  (`_worker.js/lib/holey-nester.js`): block height was `50` (real blocks run a little over —
+  corrected to `50.5"`), and kerf was charged on every board including the last (a phantom cut) —
+  should only be charged between boards (n boards need n−1 cuts). Fixed both, verified against
+  the floor's confirmed numbers: 10"→5/chunk (was 4), 2"→24/chunk, 5"→9/chunk (all now match).
+  Oversize check simplified to `t > height` (no longer double-charges a kerf that no longer
+  applies to a lone board). New admin-only `POST /api/holey-chunks/backfill`
+  (`handleHoleyChunksBackfill` in `_worker.js/routes/jobs.js`, gated via a new
+  `API_PERMISSION_MAP` row keyed `admin` in `lib/core.js` — same key/pattern already used by
+  `/api/users`/`/api/roles`, so no new plumbing needed) — loops every non-archived job with HB
+  line items and reruns P379's `computeAndPersistHoleyChunks` so existing jobs' persisted
+  `hb_chunks_required`/`hb_chunk_breakdown` reflect the corrected nester. No schema change, no
+  migration. **Steve still owes**: call `POST /api/holey-chunks/backfill` once (admin session)
+  after this deploys — until then, existing HB jobs keep showing the old (pre-50.5") numbers;
+  newly-saved jobs are already correct. Verified live (read-only `wrangler d1 execute --remote`)
+  that only 11 jobs currently qualify, well under Cloudflare's per-request subrequest/CPU limits
+  for the sequential loop, so the endpoint is safe to ship as a single unbatched call — no
+  `limit`/`offset` needed. **Real bilateral gap found and fixed, not just noted** — the prompt's
+  scope list didn't mention it, but the nester's own header comment says it's a "port of the FFD
+  packing in `manufacturing/holey-board-calculator.html`," and that page (live, linked from the
+  Manufacturing home tile — not archived) has its own independent `binPack()` with the identical
+  height-50/kerf-on-every-board bugs. A floor person using the calculator directly would have kept
+  getting the old wrong counts (4/chunk) while order entry and the cut list showed the corrected 5.
+  Mirrored both fixes there: `chunkHeight` 50→50.5 (only the default "50\"" preset — the separate
+  "51\"" variant is out of scope, per the nester's own comment that it's "not surfaced at order
+  entry yet"), `binPack()`'s kerf model, both oversize checks, and the two "boards per chunk"
+  quick-calc formulas (`Math.floor(height/(t+kerf))` → `Math.floor((height+kerf)/(t+kerf))` — the
+  interior-cuts count for n uniform boards). Verified the extracted `binPack()` against the same
+  three floor-confirmed cases (10"→5, 2"→24, 5"→9) — matches the nester exactly. **Left
+  un-touched, flagged not fixed**: the canvas diagram's per-board proportional band width still
+  includes a kerf sliver on every board (cosmetic only — pre-existing approximation, not
+  correctness-affecting, sub-2% of one board's height on the last board of a chunk); not worth the
+  scope creep for a visual nicety. `node --check` clean on all four edited worker files + the
+  extracted calculator `<script>` block; a live sanity run of `nestHoleyChunks` and the
+  calculator's own `binPack` against the corrected code both reproduced the floor's exact
+  confirmed counts (10"→5, 2"→24, 5"→9 per chunk) before commit.
 - **P389** — Added 10 missing DiversiTech H-series parts (`H2448-4` … `H4558-4`) surfaced by the
   packing-slip match audit (db-api-agent). New guarded `INSERT ... WHERE NOT EXISTS` per row in
   `DB_Migrations/add-diversitech-hseries-parts.sql` (gitignored, not committed — Steve runs it in
@@ -2103,6 +2140,9 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Production / Manufacturing
 
+- **P390 (see Database / API)** — `manufacturing/holey-board-calculator.html`'s standalone
+  `binPack()` had the same block-height/kerf-model bugs as the chunk nester it was ported from;
+  fixed in the same commit for parity. Full writeup under the Database / API section.
 - **P327** — Added a "Taper Block Calculator" tile to the Manufacturing dashboard (`manufacturing/index.html`), linking to `/v2/blocks` (the P322 Block Nesting scaffold). Placed immediately adjacent to the legacy Block Calculator tile, cloned from its exact `.mfg-tile` markup — both stay live during the strangler phase, no new CSS classes. No permission-gating script change: `/v2/blocks` already enforces `manufacturing.blocks` at the route/middleware level (P322). No inline `<script>` touched, so no `node --check` was needed.
 - **P297** — Split the Manufacturing Cutting tile into two: Main Line / Blue Line (`/v2/cutting`) and Cross Cutter / Hole Cutter (`/v2/cutting/crosscutter`). Both tiles keep the `mfg-cutting-link` class so the existing `manufacturing.cutting` permission-based show/hide (`gateMfgNav()`) governs both without any script change. `manufacturing/index.html` only; no inline `<script>` touched, so no `node --check` was needed.
 - **P234** — Cutting cutover: Manufacturing tile repointed from legacy `cutting-dashboard.html` to the v2 board at `/v2/cutting` (operator loop validated on the real host); legacy page archived to `manufacturing/_archived/` (P176 precedent, still reachable by direct link as fallback); permission gate re-keyed from a fragile `href*="cutting-dashboard"` substring match to a stable `.mfg-cutting-link` class so `manufacturing.cutting` gating survives the href change; `PATH_PERMISSION_MAP` pattern widened to keep the archived path gated. `cutting_steps`, `/api/cutting*`, `routes/cutting.js`, and `lib/cutting.js` deliberately left intact — their removal remains a separate backlog item.

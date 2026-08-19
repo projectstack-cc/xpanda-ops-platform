@@ -1475,3 +1475,23 @@ export async function handleHoleyChunksPreview(request, env) {
   return json({ ok: true, ...result });
 }
 
+// P390: repeatable recompute of persisted HB chunk plans after a nester change. Loops every
+// non-archived job with Holey Board line items and re-runs computeAndPersistHoleyChunks so
+// hb_chunks_required / hb_chunk_breakdown reflect the current nester (height/kerf). Non-destructive
+// (deterministic rewrite of authoritative values). Gated admin-only via API_PERMISSION_MAP.
+export async function handleHoleyChunksBackfill(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, 405);
+  const db = env.DB;
+  const rows = await db.prepare(
+    `SELECT DISTINCT j.id AS id
+       FROM jobs j
+       JOIN job_line_items jli ON jli.job_id = j.id
+       JOIN parts p ON p.id = jli.part_id
+      WHERE p.category = 'Holey Board' AND j.archived_at IS NULL`
+  ).all();
+  const ids = (rows.results || []).map((r) => r.id);
+  let updated = 0;
+  for (const id of ids) { await computeAndPersistHoleyChunks(db, id, null); updated++; }
+  return json({ ok: true, updated, total: ids.length });
+}
+
