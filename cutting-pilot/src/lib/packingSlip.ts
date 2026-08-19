@@ -259,7 +259,7 @@ function isItemHeader(sortedItems: RawItem[]): boolean {
 function extractThickness(text: string): number | null {
   if (!text) return null;
   const stripped = String(text).replace(/\([^)]*\)/g, " ");
-  const re = /[xX×]\s*(\d+(?:\.\d+)?)\s*["“”″]/g;
+  const re = /(\d+(?:\.\d+)?)\s*["“”″]/g;
   const matches: RegExpExecArray[] = [];
   let match: RegExpExecArray | null;
   while ((match = re.exec(stripped)) !== null) matches.push(match);
@@ -341,6 +341,7 @@ function parseLineItems(groups: LineGroup[], descriptionY: number): ParsedLineIt
   return items
     .filter((item) => {
       if (item._isNotes) return false;
+      if (/credit card|processing fee/i.test((item.category || "") + " " + (item._descLines || []).join(" ") + " " + (item.description || ""))) return false;
       if (!item.quantity || item.quantity <= 0) return false;
       return true;
     })
