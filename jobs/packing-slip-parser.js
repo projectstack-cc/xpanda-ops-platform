@@ -214,7 +214,7 @@ window.PackingSlipParser = (function () {
   function extractThickness(text) {
     if (!text) return null;
     const stripped = String(text).replace(/\([^)]*\)/g, ' ');
-    const m = [...stripped.matchAll(/[xX×]\s*(\d+(?:\.\d+)?)\s*["\u201C\u201D\u2033]/g)];
+    const m = [...stripped.matchAll(/(\d+(?:\.\d+)?)\s*["\u201C\u201D\u2033]/g)];
     if (!m.length) return null;
     const t = parseFloat(m[m.length - 1][1]);
     return isNaN(t) ? null : t;
@@ -296,6 +296,7 @@ window.PackingSlipParser = (function () {
     return items
       .filter(item => {
         if (item._isNotes) return false;
+        if (/credit card|processing fee/i.test((item.category || '') + ' ' + (item._descLines || []).join(' ') + ' ' + (item.description || ''))) return false;
         if (!item.quantity || item.quantity <= 0) return false;
         return true;
       })

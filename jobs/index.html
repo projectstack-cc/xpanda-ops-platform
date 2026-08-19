@@ -1933,7 +1933,7 @@ function matchLineItemToPart(lineItem, partsLibrary) {
     let thickness = (typeof lineItem.thickness === 'number') ? lineItem.thickness : null;
     if (isHB && thickness == null) {
       const src = (dims + ' ' + desc + ' ' + cat).replace(/\([^)]*\)/g, ' ');
-      const tm = [...src.matchAll(/[xX×]\s*(\d+(?:\.\d+)?)\s*["\u201C\u201D\u2033]/g)];
+      const tm = [...src.matchAll(/(\d+(?:\.\d+)?)\s*["\u201C\u201D\u2033]/g)];
       if (tm.length) thickness = parseFloat(tm[tm.length - 1][1]);
     }
     if (isHB && thickness != null && !isNaN(thickness)) {

@@ -1101,6 +1101,13 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **P389** — Added 10 missing DiversiTech H-series parts (`H2448-4` … `H4558-4`) surfaced by the
+  packing-slip match audit (db-api-agent). New guarded `INSERT ... WHERE NOT EXISTS` per row in
+  `DB_Migrations/add-diversitech-hseries-parts.sql` (gitignored, not committed — Steve runs it in
+  the D1 console). Verified live via read-only `wrangler d1 execute --remote`: `parts`' NOT-NULL,
+  no-default columns are exactly `part_number`/`length_in`/`width_in`/`height_in` as the prompt
+  claimed, and none of the 10 part numbers already exist (no collision, guard is a safety net for
+  re-runs only). No schema change, no code change.
 - **P385** — Fix: a single loaded trailer force-completes cutting on multi-trailer jobs
   (db-api-agent). `completeCuttingLinesForJob(db, jobId, reason)` in `_worker.js/lib/cutting-
   lines.js` claimed to fire "once a job is provably past cutting" but didn't enforce it — on a
@@ -1576,6 +1583,20 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P387 — packing-slip matcher reads standalone trailing HB thickness; fee lines excluded
+  (job-board-agent).** Diagnostic against all 139 corpus slips found 50% of unmatched lines (191)
+  were standard Holey Board orders whose thickness prints as a standalone trailing token
+  (`Holey Board 1.0# - RC 2' x 4' (24" x 48") 6"`) rather than `x6"` — both thickness readers
+  (`extractThickness()` in `jobs/packing-slip-parser.js`, the HB fallback in `jobs/index.html`
+  `matchLineItemToPart()` Pass 3b) required a leading `x`/`×` and returned null. Dropped the
+  `[xX×]\s*` requirement at both sites, keeping the existing paren-strip + last-trailing-inch-token
+  logic. Also filters credit-card/processing-fee lines out of parsed line items (were auto-creating
+  junk parts on load build) via a new guard in the finalizer filter, tested against
+  `_descLines`/`category`/`description`. Recovers all 191 HB lines, lifts corpus match rate 37.5% →
+  68.7%, 0 misclassifications (the 21 thickness-less HB base lines correctly remain unmatched).
+  Out of scope (left alone): those 21 base lines, "remainder of block"/"pallet foam" note lines,
+  dimension/part-number passes, the alias table. `node --check` clean on the parser; both anchors
+  verified flipped (old strings → 0, new strings → 1) before and after.
 - **P386 — cut-list chunk breakdown: group by recipe + fix v2 bilateral gap (BILATERAL FIX —
   job-board-agent + react-component-agent §9b).** Two real bugs, confirmed live. (1) P381's
   cut-list "CHUNK BREAKDOWN" page rendered one row per individual chunk — for a real HB order

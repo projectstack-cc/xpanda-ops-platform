@@ -201,6 +201,14 @@
 
 ## Job Board
 
+- [ ] **P387 follow-up — alias table for made-to-order / customer-worded parts.** Packing-slip
+  match audit corpus still has unresolved lines needing a dedicated alias table (Spa Cover `ITEM#`
+  keys, block variants, laminate) — separate prompt, not touched by P387/P389.
+- [ ] **P387 follow-up — HB base lines with no stated thickness (21 in corpus).** Left unmatched
+  by design in P387; decide handling (default thickness? flag for manual review?).
+- [ ] **P387 follow-up — "remainder of block" / "pallet foam" note lines.** Ambiguous whether
+  these should ship as line items or be filtered like the credit-card/processing-fee lines P387
+  excluded; Steve's call.
 - [ ] **P364 follow-up — legacy BOL viewer modal (`jobs-bol-view-modal`) has no explicit Print
   button.** It only has Download (relies on the browser's native in-frame PDF toolbar for print).
   P364 gave the v2 shared `PdfViewer` explicit Download + Print controls instead of relying on that
