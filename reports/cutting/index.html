@@ -38,43 +38,97 @@
   border: 1px solid var(--card-border);
   border-radius: 8px;
   padding: 8px 12px;
-  min-width: 120px;
+  min-width: 150px;
 }
 .cutting-op-summary-name {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
+}
+.cutting-op-summary-shift {
+  font-size: 11px;
+  font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: .04em;
+  margin-left: 6px;
 }
-.cutting-op-summary-hours {
-  font-size: 18px;
-  font-weight: 700;
+.cutting-op-summary-stats {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
 }
 
-.cutting-day-section {
-  margin-bottom: 20px;
-}
-.cutting-day-header {
+.cutting-section-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 4px;
-  border-bottom: 2px solid var(--card-border);
-  margin-bottom: 6px;
+  margin: 18px 0 8px;
 }
-.cutting-day-date {
+.cutting-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+}
+.cutting-section-actions {
+  display: flex;
+  gap: 8px;
+}
+.cutting-section-actions .btn {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.invoice-group {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  box-shadow: var(--shadow);
+}
+.invoice-group > summary {
+  cursor: pointer;
+  padding: 12px 14px;
+  list-style: revert;
+}
+.invoice-group > summary::marker {
+  color: var(--muted);
+}
+.invoice-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+}
+.invoice-number {
   font-size: 15px;
   font-weight: 700;
 }
-.cutting-day-totals {
+.invoice-customer {
   font-size: 13px;
+  color: var(--text);
+}
+.invoice-meta {
+  font-size: 12px;
   color: var(--muted);
+}
+.invoice-meta-spacer {
+  flex: 1 1 auto;
+}
+.invoice-body {
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--line);
+}
+.invoice-subsection-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  margin: 14px 0 6px;
 }
 
 .cutting-muted {
-  font-size: 12px;
   color: var(--muted);
 }
 .cutting-italic {
@@ -89,8 +143,8 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .04em;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--info-bg);
+  color: var(--info-text);
 }
 
 .cutting-error {
@@ -100,10 +154,13 @@
 @media print {
   .reports-back-link,
   .cutting-filters,
+  .cutting-section-actions,
   .reports-platform-footer {
     display: none !important;
   }
-  .cutting-day-section {
+  .invoice-group,
+  .cutting-op-summary,
+  .cutting-section-header {
     page-break-inside: avoid;
   }
 }
@@ -123,7 +180,7 @@ document.getElementById('reports-page-title').textContent = 'Cutting Line Activi
 
   <div class="reports-section-intro">
     <h2 class="reports-section-title">Cutting Line Activity</h2>
-    <p class="reports-section-subtitle">Operator start/stop activity and the order or work item cut, across Main Line, Blue Line, Cross Cutter, and Hole Cutter.</p>
+    <p class="reports-section-subtitle">Grouped by invoice — click an invoice to see exactly what was cut and by whom.</p>
   </div>
 
   <!-- Filters -->
@@ -164,7 +221,20 @@ document.getElementById('reports-page-title').textContent = 'Cutting Line Activi
   </div>
 
   <div id="operator-summary"></div>
-  <div id="results-wrap"></div>
+
+  <div class="cutting-section-header">
+    <h3 class="cutting-section-title">Invoices</h3>
+    <div class="cutting-section-actions">
+      <button class="btn ghost" onclick="setAllInvoiceGroups(true)">Expand all</button>
+      <button class="btn ghost" onclick="setAllInvoiceGroups(false)">Collapse all</button>
+    </div>
+  </div>
+  <div id="invoice-wrap"></div>
+
+  <div class="cutting-section-header">
+    <h3 class="cutting-section-title">Cross / Hole Cutter (no invoice)</h3>
+  </div>
+  <div id="chunk-wrap"></div>
 
   <div class="reports-platform-footer">
     <a href="/reports/">← Back to Reports</a>
@@ -177,9 +247,10 @@ const ET_TZ = 'America/New_York';
 const etDayFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: ET_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
 const etTimeFormatter = new Intl.DateTimeFormat('en-US', { timeZone: ET_TZ, hour: 'numeric', minute: '2-digit', hour12: true });
 const etWeekdayFormatter = new Intl.DateTimeFormat('en-US', { timeZone: ET_TZ, weekday: 'short' });
-const dayLabelFormatter = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
-let allSessions = [];
+let rawSessions = [];
+let rawCutItems = [];
+let rawChunkSessions = [];
 let knownOperators = new Set();
 let lastRangeKey = '';
 
@@ -216,17 +287,11 @@ function currentEtWeekRange() {
   return { from: fmt(monday), to: fmt(sunday) };
 }
 
-function formatDayLabel(dayStr) {
-  const [y, m, d] = dayStr.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  return dayLabelFormatter.format(dt);
-}
-
-function durationSeconds(session) {
-  const start = parseUtc(session.started_at);
+function durationSeconds(row) {
+  const start = parseUtc(row.started_at);
   if (!start) return 0;
-  const isOpen = session.status === 'open' || !session.ended_at;
-  const end = isOpen ? new Date() : parseUtc(session.ended_at);
+  const isOpen = row.status === 'open' || !row.ended_at;
+  const end = isOpen ? new Date() : parseUtc(row.ended_at);
   if (!end) return 0;
   return Math.max(0, Math.floor((end - start) / 1000));
 }
@@ -249,6 +314,10 @@ function escAttr(s) {
   return esc(s).replace(/"/g, '&quot;');
 }
 
+function muted(s) {
+  return s ? esc(s) : '<span class="cutting-muted">—</span>';
+}
+
 async function loadReport() {
   const from = document.getElementById('f-from').value;
   const to = document.getElementById('f-to').value;
@@ -264,33 +333,40 @@ async function loadReport() {
 
   const operator = document.getElementById('f-operator').value;
 
-  const wrap = document.getElementById('results-wrap');
-  wrap.innerHTML = '<p class="report-empty">Loading…</p>';
+  document.getElementById('invoice-wrap').innerHTML = '<p class="report-empty">Loading…</p>';
+  document.getElementById('chunk-wrap').innerHTML = '';
+  document.getElementById('operator-summary').innerHTML = '';
 
   try {
-    let url = `/api/reports/cutting-sessions?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+    let url = `/api/reports/cutting-activity?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
     if (operator) url += `&operator=${encodeURIComponent(operator)}`;
 
     const { ok, data } = await window.api.get(url);
     if (!ok) {
-      wrap.innerHTML = '<p class="report-empty cutting-error">Error loading cutting sessions.</p>';
+      document.getElementById('invoice-wrap').innerHTML = '<p class="report-empty cutting-error">Error loading cutting activity.</p>';
       return;
     }
 
-    const raw = (data && data.sessions) || [];
-
-    allSessions = raw
+    rawSessions = ((data && data.sessions) || [])
       .map((s) => ({ ...s, etDay: etDateKey(s.started_at) }))
       .filter((s) => s.etDay && s.etDay >= from && s.etDay <= to);
 
-    allSessions.forEach((s) => {
-      if (s.operator) knownOperators.add(s.operator);
-    });
+    rawCutItems = ((data && data.cut_items) || [])
+      .map((c) => ({ ...c, etDay: etDateKey(c.cut_at) }))
+      .filter((c) => c.etDay && c.etDay >= from && c.etDay <= to);
+
+    rawChunkSessions = ((data && data.chunk_sessions) || [])
+      .map((c) => ({ ...c, etDay: etDateKey(c.started_at) }))
+      .filter((c) => c.etDay && c.etDay >= from && c.etDay <= to);
+
+    rawSessions.forEach((s) => { if (s.operator) knownOperators.add(s.operator); });
+    rawCutItems.forEach((c) => { if (c.cut_by) knownOperators.add(c.cut_by); });
+    rawChunkSessions.forEach((c) => { if (c.operator) knownOperators.add(c.operator); });
     populateOperatorOptions(operator);
 
     render();
   } catch (e) {
-    wrap.innerHTML = '<p class="report-empty cutting-error">Network error.</p>';
+    document.getElementById('invoice-wrap').innerHTML = '<p class="report-empty cutting-error">Network error.</p>';
   }
 }
 
@@ -304,35 +380,43 @@ function populateOperatorOptions(selected) {
 
 function render() {
   const board = document.getElementById('f-board').value;
-  const filtered = board ? allSessions.filter((s) => s.board === board) : allSessions;
 
-  renderOperatorSummary(filtered);
-  renderDayGroups(filtered);
+  const sessions = board ? rawSessions.filter((s) => s.board === board) : rawSessions;
+  const cutItems = board ? rawCutItems.filter((c) => c.line === board) : rawCutItems;
+  const chunkSessions = board ? rawChunkSessions.filter((c) => c.board === board) : rawChunkSessions;
+
+  renderOperatorSummary(sessions, cutItems);
+  renderInvoiceGroups(sessions, cutItems);
+  renderChunkSection(chunkSessions);
 }
 
-function renderOperatorSummary(sessions) {
+function renderOperatorSummary(sessions, cutItems) {
   const el = document.getElementById('operator-summary');
-  if (!sessions.length) {
+  const names = new Set();
+  sessions.forEach((s) => { if (s.operator) names.add(s.operator); });
+  cutItems.forEach((c) => { if (c.cut_by) names.add(c.cut_by); });
+
+  if (!names.size) {
     el.innerHTML = '';
     return;
   }
 
-  const totals = {};
-  sessions.forEach((s) => {
-    const name = s.operator || 'Unknown';
-    totals[name] = (totals[name] || 0) + durationSeconds(s);
-  });
-
-  const rows = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  const rows = Array.from(names).map((name) => {
+    const opSessions = sessions.filter((s) => s.operator === name);
+    const opCutItems = cutItems.filter((c) => c.cut_by === name);
+    const shift = (opCutItems.find((c) => c.cut_by_shift) || {}).cut_by_shift || null;
+    const secs = opSessions.reduce((sum, s) => sum + durationSeconds(s), 0);
+    return { name, shift, sessionCount: opSessions.length, secs, itemCount: opCutItems.length };
+  }).sort((a, b) => b.secs - a.secs || b.itemCount - a.itemCount);
 
   el.innerHTML = `
     <div class="card cutting-op-summary">
-      <h2>Operator Hours (range total)</h2>
+      <h2>Per-Operator Accountability (range total)</h2>
       <div class="cutting-op-summary-grid">
-        ${rows.map(([name, secs]) => `
+        ${rows.map((r) => `
           <div class="cutting-op-summary-item">
-            <div class="cutting-op-summary-name">${esc(name)}</div>
-            <div class="cutting-op-summary-hours">${formatDuration(secs)}</div>
+            <div class="cutting-op-summary-name">${esc(r.name)}${r.shift ? `<span class="cutting-op-summary-shift">${esc(r.shift)}</span>` : ''}</div>
+            <div class="cutting-op-summary-stats">${r.sessionCount} session${r.sessionCount !== 1 ? 's' : ''} · ${formatDuration(r.secs)} · ${r.itemCount} item${r.itemCount !== 1 ? 's' : ''} cut</div>
           </div>
         `).join('')}
       </div>
@@ -340,83 +424,211 @@ function renderOperatorSummary(sessions) {
   `;
 }
 
-function renderDayGroups(sessions) {
-  const wrap = document.getElementById('results-wrap');
-  if (!sessions.length) {
-    wrap.innerHTML = '<p class="report-empty">No cutting activity found for this range.</p>';
+function groupKey(row) {
+  if (row.job_id != null) return 'job:' + row.job_id;
+  if (row.invoice_number) return 'inv:' + row.invoice_number;
+  return 'unknown';
+}
+
+function buildInvoiceGroups(sessions, cutItems) {
+  const groups = new Map();
+
+  function ensure(row) {
+    const key = groupKey(row);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        invoice_number: row.invoice_number || null,
+        customer: row.customer || null,
+        sessions: [],
+        cutItems: [],
+        operators: new Set(),
+        latest: 0,
+      });
+    }
+    const g = groups.get(key);
+    if (!g.customer && row.customer) g.customer = row.customer;
+    if (!g.invoice_number && row.invoice_number) g.invoice_number = row.invoice_number;
+    return g;
+  }
+
+  sessions.forEach((s) => {
+    const g = ensure(s);
+    g.sessions.push(s);
+    if (s.operator) g.operators.add(s.operator);
+    const t = parseUtc(s.started_at);
+    if (t && t.getTime() > g.latest) g.latest = t.getTime();
+  });
+
+  cutItems.forEach((c) => {
+    const g = ensure(c);
+    g.cutItems.push(c);
+    if (c.cut_by) g.operators.add(c.cut_by);
+    const t = parseUtc(c.cut_at);
+    if (t && t.getTime() > g.latest) g.latest = t.getTime();
+  });
+
+  return Array.from(groups.values()).sort((a, b) => b.latest - a.latest);
+}
+
+function renderInvoiceGroups(sessions, cutItems) {
+  const wrap = document.getElementById('invoice-wrap');
+  const groups = buildInvoiceGroups(sessions, cutItems);
+
+  if (!groups.length) {
+    wrap.innerHTML = '<p class="report-empty">No invoice cutting activity found for this filter.</p>';
     return;
   }
 
-  const byDay = {};
-  sessions.forEach((s) => {
-    (byDay[s.etDay] = byDay[s.etDay] || []).push(s);
-  });
-
-  const days = Object.keys(byDay).sort().reverse();
-
-  wrap.innerHTML = days.map((day) => {
-    const daySessions = byDay[day].sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
-    const totalSecs = daySessions.reduce((sum, s) => sum + durationSeconds(s), 0);
+  wrap.innerHTML = groups.map((g) => {
+    const totalSecs = g.sessions.reduce((sum, s) => sum + durationSeconds(s), 0);
+    const operators = Array.from(g.operators).sort((a, b) => a.localeCompare(b));
 
     return `
-      <div class="cutting-day-section">
-        <div class="cutting-day-header">
-          <span class="cutting-day-date">${formatDayLabel(day)}</span>
-          <span class="cutting-day-totals">${daySessions.length} session${daySessions.length !== 1 ? 's' : ''} · ${formatDuration(totalSecs)}</span>
+      <details class="invoice-group">
+        <summary>
+          <span class="invoice-summary-row">
+            <span class="invoice-number">${muted(g.invoice_number)}</span>
+            <span class="invoice-customer">${muted(g.customer)}</span>
+            <span class="invoice-meta-spacer"></span>
+            <span class="invoice-meta">${operators.length ? esc(operators.join(', ')) : '—'}</span>
+            <span class="invoice-meta">${g.sessions.length} session${g.sessions.length !== 1 ? 's' : ''}</span>
+            <span class="invoice-meta">${formatDuration(totalSecs)}</span>
+            <span class="invoice-meta">${g.cutItems.length} item${g.cutItems.length !== 1 ? 's' : ''} cut</span>
+          </span>
+        </summary>
+        <div class="invoice-body">
+          <div class="invoice-subsection-title">Sessions on this invoice</div>
+          ${sessionsTable(g.sessions)}
+          <div class="invoice-subsection-title">What was cut</div>
+          ${cutItemsTable(g.cutItems)}
         </div>
-        <div class="report-table-wrap">
-          <table class="report-table">
-            <thead>
-              <tr>
-                <th>Operator</th>
-                <th>Board</th>
-                <th>Order/Work</th>
-                <th>Start</th>
-                <th>Stop</th>
-                <th>Duration</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${daySessions.map(rowHtml).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      </details>
     `;
   }).join('');
 }
 
-function rowHtml(s) {
-  const isOpen = s.status === 'open' || !s.ended_at;
-  const stopCell = isOpen ? '<span class="pill-open">In progress</span>' : etTimeLabel(s.ended_at);
-  const orderWork = s.session_source === 'line' ? lineOrderCell(s) : chunkWorkCell(s);
-
+function sessionsTable(sessions) {
+  if (!sessions.length) return '<p class="report-empty">No sessions on this invoice.</p>';
+  const sorted = [...sessions].sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
   return `
-    <tr>
-      <td>${esc(s.operator || '—')}</td>
-      <td>${esc(s.board || '—')}</td>
-      <td>${orderWork}</td>
-      <td>${etTimeLabel(s.started_at)}</td>
-      <td>${stopCell}</td>
-      <td>${formatDuration(durationSeconds(s))}</td>
-      <td>${esc(s.handoff_note || '')}</td>
-    </tr>
+    <div class="report-table-wrap">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Operator</th>
+            <th>Line</th>
+            <th>Start</th>
+            <th>Stop</th>
+            <th>Duration</th>
+            <th>Handoff Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sorted.map((s) => {
+            const isOpen = s.status === 'open' || !s.ended_at;
+            const stopCell = isOpen ? '<span class="pill-open">In progress</span>' : etTimeLabel(s.ended_at);
+            return `
+              <tr>
+                <td>${muted(s.operator)}</td>
+                <td>${muted(s.board)}</td>
+                <td>${etTimeLabel(s.started_at)}</td>
+                <td>${stopCell}</td>
+                <td>${formatDuration(durationSeconds(s))}</td>
+                <td class="cutting-muted">${s.handoff_note ? esc(s.handoff_note) : ''}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
   `;
 }
 
-function lineOrderCell(s) {
-  const customer = String(s.order_customer || '').trim();
-  const po = String(s.order_po || '').trim();
-  const custHtml = customer ? `<strong>${esc(customer)}</strong>` : '<span class="cutting-muted">—</span>';
-  const poHtml = po ? `<div class="cutting-muted">${esc(po)}</div>` : '';
-  return `${custHtml}${poHtml}`;
+function cutItemsTable(items) {
+  if (!items.length) return '<p class="report-empty">No completed line items on this invoice yet.</p>';
+  const sorted = [...items].sort((a, b) => (b.cut_at || '').localeCompare(a.cut_at || ''));
+  return `
+    <div class="report-table-wrap">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>Dimensions</th>
+            <th>Line</th>
+            <th>Cut By</th>
+            <th>Cut At (ET)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sorted.map((c) => `
+            <tr>
+              <td>${muted(c.description)}</td>
+              <td>${muted(c.dimensions)}</td>
+              <td>${muted(c.line)}</td>
+              <td>${muted(c.cut_by)}</td>
+              <td>${etTimeLabel(c.cut_at)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
-function chunkWorkCell(s) {
-  const label = String(s.work_item || '').trim() || '—';
-  return `<span class="cutting-muted cutting-italic">${esc(label)}</span>`;
+function renderChunkSection(chunkSessions) {
+  const wrap = document.getElementById('chunk-wrap');
+  if (!chunkSessions.length) {
+    wrap.innerHTML = '<p class="report-empty">No Cross/Hole Cutter activity found for this filter.</p>';
+    return;
+  }
+
+  const sorted = [...chunkSessions].sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
+
+  wrap.innerHTML = `
+    <div class="report-table-wrap">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Operator</th>
+            <th>Board</th>
+            <th>Work Item</th>
+            <th>Start</th>
+            <th>Stop</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sorted.map((c) => {
+            const isOpen = c.status === 'open' || !c.ended_at;
+            const stopCell = isOpen ? '<span class="pill-open">In progress</span>' : etTimeLabel(c.ended_at);
+            return `
+              <tr>
+                <td>${muted(c.operator)}</td>
+                <td>${muted(c.board)}</td>
+                <td class="cutting-italic">${muted(c.work_item)}</td>
+                <td>${etTimeLabel(c.started_at)}</td>
+                <td>${stopCell}</td>
+                <td>${formatDuration(durationSeconds(c))}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
+
+function setAllInvoiceGroups(open) {
+  document.querySelectorAll('.invoice-group').forEach((d) => { d.open = open; });
+}
+
+window.addEventListener('beforeprint', () => {
+  document.querySelectorAll('.invoice-group').forEach((d) => { d.dataset.wasOpen = d.open ? '1' : '0'; d.open = true; });
+});
+window.addEventListener('afterprint', () => {
+  document.querySelectorAll('.invoice-group').forEach((d) => { d.open = d.dataset.wasOpen === '1'; });
+});
 
 // Init — default to This Week (ET)
 const defaultRange = currentEtWeekRange();

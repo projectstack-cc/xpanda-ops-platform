@@ -697,4 +697,101 @@ export async function handleIncidentDetail(request, env) {
   }
 }
 
+export async function handleCuttingActivityReport(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
+
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method Not Allowed" }, 405);
+  }
+
+  const url = new URL(request.url);
+  const from = String(url.searchParams.get("from") || "").trim();
+  const to = String(url.searchParams.get("to") || "").trim();
+  const operator = String(url.searchParams.get("operator") || "").trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return json(
+      { ok: false, error: "Invalid or missing from/to. Use YYYY-MM-DD" },
+      400,
+    );
+  }
+
+  try {
+    const sessionsStmt = db
+      .prepare(
+        `
+      SELECT cs.operator_name AS operator, cs.line AS board, cs.status,
+             cs.started_at, cs.ended_at, cs.handoff_note,
+             j.invoice_number, j.customer, j.id AS job_id
+      FROM cutting_sessions cs
+      LEFT JOIN jobs j ON j.id = cs.job_id
+      WHERE date(cs.started_at) BETWEEN date(?, '-1 day') AND date(?, '+1 day')
+        AND (? = '' OR cs.operator_name = ?)
+      ORDER BY cs.started_at DESC
+    `,
+      )
+      .bind(from, to, operator, operator);
+
+    const cutItemsStmt = db
+      .prepare(
+        `
+      SELECT j.invoice_number, j.customer, j.id AS job_id, clp.line,
+             li.description, li.dimensions, li.part_number,
+             COALESCE(u.display_name, clp.updated_by) AS cut_by,
+             u.shift AS cut_by_shift,
+             clp.updated_at AS cut_at
+      FROM cutting_line_progress clp
+      LEFT JOIN jobs j            ON j.id  = clp.job_id
+      LEFT JOIN job_line_items li ON li.id = clp.line_item_id
+      LEFT JOIN users u           ON u.id  = clp.updated_by
+      WHERE clp.completed = 1
+        AND date(clp.updated_at) BETWEEN date(?, '-1 day') AND date(?, '+1 day')
+        AND (? = '' OR COALESCE(u.display_name, clp.updated_by) = ?)
+      ORDER BY clp.updated_at DESC
+    `,
+      )
+      .bind(from, to, operator, operator);
+
+    const chunkSessionsStmt = db
+      .prepare(
+        `
+      SELECT ch.operator_name AS operator,
+             CASE ch.board WHEN 'cc' THEN 'Cross Cutter' WHEN 'hc' THEN 'Hole Cutter' ELSE ch.board END AS board,
+             COALESCE(cca.label, hcs.label, ch.ref_id) AS work_item,
+             ch.started_at, ch.ended_at, ch.status
+      FROM chunk_sessions ch
+      LEFT JOIN cc_assignments cca ON ch.board = 'cc' AND cca.id = ch.ref_id
+      LEFT JOIN hc_slots       hcs ON ch.board = 'hc' AND hcs.slot_key = ch.ref_id
+      WHERE date(ch.started_at) BETWEEN date(?, '-1 day') AND date(?, '+1 day')
+        AND (? = '' OR ch.operator_name = ?)
+      ORDER BY ch.started_at DESC
+    `,
+      )
+      .bind(from, to, operator, operator);
+
+    const [sessions, cutItems, chunkSessions] = await db.batch([
+      sessionsStmt,
+      cutItemsStmt,
+      chunkSessionsStmt,
+    ]);
+
+    return json({
+      ok: true,
+      sessions: sessions.results || [],
+      cut_items: cutItems.results || [],
+      chunk_sessions: chunkSessions.results || [],
+    });
+  } catch (e) {
+    return json(
+      {
+        ok: false,
+        error: "Server error",
+        detail: String(e?.message || e),
+      },
+      500,
+    );
+  }
+}
+
 

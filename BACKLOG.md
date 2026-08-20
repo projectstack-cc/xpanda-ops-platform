@@ -435,9 +435,12 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 
 ## Reports
 
-- [ ] **P380 follow-up — Cutting report: capture per-session qty cut.** `cutting_sessions.qty_done_delta`
-  is currently unpopulated in production; once it's populated, surface it on the Cutting Line
-  Activity report to enable throughput totals.
+- [ ] **P391 follow-up — Cutting report: qty per cut** (`cutting_line_progress.completed_qty` /
+  `cutting_sessions.qty_done_delta` currently unpopulated) for true throughput totals.
+- [ ] **P391 follow-up — orphaned endpoint.** `GET /api/reports/cutting-sessions`
+  (`handleCuttingSessionsReport`) has no remaining frontend consumer now that `reports/cutting/index.html`
+  was rewritten to use `/api/reports/cutting-activity` (P391). Confirm no other caller, then remove the
+  handler and its `API_ROUTES` row.
 - [ ] Reports copy cleanup
 - [ ] Consistent subtitles across report pages
 - [ ] Inspection trends report
