@@ -1230,6 +1230,45 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P392 — Notification click-through deep-links to the INV modal (logistics-agent §3 + db-api-agent §9).**
+  Clicking a notification now navigates to the referenced record and opens the Loading
+  Dashboard `openShippingInfo` INV modal, instead of only marking it read. `shared-header.js`
+  gains an extensible `entity_type -> URL` map (`NOTIF_DEEPLINK_ROUTES`); `loading_assignment`
+  opens directly, `shipment` resolves via new `/api/shipments?id=` (read-only) → `job_id` →
+  assignment. Deep-linked loads pull `?include_archived=1` so aged-off (delivered/archived)
+  records still open. No schema change, no migration, no new permission. Live D1 check before
+  push: 842/848 existing `shipment`-typed notifications resolve to a real `shipments` row (the
+  remainder point at deleted/historical shipments — degrade gracefully to "land on dashboard, no
+  modal," not an error). **Real gap found and fixed, not just noted**: `shared-header.js` is only
+  loaded by the six modules that use `*-header.js` (jobs/logistics/manufacturing/production/qc/
+  reports) — `index.html` (homepage) and all four `admin/*.html` pages (`parts`, `roles`, `users`,
+  `activity-log`) each carry their own independent, copy-pasted `handleNotifClick`, none of which
+  reference the shared file. All five had the identical old bug (redirect-only for
+  `loading_assignment`, `shipment` ignored entirely; three of the five — `roles`/`users`/
+  `activity-log` — didn't even capture `entity_id` as a function parameter). Applied the same
+  `NOTIF_DEEPLINK_ROUTES` map + null-guard to all five so notification click-through behaves
+  identically everywhere in the platform, not just on modules routed through `shared-header.js`.
+  **Flagged, not fixed — confirmed live, not theoretical**: `/api/shipments` is gated under
+  `logistics.dashboard` in `API_PERMISSION_MAP`, while `/logistics/loading.html` and
+  `/api/loading-assignments` are gated under the narrower `logistics.loading`. Checked live via
+  `wrangler d1 execute --remote SELECT name, permissions FROM roles`: the **Loading Team** role
+  has `logistics.loading.view=true` but `logistics.dashboard.view=false` — exactly the bad
+  combination. Those users can open the Loading Dashboard and click a `loading_assignment`
+  notification fine, but a `shipment` notification's resolve call will 403 and silently land on
+  the dashboard with no modal (no error surfaced, no crash — just a quiet no-op). Not fixed here
+  since re-gating `/api/shipments` would broaden Loading Team's access to the full shipments
+  list/dashboard, a permission-model decision out of this prompt's scope. **Steve still owes**:
+  either grant `logistics.dashboard` view to the Loading Team role (one admin-UI toggle), or scope
+  a narrower permission if broadening that role isn't desired — until then, shipment-notification
+  deep-links are dead for Loading Team users specifically (loading_assignment deep-links are
+  unaffected). Separately, the `shipment` resolve's fallback match (no `load_number` column exists
+  on `shipments` to disambiguate) picks the first assignment for the job ordered by
+  `created_at ASC` — on a multi-load job (P377) this opens **load 1's** modal regardless of which
+  load the notification was actually about. Prompt-designed fallback, not a bug, but worth knowing.
+  Also worth noting for the floor: a deep-linked load briefly renders delivered/archived cards on
+  the board (from the `?include_archived=1` fetch) until the existing 15s `setInterval(loadDashboard,
+  15000)` refetch (no args → excludes archived) clears them — self-healing, not a defect.
+
 - **P378** — Load Builder DISSOLVE preview: per-line checkboxes to exclude moves. The
   `DISSOLVE → OTHER` confirmation modal (P204) now renders each proposed move-group with an
   auto-checked checkbox; unchecking a line keeps those pieces on the **source** trailer instead of

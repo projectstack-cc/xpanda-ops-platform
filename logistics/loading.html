@@ -389,11 +389,11 @@ const LD_STATUS_COLORS = {
   delivered:   { bg: '#ccfbf1', border: '#0d9488', text: '#115e59', label: 'Delivered' },
 };
 
-async function loadDashboard() {
+async function loadDashboard({ includeArchived = false } = {}) {
   try {
     const [baysRes, assignRes] = await Promise.all([
       api.get('/api/loading-bays'),
-      api.get('/api/loading-assignments'),
+      api.get('/api/loading-assignments' + (includeArchived ? '?include_archived=1' : '')),
     ]);
     allBays = baysRes.data?.bays || [];
     allAssignments = assignRes.data?.assignments || [];
@@ -1143,7 +1143,16 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    loadDashboard();
+    const dlParams = new URLSearchParams(location.search);
+    const dlAssignment = dlParams.get('assignment');
+    const dlShipment = dlParams.get('shipment');
+    if (dlAssignment || dlShipment) {
+      loadDashboard({ includeArchived: true }).then(() => {
+        openFromNotificationDeepLink(dlAssignment, dlShipment);
+      });
+    } else {
+      loadDashboard();
+    }
     updatePullButtonVisibility();
   }
 
@@ -1208,6 +1217,40 @@ function downloadBolFromViewer() {
 }
 
 const shippingInfoJobCache = new Map();
+
+// Notification deep-link: open the INV modal for ?assignment= or ?shipment=.
+// Called after loadDashboard({includeArchived:true}) so aged-off (delivered/archived)
+// assignments are present in allAssignments.
+async function openFromNotificationDeepLink(assignmentId, shipmentId) {
+  let targetAssignmentId = assignmentId || null;
+
+  if (!targetAssignmentId && shipmentId) {
+    // Resolve shipment -> job_id -> assignment (Part A endpoint).
+    const { ok, data } = await api.get('/api/shipments?id=' + encodeURIComponent(shipmentId));
+    const shipment = ok ? (data?.data || null) : null;
+    if (shipment && shipment.job_id) {
+      // Prefer an exact load match when the shipment carries a load_number (multi-load jobs).
+      let match = null;
+      if (shipment.load_number != null) {
+        match = allAssignments.find(a =>
+          String(a.job_id) === String(shipment.job_id) &&
+          String(a.load_number) === String(shipment.load_number));
+      }
+      if (!match) {
+        match = allAssignments.find(a => String(a.job_id) === String(shipment.job_id));
+      }
+      if (match) targetAssignmentId = match.id;
+    }
+  }
+
+  if (targetAssignmentId && allAssignments.some(a => String(a.id) === String(targetAssignmentId))) {
+    openShippingInfo(targetAssignmentId);
+  }
+  // If unresolved (record truly gone), we simply land on the dashboard — no error toast.
+
+  // Clean the URL so a refresh doesn't reopen the modal.
+  try { history.replaceState(null, '', location.pathname); } catch {}
+}
 
 async function openShippingInfo(assignmentId) {
   const a = allAssignments.find(x => x.id === assignmentId);

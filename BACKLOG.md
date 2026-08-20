@@ -163,6 +163,12 @@
 
 ### Standing Logistics Backlog
 
+- [ ] **P392 follow-up — emit `loading_assignment` entity_type from `public.js`'s in_transit/delivered
+  dispatch instead of `shipment`.** Would let future shipment-status notifications skip the
+  `/api/shipments?id=` → `job_id` → assignment resolve hop entirely. Existing ~850 historical
+  `shipment`-typed notification rows still need the resolve path either way, so this is a nicety,
+  not a requirement. Also consider routing shipment notifications to a dedicated shipment-tracking
+  dashboard instead of the Loading Dashboard, if that becomes the more natural landing page.
 - [ ] **P332 follow-up — periodic reconcile/health-check for orphaned loading cards.** Consider a
   lightweight periodic job that flags any job whose non-archived `loading_assignments` count exceeds
   its `load_count`, so future regressions in the reconcile/backfill/adopt paths surface proactively

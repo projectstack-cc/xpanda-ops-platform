@@ -353,13 +353,23 @@ if (!window.__xpandaPwaInstallLoaded) {
           loadNotifications();
         };
 
+        // Extensible notification deep-link map. entity_type -> URL builder.
+        // Adding a future module's target is a one-line addition here; no new branching.
+        const NOTIF_DEEPLINK_ROUTES = {
+          loading_assignment: (id) => `/logistics/loading.html?assignment=${encodeURIComponent(id)}`,
+          shipment:           (id) => `/logistics/loading.html?shipment=${encodeURIComponent(id)}`,
+        };
+
         window.handleNotifClick = function (notifId, entityType, entityId) {
           fetch('/api/notifications/read', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ids: [notifId] }),
           });
-          if (entityType === 'loading_assignment') window.location.href = '/logistics/loading.html';
+          const build = NOTIF_DEEPLINK_ROUTES[entityType];
+          if (build && entityId && entityId !== 'null' && entityId !== 'undefined') {
+            window.location.href = build(entityId);
+          }
           notifDropdownOpen = false;
           const dd = document.getElementById('hdr-notif-dropdown');
           if (dd) dd.style.display = 'none';

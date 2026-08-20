@@ -804,7 +804,8 @@ let _notifOpen = false;
 function toggleNotifDropdown() { _notifOpen = !_notifOpen; document.getElementById('hdr-notif-dropdown').style.display = _notifOpen ? '' : 'none'; if (_notifOpen) _loadNotifs(); }
 document.addEventListener('click', (e) => { const b = document.getElementById('hdr-notif-bell'), d = document.getElementById('hdr-notif-dropdown'); if (b && d && !b.contains(e.target) && !d.contains(e.target)) { _notifOpen = false; d.style.display = 'none'; } });
 async function markAllRead() { await fetch('/api/notifications/read', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ all: true }) }); _loadNotifs(); }
-function handleNotifClick(id, type) { fetch('/api/notifications/read', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id] }) }); if (type === 'loading_assignment') window.location.href = '/logistics/loading.html'; _notifOpen = false; document.getElementById('hdr-notif-dropdown').style.display = 'none'; }
+const NOTIF_DEEPLINK_ROUTES = { loading_assignment: (id) => `/logistics/loading.html?assignment=${encodeURIComponent(id)}`, shipment: (id) => `/logistics/loading.html?shipment=${encodeURIComponent(id)}` };
+function handleNotifClick(id, type, eid) { fetch('/api/notifications/read', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id] }) }); const build = NOTIF_DEEPLINK_ROUTES[type]; if (build && eid && eid !== 'null' && eid !== 'undefined') window.location.href = build(eid); _notifOpen = false; document.getElementById('hdr-notif-dropdown').style.display = 'none'; }
 async function _loadNotifs() {
   try {
     const d = await (await fetch('/api/notifications')).json(); if (!d.ok) return;

@@ -761,9 +761,14 @@ async function markAllRead() {
   await fetch('/api/notifications/read', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ all: true }) });
   _loadNotifs();
 }
+const NOTIF_DEEPLINK_ROUTES = {
+  loading_assignment: (id) => `/logistics/loading.html?assignment=${encodeURIComponent(id)}`,
+  shipment:           (id) => `/logistics/loading.html?shipment=${encodeURIComponent(id)}`,
+};
 function handleNotifClick(id, type, eid) {
   fetch('/api/notifications/read', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id] }) });
-  if (type === 'loading_assignment') window.location.href = '/logistics/loading.html';
+  const build = NOTIF_DEEPLINK_ROUTES[type];
+  if (build && eid && eid !== 'null' && eid !== 'undefined') window.location.href = build(eid);
   _notifOpen = false; document.getElementById('hdr-notif-dropdown').style.display = 'none';
 }
 async function _loadNotifs() {

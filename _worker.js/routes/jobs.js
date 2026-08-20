@@ -1141,6 +1141,19 @@ export async function handleApiShipments(request, env) {
     const direction = url.searchParams.get("direction");
     const status    = url.searchParams.get("status");
     const jobId     = url.searchParams.get("job_id");
+
+    // Deep-link support: fetch a single shipment by id (used by notification click-through
+    // to resolve shipment.id -> job_id). Read-only; already gated under logistics.
+    const byId = url.searchParams.get("id");
+    if (byId) {
+      try {
+        const row = await db.prepare("SELECT * FROM shipments WHERE id = ?").bind(byId).first();
+        return json({ ok: true, data: row || null });
+      } catch (e) {
+        return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
+      }
+    }
+
     const days      = parseInt(url.searchParams.get("days") || "30", 10);
     const week      = url.searchParams.get("week"); // YYYY-MM-DD of week start (Mon)
 
