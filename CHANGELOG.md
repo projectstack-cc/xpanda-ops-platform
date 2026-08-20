@@ -1230,6 +1230,23 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P394 — BOL Email Queue: click a tile to preview the BOL before sending (logistics-agent §3).**
+  Clicking a queued BOL tile's label (`logistics/bol-email.html`) now opens a modal that renders
+  that BOL's **driver copy** — the same copy that gets emailed — via the page's existing
+  `window.BolShared.generatePdf([record], { previewOnly:true, copyType:'driver' })`, into an
+  `<iframe>` from the returned `blobUrl`. Lets a manager confirm it's the right BOL and the fields
+  are correct before sending, without leaving the queue. Frontend-only, no backend/schema change;
+  `bol-shared.js` untouched. Reuses the shared `logistics-modal-overlay`/`logistics-modal-close`
+  backdrop classes (confirmed already present in `logistics-shared.css`, no new overlay rule
+  needed). The label click only opens the preview — the row checkbox and × remove button keep
+  their own separate click targets, unaffected. Blob URL is revoked on close; an "Open in tab"
+  link is also offered as a fallback for devices where the iframe's blob PDF doesn't render inline.
+  Prompt file's internal header mislabeled this "P360" (that number was already shipped — Shift
+  Notes v2 UI, P359–P361) — sequenced and changelogged as P394 per the filename and the actual
+  next prompt number after P393, same mislabeling pattern seen before (P362, P390).
+  `node --check` clean on the extracted inline `<script>` block. No matching BACKLOG.md item
+  existed to remove.
+
 - **P393 — Edit generated BOLs from the Logistics dashboard view modal (logistics-agent §3 + db-api-agent §9).**
   The BOL view modal (`#log-bol-view-modal`, `logistics/index.html`) gains an **Edit** button that
   swaps the iframe for the existing `BolEditor` component in-place — no more delete-and-remake to
