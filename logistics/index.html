@@ -29,11 +29,19 @@
     <div style="padding:10px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
       <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--text);">Bill of Lading</h3>
       <div style="display:flex;gap:8px;align-items:center;">
+        <button id="log-bol-edit-btn" onclick="openBolEditor()" style="display:none;padding:6px 12px;background:var(--ghost-bg);color:var(--muted);border:1px solid var(--input-border);border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">Edit</button>
         <button onclick="downloadBolFromViewer()" style="padding:6px 12px;background:var(--ghost-bg);color:var(--muted);border:1px solid var(--input-border);border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">Download</button>
         <button onclick="closeBolViewModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);padding:0;line-height:1;">×</button>
       </div>
     </div>
     <iframe id="log-bol-view-iframe" style="flex:1;width:100%;border:none;background:#525659;"></iframe>
+    <div id="log-bol-edit-host" style="display:none;flex:1;flex-direction:column;overflow:hidden;background:var(--card-bg);">
+      <div id="log-bol-edit-picker" style="display:none;padding:8px 16px;border-bottom:1px solid var(--line);">
+        <label style="font-size:13px;color:var(--muted);margin-right:8px;">Editing load:</label>
+        <select id="log-bol-edit-select" style="padding:6px 10px;border:1px solid var(--input-border);border-radius:6px;background:var(--card-bg);color:var(--text);font-size:13px;"></select>
+      </div>
+      <div id="log-bol-edit-mount" style="flex:1;overflow:auto;"></div>
+    </div>
   </div>
 </div>
 
@@ -964,6 +972,8 @@ async function loadBolDocuments(s) {
 
 let currentBolBlobUrl = null;
 let currentBolFilename = 'BOL.pdf';
+let bolViewState = { jobId: null, bols: [], activeIndex: 0, locked: false };
+const BOL_LOCKED_STATUSES = ['in_transit', 'delivered', 'archived', 'cancelled'];
 
 async function viewBolForJob(jobId) {
   if (!jobId) return;
@@ -983,6 +993,20 @@ async function viewBolForJob(jobId) {
     const bolsToRender = Object.keys(byLoad)
       .sort((a, c) => Number(a) - Number(c))
       .map(k => byLoad[k]);
+
+    const _ship = (outboundData || []).find(s => String(s.job_id) === String(jobId));
+    bolViewState = {
+      jobId,
+      bols: bolsToRender,
+      activeIndex: 0,
+      locked: !!(_ship && BOL_LOCKED_STATUSES.includes(String(_ship.status)))
+    };
+    const _editBtn = document.getElementById('log-bol-edit-btn');
+    if (_editBtn) _editBtn.style.display = bolViewState.locked ? 'none' : '';
+    // Ensure viewer is showing (not the editor) on every (re)open:
+    document.getElementById('log-bol-edit-host').style.display = 'none';
+    document.getElementById('log-bol-edit-mount').innerHTML = '';
+    document.getElementById('log-bol-view-iframe').style.display = '';
 
     // Render the same combined output as Generate: original → driver → customer.
     const { PDFDocument } = PDFLib;
@@ -1007,10 +1031,106 @@ async function viewBolForJob(jobId) {
   }
 }
 
+function openBolEditor() {
+  if (bolViewState.locked) { alert('This load has shipped — the BOL is read-only.'); return; }
+  if (typeof BolEditor === 'undefined' || !BolEditor.open) { alert('Editor failed to load. Refresh and try again.'); return; }
+  const bols = bolViewState.bols || [];
+  if (!bols.length) return;
+
+  const picker = document.getElementById('log-bol-edit-picker');
+  if (bols.length > 1) {
+    let sel = document.getElementById('log-bol-edit-select');
+    sel.innerHTML = '';
+    bols.forEach((b, i) => {
+      const o = document.createElement('option');
+      o.value = String(i);
+      const load = (b.load_number != null && b.load_number !== '') ? b.load_number : (i + 1);
+      o.textContent = `Load ${load} — BOL ${b.bol_number || b.id}`;
+      sel.appendChild(o);
+    });
+    // Rebind change handler cleanly (avoid stacking listeners across opens):
+    const fresh = sel.cloneNode(true);
+    sel.parentNode.replaceChild(fresh, sel);
+    fresh.value = String(bolViewState.activeIndex || 0);
+    fresh.addEventListener('change', (e) => {
+      bolViewState.activeIndex = Number(e.target.value) || 0;
+      mountBolEditor();
+    });
+    picker.style.display = '';
+  } else {
+    picker.style.display = 'none';
+    bolViewState.activeIndex = 0;
+  }
+
+  document.getElementById('log-bol-view-iframe').style.display = 'none';
+  document.getElementById('log-bol-edit-host').style.display = 'flex';
+  document.getElementById('log-bol-edit-btn').style.display = 'none';
+  mountBolEditor();
+}
+
+function mountBolEditor() {
+  const bol = bolViewState.bols[bolViewState.activeIndex];
+  if (!bol) return;
+  // Hydrate _overrides from the stored render_overrides string so the editor derives current values.
+  if (!bol._overrides && bol.render_overrides) {
+    try {
+      bol._overrides = (typeof bol.render_overrides === 'string')
+        ? JSON.parse(bol.render_overrides)
+        : bol.render_overrides;
+    } catch (e) { /* leave unset — editor falls back to base fields */ }
+  }
+  const mount = document.getElementById('log-bol-edit-mount');
+  mount.innerHTML = '';
+  requestAnimationFrame(() => {
+    BolEditor.open(bol, mount, { onApply: bolEditorApply, onCancel: closeBolEditor });
+  });
+}
+
+async function bolEditorApply(updatedBol) {
+  try {
+    // FULL-ROW replace: send the entire existing row, swapping in the new overrides only.
+    const payload = Object.assign({}, updatedBol, {
+      render_overrides: updatedBol._overrides || null
+    });
+    delete payload._overrides; // client-only key; harmless but tidy
+    const res = await api.put('/api/bols/' + encodeURIComponent(updatedBol.id), payload);
+    if (!res.ok) {
+      if (res.status === 409 || (res.data && res.data.locked)) {
+        alert('This load has shipped — the BOL can no longer be edited.');
+      } else {
+        alert('Failed to save BOL changes.');
+      }
+      closeBolEditor();
+      return;
+    }
+    closeBolEditor();
+    // Reload from the API so the viewer reflects the persisted overrides.
+    await viewBolForJob(bolViewState.jobId);
+  } catch (e) {
+    console.error('BOL edit save failed:', e);
+    alert('Failed to save BOL changes.');
+    closeBolEditor();
+  }
+}
+
+function closeBolEditor() {
+  document.getElementById('log-bol-edit-host').style.display = 'none';
+  document.getElementById('log-bol-edit-mount').innerHTML = '';
+  document.getElementById('log-bol-view-iframe').style.display = '';
+  if (!bolViewState.locked) {
+    const btn = document.getElementById('log-bol-edit-btn');
+    if (btn) btn.style.display = '';
+  }
+}
+
 function closeBolViewModal() {
   document.getElementById('log-bol-view-modal').style.display = 'none';
   document.getElementById('log-bol-view-iframe').src = '';
+  document.getElementById('log-bol-edit-host').style.display = 'none';
+  document.getElementById('log-bol-edit-mount').innerHTML = '';
+  document.getElementById('log-bol-view-iframe').style.display = '';
   if (currentBolBlobUrl) { try { URL.revokeObjectURL(currentBolBlobUrl); } catch (e) {} currentBolBlobUrl = null; }
+  bolViewState = { jobId: null, bols: [], activeIndex: 0, locked: false };
 }
 
 function downloadBolFromViewer() {

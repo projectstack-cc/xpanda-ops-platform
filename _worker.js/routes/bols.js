@@ -483,8 +483,22 @@ export async function handleApiBols(request, env) {
     try { payload = await request.json(); }
     catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
 
-    const existing = await db.prepare("SELECT id, render_overrides, access_token FROM bols WHERE id = ?").bind(bolId).first();
+    const existing = await db.prepare("SELECT id, job_id, render_overrides, access_token FROM bols WHERE id = ?").bind(bolId).first();
     if (!existing) return json({ ok: false, error: "BOL not found." }, 404);
+
+    if (existing.job_id) {
+      const _ship = await db
+        .prepare("SELECT status FROM shipments WHERE job_id = ? AND direction = 'outbound' ORDER BY updated_at DESC LIMIT 1")
+        .bind(existing.job_id)
+        .first();
+      const LOCKED = ['in_transit', 'delivered', 'archived', 'cancelled'];
+      if (_ship && LOCKED.includes(String(_ship.status))) {
+        return json(
+          { ok: false, error: 'BOL locked', detail: 'This load has shipped; the BOL can no longer be edited.', locked: true },
+          409
+        );
+      }
+    }
 
     const s = (f) => String(payload[f] || "").trim();
     const validTerms    = ["prepaid", "collect", "3rd_party"];

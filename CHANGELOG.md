@@ -1230,6 +1230,29 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P393 — Edit generated BOLs from the Logistics dashboard view modal (logistics-agent §3 + db-api-agent §9).**
+  The BOL view modal (`#log-bol-view-modal`, `logistics/index.html`) gains an **Edit** button that
+  swaps the iframe for the existing `BolEditor` component in-place — no more delete-and-remake to
+  change a generated BOL. Editing writes to the already-existing `bols.render_overrides` column via
+  the already-existing `PUT /api/bols/:id`; the Apply handler always sends the full existing BOL row
+  (from the modal's own `SELECT *`) with only `render_overrides` swapped in, since the PUT is a
+  full-row replace. Multi-load jobs get a load picker (`log-bol-edit-select`) to choose which BOL to
+  edit; single-load jobs skip it. Backend freeze guard (`_worker.js/routes/bols.js`): the PUT's
+  existing-row `SELECT` now also loads `job_id`, and immediately rejects with `409 { locked: true }`
+  when that job's most recent **outbound** `shipments` row has status ∈ `{in_transit, delivered,
+  archived, cancelled}` — a BOL is a legal snapshot once the load has shipped. The Edit button hides
+  client-side for locked jobs (derived from `outboundData`, the dashboard's own shipment list); the
+  409 is also handled directly (alert) so a stale-open modal can't slip a locked edit through. **Real
+  gap found and fixed, not just noted**: the prompt's own guard snippet queried
+  `shipments WHERE job_id = ? ORDER BY updated_at DESC LIMIT 1` with no `direction` filter — every
+  other `job_id`-scoped `shipments` query in `_worker.js` (`loading.js`, `jobs.js`, `public.js`)
+  filters `direction = 'outbound'`, because a job can carry both an inbound and an outbound shipment
+  row. Left as-written, an inbound shipment updated more recently than the real outbound one could
+  have shadowed the correct lock state in either direction. Added `AND direction = 'outbound'` to
+  match the established pattern. No DB migration, no new permission (PUT already gated by logistics
+  `edit`). `node --check` clean on `bols.js`; inline `<script>` blocks in `logistics/index.html`
+  extracted and syntax-checked clean (classic scripts, not modules).
+
 - **P392 — Notification click-through deep-links to the INV modal (logistics-agent §3 + db-api-agent §9).**
   Clicking a notification now navigates to the referenced record and opens the Loading
   Dashboard `openShippingInfo` INV modal, instead of only marking it read. `shared-header.js`
