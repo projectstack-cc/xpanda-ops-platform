@@ -232,6 +232,9 @@
         <textarea id="damage-notes" placeholder="Describe the damage…"></textarea>
       </div>
 
+      <label class="field" for="additional-info">Additional info (optional)</label>
+      <textarea id="additional-info" placeholder="e.g. fuel surcharge added to BOL…"></textarea>
+
       <label class="field">Photo of signed BOL</label>
       <div class="photo-area">
         <input type="file" accept="image/*" capture="environment" id="photo-input" class="photo-input">
@@ -328,6 +331,7 @@
     const accepted = getSelectedValue('accepted-group');
     const damages = getSelectedValue('damages-group') === 'yes';
     const damage_notes = damages ? (document.getElementById('damage-notes').value || '') : null;
+    const additional_info = (document.getElementById('additional-info').value || '').trim() || null;
     if (!accepted || !photoBase64) return;
 
     const btn = document.getElementById('submit-btn');
@@ -337,7 +341,7 @@
       const res = await fetch('/api/public/bol-delivery/' + encodeURIComponent(token), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accepted, damages, damage_notes, signed_photo_base64: photoBase64 }),
+        body: JSON.stringify({ accepted, damages, damage_notes, additional_info, signed_photo_base64: photoBase64 }),
       });
       const data = await res.json();
       if (!data.ok) { btn.disabled = false; btn.textContent = 'Submit Delivery'; alert(data.error || 'Failed'); return; }
