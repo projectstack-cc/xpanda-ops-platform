@@ -184,10 +184,14 @@ export async function handleApiPublicBolDelivery(request, env) {
   try { payload = await request.json(); }
   catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
 
-  const accepted = payload.accepted;
-  if (!['yes', 'no', 'partial'].includes(accepted)) {
+  const source = payload.source === 'carrier_upload' ? 'carrier_upload' : 'driver_qr';
+  const accepted = source === 'carrier_upload' ? (payload.accepted || 'yes') : payload.accepted;
+  if (source !== 'carrier_upload' && !['yes', 'no', 'partial'].includes(accepted)) {
     return json({ ok: false, error: 'accepted must be yes|no|partial' }, 400);
   }
+  const additionalInfo = payload.additional_info != null
+    ? String(payload.additional_info).slice(0, 2000)
+    : null;
   const damages = !!payload.damages;
   const damageNotes = damages ? String(payload.damage_notes || '').slice(0, 2000) : null;
   const photoBase64 = String(payload.signed_photo_base64 || '');
@@ -224,8 +228,10 @@ export async function handleApiPublicBolDelivery(request, env) {
   if (alreadyDelivered) {
     return json({ ok: true, stage: 'delivered', already: true });
   }
-  // Must be in_transit before a delivery POST is valid.
-  if (notInTransit) {
+  // Must be in_transit before a delivery POST is valid — EXCEPT the carrier upload
+  // fail-safe, which exists precisely because the driver skipped the QR pickup scan
+  // that sets in_transit. Allow it straight to delivered.
+  if (notInTransit && source !== 'carrier_upload') {
     return json({ ok: false, error: 'shipment must be in_transit before delivery' }, 409);
   }
 
@@ -244,12 +250,12 @@ export async function handleApiPublicBolDelivery(request, env) {
 
   if (bol.load_number != null) {
     await db.prepare(
-      "UPDATE loading_assignments SET loading_status = 'delivered', delivered_at = ?, updated_at = ? WHERE job_id = ? AND load_number = ? AND loading_status != 'archived'"
-    ).bind(now, now, bol.job_id, bol.load_number).run();
+      "UPDATE loading_assignments SET loading_status = 'delivered', delivered_at = ?, in_transit_at = COALESCE(in_transit_at, ?), updated_at = ? WHERE job_id = ? AND load_number = ? AND loading_status != 'archived'"
+    ).bind(now, now, now, bol.job_id, bol.load_number).run();
   } else {
     await db.prepare(
-      "UPDATE loading_assignments SET loading_status = 'delivered', delivered_at = ?, updated_at = ? WHERE job_id = ? AND loading_status != 'archived'"
-    ).bind(now, now, bol.job_id).run();
+      "UPDATE loading_assignments SET loading_status = 'delivered', delivered_at = ?, in_transit_at = COALESCE(in_transit_at, ?), updated_at = ? WHERE job_id = ? AND loading_status != 'archived'"
+    ).bind(now, now, now, bol.job_id).run();
   }
 
   // Data-integrity backstop: driver QR confirms delivery → cutting is provably done.
@@ -260,8 +266,8 @@ export async function handleApiPublicBolDelivery(request, env) {
   }
 
   await db.prepare(
-    "UPDATE bols SET signed_bol_photo_key = ?, signed_bol_uploaded_at = ? WHERE id = ?"
-  ).bind(r2Key, now, bol.id).run();
+    "UPDATE bols SET signed_bol_photo_key = ?, signed_bol_uploaded_at = ?, signed_bol_additional_info = COALESCE(?, signed_bol_additional_info) WHERE id = ?"
+  ).bind(r2Key, now, additionalInfo, bol.id).run();
 
   // Gate the job-level shipment flip + dispatch: only once every non-archived assignment
   // for the job has reached delivered. Zero non-archived assignments counts as complete.
@@ -279,15 +285,15 @@ export async function handleApiPublicBolDelivery(request, env) {
         delivery_damages = ?,
         delivery_damage_notes = ?,
         delivery_recorded_at = ?,
-        delivery_source = 'driver_qr',
+        delivery_source = ?,
         updated_at = ?
       WHERE id = ?
-    `).bind(now, accepted, damages ? 1 : 0, damageNotes, now, now, shipment.id).run();
+    `).bind(now, accepted, damages ? 1 : 0, damageNotes, now, source, now, shipment.id).run();
   }
 
   await logActivity(db, 'delivery_completed', 'shipment', shipment.id,
-    `Delivery completed via driver QR — BOL #${bol.bol_number}`,
-    { source: 'driver_qr', bol_number: bol.bol_number, accepted, damages, photo_key: r2Key }, null);
+    `Delivery completed via ${source === 'carrier_upload' ? 'carrier upload' : 'driver QR'} — BOL #${bol.bol_number}`,
+    { source, bol_number: bol.bol_number, accepted, damages, photo_key: r2Key }, null);
 
   // Push notification — reuse the existing 'loading.delivered' type. Only fire once the
   // job-level shipment has actually flipped (the last trailer) — per-trailer spam is not wanted.
@@ -309,4 +315,25 @@ export async function handleApiPublicBolDelivery(request, env) {
   }
 
   return json({ ok: true, stage: 'delivered' });
+}
+
+export async function handleApiPublicBolSigned(request, env) {
+  const url = new URL(request.url);
+  const token = url.pathname.replace('/api/public/bol-signed/', '').replace(/\/$/, '');
+  if (!token || token.length < 8) return new Response('Invalid token', { status: 400 });
+
+  const db = env.DB;
+  const row = await db.prepare(
+    "SELECT signed_bol_photo_key FROM bols WHERE access_token = ?"
+  ).bind(token).first();
+  if (!row?.signed_bol_photo_key) return new Response('Not found', { status: 404 });
+
+  const obj = await env.BOL_PHOTOS.get(row.signed_bol_photo_key);
+  if (!obj) return new Response('Not found', { status: 404 });
+  return new Response(obj.body, {
+    headers: {
+      'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+      'Cache-Control': 'private, max-age=300',
+    },
+  });
 }
