@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import CarrierStatusPill from "./CarrierStatusPill";
+import CarrierUploadModal from "./CarrierUploadModal";
 
 const REFRESH_MS = 60_000;
 
@@ -14,6 +15,11 @@ interface CarrierRow {
   trailer_number: string | null;
   loading_status: string;
   load_number: number | null;
+  load_count: number | null;
+  suffix: string;
+  access_token: string | null;
+  has_signed: boolean;
+  additional_info: string | null;
   ship_day: string;
 }
 
@@ -47,14 +53,16 @@ async function handleSignOut() {
   window.location.href = "/login.html";
 }
 
-function LoadRow({ row }: { row: CarrierRow }) {
+function LoadRow({ row, onUpload }: { row: CarrierRow; onUpload: (row: CarrierRow) => void }) {
   const cityState = [row.ship_to_city, row.ship_to_state].filter(Boolean).join(", ");
+  const uploadDisabled = !row.access_token || row.loading_status === "delivered";
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-lg font-bold tabular-nums truncate">
+          <div className="text-xs font-semibold tabular-nums truncate">
             INV# {row.invoice_number || "—"}
+            {row.suffix}
           </div>
           <div className="text-sm text-[var(--text-muted)] truncate mt-0.5">
             {row.customer || "—"}
@@ -69,18 +77,65 @@ function LoadRow({ row }: { row: CarrierRow }) {
         <CarrierStatusPill status={row.loading_status} />
       </div>
       <div className="flex items-center gap-2 mt-3">
-        <span className="inline-flex items-center px-2 py-1 rounded bg-[var(--ghost-bg)] text-[var(--ghost-text)] text-xs font-semibold font-mono tabular-nums">
+        <span className="inline-flex items-center px-3 py-1.5 rounded bg-[var(--ghost-bg)] text-[var(--ghost-text)] text-lg font-bold font-mono tabular-nums">
           Bay {row.bay_number ?? "—"}
         </span>
-        <span className="inline-flex items-center px-2 py-1 rounded bg-[var(--ghost-bg)] text-[var(--ghost-text)] text-xs font-semibold font-mono tabular-nums">
+        <span className="inline-flex items-center px-3 py-1.5 rounded bg-[var(--ghost-bg)] text-[var(--ghost-text)] text-lg font-bold font-mono tabular-nums">
           Trailer {row.trailer_number || "—"}
         </span>
       </div>
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        {row.access_token ? (
+          <a
+            href={`/track/${row.access_token}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold"
+          >
+            View BOL
+          </a>
+        ) : (
+          <span className="inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold opacity-40 cursor-not-allowed">
+            View BOL
+          </span>
+        )}
+        {row.has_signed && row.access_token && (
+          <a
+            href={`/api/public/bol-signed/${row.access_token}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold"
+          >
+            View Signed BOL
+          </a>
+        )}
+        <button
+          type="button"
+          disabled={uploadDisabled}
+          onClick={() => onUpload(row)}
+          className="inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Upload BOL
+        </button>
+      </div>
+      {row.additional_info && (
+        <div className="mt-2 inline-block rounded px-2 py-1 text-xs bg-[var(--info-bg)] text-[var(--info-text)]">
+          Additional info: {row.additional_info}
+        </div>
+      )}
     </div>
   );
 }
 
-function DaySection({ label, rows }: { label: string; rows: CarrierRow[] }) {
+function DaySection({
+  label,
+  rows,
+  onUpload,
+}: {
+  label: string;
+  rows: CarrierRow[];
+  onUpload: (row: CarrierRow) => void;
+}) {
   return (
     <section>
       <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2 px-1">
@@ -93,7 +148,7 @@ function DaySection({ label, rows }: { label: string; rows: CarrierRow[] }) {
       ) : (
         <div className="flex flex-col gap-2">
           {rows.map((row, i) => (
-            <LoadRow key={`${row.invoice_number}-${row.load_number}-${i}`} row={row} />
+            <LoadRow key={`${row.invoice_number}-${row.load_number}-${i}`} row={row} onUpload={onUpload} />
           ))}
         </div>
       )}
@@ -105,6 +160,7 @@ export default function CarrierBoard() {
   const [data, setData] = useState<CarrierResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uploadRow, setUploadRow] = useState<CarrierRow | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -148,7 +204,7 @@ export default function CarrierBoard() {
         </button>
       </header>
 
-      <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-4 space-y-6">
+      <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-4">
         {loading && !data && !error && (
           <div className="text-center text-sm text-[var(--text-hint)] py-10">Loading…</div>
         )}
@@ -167,16 +223,25 @@ export default function CarrierBoard() {
         )}
 
         {data && (
-          <>
-            <DaySection label={dayLabel(data.today)} rows={todayRows} />
-            <DaySection label={dayLabel(data.tomorrow)} rows={tomorrowRows} />
-          </>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <DaySection label={dayLabel(data.today)} rows={todayRows} onUpload={setUploadRow} />
+            <DaySection label={dayLabel(data.tomorrow)} rows={tomorrowRows} onUpload={setUploadRow} />
+          </div>
         )}
       </main>
 
       <footer className="px-4 py-4 text-center text-xs text-[var(--text-hint)]">
         Showing loads for Lisma and Seal Express during rebrand.
       </footer>
+
+      {uploadRow && (
+        <CarrierUploadModal
+          isOpen={!!uploadRow}
+          onClose={() => setUploadRow(null)}
+          row={uploadRow}
+          onDone={load}
+        />
+      )}
     </div>
   );
 }

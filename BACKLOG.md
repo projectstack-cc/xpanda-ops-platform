@@ -14,6 +14,10 @@
   `/v2/carrier` ships invoice/customer/city-state/bay/trailer/status only. Revisit if the carrier
   needs scheduling detail beyond the day-level view.
 
+- [ ] **P399 follow-up — client-side image downscale in `CarrierUploadModal`.** Currently only a
+  hard ~3MB base64 size cap with an inline "please retake" error; a canvas-based downscale before
+  encoding would avoid the retake step entirely for oversized phone photos.
+
 ## Shift Notes (v2)
 
 - [ ] **P359 follow-up — v2 activity-log parity for notes.** `logActivity()` is legacy-worker-only;

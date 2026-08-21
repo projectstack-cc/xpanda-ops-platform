@@ -1083,6 +1083,47 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Carrier View (v2)
 
+- **P399 — Carrier View UI: side-by-side days, pill/font swap, suffix, BOL action pills + upload
+  modal (react-component-agent §9b).** Five changes to `CarrierBoard.tsx`: (1) Today/Tomorrow render
+  as a `grid grid-cols-1 md:grid-cols-2` (was `space-y-6` stacked), `main` widened to `max-w-6xl`.
+  (2) Visual weight swap in `LoadRow` — INV# (with P398's `suffix` inline) shrinks from
+  `text-lg font-bold` to the old pill size (`text-xs font-semibold`); Bay/Trailer pills grow to the
+  old INV# size (`text-lg font-bold`, `px-3 py-1.5`), keeping the `--ghost-bg`/`--ghost-text` pill
+  styling. (3) New BOL action pill row: **View BOL** links to `/track/{access_token}` (the existing
+  GET tracking page — the public `bol-document` endpoint is POST-only, so this was the correct
+  target rather than a raw PDF link), greyed/disabled when `access_token` is null; **View Signed
+  BOL** links to P396's `GET /api/public/bol-signed/{access_token}`, rendered only when
+  `has_signed`; an `--info-bg`/`--info-text` callout shows `additional_info` beneath the pills when
+  present. **Upload BOL** opens a new `CarrierUploadModal.tsx` (composes the shared `@/components/
+  Modal` primitive, not hand-rolled), disabled when `access_token` is null or the load is already
+  `delivered`. The modal takes a photo (`accept="image/*" capture="environment"`, base64-encoded
+  client-side, ~3MB cap with an inline retake error above that), POSTs
+  `{ source: 'carrier_upload', signed_photo_base64 }` to `/api/public/bol-delivery/:token`, surfaces
+  server errors (409/413/500) as readable messages, and calls the parent's `load()` via `onDone` to
+  refetch on success. `npx tsc --noEmit` + `npm run cf-build` (`opennextjs-cloudflare build`) both
+  green.
+
+- **P398 — Carrier route payload: BOL linkage, tokens, signed-state, multi-load suffix
+  (next-platform-agent §9a).** `/v2/api/carrier`'s query gains a `LEFT JOIN bols b` on
+  `(job_id, load_number)`, guarded against multi-BOL fan-out by matching only the newest BOL per
+  load (`b.created_at = (SELECT MAX(...) ...)`). **Deviated from the prompt's own "verified 1:1"
+  join** — a live `wrangler d1 execute --remote` check (prompted by `advisor()`'s pre-push review)
+  found 107 of 425 `bols` rows have `load_number IS NULL` (single-load jobs — `load_number` is only
+  ever populated for multi-load jobs), while `loading_assignments.load_number` is never null (0/418
+  live). A plain equality join would have left every single-load carrier row's `access_token`/
+  `has_signed`/`additional_info` null — View BOL and Upload BOL silently disabled on the most common
+  case, no error, no build signal. Mirrored the existing NULL-fallback convention already used by
+  `public.js`'s driver-QR delivery match and `loading.js`'s BOL-count join (`b.load_number IS NULL
+  AND` exactly one `bols` row exists for that job) instead of inventing a new one — applied to both
+  the join condition and its newest-per-load `MAX(created_at)` subquery. Adds `access_token`,
+  `load_count`, `has_signed` (`signed_bol_photo_key IS NOT NULL`), and `additional_info` (P396's
+  column) to each row; assignments with no BOL yet come back with those fields null and the UI
+  disables the corresponding pills. New response field `suffix` (`-01`, `-02`, …) derived from the
+  integer `load_number` zero-padded, gated on `load_count > 1` — deliberately not parsed from the
+  `bol_number` string, since production data mixes padded (`4272-01`) and unpadded (`4103-3`)
+  formats. `npx tsc --noEmit` + `npm run cf-build` green (before and after the join fix). Depends on
+  P396's `signed_bol_additional_info` column — migration confirmed run same session.
+
 - **P368 — carrier-facing read-only 2-day view (`/v2/carrier`).** Rolling today+tomorrow (literal
   ET calendar days) list of outgoing loads for the Lisma/Seal Express carrier (`j.carrier LIKE
   'LISMA%' OR 'SEAL%'`), assigned-only (bay + trailer, excl. `archived`). Read route
@@ -1229,6 +1270,43 @@ Entries within each module are ordered by prompt # descending (newest first).
   `node --check` clean.
 
 ## Logistics
+
+- **P397 — `/track` QR sign page: optional Additional Info field on the signed-copy flow (logistics-agent §3).**
+  Adds a free-text "Additional info (optional)" textarea to `track/index.html`'s delivery form
+  (rendered immediately above the existing "Photo of signed BOL" field, reusing the page's existing
+  `textarea` styling — no new CSS). `submitDelivery()` reads it (`trim() || null`, so an empty field
+  sends `null`) and includes it as `additional_info` in the `bol-delivery` POST body. Does not gate
+  submission — the field is optional by design. Persisted server-side by P396's
+  `signed_bol_additional_info` column (migration confirmed run same session, see P396 entry). No JS
+  module/build step (legacy vanilla page) — verified via `grep -Fc` anchor match + balanced-tag check.
+
+- **P396 — Carrier View BOL backend: additional-info column, carrier-upload delivery branch, public
+  signed-photo endpoint (db-api-agent §9).** Groundwork for the Carrier View BOL features consumed
+  by P397–P399. New `bols.signed_bol_additional_info TEXT` column
+  (`DB_Migrations/P396-bol-additional-info.sql` — gitignored; D1's SQLite has no
+  `ADD COLUMN IF NOT EXISTS`, so re-running it would error "duplicate column" — expected and
+  harmless). **Run via `wrangler d1 execute DB --remote --file=...` this session** (Steve's explicit
+  choice via `AskUserQuestion`, prompted by `advisor()`'s pre-push review flagging that the new
+  `bols` UPDATE sits *after* the R2 photo put and the `delivered` status flip in the live driver-QR
+  flow — deploying the code before the column existed would 500 every QR delivery mid-flow, not
+  just the new carrier feature). Verified column absent via `PRAGMA table_info(bols)` before, present
+  (`cid 44`) after.
+  `handleApiPublicBolDelivery` (`_worker.js/routes/public.js`) gains a `source` field
+  (`carrier_upload` vs. the existing `driver_qr` default): a `carrier_upload` POST skips the
+  accepted-radio requirement (defaults `accepted='yes'` — the paper is hand-marked, photo-only) and
+  is now allowed straight to `delivered` even when the load isn't `in_transit` yet, since the whole
+  point of the carrier upload fail-safe is that the driver skipped the QR pickup scan that normally
+  sets `in_transit`. Both delivery `UPDATE loading_assignments` statements now also back-stamp
+  `in_transit_at = COALESCE(in_transit_at, ?)` so the timeline isn't left missing the middle stage
+  for a fail-safe delivery. `additional_info` (capped 2000 chars) persists to the new column via
+  `COALESCE(?, signed_bol_additional_info)` — never clobbers an existing note with a null on a
+  second write. `source` is threaded into `shipments.delivery_source` (was hardcoded
+  `'driver_qr'`) and the `delivery_completed` activity-log message/details. New public
+  `GET /api/public/bol-signed/:token` (`handleApiPublicBolSigned`) serves the signed R2 photo keyed
+  on `access_token` — the carrier role has no `logistics.view`, so the existing authed
+  `/api/bols/:id/signed-photo` route is unreachable for it; registered in `_worker.js/index.js`'s
+  `API_ROUTES` table, auto-exempted from the session gate by the existing `/api/public/` prefix
+  match (no explicit exemption list to extend). `node --check` clean on both edited files.
 
 - **P394 — BOL Email Queue: click a tile to preview the BOL before sending (logistics-agent §3).**
   Clicking a queued BOL tile's label (`logistics/bol-email.html`) now opens a modal that renders
