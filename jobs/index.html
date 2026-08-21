@@ -2410,18 +2410,48 @@ async function buildCutListPdf(job) {
   const colDensityX = 300;
   const colDimsX    = 380;
 
-  // Fixed row-capacity constants (not measured) — sized conservatively for Letter portrait so
-  // rows never run past the bottom margin. ROWS_PAGE_1 assumes a worst-case 5-line ship-to
-  // address under the full header; ROWS_PAGE_CONT assumes the shorter compact header. Both leave
-  // clean bottom margin even when the final page also needs to carry the total-pieces block.
-  const ROWS_PAGE_1    = 14;
-  const ROWS_PAGE_CONT = 20;
+  // P395: rows are now placed by measured height (see renderRow / rowHeight) and page-break when the
+  // next row won't fit, replacing the old fixed ROWS_PAGE_1/ROWS_PAGE_CONT capacity constants.
   const MIN_Y_FOR_TOTAL = 70; // below this, push the total-pieces block to its own trailing page
+  const LH_PART = 13; // line height for wrapped part-label lines (size 11)
+  const LH_DESC = 11; // line height for wrapped description lines (size 9)
 
   const drawRight = (page, text, size, f, color, yPos) => {
     page.drawText(text, { x: right - f.widthOfTextAtSize(text, size), y: yPos, size, font: f, color });
   };
   const hr = (page, yPos) => page.drawLine({ start: { x: margin, y: yPos }, end: { x: right, y: yPos }, thickness: 1, color: rule });
+
+  // P395: word-wrap helper. Splits `text` into lines that each fit within maxWidth at the given
+  // font/size, measured with widthOfTextAtSize. Honors embedded newlines and hard-breaks any single
+  // token wider than the column so nothing can run past the edge. Returns [] for empty input.
+  const wrapText = (text, f, size, maxWidth) => {
+    const s = String(text ?? '');
+    if (!s.trim()) return [];
+    const lines = [];
+    for (const rawLine of s.split('\n')) {
+      const words = rawLine.split(/\s+/).filter(Boolean);
+      if (!words.length) continue;
+      let line = '';
+      for (const w of words) {
+        if (f.widthOfTextAtSize(w, size) <= maxWidth) {
+          const trial = line ? line + ' ' + w : w;
+          if (f.widthOfTextAtSize(trial, size) <= maxWidth) { line = trial; }
+          else { if (line) lines.push(line); line = w; }
+        } else {
+          // token longer than the column: flush current line, then hard-break by characters
+          if (line) { lines.push(line); line = ''; }
+          let chunk = '';
+          for (const ch of w) {
+            if (chunk && f.widthOfTextAtSize(chunk + ch, size) > maxWidth) { lines.push(chunk); chunk = ch; }
+            else { chunk += ch; }
+          }
+          line = chunk;
+        }
+      }
+      if (line) lines.push(line);
+    }
+    return lines;
+  };
 
   let logoImg = null;
   try {
@@ -2484,20 +2514,37 @@ async function buildCutListPdf(job) {
     return drawColumnHeader(page, y - 18);
   };
 
-  const drawRow = (page, li, yStart) => {
+  // P395: renders a row with wrapped part-label + wrapped description. Pass page=null to MEASURE only
+  // (draws nothing) so pagination can decide page-breaks with the exact geometry it will draw.
+  // Returns the y after the row.
+  const renderRow = (page, li, yStart) => {
     let y = yStart;
     const partLabel = (li.part_number && String(li.part_number).trim()) || 'Foam';
-    page.drawText(partLabel, { x: margin, y, size: 11, font: fontBold, color: black });
-    page.drawText(li.density ? String(li.density) : '', { x: colDensityX, y, size: 10, font, color: black });
-    page.drawText(formatCutListDims(li.dimensions), { x: colDimsX, y, size: 10, font, color: black });
-    drawRight(page, String(Number(li.quantity) || 0), 10, font, black, y);
-    y -= 13;
-    if (li.description) {
-      page.drawText(String(li.description), { x: margin, y, size: 9, font, color: gray });
+    const partLines = wrapText(partLabel, fontBold, 11, colDensityX - margin - 8);
+    const plines = partLines.length ? partLines : [partLabel];
+    const dlines = li.description ? wrapText(li.description, font, 9, right - margin) : [];
+    if (page) {
+      // density / dims / qty align to the first part line
+      page.drawText(li.density ? String(li.density) : '', { x: colDensityX, y, size: 10, font, color: black });
+      page.drawText(formatCutListDims(li.dimensions), { x: colDimsX, y, size: 10, font, color: black });
+      drawRight(page, String(Number(li.quantity) || 0), 10, font, black, y);
     }
-    y -= 17;
+    for (const pl of plines) {
+      if (page) page.drawText(pl, { x: margin, y, size: 11, font: fontBold, color: black });
+      y -= LH_PART;
+    }
+    if (dlines.length) {
+      y -= 4;
+      for (const dl of dlines) {
+        if (page) page.drawText(dl, { x: margin, y, size: 9, font, color: gray });
+        y -= LH_DESC;
+      }
+    }
+    y -= 9; // trailing gap before the row separator
     return y;
   };
+  // Height of a row = how far renderRow moves y down from a zero baseline (measure-only pass).
+  const rowHeight = (li) => -renderRow(null, li, 0);
 
   const drawTotal = (page, yStart, totalQty) => {
     let y = yStart - 3;
@@ -2510,25 +2557,24 @@ async function buildCutListPdf(job) {
   const items = Array.isArray(job.line_items) ? job.line_items : [];
   const totalQty = items.reduce((sum, li) => sum + (Number(li.quantity) || 0), 0);
 
-  let idx = 0;
-  let pageCount = 0;
-  let lastPage = null;
-  let lastY = 0;
-  while (idx < items.length || pageCount === 0) {
-    const page = doc.addPage([pageW, pageH]);
-    pageCount += 1;
-    let y = pageCount === 1 ? drawPage1Header(page) : drawContHeader(page);
-    const cap = pageCount === 1 ? ROWS_PAGE_1 : ROWS_PAGE_CONT;
-    let isFirstRowOnPage = true;
-    for (const li of items.slice(idx, idx + cap)) {
-      if (!isFirstRowOnPage) hr(page, y + 8);
-      y = drawRow(page, li, y);
-      isFirstRowOnPage = false;
+  const BOTTOM = margin + 6; // lowest y a row is allowed to occupy
+  let page = doc.addPage([pageW, pageH]);
+  let pageCount = 1;
+  let y = drawPage1Header(page);
+  let isFirstRowOnPage = true;
+  for (const li of items) {
+    if (y - rowHeight(li) < BOTTOM) {
+      page = doc.addPage([pageW, pageH]);
+      pageCount += 1;
+      y = drawContHeader(page);
+      isFirstRowOnPage = true;
     }
-    idx += cap;
-    lastPage = page;
-    lastY = y;
+    if (!isFirstRowOnPage) hr(page, y + 8);
+    y = renderRow(page, li, y);
+    isFirstRowOnPage = false;
   }
+  let lastPage = page;
+  let lastY = y;
 
   if (lastY >= MIN_Y_FOR_TOTAL) {
     drawTotal(lastPage, lastY, totalQty);
@@ -2565,11 +2611,16 @@ async function buildCutListPdf(job) {
       p.drawText('CHUNKS', { x: margin, y, size: 9, font: fontBold, color: gray });
       p.drawText('CUT EACH INTO', { x: margin + 70, y, size: 9, font: fontBold, color: gray });
       y -= 16;
+      const sigMaxW = right - (margin + 70);
       for (const r of rows) {
-        if (y < MIN_Y_FOR_TOTAL) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        const sigLines = wrapText(r.sig, font, 10, sigMaxW);
+        const sl = sigLines.length ? sigLines : [''];
+        const need = sl.length * 14;
+        if (y - need < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
         p.drawText(`${r.count}×`, { x: margin, y, size: 11, font: fontBold, color: black });
-        p.drawText(r.sig, { x: margin + 70, y, size: 10, font, color: black });
-        y -= 16;
+        let sy = y;
+        for (const line of sl) { p.drawText(line, { x: margin + 70, y: sy, size: 10, font, color: black }); sy -= 14; }
+        y -= need;
       }
     }
   }

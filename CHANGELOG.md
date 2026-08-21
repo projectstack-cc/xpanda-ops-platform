@@ -1701,6 +1701,26 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P395 — Cut list PDF: word-wrap long text + measured flowing pagination (job-board-agent +
+  react-component-agent, BILATERAL).** `buildCutListPdf` in `jobs/index.html` drew every free-text
+  field (`job_line_items.description` — up to 211 chars live — part numbers, `ship_to_company`,
+  `customer`) with no width measurement; pdf-lib doesn't auto-wrap, so long strings ran off the
+  right edge. Added a `wrapText` helper (measures with `widthOfTextAtSize`, honors embedded
+  newlines, hard-breaks any single token wider than its column) and replaced `drawRow` with a
+  measure-or-draw `renderRow`/`rowHeight` pair (part label + wrapped description, `page=null` for a
+  measure-only pass). Wrapping forced pagination to change too: the old fixed row-count model
+  (`ROWS_PAGE_1 = 14`, `ROWS_PAGE_CONT = 20`, "sized so rows never run past the bottom margin")
+  would overflow the bottom margin once rows wrap to 2–3 lines, so it's replaced with measured
+  flowing pagination — track a y-cursor, page-break when the next row (by `rowHeight`) won't fit
+  above `BOTTOM`. Also wraps the CHUNK BREAKDOWN recipe line (`r.sig`, drawn at `margin + 70`) with
+  its own wrap-aware page-break. Closes the standing backlog item "P331 follow-up — cut-list PDF
+  measured-fill pagination." Identical fix landed in both `jobs/index.html` (legacy) and
+  `cutting-pilot/src/lib/cutList.ts` (the verbatim logic-port consumed by the v2 order-detail
+  modal's "Print cut list" button) in this one commit to keep the two surfaces logic-parity — no
+  layout/coordinate changes, only wrap + measured pagination. Verified: legacy inline script
+  extracted and `node --check`'d clean; v2 `npx tsc --noEmit` and `npx opennextjs-cloudflare build`
+  (via `npm run cf-build`) both green. No migration, no API, no permission changes.
+
 - **P387 — packing-slip matcher reads standalone trailing HB thickness; fee lines excluded
   (job-board-agent).** Diagnostic against all 139 corpus slips found 50% of unmatched lines (191)
   were standard Holey Board orders whose thickness prints as a standalone trailing token

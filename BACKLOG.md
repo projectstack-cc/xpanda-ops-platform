@@ -224,10 +224,6 @@
   native toolbar (unreliable on tablets); the legacy BOL modal is now the odd one out. Low priority
   — add an explicit Print button (`iframe.contentWindow.print()`, same pattern as v2) if it comes up
   on the floor.
-- [ ] **P331 follow-up — cut-list PDF measured-fill pagination.** P331 paginates with fixed,
-  unmeasured row-capacity constants (`ROWS_PAGE_1 = 14`, `ROWS_PAGE_CONT = 20`) chosen
-  conservatively for worst-case header height. If a real job's continuation pages look noticeably
-  empty or cramped, switch to measured text-height row placement instead of nudging the constants.
 - [ ] **P319 follow-up — split badge parity on jobs list/table view and calendar day-detail
   modal.** P319 only added the split-day-groups badge + Partially-shipped indicator to the Kanban
   card render; the list/table view (`jobs/index.html` ~line 823) and the calendar day-detail modal
