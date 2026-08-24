@@ -1142,6 +1142,18 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Production Log (v2)
 
+- **P403 — `production.log` permission label + nav wiring + v1 archive note (admin-auth-agent
+  §8).** `admin/roles.html` gains the `production.log` label (assignable, "Production Log
+  (Molding / Expansion)") alongside the existing `production.inventory` row, relabeled "Inventory
+  (v1 — legacy)" to keep it assignable-but-clearly-marked during the transition.
+  `index.html`'s Production home card repointed: `data-permission="production.log"`, description
+  "Molding & expansion production log", Open button → `/v2/production`. No legacy `_worker.js`
+  PATH/API map change — v2 paths are gated by P401's middleware, not the legacy worker. v1 archival
+  logged to `BACKLOG.md` as a future signed-off step (not performed here); the platform-wide i18n
+  follow-up was already present in `BACKLOG.md` (Admin/Platform section), not duplicated. Manual
+  step for Steve post-deploy: grant "Production Log (Molding / Expansion)" to the pre-expander/
+  molding operator role(s) in the Roles admin UI.
+
 - **P402 — Production v2 page: segmented Molding | Expansion (react-component-agent §9b).** New
   `/v2/production` (`src/app/production/page.tsx` server shell + `ProductionBoard.tsx` client
   board) replacing the never-used v1 3-tab inventory page. Segmented switch (Molding | Expansion,

@@ -14,6 +14,11 @@
   `bucket_weight_g / (V_liters × 16.0185)` once the bucket's rated volume constant is supplied;
   ship as a toggle.
 
+- [ ] **P403 — Archive v1 production module once v2 log is on the floor.** Remove
+  `/production/inventory.html`, `/production/bead-inventory.html`, and the `production.inventory`
+  permission key + its home card/nav gate; retire v1 tables (`molding_log`, `bead_stock`,
+  `block_inventory`) after data-retention sign-off.
+
 ---
 
 ## Carrier View (v2)
