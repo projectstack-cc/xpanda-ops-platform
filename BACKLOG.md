@@ -8,6 +8,14 @@
 
 ---
 
+## Production Log (v2)
+
+- [ ] **P402 follow-up — Density readout (expansion).** Display-only pcf per batch =
+  `bucket_weight_g / (V_liters × 16.0185)` once the bucket's rated volume constant is supplied;
+  ship as a toggle.
+
+---
+
 ## Carrier View (v2)
 
 - [ ] **P368 follow-up — appointment/ETA time column + per-bay dock instructions (deferred).**

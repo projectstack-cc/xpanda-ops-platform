@@ -1142,6 +1142,27 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Production Log (v2)
 
+- **P402 — Production v2 page: segmented Molding | Expansion (react-component-agent §9b).** New
+  `/v2/production` (`src/app/production/page.tsx` server shell + `ProductionBoard.tsx` client
+  board) replacing the never-used v1 3-tab inventory page. Segmented switch (Molding | Expansion,
+  ≥44px targets, tokened) instead of the old tab bar. Made-today strip (`GET /v2/api/production/
+  today`) shows molding block count/total lbs + per-silo chips and expansion batch count, refetched
+  after every append/create. Session bar shows the active board's current open session (silo,
+  control #, operators, ET date); **New sheet** opens `NewSheetModal.tsx` (composes `@/components/
+  Modal`, one component with a `variant` prop for both boards — no duplicated modal shell);
+  **Close sheet** PATCHes `status:'closed'`; no open session renders a "Start a sheet" empty state.
+  Row grid renders existing rows oldest-first (mirrors paper continuation) with a sticky inline
+  append row at the bottom in exact paper column order (Molding: # Block · Block Type · Block Size
+  · RC % Open · RC Speed · Virgin % Open · Virgin Speed · Time · Block Weight (lbs) · Init. Oper;
+  Expansion: Batch · Weight (KG) · Heating Time (s) · Bucket Weight (g)) — `# Block`/`Batch`
+  pre-fill as last row's number + 1 but stay editable, dispenser/numeric fields never block a save
+  when blank. After a successful append: input row clears (with the pre-filled next number), rows +
+  today strip refetch, and focus returns to the first cell for fast repeated entry (Enter in the
+  last cell also submits). `PlatformHeader.tsx`'s Production nav entry repointed from
+  `/production/` (`production.inventory`) to `/v2/production` (`production.log`). No hex colors —
+  all styling via `var(--token)`. `npx tsc --noEmit` + `npm run cf-build` green; `/production` +
+  all seven P401 API routes confirmed present in the build output.
+
 - **P401 — Production v2 API + permission gate (next-platform-agent §9a).** Standalone v2
   Production logging API backing the P402 `/v2/production` page (segmented Molding | Expansion),
   mirroring the physical XPanda Foam paper log: a **session** (silo, control #, operators, ET
