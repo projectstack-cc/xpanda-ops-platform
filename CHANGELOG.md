@@ -1140,6 +1140,27 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ---
 
+## Production Log (v2)
+
+- **P401 — Production v2 API + permission gate (next-platform-agent §9a).** Standalone v2
+  Production logging API backing the P402 `/v2/production` page (segmented Molding | Expansion),
+  mirroring the physical XPanda Foam paper log: a **session** (silo, control #, operators, ET
+  `log_date`) opened once, then appended **rows** (blocks / batches). Fully decoupled from jobs and
+  inventory — no `job_id`, no `jobs.status` writes, same pattern as the chunk-board tables. New
+  `production.log` permission key added to `src/middleware.ts`'s `PERMISSION_MAP` (gates both
+  `/v2/api/production` and `/v2/production`). New routes: `molding/sessions` (GET `?days=30` with
+  correlated `block_count`/`total_lbs` subqueries, POST), `molding/sessions/[id]` (GET with blocks,
+  PATCH), `molding/blocks` (POST, 404s on unknown `session_id`), and the expansion mirrors
+  (`batch_count` via `COUNT`, `batches` in place of `blocks`), plus `today` (GET, ET-day summary:
+  molding block count/total lbs per-silo + expansion batch count). Identity (`created_by`) is always
+  read from `X-User-Id`/`X-User-Name` headers, never the request body; all row numerics coerce
+  blank/undefined to `null` rather than rejecting (the paper leaves dispenser fields struck/blank
+  routinely). Depends on P400's migration (`DB_Migrations/production-v2-log.sql`) — confirmed run
+  against remote D1 same session (all four tables verified present via `sqlite_master` before/after).
+  `npx tsc --noEmit` + `npm run cf-build` green.
+
+---
+
 ## Database / API
 
 - **P390 — corrected chunk nester geometry (block height + interior-cuts kerf); recompute
