@@ -1190,7 +1190,12 @@ Entries within each module are ordered by prompt # descending (newest first).
   blank/undefined to `null` rather than rejecting (the paper leaves dispenser fields struck/blank
   routinely). Depends on P400's migration (`DB_Migrations/production-v2-log.sql`) — confirmed run
   against remote D1 same session (all four tables verified present via `sqlite_master` before/after).
-  `npx tsc --noEmit` + `npm run cf-build` green.
+  **Deviated from the prompt's "write an `activity_log` row on each create"** — session opens
+  (`molding/sessions` POST, `expansion/sessions` POST) write one, but the high-frequency row appends
+  (`molding/blocks`, `expansion/batches`) don't: a block/batch every few minutes, per operator, per
+  session, would flood `activity_log` with entries no one reads (unlike a session open, which is a
+  meaningful once-per-sheet event). Revisit if a floor audit trail down to the individual row is
+  ever needed. `npx tsc --noEmit` + `npm run cf-build` green.
 
 ---
 
