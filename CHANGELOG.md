@@ -602,6 +602,40 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P408 — schedule-ingest: batched writes to shrink shared-D1 write-contention window
+  (next-platform-agent §9a, closes `SIGNOUT-INVESTIGATION-P404.md`'s "Trigger" candidate —
+  a contention-reduction measure, not a proven root cause).** The `xpanda-cutting-v2` cron
+  (`*/10 * * * *`) ran `runSchedulePoll()` → `matchAndUpsert()` (`schedule-ingest.ts`) as a fully
+  sequential per-row `SELECT`-then-`INSERT`/`UPDATE` loop (up to ~2 round trips × up to ~180 rows
+  across both fetched ship weeks) plus 1–2 per-week `DELETE`s, against the **same D1** that
+  `validateSession` reads on every legacy and v2 request — a multi-second write burst every 10
+  minutes with zero coordination with the read-heavy auth path (P405/P406 fix the consequence;
+  this shrinks the odds of the D1-side blip in the first place). Replaced the per-row `SELECT` with
+  one pre-fetch (`lookupExistingRows`) of every existing `schedule_rows` row across the fetched
+  ship weeks (≤2 weeks, well under the 100-bound-param ceiling — no chunking needed there), then
+  built every row's INSERT-or-UPDATE as a prepared-but-unexecuted D1 statement and submitted them
+  via `db.batch([...])`, chunked at `WRITE_BATCH_CHUNK = 90` (reuses the file's existing
+  `JOBS_LOOKUP_CHUNK` number for a familiar, already-justified size — sized to roughly one
+  ship-week's rows, so one batch's blast radius on failure is at most one week, not the whole run;
+  the underlying constraint differs — D1 batch-call size, not one statement's bound-param count —
+  but the number was reused deliberately rather than inventing a second one). The per-week
+  `DELETE` prune now also runs via `db.batch()`, in its own call issued only after every upsert
+  batch above it has been awaited — preserves the mark-and-sweep ordering (prune reads
+  `last_seen_at` values the upserts just wrote) the sequential version relied on. **Real edge case
+  reasoned through and fixed by construction, not left to chance**: the old per-row
+  select-then-write loop naturally self-corrected if two parsed rows in the same run resolved to
+  the same (invoice_number, ship_week, day_of_week) key (a same-day duplicate INV split, e.g. — the
+  file's own doc comment gives a cross-day example, not ruling out a same-day one) — each
+  subsequent same-key row would `UPDATE` the row the previous one had just inserted, so the last
+  one always won. A naive batch-everything version would have instead pre-fetched existing state
+  once, found no existing row for either, and emitted **two INSERT statements** for one key —
+  silently duplicating a row instead of keying it once, breaking the join. Added an explicit
+  last-one-wins de-dup pass (`Map` keyed the same way as the existing-row lookup) before building
+  statements, so the batched version's output matches the sequential version's output row-for-row
+  even in this case. Not verified against live duplicate data this session (no evidence it
+  currently occurs) — a defensive-by-construction fix for behavior-preservation, not a live-
+  diagnosed bug. No schema change, no migration, no change to parse/normalize logic, no change to
+  cron cadence — write mechanism only. `npx tsc --noEmit` + `npm run cf-build` green.
 - **P377 — "Loading X of Y" for multi-load orders on `/v2/schedule`.** A multi-load order
   previously flipped to "Loaded" the moment a **single** one of its loads was marked loaded (same
   flaw on the `in_transit`/`delivered` → Shipped rungs — one departed truck flipped a partly-loaded

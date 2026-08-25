@@ -238,6 +238,24 @@ interface JobLookupRow {
   invoice_number: string;
 }
 
+interface ExistingScheduleRow {
+  id: number;
+  invoice_number: string;
+  ship_week: string;
+  day_of_week: string;
+}
+
+// Sized to roughly one ship-week's worth of order rows (the file's own realistic-volume
+// assumption — see JOBS_LOOKUP_CHUNK above), so a single batch failure's blast radius is at
+// most one week rather than the whole run, and to stay comfortably clear of any D1 per-batch
+// ceiling. Not the same constraint JOBS_LOOKUP_CHUNK guards (bound-param count on one
+// statement) — reused as a chunk size purely for a familiar, already-justified number.
+const WRITE_BATCH_CHUNK = 90;
+
+function scheduleRowKey(row: { invoice_number: string; ship_week: string; day_of_week: string }): string {
+  return `${row.invoice_number}::${row.ship_week}::${row.day_of_week}`;
+}
+
 /**
  * Matches parsed rows to `jobs.invoice_number`, upserts into `schedule_rows` by
  * (invoice_number, ship_week, day_of_week), and prunes rows no longer present for weeks
@@ -246,10 +264,18 @@ interface JobLookupRow {
  * multiple delivery days within the same week (confirmed live: "INV 4203-001 thru 003" on
  * Tuesday and "INV 4203-004 thru 007" on Wednesday both reduce to base invoice 4203 under the
  * `INV\s*(\d+)` regex; a two-field key would have silently dropped one row every poll).
- * `schedule_rows` has no UNIQUE constraint for this (see 1/5), so the upsert is done in
- * application code (select-then-insert/update) rather than SQL ON CONFLICT. Pruning uses a
- * mark-and-sweep: every row touched this run gets the same `last_seen_at`; anything older for
- * a fetched week is stale and deleted.
+ * `schedule_rows` has no UNIQUE constraint for this (see 1/5), so the upsert-or-insert decision
+ * is still made in application code — but as ONE pre-fetched snapshot of existing rows for the
+ * fetched weeks, not a SELECT per row. If two parsed rows this run land on the same key (the
+ * INV-split case above, but on the SAME day rather than split across days), the later one wins
+ * — matching the pre-batch code's outcome, where each same-key row in turn overwrote whatever
+ * the previous one had just written. All per-row INSERT/UPDATE statements (and the per-week
+ * DELETE prune, which must run only after every upsert above it has landed — same mark-and-sweep
+ * ordering as before, just batched instead of sequential awaits) are built as prepared-but-
+ * unexecuted D1 statements and submitted via `db.batch()`, chunked at WRITE_BATCH_CHUNK, instead
+ * of one `await ...run()` per row/delete. Same rows in, same rows out — only the number of D1
+ * round trips changes (previously up to ~2 per row plus 1 per week; now ~1 batch call per
+ * WRITE_BATCH_CHUNK rows plus 1 for the prunes).
  */
 export async function matchAndUpsert(
   db: D1Database,
@@ -257,19 +283,35 @@ export async function matchAndUpsert(
   fetchedShipWeeks: string[]
 ): Promise<void> {
   const pollTimestamp = new Date().toISOString();
-  const jobIdByInvoice = await lookupJobIds(db, parsedRows.map((r) => r.invoice_number));
 
-  for (const row of parsedRows) {
+  // Last-one-wins de-dup on the upsert key, mirroring what the old sequential
+  // select-then-write loop produced when a run parsed two rows for the same key.
+  const dedupedByKey = new Map<string, ParsedRow>();
+  for (const row of parsedRows) dedupedByKey.set(scheduleRowKey(row), row);
+  const dedupedRows = Array.from(dedupedByKey.values());
+
+  const jobIdByInvoice = await lookupJobIds(db, dedupedRows.map((r) => r.invoice_number));
+  const existingIdByKey = await lookupExistingRows(db, fetchedShipWeeks);
+
+  const writeStatements = dedupedRows.map((row) => {
     const matchJobId = jobIdByInvoice.get(row.invoice_number) ?? null;
-    await upsertRow(db, row, matchJobId, pollTimestamp);
+    const existingId = existingIdByKey.get(scheduleRowKey(row));
+    return existingId
+      ? buildUpdateStatement(db, row, matchJobId, pollTimestamp, existingId)
+      : buildInsertStatement(db, row, matchJobId, pollTimestamp);
+  });
+
+  for (let i = 0; i < writeStatements.length; i += WRITE_BATCH_CHUNK) {
+    const chunk = writeStatements.slice(i, i + WRITE_BATCH_CHUNK);
+    if (chunk.length) await db.batch(chunk);
   }
 
-  for (const shipWeek of fetchedShipWeeks) {
-    await db
+  const deleteStatements = fetchedShipWeeks.map((shipWeek) =>
+    db
       .prepare(`DELETE FROM schedule_rows WHERE ship_week = ? AND last_seen_at < ?`)
       .bind(shipWeek, pollTimestamp)
-      .run();
-  }
+  );
+  if (deleteStatements.length) await db.batch(deleteStatements);
 }
 
 async function lookupJobIds(db: D1Database, invoiceNumbers: string[]): Promise<Map<string, string>> {
@@ -291,50 +333,67 @@ async function lookupJobIds(db: D1Database, invoiceNumbers: string[]): Promise<M
   return jobIdByInvoice;
 }
 
-async function upsertRow(
+/** One pre-fetch of every existing `schedule_rows` row for the fetched weeks, replacing the
+ * old per-row `SELECT ... WHERE invoice_number = ? AND ship_week = ? AND day_of_week = ?`. */
+async function lookupExistingRows(db: D1Database, shipWeeks: string[]): Promise<Map<string, number>> {
+  const existingIdByKey = new Map<string, number>();
+  if (shipWeeks.length === 0) return existingIdByKey;
+
+  const placeholders = shipWeeks.map(() => "?").join(",");
+  const { results } = await db
+    .prepare(
+      `SELECT id, invoice_number, ship_week, day_of_week FROM schedule_rows WHERE ship_week IN (${placeholders})`
+    )
+    .bind(...shipWeeks)
+    .all<ExistingScheduleRow>();
+  for (const row of results ?? []) {
+    existingIdByKey.set(scheduleRowKey(row), row.id);
+  }
+
+  return existingIdByKey;
+}
+
+function buildUpdateStatement(
+  db: D1Database,
+  row: ParsedRow,
+  matchJobId: string | null,
+  lastSeenAt: string,
+  existingId: number
+) {
+  return db
+    .prepare(
+      `UPDATE schedule_rows SET
+         ship_date = ?, day_of_week = ?, sort_order = ?, customer = ?, load_count = ?,
+         method = ?, location = ?, delivery_time = ?, carrier = ?, total_bdft = ?,
+         scrap_pickup = ?, sheet_status = ?, match_job_id = ?, last_seen_at = ?
+       WHERE id = ?`
+    )
+    .bind(
+      row.ship_date,
+      row.day_of_week,
+      row.sort_order,
+      row.customer,
+      row.load_count,
+      row.method,
+      row.location,
+      row.delivery_time,
+      row.carrier,
+      row.total_bdft,
+      row.scrap_pickup,
+      row.sheet_status,
+      matchJobId,
+      lastSeenAt,
+      existingId
+    );
+}
+
+function buildInsertStatement(
   db: D1Database,
   row: ParsedRow,
   matchJobId: string | null,
   lastSeenAt: string
-): Promise<void> {
-  const existing = await db
-    .prepare(
-      `SELECT id FROM schedule_rows WHERE invoice_number = ? AND ship_week = ? AND day_of_week = ?`
-    )
-    .bind(row.invoice_number, row.ship_week, row.day_of_week)
-    .first<{ id: number }>();
-
-  if (existing) {
-    await db
-      .prepare(
-        `UPDATE schedule_rows SET
-           ship_date = ?, day_of_week = ?, sort_order = ?, customer = ?, load_count = ?,
-           method = ?, location = ?, delivery_time = ?, carrier = ?, total_bdft = ?,
-           scrap_pickup = ?, sheet_status = ?, match_job_id = ?, last_seen_at = ?
-         WHERE id = ?`
-      )
-      .bind(
-        row.ship_date,
-        row.day_of_week,
-        row.sort_order,
-        row.customer,
-        row.load_count,
-        row.method,
-        row.location,
-        row.delivery_time,
-        row.carrier,
-        row.total_bdft,
-        row.scrap_pickup,
-        row.sheet_status,
-        matchJobId,
-        lastSeenAt,
-        existing.id
-      )
-      .run();
-    return;
-  }
-
-  await db
+) {
+  return db
     .prepare(
       `INSERT INTO schedule_rows
          (invoice_number, ship_week, ship_date, day_of_week, sort_order, customer,
@@ -359,8 +418,7 @@ async function upsertRow(
       row.sheet_status,
       matchJobId,
       lastSeenAt
-    )
-    .run();
+    );
 }
 
 // ─── Orchestration ────────────────────────────────────────────────────────────

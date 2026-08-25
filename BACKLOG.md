@@ -10,6 +10,13 @@
 
 ## Auth / Session
 
+- [ ] **P408 follow-up — audit other unbatched hot-path writes against the shared D1.**
+  `schedule-ingest.ts`'s cron writes were the one identified structural contention hazard against
+  the same D1 `validateSession` reads on every request (P404 investigation, batched in P408). If
+  `wrangler tail` (both workers, filtered on `Session validation failed:`/`transient_session_lookup_failure`)
+  still shows transient hits persisting after P405–P408 all ship, look for other sequential
+  per-row write loops against the shared D1 (legacy `_worker.js` bulk-insert/import paths,
+  the QBO sync path) as the next contention source to batch.
 - [ ] **P406 follow-up — nine v2 `page.tsx` server components re-call `validateSession()`
   independently of `middleware.ts`.** `schedule`, `orders`, `board`, `blocks`, `loading`, `notes`,
   `production`, `cutting`, `cutting/crosscutter` each call `validateSession()` a second time (to
