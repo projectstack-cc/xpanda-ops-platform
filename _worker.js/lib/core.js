@@ -47,6 +47,26 @@ export function getSessionToken(request) {
   return match ? match[1] : null;
 }
 
+export class SessionLookupError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'SessionLookupError';
+  }
+}
+
+export function sessionUnavailableResponse() {
+  return json({ ok: false, error: 'session_unavailable', transient: true }, 503, { 'Retry-After': '2' });
+}
+
+async function withOneRetry(fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+    return await fn();
+  }
+}
+
 export async function validateSession(db, request) {
   const token = getSessionToken(request);
   if (!token) return null;
@@ -59,13 +79,13 @@ export async function validateSession(db, request) {
 
   try {
     // Get session + user (without role — roles come from junction table)
-    const session = await db.prepare(`
+    const session = await withOneRetry(() => db.prepare(`
       SELECT s.id, s.user_id, s.expires_at, s.simulating_role_id,
              u.id as uid, u.username, u.display_name, u.role, u.role_id, u.is_active, u.first_login
       FROM sessions s
       JOIN users u ON s.user_id = u.id
       WHERE s.id = ?
-    `).bind(token).first();
+    `).bind(token).first());
 
     if (!session) return null;
     if (!session.is_active) return null;
@@ -148,7 +168,8 @@ export async function validateSession(db, request) {
     };
   } catch (e) {
     console.error('Session validation failed:', e);
-    return null;
+    console.warn('[auth] transient_session_lookup_failure', { path: new URL(request.url).pathname, message: e && e.message });
+    throw new SessionLookupError('session lookup failed');
   }
 }
 

@@ -1,4 +1,4 @@
-import { json, logActivity, generateAccessToken, normalizeName, validateSession, PATH_PERMISSION_MAP, API_PERMISSION_MAP, getPermissionKey, hasPermission, safeJsonParse } from './lib/core.js';
+import { json, logActivity, generateAccessToken, normalizeName, validateSession, SessionLookupError, sessionUnavailableResponse, PATH_PERMISSION_MAP, API_PERMISSION_MAP, getPermissionKey, hasPermission, safeJsonParse } from './lib/core.js';
 import { dispatchNotification } from './lib/push.js';
 import { handleApiLoadingBays, handleApiLoadingAssignments, handleApiLoadingPhotos } from './routes/loading.js';
 import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers, handleApiBols,
@@ -212,7 +212,13 @@ export default {
       if (!isStaticAsset && !isPublicApi) {
         const db = env.DB;
         if (db) {
-          const user = await validateSession(db, request);
+          let user;
+          try {
+            user = await validateSession(db, request);
+          } catch (e) {
+            if (e instanceof SessionLookupError) return sessionUnavailableResponse();
+            throw e;
+          }
           if (!user) {
             if (url.pathname.startsWith('/api/')) {
               return json({ ok: false, error: 'Unauthorized' }, 401);

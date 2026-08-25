@@ -1,4 +1,13 @@
-import { json, logActivity, validateSession, getSessionToken } from '../lib/core.js';
+import { json, logActivity, validateSession, getSessionToken, SessionLookupError, sessionUnavailableResponse } from '../lib/core.js';
+
+async function resolveSessionUser(db, request) {
+  try {
+    return { user: await validateSession(db, request), transient: false };
+  } catch (e) {
+    if (e instanceof SessionLookupError) return { user: null, transient: true };
+    throw e;
+  }
+}
 
 async function createSession(db, userId) {
   const sessionId = crypto.randomUUID();
@@ -11,7 +20,7 @@ async function createSession(db, userId) {
 
 function sessionCookie(sessionId, expires) {
   const expDate = new Date(expires).toUTCString();
-  return `xpanda_session=${sessionId}; Path=/; Expires=${expDate}; HttpOnly; SameSite=Lax`;
+  return `xpanda_session=${sessionId}; Path=/; Expires=${expDate}; HttpOnly; Secure; SameSite=Lax`;
 }
 
 function clearSessionCookie() {
@@ -78,7 +87,8 @@ export async function handleAuthMe(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
 
-  const user = await validateSession(db, request);
+  const { user, transient } = await resolveSessionUser(db, request);
+  if (transient) return sessionUnavailableResponse();
   if (!user) return json({ ok: false, error: 'Not authenticated' }, 401);
 
   return json({
@@ -104,7 +114,8 @@ export async function handleAuthChangePassword(request, env) {
   if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, 405);
 
-  const user = await validateSession(db, request);
+  const { user, transient } = await resolveSessionUser(db, request);
+  if (transient) return sessionUnavailableResponse();
   if (!user) return json({ ok: false, error: 'Not authenticated' }, 401);
 
   let body;
@@ -128,7 +139,8 @@ export async function handleSimulateRoleStart(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
 
-  const user = await validateSession(db, request);
+  const { user, transient } = await resolveSessionUser(db, request);
+  if (transient) return sessionUnavailableResponse();
   if (!user) return json({ ok: false, error: 'Not authenticated' }, 401);
   if (!user.isRealAdmin) return json({ ok: false, error: 'Only administrators can simulate roles.' }, 403);
 
@@ -160,7 +172,8 @@ export async function handleSimulateRoleStop(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
 
-  const user = await validateSession(db, request);
+  const { user, transient } = await resolveSessionUser(db, request);
+  if (transient) return sessionUnavailableResponse();
   if (!user) return json({ ok: false, error: 'Not authenticated' }, 401);
   if (!user.isRealAdmin) return json({ ok: false, error: 'Only administrators can manage simulation.' }, 403);
 

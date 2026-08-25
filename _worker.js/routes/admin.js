@@ -1,4 +1,4 @@
-import { json, logActivity, validateSession } from '../lib/core.js';
+import { json, logActivity, validateSession, SessionLookupError, sessionUnavailableResponse } from '../lib/core.js';
 
 export async function handleApiActivityLog(request, env) {
   const db = env.DB;
@@ -64,7 +64,13 @@ export async function handleApiUsers(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
 
-  const sessionUser = await validateSession(db, request);
+  let sessionUser;
+  try {
+    sessionUser = await validateSession(db, request);
+  } catch (e) {
+    if (e instanceof SessionLookupError) return sessionUnavailableResponse();
+    throw e;
+  }
   if (!sessionUser) return json({ ok: false, error: 'Unauthorized' }, 401);
   if (!sessionUser.isRealAdmin) return json({ ok: false, error: 'Forbidden' }, 403);
 

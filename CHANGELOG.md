@@ -2413,6 +2413,39 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Admin / Platform
 
+- **P405 — legacy `validateSession()` resilience: distinguish transient D1 failure from
+  unauthenticated (db-api-agent §9, closes `SIGNOUT-INVESTIGATION-P404.md`).** Root cause of the
+  random-signout reports: `validateSession()` (`_worker.js/lib/core.js`) failed closed — any thrown
+  D1 exception during the session lookup returned the identical `null` a genuinely missing/expired
+  session returns, and every consumer of `null` (the session gate, ten copies of the legacy 401
+  interceptor — P407) treated it as a hard logout. Fix: the primary session+user lookup now gets
+  **one bounded retry** (~50ms delay via a small `withOneRetry` wrapper) before giving up; a
+  definitive answer (row found, no row, expired row) is unchanged — still returns `null` exactly as
+  before. Only a lookup that still throws after the retry is now distinguished: `validateSession`
+  throws a new typed `SessionLookupError` instead of swallowing it into `null`, plus one distinctive
+  `console.warn('[auth] transient_session_lookup_failure', {...})` so `wrangler tail` can count
+  occurrences. The session gate in `index.js` catches `SessionLookupError` and responds **503**
+  (`Retry-After: 2`, `{ ok:false, error:'session_unavailable', transient:true }`) — never a
+  401/redirect, never granting access (HARD RULE: never fail open). New `sessionUnavailableResponse()`
+  helper in `core.js` for the shared response shape. **Real gap found and fixed, not just the one
+  call site the prompt named**: `/api/auth/*` routes (`handleAuthMe`, `handleAuthChangePassword`,
+  `handleSimulateRoleStart`, `handleSimulateRoleStop` in `_worker.js/routes/auth.js`) dispatch
+  *before* the index.js session gate (`index.js` step 3, lines ~164–169) and each call
+  `validateSession()` directly — the prompt's scope only named the gate call site at index.js:215,
+  but these four are equally real, unguarded consumers. Without a fix here, a transient blip would
+  propagate an uncaught `SessionLookupError` up through index.js's outer catch-all, producing a
+  plain-text `"Worker crashed:\n\n" + stack` 500 (a stack-trace leak, and worse than the 401 it
+  replaced) instead of a clean 503. This is load-bearing for **P407**: `/api/auth/me` is that
+  prompt's confirmation oracle for a background-poll 401, so it has to answer cleanly under the
+  exact transient condition P407 exists to handle. Fixed via a small `resolveSessionUser()` helper
+  in `auth.js` (mirrors the gate's catch pattern) at all four sites. Also fixed the lower-stakes
+  `handleApiUsers` in `admin.js` (reaches `validateSession` a second time after already passing the
+  gate once) for consistency, same helper pattern. **Unrelated hardening bundled per the prompt**:
+  `sessionCookie()` (`auth.js`) gains the `Secure` attribute — cookie now HTTPS-only; safe since
+  prod (`www.xpandaops.com`) is HTTPS-only, but any future `http://` local dev login would need
+  HTTPS to receive the cookie. No schema change, no migration, no permission change. `node --check`
+  clean on `core.js`, `index.js`, `auth.js`, `admin.js`. See also **P406** (identical v2 mirror) and
+  **P407** (legacy 401-interceptor consolidation, depends on this shipping first).
 - **P367 — carrier view permission key + permission-based login landing.** New grantable key
   `logistics.carrier_view` added to `admin/roles.html` `PERMISSION_LABELS` (Logistics group).
   `login.html` gains `landingForUser`/`goToLanding`: a non-admin user whose only `view` permission
