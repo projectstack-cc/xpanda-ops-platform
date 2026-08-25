@@ -4,6 +4,7 @@
 <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('xpanda-theme') || 'dark');</script>
   <script src="/shared/theme.js"></script>
   <meta charset="UTF-8" />
+  <script src="/shared/auth-interceptor.js"></script>
   <title>xPanda Operations Platform</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -478,15 +479,7 @@
 </main>
 
 <script>
-const _origFetch = window.fetch;
-window.fetch = async function(...args) {
-  const res = await _origFetch.apply(this, args);
-  if (res.status === 401 && !window.location.pathname.startsWith('/login')) {
-    window.location.href = '/login.html';
-    return res;
-  }
-  return res;
-};
+// 401/503 interceptor now lives in /shared/auth-interceptor.js (loaded in <head>, P407).
 
 async function doLogout() {
   await fetch('/api/auth/logout', { method: 'POST' });

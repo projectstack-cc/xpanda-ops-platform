@@ -2413,6 +2413,44 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Admin / Platform
 
+- **P407 — legacy 401 interceptor: ten copies consolidated to one, de-triggered on background
+  polls (admin-auth-agent §8, depends on P405 shipping first).** Every legacy page installed a
+  byte-identical global `window.fetch` wrapper that hard-navigated to `/login.html` on **any** 401
+  — including the 60s background notification poll (`shared-header.js`'s `loadNotifications`) that
+  runs on every idle tab. Found in ten locations across six files: the single implementation in
+  `shared/shared-header.js` (delegated to by all six module `*-header.js` shims — `jobs`,
+  `logistics`, `manufacturing`, `production`, `qc`, `reports` — confirmed no drift via grep) plus
+  four standalone inline copies with no delegation: `index.html`, `admin/roles.html`,
+  `admin/parts.html`, `admin/activity-log.html`, `admin/users.html`. Enumerated live via
+  `grep -rl "window.location.href = '/login.html'" .` before touching anything, per the prompt's
+  own instruction — confirmed six source files (not the ten the investigation doc's prose implied;
+  ten was counting per-module *usage*, not per-file *copies* — same math, six unique bodies of
+  code). New single vanilla module `shared/auth-interceptor.js` (`<script src>`-loadable, no ES
+  imports/exports, no build step, self-`(function(){...})()`-wrapped, mirrors the existing
+  `__xpandaFetchWrapped` double-wrap guard the old `shared-header.js` copy already had). The
+  de-trigger: **never redirects on 503** (P405/P406's transient-D1-lookup signal — let the
+  caller's own logic retry, nothing destructive here); **never hard-redirects on a 401 without
+  confirming first** — a single `GET /api/auth/me`, issued via the pre-wrap `_origFetch` so the
+  confirm call itself is never re-intercepted (loop guard), decides: confirm-401 → genuinely gone,
+  redirect (existing behavior, now confirmed); confirm-200 → the original 401 was spurious, no
+  redirect, original response returned untouched. Also guards on the request path itself
+  (`/api/auth/me` responses are never run back through this logic) and on already being on
+  `/login`. `shared-header.js`'s inline copy replaced with a `document.write('<script
+  src="/shared/auth-interceptor.js">...')` added to its existing guarded "auto-load companion
+  shared modules" block (same pattern as `theme.js`/`shared-api.js`/etc., ordered first so it's
+  active before any of shared-header.js's own fetches, including its `/api/auth/me` identity
+  call). The four standalone HTML files get `<script src="/shared/auth-interceptor.js"></script>`
+  added to `<head>` (right after `<meta charset>`, blocking/synchronous — loads before any body
+  script runs) with their old inline block removed from wherever it sat in the body. **Real
+  ordering gap found and fixed along the way, not just preserved**: in `admin/parts.html` and
+  `admin/activity-log.html`, the old inline interceptor was defined *after* the page's own first
+  data fetch (`loadParts()` / `reload()`, respectively) — meaning that very first fetch was never
+  actually protected by the old inline copy either. Moving the load to `<head>` fixes this
+  incidentally as well as consolidating the code. `node --check` clean on the new module and on
+  `shared-header.js`; all five touched HTML files' inline `<script>` blocks extracted and
+  `node --check`'d clean (classic scripts, not modules). No schema change, no migration, no
+  permission change. Depended on **P405** shipping first (this session, same batch) so the 503
+  contract it confirms against already exists.
 - **P406 — v2 `validateSession()` resilience: 1:1 mirror of P405 (next-platform-agent §9a +
   react-component-agent §9b, closes `SIGNOUT-INVESTIGATION-P404.md`'s v2 half).**
   `cutting-pilot/src/lib/session.ts`'s `validateSession()` gets the identical fix as legacy's

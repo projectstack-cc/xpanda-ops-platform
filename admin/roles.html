@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <script src="/shared/auth-interceptor.js"></script>
   <title>Role Management — xPanda Admin</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -387,15 +388,7 @@
 </div>
 
 <script>
-const _origFetch = window.fetch;
-window.fetch = async function(...args) {
-  const res = await _origFetch.apply(this, args);
-  if (res.status === 401 && !window.location.pathname.startsWith('/login')) {
-    window.location.href = '/login.html';
-    return res;
-  }
-  return res;
-};
+// 401/503 interceptor now lives in /shared/auth-interceptor.js (loaded in <head>, P407).
 
 const NOTIFICATION_TYPE_LABELS = {
   'loading.assigned':   'Job assigned to loading',

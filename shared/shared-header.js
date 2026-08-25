@@ -9,6 +9,10 @@ if (!window.__xpandaThemeLoaded) {
 }
 
 // Auto-load companion shared modules.
+if (!window.__xpandaAuthInterceptorLoaded) {
+  window.__xpandaAuthInterceptorLoaded = true;
+  document.write('<script src="/shared/auth-interceptor.js"><\/script>');
+}
 if (!window.__xpandaSharedApiLoaded) {
   window.__xpandaSharedApiLoaded = true;
   document.write('<script src="/shared/shared-api.js"><\/script>');
@@ -259,19 +263,7 @@ if (!window.__xpandaPwaInstallLoaded) {
         }
       });
 
-      // 401 interceptor — guard prevents double-wrap if two shims are accidentally loaded.
-      if (!window.__xpandaFetchWrapped) {
-        window.__xpandaFetchWrapped = true;
-        const _origFetch = window.fetch;
-        window.fetch = async function (...args) {
-          const res = await _origFetch.apply(this, args);
-          if (res.status === 401 && !window.location.pathname.startsWith('/login')) {
-            window.location.href = '/login.html';
-            return res;
-          }
-          return res;
-        };
-      }
+      // 401/503 interceptor now lives in /shared/auth-interceptor.js (loaded above, P407).
 
       // Auth
       fetch('/api/auth/me').then(r => r.json()).then(d => {
