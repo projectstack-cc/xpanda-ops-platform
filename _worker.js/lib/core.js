@@ -62,6 +62,7 @@ async function withOneRetry(fn) {
   try {
     return await fn();
   } catch (e) {
+    console.warn('[auth] transient_session_lookup_retry', { message: e && e.message });
     await new Promise(resolve => setTimeout(resolve, 50));
     return await fn();
   }

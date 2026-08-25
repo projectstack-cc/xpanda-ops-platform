@@ -2493,12 +2493,18 @@ Entries within each module are ordered by prompt # descending (newest first).
   throws a typed `SessionLookupError` (same name, same `console.warn('[auth]
   transient_session_lookup_failure', ...)` line) instead of swallowing it into `null`.
   `middleware.ts` (the v2 auth bridge — a READ, never sets/clears cookies) catches
-  `SessionLookupError` and responds **503** (`Retry-After: 2`,
+  `SessionLookupError` and responds **503** (`Retry-After: 2`, `Cache-Control: no-store` on both
+  branches — CF has previously cached a `/v2/_next/*` 404 per §9a's own documented gotcha, and a
+  cached 503 pinning the wall TV to an error string past the blip is the page-level equivalent,
+  caught via `advisor()` pre-push and fixed same session,
   `{ ok:false, error:'session_unavailable', transient:true }` for `/v2/api/*`, plain text for
   pages) — never a 401/redirect. Because the middleware matcher (`/((?!_next/static|_next/image|
   favicon.ico).*)`) covers every `/v2/*` page and API route, this one call site is the
   authoritative session check for the whole surface; a 401 that does reach a client is now always
-  a real, retried-once, definitive negative — not a coin-flip on a D1 blip.
+  a real, retried-once, definitive negative — not a coin-flip on a D1 blip. Also carries P405's
+  same-session `advisor()` fix: `withOneRetry` now logs a distinct
+  `transient_session_lookup_retry` warning on a recovered first-attempt throw, so a blip that
+  self-heals on retry is still visible in `wrangler tail`, not silently invisible.
   **Verified rather than assumed (per the prompt's own hedge — "or the platform's equivalent
   session endpoint")**: no `/v2/api/auth/me` exists in `cutting-pilot/src` at all (grepped); the
   three polling board components confirm via the **legacy** `/api/auth/me` instead — same host
@@ -2545,7 +2551,14 @@ Entries within each module are ordered by prompt # descending (newest first).
   before. Only a lookup that still throws after the retry is now distinguished: `validateSession`
   throws a new typed `SessionLookupError` instead of swallowing it into `null`, plus one distinctive
   `console.warn('[auth] transient_session_lookup_failure', {...})` so `wrangler tail` can count
-  occurrences. The session gate in `index.js` catches `SessionLookupError` and responds **503**
+  occurrences. **`advisor()` pre-push review caught a real observability gap, fixed same session**:
+  the initial cut only logged on the give-up path — a first-attempt throw that succeeded on retry
+  (the common case; D1 blips are almost always single-request) logged nothing at all, silently
+  defeating the exact `wrangler tail`-watching plan `SIGNOUT-INVESTIGATION-P404.md` §5 #5 and this
+  batch's own BACKLOG follow-ups depend on. Added a second, distinctly-named
+  `console.warn('[auth] transient_session_lookup_retry', {...})` inside `withOneRetry`'s catch, so
+  a recovered blip is now visible and distinguishable from a given-up one. The session gate in
+  `index.js` catches `SessionLookupError` and responds **503**
   (`Retry-After: 2`, `{ ok:false, error:'session_unavailable', transient:true }`) — never a
   401/redirect, never granting access (HARD RULE: never fail open). New `sessionUnavailableResponse()`
   helper in `core.js` for the shared response shape. **Real gap found and fixed, not just the one

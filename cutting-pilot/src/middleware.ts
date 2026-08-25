@@ -81,10 +81,10 @@ export async function middleware(request: NextRequest) {
     if (e instanceof SessionLookupError) {
       const body = { ok: false, error: "session_unavailable", transient: true };
       return isApi
-        ? NextResponse.json(body, { status: 503, headers: { "Retry-After": "2" } })
+        ? NextResponse.json(body, { status: 503, headers: { "Retry-After": "2", "Cache-Control": "no-store" } })
         : new NextResponse("Session temporarily unavailable, please retry.", {
             status: 503,
-            headers: { "Retry-After": "2" },
+            headers: { "Retry-After": "2", "Cache-Control": "no-store" },
           });
     }
     throw e;

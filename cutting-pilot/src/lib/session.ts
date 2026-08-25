@@ -41,6 +41,9 @@ async function withOneRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (e) {
+    console.warn("[auth] transient_session_lookup_retry", {
+      message: e instanceof Error ? e.message : String(e),
+    });
     await new Promise((resolve) => setTimeout(resolve, 50));
     return await fn();
   }
