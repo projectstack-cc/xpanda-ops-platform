@@ -15,7 +15,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { validateSession, hasPermission } from "@/lib/session";
+import { validateSession, hasPermission, SessionLookupError } from "@/lib/session";
 
 // First matching prefix wins. A path with no match falls through with no permission gate
 // (still session-gated above) — same as an un-mapped path in the legacy PATH_PERMISSION_MAP.
@@ -74,7 +74,21 @@ export async function middleware(request: NextRequest) {
       : new NextResponse("Missing D1 binding", { status: 500 });
   }
 
-  const user = await validateSession(db, request.headers.get("Cookie"));
+  let user;
+  try {
+    user = await validateSession(db, request.headers.get("Cookie"));
+  } catch (e) {
+    if (e instanceof SessionLookupError) {
+      const body = { ok: false, error: "session_unavailable", transient: true };
+      return isApi
+        ? NextResponse.json(body, { status: 503, headers: { "Retry-After": "2" } })
+        : new NextResponse("Session temporarily unavailable, please retry.", {
+            status: 503,
+            headers: { "Retry-After": "2" },
+          });
+    }
+    throw e;
+  }
 
   if (!user) {
     if (isApi) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });

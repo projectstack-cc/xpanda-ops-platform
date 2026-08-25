@@ -162,19 +162,47 @@ export default function CarrierBoard() {
   const [loading, setLoading] = useState(true);
   const [uploadRow, setUploadRow] = useState<CarrierRow | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasGoodDataRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/v2/api/carrier");
+
+      // 503 = the auth layer's D1 lookup blipped — transient, not a session verdict.
+      // Never treat it as logged-out; keep whatever's already on screen and retry next tick.
+      if (res.status === 503) {
+        if (!hasGoodDataRef.current) setError("Reconnecting…");
+        return;
+      }
+
+      // 401 from a background poll could be a genuinely dead session, or a stray one-off.
+      // Confirm against the auth endpoint before showing anything scarier than "reconnecting."
+      if (res.status === 401) {
+        let confirmedGone = true;
+        try {
+          const confirmRes = await fetch("/api/auth/me");
+          confirmedGone = !confirmRes.ok;
+        } catch {
+          confirmedGone = false;
+        }
+        if (!confirmedGone) {
+          if (!hasGoodDataRef.current) setError("Reconnecting…");
+          return;
+        }
+        setError("Signed out — sign back in to resume.");
+        return;
+      }
+
       const json: CarrierResponse = await res.json();
       if (!res.ok || !json.ok) {
         setError(json.error || "Failed to load.");
         return;
       }
+      hasGoodDataRef.current = true;
       setData(json);
       setError(null);
     } catch {
-      setError("Network error — could not reach the server.");
+      if (!hasGoodDataRef.current) setError("Network error — could not reach the server.");
     } finally {
       setLoading(false);
     }

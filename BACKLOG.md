@@ -8,6 +8,18 @@
 
 ---
 
+## Auth / Session
+
+- [ ] **P406 follow-up — nine v2 `page.tsx` server components re-call `validateSession()`
+  independently of `middleware.ts`.** `schedule`, `orders`, `board`, `blocks`, `loading`, `notes`,
+  `production`, `cutting`, `cutting/crosscutter` each call `validateSession()` a second time (to
+  read `isAdmin`/`permissions` for client props) after the middleware already validated the same
+  request. Low risk (middleware's matcher covers every page route and already 503s on the common
+  transient case before the page runs; Next.js's Server Component error boundary handles an
+  uncaught throw more gracefully than a raw crash), but if `wrangler tail` ever shows
+  `SessionLookupError` surfacing from a page component specifically, wrap these the same way
+  `auth.js`'s `resolveSessionUser()` does.
+
 ## Production Log (v2)
 
 - [ ] **P402 follow-up — Density readout (expansion).** Display-only pcf per batch =

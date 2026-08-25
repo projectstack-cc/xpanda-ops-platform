@@ -2413,6 +2413,55 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Admin / Platform
 
+- **P406 — v2 `validateSession()` resilience: 1:1 mirror of P405 (next-platform-agent §9a +
+  react-component-agent §9b, closes `SIGNOUT-INVESTIGATION-P404.md`'s v2 half).**
+  `cutting-pilot/src/lib/session.ts`'s `validateSession()` gets the identical fix as legacy's
+  P405: one bounded retry (~50ms, `withOneRetry`) on the primary session lookup; a definitive
+  answer (row/no row/expired) still returns `null` unchanged; a lookup that still throws now
+  throws a typed `SessionLookupError` (same name, same `console.warn('[auth]
+  transient_session_lookup_failure', ...)` line) instead of swallowing it into `null`.
+  `middleware.ts` (the v2 auth bridge — a READ, never sets/clears cookies) catches
+  `SessionLookupError` and responds **503** (`Retry-After: 2`,
+  `{ ok:false, error:'session_unavailable', transient:true }` for `/v2/api/*`, plain text for
+  pages) — never a 401/redirect. Because the middleware matcher (`/((?!_next/static|_next/image|
+  favicon.ico).*)`) covers every `/v2/*` page and API route, this one call site is the
+  authoritative session check for the whole surface; a 401 that does reach a client is now always
+  a real, retried-once, definitive negative — not a coin-flip on a D1 blip.
+  **Verified rather than assumed (per the prompt's own hedge — "or the platform's equivalent
+  session endpoint")**: no `/v2/api/auth/me` exists in `cutting-pilot/src` at all (grepped); the
+  three polling board components confirm via the **legacy** `/api/auth/me` instead — same host
+  (`www.xpandaops.com`), same shared cookie, already the platform's one real session-identity
+  endpoint per §9a's architecture (login/session stays on legacy). `ScheduleBoard.tsx`,
+  `LoadingBoard.tsx`, `CarrierBoard.tsx` (the only three components with a `setInterval(fetch,
+  POLL_MS)` poll — verified via grep, no undocumented sibling found) now branch explicitly: a
+  **503** never touches state beyond a "Reconnecting…" placeholder (or, once good data exists, the
+  board's own existing stale-badge path — never blanked); a **401** triggers one confirmatory
+  `GET /api/auth/me` before showing anything worse than "Reconnecting…" — only a confirmed-gone
+  session shows "Signed out — sign back in to resume." None of the three ever force-navigates on a
+  background poll tick, satisfying the "no hard-logout from a passive poll" contract without
+  changing the boards' pre-existing (correct) no-redirect behavior. **Real gap found and fixed,
+  not just the documented case**: `CarrierBoard.tsx` (driver-facing, not a wall TV) previously
+  replaced its entire data view with a blocking error banner on **any** non-2xx response,
+  including what would now be a transient 503 — a mid-scan driver would have seen today's/
+  tomorrow's loads vanish behind "Failed to load." on a single D1 blip. Added the same
+  `hasGoodDataRef` last-good-data-preserving pattern the two TV boards already used, so a
+  transient or spurious-401 poll now silently retries instead of hiding the load list.
+  **Flagged, not fixed (documented deviation from the prompt's single named call site, same class
+  of gap P405 found and fixed in `auth.js`, lower stakes here)**: nine `page.tsx` server
+  components (`schedule`, `orders`, `board`, `blocks`, `loading`, `notes`, `production`, `cutting`,
+  `cutting/crosscutter`) each call `validateSession()` a second time after `middleware.ts` already
+  validated the same request, to read `isAdmin`/`permissions` for their client component props —
+  same double-call shape as legacy `admin.js`'s `handleApiUsers`. Since the matcher covers every
+  page route, `middleware.ts` already 503s (never reaching the page) on the common case; a page's
+  own second call could still throw only on a rare *independent* second D1 failure in the same
+  request's lifetime, which Next.js's own Server Component error boundary handles more gracefully
+  than legacy's plain-text crash dump did. Left untouched — out of the prompt's LOCKED scope
+  (`session.ts`, `middleware.ts`, the three named board components only) and low enough risk not
+  to justify expanding a four-prompt batch's scope; worth a small follow-up pass if `wrangler tail`
+  ever shows it firing. `npx tsc --noEmit` + `npm run cf-build` (the correct invocation — bare
+  `opennextjs-cloudflare build` throws `ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL` on this installed CLI
+  version, same gotcha as P369–P373/P395) both green. No schema change, no migration, no permission
+  change.
 - **P405 — legacy `validateSession()` resilience: distinguish transient D1 failure from
   unauthenticated (db-api-agent §9, closes `SIGNOUT-INVESTIGATION-P404.md`).** Root cause of the
   random-signout reports: `validateSession()` (`_worker.js/lib/core.js`) failed closed — any thrown

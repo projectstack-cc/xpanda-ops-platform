@@ -87,6 +87,35 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
   const fetchBoard = useCallback(async () => {
     try {
       const res = await fetch("/v2/api/schedule-board");
+
+      // 503 = the auth layer's D1 lookup blipped — transient, not a session verdict.
+      // Never treat it as logged-out; just retry on the next tick.
+      if (res.status === 503) {
+        if (hasGoodDataRef.current) setStale(true);
+        else setError("Reconnecting…");
+        return;
+      }
+
+      // 401 from a background poll could be a genuinely dead session, or a stray one-off.
+      // Confirm against the auth endpoint before showing anything scarier than "stale."
+      if (res.status === 401) {
+        let confirmedGone = true;
+        try {
+          const confirmRes = await fetch("/api/auth/me");
+          confirmedGone = !confirmRes.ok;
+        } catch {
+          // couldn't even confirm — treat as transient, not as a verdict.
+          confirmedGone = false;
+        }
+        if (!confirmedGone) {
+          if (hasGoodDataRef.current) setStale(true);
+          else setError("Reconnecting…");
+          return;
+        }
+        setError("Signed out — sign back in to resume.");
+        return;
+      }
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: ScheduleBoardResponse = await res.json();
       hasGoodDataRef.current = true;

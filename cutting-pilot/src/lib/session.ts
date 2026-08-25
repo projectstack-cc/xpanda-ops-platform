@@ -30,6 +30,22 @@ export function getSessionToken(cookieHeader: string | null): string | null {
   return m ? m[1] : null;
 }
 
+export class SessionLookupError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SessionLookupError";
+  }
+}
+
+async function withOneRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return await fn();
+  }
+}
+
 export async function validateSession(
   db: D1Database,
   cookieHeader: string | null
@@ -38,15 +54,17 @@ export async function validateSession(
   if (!token) return null;
 
   try {
-    const session = await db
-      .prepare(
-        `SELECT s.id, s.user_id, s.expires_at, s.simulating_role_id,
-                u.id as uid, u.username, u.display_name, u.role, u.role_id, u.is_active, u.first_login
-         FROM sessions s JOIN users u ON s.user_id = u.id
-         WHERE s.id = ?`
-      )
-      .bind(token)
-      .first<any>();
+    const session = await withOneRetry(() =>
+      db
+        .prepare(
+          `SELECT s.id, s.user_id, s.expires_at, s.simulating_role_id,
+                  u.id as uid, u.username, u.display_name, u.role, u.role_id, u.is_active, u.first_login
+           FROM sessions s JOIN users u ON s.user_id = u.id
+           WHERE s.id = ?`
+        )
+        .bind(token)
+        .first<any>()
+    );
 
     if (!session || !session.is_active) return null;
     if (new Date(session.expires_at) < new Date()) {
@@ -117,7 +135,10 @@ export async function validateSession(
     };
   } catch (e) {
     console.error("Session validation failed:", e);
-    return null;
+    console.warn("[auth] transient_session_lookup_failure", {
+      message: e instanceof Error ? e.message : String(e),
+    });
+    throw new SessionLookupError("session lookup failed");
   }
 }
 
