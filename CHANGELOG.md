@@ -10,6 +10,30 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P412 — Block nester: removed the minimum-reusable-size threshold; carried-forward = all real
+  offcut; residual renamed `kerfLossBF` (next-platform-agent §9a + react-component-agent §9b).**
+  Per the customer-locked full-block-yield model, the engine no longer decides whether an offcut
+  is worth keeping — every enumerated real-offcut region (leftover face height, block-width
+  strips, length ends, mold length leftover) is now `carriedForwardBF`, full stop; that call is
+  made live on the floor with the piece in hand. `DEFAULT_MIN_REUSABLE_IN` (12" placeholder) and
+  the `minReusableIn` param threaded through `nest()`/`nestDensity()`/`tallyCarriedForwardBF()`
+  are gone entirely, along with `BlocksApp.tsx`'s "Minimum reusable size" Setup input and its
+  validation guard. **Physical-honesty constraint preserved, not dropped along with the
+  threshold**: the old residual (`scrapBF`) was never purely reusable-vs-not — it also silently
+  absorbed saw-kerf slivers and micro-regions `tallyCarriedForwardBF` deliberately doesn't
+  enumerate. Renaming that residual straight to "carried-forward" would have falsely counted kerf
+  dust as sellable inventory, so it's kept as its own field, renamed `kerfLossBF` (unavoidable
+  process loss) — two value buckets the floor cares about (finished, carried-forward) plus one
+  honest loss line, not a two-bucket collapse. `CutSheet.tsx`'s BF-split display relabeled "scrap"
+  → "kerf loss" accordingly. `blockNester.selfcheck.ts`: dropped the now-meaningless
+  `minReusableIn` threshold sweep (2/3/12/40) in favor of a single evaluation per mix/PO#1
+  density — the same non-tautological accounting checks (`carriedForwardBF` bounded by total
+  offcut, both buckets non-negative) still run, just without a parameter that no longer exists.
+  55 self-check assertions, all pass. `finishedBF`, `computeFaceCapacity`, and mold counts are
+  untouched by this patch (offcut/residual accounting only) — confirmed via the self-check's own
+  PO#1 piece-count and reconciliation checks, unaffected. Verification per the prompt's own gate:
+  `grep -rn "minReusable\|MIN_REUSABLE\|scrapBF" src` returns zero hits. No DB/migration/permission
+  change (ephemeral module, unchanged). `tsc --noEmit` + `cf-build` green.
 - **P411 — Block nesting: offcut-recursive nester + cut-sheet renderer, completing `/v2/blocks`
   (react-component-agent §9b + next-platform-agent §9a). Replaces P324's engine, on top of
   P322/P323/P410 (executed this session as delta patches, per the prompt's own "do NOT re-run,

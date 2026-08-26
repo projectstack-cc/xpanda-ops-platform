@@ -1,7 +1,7 @@
 "use client";
 // Block Nesting: upload a PO spreadsheet, parse SKUs, correct via an editable grid (the safety
 // net for mis-parses), set per-density block dimensions, then "Reload cut sheet" nests and
-// renders the cut sheet (P324's nest() + <CutSheet>).
+// renders the cut sheet (nest() + <CutSheet>).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Upload, Plus, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -9,7 +9,6 @@ import Modal from "@/components/Modal";
 import {
   DEFAULT_BLOCK,
   DEFAULT_BLOCKS,
-  DEFAULT_MIN_REUSABLE_IN,
   type BlockSize,
   type BlockSizes,
   type NestResult,
@@ -50,7 +49,6 @@ export default function BlocksApp() {
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [skuLines, setSkuLines] = useState<SkuLine[]>([]);
   const [blockSizes, setBlockSizes] = useState<BlockSizes>({});
-  const [minReusableIn, setMinReusableIn] = useState<number>(DEFAULT_MIN_REUSABLE_IN);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [computeError, setComputeError] = useState<string | null>(null);
   const [nestResult, setNestResult] = useState<NestResult | null>(null);
@@ -233,12 +231,7 @@ export default function BlocksApp() {
         return;
       }
     }
-    if (!(minReusableIn > 0)) {
-      setComputeError("Minimum reusable size must be a positive number of inches.");
-      return;
-    }
-
-    setNestResult(nest(skuLines, blockSizes, minReusableIn));
+    setNestResult(nest(skuLines, blockSizes));
     setNestedBlockSizes(blockSizes);
   }
 
@@ -388,26 +381,6 @@ export default function BlocksApp() {
                 );
               })}
             </div>
-          </div>
-        )}
-
-        {/* Minimum reusable size */}
-        {presentDensities.length > 0 && (
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-text">Minimum reusable size</h3>
-            <label className="text-xs text-muted flex flex-col gap-1 max-w-[220px]">
-              Carried-forward vs. scrap threshold (in)
-              <input
-                type="number"
-                value={minReusableIn}
-                onChange={(e) => setMinReusableIn(parseNum(e.target.value))}
-                className="min-h-[44px] px-2 bg-[var(--input-bg)] border border-[var(--input-border)] rounded text-text text-sm"
-              />
-            </label>
-            <p className="text-xs text-muted">
-              An offcut whose smallest usable dimension is at least this many inches is
-              carried-forward inventory; smaller than that, it&apos;s true scrap.
-            </p>
           </div>
         )}
 

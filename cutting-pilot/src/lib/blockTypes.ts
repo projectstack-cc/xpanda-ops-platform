@@ -37,10 +37,6 @@ export const DEFAULT_BLOCKS: BlockSizes = {
   "2": { width: 50, height: 44, length: 198 },
 };
 
-// P411: carried-forward vs true-scrap threshold (inches) on an offcut's smallest usable
-// dimension; consumed by blockNester.ts. Placeholder — Steve will set the real value.
-export const DEFAULT_MIN_REUSABLE_IN = 12;
-
 // --- Nester output (P411) ---
 
 export interface NestChunkLine {
@@ -77,8 +73,8 @@ export interface DensityNestResult {
   blocks: NestBlock[]; // block (mold) -> chunk -> SKU map
   moldsNeeded: number;
   finishedBF: number; // board feet actually delivered as ordered parts (packing-invariant)
-  carriedForwardBF: number; // offcut whose smallest usable dimension >= minReusableIn
-  scrapBF: number; // remaining offcut (finishedBF + carriedForwardBF + scrapBF == moldsNeeded's total block BF)
+  carriedForwardBF: number; // board feet of enumerated real offcut (all of it — the floor decides live what to keep)
+  kerfLossBF: number; // unavoidable residual: saw kerf + micro-regions (finishedBF + carriedForwardBF + kerfLossBF == moldsNeeded's total block BF)
   volumeFloor: number; // perfect-yield minimum mold count (finishedBF / BF-per-mold)
 }
 
@@ -89,5 +85,5 @@ export interface NestTotals {
   moldsNeeded: number;
   finishedBF: number;
   carriedForwardBF: number;
-  scrapBF: number;
+  kerfLossBF: number;
 }

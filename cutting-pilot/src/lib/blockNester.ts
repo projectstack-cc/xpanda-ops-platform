@@ -14,18 +14,19 @@
 //      y+thi) already claims that space, and if nothing does, it's already inside the chunk's
 //      leftover-face-height region (block.height - usedHeight, which itself only advanced by thi
 //      for this rect). Tallying it separately would double-count cubic inches already counted
-//      one of those two ways — this was caught by pre-push review before it could ship silent
-//      at the minReusableIn placeholder (12" — the complement, 2-5" on real SKUs, never crossed
-//      that threshold, so the double-count was inert until Steve raises it).
+//      one of those two ways — this was caught by pre-push review before it could ship. With no
+//      threshold, the complement simply lands in carriedForwardBF via whichever of those two
+//      regions actually claims it; it is real offcut, never tallied separately.
 //   3. Chunk = one width, one length, many heights: rectangles of the same established chunk
 //      width stack up the face; a narrower rectangle may be admitted into an existing chunk's
 //      remaining height, ripped down from that chunk's established (wider) face to its own
 //      native width (trimmedFrom) — the strip beside it is offcut. A chunk's length is the max
 //      native length among its residents; a shorter resident leaves a "length end" gap, also
-//      offcut. Both routed to the pool via tallyCarriedForwardBF, split against minReusableIn.
+//      offcut. Both routed to the pool via tallyCarriedForwardBF (all real offcut carries; no
+//      size gate).
 //   4. Recursive offcut nesting -> inventory, not waste: leftover face height, block-width
 //      strips, and length ends are NOT dropped as waste — each is classified as carried-forward
-//      inventory (smallest usable dimension >= minReusableIn) or true scrap (below it). SCOPED
+//      inventory (all of it); the floor decides live what is physically worth keeping. SCOPED
 //      LIMITATION: this engine does not attempt to place additional
 //      finished parts inside these offcut regions (that needs full 2D/3D guillotine bin-packing
 //      across the block's whole width x length plane — see BACKLOG.md); it computes/classifies
@@ -42,7 +43,7 @@
 //          assumption.
 //   6. Objective: minimize mold count first, yield second.
 //   7. Output in board feet (1 BF = 144 in^3): finishedBF (packing-invariant — a pure function of
-//      the order, computed directly from SKU dims/qty), carriedForwardBF, scrapBF, moldsNeeded,
+//      the order, computed directly from SKU dims/qty), carriedForwardBF, kerfLossBF, moldsNeeded,
 //      and the block(mold) -> chunk -> SKU map. No flat "waste %".
 import {
   DEFAULT_BLOCK,
@@ -233,19 +234,21 @@ function packMoldsBestFit(chunks: Chunk[], block: BlockSize): Chunk[][] {
   return molds.map((m) => m.map((x) => x.c));
 }
 
-// Sums every offcut region (leftover face height, block-width strips, length ends, lone-wedge
-// complements, mold length leftover) whose smallest usable dimension >= minReusableIn, in board
-// feet. scrapBF is then computed as a residual (moldsNeeded's total block BF - finishedBF -
-// carriedForwardBF) rather than a second independent sum — this guarantees the reconciliation
-// identity (finishedBF + carriedForwardBF + scrapBF == moldsNeeded's total block BF) holds
-// exactly regardless of any micro-region (e.g. the internal per-pair kerf sliver) this function
-// doesn't separately enumerate; those fall into scrapBF by construction, which is correct — a
-// sliver at kerf width is always well under any realistic minReusableIn.
-function tallyCarriedForwardBF(molds: Chunk[][], block: BlockSize, minReusableIn: number): number {
+// Sums every enumerated real-offcut region (leftover face height, block-width strips, length
+// ends, mold length leftover) in board feet — no size gate; the floor decides live what's worth
+// keeping. The residual (moldsNeeded's total block BF - finishedBF - carriedForwardBF, computed
+// in nestDensity as kerfLossBF) is NOT a second independent sum of this same set — it's the
+// unavoidable process loss this function deliberately does not enumerate: saw kerf (the internal
+// per-pair sliver, the cross-cut kerf between chunks) and any other micro-region below what's
+// worth tracking. A kerf-width sliver is never inventory, so it stays out of carriedForwardBF and
+// lands in kerfLossBF by construction.
+function tallyCarriedForwardBF(molds: Chunk[][], block: BlockSize): number {
   let carriedVol = 0;
   const maybeCarry = (w: number, h: number, l: number) => {
     if (w <= EPS || h <= EPS || l <= EPS) return;
-    if (Math.min(w, h, l) + EPS >= minReusableIn) carriedVol += w * h * l;
+    // Redundant with the early return above (P412 dropped the size-gate condition that used to
+    // live here) — kept explicit rather than collapsed, so a region is never added silently.
+    if (w > EPS && h > EPS && l > EPS) carriedVol += w * h * l;
   };
 
   for (const mold of molds) {
@@ -306,7 +309,7 @@ function chunkToNestChunk(c: Chunk): NestChunk {
   return { width: c.width, length, faceUsed: c.usedHeight, lines: Array.from(lineMap.values()) };
 }
 
-export function nestDensity(lines: SkuLine[], block: BlockSize, minReusableIn: number): DensityNestResult {
+export function nestDensity(lines: SkuLine[], block: BlockSize): DensityNestResult {
   const rects = buildRectangles(lines);
   const volumeFloor = computeVolumeFloor(lines, block);
   const finishedBF = computeFinishedBF(lines);
@@ -320,10 +323,10 @@ export function nestDensity(lines: SkuLine[], block: BlockSize, minReusableIn: n
   const finalMolds = bestFitMolds.length <= firstFitMolds.length ? bestFitMolds : firstFitMolds;
   const moldsNeeded = finalMolds.length;
 
-  const carriedForwardBF = tallyCarriedForwardBF(finalMolds, block, minReusableIn);
+  const carriedForwardBF = tallyCarriedForwardBF(finalMolds, block);
   const totalBlockBF = (moldsNeeded * block.width * block.height * block.length) / BF;
-  let scrapBF = totalBlockBF - finishedBF - carriedForwardBF;
-  if (scrapBF < 0 && scrapBF > -1e-6) scrapBF = 0; // floating-point guard only
+  let kerfLossBF = totalBlockBF - finishedBF - carriedForwardBF;
+  if (kerfLossBF < 0 && kerfLossBF > -1e-6) kerfLossBF = 0; // floating-point guard only
 
   const blocks: NestBlock[] = finalMolds.map((chunkList) => ({
     chunks: chunkList.map(chunkToNestChunk),
@@ -335,12 +338,12 @@ export function nestDensity(lines: SkuLine[], block: BlockSize, minReusableIn: n
     moldsNeeded,
     finishedBF,
     carriedForwardBF,
-    scrapBF,
+    kerfLossBF,
     volumeFloor,
   };
 }
 
-export function nest(skuLines: SkuLine[], sizes: BlockSizes, minReusableIn: number): NestResult {
+export function nest(skuLines: SkuLine[], sizes: BlockSizes): NestResult {
   const densities = Array.from(
     new Set(skuLines.filter((l) => l.parsed && l.density > 0 && l.qty > 0).map((l) => l.density))
   ).sort((a, b) => a - b);
@@ -349,7 +352,7 @@ export function nest(skuLines: SkuLine[], sizes: BlockSizes, minReusableIn: numb
   for (const density of densities) {
     const block = sizes[String(density)] ?? DEFAULT_BLOCK;
     const lines = skuLines.filter((l) => l.parsed && l.density === density && l.qty > 0);
-    result[String(density)] = nestDensity(lines, block, minReusableIn);
+    result[String(density)] = nestDensity(lines, block);
   }
   return result;
 }
@@ -360,9 +363,9 @@ export function nestTotals(result: NestResult): NestTotals {
       moldsNeeded: acc.moldsNeeded + d.moldsNeeded,
       finishedBF: acc.finishedBF + d.finishedBF,
       carriedForwardBF: acc.carriedForwardBF + d.carriedForwardBF,
-      scrapBF: acc.scrapBF + d.scrapBF,
+      kerfLossBF: acc.kerfLossBF + d.kerfLossBF,
     }),
-    { moldsNeeded: 0, finishedBF: 0, carriedForwardBF: 0, scrapBF: 0 }
+    { moldsNeeded: 0, finishedBF: 0, carriedForwardBF: 0, kerfLossBF: 0 }
   );
 }
 

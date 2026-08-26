@@ -1,7 +1,7 @@
 "use client";
 // Cut-sheet renderer — consumes the P411 nester's NestResult. Per density → per mold → per
 // chunk: a table (item, taper, qty, part W×L, trimmed flag) beside the cut diagram. Header shows
-// the board-foot split (finished / carried-forward / scrap) per density + total.
+// the board-foot split (finished / carried-forward / kerf loss) per density + total.
 import type { BlockSizes, NestResult } from "@/lib/blockTypes";
 import { nestTotals } from "@/lib/blockNester";
 import ChunkElevation from "./ChunkElevation";
@@ -11,10 +11,10 @@ interface Props {
   blockSizes: BlockSizes;
 }
 
-function bfSplit(finishedBF: number, carriedForwardBF: number, scrapBF: number): string {
+function bfSplit(finishedBF: number, carriedForwardBF: number, kerfLossBF: number): string {
   return `finished ${finishedBF.toFixed(2)} BF · carried-forward ${carriedForwardBF.toFixed(
     2
-  )} BF · scrap ${scrapBF.toFixed(2)} BF`;
+  )} BF · kerf loss ${kerfLossBF.toFixed(2)} BF`;
 }
 
 export default function CutSheet({ result, blockSizes }: Props) {
@@ -34,7 +34,7 @@ export default function CutSheet({ result, blockSizes }: Props) {
         <h3 className="text-base font-semibold text-text">Total</h3>
         <span className="text-xs font-mono tabular-nums text-muted">
           {totals.moldsNeeded} mold{totals.moldsNeeded === 1 ? "" : "s"} ·{" "}
-          {bfSplit(totals.finishedBF, totals.carriedForwardBF, totals.scrapBF)}
+          {bfSplit(totals.finishedBF, totals.carriedForwardBF, totals.kerfLossBF)}
         </span>
       </div>
 
@@ -48,7 +48,7 @@ export default function CutSheet({ result, blockSizes }: Props) {
               <h3 className="text-base font-semibold text-text">{density}# density</h3>
               <span className="text-xs font-mono tabular-nums text-muted">
                 {d.moldsNeeded} mold{d.moldsNeeded === 1 ? "" : "s"} · volume floor{" "}
-                {d.volumeFloor.toFixed(2)} · {bfSplit(d.finishedBF, d.carriedForwardBF, d.scrapBF)}
+                {d.volumeFloor.toFixed(2)} · {bfSplit(d.finishedBF, d.carriedForwardBF, d.kerfLossBF)}
               </span>
             </div>
 

@@ -2,20 +2,22 @@
 // invoked once from BlocksApp in a NODE_ENV !== "production" effect and logged to console.
 //
 // Verifies: the face-capacity-with-top-off formula against all five customer-locked reference
-// numbers; the reconciliation identity (finishedBF + carriedForwardBF + scrapBF == moldsNeeded's
+// numbers; the reconciliation identity (finishedBF + carriedForwardBF + kerfLossBF == moldsNeeded's
 // total block BF) on synthetic mixes and on the real PO#1 fixture at both old and new default
 // block sizes; finishedBF's invariance to block size/packing; moldsNeeded >= ceil(volumeFloor);
 // the offcut-recursion (best-fit) tier never regressing past the greedy (first-fit) tier; and the
-// PO#1 piece-count regression (302/74/59) as a parser+capacity-path baseline.
+// PO#1 piece-count regression (302/74/59) as a parser+capacity-path baseline. P412 removed the
+// minimum-reusable-size threshold entirely — all enumerated real offcut is carriedForwardBF now
+// (no size gate); kerfLossBF is the honest unavoidable-loss residual (saw kerf + micro-regions).
 //
-// NOT covered here: the "locked customer order" (Sheet1, 20 SKUs) ground truth from the P411
-// prompt — pieces 1#=303/1.5#=60/2#=48, greedy molds 1#=8/3/3, finishedBF=37,038. That fixture's
-// raw line items were never provided this session (checked: absent from both
-// xPanda_PO1_Nesting_Map.xlsx, which only has PO#1's 47 SKUs, and the rest of the repo). Those
-// four numbers are aggregates of an order this file doesn't have — they can't be reconstructed
-// from a handful of totals without fabricating SKU rows tuned to match, which would be worthless
-// as verification. Once Steve provides that order (same shape as po1Fixture.ts), add it here
-// alongside PO1_ROWS.
+// STILL NOT COVERED as of P412: the "locked customer order" (Sheet1, 20 SKUs) ground truth from
+// the P411 prompt — pieces 1#=303/1.5#=60/2#=48, greedy molds 1#=8/3/3, finishedBF=37,038. That
+// fixture's raw line items have never been provided (checked: absent from both
+// xPanda_PO1_Nesting_Map.xlsx, which only has PO#1's 47 SKUs, and the rest of the repo, as of both
+// P411 and P412). Those four numbers are aggregates of an order this file doesn't have — they
+// can't be reconstructed from a handful of totals without fabricating SKU rows tuned to match,
+// which would be worthless as verification. Once Steve provides that order (same shape as
+// po1Fixture.ts), add it here alongside PO1_ROWS. See BACKLOG.md's matching item.
 import type { SkuLine, BlockSize } from "./blockTypes";
 import { nest, nestDensity, computeFaceCapacity, __internal } from "./blockNester";
 import { parsePoRows } from "./poParser";
@@ -48,12 +50,12 @@ function line(overrides: Partial<SkuLine>): SkuLine {
 
 function reconciles(d: ReturnType<typeof nestDensity>, block: BlockSize): { ok: boolean; detail: string } {
   const totalBlockBF = (d.moldsNeeded * block.width * block.height * block.length) / 144;
-  const sum = d.finishedBF + d.carriedForwardBF + d.scrapBF;
+  const sum = d.finishedBF + d.carriedForwardBF + d.kerfLossBF;
   return {
-    ok: approxEq(sum, totalBlockBF) && d.carriedForwardBF >= -1e-6 && d.scrapBF >= -1e-6,
+    ok: approxEq(sum, totalBlockBF) && d.carriedForwardBF >= -1e-6 && d.kerfLossBF >= -1e-6,
     detail: `finished=${d.finishedBF.toFixed(2)} carried=${d.carriedForwardBF.toFixed(
       2
-    )} scrap=${d.scrapBF.toFixed(2)} sum=${sum.toFixed(2)} moldBF=${totalBlockBF.toFixed(2)}`,
+    )} kerfLoss=${d.kerfLossBF.toFixed(2)} sum=${sum.toFixed(2)} moldBF=${totalBlockBF.toFixed(2)}`,
   };
 }
 
@@ -101,9 +103,9 @@ export function runBlockNesterSelfCheck(): { pass: boolean; results: CheckResult
   ];
 
   for (const [i, mix] of mixes.map((m, idx) => [idx, m] as const)) {
-    const d = nestDensity(mix, block, 12);
+    const d = nestDensity(mix, block);
     const { ok, detail } = reconciles(d, block);
-    check(`mix ${i}: finishedBF + carriedForwardBF + scrapBF == moldsNeeded block BF`, ok, detail);
+    check(`mix ${i}: finishedBF + carriedForwardBF + kerfLossBF == moldsNeeded block BF`, ok, detail);
 
     const floor = __internal.computeVolumeFloor(mix, block);
     check(
@@ -128,37 +130,28 @@ export function runBlockNesterSelfCheck(): { pass: boolean; results: CheckResult
       d.moldsNeeded === Math.min(firstFit.length, bestFit.length)
     );
 
-    // Non-tautological accounting checks, swept across several thresholds — scrapBF/
-    // carriedForwardBF are NOT forced positive/bounded by the residual construction the way the
-    // reconciliation identity above is; these catch a region double-counted against total offcut
-    // (e.g. the lone-wedge-complement bug caught by pre-push review at minReusableIn=12, which
-    // stayed silent there only because tlo+kerf never crossed that threshold on these fixtures).
-    for (const t of [2, 3, 12, 40]) {
-      const dt = nestDensity(mix, block, t);
-      const totalBlockBF = (dt.moldsNeeded * block.width * block.height * block.length) / 144;
-      check(
-        `mix ${i} @ minReusableIn=${t}: carriedForwardBF (${dt.carriedForwardBF.toFixed(
-          2
-        )}) <= total offcut (${(totalBlockBF - dt.finishedBF).toFixed(2)})`,
-        dt.carriedForwardBF <= totalBlockBF - dt.finishedBF + 1e-6
-      );
-      check(
-        `mix ${i} @ minReusableIn=${t}: scrapBF (${dt.scrapBF.toFixed(2)}) >= 0`,
-        dt.scrapBF >= -1e-6
-      );
-      check(
-        `mix ${i} @ minReusableIn=${t}: carriedForwardBF (${dt.carriedForwardBF.toFixed(2)}) >= 0`,
-        dt.carriedForwardBF >= -1e-6
-      );
-    }
+    // Non-tautological accounting checks — carriedForwardBF/kerfLossBF are NOT forced
+    // positive/bounded by the residual construction the way the reconciliation identity above is;
+    // these catch a region double-counted against total offcut (this is exactly what caught the
+    // lone-wedge-complement bug in the P411 pre-push review).
+    const dt = nestDensity(mix, block);
+    const totalBlockBF = (dt.moldsNeeded * block.width * block.height * block.length) / 144;
+    check(
+      `mix ${i}: carriedForwardBF (${dt.carriedForwardBF.toFixed(2)}) <= total offcut (${(
+        totalBlockBF - dt.finishedBF
+      ).toFixed(2)})`,
+      dt.carriedForwardBF <= totalBlockBF - dt.finishedBF + 1e-6
+    );
+    check(`mix ${i}: kerfLossBF (${dt.kerfLossBF.toFixed(2)}) >= 0`, dt.kerfLossBF >= -1e-6);
+    check(`mix ${i}: carriedForwardBF (${dt.carriedForwardBF.toFixed(2)}) >= 0`, dt.carriedForwardBF >= -1e-6);
   }
 
   // --- finishedBF is a pure function of the order: invariant to block size ---
   const invarianceMix = mixes[0];
   const smallBlock: BlockSize = { width: 50, height: 44, length: 198 };
   const bigBlock: BlockSize = { width: 50, height: 65, length: 198 };
-  const finishedSmall = nestDensity(invarianceMix, smallBlock, 12).finishedBF;
-  const finishedBig = nestDensity(invarianceMix, bigBlock, 12).finishedBF;
+  const finishedSmall = nestDensity(invarianceMix, smallBlock).finishedBF;
+  const finishedBig = nestDensity(invarianceMix, bigBlock).finishedBF;
   check(
     "finishedBF is invariant to block size",
     approxEq(finishedSmall, finishedBig),
@@ -170,7 +163,7 @@ export function runBlockNesterSelfCheck(): { pass: boolean; results: CheckResult
   // instruction to reproduce this as a regression fixture. ---
   const po1Lines = parsePoRows(PO1_ROWS);
   const po1SizesOld = { "1": block, "1.5": block, "2": block };
-  const po1ResultOld = nest(po1Lines, po1SizesOld, 12);
+  const po1ResultOld = nest(po1Lines, po1SizesOld);
   for (const densityKey of Object.keys(PO1_EXPECTED)) {
     const exp = PO1_EXPECTED[densityKey];
     const got = po1ResultOld[densityKey];
@@ -188,26 +181,23 @@ export function runBlockNesterSelfCheck(): { pass: boolean; results: CheckResult
     }
   }
 
-  // --- Threshold sweep on the real PO#1 order (same non-tautological checks as the synthetic
-  // mixes above, on real data) + logging whether the offcut-recursion (best-fit) tier actually
-  // diverges from greedy (first-fit) here, so it's visible whether tier two is doing real work
-  // or is decorative on this order. ---
+  // --- Same non-tautological checks as the synthetic mixes above, on the real PO#1 order + logging
+  // whether the offcut-recursion (best-fit) tier actually diverges from greedy (first-fit) here,
+  // so it's visible whether tier two is doing real work or is decorative on this order. ---
   for (const densityKey of Object.keys(PO1_EXPECTED)) {
     const linesForDensity = po1Lines.filter(
       (l) => l.parsed && String(l.density) === densityKey && l.qty > 0
     );
     if (linesForDensity.length === 0) continue;
-    for (const t of [2, 3, 12, 40]) {
-      const dt = nestDensity(linesForDensity, block, t);
-      const totalBlockBF = (dt.moldsNeeded * block.width * block.height * block.length) / 144;
-      check(
-        `PO#1 @ ${densityKey}# @ minReusableIn=${t}: carriedForwardBF <= total offcut`,
-        dt.carriedForwardBF <= totalBlockBF - dt.finishedBF + 1e-6,
-        `carried=${dt.carriedForwardBF.toFixed(2)} totalOffcut=${(totalBlockBF - dt.finishedBF).toFixed(2)}`
-      );
-      check(`PO#1 @ ${densityKey}# @ minReusableIn=${t}: scrapBF >= 0`, dt.scrapBF >= -1e-6);
-      check(`PO#1 @ ${densityKey}# @ minReusableIn=${t}: carriedForwardBF >= 0`, dt.carriedForwardBF >= -1e-6);
-    }
+    const dt = nestDensity(linesForDensity, block);
+    const totalBlockBF = (dt.moldsNeeded * block.width * block.height * block.length) / 144;
+    check(
+      `PO#1 @ ${densityKey}#: carriedForwardBF <= total offcut`,
+      dt.carriedForwardBF <= totalBlockBF - dt.finishedBF + 1e-6,
+      `carried=${dt.carriedForwardBF.toFixed(2)} totalOffcut=${(totalBlockBF - dt.finishedBF).toFixed(2)}`
+    );
+    check(`PO#1 @ ${densityKey}#: kerfLossBF >= 0`, dt.kerfLossBF >= -1e-6);
+    check(`PO#1 @ ${densityKey}#: carriedForwardBF >= 0`, dt.carriedForwardBF >= -1e-6);
 
     const rects = __internal.buildRectangles(linesForDensity);
     const chunks = __internal.buildChunksGreedy(rects, block);
@@ -222,7 +212,7 @@ export function runBlockNesterSelfCheck(): { pass: boolean; results: CheckResult
 
   // --- Same PO#1 order, reconciliation holds at the NEW per-density defaults too ---
   const po1SizesNew: Record<string, BlockSize> = { "1": bigBlock, "1.5": smallBlock, "2": smallBlock };
-  const po1ResultNew = nest(po1Lines, po1SizesNew, 12);
+  const po1ResultNew = nest(po1Lines, po1SizesNew);
   for (const densityKey of Object.keys(PO1_EXPECTED)) {
     const got = po1ResultNew[densityKey];
     if (!got) continue;
