@@ -1,12 +1,20 @@
 "use client";
-// Cut-sheet renderer — consumes the P324 nester's NestResult. Per density → per mold → per
-// chunk: a table (item, taper, qty, part W×L, trimmed flag) beside the cut diagram.
+// Cut-sheet renderer — consumes the P411 nester's NestResult. Per density → per mold → per
+// chunk: a table (item, taper, qty, part W×L, trimmed flag) beside the cut diagram. Header shows
+// the board-foot split (finished / carried-forward / scrap) per density + total.
 import type { BlockSizes, NestResult } from "@/lib/blockTypes";
+import { nestTotals } from "@/lib/blockNester";
 import ChunkElevation from "./ChunkElevation";
 
 interface Props {
   result: NestResult;
   blockSizes: BlockSizes;
+}
+
+function bfSplit(finishedBF: number, carriedForwardBF: number, scrapBF: number): string {
+  return `finished ${finishedBF.toFixed(2)} BF · carried-forward ${carriedForwardBF.toFixed(
+    2
+  )} BF · scrap ${scrapBF.toFixed(2)} BF`;
 }
 
 export default function CutSheet({ result, blockSizes }: Props) {
@@ -18,8 +26,18 @@ export default function CutSheet({ result, blockSizes }: Props) {
     return <p className="text-sm text-muted">No parsed SKUs with quantity to nest.</p>;
   }
 
+  const totals = nestTotals(result);
+
   return (
     <div className="space-y-8">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-border pb-2">
+        <h3 className="text-base font-semibold text-text">Total</h3>
+        <span className="text-xs font-mono tabular-nums text-muted">
+          {totals.moldsNeeded} mold{totals.moldsNeeded === 1 ? "" : "s"} ·{" "}
+          {bfSplit(totals.finishedBF, totals.carriedForwardBF, totals.scrapBF)}
+        </span>
+      </div>
+
       {densities.map((density) => {
         const key = String(density);
         const d = result[key];
@@ -29,15 +47,15 @@ export default function CutSheet({ result, blockSizes }: Props) {
             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
               <h3 className="text-base font-semibold text-text">{density}# density</h3>
               <span className="text-xs font-mono tabular-nums text-muted">
-                {d.blocksNeeded} mold{d.blocksNeeded === 1 ? "" : "s"} · volume floor{" "}
-                {d.volumeFloor.toFixed(2)} · {d.scrapWedges} scrap wedge{d.scrapWedges === 1 ? "" : "s"}
+                {d.moldsNeeded} mold{d.moldsNeeded === 1 ? "" : "s"} · volume floor{" "}
+                {d.volumeFloor.toFixed(2)} · {bfSplit(d.finishedBF, d.carriedForwardBF, d.scrapBF)}
               </span>
             </div>
 
             {d.blocks.map((mold, moldIdx) => (
               <div key={moldIdx} className="border border-border rounded p-3 space-y-3">
                 <p className="text-xs font-semibold text-muted uppercase tracking-wide">
-                  Mold {moldIdx + 1} of {d.blocksNeeded}
+                  Mold {moldIdx + 1} of {d.moldsNeeded}
                 </p>
                 {mold.chunks.map((chunk, chunkIdx) => (
                   <div key={chunkIdx} className="flex flex-col md:flex-row gap-3">

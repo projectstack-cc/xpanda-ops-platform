@@ -1,13 +1,23 @@
-// Guarded dev self-check for the block nester (P324). Not part of the production build path —
+// Guarded dev self-check for the block nester (P411). Not part of the production build path —
 // invoked once from BlocksApp in a NODE_ENV !== "production" effect and logged to console.
 //
-// Verifies structural invariants against synthetic fixtures (reconciliation, scrap-wedge
-// counting, strict >= greedy, blocksNeeded >= ceil(volumeFloor)), PLUS the real PO#1 baseline
-// (via po1Fixture.ts — provided by Steve, 2026-08-04): parsing all 57 real line items and nesting
-// them reproduces the manager-hand-checked exact numbers for every density (blocksNeeded,
-// volumeFloor, scrapWedges — see xPanda_PO1_Nesting_Map.xlsx's Summary sheet).
+// Verifies: the face-capacity-with-top-off formula against all five customer-locked reference
+// numbers; the reconciliation identity (finishedBF + carriedForwardBF + scrapBF == moldsNeeded's
+// total block BF) on synthetic mixes and on the real PO#1 fixture at both old and new default
+// block sizes; finishedBF's invariance to block size/packing; moldsNeeded >= ceil(volumeFloor);
+// the offcut-recursion (best-fit) tier never regressing past the greedy (first-fit) tier; and the
+// PO#1 piece-count regression (302/74/59) as a parser+capacity-path baseline.
+//
+// NOT covered here: the "locked customer order" (Sheet1, 20 SKUs) ground truth from the P411
+// prompt — pieces 1#=303/1.5#=60/2#=48, greedy molds 1#=8/3/3, finishedBF=37,038. That fixture's
+// raw line items were never provided this session (checked: absent from both
+// xPanda_PO1_Nesting_Map.xlsx, which only has PO#1's 47 SKUs, and the rest of the repo). Those
+// four numbers are aggregates of an order this file doesn't have — they can't be reconstructed
+// from a handful of totals without fabricating SKU rows tuned to match, which would be worthless
+// as verification. Once Steve provides that order (same shape as po1Fixture.ts), add it here
+// alongside PO1_ROWS.
 import type { SkuLine, BlockSize } from "./blockTypes";
-import { nest, nestDensity, __internal } from "./blockNester";
+import { nest, nestDensity, computeFaceCapacity, __internal } from "./blockNester";
 import { parsePoRows } from "./poParser";
 import { PO1_ROWS, PO1_EXPECTED } from "./po1Fixture";
 
@@ -15,6 +25,10 @@ interface CheckResult {
   name: string;
   pass: boolean;
   detail?: string;
+}
+
+function approxEq(a: number, b: number, eps = 0.01): boolean {
+  return Math.abs(a - b) < eps;
 }
 
 function line(overrides: Partial<SkuLine>): SkuLine {
@@ -32,54 +46,54 @@ function line(overrides: Partial<SkuLine>): SkuLine {
   };
 }
 
+function reconciles(d: ReturnType<typeof nestDensity>, block: BlockSize): { ok: boolean; detail: string } {
+  const totalBlockBF = (d.moldsNeeded * block.width * block.height * block.length) / 144;
+  const sum = d.finishedBF + d.carriedForwardBF + d.scrapBF;
+  return {
+    ok: approxEq(sum, totalBlockBF) && d.carriedForwardBF >= -1e-6 && d.scrapBF >= -1e-6,
+    detail: `finished=${d.finishedBF.toFixed(2)} carried=${d.carriedForwardBF.toFixed(
+      2
+    )} scrap=${d.scrapBF.toFixed(2)} sum=${sum.toFixed(2)} moldBF=${totalBlockBF.toFixed(2)}`,
+  };
+}
+
 export function runBlockNesterSelfCheck(): { pass: boolean; results: CheckResult[] } {
   const results: CheckResult[] = [];
   function check(name: string, pass: boolean, detail?: string) {
     results.push({ name, pass, detail });
   }
 
-  const block: BlockSize = { width: 50, height: 50, length: 198 };
-
-  // A representative synthetic mix: several footprints/tapers/densities, some odd qty.
-  const lines: SkuLine[] = [
-    line({ item: "A", width: 12, length: 40, tlo: 2, thi: 4, density: 1.5, qty: 10 }),
-    line({ item: "B", width: 12, length: 40, tlo: 3, thi: 5, density: 1.5, qty: 7 }), // odd
-    line({ item: "C", width: 8, length: 30, tlo: 1, thi: 3, density: 1.5, qty: 15 }), // odd
-    line({ item: "D", width: 20, length: 60, tlo: 4, thi: 6, density: 2, qty: 6 }),
-    line({ item: "E", width: 20, length: 60, tlo: 4, thi: 6, density: 2, qty: 1 }), // odd, lone
+  // --- Face capacity with top-off: the five customer-locked reference numbers ---
+  const capacityCases: Array<{ tlo: number; thi: number; H: number; expect: number }> = [
+    { tlo: 2, thi: 4, H: 65, expect: 20 },
+    { tlo: 3, thi: 5, H: 65, expect: 15 },
+    { tlo: 4, thi: 5, H: 65, expect: 14 },
+    { tlo: 3, thi: 4, H: 44, expect: 12 },
+    { tlo: 4, thi: 5, H: 44, expect: 9 },
   ];
-
-  const result = nest(lines, { "1.5": block, "2": block });
-
-  // --- Reconciliation: summed finished pieces per density === input qty totals ---
-  for (const density of [1.5, 2]) {
-    const inputQty = lines.filter((l) => l.density === density).reduce((s, l) => s + l.qty, 0);
-    const dResult = result[String(density)];
-    const outputQty = dResult.blocks
-      .flatMap((b) => b.chunks)
-      .flatMap((c) => c.lines)
-      .reduce((s, l) => s + l.qty, 0);
+  for (const c of capacityCases) {
+    const got = computeFaceCapacity(c.tlo, c.thi, c.H);
     check(
-      `reconciliation @ ${density}#: output pieces === input qty`,
-      outputQty === inputQty,
-      `input=${inputQty} output=${outputQty}`
+      `face capacity (${c.tlo}>${c.thi})@${c.H} == ${c.expect}`,
+      got === c.expect,
+      `got ${got}`
     );
   }
 
-  // --- Scrap wedges: odd qty -> 1 wedge per SKU, even -> 0 ---
-  const oddOnly = [line({ item: "O1", qty: 5 }), line({ item: "O2", qty: 8 })];
-  const { scrapWedges } = __internal.buildRectangles(oddOnly);
-  check("scrap wedges: exactly one odd-qty SKU -> 1 wedge", scrapWedges === 1, `got ${scrapWedges}`);
+  const block: BlockSize = { width: 50, height: 50, length: 198 };
 
-  const bothOdd = [line({ item: "O1", qty: 5 }), line({ item: "O2", qty: 7 })];
-  const { scrapWedges: scrapWedges2 } = __internal.buildRectangles(bothOdd);
-  check("scrap wedges: two odd-qty SKUs -> 2 wedges", scrapWedges2 === 2, `got ${scrapWedges2}`);
-
-  // --- greedy <= strict, block count >= ceil(volumeFloor), across several density mixes ---
+  // --- Reconciliation + non-negativity across several synthetic mixes, some with odd qty ---
   const mixes: SkuLine[][] = [
-    lines.filter((l) => l.density === 1.5),
-    lines.filter((l) => l.density === 2),
-    [line({ item: "F", width: 15, length: 50, tlo: 2, thi: 2, density: 1, qty: 40 })],
+    [
+      line({ item: "A", width: 12, length: 40, tlo: 2, thi: 4, density: 1.5, qty: 10 }),
+      line({ item: "B", width: 12, length: 40, tlo: 3, thi: 5, density: 1.5, qty: 7 }), // odd
+      line({ item: "C", width: 8, length: 30, tlo: 1, thi: 3, density: 1.5, qty: 15 }), // odd
+    ],
+    [
+      line({ item: "D", width: 20, length: 60, tlo: 4, thi: 6, density: 2, qty: 6 }),
+      line({ item: "E", width: 20, length: 60, tlo: 4, thi: 6, density: 2, qty: 1 }), // odd, lone
+    ],
+    [line({ item: "F", width: 15, length: 50, tlo: 2, thi: 2, density: 1, qty: 41 })], // odd
     [
       line({ item: "G", width: 10, length: 25, tlo: 1, thi: 2, density: 1, qty: 3 }),
       line({ item: "H", width: 30, length: 100, tlo: 5, thi: 8, density: 1, qty: 2 }),
@@ -87,69 +101,134 @@ export function runBlockNesterSelfCheck(): { pass: boolean; results: CheckResult
   ];
 
   for (const [i, mix] of mixes.map((m, idx) => [idx, m] as const)) {
-    const strictChunks = __internal.buildChunksStrict(__internal.buildRectangles(mix).rects, block);
-    const strictBlocks = __internal.packChunksIntoBlocks(strictChunks, block);
-    const greedyChunks = __internal.buildChunksGreedy(__internal.buildRectangles(mix).rects, block);
-    const greedyBlocks = __internal.packChunksIntoBlocks(greedyChunks, block);
-    const floor = __internal.computeVolumeFloor(mix, block);
-    const dResult = nestDensity(mix, block);
+    const d = nestDensity(mix, block, 12);
+    const { ok, detail } = reconciles(d, block);
+    check(`mix ${i}: finishedBF + carriedForwardBF + scrapBF == moldsNeeded block BF`, ok, detail);
 
+    const floor = __internal.computeVolumeFloor(mix, block);
     check(
-      `mix ${i}: greedy blocks (${greedyBlocks.length}) <= strict blocks (${strictBlocks.length})`,
-      greedyBlocks.length <= strictBlocks.length
-    );
-    check(
-      `mix ${i}: final blocksNeeded (${dResult.blocksNeeded}) >= ceil(volumeFloor) (${Math.ceil(floor)})`,
-      dResult.blocksNeeded >= Math.ceil(floor),
+      `mix ${i}: moldsNeeded (${d.moldsNeeded}) >= ceil(volumeFloor) (${Math.ceil(floor)})`,
+      d.moldsNeeded >= Math.ceil(floor),
       `floor=${floor}`
     );
+
+    const rects = __internal.buildRectangles(mix);
+    const chunks = __internal.buildChunksGreedy(rects, block);
+    const firstFit = __internal.packMoldsFirstFit(chunks, block);
+    const bestFit = __internal.packMoldsBestFit(chunks, block);
     check(
-      `mix ${i}: final blocksNeeded never worse than strict`,
-      dResult.blocksNeeded <= strictBlocks.length
+      `mix ${i}: offcut-recursion (best-fit, ${bestFit.length}) never regresses past greedy (first-fit, ${firstFit.length})`,
+      bestFit.length <= firstFit.length
+    );
+    check(
+      `mix ${i}: final moldsNeeded (${d.moldsNeeded}) matches the winning tier (${Math.min(
+        firstFit.length,
+        bestFit.length
+      )})`,
+      d.moldsNeeded === Math.min(firstFit.length, bestFit.length)
+    );
+
+    // Non-tautological accounting checks, swept across several thresholds — scrapBF/
+    // carriedForwardBF are NOT forced positive/bounded by the residual construction the way the
+    // reconciliation identity above is; these catch a region double-counted against total offcut
+    // (e.g. the lone-wedge-complement bug caught by pre-push review at minReusableIn=12, which
+    // stayed silent there only because tlo+kerf never crossed that threshold on these fixtures).
+    for (const t of [2, 3, 12, 40]) {
+      const dt = nestDensity(mix, block, t);
+      const totalBlockBF = (dt.moldsNeeded * block.width * block.height * block.length) / 144;
+      check(
+        `mix ${i} @ minReusableIn=${t}: carriedForwardBF (${dt.carriedForwardBF.toFixed(
+          2
+        )}) <= total offcut (${(totalBlockBF - dt.finishedBF).toFixed(2)})`,
+        dt.carriedForwardBF <= totalBlockBF - dt.finishedBF + 1e-6
+      );
+      check(
+        `mix ${i} @ minReusableIn=${t}: scrapBF (${dt.scrapBF.toFixed(2)}) >= 0`,
+        dt.scrapBF >= -1e-6
+      );
+      check(
+        `mix ${i} @ minReusableIn=${t}: carriedForwardBF (${dt.carriedForwardBF.toFixed(2)}) >= 0`,
+        dt.carriedForwardBF >= -1e-6
+      );
+    }
+  }
+
+  // --- finishedBF is a pure function of the order: invariant to block size ---
+  const invarianceMix = mixes[0];
+  const smallBlock: BlockSize = { width: 50, height: 44, length: 198 };
+  const bigBlock: BlockSize = { width: 50, height: 65, length: 198 };
+  const finishedSmall = nestDensity(invarianceMix, smallBlock, 12).finishedBF;
+  const finishedBig = nestDensity(invarianceMix, bigBlock, 12).finishedBF;
+  check(
+    "finishedBF is invariant to block size",
+    approxEq(finishedSmall, finishedBig),
+    `small=${finishedSmall.toFixed(4)} big=${finishedBig.toFixed(4)}`
+  );
+
+  // --- Real PO#1 baseline (57 real line items): piece-count regression at OLD defaults
+  // (50x50x198) for every density — a parser+capacity-path check, per the P411 prompt's own
+  // instruction to reproduce this as a regression fixture. ---
+  const po1Lines = parsePoRows(PO1_ROWS);
+  const po1SizesOld = { "1": block, "1.5": block, "2": block };
+  const po1ResultOld = nest(po1Lines, po1SizesOld, 12);
+  for (const densityKey of Object.keys(PO1_EXPECTED)) {
+    const exp = PO1_EXPECTED[densityKey];
+    const got = po1ResultOld[densityKey];
+    const gotParts = got
+      ? got.blocks.flatMap((b) => b.chunks).flatMap((c) => c.lines).reduce((s, l) => s + l.qty, 0)
+      : -1;
+    check(
+      `PO#1 @ ${densityKey}# (old defaults 50x50x198): ${exp.parts} pieces`,
+      gotParts === exp.parts,
+      `got ${gotParts}`
+    );
+    if (got) {
+      const { ok, detail } = reconciles(got, block);
+      check(`PO#1 @ ${densityKey}# (old defaults): reconciliation holds`, ok, detail);
+    }
+  }
+
+  // --- Threshold sweep on the real PO#1 order (same non-tautological checks as the synthetic
+  // mixes above, on real data) + logging whether the offcut-recursion (best-fit) tier actually
+  // diverges from greedy (first-fit) here, so it's visible whether tier two is doing real work
+  // or is decorative on this order. ---
+  for (const densityKey of Object.keys(PO1_EXPECTED)) {
+    const linesForDensity = po1Lines.filter(
+      (l) => l.parsed && String(l.density) === densityKey && l.qty > 0
+    );
+    if (linesForDensity.length === 0) continue;
+    for (const t of [2, 3, 12, 40]) {
+      const dt = nestDensity(linesForDensity, block, t);
+      const totalBlockBF = (dt.moldsNeeded * block.width * block.height * block.length) / 144;
+      check(
+        `PO#1 @ ${densityKey}# @ minReusableIn=${t}: carriedForwardBF <= total offcut`,
+        dt.carriedForwardBF <= totalBlockBF - dt.finishedBF + 1e-6,
+        `carried=${dt.carriedForwardBF.toFixed(2)} totalOffcut=${(totalBlockBF - dt.finishedBF).toFixed(2)}`
+      );
+      check(`PO#1 @ ${densityKey}# @ minReusableIn=${t}: scrapBF >= 0`, dt.scrapBF >= -1e-6);
+      check(`PO#1 @ ${densityKey}# @ minReusableIn=${t}: carriedForwardBF >= 0`, dt.carriedForwardBF >= -1e-6);
+    }
+
+    const rects = __internal.buildRectangles(linesForDensity);
+    const chunks = __internal.buildChunksGreedy(rects, block);
+    const firstFit = __internal.packMoldsFirstFit(chunks, block);
+    const bestFit = __internal.packMoldsBestFit(chunks, block);
+    check(
+      `PO#1 @ ${densityKey}# (old defaults): first-fit=${firstFit.length} molds, best-fit=${bestFit.length} molds` +
+        (bestFit.length < firstFit.length ? " — tier two wins here" : " — tiers tie on this order"),
+      bestFit.length <= firstFit.length
     );
   }
 
-  // --- Prove the greedy lever actually engages (strictly beats strict at least once), not just
-  // ties. A narrow-length block (100") forces one chunk per block; two footprints that each
-  // leave a large per-chunk height leftover under strict consolidate into fewer chunks (and
-  // therefore fewer blocks) once cross-footprint width-trim admission is allowed. ---
-  const narrowBlock: BlockSize = { width: 50, height: 50, length: 100 };
-  const leverMix: SkuLine[] = [
-    line({ item: "A", width: 10, length: 90, tlo: 2, thi: 4, density: 1, qty: 18 }),
-    line({ item: "B", width: 12, length: 90, tlo: 1, thi: 1.5, density: 1, qty: 18 }),
-  ];
-  const leverStrict = __internal.packChunksIntoBlocks(
-    __internal.buildChunksStrict(__internal.buildRectangles(leverMix).rects, narrowBlock),
-    narrowBlock
-  );
-  const leverGreedy = __internal.packChunksIntoBlocks(
-    __internal.buildChunksGreedy(__internal.buildRectangles(leverMix).rects, narrowBlock),
-    narrowBlock
-  );
-  check(
-    `greedy lever: strictly beats strict on a constructed case (greedy=${leverGreedy.length} < strict=${leverStrict.length})`,
-    leverGreedy.length < leverStrict.length,
-    `strict=${leverStrict.length} greedy=${leverGreedy.length}`
-  );
-
-  // --- Real PO#1 baseline: parse + nest all 57 real line items, compare to the exact manager-
-  // hand-checked numbers (blocksNeeded, volumeFloor, scrapWedges) for every density. ---
-  const po1Lines = parsePoRows(PO1_ROWS);
-  const po1Sizes = { "1": block, "1.5": block, "2": block };
-  const po1Result = nest(po1Lines, po1Sizes);
+  // --- Same PO#1 order, reconciliation holds at the NEW per-density defaults too ---
+  const po1SizesNew: Record<string, BlockSize> = { "1": bigBlock, "1.5": smallBlock, "2": smallBlock };
+  const po1ResultNew = nest(po1Lines, po1SizesNew, 12);
   for (const densityKey of Object.keys(PO1_EXPECTED)) {
-    const exp = PO1_EXPECTED[densityKey];
-    const got = po1Result[densityKey];
-    check(
-      `PO#1 @ ${densityKey}#: ${exp.molds} molds, floor ${exp.floor}, ${exp.scrap} scrap wedges`,
-      !!got &&
-        got.blocksNeeded === exp.molds &&
-        Math.abs(got.volumeFloor - exp.floor) < 0.005 &&
-        got.scrapWedges === exp.scrap,
-      got
-        ? `got molds=${got.blocksNeeded} floor=${got.volumeFloor.toFixed(2)} scrap=${got.scrapWedges}`
-        : "no result for this density"
-    );
+    const got = po1ResultNew[densityKey];
+    if (!got) continue;
+    const blockForDensity = po1SizesNew[densityKey];
+    const { ok, detail } = reconciles(got, blockForDensity);
+    check(`PO#1 @ ${densityKey}# (new per-density defaults): reconciliation holds`, ok, detail);
   }
 
   return { pass: results.every((r) => r.pass), results };

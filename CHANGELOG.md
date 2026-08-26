@@ -10,6 +10,99 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P411 — Block nesting: offcut-recursive nester + cut-sheet renderer, completing `/v2/blocks`
+  (react-component-agent §9b + next-platform-agent §9a). Replaces P324's engine, on top of
+  P322/P323/P410 (executed this session as delta patches, per the prompt's own "do NOT re-run,
+  this is a follow-up patch" framing — both already-shipped modules edited in place, not
+  rewritten).** `blockNester.ts`: new `computeFaceCapacity(tlo, thi, H)` — the "face capacity with
+  top-off" reference formula (`2·floor(H/rect) + 1 if the leftover fits one more lone wedge`,
+  `rect = tlo+thi+0.25`) — a documented figure, not a placement driver (ordered qty is always laid
+  out exactly, never inflated to hit it). A lone wedge (odd qty) now reserves only its thick-end
+  height (`thi`) in the stack instead of the old engine's full paired-rect height; its complement
+  (`tlo+kerf` tall) is a byproduct routed to the offcut pool, not silently absorbed. Two packing
+  tiers over the same chunk set from `buildChunksGreedy` (cross-SKU width-trim admission,
+  unchanged from P324): `packMoldsFirstFit` (the required greedy baseline) and `packMoldsBestFit`
+  (best-fit-decreasing — the "offcut-recursion" tier); whichever yields fewer-or-equal molds wins
+  by explicit comparison, so "never regress below the greedy mold count" is a hard guarantee.
+  Output reshaped to board feet: `finishedBF` (a pure function of the order — width×length×
+  avg-taper-height×qty/144 — packing-invariant, asserted directly), `carriedForwardBF` (every
+  offcut region — leftover face height, block-width strips, length ends, lone-wedge complements,
+  mold length leftover — whose smallest usable dimension ≥ `minReusableIn`), and `scrapBF`
+  computed as the residual against each mold's actual physical volume (guarantees the
+  reconciliation identity `finishedBF + carriedForwardBF + scrapBF == moldsNeeded × block BF`
+  exactly, absorbing kerf-sliver-scale offcuts this engine doesn't separately enumerate — correct
+  by construction, since those are always well under any realistic `minReusableIn`). **Real bug
+  fixed in the same rewrite, not just re-shaped:** `chunkToNestChunk`'s `NestChunkLine.partWidth`
+  previously reported the *chunk's* established width for every resident line, including trimmed
+  (narrower) ones — a trimmed SKU's displayed cut width was silently wrong (the chunk's wider
+  dimension, not its own ordered width). Now reports the SKU's own native/trimmed width, matching
+  what actually gets cut. **SCOPED LIMITATION, stated not hidden:** offcut regions are honestly
+  classified into the BF split, but no additional finished parts are ever cut FROM them — that
+  still needs full 2D/3D guillotine bin-packing across the block's width×length plane, the same
+  boundary P324 already drew (see `BACKLOG.md`). `CutSheet.tsx`: header now shows the BF split
+  (finished/carried-forward/scrap) per density plus a grand total (new `nestTotals()` export);
+  mold/chunk table unchanged in structure. `ChunkElevation.tsx`: a lone wedge now draws at its own
+  `thi`-tall footprint (dashed border) instead of the old uniform paired-band height, matching the
+  engine's real stacking ledger — its complement isn't drawn as a box (it has no fixed location in
+  this diagram's own length×height plane; it's a pool byproduct), called out via the footer note
+  instead. `BlocksApp.tsx`: `Reload cut sheet` now calls `nest(skuLines, blockSizes,
+  minReusableIn)` (3-arg, was 2 — see P410 below for where `minReusableIn` state was added).
+  **Verification, given a real constraint:** the prompt's own "locked customer order (Sheet1, 20
+  SKUs)" ground-truth fixture (pieces 1#=303/1.5#=60/2#=48, greedy molds 1#=8/3/3,
+  finishedBF=37,038) was never provided this session — checked `xPanda_PO1_Nesting_Map.xlsx`
+  (only has PO#1's 47 SKUs across its own tabs) and the rest of the repo; nothing matching a
+  20-SKU order exists. Fabricating rows tuned to hit those four aggregate numbers would be
+  worthless as verification (four numbers can't pin twenty rows × six fields) and would actively
+  mask bugs, so it wasn't attempted — logged as its own `BACKLOG.md` item instead, one-line addition
+  once Steve provides it. What WAS verified directly: all five customer-locked face-capacity
+  numbers exactly ((2>4)@65=20, (3>5)@65=15, (4>5)@65=14, (3>4)@44=12, (4>5)@44=9); the
+  reconciliation identity on several synthetic mixes and on the real PO#1 order at both old
+  (50×50×198) and new per-density (65/44/44) defaults; `finishedBF`'s invariance to block size;
+  `moldsNeeded >= ceil(volumeFloor)`; the best-fit tier never regressing past first-fit; and the
+  PO#1 piece-count regression the prompt explicitly asked for (1# 302 / 1.5# 74 / 2# 59 pcs, exact
+  — a parser+capacity-path check, unaffected by the engine rewrite). On the real PO#1 order, the
+  offcut-recursion (best-fit) tier ties the greedy (first-fit) tier exactly (10/3/3 molds, all
+  three densities) rather than beating it — logged plainly rather than implied otherwise; tier two
+  is real (a genuinely different bin-packing heuristic, asserted never-worse on every fixture) but
+  decorative on this particular order's chunk-length distribution. **`advisor()` pre-push review
+  caught a real double-count, fixed before push, not just noted:** the first implementation tallied
+  a lone wedge's offcut complement (`tlo+kerf`, the gap between its own `thi`-tall stacking
+  footprint and what a full paired rectangle would have used) as its own carried-forward/scrap
+  region — but that space is already claimed one of two ways: by whatever the packer stacks
+  immediately above it, or (if nothing does) by the chunk's own leftover-face-height region, which
+  is computed from the same `thi`-only stacking ledger. Tallying it a third time double-counted
+  real cubic inches. It shipped clean through every assertion at the placeholder `minReusableIn=12`
+  purely by coincidence — the complement is 2–5" on real SKUs, always under that threshold, so
+  `maybeCarry`'s own filter silently dropped it either way; the bug would have surfaced the moment
+  Steve raises the threshold. Fixed by dropping the complement from the tally entirely (kept as a
+  documented non-double-counted concept in the file header) and removed the now-dead
+  `Rect.complementHeight` field. Also fixed: `nest()`'s density-fallback block size was a second
+  hardcoded `{width:50,height:50,length:198}` literal instead of the existing `DEFAULT_BLOCK`
+  import — P410's own instruction that block dims live only in `blockTypes.ts`. Re-verified after
+  both fixes: added a `minReusableIn` sweep (2/3/12/40) asserting `carriedForwardBF` stays within
+  total offcut and both BF fields stay non-negative — these are NOT forced true by the residual
+  construction the way the reconciliation identity is, so they're the checks that would have
+  caught the double-count directly; all pass at every threshold, on both synthetic mixes and the
+  real PO#1 order. `blockNester.selfcheck.ts` also drops the retired "strict" tier and
+  scrap-wedge-count assertions from P324, which don't exist in this shape anymore. `tsc --noEmit`
+  + `cf-build` green after the fixes.
+- **P410 — Block nesting: per-density block-size defaults + minimum-reusable-size input
+  (react-component-agent §9b + next-platform-agent §9a). Delta patch over P322/P323 (already
+  shipped) — edited `blockTypes.ts`/`BlocksApp.tsx` in place, did not rewrite them.**
+  `blockTypes.ts`: new `DEFAULT_BLOCKS` (per-density customer mold defaults — 1# 50×65×198, 1.5#/2#
+  50×44×198 — still fully editable in the UI) and `DEFAULT_MIN_REUSABLE_IN = 12` (placeholder;
+  Steve will set the real value), plus a documented axis convention (length = chunk/mold axis,
+  height = taper-stacking face, width = one-part-across). `BlocksApp.tsx`: per-density block-size
+  inputs now default from `DEFAULT_BLOCKS[density]` (fallback `DEFAULT_BLOCK`) instead of always
+  `DEFAULT_BLOCK`; new minimum-reusable-size numeric input (defaulted from
+  `DEFAULT_MIN_REUSABLE_IN`, validated `> 0` before Reload), labeled as the carried-forward-vs-
+  scrap line. Held as UI-only + typed state this commit — `minReusableIn` isn't threaded into
+  `nest()` until the P411 commit updates that function's signature to accept it (kept the two
+  prompts' builds independently green rather than landing a 3-arg call against a still-2-arg
+  function). No parser changes needed: `poParser.ts`'s existing regex already matches P410's own
+  reference regex verbatim (already covers every messy variant listed) — verified by diff, not
+  reimplemented. `tsc --noEmit` + `cf-build` green (checked before the P411 commit landed, so this
+  step is independently verifiable).
 - **P384 — v2 UI: HB chunk override wiring + schedule chunk badge (react-component-agent §9b).**
   `CuttingBoard.tsx`'s `setChunkTarget` now branches on `dockLine`: HB guillotine lines (Main/Blue,
   `selectedJob.hb_chunks_required != null`) POST to P382's manager-only

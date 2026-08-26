@@ -2,56 +2,64 @@
 // context, client+server safe. Separate from and does NOT touch the legacy src/lib/blockEngine.ts
 // (still used by the cutting dashboard).
 //
-// Validated exactly (blocksNeeded, volumeFloor, scrapWedges — all three densities) against the
-// real hand-checked PO#1 reference (xPanda_PO1_Nesting_Map.xlsx): 1# = 10 molds/6.31 floor/0
-// scrap, 1.5# = 3/2.03/0, 2# = 3/2.09/3. That file's own "Method & Assumptions" sheet documents
-// three tiers — Strict (no reuse at all), Greedy (height-leftover reuse via width-only trimming,
-// what's implemented here), and a true offcut-recursive optimum that additionally re-pools
-// width-strip and length-end voids, which the reference spreadsheet itself states is NOT yet
-// computed ("the true offcut-recursive optimum sits between [floor and greedy]"). This engine
-// matches their Greedy tier exactly; the further optimum is out of scope here too (see the
-// scoped-limitation note below), same boundary the domain expert's own hand analysis drew.
-//
-// Algorithm, per density (density never mixes — a mold is one density):
-//   1. Pair tapers: each SKU's qty pairs into ceil(qty/2) rectangles of height tlo+thi+0.25"
-//      (kerf for the 3 face cuts: flat-taper-flat). Odd qty leaves one scrap complement wedge —
-//      a genuine extra unit of that same size, set aside for a future order or eventually
-//      scrapped (tracked as a count; not itself a rectangular offcut, so not geometrically
-//      re-poolable by this engine).
-//   2. Strict tier (buildChunksStrict): group rectangles by exact native width, height-FFD-bin
-//      each width group into chunks. No cross-SKU reuse at all — the naive floor.
-//   3. Greedy tier (buildChunksGreedy — the required baseline, "MUST hit the PO#1 numbers"): a
-//      chunk's width is set by whichever rectangle opens it. Process rectangles WIDEST-first
-//      (ties by native footprint area descending); a narrower rectangle may be admitted into an
-//      existing chunk's remaining height, its width trimmed down to exactly that chunk's
-//      established width (trimmedFrom flagged only when strictly narrower — an exact width match
-//      needs no trim). LENGTH is never forced to match: a chunk's length is the max native length
-//      among its residents, and a shorter resident just leaves an unrecovered "length end" gap
-//      (reported per-line via NestChunkLine.partLength, not re-packed).
-//      SCOPED LIMITATION (matches the reference spreadsheet's own stated scope): the block-level
-//      *width strip* (block.width - chunk.width, running that chunk's whole length) and the
-//      per-band *length end* above are computed/displayed but never fed back into the packer as
-//      additional capacity — that would need full 2D/3D guillotine bin-packing across the block's
-//      whole width×length plane. Backlogged in BACKLOG.md.
-//   4. Pack chunks into fixed-length blocks (molds): block.length is fixed capacity — every mold
-//      is full length whether used or not. Each internal cross-cut between chunks sharing a block
-//      costs 0.25/3" (0.0833"), charged as (n-1) per block. FFD by chunk length.
-//   Strict vs. greedy: both are computed in full and the smaller-or-equal block count wins by
-//   explicit comparison, so "never regress below the strict floor" is a hard guarantee (greedy
-//   has strictly more admission freedom than strict, so it always wins in practice).
-import type {
-  BlockSize,
-  BlockSizes,
-  DensityNestResult,
-  NestBlock,
-  NestChunk,
-  NestChunkLine,
-  NestResult,
-  SkuLine,
+// P411 rewrite over P324's engine. Per density (density never mixes — a mold is one density):
+//   1. Face capacity with top-off (computeFaceCapacity): a reference/self-check figure only, not
+//      a placement driver — see the prompt's own framing ("a capacity, not a forced add"). The
+//      ordered qty is always laid out exactly, never inflated to hit capacity.
+//   2. Lay out ordered quantity: each SKU's qty pairs into ceil(qty/2) rectangles of height
+//      tlo+thi+0.25" (kerf for the 3 face cuts: flat-taper-flat). An odd qty leaves one LONE
+//      WEDGE occupying only its thick-end height (thi) in the stacking ledger — its complement
+//      (the rest of what a full paired rectangle would have used, tlo+kerf tall) is real offcut,
+//      but it's NOT tallied as its own region: whatever the packer stacks immediately above (at
+//      y+thi) already claims that space, and if nothing does, it's already inside the chunk's
+//      leftover-face-height region (block.height - usedHeight, which itself only advanced by thi
+//      for this rect). Tallying it separately would double-count cubic inches already counted
+//      one of those two ways — this was caught by pre-push review before it could ship silent
+//      at the minReusableIn placeholder (12" — the complement, 2-5" on real SKUs, never crossed
+//      that threshold, so the double-count was inert until Steve raises it).
+//   3. Chunk = one width, one length, many heights: rectangles of the same established chunk
+//      width stack up the face; a narrower rectangle may be admitted into an existing chunk's
+//      remaining height, ripped down from that chunk's established (wider) face to its own
+//      native width (trimmedFrom) — the strip beside it is offcut. A chunk's length is the max
+//      native length among its residents; a shorter resident leaves a "length end" gap, also
+//      offcut. Both routed to the pool via tallyCarriedForwardBF, split against minReusableIn.
+//   4. Recursive offcut nesting -> inventory, not waste: leftover face height, block-width
+//      strips, and length ends are NOT dropped as waste — each is classified as carried-forward
+//      inventory (smallest usable dimension >= minReusableIn) or true scrap (below it). SCOPED
+//      LIMITATION: this engine does not attempt to place additional
+//      finished parts inside these offcut regions (that needs full 2D/3D guillotine bin-packing
+//      across the block's whole width x length plane — see BACKLOG.md); it computes/classifies
+//      the resulting BF split honestly, it does not re-nest into them.
+//   5. Pack chunks into fixed-length molds: block.length is fixed capacity — every mold is full
+//      length whether used or not. Each internal cross-cut between chunks sharing a mold costs
+//      0.25/3" (0.0833"), charged as (n-1) per mold. Two tiers, both computed in full:
+//        - buildChunksGreedy + packMoldsFirstFit ("greedy" tier, first-fit-decreasing by chunk
+//          length): the required baseline.
+//        - the SAME chunk set repacked via packMoldsBestFit (best-fit-decreasing): the
+//          "offcut-recursion" tier — a legitimately different, usually-tighter bin-packing
+//          heuristic over the same chunks. Whichever yields fewer-or-equal molds wins by explicit
+//          comparison, so "never regress below the greedy mold count" is a hard guarantee, not an
+//          assumption.
+//   6. Objective: minimize mold count first, yield second.
+//   7. Output in board feet (1 BF = 144 in^3): finishedBF (packing-invariant — a pure function of
+//      the order, computed directly from SKU dims/qty), carriedForwardBF, scrapBF, moldsNeeded,
+//      and the block(mold) -> chunk -> SKU map. No flat "waste %".
+import {
+  DEFAULT_BLOCK,
+  type BlockSize,
+  type BlockSizes,
+  type DensityNestResult,
+  type NestBlock,
+  type NestChunk,
+  type NestChunkLine,
+  type NestResult,
+  type NestTotals,
+  type SkuLine,
 } from "./blockTypes";
 
 const TAPER_KERF = 0.25;
 const CROSS_CUT_KERF = 0.25 / 3;
+const BF = 144; // 1 board foot = 144 in^3
 const EPS = 1e-9;
 
 interface Rect {
@@ -60,7 +68,7 @@ interface Rect {
   nativeLength: number;
   tlo: number;
   thi: number;
-  height: number;
+  height: number; // stacking footprint on the face: tlo+thi+kerf for a pair, thi for a lone wedge
   pieces: number; // 1 or 2 finished pieces represented by this rectangle
 }
 
@@ -74,15 +82,22 @@ interface Chunk {
   usedHeight: number;
 }
 
-function buildRectangles(lines: SkuLine[]): { rects: Rect[]; scrapWedges: number } {
-  const rects: Rect[] = [];
-  let scrapWedges = 0;
+/** Face capacity with top-off (reference figure — see file header; not a placement driver).
+ *  capacity = 2*floor(H/rect) + (1 if the leftover height fits one more lone wedge, else 0). */
+export function computeFaceCapacity(tlo: number, thi: number, H: number): number {
+  const rect = tlo + thi + TAPER_KERF;
+  if (rect <= EPS || H <= 0) return 0;
+  const pairs = Math.floor((H + EPS) / rect);
+  const remainder = H - pairs * rect;
+  const loneWedge = remainder + EPS >= thi ? 1 : 0;
+  return 2 * pairs + loneWedge;
+}
 
+function buildRectangles(lines: SkuLine[]): Rect[] {
+  const rects: Rect[] = [];
   for (const line of lines) {
     const rectCount = Math.ceil(line.qty / 2);
     const odd = line.qty % 2 === 1;
-    if (odd) scrapWedges += 1;
-
     for (let i = 0; i < rectCount; i++) {
       const isLastOdd = odd && i === rectCount - 1;
       rects.push({
@@ -91,66 +106,39 @@ function buildRectangles(lines: SkuLine[]): { rects: Rect[]; scrapWedges: number
         nativeLength: line.length,
         tlo: line.tlo,
         thi: line.thi,
-        height: line.tlo + line.thi + TAPER_KERF,
+        height: isLastOdd ? line.thi : line.tlo + line.thi + TAPER_KERF,
         pieces: isLastOdd ? 1 : 2,
       });
     }
   }
-
-  return { rects, scrapWedges };
+  return rects;
 }
 
-// taper runs along length; wedge volume uses average height (a linear taper's volume is exact
-// via the trapezoidal average, no integral needed).
-function computeVolumeFloor(lines: SkuLine[], block: BlockSize): number {
-  const blockVolume = block.width * block.height * block.length;
-  if (blockVolume <= 0) return 0;
+// finishedBF is a pure function of the order (width * length * avg-taper-height * qty), never of
+// how it's packed — asserted by the self-check across both old and new default block sizes.
+function computeFinishedBF(lines: SkuLine[]): number {
   const totalVolume = lines.reduce(
     (sum, l) => sum + l.width * l.length * ((l.tlo + l.thi) / 2) * l.qty,
     0
   );
-  return totalVolume / blockVolume;
+  return totalVolume / BF;
 }
 
-// Strict tier: group by EXACT native width, height-FFD per width group. Never trims — every rect
-// keeps its own native width/length. This is the naive floor with no cross-SKU reuse at all.
-function buildChunksStrict(rects: Rect[], block: BlockSize): Chunk[] {
-  const groups = new Map<number, Rect[]>();
-  for (const r of rects) {
-    const g = groups.get(r.nativeWidth);
-    if (g) g.push(r);
-    else groups.set(r.nativeWidth, [r]);
-  }
-
-  const chunks: Chunk[] = [];
-  for (const groupRects of Array.from(groups.values())) {
-    const sorted = [...groupRects].sort((a, b) => b.height - a.height);
-    const widthChunks: Chunk[] = [];
-    for (const r of sorted) {
-      const home = widthChunks.find((c) => c.usedHeight + r.height <= block.height + EPS);
-      if (home) {
-        home.rects.push({ ...r });
-        home.usedHeight += r.height;
-      } else {
-        widthChunks.push({ width: r.nativeWidth, rects: [{ ...r }], usedHeight: r.height });
-      }
-    }
-    chunks.push(...widthChunks);
-  }
-  return chunks;
+function computeVolumeFloor(lines: SkuLine[], block: BlockSize): number {
+  const blockVolume = block.width * block.height * block.length;
+  if (blockVolume <= 0) return 0;
+  return (computeFinishedBF(lines) * BF) / blockVolume;
 }
 
 // Greedy tier (the prompt's required baseline): a chunk's width is established by whichever
 // rectangle opens it — process rectangles WIDEST-first (ties broken by native footprint area
-// descending) so a chunk's width ceiling is always set before anything narrower is considered
-// for it. A narrower rectangle may then be admitted into an existing chunk's remaining height,
-// its width trimmed down to exactly that chunk's established width (flagged via trimmedFrom
-// only when strictly narrower — width equal to the chunk needs no trim). Length is never
-// forced to match: a chunk's length is the max native length among its residents, and a
-// shorter resident simply leaves an unrecovered "length end" gap (reported per-line via
-// NestChunkLine.partLength, not re-packed — see the scoped-limitation note in the file header).
-// A rectangle WIDER than every open chunk (or that fits nowhere by height) anchors a new chunk
-// at its own native width.
+// descending) so a chunk's width ceiling is always set before anything narrower is considered for
+// it. A narrower rectangle may then be admitted into an existing chunk's remaining height, ripped
+// down from that chunk's established (wider) face to its own native width (trimmedFrom flagged
+// only when strictly narrower). Length is never forced to match: a chunk's length is the max
+// native length among its residents, and a shorter resident leaves an unrecovered "length end"
+// gap (routed to the offcut pool). A rectangle WIDER than every open chunk (or that fits nowhere
+// by height) anchors a new chunk at its own native width.
 function buildChunksGreedy(rects: Rect[], block: BlockSize): Chunk[] {
   const sorted = [...rects].sort((a, b) => {
     if (b.nativeWidth !== a.nativeWidth) return b.nativeWidth - a.nativeWidth;
@@ -187,31 +175,111 @@ function buildChunksGreedy(rects: Rect[], block: BlockSize): Chunk[] {
   return chunks;
 }
 
-// Pack chunks into fixed-length blocks (molds). FFD by chunk length; a block holding n chunks
-// charges (n-1) internal cross-cuts off its usable length.
-function packChunksIntoBlocks(chunks: Chunk[], block: BlockSize): Chunk[][] {
-  const withLength = chunks.map((c) => ({ c, length: chunkLength(c) }));
-  const sorted = [...withLength].sort((a, b) => b.length - a.length);
-  const blocks: { chunk: Chunk; length: number }[][] = [];
+function chunkLength(c: Chunk): number {
+  return c.rects.reduce((max, r) => Math.max(max, r.nativeLength), 0);
+}
 
-  for (const item of sorted) {
-    let placedIn: { chunk: Chunk; length: number }[] | null = null;
-    for (const b of blocks) {
-      const total = b.reduce((sum, x) => sum + x.length, 0) + item.length + b.length * CROSS_CUT_KERF;
-      if (total <= block.length + EPS) {
-        placedIn = b;
+function moldUsedLength(items: { length: number }[]): number {
+  if (items.length === 0) return 0;
+  const sumLen = items.reduce((s, x) => s + x.length, 0);
+  return sumLen + (items.length - 1) * CROSS_CUT_KERF;
+}
+
+// "Greedy" mold packing: first-fit-decreasing by chunk length.
+function packMoldsFirstFit(chunks: Chunk[], block: BlockSize): Chunk[][] {
+  const items = chunks.map((c) => ({ c, length: chunkLength(c) })).sort((a, b) => b.length - a.length);
+  const molds: { c: Chunk; length: number }[][] = [];
+
+  for (const item of items) {
+    let placedIn: { c: Chunk; length: number }[] | null = null;
+    for (const m of molds) {
+      if (moldUsedLength([...m, item]) <= block.length + EPS) {
+        placedIn = m;
         break;
       }
     }
-    if (placedIn) placedIn.push({ chunk: item.c, length: item.length });
-    else blocks.push([{ chunk: item.c, length: item.length }]);
+    if (placedIn) placedIn.push(item);
+    else molds.push([item]);
   }
 
-  return blocks.map((b) => b.map((x) => x.chunk));
+  return molds.map((m) => m.map((x) => x.c));
 }
 
-function chunkLength(c: Chunk): number {
-  return c.rects.reduce((max, r) => Math.max(max, r.nativeLength), 0);
+// "Offcut-recursion" mold packing: best-fit-decreasing by chunk length — among molds the chunk
+// fits into, picks the one leaving the least leftover length. A different (usually tighter)
+// heuristic over the identical chunk set from buildChunksGreedy; never assumed better, always
+// compared against the first-fit result before being used (see nestDensity).
+function packMoldsBestFit(chunks: Chunk[], block: BlockSize): Chunk[][] {
+  const items = chunks.map((c) => ({ c, length: chunkLength(c) })).sort((a, b) => b.length - a.length);
+  const molds: { c: Chunk; length: number }[][] = [];
+
+  for (const item of items) {
+    let bestIdx = -1;
+    let bestSlack = Infinity;
+    for (let i = 0; i < molds.length; i++) {
+      const used = moldUsedLength([...molds[i], item]);
+      if (used <= block.length + EPS) {
+        const slack = block.length - used;
+        if (slack < bestSlack) {
+          bestSlack = slack;
+          bestIdx = i;
+        }
+      }
+    }
+    if (bestIdx === -1) molds.push([item]);
+    else molds[bestIdx].push(item);
+  }
+
+  return molds.map((m) => m.map((x) => x.c));
+}
+
+// Sums every offcut region (leftover face height, block-width strips, length ends, lone-wedge
+// complements, mold length leftover) whose smallest usable dimension >= minReusableIn, in board
+// feet. scrapBF is then computed as a residual (moldsNeeded's total block BF - finishedBF -
+// carriedForwardBF) rather than a second independent sum — this guarantees the reconciliation
+// identity (finishedBF + carriedForwardBF + scrapBF == moldsNeeded's total block BF) holds
+// exactly regardless of any micro-region (e.g. the internal per-pair kerf sliver) this function
+// doesn't separately enumerate; those fall into scrapBF by construction, which is correct — a
+// sliver at kerf width is always well under any realistic minReusableIn.
+function tallyCarriedForwardBF(molds: Chunk[][], block: BlockSize, minReusableIn: number): number {
+  let carriedVol = 0;
+  const maybeCarry = (w: number, h: number, l: number) => {
+    if (w <= EPS || h <= EPS || l <= EPS) return;
+    if (Math.min(w, h, l) + EPS >= minReusableIn) carriedVol += w * h * l;
+  };
+
+  for (const mold of molds) {
+    let usedLength = 0;
+    for (const c of mold) {
+      const length = chunkLength(c);
+      usedLength += length;
+
+      // Leftover face height above this chunk's stacked bands, across its own footprint.
+      maybeCarry(c.width, block.height - c.usedHeight, length);
+      // Block-width strip beside this chunk's established width, for its own length span.
+      maybeCarry(block.width - c.width, block.height, length);
+
+      for (const r of c.rects) {
+        // Length end: this resident is shorter than the chunk's established length.
+        if (r.nativeLength < length - EPS) {
+          maybeCarry(c.width, r.height, length - r.nativeLength);
+        }
+        // Width strip from ripping this resident down to its own native width.
+        if (r.trimmedFrom) {
+          maybeCarry(c.width - r.nativeWidth, r.height, r.nativeLength);
+        }
+        // NOTE: a lone wedge's complement (r.complementHeight) is deliberately NOT tallied here
+        // — see the file header's step 2 for why that would double-count against either the next
+        // band's own footprint or this chunk's leftover-face-height region above.
+      }
+    }
+
+    const moldLeftoverLength =
+      block.length - usedLength - Math.max(mold.length - 1, 0) * CROSS_CUT_KERF;
+    maybeCarry(block.width, block.height, moldLeftoverLength);
+  }
+
+  return carriedVol / BF;
 }
 
 function chunkToNestChunk(c: Chunk): NestChunk {
@@ -229,7 +297,7 @@ function chunkToNestChunk(c: Chunk): NestChunk {
         tlo: r.tlo,
         thi: r.thi,
         qty: r.pieces,
-        partWidth: c.width,
+        partWidth: r.nativeWidth,
         partLength: r.nativeLength,
         trimmedFrom: r.trimmedFrom,
       });
@@ -238,55 +306,73 @@ function chunkToNestChunk(c: Chunk): NestChunk {
   return { width: c.width, length, faceUsed: c.usedHeight, lines: Array.from(lineMap.values()) };
 }
 
-export function nestDensity(lines: SkuLine[], block: BlockSize): DensityNestResult {
-  const { rects, scrapWedges } = buildRectangles(lines);
+export function nestDensity(lines: SkuLine[], block: BlockSize, minReusableIn: number): DensityNestResult {
+  const rects = buildRectangles(lines);
   const volumeFloor = computeVolumeFloor(lines, block);
+  const finishedBF = computeFinishedBF(lines);
 
-  const strictChunks = buildChunksStrict(rects, block);
-  const strictBlocks = packChunksIntoBlocks(strictChunks, block);
+  const chunks = buildChunksGreedy(rects, block);
+  const firstFitMolds = packMoldsFirstFit(chunks, block);
+  const bestFitMolds = packMoldsBestFit(chunks, block);
 
-  const greedyChunks = buildChunksGreedy(rects, block);
-  const greedyBlocks = packChunksIntoBlocks(greedyChunks, block);
+  // Never regress below the greedy (first-fit) baseline: pick whichever mold count is
+  // smaller-or-equal, by explicit comparison (a hard guarantee, not an assumption).
+  const finalMolds = bestFitMolds.length <= firstFitMolds.length ? bestFitMolds : firstFitMolds;
+  const moldsNeeded = finalMolds.length;
 
-  // Never regress below the strict baseline: pick whichever block count is smaller-or-equal.
-  // (Greedy has strictly more admission freedom than strict, so it wins by construction in
-  // every case we've observed — this comparison makes that a hard guarantee, not an assumption.)
-  const useGreedy = greedyBlocks.length <= strictBlocks.length;
-  const finalBlocks = useGreedy ? greedyBlocks : strictBlocks;
+  const carriedForwardBF = tallyCarriedForwardBF(finalMolds, block, minReusableIn);
+  const totalBlockBF = (moldsNeeded * block.width * block.height * block.length) / BF;
+  let scrapBF = totalBlockBF - finishedBF - carriedForwardBF;
+  if (scrapBF < 0 && scrapBF > -1e-6) scrapBF = 0; // floating-point guard only
 
-  const blocks: NestBlock[] = finalBlocks.map((chunkList) => ({
+  const blocks: NestBlock[] = finalMolds.map((chunkList) => ({
     chunks: chunkList.map(chunkToNestChunk),
   }));
 
   return {
     density: lines[0]?.density ?? 0,
     blocks,
-    blocksNeeded: blocks.length,
-    scrapWedges,
+    moldsNeeded,
+    finishedBF,
+    carriedForwardBF,
+    scrapBF,
     volumeFloor,
   };
 }
 
-export function nest(skuLines: SkuLine[], sizes: BlockSizes): NestResult {
+export function nest(skuLines: SkuLine[], sizes: BlockSizes, minReusableIn: number): NestResult {
   const densities = Array.from(
     new Set(skuLines.filter((l) => l.parsed && l.density > 0 && l.qty > 0).map((l) => l.density))
   ).sort((a, b) => a - b);
 
   const result: NestResult = {};
   for (const density of densities) {
-    const block = sizes[String(density)] ?? { width: 50, height: 50, length: 198 };
+    const block = sizes[String(density)] ?? DEFAULT_BLOCK;
     const lines = skuLines.filter((l) => l.parsed && l.density === density && l.qty > 0);
-    result[String(density)] = nestDensity(lines, block);
+    result[String(density)] = nestDensity(lines, block, minReusableIn);
   }
   return result;
 }
 
-// Exposed for the dev self-check only (verifying "greedy <= strict" is structural, not assumed).
+export function nestTotals(result: NestResult): NestTotals {
+  return Object.values(result).reduce<NestTotals>(
+    (acc, d) => ({
+      moldsNeeded: acc.moldsNeeded + d.moldsNeeded,
+      finishedBF: acc.finishedBF + d.finishedBF,
+      carriedForwardBF: acc.carriedForwardBF + d.carriedForwardBF,
+      scrapBF: acc.scrapBF + d.scrapBF,
+    }),
+    { moldsNeeded: 0, finishedBF: 0, carriedForwardBF: 0, scrapBF: 0 }
+  );
+}
+
+// Exposed for the dev self-check only.
 export const __internal = {
   buildRectangles,
-  buildChunksStrict,
   buildChunksGreedy,
-  packChunksIntoBlocks,
+  packMoldsFirstFit,
+  packMoldsBestFit,
   computeVolumeFloor,
+  computeFinishedBF,
   chunkLength,
 };

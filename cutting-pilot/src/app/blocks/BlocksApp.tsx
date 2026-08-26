@@ -6,7 +6,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Upload, Plus, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
 import * as XLSX from "xlsx";
 import Modal from "@/components/Modal";
-import { DEFAULT_BLOCK, type BlockSize, type BlockSizes, type NestResult, type SkuLine } from "@/lib/blockTypes";
+import {
+  DEFAULT_BLOCK,
+  DEFAULT_BLOCKS,
+  DEFAULT_MIN_REUSABLE_IN,
+  type BlockSize,
+  type BlockSizes,
+  type NestResult,
+  type SkuLine,
+} from "@/lib/blockTypes";
 import { parsePoRows, type PoInputRow } from "@/lib/poParser";
 import { runPoParserSelfCheck } from "@/lib/poParser.selfcheck";
 import { nest } from "@/lib/blockNester";
@@ -42,6 +50,7 @@ export default function BlocksApp() {
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [skuLines, setSkuLines] = useState<SkuLine[]>([]);
   const [blockSizes, setBlockSizes] = useState<BlockSizes>({});
+  const [minReusableIn, setMinReusableIn] = useState<number>(DEFAULT_MIN_REUSABLE_IN);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [computeError, setComputeError] = useState<string | null>(null);
   const [nestResult, setNestResult] = useState<NestResult | null>(null);
@@ -92,13 +101,15 @@ export default function BlocksApp() {
     setComputeError(null);
     setPickerOpen(false);
 
-    // Seed per-density block sizes for any newly discovered density, defaulting to DEFAULT_BLOCK.
+    // Seed per-density block sizes for any newly discovered density, defaulting to that
+    // density's DEFAULT_BLOCKS entry (the customer's current molds), falling back to
+    // DEFAULT_BLOCK for any density not in that table.
     setBlockSizes((prev) => {
       const next = { ...prev };
       for (const line of parsed) {
         if (!line.parsed || line.density <= 0) continue;
         const key = String(line.density);
-        if (!next[key]) next[key] = { ...DEFAULT_BLOCK };
+        if (!next[key]) next[key] = { ...(DEFAULT_BLOCKS[key] ?? DEFAULT_BLOCK) };
       }
       return next;
     });
@@ -202,7 +213,7 @@ export default function BlocksApp() {
   function updateBlockSize(densityKey: string, patch: Partial<BlockSize>) {
     setBlockSizes((prev) => ({
       ...prev,
-      [densityKey]: { ...(prev[densityKey] ?? DEFAULT_BLOCK), ...patch },
+      [densityKey]: { ...(prev[densityKey] ?? DEFAULT_BLOCKS[densityKey] ?? DEFAULT_BLOCK), ...patch },
     }));
   }
 
@@ -222,8 +233,12 @@ export default function BlocksApp() {
         return;
       }
     }
+    if (!(minReusableIn > 0)) {
+      setComputeError("Minimum reusable size must be a positive number of inches.");
+      return;
+    }
 
-    setNestResult(nest(skuLines, blockSizes));
+    setNestResult(nest(skuLines, blockSizes, minReusableIn));
     setNestedBlockSizes(blockSizes);
   }
 
@@ -352,7 +367,7 @@ export default function BlocksApp() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {presentDensities.map((d) => {
                 const key = String(d);
-                const bs = blockSizes[key] ?? DEFAULT_BLOCK;
+                const bs = blockSizes[key] ?? DEFAULT_BLOCKS[key] ?? DEFAULT_BLOCK;
                 return (
                   <div key={key} className="border border-border rounded p-3 space-y-2">
                     <div className="text-sm font-semibold text-text">{d}# density</div>
@@ -373,6 +388,26 @@ export default function BlocksApp() {
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Minimum reusable size */}
+        {presentDensities.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-text">Minimum reusable size</h3>
+            <label className="text-xs text-muted flex flex-col gap-1 max-w-[220px]">
+              Carried-forward vs. scrap threshold (in)
+              <input
+                type="number"
+                value={minReusableIn}
+                onChange={(e) => setMinReusableIn(parseNum(e.target.value))}
+                className="min-h-[44px] px-2 bg-[var(--input-bg)] border border-[var(--input-border)] rounded text-text text-sm"
+              />
+            </label>
+            <p className="text-xs text-muted">
+              An offcut whose smallest usable dimension is at least this many inches is
+              carried-forward inventory; smaller than that, it&apos;s true scrap.
+            </p>
           </div>
         )}
 

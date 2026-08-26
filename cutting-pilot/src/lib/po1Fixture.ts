@@ -7,6 +7,9 @@
 //   1#:   18 SKUs, 302 parts, 10 molds (greedy), volume floor 6.31, 0 scrap wedges
 //   1.5#: 13 SKUs,  74 parts,  3 molds (greedy), volume floor 2.03, 0 scrap wedges
 //   2#:   16 SKUs,  59 parts,  3 molds (greedy), volume floor 2.09, 3 scrap wedges
+// molds/scrap above are P324's engine (pre-P411) and are NOT re-asserted post-P411 — the
+// lone-wedge top-off change can legitimately shift mold counts. `parts` (piece counts) is
+// engine-agnostic (pure parser+combine output) and remains the regression check P411 uses.
 export interface Po1FixtureRow {
   item: string;
   desc: string;

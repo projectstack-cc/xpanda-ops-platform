@@ -84,21 +84,28 @@
   (`index.html`) still has no direct entry point (per-prompt scope: Manufacturing section only).
   Mirror the existing pattern used for the Cutting card (P235/P298) — a dedicated `data-permission`
   gated card/button — once Steve wants a home-page shortcut.
-- [ ] **P324 follow-up — width-strip and length-end offcut are not re-pooled.** `blockNester.ts`'s
-  Greedy tier only re-harvests each chunk's own height-leftover void (global width-sorted pass
-  with width-trim admission) — this matches the real PO#1 baseline exactly as-is (10/3/3 molds,
-  confirmed 2026-08-04), so this is a genuine yield improvement opportunity, not a correctness
-  gap. The block-level width strip (`block.width - chunk.width`, running that chunk's whole
-  length) and the per-band length-end (`chunkLength - partLength` for a band shorter than its
-  chunk) are computed/displayed (`NestChunkLine.partWidth/partLength`, `ChunkElevation`'s
-  "→ pool" shading) but never fed back into the packer as additional capacity. Closing this gap
-  would need full 2D/3D guillotine bin-packing across the block's width×length plane — the
-  reference spreadsheet's own "Method & Assumptions" sheet calls this same gap out explicitly
-  ("the true offcut-recursive optimum sits between [floor and greedy]"), so it's unbuilt by the
-  domain expert too, not just this engine.
-- [ ] **Block-nesting width step-down end-cap view** (deferred unless testing requires) — P324's
+- [ ] **P411 follow-up — offcut regions are classified (carried-forward/scrap BF) but not
+  re-nested for additional finished parts.** `blockNester.ts` now correctly counts leftover face
+  height, block-width strips, length ends, and lone-wedge complements into `carriedForwardBF`/
+  `scrapBF` (reconciliation identity holds exactly against every mold's physical volume), and the
+  offcut-recursion tier does get fewer-or-equal molds than plain greedy via a best-fit-decreasing
+  mold repack — but no additional SKU pieces are ever cut FROM those offcut regions; the pool is
+  an accounting/inventory concept only. Actually placing more parts into offcuts needs full 2D/3D
+  guillotine bin-packing across the block's width×length plane — same scope boundary P324 already
+  drew, still unbuilt, now with the honest BF accounting on top of it instead of a bare count.
+- [ ] **P411 follow-up — awaiting the "locked customer order" fixture (Sheet1, 20 SKUs).** The
+  prompt's own ground-truth section (pieces 1#=303/1.5#=60/2#=48, greedy molds 1#=8/3/3,
+  finishedBF=37,038) wasn't checkable this session — the raw line items never made it into the
+  repo (checked `xPanda_PO1_Nesting_Map.xlsx`, which only has PO#1's 47 SKUs, and the rest of the
+  tree). Once Steve provides that order's raw descriptions (same shape as `po1Fixture.ts`), add
+  it to `blockNester.selfcheck.ts` alongside the existing PO#1 fixture.
+- [ ] **P411 follow-up — carried-forward inventory has no routing to future jobs.** `blockNester.ts`
+  reports `carriedForwardBF` per density/total but nothing persists it or offers it against a
+  later order's SKU needs (ephemeral module, no DB by design). Would need a
+  `block_inventory`-style table plus a matching step in this same nester once Steve wants it.
+- [ ] **Block-nesting width step-down end-cap view** (deferred unless testing requires) — P411's
   `ChunkElevation.tsx` surfaces width step-downs only in the table's `Part W×L` column; a true
-  end-cap (front-face) diagram is a follow-on, not built in P322-324.
+  end-cap (front-face) diagram is a follow-on, not built here either.
 - [ ] **P282 follow-up — elapsed-time readout on `ClockedInBar`.** Deferred: `formatDuration` lives
   in `src/lib/time.ts` (shared, in scope), but the UTC-timestamp parser it depends on
   (`parseUtc`) is a module-private function in that same file, and `src/lib/time.ts` was out of
