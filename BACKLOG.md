@@ -93,12 +93,6 @@
   an accounting/inventory concept only. Actually placing more parts into offcuts needs full 2D/3D
   guillotine bin-packing across the block's width×length plane — same scope boundary P324 already
   drew, still unbuilt, now with the honest BF accounting on top of it instead of a bare count.
-- [ ] **P411 follow-up — awaiting the "locked customer order" fixture (Sheet1, 20 SKUs).** The
-  prompt's own ground-truth section (pieces 1#=303/1.5#=60/2#=48, greedy molds 1#=8/3/3,
-  finishedBF=37,038) wasn't checkable this session — the raw line items never made it into the
-  repo (checked `xPanda_PO1_Nesting_Map.xlsx`, which only has PO#1's 47 SKUs, and the rest of the
-  tree). Once Steve provides that order's raw descriptions (same shape as `po1Fixture.ts`), add
-  it to `blockNester.selfcheck.ts` alongside the existing PO#1 fixture.
 - [ ] **P411 follow-up — carried-forward inventory has no routing to future jobs.** `blockNester.ts`
   reports `carriedForwardBF` per density/total but nothing persists it or offers it against a
   later order's SKU needs (ephemeral module, no DB by design). Would need a

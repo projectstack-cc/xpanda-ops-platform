@@ -10,6 +10,17 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P411 addendum — the "locked customer order" ground truth, now verified.** Steve provided the
+  source file (`Foam Purchase Orders (2).xlsx`'s `Sheet1` tab — 20 real line items + a `Final QTY`
+  column) after both the P411 and P412 sessions had shipped without it. New
+  `src/lib/lockedOrderFixture.ts` (real SKU codes/dims/qty only, no customer name or pricing — same
+  policy as `po1Fixture.ts`); wired into `blockNester.selfcheck.ts` as `LOCKED_ORDER_ROWS`/
+  `LOCKED_ORDER_EXPECTED`/`LOCKED_ORDER_FINISHED_BF`. Every one of the prompt's four numbers checks
+  out **exactly**, at the real per-density defaults (1# 50×65×198, 1.5#/2# 50×44×198), with zero
+  tolerance beyond floating point: pieces **1#=303, 1.5#=60, 2#=48** (matches the sheet's own
+  per-density sums); greedy (first-fit) molds **1#=8, 1.5#=3, 2#=3**; total finishedBF
+  **37,037.85** (the sheet's own total, ≈37,038). Self-check now runs 65 assertions total (was 55),
+  all pass. `tsc --noEmit` + `cf-build` green.
 - **P412 — Block nester: removed the minimum-reusable-size threshold; carried-forward = all real
   offcut; residual renamed `kerfLossBF` (next-platform-agent §9a + react-component-agent §9b).**
   Per the customer-locked full-block-yield model, the engine no longer decides whether an offcut

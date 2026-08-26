@@ -5,23 +5,20 @@
 // numbers; the reconciliation identity (finishedBF + carriedForwardBF + kerfLossBF == moldsNeeded's
 // total block BF) on synthetic mixes and on the real PO#1 fixture at both old and new default
 // block sizes; finishedBF's invariance to block size/packing; moldsNeeded >= ceil(volumeFloor);
-// the offcut-recursion (best-fit) tier never regressing past the greedy (first-fit) tier; and the
-// PO#1 piece-count regression (302/74/59) as a parser+capacity-path baseline. P412 removed the
+// the offcut-recursion (best-fit) tier never regressing past the greedy (first-fit) tier; the
+// PO#1 piece-count regression (302/74/59) as a parser+capacity-path baseline; and — as of
+// 2026-08-26 — the P411 prompt's own "locked customer order" ground truth (pieces
+// 1#=303/1.5#=60/2#=48, greedy molds 1#=8/3/3, finishedBF=37,038), via lockedOrderFixture.ts
+// (Steve provided the source file, "Foam Purchase Orders (2).xlsx"'s Sheet1 tab, after the P411
+// and P412 sessions had both shipped without it — see CHANGELOG.md). P412 removed the
 // minimum-reusable-size threshold entirely — all enumerated real offcut is carriedForwardBF now
 // (no size gate); kerfLossBF is the honest unavoidable-loss residual (saw kerf + micro-regions).
-//
-// STILL NOT COVERED as of P412: the "locked customer order" (Sheet1, 20 SKUs) ground truth from
-// the P411 prompt — pieces 1#=303/1.5#=60/2#=48, greedy molds 1#=8/3/3, finishedBF=37,038. That
-// fixture's raw line items have never been provided (checked: absent from both
-// xPanda_PO1_Nesting_Map.xlsx, which only has PO#1's 47 SKUs, and the rest of the repo, as of both
-// P411 and P412). Those four numbers are aggregates of an order this file doesn't have — they
-// can't be reconstructed from a handful of totals without fabricating SKU rows tuned to match,
-// which would be worthless as verification. Once Steve provides that order (same shape as
-// po1Fixture.ts), add it here alongside PO1_ROWS. See BACKLOG.md's matching item.
 import type { SkuLine, BlockSize } from "./blockTypes";
+import { DEFAULT_BLOCKS, DEFAULT_BLOCK } from "./blockTypes";
 import { nest, nestDensity, computeFaceCapacity, __internal } from "./blockNester";
 import { parsePoRows } from "./poParser";
 import { PO1_ROWS, PO1_EXPECTED } from "./po1Fixture";
+import { LOCKED_ORDER_ROWS, LOCKED_ORDER_EXPECTED, LOCKED_ORDER_FINISHED_BF } from "./lockedOrderFixture";
 
 interface CheckResult {
   name: string;
@@ -220,6 +217,49 @@ export function runBlockNesterSelfCheck(): { pass: boolean; results: CheckResult
     const { ok, detail } = reconciles(got, blockForDensity);
     check(`PO#1 @ ${densityKey}# (new per-density defaults): reconciliation holds`, ok, detail);
   }
+
+  // --- The P411 prompt's own "locked customer order" ground truth (20 SKUs, real order, at the
+  // NEW per-density defaults — this order's whole reason for existing was to validate those
+  // defaults + the greedy tier). Every one of the prompt's four numbers, checked directly. ---
+  const lockedLines = parsePoRows(LOCKED_ORDER_ROWS);
+  const lockedResult = nest(lockedLines, DEFAULT_BLOCKS);
+  let lockedTotalFinishedBF = 0;
+  for (const densityKey of Object.keys(LOCKED_ORDER_EXPECTED)) {
+    const exp = LOCKED_ORDER_EXPECTED[densityKey];
+    const got = lockedResult[densityKey];
+    const gotParts = got
+      ? got.blocks.flatMap((b) => b.chunks).flatMap((c) => c.lines).reduce((s, l) => s + l.qty, 0)
+      : -1;
+    check(
+      `locked order @ ${densityKey}#: ${exp.parts} pieces`,
+      gotParts === exp.parts,
+      `got ${gotParts}`
+    );
+    check(
+      `locked order @ ${densityKey}#: greedy molds == ${exp.greedyMolds}`,
+      (() => {
+        const block = DEFAULT_BLOCKS[densityKey] ?? DEFAULT_BLOCK;
+        const linesForDensity = lockedLines.filter(
+          (l) => l.parsed && String(l.density) === densityKey && l.qty > 0
+        );
+        const rects = __internal.buildRectangles(linesForDensity);
+        const chunks = __internal.buildChunksGreedy(rects, block);
+        const firstFit = __internal.packMoldsFirstFit(chunks, block);
+        return firstFit.length === exp.greedyMolds;
+      })()
+    );
+    if (got) {
+      lockedTotalFinishedBF += got.finishedBF;
+      const block = DEFAULT_BLOCKS[densityKey] ?? DEFAULT_BLOCK;
+      const { ok, detail } = reconciles(got, block);
+      check(`locked order @ ${densityKey}#: reconciliation holds`, ok, detail);
+    }
+  }
+  check(
+    `locked order: total finishedBF == ${LOCKED_ORDER_FINISHED_BF.toFixed(2)}`,
+    approxEq(lockedTotalFinishedBF, LOCKED_ORDER_FINISHED_BF, 0.01),
+    `got ${lockedTotalFinishedBF.toFixed(4)}`
+  );
 
   return { pass: results.every((r) => r.pass), results };
 }

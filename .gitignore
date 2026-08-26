@@ -20,3 +20,8 @@ employee_roster.md
 # Source spreadsheet for the P323/P324 block-nesting baseline — kept local only. The parsed data
 # it contains (item codes/dims/qty) is committed in cutting-pilot/src/lib/po1Fixture.ts instead.
 xPanda_PO1_Nesting_Map.xlsx
+
+# Source spreadsheet for the P411 "locked customer order" ground-truth fixture — kept local only,
+# same policy as above (contains pricing). The parsed data (item codes/dims/qty) is committed in
+# cutting-pilot/src/lib/lockedOrderFixture.ts instead.
+Foam Purchase Orders (2).xlsx
