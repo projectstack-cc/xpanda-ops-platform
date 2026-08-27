@@ -1,12 +1,14 @@
 // src/lib/bagLabels.ts
-// Bag label printing (P413) for the Block Calculator (/v2/blocks). Pure module (no DOM, no
-// React) mirroring src/lib/cutList.ts's shape/patterns: pdf-lib for client-side PDF generation,
-// printed on the floor's Omezizy D520BT (standard 203-DPI direct-thermal, 4x6" pages through the
-// normal OS print dialog — no driver/protocol work in scope).
+// Bag label printing (P413, reworked to portrait per P417) for the Block Calculator
+// (/v2/blocks). Pure module (no DOM, no React) mirroring src/lib/cutList.ts's shape/patterns:
+// pdf-lib for client-side PDF generation, printed on the floor's Omezizy D520BT (standard
+// 203-DPI direct-thermal, 4x6" pages through the normal OS print dialog — no driver/protocol
+// work in scope).
 //
-// One page per bag, 4x6" landscape (432x288pt @ 72pt/in). Bagging: 4 pcs/bag, remainder in the
-// last bag of each line; no SKU shares a bag; bag numbering is sequential across the whole loaded
-// PO in grid order (array order = PO top-to-bottom).
+// One page per bag, 4x6" PORTRAIT (288x432pt @ 72pt/in — P417 supersedes P413's landscape
+// layout). Bagging: 4 pcs/bag, remainder in the last bag of each line; no SKU shares a bag; bag
+// numbering is sequential across the whole loaded PO in grid order (array order = PO
+// top-to-bottom).
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { SkuLine } from "./blockTypes";
 
@@ -121,19 +123,20 @@ export function computeBags(lines: SkuLine[]): BagLabel[] {
 
 // --- PDF rendering ---
 
-const PAGE_W = 432; // 6in @ 72pt/in, landscape by dimension
-const PAGE_H = 288; // 4in
-const MARGIN = 16;
+const PAGE_W = 288; // 4in @ 72pt/in, portrait by dimension
+const PAGE_H = 432; // 6in
+const MARGIN = 13;
 const RULE_WIDTH = 2;
-const HEADER_H = 32;
-const PRODUCT_BOX_H = 48;
-const TABLE_ROW_H = 26;
-const BOTTOM_ROW_H = 56;
-const GAP = 6;
-const TABLE_LABEL_COL_W = 70;
-const QTY_BLOCK_W = 108;
-const BAG_BLOCK_W = 168;
-const BAG_LABEL_COL_W = 42;
+const HEADER_H = 40;
+const PRODUCT_BOX_H = 68;
+const TABLE_ROW_H = 45;
+const BOTTOM_ROW_H = 68;
+const GAP = 16;
+const BOTTOM_GAP = 8;
+const TABLE_LABEL_COL_W = 97;
+const QTY_LABEL_COL_W = 68;
+const QTY_VALUE_COL_W = 83;
+const QTY_BLOCK_W = QTY_LABEL_COL_W + QTY_VALUE_COL_W;
 
 export async function buildBagLabelsPdf(lines: SkuLine[], opts?: BagLabelOptions): Promise<Uint8Array> {
   const customer = opts?.customer ?? DEFAULT_CUSTOMER;
@@ -150,7 +153,7 @@ export async function buildBagLabelsPdf(lines: SkuLine[], opts?: BagLabelOptions
 
   let logoImg = null;
   try {
-    const logoBytes = await fetch("/logo/xpanda%20bw.png").then((r) => r.arrayBuffer());
+    const logoBytes = await fetch("/logo/xpanda-panda-600.png").then((r) => r.arrayBuffer());
     logoImg = await doc.embedPng(logoBytes);
   } catch (e) {
     console.error("Bag labels: logo embed failed", e);
@@ -189,7 +192,10 @@ function drawLabelValueBlock(
   value: string,
   font: PDFFont,
   fontBold: PDFFont,
-  black: ReturnType<typeof rgb>
+  black: ReturnType<typeof rgb>,
+  labelSize = 13,
+  valueStartSize = 22,
+  valueFloorSize = 10
 ) {
   page.drawRectangle({ x, y, width: w, height: h, borderColor: black, borderWidth: RULE_WIDTH });
   page.drawLine({
@@ -198,9 +204,9 @@ function drawLabelValueBlock(
     thickness: RULE_WIDTH,
     color: black,
   });
-  page.drawText(label, { x: x + 6, y: y + h / 2 - 4, size: 9, font: fontBold, color: black });
+  page.drawText(label, { x: x + 6, y: y + h / 2 - labelSize * 0.35, size: labelSize, font: fontBold, color: black });
   const valueMaxW = w - labelColW - 12;
-  const valueSize = fitSize(value, font, valueMaxW, 13, 8);
+  const valueSize = fitSize(value, font, valueMaxW, valueStartSize, valueFloorSize);
   page.drawText(value, {
     x: x + labelColW + 6,
     y: y + h / 2 - valueSize * 0.35,
@@ -224,8 +230,8 @@ function drawLabelPage(
   let cursorY = PAGE_H - MARGIN;
 
   // 1. Header — constant customer string, centered, bold, no border.
-  const headerSize = fitSize(customer, fontBold, contentW - 16, 22, 12);
-  drawCentered(page, customer, fontBold, headerSize, cursorY - HEADER_H + 10, black);
+  const headerSize = fitSize(customer, fontBold, contentW - 16, 32, 14);
+  drawCentered(page, customer, fontBold, headerSize, cursorY - HEADER_H + 12, black);
   cursorY -= HEADER_H + GAP;
 
   // 2. Product box — bordered, SKU centered, auto-shrunk.
@@ -238,15 +244,16 @@ function drawLabelPage(
     borderColor: black,
     borderWidth: RULE_WIDTH,
   });
-  const itemSize = fitSize(bag.item, fontBold, contentW - 16, 26, 12);
+  const itemSize = fitSize(bag.item, fontBold, contentW - 16, 32, 14);
   drawCentered(page, bag.item, fontBold, itemSize, boxY + PRODUCT_BOX_H / 2 - itemSize * 0.35, black);
   cursorY = boxY - GAP;
 
-  // 3. 3-row spec table.
+  // 3. 4-row spec table (SIZE, DATE, DENSITY, BAG — BAG is the 4th row, not part of the bottom row).
   const specRows: Array<[string, string]> = [
     ["SIZE", bag.sizeStr],
     ["DATE", date],
     ["DENSITY", bag.densityStr],
+    ["BAG", `${bag.bagNumber} of ${bag.totalBags}`],
   ];
   for (const [label, value] of specRows) {
     const rowY = cursorY - TABLE_ROW_H;
@@ -255,7 +262,7 @@ function drawLabelPage(
   }
   cursorY -= GAP;
 
-  // 4. Bottom row — QTY | BAG | logo.
+  // 4. Bottom row — QTY (pieces in this bag) on the left, panda logo bottom-right.
   const bottomY = cursorY - BOTTOM_ROW_H;
   drawLabelValueBlock(
     page,
@@ -263,32 +270,23 @@ function drawLabelPage(
     bottomY,
     QTY_BLOCK_W,
     BOTTOM_ROW_H,
-    BAG_LABEL_COL_W,
+    QTY_LABEL_COL_W,
     "QTY",
     qtyString(bag.piecesInBag),
     font,
     fontBold,
-    black
-  );
-  drawLabelValueBlock(
-    page,
-    MARGIN + QTY_BLOCK_W,
-    bottomY,
-    BAG_BLOCK_W,
-    BOTTOM_ROW_H,
-    BAG_LABEL_COL_W,
-    "BAG",
-    `${bag.bagNumber} of ${bag.totalBags}`,
-    font,
-    fontBold,
-    black
+    black,
+    14,
+    24,
+    11
   );
 
   if (logoImg) {
-    // Clamp on BOTH axes — the logo area is narrow (right of the BAG block), so a wide/short
-    // logo sized by height alone can run into the BAG cell's "n of total" text (the field the
-    // floor uses to sequence bags). Scale by whichever axis is tighter.
-    const logoAreaX = MARGIN + QTY_BLOCK_W + BAG_BLOCK_W + GAP;
+    // Clamp on BOTH axes — the logo area right of the QTY block is narrow, so a wide/tall logo
+    // sized by only one axis could overflow into the QTY block or past the page margin. Scale by
+    // whichever axis (available height vs. available width) is tighter; never hardcode a square —
+    // width is always derived from the embedded image's real aspect ratio.
+    const logoAreaX = MARGIN + QTY_BLOCK_W + BOTTOM_GAP;
     const logoAreaW = PAGE_W - MARGIN - logoAreaX;
     const maxLogoH = BOTTOM_ROW_H - 12;
     const scale = Math.min(maxLogoH / logoImg.height, logoAreaW / logoImg.width);

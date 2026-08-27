@@ -10,6 +10,31 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P417 — Bag label printing reworked to portrait, real committed panda logo (react-component-agent
+  §9b + next-platform-agent §9a). Supersedes P413's landscape layout.** `src/lib/bagLabels.ts`'s
+  `buildBagLabelsPdf` now renders **4×6" PORTRAIT** pages (288×432pt, was 432×288 landscape) with a
+  **4-row spec table — SIZE/DATE/DENSITY/BAG** (`BAG` moved from the bottom row into the table as its
+  4th row: `n of total`); the bottom row is now QTY alone (pieces in this bag, zero-padded) plus the
+  logo. Logo swapped from the placeholder B&W mark (`/logo/xpanda%20bw.png`) to the real committed
+  XPanda panda mark at `logo/xpanda-panda-600.png` (transparent PNG, 561×600, no `%20` encoding
+  needed — hyphenated filename), fetched/embedded the same try/catch way so a missing logo still
+  never aborts a print run; sizing keeps P413's advisor-verified clamp-on-both-axes scale (tighter of
+  available height vs. available width) rather than height-only, since the logo area is still narrow
+  relative to the mark's real (non-square) aspect ratio. **`advisor()` pre-push review caught a real
+  gap, fixed before commit**: the first pass grew every box/row/column to portrait proportions but
+  left the label/value font sizes at their old landscape constants (13pt value start, 9pt hardcoded
+  label) — inside the new, taller 45pt table rows and 68pt bottom row that read noticeably small
+  against the reference layout's "match those proportions" instruction. `drawLabelValueBlock`'s
+  label/value sizes are now parameters (label 13pt default, value 22pt start/10pt floor for the table
+  rows; 14pt/24pt/11pt for the taller QTY row) instead of hardcoded, and the header start size grew
+  22→32pt; `fitSize`'s per-value shrink-to-fit still guards every field against overflow. `computeBags`
+  (bagging logic) and
+  `bagLabels.selfcheck.ts` are unchanged — the rework is presentation-only. `BlocksApp.tsx`'s button/
+  modal/handler wiring from P413 already matched this prompt's spec as-is (Print Bag Labels button
+  immediately before the cut-sheet section, blocking Modal on `UnparsedRowsError`) — no edits needed
+  there. No `BACKLOG.md` change needed: both of this prompt's requested follow-ons (PO→job creation,
+  customer-configurable label header) already exist there as P413 follow-up items. Client-side only
+  (no DB/schema/API change). `npx tsc --noEmit` + `npm run cf-build` green.
 - **P413 — Bag label printing (Core Covers) in the v2 Block Calculator (react-component-agent
   §9b + next-platform-agent §9a).** New `src/lib/bagLabels.ts` (pure, no DOM/React, mirrors
   `cutList.ts`'s shape): `computeBags(lines)` walks the loaded PO's `skuLines` in grid order and
