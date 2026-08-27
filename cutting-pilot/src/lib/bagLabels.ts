@@ -285,9 +285,16 @@ function drawLabelPage(
   );
 
   if (logoImg) {
-    const logoH = BOTTOM_ROW_H - 12;
-    const logoW = logoImg.width * (logoH / logoImg.height);
+    // Clamp on BOTH axes — the logo area is narrow (right of the BAG block), so a wide/short
+    // logo sized by height alone can run into the BAG cell's "n of total" text (the field the
+    // floor uses to sequence bags). Scale by whichever axis is tighter.
+    const logoAreaX = MARGIN + QTY_BLOCK_W + BAG_BLOCK_W + GAP;
+    const logoAreaW = PAGE_W - MARGIN - logoAreaX;
+    const maxLogoH = BOTTOM_ROW_H - 12;
+    const scale = Math.min(maxLogoH / logoImg.height, logoAreaW / logoImg.width);
+    const logoW = logoImg.width * scale;
+    const logoH = logoImg.height * scale;
     const logoX = PAGE_W - MARGIN - logoW;
-    page.drawImage(logoImg, { x: logoX, y: bottomY + 6, width: logoW, height: logoH });
+    page.drawImage(logoImg, { x: logoX, y: bottomY + (BOTTOM_ROW_H - logoH) / 2, width: logoW, height: logoH });
   }
 }

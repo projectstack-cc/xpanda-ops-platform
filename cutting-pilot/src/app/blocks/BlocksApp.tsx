@@ -255,7 +255,7 @@ export default function BlocksApp() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (e) {
       if (e instanceof UnparsedRowsError) {
         setLabelError({ rows: e.rows });
