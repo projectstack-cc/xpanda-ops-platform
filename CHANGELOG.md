@@ -10,6 +10,25 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **P413 — Bag label printing (Core Covers) in the v2 Block Calculator (react-component-agent
+  §9b + next-platform-agent §9a).** New `src/lib/bagLabels.ts` (pure, no DOM/React, mirrors
+  `cutList.ts`'s shape): `computeBags(lines)` walks the loaded PO's `skuLines` in grid order and
+  bags each line 4 pieces/bag with the remainder in the line's last bag (no SKU shares a bag),
+  numbering bags sequentially across the whole loaded PO; `buildBagLabelsPdf(lines, opts?)` renders
+  one 4×6" landscape page per bag via `pdf-lib` — `Core Covers` header, bordered product box (SKU,
+  auto-shrunk), a SIZE/DATE/DENSITY 3-row spec table, and a bottom row (`QTYpcs` | `BAG n of total`
+  | B&W panda logo, `/logo/xpanda%20bw.png`, fetched/embedded in a try/catch so a missing logo never
+  aborts the run). Guards (defense in depth, UI checks first): any `!parsed` row or a `qty>0`/
+  `density<=0` row throws a typed `UnparsedRowsError` carrying the offending `item`/`raw` values.
+  Wired into `BlocksApp.tsx`: a **Print Bag Labels** button (next to Reload cut sheet, shown once a
+  PO is loaded) downloads `bag-labels.pdf` via the same blob/`a.download`/revoke pattern the
+  platform already uses for PDF downloads; on `UnparsedRowsError` a blocking `Modal` lists the
+  offending rows instead, so a bag label with a blank size/density is never emitted. New
+  `bagLabels.selfcheck.ts` (mirrors `poParser.selfcheck.ts`'s pattern) asserts `computeBags` alone —
+  remainder-last bagging, sequential numbering across multiple lines, no-SKU-shares-a-bag — wired
+  into the same dev-only self-check effect as the parser/nester checks. Client-side only (no
+  DB/schema/API change); ephemeral like the rest of the calculator. `npx tsc --noEmit` +
+  `npm run cf-build` green.
 - **P411 addendum — the "locked customer order" ground truth, now verified.** Steve provided the
   source file (`Foam Purchase Orders (2).xlsx`'s `Sheet1` tab — 20 real line items + a `Final QTY`
   column) after both the P411 and P412 sessions had shipped without it. New

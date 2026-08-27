@@ -60,6 +60,13 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **P413 follow-up — PO→job creation from the block-calculator spreadsheet.** The Block
+  Calculator's loaded PO spreadsheet carries only parts (no customer/job info), so bag labels are
+  generated straight from `skuLines` with no job created. Wiring PO→job creation is a separate,
+  deliberately deferred step.
+- [ ] **P413 follow-up — multi-density / customer-configurable label header.** `Core Covers` is
+  currently a constant string in `bagLabels.ts` (`DEFAULT_CUSTOMER`); generalize to a per-customer
+  configurable header once a second labelled customer appears.
 - [ ] **P386 follow-up — inline grouped chunk breakdown in `/v2/cutting`'s `PartsPanel`/
   `OrderDetailModal`.** Currently the grouped recipe breakdown only exists in the cut-list PDF
   (both surfaces, per P386). Surfacing it inline on the board would need `hb_chunk_breakdown` on

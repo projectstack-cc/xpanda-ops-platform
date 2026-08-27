@@ -3,7 +3,7 @@
 // net for mis-parses), set per-density block dimensions, then "Reload cut sheet" nests and
 // renders the cut sheet (nest() + <CutSheet>).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Upload, Plus, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
+import { Upload, Plus, Trash2, RefreshCw, AlertTriangle, Printer } from "lucide-react";
 import * as XLSX from "xlsx";
 import Modal from "@/components/Modal";
 import {
@@ -18,6 +18,8 @@ import { parsePoRows, type PoInputRow } from "@/lib/poParser";
 import { runPoParserSelfCheck } from "@/lib/poParser.selfcheck";
 import { nest } from "@/lib/blockNester";
 import { runBlockNesterSelfCheck } from "@/lib/blockNester.selfcheck";
+import { buildBagLabelsPdf, UnparsedRowsError } from "@/lib/bagLabels";
+import { runBagLabelsSelfCheck } from "@/lib/bagLabels.selfcheck";
 import CutSheet from "./CutSheet";
 
 const ITEM_ALIASES = ["item", "sku", "part", "part#", "partno", "itemno", "itemnumber", "code"];
@@ -53,6 +55,7 @@ export default function BlocksApp() {
   const [computeError, setComputeError] = useState<string | null>(null);
   const [nestResult, setNestResult] = useState<NestResult | null>(null);
   const [nestedBlockSizes, setNestedBlockSizes] = useState<BlockSizes>({});
+  const [labelError, setLabelError] = useState<{ rows: { item: string; raw: string }[] } | null>(null);
 
   // Column/sheet picker — only shown when the first sheet's headers don't auto-match.
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -75,6 +78,12 @@ export default function BlocksApp() {
     console[nesterCheck.pass ? "log" : "warn"](
       `[blocks] Nester self-check: ${nesterCheck.pass ? "PASS" : "FAIL"}`,
       nesterCheck.results
+    );
+    const bagLabelsCheck = runBagLabelsSelfCheck();
+    // eslint-disable-next-line no-console
+    console[bagLabelsCheck.pass ? "log" : "warn"](
+      `[blocks] Bag labels self-check: ${bagLabelsCheck.pass ? "PASS" : "FAIL"}`,
+      bagLabelsCheck.results
     );
   }, []);
 
@@ -233,6 +242,27 @@ export default function BlocksApp() {
     }
     setNestResult(nest(skuLines, blockSizes));
     setNestedBlockSizes(blockSizes);
+  }
+
+  async function handlePrintBagLabels() {
+    try {
+      const pdfBytes = await buildBagLabelsPdf(skuLines);
+      const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "bag-labels.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      if (e instanceof UnparsedRowsError) {
+        setLabelError({ rows: e.rows });
+        return;
+      }
+      console.error("Bag labels PDF failed:", e);
+    }
   }
 
   return (
@@ -399,6 +429,20 @@ export default function BlocksApp() {
           </div>
         )}
 
+        {/* Print bag labels */}
+        {skuLines.length > 0 && (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={handlePrintBagLabels}
+              className="min-h-[44px] px-5 inline-flex items-center gap-2 bg-[var(--brand)] text-white rounded text-sm font-semibold cursor-pointer hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            >
+              <Printer size={16} aria-hidden="true" />
+              Print Bag Labels
+            </button>
+          </div>
+        )}
+
         {/* Cut sheet */}
         {nestResult && (
           <div className="space-y-3">
@@ -462,6 +506,34 @@ export default function BlocksApp() {
               className="min-h-[44px] px-4 bg-[var(--brand)] text-white rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
             >
               Use these columns
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Blocking modal — labels refuse to print until every row parses cleanly */}
+      <Modal isOpen={!!labelError} onClose={() => setLabelError(null)} title="Fix rows before printing" size="lg">
+        <div className="space-y-3">
+          <p className="flex items-center gap-1.5 text-sm text-[var(--warn-text)]">
+            <AlertTriangle size={16} aria-hidden="true" />
+            This PO has unparsed or incomplete rows. Correct them in the grid above, then click
+            Print Bag Labels again.
+          </p>
+          <ul className="space-y-1 text-sm text-text">
+            {labelError?.rows.map((r, i) => (
+              <li key={i} className="border border-border rounded px-2 py-1">
+                <span className="font-semibold">{r.item || "(no item)"}</span>
+                {r.raw && <span className="text-muted"> — {r.raw}</span>}
+              </li>
+            ))}
+          </ul>
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={() => setLabelError(null)}
+              className="min-h-[44px] px-4 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)]"
+            >
+              Close
             </button>
           </div>
         </div>
