@@ -1399,6 +1399,16 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **P416 — Fix 500 on user delete: clear FK-child rows before deleting the user (db-api-agent).**
+  `DELETE /api/users/:id` was throwing `FOREIGN KEY constraint failed` (swallowed into a generic
+  500) for any user with a `user_roles` row — i.e. every real user — because D1 enforces FKs and
+  four tables reference `users(id)` with no `ON DELETE CASCADE` (`sessions`, `user_roles`,
+  `notifications`, `push_subscriptions`), but the handler in `_worker.js/routes/admin.js` only
+  cleared `sessions` before `DELETE FROM users`. Now clears `user_roles`, `notifications`,
+  `push_subscriptions`, and `sessions` before deleting the user; added a not-found guard (404) and
+  a `logActivity()` audit entry (parity with the existing role-delete call in the same file).
+  `activity_log` rows for the deleted user are left in place (no FK to `users`, is the audit
+  trail). Code-only fix, no migration, no schema change. `node --check` green.
 - **P390 — corrected chunk nester geometry (block height + interior-cuts kerf); recompute
   endpoint (db-api-agent).** Two confirmed geometry errors in the P379 nester
   (`_worker.js/lib/holey-nester.js`): block height was `50` (real blocks run a little over —

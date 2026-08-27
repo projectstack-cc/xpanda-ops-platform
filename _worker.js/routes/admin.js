@@ -182,8 +182,18 @@ export async function handleApiUsers(request, env) {
       if (!userId) return json({ ok: false, error: 'User ID required.' }, 400);
       if (userId === sessionUser.userId) return json({ ok: false, error: 'Cannot delete your own account.' }, 400);
 
+      const target = await db.prepare('SELECT username FROM users WHERE id = ?').bind(userId).first();
+      if (!target) return json({ ok: false, error: 'User not found.' }, 404);
+
+      // D1 enforces foreign keys and none of these cascade, so clear every
+      // FK-child row before deleting the user or the DELETE 500s.
+      await db.prepare(`DELETE FROM user_roles WHERE user_id = ?`).bind(userId).run();
+      await db.prepare(`DELETE FROM notifications WHERE user_id = ?`).bind(userId).run();
+      await db.prepare(`DELETE FROM push_subscriptions WHERE user_id = ?`).bind(userId).run();
       await db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId).run();
       await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
+
+      await logActivity(db, 'delete', 'user', userId, `Deleted user "${target.username}"`, { username: target.username }, sessionUser.userId);
       return json({ ok: true });
     }
 
