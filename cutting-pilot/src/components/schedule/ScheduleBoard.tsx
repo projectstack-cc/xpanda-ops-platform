@@ -21,6 +21,11 @@ const POLL_MS = 60_000;
 // a signal prop to PlatformHeader. Keep this in sync if PlatformHeader's idle delay changes.
 const NAV_AUTO_HIDE_IDLE_MS = 5_000;
 
+// P415 wall-display cursor hide: on the TV the pointer, once moved onto the screen, sits there
+// forever. Hide it after this much pointer inactivity; any activity brings it back. Independent
+// of the header auto-hide above (different delay, different concern).
+const CURSOR_IDLE_MS = 15_000;
+
 interface ScheduleBoardProps {
   userName: string;
   isAdmin: boolean;
@@ -47,6 +52,7 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
   // wall TV) never fires these listeners, so `headerRevealed` stays false and the board renders
   // full-bleed with zero offset, unchanged from before.
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const cursorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [headerRevealed, setHeaderRevealed] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -69,6 +75,32 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     };
   }, [revealHeader]);
+
+  // P415 wall-display cursor hide. Toggles `cursor:none` imperatively on the board root, so it
+  // needs no className changes across the loading/error/data branches; React never re-applies a
+  // `style` prop to these nodes, so the imperative set survives re-renders. Deliberately its own
+  // listeners + timer (additive) so it can't perturb the P365 header auto-hide effect above.
+  useEffect(() => {
+    const showThenArmHide = () => {
+      const el = rootRef.current;
+      if (el) el.style.cursor = "";
+      if (cursorTimerRef.current) clearTimeout(cursorTimerRef.current);
+      cursorTimerRef.current = setTimeout(() => {
+        const node = rootRef.current;
+        if (node) node.style.cursor = "none";
+      }, CURSOR_IDLE_MS);
+    };
+    showThenArmHide(); // arm on mount so an untouched wall hides the pointer after the idle delay
+    window.addEventListener("pointermove", showThenArmHide);
+    window.addEventListener("keydown", showThenArmHide);
+    window.addEventListener("touchstart", showThenArmHide, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", showThenArmHide);
+      window.removeEventListener("keydown", showThenArmHide);
+      window.removeEventListener("touchstart", showThenArmHide);
+      if (cursorTimerRef.current) clearTimeout(cursorTimerRef.current);
+    };
+  }, []);
 
   // Measures the header actually rendered inside this component's own subtree (never queries
   // outside `rootRef`) — re-runs whenever the board swaps render branches (loading/error/data),

@@ -749,6 +749,13 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P415 — `/v2/schedule` wall board hides the mouse pointer after 15s idle
+  (react-component-agent §9b).** On the TV, a mouse pointer left anywhere on screen previously sat
+  there permanently. `ScheduleBoard.tsx` gained a self-contained sibling effect (own timer, own
+  `pointermove`/`keydown`/`touchstart` listeners) that imperatively sets `cursor: none` on the
+  board's `rootRef` after 15s of inactivity and clears it instantly on any activity — additive only,
+  does not touch the existing P365 header auto-hide effect or `PlatformHeader`. Client-only; no
+  API/schema change. `npx tsc --noEmit` + `npm run cf-build` green.
 - **P414 — linked trailer groups on `/v2/schedule` now render as one bounded unit
   (react-component-agent §9b).** A group (`trailer_group_id`, ≥2 members in the same day column)
   previously drew only a left rail plus the same inter-row divider its ungrouped neighbors use, so
