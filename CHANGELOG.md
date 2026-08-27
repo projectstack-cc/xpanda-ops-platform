@@ -730,6 +730,16 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P414 — linked trailer groups on `/v2/schedule` now render as one bounded unit
+  (react-component-agent §9b).** A group (`trailer_group_id`, ≥2 members in the same day column)
+  previously drew only a left rail plus the same inter-row divider its ungrouped neighbors use, so
+  members read as independent stacked rows rather than one unit. `DayColumn.tsx`'s group wrapper
+  now shades the whole group `bg-[var(--surface-2)]` and adds brand top/bottom brackets to the
+  existing left rail (`border-t-2 border-b-2`, three-sided — right side stays open on purpose, not
+  a full box); `OrderRow.tsx` gained an `inGroup` prop that suppresses a grouped member's own
+  bottom divider so the fused group has no internal double lines. Presentational only, existing
+  tokens only, no new elements/pills, no API/schema change. `npx tsc --noEmit` + `npm run cf-build`
+  green.
 - **P408 — schedule-ingest: batched writes to shrink shared-D1 write-contention window
   (next-platform-agent §9a, closes `SIGNOUT-INVESTIGATION-P404.md`'s "Trigger" candidate —
   a contention-reduction measure, not a proven root cause).** The `xpanda-cutting-v2` cron

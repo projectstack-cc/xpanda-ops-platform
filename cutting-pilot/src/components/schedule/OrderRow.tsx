@@ -25,6 +25,10 @@ interface OrderRowProps {
   // that wrapper and drop the border under the last member of every group, not just the column's
   // true last row. DayColumn computes this explicitly instead.
   isLastInColumn?: boolean;
+  // True for a row rendered inside a linked-group wrapper. The group wrapper draws the group's
+  // top/bottom brackets, so members must NOT draw their own bottom divider (would double the line
+  // and re-fragment the fused group). Overrides isLastInColumn for divider purposes.
+  inGroup?: boolean;
 }
 
 // Single definition shared by customer name and INV# so they read as one visual tier — a
@@ -36,7 +40,7 @@ function isScrapYes(scrapPickup: string | null): boolean {
   return (scrapPickup ?? "").trim().toUpperCase().startsWith("Y");
 }
 
-export default function OrderRow({ row, density, orphanedGroup, isLastInColumn }: OrderRowProps) {
+export default function OrderRow({ row, density, orphanedGroup, isLastInColumn, inGroup }: OrderRowProps) {
   const showLoadCount = density !== "minimal";
   const showScrapIcon = density !== "minimal";
   const scrapYes = showScrapIcon && isScrapYes(row.scrap_pickup);
@@ -50,7 +54,7 @@ export default function OrderRow({ row, density, orphanedGroup, isLastInColumn }
     <div
       className={[
         "px-1.5",
-        isLastInColumn ? "" : "border-b border-[var(--border-light)]",
+        inGroup || isLastInColumn ? "" : "border-b border-[var(--border-light)]",
         density === "full" ? "py-1" : "py-0.5",
         row.unmatched ? "opacity-60 grayscale-[30%]" : "",
       ].join(" ")}

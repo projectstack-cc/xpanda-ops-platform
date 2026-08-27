@@ -146,12 +146,13 @@ export default function DayColumn({ dayOfWeek, shipDate, rows, density, rowCap, 
           visible.map((block, bi) => {
             const isLastBlock = bi === visible.length - 1;
             return block.grouped ? (
-              <div key={`group-${block.rows[0].trailer_group_id}`} className="border-l-2 border-[var(--brand)]">
+              <div key={`group-${block.rows[0].trailer_group_id}`} className="bg-[var(--surface-2)] border-l-2 border-t-2 border-b-2 border-[var(--brand)]">
                 {block.rows.map((row, i) => (
                   <OrderRow
                     key={`${row.invoice_number}-${row.job_id ?? i}`}
                     row={row}
                     density={density}
+                    inGroup
                     isLastInColumn={isLastBlock && i === block.rows.length - 1}
                   />
                 ))}
