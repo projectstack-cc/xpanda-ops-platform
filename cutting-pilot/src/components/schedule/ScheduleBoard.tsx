@@ -76,21 +76,45 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
     };
   }, [revealHeader]);
 
-  // P415 wall-display cursor hide. Toggles `cursor:none` imperatively on the board root, so it
-  // needs no className changes across the loading/error/data branches; React never re-applies a
-  // `style` prop to these nodes, so the imperative set survives re-renders. Deliberately its own
-  // listeners + timer (additive) so it can't perturb the P365 header auto-hide effect above.
+  // P415 wall-display cursor hide, hardened twice over reports it "doesn't go away" mid-screen:
+  //
+  // 1. The original cut set `style.cursor = "none"` on just the board's own root div and relied
+  //    on CSS inheritance — but PlatformHeader's `autoHide` nav-reveal hotzone (a permanent,
+  //    full-width, 44px-tall hit target pinned to the top of the screen) sets its own explicit
+  //    `cursor-pointer` class, which wins over an inherited value whenever the pointer rests in
+  //    that strip. Toggling a class on <html> instead (globals.css: `.wall-cursor-hidden *`,
+  //    `!important`) beats any current or future explicit `cursor-*` utility in the tree — this
+  //    alone doesn't explain a cursor stuck at screen CENTER though (no descendant there sets its
+  //    own cursor), which points at #2:
+  // 2. Wall-mounted PCs commonly run KVM/remote-desktop/"mouse jiggler" software to keep the
+  //    display awake, which injects synthetic pointer events with zero movement — each one used
+  //    to re-arm this timer forever, so the cursor would never hide no matter how long the wall
+  //    was actually untouched. `movementX`/`movementY` are both 0 on these synthetic events (and
+  //    essentially never both exactly 0 on real hardware input), so they're now filtered out.
+  //
+  // Deliberately its own listeners + timer (additive) so it can't perturb the P365 header
+  // auto-hide effect above.
   useEffect(() => {
-    const showThenArmHide = () => {
-      const el = rootRef.current;
-      if (el) el.style.cursor = "";
-      if (cursorTimerRef.current) clearTimeout(cursorTimerRef.current);
+    const root = document.documentElement;
+    const arm = () => {
       cursorTimerRef.current = setTimeout(() => {
-        const node = rootRef.current;
-        if (node) node.style.cursor = "none";
+        root.classList.add("wall-cursor-hidden");
       }, CURSOR_IDLE_MS);
     };
-    showThenArmHide(); // arm on mount so an untouched wall hides the pointer after the idle delay
+    const showThenArmHide = (e?: Event) => {
+      if (
+        e instanceof PointerEvent &&
+        e.type === "pointermove" &&
+        e.movementX === 0 &&
+        e.movementY === 0
+      ) {
+        return; // synthetic/zero-delta move (KVM, remote desktop, jiggler) — not real activity
+      }
+      root.classList.remove("wall-cursor-hidden");
+      if (cursorTimerRef.current) clearTimeout(cursorTimerRef.current);
+      arm();
+    };
+    arm(); // arm on mount so an untouched wall hides the pointer after the idle delay
     window.addEventListener("pointermove", showThenArmHide);
     window.addEventListener("keydown", showThenArmHide);
     window.addEventListener("touchstart", showThenArmHide, { passive: true });
@@ -99,6 +123,7 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
       window.removeEventListener("keydown", showThenArmHide);
       window.removeEventListener("touchstart", showThenArmHide);
       if (cursorTimerRef.current) clearTimeout(cursorTimerRef.current);
+      root.classList.remove("wall-cursor-hidden"); // don't leak a hidden cursor to other v2 routes
     };
   }, []);
 

@@ -774,6 +774,30 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P415 follow-up — idle cursor hide fixed; original cut didn't actually work
+  (react-component-agent §9b).** Steve reported the pointer still not disappearing (reported at
+  screen center, not just near the top). Two independent bugs, both fixed:
+  1. The original effect set `style.cursor = "none"` only on the board's own `rootRef` div and
+     relied on CSS inheritance. `PlatformHeader`'s `autoHide` nav-reveal hotzone — a permanent,
+     full-width, 44px-tall hit target pinned to the top of the screen, present in the DOM whenever
+     the board isn't currently revealed — sets its own explicit `cursor-pointer` class, which wins
+     over an inherited value any time the pointer rests in that strip. Fixed by toggling a
+     `wall-cursor-hidden` class on `<html>` instead, paired with a new `globals.css` rule
+     (`html.wall-cursor-hidden, html.wall-cursor-hidden *`, `!important`) that beats any current or
+     future explicit `cursor-*` utility anywhere in the tree, not just what the board root inherits.
+  2. This alone doesn't explain a cursor stuck at screen **center** — nothing in `WeekBand.tsx`/
+     `DayColumn.tsx` sets its own cursor. The more likely cause of "never goes away, anywhere": wall
+     PCs commonly run KVM/remote-desktop/"mouse jiggler" software to keep the display awake, which
+     injects synthetic `pointermove` events with zero movement — each one was re-arming the 15s
+     timer forever, so the cursor would never actually hide no matter how long the wall sat
+     untouched. The timer now ignores any `pointermove` whose `movementX`/`movementY` are both
+     exactly 0 (real hardware input essentially never reports that), while still resetting
+     normally on any genuine move, `keydown`, or `touchstart`.
+  `npx tsc --noEmit` + `npm run cf-build` green. Not verified live on the wall TV this session — if
+  the pointer still doesn't hide after this, the next thing to check is whether the display's
+  cursor is being rendered by the KVM/remote-desktop client itself rather than the browser page (in
+  which case no page-level CSS can affect it), and whether this deploy actually reached the worker
+  (confirm the GitHub Actions run for this push succeeded).
 - **P415 — `/v2/schedule` wall board hides the mouse pointer after 15s idle
   (react-component-agent §9b).** On the TV, a mouse pointer left anywhere on screen previously sat
   there permanently. `ScheduleBoard.tsx` gained a self-contained sibling effect (own timer, own

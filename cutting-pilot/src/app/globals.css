@@ -144,3 +144,16 @@
    P304 removed the pixel-shift drift, and Steve reported it as the same "moving left to right"
    motion-discomfort issue. See CHANGELOG.md for the full burn-in-mitigation timeline (P301 add
    → P304 pixel-shift removal → P306 logo-sweep removal). */
+
+/* P415 fix: wall-display idle cursor hide (ScheduleBoard/LoadingBoard). The original P415 cut set
+   `style.cursor = "none"` on the board's own root div and relied on CSS inheritance — but
+   PlatformHeader's `autoHide` nav-reveal hotzone (a permanent, full-width, 44px-tall hit target
+   pinned to the top of the screen) sets its own explicit `cursor-pointer` class, which wins over
+   an inherited value whenever the pointer rests in that strip, so the cursor never actually
+   disappeared there. Toggling this class on <html> instead, with `!important` on every descendant,
+   beats any current or future explicit `cursor-*` utility anywhere in the tree — nothing nested
+   under a hidden-cursor board can force the pointer visible again except real activity. */
+html.wall-cursor-hidden,
+html.wall-cursor-hidden * {
+  cursor: none !important;
+}
