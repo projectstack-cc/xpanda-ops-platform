@@ -2154,6 +2154,28 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P421 correction — trigger button moved from the Kanban card into the job edit modal
+  (job-board-agent).** The initial P421 commit put "🏷️ Print DiversiTech Labels" on
+  `buildCard()`'s Kanban card only. Steve reported it missing on a same-day DiversiTech job
+  (INV#4324) — root-caused live: the Job Board defaults to **List view** (`renderList()`), a
+  separate lightweight `<tr>` renderer with no action buttons at all today, not even View BOL;
+  Kanban (where the button *did* correctly render, confirmed via screenshot) isn't the default
+  view. Per Steve's explicit direction, pulled the button off the card entirely and put it in the
+  job edit modal instead — `openModal()` is the one code path both List row clicks and Kanban card
+  clicks already funnel through, so one placement now covers both views. New
+  `#modal-print-diversitech` button lives in the modal's status-section row next to the existing
+  `#modal-view-bol`/`#modal-split-days` buttons (same `.btn.ghost.small` class, no new CSS needed —
+  dropped the now-unused `.jobs-diversitech-btn` rule added in the first commit), toggled in
+  `openModal()` off the same `curJob` lookup already used for the status-editable check
+  (`curJob.customer.startsWith('DiversiTech')`), wired via `addEventListener` alongside the other
+  modal buttons in `setupModal()`. `printDiversiTechLabels()` in `diversitech-labels.js` updated to
+  look up the fixed `modal-print-diversitech` id (was a per-card `diversitech-btn-{jobId}` id that
+  no longer exists) for its generating-state label swap. Same visibility caveat as View BOL/Assign
+  Ship Days: hidden whenever `status-section` itself is hidden (job status outside
+  not_started/in_production/done) — consistent with existing modal behavior, not a new gap.
+  `node --check` clean on the new file and the extracted inline `<script>` block. No DB/API/
+  permission change.
+
 - **P421 — DiversiTech bag/bundle label printing, client-side PDF (job-board-agent).** New
   `jobs/diversitech-labels.js` (vanilla, global functions, no exports — `<script src>`-loaded,
   following the `packing-slip-parser.js` precedent) generates a multi-page landscape 6"×4"

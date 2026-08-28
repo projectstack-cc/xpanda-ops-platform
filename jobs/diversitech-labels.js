@@ -186,7 +186,7 @@ async function printDiversiTechLabels(jobId) {
     return;
   }
 
-  const btn = document.getElementById('diversitech-btn-' + jobId);
+  const btn = document.getElementById('modal-print-diversitech');
   const originalLabel = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Generating Labels…'; }
 

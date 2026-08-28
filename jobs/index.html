@@ -47,8 +47,6 @@
 .jobs-slip-badge-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; margin-top: 2px; }
 .jobs-card-trailer { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 9999px; background: rgba(99,102,241,.12); color: #4338ca; }
 .jobs-bol-view-btn { display: block; width: 100%; margin-top: 4px; padding: 3px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid #6366f1; background: rgba(99,102,241,.08); color: #4338ca; cursor: pointer; text-align: center; }
-.jobs-diversitech-btn { display: block; width: 100%; margin-top: 4px; padding: 3px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid #16a34a; background: rgba(22,163,74,.08); color: #15803d; cursor: pointer; text-align: center; }
-.jobs-diversitech-btn:disabled { opacity: 0.6; cursor: default; }
 .jobs-slip-remove { font-size: 12px; color: #ef4444; cursor: pointer; background: none; border: none; padding: 0; text-decoration: underline; font-family: inherit; }
 .jobs-slip-view { font-size: 12px; color: #1e40af; cursor: pointer; background: none; border: 1px solid #93c5fd; border-radius: 5px; padding: 3px 8px; font-family: inherit; font-weight: 600; }
 .jobs-card-slip { font-size: 11px; cursor: pointer; opacity: 0.7; margin-left: 3px; vertical-align: middle; }
@@ -284,6 +282,7 @@
         </label>
         <button id="modal-view-bol" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;">View BOL</button>
         <button id="modal-split-days" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;">Assign Ship Days</button>
+        <button id="modal-print-diversitech" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;">🏷️ Print DiversiTech Labels</button>
       </div>
 
       <!-- Assigned to (P334): read-only chips always visible; add/remove is manager-only (jobs.manage) -->
@@ -1186,9 +1185,6 @@ function buildCard(job) {
     ${splitBadge}
     ${shipToVerifiedBadge(job.ship_to_verified) ? `<div style="margin-top:4px;">${shipToVerifiedBadge(job.ship_to_verified)}</div>` : ''}
     <button id="bol-view-btn-${esc(job.id)}" class="jobs-bol-view-btn" hidden onclick="event.stopPropagation();viewBolForJob('${esc(job.id)}')">View BOL</button>
-    ${job.customer && job.customer.startsWith('DiversiTech')
-      ? `<button id="diversitech-btn-${esc(job.id)}" class="jobs-diversitech-btn" onclick="event.stopPropagation();printDiversiTechLabels('${esc(job.id)}')" title="Generate and print DiversiTech bag labels">🏷️ Print DiversiTech Labels</button>`
-      : ''}
     ${(job.status === 'shipped' && !job.archived_at) ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
     ${job.archived_at ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to its real status">Unarchive</button>` : ''}
     <div class="jobs-card-actions">
@@ -1492,6 +1488,7 @@ function setupModal() {
   document.getElementById('modal-delete').addEventListener('click', confirmDelete);
   document.getElementById('modal-view-bol').addEventListener('click', () => viewBolForJob(editingJobId));
   document.getElementById('modal-split-days').addEventListener('click', () => openSplitDaysModal(editingJobId));
+  document.getElementById('modal-print-diversitech').addEventListener('click', () => printDiversiTechLabels(editingJobId));
 
   document.getElementById('f-ship-date').addEventListener('change', (e) => {
     document.getElementById('f-ship-day-display').textContent = getShipDay(e.target.value);
@@ -1629,6 +1626,7 @@ function openModal(jobId) {
   const editableStatus = curJob && ['not_started','in_production','done'].includes(curJob.status);
   document.getElementById('status-section').hidden = !editableStatus;
   document.getElementById('modal-view-bol').hidden = true;
+  document.getElementById('modal-print-diversitech').hidden = !(curJob && curJob.customer && curJob.customer.startsWith('DiversiTech'));
   document.getElementById('cutlist-inline-viewer').hidden = isNew;
   updateHoleyChunkPreview();
   if (!isNew) {
