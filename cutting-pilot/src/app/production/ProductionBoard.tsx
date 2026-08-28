@@ -2,8 +2,16 @@
 // Segmented Molding | Expansion board mirroring the physical XPanda Foam paper log: a session
 // header opened once per sheet, then an inline append-row grid for repeated block/batch entry.
 // Fully decoupled from jobs — no job_id anywhere in this surface.
+//
+// P419: a sheet picker lets the floor browse ANY sheet (open + closed) instead of only ever
+// showing the single open session. Only the selected sheet's OPEN status makes it mutable
+// (append + per-row edit/delete); a closed sheet is read-only until Reopened.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import NewSheetModal, { type SheetVariant } from "./NewSheetModal";
+import EditRowModal from "./EditRowModal";
+import DeleteRowModal from "./DeleteRowModal";
+import { MOLDING_FIELDS, EXPANSION_FIELDS, fieldsFor, emptyRow, rowToValues, type RowFieldDef } from "./fields";
 
 type BoardKind = "molding" | "expansion";
 
@@ -68,22 +76,34 @@ interface TodaySummary {
   expansion: { batch_count: number };
 }
 
-const BLOCK_ROW_DEFAULT = {
-  block_no: "", block_type: "", block_size: "", rc_pct_open: "", rc_speed: "",
-  virgin_pct_open: "", virgin_speed: "", mold_time: "", block_weight_lbs: "", init_oper: "",
-};
-const BATCH_ROW_DEFAULT = { batch_no: "", weight_kg: "", heating_time_s: "", bucket_weight_g: "" };
+interface EditingRow {
+  id: string;
+  label: string;
+  values: Record<string, string>;
+}
+
+interface DeletingRow {
+  id: string;
+  label: string;
+}
 
 const CELL = "px-2 py-1.5 text-sm text-text whitespace-nowrap";
 const HEAD = "px-2 py-1.5 text-xs font-semibold text-muted text-left whitespace-nowrap";
 const INPUT =
   "w-full min-h-[40px] px-2 rounded border border-border bg-bg text-text text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
 
+function errorMessage(err: string | undefined, fallback: string): string {
+  if (err === "sheet_closed") return "This sheet is locked — reopen it to edit.";
+  return err || fallback;
+}
+
 export default function ProductionBoard() {
   const [board, setBoard] = useState<BoardKind>("molding");
   const [today, setToday] = useState<TodaySummary | null>(null);
   const [moldingSessions, setMoldingSessions] = useState<MoldingSession[]>([]);
   const [expansionSessions, setExpansionSessions] = useState<ExpansionSession[]>([]);
+  const [selectedMoldingId, setSelectedMoldingId] = useState<string | null>(null);
+  const [selectedExpansionId, setSelectedExpansionId] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<MoldingBlock[]>([]);
   const [batches, setBatches] = useState<ExpansionBatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,13 +111,18 @@ export default function ProductionBoard() {
   const [acting, setActing] = useState(false);
   const [newSheetOpen, setNewSheetOpen] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
-  const [blockRow, setBlockRow] = useState({ ...BLOCK_ROW_DEFAULT });
-  const [batchRow, setBatchRow] = useState({ ...BATCH_ROW_DEFAULT });
+  const [blockRow, setBlockRow] = useState(emptyRow(MOLDING_FIELDS));
+  const [batchRow, setBatchRow] = useState(emptyRow(EXPANSION_FIELDS));
+  const [editingRow, setEditingRow] = useState<EditingRow | null>(null);
+  const [deletingRow, setDeletingRow] = useState<DeletingRow | null>(null);
   const firstCellRef = useRef<HTMLInputElement>(null);
 
-  const openMolding = moldingSessions.find((s) => s.status === "open") ?? null;
-  const openExpansion = expansionSessions.find((s) => s.status === "open") ?? null;
-  const openSession = board === "molding" ? openMolding : openExpansion;
+  const sessionsForBoard = board === "molding" ? moldingSessions : expansionSessions;
+  const selectedId = board === "molding" ? selectedMoldingId : selectedExpansionId;
+  const selectedSession = sessionsForBoard.find((s) => s.id === selectedId) ?? null;
+  const isEditable = selectedSession?.status === "open";
+  const fields = fieldsFor(board);
+  const rowPath = board === "molding" ? "blocks" : "batches";
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -142,7 +167,7 @@ export default function ProductionBoard() {
       if (kind === "molding") setBlocks(data.blocks ?? []);
       else setBatches(data.batches ?? []);
     } catch {
-      // row-list refetch failure surfaces via the append action's own error path instead
+      // row-list refetch failure surfaces via the append/edit/delete action's own error path instead
     }
   }, []);
 
@@ -151,31 +176,58 @@ export default function ProductionBoard() {
     fetchToday();
   }, [fetchSessions, fetchToday]);
 
+  // Default the selected sheet to the open session (or the newest sheet if none open); keep the
+  // current selection if it's still in the refreshed list.
   useEffect(() => {
-    if (board === "molding" && openMolding) fetchRows("molding", openMolding.id);
-    else if (board === "expansion" && openExpansion) fetchRows("expansion", openExpansion.id);
-    else {
-      setBlocks([]);
-      setBatches([]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board, openMolding?.id, openExpansion?.id, fetchRows]);
+    setSelectedMoldingId((cur) => {
+      if (!moldingSessions.length) return null;
+      if (cur && moldingSessions.some((s) => s.id === cur)) return cur;
+      const open = moldingSessions.find((s) => s.status === "open");
+      return (open ?? moldingSessions[0]).id;
+    });
+  }, [moldingSessions]);
 
-  async function createSheet(fields: Record<string, string>) {
+  useEffect(() => {
+    setSelectedExpansionId((cur) => {
+      if (!expansionSessions.length) return null;
+      if (cur && expansionSessions.some((s) => s.id === cur)) return cur;
+      const open = expansionSessions.find((s) => s.status === "open");
+      return (open ?? expansionSessions[0]).id;
+    });
+  }, [expansionSessions]);
+
+  useEffect(() => {
+    if (board === "molding") {
+      if (selectedMoldingId) fetchRows("molding", selectedMoldingId);
+      else setBlocks([]);
+    } else {
+      if (selectedExpansionId) fetchRows("expansion", selectedExpansionId);
+      else setBatches([]);
+    }
+  }, [board, selectedMoldingId, selectedExpansionId, fetchRows]);
+
+  function selectSheet(id: string) {
+    if (board === "molding") setSelectedMoldingId(id);
+    else setSelectedExpansionId(id);
+  }
+
+  async function createSheet(fieldsBody: Record<string, string>) {
     setActing(true);
     try {
       const res = await fetch(`/v2/api/production/${board}/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fields),
+        body: JSON.stringify(fieldsBody),
       });
       const data = await res.json();
       if (data.ok) {
         showToast("Sheet started.");
         setNewSheetOpen(false);
+        if (board === "molding") setSelectedMoldingId(data.session_id);
+        else setSelectedExpansionId(data.session_id);
         await fetchSessions(true);
       } else {
-        showToast(data.error || "Failed to start sheet.", false);
+        showToast(errorMessage(data.error, "Failed to start sheet."), false);
       }
     } catch {
       showToast("Network error.", false);
@@ -185,10 +237,10 @@ export default function ProductionBoard() {
   }
 
   async function closeSheet() {
-    if (!openSession) return;
+    if (!selectedSession) return;
     setActing(true);
     try {
-      const res = await fetch(`/v2/api/production/${board}/sessions/${openSession.id}`, {
+      const res = await fetch(`/v2/api/production/${board}/sessions/${selectedSession.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "closed" }),
@@ -199,7 +251,30 @@ export default function ProductionBoard() {
         await fetchSessions(true);
         await fetchToday();
       } else {
-        showToast(data.error || "Failed to close sheet.", false);
+        showToast(errorMessage(data.error, "Failed to close sheet."), false);
+      }
+    } catch {
+      showToast("Network error.", false);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function reopenSheet() {
+    if (!selectedSession) return;
+    setActing(true);
+    try {
+      const res = await fetch(`/v2/api/production/${board}/sessions/${selectedSession.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "open" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast("Sheet reopened.");
+        await fetchSessions(true);
+      } else {
+        showToast(errorMessage(data.error, "Failed to reopen sheet."), false);
       }
     } catch {
       showToast("Network error.", false);
@@ -214,21 +289,21 @@ export default function ProductionBoard() {
   }
 
   async function submitBlockRow() {
-    if (!openMolding) return;
+    if (!selectedMoldingId) return;
     setActing(true);
     try {
       const res = await fetch("/v2/api/production/molding/blocks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: openMolding.id, ...blockRow }),
+        body: JSON.stringify({ session_id: selectedMoldingId, ...blockRow }),
       });
       const data = await res.json();
       if (data.ok) {
-        setBlockRow({ ...BLOCK_ROW_DEFAULT, block_no: nextNo(blockRow.block_no) });
-        await Promise.all([fetchRows("molding", openMolding.id), fetchToday()]);
+        setBlockRow({ ...emptyRow(MOLDING_FIELDS), block_no: nextNo(blockRow.block_no) });
+        await Promise.all([fetchRows("molding", selectedMoldingId), fetchToday()]);
         firstCellRef.current?.focus();
       } else {
-        showToast(data.error || "Failed to save block.", false);
+        showToast(errorMessage(data.error, "Failed to save block."), false);
       }
     } catch {
       showToast("Network error.", false);
@@ -238,21 +313,21 @@ export default function ProductionBoard() {
   }
 
   async function submitBatchRow() {
-    if (!openExpansion) return;
+    if (!selectedExpansionId) return;
     setActing(true);
     try {
       const res = await fetch("/v2/api/production/expansion/batches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: openExpansion.id, ...batchRow }),
+        body: JSON.stringify({ session_id: selectedExpansionId, ...batchRow }),
       });
       const data = await res.json();
       if (data.ok) {
-        setBatchRow({ ...BATCH_ROW_DEFAULT, batch_no: nextNo(batchRow.batch_no) });
-        await Promise.all([fetchRows("expansion", openExpansion.id), fetchToday()]);
+        setBatchRow({ ...emptyRow(EXPANSION_FIELDS), batch_no: nextNo(batchRow.batch_no) });
+        await Promise.all([fetchRows("expansion", selectedExpansionId), fetchToday()]);
         firstCellRef.current?.focus();
       } else {
-        showToast(data.error || "Failed to save batch.", false);
+        showToast(errorMessage(data.error, "Failed to save batch."), false);
       }
     } catch {
       showToast("Network error.", false);
@@ -260,6 +335,87 @@ export default function ProductionBoard() {
       setActing(false);
     }
   }
+
+  function openEdit(row: MoldingBlock | ExpansionBatch) {
+    const label =
+      board === "molding"
+        ? `Block #${(row as MoldingBlock).block_no || row.id.slice(0, 8)}`
+        : `Batch #${(row as ExpansionBatch).batch_no || row.id.slice(0, 8)}`;
+    setEditingRow({ id: row.id, label, values: rowToValues(fields, row) });
+  }
+
+  function openDelete(row: MoldingBlock | ExpansionBatch) {
+    const label =
+      board === "molding"
+        ? `Block #${(row as MoldingBlock).block_no || row.id.slice(0, 8)}`
+        : `Batch #${(row as ExpansionBatch).batch_no || row.id.slice(0, 8)}`;
+    setDeletingRow({ id: row.id, label });
+  }
+
+  async function submitEditRow(values: Record<string, string>) {
+    if (!editingRow) return;
+    const changed = Object.fromEntries(
+      Object.entries(values).filter(([k, v]) => v !== (editingRow.values[k] ?? ""))
+    );
+    if (!Object.keys(changed).length) {
+      setEditingRow(null);
+      return;
+    }
+    setActing(true);
+    try {
+      const res = await fetch(`/v2/api/production/${board}/${rowPath}/${editingRow.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(changed),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast("Row updated.");
+        setEditingRow(null);
+        if (selectedId) await Promise.all([fetchRows(board, selectedId), fetchToday()]);
+      } else {
+        showToast(errorMessage(data.error, "Failed to update row."), false);
+      }
+    } catch {
+      showToast("Network error.", false);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function confirmDeleteRow() {
+    if (!deletingRow) return;
+    setActing(true);
+    try {
+      const res = await fetch(`/v2/api/production/${board}/${rowPath}/${deletingRow.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast("Row deleted.");
+        setDeletingRow(null);
+        if (selectedId) await Promise.all([fetchRows(board, selectedId), fetchToday()]);
+      } else {
+        showToast(errorMessage(data.error, "Failed to delete row."), false);
+        setDeletingRow(null);
+      }
+    } catch {
+      showToast("Network error.", false);
+      setDeletingRow(null);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  function displayValue(f: RowFieldDef, row: Record<string, any>): string {
+    const v = row[f.key];
+    return v === null || v === undefined || v === "" ? "—" : String(v);
+  }
+
+  const rows: (MoldingBlock | ExpansionBatch)[] = board === "molding" ? blocks : batches;
+  const appendRow = board === "molding" ? blockRow : batchRow;
+  const setAppendRow = board === "molding" ? setBlockRow : setBatchRow;
+  const submitAppendRow = board === "molding" ? submitBlockRow : submitBatchRow;
 
   return (
     <div className="flex flex-col h-full">
@@ -351,251 +507,180 @@ export default function ProductionBoard() {
             <div className="p-4 space-y-4">
               {/* Session bar */}
               <div className="flex flex-wrap items-center justify-between gap-3 border border-border rounded px-4 py-3">
-                {openSession ? (
+                {selectedSession ? (
                   <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
                     <span className="font-semibold text-text">
-                      {board === "molding" ? "Molding" : "Expansion"} — {openSession.log_date}
+                      {board === "molding" ? "Molding" : "Expansion"} — {selectedSession.log_date}
                     </span>
-                    <span className="text-muted">Silo {openSession.silo ?? "—"}</span>
-                    <span className="text-muted">Control # {openSession.control_no || "—"}</span>
+                    <span className="text-muted">Silo {selectedSession.silo ?? "—"}</span>
+                    <span className="text-muted">Control # {selectedSession.control_no || "—"}</span>
                     <span className="text-muted">
-                      {openSession.operator_1 || "—"}
-                      {openSession.operator_2 ? ` / ${openSession.operator_2}` : ""}
+                      {selectedSession.operator_1 || "—"}
+                      {selectedSession.operator_2 ? ` / ${selectedSession.operator_2}` : ""}
+                    </span>
+                    <span
+                      className={[
+                        "px-2 py-0.5 rounded-full text-xs font-semibold",
+                        isEditable
+                          ? "bg-[var(--success-bg)] text-[var(--success-text)]"
+                          : "bg-[var(--ghost-bg)] text-muted",
+                      ].join(" ")}
+                    >
+                      {isEditable ? "OPEN" : "CLOSED"}
                     </span>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted">No open sheet. Start a sheet to begin logging.</p>
+                  <p className="text-sm text-muted">No sheets yet. Start a sheet to begin logging.</p>
                 )}
-                <div className="flex gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {sessionsForBoard.length > 0 && (
+                    <select
+                      aria-label="Select sheet"
+                      value={selectedId ?? ""}
+                      onChange={(e) => selectSheet(e.target.value)}
+                      className="min-h-[44px] px-3 rounded border border-border bg-bg text-text text-sm cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                    >
+                      {sessionsForBoard.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.log_date} · Silo {s.silo ?? "—"} · #{s.control_no || "—"} ·{" "}
+                          {s.status.toUpperCase()}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <button
                     type="button"
                     onClick={() => setNewSheetOpen(true)}
-                    className="min-h-[40px] px-4 rounded border border-border bg-[var(--ghost-bg)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                    className="min-h-[44px] px-4 rounded border border-border bg-[var(--ghost-bg)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                   >
                     New sheet
                   </button>
-                  {openSession && (
+                  {selectedSession && isEditable && (
                     <button
                       type="button"
                       disabled={acting}
                       onClick={closeSheet}
-                      className="min-h-[40px] px-4 rounded border border-border text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                      className="min-h-[44px] px-4 rounded border border-border text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                     >
                       Close sheet
+                    </button>
+                  )}
+                  {selectedSession && !isEditable && (
+                    <button
+                      type="button"
+                      disabled={acting}
+                      onClick={reopenSheet}
+                      className="min-h-[44px] px-4 rounded border border-border text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                    >
+                      Reopen
                     </button>
                   )}
                 </div>
               </div>
 
               {/* Row grid */}
-              {openSession && board === "molding" && (
+              {selectedSession && (
                 <div className="overflow-x-auto border border-border rounded">
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="border-b border-border bg-[var(--surface-2)]">
-                        <th className={HEAD}># Block</th>
-                        <th className={HEAD}>Block Type</th>
-                        <th className={HEAD}>Block Size</th>
-                        <th className={HEAD}>RC % Open</th>
-                        <th className={HEAD}>RC Speed</th>
-                        <th className={HEAD}>Virgin % Open</th>
-                        <th className={HEAD}>Virgin Speed</th>
-                        <th className={HEAD}>Time</th>
-                        <th className={HEAD}>Block Weight (lbs)</th>
-                        <th className={HEAD}>Init. Oper</th>
+                        {fields.map((f) => (
+                          <th key={f.key} className={HEAD}>
+                            {f.label}
+                          </th>
+                        ))}
+                        {isEditable && <th className={HEAD}>Actions</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {blocks.map((b) => (
-                        <tr key={b.id} className="border-b border-border">
-                          <td className={CELL}>{b.block_no || "—"}</td>
-                          <td className={CELL}>{b.block_type || "—"}</td>
-                          <td className={CELL}>{b.block_size || "—"}</td>
-                          <td className={CELL}>{b.rc_pct_open ?? "—"}</td>
-                          <td className={CELL}>{b.rc_speed ?? "—"}</td>
-                          <td className={CELL}>{b.virgin_pct_open ?? "—"}</td>
-                          <td className={CELL}>{b.virgin_speed ?? "—"}</td>
-                          <td className={CELL}>{b.mold_time || "—"}</td>
-                          <td className={CELL}>{b.block_weight_lbs ?? "—"}</td>
-                          <td className={CELL}>{b.init_oper || "—"}</td>
+                      {rows.map((row) => (
+                        <tr key={row.id} className="border-b border-border">
+                          {fields.map((f) => (
+                            <td key={f.key} className={CELL}>
+                              {displayValue(f, row)}
+                            </td>
+                          ))}
+                          {isEditable && (
+                            <td className={CELL}>
+                              <div className="flex gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => openEdit(row)}
+                                  aria-label="Edit row"
+                                  className="w-11 h-11 flex items-center justify-center rounded text-muted hover:text-text hover:bg-[var(--ghost-bg)] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                                >
+                                  <Pencil size={16} aria-hidden="true" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openDelete(row)}
+                                  aria-label="Delete row"
+                                  className="w-11 h-11 flex items-center justify-center rounded text-muted hover:text-[var(--danger-bg)] hover:bg-[var(--ghost-bg)] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                                >
+                                  <Trash2 size={16} aria-hidden="true" />
+                                </button>
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       ))}
-                      <tr className="sticky bottom-0 bg-surface border-t-2 border-border">
-                        <td className="px-2 py-1.5">
-                          <input
-                            ref={firstCellRef}
-                            type="text"
-                            className={INPUT}
-                            value={blockRow.block_no}
-                            onChange={(e) => setBlockRow((r) => ({ ...r, block_no: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="text"
-                            className={INPUT}
-                            value={blockRow.block_type}
-                            onChange={(e) => setBlockRow((r) => ({ ...r, block_type: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="text"
-                            className={INPUT}
-                            value={blockRow.block_size}
-                            onChange={(e) => setBlockRow((r) => ({ ...r, block_size: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="number"
-                            step="any"
-                            className={INPUT}
-                            value={blockRow.rc_pct_open}
-                            onChange={(e) => setBlockRow((r) => ({ ...r, rc_pct_open: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="number"
-                            step="any"
-                            className={INPUT}
-                            value={blockRow.rc_speed}
-                            onChange={(e) => setBlockRow((r) => ({ ...r, rc_speed: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="number"
-                            step="any"
-                            className={INPUT}
-                            value={blockRow.virgin_pct_open}
-                            onChange={(e) => setBlockRow((r) => ({ ...r, virgin_pct_open: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="number"
-                            step="any"
-                            className={INPUT}
-                            value={blockRow.virgin_speed}
-                            onChange={(e) => setBlockRow((r) => ({ ...r, virgin_speed: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="text"
-                            placeholder="9:30 AM"
-                            className={INPUT}
-                            value={blockRow.mold_time}
-                            onChange={(e) => setBlockRow((r) => ({ ...r, mold_time: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="number"
-                            step="any"
-                            className={INPUT}
-                            value={blockRow.block_weight_lbs}
-                            onChange={(e) => setBlockRow((r) => ({ ...r, block_weight_lbs: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <div className="flex gap-1">
-                            <input
-                              type="text"
-                              className={INPUT}
-                              value={blockRow.init_oper}
-                              onChange={(e) => setBlockRow((r) => ({ ...r, init_oper: e.target.value }))}
-                              onKeyDown={(e) => { if (e.key === "Enter" && !acting) submitBlockRow(); }}
-                            />
-                            <button
-                              type="button"
-                              disabled={acting}
-                              onClick={submitBlockRow}
-                              className="shrink-0 min-h-[40px] px-3 rounded bg-[var(--brand)] text-white text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-                            >
-                              Add
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
 
-              {openSession && board === "expansion" && (
-                <div className="overflow-x-auto border border-border rounded">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="border-b border-border bg-[var(--surface-2)]">
-                        <th className={HEAD}>Batch</th>
-                        <th className={HEAD}>Weight (KG)</th>
-                        <th className={HEAD}>Heating Time (s)</th>
-                        <th className={HEAD}>Bucket Weight (g)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {batches.map((b) => (
-                        <tr key={b.id} className="border-b border-border">
-                          <td className={CELL}>{b.batch_no || "—"}</td>
-                          <td className={CELL}>{b.weight_kg ?? "—"}</td>
-                          <td className={CELL}>{b.heating_time_s ?? "—"}</td>
-                          <td className={CELL}>{b.bucket_weight_g ?? "—"}</td>
+                      {isEditable && (
+                        <tr className="sticky bottom-0 bg-surface border-t-2 border-border">
+                          {fields.map((f, i) => {
+                            const isLast = i === fields.length - 1;
+                            return (
+                              <td key={f.key} className="px-2 py-1.5">
+                                {isLast ? (
+                                  <div className="flex gap-1">
+                                    <input
+                                      type={f.type}
+                                      step={f.type === "number" ? "any" : undefined}
+                                      placeholder={f.placeholder}
+                                      className={INPUT}
+                                      value={appendRow[f.key]}
+                                      onChange={(e) =>
+                                        setAppendRow((r) => ({ ...r, [f.key]: e.target.value }))
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" && !acting) submitAppendRow();
+                                      }}
+                                    />
+                                    <button
+                                      type="button"
+                                      disabled={acting}
+                                      onClick={submitAppendRow}
+                                      className="shrink-0 min-h-[40px] px-3 rounded bg-[var(--brand)] text-white text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                                    >
+                                      Add
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <input
+                                    ref={i === 0 ? firstCellRef : undefined}
+                                    type={f.type}
+                                    step={f.type === "number" ? "any" : undefined}
+                                    placeholder={f.placeholder}
+                                    className={INPUT}
+                                    value={appendRow[f.key]}
+                                    onChange={(e) =>
+                                      setAppendRow((r) => ({ ...r, [f.key]: e.target.value }))
+                                    }
+                                  />
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td />
                         </tr>
-                      ))}
-                      <tr className="sticky bottom-0 bg-surface border-t-2 border-border">
-                        <td className="px-2 py-1.5">
-                          <input
-                            ref={firstCellRef}
-                            type="text"
-                            className={INPUT}
-                            value={batchRow.batch_no}
-                            onChange={(e) => setBatchRow((r) => ({ ...r, batch_no: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="number"
-                            step="any"
-                            className={INPUT}
-                            value={batchRow.weight_kg}
-                            onChange={(e) => setBatchRow((r) => ({ ...r, weight_kg: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="number"
-                            step="any"
-                            className={INPUT}
-                            value={batchRow.heating_time_s}
-                            onChange={(e) => setBatchRow((r) => ({ ...r, heating_time_s: e.target.value }))}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              step="any"
-                              className={INPUT}
-                              value={batchRow.bucket_weight_g}
-                              onChange={(e) => setBatchRow((r) => ({ ...r, bucket_weight_g: e.target.value }))}
-                              onKeyDown={(e) => { if (e.key === "Enter" && !acting) submitBatchRow(); }}
-                            />
-                            <button
-                              type="button"
-                              disabled={acting}
-                              onClick={submitBatchRow}
-                              className="shrink-0 min-h-[40px] px-3 rounded bg-[var(--brand)] text-white text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-                            >
-                              Add
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      )}
                     </tbody>
                   </table>
+                  {!isEditable && (
+                    <p className="px-3 py-2 text-xs text-muted border-t border-border">
+                      Closed — reopen to edit.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -609,6 +694,25 @@ export default function ProductionBoard() {
         variant={board as SheetVariant}
         onSubmit={createSheet}
         acting={acting}
+      />
+
+      <EditRowModal
+        isOpen={editingRow !== null}
+        onClose={() => setEditingRow(null)}
+        title={editingRow?.label ?? "Edit row"}
+        size={board === "molding" ? "lg" : "md"}
+        fields={fields}
+        initialValues={editingRow?.values ?? {}}
+        onSubmit={submitEditRow}
+        acting={acting}
+      />
+
+      <DeleteRowModal
+        isOpen={deletingRow !== null}
+        rowLabel={deletingRow?.label}
+        acting={acting}
+        onConfirm={confirmDeleteRow}
+        onCancel={() => setDeletingRow(null)}
       />
     </div>
   );

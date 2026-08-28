@@ -1365,6 +1365,50 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Production Log (v2)
 
+- **P419 — Sheet picker (history) + row edit/delete UI (react-component-agent §9b).**
+  `ProductionBoard.tsx` no longer pins each board to `moldingSessions.find(s => s.status ===
+  "open")` — a per-board `selectedMoldingId`/`selectedExpansionId` now drives which sheet is shown,
+  defaulting to that board's open session (falling back to the newest sheet if none is open) and
+  refetching rows whenever the selection changes. A new `<select>` sheet picker in the session-bar
+  region lists every sheet from the existing `?days=30` fetch, newest-first, labeled `` `${log_date}
+  · Silo ${silo ?? "—"} · #${control_no || "—"} · ${status.toUpperCase()}` ``; changing it swaps the
+  selected sheet. `isEditable = selectedSession?.status === "open"` gates everything mutating: the
+  append row, the per-row **Actions** column, and the **Close sheet** button only render when the
+  selected sheet is open; a **Reopen** button (PATCH `status:'open'`, reusing the shipped session
+  PATCH) appears only when it's closed, and a "Closed — reopen to edit" hint sits under a read-only
+  grid. Each row now gets **edit** (pencil) and **delete** (trash) icon buttons (lucide-react,
+  44×44px) wired to P418's `PATCH`/`DELETE .../[id]` routes. New `fields.ts` is the single field
+  definition (key/label/input-type, exact paper column order) for both boards — the append row's
+  inline table cells AND the new `EditRowModal.tsx` (composes `@/components/Modal`, one component
+  with a `size`/`fields` prop for both variants, no duplicated shell) map over the same array, so a
+  column never needs updating in two places. Edit submits only the fields that actually changed
+  (diffed against the row's prefilled values) — an unmodified save closes the modal without a
+  network call, and never trips the API's `Nothing to update.` 400 as a spurious toast. Delete goes
+  through a new `DeleteRowModal.tsx` confirm-then-mutate composition (mirrors `cutting/
+  KickModal.tsx`) — no `window.confirm`, no hand-rolled overlay. Every mutation's `{ ok:false, error
+  }` surfaces via the existing toast; `sheet_closed` specifically renders as "This sheet is locked —
+  reopen it to edit." rather than the raw error code. New sheet creation now selects the
+  newly-created sheet (`session_id` from the POST response) instead of relying on the next sessions
+  refetch to land on it. No API/schema change — pure UI on top of P418. Not exercised in a browser
+  this session (the `xpanda_session` cookie is host-pinned to `www.xpandaops.com` per §9a's auth
+  bridge, so a local `wrangler dev`/preview would only show a logged-out shell) — build-verified
+  only (`npx tsc --noEmit` + `npm run cf-build` green); floor verification is Steve's first real
+  pass. Sequential after P418, same commit/CHANGELOG.
+
+- **P418 — Row edit/delete API for the production log (next-platform-agent §9a).** Two new routes:
+  `molding/blocks/[id]` and `expansion/batches/[id]`, each with **PATCH** (dynamic `UPDATE` over only
+  the editable columns present in the body — molding: `block_no, block_type, block_size,
+  rc_pct_open, rc_speed, virgin_pct_open, virgin_speed, block_weight_lbs, mold_time, init_oper`;
+  expansion: `batch_no, weight_kg, heating_time_s, bucket_weight_g`; `id`/`session_id`/`created_at`
+  never editable) and **DELETE**. **Open-sheet lock**: both handlers join the row to its parent
+  session and 409 `{ ok:false, error:"sheet_closed" }` (writing nothing) once that session's
+  `status='closed'`; 404 if the row doesn't exist. Unlike P401's high-frequency row-append POSTs
+  (deliberately unaudited to avoid flooding `activity_log`), edit and delete are each audited — one
+  `activity_log` row per mutation (`action` `update`/`delete`, `entity_type`
+  `production_molding_block` / `production_expansion_batch`), wrapped in try/catch so an audit-log
+  failure never fails the request. No schema change, no `updated_at` column, no migration. UI half
+  is P419 (sequential same-commit follow-on). `npx tsc --noEmit` + `npm run cf-build` green.
+
 - **P403 — `production.log` permission label + nav wiring + v1 archive note (admin-auth-agent
   §8).** `admin/roles.html` gains the `production.log` label (assignable, "Production Log
   (Molding / Expansion)") alongside the existing `production.inventory` row, relabeled "Inventory
