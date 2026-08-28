@@ -190,6 +190,7 @@
 - [x] P268 follow-up — reclaimed row space with badges hidden. No longer applicable — badges are restored (P278), so the "hidden" premise this item was tracking is gone. `density.ts` was untouched by P278 (out of scope); no retune was needed since rows are back to their pre-P268 content.
 - [x] P300 — `source_updated_at` (real sheet-pull time, `max(last_seen_at)`) added to `GET /v2/api/schedule-board`, alongside the unchanged `generated_at`.
 - [x] P301 — Honest freshness clock (relative + absolute, ticks on its own, amber past 20 min, explicit "no data") sourced from `source_updated_at`, replacing the old render-time stamp; plus 24/7-TV burn-in mitigation (continuous pixel-shift + 5-min branded logo sweep).
+- [x] P420 — shift assignment badges on `/v2/schedule` order rows — `job_shifts` data surfaced via a new `fetchShiftsByJob` enrichment query on the schedule-board API, rendered as compact slate badges next to the status pill on each order row's second line.
 
 ## Loading Board (v2)
 

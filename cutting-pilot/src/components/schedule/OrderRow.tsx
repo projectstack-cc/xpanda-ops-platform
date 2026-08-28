@@ -36,6 +36,12 @@ interface OrderRowProps {
 // number since it's numeric data, without touching the shared size/weight/color.
 const PRIMARY_LABEL_CLS = "text-[clamp(0.6875rem,1vh,0.8rem)] font-medium text-text";
 
+const SHIFT_LABELS: Record<string, string> = {
+  "1st": "1st",
+  "2nd": "2nd",
+  "3rd": "3rd",
+};
+
 function isScrapYes(scrapPickup: string | null): boolean {
   return (scrapPickup ?? "").trim().toUpperCase().startsWith("Y");
 }
@@ -96,6 +102,14 @@ export default function OrderRow({ row, density, orphanedGroup, isLastInColumn, 
                 loadsTotal={row.loads_total}
               />
             )}
+            {row.shifts.length > 0 && row.shifts.map((s) => (
+              <span
+                key={s}
+                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-200 text-slate-700 shrink-0"
+              >
+                {SHIFT_LABELS[s] ?? s}
+              </span>
+            ))}
             {scrapYes && (
               <Recycle size={11} className="shrink-0 text-[var(--warn-text)]" aria-label="Scrap pickup" />
             )}

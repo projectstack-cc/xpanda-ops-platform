@@ -32,6 +32,31 @@ async function fetchGroupIds(db: D1Database, jobIds: string[]): Promise<Map<stri
   return out;
 }
 
+// Shift assignments from job_shifts, resolved for the matched job set in one batch (chunked).
+// Returns Map<job_id, string[]> (e.g. { "abc123": ["1st","2nd"] }).
+async function fetchShiftsByJob(
+  db: D1Database,
+  jobIds: string[]
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  for (let i = 0; i < jobIds.length; i += GROUP_CHUNK) {
+    const chunk = jobIds.slice(i, i + GROUP_CHUNK);
+    const placeholders = chunk.map(() => "?").join(",");
+    const { results } = await db
+      .prepare(
+        `SELECT job_id, shift FROM job_shifts WHERE job_id IN (${placeholders})`
+      )
+      .bind(...chunk)
+      .all<{ job_id: string; shift: string }>();
+    for (const row of results ?? []) {
+      const list = out.get(row.job_id) ?? [];
+      if (!list.includes(row.shift)) list.push(row.shift);
+      out.set(row.job_id, list);
+    }
+  }
+  return out;
+}
+
 // P383: effective HB chunks required per matched job = COALESCE(manual guillotine override,
 // geometry). Mirrors fetchGroupIds' chunking; local to this route.
 async function fetchChunksByJob(db: D1Database, jobIds: string[]): Promise<Map<string, number>> {
@@ -99,6 +124,7 @@ interface ScheduleBoardRow {
   job_id: string | null;
   trailer_group_id: string | null;
   chunks_required: number | null;
+  shifts: string[];
 }
 
 interface DayGroup {
@@ -134,10 +160,11 @@ export async function GET() {
     const jobIds = Array.from(
       new Set(rows.map((r) => r.match_job_id).filter((id): id is string => !!id))
     );
-    const [statusByJobId, groupIdByJobId, chunksByJobId] = await Promise.all([
+    const [statusByJobId, groupIdByJobId, chunksByJobId, shiftsByJobId] = await Promise.all([
       deriveStatuses(DB, jobIds),
       fetchGroupIds(DB, jobIds),
       fetchChunksByJob(DB, jobIds),
+      fetchShiftsByJob(DB, jobIds),
     ]);
 
     // One entry per calendar date (ship_date is unique across the two fetched weeks — they
@@ -176,6 +203,7 @@ export async function GET() {
         job_id: row.match_job_id,
         trailer_group_id: unmatched ? null : groupIdByJobId.get(row.match_job_id!) ?? null,
         chunks_required: unmatched ? null : chunksByJobId.get(row.match_job_id!) ?? null,
+        shifts: unmatched ? [] : shiftsByJobId.get(row.match_job_id!) ?? [],
       });
     }
 

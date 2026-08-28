@@ -774,6 +774,21 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P420 — shift assignment badges on `/v2/schedule` order rows
+  (react-component-agent §9b + next-platform-agent §9a).** Each order row's
+  second line (customer name + status pill) now also shows the job's assigned
+  shift(s) as compact slate badges immediately to the right of the status pill.
+  API: `fetchShiftsByJob()` added to `cutting-pilot/src/app/api/schedule-board/route.ts`
+  — a fourth parallel enrichment query (chunked at 90, mirrors `fetchGroupIds`) that
+  reads `job_shifts` and returns `Map<job_id, string[]>`. The `ScheduleBoardRow`
+  type (`cutting-pilot/src/types/schedule.ts`) gained `shifts: string[]`; unmatched
+  rows get `[]`, matched rows get the actual shift strings. UI: `OrderRow.tsx`
+  renders a `bg-slate-200 text-slate-700` badge per shift (via `SHIFT_LABELS`
+  map, values "1st"/"2nd"/"3rd") inside the existing status-line flex container,
+  after `StatusBadge` and before the scrap icon. Rows with no shifts render
+  identically to before. No schema change — `job_shifts` table already existed.
+  `npx tsc --noEmit` + `npm run cf-build` green.
+
 - **P415 follow-up — idle cursor hide fixed; original cut didn't actually work
   (react-component-agent §9b).** Steve reported the pointer still not disappearing (reported at
   screen center, not just near the top). Two independent bugs, both fixed:
