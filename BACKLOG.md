@@ -301,7 +301,10 @@
 - [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy — blocked on Quickbase input formatting improvements)
 - [ ] Create packet feature with Bill of Materials (BOM)
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
-- [ ] Label printing — DiversiTech and UL labels
+- [ ] Label printing — UL labels (DiversiTech labels shipped in P421)
+- [ ] P421 follow-up — real BATCH numbers on DiversiTech labels once production batch tracking exists (currently the constant `42E36164Z` placeholder)
+- [ ] P421 follow-up — licensed CG Triumvirate Condensed Bold TTF + fontkit embed for DiversiTech labels, to exactly match the Labelife source (currently `StandardFonts.HelveticaBold`)
+- [ ] P421 follow-up — wire DiversiTech label generation into job creation (currently print-on-demand from the job card only)
 
 **Holey Board chunk engine follow-ons (P379 shipped the backend foundation; P381 closed the
 order-entry chunk UI; P382–P384 closed v2 chunk consumption — unit flip, manager override,

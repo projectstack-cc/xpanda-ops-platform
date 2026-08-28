@@ -2154,6 +2154,36 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P421 — DiversiTech bag/bundle label printing, client-side PDF (job-board-agent).** New
+  `jobs/diversitech-labels.js` (vanilla, global functions, no exports — `<script src>`-loaded,
+  following the `packing-slip-parser.js` precedent) generates a multi-page landscape 6"×4"
+  (432×288pt) PDF via `pdf-lib` — one page per **bundle** of 5 pcs (`bundles = ceil(qty / 5)` per
+  line item, last bundle carries the remainder, numbering resets per SKU, pages emitted in
+  `sort_order`) — for the Omezizy D520BT direct-thermal printer, replacing the manual Labelife
+  process. Each page: header (`DiversiTech Corporation`, constant), a bordered product box
+  (`FOAM - {part_number}`, shrink-to-fit, falls back to `description` when `part_number` is empty),
+  a SIZE/DATE/DENSITY/BATCH spec table (SIZE printed exactly as stored, DATE reformatted
+  `YYYY-MM-DD` → `MM/DD/YYYY` string-parsed to dodge timezone drift, DENSITY falls back to `1.0 RC`,
+  BATCH is the constant `42E36164Z` placeholder), and a bottom row (`QTYpcs` zero-padded | large
+  bundle-number box | panda logo). **Logo is `logo/xpanda-panda-600.png` per Steve's explicit
+  direction** (the same real committed panda mark P417 already put in place for the v2 bag-label
+  PDF), not the prompt's own "prefer black/red, fall back to B&W" fallback logic — that logic was
+  moot since Steve named the file directly. Font is `StandardFonts.HelveticaBold` (pdf-lib), a
+  deliberate deviation from the Labelife source's proprietary CG Triumvirate Condensed Bold — no
+  licensed TTF is in the repo, and the prompt explicitly forbade pulling one from a CDN; a fontkit
+  embed can follow later if exact typeface match is wanted. Trigger: a "🏷️ Print DiversiTech Labels"
+  button renders on a job card only when `job.customer` starts with `DiversiTech` (covers the
+  `DiversiTech`, `DiversiTech LEESBURG`, `DiversiTech LEESBURG Branch 11700` variants seen live); on
+  click it reads `job.line_items` off the already-loaded `allJobs` entry (no new fetch, no new
+  endpoint — line items are already client-side on the card, same access path `buildCutListPdf`
+  uses) and opens the generated PDF via `window.open(blobUrl, '_blank')` + delayed
+  `URL.revokeObjectURL`, mirroring `bol-shared.js`'s `openPdf` mechanism. `pdf-lib` was already
+  loaded in `jobs/index.html` (shared with the existing cut-list PDF) — no new script include needed
+  for it. `jobs/index.html` changes are limited to the new script include, two CSS rules, and the
+  conditional button + click hook in `buildCard()`. No D1 migration, no new API route, no new
+  permission key — client-side only. `node --check` clean (via a real temp file per the prompt's own
+  anti-`/dev/stdin` rule).
+
 - **P395 — Cut list PDF: word-wrap long text + measured flowing pagination (job-board-agent +
   react-component-agent, BILATERAL).** `buildCutListPdf` in `jobs/index.html` drew every free-text
   field (`job_line_items.description` — up to 211 chars live — part numbers, `ship_to_company`,
