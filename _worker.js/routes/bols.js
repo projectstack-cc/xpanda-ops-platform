@@ -1,4 +1,4 @@
-import { json, logActivity, generateAccessToken } from '../lib/core.js';
+import { json, logActivity, generateAccessToken, nowSqlite } from '../lib/core.js';
 
 export async function handleApiBolCustomers(request, env) {
   const db = env.DB;
@@ -920,7 +920,7 @@ export async function handleApiLoadBuilderSkus(request, env) {
     if (category !== undefined) { updates.push("category = ?"); binds.push(category || ""); }
     if (parent_group !== undefined) { updates.push("parent_group = ?"); binds.push(parent_group || ""); }
     if (body.bundleQty !== undefined) { updates.push("bundle_qty = ?"); binds.push(parseInt(body.bundleQty, 10) || 0); }
-    updates.push("updated_at = datetime('now')");
+    updates.push("updated_at = ?"); binds.push(nowSqlite());
     if (updates.length === 1) return json({ ok: false, error: "Nothing to update." }, 400);
     await db.prepare(`UPDATE parts SET ${updates.join(", ")} WHERE id = ?`).bind(...binds, skuId).run();
     const updated = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(skuId).first();

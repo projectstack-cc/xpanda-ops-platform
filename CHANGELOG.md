@@ -1507,6 +1507,32 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **QC Cleanup-5 — Standardize legacy `activity_log`/`parts` timestamp writes on SQLite-native
+  space format (db-api-agent).** Closes AUDIT-201, AUDIT-202, REVIEW-1. Wave A (format-only; no
+  control-flow or auth change). The platform was writing two timestamp formats into shared
+  tables: JS `toISOString()` (ISO-Z, `2026-08-25T12:18:00.900Z`) and SQLite-native space format
+  (`2026-08-25 12:18:00`). Confirmed live collision: `activity_log.timestamp` — legacy
+  `logActivity()` wrote ISO-Z while 12+ v2 route files already write space format — and
+  `admin/activity-log.html`'s viewer runs `ORDER BY timestamp DESC` on that mixed column, silently
+  misordering the audit trail (space `0x20` sorts before `T` `0x54`). Also `parts.updated_at`:
+  `production.js` wrote ISO, `bols.js` wrote via `datetime('now')`. New shared helper
+  `nowSqlite()` in `_worker.js/lib/core.js` (`new Date().toISOString().replace("T"," ").slice(0,19)`)
+  is now the single write mechanism for both tables: `logActivity()`'s own `timestamp`/`created_at`
+  write, `production.js`'s `handleApiParts` INSERT/UPDATE `parts.created_at`/`updated_at`, and
+  `bols.js`'s `handleApiLoadBuilderSkus` PUT `parts.updated_at` (previously `datetime('now')` —
+  already the correct *format*, converted anyway so all `parts`/`activity_log` writes route
+  through one mechanism instead of two, per the standardization goal). Scope was grepped and
+  confirmed locked to these two tables — every other `toISOString()` call site in `_worker.js`
+  (bol_customers, bols, saved_loads, saved_combos, bead_stock, block_inventory, molding_log,
+  block_consumption_log, sessions, quickbooks tokens, etc.) is untouched, including
+  `sessions.expires_at`, which stays ISO-Z by design (parsed via `new Date()` in `validateSession`'s
+  30-day math) — explicit hard exclusion, verified untouched. Forward-only: the ~5,835 existing
+  `activity_log` rows and historical `parts` rows are not backfilled (same TEXT column, no
+  schema/migration; backfill noted as an optional future task in BACKLOG). v2's 12+ inline
+  `.replace("T"," ").slice(0,19)` inserts already emit space format and were left as-is (optional
+  per the prompt — would have widened the diff for no correctness gain). `node --check` clean on
+  all three modified files (`_worker.js/lib/core.js`, `_worker.js/routes/production.js`,
+  `_worker.js/routes/bols.js`).
 - **QC Cleanup-1 — Stop leaking stack traces / exception detail to clients on 500s
   (db-api-agent + admin-auth-agent).** Closes AUDIT-101, RT-08. Two info-disclosure sites returned
   internal detail to any requester, including anonymous callers hitting `/api/public/*` or the QB

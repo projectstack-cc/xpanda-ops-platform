@@ -387,6 +387,8 @@ Private single-company use does **not** require App Store publishing/certificati
 - [ ] Scrap batch entry tool *(density calc now centralized in shared-utils.js — safe to add)*
 - [ ] **Dark mode Bucket A — remaining passes** — P184 audit identified Bucket A hits in Safety (0% token adoption — highest priority), `logistics/load-builder.html` (local token system, separate batch), and `track/index.html` (standalone, no tokens.css). P186 covered all other modules. These three remain for dedicated prompts.
 - [ ] Remove dead `_worker.js/routes/quickbooks.js` intake route (QBO abandoned — no domain API access); post-launch backlog cleanup.
+- [ ] Backfill historical `activity_log`/`parts` timestamp rows to SQLite-native space format (QC Cleanup-5 was forward-only — new writes use `nowSqlite()`, but ~5,835 existing `activity_log` rows and historical `parts.created_at`/`updated_at` rows still carry the old ISO-Z format). Same TEXT column, no schema change — a one-off UPDATE/backfill script (`REPLACE(col, 'T', ' ')` truncated to 19 chars, guarded to only touch rows matching the ISO-Z shape) would fully resolve the `admin/activity-log.html` `ORDER BY timestamp DESC` misordering for old rows too, not just new ones.
+- [ ] (Optional, not required for correctness) Refactor the 12+ v2 inline `.replace("T"," ").slice(0,19)` timestamp inserts to a shared `nowSqlite()`-equivalent helper in a v2 lib, for mechanism consistency with the legacy side (QC Cleanup-5 left these as-is per the prompt's explicit optionality — they already emit the correct space format, so this is DRY/consistency only, not a bug fix).
 
 ---
 

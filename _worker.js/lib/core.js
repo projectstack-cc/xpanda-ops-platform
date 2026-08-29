@@ -17,10 +17,19 @@ export function generateAccessToken() {
   return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// QC Cleanup-5: shared SQLite-native timestamp ("YYYY-MM-DD HH:MM:SS") for
+// activity_log + parts writes only. Sorts correctly with SQLite datetime()
+// (unlike ISO-Z, whose "T" sorts after the space format's " "). Do NOT use
+// for sessions.expires_at — that stays ISO-Z by design (parsed via new
+// Date() in validateSession's 30-day math).
+export function nowSqlite() {
+  return new Date().toISOString().replace("T", " ").slice(0, 19);
+}
+
 export async function logActivity(db, action, entityType, entityId, summary, detail, userId) {
   try {
     const id = crypto.randomUUID();
-    const now = new Date().toISOString();
+    const now = nowSqlite();
     const detailStr = typeof detail === 'string' ? detail : JSON.stringify(detail || {});
     await db.prepare(
       `INSERT INTO activity_log (id, timestamp, action, entity_type, entity_id, summary, detail, user_id, created_at)

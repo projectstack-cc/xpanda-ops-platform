@@ -1,4 +1,4 @@
-import { json, logActivity, safeJsonParse } from '../lib/core.js';
+import { json, logActivity, safeJsonParse, nowSqlite } from '../lib/core.js';
 
 export async function handleApiParts(request, env) {
   const db = env.DB;
@@ -42,7 +42,7 @@ export async function handleApiParts(request, env) {
     if (!Number.isFinite(height_in) || height_in <= 0) return json({ ok: false, error: "Height must be greater than 0." }, 400);
 
     const id  = crypto.randomUUID();
-    const now = new Date().toISOString();
+    const now = nowSqlite();
 
     try {
       await db.prepare(
@@ -88,7 +88,7 @@ export async function handleApiParts(request, env) {
     const existing = await db.prepare("SELECT id FROM parts WHERE id = ?").bind(id).first();
     if (!existing) return json({ ok: false, error: "Part not found." }, 404);
 
-    const now = new Date().toISOString();
+    const now = nowSqlite();
     try {
       const bundle_qty_upd = payload.bundle_qty !== undefined ? (parseInt(payload.bundle_qty, 10) || 0) : undefined;
       const updateSql = bundle_qty_upd !== undefined
