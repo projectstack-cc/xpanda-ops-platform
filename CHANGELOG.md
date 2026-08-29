@@ -1507,6 +1507,21 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **QC Cleanup-1 — Stop leaking stack traces / exception detail to clients on 500s
+  (db-api-agent + admin-auth-agent).** Closes AUDIT-101, RT-08. Two info-disclosure sites returned
+  internal detail to any requester, including anonymous callers hitting `/api/public/*` or the QB
+  webhook pre-gate: (1) the outer catch-all in `_worker.js/index.js` returned
+  `"Worker crashed:\n\n" + err.stack` as a plain-text body — full stack trace (file paths, line
+  numbers, sometimes bound query values) — for any unhandled exception anywhere in the worker; (2)
+  `_worker.js/routes/auth.js`'s pre-auth login (`handleAuthLogin`) and change-password
+  (`handleAuthChangePassword`) catch blocks returned `detail: String(e?.message || e)` in their 500
+  JSON bodies. Both now return a generic body (`json({ ok:false, error:'Server error.' }, 500)` in
+  auth.js; same shape via the outer catch-all's `json` import in index.js — no more raw
+  `text/plain` crash body) and log the real error server-side via `console.error(...)` (tail-log
+  only, never client-visible) so debuggability is unaffected. Error-body wording only — no route,
+  status code, or success-path behavior changed. `node --check` clean on both modified files
+  (`_worker.js/index.js`, `_worker.js/routes/auth.js`). Wave A of the QC cleanup track — safest
+  wave, cannot break a working flow or log anyone out.
 - **P416 — Fix 500 on user delete: clear FK-child rows before deleting the user (db-api-agent).**
   `DELETE /api/users/:id` was throwing `FOREIGN KEY constraint failed` (swallowed into a generic
   500) for any user with a `user_roles` row — i.e. every real user — because D1 enforces FKs and

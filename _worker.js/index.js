@@ -286,15 +286,9 @@ export default {
         return assetResp;
       }
     } catch (err) {
-      const msg =
-        err && (err.stack || err.message)
-          ? err.stack || err.message
-          : String(err);
+      console.error(err.stack || err);
 
-      return new Response("Worker crashed:\n\n" + msg, {
-        status: 500,
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
-      });
+      return json({ ok: false, error: 'Server error.' }, 500);
     }
   },
 };

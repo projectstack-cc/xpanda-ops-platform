@@ -62,7 +62,8 @@ export async function handleAuthLogin(request, env) {
       }
     }, 200, { 'Set-Cookie': sessionCookie(sessionId, expires) });
   } catch (e) {
-    return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    console.error(e && e.stack ? e.stack : e);
+    return json({ ok: false, error: 'Server error.' }, 500);
   }
 }
 
@@ -131,7 +132,8 @@ export async function handleAuthChangePassword(request, env) {
 
     return json({ ok: true });
   } catch (e) {
-    return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+    console.error(e && e.stack ? e.stack : e);
+    return json({ ok: false, error: 'Server error.' }, 500);
   }
 }
 
