@@ -6,8 +6,7 @@ import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers,
          handleApiSavedLoads } from './routes/bols.js';
 import { handleApiJobs, handleApiShipments, handleApiAddressValidate, handleApiAssignableUsers, handleHoleyChunksPreview, handleHoleyChunksBackfill } from './routes/jobs.js';
 import { handleApiCutting } from './routes/cutting.js';
-import { handleApiParts, handleApiCombos, handleApiBeadTypes, handleApiBeadStock,
-         handleApiBlockInventory, handleApiMoldingLog, handleApiBlockConsumption } from './routes/production.js';
+import { handleApiParts, handleApiCombos, handleApiBeadTypes } from './routes/production.js';
 import { handleApiCompletions, handleApiScrapLog } from './routes/qc.js';
 import { handleApiReportsScrapSummary, handleApiReportsScrapTrend, handleApiReportsScrapReasons,
          handleIncidentTrend, handleIncidentSummary, handleIncidentList, handleIncidentDetail,
@@ -62,10 +61,6 @@ const API_ROUTES = [
   { path: '/api/parts',             handler: (req, env) => handleApiParts(req, env) },
   { path: '/api/combos',            handler: (req, env) => handleApiCombos(req, env) },
   { path: '/api/bead-types',        handler: (req, env) => handleApiBeadTypes(req, env) },
-  { path: '/api/bead-stock',        handler: (req, env) => handleApiBeadStock(req, env) },
-  { path: '/api/block-inventory',   handler: (req, env) => handleApiBlockInventory(req, env) },
-  { path: '/api/molding-log',       handler: (req, env) => handleApiMoldingLog(req, env) },
-  { path: '/api/block-consumption', handler: (req, env) => handleApiBlockConsumption(req, env) },
 
   // QuickBooks integration
   { prefix: '/api/qb', handler: (req, env) => handleApiQuickbooks(req, env) },
@@ -306,7 +301,7 @@ export default {
 // TABLE: saved_combos — id, name, parts_json, ...
 // TABLE: jobs — id, customer, status, po_number, invoice_number, line_items (JSON), ship_to_*, ...
 // TABLE: job_line_items — id, job_id, part_number, description, quantity, dimensions, ...
-// TABLE: bead_types, bead_stock, block_inventory, molding_log, block_consumption_log
+// TABLE: bead_types — id, name, grade, color, notes, ...
 // TABLE: shipments — id, direction, customer, origin, destination, status, ...
 // TABLE: bol_customers — id, company, street, city, state, zip, ...
 // TABLE: bol_carriers — id, name, scac, ...

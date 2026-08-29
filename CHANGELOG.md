@@ -2828,6 +2828,38 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Production / Manufacturing
 
+- **QC Cleanup-6 — Retire the dead v1 `production/inventory.html` + its four dead backend
+  handlers (production-agent + db-api-agent).** Closes AUDIT-001 (executes the queued BACKLOG
+  P403 item). Wave B. `production/inventory.html` (the v1 three-tab bead-stock/blocks/molding-log
+  page) was calling `/api/bead-stock`, `/api/block-inventory`, `/api/molding-log`, and
+  `/api/block-consumption` — grep-confirmed the *only* thing calling those four endpoints — all
+  backed by D1 tables (`bead_stock`, `block_inventory`, `molding_log`, `block_consumption_log`)
+  already absent from D1, so the page 500'd on every load. Already superseded by the v2 Production
+  Log (`/v2/production`, P401–P419) per the v2-track P403's own CHANGELOG note calling this "the
+  never-used v1 3-tab inventory page." Archived to `production/_archived/inventory.html` (plain
+  file move, matching the `logistics/_archived/bol-generator.html` / `manufacturing/_archived/
+  cutting-dashboard.html` convention). Its nav tile removed from `production/index.html` (that
+  page now has zero tiles — flagged to BACKLOG). Removed the four dead handlers
+  (`handleApiBeadStock`, `handleApiBlockInventory`, `handleApiMoldingLog`,
+  `handleApiBlockConsumption`) from `_worker.js/routes/production.js` (389 lines), their
+  `API_ROUTES` rows and the now-partial import in `_worker.js/index.js` (trimmed to
+  `handleApiParts, handleApiCombos, handleApiBeadTypes`), and corrected the stale `DATABASE SCHEMA
+  REFERENCE` doc comment that had lumped the four dead tables in with the still-live `bead_types`.
+  **Permission key `production.inventory` KEPT, not removed** — grepped first per the prompt's own
+  instruction: `lib/core.js`'s `PATH_PERMISSION_MAP` `/^\/production\//` pattern is a catch-all
+  gating *every* page under `/production/`, including the live `bead-inventory.html`, and its
+  `API_PERMISSION_MAP` `/^\/api\/bead/` pattern likewise gates the live `/api/bead-types`
+  endpoint — removing the key would have broken access control for a page still in active use.
+  `lib/core.js` and `admin/roles.html`'s `'production.inventory': { ... label: 'Inventory (v1 —
+  legacy)' }` row left untouched, per the prompt's own "only remove the dead page/handlers"
+  instruction for this branch. Confirmed `handleApiBeadTypes` and `handleApiCombos` survive
+  untouched, unblocking QC Cleanup-8's planned `logActivity()` instrumentation of those two
+  handlers. **Flagged, not fixed (pre-existing, out of scope)**: `bead-inventory.html` also calls
+  `/api/silos` and `/api/bead-transactions`, and grep found **no** `API_ROUTES` entry for either
+  anywhere in `_worker.js/`, confirmed absent even before this session's changes (`git show
+  HEAD:_worker.js/index.js` on the pre-QC-6 commit) — a pre-existing gap, not introduced by this
+  cleanup, worth Steve's attention separately. No migration (the four tables were already
+  confirmed absent from D1). `node --check` clean on both modified files.
 - **P390 (see Database / API)** — `manufacturing/holey-board-calculator.html`'s standalone
   `binPack()` had the same block-height/kerf-model bugs as the chunk nester it was ported from;
   fixed in the same commit for parity. Full writeup under the Database / API section.
