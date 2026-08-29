@@ -3148,7 +3148,30 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## QuickBooks Integration
 
-*(Scoped and tabled — no items shipped. Full spec in BACKLOG.md.)*
+- **QC Cleanup-12 — QuickBooks integration fully removed, not iceboxed (db-api-agent).**
+  Closes AUDIT-305, AUDIT-505 (by deletion). Steve's decision: QB is fully axed rather than
+  resumed later. D1 showed `qb_connections` held **1 row with live OAuth tokens** — this was
+  a wired, session-gate-bypassing pipeline (not a dormant stub), so removal was scoped as
+  complete code deletion plus credential revocation, not a code-only cleanup. Deleted
+  `_worker.js/routes/quickbooks.js`, `_worker.js/lib/quickbooks.js`, and
+  `_worker.js/lib/qb-mapper.js` outright. In `_worker.js/index.js`, removed the dead import,
+  the `/api/qb` `API_ROUTES` prefix row, and the two pre-gate bypass entries
+  (`POST /api/qb/webhook`, `GET /api/qb/callback`) that let unauthenticated Intuit callbacks
+  reach the worker (partial RT-03/RT-07 win — one fewer anonymous, gate-bypassing surface).
+  Removed the `/api/qb` entry from `API_PERMISSION_MAP` in `_worker.js/lib/core.js`; no
+  `PATH_PERMISSION_MAP` entry or nav/UI entry existed to remove. Wrote
+  `DB_Migrations/drop-qb-connections.sql` (`DROP TABLE qb_connections;`, gitignored, not run)
+  for Steve to run manually, strictly after two other manual steps: Steve revokes the app
+  authorization on Intuit's side and deletes the `QB_WEBHOOK_VERIFIER` + `QB_CLIENT_SECRET`
+  Worker secrets FIRST (that's what actually invalidates the OAuth grant — the DROP TABLE
+  does not; `QB_CLIENT_ID`/`QB_REALM_ID`/`QB_SANDBOX` are dead but non-secret and can go too),
+  then this code-removal ships, then the DROP runs last. `legal/eula.html` and
+  `legal/privacy.html` (the QBO-integration disclosure pages) and matching
+  QuickBooks-sourced-PDF comments in `jobs/packing-slip-parser.js` and
+  `cutting-pilot/src/lib/packingSlip.ts` were flagged as QB-related but left untouched — out
+  of this prompt's locked `_worker.js`-only scope. `node --check` clean on both modified files
+  (`_worker.js/index.js`, `_worker.js/lib/core.js`). Wave D — destructive, gated on Steve's
+  manual sequence before push.
 
 ---
 

@@ -337,61 +337,6 @@ schedule badge):**
 
 ---
 
-## QuickBooks Integration — Automated Job Intake · **SCOPED · TABLED (not today)**
-
-> **Status:** Fully scoped 2026-06-05, intentionally deferred. The legacy packing-slip parser (`/jobs/packing-slip-parser.js`) **remains the primary, production intake method** and works great — **do not refactor or replace it.** QB becomes intake only once this pipeline is proven; the parser then becomes the fallback path.
-
-**Goal:** QBO invoice created → webhook → fetch invoice → map → xPanda job auto-created → notify ops. No PDF generated, uploaded, or parsed.
-
-### Locked decisions / constraints
-
-- **All QB code is server-side in the worker** — `_worker.js/lib/quickbooks.js` (API client), `_worker.js/lib/qb-mapper.js` (invoice→job, pure fn), `_worker.js/routes/qb.js` (connect/callback/disconnect/webhook). **Not** in `/shared/*` or `/jobs/*` — those are browser-loaded; OAuth, the client secret, token refresh, and the webhook must never touch the client.
-- **Sandbox first, then prod cutover.** Base URL + keys are **env-driven** (`QB_ENV` flips `sandbox-quickbooks.api.intuit.com` ↔ `quickbooks.api.intuit.com`) so cutover is **config-only, never a code change.**
-- **Secrets** (Cloudflare secrets, *not* `wrangler.toml [vars]`): `QB_CLIENT_ID`, `QB_CLIENT_SECRET`, `QB_WEBHOOK_VERIFIER`, `QB_REDIRECT_URI`, `QB_ENV`. Realm ID + tokens live in a new D1 `qb_tokens` table.
-- **OAuth connect is a one-time action by the QBO admin/owner** — not Steve's QBO access level. Sequenced late (QB4) so the whole pipeline is proven before the higher-up is pulled in (their part is a ~2-min click).
-- **Webhook is CloudEvents v1.0** (old format retired May 15 2026). Payload is an **array of events** that can span **multiple companies** → iterate. Verify the `intuit-signature` HMAC against `QB_WEBHOOK_VERIFIER`. Endpoint **bypasses the session gate** like `/api/public/*` (Intuit's servers have no session).
-- **Tokens:** access ~60 min, refresh ~101 days (5-yr max). Refresh token **rotates on every refresh — persist the new one each time.**
-- **API quirks:** `Id` filters only `=`/`IN` and is not sortable (sort by `TxnDate`). Free **Builder tier** = 500k calls/mo, 10 req/s/realm — ample for one company.
-
-### ⚠️ Open risks (the unsolved parts)
-
-1. **Custom-field accessibility — must be probed before anything is built on it.** XPanda's 8 invoice custom fields are the *newer* Custom Fields platform. Standard read path is v3 REST `?minorversion=70&include=enhancedAllCustomFields`; the full Custom Fields **GraphQL** API is a **Gold/Platinum Premium** feature. **Customer-category** fields (Truck Loads, Total Board Foot, etc.) have a long history of returning **empty/unavailable** over the API. Several drive real job data (`load_count`, `total_bdft`) → **QB1 must empirically dump a real invoice and confirm which fields actually return values** before the mapper is designed. Fallbacks: default `load_count = 1`, blank/compute `total_bdft`.
-2. **Parts pull / line-item matching (main worry).** Open question whether QB invoice `Line[]` items reliably resolve into the unified `parts` library the way the parser does at parse time. The mapper must **reuse the parser's part-matching**, with on-the-fly part creation + human review for unmatched lines. Not yet validated — treat as unproven.
-
-### Field map (QBO invoice → xPanda job)
-
-| QBO field | Type | → job field |
-|---|---|---|
-| CustomerRef / BillAddr / ShipAddr | standard | `customer`, `ship_to_*` |
-| DocNumber | standard | `invoice_number` |
-| Line[] | standard | `line_items[]` (+ part match) |
-| TxnDate | standard | order/ship date |
-| PURCHASE ORDER | custom (Transaction) | `po_number` |
-| Truck Loads | custom (Customer ⚠️) | `load_count` |
-| Total Board Foot | custom (Customer ⚠️) | `total_bdft` |
-| PICK UP SCRAPS | custom (Customer ⚠️) | scrap-pickup flag (BOL) |
-| Shipment Contact | custom (Customer ⚠️) | ship-to contact |
-| Order Entry Date | custom (Customer ⚠️) | entry/order date |
-| Entry By | custom (Transaction) | created-by metadata |
-| PAYMENT METHOD | custom (Customer ⚠️) | metadata (likely unused for jobs) |
-
-⚠️ = at-risk via API per risk #1.
-
-### Build order (sequenced; labels are initiative-internal, not platform prompt numbers)
-
-- [ ] **QB1 — Connectivity + custom-field recon (sandbox).** `lib/quickbooks.js` (env-driven base URL + pasted OAuth-Playground token) + throwaway probe route `GET /api/qb/probe?invoiceId=X` that fetches with `include=enhancedAllCustomFields` and dumps raw JSON. **Gate:** produces the field-availability map that decides everything downstream.
-- [ ] **QB2 — Mapper.** `lib/qb-mapper.js`, pure fn built against QB1's real shape, explicit fallbacks for missing custom fields, reuses parser part-matching.
-- [ ] **QB3 — Job creation.** Extract `createJobFromPayload()` out of `handleApiJobs` POST so QB jobs route through the **same** path (shipment + loading-card creation identical). Feed mapper output in.
-- [ ] **QB4 — OAuth connect + token storage.** `qb_tokens` table (**needs migration**), `/api/qb/connect` `/callback` `/disconnect`, refresh-with-rotation. QBO admin does the one-time connect. Replaces the pasted token.
-- [ ] **QB5 — Webhook (CloudEvents).** `/api/qb/webhook` — session-gate bypass, HMAC verify, iterate events (multi-company), filter invoice created/updated, dedupe, fetch → map → create.
-- [ ] **QB6 — Notifications.** Reuse `lib/push.js` + notifications route to alert ops on each auto-created job.
-
-### Production-key gate (parallel, non-blocking)
-
-Private single-company use does **not** require App Store publishing/certification. To unlock production keys: app details + **App Assessment Questionnaire** (security Q&A), a production HTTPS **redirect URI**, **host/launch URL**, **disconnect URL**, and publicly hosted **privacy policy** + **EULA** pages (the one genuinely new deliverable — two static `/legal/*.html` pages). Can run in parallel with sandbox dev; cutover stays config-only.
-
----
-
 ## Admin / Platform
 
 - [ ] Remove temporary `pages.dev` → `xpandaops.com` redirect from `_worker.js/index.js` once all internal links/bookmarks confirmed updated.
@@ -400,7 +345,6 @@ Private single-company use does **not** require App Store publishing/certificati
 - [ ] Port language / i18n features from Safety portal to platform-wide use *(needs F1c shared utils as its home — now done)*
 - [ ] Scrap batch entry tool *(density calc now centralized in shared-utils.js — safe to add)*
 - [ ] **Dark mode Bucket A — remaining passes** — P184 audit identified Bucket A hits in Safety (0% token adoption — highest priority), `logistics/load-builder.html` (local token system, separate batch), and `track/index.html` (standalone, no tokens.css). P186 covered all other modules. These three remain for dedicated prompts.
-- [ ] Remove dead `_worker.js/routes/quickbooks.js` intake route (QBO abandoned — no domain API access); post-launch backlog cleanup.
 - [ ] Backfill historical `activity_log`/`parts` timestamp rows to SQLite-native space format (QC Cleanup-5 was forward-only — new writes use `nowSqlite()`, but ~5,835 existing `activity_log` rows and historical `parts.created_at`/`updated_at` rows still carry the old ISO-Z format). Same TEXT column, no schema change — a one-off UPDATE/backfill script (`REPLACE(col, 'T', ' ')` truncated to 19 chars, guarded to only touch rows matching the ISO-Z shape) would fully resolve the `admin/activity-log.html` `ORDER BY timestamp DESC` misordering for old rows too, not just new ones.
 - [ ] (Optional, not required for correctness) Refactor the 12+ v2 inline `.replace("T"," ").slice(0,19)` timestamp inserts to a shared `nowSqlite()`-equivalent helper in a v2 lib, for mechanism consistency with the legacy side (QC Cleanup-5 left these as-is per the prompt's explicit optionality — they already emit the correct space format, so this is DRY/consistency only, not a bug fix).
 

@@ -16,7 +16,6 @@ import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePasswo
          handleSimulateRoleStart, handleSimulateRoleStop } from './routes/auth.js';
 import { handleApiNotifications, handleApiPushSubscribe, handleApiPushUnsubscribe } from './routes/notifications.js';
 import { handleApiPublicBolLookup, handleApiPublicBolPickup, handleApiPublicBolDelivery, handleApiPublicBolDocument, handleApiPublicBolSigned } from './routes/public.js';
-import { handleApiQuickbooks, handleApiQbWebhook, handleApiQbOAuthCallback } from './routes/quickbooks.js';
 import { handleApiBolEmail } from './routes/bol-email.js';
 
 // _worker.js — Pages Advanced Mode with SAFE error reporting
@@ -60,9 +59,6 @@ const API_ROUTES = [
   { path: '/api/parts',             handler: (req, env) => handleApiParts(req, env) },
   { path: '/api/combos',            handler: (req, env) => handleApiCombos(req, env) },
   { path: '/api/bead-types',        handler: (req, env) => handleApiBeadTypes(req, env) },
-
-  // QuickBooks integration
-  { prefix: '/api/qb', handler: (req, env) => handleApiQuickbooks(req, env) },
 
   // Jobs / shipments / manufacturing
   { path: '/api/address/validate', method: 'POST', handler: (req, env) => handleApiAddressValidate(req, env) },
@@ -185,17 +181,6 @@ export default {
       // Public BOL tracking surface (no auth — drivers aren't platform users).
       if (url.pathname === '/track' || url.pathname === '/track/' || url.pathname.startsWith('/track/')) {
         return env.ASSETS.fetch(new Request(new URL('/track/index.html', url.origin).toString()));
-      }
-
-      // QBO webhook — bypasses session gate; verified by HMAC-SHA256 signature inside handler.
-      if (url.pathname === '/api/qb/webhook' && request.method === 'POST') {
-        return handleApiQbWebhook(request, env, ctx);
-      }
-
-      // QBO OAuth callback — bypasses session gate; Intuit redirects here with auth code.
-      // State cookie set by /api/qb/oauth guards against CSRF.
-      if (url.pathname === '/api/qb/callback' && request.method === 'GET') {
-        return handleApiQbOAuthCallback(request, env);
       }
 
       // /api/public/* bypasses the session gate; the handler enforces its own
