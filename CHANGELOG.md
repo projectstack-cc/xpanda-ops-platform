@@ -2154,6 +2154,43 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P421 rework — DiversiTech label layout replaced with a 1:1 extraction from the Labelife
+  source file (job-board-agent).** Steve provided `H1840.aml` (kept local, gitignored — see
+  `.gitignore`) and asked for exact fidelity instead of the first commit's proportional-guess
+  layout. Parsed the file directly (it's XML — a `Text`/`Table`/`Image` object per element, each
+  with its own `x`/`y`/`width`/`height` in mm plus per-object font metadata) and converted every
+  coordinate and font size to pt at the file's own scale (72/25.4 pt/mm), landing in a new
+  `DIVERSITECH_LAYOUT` constant in `jobs/diversitech-labels.js` — hardcoded per-element boxes
+  instead of the old proportional margin/contentW math. Corrected several real mismatches the
+  extraction surfaced: **page size** is the source's actual 151.892mm×102.108mm
+  (430.56×289.44pt, ~5.98"×4.02"), not a rounded 6"×4" — the source isn't an exact 3:2 ratio, so
+  rounding would have introduced a ~0.85% aspect distortion; **QTY is one row with label and
+  value side by side** (`QTY | 05pcs`), not stacked as first built; **bold weight is used only on
+  the header and the SIZE row's value** — the product box, DATE/DENSITY/BATCH rows, QTY, and the
+  bundle number are all regular weight in the source (added a second embedded `Helvetica`
+  alongside `HelveticaBold` to preserve this instead of bolding everything); the header is
+  **top-aligned**, everything else is vertically centered. The source's BATCH row is actually
+  rendered as two floating `Text` objects overlaid on the spec table's structurally-empty 4th
+  row (implementation detail of the design tool, likely because BATCH's value needed different
+  data-binding than the per-job SIZE/DATE/DENSITY fields) — reproduced as a normal 4th table row
+  since the visual result is identical and it's far simpler. **Discrepancy flagged, not silently
+  fixed**: the source file's own sample BATCH value is `42E36264Z`, one digit off from the
+  constant `42E36164Z` Steve's original P421 prompt explicitly specified — kept the prompt's
+  value since it was Steve's literal instruction, not the design file's incidental sample data;
+  worth Steve confirming which is the real one. **Verified visually before push, not just by
+  eyeballing the numbers**: built a local test harness (pdf-lib + pdf.js, served over a throwaway
+  `python3 -m http.server` so the extension could script it — `file://` pages are blocked from
+  automation) that runs the real `buildDiversiTechLabelsPdf` against sample H1840 data and
+  renders page 1 to a canvas via pdf.js, screenshotted in Chrome. First render caught a real bug
+  before Steve saw it: the header and product box overlapped by ~2.8mm/7.85pt in the source
+  geometry itself (both objects' true positions, not a conversion error), which read as a visible
+  double border line at render scale — kept as extracted since it's genuinely present in the
+  source, until Steve's live follow-up ("no border around DiversiTech Corporation") revealed the
+  header's `borderDisplay=1` XML flag doesn't correspond to an actual visible box on the real
+  printed label; removed the header border entirely, which also incidentally resolved the overlap
+  artifact. `node --check` clean. No DB/API/permission change — same client-side-only PDF
+  generation, only the layout geometry changed.
+
 - **P421 correction — trigger button moved from the Kanban card into the job edit modal
   (job-board-agent).** The initial P421 commit put "🏷️ Print DiversiTech Labels" on
   `buildCard()`'s Kanban card only. Steve reported it missing on a same-day DiversiTech job

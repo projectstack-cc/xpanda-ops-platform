@@ -25,3 +25,8 @@ xPanda_PO1_Nesting_Map.xlsx
 # same policy as above (contains pricing). The parsed data (item codes/dims/qty) is committed in
 # cutting-pilot/src/lib/lockedOrderFixture.ts instead.
 Foam Purchase Orders (2).xlsx
+
+# Labelife source label definition for the P421 DiversiTech label rework — kept local only, same
+# policy as above. The parsed geometry (element x/y/w/h, font sizes, bold weights) is committed in
+# jobs/diversitech-labels.js's DIVERSITECH_LAYOUT constant instead.
+H1840.aml
