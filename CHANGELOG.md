@@ -1553,6 +1553,19 @@ Entries within each module are ordered by prompt # descending (newest first).
   per the prompt — would have widened the diff for no correctness gain). `node --check` clean on
   all three modified files (`_worker.js/lib/core.js`, `_worker.js/routes/production.js`,
   `_worker.js/routes/bols.js`).
+- **QC Cleanup-4 — Drop orphan parts tables: `load_builder_skus` + `parts_library` (db-api-agent).**
+  Closes AUDIT-002/AUDIT-303. Both tables are pre-consolidation corpses (`load_builder_skus`: 125
+  rows, frozen since 2026-05-18; `parts_library`: 50 rows, frozen since 2026-04-27) — the live parts
+  library is `parts` (184 rows, actively written), and `/api/load-builder-skus` reads/writes `parts`
+  exclusively. Re-confirmed zero code references to either table across `_worker.js` and
+  `cutting-pilot/src` before proceeding. No source changes needed. Exported full row backups
+  (`DB_Migrations/backup-load_builder_skus-2026-08-29.json`, 125 rows;
+  `DB_Migrations/backup-parts_library-2026-08-29.json`, 50 rows — both gitignored, local only) via
+  `wrangler d1 execute DB --remote`, confirming both live-D1 row counts exactly match the audit's
+  numbers. Wrote `DB_Migrations/drop-orphan-parts-tables.sql` (gitignored) —
+  `DROP TABLE load_builder_skus; DROP TABLE parts_library;` — held for Steve to run manually in the
+  D1 console after confirming the backups. No migration executed this session, no code/schema
+  change in the pushed commit.
 - **QC Cleanup-1 — Stop leaking stack traces / exception detail to clients on 500s
   (db-api-agent + admin-auth-agent).** Closes AUDIT-101, RT-08. Two info-disclosure sites returned
   internal detail to any requester, including anonymous callers hitting `/api/public/*` or the QB
