@@ -2154,6 +2154,12 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P421 follow-up — removed the logo's border box too, same call as the header.** Steve
+  confirmed the batch number placeholder is fine, then flagged the logo box's border as another
+  spurious one (same root cause as the header: a `borderDisplay`-style source flag that doesn't
+  correspond to a visible box on the real printed label). Dropped `diversiTechDrawBox` for the
+  logo in `diversiTechDrawLabel` — logo now draws borderless, matching the header.
+
 - **P421 rework — DiversiTech label layout replaced with a 1:1 extraction from the Labelife
   source file (job-board-agent).** Steve provided `H1840.aml` (kept local, gitignored — see
   `.gitignore`) and asked for exact fidelity instead of the first commit's proportional-guess

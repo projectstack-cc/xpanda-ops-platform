@@ -145,8 +145,7 @@ function diversiTechDrawLabel(page, fontBold, fontRegular, black, logoImg, data)
   const bundleSize = diversiTechFitSize(fontRegular, bundleText, L.bundle.w - 24, L.bundle.fontSize, 14);
   diversiTechCenteredText(page, bundleText, fontRegular, bundleSize, black, L.bundle.x, L.bundle.y, L.bundle.w, L.bundle.h);
 
-  // Logo box
-  diversiTechDrawBox(page, L.logo.x, L.logo.y, L.logo.w, L.logo.h, black);
+  // Logo — no border (matches the header's real, borderless printed appearance)
   if (logoImg) {
     const pad = 6;
     const maxW = L.logo.w - pad * 2;
