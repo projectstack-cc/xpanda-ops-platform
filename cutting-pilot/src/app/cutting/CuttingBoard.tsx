@@ -199,38 +199,16 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
     }
   }
 
-  async function setTaperYield(yieldPerChunk: number) {
-    if (!selectedJob) return;
-    setChecklistBusy(true);
-    try {
-      const res = await fetch("/v2/api/cutting/taper-yield", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: selectedJob.id, yield: yieldPerChunk }),
-      });
-      const data = await res.json();
-      if (!data.ok) showToast(data.error || "Failed to set yield.", false);
-      await fetchQueue(true);
-    } catch {
-      showToast("Network error.", false);
-    } finally {
-      setChecklistBusy(false);
-    }
-  }
-
   async function setChunkTarget(qtyTarget: number) {
     if (!selectedJob) return;
     setChecklistBusy(true);
     try {
-      // P382/P384: HB guillotine lines (Main/Blue) route to the manager-only override endpoint
-      // instead of the Cross/Hole Cutter chunk-target route.
-      const isHbGuillotine =
-        selectedJob.hb_chunks_required != null &&
-        (dockLine === "Main Line" || dockLine === "Blue Line");
-      const url = isHbGuillotine
-        ? "/v2/api/cutting/manage/hb-chunk-override"
-        : "/v2/api/cutting/chunk-target";
-      const res = await fetch(url, {
+      // P382/P384: HB guillotine lines (Main/Blue) manual chunk override — the manager-only
+      // override endpoint. QC Cleanup-7 (AUDIT-302) removed the dead Cross/Hole Cutter
+      // chunk-target route this used to branch to: dockLine can only be Main Line / Blue Line
+      // on this board (Cross Cutter moved to the standalone /v2/cutting/crosscutter board), so
+      // this was always the only reachable branch.
+      const res = await fetch("/v2/api/cutting/manage/hb-chunk-override", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ job_id: selectedJob.id, qty_target: qtyTarget }),
@@ -632,7 +610,6 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
                         toggleChecklistItem(dockLine, itemId, false);
                       }
                     }}
-                    onSetYield={(y) => setTaperYield(y)}
                     onSetChunkTarget={(q) => setChunkTarget(q)}
                     canManageChunks={canManageChunks}
                     busy={checklistBusy}

@@ -10,7 +10,7 @@ import { handleApiParts, handleApiCombos, handleApiBeadTypes } from './routes/pr
 import { handleApiCompletions, handleApiScrapLog } from './routes/qc.js';
 import { handleApiReportsScrapSummary, handleApiReportsScrapTrend, handleApiReportsScrapReasons,
          handleIncidentTrend, handleIncidentSummary, handleIncidentList, handleIncidentDetail,
-         handleCuttingSessionsReport, handleCuttingActivityReport } from './routes/reports.js';
+         handleCuttingActivityReport } from './routes/reports.js';
 import { handleApiUsers, handleApiRoles, handleApiActivityLog } from './routes/admin.js';
 import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePassword,
          handleSimulateRoleStart, handleSimulateRoleStop } from './routes/auth.js';
@@ -54,7 +54,6 @@ const API_ROUTES = [
   { path: '/api/reports/incidents-summary', handler: (req, env) => handleIncidentSummary(req, env) },
   { path: '/api/reports/incidents-list',    handler: (req, env) => handleIncidentList(req, env) },
   { path: '/api/reports/incidents-detail',  handler: (req, env) => handleIncidentDetail(req, env) },
-  { path: '/api/reports/cutting-sessions',  handler: (req, env) => handleCuttingSessionsReport(req, env) },
   { path: '/api/reports/cutting-activity',  handler: (req, env) => handleCuttingActivityReport(req, env) },
 
   // Parts / production

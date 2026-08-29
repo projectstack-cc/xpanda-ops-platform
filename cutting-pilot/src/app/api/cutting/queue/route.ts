@@ -7,12 +7,13 @@ import { getEnv } from "@/lib/db";
 
 // P295: /v2/cutting is now Main Line / Blue Line only. Cross Cutter + Hole Cutter moved to the
 // standalone /v2/cutting/crosscutter board (P292–P294); Laminate dropped from v2 cutting.
-// Chunk branches below (CHUNK_LINES, taper Cross Cutter derivation) are left dormant on purpose.
+// QC Cleanup-7 (AUDIT-302) removed the CHUNK_LINES-gated branches below: requiredLines can only
+// ever be Main Line / Blue Line now, so CHUNK_LINES.has(line) was always false. Every required
+// line here is a PART line (target = total ordered units) unless the HB-guillotine path below
+// (GUILLOTINE_LINES) converts it to chunk-unit. The taper Cross Cutter derivation section further
+// down is separately dormant (job.requiredLines never includes "Cross Cutter") and is left as-is
+// — out of this cleanup's locked scope.
 const PROCESS_ORDER = ["Main Line", "Blue Line"];
-// Lines whose work unit is a CHUNK (block→chunk). Their target needs the step-2 block-calc
-// engine + a per-job block-dimension source, so P225 leaves their qty_target NULL.
-// Every other required line is a PART line: target = total ordered units (no math needed).
-const CHUNK_LINES = new Set(["Cross Cutter", "Hole Cutter"]);
 // P382: guillotine lines that become chunk-unit for Holey Board jobs (per-job, not global).
 const GUILLOTINE_LINES = new Set(["Main Line", "Blue Line"]);
 
@@ -229,22 +230,12 @@ export async function GET(request: Request) {
       const planId = planIdByJob.get(job.id)!;
       const partUnits = partUnitsByJob.get(job.id) ?? 0;
       for (const line of job.requiredLines) {
-        const isChunk = CHUNK_LINES.has(line);
         planStmts.push(
           DB.prepare(
             `INSERT OR IGNORE INTO cut_plan_lines
                (id, cut_plan_id, job_id, line, unit, qty_target, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-          ).bind(
-            crypto.randomUUID(),
-            planId,
-            job.id,
-            line,
-            isChunk ? "chunk" : "part",
-            isChunk ? null : partUnits,
-            now,
-            now
-          )
+          ).bind(crypto.randomUUID(), planId, job.id, line, "part", partUnits, now, now)
         );
       }
     }
@@ -279,7 +270,6 @@ export async function GET(request: Request) {
     const mirrorStmts: ReturnType<typeof DB.prepare>[] = [];
     for (const job of jobs) {
       for (const line of job.requiredLines) {
-        if (CHUNK_LINES.has(line)) continue;
         const plan = planByKey.get(`${job.id}:${line}`);
         if (!plan || plan.qty_target == null) continue;
         mirrorStmts.push(

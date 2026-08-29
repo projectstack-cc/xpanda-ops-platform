@@ -10,6 +10,26 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **QC Cleanup-7 — removed the dormant AUDIT-302 chunk branches from `/v2/cutting`
+  (react-component-agent §9b + next-platform-agent §9a).** Closes AUDIT-302 (partial — see
+  `BACKLOG.md`; the P227 taper-derivation section and `cut-plan/save`'s Cross Cutter write were
+  intentionally left in place, out of this cleanup's locked scope). Confirmed via whole-tree grep
+  that `chunk-target`/`taper-yield` had zero live callers before removal: both routes were only
+  ever reachable from `CuttingBoard.tsx`'s `setChunkTarget`/`setTaperYield`, and those handlers
+  were themselves unreachable — `dockLine` can only be `"Main Line"`/`"Blue Line"` on this board
+  (P295 moved Cross Cutter/Hole Cutter to the standalone `/v2/cutting/crosscutter` board), so
+  every `line === "Cross Cutter"` guard downstream was provably dead. Deleted
+  `src/app/api/cutting/chunk-target/route.ts` and `taper-yield/route.ts` outright. Collapsed
+  `CuttingBoard.tsx`'s `setChunkTarget` to call only `/v2/api/cutting/manage/hb-chunk-override`
+  (its one reachable branch) and deleted `setTaperYield` + the `onSetYield` prop entirely. In
+  `PartsPanel.tsx`, removed the dead taper-yield input block and collapsed
+  `line === "Cross Cutter" || isHbGuillotine` down to `isHbGuillotine` alone — **left the Hole
+  Cutter read-only fallback branch in place** (still reachable: a job whose `hb_chunks_required`
+  is later cleared leaves a stale `unit='chunk'` row with `isHbGuillotine` false). In
+  `queue/route.ts`, removed the `CHUNK_LINES`-gated branches (always false — `requiredLines` can
+  only be Main/Blue Line) and the now-unused constant; `cut_plan_lines` inserts now always write
+  `unit: "part"` directly. `npx tsc --noEmit` and `npm run cf-build` both green (required one
+  `.next` cache clear — stale generated route types referenced the just-deleted files).
 - **P417 — Bag label printing reworked to portrait, real committed panda logo (react-component-agent
   §9b + next-platform-agent §9a). Supersedes P413's landscape layout.** `src/lib/bagLabels.ts`'s
   `buildBagLabelsPdf` now renders **4×6" PORTRAIT** pages (288×432pt, was 432×288 landscape) with a
@@ -1687,6 +1707,19 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **QC Cleanup-7 — removed the dead BOL-generator `PATH_PERMISSION_MAP` entry and the leftover
+  "BOL Generator" toolbar wiring (logistics-agent).** Closes AUDIT-602 (code half) + REVIEW-2.
+  Removed the dormant `{ pattern: /^\/logistics\/bol-generator/, key: 'logistics.bol' }` row from
+  `PATH_PERMISSION_MAP` in `_worker.js/lib/core.js` — no page has lived at that path since
+  `bol-generator.html` was archived to `logistics/_archived/` at P176; the `logistics.bol`
+  permission key remains live via the `/logistics/bol-email` path row and the `/api/bols` etc.
+  API rows. In `logistics/index.html`, removed the "BOL Generator" toolbar link and its now-
+  zero-caller `openBlankBolModal()` function definition — grepped the whole tree first and
+  confirmed the toolbar link was its only call site. Also removed the now-pointless
+  `!perms['logistics.bol']?.view` hide-rule block; its selectors no longer match anything.
+  **BOL generation is unaffected and continues to run through `bol-compose.js`** (untouched) via
+  its two remaining live entry points: `openBolModalForJob(jobId)` (per-shipment "Generate BOL")
+  and `logistics/load-builder.html`. `node --check` clean on the touched `_worker.js` file.
 - **P397 — `/track` QR sign page: optional Additional Info field on the signed-copy flow (logistics-agent §3).**
   Adds a free-text "Additional info (optional)" textarea to `track/index.html`'s delivery form
   (rendered immediately above the existing "Photo of signed BOL" field, reusing the page's existing
@@ -2888,6 +2921,14 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Reports
 
+- **QC Cleanup-7 — removed the orphaned `GET /api/reports/cutting-sessions` endpoint
+  (reports-agent + db-api-agent).** Closes AUDIT-304. Confirmed via whole-tree grep zero
+  remaining callers: `reports/cutting/index.html` was rewritten in P391 to use
+  `/api/reports/cutting-activity` instead, leaving this P380 endpoint orphaned exactly as P391's
+  own changelog entry and the matching `BACKLOG.md` follow-up item both already flagged. Removed
+  `handleCuttingSessionsReport` from `_worker.js/routes/reports.js` and its `API_ROUTES` row +
+  import in `_worker.js/index.js` (`handleCuttingActivityReport`, the P391 replacement, is
+  untouched). `node --check` clean on both touched files.
 - **P391 — Reports: Cutting Line Activity — invoice-grouped log with per-invoice drill-down (sessions + exactly what was cut, by whom/when via cutting_line_progress→users), per-operator shift accountability summary, Cross/Hole Cutter time-only section; ET-localized, read-only.** New read-only `GET /api/reports/cutting-activity` (`handleCuttingActivityReport` in `_worker.js/routes/reports.js`, one `env.DB.batch([...])` round trip for `cutting_sessions`, `cutting_line_progress` (the accountability table — `completed=1` rows, `updated_by` resolved to `users.display_name`/`shift`, never `users.password`), and `chunk_sessions`), UTC window widened ±1 day server-side with precise ET-day trimming client-side (same pattern as P380). Rewrote `reports/cutting/index.html` (superseding P380's day-grouped layout) around invoice grouping: sessions and completed line items are grouped by `job_id`/`invoice_number` (LEFT JOINs throughout so archived jobs still show their invoice label) and rendered as collapsed `<details>` rows — invoice#, customer, operators involved, session count, total time, items cut — that expand into a Sessions table and a "What was cut" table (description, dimensions, line, cut by, cut at ET), plus Expand-all/Collapse-all. A range-wide per-operator accountability summary (shift, sessions, hours, items cut) sits above the invoice list; a separate Cross/Hole Cutter section (no invoice attribution possible) sits below. Operator/board filters match P380's pattern (operator roster accumulates across same-range refetches; board filter is client-side only). `reports/cutting/index.html` was **fully replaced** — P380's day-grouped layout (`renderDayGroups`, per-day headers) is gone, superseded entirely by the invoice-grouped drill-down. Only the backend `handleCuttingSessionsReport` handler and its `/api/reports/cutting-sessions` route (P380) were left in place, since the file list didn't call for their removal — they're now orphaned (no remaining frontend caller); follow-on to remove them added to `BACKLOG.md`. **Deviated from the prompt's literal `?1/?2/?3` numbered SQL params**, same reasoning as P380 — no precedent for numbered placeholders anywhere in `_worker.js`, so rewrote as anonymous `?` with params repeated in bind order. `reports/index.html`'s "Cutting Line Activity" card already pointed at `/reports/cutting/` from P380 — no change needed there. No migration, no permission-map change (`/api/reports` already covered). Follow-on added to `BACKLOG.md` (superseding the P380 item): qty-per-cut throughput once `cutting_line_progress.completed_qty`/`cutting_sessions.qty_done_delta` are populated.
 - **P380 — Reports: Cutting Line Activity log (operator start/stop + order/work item across Main/Blue Line and Cross/Hole Cutter; ET-localized, grouped by day).** New read-only `GET /api/reports/cutting-sessions` (`handleCuttingSessionsReport` in `_worker.js/routes/reports.js`) — one normalized `UNION ALL` over `cutting_sessions` (LEFT JOIN `jobs` for customer/PO, survives archived jobs) and `chunk_sessions` (LEFT JOIN `cc_assignments`/`hc_slots` for the work-item label), bound-param filtered on `from`/`to`/`operator`, UTC window widened ±1 day so no evening-ET/next-day-UTC row is lost. New `reports/cutting/index.html`: date-range filter (defaults to This Week), operator dropdown (accumulated from returned rows across refetches so it doesn't collapse to one name once an operator is selected), board dropdown (client-side only, no refetch). Every timestamp is converted UTC→America/New_York client-side for both day-bucketing and the precise range trim (the server's ±1-day widening is intentionally imprecise — the client drops anything outside the real ET `[from,to]`). Grouped by ET day (newest first) with day totals, plus a per-operator hours summary strip for the filtered range. Open sessions (`status='open'`/no `ended_at`) render an "In progress" pill with duration computed to now. Reused the existing `reports` permission key (`/api/reports` already covered in `API_PERMISSION_MAP`) — no new permission, no migration (all three tables already exist). **Deviated from the prompt's literal `?1/?2/?3` numbered SQL params** — no precedent for numbered placeholders anywhere else in `_worker.js`, so rewrote as eight anonymous `?` with the params repeated in bind order (`from, to, operator, operator` per UNION arm) rather than push a novel D1 binding form on faith. **Verified live against remote D1 before push** (read-only queries): the prompt's data-model claim `cutting_sessions.line ∈ {Main Line, Blue Line}` is stale — 2 historical rows carry `Laminate` and some carry `Cross Cutter` (pre-dating the v2 cutting-board split), still visible under the report's default "All" board filter, just not selectable via the prompt's own static Main/Blue/Cross/Hole dropdown list (kept as specified, not expanded, per the no-speculative-features rule); confirmed the `chunk_sessions`→`cc_assignments`/`hc_slots` label join resolves correctly (`8-hole` came back for a live `hc` session); confirmed both tables store timestamps as bare `YYYY-MM-DD HH:MM:SS` UTC exactly as claimed, so the client's UTC→ET parser is safe. Follow-on added to `BACKLOG.md`: surface `cutting_sessions.qty_done_delta` once it's actually populated.
 - **P285** — Orders Report now treats `archived_at` as the archive signal (P271/P272) instead of `status === 'archived'`, via a shared `isArchived()` predicate used by the Status filter, both stat tiles, and the status badge. The literal-status term is retained inside `isArchived()` as a fallback for the legacy backfilled population; non-archived filter selections now exclude archived jobs, since a job's real status survives archiving post-P272 and would otherwise bleed into e.g. a "Done" filter. Also dropped a stale `BACKLOG.md` item to hide `packing-slip-test.html` from navigation (not implemented — the page isn't linked from anywhere, so nobody stumbles onto it). Read-only filter/label logic only, no API/schema change.

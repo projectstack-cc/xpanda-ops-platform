@@ -186,7 +186,6 @@ export async function validateSession(db, request) {
 export const PATH_PERMISSION_MAP = [
   { pattern: /^\/admin\//,                                                    key: 'admin' },
   { pattern: /^\/jobs\//,                                                     key: 'jobs' },
-  { pattern: /^\/logistics\/bol-generator/,                                   key: 'logistics.bol' },
   { pattern: /^\/logistics\/bol-email/,                                       key: 'logistics.bol' },
   { pattern: /^\/logistics\/load-builder/,                                    key: 'logistics.load-builder' },
   { pattern: /^\/logistics\/loading/,                                         key: 'logistics.loading' },

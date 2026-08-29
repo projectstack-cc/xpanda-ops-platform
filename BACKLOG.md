@@ -134,9 +134,11 @@
 - [ ] Enable OpenNext skew protection on the v2 Worker (durable fix for hashed-asset 404s across deploys) — see https://opennext.js.org/cloudflare/howtos/skew
 - [ ] Surface completed_qty in the checklist/reports (progress bars per part, first-pass yield) once qty data accrues
 - [ ] Cross Cutter / Hole Cutter chunk checklists (replace the shared parts list) once block-calc BOM feeds chunk counts
-- [ ] **Cleanup: remove dormant chunk branches + dead endpoints** (`chunk-target`, `taper-yield`,
-  `cut-plan`, `CHUNK_LINES`, taper Cross Cutter derivation) from `/v2/cutting` once the standalone
-  board (P292–P294) is proven.
+- [ ] **Cleanup: remove remaining dormant chunk logic** (`cut-plan/save`'s Cross Cutter chunk
+  write, the P227 taper Cross Cutter derivation section in `queue/route.ts`) once the standalone
+  board (P292–P294) is proven. QC Cleanup-7 already removed the `chunk-target`/`taper-yield`
+  routes and the `CHUNK_LINES`-gated branches in `queue/route.ts` + the matching dead UI branches
+  in `PartsPanel.tsx`/`CuttingBoard.tsx` (AUDIT-302).
 - [ ] Taper Cross Cutter chunk auto-derivation (`taper_yield`) no longer feeds any board — Cross
   Cutter tasks are now assigned manually on `/v2/cutting/crosscutter`. Revisit if auto-derivation is
   wanted there.
@@ -501,10 +503,6 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 
 - [ ] **P391 follow-up — Cutting report: qty per cut** (`cutting_line_progress.completed_qty` /
   `cutting_sessions.qty_done_delta` currently unpopulated) for true throughput totals.
-- [ ] **P391 follow-up — orphaned endpoint.** `GET /api/reports/cutting-sessions`
-  (`handleCuttingSessionsReport`) has no remaining frontend consumer now that `reports/cutting/index.html`
-  was rewritten to use `/api/reports/cutting-activity` (P391). Confirm no other caller, then remove the
-  handler and its `API_ROUTES` row.
 - [ ] Reports copy cleanup
 - [ ] Consistent subtitles across report pages
 - [ ] Inspection trends report
