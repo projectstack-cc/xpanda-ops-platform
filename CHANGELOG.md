@@ -3055,6 +3055,34 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Infra / Docs
 
+- **QC Cleanup-2** — Agent doc sync (docs only). Closes AUDIT-601, AUDIT-602, AUDIT-603, AUDIT-004.
+  **(1) `ROADMAP.md` replaced (AUDIT-601)** — it held the verbatim text of an old QC
+  density-calculator task prompt, not a roadmap. Now contains the platform's actual
+  forward-looking remediation roadmap: the `QC Cleanup-*` track (all 15 prompts, grouped by wave —
+  A safest through D destructive, plus the two zero-risk parallel VERIFY tracks) and a themed
+  pointer into `BACKLOG.md`'s open module sections. **(2) Stale `bol-generator.html` live-file
+  references corrected (AUDIT-602)** — the standalone page was archived to
+  `logistics/_archived/` ~P176; the actual current BOL-generation flow is
+  `logistics/bol-compose.js` (the shared BOL engine), consumed by both `logistics/index.html`
+  (BOL modal entry point) and `logistics/load-builder.html`. Fixed in `xpanda-ops-agents.md`
+  (Repository Structure listing, §3 Logistics Domain Knowledge + "Key Files You Own" + "Critical
+  Constraint: bol-shared.js", §10 File Size Budget, and the Agent Interaction Protocol worked
+  example) and in `AGENTS.md` (§4 Module Overview table). **(3) Stale file-size/line-count
+  figures refreshed (AUDIT-603)**, each verified live via `wc -c`/`wc -l` immediately before
+  writing: `jobs/index.html` 78KB→**152KB** (155,725 bytes), `logistics/index.html` 65KB→**91KB**
+  (93,364 bytes), `_worker.js/routes/bols.js` ~840→**961 lines**; added `logistics/bol-compose.js`
+  at **45.8KB** (46,874 bytes) to the same Repository Structure listing and File Size Budget table
+  in place of the removed `bol-generator.html` (59KB) row. **(4) Added the missing
+  `manufacturing.cutting.override` bullet (AUDIT-004)** to `xpanda-ops-agents.md` §8's
+  "Migration-surface permission keys (v2)" list, mirroring the existing `manufacturing.cutting` /
+  `.manage` entries: manager-only "kick operators" — force-closes a stuck-open `cutting_sessions`
+  row on the Main Line/Blue Line board (`/v2/cutting`) so another operator can Start; writes only
+  `status`/`ended_at`, never `cutting_lines`/`jobs.status`; enforced in v2 middleware on the
+  `/v2/api/cutting/kick` prefix (placed above the general `/v2/api/cutting` prefix — first match
+  wins) and surfaced via the `X-User-Can-Override-Cutting` header. Docs only — no
+  code/schema/migration touched. Per the prompt's own note, the dead `PATH_PERMISSION_MAP`
+  `/^\/logistics\/bol-generator/` entry in `_worker.js/lib/core.js` was deliberately left alone
+  (that's a code change, handled in `QC Cleanup-7`).
 - **P302** — Added GitHub Actions CI/CD for the v2 Worker: pushes touching `cutting-pilot/**` auto build + typecheck; deploy gated behind a manual approval (production environment). D1 migrations remain manual. New `.github/workflows/deploy-v2-worker.yml`, path-filtered to `cutting-pilot/**` + the workflow file so legacy-only pushes never trigger it. Two jobs: `build` (`npm ci` → `tsc --noEmit` → `npm run cf-build` → uploads `.open-next` as an artifact, 1-day retention) → `deploy` (`environment: production`, held for a required reviewer; downloads the artifact and runs `wrangler deploy` with `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` from GitHub secrets — no double build). The approval gate is deliberately where Steve confirms any pending D1 migration has been run before the worker that depends on it goes live — the workflow itself never runs migrations. Coexists untouched with the legacy Pages auto-deploy (different route space, different mechanism). CI config only, no app code changed. YAML validated (`yaml-lint`).
 - **P302 hotfix** — Fixed the CI build job failing on its very first real run (`Cannot find module './.open-next/worker.js'`, exit code 2). Root cause: `custom-worker.ts` imports `./.open-next/worker.js`, which `opennextjs-cloudflare build` generates and which is gitignored — it doesn't exist on a truly clean checkout until AFTER that build step runs, but both the workflow's standalone `Typecheck` step (`npx tsc --noEmit`) and `next build`'s own internal type check (inside `npm run cf-build`) run *before* that point. Never surfaced locally because every dev/agent session in this repo has worked in the same long-lived directory, where a stale `.open-next/worker.js` from an earlier build always happened to be sitting on disk — GitHub Actions' genuinely fresh checkout was the first environment to actually exercise the cold-start path. Reproduced locally by simulating a clean checkout (moving `.open-next` aside, confirming both `npx tsc --noEmit` and `npm run cf-build` fail identically) before fixing. Fix: `custom-worker.ts` added to `tsconfig.json`'s top-level `exclude` (Next's own tsconfig, so this fixes `next build`'s internal check too, not just the standalone command) plus a new `tsconfig.worker.json` (extends the base config, scoped to just that one file) so the workflow can still typecheck it — new `Typecheck custom-worker.ts (post-build)` step added *after* `npm run cf-build`, once `.open-next/worker.js` genuinely exists. No type safety lost, just reordered to when the check can actually succeed. Only `.github/workflows/deploy-v2-worker.yml`, `cutting-pilot/tsconfig.json`, and new `cutting-pilot/tsconfig.worker.json` touched.
 - **P302 follow-up** — Dropped the deploy approval gate: `deploy` no longer references `environment: production`, so every green `build` on `cutting-pilot/**` now deploys immediately with no manual click. Steve's call — migration-before-push discipline ("never push code that depends on a migration before running that migration in the D1 console") moves to a human rule he's encoding in `AGENTS.md`/`xpanda-ops-agents.md` himself, rather than a CI checkpoint. (Separately, the token used for `CLOUDFLARE_API_TOKEN` needs a `Zone → Workers Routes → Edit` scope on `xpandaops.com` in addition to the two account-level permissions — `wrangler deploy` also updates the `[[routes]]` binding in `wrangler.toml`, which is a zone-level resource the original account-only token couldn't touch.)

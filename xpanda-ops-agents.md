@@ -54,15 +54,16 @@ _root/
   manifest.json
 
   jobs/
-    index.html            (78KB — Kanban board, packing slip upload, line items)
+    index.html            (152KB — Kanban board, packing slip upload, line items)
     jobs-header.js        (10KB — auth bar, 401 interceptor, user cache)
     jobs-shared.css       (17KB — module styles)
     packing-slip-parser.js (21KB — PDF.js client-side parsing)
     packing-slip-test.html (8.5KB — parser test page)
 
   logistics/
-    index.html            (65KB — shipment tracking dashboard)
-    bol-generator.html    (59KB — BOL PDF generation via pdf-lib)
+    index.html            (91KB — shipment tracking dashboard; hosts the BOL modal entry point)
+    bol-compose.js        (45.8KB — shared BOL engine; consumed by index.html + load-builder.html.
+                           bol-generator.html was archived to logistics/_archived/ ~P176)
     load-builder.html     (159KB — trailer load planning, auto-pack, saved loads)
     loading.html          (45KB — dock loading status, bay assignments)
     bol-shared.js         (11.6KB — single source of truth for BOL coordinates)
@@ -223,7 +224,7 @@ You build and maintain the Job Board module (`/jobs/`). This is the central Kanb
 - **Archive**: Shipped jobs can be archived to reduce clutter
 
 ## Key Files You Own
-- `jobs/index.html` (78KB) — Main Kanban board
+- `jobs/index.html` (152KB) — Main Kanban board
 - `jobs/jobs-header.js` — Auth, user display, 401 interceptor
 - `jobs/jobs-shared.css` — Module styles
 - `jobs/packing-slip-parser.js` — PDF parsing logic
@@ -293,15 +294,19 @@ function initKanban() {
 You build and maintain the Logistics module (`/logistics/`). This covers BOL generation, trailer load planning, shipment tracking, and dock loading management. You understand the critical BOL → Load Builder → Loading → Shipment flow and the shared `bol-shared.js` coordinate system.
 
 ## Domain Knowledge
-- **BOL Generator**: PDF generation via `pdf-lib.js`, pre-filled from job ship-to address
+- **BOL Generator**: PDF generation via `pdf-lib.js`, pre-filled from job ship-to address. The
+  standalone `bol-generator.html` page was archived (~P176, now at `logistics/_archived/`); BOL
+  generation today runs through `bol-compose.js` — the shared BOL engine — invoked from a modal on
+  `logistics/index.html` and from `logistics/load-builder.html`.
 - **Load Builder**: Trailer load planning (53ft standard, 109" height), auto-pack algorithm, drag-and-drop customize mode, saved loads (90-day TTL)
 - **Loading Dashboard**: Dock bay assignments, trailer numbers, loading status, photo capture
 - **Shipment Tracking**: Inbound/outbound, carrier management, BOL numbers, PRO tracking
 - **Customer/Carrier**: Address book and carrier directory for BOLs
 
 ## Key Files You Own
-- `logistics/index.html` (65KB) — Shipment tracking dashboard
-- `logistics/bol-generator.html` (59KB) — BOL PDF generation
+- `logistics/index.html` (91KB) — Shipment tracking dashboard; hosts the BOL modal entry point
+- `logistics/bol-compose.js` (45.8KB) — Shared BOL engine (PDF generation via `pdf-lib.js`);
+  consumed by `index.html` and `load-builder.html`
 - `logistics/load-builder.html` (159KB) — Trailer load planning (largest file in repo)
 - `logistics/loading.html` (45KB) — Dock loading status
 - `logistics/bol-shared.js` (11.6KB) — **CRITICAL**: Single source of truth for BOL coordinates
@@ -326,7 +331,7 @@ You build and maintain the Logistics module (`/logistics/`). This covers BOL gen
 - `bol_carriers` — id, name, account_number, service_types, contacts
 
 ## Critical Constraint: bol-shared.js
-**NEVER duplicate BOL coordinate logic.** Both `bol-generator.html` and `load-builder.html` consume `bol-shared.js` for PDF rendering coordinates. If BOL layout changes, edit ONLY `bol-shared.js`.
+**NEVER duplicate BOL coordinate logic.** `bol-compose.js` (the shared BOL engine, consumed by both `logistics/index.html` and `load-builder.html`) consumes `bol-shared.js` for PDF rendering coordinates. If BOL layout changes, edit ONLY `bol-shared.js`.
 
 ```javascript
 // bol-shared.js pattern — consumed by both BOL generator and load builder
@@ -666,6 +671,7 @@ const PATH_PERMISSION_MAP = [
 **Migration-surface permission keys (v2):**
 - `manufacturing.cutting` — access to the v2 cutting boards (`/v2/cutting`, `/v2/cutting/crosscutter`); GET→view, mutate→edit.
 - `manufacturing.cutting.manage` — **manager-only** actions on the standalone chunk board: create/edit/delete Cross Cutter assignments and reorder the queue. Enforced in the v2 middleware via the `/v2/api/cutting/manage/*` prefix (placed ABOVE the general cutting prefix — first match wins) and surfaced to the UI as the `X-User-Can-Manage-Cutting` header. Admins always pass. Its label lives in `admin/roles.html` `PERMISSION_LABELS` so it's assignable per role.
+- `manufacturing.cutting.override` — **manager-only** "kick operators": force-closes a stuck-open `cutting_sessions` row (someone forgot to Stop) on the Main Line/Blue Line board (`/v2/cutting`) so another operator can Start. Writes only `status`/`ended_at` on `cutting_sessions` — never touches `cutting_lines.line_status` or `jobs.status` (can't attest to what the kicked operator actually cut); logged via `activity_log` only, no schema change. Enforced in the v2 middleware via the `/v2/api/cutting/kick` prefix (placed ABOVE the general `/v2/api/cutting` prefix — first match wins) and surfaced to the UI as the `X-User-Can-Override-Cutting` header (`route.ts` also checks it directly as defense-in-depth). Admins always pass. Its label lives in `admin/roles.html` `PERMISSION_LABELS` so it's assignable per role.
 
 ## Implementation Rules
 - Passwords are plaintext in D1 (intentional design for admin recovery)
@@ -939,12 +945,12 @@ Every module has `*-shared.css` scoped to that module. Page-specific styles use 
 ## File Size Budget (Current)
 | File | Size | Notes |
 |------|------|-------|
-| `_worker.js/` (split) | ~5,500 lines | Already file-split (index.js + lib/ + routes/) under F2/F5; largest is `routes/bols.js` (~840 lines). Add to the right module, never back into one file. |
+| `_worker.js/` (split) | ~5,500 lines | Already file-split (index.js + lib/ + routes/) under F2/F5; largest is `routes/bols.js` (~961 lines). Add to the right module, never back into one file. |
 | `load-builder.html` | 159KB | Largest frontend file |
+| `jobs/index.html` | 152KB | Kanban + packing slip + parser |
 | `manufacturing/block-calculator.html` | 108KB | Complex canvas + XLSX logic |
-| `jobs/index.html` | 78KB | Kanban + packing slip + parser |
-| `logistics/index.html` | 65KB | Shipment dashboard |
-| `bol-generator.html` | 59KB | PDF generation |
+| `logistics/index.html` | 91KB | Shipment dashboard; hosts the BOL modal entry point |
+| `logistics/bol-compose.js` | 45.8KB | Shared BOL engine (PDF generation); consumed by `index.html` + `load-builder.html`. `bol-generator.html` archived ~P176. |
 
 ## End-to-End Workflow (The Platform's Core Value)
 ```
@@ -978,7 +984,7 @@ All backed by one unified `parts` table. Parts created in any context are availa
 
 **Orchestrator** → Routes to **logistics-agent** (primary) + **db-api-agent** (migration + API)
 
-**Logistics Agent**: "I will modify `logistics/bol-generator.html` to add the customer_po input field and update the BOL PDF rendering in `logistics/bol-shared.js` to include this field at the appropriate coordinates."
+**Logistics Agent**: "I will modify `logistics/bol-compose.js` to add the customer_po input field and update the BOL PDF rendering in `logistics/bol-shared.js` to include this field at the appropriate coordinates."
 
 **DB/API Agent**: "I will create `DB_Migrations/add-customer-po-to-bols.sql` to add the column, and update `_worker.js` to handle the new field in `/api/bols` POST and PUT handlers."
 

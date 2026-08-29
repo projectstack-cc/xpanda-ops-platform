@@ -105,7 +105,7 @@ All APIs live inside `_worker.js`. No exceptions.
 | Module | Path | Purpose | Key Files |
 |---|---|---|---|
 | **Jobs** | `/jobs/` | Kanban workflow — packing slip upload, job lifecycle, line items | `jobs/index.html`, `jobs/packing-slip-parser.js` |
-| **Logistics** | `/logistics/` | BOL generation, load building, shipment tracking | `logistics/bol-generator.html`, `logistics/load-builder.html`, `logistics/bol-shared.js`, `logistics/index.html` |
+| **Logistics** | `/logistics/` | BOL generation, load building, shipment tracking | `logistics/bol-compose.js` (shared BOL engine, consumed by `index.html` + `load-builder.html`), `logistics/load-builder.html`, `logistics/bol-shared.js`, `logistics/index.html` |
 | **Manufacturing** | `/manufacturing/` | Block calculator, holey board calculator, Cutting Dashboard | `manufacturing/block-calculator.html`, `manufacturing/holey-board-calculator.html`, `manufacturing/cutting-dashboard.html` |
 | **Production** | `/production/` | Bead/block inventory, molding log (inventory-only) | `production/inventory.html`, `production/bead-inventory.html` |
 | **QC** | `/qc/` | Scrap log, final inspection, density calculator | `qc/` |

@@ -1,196 +1,94 @@
-You are working inside the xPanda Operations Platform repository.
+# xPanda Ops Platform — Roadmap
 
-Follow all rules defined in AGENTS.md.
+> This file previously contained the verbatim text of an old QC density-calculator task prompt
+> (not a roadmap). Replaced under `QC Cleanup-2` (AUDIT-601) with the platform's actual
+> forward-looking remediation roadmap. Living doc — cross-reference `Prompts/`, `BACKLOG.md`, and
+> `CHANGELOG.md` for current status; this file summarizes, it doesn't duplicate their detail.
 
-Objective:
-Create a new QC utility tool for day-to-day floor use:
+---
 
-/qc/density-calculator.html
+## 1. QC Cleanup Track (active remediation sprint)
 
-This is a standalone mobile-friendly calculator for foam density.
+A sequence of numbered prompts (`Prompts/prompt-QC-Cleanup-*.md`) closing findings from the
+platform QC/red-team audit (`PLATFORM-QC-AUDIT-P409.md`, `PLATFORM-REDTEAM-AUDIT-P409.md`),
+tracked as `AUDIT-###` / `RT-##` / `REVIEW-#` IDs. Ordered in waves by production risk — safest
+(docs/error-bodies) first, destructive (DROP/removal) and auth-path changes last, with two
+parallel zero-risk verification/audit tracks that can run anytime.
 
---------------------------------------------------
-SCOPE
---------------------------------------------------
+**Wave A — safest (error bodies, docs, hygiene, format-only, one destructive DROP):**
+- `QC Cleanup-1` — Info-leak hardening (error-response bodies). Closes AUDIT-101, RT-08.
+- `QC Cleanup-2` — Docs cleanup: this file, stale BOL-file references, stale file-size figures,
+  the missing `manufacturing.cutting.override` permission doc. Closes AUDIT-601, AUDIT-602,
+  AUDIT-603, AUDIT-004.
+- `QC Cleanup-3` — `.wrangler/`/`.gitignore` repo hygiene. Closes AUDIT-702.
+- `QC Cleanup-4` — Drop orphan parts tables (destructive — DROP). Closes AUDIT-002 / AUDIT-303.
+- `QC Cleanup-5` — Timestamp standardization (legacy + v2 inline inserts). Closes AUDIT-201,
+  AUDIT-202, REVIEW-1.
 
-Allowed edits:
+**Wave B — behavioral, additive, or verification-only:**
+- `QC Cleanup-6` — Retire v1 Production inventory pages (executes queued BACKLOG P403 item).
+  Closes AUDIT-001.
+- `QC Cleanup-7` — Dead-code sweep (v2 + reports endpoint + BOL remnants, removal-only). Closes
+  AUDIT-302, AUDIT-304, AUDIT-602 (code half), REVIEW-2.
+- `QC Cleanup-8` — `logActivity()` coverage gaps (qc.js, production.js, bol-email.js). Closes
+  AUDIT-501, AUDIT-502, AUDIT-503, RT-07.
+- `QC Cleanup-9` — VERIFY (read-only): v2 activity-log enumeration. Closes the open question behind
+  AUDIT-504 (corrected) / AUDIT-203.
 
-1. create /qc/density-calculator.html
+**Wave C — auth path (higher blast radius):**
+- `QC Cleanup-10` — Auth lifecycle hardening (has a KV binding prerequisite). Closes RT-01, RT-02,
+  RT-09.
+- `QC Cleanup-11` — Session-gate hardening. Closes RT-03, RT-05.
 
-Optional only if needed to make the tool reachable:
-2. update the QC dashboard page to add a new tile linking to /qc/density-calculator.html
+**Wave D — destructive / high-blast-radius:**
+- `QC Cleanup-12` — QuickBooks integration full removal (destructive — drop-ordering + credential
+  revocation). Closes AUDIT-305, AUDIT-505, partial RT-03/RT-07.
+- `QC Cleanup-13` — Legacy Cutting Dashboard retirement (destructive — touches `jobs.js`). Closes
+  AUDIT-301.
 
-Do NOT modify:
-- Apps Script
-- backend routes
-- shared CSS files
-- shared header files
-- other QC tools unless adding the dashboard link is necessary
+**Parallel — zero production risk, no ordering dependency:**
+- `QC Cleanup-14` — VERIFY: scaffolding-retirement audit (read-only, all agents).
+- `QC Cleanup-15` — VERIFY: XSS-sink audit (read-only). Closes RT-04.
 
-Do NOT introduce frameworks.
-Do NOT redesign the QC system.
+---
 
-All changes must be surgical and aligned with existing QC page patterns.
+## 2. Open BACKLOG.md Themes (forward-looking)
 
---------------------------------------------------
-TOOL PURPOSE
---------------------------------------------------
+Beyond the QC Cleanup track, `BACKLOG.md` carries the platform's standing feature/debt backlog by
+module. Full item-level detail lives there — this is a pointer, not a duplicate:
 
-This page calculates foam density in lb/ft³ using dimensions and weight.
+- **Auth / Session** — hardening follow-ups feeding into `QC Cleanup-10`/`11`.
+- **Production Log (v2)** — density-readout expansion; v1 module archival (`QC Cleanup-6`).
+- **Carrier View (v2)** — appointment/ETA time column, dock instructions; upload-image downscale.
+- **Shift Notes (v2)** — v2 activity-log parity.
+- **Manufacturing / Cutting (React pilot)** — ongoing block-nester and bag-label work on `/v2/blocks`.
+- **Orders (v2)** — order-board follow-ons.
+- **Schedule Board (v2)** — scheduling follow-ons.
+- **Loading Board (v2)** — loading-board follow-ons.
+- **Logistics** — BOL / load-builder / loading-dashboard follow-ons.
+- **Job Board** — Kanban / packing-slip follow-ons.
+- **QuickBooks Integration** — scoped and tabled (not active); full removal path is
+  `QC Cleanup-12` if the decision is made to drop it rather than resume it.
+- **Admin / Platform** — role/permission and activity-log follow-ons.
+- **Infra / CI-CD** — pipeline follow-ons.
+- **Foundation Roadmap** — ✅ all phases complete (historical; see `CHANGELOG.md`).
+- **Production / Manufacturing** — non-v2 module follow-ons.
+- **Scrap Database (native — replaces Google Sheets)** — scoped, separate project (not started).
+- **Manufacturing ERP add-ons** — icebox; fold in opportunistically.
+- **QC** — QC module follow-ons.
+- **Safety** — safety module follow-ons.
+- **Reports** — reporting follow-ons.
 
-Primary use case:
-A user on the floor enters a part/block size and weight, and the page immediately calculates density.
+See `BACKLOG.md` for the authoritative, itemized version of each of the above; see `CHANGELOG.md`
+for everything already shipped.
 
---------------------------------------------------
-UI REQUIREMENTS
---------------------------------------------------
+---
 
-Use the existing QC page pattern:
-- inject shared header via /qc/qc-header.js
-- use /qc/qc-shared.css
-- mobile-friendly layout
-- same card/button visual language as existing QC tools
+## Process
 
-Page title:
-Density Calculator
-
-Page subtitle:
-Calculate foam density from dimensions and weight.
-
-Create a simple calculator layout with one main card.
-
---------------------------------------------------
-INPUTS
---------------------------------------------------
-
-Required inputs:
-
-- Length
-- Width
-- Height
-- Weight (lbs)
-
-Assume dimensions are entered in inches.
-
-Input behavior:
-- numeric-friendly mobile input modes
-- clear labels
-- lightweight help text indicating dimensions are in inches and weight is in pounds
-
---------------------------------------------------
-CALCULATIONS
---------------------------------------------------
-
-Use these formulas:
-
-1. Cubic inches:
-length × width × height
-
-2. Cubic feet:
-cubic_inches / 1728
-
-3. Density (lb/ft³):
-weight / cubic_feet
-
-Display:
-- Cubic Inches
-- Cubic Feet
-- Density (lb/ft³)
-
-Format output cleanly and reasonably:
-- cubic inches can be shown as a normal number
-- cubic feet and density should be rounded to 3 decimal places or similar readable precision
-
---------------------------------------------------
-OPTIONAL TARGET COMPARISON
---------------------------------------------------
-
-Also include an optional input:
-
-- Target Density (lb/ft³)
-
-If target density is provided:
-- show variance from target
-- show whether actual density is:
-  - Above Target
-  - Below Target
-  - On Target (if equal after reasonable rounding)
-
-If target density is blank:
-- do not show comparison messaging
-
-Keep comparison simple and readable.
-
---------------------------------------------------
-INTERACTION REQUIREMENTS
---------------------------------------------------
-
-Add buttons:
-- Calculate
-- Reset
-
-Preferred behavior:
-- also recalculate automatically on input changes if easy to implement cleanly
-- but explicit Calculate button is required
-
-Validation:
-- all required inputs must be greater than 0
-- if invalid, show a clear status/error message in the same style as other QC tools
-
---------------------------------------------------
-OUTPUT REQUIREMENTS
---------------------------------------------------
-
-Show results in a separate results card or results section on the page.
-
-Suggested fields:
-- Cubic Inches
-- Cubic Feet
-- Density
-- Target Density (if entered)
-- Variance (if target entered)
-- Comparison Result (if target entered)
-
-Keep wording practical for shop-floor use.
-
---------------------------------------------------
-PRESERVE QC PATTERNS
---------------------------------------------------
-
-Use the same general page structure and conventions as other QC pages:
-- shared header
-- card layout
-- buttons
-- footer from qc-header.js
-
-Do not overbuild this tool.
-Do not add persistence.
-Do not add backend submission.
-Do not add report storage.
-
-This is a local calculator only.
-
---------------------------------------------------
-OPTIONAL DASHBOARD LINK
---------------------------------------------------
-
-If the QC dashboard contains tiles/links for QC tools, add a new tile for:
-
-Density Calculator
-
-Use brief supporting text similar to the other QC tools.
-
-If adding this link requires touching the dashboard page, keep that change minimal.
-
-If the dashboard file is not in scope or not needed for this task, create only the calculator page.
-
---------------------------------------------------
-DELIVERABLE
---------------------------------------------------
-
-Return:
-
-1. full contents of /qc/density-calculator.html
-2. if updated, the minimal dashboard code addition needed to link to the new tool
-
-Keep everything production-safe, mobile-friendly, and aligned with the current QC tool patterns.
+- Each `QC Cleanup-N` prompt is scoped, single-agent (or a small named set), and ends with a
+  ready-to-push report — one commit per prompt, no bundling.
+- `CHANGELOG.md` gets an entry keyed to `QC Cleanup-N` when a prompt ships; `BACKLOG.md` items are
+  removed when the work they describe ships.
+- **Migration-before-push (HARD RULE)** and the **v2 visibility gate (HARD RULE)** in
+  `xpanda-ops-agents.md` apply to this track exactly as they do to any other prompt.
