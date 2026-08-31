@@ -1527,6 +1527,18 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **P422 follow-up — pill-driven status advance now also syncs the linked shipment
+  (db-api-agent).** Same-day fix: the original P422 block corrected `jobs.status` but
+  the logistics board (`logistics/index.html`) actually renders `shipments.status`,
+  which is populated by a separate "Sync job status to linked shipment" block that
+  only fires `if (payload.status)` — never true on a pure pill update, so the board
+  stayed frozen even though `jobs.status` was advancing correctly underneath it.
+  Confirmed live via Claude in Chrome: toggling a pill on a real job moved
+  `jobs.status` `in_production → done` but left the linked shipment at
+  `not_started`. Fix mirrors the `JOB_TO_SHIPMENT_STATUS` mapping
+  (`not_started`/`in_production`/`done → ready_to_ship`) inside the P422 block itself,
+  right after the `jobs.status` UPDATE, so both writes happen atomically within the
+  same pill-toggle request. `node --check` clean.
 - **P422 — Restore pill-derived job status advancement (db-api-agent).** Fixes a
   logistics-board status regression introduced by `QC Cleanup-13` (commit `5ea37b7`),
   which retired the legacy `cutting_steps` stack and, with it, removed the

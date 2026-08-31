@@ -867,6 +867,10 @@ export async function handleApiJobs(request, env) {
       // never fights an operator's explicit status pick or the P354 → not_started reset below.
       // Guards mirror the v2 signal (status IN not_started/in_production, forward-only) so the two
       // paths are idempotent and never double-advance or downgrade.
+      // P422 follow-up — also mirrors the status onto the linked shipment (see the "Sync job
+      // status to linked shipment" block below), since that block only fires off payload.status
+      // and a pure pill update never carries one; without this the logistics board (which renders
+      // shipments.status) stayed frozen even after jobs.status advanced correctly.
       if ("processes" in payload && !("status" in payload)) {
         try {
           const procs = Array.isArray(payload.processes)
@@ -885,6 +889,24 @@ export async function handleApiJobs(request, env) {
                   `Status ${s} → ${target} from cutting process pills`,
                   { from: s, to: target, trigger: 'process_pills' }, null
                 );
+                // Mirror the "Sync job status to linked shipment" block further down this handler
+                // (which only fires off payload.status and therefore never sees this pill-driven
+                // change) — otherwise the logistics board, which renders shipments.status, stays
+                // stale even though jobs.status advanced correctly.
+                const P422_JOB_TO_SHIPMENT_STATUS = {
+                  not_started: 'not_started', in_production: 'in_production', done: 'ready_to_ship',
+                };
+                const mappedShipmentStatus = P422_JOB_TO_SHIPMENT_STATUS[target];
+                if (mappedShipmentStatus) {
+                  const shipment = await db.prepare(
+                    "SELECT id FROM shipments WHERE job_id = ? AND direction = 'outbound' LIMIT 1"
+                  ).bind(id).first();
+                  if (shipment) {
+                    await db.prepare(
+                      "UPDATE shipments SET status = ?, updated_at = datetime('now') WHERE id = ?"
+                    ).bind(mappedShipmentStatus, shipment.id).run();
+                  }
+                }
               }
             }
           }
