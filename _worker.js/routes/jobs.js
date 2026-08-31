@@ -860,6 +860,39 @@ export async function handleApiJobs(request, env) {
         }
       }
 
+      // P422 — Forward-only pill→status advance. Replaces the retired syncJobFromSteps
+      // (QC Cleanup-13) that used to move jobs.status from the Job Board's cutting pills.
+      // Sources jobs.processes DIRECTLY — no cutting_steps. Runs only on a PURE pill update
+      // (processes present, no explicit status in payload = the toggleProcessPill path), so it
+      // never fights an operator's explicit status pick or the P354 → not_started reset below.
+      // Guards mirror the v2 signal (status IN not_started/in_production, forward-only) so the two
+      // paths are idempotent and never double-advance or downgrade.
+      if ("processes" in payload && !("status" in payload)) {
+        try {
+          const procs = Array.isArray(payload.processes)
+            ? payload.processes.filter(p => p && p.name)
+            : [];
+          if (procs.length > 0) {
+            const cur = await db.prepare("SELECT status FROM jobs WHERE id = ?").bind(id).first();
+            const s = cur?.status;
+            if (s === 'not_started' || s === 'in_production') {
+              const target = procs.every(p => !!p.completed) ? 'done' : 'in_production';
+              if (target !== s) {
+                await db.prepare("UPDATE jobs SET status = ?, updated_at = ? WHERE id = ?")
+                  .bind(target, new Date().toISOString(), id).run();
+                await logActivity(
+                  db, 'update', 'job', id,
+                  `Status ${s} → ${target} from cutting process pills`,
+                  { from: s, to: target, trigger: 'process_pills' }, null
+                );
+              }
+            }
+          }
+        } catch (e) {
+          console.error('P422 pill→status advance failed on PUT:', String(e?.message || e));
+        }
+      }
+
       // P354 — v2 cutting reset on the explicit `→ not_started` transition (backward-only; the
       // v2 board signals one-directional done→jobs.status, so forcing a job back to not_started
       // otherwise leaves the v2 board stale). Full reset (Steve's decision, not shallow): closes

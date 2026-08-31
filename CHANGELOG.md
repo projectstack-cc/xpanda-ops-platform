@@ -1527,6 +1527,31 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **P422 — Restore pill-derived job status advancement (db-api-agent).** Fixes a
+  logistics-board status regression introduced by `QC Cleanup-13` (commit `5ea37b7`),
+  which retired the legacy `cutting_steps` stack and, with it, removed the
+  `PUT /api/jobs` sync calls (`reconcileCuttingSteps`, `mirrorProcessesToSteps`,
+  `syncJobFromSteps`). `syncJobFromSteps` was the only thing advancing `jobs.status`
+  from the Job Board's process pills (`not_started → in_production`,
+  `in_production → done`); with it gone, ticking cutting pills stopped moving a job's
+  lifecycle status, so the logistics board (which renders `jobs.status` directly)
+  appeared frozen except for logistics-stage writes (loading/shipped/delivered). Fix:
+  new forward-only, no-downgrade block in `_worker.js/routes/jobs.js`'s `PUT` handler
+  (immediately before the P354 reset block), sourced directly from `jobs.processes`
+  — no `cutting_steps`, which is being retired. Semantics: any required process pill
+  (`processes.length ≥ 1`) ⇒ `in_production`; all required pills `completed` ⇒ `done`;
+  only acts when current status is `not_started` or `in_production` (never touches
+  `done`/`loading`/`shipped`/`archived`, so un-completing a pill on a `done` job can't
+  drag it back). Trigger-gated to a **pure pill update** (`"processes" in payload &&
+  !("status" in payload)`) — exactly the `toggleProcessPill` path — so it never fights
+  an operator's explicit status pick or the P354 `→ not_started` reset. Guards mirror
+  the v2 cutting signal (same forward-only, same status set), so the two paths are
+  idempotent and coexist without double-advancing or fighting each other. Logged via
+  `logActivity()`. `node --check` clean. A one-time reconcile SQL
+  (`DB_Migrations/reconcile-frozen-job-status-p422.sql`, gitignored, not committed) is
+  provided for Steve to run manually in the D1 console to heal jobs already frozen
+  before this fix — two statements run one at a time, independent of the code push
+  (no new column/table, so no migration-before-push ordering requirement either way).
 - **QC Cleanup-11 — Session gate hardening: strip client `X-User-*` headers before
   server-derived injection, deny unmapped API mutations by default (db-api-agent).**
   Closes RT-03, RT-05. Wave C. Two changes, both scoped to `_worker.js/index.js` +
