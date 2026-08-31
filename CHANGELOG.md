@@ -1527,6 +1527,45 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **QC Cleanup-10 — Auth lifecycle hardening: verified current-password on change, raised
+  minimum length, added login rate limiting (admin-auth-agent + db-api-agent for the KV
+  binding).** Closes RT-01, RT-02, RT-09. Wave C. **BLOCKED ON STEVE — not pushed.** Three
+  changes to `_worker.js/routes/auth.js`, closing the red-team-identified account-takeover
+  chain: (1) `handleAuthChangePassword` now requires and verifies `current_password` (plaintext
+  comparison against `users.password`, matching this repo's documented plaintext-at-rest design
+  — no hashing added, out of scope) before allowing a change — previously session-only, so
+  anyone with an active session (stolen cookie, XSS, an unlocked floor terminal) could silently
+  reset the password with no proof of knowing the old one. The separate admin recovery path
+  (`/api/users`, `_worker.js/routes/admin.js`) is untouched — admins still reset any user's
+  password without knowing the old one. On success, all *other* `sessions` rows for that user
+  are now deleted (`DELETE FROM sessions WHERE user_id = ? AND id != ?`, current session kept
+  alive) — folds in RT-09 per the audit's own suggestion. (2) Minimum new-password length raised
+  4→8 via a single named `MIN_PASSWORD_LENGTH` constant — the prompt's own recommended value;
+  Steve wasn't available to confirm synchronously, so implemented at the prompt's stated
+  fallback recommendation, flagged for his explicit sign-off. (3) `handleAuthLogin` now checks a
+  per-`username`+IP failure counter in a new Workers KV namespace (binding `RATE_LIMIT`) before
+  querying `users`, locking out further attempts after 5 failures in a sliding 15-minute window
+  with an identical, non-enumerating `429 Too many attempts. Try again later.` response — the
+  existing "Invalid username or password." message on individual failures is unchanged, and
+  since storage is intentionally plaintext, rate limiting is the *only* brute-force control here
+  per the audit. All four new KV helpers fail OPEN (no-op / return false) on a missing binding
+  or any KV read/write error, so a KV outage degrades to "no rate limiting" rather than "nobody
+  can log in." KV eventual consistency is an accepted tradeoff per the prompt (no Durable
+  Object). **Scope extension, flagged**: `login.html` (admin-auth-agent's own file) was also
+  updated — grepping the whole repo confirmed its first-login forced password-change form is the
+  *only* caller of `/api/auth/change-password` anywhere in the platform, and it was never
+  sending `current_password` (client-side length check was still `< 4`) — left as-is, change (1)
+  above would have 400-looped every first-login account activation forever. Added a required
+  "current password" field, wired it into the POST body, and matched the client-side
+  minimum-length check/placeholder to 8. **KV-namespace-before-push GATE (unresolved — this is
+  why nothing was pushed)**: `env.RATE_LIMIT` does not exist yet. `wrangler.toml` has the
+  binding block staged with a labeled placeholder id (`[[kv_namespaces]]` +
+  `[[env.production.kv_namespaces]]`, binding `RATE_LIMIT`, mirroring the existing
+  `DB`/`BOL_PHOTOS` root+env.production duplication). Steve must run `wrangler kv namespace
+  create xpanda-rate-limit` and paste the returned id into both placeholder lines before this
+  can be pushed; acceptance test post-deploy is 6 consecutive bad logins for one username/IP —
+  the 6th should return 429, not 401. No schema/migration change. `node --check` clean on
+  `_worker.js/routes/auth.js` and (extracted inline `<script>`) `login.html`.
 - **QC Cleanup-5 — Standardize legacy `activity_log`/`parts` timestamp writes on SQLite-native
   space format (db-api-agent).** Closes AUDIT-201, AUDIT-202, REVIEW-1. Wave A (format-only; no
   control-flow or auth change). The platform was writing two timestamp formats into shared

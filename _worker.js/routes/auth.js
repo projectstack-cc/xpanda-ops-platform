@@ -1,5 +1,17 @@
 import { json, logActivity, validateSession, getSessionToken, SessionLookupError, sessionUnavailableResponse } from '../lib/core.js';
 
+// QC Cleanup-10 / RT-01: minimum new-password length. Raised 4 -> 8, this prompt's own
+// recommended value ("[STEVE: confirm - recommend 8]" — implemented at the recommendation per
+// the prompt's own fallback instruction since Steve wasn't available to confirm synchronously).
+// Single named constant so it's trivial to change if the floor-tablet UX tradeoff argues for a
+// different number later. STEVE: please confirm 8 is right, or tell us the number you want here.
+const MIN_PASSWORD_LENGTH = 8;
+
+// QC Cleanup-10 / RT-02: login rate limiting threshold/window. See the KV helpers below
+// (loginRateLimitKey/isLoginLocked/recordLoginFailure/clearLoginFailures).
+const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5;
+const LOGIN_RATE_LIMIT_WINDOW_SECONDS = 15 * 60; // 15 minutes
+
 async function resolveSessionUser(db, request) {
   try {
     return { user: await validateSession(db, request), transient: false };
@@ -27,6 +39,54 @@ function clearSessionCookie() {
   return `xpanda_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax`;
 }
 
+// ========================
+// QC Cleanup-10 / RT-02: login rate limiting
+// ========================
+// Per username+IP failure counter in Workers KV (binding: RATE_LIMIT — see wrangler.toml;
+// KV-namespace-before-push GATE applies, see prompt-QC-Cleanup-10). KV is eventually consistent
+// by design — accepted tradeoff here per the prompt (slows online guessing of a handful of
+// accounts; does not need to be airtight, no Durable Object). These helpers fail OPEN (never
+// block/lock anyone) on a missing binding or any KV read/write error, so a KV outage or a
+// preview/local env without the binding never takes login itself down — rate limiting is
+// defense-in-depth layered on top of the existing identical-error-message anti-enumeration
+// behavior, not a hard dependency of login working at all.
+function loginRateLimitKey(username, ip) {
+  return `loginfail:${String(username || '').trim().toLowerCase()}:${ip}`;
+}
+
+async function isLoginLocked(kv, key) {
+  if (!kv) return false;
+  try {
+    const raw = await kv.get(key);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    return typeof data.count === 'number' && data.count >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS;
+  } catch (e) {
+    console.error('Login rate limit KV read failed:', e);
+    return false;
+  }
+}
+
+async function recordLoginFailure(kv, key) {
+  if (!kv) return;
+  try {
+    const raw = await kv.get(key);
+    let count = 1;
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (typeof data.count === 'number') count = data.count + 1;
+    }
+    await kv.put(key, JSON.stringify({ count }), { expirationTtl: LOGIN_RATE_LIMIT_WINDOW_SECONDS });
+  } catch (e) {
+    console.error('Login rate limit KV write failed:', e);
+  }
+}
+
+async function clearLoginFailures(kv, key) {
+  if (!kv) return;
+  try { await kv.delete(key); } catch (e) { console.error('Login rate limit KV clear failed:', e); }
+}
+
 export async function handleAuthLogin(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
@@ -40,14 +100,34 @@ export async function handleAuthLogin(request, env) {
 
   if (!username || !password) return json({ ok: false, error: 'Username and password required.' }, 400);
 
+  const kv = env.RATE_LIMIT;
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const rateLimitKey = loginRateLimitKey(username, ip);
+
   try {
+    // RT-02: check the failure counter BEFORE touching the DB. The lockout message is
+    // identical regardless of whether `username` is real — the counter is keyed off the
+    // submitted username+IP for every attempt, real account or not — so it reveals nothing
+    // about account existence, preserving the existing anti-enumeration behavior.
+    if (await isLoginLocked(kv, rateLimitKey)) {
+      return json({ ok: false, error: 'Too many attempts. Try again later.' }, 429);
+    }
+
     const user = await db.prepare(
       `SELECT id, username, display_name, role, is_active, first_login, password
        FROM users WHERE username = ? COLLATE NOCASE`
     ).bind(username).first();
 
-    if (!user || !user.is_active) return json({ ok: false, error: 'Invalid username or password.' }, 401);
-    if (user.password !== password) return json({ ok: false, error: 'Invalid username or password.' }, 401);
+    if (!user || !user.is_active) {
+      await recordLoginFailure(kv, rateLimitKey);
+      return json({ ok: false, error: 'Invalid username or password.' }, 401);
+    }
+    if (user.password !== password) {
+      await recordLoginFailure(kv, rateLimitKey);
+      return json({ ok: false, error: 'Invalid username or password.' }, 401);
+    }
+
+    await clearLoginFailures(kv, rateLimitKey);
 
     const { sessionId, expires } = await createSession(db, user.id);
 
@@ -122,13 +202,35 @@ export async function handleAuthChangePassword(request, env) {
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
 
+  const currentPassword = String(body.current_password || '');
   const newPassword = String(body.new_password || '');
-  if (newPassword.length < 4) return json({ ok: false, error: 'Password must be at least 4 characters.' }, 400);
+
+  // RT-01: current_password is now required — a bare session is no longer sufficient to change
+  // the password (previously: session-only, no current-password check at all).
+  if (!currentPassword) return json({ ok: false, error: 'Current password is required.' }, 400);
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    return json({ ok: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` }, 400);
+  }
 
   try {
+    // Plaintext comparison — matches this repo's documented plaintext-password-at-rest design
+    // (AGENTS.md Sec 3: "intentional — admin recovery for floor workers"). Hashing is explicitly
+    // out of scope for this prompt. This does NOT touch the separate admin recovery path
+    // (`/api/users`, handled in admin.js) — that stays untouched.
+    const row = await db.prepare(`SELECT password FROM users WHERE id = ?`).bind(user.userId).first();
+    if (!row || row.password !== currentPassword) {
+      return json({ ok: false, error: 'Current password is incorrect.' }, 400);
+    }
+
     await db.prepare(
       `UPDATE users SET password = ?, first_login = 0, updated_at = ? WHERE id = ?`
     ).bind(newPassword, new Date().toISOString(), user.userId).run();
+
+    // RT-01 / RT-09: invalidate every OTHER session for this user so a stolen/XSS'd session
+    // can't silently reset the password and keep permanent access while the real user stays
+    // logged in unaware. Keep the current session (the one making this request) alive.
+    await db.prepare(`DELETE FROM sessions WHERE user_id = ? AND id != ?`)
+      .bind(user.userId, user.sessionId).run();
 
     return json({ ok: true });
   } catch (e) {

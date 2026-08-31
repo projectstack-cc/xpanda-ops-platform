@@ -10,6 +10,21 @@
 
 ## Auth / Session
 
+- [ ] **QC Cleanup-10 — confirm `MIN_PASSWORD_LENGTH` = 8.** `_worker.js/routes/auth.js`
+  top-of-file constant implements the prompt's own recommended value since Steve wasn't
+  available to confirm synchronously. Needs an explicit yes/no (or a different number) from
+  Steve, weighing floor-tablet UX vs. brute-force resistance. One-line change once decided
+  (`login.html`'s client-side check + placeholder would need the matching number too).
+- [ ] **QC Cleanup-10 — KV namespace prerequisite (hard blocker on pushing).** Run
+  `wrangler kv namespace create xpanda-rate-limit`, then paste the returned id into both
+  placeholder `id = "REPLACE_WITH_NAMESPACE_ID"` lines in `wrangler.toml`
+  (`[[kv_namespaces]]` and `[[env.production.kv_namespaces]]`, binding `RATE_LIMIT`) before
+  the commit can be pushed.
+- [ ] **(Optional) Consider a self-service "change my password" settings page.** Discovered
+  during QC Cleanup-10: `login.html`'s first-login forced form is currently the *only* caller
+  of `/api/auth/change-password` anywhere in the platform — no way for a user to voluntarily
+  change their own password later without an admin reset via `/api/users`. Not a bug (admin
+  recovery is the documented design), just an absence worth a deliberate yes/no.
 - [ ] **P408 follow-up — audit other unbatched hot-path writes against the shared D1.**
   `schedule-ingest.ts`'s cron writes were the one identified structural contention hazard against
   the same D1 `validateSession` reads on every request (P404 investigation, batched in P408). If

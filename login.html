@@ -124,7 +124,8 @@
 
       <div id="password-form" hidden>
         <p class="info-msg">Welcome! Please set a new password to continue.</p>
-        <input type="password" id="f-new-password" placeholder="New password (min 4 characters)" />
+        <input type="password" id="f-current-password" placeholder="Current password" autocomplete="current-password" />
+        <input type="password" id="f-new-password" placeholder="New password (min 8 characters)" />
         <input type="password" id="f-confirm-password" placeholder="Confirm new password" />
         <button id="btn-set-password" onclick="doChangePassword()">Set Password &amp; Continue</button>
         <div id="password-error" class="error-msg" hidden></div>
@@ -215,13 +216,21 @@ function showPasswordForm() {
 }
 
 async function doChangePassword() {
+  const currentPwd = document.getElementById('f-current-password').value;
   const newPwd = document.getElementById('f-new-password').value;
   const confirmPwd = document.getElementById('f-confirm-password').value;
   const errEl = document.getElementById('password-error');
   errEl.hidden = true;
 
-  if (newPwd.length < 4) {
-    errEl.textContent = 'Password must be at least 4 characters.';
+  // QC Cleanup-10 / RT-01: current password is now required server-side too — keep this in
+  // sync with MIN_PASSWORD_LENGTH in _worker.js/routes/auth.js if that constant ever changes.
+  if (!currentPwd) {
+    errEl.textContent = 'Please enter your current password.';
+    errEl.hidden = false;
+    return;
+  }
+  if (newPwd.length < 8) {
+    errEl.textContent = 'Password must be at least 8 characters.';
     errEl.hidden = false;
     return;
   }
@@ -238,7 +247,7 @@ async function doChangePassword() {
     const res = await fetch('/api/auth/change-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ new_password: newPwd }),
+      body: JSON.stringify({ current_password: currentPwd, new_password: newPwd }),
     });
     const data = await res.json();
 
