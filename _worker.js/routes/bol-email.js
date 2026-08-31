@@ -1,4 +1,4 @@
-import { json } from '../lib/core.js';
+import { json, logActivity } from '../lib/core.js';
 
 function etDateStr(offsetDays = 0) {
   const d = new Date(Date.now() + offsetDays * 86400000);
@@ -89,7 +89,13 @@ async function handleSend(request, env) {
         attachments,
       }),
     });
-    if (resp.ok) return json({ ok: true, sent: attachments.length, recipients: emails.length });
+    if (resp.ok) {
+      await logActivity(db, 'send', 'bol_email', shipDate,
+        `Sent ${attachments.length} BOL(s) for ${shipDate} to ${emails.length} recipient(s)`,
+        { ship_date: shipDate, sent: attachments.length, recipients: emails.length }
+      );
+      return json({ ok: true, sent: attachments.length, recipients: emails.length });
+    }
     const detail = await resp.text();
     return json({ ok: false, error: 'Resend send failed', detail }, 502);
   } catch (e) {

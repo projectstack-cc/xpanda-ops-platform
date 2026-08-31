@@ -1720,6 +1720,20 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **QC Cleanup-8 — `logActivity()` coverage for BOL email send (logistics-agent +
+  db-api-agent).** Closes AUDIT-503. Wave B. Additive logging only.
+  `handleSend` in `_worker.js/routes/bol-email.js` (POST `/api/bol-email/send`) now logs a
+  `send` / `bol_email` activity entry — keyed to the requested `ship_date`, with sent-count
+  and recipient-count in the detail payload — immediately after Resend confirms a
+  successful send (`resp.ok`), before the success response is returned. A failed send
+  (non-`ok` Resend response, or the earlier fetch throwing) is not logged. `logActivity`
+  added to the file's existing `../lib/core.js` import. `node --check` clean.
+  **RT-07 NOT closed by this entry.** The prompt binds RT-07 specifically to §4
+  (HMAC-signature-verification-failure logging in `handleApiQbWebhook`,
+  `_worker.js/routes/quickbooks.js`) — confirmed via `ls` that QC Cleanup-12 already ran and
+  fully removed QuickBooks (`routes/quickbooks.js`, `lib/quickbooks.js`, `lib/qb-mapper.js`)
+  from the tree, exactly as the prompt's own coordination note anticipated for this
+  scenario. There is no remaining target for RT-07's specific requirement.
 - **QC Cleanup-7 — removed the dead BOL-generator `PATH_PERMISSION_MAP` entry and the leftover
   "BOL Generator" toolbar wiring (logistics-agent).** Closes AUDIT-602 (code half) + REVIEW-2.
   Removed the dormant `{ pattern: /^\/logistics\/bol-generator/, key: 'logistics.bol' }` row from
@@ -2874,6 +2888,18 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Production / Manufacturing
 
+- **QC Cleanup-8 — `logActivity()` coverage for `production.js`'s two live mutating
+  handlers (production-agent + db-api-agent).** Closes AUDIT-502. Wave B. Additive logging
+  only. **Coordinate note:** QC Cleanup-6 already ran and removed the four dead handlers
+  (`handleApiBeadStock`, `handleApiBlockInventory`, `handleApiMoldingLog`,
+  `handleApiBlockConsumption`) from this file — confirmed via
+  `grep "^export async function handleApi"` before starting, so only `handleApiBeadTypes`
+  and `handleApiCombos` remain as live mutating handlers (`handleApiParts` already had
+  `logActivity()` coverage from prior work and was left untouched). Instrumented all three
+  mutating branches of `handleApiBeadTypes` (POST/PUT/DELETE — `create`/`update`/`delete`
+  on entity `bead_type`) and both mutating branches of `handleApiCombos` (POST/DELETE —
+  `create`/`delete` on entity `combo`; this handler has no PUT). Each call mirrors the
+  existing `handleApiParts` pattern. `node --check` clean.
 - **QC Cleanup-6 — Retire the dead v1 `production/inventory.html` + its four dead backend
   handlers (production-agent + db-api-agent).** Closes AUDIT-001 (executes the queued BACKLOG
   P403 item). Wave B. `production/inventory.html` (the v1 three-tab bead-stock/blocks/molding-log
@@ -2920,6 +2946,18 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## QC
 
+- **QC Cleanup-8 — `logActivity()` coverage for QC's two live mutating handlers (qc-agent
+  + db-api-agent).** Closes AUDIT-501. Wave B. Additive logging only — no
+  behavior change to either endpoint. `handleApiScrapLog` (POST `/api/scrap-log`) now logs
+  a `create` / `scrap_log` activity entry (keyed to the record's own UUID) after the D1
+  insert succeeds, before the Google Sheets mirror's result is folded into the response —
+  a mirror failure still returns 200/201 with `mirror_ok: false` exactly as before, and the
+  activity-log write never blocks or fails the request. `handleApiCompletions` (POST
+  `/api/completions`) previously did not capture the D1 `INSERT`'s `run()` result at all
+  (autoincrement PK, no local `id` variable existed); now captures
+  `insertResult.meta.last_row_id` and logs a `create` / `completion` entry keyed to it
+  (falls back to `block_id` if `last_row_id` is unexpectedly absent). `logActivity` added
+  to the file's existing `../lib/core.js` import. `node --check` clean.
 - **P172** — Hotfix: repair malformed `getCheckedDepartments` function declaration in `qc/incident-report.html` (missing `() {`); a parse error at line 348 was aborting the entire inline script, leaving the customer dropdown stuck on "Loading Customers".
 
 *(QC module bootstrapped as part of the early foundation; no items with distinct prompt numbers. P137 is in Infra / Docs.)*

@@ -225,6 +225,10 @@ export async function handleApiCombos(request, env) {
         .prepare("SELECT * FROM saved_combos WHERE id = ?")
         .bind(id)
         .first();
+      await logActivity(db, 'create', 'combo', id,
+        `Saved combination ${name}`,
+        { name, block_l, block_w, block_h }
+      );
       return json(
         {
           ok: true,
@@ -267,6 +271,10 @@ export async function handleApiCombos(request, env) {
 
     try {
       await db.prepare("DELETE FROM saved_combos WHERE id = ?").bind(id).run();
+      await logActivity(db, 'delete', 'combo', id,
+        `Deleted combination ${id}`,
+        { id }
+      );
       return json({ ok: true, message: "Combination deleted." });
     } catch (e) {
       return json(
@@ -317,6 +325,10 @@ export async function handleApiBeadTypes(request, env) {
         "INSERT INTO bead_types (id, name, grade, color, notes) VALUES (?, ?, ?, ?, ?)"
       ).bind(id, name, grade, color, notes).run();
       const row = await db.prepare("SELECT * FROM bead_types WHERE id = ?").bind(id).first();
+      await logActivity(db, 'create', 'bead_type', id,
+        `Created bead type ${name}`,
+        { name, grade, color }
+      );
       return json({ ok: true, data: row }, 201);
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -360,6 +372,10 @@ export async function handleApiBeadTypes(request, env) {
       await db.prepare(`UPDATE bead_types SET ${sets.join(", ")} WHERE id = ?`)
         .bind(...vals).run();
       const row = await db.prepare("SELECT * FROM bead_types WHERE id = ?").bind(id).first();
+      await logActivity(db, 'update', 'bead_type', id,
+        `Updated bead type ${row?.name || id}`,
+        { updated_fields: allowed.filter((k) => k in payload) }
+      );
       return json({ ok: true, data: row });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
@@ -381,6 +397,10 @@ export async function handleApiBeadTypes(request, env) {
 
     try {
       await db.prepare("DELETE FROM bead_types WHERE id = ?").bind(id).run();
+      await logActivity(db, 'delete', 'bead_type', id,
+        `Deleted bead type ${id}`,
+        { id }
+      );
       return json({ ok: true, message: "Bead type deleted." });
     } catch (e) {
       return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);

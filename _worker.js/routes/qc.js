@@ -1,4 +1,4 @@
-import { json, normalizeName } from '../lib/core.js';
+import { json, normalizeName, logActivity } from '../lib/core.js';
 
 function isAdminAuthorized(request, env) {
   const key = env.ADMIN_KEY;
@@ -58,7 +58,7 @@ export async function handleApiCompletions(request, env) {
     const user_agent = request.headers.get("User-Agent") || null;
 
     try {
-      await db
+      const insertResult = await db
         .prepare(
           `
         INSERT INTO completions
@@ -68,6 +68,16 @@ export async function handleApiCompletions(request, env) {
         )
         .bind(employee_name, block_id, block_title, 1, ip_hash, user_agent)
         .run();
+
+      const completionId = insertResult?.meta?.last_row_id ?? block_id;
+      await logActivity(
+        db,
+        'create',
+        'completion',
+        completionId,
+        `Recorded completion for block ${block_title} by ${employee_name}`,
+        { block_id, block_title, employee_name },
+      );
 
       return json({ ok: true, message: "Completion recorded." }, 201);
     } catch (e) {
@@ -307,6 +317,15 @@ export async function handleApiScrapLog(request, env) {
       .run();
 
     const mirrorResult = await mirrorScrapLogToSheet(record, env);
+
+    await logActivity(
+      db,
+      'create',
+      'scrap_log',
+      record.id,
+      `Logged scrap: ${part_product} (${scrap_reason}, ${scrap_board_ft.toFixed(2)} bd ft)`,
+      { event_date, shift, operator_name, line_machine, inv_number, scrap_reason, scrap_cubic_in },
+    );
 
     return json(
       {
