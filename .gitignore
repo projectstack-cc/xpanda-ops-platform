@@ -5,6 +5,15 @@ logistics/assets/Master copies/
 qc-slop-audit.md
 status-write-site-inventory.md
 
+# QC Cleanup-3 (AUDIT-702): local/account build+runtime state, same class of issue as the
+# DB_Migrations incident below — never belonged in a shared repo. cutting-pilot/.gitignore
+# already covers these for the v2 tree; this was a root-only gap.
+.wrangler/
+.next/
+.open-next/
+node_modules/
+.dev.vars
+
 # OAuth client secret downloads — never commit, values are stored as Worker secrets
 client_secret_*.json
 

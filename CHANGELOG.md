@@ -3190,6 +3190,21 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Infra / Docs
 
+- **QC Cleanup-3 — root `.gitignore`/`.wrangler` repo hygiene (db-api-agent).** Closes
+  AUDIT-702. Root `.gitignore` covered `DB_Migrations/`/`employee_roster.md`/secrets but had no
+  entry for `.wrangler/`, `.next/`, `.open-next/`, `node_modules/`, or `.dev.vars` —
+  `cutting-pilot/.gitignore` already handled this correctly for the v2 tree, the gap was
+  root-only. `git ls-files` confirmed 25 tracked paths under root `.wrangler/` (no tracked
+  `.next/`/`.open-next/`/`node_modules/`/`.dev.vars` paths existed); `.wrangler/cache/
+  wrangler-account.json` had a committed Cloudflare account ID + owner email — same class of
+  "local/account state committed to a shared repo" as the `DB_Migrations` incident, though
+  low-sensitivity (not a live secret). Added the five patterns to root `.gitignore`; ran
+  `git rm -r --cached .wrangler` to untrack all 25 paths (content stays on disk — ordinary
+  untracking, NOT a `git filter-repo` history purge; the account-id/email remain in history
+  unless Steve later chooses a rewrite). Confirmed the three `.wrangler/cache/*.json` files
+  already showed as deleted-from-working-tree before this session (pre-existing, unrelated) —
+  `git rm --cached` only formalized the index to match; the rest of `.wrangler/tmp/` and
+  `.wrangler/state/` are still intact on disk. No source, no schema change.
 - **QC Cleanup-2** — Agent doc sync (docs only). Closes AUDIT-601, AUDIT-602, AUDIT-603, AUDIT-004.
   **(1) `ROADMAP.md` replaced (AUDIT-601)** — it held the verbatim text of an old QC
   density-calculator task prompt, not a roadmap. Now contains the platform's actual
