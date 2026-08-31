@@ -291,7 +291,8 @@
   worker + legacy entry UI), 3/3 (P277, `/v2/schedule` side rail) have all shipped. **P277 still
   needs `wrangler deploy` from `cutting-pilot/` before the rail is live** — v2 doesn't auto-deploy.
 - [ ] **`DELETE /api/jobs` does not cascade the v2 cutting tables.** The child-delete list covers
-  legacy `cutting_steps` but not `cutting_lines` or `cutting_sessions`, so deleting a job that was
+  neither `cutting_lines` nor `cutting_sessions` (QC Cleanup-13 removed the old legacy
+  `cutting_steps` cascade line, which never covered these v2 tables either), so deleting a job that was
   tracked in v2 orphans those rows. Impact is currently contained: P282's `my-session` route uses a
   `LEFT JOIN` specifically so an operator whose job row was hard-deleted can still see and close
   the session, and P258's backstop only ever runs from live delivery/loading write-points. Worth
@@ -402,7 +403,6 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [x] P233 — Per-line throughput raw readout (`qty_done[/qty_target] unit · wall · active`) in v2 job-detail `LineRow`, using existing `qty_target` from P225.
 - [ ] v2 cut-plan: units/hr rate and progress bars still open (raw throughput numbers shipped in P233; the rate needs qty-entry to be routine first).
 - [ ] First-pass yield (v2) — blocked on native scrap DB (defect denominator)
-- [ ] Retire cutting_steps + /api/cutting* + routes/cutting.js + lib/cutting.js (legacy page already archived in P234; the worker/table still drive jobs.processes pill sync — needs its own prompt)
 
 ---
 

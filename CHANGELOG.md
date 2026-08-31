@@ -2888,6 +2888,39 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Production / Manufacturing
 
+- **QC Cleanup-13 — Legacy Cutting retirement, code removal (manufacturing-agent + db-api-agent).**
+  Closes AUDIT-301. Wave D. Destructive — DROP held for Steve. Superseded by the v2 React session
+  model (`/v2/cutting` + `/v2/cutting/crosscutter`), which has been the only cutting surface linked
+  from both nav pages since P295/P234. Discovery-first per the prompt: `grep -rln -E
+  "cutting_steps|/api/cutting|handleApiCutting|handleCutting" _worker.js manufacturing` plus a
+  repo-wide sweep for `/api/cutting` — confirmed zero live legacy callers before removing anything;
+  every hit outside the files below was either the unrelated `handleCuttingActivityReport` (reads
+  `cutting_sessions`/`cutting_line_progress`, not `cutting_steps` — left untouched) or a
+  `cutting-pilot/**` `/v2/api/cutting*` route (different namespace, substring false-positive).
+  Deleted `_worker.js/routes/cutting.js` (137 lines — `handleApiCutting`: `GET /api/cutting`, `POST
+  /api/cutting/start`, `PUT /api/cutting/:stepId`) and `_worker.js/lib/cutting.js` (108 lines —
+  `reconcileCuttingSteps`, `syncJobFromSteps`, `applyStepCompletionToProcesses`,
+  `mirrorProcessesToSteps`). Removed the `handleApiCutting` import and its `API_ROUTES` row from
+  `_worker.js/index.js`. In `_worker.js/routes/jobs.js` (surgical — only the `cutting_steps`
+  writes, everything else in the file, including the P354 v2 cutting-reset block and
+  `completeCuttingLinesForJob`, left untouched): removed the `lib/cutting.js` import, the
+  auto-create-on-job-create call, the bidirectional `jobs.processes ↔ cutting_steps` pill-sync on
+  PUT, **and** the `DELETE FROM cutting_steps WHERE job_id = ?` line from the job-delete cleanup
+  sequence — that last one isn't literally "pill-sync" but is a live write to `cutting_steps` on a
+  hot path (job deletion) that would throw `no such table` the instant the DROP below runs, so it
+  had to go too. **`manufacturing.cutting` permission key KEPT** — grep-confirmed
+  `cutting-pilot/src/middleware.ts` and 8 other `/v2/api/cutting/**` route files still gate on this
+  exact key for `/v2/cutting` + `/v2/cutting/crosscutter`; it's genuinely shared between the retired
+  legacy surface and the live v2 one. **Archived-page decision:** deleted
+  `manufacturing/_archived/cutting-dashboard.html` (grep-confirmed zero live references anywhere
+  outside docs; already fully unlinked from both nav pages) rather than leaving it as a dead file
+  whose own `fetch()` calls would start 404ing — `xpanda-ops-agents.md` §4a names it in the same
+  retirement sentence as the two worker files above. Wrote `DB_Migrations/drop-cutting-steps.sql`
+  (`DROP TABLE cutting_steps;`) — **not run**. Drop-ordering gate: this push first → Steve confirms
+  the platform is happy → Steve runs the DROP in the D1 console manually. `node --check` clean on
+  both modified files plus a stronger import-resolution check (`grep -rn
+  "lib/cutting\.js|routes/cutting\.js" _worker.js` → zero hits, since `--check` alone doesn't catch
+  a dangling import).
 - **QC Cleanup-8 — `logActivity()` coverage for `production.js`'s two live mutating
   handlers (production-agent + db-api-agent).** Closes AUDIT-502. Wave B. Additive logging
   only. **Coordinate note:** QC Cleanup-6 already ran and removed the four dead handlers

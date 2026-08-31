@@ -1,5 +1,4 @@
 import { json, logActivity, safeJsonParse } from '../lib/core.js';
-import { reconcileCuttingSteps, mirrorProcessesToSteps, syncJobFromSteps } from '../lib/cutting.js';
 import { completeCuttingLinesForJob } from '../lib/cutting-lines.js';
 import { nestHoleyChunks } from '../lib/holey-nester.js';
 
@@ -559,13 +558,6 @@ export async function handleApiJobs(request, env) {
         }
       }
 
-      // Auto-create cutting steps from processes (non-blocking)
-      try {
-        await reconcileCuttingSteps(db, id, payload.processes || []);
-      } catch (e) {
-        console.error('Auto-create cutting steps on job create failed:', String(e?.message || e));
-      }
-
       const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(id).first();
       const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(id).all();
 
@@ -868,24 +860,14 @@ export async function handleApiJobs(request, env) {
         }
       }
 
-      // Reconcile cutting steps + bidirectional pill↔step sync (non-blocking)
-      if ("processes" in payload) {
-        try {
-          await reconcileCuttingSteps(db, id, payload.processes);
-          await mirrorProcessesToSteps(db, id, payload.processes);
-          await syncJobFromSteps(db, id);
-        } catch (e) {
-          console.error('Cutting steps reconcile/sync failed on PUT:', String(e?.message || e));
-        }
-      }
-
       // P354 — v2 cutting reset on the explicit `→ not_started` transition (backward-only; the
       // v2 board signals one-directional done→jobs.status, so forcing a job back to not_started
       // otherwise leaves the v2 board stale). Full reset (Steve's decision, not shallow): closes
       // open sessions, resets lines, AND clears per-item completions so the derived qty_done
       // (P351) truly reads 0 rather than showing stale completed-piece counts on a "not started"
       // line. Best-effort — a reset failure must never fail the job PUT. Separate, clearly-labeled
-      // block from the legacy cutting_steps reconcile above; does not touch that model.
+      // block, independent of the v1 model (QC Cleanup-13 retired the legacy cutting_steps
+      // reconcile/pill-sync that used to live above this).
       // Guard is a real transition, not just "the payload happened to carry not_started" — the
       // job-edit modal's save resends payload.status = f-status.value on EVERY save whenever the
       // status-section is visible (any not_started/in_production/done job), so gating on
@@ -1008,7 +990,6 @@ export async function handleApiJobs(request, env) {
       // accounting records; removing them would corrupt production yield history.
       await db.prepare("DELETE FROM loading_photos WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM loading_assignments WHERE job_id = ?").bind(id).run();
-      await db.prepare("DELETE FROM cutting_steps WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM bols WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM saved_loads WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM shipments WHERE job_id = ?").bind(id).run();

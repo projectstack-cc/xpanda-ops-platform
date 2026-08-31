@@ -5,7 +5,6 @@ import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers,
          handleApiPartsSeed, handleApiLoadBuilderSkusDeleteAll, handleApiLoadBuilderSkus,
          handleApiSavedLoads } from './routes/bols.js';
 import { handleApiJobs, handleApiShipments, handleApiAddressValidate, handleApiAssignableUsers, handleHoleyChunksPreview, handleHoleyChunksBackfill } from './routes/jobs.js';
-import { handleApiCutting } from './routes/cutting.js';
 import { handleApiParts, handleApiCombos, handleApiBeadTypes } from './routes/production.js';
 import { handleApiCompletions, handleApiScrapLog } from './routes/qc.js';
 import { handleApiReportsScrapSummary, handleApiReportsScrapTrend, handleApiReportsScrapReasons,
@@ -68,7 +67,6 @@ const API_ROUTES = [
   { prefix: '/api/assignable-users', handler: (req, env) => handleApiAssignableUsers(req, env) },
   { path:   '/api/shipments', handler: (req, env) => handleApiShipments(req, env) },
   { prefix: '/api/bol-email', handler: (req, env) => handleApiBolEmail(req, env) },
-  { prefix: '/api/cutting',   handler: (req, env) => handleApiCutting(req, env) },
 
   // BOL / load builder (specific paths before their shared prefixes)
   { path:   '/api/bol-customers/seed',     handler: (req, env) => handleApiBolCustomersSeed(req, env) },
