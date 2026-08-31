@@ -21,20 +21,16 @@ bucket_name = "xpanda-bol-photos"
 binding = "BOL_PHOTOS"
 bucket_name = "xpanda-bol-photos"
 
-# QC Cleanup-10 / RT-02 (auth login rate limiting) — KV-namespace-before-push GATE.
-# HELD, NOT YET LIVE: "REPLACE_WITH_NAMESPACE_ID" below is a placeholder, not a real id.
-# Steve must run this BEFORE this change is pushed:
-#   wrangler kv namespace create xpanda-rate-limit
-# ...then paste the returned "id" value into BOTH `id = "REPLACE_WITH_NAMESPACE_ID"` lines below
-# (root + env.production use the same physical namespace, same pattern as the DB/BOL_PHOTOS
-# bindings above). Binding name used in code: env.RATE_LIMIT (see _worker.js/routes/auth.js).
+# QC Cleanup-10 / RT-02 (auth login rate limiting). Namespace "xpanda-rate-limit" created
+# 2026-08-31 via `wrangler kv namespace create xpanda-rate-limit`. Binding name used in code:
+# env.RATE_LIMIT (see _worker.js/routes/auth.js).
 [[kv_namespaces]]
 binding = "RATE_LIMIT"
-id = "REPLACE_WITH_NAMESPACE_ID"
+id = "ac3674d41b8541fba89939120cf268ea"
 
 [[env.production.kv_namespaces]]
 binding = "RATE_LIMIT"
-id = "REPLACE_WITH_NAMESPACE_ID"
+id = "ac3674d41b8541fba89939120cf268ea"
 
 [vars]
 INCIDENT_TRACKER_JSON_URL = "https://docs.google.com/spreadsheets/d/1DRRJyyiSRMhBQIne5gTBri4HhiBPk4mCtvS0XWNGNu0/gviz/tq?tqx=out:json&gid=1547880443"
