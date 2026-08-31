@@ -342,8 +342,18 @@ schedule badge):**
 - [ ] Explicit clear-to-geometry control on the HB override input (`PartsPanel.tsx`'s guillotine
   chunk-target field has no empty/clear affordance yet; the backend already supports
   `qty_target: null` via `hb-chunk-override`).
-- [ ] Optional: map `/api/holey-chunks` → `jobs` in `API_PERMISSION_MAP` (currently unmapped ⇒
-  authenticated-allowed; fine for compute-only, tidy later).
+- [ ] Optional: map `/api/holey-chunks/preview` → a permission key in `API_PERMISSION_MAP`
+  instead of relying on its QC Cleanup-11 entry in `UNMAPPED_API_MUTATION_ALLOWLIST`
+  (`lib/core.js`). No longer an accidental fail-open (the route is now explicitly allowlisted
+  with a documented reason and unmapped mutations are denied by default elsewhere), just still
+  not tied to a module permission — tidy later if desired.
+- [ ] Optional: `/api/notifications` (PUT .../read), `/api/push/subscribe`, and
+  `/api/push/unsubscribe` are self-scoped-to-caller mutations with no `API_PERMISSION_MAP`
+  entry — QC Cleanup-11 added them to `UNMAPPED_API_MUTATION_ALLOWLIST` in `lib/core.js` rather
+  than a module permission key, since none of the existing module keys (jobs/logistics/qc/etc.)
+  fit a cross-module personal-notification feature. Revisit only if a dedicated "notifications"
+  module permission is ever wanted; today any authenticated user can use these three, which
+  matches current UI behavior (notification bell + push opt-in are shown to everyone).
 - [ ] Optional: surface the 51" chunk-height selection at order entry (nester already
   parameterized).
 - [ ] Optional: converge `holey-board-calculator.html` onto the shared endpoint (kill the last

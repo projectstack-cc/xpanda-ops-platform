@@ -1454,8 +1454,9 @@ export async function handleApiAssignableUsers(request, env) {
 // Body: { items:[{thickness,qty}], height?, kerf? }. No DB writes, no persistence. Order entry posts
 // already-resolved {thickness,qty} (it knows the matched HB part heights client-side); the
 // authoritative persist path (computeAndPersistHoleyChunks) resolves from stored parts on save.
-// Unmapped in API_PERMISSION_MAP ⇒ allowed for any authenticated session (compute-only, exposes no
-// stored data — see lib/core.js line ~209 `if (!permKey) return true`).
+// Unmapped in API_PERMISSION_MAP (compute-only, exposes no stored data). Since QC Cleanup-11 (RT-03)
+// unmapped POST/PUT/DELETE routes are denied by default — this one is explicitly allowlisted in
+// UNMAPPED_API_MUTATION_ALLOWLIST (lib/core.js), not fail-open.
 export async function handleHoleyChunksPreview(request, env) {
   const db = env.DB; // unused today; kept for signature parity with other handlers
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, 405);

@@ -234,6 +234,30 @@ export function getPermissionKey(pathname, isApi) {
   return null;
 }
 
+// QC Cleanup-11 (RT-03): explicit allowlist of API routes with NO entry in
+// API_PERMISSION_MAP that are still permitted to accept mutating requests
+// (POST/PUT/PATCH/DELETE). Every route below is either self-scoped to the
+// requesting user (acts only on rows owned by their own X-User-Id),
+// compute-only with no persistence, or self-checks admin status inside the
+// handler. This is the ONLY way an unmapped route may accept a mutation as
+// of QC Cleanup-11 — see index.js's session gate. GET/HEAD on an unmapped
+// route is unaffected by this list (still allowed, unchanged behavior).
+export const UNMAPPED_API_MUTATION_ALLOWLIST = [
+  { pattern: /^\/api\/holey-chunks\/preview$/, reason: 'compute-only preview, no DB writes (P379)' },
+  { pattern: /^\/api\/notifications\/read$/,   reason: 'self-scoped: marks own notifications read (WHERE user_id = ?)' },
+  { pattern: /^\/api\/push\/subscribe$/,       reason: 'self-scoped: registers own push subscription' },
+  { pattern: /^\/api\/push\/unsubscribe$/,     reason: 'self-scoped: deletes own push subscription rows only' },
+  { pattern: /^\/api\/admin\/r2-backfill$/,    reason: 'handler self-checks X-User-Is-Admin === 1' },
+];
+
+export function isAllowedUnmappedMutation(pathname) {
+  return UNMAPPED_API_MUTATION_ALLOWLIST.some(entry => entry.pattern.test(pathname));
+}
+
+// `hasPermission` is only ever called by the gate when `permKey` is truthy
+// (see index.js) — the `!permKey` branch below is a defensive default, not
+// a live code path. Unmapped-route handling (RT-03) lives in the gate via
+// `isAllowedUnmappedMutation`, not here.
 export function hasPermission(user, permKey, action) {
   if (user.isAdministrator) return true;
   if (!permKey) return true;

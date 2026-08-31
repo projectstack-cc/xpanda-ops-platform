@@ -1527,6 +1527,58 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Database / API
 
+- **QC Cleanup-11 — Session gate hardening: strip client `X-User-*` headers before
+  server-derived injection, deny unmapped API mutations by default (db-api-agent).**
+  Closes RT-03, RT-05. Wave C. Two changes, both scoped to `_worker.js/index.js` +
+  `_worker.js/lib/core.js`. (1) **RT-05 strip-before-inject**: the session gate now
+  explicitly `.delete()`s `X-User-Id`, `X-User-Role`, `X-User-Name`,
+  `X-User-Permissions`, `X-User-Is-Admin` off the incoming request's `Headers` before
+  `.set()`-ing the server-derived values (grep confirmed these five are the complete
+  set the gate ever sets — no others exist in the legacy worker). This closes a real
+  bug, not just a theoretical one: the old code built the outgoing `Headers` via
+  `new Headers([...incoming.entries(), ...serverPairs])`, and the `Headers` sequence
+  constructor **appends** rather than sets on a duplicate key, so a client-sent
+  `X-User-Id: evil` alongside the server's own pair produced the comma-joined string
+  `"evil, 42"` — not "last one wins" as originally assumed. Confirmed by direct test
+  (`new Headers([['X-User-Id','evil'],['X-User-Id','42']]).get(...)` → `"evil, 42"`).
+  Downstream impact of the old bug: `activity_log.user_id` could be written as a
+  corrupted joined string (audit-log poisoning), and the unguarded
+  `JSON.parse(request.headers.get('X-User-Permissions'))` call in `routes/jobs.js`,
+  `routes/loading.js`, and `routes/bols.js` would throw on a comma-joined JSON string,
+  surfacing as a generic 500 for that request. No privilege-escalation path existed
+  even pre-fix — a spoofed `X-User-Is-Admin: 1` became `"1, 0"`, which fails the
+  `=== '1'` check the same way a plain `"0"` would — so this was corruption/DoS risk,
+  not an authorization bypass. (2) **RT-03 deny-unmapped-mutations**: audited every
+  route in `API_ROUTES` against `API_PERMISSION_MAP` (verified two ways — manual
+  read-through and a small Node script diffing the two lists) and found exactly six
+  API route groups with no permission-map entry: `/api/holey-chunks/preview` (POST,
+  compute-only, no DB writes), `/api/assignable-users` (GET-only, 405s everything
+  else), `/api/admin/r2-backfill` (POST, self-checks `X-User-Is-Admin` in the
+  handler), `/api/notifications` (GET + `PUT .../read`, self-scoped to the caller's
+  own `X-User-Id`), `/api/push/subscribe` (POST, self-scoped), `/api/push/unsubscribe`
+  (DELETE, self-scoped). All were already mapped/allowed or explicitly documented
+  before the default flipped, per the prompt's required ordering. New
+  `UNMAPPED_API_MUTATION_ALLOWLIST` in `lib/core.js` (+ `isAllowedUnmappedMutation()`
+  helper) explicitly allowlists the four mutation-capable ones by exact path pattern
+  with an inline `reason` string; the gate in `index.js` now denies (403
+  `Access denied. Unmapped route.`) any API request with a mutating method
+  (POST/PUT/PATCH/DELETE) on a route with **no** `API_PERMISSION_MAP` entry **and**
+  no allowlist entry. GET/HEAD on an unmapped API route is unchanged (still allowed)
+  — flagged as a default Steve should explicitly confirm rather than a guessed
+  answer; the alternative (deny-by-default on GET too) would 403 the notification
+  bell (`GET /api/notifications`) for every non-admin user and break
+  `/api/assignable-users`, which is called from both `jobs/index.html` and the v2
+  `ProductionBoard.tsx` — no single permission key covers both callers without
+  breaking one of them. Zero currently-working request can newly 403: every route
+  `dispatchApiRoute` actually matches is now either mapped or allowlisted; an
+  unmatched `/api/*` path previously fell through to `env.ASSETS.fetch` and 404'd,
+  so a POST to it now returning 403 instead of 404 is the only behavior delta, and
+  it was never a working call to begin with. `node --check` clean on `index.js`,
+  `lib/core.js`, `routes/jobs.js` (comment-only touch, updated a stale reference to
+  the old fail-open mechanism). **Not pushed — held for Steve's review of the full
+  unmapped-route inventory and the GET-allow-vs-deny default**, per this prompt's
+  standing instructions (highest-risk prompt in the sprint, changes a security
+  default).
 - **QC Cleanup-10 — Auth lifecycle hardening: verified current-password on change, raised
   minimum length, added login rate limiting (admin-auth-agent + db-api-agent for the KV
   binding).** Closes RT-01, RT-02, RT-09. Wave C. **BLOCKED ON STEVE — not pushed.** Three

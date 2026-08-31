@@ -1,4 +1,4 @@
-import { json, logActivity, generateAccessToken, normalizeName, validateSession, SessionLookupError, sessionUnavailableResponse, PATH_PERMISSION_MAP, API_PERMISSION_MAP, getPermissionKey, hasPermission, safeJsonParse } from './lib/core.js';
+import { json, logActivity, generateAccessToken, normalizeName, validateSession, SessionLookupError, sessionUnavailableResponse, PATH_PERMISSION_MAP, API_PERMISSION_MAP, getPermissionKey, hasPermission, isAllowedUnmappedMutation, safeJsonParse } from './lib/core.js';
 import { dispatchNotification } from './lib/push.js';
 import { handleApiLoadingBays, handleApiLoadingAssignments, handleApiLoadingPhotos } from './routes/loading.js';
 import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers, handleApiBols,
@@ -219,18 +219,37 @@ export default {
               }
               return Response.redirect(`${url.origin}/?access_denied=1`, 302);
             }
+          } else if (!permKey && !isEscapePath && isApi) {
+            // QC Cleanup-11 (RT-03): route has NO entry in API_PERMISSION_MAP.
+            // GET/HEAD keeps the pre-existing allow (unchanged behavior — flagged
+            // in the ship report as a default Steve should confirm). A mutation
+            // (POST/PUT/PATCH/DELETE) is DENIED unless explicitly allowlisted —
+            // see UNMAPPED_API_MUTATION_ALLOWLIST in lib/core.js.
+            const isMutation = request.method !== 'GET' && request.method !== 'HEAD';
+            if (isMutation && !isAllowedUnmappedMutation(url.pathname)) {
+              return json({ ok: false, error: 'Access denied. Unmapped route.' }, 403);
+            }
           }
 
           // ── Inject user headers ──────────────────────────────────────────
+          // SECURITY (RT-05): operator identity is server-derived; client-supplied
+          // X-User-* headers are untrusted and MUST be stripped before we append
+          // the values we just computed from the validated session.
+          const cleanHeaders = new Headers(request.headers);
+          cleanHeaders.delete('X-User-Id');
+          cleanHeaders.delete('X-User-Role');
+          cleanHeaders.delete('X-User-Name');
+          cleanHeaders.delete('X-User-Permissions');
+          cleanHeaders.delete('X-User-Is-Admin');
+          cleanHeaders.set('X-User-Id', String(user.userId));
+          cleanHeaders.set('X-User-Role', user.role);
+          cleanHeaders.set('X-User-Name', user.displayName || user.username);
+          cleanHeaders.set('X-User-Permissions', JSON.stringify(user.permissions));
+          cleanHeaders.set('X-User-Is-Admin', user.isAdministrator ? '1' : '0');
+
           request = new Request(request.url, {
             method: request.method,
-            headers: new Headers([...request.headers.entries(),
-              ['X-User-Id', String(user.userId)],
-              ['X-User-Role', user.role],
-              ['X-User-Name', user.displayName || user.username],
-              ['X-User-Permissions', JSON.stringify(user.permissions)],
-              ['X-User-Is-Admin', user.isAdministrator ? '1' : '0'],
-            ]),
+            headers: cleanHeaders,
             body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : null,
           });
         }
