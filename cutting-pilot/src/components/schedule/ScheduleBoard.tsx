@@ -9,7 +9,6 @@ import { AlertTriangle } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import type { ScheduleBoardResponse } from "@/types/schedule";
 import WeekBand from "./WeekBand";
-import { computeDensity } from "./density";
 import FreshnessClock from "./FreshnessClock";
 
 const POLL_MS = 60_000;
@@ -268,13 +267,6 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
   const currentDays = data.days.filter((d) => d.ship_week === currentTab);
   const nextDays = data.days.filter((d) => d.ship_week === nextTab);
 
-  const maxColumnRows = Math.max(
-    0,
-    ...currentDays.map((d) => d.rows.length),
-    ...nextDays.map((d) => d.rows.length)
-  );
-  const { density, rowCap } = computeDensity(maxColumnRows);
-
   return (
     <div ref={rootRef} className="h-screen flex flex-col bg-bg overflow-hidden">
       <PlatformHeader
@@ -318,16 +310,12 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
               weekLabel={formatWeekLabel(currentTab, "THIS WEEK")}
               weekTab={currentTab}
               days={currentDays}
-              density={density}
-              rowCap={rowCap}
               birthdays={data.birthdays ?? []}
             />
             <WeekBand
               weekLabel={formatWeekLabel(nextTab, "NEXT WEEK")}
               weekTab={nextTab}
               days={nextDays}
-              density={density}
-              rowCap={rowCap}
               birthdays={data.birthdays ?? []}
             />
           </div>

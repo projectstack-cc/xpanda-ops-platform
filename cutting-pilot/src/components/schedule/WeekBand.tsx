@@ -5,7 +5,6 @@ import type { ScheduleDayGroup } from "@/types/schedule";
 import DayColumn from "./DayColumn";
 import type { Birthday } from "@/types/schedule";
 import { parseWeekMonday, birthdaysForColumn } from "./birthdays";
-import type { Density } from "./density";
 
 const DAY_ORDER = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"] as const;
 
@@ -29,12 +28,10 @@ interface WeekBandProps {
   weekLabel: string;
   weekTab: string | undefined;
   days: ScheduleDayGroup[];
-  density: Density;
-  rowCap: number;
   birthdays: Birthday[];
 }
 
-export default function WeekBand({ weekLabel, weekTab, days, density, rowCap, birthdays }: WeekBandProps) {
+export default function WeekBand({ weekLabel, weekTab, days, birthdays }: WeekBandProps) {
   const byDay = new Map(days.map((d) => [d.day_of_week, d]));
   const weekMonday = parseWeekMonday(weekTab);
 
@@ -52,8 +49,6 @@ export default function WeekBand({ weekLabel, weekTab, days, density, rowCap, bi
               dayOfWeek={day}
               shipDate={group?.ship_date ?? columnDate(weekMonday, dayIndex)}
               rows={group?.rows ?? []}
-              density={density}
-              rowCap={rowCap}
               birthdays={birthdaysForColumn(birthdays, weekMonday, dayIndex)}
             />
           );

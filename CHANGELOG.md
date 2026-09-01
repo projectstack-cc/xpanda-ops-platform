@@ -794,6 +794,31 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P423 — roomy rows + continuous smooth-scroll, retires shrink-to-fit density
+  (react-component-agent §9b).** Replaces the shrink-to-fit density tiering system
+  (`full`/`compact`/`minimal`) that dropped the whole board to `minimal` — hiding the load
+  count and scrap icon on every row and clipping columns to a `rowCap` "+N more" chip —
+  whenever the busiest day column exceeded 9 rows. This is why the load/TL count "disappeared";
+  it was shed by design at high density. Now: one fixed roomy row size (`py-1`) always, every
+  field always renders (customer, INV#, chunks, status badge + progress/loads, shifts, scrap,
+  load label), no re-sorting. A day column whose rows overflow its available height crawls
+  upward in a seamless vertical loop (departures-board style) at a Steve-locked 10 px/s
+  (`SCHEDULE_SCROLL_PX_PER_SEC`, from wall testing); columns that fit render static. New
+  `AutoScrollColumn.tsx` (measures content vs. viewport via `ResizeObserver`, renders two
+  stacked copies of the children and animates the track up by exactly one copy's height for a
+  seamless loop) wraps `DayColumn.tsx`'s rows region. `OrderRow.tsx` rewritten to drop the
+  `Density` prop and all density conditionals, and drops `isLastInColumn` — every ungrouped row
+  now draws its own bottom divider (grouped rows still suppress via `inGroup`) so the scroll
+  seam stays uniform. `DayColumn.tsx` rewritten to drop `density`/`rowCap`/`selectVisible`/the
+  rowCap clip/the "+N more" chip, rendering every block. `WeekBand.tsx`/`ScheduleBoard.tsx`
+  surgically edited to drop the now-dead `density`/`rowCap` props and the `computeDensity()`
+  call. Deleted `density.ts` entirely. New `globals.css` keyframe (`sched-scroll`/
+  `.sched-scroll-track`) is intentionally NOT disabled under `prefers-reduced-motion` — the
+  crawl is the only way every order in a crowded day becomes visible, not decorative motion.
+  Trailer-group rails, `orphanedGroup` link chip, birthday footer, `FreshnessClock`, stale
+  handling, P365 nav push-reflow, P415 cursor hide, and `--tv-safe-inset` all preserved
+  untouched. `npx tsc --noEmit` + `npm run cf-build` green.
+
 - **P420 — shift assignment badges on `/v2/schedule` order rows
   (react-component-agent §9b + next-platform-agent §9a).** Each order row's
   second line (customer name + status pill) now also shows the job's assigned

@@ -1,67 +1,49 @@
 // src/components/schedule/OrderRow.tsx
-// One reusable order row for each day column on the TV board. Customer +
-// INV# + status badge are always visible; the load count + scrap icon trim out at minimal
-// density — trimming fields is preferred over shrinking text below the legibility floor.
-// Delivery time/location and method/carrier are intentionally NOT displayed on the board:
-// those sheet cells are pulled for matching/sorting only (P313).
+// One reusable order row for each day column on the TV board. Every field is always shown —
+// customer, INV#, chunks, status badge (+ progress / loads), shifts, scrap, and the load label.
+// Rows are a single roomy size (no density tiering): the board no longer sheds fields to fit, it
+// scrolls (AutoScrollColumn). Delivery time/location and method/carrier remain pulled for
+// matching/sorting only and are still not displayed here (P313).
 import { Link2, Recycle } from "lucide-react";
 import type { ScheduleBoardRow } from "@/types/schedule";
 import StatusBadge from "./StatusBadge";
-import type { Density } from "./density";
 import { formatLoadLabel } from "@/lib/truckType";
 import { SHOW_STATUS_BADGES } from "./flags";
 
 interface OrderRowProps {
   row: ScheduleBoardRow;
-  density: Density;
-  // True when this row belongs to a trailer_group_id but none of its groupmates are visible in
-  // this same day column (DayColumn computes this — the group is split across days, not just
-  // clipped: DayColumn never partially clips a group). A rail can't span two day columns, so
-  // this renders a link chip instead, on the row's always-present first line so it survives
-  // every density tier without adding a line of height.
+  // True when this row belongs to a trailer_group_id but none of its groupmates are in this same
+  // day column (group split across days). A rail can't span columns, so a link chip renders on the
+  // always-present first line instead.
   orphanedGroup?: boolean;
-  // True only for the last row actually rendered in the column. Grouped rows sit inside their
-  // own wrapper div now (for the rail border), so a plain `last:` CSS selector would scope to
-  // that wrapper and drop the border under the last member of every group, not just the column's
-  // true last row. DayColumn computes this explicitly instead.
-  isLastInColumn?: boolean;
-  // True for a row rendered inside a linked-group wrapper. The group wrapper draws the group's
-  // top/bottom brackets, so members must NOT draw their own bottom divider (would double the line
-  // and re-fragment the fused group). Overrides isLastInColumn for divider purposes.
+  // Row rendered inside a linked-group wrapper: the wrapper draws the group's top/bottom brackets,
+  // so members must NOT draw their own bottom divider (would double the line / re-fragment the
+  // group). Ungrouped rows always draw a bottom divider so the scroll loop seam stays uniform.
   inGroup?: boolean;
 }
 
-// Single definition shared by customer name and INV# so they read as one visual tier — a
-// later change to one moves both. font-mono/tabular-nums stacks on top for the invoice
-// number since it's numeric data, without touching the shared size/weight/color.
+// Shared by customer name + INV# so they read as one visual tier.
 const PRIMARY_LABEL_CLS = "text-[clamp(0.6875rem,1vh,0.8rem)] font-medium text-text";
 
-const SHIFT_LABELS: Record<string, string> = {
-  "1st": "1st",
-  "2nd": "2nd",
-  "3rd": "3rd",
-};
+const SHIFT_LABELS: Record<string, string> = { "1st": "1st", "2nd": "2nd", "3rd": "3rd" };
 
 function isScrapYes(scrapPickup: string | null): boolean {
   return (scrapPickup ?? "").trim().toUpperCase().startsWith("Y");
 }
 
-export default function OrderRow({ row, density, orphanedGroup, isLastInColumn, inGroup }: OrderRowProps) {
-  const showLoadCount = density !== "minimal";
-  const showScrapIcon = density !== "minimal";
-  const scrapYes = showScrapIcon && isScrapYes(row.scrap_pickup);
+export default function OrderRow({ row, orphanedGroup, inGroup }: OrderRowProps) {
+  const scrapYes = isScrapYes(row.scrap_pickup);
   const loadLabel = formatLoadLabel(row.method, row.load_count);
-  // Unmatched rows keep their flag regardless of the badge flag — it's the operator's only
-  // signal that a sheet row has no platform job, not a derived production status.
+  // Unmatched rows always show their flag (operator's only "no platform job" signal), regardless
+  // of the status-badge feature flag.
   const showBadge = SHOW_STATUS_BADGES || row.unmatched;
-  const showSecondLine = showBadge || scrapYes || (showLoadCount && !!loadLabel);
+  const showSecondLine = showBadge || scrapYes || !!loadLabel;
 
   return (
     <div
       className={[
-        "px-1.5",
-        inGroup || isLastInColumn ? "" : "border-b border-[var(--border-light)]",
-        density === "full" ? "py-1" : "py-0.5",
+        "px-1.5 py-1",
+        inGroup ? "" : "border-b border-[var(--border-light)]",
         row.unmatched ? "opacity-60 grayscale-[30%]" : "",
       ].join(" ")}
     >
@@ -69,11 +51,7 @@ export default function OrderRow({ row, density, orphanedGroup, isLastInColumn, 
         <span className={`truncate ${PRIMARY_LABEL_CLS}`}>{row.customer || "—"}</span>
         <span className="shrink-0 flex items-center gap-0.5">
           {orphanedGroup && (
-            <Link2
-              size={10}
-              className="shrink-0 text-[var(--brand)]"
-              aria-label="Linked to a job on another day"
-            />
+            <Link2 size={10} className="shrink-0 text-[var(--brand)]" aria-label="Linked to a job on another day" />
           )}
           {row.chunks_required != null && (
             <span
@@ -83,9 +61,7 @@ export default function OrderRow({ row, density, orphanedGroup, isLastInColumn, 
               {row.chunks_required}c
             </span>
           )}
-          <span className={`font-mono tabular-nums ${PRIMARY_LABEL_CLS}`}>
-            #{row.invoice_number}
-          </span>
+          <span className={`font-mono tabular-nums ${PRIMARY_LABEL_CLS}`}>#{row.invoice_number}</span>
         </span>
       </div>
 
@@ -114,10 +90,8 @@ export default function OrderRow({ row, density, orphanedGroup, isLastInColumn, 
               <Recycle size={11} className="shrink-0 text-[var(--warn-text)]" aria-label="Scrap pickup" />
             )}
           </div>
-          {showLoadCount && loadLabel && (
-            <span className="shrink-0 font-mono tabular-nums text-[10px] text-text-hint">
-              {loadLabel}
-            </span>
+          {loadLabel && (
+            <span className="shrink-0 font-mono tabular-nums text-[10px] text-text-hint">{loadLabel}</span>
           )}
         </div>
       )}

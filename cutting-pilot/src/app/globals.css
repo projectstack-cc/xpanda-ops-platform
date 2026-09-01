@@ -157,3 +157,19 @@ html.wall-cursor-hidden,
 html.wall-cursor-hidden * {
   cursor: none !important;
 }
+
+/* Schedule board day-column auto-scroll: seamless vertical crawl for a column whose orders
+   overflow its height (AutoScrollColumn.tsx). The motion is LOAD-BEARING — it's the only way
+   every order in a crowded day becomes visible — so it is intentionally NOT disabled under
+   prefers-reduced-motion (unlike decorative animations). Duration is set inline (content height
+   ÷ 10 px/s); this only names the animation + timing so the inline animationDuration wins. */
+.sched-scroll-track {
+  animation-name: sched-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+@keyframes sched-scroll {
+  from { transform: translateY(0); }
+  to   { transform: translateY(calc(-1 * var(--sched-scroll-h, 0px))); }
+}
