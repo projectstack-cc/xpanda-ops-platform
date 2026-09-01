@@ -3,11 +3,12 @@
 // customer, INV#, chunks, status badge (+ progress / loads), shifts, scrap, and the load label.
 // Rows are a single roomy size (no density tiering): the board no longer sheds fields to fit, it
 // scrolls (AutoScrollColumn). Delivery time/location and method/carrier remain pulled for
-// matching/sorting only and are still not displayed here (P313).
+// matching/sorting (P313); the delivery time is now surfaced as the leading column (P424).
 import { Link2, Recycle } from "lucide-react";
 import type { ScheduleBoardRow } from "@/types/schedule";
 import StatusBadge from "./StatusBadge";
 import { formatLoadLabel } from "@/lib/truckType";
+import { parseDeliveryTime } from "@/lib/deliveryTime";
 import { SHOW_STATUS_BADGES } from "./flags";
 
 interface OrderRowProps {
@@ -34,6 +35,7 @@ function isScrapYes(scrapPickup: string | null): boolean {
 export default function OrderRow({ row, orphanedGroup, inGroup }: OrderRowProps) {
   const scrapYes = isScrapYes(row.scrap_pickup);
   const loadLabel = formatLoadLabel(row.method, row.load_count);
+  const deliveryTime = parseDeliveryTime(row.delivery_time);
   // Unmatched rows always show their flag (operator's only "no platform job" signal), regardless
   // of the status-badge feature flag.
   const showBadge = SHOW_STATUS_BADGES || row.unmatched;
@@ -48,7 +50,15 @@ export default function OrderRow({ row, orphanedGroup, inGroup }: OrderRowProps)
       ].join(" ")}
     >
       <div className="flex items-center justify-between gap-1 min-w-0">
-        <span className={`truncate ${PRIMARY_LABEL_CLS}`}>{row.customer || "—"}</span>
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span
+            className="shrink-0 w-12 overflow-hidden whitespace-nowrap font-mono tabular-nums text-[clamp(0.6875rem,1vh,0.8rem)] text-muted"
+            title={row.delivery_time ?? undefined}
+          >
+            {deliveryTime ?? "—"}
+          </span>
+          <span className={`truncate ${PRIMARY_LABEL_CLS}`}>{row.customer || "—"}</span>
+        </div>
         <span className="shrink-0 flex items-center gap-0.5">
           {orphanedGroup && (
             <Link2 size={10} className="shrink-0 text-[var(--brand)]" aria-label="Linked to a job on another day" />

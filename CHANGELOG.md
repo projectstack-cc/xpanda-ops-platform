@@ -794,6 +794,17 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P424 — leading delivery-time column on the roomy row (react-component-agent §9b).** Adds a
+  fixed-width (`w-12`) parsed delivery time to the left of the customer name on line 1 of each
+  `/v2/schedule` row, so times align down the column and the day reads chronologically at a
+  glance. New `lib/deliveryTime.ts` (`parseDeliveryTime`) extracts the first clock time from the
+  free-text `delivery_time` sheet cell — invoice-number-safe (requires a 1-2 digit hour
+  immediately followed by am/pm, so a 4-digit `INV####` can never match) and note-safe (first
+  match wins, so a trailing "DRIVER TO PULL... NO EARLIER THAN 9:45 AM" note never beats the real
+  delivery time). No route/type/DB/permission change — `delivery_time` was already on the payload
+  and `ScheduleBoardRow` (P313, previously matching/sorting-only). Rows with no parseable time
+  show a faint "—" so the customer-name left edge still lines up; full raw cell on `title` for
+  hover/debug.
 - **P423 — roomy rows + continuous smooth-scroll, retires shrink-to-fit density
   (react-component-agent §9b).** Replaces the shrink-to-fit density tiering system
   (`full`/`compact`/`minimal`) that dropped the whole board to `minimal` — hiding the load
