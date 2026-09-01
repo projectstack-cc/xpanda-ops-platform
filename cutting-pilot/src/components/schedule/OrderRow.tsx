@@ -21,6 +21,10 @@ interface OrderRowProps {
   // so members must NOT draw their own bottom divider (would double the line / re-fragment the
   // group). Ungrouped rows always draw a bottom divider so the scroll loop seam stays uniform.
   inGroup?: boolean;
+  // Desk board only: when provided AND the row has a linked job, the row becomes clickable and calls
+  // this with the job_id (opens the read-only detail modal). Omitted on the TV board → not clickable,
+  // behavior unchanged.
+  onSelect?: (jobId: string) => void;
 }
 
 // Shared by customer name + INV# so they read as one visual tier.
@@ -32,7 +36,8 @@ function isScrapYes(scrapPickup: string | null): boolean {
   return (scrapPickup ?? "").trim().toUpperCase().startsWith("Y");
 }
 
-export default function OrderRow({ row, orphanedGroup, inGroup }: OrderRowProps) {
+export default function OrderRow({ row, orphanedGroup, inGroup, onSelect }: OrderRowProps) {
+  const clickable = !!onSelect && !!row.job_id;
   const scrapYes = isScrapYes(row.scrap_pickup);
   const loadLabel = formatLoadLabel(row.method, row.load_count);
   const deliveryTime = parseDeliveryTime(row.delivery_time);
@@ -47,7 +52,21 @@ export default function OrderRow({ row, orphanedGroup, inGroup }: OrderRowProps)
         "px-1.5 py-1",
         inGroup ? "" : "border-b border-[var(--border-light)]",
         row.unmatched ? "opacity-60 grayscale-[30%]" : "",
+        clickable ? "cursor-pointer hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]" : "",
       ].join(" ")}
+      {...(clickable
+        ? {
+            role: "button" as const,
+            tabIndex: 0,
+            onClick: () => onSelect!(row.job_id!),
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect!(row.job_id!);
+              }
+            },
+          }
+        : {})}
     >
       <div className="flex items-center justify-between gap-1 min-w-0">
         <div className="flex items-baseline gap-1.5 min-w-0">

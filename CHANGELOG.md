@@ -794,6 +794,39 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P425 — interactive "desk" schedule board at `/v2/schedule/desk`: hover-pause scroll +
+  click-to-view order modal (react-component-agent §9b).** New desktop-facing variant of the
+  read-only TV board, reusing `GET /v2/api/board/[id]` and the existing `schedule` permission (the
+  `/v2/schedule` middleware prefix already covers `/v2/schedule/desk`, no middleware change). New
+  `InteractiveScrollColumn.tsx` gives each day column a real native scrollbar plus the same
+  P423 10 px/s crawl, but the crawl now **pauses while the pointer is over the column** (resumes on
+  leave) so a user can read or click a row without it moving — single content copy (no seamless
+  duplicate) so the scrollbar thumb reflects the true position; on reaching bottom it dwells 1.5s
+  then resets to top. `OrderRow.tsx`, `DayColumn.tsx`, `WeekBand.tsx` each grew **optional** props
+  (`onSelect`/`interactive`/`onSelectOrder`) that default to current behavior — same shared
+  components, two call sites, not forked copies; confirmed the TV board (`ScheduleBoard.tsx`) passes
+  none of them and renders byte-identically (`grep -n "interactive\|onSelect"` → zero matches).
+  Clicking a row with a linked job (`job_id != null`) opens the existing `OrderDetailModal`
+  (view-only, packing-slip/cut-list PDF viewers retained); unmatched rows stay non-clickable.
+  `OrderDetailModal.tsx` gained a read-only Shipping block (company/attention/street/city-state-zip +
+  carrier) between the header line and the parts table — shared with the production board, so it
+  appears there too. New `InteractiveScheduleBoard.tsx` (desk variant of `ScheduleBoard.tsx` with the
+  TV hardening removed — no cursor-hide, no burn-in inset, header always visible, not auto-hide) +
+  new `app/schedule/desk/page.tsx` server shell mirroring `app/schedule/page.tsx`. **Path correction
+  caught by `advisor()` before commit**: the prompt's own inline code-block header comments said
+  `src/app/v2/schedule/desk/page.tsx`, but the real existing route lives at `src/app/schedule/
+  page.tsx` (no `v2/` directory segment — `/v2` is a build-time relocation, not a source path,
+  confirmed by the build's own "Relocated `_next` → `v2/_next`" step); the prompt's own "Files in
+  scope" line had the correct path all along. First pass followed the wrong (stale) comment, built a
+  stray `src/app/v2/schedule/` tree, and the route table showed `/v2/schedule/desk` (double-`v2`
+  live, and outside the `/v2/schedule` middleware prefix — would have 404'd both the page fetch and
+  the permission gate). Moved to the correct path, deleted the stray `v2/` directory, cleared the
+  stale `.next` type cache, and reconfirmed the build's route table lists `/schedule/desk` directly
+  beneath `/schedule` — same shape as every other route. Also verified `Modal.tsx`'s root is `fixed
+  inset-0` (overlay, not in-flow), so mounting `OrderDetailModal` as the last child of the board's
+  flex column doesn't squeeze the two week bands. No new route/nav link — not wired into any nav or
+  home card this prompt (reachable only by direct URL), per the standing no-cutover-until-Steve-
+  tests rule. `npx tsc --noEmit` + `npm run cf-build` green.
 - **P424 — leading delivery-time column on the roomy row (react-component-agent §9b).** Adds a
   fixed-width (`w-12`) parsed delivery time to the left of the customer name on line 1 of each
   `/v2/schedule` row, so times align down the column and the day reads chronologically at a

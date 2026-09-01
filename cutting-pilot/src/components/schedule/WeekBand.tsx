@@ -29,9 +29,11 @@ interface WeekBandProps {
   weekTab: string | undefined;
   days: ScheduleDayGroup[];
   birthdays: Birthday[];
+  interactive?: boolean;
+  onSelectOrder?: (jobId: string) => void;
 }
 
-export default function WeekBand({ weekLabel, weekTab, days, birthdays }: WeekBandProps) {
+export default function WeekBand({ weekLabel, weekTab, days, birthdays, interactive, onSelectOrder }: WeekBandProps) {
   const byDay = new Map(days.map((d) => [d.day_of_week, d]));
   const weekMonday = parseWeekMonday(weekTab);
 
@@ -50,6 +52,8 @@ export default function WeekBand({ weekLabel, weekTab, days, birthdays }: WeekBa
               shipDate={group?.ship_date ?? columnDate(weekMonday, dayIndex)}
               rows={group?.rows ?? []}
               birthdays={birthdaysForColumn(birthdays, weekMonday, dayIndex)}
+              interactive={interactive}
+              onSelectOrder={onSelectOrder}
             />
           );
         })}

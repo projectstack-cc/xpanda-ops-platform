@@ -9,6 +9,7 @@
 import type { ScheduleBoardRow, Birthday } from "@/types/schedule";
 import OrderRow from "./OrderRow";
 import AutoScrollColumn from "./AutoScrollColumn";
+import InteractiveScrollColumn from "./InteractiveScrollColumn";
 
 function formatDayHeader(dayOfWeek: string, shipDate: string | null): string {
   const short = dayOfWeek.slice(0, 3);
@@ -24,6 +25,10 @@ interface DayColumnProps {
   shipDate: string | null;
   rows: ScheduleBoardRow[];
   birthdays: Birthday[];
+  // Desk board: use the hover-pausing scrollbar column and make rows clickable. Omitted on the TV
+  // board → AutoScrollColumn + non-clickable rows, unchanged.
+  interactive?: boolean;
+  onSelectOrder?: (jobId: string) => void;
 }
 
 // Only a trailer_group_id with >=2 rows PRESENT IN THIS COLUMN counts as a local group. A count of
@@ -91,7 +96,8 @@ function buildBlocks(rows: ScheduleBoardRow[], localCount: Map<string, number>):
   return blocks;
 }
 
-export default function DayColumn({ dayOfWeek, shipDate, rows, birthdays }: DayColumnProps) {
+export default function DayColumn({ dayOfWeek, shipDate, rows, birthdays, interactive, onSelectOrder }: DayColumnProps) {
+  const ScrollWrapper = interactive ? InteractiveScrollColumn : AutoScrollColumn;
   const localCount = countLocalGroups(rows);
   const ordered = withGroupsAdjacent(rows, localCount);
   const blocks = buildBlocks(ordered, localCount);
@@ -105,7 +111,7 @@ export default function DayColumn({ dayOfWeek, shipDate, rows, birthdays }: DayC
         <span className="font-mono tabular-nums text-[10px] text-text-faint">{rows.length}</span>
       </div>
 
-      <AutoScrollColumn>
+      <ScrollWrapper>
         {blocks.length === 0 ? (
           <div className="px-1.5 py-2 text-[10px] italic text-text-faint">No loads</div>
         ) : (
@@ -116,7 +122,7 @@ export default function DayColumn({ dayOfWeek, shipDate, rows, birthdays }: DayC
                 className="bg-[var(--surface-2)] border-l-2 border-t-2 border-b-2 border-[var(--brand)]"
               >
                 {block.rows.map((row, i) => (
-                  <OrderRow key={`${row.invoice_number}-${row.job_id ?? i}`} row={row} inGroup />
+                  <OrderRow key={`${row.invoice_number}-${row.job_id ?? i}`} row={row} inGroup onSelect={onSelectOrder} />
                 ))}
               </div>
             ) : (
@@ -124,11 +130,12 @@ export default function DayColumn({ dayOfWeek, shipDate, rows, birthdays }: DayC
                 key={`${block.rows[0].invoice_number}-${block.rows[0].job_id ?? bi}`}
                 row={block.rows[0]}
                 orphanedGroup={!!block.rows[0].trailer_group_id}
+                onSelect={onSelectOrder}
               />
             )
           )
         )}
-      </AutoScrollColumn>
+      </ScrollWrapper>
 
       {birthdays.length > 0 && (
         <div className="shrink-0 border-t border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-1">

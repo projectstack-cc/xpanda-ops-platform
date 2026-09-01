@@ -143,6 +143,30 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
             {job.ship_date && <span>Ship {job.ship_date}</span>}
           </div>
 
+          {(job.ship_to_company || job.ship_to_street || job.ship_to_city || job.carrier) && (
+            <div className="rounded-lg border border-[var(--card-border)] p-3 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">Shipping</div>
+              <div className="text-text leading-snug">
+                {job.ship_to_company && <div className="font-medium">{job.ship_to_company}</div>}
+                {job.ship_to_attention && <div className="text-muted">{job.ship_to_attention}</div>}
+                {job.ship_to_street && <div>{job.ship_to_street}</div>}
+                {job.ship_to_street2 && <div>{job.ship_to_street2}</div>}
+                {(job.ship_to_city || job.ship_to_state || job.ship_to_zip) && (
+                  <div>
+                    {job.ship_to_city}
+                    {job.ship_to_state ? `, ${job.ship_to_state}` : ""}
+                    {job.ship_to_zip ? ` ${job.ship_to_zip}` : ""}
+                  </div>
+                )}
+              </div>
+              {job.carrier && (
+                <div className="mt-2 text-muted">
+                  <span className="text-xs font-semibold uppercase tracking-wide">Carrier</span> {job.carrier}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="overflow-x-auto rounded-lg border border-[var(--card-border)]">
             <table className="w-full text-sm">
               <thead>
