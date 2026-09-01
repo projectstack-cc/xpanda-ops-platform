@@ -3,7 +3,7 @@
 // customer, INV#, chunks, status badge (+ progress / loads), shifts, scrap, and the load label.
 // Rows are a single roomy size (no density tiering): the board no longer sheds fields to fit, it
 // scrolls (AutoScrollColumn). Delivery time/location and method/carrier remain pulled for
-// matching/sorting (P313); the delivery time is now surfaced as the leading column (P424).
+// matching/sorting (P313); the delivery time rides after the load label on line 2, e.g. "TL x1 @ 7a" (P424/P426).
 import { Link2, Recycle } from "lucide-react";
 import type { ScheduleBoardRow } from "@/types/schedule";
 import StatusBadge from "./StatusBadge";
@@ -41,10 +41,13 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect }: Orde
   const scrapYes = isScrapYes(row.scrap_pickup);
   const loadLabel = formatLoadLabel(row.method, row.load_count);
   const deliveryTime = parseDeliveryTime(row.delivery_time);
+  // Load label + delivery time share the right slot on line 2, e.g. "TL x1 @ 7a" (P426 — moved from
+  // the P424 leading column). Either part may be absent.
+  const loadTimeLabel = [loadLabel, deliveryTime ? `@ ${deliveryTime}` : null].filter(Boolean).join(" ");
   // Unmatched rows always show their flag (operator's only "no platform job" signal), regardless
   // of the status-badge feature flag.
   const showBadge = SHOW_STATUS_BADGES || row.unmatched;
-  const showSecondLine = showBadge || scrapYes || !!loadLabel;
+  const showSecondLine = showBadge || scrapYes || !!loadTimeLabel;
 
   return (
     <div
@@ -69,15 +72,7 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect }: Orde
         : {})}
     >
       <div className="flex items-center justify-between gap-1 min-w-0">
-        <div className="flex items-baseline gap-1.5 min-w-0">
-          <span
-            className="shrink-0 w-12 overflow-hidden whitespace-nowrap font-mono tabular-nums text-[clamp(0.6875rem,1vh,0.8rem)] text-muted"
-            title={row.delivery_time ?? undefined}
-          >
-            {deliveryTime ?? "—"}
-          </span>
-          <span className={`truncate ${PRIMARY_LABEL_CLS}`}>{row.customer || "—"}</span>
-        </div>
+        <span className={`truncate ${PRIMARY_LABEL_CLS}`}>{row.customer || "—"}</span>
         <span className="shrink-0 flex items-center gap-0.5">
           {orphanedGroup && (
             <Link2 size={10} className="shrink-0 text-[var(--brand)]" aria-label="Linked to a job on another day" />
@@ -119,8 +114,13 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect }: Orde
               <Recycle size={11} className="shrink-0 text-[var(--warn-text)]" aria-label="Scrap pickup" />
             )}
           </div>
-          {loadLabel && (
-            <span className="shrink-0 font-mono tabular-nums text-[10px] text-text-hint">{loadLabel}</span>
+          {loadTimeLabel && (
+            <span
+              className="shrink-0 font-mono tabular-nums text-[10px] text-text-hint"
+              title={row.delivery_time ?? undefined}
+            >
+              {loadTimeLabel}
+            </span>
           )}
         </div>
       )}

@@ -794,6 +794,17 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P426 — moved the delivery time from the P424 leading column to the right of line 2, appended
+  to the load label (react-component-agent §9b).** P424's fixed-width leading time slot (plus its
+  "—" placeholder on timeless rows) opened an unappealing gap between the time and the customer
+  name. Single-file change to `OrderRow.tsx`: line 1 reverts to the plain customer name (leading
+  time slot removed); line 2's right slot now renders a combined `loadTimeLabel` — `formatLoadLabel`
+  and `parseDeliveryTime`'s parsed value joined as `"TL x1 @ 7a"` when both are present, `"TL x1"`
+  when only the load label is, `"@ 7a"` when only the time is, empty when neither is (both parsing
+  functions themselves unchanged). `showSecondLine` now also triggers off `loadTimeLabel` rather
+  than the old bare `loadLabel`, so a timeless row with no load label still only shows line 2 when
+  a badge/shift/scrap icon needs it — unchanged from before P424. Same parsed value, placement only.
+  `npx tsc --noEmit` + `npm run cf-build` green.
 - **P425 — interactive "desk" schedule board at `/v2/schedule/desk`: hover-pause scroll +
   click-to-view order modal (react-component-agent §9b).** New desktop-facing variant of the
   read-only TV board, reusing `GET /v2/api/board/[id]` and the existing `schedule` permission (the
