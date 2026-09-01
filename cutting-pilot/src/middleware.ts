@@ -19,32 +19,35 @@ import { validateSession, hasPermission, SessionLookupError } from "@/lib/sessio
 
 // First matching prefix wins. A path with no match falls through with no permission gate
 // (still session-gated above) — same as an un-mapped path in the legacy PATH_PERMISSION_MAP.
-const PERMISSION_MAP: Array<{ prefix: string; key: string }> = [
-  { prefix: "/v2/api/schedule-board", key: "schedule" },
-  { prefix: "/v2/schedule", key: "schedule" },
-  { prefix: "/v2/api/loading-board", key: "logistics.loading.tv" },
-  { prefix: "/v2/loading", key: "logistics.loading.tv" },
-  { prefix: "/v2/api/cutting/manage", key: "manufacturing.cutting.manage" },
-  { prefix: "/v2/api/cutting/kick", key: "manufacturing.cutting.override" },
-  { prefix: "/v2/api/cutting", key: "manufacturing.cutting" },
-  { prefix: "/v2/cutting", key: "manufacturing.cutting" },
-  { prefix: "/v2/api/board", key: "jobs" },
-  { prefix: "/v2/board", key: "jobs" },
-  { prefix: "/v2/api/orders", key: "orders" },
-  { prefix: "/v2/orders", key: "orders" },
-  { prefix: "/v2/api/notes/mark-viewed", key: "notes.manage" },
-  { prefix: "/v2/api/notes", key: "notes" },
-  { prefix: "/v2/notes", key: "notes" },
-  { prefix: "/v2/api/blocks", key: "manufacturing.blocks" },
-  { prefix: "/v2/blocks", key: "manufacturing.blocks" },
-  { prefix: "/v2/api/carrier", key: "logistics.carrier_view" },
-  { prefix: "/v2/carrier", key: "logistics.carrier_view" },
-  { prefix: "/v2/api/production", key: "production.log" },
-  { prefix: "/v2/production", key: "production.log" },
+const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
+  // Both schedule views read the same data API — EITHER key grants read access.
+  { prefix: "/v2/api/schedule-board", keys: ["schedule", "schedule.desk"] },
+  // Desk page must come BEFORE the general /v2/schedule prefix (first match wins).
+  { prefix: "/v2/schedule/desk", keys: ["schedule.desk"] },
+  { prefix: "/v2/schedule", keys: ["schedule"] },
+  { prefix: "/v2/api/loading-board", keys: ["logistics.loading.tv"] },
+  { prefix: "/v2/loading", keys: ["logistics.loading.tv"] },
+  { prefix: "/v2/api/cutting/manage", keys: ["manufacturing.cutting.manage"] },
+  { prefix: "/v2/api/cutting/kick", keys: ["manufacturing.cutting.override"] },
+  { prefix: "/v2/api/cutting", keys: ["manufacturing.cutting"] },
+  { prefix: "/v2/cutting", keys: ["manufacturing.cutting"] },
+  { prefix: "/v2/api/board", keys: ["jobs"] },
+  { prefix: "/v2/board", keys: ["jobs"] },
+  { prefix: "/v2/api/orders", keys: ["orders"] },
+  { prefix: "/v2/orders", keys: ["orders"] },
+  { prefix: "/v2/api/notes/mark-viewed", keys: ["notes.manage"] },
+  { prefix: "/v2/api/notes", keys: ["notes"] },
+  { prefix: "/v2/notes", keys: ["notes"] },
+  { prefix: "/v2/api/blocks", keys: ["manufacturing.blocks"] },
+  { prefix: "/v2/blocks", keys: ["manufacturing.blocks"] },
+  { prefix: "/v2/api/carrier", keys: ["logistics.carrier_view"] },
+  { prefix: "/v2/carrier", keys: ["logistics.carrier_view"] },
+  { prefix: "/v2/api/production", keys: ["production.log"] },
+  { prefix: "/v2/production", keys: ["production.log"] },
 ];
 
-function permissionKeyFor(pathname: string): string | null {
-  return PERMISSION_MAP.find((m) => pathname.startsWith(m.prefix))?.key ?? null;
+function permissionKeysFor(pathname: string): string[] | null {
+  return PERMISSION_MAP.find((m) => pathname.startsWith(m.prefix))?.keys ?? null;
 }
 
 export const config = {
@@ -96,7 +99,10 @@ export async function middleware(request: NextRequest) {
   }
 
   const action = request.method === "GET" || request.method === "HEAD" ? "view" : "edit";
-  if (!hasPermission(user, permissionKeyFor(url.pathname), action)) {
+  // Unmapped path (null) stays ungated as before; a mapped path passes if the user holds ANY of its keys.
+  const requiredKeys = permissionKeysFor(url.pathname);
+  const permitted = requiredKeys === null || requiredKeys.some((k) => hasPermission(user, k, action));
+  if (!permitted) {
     if (isApi) return NextResponse.json({ ok: false, error: "Access denied." }, { status: 403 });
     return NextResponse.redirect(new URL("/?access_denied=1", url.origin));
   }

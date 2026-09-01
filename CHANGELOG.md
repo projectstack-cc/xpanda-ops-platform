@@ -794,6 +794,23 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Schedule Board (v2)
 
+- **P427 — dedicated `schedule.desk` permission gating `/v2/schedule/desk`, dual links on the home
+  schedule card (next-platform-agent §9a + admin-auth-agent).** Both v2 schedule views (`/v2/schedule`
+  TV, `/v2/schedule/desk`) were gated on the single `schedule` key, so the home page couldn't route
+  different users to different views. `PERMISSION_MAP` in `cutting-pilot/src/middleware.ts` now maps
+  each prefix to an array of keys (`permissionKeyFor` → `permissionKeysFor`, single-key lookup →
+  any-of check via `.some()`); the desk-page prefix (`/v2/schedule/desk`, key `schedule.desk`) is
+  listed before the general `/v2/schedule` prefix so first-match-wins routes it correctly, and the
+  shared `/v2/api/schedule-board` data endpoint now accepts **either** `schedule` or `schedule.desk`
+  so a desk-only user doesn't 403 on their own data. Mirrors the existing Loading card pattern
+  (`logistics.loading` + `logistics.loading.tv`). `admin/roles.html` gained the `schedule.desk` →
+  "Schedule Board (Desk)" label (auto-rendered toggle, no other change). `index.html`'s Schedule card
+  gate widened to `data-permission="schedule,schedule.desk"` (card shows if the user has either key)
+  and now renders two links — "TV Board" (`/v2/schedule`, `data-perm-key="schedule"`) and "Desk View"
+  (`/v2/schedule/desk`, `data-perm-key="schedule.desk"`) — each hidden per-permission by the existing
+  per-link visibility logic; admins see both. `npx tsc --noEmit` + `npm run cf-build` green. Steve to
+  assign `schedule.desk` to desk/office users in Admin → Roles after push (existing TV users keep
+  `schedule`).
 - **P426 — moved the delivery time from the P424 leading column to the right of line 2, appended
   to the load label (react-component-agent §9b).** P424's fixed-width leading time slot (plus its
   "—" placeholder on timeless rows) opened an unappealing gap between the time and the customer
