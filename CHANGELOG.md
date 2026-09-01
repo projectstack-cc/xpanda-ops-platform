@@ -803,7 +803,8 @@ Entries within each module are ordered by prompt # descending (newest first).
   when only the load label is, `"@ 7a"` when only the time is, empty when neither is (both parsing
   functions themselves unchanged). `showSecondLine` now also triggers off `loadTimeLabel` rather
   than the old bare `loadLabel`, so a timeless row with no load label still only shows line 2 when
-  a badge/shift/scrap icon needs it — unchanged from before P424. Same parsed value, placement only.
+  a badge/scrap icon needs it (shifts are rendered on line 2 but don't gate `showSecondLine`,
+  pre-existing since P420/P423) — unchanged from before P424. Same parsed value, placement only.
   `npx tsc --noEmit` + `npm run cf-build` green.
 - **P425 — interactive "desk" schedule board at `/v2/schedule/desk`: hover-pause scroll +
   click-to-view order modal (react-component-agent §9b).** New desktop-facing variant of the
