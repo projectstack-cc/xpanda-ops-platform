@@ -177,7 +177,7 @@
 - [ ] **Retire legacy `jobs/index.html` board** (+ `jobs-header.js`, `jobs-shared.css` if unused)
   once `/v2/board` is re-linked and confirmed at parity on the floor — post-cutover cleanup.
   Pairs with the already-noted `_worker.js/routes/quickbooks.js` removal for the same cleanup pass.
-- [ ] **P431 — packing-slip parser: extract density.** Blocked on a sample slip showing the density token format; neither parser extracts it today.
+- [ ] Density no-keyword default is blanket RC (Holey Board/Insulperm, Laminate). Physically Holey Board/Insulperm is usually virgin — revisit if a product proves virgin (one-line flip in deriveDensity).
 - [ ] Board: manager-flag header for assign gating (avoid the 403 round-trip) — `BoardRowEdit.tsx`
   currently discovers manager status by attempting the legacy assign/unassign call and reading a
   403, same as the P333 job-board UI. A dedicated header (mirroring

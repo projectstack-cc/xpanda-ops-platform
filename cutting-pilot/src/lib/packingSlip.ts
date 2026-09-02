@@ -616,7 +616,9 @@ function mapToPrefill(data: ParsedDoc): PackingSlipPrefill {
         description: descParts.filter(Boolean).join(" ").trim(),
         quantity: String(li.quantity ?? 1),
         dimensions: li.dimensions || "",
-        density: "",
+        density: deriveDensity(
+          [li.category, li.description, li.label, ...(li._descLines ?? [])].filter(Boolean).join(" ")
+        ),
       };
     });
   }
@@ -625,6 +627,20 @@ function mapToPrefill(data: ParsedDoc): PackingSlipPrefill {
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────
+
+// P431 — derive the density code from a line item's combined text. The number comes from the
+// `X.X#` pound marker (a DECIMAL is required, so product codes like "#206" and weights never
+// match). Suffix is V when the item is virgin (the word VIRGIN, or a "- V" header code),
+// otherwise RC — RECYCLE/Regrind/RC/"- RC" and also the no-keyword products (Holey Board /
+// Insulperm, Laminate) which carry no virgin/RC word on the slip. Output matches the legacy
+// density field: "1.0 RC", "1.25 V". Detection is per line item (a slip can mix V and RC).
+function deriveDensity(text: string): string {
+  const m = text.match(/(\d+\.\d+)\s*#/);
+  if (!m) return "";
+  const num = m[1];
+  const isVirgin = /\bVIRGIN\b/i.test(text) || /[-–]\s*V\b/.test(text);
+  return `${num} ${isVirgin ? "V" : "RC"}`;
+}
 
 export async function parsePackingSlip(file: File): Promise<ParsePackingSlipResult> {
   try {
