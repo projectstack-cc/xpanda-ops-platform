@@ -1965,6 +1965,15 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P433 — Load builder: cross-row layer drag-and-drop in customize mode (logistics-agent).**
+  The customize-mode drop handler in `logistics/load-builder.html` rejected any drop whose source
+  row differed from the target row (`fromRi !== ri`), so layers could only be moved between columns
+  within the same row. The move body was already fully row-indexed and supported cross-row moves —
+  only the guard forbade it. Relaxed the guard to reject solely a same-cell no-op
+  (`fromRi === ri && fromCi === ci`), enabling drag between any columns across any rows. No fenced
+  logic touched (`calcLoading`, dissolve, `reflowRowGeometry`, UNDO, `bol-shared.js` untouched);
+  empty source columns/rows are still cleaned by the existing apply path.
+
 - **QC Cleanup-8 — `logActivity()` coverage for BOL email send (logistics-agent +
   db-api-agent).** Closes AUDIT-503. Wave B. Additive logging only.
   `handleSend` in `_worker.js/routes/bol-email.js` (POST `/api/bol-email/send`) now logs a

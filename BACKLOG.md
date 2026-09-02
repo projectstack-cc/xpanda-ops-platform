@@ -263,7 +263,6 @@
 - [ ] Consider separate dashboards for staff vs. management (TV display)
 - [ ] Zoning support for deck systems
 - [ ] Load builder: make initial calculated load view larger, include the stacks visually
-- [ ] Load builder: fix/clarify customize mode drag-and-drop (move layers between columns)
 - [ ] Load builder DISSOLVE: optional per-piece (sub-line) granularity within a move-group — current P378 checkbox toggles a whole skuCode|height|dest group at once.
 
 ### BOL Issues

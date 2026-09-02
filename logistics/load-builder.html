@@ -2408,7 +2408,7 @@ function renderEditorContent(box, ti, skuLib) {
         let data;
         try { data = JSON.parse(e.dataTransfer.getData('text/plain')); } catch { return; }
         const { ri: fromRi, ci: fromCi, li: fromLi } = data;
-        if (fromRi !== ri || fromCi === ci) return;
+        if (fromRi === ri && fromCi === ci) return; // allow cross-row moves; reject only a same-cell no-op
         const layer = editorRows[fromRi].columns[fromCi].layers.splice(fromLi, 1)[0];
         if (!layer) return;
         editorRows[ri].columns[ci].layers.push(layer);
