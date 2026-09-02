@@ -566,6 +566,20 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P432 follow-up — dimension matching in `partMatch.ts` is now exact, no tolerance.** Steve
+  flagged that the ± dimension window has, in the past, pulled the wrong catalog part onto a
+  real order (a different SKU merely fell within the tolerance window). Removed tolerance from
+  all four comparisons (main L×W×H match, Holey-Board-by-thickness, Holey-Board-by-height) —
+  `EPS = 1e-6` guards only float-representation noise, not physical variance. Confirmed with
+  Steve this should apply to the two Holey-Board passes too (checked `admin/parts.html`'s height
+  field first — free-typed to the hundredth, no fixed nominal set — so an exact match there can
+  blank a row rather than mismatch; his call was exact everywhere regardless). Also: when
+  several parts tie on exact dimensions and no keyword (holey board/laminate/plug/notch) narrows
+  it, the matcher no longer guesses the first tie (`dimensions_fuzzy` removed) — returns no
+  match, row stays blank for manual entry. Same fix mirrored into legacy `jobs/index.html`'s
+  `matchLineItemToPart` (bilateral parity — the original pre-existing bad matches most likely
+  happened there, since v2 didn't exist before this session). `tsc --noEmit` + `cf-build` green;
+  legacy inline `<script>` blocks re-verified parseable.
 - **P432** — `/v2/orders` now auto-matches parsed line items to the parts library: new `partMatch.ts` (logic port of the legacy `matchLineItemToPart` / `parseDimensionValues` — exact part# token, dimension ±0.25″, Holey-Board by thickness/height), the parser carries `category`/`thickness` through the prefill, and `handleSlipFile` fetches `/api/parts` (cached) and applies `part_id` + `part_number` per line, fail-open. No schema/route change. `tsc --noEmit` + `cf-build` green.
 - **P431** — packing-slip parser now extracts density per line item: number from the `X.X#` marker (decimal-required regex ignores product codes/weights), suffix **V** for virgin (`VIRGIN` or a `- V` header code) else **RC** (covers RECYCLE/Regrind/RC and the no-keyword Holey Board/Laminate products). Emits the legacy `"1.0 RC"` / `"1.25 V"` format into the order form's density field. Parser-lib only. `tsc --noEmit` + `cf-build` green.
 - **P430** — `/v2/orders` ship-to verification at save: removed the stubbed Verify button; `handleSubmit` now calls the existing legacy `/api/address/validate` (Lob) when a full ship-to is present, fail-open, and on a `corrected` result opens the new `AddressCorrectionModal` (composes `<Modal>`) for Use-suggested / Keep-as-entered. Persists `ship_to_verified` / `ship_to_standardized` / `ship_to_verified_at` (+ `ship_to_street2` from the suggestion) — all already bound by the route. No v2 endpoint, no schema. `tsc --noEmit` + `cf-build` green.
