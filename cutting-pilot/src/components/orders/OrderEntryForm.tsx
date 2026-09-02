@@ -26,8 +26,13 @@ export interface OrderPayload {
   ship_to_city: string;
   ship_to_state: string;
   ship_to_zip: string;
-  method: string;
+  customer_pickup: boolean;
   carrier: string;
+  delivery_time: string;
+  scrap_pickup: string;
+  contact_name: string;
+  contact_phone: string;
+  processes: Array<{ name: string; completed: boolean }>;
   ship_date: string;
   load_count: number;
   total_bdft: number;
@@ -128,9 +133,19 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
   const [shipToZip, setShipToZip] = useState("");
 
   const [shipDate, setShipDate] = useState("");
-  const [method, setMethod] = useState("");
+  const [customerPickup, setCustomerPickup] = useState(false);
   const [carrier, setCarrier] = useState("");
   const [loadCount, setLoadCount] = useState("1");
+  const [deliveryTime, setDeliveryTime] = useState("");
+  const [scrapPickup, setScrapPickup] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+  const [procCrossCutter, setProcCrossCutter] = useState(false);
+  const [procHoleCutter, setProcHoleCutter] = useState(false);
+  const [procMainLine, setProcMainLine] = useState(false);
+  const [procBlueLine, setProcBlueLine] = useState(false);
+  const [procLaminate, setProcLaminate] = useState(false);
 
   const [lineItems, setLineItems] = useState<OrderLineItem[]>([{ ...EMPTY_LINE }]);
 
@@ -169,6 +184,8 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
       if (data.ship_to_state) setShipToState(data.ship_to_state);
       if (data.ship_to_zip) setShipToZip(data.ship_to_zip);
       if (data.ship_date) setShipDate(data.ship_date);
+      if (data.contact_name) setContactName(data.contact_name);
+      if (data.contact_phone) setContactPhone(data.contact_phone);
       if (data.line_items && data.line_items.length) setLineItems(data.line_items);
     } catch {
       setParseError("Couldn't read that slip — enter the order manually.");
@@ -200,9 +217,19 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
     setShipToState("");
     setShipToZip("");
     setShipDate("");
-    setMethod("");
+    setCustomerPickup(false);
     setCarrier("");
     setLoadCount("1");
+    setDeliveryTime("");
+    setScrapPickup("");
+    setContactName("");
+    setContactPhone("");
+    setDragActive(false);
+    setProcCrossCutter(false);
+    setProcHoleCutter(false);
+    setProcMainLine(false);
+    setProcBlueLine(false);
+    setProcLaminate(false);
     setLineItems([{ ...EMPTY_LINE }]);
     setCuttingInstructions("");
     setPackingInstructions("");
@@ -235,9 +262,22 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
       ship_to_city: shipToCity.trim(),
       ship_to_state: shipToState.trim(),
       ship_to_zip: shipToZip.trim(),
-      method: method.trim(),
+      customer_pickup: customerPickup,
       carrier: carrier.trim(),
       ship_date: shipDate,
+      delivery_time: deliveryTime.trim(),
+      scrap_pickup: scrapPickup,
+      contact_name: contactName.trim(),
+      contact_phone: contactPhone.trim(),
+      processes: [
+        { name: "Cross Cutter", completed: false, checked: procCrossCutter },
+        { name: "Hole Cutter", completed: false, checked: procHoleCutter },
+        { name: "Main Line", completed: false, checked: procMainLine },
+        { name: "Blue Line", completed: false, checked: procBlueLine },
+        { name: "Laminate", completed: false, checked: procLaminate },
+      ]
+        .filter((p) => p.checked)
+        .map((p) => ({ name: p.name, completed: p.completed })),
       load_count: Number.isFinite(Number(loadCount)) && Number(loadCount) > 0 ? Number(loadCount) : 1,
       total_bdft: totalBdft,
       cutting_instructions: cuttingInstructions.trim(),
@@ -316,7 +356,11 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
         <section>
           <label
             htmlFor="packing-slip-input"
-            className="flex flex-col items-center justify-center gap-2 min-h-[96px] rounded-lg border-2 border-dashed border-[var(--input-border)] bg-[var(--surface-2)] text-center px-4 py-6 cursor-pointer hover:border-[var(--brand)] transition-colors"
+            onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+            onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+            onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+            onDrop={(e) => { e.preventDefault(); setDragActive(false); handleSlipFile(e.dataTransfer.files?.[0]); }}
+            className={`flex flex-col items-center justify-center gap-2 min-h-[96px] rounded-lg border-2 border-dashed ${dragActive ? "border-[var(--brand)]" : "border-[var(--input-border)]"} bg-[var(--surface-2)] text-center px-4 py-6 cursor-pointer hover:border-[var(--brand)] transition-colors`}
           >
             <FileUp size={22} className="text-muted" aria-hidden="true" />
             <span className="text-sm font-medium text-text">
@@ -387,18 +431,10 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
               <span className={labelClass}>Ship date</span>
               <input type="date" value={shipDate} onChange={(e) => setShipDate(e.target.value)} className={inputClass} />
             </label>
-            <label className="block">
-              <span className={labelClass}>Method</span>
-              <select value={method} onChange={(e) => setMethod(e.target.value)} className={inputClass}>
-                <option value="">— Select —</option>
-                <option value="Our truck">Our truck</option>
-                <option value="Common carrier">Common carrier</option>
-                <option value="Customer pickup">Customer pickup</option>
-              </select>
-            </label>
+            <TextField label="Delivery time" value={deliveryTime} onChange={setDeliveryTime} placeholder="e.g. 7:00 am & HRLY" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <TextField label="Carrier" value={carrier} onChange={setCarrier} />
+            <TextField label="Carrier" value={carrier} onChange={setCarrier} placeholder="e.g. LISMA" />
             <label className="block">
               <span className={labelClass}>Load count</span>
               <input
@@ -409,6 +445,63 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
                 className={inputClass}
               />
             </label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+            <label className="block">
+              <span className={labelClass}>Scrap pickup</span>
+              <select value={scrapPickup} onChange={(e) => setScrapPickup(e.target.value)} className={inputClass}>
+                <option value="">— N/A —</option>
+                <option value="YES">YES</option>
+                <option value="NO">NO</option>
+                <option value="N/A">N/A</option>
+              </select>
+            </label>
+            <label className="inline-flex items-center gap-2 min-h-[44px] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={customerPickup}
+                onChange={(e) => setCustomerPickup(e.target.checked)}
+                className="h-5 w-5 accent-[var(--brand)]"
+              />
+              <span className="text-sm font-medium text-text">Customer pickup</span>
+            </label>
+          </div>
+        </section>
+
+        {/* Contact */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-text">Contact</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <TextField label="Contact name" value={contactName} onChange={setContactName} placeholder="Contact person" />
+            <TextField label="Contact phone" value={contactPhone} onChange={setContactPhone} placeholder="Phone number" />
+          </div>
+        </section>
+
+        {/* Production processes */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-text">Production processes</h2>
+          <p className="text-xs text-muted">Select which processes this job requires.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {[
+              { label: "Cross Cutter", checked: procCrossCutter, set: setProcCrossCutter },
+              { label: "Hole Cutter", checked: procHoleCutter, set: setProcHoleCutter },
+              { label: "Main Line", checked: procMainLine, set: setProcMainLine },
+              { label: "Blue Line", checked: procBlueLine, set: setProcBlueLine },
+              { label: "Laminate", checked: procLaminate, set: setProcLaminate },
+            ].map((proc) => (
+              <label
+                key={proc.label}
+                className="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-md border border-[var(--input-border)] cursor-pointer select-none hover:bg-[var(--ghost-bg)]"
+              >
+                <input
+                  type="checkbox"
+                  checked={proc.checked}
+                  onChange={(e) => proc.set(e.target.checked)}
+                  className="h-5 w-5 accent-[var(--brand)]"
+                />
+                <span className="text-sm font-medium text-text">{proc.label}</span>
+              </label>
+            ))}
           </div>
         </section>
 

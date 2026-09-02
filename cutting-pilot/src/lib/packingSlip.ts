@@ -89,6 +89,8 @@ export interface PackingSlipPrefill {
   ship_to_state?: string;
   ship_to_zip?: string;
   ship_date?: string;
+  contact_name?: string;
+  contact_phone?: string;
   line_items?: OrderLineItem[];
 }
 
@@ -596,6 +598,9 @@ function mapToPrefill(data: ParsedDoc): PackingSlipPrefill {
 
   if (data.po_number) prefill.po_number = data.po_number;
   if (data.invoice_number) prefill.invoice_number = data.invoice_number;
+
+  if (data.contact_name) prefill.contact_name = data.contact_name;
+  if (data.contact_phone) prefill.contact_phone = data.contact_phone;
 
   if (data.ship_date) {
     const iso = toIsoDate(data.ship_date);

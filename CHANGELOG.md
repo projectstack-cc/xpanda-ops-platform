@@ -566,6 +566,7 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P428** — `/v2/orders` field-parity with the job entry board: removed the Method dropdown in favor of a Customer-pickup checkbox (route derives `method="customer pickup"` from it, preserving the loading-assignment skip); added Delivery time, Scrap pickup, Contact name/phone, and the 5 Production-process checkboxes; wired real drag-and-drop on the slip dropzone; route now persists whitelisted `processes` (was hardcoded `[]`); parser maps its already-extracted `contact_name`/`contact_phone` into the form prefill. No schema change — all columns pre-existed and the route already bound them. `tsc --noEmit` + `cf-build` green.
 - **P349 — Ship Via on the cut list, bilateral (legacy + v2).** `cutting-pilot/src/lib/cutList.ts`
   is a **separate TypeScript port** of the legacy `buildCutListPdf` (not a shared generator — ported
   verbatim in logic, P345), so it needed its own edit: `CutListJob` gained `carrier: string | null`

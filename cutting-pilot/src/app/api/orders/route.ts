@@ -41,7 +41,11 @@ export async function POST(request: NextRequest) {
   const id = crypto.randomUUID();
   const ts = now();
   const status = "not_started";
-  const method = s(p.method);
+  const customer_pickup = p.customer_pickup === true || s(p.customer_pickup) === "true";
+  // Method dropdown was removed from /v2/orders (P428). "customer pickup" is the only value
+  // that carried behavior (skips loading-assignment creation below), so derive it from the
+  // checkbox and leave method blank otherwise. The existing skip check is unchanged.
+  const method = customer_pickup ? "customer pickup" : "";
   const carrier = s(p.carrier);
   const location = s(p.location);
   const ship_date = s(p.ship_date);
@@ -52,6 +56,10 @@ export async function POST(request: NextRequest) {
   const total_bdft = Number.isFinite(Number(p.total_bdft)) ? Number(p.total_bdft) : 0;
   const source = "manual";
   const lineItems = Array.isArray(p.line_items) ? p.line_items : [];
+  const ALLOWED_PROCS = ["Cross Cutter", "Hole Cutter", "Main Line", "Blue Line", "Laminate"];
+  const procsJson = (Array.isArray(p.processes) ? p.processes : [])
+    .filter((x: any) => x && ALLOWED_PROCS.includes(String(x.name)))
+    .map((x: any) => ({ name: String(x.name), completed: !!x.completed }));
 
   try {
     // Port the exact jobs INSERT column list from _worker.js/routes/jobs.js.
@@ -74,7 +82,7 @@ export async function POST(request: NextRequest) {
       scrap_pickup, s(p.sales_lead), s(p.bol_info), s(p.payment_info), s(p.notes),
       s(p.cutting_instructions), s(p.packing_instructions), s(p.contact_name), s(p.contact_phone),
       p.combo_id ? s(p.combo_id) : null,
-      s(p.priority), p.confirmed_to_ship ? 1 : 0, "[]", ts, ts,
+      s(p.priority), p.confirmed_to_ship ? 1 : 0, JSON.stringify(procsJson), ts, ts,
       null, null, s(p.packing_slip_filename), s(p.packing_slip_invoice), source,
       s(p.ship_to_company), s(p.ship_to_attention), s(p.ship_to_street), s(p.ship_to_street2),
       s(p.ship_to_city), s(p.ship_to_state), s(p.ship_to_zip),
