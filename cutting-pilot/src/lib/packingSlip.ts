@@ -616,6 +616,8 @@ function mapToPrefill(data: ParsedDoc): PackingSlipPrefill {
         description: descParts.filter(Boolean).join(" ").trim(),
         quantity: String(li.quantity ?? 1),
         dimensions: li.dimensions || "",
+        category: li.category,
+        thickness: li.thickness,
         density: deriveDensity(
           [li.category, li.description, li.label, ...(li._descLines ?? [])].filter(Boolean).join(" ")
         ),

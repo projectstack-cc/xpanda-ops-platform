@@ -7,10 +7,13 @@ import { useRef, useState } from "react";
 import { FileUp, Plus, Trash2 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import { parsePackingSlip } from "@/lib/packingSlip";
+import { matchLineItemToPart, loadPartsLibrary } from "@/lib/partMatch";
 import PartsPicker from "@/components/orders/PartsPicker";
 import AddressCorrectionModal, { type AddressParts } from "@/components/orders/AddressCorrectionModal";
 
 export interface OrderLineItem {
+  category?: string;
+  thickness?: number;
   part_id?: string;
   part_number: string;
   description: string;
@@ -209,7 +212,21 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
       if (data.ship_date) setShipDate(data.ship_date);
       if (data.contact_name) setContactName(data.contact_name);
       if (data.contact_phone) setContactPhone(data.contact_phone);
-      if (data.line_items && data.line_items.length) setLineItems(data.line_items);
+      if (data.line_items && data.line_items.length) {
+        let items = data.line_items;
+        // Auto-match each parsed line to the parts library (fail-open: unmatched rows stay blank
+        // for manual entry / the "From parts library" picker).
+        try {
+          const parts = await loadPartsLibrary();
+          items = items.map((li) => {
+            const m = matchLineItemToPart(li, parts);
+            return m ? { ...li, part_id: m.part.id, part_number: m.part.part_number } : li;
+          });
+        } catch {
+          /* parts unavailable — leave rows for manual entry */
+        }
+        setLineItems(items);
+      }
     } catch {
       setParseError("Couldn't read that slip — enter the order manually.");
     } finally {

@@ -191,9 +191,8 @@
 - [ ] Tag orders created via packing-slip prefill with `source='packing_slip'` in
   `/v2/api/orders` — deferred out of P338/P340 to keep those prompts single-purpose; currently
   every v2-created order is hardcoded `source: "manual"` regardless of how it was filled in.
-- [ ] Port packing-slip line-item → parts-library matching (`matchLineItemToPart`/
-  `getPartsLibrary` in `jobs/index.html`) into `/v2/orders` — P340 only ported raw extraction;
-  prefilled line items currently carry a blank `part_number` for manual entry.
+- [ ] Dedup the parts-library fetch cache — PartsPicker (P429) and partMatch.ts (P432) each hold
+  their own /api/parts cache; centralize into one loader.
 - [ ] Persist the order-entry packing slip to R2 on save (mirror legacy `jobs.js` R2 upload) —
   `cutting-pilot/src/app/api/orders/route.ts` currently inserts `null` for
   `packing_slip_key`/`packing_slip_pdf`, so v2-entered orders don't carry their uploaded slip into
