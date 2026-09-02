@@ -177,7 +177,6 @@
 - [ ] **Retire legacy `jobs/index.html` board** (+ `jobs-header.js`, `jobs-shared.css` if unused)
   once `/v2/board` is re-linked and confirmed at parity on the floor — post-cutover cleanup.
   Pairs with the already-noted `_worker.js/routes/quickbooks.js` removal for the same cleanup pass.
-- [ ] **P429 — v2 orders "From Parts Library" picker.** Port the legacy searchable modal picker (composing @/components/Modal); fetch legacy /api/parts directly (same host, shared cookie); populate part_id + fields on select.
 - [ ] **P430 — v2 ship-to verification at save.** Port jobs/index.html's save-time Lob flow (validate → correction modal → keep/use), calling the existing legacy /api/address/validate; remove the stubbed disabled Verify button. (Resolves the existing "Wire v2 ship-to address verification" item.)
 - [ ] **P431 — packing-slip parser: extract density.** Blocked on a sample slip showing the density token format; neither parser extracts it today.
 - [ ] Board: manager-flag header for assign gating (avoid the 403 round-trip) — `BoardRowEdit.tsx`

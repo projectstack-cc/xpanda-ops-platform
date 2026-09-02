@@ -7,8 +7,10 @@ import { useRef, useState } from "react";
 import { FileUp, Plus, Trash2 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import { parsePackingSlip } from "@/lib/packingSlip";
+import PartsPicker from "@/components/orders/PartsPicker";
 
 export interface OrderLineItem {
+  part_id?: string;
   part_number: string;
   description: string;
   quantity: string;
@@ -198,8 +200,19 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
     setLineItems((prev) => prev.map((li, i) => (i === idx ? { ...li, ...patch } : li)));
   }
 
+  const [partsPickerOpen, setPartsPickerOpen] = useState(false);
+
   function addLine() {
     setLineItems((prev) => [...prev, { ...EMPTY_LINE }]);
+  }
+
+  // Append a picked part; if the only row is still the empty default, replace it.
+  function addPartLine(line: OrderLineItem) {
+    setLineItems((prev) => {
+      const onlyEmpty =
+        prev.length === 1 && !prev[0].part_number && !prev[0].description && !prev[0].dimensions;
+      return onlyEmpty ? [line] : [...prev, line];
+    });
   }
 
   function removeLine(idx: number) {
@@ -293,6 +306,7 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
           quantity: Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
           dimensions: li.dimensions.trim(),
           density: li.density.trim(),
+          ...(li.part_id ? { part_id: li.part_id } : {}),
         })),
     };
 
@@ -544,14 +558,23 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
               </div>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={addLine}
-            className="min-h-[44px] px-4 inline-flex items-center gap-2 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
-          >
-            <Plus size={16} aria-hidden="true" />
-            Add line
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={addLine}
+              className="min-h-[44px] px-4 inline-flex items-center gap-2 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
+            >
+              <Plus size={16} aria-hidden="true" />
+              Add line
+            </button>
+            <button
+              type="button"
+              onClick={() => setPartsPickerOpen(true)}
+              className="min-h-[44px] px-4 inline-flex items-center gap-2 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
+            >
+              From parts library
+            </button>
+          </div>
         </section>
 
         {/* Instructions */}
@@ -599,6 +622,12 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
           </button>
         </div>
       </form>
+
+      <PartsPicker
+        isOpen={partsPickerOpen}
+        onClose={() => setPartsPickerOpen(false)}
+        onPick={addPartLine}
+      />
     </div>
   );
 }
