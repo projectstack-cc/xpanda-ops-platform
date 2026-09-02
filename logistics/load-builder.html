@@ -1824,6 +1824,16 @@ function cloneRows(rows) {
 // Reassign stored layout geometry (posFromFront / posY / rowWidthUsed) after rows or
 // columns have been added or removed. buildTopViewSVG + buildPrintSvg render from these
 // stored fields, so any structural mutation must reflow them or the diagram goes stale.
+// P434: arrangement-preserving compaction for REFRESH LOAD. Drops empty columns/rows, then reflows
+// geometry so pieces close ranks and anchor to the rear (posFromFront=0 = rear / left of diagram).
+// Preserves row/column order and each surviving column's layers + stats. Does NOT call calcLoading.
+function compactTrailerRows(rows) {
+  const cleaned = cloneRows(rows)
+    .map(row => ({ ...row, columns: (row.columns || []).filter(col => col.layers && col.layers.length > 0) }))
+    .filter(row => row.columns.length > 0);
+  return reflowRowGeometry(cleaned);
+}
+
 function reflowRowGeometry(rows) {
   let posFromFront = 0;
   (rows || []).forEach(row => {
@@ -2211,7 +2221,7 @@ function renderResultsTab() {
     tRight.appendChild(h('button', { className: 'btn btn-blue-light', onClick: () => { state.editorTrailer = state.editorTrailer === ti ? null : ti; render(); } }, state.editorTrailer === ti ? 'CLOSE CUSTOMIZE' : 'CUSTOMIZE TRAILER'));
     if (result.trailers.length > 1) tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => openDissolvePreview(ti) }, 'DISSOLVE → OTHER'));
     tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => {
-      const dense = repackTrailerDense(trailer.rows, trailerDims);
+      const dense = compactTrailerRows(trailer.rows);
       if (dense === trailer.rows) { showToast('Couldn’t compact this trailer — kept current layout.', 'warn'); return; }
       const sig = rs => (rs || []).map(r => r.rowLength + '/' + r.columns.map(c => c.colWidth + ':' + c.layers.map(l => l.skuId + 'x' + l.count).join('+')).join('|')).join(';');
       if (sig(dense) === sig(trailer.rows)) { showToast('Load already compact — nothing to shift.', 'warn'); return; }

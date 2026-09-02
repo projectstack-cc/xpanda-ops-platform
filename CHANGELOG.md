@@ -1965,6 +1965,16 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P434 — Load builder: REFRESH LOAD compacts the customized layout instead of re-optimizing
+  (logistics-agent).** REFRESH previously called `repackTrailerDense`, which reduced the trailer to
+  per-SKU counts and re-ran the auto-packer (`calcLoading`), discarding the operator's customizations
+  and dissolves so the layout reverted to its original auto-packed state. Added `compactTrailerRows`:
+  an arrangement-preserving compaction that drops empty columns/rows and reflows geometry via the
+  existing `reflowRowGeometry`, so pieces close ranks and anchor to the rear (`posFromFront = 0` =
+  rear / left of the diagram). Row and column order and each surviving column's layers/stats are
+  preserved, and `calcLoading` is no longer called, so REFRESH no longer inherits the packing-logic
+  behavior. `repackTrailerDense` is retained (still used by the dissolve source re-pack).
+
 - **P433 — Load builder: cross-row layer drag-and-drop in customize mode (logistics-agent).**
   The customize-mode drop handler in `logistics/load-builder.html` rejected any drop whose source
   row differed from the target row (`fromRi !== ri`), so layers could only be moved between columns
