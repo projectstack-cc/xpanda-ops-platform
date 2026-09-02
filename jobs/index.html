@@ -1879,6 +1879,10 @@ function parseDimensionValues(dimStr) {
   return { length, width, height: height || width };
 }
 
+// Float-representation guard only (e.g. 12.0000000001) — dimension matching below is exact, no
+// physical tolerance. See the Pass 2 comment for why.
+const DIM_EPS = 1e-6;
+
 function matchLineItemToPart(lineItem, partsLibrary) {
   const desc = (lineItem.description || '').toLowerCase();
   const cat = (lineItem.category || '').toLowerCase();
@@ -1897,13 +1901,14 @@ function matchLineItemToPart(lineItem, partsLibrary) {
     if (match) return { part: match, method: 'part_number' };
   }
 
-  // Pass 2: Exact dimension match (±0.25" tolerance)
+  // Pass 2: Exact dimension match. Intentionally zero tolerance — a ± window previously let a
+  // different catalog SKU that merely fell within it outrank the customer's actual part, pulling
+  // the wrong part onto real orders. DIM_EPS below guards only float-representation noise.
   if (parsedDims) {
-    const tolerance = 0.25;
     const dimMatches = partsLibrary.filter(p =>
-      Math.abs(p.length_in - parsedDims.length) <= tolerance &&
-      Math.abs(p.width_in - parsedDims.width) <= tolerance &&
-      Math.abs(p.height_in - parsedDims.height) <= tolerance
+      Math.abs(p.length_in - parsedDims.length) <= DIM_EPS &&
+      Math.abs(p.width_in - parsedDims.width) <= DIM_EPS &&
+      Math.abs(p.height_in - parsedDims.height) <= DIM_EPS
     );
     if (dimMatches.length === 1) {
       return { part: dimMatches[0], method: 'dimensions' };
@@ -1922,7 +1927,7 @@ function matchLineItemToPart(lineItem, partsLibrary) {
         return false;
       });
       if (narrowed) return { part: narrowed, method: 'dimensions+keyword' };
-      return { part: dimMatches[0], method: 'dimensions_fuzzy' };
+      return null; // tied on dimensions, no keyword signal — don't guess
     }
   }
 
@@ -1942,7 +1947,7 @@ function matchLineItemToPart(lineItem, partsLibrary) {
     }
     if (isHB && thickness != null && !isNaN(thickness)) {
       const hbByThk = partsLibrary.filter(p =>
-        p.category === 'Holey Board' && Math.abs(p.height_in - thickness) <= 0.1
+        p.category === 'Holey Board' && Math.abs(p.height_in - thickness) <= DIM_EPS
       );
       if (hbByThk.length) {
         const pref = hbByThk.find(p => {
@@ -1961,9 +1966,9 @@ function matchLineItemToPart(lineItem, partsLibrary) {
        cat.includes('holey board') || /\bHB\b/i.test(cat)) && parsedDims) {
     const hbMatch = partsLibrary.find(p =>
       p.category === 'Holey Board' &&
-      Math.abs(p.height_in - parsedDims.height) <= 0.25 &&
-      Math.abs(p.length_in - parsedDims.length) <= 0.5 &&
-      Math.abs(p.width_in - parsedDims.width) <= 0.5
+      Math.abs(p.height_in - parsedDims.height) <= DIM_EPS &&
+      Math.abs(p.length_in - parsedDims.length) <= DIM_EPS &&
+      Math.abs(p.width_in - parsedDims.width) <= DIM_EPS
     );
     if (hbMatch) return { part: hbMatch, method: 'holey_board_height' };
   }

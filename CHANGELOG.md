@@ -2500,6 +2500,13 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **Legacy `matchLineItemToPart` dimension matching is now exact, no tolerance** — same fix as
+  the `/v2/orders` `partMatch.ts` port, applied here for bilateral parity (see Orders (v2)
+  changelog for full rationale: Steve reported a past wrong-part pull traced to the ± dimension
+  window; fixed on his explicit confirmation to apply to all four tolerance-based comparisons,
+  Holey-Board passes included). New `DIM_EPS = 1e-6` constant (float-representation guard only).
+  Ambiguous same-dimension ties with no keyword winner now return no match instead of an
+  arbitrary first pick. `node --check`-equivalent inline-script parse verified clean.
 - **P421 follow-up — removed the logo's border box too, same call as the header.** Steve
   confirmed the batch number placeholder is fine, then flagged the logo box's border as another
   spurious one (same root cause as the header: a `borderDisplay`-style source flag that doesn't
