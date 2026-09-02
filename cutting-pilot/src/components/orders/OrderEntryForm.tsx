@@ -8,6 +8,7 @@ import { FileUp, Plus, Trash2 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import { parsePackingSlip } from "@/lib/packingSlip";
 import PartsPicker from "@/components/orders/PartsPicker";
+import AddressCorrectionModal, { type AddressParts } from "@/components/orders/AddressCorrectionModal";
 
 export interface OrderLineItem {
   part_id?: string;
@@ -28,6 +29,10 @@ export interface OrderPayload {
   ship_to_city: string;
   ship_to_state: string;
   ship_to_zip: string;
+  ship_to_street2?: string;
+  ship_to_verified?: string;
+  ship_to_standardized?: unknown;
+  ship_to_verified_at?: string;
   customer_pickup: boolean;
   carrier: string;
   delivery_time: string;
@@ -163,6 +168,22 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+
+  // Ship-to correction modal: a promise resolver bridges the async save flow to the operator's click.
+  const [addrModal, setAddrModal] = useState<{ entered: AddressParts; standardized: AddressParts } | null>(null);
+  const addrResolver = useRef<((choice: "use" | "keep") => void) | null>(null);
+  function askAddressChoice(entered: AddressParts, standardized: AddressParts): Promise<"use" | "keep"> {
+    return new Promise((resolve) => {
+      addrResolver.current = resolve;
+      setAddrModal({ entered, standardized });
+    });
+  }
+  function resolveAddrChoice(choice: "use" | "keep") {
+    setAddrModal(null);
+    const r = addrResolver.current;
+    addrResolver.current = null;
+    r?.(choice);
+  }
 
   async function handleSlipFile(file: File | undefined | null) {
     if (!file) return;
@@ -310,6 +331,50 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
         })),
     };
 
+    // ── Ship-to verification (Lob via legacy /api/address/validate) — fail-open ──
+    const hasFullShipTo = !!(payload.ship_to_street && payload.ship_to_city && payload.ship_to_state && payload.ship_to_zip);
+    if (hasFullShipTo) {
+      let result: any = { status: "unverifiable" };
+      try {
+        const vr = await fetch("/api/address/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            street: payload.ship_to_street,
+            street2: "",
+            city: payload.ship_to_city,
+            state: payload.ship_to_state,
+            zip: payload.ship_to_zip,
+          }),
+        });
+        const vb = await vr.json();
+        if (vr.ok && vb?.data) result = vb.data;
+      } catch {
+        result = { status: "unverifiable" };
+      }
+
+      let finalStatus: string = result.status || "unverifiable";
+      if (result.status === "corrected" && result.standardized) {
+        const choice = await askAddressChoice(
+          { street: payload.ship_to_street, city: payload.ship_to_city, state: payload.ship_to_state, zip: payload.ship_to_zip },
+          result.standardized
+        );
+        if (choice === "use") {
+          payload.ship_to_street = result.standardized.street || payload.ship_to_street;
+          payload.ship_to_street2 = result.standardized.street2 || "";
+          payload.ship_to_city = result.standardized.city || payload.ship_to_city;
+          payload.ship_to_state = result.standardized.state || payload.ship_to_state;
+          payload.ship_to_zip = result.standardized.zip || payload.ship_to_zip;
+          finalStatus = "corrected";
+        } else {
+          finalStatus = "kept_original";
+        }
+      }
+      payload.ship_to_verified = finalStatus;
+      payload.ship_to_standardized = result.standardized || null;
+      payload.ship_to_verified_at = new Date().toISOString();
+    }
+
     setSaving(true);
     try {
       const res = await fetch("/v2/api/orders", {
@@ -421,19 +486,11 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
             <TextField label="Company" value={shipToCompany} onChange={setShipToCompany} />
             <TextField label="Attention" value={shipToAttention} onChange={setShipToAttention} />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr] gap-3 items-end">
             <TextField label="Street" value={shipToStreet} onChange={setShipToStreet} />
             <TextField label="City" value={shipToCity} onChange={setShipToCity} />
             <TextField label="State" value={shipToState} onChange={setShipToState} />
             <TextField label="ZIP" value={shipToZip} onChange={setShipToZip} />
-            <button
-              type="button"
-              disabled
-              title="Address verification — coming"
-              className="min-h-[44px] px-4 rounded-md border border-[var(--input-border)] text-muted text-sm font-semibold cursor-not-allowed opacity-60"
-            >
-              Verify
-            </button>
           </div>
         </section>
 
@@ -622,6 +679,16 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
           </button>
         </div>
       </form>
+
+      {addrModal && (
+        <AddressCorrectionModal
+          isOpen={true}
+          entered={addrModal.entered}
+          standardized={addrModal.standardized}
+          onUse={() => resolveAddrChoice("use")}
+          onKeep={() => resolveAddrChoice("keep")}
+        />
+      )}
 
       <PartsPicker
         isOpen={partsPickerOpen}

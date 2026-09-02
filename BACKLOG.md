@@ -177,7 +177,6 @@
 - [ ] **Retire legacy `jobs/index.html` board** (+ `jobs-header.js`, `jobs-shared.css` if unused)
   once `/v2/board` is re-linked and confirmed at parity on the floor — post-cutover cleanup.
   Pairs with the already-noted `_worker.js/routes/quickbooks.js` removal for the same cleanup pass.
-- [ ] **P430 — v2 ship-to verification at save.** Port jobs/index.html's save-time Lob flow (validate → correction modal → keep/use), calling the existing legacy /api/address/validate; remove the stubbed disabled Verify button. (Resolves the existing "Wire v2 ship-to address verification" item.)
 - [ ] **P431 — packing-slip parser: extract density.** Blocked on a sample slip showing the density token format; neither parser extracts it today.
 - [ ] Board: manager-flag header for assign gating (avoid the 403 round-trip) — `BoardRowEdit.tsx`
   currently discovers manager status by attempting the legacy assign/unassign call and reading a
@@ -186,8 +185,6 @@
 - [ ] Order entry: load-existing-order-for-edit deep link — `/v2/orders` only creates new orders
   (P339 scope). The board's "Open in order entry" link (P343) goes to the module, not a specific
   order; once order entry supports loading an existing job for edit, deep-link to it directly.
-- [ ] Wire v2 ship-to address verification (Lob) into order entry — the `/v2/orders` form's Verify
-  button is stubbed disabled (P339) since no v2 Lob endpoint exists yet.
 - [ ] Packing-slip parser rewrite (anchor-relative extraction + per-vendor template registry) —
   P340 ported the existing y-coordinate/x-gap heuristic parser as-is into v2; the more robust
   rewrite is still a separate, future effort (applies to both legacy and v2 copies).
