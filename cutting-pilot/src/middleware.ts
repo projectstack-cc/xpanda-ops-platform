@@ -124,6 +124,12 @@ export async function middleware(request: NextRequest) {
     "X-User-Can-Manage-Notes",
     hasPermission(user, "notes.manage", "edit") ? "1" : "0"
   );
+  // P439 — JSON blob of the user's merged role permissions, so legacy endpoints (e.g.
+  // /api/jobs/:id/assignments, /api/jobs/:id/shifts) and the new v2 /v2/api/orders/:id/shifts
+  // route can gate manager-only writes on the same blob the legacy worker already trusts.
+  // Value is "{}" if the user has no role permissions (e.g. legacy `role` TEXT-column row with
+  // no roles.id assignment); consumers must JSON.parse it defensively.
+  headers.set("X-User-Permissions", JSON.stringify(user.permissions || {}));
 
   return NextResponse.next({ request: { headers } });
 }

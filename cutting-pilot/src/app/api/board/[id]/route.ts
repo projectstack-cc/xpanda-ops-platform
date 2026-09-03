@@ -1,7 +1,9 @@
-// src/app/api/board/[id]/route.ts  →  PUT /v2/api/board/:id
-// Board inline-edit: updates ONLY ship_date, priority(+level), notes, status on jobs.
-// Everything else on the order is edited in /v2/orders. Gated on `jobs` (edit, via the
-// existing /v2/api/board middleware prefix from P341 — no new permission key).
+// src/app/api/board/[id]/route.ts  →  GET/PUT /v2/api/board/:id
+// GET (P439-broadened): returns the full editable subset the in-place edit modal needs — every
+// text field the legacy "Edit Job" modal covers plus the derived bits (has_packing_slip, shifts,
+// processes JSON). PUT stays deliberately narrow (ship_date / priority(+level) / notes / status)
+// for the inline BoardRowEdit panel — the full edit lives at PUT /v2/api/orders/:id.
+// Gated on `jobs` (view/edit) by middleware.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 
@@ -13,21 +15,39 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
   const { DB } = await getEnv();
   try {
     const job = await DB.prepare(`
-      SELECT id, customer, invoice_number, status, ship_date, carrier,
+      SELECT id, customer, po_number, invoice_number, status, priority, priority_level,
+             ship_date, ship_day, location, delivery_time, method, carrier,
+             load_count, total_bdft, notes, cutting_instructions, packing_instructions,
+             contact_name, contact_phone,
              ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
-             ship_to_city, ship_to_state, ship_to_zip,
+             ship_to_city, ship_to_state, ship_to_zip, source, processes,
              (packing_slip_key IS NOT NULL OR packing_slip_pdf IS NOT NULL) AS has_packing_slip
         FROM jobs WHERE id = ?
     `).bind(id).first<any>();
     if (!job) return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 });
     const li = await DB.prepare(`
-      SELECT part_number, description, quantity, dimensions, density
+      SELECT id, part_id, part_number, description, quantity, dimensions, density
         FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC
     `).bind(id).all();
+    // shifts[] — mirrors /api/jobs/:id/shifts GET for the modal's chip section. Lazily fetched
+    // here so the modal can read a single /v2/api/board/:id response instead of also firing
+    // /v2/api/orders/:id/shifts on open. assignees stay lazy (the modal fires /api/jobs/:id/assignments).
+    const sh = await DB.prepare(
+      `SELECT shift FROM job_shifts WHERE job_id = ? ORDER BY shift`
+    ).bind(id).all();
     return NextResponse.json({
       ok: true,
-      job: { ...job, has_packing_slip: !!job.has_packing_slip },
+      job: {
+        ...job,
+        has_packing_slip: !!job.has_packing_slip,
+        // Parse processes JSON defensively so a malformed cell doesn't crash the modal.
+        processes: (() => {
+          try { return job.processes ? JSON.parse(job.processes) : []; }
+          catch { return []; }
+        })(),
+      },
       line_items: li.results ?? [],
+      shifts: (sh.results ?? []).map((r: any) => r.shift),
     });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, { status: 500 });

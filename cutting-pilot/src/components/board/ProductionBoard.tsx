@@ -1,14 +1,23 @@
 "use client";
 // src/components/board/ProductionBoard.tsx
-// Production board consuming GET /v2/api/board. Board rows themselves stay read-only; Edit
-// expands an inline panel (BoardRowEdit, P343) scoped to the locked editable subset (ship_date,
-// priority(+level), notes, status) plus assignment — everything else on the order is read-only
-// here and edited in /v2/orders.
+// P439 — Production board consuming GET /v2/api/board. Three affordances per row, matching
+// the legacy job-board UX:
+//   1. Clicking a row (or the row's Edit button) — expands the inline BoardRowEdit panel
+//      (P343) for the locked editable subset (ship_date / priority(+level) / notes / status
+//      + assignment chips). The same panel that shipped pre-P439, with the "Open in order
+//      entry →" link removed (the OrderEditModal now covers that surface inline).
+//   2. Edit button — opens OrderEditModal, the new full in-place edit modal (P439). Mirrors
+//      what the legacy /jobs/ "Edit Job" modal edits (customer, PO, INV, ship-to,
+//      cutting/packing instructions, line items, shifts, etc.) — POSTs to PUT
+//      /v2/api/orders/:id.
+//   3. View button — opens OrderDetailModal, the read-only viewer (shipping + line items +
+//      cut-list + packing-slip dropdowns). Mirrors the previous behavior.
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import PlatformHeader from "@/components/PlatformHeader";
 import StatusCards, { type StatusBucket } from "./StatusCards";
 import StatusModal from "./StatusModal";
 import OrderDetailModal from "./OrderDetailModal";
+import OrderEditModal from "./OrderEditModal";
 import CalendarView from "./CalendarView";
 import BoardRowEdit from "./BoardRowEdit";
 import { JobStatusBadge, PriorityBadge } from "./badges";
@@ -64,7 +73,8 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   const [activeBucket, setActiveBucket] = useState<StatusBucket | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const [viewId, setViewId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [view, setView] = useState<"list" | "calendar">("list");
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
@@ -199,7 +209,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                         className={`border-b border-[var(--line)] last:border-0 transition-colors cursor-pointer hover:bg-[var(--ghost-bg)] ${
                           highlightedId === job.id ? "bg-[var(--info-bg)]" : ""
                         }`}
-                        onClick={() => setDetailId(job.id)}
+                        onClick={() => toggleExpand(job.id)}
                       >
                         <td className="px-3 py-3">
                           <div className="font-medium text-text">{job.customer || "—"}</div>
@@ -219,13 +229,22 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                           <JobStatusBadge status={job.status} />
                         </td>
                         <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={() => toggleExpand(job.id)}
-                            className="min-h-[36px] px-3 rounded-md border border-[var(--input-border)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
-                          >
-                            {expandedId === job.id ? "Close" : "Edit"}
-                          </button>
+                          <div className="inline-flex items-center gap-2 justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setViewId(job.id)}
+                              className="min-h-[36px] px-3 rounded-md border border-[var(--input-border)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
+                            >
+                              View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditId(job.id)}
+                              className="min-h-[36px] px-3 rounded-md border border-[var(--input-border)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
+                            >
+                              Edit
+                            </button>
+                          </div>
                         </td>
                       </tr>
                       {expandedId === job.id && (
@@ -251,7 +270,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
             )}
 
             {view === "calendar" && (
-              <CalendarView jobs={data.jobs} onSelectJob={setDetailId} />
+              <CalendarView jobs={data.jobs} onSelectJob={toggleExpand} />
             )}
           </>
         )}
@@ -267,7 +286,15 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
         />
       )}
 
-      <OrderDetailModal jobId={detailId} onClose={() => setDetailId(null)} />
+      <OrderDetailModal jobId={viewId} onClose={() => setViewId(null)} />
+
+      <OrderEditModal
+        jobId={editId}
+        onClose={() => setEditId(null)}
+        onSaved={load}
+        isAdmin={isAdmin}
+        permissions={permissions}
+      />
     </div>
   );
 }

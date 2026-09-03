@@ -566,6 +566,104 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P439 — `/v2/board` gets a full in-place edit modal **alongside** the inline panel +
+  read-only viewer (react-component-agent §9b + next-platform-agent §9a). Closes the v2
+  omission Steve flagged: every editable field on an order used to be split between the
+  inline panel (P343, locked subset) and `/v2/orders` (line items, ship-to, cutting/packing
+  instructions, shifts) — neither surface let a board user edit line items in place.** The
+  per-row Actions cell now has two buttons, **View** and **Edit**, and the row click
+  behavior is preserved: clicking the row body still expands the inline `BoardRowEdit`
+  panel (P343) for the locked editable subset (ship_date / priority(+level) / notes /
+  status + assignment chips) — the "Open in order entry →" link inside it is gone (the
+  OrderEditModal now covers that surface). **View** opens the restored read-only
+  `OrderDetailModal` (shipping + line items + cut-list + packing-slip dropdowns). **Edit**
+  opens the new **`OrderEditModal`** — the full in-place edit modal — which renders 12
+  sections top-to-bottom: header (customer / PO / INV), ship-to card (company / attention /
+  street / street2 / city / state / zip), schedule grid (ship_date / status / priority /
+  priority level — status locked when the job is `loading` or `shipped`, same rule the
+  existing v2 board PUT enforces), shipping details (carrier / location / load_count /
+  total_bdft), notes, **cutting instructions** (placeholder copied verbatim from
+  `jobs/index.html:550`), **packing instructions** (placeholder from `jobs/index.html:554`),
+  line items (full editor reusing `OrderLineItem` / `EMPTY_LINE` / `addLine` / `removeLine` /
+  `updateLine` from `OrderEntryForm.tsx` plus the "From parts library" picker — NO
+  qty-as-BDFT toggle, out of scope per the prompt), **job shifts** chip section
+  (manager-only add/remove, `SHIFT_LABELS = { '1st':'1st Shift','2nd':'2nd Shift','3rd':'3rd Shift' }`
+  from `jobs/index.html:1772`, mirrors legacy `setupShiftSection`/`renderShiftChips`),
+  assignees chip section (manager-only writes through the existing legacy
+  `/api/jobs/:id/assignments` endpoints), Cut List dropdown viewer, and Packing Slip
+  dropdown viewer. Both viewers reuse the exact blob-url-revoke hygiene `OrderDetailModal`
+  had (`cutListBlobUrlRef` cleanup on `jobId` change and on unmount). Save posts the full
+  edited payload to a new **`PUT /v2/api/orders/:id`** — mirroring legacy
+  `_worker.js/routes/jobs.js` lines 575–860 but deliberately scoped down: NO
+  `trailer_group_id`, `archived_at`, `packing_slip_pdf`/`packing_slip_key`, or `processes`
+  writes (those stay in their existing surfaces — trailer linking, archive, packing-slip
+  upload, cutting pills). Validations mirror legacy: status ∈ {not_started, in_production,
+  done, loading, shipped}; priority ∈ {normal, rush}; priority_level ∈ 0..3; ship_date
+  matches `^\d{4}-\d{2}-\d{2}$`; load_count / total_bdft coerced to numbers. Side effects
+  on PUT: (1) if any ship-to field is in the payload, set `ship_to_verified =
+  "unverified"` (does NOT touch `ship_to_standardized` / `ship_to_verified_at` — Lob
+  verification stays out of scope for v2); (2) if `line_items` is an array, DELETE +
+  reinsert (same pattern as legacy lines 800–818); (3) if `load_count` is in the payload,
+  reconcile `loading_assignments` (legacy lines 820–861, skip on `method = 'customer
+  pickup'`); (4) if line_items was replaced, call the extracted
+  `computeAndPersistHoleyChunks` helper to recompute `jobs.hb_chunks_required` +
+  `hb_chunk_breakdown` (best-effort — log + swallow on failure, never blocks the save);
+  (5) activity log via raw INSERT (`action='update'`, `entity_type='job'`, summary
+  `"Order updated via v2 board (…)"`, `detail: { via: "board-edit", fields: [...] }`) —
+  mirrors the v2 board's existing PUT activity log style at
+  `cutting-pilot/src/app/api/board/[id]/route.ts` lines 80–92. Status guard mirrors the
+  existing `/v2/api/board/:id` PUT: if the job is `shipped` or `loading`, reject any status
+  change away from itself. New endpoints:
+  - **`PUT /v2/api/orders/:id`** — gated by middleware on `orders.edit` (no new permission
+    key); 401 on missing `X-User-Id`, 400 on invalid JSON, 404 on missing job, 400 on
+    archived job.
+  - **`GET /v2/api/orders/:id/shifts`** — ungated, returns `{ ok, shifts: string[] }`.
+  - **`POST /v2/api/orders/:id/shifts`** — manager-gated from `X-User-Is-Admin` and the new
+    `X-User-Permissions` header (see middleware change below); `INSERT OR IGNORE INTO
+    job_shifts` with the legacy 5-column INSERT; activity log `action='assign_shift'`.
+  - **`DELETE /v2/api/orders/:id/shifts/:shift`** — same manager gate; `DELETE FROM
+    job_shifts WHERE job_id = ? AND shift = ?`; activity log `action='unassign_shift'`.
+  All four endpoints use the existing `NextResponse.json({ ok, error }, { status })` shape
+  and the shared `now()` ISO helper. **Middleware change
+  (`cutting-pilot/src/middleware.ts`):** added a new `X-User-Permissions` header —
+  `JSON.stringify(user.permissions || {})` — on every authenticated `/v2/*` request, so
+  legacy endpoints (e.g. `/api/jobs/:id/assignments`) and the new v2 shift routes can
+  gate manager-only writes on the same JSON blob the legacy worker already trusts. Value
+  is `{}` if the user has no role permissions; consumers must `JSON.parse` defensively.
+  **Server GET broadening (`cutting-pilot/src/app/api/board/[id]/route.ts`):** extended the
+  existing GET SELECT to return every column the modal needs to render and edit —
+  `customer, po_number, invoice_number, status, priority, priority_level, ship_date,
+  ship_day, location, delivery_time, method, carrier, load_count, total_bdft, notes,
+  cutting_instructions, packing_instructions, contact_name, contact_phone, ship_to_company,
+  ship_to_attention, ship_to_street, ship_to_street2, ship_to_city, ship_to_state,
+  ship_to_zip, source, processes` — plus a parallel query for `shifts: string[]`
+  (lazily fetched here so the modal can read a single `/v2/api/board/:id` response instead
+  of firing `/shifts` on open). Assignees stay lazy (the modal fires
+  `/api/jobs/:id/assignments`). The narrower board PUT (ship_date / priority(+level) /
+  notes / status) stays intact for the inline `BoardRowEdit` panel + any future caller
+  that wants the quick-edit subset. **Helper extraction
+  (`cutting-pilot/src/lib/holeyChunks.ts`):** pulled `computeAndPersistHoleyChunks` out
+  of `cutting-pilot/src/app/api/orders/route.ts` (P438) verbatim into a shared module —
+  both the orders POST (existing) and the new orders PUT import it. The legacy
+  `_worker.js` port is unaffected. **Files added:**
+  `cutting-pilot/src/app/api/orders/[id]/route.ts`,
+  `cutting-pilot/src/app/api/orders/[id]/shifts/route.ts`,
+  `cutting-pilot/src/app/api/orders/[id]/shifts/[shift]/route.ts`,
+  `cutting-pilot/src/components/board/OrderEditModal.tsx`,
+  `cutting-pilot/src/lib/holeyChunks.ts`. **Files modified:**
+  `cutting-pilot/src/middleware.ts` (X-User-Permissions header),
+  `cutting-pilot/src/app/api/board/[id]/route.ts` (broader GET),
+  `cutting-pilot/src/app/api/orders/route.ts` (imports the shared helper — no behavior
+  change), `cutting-pilot/src/components/board/ProductionBoard.tsx` (row click now
+  expands the inline panel, **View** + **Edit** buttons added in the Actions cell, both
+  modals wired side-by-side, `CalendarView`'s `onSelectJob` retargeted at `toggleExpand`
+  so a calendar click also expands the inline panel — matches the list row click).
+  **No DB migration** (all required columns already exist), **no new permission key**
+  (the existing `orders` permission gates PUT/POST; the existing `jobs.manage` permission
+  + `X-User-Is-Admin` gate shifts). Dirty-tracking close-confirm
+  (`window.confirm("Discard changes?")`) is wired via a JSON-stringify snapshot of the
+  GET response vs the current state. `tsc --noEmit` + `npm run cf-build` both green; v2
+  deploy workflow fires on push to main.
 - **P438 — print cut list from the post-save screen + live Holey Board chunks preview
   (react-component-agent §9b + next-platform-agent §9a). Closes the v2 omission Steve
   flagged on the legacy job entry.** The post-save "Order saved" card (P339) now offers

@@ -1,10 +1,10 @@
 "use client";
 // src/components/board/OrderDetailModal.tsx
-// Order-detail modal for a production-board row: line items, and two independent inline PDF
-// viewers — packing slip (legacy R2/base64-backed PDF, same host, no new v2 endpoint) and cut
-// list (prompt-328/329 generator ported to src/lib/cutList.ts). P366: each is its own labeled
-// dropdown-link toggle over its own PdfViewer instance/state — opening one must never replace
-// or hijack the other (P364 had them sharing one `viewerDoc` slot, which crossed them).
+// P439 — restored read-only modal. The P439 broader /v2/api/board/:id GET still returns the
+// `shifts` and `processes` arrays on the job (for the OrderEditModal to consume), but this
+// modal ignores them — its surface is the read-only shipping / line items / cut-list /
+// packing-slip viewer. Opens from the "View" button in /v2/board and from a click on the
+// schedule desk's order cell.
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import Modal from "@/components/Modal";

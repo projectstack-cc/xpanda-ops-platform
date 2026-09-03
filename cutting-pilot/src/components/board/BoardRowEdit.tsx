@@ -1,9 +1,11 @@
 "use client";
 // src/components/board/BoardRowEdit.tsx
-// Inline row-expand edit panel for the production board (P343). Editable subset ONLY:
-// ship_date, priority(+level), notes, status — everything else on the order (customer,
-// po_number, invoice_number, ship_to_*, method/carrier, line items, cutting/packing
-// instructions) is shown read-only here and edited in /v2/orders instead.
+// P439 — inline row-expand edit panel for the production board (P343 — restored). Editable
+// subset ONLY: ship_date, priority(+level), notes, status — everything else on the order
+// (customer, po_number, invoice_number, ship_to_*, method/carrier, line items, cutting/packing
+// instructions) is shown read-only here and edited via the full OrderEditModal (P439 modal
+// opened from the Edit button). The "Open in order entry →" link is intentionally gone
+// because the modal now covers everything /v2/orders would.
 import { useEffect, useState } from "react";
 import type { BoardJob } from "./ProductionBoard";
 
@@ -267,17 +269,10 @@ export default function BoardRowEdit({ job, assignableUsers, onSaved, onCancel }
         </div>
       </div>
 
-      {/* Read-only order spec */}
+      {/* Read-only order spec — no more "Open in order entry →" link (the OrderEditModal
+          covers the same surface inline). */}
       <div className="rounded-lg border border-[var(--card-border)] bg-surface p-3 space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-muted">Order spec (read-only)</span>
-          <a
-            href="/v2/orders"
-            className="text-xs font-semibold text-[var(--brand)] no-underline hover:opacity-80"
-          >
-            Open in order entry →
-          </a>
-        </div>
+        <span className="text-xs font-semibold text-muted">Order spec (read-only — use Edit to change)</span>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted">
           <div>
             <dt className="inline font-medium text-text">PO: </dt>
