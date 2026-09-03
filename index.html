@@ -431,7 +431,7 @@
         <div class="hp-card-icon hp-icon-cutting"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg></div>
         <div class="hp-card-title" data-i18n="common.cutting">Cutting</div>
       </div>
-      <div class="hp-card-desc">Live cutting floor — start, hand off, complete lines</div>
+      <div class="hp-card-desc" data-i18n="home.cuttingDesc">Live cutting floor — start, hand off, complete lines</div>
       <div class="hp-card-actions">
         <a class="hp-btn hp-btn-cutting" href="/v2/cutting" data-i18n="home.mainBlueLine">Main / Blue Line</a>
         <a class="hp-btn hp-btn-outline" href="/v2/cutting/crosscutter" data-i18n="home.crossHoleCutter">Cross / Hole Cutter</a>
@@ -445,7 +445,7 @@
         <div class="hp-card-title" data-i18n="home.shiftNotes">Shift Notes</div>
         <span id="hp-notes-bubble" class="hp-card-badge" aria-hidden="true"></span>
       </div>
-      <div class="hp-card-desc" id="hp-notes-desc">Shift log — wire breaks, air line issues, anything worth flagging</div>
+      <div class="hp-card-desc" id="hp-notes-desc" data-i18n="home.shiftNotesDesc">Shift log — wire breaks, air line issues, anything worth flagging</div>
       <div class="hp-card-actions">
         <a class="hp-btn hp-btn-cutting" href="/v2/notes" data-i18n="common.open">Open</a>
       </div>
@@ -457,7 +457,7 @@
         <div class="hp-card-icon hp-icon-schedule"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
         <div class="hp-card-title" data-i18n="common.schedule">Schedule</div>
       </div>
-      <div class="hp-card-desc">Delivery schedule, live production &amp; loading status</div>
+      <div class="hp-card-desc" data-i18n="home.scheduleDesc">Delivery schedule, live production &amp; loading status</div>
       <div class="hp-card-actions">
         <a class="hp-btn hp-btn-schedule" href="/v2/schedule" data-perm-key="schedule" data-i18n="common.tvBoard">TV Board</a>
         <a class="hp-btn hp-btn-outline" href="/v2/schedule/desk" data-perm-key="schedule.desk" data-i18n="home.deskView">Desk View</a>
@@ -470,7 +470,7 @@
         <div class="hp-card-icon hp-icon-production"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div>
         <div class="hp-card-title" data-i18n="common.production">Production</div>
       </div>
-      <div class="hp-card-desc">Molding &amp; expansion production log</div>
+      <div class="hp-card-desc" data-i18n="home.productionDesc">Molding &amp; expansion production log</div>
       <div class="hp-card-actions">
         <a class="hp-btn hp-btn-production" href="/v2/production" data-i18n="common.open">Open</a>
       </div>
@@ -556,23 +556,28 @@ async function refreshShiftNotesIndicator() {
   if (!card || card.style.display === 'none') return;
   const bubble = document.getElementById('hp-notes-bubble');
   const desc = document.getElementById('hp-notes-desc');
-  const baseDesc = 'Shift log — wire breaks, air line issues, anything worth flagging';
+  const baseDesc = function () { return window.I18n ? window.I18n.t('home.shiftNotesDesc') : 'Shift log — wire breaks, air line issues, anything worth flagging'; };
   try {
     const res = await fetch('/v2/api/notes/unviewed-count?_=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) { card.classList.remove('has-new'); bubble.style.display = 'none'; desc.textContent = baseDesc; return; }
+    if (!res.ok) { card.classList.remove('has-new'); bubble.style.display = 'none'; desc.textContent = baseDesc(); return; }
     const data = await res.json();
     const count = data && data.ok ? (data.unviewed_count || 0) : 0;
     if (count > 0) {
       card.classList.add('has-new');
       bubble.style.display = 'inline-block';
       bubble.textContent = count > 99 ? '99+' : String(count);
-      desc.textContent = data.latest_subject ? ('New: ' + data.latest_subject) : (count + ' new note' + (count > 1 ? 's' : '') + ' need review');
+      if (data.latest_subject) {
+        desc.textContent = window.I18n ? window.I18n.t('home.shiftNotesNewSubject', { subject: data.latest_subject }) : ('New: ' + data.latest_subject);
+      } else {
+        const key = count > 1 ? 'home.shiftNotesNeedReviewMany' : 'home.shiftNotesNeedReviewOne';
+        desc.textContent = window.I18n ? window.I18n.t(key, { count: count }) : (count + ' new note' + (count > 1 ? 's' : '') + ' need review');
+      }
     } else {
       card.classList.remove('has-new');
       bubble.style.display = 'none';
-      desc.textContent = baseDesc;
+      desc.textContent = baseDesc();
     }
-  } catch { card.classList.remove('has-new'); bubble.style.display = 'none'; desc.textContent = baseDesc; }
+  } catch { card.classList.remove('has-new'); bubble.style.display = 'none'; desc.textContent = baseDesc(); }
 }
 setTimeout(refreshShiftNotesIndicator, 700);
 setInterval(refreshShiftNotesIndicator, 60000);

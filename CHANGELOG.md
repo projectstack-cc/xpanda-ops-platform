@@ -3528,6 +3528,20 @@ Entries within each module are ordered by prompt # descending (newest first).
   literal scope); the dynamically-rendered "No notifications" empty state now resolves through
   `I18n.t('home.noNotifications')` at render time since `data-i18n` tagging can't reach
   JS-generated HTML. No D1 migration, no permission change.
+- **P440 follow-up — closed the 4 home-page description strings P440 left untagged (Cutting,
+  Shift Notes, Schedule, Production).** Flagged by manual QA in production (`www.xpandaops.com`,
+  Spanish selected): those 4 `.hp-card-desc` elements had neither a `data-i18n` attribute nor a
+  `home.*Desc` catalog entry, so they stayed in English while all 9 sibling cards translated
+  correctly. Added `home.cuttingDesc`, `home.shiftNotesDesc`, `home.scheduleDesc`,
+  `home.productionDesc` (en/es/ht) to `shared/i18n-common.js` and tagged the corresponding
+  `index.html` elements. Also fixed `refreshShiftNotesIndicator()`: it was overwriting
+  `#hp-notes-desc` with hardcoded English (`baseDesc`, `'New: ' + subject`, `count + ' new note(s)
+  need review'`) on every 60s poll, silently reverting the translation back to English even after
+  the language selector's initial `apply()` had translated it. Added `home.shiftNotesNewSubject`
+  (`{subject}` var) and `home.shiftNotesNeedReviewOne`/`home.shiftNotesNeedReviewMany` (`{count}`
+  var, selected by the existing singular/plural branch) and routed all three dynamic states through
+  `window.I18n.t()`, falling back to the original hardcoded English only if `window.I18n` isn't
+  loaded. No catalog restructuring, no new `data-i18n` mechanism — same pattern as every other card.
 - **P407 — legacy 401 interceptor: ten copies consolidated to one, de-triggered on background
   polls (admin-auth-agent §8, depends on P405 shipping first).** Every legacy page installed a
   byte-identical global `window.fetch` wrapper that hard-navigated to `/login.html` on **any** 401

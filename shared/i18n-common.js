@@ -92,10 +92,17 @@
       logisticsDesc: 'Shipments, BOL generator, load builder',
       loadingDesc: 'Bay assignments, trailer loading status',
       manufacturingDesc: 'Block calculator, holey board calculator, cutting dashboard',
+      cuttingDesc: 'Live cutting floor — start, hand off, complete lines',
       mainBlueLine: 'Main / Blue Line',
       crossHoleCutter: 'Cross / Hole Cutter',
       shiftNotes: 'Shift Notes',
+      shiftNotesDesc: 'Shift log — wire breaks, air line issues, anything worth flagging',
+      shiftNotesNewSubject: 'New: {subject}',
+      shiftNotesNeedReviewOne: '{count} new note need review',
+      shiftNotesNeedReviewMany: '{count} new notes need review',
       deskView: 'Desk View',
+      scheduleDesc: 'Delivery schedule, live production & loading status',
+      productionDesc: 'Molding & expansion production log',
       adminDesc: 'Parts library, users, roles, activity log'
     },
     es: {
@@ -112,10 +119,17 @@
       logisticsDesc: 'Envíos, generador de BOL, armador de carga',
       loadingDesc: 'Asignación de bahías, estado de carga de tráileres',
       manufacturingDesc: 'Calculadora de bloques, calculadora de tableros perforados, panel de corte',
+      cuttingDesc: 'Línea de corte en vivo — iniciar, entregar, completar líneas',
       mainBlueLine: 'Línea Principal / Azul',
       crossHoleCutter: 'Cortadora Transversal / Perforadora',
       shiftNotes: 'Notas de Turno',
+      shiftNotesDesc: 'Registro de turno — roturas de alambre, problemas de línea de aire, cualquier cosa a reportar',
+      shiftNotesNewSubject: 'Nuevo: {subject}',
+      shiftNotesNeedReviewOne: '{count} nota nueva necesita revisión',
+      shiftNotesNeedReviewMany: '{count} notas nuevas necesitan revisión',
       deskView: 'Vista de Escritorio',
+      scheduleDesc: 'Horario de entregas, producción en vivo y estado de carga',
+      productionDesc: 'Registro de producción de moldeado y expansión',
       adminDesc: 'Biblioteca de piezas, usuarios, roles, registro de actividad'
     },
     ht: {
@@ -132,10 +146,17 @@
       logisticsDesc: 'Ekspedisyon, jeneratè BOL, konstriktè chaj',
       loadingDesc: 'Asiyasyon bè, estati chajman remòk',
       manufacturingDesc: 'Kalkilatè blòk, kalkilatè planch twou, tablodbò koupe',
+      cuttingDesc: 'Etaj koupe an dirèk — kòmanse, remèt, konplete liy yo',
       mainBlueLine: 'Liy Prensipal / Ble',
       crossHoleCutter: 'Koupè Kwaze / Koupè Twou',
       shiftNotes: 'Nòt Ekip',
+      shiftNotesDesc: 'Jounal ekip — fil kase, pwoblèm liy lè, nenpòt bagay ki vo repòte',
+      shiftNotesNewSubject: 'Nouvo: {subject}',
+      shiftNotesNeedReviewOne: '{count} nòt nouvo bezwen revizyon',
+      shiftNotesNeedReviewMany: '{count} nòt nouvo bezwen revizyon',
       deskView: 'Vi Biwo',
+      scheduleDesc: 'Orè livrezon, pwodiksyon an dirèk ak estati chajman',
+      productionDesc: 'Jounal pwodiksyon moulaj ak ekspansyon',
       adminDesc: 'Bibliyotèk pyès, itilizatè, wòl, jounal aktivite'
     }
   });
