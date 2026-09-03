@@ -197,6 +197,16 @@
   `cutting-pilot/src/app/api/orders/route.ts` currently inserts `null` for
   `packing_slip_key`/`packing_slip_pdf`, so v2-entered orders don't carry their uploaded slip into
   the board's order-detail modal (P345) — only legacy/imported jobs show one there today.
+- [ ] **v2 per-surface i18n extraction** (P442 shipped the `src/lib/i18n.ts` + `LangProvider`/
+  `useLang` spine and a bounded 6-string proof-slice on `OrderEntryForm.tsx` only) — the rest of
+  `OrderEntryForm.tsx` (dropzone, ship-to, process toggles, line items), plus `/v2/board`, `/v2/
+  schedule`, `/v2/loading`, `/v2/carrier`, `cutting-pilot`'s blocks/notes/production surfaces each
+  need their own `catalog` entries registered and their strings wired through `t()`.
+- [ ] **Decide whether v2 needs its own language selector** — P442 deliberately shipped no
+  `<select>` in v2 (`PlatformHeader` or elsewhere); today `xpanda_lang` is only ever set from the
+  P440 selector on the legacy home page before a user navigates into `/v2/*`. If floor tablets
+  start deep-linking directly into a `/v2/*` page (bypassing the home page), those sessions would
+  have no in-page way to change language — revisit then.
 
 ---
 

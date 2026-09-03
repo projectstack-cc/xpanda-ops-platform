@@ -582,6 +582,29 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P442 — v2/TypeScript i18n spine (`cutting-pilot/`), mirroring the existing `theme.tsx` /
+  `ThemeProvider` / `useTheme` pattern.** New `src/lib/i18n.ts` exports `LANGS` (`en`/`es`/`ht`),
+  `DEFAULT_LANG` (`en`), `LANG_STORAGE_KEY` (`xpanda_lang` — the same key the legacy `window.I18n`
+  engine from P440 and Safety's donor refactor from P441 already read/write, so a language chosen
+  on any surface carries over the next time a v2 page loads), a small `catalog` of `orders.*`
+  strings, `getStoredLang()`, and `translate(lang, key)` (falls back to `en`, then the raw key —
+  same fallback contract as the shared engine). New `src/components/lang.tsx` adds
+  `LangProvider`/`useLang()` — a client context that reads the stored lang on mount, re-syncs on
+  the browser `storage` event and on a `document`-level `xpanda:langchange` CustomEvent (the same
+  event `window.I18n.set()` fires on the legacy surfaces), and exposes `t(key)`. `layout.tsx` wraps
+  `<ThemeProvider>` in `<LangProvider>` and gets a pre-hydration inline script (parallel to the
+  existing theme script) that reads `localStorage['xpanda_lang']` and sets `document.documentElement.lang`
+  before paint, avoiding a hydration flash. As a bounded proof-slice (not a full-surface
+  translation), `OrderEntryForm.tsx` wires six strings through `t()`: the "New order" heading
+  (both the post-save reset button and the page `<h1>`), the "Customer & order" section header,
+  and the Customer / PO number / Invoice number field labels, plus the post-save "Order saved"
+  heading. Everything else on the form (dropzone copy, ship-to, process toggles, cut-list, line
+  items) is deliberately left untouched — full-form translation is tracked as backlog. **No
+  language `<select>` was added to v2** — by design, v2 pages are reached via `PlatformHeader`
+  navigation from the legacy home page, where the P440 selector already sets `xpanda_lang` before
+  the user ever crosses into `/v2/*`; v2 has no independent language entry point yet. Verified:
+  `npx tsc --noEmit` clean, `npm run cf-build` green.
+
 - **P439 — `/v2/board` gets a full in-place edit modal **alongside** the inline panel +
   read-only viewer (react-component-agent §9b + next-platform-agent §9a). Closes the v2
   omission Steve flagged: every editable field on an order used to be split between the

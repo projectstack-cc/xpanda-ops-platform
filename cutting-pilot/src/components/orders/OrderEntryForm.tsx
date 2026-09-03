@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FileUp, Plus, Printer, Trash2 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
+import { useLang } from "@/components/lang";
 import { parsePackingSlip } from "@/lib/packingSlip";
 import { matchLineItemToPart, loadPartsLibrary } from "@/lib/partMatch";
 import { buildCutListPdf, type CutListJob } from "@/lib/cutList";
@@ -133,6 +134,7 @@ interface OrderEntryFormProps {
 }
 
 export default function OrderEntryForm({ userName, isAdmin, permissions }: OrderEntryFormProps) {
+  const { t } = useLang();
   const [customer, setCustomer] = useState("");
   const [poNumber, setPoNumber] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
@@ -644,7 +646,7 @@ function setQtyAsBdftConvert(on: boolean) {
         <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Orders · v2" currentPath="/v2/orders" />
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="w-full max-w-[770px] bg-surface border border-[var(--card-border)] rounded-2xl p-8 text-center space-y-4">
-            <h2 className="text-lg font-semibold text-text">Order saved</h2>
+            <h2 className="text-lg font-semibold text-text">{t("orders.orderSaved")}</h2>
             <p className="text-sm text-muted">The order was created successfully.</p>
             {printError && (
               <p className="text-sm text-[var(--warn-text)]">{printError}</p>
@@ -655,7 +657,7 @@ function setQtyAsBdftConvert(on: boolean) {
                 onClick={resetForm}
                 className="min-h-[44px] px-5 rounded-md bg-[var(--brand)] text-white text-sm font-semibold cursor-pointer hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
               >
-                New order
+                {t("orders.newOrder")}
               </button>
               {/* P438: print the cut list for the order just saved (pixel-parity with the
                   /v2/board OrderDetailModal cut-list viewer). Native print() in same tab. */}
@@ -692,7 +694,7 @@ function setQtyAsBdftConvert(on: boolean) {
       <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Orders · v2" currentPath="/v2/orders" />
 
       <form onSubmit={handleSubmit} className="flex-1 w-full max-w-[770px] mx-auto px-4 py-6 space-y-6">
-        <h1 className="text-xl font-semibold text-text">New order</h1>
+        <h1 className="text-xl font-semibold text-text">{t("orders.newOrder")}</h1>
 
         {/* Packing-slip upload — client-side parse + prefill; never blocks manual entry */}
         <section>
@@ -734,11 +736,11 @@ function setQtyAsBdftConvert(on: boolean) {
 
         {/* Customer & order */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-text">Customer & order</h2>
-          <TextField label="Customer" value={customer} onChange={setCustomer} required placeholder="Customer name" />
+          <h2 className="text-sm font-semibold text-text">{t("orders.customerOrderSection")}</h2>
+          <TextField label={t("orders.customer")} value={customer} onChange={setCustomer} required placeholder="Customer name" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <TextField label="PO number" value={poNumber} onChange={setPoNumber} />
-            <TextField label="Invoice number" value={invoiceNumber} onChange={setInvoiceNumber} />
+            <TextField label={t("orders.poNumber")} value={poNumber} onChange={setPoNumber} />
+            <TextField label={t("orders.invoiceNumber")} value={invoiceNumber} onChange={setInvoiceNumber} />
           </div>
         </section>
 
