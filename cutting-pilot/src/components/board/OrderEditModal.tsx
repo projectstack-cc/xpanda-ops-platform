@@ -340,10 +340,6 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
   }
 
   function handleClose() {
-    if (isDirty()) {
-      const ok = window.confirm("Discard changes?");
-      if (!ok) return;
-    }
     onClose();
   }
 
@@ -508,6 +504,19 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
           {saveError && (
             <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-3 py-2">
               {saveError}
+            </div>
+          )}
+
+          {isDirty() && !saving && (
+            <div className="rounded-md border border-[var(--brand)] bg-[var(--info-bg)] text-[var(--info-text)] text-sm px-3 py-2 flex items-center justify-between gap-3">
+              <span>You have unsaved changes.</span>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="min-h-[36px] px-3 rounded-md bg-[var(--brand)] text-white text-xs font-semibold cursor-pointer hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+              >
+                Save changes
+              </button>
             </div>
           )}
 

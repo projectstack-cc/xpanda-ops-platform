@@ -654,16 +654,21 @@ Entries within each module are ordered by prompt # descending (newest first).
   `cutting-pilot/src/middleware.ts` (X-User-Permissions header),
   `cutting-pilot/src/app/api/board/[id]/route.ts` (broader GET),
   `cutting-pilot/src/app/api/orders/route.ts` (imports the shared helper — no behavior
-  change), `cutting-pilot/src/components/board/ProductionBoard.tsx` (row click now
+  change),   `cutting-pilot/src/components/board/ProductionBoard.tsx` (row click now
   expands the inline panel, **View** + **Edit** buttons added in the Actions cell, both
-  modals wired side-by-side, `CalendarView`'s `onSelectJob` retargeted at `toggleExpand`
-  so a calendar click also expands the inline panel — matches the list row click).
+  modals wired side-by-side, `CalendarView`'s `onSelectJob` retargeted at `setViewId`
+  so a calendar click opens the same read-only `OrderDetailModal` as the **View**
+  button — list and calendar now share one read-only affordance).
   **No DB migration** (all required columns already exist), **no new permission key**
   (the existing `orders` permission gates PUT/POST; the existing `jobs.manage` permission
-  + `X-User-Is-Admin` gate shifts). Dirty-tracking close-confirm
-  (`window.confirm("Discard changes?")`) is wired via a JSON-stringify snapshot of the
-  GET response vs the current state. `tsc --noEmit` + `npm run cf-build` both green; v2
-  deploy workflow fires on push to main.
+  + `X-User-Is-Admin` gate shifts).   Dirty-state UI (revised): no `window.confirm("Discard changes?")` on close — closing
+  the modal without saving simply discards in-memory state, nothing has been written.
+  Instead an inline **"You have unsaved changes. [Save changes]"** banner appears
+  inside the modal (top of the form, brand-tinted) only when the form is dirty
+  (JSON-stringify snapshot of the GET response vs the current state); the banner hides
+  while a save is in flight and after a successful save. The **Save** button in the
+  footer is unchanged. `tsc --noEmit` + `npm run cf-build` both green; v2 deploy
+  workflow fires on push to main.
 - **P438 — print cut list from the post-save screen + live Holey Board chunks preview
   (react-component-agent §9b + next-platform-agent §9a). Closes the v2 omission Steve
   flagged on the legacy job entry.** The post-save "Order saved" card (P339) now offers

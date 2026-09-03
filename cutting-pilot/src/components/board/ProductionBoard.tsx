@@ -270,7 +270,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
             )}
 
             {view === "calendar" && (
-              <CalendarView jobs={data.jobs} onSelectJob={toggleExpand} />
+              <CalendarView jobs={data.jobs} onSelectJob={setViewId} />
             )}
           </>
         )}
