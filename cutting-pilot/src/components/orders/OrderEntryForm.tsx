@@ -3,11 +3,12 @@
 // Manual order-entry form for /v2/orders. Single-column, section by section, posts to the
 // P338 contract at POST /v2/api/orders. A packing-slip dropzone (P340) parses a PDF client-side
 // and prefills form state — parsing failures never block manual entry.
-import { useRef, useState } from "react";
-import { FileUp, Plus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { FileUp, Plus, Printer, Trash2 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import { parsePackingSlip } from "@/lib/packingSlip";
 import { matchLineItemToPart, loadPartsLibrary } from "@/lib/partMatch";
+import { buildCutListPdf, type CutListJob } from "@/lib/cutList";
 import PartsPicker from "@/components/orders/PartsPicker";
 import AddressCorrectionModal, { type AddressParts } from "@/components/orders/AddressCorrectionModal";
 
@@ -173,6 +174,45 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [savedOrder, setSavedOrder] = useState<{
+    id: string;
+    invoice_number: string;
+    ship_date: string;
+    customer: string;
+    ship_to_company: string;
+    ship_to_attention: string;
+    ship_to_street: string;
+    ship_to_street2: string;
+    ship_to_city: string;
+    ship_to_state: string;
+    ship_to_zip: string;
+    carrier: string;
+    line_items: Array<{
+      part_number: string;
+      description: string;
+      quantity: number;
+      dimensions: string;
+      density: string;
+    }>;
+    hb_chunk_breakdown: string | null;
+  } | null>(null);
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
+  const printBlobUrlRef = useRef<string | null>(null);
+  const printIframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // P438: live Holey Board "Chunks required" preview — ported from legacy updateHoleyChunkPreview
+  // + /api/holey-chunks/preview. Resolves each line against the parts library, posts
+  // {items:[{thickness,qty}]} where category==='Holey Board', renders a count badge below the
+  // line-items section. Hidden when no HB items (matches legacy hidden-default behavior).
+  const [holeyPreview, setHoleyPreview] = useState<{
+    chunks_required: number;
+    avg_util: number;
+    height: number;
+    kerf: number;
+  } | null>(null);
+  const holeyPreviewSeqRef = useRef(0);
+  const holeyPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ship-to correction modal: a promise resolver bridges the async save flow to the operator's click.
   const [addrModal, setAddrModal] = useState<{ entered: AddressParts; standardized: AddressParts } | null>(null);
@@ -319,9 +359,144 @@ function setQtyAsBdftConvert(on: boolean) {
     if (fileInputRef.current) fileInputRef.current.value = "";
     setError(null);
     setSavedId(null);
+    setSavedOrder(null);
+    setPrintError(null);
+    if (printBlobUrlRef.current) {
+      try { URL.revokeObjectURL(printBlobUrlRef.current); } catch {}
+      printBlobUrlRef.current = null;
+    }
+    setHoleyPreview(null);
+    if (holeyPreviewTimerRef.current) {
+      clearTimeout(holeyPreviewTimerRef.current);
+      holeyPreviewTimerRef.current = null;
+    }
   }
 
   const totalBdft = computeTotalBdft(lineItems);
+
+  // P438: live HB preview — debounced 350ms after line items change so typing dims/qty doesn't
+  // spam the endpoint. Late responses drop silently via the seq counter (mirrors legacy
+  // _holeyPreviewSeq in jobs/index.html).
+  useEffect(() => {
+    if (holeyPreviewTimerRef.current) clearTimeout(holeyPreviewTimerRef.current);
+    const candidate = lineItems.filter((li) => li.part_number.trim() || li.description.trim());
+    if (candidate.length === 0) {
+      setHoleyPreview(null);
+      return;
+    }
+    holeyPreviewTimerRef.current = setTimeout(async () => {
+      const seq = ++holeyPreviewSeqRef.current;
+      try {
+        const parts = await loadPartsLibrary();
+        const items: { thickness: number; qty: number }[] = [];
+        for (const li of candidate) {
+          if (!li.part_id) continue;
+          const part = parts.find((p) => p.id === li.part_id);
+          if (!part || part.category !== "Holey Board") continue;
+          const thickness = parseFloat(String(part.height_in ?? ""));
+          const qty = parseInt(String(li.quantity ?? ""), 10);
+          if (!(thickness > 0) || !(qty >= 1)) continue;
+          items.push({ thickness, qty });
+        }
+        if (seq !== holeyPreviewSeqRef.current) return; // stale
+        if (items.length === 0) {
+          setHoleyPreview(null);
+          return;
+        }
+        const res = await fetch("/v2/api/orders/holey-chunks/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items }),
+        });
+        if (seq !== holeyPreviewSeqRef.current) return; // stale
+        const body = await res.json();
+        if (!res.ok || !body?.ok) {
+          setHoleyPreview(null);
+          return;
+        }
+        if (seq !== holeyPreviewSeqRef.current) return; // stale
+        setHoleyPreview({
+          chunks_required: body.chunks_required,
+          avg_util: body.avg_util,
+          height: body.height,
+          kerf: body.kerf,
+        });
+      } catch {
+        if (seq === holeyPreviewSeqRef.current) setHoleyPreview(null);
+      }
+    }, 350);
+    return () => {
+      if (holeyPreviewTimerRef.current) clearTimeout(holeyPreviewTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineItems]);
+
+  // P438: build + print the cut list for the just-saved order. Uses buildCutListPdf (same call as
+  // /v2/board's OrderDetailModal) so the PDF is pixel-parity with the order-detail viewer's print,
+  // including the CHUNK BREAKDOWN page when jobs.hb_chunk_breakdown is populated (best-effort
+  // resolved from the POST response; falls back to null if the server didn't return it).
+  async function handlePrintCutList() {
+    if (!savedOrder) return;
+    setPrinting(true);
+    setPrintError(null);
+    try {
+      const job: CutListJob = {
+        id: savedOrder.id,
+        invoice_number: savedOrder.invoice_number || null,
+        ship_date: savedOrder.ship_date || null,
+        customer: savedOrder.customer || null,
+        ship_to_company: savedOrder.ship_to_company || null,
+        ship_to_attention: savedOrder.ship_to_attention || null,
+        ship_to_street: savedOrder.ship_to_street || null,
+        ship_to_street2: savedOrder.ship_to_street2 || null,
+        ship_to_city: savedOrder.ship_to_city || null,
+        ship_to_state: savedOrder.ship_to_state || null,
+        ship_to_zip: savedOrder.ship_to_zip || null,
+        carrier: savedOrder.carrier || null,
+        line_items: savedOrder.line_items.map((li) => ({
+          part_number: li.part_number || null,
+          description: li.description || null,
+          quantity: li.quantity,
+          dimensions: li.dimensions || null,
+          density: li.density || null,
+        })),
+        hb_chunk_breakdown: savedOrder.hb_chunk_breakdown || null,
+      };
+      const pdfBytes = await buildCutListPdf(job);
+      const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
+      if (printBlobUrlRef.current) {
+        try { URL.revokeObjectURL(printBlobUrlRef.current); } catch {}
+      }
+      const url = URL.createObjectURL(blob);
+      printBlobUrlRef.current = url;
+      const iframe = printIframeRef.current;
+      if (iframe && iframe.contentWindow) {
+        iframe.src = url;
+        // Wait for load before invoking print; onload fires after src assignment.
+        iframe.onload = () => {
+          try { iframe.contentWindow?.focus(); iframe.contentWindow?.print(); } catch {}
+        };
+      } else {
+        // No iframe mounted yet — fall back to opening in a new tab so the user still gets the PDF.
+        window.open(url, "_blank");
+      }
+    } catch (e) {
+      console.error("Cut list print failed:", e);
+      setPrintError("Couldn't generate the cut list. Please try again.");
+    } finally {
+      setPrinting(false);
+    }
+  }
+
+  // Revoke the print blob URL on unmount so we never leak it across module navigations.
+  useEffect(() => {
+    return () => {
+      if (printBlobUrlRef.current) {
+        try { URL.revokeObjectURL(printBlobUrlRef.current); } catch {}
+        printBlobUrlRef.current = null;
+      }
+    };
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -434,6 +609,28 @@ function setQtyAsBdftConvert(on: boolean) {
         return;
       }
       setSavedId(data.id);
+      setSavedOrder({
+        id: data.id,
+        invoice_number: payload.invoice_number,
+        ship_date: payload.ship_date,
+        customer: payload.customer,
+        ship_to_company: payload.ship_to_company,
+        ship_to_attention: payload.ship_to_attention,
+        ship_to_street: payload.ship_to_street,
+        ship_to_street2: payload.ship_to_street2 ?? "",
+        ship_to_city: payload.ship_to_city,
+        ship_to_state: payload.ship_to_state,
+        ship_to_zip: payload.ship_to_zip,
+        carrier: payload.carrier,
+        line_items: payload.line_items.map((li) => ({
+          part_number: li.part_number,
+          description: li.description,
+          quantity: li.quantity,
+          dimensions: li.dimensions,
+          density: li.density,
+        })),
+        hb_chunk_breakdown: data?.job?.hb_chunk_breakdown ?? data?.hb_chunk_breakdown ?? null,
+      });
     } catch (e: any) {
       setError("Network error — couldn't reach the server.");
     } finally {
@@ -449,13 +646,27 @@ function setQtyAsBdftConvert(on: boolean) {
           <div className="w-full max-w-[770px] bg-surface border border-[var(--card-border)] rounded-2xl p-8 text-center space-y-4">
             <h2 className="text-lg font-semibold text-text">Order saved</h2>
             <p className="text-sm text-muted">The order was created successfully.</p>
-            <div className="flex items-center justify-center gap-3 pt-2">
+            {printError && (
+              <p className="text-sm text-[var(--warn-text)]">{printError}</p>
+            )}
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
               <button
                 type="button"
                 onClick={resetForm}
                 className="min-h-[44px] px-5 rounded-md bg-[var(--brand)] text-white text-sm font-semibold cursor-pointer hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
               >
                 New order
+              </button>
+              {/* P438: print the cut list for the order just saved (pixel-parity with the
+                  /v2/board OrderDetailModal cut-list viewer). Native print() in same tab. */}
+              <button
+                type="button"
+                onClick={handlePrintCutList}
+                disabled={printing}
+                className="min-h-[44px] px-5 inline-flex items-center gap-2 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+              >
+                <Printer size={16} aria-hidden="true" />
+                {printing ? "Generating…" : "Print cut list"}
               </button>
               <a
                 href="/jobs/"
@@ -464,6 +675,12 @@ function setQtyAsBdftConvert(on: boolean) {
                 Go to job board
               </a>
             </div>
+            {/* Hidden iframe — printCutList points it at the blob URL and invokes print() on load. */}
+            <iframe
+              ref={printIframeRef}
+              title="Cut list"
+              style={{ position: "absolute", left: -9999, top: -9999, width: 0, height: 0, border: 0 }}
+            />
           </div>
         </div>
       </div>
@@ -628,6 +845,24 @@ function setQtyAsBdftConvert(on: boolean) {
             <h2 className="text-sm font-semibold text-text">Line items</h2>
             <span className="text-xs font-mono tabular-nums text-muted">Total BDFT: {totalBdft || 0}</span>
           </div>
+
+          {/* P438: live Holey Board chunks preview (port of legacy holey-chunks-summary) */}
+          {holeyPreview && (
+            <div className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-2)] px-4 py-3">
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm font-semibold text-text">Chunks required</span>
+                <span className="text-xl font-bold tabular-nums text-text">
+                  {holeyPreview.chunks_required}
+                </span>
+                <span className="text-xs text-muted">
+                  · 48×24×{holeyPreview.height}&quot; · {holeyPreview.kerf}&quot; kerf · {holeyPreview.avg_util}% avg fill
+                </span>
+              </div>
+              <div className="mt-1 text-[11px] text-muted">
+                live estimate; the value saved on the order is authoritative.
+              </div>
+            </div>
+          )}
           <div className="space-y-3">
             {lineItems.map((li, idx) => (
               <div key={idx} className="rounded-lg border border-[var(--card-border)] p-3 space-y-2">

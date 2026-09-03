@@ -566,6 +566,35 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P438 — print cut list from the post-save screen + live Holey Board chunks preview
+  (react-component-agent §9b + next-platform-agent §9a). Closes the v2 omission Steve
+  flagged on the legacy job entry.** The post-save "Order saved" card (P339) now offers
+  three actions side by side: **New order**, **Print cut list** (new), and **Go to job board**
+  (the existing legacy link). Print calls `buildCutListPdf` (`@/lib/cutList.ts`) with the saved
+  order's ship-to + line items + the server-persisted `hb_chunk_breakdown`, mirrors it into a
+  hidden iframe, and invokes the iframe's `contentWindow.print()` so the OS print dialog opens
+  in-tab — the same `buildCutListPdf` call used by `/v2/board`'s `OrderDetailModal`, so the PDF
+  is pixel-parity with the order-detail viewer's print. When `hb_chunk_breakdown` is populated,
+  cutList.ts's P386 CHUNK BREAKDOWN page renders (48×24×H · kerf · avg fill · grouped chunks →
+  cut-each-into). The PDF blob URL is revoked on `resetForm` and on unmount via `useEffect`
+  cleanup so navigations don't leak. Also added a **live "Chunks required" badge** under the
+  line-items section header (port of legacy `updateHoleyChunkPreview` + the `holey-chunks-summary`
+  card): resolves each line's matched part_id against the parts library, posts
+  `{items:[{thickness,qty}]}` for any line whose `parts.category === 'Holey Board'` to a new
+  **POST `/v2/api/orders/holey-chunks/preview`** (1:1 mirror of legacy `handleHoleyChunksPreview`),
+  and renders the count + 48×24×H · kerf · avg fill string with a "live estimate; the value
+  saved on the order is authoritative" subtitle. Debounced 350ms; late responses drop via a
+  ref-based seq counter (mirrors legacy `_holeyPreviewSeq`). Server side: ported
+  `_worker.js/lib/holey-nester.js` verbatim to `src/lib/holeyNester.ts` (pure, no D1) and added a
+  `computeAndPersistHoleyChunks(DB, jobId)` step to the orders POST after line-item inserts —
+  writes `jobs.hb_chunks_required` + `jobs.hb_chunk_breakdown` so the PDF's chunk-breakdown page
+  has data and `/v2/cutting`'s guillotine seed is correct on create (no backfill needed).
+  Best-effort like the auto-shipment / loading-assignment creates — logged, never blocks save.
+  **No DB migration** — the schema already has `hb_chunks_required` + `hb_chunk_breakdown`
+  columns from P379-era. Middleware unchanged: `/v2/api/orders` prefix already gates on
+  `orders.edit` and the new `/v2/api/orders/holey-chunks/preview` falls under that prefix. UI-only
+  + one new pure lib + one new API route + persistence side-effect on save. `tsc --noEmit` +
+  `cf-build` both green.
 - **P437 — "Qty entered as BDFT" toggle restored + 15% wider layout in `/v2/orders`
   (react-component-agent §9b).** Closes the v2 omission Steve flagged: the legacy
   `jobs/index.html` job-entry form had a single "Qty entered as BDFT — convert to pieces" checkbox
