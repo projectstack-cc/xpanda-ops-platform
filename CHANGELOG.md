@@ -3542,6 +3542,42 @@ Entries within each module are ordered by prompt # descending (newest first).
   var, selected by the existing singular/plural branch) and routed all three dynamic states through
   `window.I18n.t()`, falling back to the original hardcoded English only if `window.I18n` isn't
   loaded. No catalog restructuring, no new `data-i18n` mechanism — same pattern as every other card.
+- **i18n sweep, phase 1 — `shared/shared-header.js` (the module nav/notifications/sign-out chrome
+  every legacy page renders) now speaks en/es/ht.** Requested after manual QA found the language
+  selector had zero effect once you left the home page — every module (Job Board, Logistics,
+  Manufacturing, Production, QC, Reports) builds its header via one `document.write`'d template in
+  this file, and none of its strings were wired to `window.I18n`. Fixed at the root instead of
+  per-module: `shared-header.js` now auto-loads `/shared/i18n.js` + `/shared/i18n-common.js` itself
+  (same `window.__xpandaXLoaded`-guarded `document.write` pattern already used for
+  `theme.js`/`auth-interceptor.js`/`shared-api.js`/`shared-utils.js`/`photo-gallery.js`/
+  `pwa-install.js`), so every page that includes a `<module>-header.js` shim gets the engine for
+  free — no per-page script tag needed, unlike the Safety migration (P441). Translated: the 8 nav
+  links (reusing `common.jobBoard`/`logistics`/`manufacturing`/`production`/`reports`/`safety`/
+  `admin` — `QC` stays untranslated, matching the home page card title precedent), the
+  notifications panel (reusing `home.notifications`/`markAllRead`/`enablePush`/`enablePushSub`/
+  `noNotifications`), Sign Out (reusing `common.signOut`), the Office/Floor mode toggle, the
+  Display/Theme settings gear, relative notification timestamps ("Just now"/"Xm ago"/"Xh ago"/
+  "Xd ago"), the role-simulation banner ("Testing as: {role}" / "Stop Testing" / both its error
+  alerts), the "← Back to Operations Platform" footer link, and all nav-region `aria-label`s
+  (module nav, hamburger open/close, settings gear, mode/theme toggles). New `common.*` catalog
+  keys for all of the above (`office`, `floor`, `display`, `theme`, `settings`, `backToPlatform`,
+  `testingAs`, `stopTesting`, `stopTestingFailed`, `stopTestingError`, `unknownError`, `justNow`,
+  `minsAgo`, `hoursAgo`, `daysAgo`, `toggleFloorMode`, `toggleDarkMode`, `openMenu`, `closeMenu`,
+  `moduleNav`). New `layout` catalog namespace for the per-module page title/subtitle/back-link
+  each `<module>-header.js` shim passes as a literal English string in its config (`jobsTitle`/
+  `jobsSubtitle`/`jobsBackLink`, `logisticsTitle`/`logisticsSubtitle`, `manufacturingTitle`/
+  `manufacturingSubtitle`/`manufacturingBackLink`, `productionTitle`/`productionSubtitle`/
+  `productionBackLink`, `qcTitle`/`qcSubtitle`/`qcBackLink`, `reportsSubtitle`) — looked up in
+  `shared-header.js` by `config.moduleKey` (a field every shim already set but nothing previously
+  read), falling back to the shim's literal string only if `window.I18n` fails to load; `reports`'
+  empty `pageTitle`/`backLinkLabel` (each reports sub-page sets its own via `getElementById`) are
+  guarded so they never call `t()` with an unregistered key. `n.title`/`n.message` inside
+  individual notifications and `d.user.simulatingRole.name` are real data (job/order names, a
+  role's DB name) and correctly left untranslated, same reasoning as customer names elsewhere.
+  Confirmed via `node --check` and live in Chrome (`/jobs/`, `/logistics/`, `/qc/`) with Spanish
+  selected. Does not yet cover: each module's own page *content* below the header (that's the rest
+  of this sweep, module by module), Admin (bespoke topbar, no `shared-header.js`), Safety (already
+  on the engine directly per P441, doesn't use `shared-header.js`), or `login.html`/`legal/*`.
 - **P407 — legacy 401 interceptor: ten copies consolidated to one, de-triggered on background
   polls (admin-auth-agent §8, depends on P405 shipping first).** Every legacy page installed a
   byte-identical global `window.fetch` wrapper that hard-navigated to `/login.html` on **any** 401

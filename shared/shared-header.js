@@ -2,6 +2,20 @@
 // Consumed by every module via /<module>/<module>-header.js (thin shims).
 // TODO: replace document.write() with DOMContentLoaded + insertAdjacentHTML (deferred — separate refactor).
 
+// I18n engine + common/home/layout catalogs — loaded first so every string built below (nav
+// labels, notifications panel, sign out, mode/theme toggles, page title/subtitle) can call
+// window.I18n.t() synchronously. document.write of a <script src> blocks and executes before
+// this file's own top-level code continues, so the engine + catalogs are guaranteed ready by
+// the time the header IIFE below runs.
+if (!window.__xpandaI18nLoaded) {
+  window.__xpandaI18nLoaded = true;
+  document.write('<script src="/shared/i18n.js"><\/script>');
+}
+if (!window.__xpandaI18nCommonLoaded) {
+  window.__xpandaI18nCommonLoaded = true;
+  document.write('<script src="/shared/i18n-common.js"><\/script>');
+}
+
 // ThemeManager — loaded from /shared/theme.js so homepage and all module pages share one mechanism.
 if (!window.__xpandaThemeLoaded) {
   window.__xpandaThemeLoaded = true;
@@ -71,13 +85,18 @@ if (!window.__xpandaPwaInstallLoaded) {
     return d.innerHTML;
   }
 
+  // Fallback param covers the (should-never-happen, since i18n.js is document.write'n above
+  // before any of this runs) case where window.I18n isn't loaded — same defensive pattern as
+  // the v2 i18n spine (lang.tsx) and the home page's dynamic Shift Notes indicator.
+  function t(key, vars, fallback) { return window.I18n ? window.I18n.t(key, vars) : fallback; }
+
   function notifFmtAgo(iso) {
     const m = Math.floor((Date.now() - new Date(iso)) / 60000);
-    if (m < 1) return 'Just now';
-    if (m < 60) return m + 'm ago';
+    if (m < 1) return t('common.justNow', null, 'Just now');
+    if (m < 60) return t('common.minsAgo', { m: m }, m + 'm ago');
     const h = Math.floor(m / 60);
-    if (h < 24) return h + 'h ago';
-    return Math.floor(h / 24) + 'd ago';
+    if (h < 24) return t('common.hoursAgo', { h: h }, h + 'h ago');
+    return t('common.daysAgo', { d: Math.floor(h / 24) }, Math.floor(h / 24) + 'd ago');
   }
 
   function urlBase64ToUint8Array(base64String) {
@@ -98,12 +117,12 @@ if (!window.__xpandaPwaInstallLoaded) {
       <span id="hdr-notif-bell" onclick="toggleNotifDropdown()" style="position:relative;cursor:pointer;font-size:18px;line-height:1;">🔔<span id="hdr-notif-badge" style="display:none;position:absolute;top:-4px;right:-6px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:16px;height:16px;text-align:center;line-height:16px;"></span></span>
       <div id="hdr-notif-dropdown" style="display:none;position:absolute;top:36px;right:0;width:340px;max-height:420px;background:var(--card-bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);overflow:hidden;z-index:9999;">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);">
-          <span style="font-weight:700;font-size:14px;">Notifications</span>
-          <button onclick="markAllRead()" style="background:none;border:none;color:var(--link);font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
+          <span style="font-weight:700;font-size:14px;">${t('home.notifications', null, 'Notifications')}</span>
+          <button onclick="markAllRead()" style="background:none;border:none;color:var(--link);font-size:12px;font-weight:600;cursor:pointer;">${t('home.markAllRead', null, 'Mark all read')}</button>
         </div>
         <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:var(--info-bg);border-bottom:1px solid var(--line);cursor:pointer;" onclick="enablePushFromBanner()">
-          <div style="font-size:13px;font-weight:600;color:var(--info-text);">🔔 Enable push notifications</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Tap to get alerts on this device</div>
+          <div style="font-size:13px;font-weight:600;color:var(--info-text);">🔔 ${t('home.enablePush', null, 'Enable push notifications')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">${t('home.enablePushSub', null, 'Tap to get alerts on this device')}</div>
         </div>
         <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
       </div>` : '';
@@ -111,19 +130,19 @@ if (!window.__xpandaPwaInstallLoaded) {
     // User name + logout — in topbar when userBarLocation !== 'footer'.
     const topbarUserItemsHtml = config.userBarLocation !== 'footer' ? `
       <span id="hdr-user-name"></span>
-      <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;">Sign Out</a>` : '';
+      <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;">${t('common.signOut', null, 'Sign Out')}</a>` : '';
 
     // Mode toggle button — always rendered on every module header.
-    const modeToggleHtml = `<button type="button" id="hdr-mode-toggle" class="xpanda-mode-toggle" aria-label="Toggle floor mode" aria-pressed="false" onclick="window.__xpandaSetUiMode(window.__xpandaGetUiMode()==='floor'?'office':'floor')" style="background:none;border:1px solid var(--input-border);border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;padding:4px 10px;color:var(--muted);display:inline-flex;align-items:center;gap:4px;line-height:1;"><span id="hdr-mode-label">Office</span></button>`;
+    const modeToggleHtml = `<button type="button" id="hdr-mode-toggle" class="xpanda-mode-toggle" aria-label="${t('common.toggleFloorMode', null, 'Toggle floor mode')}" aria-pressed="false" onclick="window.__xpandaSetUiMode(window.__xpandaGetUiMode()==='floor'?'office':'floor')" style="background:none;border:1px solid var(--input-border);border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;padding:4px 10px;color:var(--muted);display:inline-flex;align-items:center;gap:4px;line-height:1;"><span id="hdr-mode-label">${t('common.office', null, 'Office')}</span></button>`;
 
     // Theme toggle button — sun/moon SVG, no emoji.
-    const themeToggleHtml = `<button type="button" id="hdr-theme-toggle" aria-label="Toggle dark mode" onclick="window.ThemeManager&&window.ThemeManager.toggle()" style="background:none;border:1px solid var(--input-border);border-radius:6px;cursor:pointer;padding:4px 8px;color:var(--muted);display:inline-flex;align-items:center;line-height:1;"><svg class="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="theme-icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>`;
+    const themeToggleHtml = `<button type="button" id="hdr-theme-toggle" aria-label="${t('common.toggleDarkMode', null, 'Toggle dark mode')}" onclick="window.ThemeManager&&window.ThemeManager.toggle()" style="background:none;border:1px solid var(--input-border);border-radius:6px;cursor:pointer;padding:4px 8px;color:var(--muted);display:inline-flex;align-items:center;line-height:1;"><svg class="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="theme-icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>`;
 
     window.__xpandaUpdateModeToggle = function (mode) {
       var btn = document.getElementById('hdr-mode-toggle');
       var lbl = document.getElementById('hdr-mode-label');
       if (!btn || !lbl) return;
-      lbl.textContent = mode === 'floor' ? 'Floor' : 'Office';
+      lbl.textContent = mode === 'floor' ? t('common.floor', null, 'Floor') : t('common.office', null, 'Office');
       btn.setAttribute('aria-pressed', mode === 'floor' ? 'true' : 'false');
     };
 
@@ -131,10 +150,10 @@ if (!window.__xpandaPwaInstallLoaded) {
     const gearSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
     const gearMenuHtml = `
       <div class="xpanda-gear" id="hdr-gear">
-        <button type="button" id="hdr-gear-btn" class="xpanda-gear-btn" aria-label="Settings" aria-haspopup="true" aria-expanded="false" onclick="window.__xpandaToggleGear&&window.__xpandaToggleGear()">${gearSvg}</button>
+        <button type="button" id="hdr-gear-btn" class="xpanda-gear-btn" aria-label="${t('common.settings', null, 'Settings')}" aria-haspopup="true" aria-expanded="false" onclick="window.__xpandaToggleGear&&window.__xpandaToggleGear()">${gearSvg}</button>
         <div class="xpanda-gear-popover" id="hdr-gear-popover" role="menu" hidden>
-          <div class="xpanda-gear-row"><span class="xpanda-gear-label">Display</span>${modeToggleHtml}</div>
-          <div class="xpanda-gear-row"><span class="xpanda-gear-label">Theme</span>${themeToggleHtml}</div>
+          <div class="xpanda-gear-row"><span class="xpanda-gear-label">${t('common.display', null, 'Display')}</span>${modeToggleHtml}</div>
+          <div class="xpanda-gear-row"><span class="xpanda-gear-label">${t('common.theme', null, 'Theme')}</span>${themeToggleHtml}</div>
         </div>
       </div>`;
 
@@ -142,22 +161,32 @@ if (!window.__xpandaPwaInstallLoaded) {
     const navActionsHtml = `${notifBellHtml}${gearMenuHtml}${topbarUserItemsHtml}`;
 
     // Back-link — rendered on non-dashboard pages when backLinkLabel is non-empty.
+    // Looked up in the "layout" catalog by moduleKey (e.g. layout.jobsBackLink); every module
+    // shim with a non-empty backLinkLabel has a matching registered key in i18n-common.js, so
+    // this never falls through to a raw dotted key — falls back to the shim's literal English
+    // string only if window.I18n itself failed to load.
     const backLinkHtml = config.backLinkLabel && !isDashboard
-      ? `\n    <a href="${config.dashboardPath}" class="${config.badgeClass.replace('-badge', '-back-link')}">${config.backLinkLabel}</a>\n`
+      ? `\n    <a href="${config.dashboardPath}" class="${config.badgeClass.replace('-badge', '-back-link')}">${t('layout.' + config.moduleKey + 'BackLink', null, config.backLinkLabel)}</a>\n`
       : '';
+
+    // Page title/subtitle — same layout-catalog lookup pattern as the back-link above.
+    // reports intentionally passes pageTitle: '' (each reports page sets its own via
+    // getElementById), so no layout.reportsTitle key exists — guarded by the pageTitle check.
+    const pageTitleText = config.pageTitle ? t('layout.' + config.moduleKey + 'Title', null, config.pageTitle) : '';
+    const pageSubtitleText = config.pageSubtitle ? t('layout.' + config.moduleKey + 'Subtitle', null, config.pageSubtitle) : '';
 
     // Module nav bar — single shared source, renders on every operational page.
     (function () {
       var _p = window.location.pathname;
       var _mods = [
-        { label: 'Job board',     href: '/jobs/',         perm: 'jobs' },
-        { label: 'Logistics',     href: '/logistics/',     perm: 'logistics.dashboard' },
-        { label: 'Manufacturing', href: '/manufacturing/', perm: 'manufacturing.calculators' },
-        { label: 'Production',    href: '/production/',    perm: 'production.inventory' },
+        { label: t('common.jobBoard', null, 'Job board'),         href: '/jobs/',         perm: 'jobs' },
+        { label: t('common.logistics', null, 'Logistics'),        href: '/logistics/',     perm: 'logistics.dashboard' },
+        { label: t('common.manufacturing', null, 'Manufacturing'), href: '/manufacturing/', perm: 'manufacturing.calculators' },
+        { label: t('common.production', null, 'Production'),      href: '/production/',    perm: 'production.inventory' },
         { label: 'QC',            href: '/qc/',            perm: 'qc' },
-        { label: 'Reports',       href: '/reports/',       perm: 'reports' },
-        { label: 'Safety',        href: '/safety/',        perm: 'safety' },
-        { label: 'Admin',         href: '/admin/',         perm: 'admin' },
+        { label: t('common.reports', null, 'Reports'),      href: '/reports/',       perm: 'reports' },
+        { label: t('common.safety', null, 'Safety'),        href: '/safety/',        perm: 'safety' },
+        { label: t('common.admin', null, 'Admin'),          href: '/admin/',         perm: 'admin' },
       ];
       var _links = _mods.map(function (m) {
         var active = _p.startsWith(m.href);
@@ -196,16 +225,16 @@ if (!window.__xpandaPwaInstallLoaded) {
         '@media(max-width:767px){.xpanda-nav-links{display:none;}.xpanda-nav-menu-btn{display:inline-flex;}}' +
         '@media(min-width:768px){.xpanda-nav-drawer{display:none;}}' +
         '</style>' +
-        '<nav class="xpanda-module-nav" id="xpanda-module-nav" aria-label="Module navigation">' +
+        '<nav class="xpanda-module-nav" id="xpanda-module-nav" aria-label="' + t('common.moduleNav', null, 'Module navigation') + '">' +
           '<div class="xpanda-nav-inner">' +
             '<a class="xpanda-nav-logo" href="/" aria-label="xPanda Operations Platform"><img src="/logo/xpanda.png" alt="xPanda"></a>' +
             '<div class="xpanda-nav-links" id="xpanda-nav-links">' + _links + '</div>' +
-            '<button type="button" class="xpanda-nav-menu-btn" id="xpanda-nav-menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="xpanda-nav-drawer">' + _ham + '</button>' +
+            '<button type="button" class="xpanda-nav-menu-btn" id="xpanda-nav-menu-btn" aria-label="' + t('common.openMenu', null, 'Open menu') + '" aria-expanded="false" aria-controls="xpanda-nav-drawer">' + _ham + '</button>' +
             '<div class="xpanda-nav-actions">' + navActionsHtml + '</div>' +
           '</div>' +
           '<div class="xpanda-nav-drawer" id="xpanda-nav-drawer" hidden>' + _links + '</div>' +
         '</nav>' +
-        '<div class="xpanda-page-desc"><h1 id="' + config.pageTitleId + '">' + config.pageTitle + '</h1><p id="' + config.pageSubtitleId + '">' + config.pageSubtitle + '</p></div>'
+        '<div class="xpanda-page-desc"><h1 id="' + config.pageTitleId + '">' + pageTitleText + '</h1><p id="' + config.pageSubtitleId + '">' + pageSubtitleText + '</p></div>'
       );
     })();
 
@@ -218,17 +247,18 @@ if (!window.__xpandaPwaInstallLoaded) {
       // Footer
       const footer = document.createElement('footer');
       footer.className = config.footerClass;
+      const backToPlatformText = t('common.backToPlatform', null, '← Back to Operations Platform');
       if (config.userBarLocation === 'footer') {
         footer.innerHTML = `
   <div id="footer-user-bar" style="margin-bottom:8px;font-size:12px;color:var(--text-muted);">
     <span id="hdr-user-name"></span>
     <span style="margin:0 4px;">•</span>
-    <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;font-size:12px;">Sign Out</a>
+    <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;font-size:12px;">${t('common.signOut', null, 'Sign Out')}</a>
   </div>
-  <a href="/">← Back to Operations Platform</a>
+  <a href="/">${backToPlatformText}</a>
 `;
       } else {
-        footer.innerHTML = `<a href="/">← Back to Operations Platform</a>`;
+        footer.innerHTML = `<a href="/">${backToPlatformText}</a>`;
       }
       document.body.appendChild(footer);
 
@@ -240,7 +270,7 @@ if (!window.__xpandaPwaInstallLoaded) {
           const open = !_navDrawer.hidden;
           _navDrawer.hidden = open;
           _navBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
-          _navBtn.setAttribute('aria-label', open ? 'Open menu' : 'Close menu');
+          _navBtn.setAttribute('aria-label', open ? t('common.openMenu', null, 'Open menu') : t('common.closeMenu', null, 'Close menu'));
         });
       }
 
@@ -287,15 +317,15 @@ if (!window.__xpandaPwaInstallLoaded) {
             const simBanner = document.createElement('div');
             simBanner.id = 'sim-role-banner';
             simBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:#f59e0b;color:#000;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:14px;font-weight:600;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
-            simBanner.innerHTML = `<span>🔍 Testing as: ${d.user.simulatingRole.name}</span><button id="sim-stop-btn" style="background:var(--card-bg);color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">Stop Testing</button>`;
+            simBanner.innerHTML = `<span>🔍 ${t('common.testingAs', { role: d.user.simulatingRole.name }, 'Testing as: ' + d.user.simulatingRole.name)}</span><button id="sim-stop-btn" style="background:var(--card-bg);color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">${t('common.stopTesting', null, 'Stop Testing')}</button>`;
             document.body.prepend(simBanner);
             document.body.style.paddingTop = simBanner.offsetHeight + 'px';
             document.getElementById('sim-stop-btn').addEventListener('click', async () => {
               try {
                 const res = await fetch('/api/auth/simulate-role', { method: 'DELETE' });
                 const data = await res.json();
-                if (data.ok) { window.location.reload(); } else { alert('Failed to stop simulation: ' + (data.error || 'Unknown error')); }
-              } catch (e) { alert('Error stopping simulation: ' + e.message); }
+                if (data.ok) { window.location.reload(); } else { alert(t('common.stopTestingFailed', { error: data.error || t('common.unknownError', null, 'Unknown error') }, 'Failed to stop simulation: ' + (data.error || 'Unknown error'))); }
+              } catch (e) { alert(t('common.stopTestingError', { error: e.message }, 'Error stopping simulation: ' + e.message)); }
             });
           }
         }
@@ -379,7 +409,7 @@ if (!window.__xpandaPwaInstallLoaded) {
             }
             const list = document.getElementById('hdr-notif-list');
             if (!list) return;
-            if (!data.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-hint);font-size:13px;">No notifications</div>'; return; }
+            if (!data.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-hint);font-size:13px;">' + t('home.noNotifications', null, 'No notifications') + '</div>'; return; }
             list.innerHTML = data.notifications.map(n => `
         <div style="padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;${n.is_read ? 'opacity:0.6;' : 'background:var(--info-bg);'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')">
           <div style="font-size:13px;font-weight:${n.is_read ? '400' : '600'};color:var(--text);margin-bottom:2px;">${notifEsc(n.title)}</div>

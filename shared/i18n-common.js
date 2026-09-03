@@ -25,7 +25,27 @@
       schedule: 'Schedule',
       open: 'Open',
       signOut: 'Sign Out',
-      langLabel: 'Language'
+      langLabel: 'Language',
+      office: 'Office',
+      floor: 'Floor',
+      display: 'Display',
+      theme: 'Theme',
+      settings: 'Settings',
+      backToPlatform: '← Back to Operations Platform',
+      testingAs: 'Testing as: {role}',
+      stopTesting: 'Stop Testing',
+      stopTestingFailed: 'Failed to stop simulation: {error}',
+      stopTestingError: 'Error stopping simulation: {error}',
+      unknownError: 'Unknown error',
+      justNow: 'Just now',
+      minsAgo: '{m}m ago',
+      hoursAgo: '{h}h ago',
+      daysAgo: '{d}d ago',
+      toggleFloorMode: 'Toggle floor mode',
+      toggleDarkMode: 'Toggle dark mode',
+      openMenu: 'Open menu',
+      closeMenu: 'Close menu',
+      moduleNav: 'Module navigation'
     },
     es: {
       safety: 'Seguridad',
@@ -49,7 +69,27 @@
       schedule: 'Horario',
       open: 'Abrir',
       signOut: 'Cerrar Sesión',
-      langLabel: 'Idioma'
+      langLabel: 'Idioma',
+      office: 'Oficina',
+      floor: 'Planta',
+      display: 'Pantalla',
+      theme: 'Tema',
+      settings: 'Configuración',
+      backToPlatform: '← Volver a la Plataforma de Operaciones',
+      testingAs: 'Probando como: {role}',
+      stopTesting: 'Detener Prueba',
+      stopTestingFailed: 'Error al detener la simulación: {error}',
+      stopTestingError: 'Error al detener la simulación: {error}',
+      unknownError: 'Error desconocido',
+      justNow: 'Ahora mismo',
+      minsAgo: 'hace {m}m',
+      hoursAgo: 'hace {h}h',
+      daysAgo: 'hace {d}d',
+      toggleFloorMode: 'Alternar modo de planta',
+      toggleDarkMode: 'Alternar modo oscuro',
+      openMenu: 'Abrir menú',
+      closeMenu: 'Cerrar menú',
+      moduleNav: 'Navegación de módulos'
     },
     ht: {
       safety: 'Sekirite',
@@ -73,7 +113,27 @@
       schedule: 'Orè',
       open: 'Ouvri',
       signOut: 'Dekonekte',
-      langLabel: 'Lang'
+      langLabel: 'Lang',
+      office: 'Biwo',
+      floor: 'Etaj',
+      display: 'Ekran',
+      theme: 'Tèm',
+      settings: 'Anviwònman',
+      backToPlatform: '← Retounen nan Platfòm Operasyon',
+      testingAs: 'Ap Teste kòm: {role}',
+      stopTesting: 'Sispann Teste',
+      stopTestingFailed: 'Echèk pou sispann simulasyon: {error}',
+      stopTestingError: 'Erè pandan y ap sispann simulasyon: {error}',
+      unknownError: 'Erè enkoni',
+      justNow: 'Kounye a',
+      minsAgo: 'sa fè {m}min',
+      hoursAgo: 'sa fè {h}è',
+      daysAgo: 'sa fè {d}j',
+      toggleFloorMode: 'Chanje mòd etaj',
+      toggleDarkMode: 'Chanje mòd fonse',
+      openMenu: 'Ouvri meni',
+      closeMenu: 'Fèmen meni',
+      moduleNav: 'Navigasyon modil'
     }
   });
 
@@ -158,6 +218,64 @@
       scheduleDesc: 'Orè livrezon, pwodiksyon an dirèk ak estati chajman',
       productionDesc: 'Jounal pwodiksyon moulaj ak ekspansyon',
       adminDesc: 'Bibliyotèk pyès, itilizatè, wòl, jounal aktivite'
+    }
+  });
+
+  // "layout" — per-module page chrome rendered by /shared/shared-header.js
+  // (pageTitle/pageSubtitle/backLinkLabel from each <module>-header.js shim's config).
+  // QC's title intentionally keeps the "QC" abbreviation untranslated, matching the
+  // home page card title precedent (home.html "QC" card has no data-i18n either).
+  window.I18n.register("layout", {
+    en: {
+      jobsTitle: 'Job Board',
+      jobsSubtitle: 'Production job tracking and shipping schedule',
+      jobsBackLink: '← Back to Job Board',
+      logisticsTitle: 'Logistics',
+      logisticsSubtitle: 'Inbound deliveries and outbound shipments',
+      manufacturingTitle: 'Manufacturing Dashboard',
+      manufacturingSubtitle: 'Production calculators and cutting operations',
+      manufacturingBackLink: '← Back to Manufacturing',
+      productionTitle: 'Production Dashboard',
+      productionSubtitle: 'Inventory and production planning',
+      productionBackLink: '← Back to Dashboard',
+      qcTitle: 'QC Dashboard',
+      qcSubtitle: 'Select a quality workflow to begin',
+      qcBackLink: '← Back to Dashboard',
+      reportsSubtitle: 'Select a reporting workflow to begin'
+    },
+    es: {
+      jobsTitle: 'Tablero de Trabajos',
+      jobsSubtitle: 'Seguimiento de trabajos de producción y horario de envíos',
+      jobsBackLink: '← Volver al Tablero de Trabajos',
+      logisticsTitle: 'Logística',
+      logisticsSubtitle: 'Entregas entrantes y envíos salientes',
+      manufacturingTitle: 'Panel de Fabricación',
+      manufacturingSubtitle: 'Calculadoras de producción y operaciones de corte',
+      manufacturingBackLink: '← Volver a Fabricación',
+      productionTitle: 'Panel de Producción',
+      productionSubtitle: 'Inventario y planificación de producción',
+      productionBackLink: '← Volver al Panel',
+      qcTitle: 'Panel de QC',
+      qcSubtitle: 'Seleccione un flujo de calidad para comenzar',
+      qcBackLink: '← Volver al Panel',
+      reportsSubtitle: 'Seleccione un flujo de informes para comenzar'
+    },
+    ht: {
+      jobsTitle: 'Tablo Travay',
+      jobsSubtitle: 'Swiv travay pwodiksyon ak orè ekspedisyon',
+      jobsBackLink: '← Retounen nan Tablo Travay',
+      logisticsTitle: 'Lojistik',
+      logisticsSubtitle: 'Livrezon k ap antre ak ekspedisyon k ap sòti',
+      manufacturingTitle: 'Tablodbò Fabrikasyon',
+      manufacturingSubtitle: 'Kalkilatè pwodiksyon ak operasyon koupe',
+      manufacturingBackLink: '← Retounen nan Fabrikasyon',
+      productionTitle: 'Tablodbò Pwodiksyon',
+      productionSubtitle: 'Envantè ak planifikasyon pwodiksyon',
+      productionBackLink: '← Retounen nan Tablodbò',
+      qcTitle: 'Tablodbò QC',
+      qcSubtitle: 'Chwazi yon pwosesis kalite pou kòmanse',
+      qcBackLink: '← Retounen nan Tablodbò',
+      reportsSubtitle: 'Chwazi yon pwosesis rapò pou kòmanse'
     }
   });
 })();
