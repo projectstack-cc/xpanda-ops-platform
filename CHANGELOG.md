@@ -10,6 +10,22 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **Hotfix (unprompted) — `/v2/orders` packing-slip attachment now persists; legacy job board and
+  `/v2/board` order-detail modal can both view the PDF again (react-component-agent §9b +
+  next-platform-agent §9a).** `OrderEntryForm.tsx` already parsed the PDF client-side for prefill
+  but threw the bytes away — only the filename rode along in the POST. `route.ts` then hard-coded
+  `packing_slip_key = null, packing_slip_pdf = null` in the `INSERT INTO jobs` bind list, so the
+  PDF was never uploaded to R2 nor stashed in D1, and `GET /api/jobs/:id/packing-slip` (R2 key
+  first, D1 base64 fallback) had nothing to serve. Fix: form now keeps `packingSlipBase64` in
+  state (read from `file.arrayBuffer()` at parse time) and sends `packing_slip_pdf` in the POST
+  body. Server mirrors the legacy `_worker.js/routes/jobs.js` POST flow: decodes base64 →
+  `BOL_PHOTOS.put('packing-slips/<id>.pdf', …, httpMetadata: application/pdf)`, stores
+  `packing_slip_key`, clears `packing_slip_pdf`; on R2 failure keeps the base64 in D1 so the
+  attachment is never lost. `BOL_PHOTOS` pulled from the existing `getEnv()` destructuring (no
+  new env, no schema change). `npx tsc --noEmit` green. Closes the BACKLOG item
+  "Persist the order-entry packing slip to R2 on save" (now marked `[x]`). Not assigned a prompt
+  number per Steve's instruction — this was a diagnostic + fix, not a scoped feature.
+
 - **QC Cleanup-7 — removed the dormant AUDIT-302 chunk branches from `/v2/cutting`
   (react-component-agent §9b + next-platform-agent §9a).** Closes AUDIT-302 (partial — see
   `BACKLOG.md`; the P227 taper-derivation section and `cut-plan/save`'s Cross Cutter write were
@@ -3444,6 +3460,34 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Admin / Platform
 
+- **P440 — platform-wide i18n engine + home page (en/es/ht), mirrors the `ThemeManager` singleton
+  pattern.** New vanilla `shared/i18n.js`: `window.I18n` singleton (`<script src>`-loadable, no ES
+  modules, guarded against double-init like `ThemeManager`), storing the chosen language in
+  `localStorage['xpanda_lang']` (default `en`). Public API: `register(namespace, dict)`,
+  `get()`/`set(lang)` (validates, writes storage, sets `document.documentElement.lang`, re-applies
+  the DOM, fires a `document`-level `xpanda:langchange` CustomEvent), `t(key, vars)` (dot-path
+  resolution with `{var}` interpolation, falls back to `en` then to the raw key), and `apply(root)`
+  which walks `[data-i18n]` (textContent), `[data-i18n-attr]` (semicolon-separated
+  `attr:ns.key` pairs), and `[data-i18n-placeholder]` (single-key `placeholder` attribute). The
+  `data-i18n-placeholder` mechanism is not part of this prompt's own literal spec for `apply()` —
+  it's included because P441 (Safety donor refactor, same batch) hard-depends on it via its own
+  pre-flight grep, and `safety/index.html`/`safety/sds.html` both carry live
+  `data-i18n-placeholder` search-box attributes today; omitting it here would silently break real
+  placeholder translation the moment Safety's private `applyLanguage()` is replaced with delegation
+  to this engine. New `shared/i18n-common.js` registers the `common` (nav/action labels: Safety,
+  Training, Reports, Job Board, Orders, Logistics, Dashboard, Load Builder, Loading, TV Board,
+  Manufacturing, Cutting, Production, Admin, Parts, Users, Roles, Log, Schedule, Open, Sign Out,
+  Language) and `home` (card descriptions + notification panel copy) catalogs, verbatim en/es/ht.
+  `index.html`: loads the engine + catalog right after `shared/theme.js`, plus an inline
+  pre-hydration snippet that sets `documentElement.lang` from storage before paint; new
+  `#hdr-lang-select` `<select>` in the header cluster next to the theme toggle (`.hp-lang-select`
+  CSS uses `var(--token)`s only, no hex), wired to `I18n.set()`/synced to `I18n.get()` on load;
+  every card title/description/button and the notification panel tagged with `data-i18n` per the
+  two catalogs (a few strings with no catalog entry — QC's title, Cutting/Shift
+  Notes/Schedule/Production's descriptions — are intentionally left untagged, out of this prompt's
+  literal scope); the dynamically-rendered "No notifications" empty state now resolves through
+  `I18n.t('home.noNotifications')` at render time since `data-i18n` tagging can't reach
+  JS-generated HTML. No D1 migration, no permission change.
 - **P407 — legacy 401 interceptor: ten copies consolidated to one, de-triggered on background
   polls (admin-auth-agent §8, depends on P405 shipping first).** Every legacy page installed a
   byte-identical global `window.fetch` wrapper that hard-navigated to `/login.html` on **any** 401

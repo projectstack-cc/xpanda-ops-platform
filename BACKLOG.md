@@ -193,7 +193,7 @@
   every v2-created order is hardcoded `source: "manual"` regardless of how it was filled in.
 - [ ] Dedup the parts-library fetch cache — PartsPicker (P429) and partMatch.ts (P432) each hold
   their own /api/parts cache; centralize into one loader.
-- [ ] Persist the order-entry packing slip to R2 on save (mirror legacy `jobs.js` R2 upload) —
+- [x] Persist the order-entry packing slip to R2 on save (mirror legacy `jobs.js` R2 upload) —
   `cutting-pilot/src/app/api/orders/route.ts` currently inserts `null` for
   `packing_slip_key`/`packing_slip_pdf`, so v2-entered orders don't carry their uploaded slip into
   the board's order-detail modal (P345) — only legacy/imported jobs show one there today.
@@ -365,8 +365,9 @@ schedule badge):**
 - [ ] Remove temporary `pages.dev` → `xpandaops.com` redirect from `_worker.js/index.js` once all internal links/bookmarks confirmed updated.
 - [ ] Breakdown job board permissions into more granular sub-modules *(easier after F3 audit + F1a shared header — both now done)*
 - [ ] Dashboard KPIs / metrics panel — homepage widget showing jobs by status, BOLs generated this week, shipments pending/in-transit/delivered, most-used parts *(adds new endpoints)*
-- [ ] Port language / i18n features from Safety portal to platform-wide use *(needs F1c shared utils as its home — now done)*
 - [ ] Scrap batch entry tool *(density calc now centralized in shared-utils.js — safe to add)*
+- [ ] **Per-module i18n extraction waves** (P440 shipped the shared `window.I18n` engine + home page only) — jobs, logistics, manufacturing, qc, production, admin, reports, legal each need their own `*-i18n.js` catalog registered against the shared engine and `data-i18n` tagging on their pages.
+- [ ] **Native-speaker review pass on the Safety i18n catalog** (es/ht) — the SDS/training strings are machine-translated; given liability exposure on a safety portal this should get verified by a native speaker before being treated as authoritative. Non-blocking.
 - [ ] **Dark mode Bucket A — remaining passes** — P184 audit identified Bucket A hits in Safety (0% token adoption — highest priority), `logistics/load-builder.html` (local token system, separate batch), and `track/index.html` (standalone, no tokens.css). P186 covered all other modules. These three remain for dedicated prompts.
 - [ ] Backfill historical `activity_log`/`parts` timestamp rows to SQLite-native space format (QC Cleanup-5 was forward-only — new writes use `nowSqlite()`, but ~5,835 existing `activity_log` rows and historical `parts.created_at`/`updated_at` rows still carry the old ISO-Z format). Same TEXT column, no schema change — a one-off UPDATE/backfill script (`REPLACE(col, 'T', ' ')` truncated to 19 chars, guarded to only touch rows matching the ISO-Z shape) would fully resolve the `admin/activity-log.html` `ORDER BY timestamp DESC` misordering for old rows too, not just new ones.
 - [ ] (Optional, not required for correctness) Refactor the 12+ v2 inline `.replace("T"," ").slice(0,19)` timestamp inserts to a shared `nowSqlite()`-equivalent helper in a v2 lib, for mechanism consistency with the legacy side (QC Cleanup-5 left these as-is per the prompt's explicit optionality — they already emit the correct space format, so this is DRY/consistency only, not a bug fix).

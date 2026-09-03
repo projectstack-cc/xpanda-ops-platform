@@ -3,6 +3,9 @@
 <head>
 <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('xpanda-theme') || 'dark');</script>
   <script src="/shared/theme.js"></script>
+    <script>try{document.documentElement.lang=localStorage.getItem('xpanda_lang')||'en';}catch(e){}</script>
+    <script src="/shared/i18n.js"></script>
+    <script src="/shared/i18n-common.js"></script>
   <meta charset="UTF-8" />
   <script src="/shared/auth-interceptor.js"></script>
   <title>xPanda Operations Platform</title>
@@ -245,6 +248,13 @@
   }
   .hp-theme-toggle:hover { color: var(--text); border-color: var(--input-border); }
   .hp-theme-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .hp-lang-select {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+    cursor: pointer; padding: 4px 8px; color: var(--muted); font-size: 12px;
+    line-height: 1;
+  }
+  .hp-lang-select:hover { color: var(--text); border-color: var(--input-border); }
+  .hp-lang-select:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
   .hp-notif-dropdown {
     display: none; position: absolute; top: 36px; right: 0; width: 340px; max-height: 420px;
     background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
@@ -288,18 +298,23 @@
     <span id="hdr-notif-bell" class="hp-notif-bell" onclick="toggleNotifDropdown()" aria-label="Notifications"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span id="hdr-notif-badge" class="hp-notif-badge"></span></span>
     <div id="hdr-notif-dropdown" class="hp-notif-dropdown">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);">
-        <span style="font-weight:700;font-size:14px;">Notifications</span>
-        <button onclick="markAllRead()" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
+        <span style="font-weight:700;font-size:14px;" data-i18n="home.notifications">Notifications</span>
+        <button onclick="markAllRead()" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;" data-i18n="home.markAllRead">Mark all read</button>
       </div>
       <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:var(--accent-soft);border-bottom:1px solid var(--line);cursor:pointer;" onclick="enablePushFromBanner()">
-        <div style="font-size:13px;font-weight:600;color:var(--accent);">Enable push notifications</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">Tap to get alerts on this device</div>
+        <div style="font-size:13px;font-weight:600;color:var(--accent);" data-i18n="home.enablePush">Enable push notifications</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;" data-i18n="home.enablePushSub">Tap to get alerts on this device</div>
       </div>
       <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
     </div>
     <button type="button" class="hp-theme-toggle" onclick="window.ThemeManager && window.ThemeManager.toggle()" aria-label="Toggle dark mode"><svg class="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="theme-icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+    <select id="hdr-lang-select" class="hp-lang-select" data-i18n-attr="aria-label:common.langLabel" aria-label="Language" onchange="window.I18n && window.I18n.set(this.value)">
+      <option value="en">English</option>
+      <option value="es">Español</option>
+      <option value="ht">Kreyòl Ayisyen</option>
+    </select>
     <span id="user-display" style="font-size:13px;"></span>
-    <a href="#" onclick="doLogout(); return false;">Sign Out</a>
+    <a href="#" onclick="doLogout(); return false;" data-i18n="common.signOut">Sign Out</a>
   </div>
 </header>
 
@@ -316,12 +331,12 @@
     <article class="hp-card" data-permission="safety">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-safety"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-        <div class="hp-card-title">Safety</div>
+        <div class="hp-card-title" data-i18n="common.safety">Safety</div>
       </div>
-      <div class="hp-card-desc">SDS library, multilingual training</div>
+      <div class="hp-card-desc" data-i18n="home.safetyDesc">SDS library, multilingual training</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-safety" href="/safety/">Open</a>
-        <a class="hp-btn hp-btn-outline" href="/safety/training/">Training</a>
+        <a class="hp-btn hp-btn-safety" href="/safety/" data-i18n="common.open">Open</a>
+        <a class="hp-btn hp-btn-outline" href="/safety/training/" data-i18n="common.training">Training</a>
       </div>
     </article>
 
@@ -331,9 +346,9 @@
         <div class="hp-card-icon hp-icon-qc"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg></div>
         <div class="hp-card-title">QC</div>
       </div>
-      <div class="hp-card-desc">Inspections, incidents, scrap tracking</div>
+      <div class="hp-card-desc" data-i18n="home.trainingDesc">Inspections, incidents, scrap tracking</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-qc" href="/qc/">Open</a>
+        <a class="hp-btn hp-btn-qc" href="/qc/" data-i18n="common.open">Open</a>
       </div>
     </article>
 
@@ -341,11 +356,11 @@
     <article class="hp-card" data-permission="reports">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-reports"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
-        <div class="hp-card-title">Reports</div>
+        <div class="hp-card-title" data-i18n="common.reports">Reports</div>
       </div>
-      <div class="hp-card-desc">Scrap dashboards, incident analytics</div>
+      <div class="hp-card-desc" data-i18n="home.reportsDesc">Scrap dashboards, incident analytics</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-reports" href="/reports/">Open</a>
+        <a class="hp-btn hp-btn-reports" href="/reports/" data-i18n="common.open">Open</a>
       </div>
     </article>
 
@@ -353,11 +368,11 @@
     <article class="hp-card" data-permission="jobs">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-jobs"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></div>
-        <div class="hp-card-title">Job Board</div>
+        <div class="hp-card-title" data-i18n="common.jobBoard">Job Board</div>
       </div>
-      <div class="hp-card-desc">Kanban tracking, order entry to shipment</div>
+      <div class="hp-card-desc" data-i18n="home.jobBoardDesc">Kanban tracking, order entry to shipment</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-jobs" href="/jobs/">Open</a>
+        <a class="hp-btn hp-btn-jobs" href="/jobs/" data-i18n="common.open">Open</a>
       </div>
     </article>
 
@@ -365,11 +380,11 @@
     <article class="hp-card" data-permission="orders">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-jobs"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg></div>
-        <div class="hp-card-title">Orders</div>
+        <div class="hp-card-title" data-i18n="common.orders">Orders</div>
       </div>
-      <div class="hp-card-desc">Create and edit orders</div>
+      <div class="hp-card-desc" data-i18n="home.ordersDesc">Create and edit orders</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-jobs" href="/v2/orders" data-perm-key="orders">Open</a>
+        <a class="hp-btn hp-btn-jobs" href="/v2/orders" data-perm-key="orders" data-i18n="common.open">Open</a>
       </div>
     </article>
 
@@ -377,12 +392,12 @@
     <article class="hp-card" data-permission="logistics.dashboard,logistics.bol,logistics.load-builder">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-logistics"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
-        <div class="hp-card-title">Logistics</div>
+        <div class="hp-card-title" data-i18n="common.logistics">Logistics</div>
       </div>
-      <div class="hp-card-desc">Shipments, BOL generator, load builder</div>
+      <div class="hp-card-desc" data-i18n="home.logisticsDesc">Shipments, BOL generator, load builder</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-logistics" href="/logistics/" data-perm-key="logistics.dashboard">Dashboard</a>
-        <a class="hp-btn hp-btn-outline" href="/logistics/load-builder.html" data-perm-key="logistics.load-builder">Load Builder</a>
+        <a class="hp-btn hp-btn-logistics" href="/logistics/" data-perm-key="logistics.dashboard" data-i18n="common.dashboard">Dashboard</a>
+        <a class="hp-btn hp-btn-outline" href="/logistics/load-builder.html" data-perm-key="logistics.load-builder" data-i18n="common.loadBuilder">Load Builder</a>
       </div>
     </article>
 
@@ -390,12 +405,12 @@
     <article class="hp-card" data-permission="logistics.loading,logistics.loading.tv">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-loading"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
-        <div class="hp-card-title">Loading</div>
+        <div class="hp-card-title" data-i18n="common.loading">Loading</div>
       </div>
-      <div class="hp-card-desc">Bay assignments, trailer loading status</div>
+      <div class="hp-card-desc" data-i18n="home.loadingDesc">Bay assignments, trailer loading status</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-loading" href="/logistics/loading.html" data-perm-key="logistics.loading">Open</a>
-        <a class="hp-btn hp-btn-outline" href="/v2/loading" data-perm-key="logistics.loading.tv">TV Board</a>
+        <a class="hp-btn hp-btn-loading" href="/logistics/loading.html" data-perm-key="logistics.loading" data-i18n="common.open">Open</a>
+        <a class="hp-btn hp-btn-outline" href="/v2/loading" data-perm-key="logistics.loading.tv" data-i18n="common.tvBoard">TV Board</a>
       </div>
     </article>
 
@@ -403,23 +418,23 @@
     <article class="hp-card" data-permission="manufacturing.calculators">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-production"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
-        <div class="hp-card-title">Manufacturing</div>
+        <div class="hp-card-title" data-i18n="common.manufacturing">Manufacturing</div>
       </div>
-      <div class="hp-card-desc">Block calculator, holey board calculator, cutting dashboard</div>
+      <div class="hp-card-desc" data-i18n="home.manufacturingDesc">Block calculator, holey board calculator, cutting dashboard</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-production" href="/manufacturing/">Open</a>
+        <a class="hp-btn hp-btn-production" href="/manufacturing/" data-i18n="common.open">Open</a>
       </div>
     </article>
 
     <article class="hp-card" data-permission="manufacturing.cutting">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-cutting"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg></div>
-        <div class="hp-card-title">Cutting</div>
+        <div class="hp-card-title" data-i18n="common.cutting">Cutting</div>
       </div>
       <div class="hp-card-desc">Live cutting floor — start, hand off, complete lines</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-cutting" href="/v2/cutting">Main / Blue Line</a>
-        <a class="hp-btn hp-btn-outline" href="/v2/cutting/crosscutter">Cross / Hole Cutter</a>
+        <a class="hp-btn hp-btn-cutting" href="/v2/cutting" data-i18n="home.mainBlueLine">Main / Blue Line</a>
+        <a class="hp-btn hp-btn-outline" href="/v2/cutting/crosscutter" data-i18n="home.crossHoleCutter">Cross / Hole Cutter</a>
       </div>
     </article>
 
@@ -427,12 +442,12 @@
     <article class="hp-card" id="hp-card-notes" data-permission="notes">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-cutting"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></div>
-        <div class="hp-card-title">Shift Notes</div>
+        <div class="hp-card-title" data-i18n="home.shiftNotes">Shift Notes</div>
         <span id="hp-notes-bubble" class="hp-card-badge" aria-hidden="true"></span>
       </div>
       <div class="hp-card-desc" id="hp-notes-desc">Shift log — wire breaks, air line issues, anything worth flagging</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-cutting" href="/v2/notes">Open</a>
+        <a class="hp-btn hp-btn-cutting" href="/v2/notes" data-i18n="common.open">Open</a>
       </div>
     </article>
 
@@ -440,12 +455,12 @@
     <article class="hp-card" data-permission="schedule,schedule.desk">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-schedule"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-        <div class="hp-card-title">Schedule</div>
+        <div class="hp-card-title" data-i18n="common.schedule">Schedule</div>
       </div>
       <div class="hp-card-desc">Delivery schedule, live production &amp; loading status</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-schedule" href="/v2/schedule" data-perm-key="schedule">TV Board</a>
-        <a class="hp-btn hp-btn-outline" href="/v2/schedule/desk" data-perm-key="schedule.desk">Desk View</a>
+        <a class="hp-btn hp-btn-schedule" href="/v2/schedule" data-perm-key="schedule" data-i18n="common.tvBoard">TV Board</a>
+        <a class="hp-btn hp-btn-outline" href="/v2/schedule/desk" data-perm-key="schedule.desk" data-i18n="home.deskView">Desk View</a>
       </div>
     </article>
 
@@ -453,11 +468,11 @@
     <article class="hp-card" data-permission="production.log">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-production"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div>
-        <div class="hp-card-title">Production</div>
+        <div class="hp-card-title" data-i18n="common.production">Production</div>
       </div>
       <div class="hp-card-desc">Molding &amp; expansion production log</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-production" href="/v2/production">Open</a>
+        <a class="hp-btn hp-btn-production" href="/v2/production" data-i18n="common.open">Open</a>
       </div>
     </article>
 
@@ -465,14 +480,14 @@
     <article class="hp-card" data-permission="admin">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-admin"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></div>
-        <div class="hp-card-title">Admin</div>
+        <div class="hp-card-title" data-i18n="common.admin">Admin</div>
       </div>
-      <div class="hp-card-desc">Parts library, users, roles, activity log</div>
+      <div class="hp-card-desc" data-i18n="home.adminDesc">Parts library, users, roles, activity log</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-admin" href="/admin/parts.html">Parts</a>
-        <a class="hp-btn hp-btn-outline" href="/admin/users.html">Users</a>
-        <a class="hp-btn hp-btn-outline" href="/admin/roles.html">Roles</a>
-        <a class="hp-btn hp-btn-outline" href="/admin/activity-log.html">Log</a>
+        <a class="hp-btn hp-btn-admin" href="/admin/parts.html" data-i18n="common.parts">Parts</a>
+        <a class="hp-btn hp-btn-outline" href="/admin/users.html" data-i18n="common.users">Users</a>
+        <a class="hp-btn hp-btn-outline" href="/admin/roles.html" data-i18n="common.roles">Roles</a>
+        <a class="hp-btn hp-btn-outline" href="/admin/activity-log.html" data-i18n="common.log">Log</a>
       </div>
     </article>
 
@@ -530,6 +545,11 @@ if (new URLSearchParams(window.location.search).get('access_denied')) {
 
 initHomepage();
 setTimeout(loadNotifications, 500);
+
+(function () {
+  var langSelect = document.getElementById('hdr-lang-select');
+  if (langSelect && window.I18n) langSelect.value = window.I18n.get();
+})();
 
 async function refreshShiftNotesIndicator() {
   const card = document.getElementById('hp-card-notes');
@@ -607,7 +627,7 @@ async function loadNotifications() {
     }
     const list = document.getElementById('hdr-notif-list');
     if (!list) return;
-    if (!data.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-hint);font-size:13px;">No notifications</div>'; return; }
+    if (!data.notifications.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-hint);font-size:13px;">${window.I18n ? window.I18n.t('home.noNotifications') : 'No notifications'}</div>`; return; }
     list.innerHTML = data.notifications.map(n => `
       <div style="padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;${n.is_read ? 'opacity:0.6;' : 'background:var(--accent-soft);'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')">
         <div style="font-size:13px;font-weight:${n.is_read ? '400' : '600'};color:var(--text);margin-bottom:2px;">${escN(n.title)}</div>
