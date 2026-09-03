@@ -27,7 +27,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { DB } = await getEnv();
+  const { DB, BOL_PHOTOS } = await getEnv();
   const actorId = request.headers.get("X-User-Id") || "";
   const actorName = request.headers.get("X-User-Name") || "";
   if (!actorId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -40,6 +40,26 @@ export async function POST(request: NextRequest) {
   if (!customer) return NextResponse.json({ ok: false, error: "Customer is required." }, { status: 400 });
 
   const id = crypto.randomUUID();
+
+  // Packing slip — upload to R2 (BOL_PHOTOS) under `packing-slips/<id>.pdf`; on R2 failure
+  // fall back to keeping the base64 in D1 so the slip isn't lost. Mirrors legacy
+  // _worker.js/routes/jobs.js POST behavior so the legacy job board can read the
+  // attachment via GET /api/jobs/:id/packing-slip (R2 key first, D1 base64 fallback).
+  let packing_slip_pdf: string | null = p.packing_slip_pdf ? String(p.packing_slip_pdf) : null;
+  let packing_slip_key: string | null = null;
+  if (packing_slip_pdf) {
+    try {
+      const slipBytes = Uint8Array.from(atob(packing_slip_pdf), (c) => c.charCodeAt(0));
+      const slipKey = `packing-slips/${id}.pdf`;
+      await BOL_PHOTOS.put(slipKey, slipBytes, { httpMetadata: { contentType: "application/pdf" } });
+      packing_slip_key = slipKey;
+      packing_slip_pdf = null;
+    } catch (e: any) {
+      console.error("Packing slip R2 upload failed — keeping in D1:", String(e?.message || e));
+      // packing_slip_pdf stays set, packing_slip_key stays null
+    }
+  }
+
   const ts = now();
   const status = "not_started";
   const customer_pickup = p.customer_pickup === true || s(p.customer_pickup) === "true";
@@ -84,7 +104,7 @@ export async function POST(request: NextRequest) {
       s(p.cutting_instructions), s(p.packing_instructions), s(p.contact_name), s(p.contact_phone),
       p.combo_id ? s(p.combo_id) : null,
       s(p.priority), p.confirmed_to_ship ? 1 : 0, JSON.stringify(procsJson), ts, ts,
-      null, null, s(p.packing_slip_filename), s(p.packing_slip_invoice), source,
+      packing_slip_key, packing_slip_pdf, s(p.packing_slip_filename), s(p.packing_slip_invoice), source,
       s(p.ship_to_company), s(p.ship_to_attention), s(p.ship_to_street), s(p.ship_to_street2),
       s(p.ship_to_city), s(p.ship_to_state), s(p.ship_to_zip),
       s(p.ship_to_verified) || "unverified", p.ship_to_standardized ? JSON.stringify(p.ship_to_standardized) : null,

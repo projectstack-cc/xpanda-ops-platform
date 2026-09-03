@@ -169,6 +169,7 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
   const [notes, setNotes] = useState("");
 
   const [packingSlipFilename, setPackingSlipFilename] = useState("");
+  const [packingSlipBase64, setPackingSlipBase64] = useState("");
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -244,6 +245,18 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
       }
       const { data } = result;
       setPackingSlipFilename(result.filename);
+      // Stash the raw PDF bytes as base64 so the server can persist the attachment
+      // (R2 by default, D1 base64 fallback) on POST — otherwise the legacy job board
+      // has no packing slip to display. Mirrors legacy /api/jobs/ POST behavior.
+      try {
+        const buf = await file.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let bin = "";
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        setPackingSlipBase64(btoa(bin));
+      } catch {
+        /* if we can't read the bytes, the form still saves with just the filename */
+      }
       if (data.customer) setCustomer(data.customer);
       if (data.po_number) setPoNumber(data.po_number);
       if (data.invoice_number) setInvoiceNumber(data.invoice_number);
@@ -357,6 +370,7 @@ function setQtyAsBdftConvert(on: boolean) {
     setPackingInstructions("");
     setNotes("");
     setPackingSlipFilename("");
+    setPackingSlipBase64("");
     setParseError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setError(null);
@@ -542,6 +556,7 @@ function setQtyAsBdftConvert(on: boolean) {
       notes: notes.trim(),
       ...(packingSlipFilename ? { packing_slip_filename: packingSlipFilename } : {}),
       ...(packingSlipFilename && invoiceNumber.trim() ? { packing_slip_invoice: invoiceNumber.trim() } : {}),
+      ...(packingSlipBase64 ? { packing_slip_pdf: packingSlipBase64 } : {}),
       line_items: lineItems
         .filter((li) => li.part_number.trim() || li.description.trim())
         .map((li) => ({
