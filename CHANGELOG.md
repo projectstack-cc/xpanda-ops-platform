@@ -566,6 +566,25 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Orders (v2)
 
+- **P437 — "Qty entered as BDFT" toggle restored + 15% wider layout in `/v2/orders`
+  (react-component-agent §9b).** Closes the v2 omission Steve flagged: the legacy
+  `jobs/index.html` job-entry form had a single "Qty entered as BDFT — convert to pieces" checkbox
+  (`li-bdft-convert` / `toggleBdftConvert`, ~P254-era) that, when ON, interpreted each line's
+  `Qty` as total board feet and divided by `bdftPerPiece(dim)` to land on a piece count; turning it
+  OFF restored the original BDFT strings stashed on each row. v2's `OrderEntryForm.tsx` (P339)
+  shipped without it, forcing Steve to mentally divide on the fly. Added the toggle in the line-items
+  footer (`ml-auto`, right of "From parts library"), with `bdftOrig` carried on `OrderLineItem` so
+  toggling OFF restores originals; rows without parseable L×W×H dimensions or a positive qty are
+  left untouched (exact parity with legacy's `toggleBdftConvert` — those rows simply do nothing).
+  `setQtyAsBdftConvert(on)` runs the conversion on every row at toggle time; `updateLine` now
+  invalidates `bdftOrig` on any manual qty/dims edit so a stale pre-conversion value can't be
+  restored after the user changes the inputs. Quantity persisted to D1 is still **pieces only**
+  (`job_line_items.quantity`), identical to today — no `qty_unit` flag stored, no schema change,
+  no API change, so the P338 contract and the `jobs.total_bdft` aggregation are untouched. Also
+  widened the form container from `max-w-2xl` (672px) to `max-w-[770px]` (≈15% wider) and applied
+  the same width to the post-save "Order saved" card so the module reads as one wider surface —
+  requested explicitly for "more text visible when verifying descriptions and dimensions during order
+  entry". UI-only change, no D1/API/migration impact. `tsc --noEmit` + `cf-build` both green.
 - **P432 follow-up — dimension matching in `partMatch.ts` is now exact, no tolerance.** Steve
   flagged that the ± dimension window has, in the past, pulled the wrong catalog part onto a
   real order (a different SKU merely fell within the tolerance window). Removed tolerance from

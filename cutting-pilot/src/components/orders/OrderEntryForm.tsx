@@ -20,6 +20,7 @@ export interface OrderLineItem {
   quantity: string;
   dimensions: string;
   density: string;
+  bdftOrig?: string;
 }
 
 export interface OrderPayload {
@@ -158,6 +159,7 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
   const [procLaminate, setProcLaminate] = useState(false);
 
   const [lineItems, setLineItems] = useState<OrderLineItem[]>([{ ...EMPTY_LINE }]);
+  const [qtyAsBdft, setQtyAsBdft] = useState(false);
 
   const [cuttingInstructions, setCuttingInstructions] = useState("");
   const [packingInstructions, setPackingInstructions] = useState("");
@@ -235,7 +237,12 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
   }
 
   function updateLine(idx: number, patch: Partial<OrderLineItem>) {
-    setLineItems((prev) => prev.map((li, i) => (i === idx ? { ...li, ...patch } : li)));
+    setLineItems((prev) => prev.map((li, i) => {
+      if (i !== idx) return li;
+      const next = { ...li, ...patch };
+      if (patch.quantity != null || patch.dimensions != null) delete next.bdftOrig;
+      return next;
+    }));
   }
 
   const [partsPickerOpen, setPartsPickerOpen] = useState(false);
@@ -253,9 +260,30 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
     });
   }
 
-  function removeLine(idx: number) {
-    setLineItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
-  }
+function removeLine(idx: number) {
+  setLineItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
+}
+
+function setQtyAsBdftConvert(on: boolean) {
+  setQtyAsBdft(on);
+  setLineItems((prev) =>
+    prev.map((li) => {
+      if (on) {
+        const bpp = bdftPerPiece(li.dimensions);
+        const bdft = parseFloat(li.quantity);
+        if (bpp != null && Number.isFinite(bdft) && bdft > 0) {
+          return { ...li, bdftOrig: li.quantity, quantity: String(Math.round(bdft / bpp)) };
+        }
+        return li;
+      }
+      if (li.bdftOrig != null) {
+        const restored = li.bdftOrig;
+        return { ...li, quantity: restored, bdftOrig: undefined };
+      }
+      return li;
+    })
+  );
+}
 
   function resetForm() {
     setCustomer("");
@@ -282,6 +310,7 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
     setProcBlueLine(false);
     setProcLaminate(false);
     setLineItems([{ ...EMPTY_LINE }]);
+    setQtyAsBdft(false);
     setCuttingInstructions("");
     setPackingInstructions("");
     setNotes("");
@@ -417,7 +446,7 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
       <div className="min-h-screen flex flex-col bg-bg">
         <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Orders · v2" currentPath="/v2/orders" />
         <div className="flex-1 flex items-center justify-center p-6">
-          <div className="w-full max-w-md bg-surface border border-[var(--card-border)] rounded-2xl p-8 text-center space-y-4">
+          <div className="w-full max-w-[770px] bg-surface border border-[var(--card-border)] rounded-2xl p-8 text-center space-y-4">
             <h2 className="text-lg font-semibold text-text">Order saved</h2>
             <p className="text-sm text-muted">The order was created successfully.</p>
             <div className="flex items-center justify-center gap-3 pt-2">
@@ -445,7 +474,7 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
     <div className="min-h-screen flex flex-col bg-bg">
       <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Orders · v2" currentPath="/v2/orders" />
 
-      <form onSubmit={handleSubmit} className="flex-1 w-full max-w-2xl mx-auto px-4 py-6 space-y-6">
+      <form onSubmit={handleSubmit} className="flex-1 w-full max-w-[770px] mx-auto px-4 py-6 space-y-6">
         <h1 className="text-xl font-semibold text-text">New order</h1>
 
         {/* Packing-slip upload — client-side parse + prefill; never blocks manual entry */}
@@ -648,6 +677,18 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
             >
               From parts library
             </button>
+            <label
+              className="ml-auto inline-flex items-center gap-2 min-h-[44px] cursor-pointer select-none text-xs whitespace-nowrap"
+              title="Sales sometimes enters total board feet instead of a piece count. Uses each row's Dimensions to convert BDFT → pieces."
+            >
+              <input
+                type="checkbox"
+                checked={qtyAsBdft}
+                onChange={(e) => setQtyAsBdftConvert(e.target.checked)}
+                className="h-5 w-5 accent-[var(--brand)]"
+              />
+              <span className="font-medium text-text">Qty entered as BDFT — convert to pieces</span>
+            </label>
           </div>
         </section>
 
