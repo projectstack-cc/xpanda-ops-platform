@@ -2,19 +2,15 @@
 // Consumed by every module via /<module>/<module>-header.js (thin shims).
 // TODO: replace document.write() with DOMContentLoaded + insertAdjacentHTML (deferred — separate refactor).
 
-// I18n engine + common/home/layout catalogs — loaded first so every string built below (nav
-// labels, notifications panel, sign out, mode/theme toggles, page title/subtitle) can call
-// window.I18n.t() synchronously. document.write of a <script src> blocks and executes before
-// this file's own top-level code continues, so the engine + catalogs are guaranteed ready by
-// the time the header IIFE below runs.
-if (!window.__xpandaI18nLoaded) {
-  window.__xpandaI18nLoaded = true;
-  document.write('<script src="/shared/i18n.js"><\/script>');
-}
-if (!window.__xpandaI18nCommonLoaded) {
-  window.__xpandaI18nCommonLoaded = true;
-  document.write('<script src="/shared/i18n-common.js"><\/script>');
-}
+// I18n engine + common/home/layout catalogs — NOT loaded from here. document.write of a
+// <script src> only guarantees synchronous load order between separate parser-inserted
+// <script> tags; it does not pause the CURRENTLY-running script to fetch/execute a tag it just
+// wrote. Since this file's own top-level code (which builds the nav HTML using window.I18n.t())
+// runs to completion before the parser ever processes anything document.write'n from inside it,
+// loading i18n.js/i18n-common.js here would make them available only *after* the nav HTML that
+// needs them has already been built with English fallback text. Instead, every
+// <module>-header.js shim document.write's i18n.js + i18n-common.js as its own preceding
+// <script> tags, before document.write'ing this file — see e.g. jobs/jobs-header.js.
 
 // ThemeManager — loaded from /shared/theme.js so homepage and all module pages share one mechanism.
 if (!window.__xpandaThemeLoaded) {
