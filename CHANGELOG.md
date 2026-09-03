@@ -3532,6 +3532,42 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Infra / Docs
 
+- **P436 — durable `patch-package` fix for the `@opennextjs/aws` Windows build crash
+  (next-platform-agent §9a).** A fresh Windows `npm install` pulls `@opennextjs/aws@3.4.0`
+  (transitive under `@opennextjs/cloudflare`) whose middleware bundler (`dist/plugins/edge.js`,
+  `openNextEdgePlugins`'s `onLoad` for `edgeFunctionHandler.js`) embeds each absolute entry-file
+  path raw into a generated `require("${file}")` string literal. On Windows, an absolute path
+  under this repo's own directory name (`...\xpanda-...`) contains `\x` followed by a non-hex
+  character, which is an invalid JS hex-escape sequence inside that string literal — a hard
+  syntax error during "Bundling middleware function...", breaking `npm run cf-build` for every
+  `cutting-pilot/**` change (mainline order-entry/job-board work included, not just logistics
+  v2). This was diagnosed during P435 (logistics v2 unit 1, on the `v2-logistics` worktree) and
+  worked around there with an uncommitted, undocumented hand-edit directly in that worktree's
+  `node_modules` — but `main`'s own local `node_modules` turned out to *already* carry the
+  identical hand-edit, untracked and undocumented, silently relied on by every build on this
+  machine. Any clean install (new machine, fresh worktree, deleted `node_modules`) would have
+  silently lost the fix with no record it ever existed. Captured the exact hand-edit as a
+  committed patch: `cutting-pilot/patches/@opennextjs+aws+3.4.0.patch`, generated via
+  `npx patch-package @opennextjs/aws` against the currently-patched `node_modules` and inspected
+  before committing — a single hunk touching only `dist/plugins/edge.js` line 114, replacing
+  `` `require("${file}");` `` with `` `require("${file.replace(/\\/g, '/')}");` `` in the
+  `entryFiles.map(...)` line. Added `patch-package` as a devDependency and a `"postinstall":
+  "patch-package"` script in `cutting-pilot/package.json` (npm runs `postinstall` on both
+  `npm install` and `npm ci`, so the patch reapplies automatically on any clean install, local or
+  CI). Verified end-to-end: deleted `cutting-pilot/node_modules` entirely, ran `npm install` (log
+  showed `postinstall` invoking `patch-package`, which reapplied and reported
+  `@opennextjs/aws@3.4.0 ✔`), then confirmed the patched line was back in
+  `node_modules/@opennextjs/aws/dist/plugins/edge.js`, `npx tsc --noEmit` clean, and
+  `npm run cf-build` green (13 OpenNext code patches applied, worker bundled, no middleware
+  syntax error). The patch only broadens path handling to tolerate backslashes; on Linux CI, POSIX
+  absolute paths already use forward slashes, so `file.replace(/\\/g, '/')` is a no-op there —
+  CI stays green and build output is byte-identical, confirmed by the patch's content and by the
+  clean-install build passing. No application source touched, no D1 migration. This retires the
+  tribal-knowledge hand-edit as durable, documented, version-controlled tooling; the equivalent
+  `patch-package` recommendation logged in `BACKLOG.md` on the `v2-logistics` branch (from P435)
+  is now superseded by this main-side fix and removed from `main`'s `BACKLOG.md` (it was never
+  present there — `main`'s `BACKLOG.md` has no `Logistics (v2)` section, that section only exists
+  on the unmerged `v2-logistics` branch).
 - **QC Cleanup-3 — root `.gitignore`/`.wrangler` repo hygiene (db-api-agent).** Closes
   AUDIT-702. Root `.gitignore` covered `DB_Migrations/`/`employee_roster.md`/secrets but had no
   entry for `.wrangler/`, `.next/`, `.open-next/`, `node_modules/`, or `.dev.vars` —

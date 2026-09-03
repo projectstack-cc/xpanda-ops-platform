@@ -1,0 +1,13 @@
+diff --git a/node_modules/@opennextjs/aws/dist/plugins/edge.js b/node_modules/@opennextjs/aws/dist/plugins/edge.js
+index 11ff059..09b3459 100644
+--- a/node_modules/@opennextjs/aws/dist/plugins/edge.js
++++ b/node_modules/@opennextjs/aws/dist/plugins/edge.js
+@@ -111,7 +111,7 @@ ${wasmFiles
+                     ? `import ${file.name} from './wasm/${file.name}.wasm';`
+                     : `const ${file.name} = readFileSync(path.join(__dirname,'/wasm/${file.name}.wasm'));`)
+                     .join("\n")}
+-${entryFiles.map((file) => `require("${file}");`).join("\n")}
++${entryFiles.map((file) => `require("${file.replace(/\\/g, '/')}");`).join("\n")}
+ ${contents}
+         `;
+                 return {
