@@ -1,8 +1,8 @@
-/* i18n.js — shared language system for xPanda Foam Safety Portal (no modules, no bundlers) */
+/* i18n.js — Safety Portal consumer of the shared xPanda i18n engine (window.I18n).
+   No modules, no bundlers. Requires /shared/i18n.js to be loaded first (registers
+   this module's catalogs against it). Keeps the public window.xPandaI18n shim so
+   the 12 pages that call initLanguageSelector() need no edit to their init call. */
 (function () {
-  const STORAGE_KEY = "xpanda_lang";
-  const DEFAULT_LANG = "en";
-
   // --- Global training video poster (ONE poster for ALL training videos) ---
   const TRAINING_POSTER_URL = "/assets/img/training-video-poster.png";
 
@@ -16,19 +16,11 @@
     }
   }
 
-  // --- Safe storage helpers (prevents weird failures in strict/privacy contexts) ---
-  function safeGetItem(key) {
-    try { return localStorage.getItem(key); } catch (e) { return null; }
-  }
-  function safeSetItem(key, value) {
-    try { localStorage.setItem(key, value); } catch (e) { /* no-op */ }
-  }
-
   // Translations used by ALL pages (navigation-critical UI)
   const translations = {
     en: {
       common: { langLabel: "Language:" },
-      home: {
+      safetyHome: {
         title: "xPanda Foam Safety Portal",
         subtitle: "SDS access • Safety training • Quick reference",
         searchHelp: "Search by product or manufacturer name to find Safety Data Sheets.",
@@ -91,7 +83,7 @@
 
     es: {
       common: { langLabel: "Idioma:" },
-      home: {
+      safetyHome: {
         title: "Portal de Seguridad de xPanda Foam",
         subtitle: "Acceso a SDS • Capacitación • Referencia rápida",
         searchHelp: "Busque por producto o fabricante para encontrar Hojas de Datos de Seguridad (SDS).",
@@ -152,7 +144,7 @@
 
     ht: {
       common: { langLabel: "Lang:" },
-      home: {
+      safetyHome: {
         title: "Pòtal Sekirite xPanda Foam",
         subtitle: "Aksè SDS • Fòmasyon Sekirite • Referans rapid",
         searchHelp: "Chèche pa non pwodwi oswa manifakti pou jwenn Fèy Done Sekirite (SDS).",
@@ -212,81 +204,52 @@
     }
   };
 
-  function hasLang(lang) {
-    return Object.prototype.hasOwnProperty.call(translations, lang);
-  }
-
-  function getSavedLanguage() {
-    return safeGetItem(STORAGE_KEY) || DEFAULT_LANG;
-  }
-
-  function setSavedLanguage(lang) {
-    safeSetItem(STORAGE_KEY, lang);
-  }
-
-  function t(lang, key) {
-    const parts = key.split(".");
-    let node = translations[lang];
-    for (const part of parts) {
-      if (!node || typeof node !== "object" || !(part in node)) return null;
-      node = node[part];
-    }
-    return typeof node === "string" ? node : null;
-  }
-
-  // Exposed helper (useful for dynamic JS strings later)
-  function getString(key, lang) {
-    const safeLang = hasLang(lang) ? lang : getSavedLanguage();
-    const safe = hasLang(safeLang) ? safeLang : DEFAULT_LANG;
-    return t(safe, key);
+  if (!window.I18n) {
+    console.warn("safety/i18n.js: window.I18n (shared engine) not found — load /shared/i18n.js first.");
+  } else {
+    window.I18n.register("common", { en: translations.en.common, es: translations.es.common, ht: translations.ht.common });
+    window.I18n.register("safetyHome", { en: translations.en.safetyHome, es: translations.es.safetyHome, ht: translations.ht.safetyHome });
+    window.I18n.register("sds", { en: translations.en.sds, es: translations.es.sds, ht: translations.ht.sds });
+    window.I18n.register("train", { en: translations.en.train, es: translations.es.train, ht: translations.ht.train });
   }
 
   function applyLanguage(lang) {
-    const safeLang = hasLang(lang) ? lang : DEFAULT_LANG;
-
-    document.documentElement.lang = safeLang;
-    setSavedLanguage(safeLang);
-
-    document.querySelectorAll("[data-i18n]").forEach((el) => {
-      const key = el.getAttribute("data-i18n");
-      const value = t(safeLang, key);
-      if (value != null) el.textContent = value;
-    });
-
-    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
-      const key = el.getAttribute("data-i18n-placeholder");
-      const value = t(safeLang, key);
-      if (value != null) el.setAttribute("placeholder", value);
-    });
-
-    // Ensure training video poster is always set (pages without video are unaffected)
+    if (!window.I18n) return;
+    window.I18n.set(lang);
     applyTrainingPoster();
   }
 
   function initLanguageSelector(options) {
+    if (!window.I18n) {
+      console.warn("safety/i18n.js: window.I18n (shared engine) not found — cannot init language selector.");
+      return;
+    }
+
     const selectorId = (options && options.selectorId) || "xpandaLang";
     const select = document.getElementById(selectorId);
 
-    const saved = getSavedLanguage();
-    const safeLang = hasLang(saved) ? saved : DEFAULT_LANG;
-
-    applyLanguage(safeLang);
-
-    if (!select) return;
-
-    select.value = safeLang;
-
-    if (!select.dataset.i18nBound) {
-      select.addEventListener("change", () => applyLanguage(select.value));
-      select.dataset.i18nBound = "1";
+    if (select) {
+      select.value = window.I18n.get();
+      if (!select.dataset.i18nBound) {
+        select.addEventListener("change", () => applyLanguage(select.value));
+        select.dataset.i18nBound = "1";
+      }
     }
+
+    window.I18n.apply(document);
+    applyTrainingPoster();
   }
 
   window.xPandaI18n = {
     applyLanguage,
     initLanguageSelector,
     translations,
-    getString,
+
+    // Preserved for shape-compatibility; delegates to the shared engine (always resolves
+    // against the engine's current active language — no per-call lang override).
+    getString: function (key) {
+      return window.I18n ? window.I18n.t(key) : null;
+    },
 
     // Optional export (handy if you ever want to call it directly)
     applyTrainingPoster

@@ -3437,7 +3437,24 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Safety
 
-*(Safety portal bootstrapped as part of the early foundation; no items with distinct prompt numbers.)*
+- **P441 — Safety module migrated off its private i18n IIFE onto the shared `window.I18n` engine
+  (P440, same batch).** `safety/i18n.js` keeps its outer IIFE, `translations` table, and
+  `applyTrainingPoster`/`TRAINING_POSTER_URL` exactly, but the private language-state machinery
+  (`getSavedLanguage`/`setSavedLanguage`/`applyLanguage`/`t`/`hasLang`) is replaced with
+  registration against `window.I18n` (`common`, `safetyHome`, `sds`, `train` namespaces) plus thin
+  delegation. The `home` namespace is renamed `safetyHome` throughout (catalog + all 14
+  `data-i18n="home.X"` tags in `safety/index.html`, plus one `data-i18n-placeholder="home.
+  searchPlaceholder"` attribute the prompt's own literal 14-count grep didn't cover — found by
+  grepping for any remaining `"home.` reference in `safety/` after the scoped rename, fixed to keep
+  the search-box placeholder translating) to avoid colliding with the platform `home` namespace
+  P440 defined with different strings under the same keys. The public
+  `window.xPandaI18n.initLanguageSelector({ selectorId: "xpandaLang" })` entry point is preserved
+  byte-for-byte in shape so all 12 calling pages needed no init-call edits — only
+  `<script src="/shared/i18n.js"></script>` added immediately before each page's existing
+  `/safety/i18n.js` load (`training/admin.html` intentionally excluded, it has no i18n). Safety
+  pages load the engine + their own catalog only, **not** `shared/i18n-common.js`, so they keep
+  self-providing `common.langLabel` with no namespace collision. Zero operator-visible change; the
+  safety portal keeps its own public in-page selector (unauthenticated/public surface).
 
 ---
 
