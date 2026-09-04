@@ -251,7 +251,7 @@
         <div class="logistics-field-section-label" data-i18n="logistics.sectionCustomerOrder">Customer &amp; Order</div>
 
         <div class="logistics-field">
-          <label data-i18n="logistics.fieldCustomer">Customer</label> <span style="color:#dc2626;">*</span>
+          <label><span data-i18n="logistics.fieldCustomer">Customer</span> <span style="color:#dc2626;">*</span></label>
           <input type="text" id="f-customer" placeholder="Customer name" data-i18n-placeholder="logistics.customerPlaceholder">
         </div>
 
@@ -378,7 +378,7 @@
         <div class="logistics-field-section-label" data-i18n="logistics.sectionInboundDetails">Inbound Details</div>
 
         <div class="logistics-field">
-          <label data-i18n="logistics.fieldSupplier">Supplier</label> <span style="color:#dc2626;">*</span>
+          <label><span data-i18n="logistics.fieldSupplier">Supplier</span> <span style="color:#dc2626;">*</span></label>
           <input type="text" id="f-supplier" placeholder="Supplier / vendor name" data-i18n-placeholder="logistics.supplierPlaceholder">
         </div>
 
@@ -638,15 +638,15 @@ async function assignBayFromDashboard(assignmentId, bayId) {
 
       const toast = document.createElement('div');
       toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:10000;';
-      toast.innerHTML = '<span style="color:#34d399;">✓</span> ' + esc(window.I18n.t('logistics.bayAssigned'));
+      toast.innerHTML = '<span style="color:#34d399;">✓</span> ' + esc(t('logistics.bayAssigned'));
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 3000);
     } else {
-      alert(data?.error || window.I18n.t('logistics.failedAssignBay'));
+      alert(data?.error || t('logistics.failedAssignBay'));
     }
   } catch (e) {
     console.error('Bay assignment failed:', e);
-    alert(window.I18n.t('logistics.failedAssignBay'));
+    alert(t('logistics.failedAssignBay'));
   }
 }
 
@@ -745,13 +745,13 @@ function setOutboundWeekOffset(weeks) {
 
 // ── Render Outbound ────────────────────────────────────────────────────────
 function DAYS() {
-  return ['daySun','dayMon','dayTue','dayWed','dayThu','dayFri','daySat'].map(k => window.I18n.t('logistics.' + k));
+  return ['daySun','dayMon','dayTue','dayWed','dayThu','dayFri','daySat'].map(k => t('logistics.' + k));
 }
 
 function renderOutbound() {
   const container = document.getElementById('outbound-content');
   if (!outboundData.length) {
-    container.innerHTML = `<div style="color:#94a3b8;font-size:14px;padding:20px 0;">${esc(window.I18n.t('logistics.noOutbound'))}</div>`;
+    container.innerHTML = `<div style="color:#94a3b8;font-size:14px;padding:20px 0;">${esc(t('logistics.noOutbound'))}</div>`;
     updateStats();
     return;
   }
@@ -786,7 +786,7 @@ function renderOutbound() {
 
   container.innerHTML = sortedDates.map(dateKey => {
     const rows    = groups[dateKey];
-    const noDateLabel = window.I18n.t('logistics.noDate');
+    const noDateLabel = t('logistics.noDate');
     const dayName = dateKey !== 'No Date' ? DAYS()[new Date(dateKey + 'T12:00:00').getDay()] : noDateLabel;
     const label   = dateKey !== 'No Date'
       ? `${dayName} — ${formatDate(dateKey)}`
@@ -800,15 +800,15 @@ function renderOutbound() {
           <table class="logistics-table logistics-table--ship">
             <thead>
               <tr>
-                <th>${esc(window.I18n.t('logistics.colCustomer'))}</th>
-                <th>${esc(window.I18n.t('logistics.colMethodCarrier'))}</th>
-                <th>${esc(window.I18n.t('logistics.colTrailer'))}</th>
-                <th>${esc(window.I18n.t('logistics.colLoads'))}</th>
-                <th>${esc(window.I18n.t('logistics.colBdft'))}</th>
-                <th>${esc(window.I18n.t('logistics.colBol'))}</th>
-                <th>${esc(window.I18n.t('logistics.colStatus'))}</th>
-                <th>${esc(window.I18n.t('logistics.colBay'))}</th>
-                <th style="text-align:right;">${esc(window.I18n.t('logistics.colActions'))}</th>
+                <th>${esc(t('logistics.colCustomer'))}</th>
+                <th>${esc(t('logistics.colMethodCarrier'))}</th>
+                <th>${esc(t('logistics.colTrailer'))}</th>
+                <th>${esc(t('logistics.colLoads'))}</th>
+                <th>${esc(t('logistics.colBdft'))}</th>
+                <th>${esc(t('logistics.colBol'))}</th>
+                <th>${esc(t('logistics.colStatus'))}</th>
+                <th>${esc(t('logistics.colBay'))}</th>
+                <th style="text-align:right;">${esc(t('logistics.colActions'))}</th>
               </tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
@@ -824,8 +824,8 @@ function renderOutbound() {
 function buildOutboundRow(s) {
   const linkedJob = allOpenJobs.find(j => j.id === s.job_id);
   const jobLink   = linkedJob
-    ? `<a class="logistics-job-link" href="/jobs/?job_id=${linkedJob.id}" onclick="event.stopPropagation()">${esc(window.I18n.t('logistics.jobPrefix'))}${esc(linkedJob.customer)}${linkedJob.invoice_number ? ' · ' + esc(linkedJob.invoice_number) : ''}</a>`
-    : (s.job_id ? `<a class="logistics-job-link" href="/jobs/" onclick="event.stopPropagation()">${esc(window.I18n.t('logistics.jobLinked'))}</a>` : '');
+    ? `<a class="logistics-job-link" href="/jobs/?job_id=${linkedJob.id}" onclick="event.stopPropagation()">${esc(t('logistics.jobPrefix'))}${esc(linkedJob.customer)}${linkedJob.invoice_number ? ' · ' + esc(linkedJob.invoice_number) : ''}</a>`
+    : (s.job_id ? `<a class="logistics-job-link" href="/jobs/" onclick="event.stopPropagation()">${esc(t('logistics.jobLinked'))}</a>` : '');
 
   const methodCarrier = [s.method, s.carrier].filter(Boolean).join(' · ');
   const bdft = s.total_bdft ? fmtNum(s.total_bdft) : '—';
@@ -840,7 +840,7 @@ function buildOutboundRow(s) {
         ? `<span style="font-weight:700;color:var(--text);">INV# ${esc(linkedJob.invoice_number)}</span>`
         : '<span style="color:#94a3b8;">—</span>'}
       ${(s.load_count || 1) > 1
-        ? `<span style="font-size:11px;font-weight:700;color:#6366f1;margin-left:6px;">${esc(window.I18n.t('logistics.loadCountLabel', { n: s.load_count }))}</span>`
+        ? `<span style="font-size:11px;font-weight:700;color:#6366f1;margin-left:6px;">${esc(t('logistics.loadCountLabel', { n: s.load_count }))}</span>`
         : ''}
       <br><span style="color:var(--text-muted);font-size:12px;" title="${esc(s.customer || '')}">${esc(utils.truncate(s.customer || 'Unknown', 20))}</span>
       ${jobLink ? `<br>${jobLink}` : ''}
@@ -862,17 +862,17 @@ function buildBayCell(shipment, loadingAssignment) {
   if (!shipment.job_id) return '—';
 
   if (loadingAssignment && loadingAssignment.bay_number) {
-    return `<span style="font-size:12px;font-weight:600;">${esc(window.I18n.t('logistics.bayLabel', { n: loadingAssignment.bay_number }))}</span>`;
+    return `<span style="font-size:12px;font-weight:600;">${esc(t('logistics.bayLabel', { n: loadingAssignment.bay_number }))}</span>`;
   }
 
   if (['ready_to_ship'].includes(shipment.status) && allLoadingBays.length > 0) {
     const laId = loadingAssignment?.id || '';
     if (!laId) return '—';
     const opts = allLoadingBays.map(b =>
-      `<option value="${b.id}">${esc(window.I18n.t('logistics.bayLabel', { n: b.bay_number }))}${b.label ? ' — ' + esc(b.label) : ''}</option>`
+      `<option value="${b.id}">${esc(t('logistics.bayLabel', { n: b.bay_number }))}${b.label ? ' — ' + esc(b.label) : ''}</option>`
     ).join('');
     return `<select class="logistics-bay-select" onchange="assignBayFromDashboard('${laId}', this.value)" onclick="event.stopPropagation()">
-      <option value="">${esc(window.I18n.t('logistics.assignEllipsis'))}</option>
+      <option value="">${esc(t('logistics.assignEllipsis'))}</option>
       ${opts}
     </select>`;
   }
@@ -881,16 +881,16 @@ function buildBayCell(shipment, loadingAssignment) {
 }
 
 async function deleteAllBolsForJob(jobId, count) {
-  if (!confirm(window.I18n.t('logistics.deleteAllBolsConfirm', { count }))) return;
+  if (!confirm(t('logistics.deleteAllBolsConfirm', { count }))) return;
   try {
     const { ok, data } = await api.del('/api/bols?job_id=' + encodeURIComponent(jobId));
-    if (!ok) { alert((data && data.error) || window.I18n.t('logistics.failedDeleteBols')); return; }
+    if (!ok) { alert((data && data.error) || t('logistics.failedDeleteBols')); return; }
     loadBolDocuments({ job_id: jobId });
     if (typeof loadOutbound === 'function') loadOutbound();
     if (typeof loadInbound === 'function') loadInbound();
   } catch (e) {
     console.error('deleteAllBolsForJob failed:', e);
-    alert(window.I18n.t('logistics.failedDeleteBols'));
+    alert(t('logistics.failedDeleteBols'));
   }
 }
 
@@ -914,9 +914,9 @@ async function loadBolDocuments(s) {
     }
     const bols = Object.keys(byLoad).sort((a, c) => Number(a) - Number(c)).map(k => byLoad[k]);
 
-    const labelFor = (t) => t === 'original_signed' ? window.I18n.t('logistics.bolOriginalSigned')
-                          : t === 'driver_signed'   ? window.I18n.t('logistics.bolDriverSigned')
-                          : t === 'customer_signed' ? window.I18n.t('logistics.bolCustomerSigned') : t;
+    const labelFor = (t) => t === 'original_signed' ? t('logistics.bolOriginalSigned')
+                          : t === 'driver_signed'   ? t('logistics.bolDriverSigned')
+                          : t === 'customer_signed' ? t('logistics.bolCustomerSigned') : t;
     // Show a single signed copy of record: prefer original_signed, else the most recent (docs are
     // returned newest-first), so legacy shipments with driver/customer copies still show one.
     const pickSignedDoc = (docs) => docs.find(d => d.doc_type === 'original_signed') || docs[0] || null;
@@ -940,19 +940,19 @@ async function loadBolDocuments(s) {
 
     const blocks = results.map(({ bol, docs, failed }) => {
       const loadLabel = (bol.load_number != null && bol.load_count != null && Number(bol.load_count) > 1)
-        ? esc(window.I18n.t('logistics.loadOfLabel', { n: bol.load_number, count: bol.load_count }))
+        ? esc(t('logistics.loadOfLabel', { n: bol.load_number, count: bol.load_count }))
         : '';
       const chosen = pickSignedDoc(docs);
       const signedLinks = chosen
         ? `<a href="/api/bols/documents/${esc(chosen.id)}" target="_blank" rel="noopener" style="font-size:13px;">📄 ${esc(labelFor(chosen.doc_type))}</a>`
         : '';
       const fallback = failed
-        ? `<span style="font-size:12px;color:var(--danger,#ef4444);">${esc(window.I18n.t('logistics.couldNotLoadSignedCopies'))}</span>`
-        : `<span style="font-size:12px;color:var(--muted,#4b5563);">${esc(window.I18n.t('logistics.noSignedCopiesYet'))}</span>`;
+        ? `<span style="font-size:12px;color:var(--danger,#ef4444);">${esc(t('logistics.couldNotLoadSignedCopies'))}</span>`
+        : `<span style="font-size:12px;color:var(--muted,#4b5563);">${esc(t('logistics.noSignedCopiesYet'))}</span>`;
       return `<div style="margin-bottom:8px;padding:8px;border:1px solid var(--input-border);border-radius:8px;">
           <div style="font-size:12px;color:var(--muted,#4b5563);margin-bottom:4px;">${loadLabel}BOL ${esc(bol.bol_number || bol.id)}</div>
           <div style="display:flex;flex-wrap:wrap;gap:10px;">
-            <a href="#" onclick="event.preventDefault();viewBolForJob('${esc(s.job_id)}')" style="font-size:13px;">📄 ${esc(window.I18n.t('logistics.viewBol'))}</a>
+            <a href="#" onclick="event.preventDefault();viewBolForJob('${esc(s.job_id)}')" style="font-size:13px;">📄 ${esc(t('logistics.viewBol'))}</a>
             ${signedLinks || fallback}
           </div>
         </div>`;
@@ -961,9 +961,9 @@ async function loadBolDocuments(s) {
     const _u = window.__xpandaUser;
     const _isMgr = _u && (_u.isAdministrator || (_u.permissions && _u.permissions['logistics.loading.manage'] && _u.permissions['logistics.loading.manage'].edit));
     const delBtn = _isMgr
-      ? `<button onclick="deleteAllBolsForJob('${esc(s.job_id)}', ${all.length})" style="margin-left:auto;font-size:12px;color:var(--danger,#ef4444);background:none;border:1px solid var(--danger,#ef4444);border-radius:6px;padding:2px 8px;cursor:pointer;">${esc(window.I18n.t('logistics.deleteAllBols'))}</button>`
+      ? `<button onclick="deleteAllBolsForJob('${esc(s.job_id)}', ${all.length})" style="margin-left:auto;font-size:12px;color:var(--danger,#ef4444);background:none;border:1px solid var(--danger,#ef4444);border-radius:6px;padding:2px 8px;cursor:pointer;">${esc(t('logistics.deleteAllBols'))}</button>`
       : '';
-    host.innerHTML = `<div style="display:flex;align-items:center;font-weight:600;font-size:13px;margin:4px 0 6px;">${esc(window.I18n.t('logistics.documentsLabel'))}${delBtn}</div>${blocks.join('')}`;
+    host.innerHTML = `<div style="display:flex;align-items:center;font-weight:600;font-size:13px;margin:4px 0 6px;">${esc(t('logistics.documentsLabel'))}${delBtn}</div>${blocks.join('')}`;
   } catch (e) {
     console.error('loadBolDocuments failed:', e);
     host.innerHTML = '';
@@ -979,8 +979,8 @@ async function viewBolForJob(jobId) {
   if (!jobId) return;
   try {
     const { ok, data } = await api.get('/api/bols?job_id=' + encodeURIComponent(jobId));
-    if (!ok || !data?.bols?.length) { alert(window.I18n.t('logistics.noBolFound')); return; }
-    if (!window.BolShared || !window.PDFLib) { alert(window.I18n.t('logistics.bolViewerNotReady')); return; }
+    if (!ok || !data?.bols?.length) { alert(t('logistics.noBolFound')); return; }
+    if (!window.BolShared || !window.PDFLib) { alert(t('logistics.bolViewerNotReady')); return; }
     // Dedupe to the latest BOL per load_number (regenerations may leave stale rows), then
     // render every load in order — the same combined packet Generate produces. BOLs with no
     // load_number (legacy/manual) are keyed under 0 and still included.
@@ -1027,13 +1027,13 @@ async function viewBolForJob(jobId) {
     document.getElementById('log-bol-view-modal').style.display = 'flex';
   } catch (e) {
     console.error('viewBolForJob failed:', e);
-    alert(window.I18n.t('logistics.failedLoadBol'));
+    alert(t('logistics.failedLoadBol'));
   }
 }
 
 function openBolEditor() {
-  if (bolViewState.locked) { alert(window.I18n.t('logistics.loadShippedReadOnly')); return; }
-  if (typeof BolEditor === 'undefined' || !BolEditor.open) { alert(window.I18n.t('logistics.editorFailedToLoad')); return; }
+  if (bolViewState.locked) { alert(t('logistics.loadShippedReadOnly')); return; }
+  if (typeof BolEditor === 'undefined' || !BolEditor.open) { alert(t('logistics.editorFailedToLoad')); return; }
   const bols = bolViewState.bols || [];
   if (!bols.length) return;
 
@@ -1045,7 +1045,7 @@ function openBolEditor() {
       const o = document.createElement('option');
       o.value = String(i);
       const load = (b.load_number != null && b.load_number !== '') ? b.load_number : (i + 1);
-      o.textContent = window.I18n.t('logistics.loadEditorOption', { n: load, bol: b.bol_number || b.id });
+      o.textContent = t('logistics.loadEditorOption', { n: load, bol: b.bol_number || b.id });
       sel.appendChild(o);
     });
     // Rebind change handler cleanly (avoid stacking listeners across opens):
@@ -1096,9 +1096,9 @@ async function bolEditorApply(updatedBol) {
     const res = await api.put('/api/bols/' + encodeURIComponent(updatedBol.id), payload);
     if (!res.ok) {
       if (res.status === 409 || (res.data && res.data.locked)) {
-        alert(window.I18n.t('logistics.loadShippedNoEdit'));
+        alert(t('logistics.loadShippedNoEdit'));
       } else {
-        alert(window.I18n.t('logistics.failedSaveBolChanges'));
+        alert(t('logistics.failedSaveBolChanges'));
       }
       closeBolEditor();
       return;
@@ -1108,7 +1108,7 @@ async function bolEditorApply(updatedBol) {
     await viewBolForJob(bolViewState.jobId);
   } catch (e) {
     console.error('BOL edit save failed:', e);
-    alert(window.I18n.t('logistics.failedSaveBolChanges'));
+    alert(t('logistics.failedSaveBolChanges'));
     closeBolEditor();
   }
 }
@@ -1146,16 +1146,16 @@ function buildActionButtons(shipment) {
 
   const hasBol = Number(shipment.bol_count || 0) > 0;
   const bolBtn = hasBol
-    ? `<a class="logistics-action-btn action-bol" href="#" onclick="event.stopPropagation();event.preventDefault();viewBolForJob('${shipment.job_id}')">${esc(window.I18n.t('logistics.viewBol'))}</a>`
-    : `<a class="logistics-action-btn action-bol" href="#" onclick="event.stopPropagation();event.preventDefault();openBolModalForJob('${shipment.job_id}')">${esc(window.I18n.t('logistics.generateBol'))}</a>`;
-  return `<a class="logistics-action-btn action-load" href="/logistics/load-builder.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">${esc(window.I18n.t('logistics.buildLoad'))}</a> ${bolBtn}`;
+    ? `<a class="logistics-action-btn action-bol" href="#" onclick="event.stopPropagation();event.preventDefault();viewBolForJob('${shipment.job_id}')">${esc(t('logistics.viewBol'))}</a>`
+    : `<a class="logistics-action-btn action-bol" href="#" onclick="event.stopPropagation();event.preventDefault();openBolModalForJob('${shipment.job_id}')">${esc(t('logistics.generateBol'))}</a>`;
+  return `<a class="logistics-action-btn action-load" href="/logistics/load-builder.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">${esc(t('logistics.buildLoad'))}</a> ${bolBtn}`;
 }
 
 async function openBolModalForJob(jobId) {
-  if (typeof BolCompose === 'undefined') { alert(window.I18n.t('logistics.bolToolFailedToLoad')); return; }
+  if (typeof BolCompose === 'undefined') { alert(t('logistics.bolToolFailedToLoad')); return; }
   try {
     const res = await api.get('/api/jobs/' + encodeURIComponent(jobId));
-    if (!res.ok || !res.data || !res.data.job) { alert(window.I18n.t('logistics.couldNotLoadJobForBol')); return; }
+    if (!res.ok || !res.data || !res.data.job) { alert(t('logistics.couldNotLoadJobForBol')); return; }
     const job = res.data.job;
     const today = new Date().toISOString().slice(0, 10);
 
@@ -1207,7 +1207,7 @@ async function openBolModalForJob(jobId) {
       const assignment = assignmentsByLoad[i + 1] || {};
       trailerData.push(Object.assign({}, base, {
         trailerIndex: i,
-        trailerLabel: loadCount > 1 ? window.I18n.t('logistics.trailerLabelMulti', { n: i + 1, count: loadCount }) : window.I18n.t('logistics.trailerLabelSingle'),
+        trailerLabel: loadCount > 1 ? t('logistics.trailerLabelMulti', { n: i + 1, count: loadCount }) : t('logistics.trailerLabelSingle'),
         invNumber: i === 0 ? (job.invoice_number || '') : '',
         trailerNo: assignment.trailer_number || '',
         date: assignment.load_ship_date || base.date,
@@ -1224,7 +1224,7 @@ async function openBolModalForJob(jobId) {
     });
   } catch (e) {
     console.error('openBolModalForJob failed:', e);
-    alert(window.I18n.t('logistics.couldNotOpenBolGenerator'));
+    alert(t('logistics.couldNotOpenBolGenerator'));
   }
 }
 
@@ -1232,7 +1232,7 @@ async function openBolModalForJob(jobId) {
 function renderInbound() {
   const container = document.getElementById('inbound-content');
   if (!inboundData.length) {
-    container.innerHTML = `<div style="color:#94a3b8;font-size:14px;padding:20px 0;">${esc(window.I18n.t('logistics.noInbound'))}</div>`;
+    container.innerHTML = `<div style="color:#94a3b8;font-size:14px;padding:20px 0;">${esc(t('logistics.noInbound'))}</div>`;
     updateStats();
     return;
   }
@@ -1248,13 +1248,13 @@ function renderInbound() {
       <table class="logistics-table">
         <thead>
           <tr>
-            <th>${esc(window.I18n.t('logistics.colSupplier'))}</th>
-            <th>${esc(window.I18n.t('logistics.colBeadType'))}</th>
-            <th>${esc(window.I18n.t('logistics.colWeight'))}</th>
-            <th>${esc(window.I18n.t('logistics.colShipDate'))}</th>
-            <th>${esc(window.I18n.t('logistics.colCarrier'))}</th>
-            <th>${esc(window.I18n.t('logistics.colBol'))}</th>
-            <th>${esc(window.I18n.t('logistics.colStatus'))}</th>
+            <th>${esc(t('logistics.colSupplier'))}</th>
+            <th>${esc(t('logistics.colBeadType'))}</th>
+            <th>${esc(t('logistics.colWeight'))}</th>
+            <th>${esc(t('logistics.colShipDate'))}</th>
+            <th>${esc(t('logistics.colCarrier'))}</th>
+            <th>${esc(t('logistics.colBol'))}</th>
+            <th>${esc(t('logistics.colStatus'))}</th>
           </tr>
         </thead>
         <tbody>${allRows.map(s => buildInboundRow(s)).join('')}</tbody>
@@ -1293,10 +1293,10 @@ function openModal(direction, prefill) {
   showError('');
 
   document.getElementById('modal-title').textContent =
-    currentDirection === 'outbound' ? window.I18n.t('logistics.modalTitleNewOutbound') : window.I18n.t('logistics.modalTitleNewInbound');
+    currentDirection === 'outbound' ? t('logistics.modalTitleNewOutbound') : t('logistics.modalTitleNewInbound');
   document.getElementById('dir-toggle-wrap').style.display = '';
   document.getElementById('modal-delete-btn').style.display = 'none';
-  document.getElementById('modal-save-btn').textContent = window.I18n.t('logistics.save');
+  document.getElementById('modal-save-btn').textContent = t('logistics.save');
 
   if (prefill) applyPrefill(prefill);
 
@@ -1317,10 +1317,10 @@ async function openEdit(id) {
   setDirection(currentDirection, true); // locked
 
   document.getElementById('modal-title').textContent =
-    currentDirection === 'outbound' ? window.I18n.t('logistics.modalTitleEditOutbound') : window.I18n.t('logistics.modalTitleEditInbound');
+    currentDirection === 'outbound' ? t('logistics.modalTitleEditOutbound') : t('logistics.modalTitleEditInbound');
   document.getElementById('dir-toggle-wrap').style.display = 'none';
   document.getElementById('modal-delete-btn').style.display = '';
-  document.getElementById('modal-save-btn').textContent = window.I18n.t('logistics.saveChanges');
+  document.getElementById('modal-save-btn').textContent = t('logistics.saveChanges');
   showError('');
 
   // Populate
@@ -1578,7 +1578,7 @@ async function saveShipment() {
 
   if (dir === 'outbound') {
     const customer = document.getElementById('f-customer').value.trim();
-    if (!customer) { showError(window.I18n.t('logistics.customerRequiredOutbound')); return; }
+    if (!customer) { showError(t('logistics.customerRequiredOutbound')); return; }
     payload.customer       = customer;
     payload.destination    = document.getElementById('f-destination').value.trim();
     payload.load_count     = parseInt(document.getElementById('f-load-count').value || 1, 10);
@@ -1588,7 +1588,7 @@ async function saveShipment() {
     payload.trailer_number = document.getElementById('f-trailer-number').value.trim();
   } else {
     const supplier = document.getElementById('f-supplier').value.trim();
-    if (!supplier) { showError(window.I18n.t('logistics.supplierRequiredInbound')); return; }
+    if (!supplier) { showError(t('logistics.supplierRequiredInbound')); return; }
     payload.customer   = supplier;
     payload.origin     = document.getElementById('f-origin').value.trim();
     payload.weight_lbs = parseFloat(document.getElementById('f-weight-lbs').value) || 0;
@@ -1613,7 +1613,7 @@ async function saveShipment() {
 
   const btn = document.getElementById('modal-save-btn');
   btn.disabled = true;
-  btn.textContent = window.I18n.t('logistics.saving');
+  btn.textContent = t('logistics.saving');
 
   try {
     const { ok, data } = editingId
@@ -1621,7 +1621,7 @@ async function saveShipment() {
       : await api.post('/api/shipments', payload);
 
     if (!ok) {
-      showError(data?.error || window.I18n.t('logistics.errorSavingShipment'));
+      showError(data?.error || t('logistics.errorSavingShipment'));
       return;
     }
 
@@ -1637,19 +1637,19 @@ async function saveShipment() {
     await Promise.all([loadOutbound(), loadInbound()]);
     updateStats();
   } catch {
-    showError(window.I18n.t('logistics.networkError'));
+    showError(t('logistics.networkError'));
   } finally {
     btn.disabled = false;
-    btn.textContent = editingId ? window.I18n.t('logistics.saveChanges') : window.I18n.t('logistics.save');
+    btn.textContent = editingId ? t('logistics.saveChanges') : t('logistics.save');
   }
 }
 
 async function confirmDelete() {
   if (!editingId) return;
-  if (!confirm(window.I18n.t('logistics.confirmDeleteShipment'))) return;
+  if (!confirm(t('logistics.confirmDeleteShipment'))) return;
 
   const { ok, data } = await api.raw('/api/shipments', { method: 'DELETE', body: { id: editingId } });
-  if (!ok) { alert(data?.error || window.I18n.t('logistics.errorDeletingShipment')); return; }
+  if (!ok) { alert(data?.error || t('logistics.errorDeletingShipment')); return; }
 
   closeModal();
   await Promise.all([loadOutbound(), loadInbound()]);
@@ -1660,7 +1660,7 @@ async function confirmDelete() {
 async function openShipJobPicker() {
   document.getElementById('job-picker-search').value = '';
   document.getElementById('job-picker-list').innerHTML =
-    `<div style="color:#94a3b8;font-size:13px;padding:12px;">${esc(window.I18n.t('logistics.loadingJobs'))}</div>`;
+    `<div style="color:#94a3b8;font-size:13px;padding:12px;">${esc(t('logistics.loadingJobs'))}</div>`;
   document.getElementById('job-picker-modal').classList.remove('hidden');
 
   try {
@@ -1697,15 +1697,15 @@ function filterJobPickerList() {
   );
 
   if (!jobs.length) {
-    list.innerHTML = `<div style="color:#94a3b8;font-size:13px;padding:12px;">${esc(window.I18n.t('logistics.noOpenJobsFound'))}</div>`;
+    list.innerHTML = `<div style="color:#94a3b8;font-size:13px;padding:12px;">${esc(t('logistics.noOpenJobsFound'))}</div>`;
     return;
   }
 
   const statusLabels = {
-    not_started: window.I18n.t('logistics.statusNotStarted'),
-    in_production: window.I18n.t('logistics.statusInProduction'),
-    done: window.I18n.t('logistics.statusDone'),
-    shipped: window.I18n.t('logistics.statusShipped'),
+    not_started: t('logistics.statusNotStarted'),
+    in_production: t('logistics.statusInProduction'),
+    done: t('logistics.statusDone'),
+    shipped: t('logistics.statusShipped'),
   };
   list.innerHTML = jobs.map(j => {
     const label      = `${esc(j.customer)}${j.invoice_number ? ' · ' + esc(j.invoice_number) : ''}`;
@@ -1751,7 +1751,7 @@ function applyPrefill(prefill) {
 function promptUpdateJob(jobId, customer) {
   promptJobId = jobId;
   document.getElementById('prompt-msg').textContent =
-    window.I18n.t('logistics.updateJobPrompt', { customer });
+    t('logistics.updateJobPrompt', { customer });
   document.getElementById('prompt-banner').classList.add('visible');
 }
 
@@ -1829,7 +1829,7 @@ function renderShipmentCalendar(direction) {
 
   const year  = calMonth.getFullYear();
   const month = calMonth.getMonth();
-  const monthNames = ['monthJan','monthFeb','monthMar','monthApr','monthMay','monthJun','monthJul','monthAug','monthSep','monthOct','monthNov','monthDec'].map(k => window.I18n.t('logistics.' + k));
+  const monthNames = ['monthJan','monthFeb','monthMar','monthApr','monthMay','monthJun','monthJul','monthAug','monthSep','monthOct','monthNov','monthDec'].map(k => t('logistics.' + k));
   labelEl.textContent = `${monthNames[month]} ${year}`;
 
   const firstDay  = new Date(year, month, 1);
@@ -1848,7 +1848,7 @@ function renderShipmentCalendar(direction) {
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
   let html = '<div class="cal-header-row">';
-  ['dayAbbrSun','dayAbbrMon','dayAbbrTue','dayAbbrWed','dayAbbrThu','dayAbbrFri','dayAbbrSat'].forEach(k => { html += `<div class="cal-header-cell">${esc(window.I18n.t('logistics.' + k))}</div>`; });
+  ['dayAbbrSun','dayAbbrMon','dayAbbrTue','dayAbbrWed','dayAbbrThu','dayAbbrFri','dayAbbrSat'].forEach(k => { html += `<div class="cal-header-cell">${esc(t('logistics.' + k))}</div>`; });
   html += '</div><div class="cal-body">';
 
   const totalCells = Math.ceil((startDow + totalDays) / 7) * 7;
@@ -1876,7 +1876,7 @@ function renderShipmentCalendar(direction) {
       });
 
       if (dayShipments.length > maxVisible) {
-        html += `<div class="cal-more" onclick="showCalDay('${direction}','${dateStr}')">${esc(window.I18n.t('logistics.moreCount', { n: dayShipments.length - maxVisible }))}</div>`;
+        html += `<div class="cal-more" onclick="showCalDay('${direction}','${dateStr}')">${esc(t('logistics.moreCount', { n: dayShipments.length - maxVisible }))}</div>`;
       }
 
       html += '</div>';
@@ -1916,16 +1916,16 @@ function showCalDay(direction, dateStr) {
 
 function statusBadge(status) {
   const labels = {
-    not_started:    window.I18n.t('logistics.statusNotStarted'),
-    in_production:  window.I18n.t('logistics.statusInProduction'),
-    ready_to_ship:  window.I18n.t('logistics.statusReadyToShip'),
-    loading:        window.I18n.t('logistics.statusLoading'),
-    loaded:         window.I18n.t('logistics.statusLoaded'),
-    in_transit:     window.I18n.t('logistics.statusInTransit'),
-    delivered:      window.I18n.t('logistics.statusDelivered'),
-    cancelled:      window.I18n.t('logistics.statusCancelled'),
-    scheduled:      window.I18n.t('logistics.statusScheduled'),
-    awaiting:       window.I18n.t('logistics.statusAwaiting'),  // legacy — keep for old records
+    not_started:    t('logistics.statusNotStarted'),
+    in_production:  t('logistics.statusInProduction'),
+    ready_to_ship:  t('logistics.statusReadyToShip'),
+    loading:        t('logistics.statusLoading'),
+    loaded:         t('logistics.statusLoaded'),
+    in_transit:     t('logistics.statusInTransit'),
+    delivered:      t('logistics.statusDelivered'),
+    cancelled:      t('logistics.statusCancelled'),
+    scheduled:      t('logistics.statusScheduled'),
+    awaiting:       t('logistics.statusAwaiting'),  // legacy — keep for old records
   };
   return `<span class="logistics-status-badge status-${status}">${esc(labels[status] || status)}</span>`;
 }
@@ -1939,6 +1939,10 @@ function formatDate(dateStr) {
 
 function fmtNum(n) {
   return (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+}
+
+function t(key, vars) {
+  return window.I18n ? window.I18n.t(key, vars) : key;
 }
 
 function esc(str) {
