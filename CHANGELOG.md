@@ -3574,6 +3574,32 @@ Entries within each module are ordered by prompt # descending (newest first).
   Verified via `node --check` on the catalog and every inline `<script>` block, plus an en/es/ht key
   parity check (221/221/221, no drift). `load-builder.html`, `loading.html`, `bol-email.html`,
   `bol-test.html` not yet tagged — next in this sweep.
+- **i18n sweep, phase 2b — Logistics module: `loading.html` (Loading Dashboard) and `bol-email.html`
+  (BOL Email Queue) now speak en/es/ht.** Picked these two next instead of `load-builder.html`
+  because they're the module's other floor-facing screens (bay assignments, loading-team view,
+  outbound BOL email); `load-builder.html` is desk-side trailer-load planning with UI text
+  load-bearing inside the bin-packing algorithm and printed BOL/diagram output, so it gets a
+  narrower labels-and-messages pass later rather than the full treatment. Extended
+  `logistics/logistics-i18n.js`'s `logistics` catalog to 359 keys × 3 langs (verified parity):
+  `loading.html` additions cover the toolbar (view toggle, search, sort, This Week/Show All, Pull
+  Job), the four status sections (Awaiting/Yard/In Transit/Delivered) and their empty states, the
+  bay grid and bay-drilldown view, assignment cards (status badges, advance-status labels, trailer
+  editing, View BOL/Photos/Move-to-Yard/Archive actions and their confirm dialogs), the Pull Job and
+  Assign Bay modals, the Shipping Information panel's field labels, and the full Loading Completion
+  Checklist modal (questions, photo capture buttons, validation alerts). `bol-email.html` additions
+  cover the toolbar, recipients panel (add/edit/remove, email validation), plant-closures list, the
+  BOL preview modal, and the send flow's button states and toasts. Both pages already loaded
+  `logistics-header.js`, so no wiring changes were needed — they picked up the extended catalog
+  automatically. Also fixed the same dead-code title/subtitle override bug on `bol-email.html`
+  (`document.getElementById('logistics-page-title').textContent = 'BOL Email Queue'` running after
+  `shared-header.js` had already set it from the module-default `layout.logisticsTitle`): unlike
+  `index.html`'s case this page's title genuinely differs from the module default, so rather than
+  deleting the override, added `layout.bolEmailTitle`/`bolEmailSubtitle` keys to
+  `shared/i18n-common.js` and switched the inline script to a guarded `window.I18n.t()` call.
+  `loading.html` has no such override (it never set a page-specific module-header title). Verified
+  via `node --check` on both files' inline `<script>` blocks and an en/es/ht key parity check across
+  all four catalogs (`logistics` 359, `common` 42, `home` 25, `layout` 17 — no drift).
+  `load-builder.html`, `bol-test.html` not yet tagged.
 - **fix (unprompted) — i18n phase-1 load order: the nav HTML was built before `window.I18n` was
   ready, so the module nav/notifications/settings chrome silently stayed in English no matter what
   language was selected.** `shared/shared-header.js` originally tried to auto-load

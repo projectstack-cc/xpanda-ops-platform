@@ -120,23 +120,23 @@
 <div class="loading-dashboard">
   <!-- Toolbar -->
   <div class="ld-toolbar">
-    <h2>Loading Dashboard</h2>
+    <h2 data-i18n="logistics.loadingDashboardHeading">Loading Dashboard</h2>
     <div class="ld-view-toggle">
-      <button id="view-overview" class="ld-view-btn active" onclick="setLdView('overview')">Overview</button>
-      <button id="view-bay" class="ld-view-btn" onclick="setLdView('bay')">Loading Team View</button>
+      <button id="view-overview" class="ld-view-btn active" onclick="setLdView('overview')" data-i18n="logistics.loadingViewOverview">Overview</button>
+      <button id="view-bay" class="ld-view-btn" onclick="setLdView('bay')" data-i18n="logistics.loadingViewTeam">Loading Team View</button>
     </div>
     <select id="bay-selector" style="display:none;" onchange="selectBay(this.value)"></select>
-    <input type="text" id="ld-search" placeholder="INV#, customer, or PO"
+    <input type="text" id="ld-search" placeholder="INV#, customer, or PO" data-i18n-placeholder="logistics.loadingSearchPlaceholder"
       oninput="ldSearchTerm=this.value;renderDashboard()" autocomplete="off"
       style="padding:6px 10px;border:1px solid var(--input-border);border-radius:6px;font-size:13px;background:var(--card-bg);color:var(--text);min-width:180px;" />
-    <button id="ld-week-toggle" onclick="toggleLdShowAll()"
+    <button id="ld-week-toggle" onclick="toggleLdShowAll()" data-i18n="logistics.thisWeek"
       style="padding:6px 12px;border:1px solid var(--input-border);border-radius:6px;font-size:13px;background:var(--card-bg);color:var(--text);cursor:pointer;font-weight:600;">This Week</button>
     <select id="ld-sort-select" style="padding:6px 10px;border:1px solid var(--input-border);border-radius:6px;font-size:13px;background:var(--card-bg);cursor:pointer;" onchange="ldSortOrder=this.value;renderDashboard()">
-      <option value="inv_asc">INV# ↑</option>
-      <option value="inv_desc">INV# ↓</option>
-      <option value="date_asc">Date added</option>
+      <option value="inv_asc" data-i18n="logistics.loadingSortInvAsc">INV# ↑</option>
+      <option value="inv_desc" data-i18n="logistics.loadingSortInvDesc">INV# ↓</option>
+      <option value="date_asc" data-i18n="logistics.loadingSortDateAdded">Date added</option>
     </select>
-    <button id="btn-pull-job" class="ld-btn-pull" onclick="openPullJobModal()" style="display:none;">+ Pull Job</button>
+    <button id="btn-pull-job" class="ld-btn-pull" onclick="openPullJobModal()" style="display:none;" data-i18n="logistics.loadingPullJobBtn">+ Pull Job</button>
   </div>
 
   <!-- Overview mode -->
@@ -144,7 +144,7 @@
     <div class="ld-section" data-section-key="awaiting">
       <h3 class="ld-section-title" onclick="toggleSection('awaiting')" style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
         <span class="ld-section-chevron" id="ld-chevron-awaiting">▾</span>
-        Awaiting Trailer Assignment
+        <span data-i18n="logistics.loadingSectionAwaiting">Awaiting Trailer Assignment</span>
       </h3>
       <div id="ld-awaiting" class="ld-queue" ondragover="event.preventDefault(); this.classList.add('ld-drop-hover');" ondragleave="this.classList.remove('ld-drop-hover');" ondrop="onQueueDrop(event); this.classList.remove('ld-drop-hover');"></div>
     </div>
@@ -154,21 +154,21 @@
     <div class="ld-section" data-section-key="yard">
       <h3 class="ld-section-title" onclick="toggleSection('yard')" style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
         <span class="ld-section-chevron" id="ld-chevron-yard">▾</span>
-        Yard
+        <span data-i18n="logistics.loadingSectionYard">Yard</span>
       </h3>
       <div id="ld-yard" class="ld-transit-grid"></div>
     </div>
     <div class="ld-section" data-section-key="transit">
       <h3 class="ld-section-title" onclick="toggleSection('transit')" style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
         <span class="ld-section-chevron" id="ld-chevron-transit">▾</span>
-        In Transit
+        <span data-i18n="logistics.loadingSectionTransit">In Transit</span>
       </h3>
       <div id="ld-transit" class="ld-transit-grid"></div>
     </div>
     <div class="ld-section" data-section-key="delivered">
       <h3 class="ld-section-title" onclick="toggleSection('delivered')" style="cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
         <span class="ld-section-chevron" id="ld-chevron-delivered">▾</span>
-        Delivered
+        <span data-i18n="logistics.loadingSectionDelivered">Delivered</span>
       </h3>
       <div id="ld-delivered" class="ld-transit-grid"></div>
     </div>
@@ -189,7 +189,7 @@
       </div>
     </div>
     <div class="ld-section" data-section-key="yard-team" style="margin-top:16px;">
-      <h3 class="ld-section-title" style="display:flex; align-items:center; gap:8px;">
+      <h3 class="ld-section-title" style="display:flex; align-items:center; gap:8px;" data-i18n="logistics.loadingSectionYard">
         Yard
       </h3>
       <div id="ld-yard-team" class="ld-transit-grid"></div>
@@ -201,22 +201,22 @@
 <div id="pull-job-modal" class="ld-modal-backdrop" hidden>
   <div class="ld-modal-card">
     <div class="ld-modal-header">
-      <h3>Pull Job to Loading</h3>
+      <h3 data-i18n="logistics.loadingPullModalTitle">Pull Job to Loading</h3>
       <button onclick="closePullJobModal()" class="ld-modal-close">✕</button>
     </div>
     <div class="ld-modal-body">
-      <label>Search Jobs</label>
-      <input type="text" id="pull-job-search" placeholder="Customer, PO, or INV #" oninput="searchJobsForPull(this.value)" autocomplete="off" />
+      <label data-i18n="logistics.loadingSearchJobsLabel">Search Jobs</label>
+      <input type="text" id="pull-job-search" placeholder="Customer, PO, or INV #" data-i18n-placeholder="logistics.loadingSearchJobsPlaceholder" oninput="searchJobsForPull(this.value)" autocomplete="off" />
       <div id="pull-job-results" class="ld-job-results"></div>
       <hr style="margin:12px 0;border:none;border-top:1px solid var(--line);" />
-      <label>Assign to</label>
+      <label data-i18n="logistics.loadingAssignToLabel">Assign to</label>
       <select id="pull-job-bay">
-        <option value="">Awaiting Queue (no bay)</option>
+        <option value="" data-i18n="logistics.loadingAwaitingQueueOption">Awaiting Queue (no bay)</option>
       </select>
     </div>
     <div class="ld-modal-footer">
-      <button onclick="closePullJobModal()" class="ld-btn-cancel">Cancel</button>
-      <button onclick="confirmPullJob()" class="ld-btn-confirm">Pull to Loading</button>
+      <button onclick="closePullJobModal()" class="ld-btn-cancel" data-i18n="logistics.cancel">Cancel</button>
+      <button onclick="confirmPullJob()" class="ld-btn-confirm" data-i18n="logistics.loadingPullToLoadingBtn">Pull to Loading</button>
     </div>
   </div>
 </div>
@@ -225,18 +225,18 @@
 <div id="assign-bay-modal" class="ld-modal-backdrop" hidden>
   <div class="ld-modal-card" style="max-width:360px;">
     <div class="ld-modal-header">
-      <h3>Assign to Bay</h3>
+      <h3 data-i18n="logistics.loadingAssignBayModalTitle">Assign to Bay</h3>
       <button onclick="closeAssignBayModal()" class="ld-modal-close">✕</button>
     </div>
     <div class="ld-modal-body">
-      <label>Select Bay</label>
+      <label data-i18n="logistics.loadingSelectBayLabel">Select Bay</label>
       <select id="assign-bay-select">
         <!-- populated dynamically -->
       </select>
     </div>
     <div class="ld-modal-footer">
-      <button onclick="closeAssignBayModal()" class="ld-btn-cancel">Cancel</button>
-      <button onclick="confirmAssignBay()" class="ld-btn-confirm">Assign</button>
+      <button onclick="closeAssignBayModal()" class="ld-btn-cancel" data-i18n="logistics.cancel">Cancel</button>
+      <button onclick="confirmAssignBay()" class="ld-btn-confirm" data-i18n="logistics.loadingAssignBtn">Assign</button>
     </div>
   </div>
 </div>
@@ -245,7 +245,7 @@
 <div id="ld-shipping-info-modal" class="ld-modal-backdrop" hidden onclick="if(event.target===this) closeShippingInfo()">
   <div class="ld-modal-card" style="max-width: 480px;">
     <div style="padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center;">
-      <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text);">Shipping Information</h3>
+      <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text);" data-i18n="logistics.loadingShippingInfoTitle">Shipping Information</h3>
       <button onclick="closeShippingInfo()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--muted); padding: 0; line-height: 1;">×</button>
     </div>
     <div id="ld-shipping-info-body" style="padding: 16px 20px; font-size: 13px; color: var(--text); line-height: 1.5;">
@@ -257,9 +257,9 @@
 <div id="ld-bol-view-modal" class="ld-modal-backdrop" hidden onclick="if(event.target===this) closeBolViewModal()" style="z-index: 1000;">
   <div class="ld-modal-card" style="max-width: 95vw; width: 95vw; max-height: 95vh; height: 95vh; display: flex; flex-direction: column;">
     <div style="padding: 10px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
-      <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text);">Bill of Lading</h3>
+      <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text);" data-i18n="logistics.loadingBolViewTitle">Bill of Lading</h3>
       <div style="display:flex;gap:8px;align-items:center;">
-        <button id="ld-bol-download-btn" onclick="downloadBolFromViewer()" style="padding:6px 12px;background:var(--ghost-bg);color:var(--muted);border:1px solid var(--input-border);border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">Download</button>
+        <button id="ld-bol-download-btn" onclick="downloadBolFromViewer()" style="padding:6px 12px;background:var(--ghost-bg);color:var(--muted);border:1px solid var(--input-border);border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;" data-i18n="logistics.download">Download</button>
         <button onclick="closeBolViewModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--muted); padding: 0; line-height: 1;">×</button>
       </div>
     </div>
@@ -281,6 +281,10 @@ let pullJobSearchResults = [];
 let ldSortOrder = 'inv_asc';
 let ldSearchTerm = '';
 let ldShowAll = false;
+
+function t(key, vars) {
+  return window.I18n ? window.I18n.t(key, vars) : key;
+}
 
 // Current week, Monday 00:00:00 → Sunday 23:59:59 local (matches job board "This Week").
 function ldCurrentWeekRange() {
@@ -325,7 +329,7 @@ function ldOverviewSet() {
 function toggleLdShowAll() {
   ldShowAll = !ldShowAll;
   const btn = document.getElementById('ld-week-toggle');
-  if (btn) btn.textContent = ldShowAll ? 'Show All' : 'This Week';
+  if (btn) btn.textContent = ldShowAll ? t('logistics.showAll') : t('logistics.thisWeek');
   renderDashboard();
 }
 
@@ -380,14 +384,24 @@ function toggleSection(key) {
   applyCollapseState();
 }
 
-const LD_STATUS_COLORS = {
-  awaiting:    { bg: '#f3f4f6', border: '#9ca3af', text: '#374151', label: 'Awaiting' },
-  not_started: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b', label: 'Not Started' },
-  loading:     { bg: '#fef3c7', border: '#f59e0b', text: '#92400e', label: 'Loading' },
-  loaded:      { bg: '#d1fae5', border: '#10b981', text: '#065f46', label: 'Loaded' },
-  in_transit:  { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3', label: 'In Transit' },
-  delivered:   { bg: '#ccfbf1', border: '#0d9488', text: '#115e59', label: 'Delivered' },
+const LD_STATUS_COLOR_META = {
+  awaiting:    { bg: '#f3f4f6', border: '#9ca3af', text: '#374151', key: 'statusAwaiting' },
+  not_started: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b', key: 'statusNotStarted' },
+  loading:     { bg: '#fef3c7', border: '#f59e0b', text: '#92400e', key: 'statusLoading' },
+  loaded:      { bg: '#d1fae5', border: '#10b981', text: '#065f46', key: 'statusLoaded' },
+  in_transit:  { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3', key: 'statusInTransit' },
+  delivered:   { bg: '#ccfbf1', border: '#0d9488', text: '#115e59', key: 'statusDelivered' },
 };
+
+function ldStatusColor(status) {
+  const meta = LD_STATUS_COLOR_META[status] || LD_STATUS_COLOR_META.awaiting;
+  return { bg: meta.bg, border: meta.border, text: meta.text, label: t('logistics.' + meta.key) };
+}
+
+// Kept as a Proxy so existing `LD_STATUS_COLORS[status]` lookups (which read `.label`
+// at call time, after the i18n engine has loaded) stay translated without touching
+// every call site.
+const LD_STATUS_COLORS = new Proxy({}, { get: (_, status) => ldStatusColor(status) });
 
 async function loadDashboard({ includeArchived = false } = {}) {
   try {
@@ -442,7 +456,7 @@ function renderOverview() {
   const awaiting = sortAssignments(ldSet.filter(a => a.loading_status === 'awaiting'));
   document.getElementById('ld-awaiting').innerHTML = awaiting.length
     ? awaiting.map(a => renderAssignmentCard(a, false, false)).join('')
-    : '<div class="ld-empty">No jobs awaiting assignment</div>';
+    : `<div class="ld-empty">${esc(t('logistics.loadingNoAwaiting'))}</div>`;
 
   const baysHtml = allBays.map(bay => {
     const bayAssignments = sortAssignments(ldSet.filter(a =>
@@ -451,7 +465,7 @@ function renderOverview() {
     return `
       <div class="ld-bay-col" data-bay-id="${bay.id}">
         <div class="ld-bay-header">
-          <div class="ld-bay-number">Bay ${bay.bay_number}</div>
+          <div class="ld-bay-number">${esc(t('logistics.bayLabel', { n: bay.bay_number }))}</div>
         </div>
         <div class="ld-bay-body"
           ondragover="event.preventDefault(); this.style.background='var(--surface-2)';"
@@ -459,7 +473,7 @@ function renderOverview() {
           ondrop="onBayDrop(event, '${bay.id}'); this.style.background='';">
           ${bayAssignments.length
             ? bayAssignments.map(a => renderAssignmentCard(a, false, false)).join('')
-            : '<div class="ld-empty-bay">Empty</div>'}
+            : `<div class="ld-empty-bay">${esc(t('logistics.loadingBayEmpty'))}</div>`}
         </div>
       </div>
     `;
@@ -470,17 +484,17 @@ function renderOverview() {
   const yard = sortAssignments(ldSet.filter(a => a.location === 'yard' && a.loading_status !== 'in_transit' && a.loading_status !== 'delivered'));
   document.getElementById('ld-yard').innerHTML = yard.length
     ? yard.map(a => renderAssignmentCard(a, false, false)).join('')
-    : '<div class="ld-empty">No trailers in the yard</div>';
+    : `<div class="ld-empty">${esc(t('logistics.loadingNoYard'))}</div>`;
 
   const transit = sortAssignments(ldSet.filter(a => a.loading_status === 'in_transit'));
   document.getElementById('ld-transit').innerHTML = transit.length
     ? transit.map(a => renderAssignmentCard(a, false, false)).join('')
-    : '<div class="ld-empty">No trailers in transit</div>';
+    : `<div class="ld-empty">${esc(t('logistics.loadingNoTransit'))}</div>`;
 
   const delivered = sortAssignments(ldSet.filter(a => a.loading_status === 'delivered'));
   document.getElementById('ld-delivered').innerHTML = delivered.length
     ? delivered.map(a => renderAssignmentCard(a, false, true)).join('')
-    : '<div class="ld-empty">No recent deliveries</div>';
+    : `<div class="ld-empty">${esc(t('logistics.loadingNoDelivered'))}</div>`;
 
   applyCollapseState();
 }
@@ -491,7 +505,7 @@ function renderBayView() {
 
   const sel = document.getElementById('bay-selector');
   sel.innerHTML = allBays.map(b =>
-    `<option value="${b.id}" ${b.id === selectedBayId ? 'selected' : ''}>Bay ${b.bay_number}</option>`
+    `<option value="${b.id}" ${b.id === selectedBayId ? 'selected' : ''}>${esc(t('logistics.bayLabel', { n: b.bay_number }))}</option>`
   ).join('');
 
   if (!selectedBayId) return;
@@ -501,9 +515,9 @@ function renderBayView() {
   const bayAssignments = allAssignments.filter(a => a.bay_id === selectedBayId && ['not_started', 'loading', 'loaded'].includes(a.loading_status));
 
   const groups = [
-    { status: 'not_started', label: 'Not Started', assignments: sortAssignments(bayAssignments.filter(a => a.loading_status === 'not_started')) },
-    { status: 'loading',     label: 'Loading',     assignments: sortAssignments(bayAssignments.filter(a => a.loading_status === 'loading')) },
-    { status: 'loaded',      label: 'Loaded',      assignments: sortAssignments(bayAssignments.filter(a => a.loading_status === 'loaded')) },
+    { status: 'not_started', label: t('logistics.statusNotStarted'), assignments: sortAssignments(bayAssignments.filter(a => a.loading_status === 'not_started')) },
+    { status: 'loading',     label: t('logistics.statusLoading'),     assignments: sortAssignments(bayAssignments.filter(a => a.loading_status === 'loading')) },
+    { status: 'loaded',      label: t('logistics.statusLoaded'),      assignments: sortAssignments(bayAssignments.filter(a => a.loading_status === 'loaded')) },
   ];
 
   const html = `
@@ -511,9 +525,9 @@ function renderBayView() {
       <button onclick="backToBayList()" style="
         background:none;border:none;color:#3b82f6;font-size:14px;font-weight:600;
         cursor:pointer;padding:0;margin-bottom:12px;display:flex;align-items:center;gap:4px;
-      ">← All Bays</button>
+      ">${esc(t('logistics.loadingBackToAllBays'))}</button>
       <div class="ld-bay-single-header" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-        <h3 style="font-size:26px; margin:0;">Bay ${bay.bay_number}</h3>
+        <h3 style="font-size:26px; margin:0;">${esc(t('logistics.bayLabel', { n: bay.bay_number }))}</h3>
         ${(() => {
           const aj = bayAssignments.find(a => a.loading_status === 'loading') || bayAssignments[0];
           return aj && aj.trailer_number
@@ -523,10 +537,10 @@ function renderBayView() {
       </div>
       ${groups.map(g => `
         <div class="ld-bay-group ld-drop-zone" data-target-status="${g.status}">
-          <div class="ld-bay-group-title">${g.label} (${g.assignments.length})</div>
+          <div class="ld-bay-group-title">${esc(g.label)} (${g.assignments.length})</div>
           ${g.assignments.length
             ? g.assignments.map(a => renderAssignmentCard(a, false, false)).join('')
-            : `<div class="ld-empty-bay">No jobs ${g.label.toLowerCase()}</div>`}
+            : `<div class="ld-empty-bay">${esc(t('logistics.loadingNoJobsInStatus', { status: g.label.toLowerCase() }))}</div>`}
         </div>
       `).join('')}
     </div>
@@ -538,7 +552,7 @@ function renderBayView() {
 function renderBayList() {
   const container = document.getElementById('ld-bay-list-content');
   if (!allBays.length) {
-    container.innerHTML = '<div class="ld-empty" style="padding:32px;">No bays configured</div>';
+    container.innerHTML = `<div class="ld-empty" style="padding:32px;">${esc(t('logistics.loadingNoBaysConfigured'))}</div>`;
     return;
   }
 
@@ -561,24 +575,24 @@ function renderBayList() {
       ">
         <div>
           <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-            <span style="font-weight:700;font-size:22px;color:var(--text);">Bay ${bay.bay_number}</span>
+            <span style="font-weight:700;font-size:22px;color:var(--text);">${esc(t('logistics.bayLabel', { n: bay.bay_number }))}</span>
             ${trailer
               ? `<span style="font-weight:700;font-size:15px;color:var(--text);background:var(--ghost-bg);padding:3px 10px;border-radius:6px;">🚛 ${esc(trailer)}</span>`
               : ''}
             ${sc
-              ? `<span class="ld-status-badge" style="font-size:12px;color:${sc.border};">${sc.label}</span>`
+              ? `<span class="ld-status-badge" style="font-size:12px;color:${sc.border};">${esc(sc.label)}</span>`
               : ''}
           </div>
           ${activeJob
             ? `<div style="font-size:13px;color:var(--muted);margin-top:6px;">
-                ${esc(activeJob.customer || 'Unknown')}${activeJob.invoice_number ? ' — INV# ' + esc(activeJob.invoice_number) : ''}
+                ${esc(activeJob.customer || t('logistics.loadingUnknownCustomer'))}${activeJob.invoice_number ? ' — ' + esc(t('logistics.invHash')) + ' ' + esc(activeJob.invoice_number) : ''}
               </div>`
-            : `<div style="font-size:13px;color:#9ca3af;margin-top:6px;">No active jobs</div>`
+            : `<div style="font-size:13px;color:#9ca3af;margin-top:6px;">${esc(t('logistics.loadingNoActiveJobs'))}</div>`
           }
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           ${jobCount > 0
-            ? `<span style="background:var(--ghost-bg);color:var(--text);font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;">${jobCount} job${jobCount > 1 ? 's' : ''}</span>`
+            ? `<span style="background:var(--ghost-bg);color:var(--text);font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;">${esc(t('logistics.loadingJobCount', { n: jobCount }))}</span>`
             : ''
           }
           <span style="color:#9ca3af;font-size:18px;">›</span>
@@ -594,7 +608,7 @@ function renderBayList() {
   if (yardEl) {
     yardEl.innerHTML = yard.length
       ? yard.map(a => renderAssignmentCard(a, false, false)).join('')
-      : '<div class="ld-empty">No trailers in the yard</div>';
+      : `<div class="ld-empty">${esc(t('logistics.loadingNoYard'))}</div>`;
   }
 }
 
@@ -624,27 +638,27 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
     : '';
   const trailerEditable = isManager && a.bay_id && ['not_started', 'loading', 'loaded'].includes(a.loading_status);
   const trailerHtml = trailerEditable
-    ? `<input class="ld-card-trailer-input" type="text" placeholder="Trailer #" value="${escAttr(a.trailer_number || '')}" onclick="event.stopPropagation();" onchange="updateAssignmentTrailer('${a.id}', this.value)" />`
-    : (a.trailer_number ? `<span>Trailer: ${esc(a.trailer_number)}</span>` : '');
+    ? `<input class="ld-card-trailer-input" type="text" placeholder="${escAttr(t('logistics.loadingTrailerPlaceholder'))}" value="${escAttr(a.trailer_number || '')}" onclick="event.stopPropagation();" onchange="updateAssignmentTrailer('${a.id}', this.value)" />`
+    : (a.trailer_number ? `<span>${esc(t('logistics.loadingTrailerLabel', { trailer: a.trailer_number }))}</span>` : '');
 
   return `
     <div class="ld-card" ${dragAttrs} style="border-left:4px solid ${sc.border};background:linear-gradient(0deg, ${sc.border}1f, ${sc.border}1f), var(--surface);" data-assignment-id="${a.id}">
       <div class="ld-card-header">
         <strong>
           ${a.invoice_number
-            ? `<a href="#" class="ld-inv-link" onclick="event.preventDefault(); event.stopPropagation(); openShippingInfo('${esc(a.id)}'); return false;">INV# ${esc(a.invoice_number)}</a>`
-            : 'No INV#'}
+            ? `<a href="#" class="ld-inv-link" onclick="event.preventDefault(); event.stopPropagation(); openShippingInfo('${esc(a.id)}'); return false;">${esc(t('logistics.invHash'))} ${esc(a.invoice_number)}</a>`
+            : esc(t('logistics.loadingNoInv'))}
           ${(a.load_count || 1) > 1
-            ? `<span style="font-weight:700;color:#6366f1;margin-left:6px;font-size:11px;">Load ${a.load_number || 1} of ${a.load_count}</span>`
+            ? `<span style="font-weight:700;color:#6366f1;margin-left:6px;font-size:11px;">${esc(t('logistics.loadingLoadOfShort', { n: a.load_number || 1, count: a.load_count }))}</span>`
             : ''}
           ${a.load_ship_date
             ? `<span class="ld-card-shipday" style="font-weight:700;color:var(--text-muted);margin-left:6px;font-size:11px;">🗓️ ${esc(new Date(a.load_ship_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }))}</span>`
             : ''}
         </strong>
-        <span class="ld-status-badge" style="color:${sc.border};">${sc.label}</span>
+        <span class="ld-status-badge" style="color:${sc.border};">${esc(sc.label)}</span>
       </div>
-      <div class="ld-card-subtext" title="${escAttr(a.customer || 'Unknown')}">
-        ${esc(truncate(a.customer || 'Unknown', 20))}
+      <div class="ld-card-subtext" title="${escAttr(a.customer || t('logistics.loadingUnknownCustomer'))}">
+        ${esc(truncate(a.customer || t('logistics.loadingUnknownCustomer'), 20))}
       </div>
       <div class="ld-card-meta">
         ${trailerHtml}
@@ -652,28 +666,28 @@ function renderAssignmentCard(a, showAssignBtn, showArchiveBtn) {
       </div>
       <div class="ld-card-actions">
         ${a.loading_status === 'awaiting' && isManager
-          ? `<button class="ld-btn-assign" onclick="openAssignBayModal('${a.id}')">Assign Bay</button>`
+          ? `<button class="ld-btn-assign" onclick="openAssignBayModal('${a.id}')">${esc(t('logistics.loadingAssignBayBtn'))}</button>`
           : ''}
         ${next && a.loading_status !== 'awaiting' && (next !== 'in_transit' || isManager)
-          ? `<button class="ld-btn-advance" onclick="advanceStatus('${a.id}', '${next}')">${getAdvanceLabel(next)}</button>`
+          ? `<button class="ld-btn-advance" onclick="advanceStatus('${a.id}', '${next}')">${esc(getAdvanceLabel(next))}</button>`
           : ''}
         ${a.loading_status !== 'awaiting'
-          ? `<button class="ld-btn-bol" ${(a.bol_count > 0) ? `onclick="viewBolForJob('${a.job_id}', ${a.load_number ?? 'null'})"` : 'disabled title="No BOL generated"'}>View BOL</button>`
+          ? `<button class="ld-btn-bol" ${(a.bol_count > 0) ? `onclick="viewBolForJob('${a.job_id}', ${a.load_number ?? 'null'})"` : `disabled title="${escAttr(t('logistics.loadingNoBolGenerated'))}"`}>${esc(t('logistics.viewBol'))}</button>`
           : ''}
-        <button class="ld-btn-photos" ${(a.photo_count > 0) ? `onclick="photoGallery.openLightbox({ jobId: '${a.job_id}' })"` : 'disabled title="No photos attached"'}>📷 Photos</button>
+        <button class="ld-btn-photos" ${(a.photo_count > 0) ? `onclick="photoGallery.openLightbox({ jobId: '${a.job_id}' })"` : `disabled title="${escAttr(t('logistics.loadingNoPhotosAttached'))}"`}>${esc(t('logistics.loadingPhotosBtn'))}</button>
         ${isManager && a.bay_id && ['not_started','loading','loaded'].includes(a.loading_status)
-          ? `<button class="ld-btn-yard" onclick="moveToYard('${a.id}')">Move to Yard</button>`
+          ? `<button class="ld-btn-yard" onclick="moveToYard('${a.id}')">${esc(t('logistics.loadingMoveToYard'))}</button>`
           : ''}
         ${isManager && a.loading_status === 'in_transit'
-          ? `<button class="ld-btn-yard" onclick="revertToBay('${a.id}')">Move back to bay</button>`
+          ? `<button class="ld-btn-yard" onclick="revertToBay('${a.id}')">${esc(t('logistics.loadingMoveBackToBay'))}</button>`
           : ''}
         ${isManager && a.location === 'yard' && !['in_transit','delivered','archived'].includes(a.loading_status)
-          ? `<button class="ld-btn-yard" onclick="revertYardToBay('${a.id}')">Move back to bay</button>`
+          ? `<button class="ld-btn-yard" onclick="revertYardToBay('${a.id}')">${esc(t('logistics.loadingMoveBackToBay'))}</button>`
           : ''}
         ${isManager && a.loading_status === 'delivered'
-          ? `<button class="ld-btn-yard" onclick="sendBackToQueue('${a.id}')">Send back to queue</button>`
+          ? `<button class="ld-btn-yard" onclick="sendBackToQueue('${a.id}')">${esc(t('logistics.loadingSendBackToQueue'))}</button>`
           : ''}
-        ${showArchiveBtn ? `<button class="ld-btn-archive" onclick="archiveAssignment('${a.id}')">Archive</button>` : ''}
+        ${showArchiveBtn ? `<button class="ld-btn-archive" onclick="archiveAssignment('${a.id}')">${esc(t('logistics.loadingArchive'))}</button>` : ''}
       </div>
     </div>
   `;
@@ -686,14 +700,14 @@ function getNextLoadingStatus(current) {
 }
 
 function getAdvanceLabel(nextStatus) {
-  const labels = {
-    not_started: 'Assign to Bay',
-    loading: 'Start Loading',
-    loaded: 'Mark Loaded',
-    in_transit: 'Mark In Transit',
-    delivered: 'Mark Delivered',
+  const keys = {
+    not_started: 'loadingAdvanceAssignToBay',
+    loading: 'loadingAdvanceStartLoading',
+    loaded: 'loadingAdvanceMarkLoaded',
+    in_transit: 'loadingAdvanceMarkInTransit',
+    delivered: 'loadingAdvanceMarkDelivered',
   };
-  return labels[nextStatus] || 'Advance';
+  return t('logistics.' + (keys[nextStatus] || 'loadingAdvanceGeneric'));
 }
 
 async function advanceStatus(assignmentId, newStatus) {
@@ -707,7 +721,7 @@ async function advanceStatus(assignmentId, newStatus) {
     if (ok) {
       loadDashboard();
     } else {
-      alert(data?.error || 'Failed to update status');
+      alert(data?.error || t('logistics.loadingFailedUpdateStatus'));
     }
   } catch (e) {
     console.error('Status advance failed:', e);
@@ -720,7 +734,7 @@ async function moveToYard(assignmentId) {
     if (ok) {
       loadDashboard();
     } else {
-      alert(data?.error || 'Failed to move to yard');
+      alert(data?.error || t('logistics.loadingFailedMoveToYard'));
     }
   } catch (e) {
     console.error('Move to yard failed:', e);
@@ -728,7 +742,7 @@ async function moveToYard(assignmentId) {
 }
 
 async function revertYardToBay(assignmentId) {
-  if (!confirm('Move this trailer back to a bay? It returns to the awaiting queue for bay re-assignment.')) return;
+  if (!confirm(t('logistics.loadingConfirmRevertYard'))) return;
   try {
     const { ok, data } = await api.put('/api/loading-assignments', {
       id: assignmentId, location: 'bay', bay_id: null, loading_status: 'awaiting'
@@ -736,7 +750,7 @@ async function revertYardToBay(assignmentId) {
     if (ok) {
       loadDashboard();
     } else {
-      alert((data && data.error) || 'Failed to move back to bay.');
+      alert((data && data.error) || t('logistics.loadingFailedRevertBay'));
     }
   } catch (e) {
     console.error('Revert yard to bay failed:', e);
@@ -744,7 +758,7 @@ async function revertYardToBay(assignmentId) {
 }
 
 async function sendBackToQueue(assignmentId) {
-  if (!confirm('Send this order back to the loading queue? This undoes "Delivered", clears the bay, and marks it unshipped.')) return;
+  if (!confirm(t('logistics.loadingConfirmSendBackQueue'))) return;
   try {
     const { ok, data } = await api.put('/api/loading-assignments', {
       id: assignmentId, location: 'bay', bay_id: null, loading_status: 'awaiting'
@@ -752,7 +766,7 @@ async function sendBackToQueue(assignmentId) {
     if (ok) {
       loadDashboard();
     } else {
-      alert((data && data.error) || 'Failed to send back to queue.');
+      alert((data && data.error) || t('logistics.loadingFailedSendBackQueue'));
     }
   } catch (e) {
     console.error('Send back to queue failed:', e);
@@ -760,13 +774,13 @@ async function sendBackToQueue(assignmentId) {
 }
 
 async function revertToBay(assignmentId) {
-  if (!confirm('Move this trailer back to a bay? This undoes "In Transit".')) return;
+  if (!confirm(t('logistics.loadingConfirmRevertTransit'))) return;
   try {
     const { ok, data } = await api.put('/api/loading-assignments', { id: assignmentId, loading_status: 'loaded', location: 'bay' });
     if (ok) {
       loadDashboard();
     } else {
-      alert((data && data.error) || 'Failed to move back to bay.');
+      alert((data && data.error) || t('logistics.loadingFailedRevertBay'));
     }
   } catch (e) {
     console.error('Revert to bay failed:', e);
@@ -783,7 +797,7 @@ async function updateAssignmentTrailer(assignmentId, trailerNumber) {
     const a = allAssignments.find(x => String(x.id) === String(assignmentId));
     if (a) a.trailer_number = trimmed;
   } else {
-    alert(data?.error || 'Failed to update trailer #');
+    alert(data?.error || t('logistics.loadingFailedUpdateTrailer'));
     loadDashboard();
   }
 }
@@ -792,7 +806,7 @@ async function archiveAssignment(assignmentId) {
   await advanceStatus(assignmentId, 'archived');
   const toast = document.createElement('div');
   toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:10000;';
-  toast.innerHTML = '<span style="color:#34d399;">✓</span> Archived';
+  toast.innerHTML = `<span style="color:#34d399;">✓</span> ${esc(t('logistics.loadingArchivedToast'))}`;
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 3000);
 }
@@ -803,7 +817,7 @@ function openAssignBayModal(assignmentId) {
   assignBayTargetId = assignmentId;
   const sel = document.getElementById('assign-bay-select');
   sel.innerHTML = allBays.map(b =>
-    `<option value="${b.id}">Bay ${b.bay_number}</option>`
+    `<option value="${b.id}">${esc(t('logistics.bayLabel', { n: b.bay_number }))}</option>`
   ).join('');
   document.getElementById('assign-bay-modal').hidden = false;
 }
@@ -816,7 +830,7 @@ function closeAssignBayModal() {
 async function confirmAssignBay() {
   if (!assignBayTargetId) return;
   const bayId = document.getElementById('assign-bay-select').value;
-  if (!bayId) { alert('Select a bay'); return; }
+  if (!bayId) { alert(t('logistics.loadingSelectBayAlert')); return; }
 
   try {
     const { ok, data } = await api.put('/api/loading-assignments', { id: assignBayTargetId, bay_id: bayId, loading_status: 'not_started' });
@@ -824,7 +838,7 @@ async function confirmAssignBay() {
       closeAssignBayModal();
       loadDashboard();
     } else {
-      alert(data?.error || 'Failed to assign bay');
+      alert(data?.error || t('logistics.failedAssignBay'));
     }
   } catch (e) {
     console.error('Assign bay failed:', e);
@@ -850,7 +864,7 @@ async function onBayDrop(event, bayId) {
     if (ok) {
       loadDashboard();
     } else {
-      alert(data?.error || 'Failed to assign bay');
+      alert(data?.error || t('logistics.failedAssignBay'));
     }
   } catch (e) {
     console.error('Drop assign failed:', e);
@@ -867,7 +881,7 @@ async function onQueueDrop(event) {
     if (ok) {
       loadDashboard();
     } else {
-      alert(data?.error || 'Failed to move to queue');
+      alert(data?.error || t('logistics.loadingFailedMoveToQueue'));
     }
   } catch (e) {
     console.error('Queue drop failed:', e);
@@ -978,8 +992,8 @@ async function openPullJobModal() {
   // selectedBayId alone, since backToBayList() leaves selectedBayId stale.
   const inBayView = document.getElementById('ld-bay-view').style.display !== 'none';
   const defaultBayId = inBayView ? selectedBayId : '';
-  baySelect.innerHTML = '<option value="">Awaiting Queue (no bay)</option>' +
-    allBays.map(b => `<option value="${b.id}" ${b.id === defaultBayId ? 'selected' : ''}>Bay ${b.bay_number}</option>`).join('');
+  baySelect.innerHTML = `<option value="">${esc(t('logistics.loadingAwaitingQueueOption'))}</option>` +
+    allBays.map(b => `<option value="${b.id}" ${b.id === defaultBayId ? 'selected' : ''}>${esc(t('logistics.bayLabel', { n: b.bay_number }))}</option>`).join('');
 }
 
 function closePullJobModal() {
@@ -1000,8 +1014,8 @@ async function searchJobsForPull(query) {
   // which is intentionally hidden from the board) falls back to a single job-level
   // row = prior auto-pick behavior.
   const html = pullJobSearchResults.map(j => {
-    const meta = `${j.invoice_number ? 'INV# ' + esc(j.invoice_number) : ''}` +
-      `${j.po_number ? ' | PO: ' + esc(j.po_number) : ''}`;
+    const meta = `${j.invoice_number ? esc(t('logistics.invHash')) + ' ' + esc(j.invoice_number) : ''}` +
+      `${j.po_number ? ' | ' + esc(t('logistics.poColonLabel')) + ' ' + esc(j.po_number) : ''}`;
 
     const loads = allAssignments
       .filter(a => String(a.job_id) === String(j.id))
@@ -1011,7 +1025,7 @@ async function searchJobsForPull(query) {
       const sel = pullJobSelectedId === j.id ? 'selected' : '';
       return `
         <div class="ld-job-result ${sel}" data-kind="job" data-job-id="${escAttr(j.id)}" onclick="selectPullRow(this)">
-          <strong>${esc(j.customer || 'Unknown')}</strong>
+          <strong>${esc(j.customer || t('logistics.loadingUnknownCustomer'))}</strong>
           <span style="font-size:12px;color:#6b7280;">${meta}${j.status ? ' | ' + esc(j.status.replace('_', ' ')) : ''}</span>
         </div>`;
     }
@@ -1020,14 +1034,14 @@ async function searchJobsForPull(query) {
     return loads.map(a => {
       const sel = pullJobSelectedAssignmentId === a.id ? 'selected' : '';
       const badge = loadCount > 1
-        ? `<span style="font-weight:700;color:#6366f1;margin-left:6px;font-size:11px;">Load ${a.load_number || 1} of ${a.load_count || loadCount}</span>`
+        ? `<span style="font-weight:700;color:#6366f1;margin-left:6px;font-size:11px;">${esc(t('logistics.loadingLoadOfShort', { n: a.load_number || 1, count: a.load_count || loadCount }))}</span>`
         : '';
       const placement = (a.bay_id && a.bay_number != null)
-        ? `On Bay ${esc(a.bay_number)} · ${esc((a.loading_status || '').replace('_', ' '))}`
-        : 'Awaiting';
+        ? esc(t('logistics.loadingOnBay', { n: a.bay_number, status: (a.loading_status || '').replace('_', ' ') }))
+        : esc(t('logistics.loadingAwaitingShort'));
       return `
         <div class="ld-job-result ${sel}" data-kind="load" data-assignment-id="${escAttr(a.id)}" onclick="selectPullRow(this)">
-          <strong>${esc(j.customer || 'Unknown')}${badge}</strong>
+          <strong>${esc(j.customer || t('logistics.loadingUnknownCustomer'))}${badge}</strong>
           <span style="font-size:12px;color:#6b7280;">${meta} | ${placement}</span>
         </div>`;
     }).join('');
@@ -1057,7 +1071,7 @@ async function confirmPullJob() {
   if (existingAssignmentId) {
     const { ok, data } = await api.put('/api/loading-assignments', { id: existingAssignmentId, bay_id: bayId, loading_status: 'not_started' });
     if (ok) { closePullJobModal(); loadDashboard(); }
-    else alert(data?.error || 'Failed to assign bay');
+    else alert(data?.error || t('logistics.failedAssignBay'));
     return;
   }
 
@@ -1065,13 +1079,13 @@ async function confirmPullJob() {
   if (pullJobSelectedAssignmentId) {
     const { ok, data } = await api.put('/api/loading-assignments', { id: pullJobSelectedAssignmentId, bay_id: bayId, loading_status: 'not_started' });
     if (ok) { closePullJobModal(); loadDashboard(); }
-    else alert(data?.error || 'Failed to assign load');
+    else alert(data?.error || t('logistics.loadingFailedAssignLoad'));
     return;
   }
 
   // Fallback: job-level pull (backend auto-picks the next awaiting load) for jobs
   // with no in-memory per-load assignments.
-  if (!pullJobSelectedId) { alert('Select a load first'); return; }
+  if (!pullJobSelectedId) { alert(t('logistics.loadingSelectLoadFirst')); return; }
 
   const { ok, data } = await api.post('/api/loading-assignments', { job_id: pullJobSelectedId, bay_id: bayId });
 
@@ -1079,7 +1093,7 @@ async function confirmPullJob() {
     closePullJobModal();
     loadDashboard();
   } else {
-    alert(data?.error || 'Failed to pull job');
+    alert(data?.error || t('logistics.loadingFailedPullJob'));
   }
 }
 
@@ -1169,7 +1183,7 @@ async function viewBolForJob(jobId, loadNumber) {
     const { ok, data } = await api.get('/api/bols?job_id=' + encodeURIComponent(jobId));
 
     if (!ok || !data?.bols || data.bols.length === 0) {
-      alert('No BOL found for this job. Generate a BOL first from the BOL Generator or Load Builder.');
+      alert(t('logistics.loadingNoBolForJob'));
       return;
     }
 
@@ -1178,7 +1192,7 @@ async function viewBolForJob(jobId, loadNumber) {
     let bol = data.bols.find(b => loadNumber != null && b.load_number === loadNumber);
     if (!bol && data.bols.length === 1) bol = data.bols[0];
     if (!bol) {
-      alert('No BOL found for this load. Generate its BOL from the Load Builder.');
+      alert(t('logistics.loadingNoBolForLoad'));
       return;
     }
     const result = await BolShared.generatePdf([bol], { previewOnly: true });
@@ -1193,7 +1207,7 @@ async function viewBolForJob(jobId, loadNumber) {
     document.getElementById('ld-bol-view-modal').hidden = false;
   } catch (e) {
     console.error('Failed to load BOL:', e);
-    alert('Failed to load BOL. Please try again.');
+    alert(t('logistics.failedLoadBol'));
   }
 }
 
@@ -1258,7 +1272,7 @@ async function openShippingInfo(assignmentId) {
 
   const modal = document.getElementById('ld-shipping-info-modal');
   const body = document.getElementById('ld-shipping-info-body');
-  body.innerHTML = '<div style="color:#6b7280;">Loading…</div>';
+  body.innerHTML = `<div style="color:#6b7280;">${esc(t('logistics.loadingEllipsis'))}</div>`;
   modal.hidden = false;
 
   let job;
@@ -1268,7 +1282,7 @@ async function openShippingInfo(assignmentId) {
     const { ok, data, error } = await api.get('/api/jobs/' + encodeURIComponent(a.job_id));
     if (!ok || !data?.job) {
       console.error('Failed to fetch shipping info:', error);
-      body.innerHTML = '<div style="color:#b91c1c;">Could not load shipping information.</div>';
+      body.innerHTML = `<div style="color:#b91c1c;">${esc(t('logistics.loadingCouldNotLoadShippingInfo'))}</div>`;
       return;
     }
     job = data.job;
@@ -1297,25 +1311,25 @@ function populateShippingInfo(job, a) {
 
   document.getElementById('ld-shipping-info-body').innerHTML = `
     <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:10px;">
-      INV# ${esc(a.invoice_number || job.invoice_number || '—')}
-      ${(a.load_count || 1) > 1 ? `<span style="font-weight:700;color:#6366f1;margin-left:8px;font-size:12px;">Load ${a.load_number || 1} of ${a.load_count}</span>` : ''}
+      ${esc(t('logistics.invHash'))} ${esc(a.invoice_number || job.invoice_number || '—')}
+      ${(a.load_count || 1) > 1 ? `<span style="font-weight:700;color:#6366f1;margin-left:8px;font-size:12px;">${esc(t('logistics.loadingLoadOfShort', { n: a.load_number || 1, count: a.load_count }))}</span>` : ''}
     </div>
-    ${row('Customer', job.customer)}
-    ${row('Ship To', job.ship_to_company)}
-    ${row('Attention', job.ship_to_attention)}
-    ${row('Address', streetLine)}
+    ${row(t('logistics.fieldCustomer'), job.customer)}
+    ${row(t('logistics.fieldShipTo'), job.ship_to_company)}
+    ${row(t('logistics.fieldAttention'), job.ship_to_attention)}
+    ${row(t('logistics.fieldStreet'), streetLine)}
     ${row('', cityStateZip)}
-    ${row('Contact', job.ship_to_contact_name)}
-    ${row('Phone', job.ship_to_phone)}
-    ${row('Email', job.ship_to_email)}
-    ${row('PO #', job.po_number)}
-    ${row('Ship Date', job.ship_date)}
-    ${row('Delivery Time', job.delivery_time)}
-    ${row('Carrier', job.carrier)}
-    ${row('Method', job.method)}
-    ${row('Loading Started', fmtTs(a.started_at))}
-    ${row('Loading Completed', fmtTs(a.loaded_at))}
-    ${row('Notes', job.notes)}
+    ${row(t('logistics.sectionContact'), job.ship_to_contact_name)}
+    ${row(t('logistics.fieldPhone'), job.ship_to_phone)}
+    ${row(t('logistics.fieldEmail'), job.ship_to_email)}
+    ${row(t('logistics.fieldPoShort'), job.po_number)}
+    ${row(t('logistics.fieldShipDate'), job.ship_date)}
+    ${row(t('logistics.fieldDeliveryTime'), job.delivery_time)}
+    ${row(t('logistics.fieldCarrier'), job.carrier)}
+    ${row(t('logistics.fieldMethod'), job.method)}
+    ${row(t('logistics.fieldLoadingStarted'), fmtTs(a.started_at))}
+    ${row(t('logistics.fieldLoadingCompleted'), fmtTs(a.loaded_at))}
+    ${row(t('logistics.fieldNotes'), job.notes)}
   `;
 }
 
@@ -1431,8 +1445,8 @@ async function confirmLoadedChecklist() {
   const qtyVerified = document.getElementById('chk-qty-verified').checked;
   const paperworkSecured = document.getElementById('chk-paperwork-secured').checked;
 
-  if (!qtyVerified) { alert('Please confirm all quantities have been counted and verified.'); return; }
-  if (!paperworkSecured) { alert('Please confirm the paperwork was secured inside the trailer.'); return; }
+  if (!qtyVerified) { alert(t('logistics.checklistAlertQty')); return; }
+  if (!paperworkSecured) { alert(t('logistics.checklistAlertPaperwork')); return; }
 
   const changesIssues = document.getElementById('chk-changes-issues').checked;
   const changesNotes = changesIssues ? document.getElementById('changes-notes').value.trim() : '';
@@ -1447,7 +1461,7 @@ async function confirmLoadedChecklist() {
 
   const btn = document.getElementById('btn-confirm-loaded');
   btn.disabled = true;
-  btn.textContent = 'Saving…';
+  btn.textContent = t('logistics.saving');
 
   try {
     const { ok, data } = await api.put('/api/loading-assignments', {
@@ -1456,7 +1470,7 @@ async function confirmLoadedChecklist() {
       ready_checklist: JSON.stringify(checklist),
     });
     if (!ok) {
-      alert(data?.error || 'Failed to mark as loaded');
+      alert(data?.error || t('logistics.checklistFailedMarkLoaded'));
       return;
     }
 
@@ -1484,16 +1498,16 @@ async function confirmLoadedChecklist() {
 
     const toast = document.createElement('div');
     toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:10000;';
-    toast.innerHTML = '<span style="color:#34d399;">&#x2713;</span> Marked as loaded';
+    toast.innerHTML = `<span style="color:#34d399;">&#x2713;</span> ${esc(t('logistics.checklistMarkedLoadedToast'))}`;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
 
   } catch (e) {
     console.error('Loaded checklist submission failed:', e);
-    alert('Failed to submit checklist. Please try again.');
+    alert(t('logistics.checklistFailedSubmit'));
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Confirm & Mark Loaded';
+    btn.textContent = t('logistics.checklistConfirmMarkLoaded');
   }
 }
 </script>
@@ -1502,38 +1516,38 @@ async function confirmLoadedChecklist() {
 <div id="loaded-checklist-modal" class="ld-modal-backdrop" hidden>
   <div class="ld-modal-card" style="max-width:500px;">
     <div class="ld-modal-header">
-      <h3>Loading Completion Checklist</h3>
+      <h3 data-i18n="logistics.checklistModalTitle">Loading Completion Checklist</h3>
       <button onclick="closeLoadedChecklist()" class="ld-modal-close">&#x2715;</button>
     </div>
     <div class="ld-modal-body">
-      <p style="font-size:13px;color:var(--text-muted);margin:0 0 16px;">
+      <p style="font-size:13px;color:var(--text-muted);margin:0 0 16px;" data-i18n="logistics.checklistIntro">
         Confirm the following before marking this load as complete.
       </p>
 
       <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;cursor:pointer;font-size:14px;color:var(--text);">
         <input type="checkbox" id="chk-qty-verified" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;">
-        Have all quantities been counted and verified?
+        <span data-i18n="logistics.checklistQtyQuestion">Have all quantities been counted and verified?</span>
       </label>
 
       <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;cursor:pointer;font-size:14px;color:var(--text);">
         <input type="checkbox" id="chk-changes-issues" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;" onchange="document.getElementById('changes-notes-row').style.display = this.checked ? '' : 'none';">
-        Were there any changes or issues?
+        <span data-i18n="logistics.checklistChangesQuestion">Were there any changes or issues?</span>
       </label>
       <div id="changes-notes-row" style="display:none;margin:0 0 16px 28px;">
-        <textarea id="changes-notes" rows="3" placeholder="Describe changes or issues&#8230;"
+        <textarea id="changes-notes" rows="3" placeholder="Describe changes or issues&#8230;" data-i18n-placeholder="logistics.checklistChangesPlaceholder"
           style="width:100%;padding:8px 12px;border:1px solid var(--input-border);border-radius:8px;font-size:14px;box-sizing:border-box;resize:vertical;"></textarea>
       </div>
 
       <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:20px;cursor:pointer;font-size:14px;color:var(--text);">
         <input type="checkbox" id="chk-paperwork-secured" style="margin-top:3px;width:18px;height:18px;flex-shrink:0;">
-        Was the paperwork secured inside the trailer?
+        <span data-i18n="logistics.checklistPaperworkQuestion">Was the paperwork secured inside the trailer?</span>
       </label>
 
       <div style="border-top:1px solid var(--line);padding-top:16px;">
-        <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px;">Photos (optional)</div>
+        <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px;" data-i18n="logistics.checklistPhotosOptional">Photos (optional)</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-          <button type="button" onclick="captureLoadingPhoto()" class="ld-btn-advance" style="font-size:13px;">&#x1F4F7; Take Photo</button>
-          <button type="button" onclick="uploadLoadingPhoto()" class="ld-btn-assign" style="font-size:13px;">&#x1F4C1; Upload from Library</button>
+          <button type="button" onclick="captureLoadingPhoto()" class="ld-btn-advance" style="font-size:13px;" data-i18n="logistics.checklistTakePhoto">&#x1F4F7; Take Photo</button>
+          <button type="button" onclick="uploadLoadingPhoto()" class="ld-btn-assign" style="font-size:13px;" data-i18n="logistics.checklistUploadPhoto">&#x1F4C1; Upload from Library</button>
         </div>
         <input type="file" id="loading-photo-capture" accept="image/*" capture="environment" style="display:none;" onchange="handleLoadingPhotoSelected(this)">
         <input type="file" id="loading-photo-upload" accept="image/*" style="display:none;" onchange="handleLoadingPhotoSelected(this)" multiple>
@@ -1541,8 +1555,8 @@ async function confirmLoadedChecklist() {
       </div>
     </div>
     <div class="ld-modal-footer">
-      <button onclick="closeLoadedChecklist()" class="ld-btn-cancel">Cancel</button>
-      <button id="btn-confirm-loaded" onclick="confirmLoadedChecklist()" class="ld-btn-confirm">Confirm &amp; Mark Loaded</button>
+      <button onclick="closeLoadedChecklist()" class="ld-btn-cancel" data-i18n="logistics.cancel">Cancel</button>
+      <button id="btn-confirm-loaded" onclick="confirmLoadedChecklist()" class="ld-btn-confirm" data-i18n="logistics.checklistConfirmMarkLoaded">Confirm &amp; Mark Loaded</button>
     </div>
   </div>
 </div>

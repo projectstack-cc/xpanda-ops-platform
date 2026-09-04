@@ -241,7 +241,9 @@
       qcTitle: 'QC Dashboard',
       qcSubtitle: 'Select a quality workflow to begin',
       qcBackLink: '← Back to Dashboard',
-      reportsSubtitle: 'Select a reporting workflow to begin'
+      reportsSubtitle: 'Select a reporting workflow to begin',
+      bolEmailTitle: 'BOL Email Queue',
+      bolEmailSubtitle: "Next shipping day's Lisma shipments"
     },
     es: {
       jobsTitle: 'Tablero de Trabajos',
@@ -258,7 +260,9 @@
       qcTitle: 'Panel de QC',
       qcSubtitle: 'Seleccione un flujo de calidad para comenzar',
       qcBackLink: '← Volver al Panel',
-      reportsSubtitle: 'Seleccione un flujo de informes para comenzar'
+      reportsSubtitle: 'Seleccione un flujo de informes para comenzar',
+      bolEmailTitle: 'Cola de Correo BOL',
+      bolEmailSubtitle: 'Envíos Lisma del próximo día de envío'
     },
     ht: {
       jobsTitle: 'Tablo Travay',
@@ -275,7 +279,9 @@
       qcTitle: 'Tablodbò QC',
       qcSubtitle: 'Chwazi yon pwosesis kalite pou kòmanse',
       qcBackLink: '← Retounen nan Tablodbò',
-      reportsSubtitle: 'Chwazi yon pwosesis rapò pou kòmanse'
+      reportsSubtitle: 'Chwazi yon pwosesis rapò pou kòmanse',
+      bolEmailTitle: 'Fil Atant Imèl BOL',
+      bolEmailSubtitle: 'Ekspedisyon Lisma pou pwochen jou ekspedisyon an'
     }
   });
 })();

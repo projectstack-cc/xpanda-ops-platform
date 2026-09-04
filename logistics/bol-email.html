@@ -346,8 +346,11 @@
 
 <script src="/logistics/logistics-header.js"></script>
 <script>
-document.getElementById('logistics-page-title').textContent = 'BOL Email Queue';
-document.getElementById('logistics-page-subtitle').textContent = "Next shipping day's Lisma shipments";
+(function () {
+  function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+  document.getElementById('logistics-page-title').textContent = tt('layout.bolEmailTitle', 'BOL Email Queue');
+  document.getElementById('logistics-page-subtitle').textContent = tt('layout.bolEmailSubtitle', "Next shipping day's Lisma shipments");
+})();
 </script>
 
 <div class="bol-email-wrap">
@@ -356,25 +359,25 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
   <div class="bol-email-columns">
     <div class="bol-email-col-main">
       <div class="bol-email-toolbar">
-        <input type="text" id="bol-email-search-input" placeholder="Add a BOL manually — search by customer or BOL #…" autocomplete="off">
+        <input type="text" id="bol-email-search-input" placeholder="Add a BOL manually — search by customer or BOL #…" data-i18n-placeholder="logistics.bolEmailSearchPlaceholder" autocomplete="off">
       </div>
       <div class="bol-email-search-results" id="bol-email-search-results"></div>
 
       <div class="bol-email-list" id="bol-email-list">
-        <div class="bol-email-empty" id="bol-email-empty">Loading…</div>
+        <div class="bol-email-empty" id="bol-email-empty" data-i18n="logistics.loadingEllipsis">Loading…</div>
       </div>
 
       <div class="bol-email-send-bar">
         <span class="bol-email-sendinfo" id="bol-email-sendinfo"></span>
-        <button class="logistics-btn logistics-btn-primary" id="bol-email-send-btn" onclick="sendNow()" disabled>Send</button>
+        <button class="logistics-btn logistics-btn-primary" id="bol-email-send-btn" onclick="sendNow()" disabled data-i18n="logistics.bolEmailSend">Send</button>
       </div>
     </div>
 
     <div class="bol-email-col-side">
       <div class="bol-email-panel">
         <div class="bol-email-panel-header">
-          <h3>Recipients</h3>
-          <button class="bol-email-small-btn" id="bol-email-edit-toggle" onclick="toggleRecipientEdit()">Edit</button>
+          <h3 data-i18n="logistics.bolEmailRecipients">Recipients</h3>
+          <button class="bol-email-small-btn" id="bol-email-edit-toggle" onclick="toggleRecipientEdit()" data-i18n="logistics.edit">Edit</button>
         </div>
         <div class="bol-email-recipients-list" id="bol-email-recipients"></div>
       </div>
@@ -382,12 +385,12 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
   </div>
 
   <details class="bol-email-holidays">
-    <summary>Plant closures (skipped when picking the ship day)</summary>
+    <summary data-i18n="logistics.bolEmailPlantClosures">Plant closures (skipped when picking the ship day)</summary>
     <div id="bol-email-holidays-list"></div>
     <div class="bol-email-add-holiday">
       <input type="date" id="bol-email-holiday-date">
-      <input type="text" id="bol-email-holiday-label" placeholder="Label (e.g. Thanksgiving)">
-      <button class="bol-email-small-btn" onclick="submitAddHoliday()">Add</button>
+      <input type="text" id="bol-email-holiday-label" placeholder="Label (e.g. Thanksgiving)" data-i18n-placeholder="logistics.bolEmailHolidayLabelPlaceholder">
+      <button class="bol-email-small-btn" onclick="submitAddHoliday()" data-i18n="logistics.bolEmailAddBtn">Add</button>
     </div>
   </details>
 </div>
@@ -412,6 +415,10 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
+  function t(key, vars) {
+    return window.I18n ? window.I18n.t(key, vars) : key;
+  }
+
   function fieldOr(v) {
     return (v === null || v === undefined || v === '') ? '—' : esc(v);
   }
@@ -426,7 +433,10 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
     const load = fieldOr(record.load_number);
     const trailer = fieldOr(record.trailer_number);
     const bay = fieldOr(record.bay_number || record.bay_label);
-    return `${customer} <span class="muted">·</span> ${invBol} <span class="muted">· Load ${load} · Trailer ${trailer} · Bay ${bay}</span>`;
+    // load/trailer/bay are already HTML-escaped by fieldOr() above; the translation
+    // template itself is plain text, so no further escaping here (would double-escape).
+    const suffix = t('logistics.bolEmailLoadTrailerBay', { load, trailer, bay });
+    return `${customer} <span class="muted">·</span> ${invBol} <span class="muted">· ${suffix}</span>`;
   }
 
   function renderList() {
@@ -445,8 +455,8 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
       row.className = 'bol-email-row';
       row.innerHTML = `
         <input type="checkbox" data-id="${esc(id)}" ${entry.checked ? 'checked' : ''}>
-        <div class="bol-email-row-label bol-email-row-view" data-view="${esc(id)}" title="Click to preview this BOL">${labelFor(entry.record)}${entry.nonLisma ? '<span class="bol-email-badge-warn">Not Lisma</span>' : ''}</div>
-        <button class="bol-email-remove-btn" data-remove="${esc(id)}" title="Remove">×</button>
+        <div class="bol-email-row-label bol-email-row-view" data-view="${esc(id)}" title="${esc(t('logistics.bolEmailClickToPreview'))}">${labelFor(entry.record)}${entry.nonLisma ? `<span class="bol-email-badge-warn">${esc(t('logistics.bolEmailNotLisma'))}</span>` : ''}</div>
+        <button class="bol-email-remove-btn" data-remove="${esc(id)}" title="${esc(t('logistics.bolEmailRemoveTitle'))}">×</button>
       `;
       listEl.appendChild(row);
     }
@@ -475,7 +485,7 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
     const div = document.createElement('div');
     div.className = 'bol-email-empty';
     div.id = 'bol-email-empty';
-    div.textContent = `No Lisma BOLs found for the next shipping day (${shipDate || '—'}).`;
+    div.textContent = t('logistics.bolEmailNoBolsFound', { date: shipDate || '—' });
     return div;
   }
 
@@ -485,7 +495,7 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
     const bolCount = [...rows.values()].filter(e => e.checked).length;
     const recCount = checkedRecipientIds.size;
     if (info) {
-      info.textContent = `Shipping ${shipDate || '—'} · ${bolCount} BOL${bolCount === 1 ? '' : 's'} · ${recCount} recipient${recCount === 1 ? '' : 's'}`;
+      info.textContent = t('logistics.bolEmailShippingSummary', { date: shipDate || '—', bolCount, recCount });
     }
     if (sendBtn) sendBtn.disabled = bolCount === 0 || recCount === 0;
   }
@@ -495,12 +505,12 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
     if (!ok) {
       document.getElementById('bol-email-list').innerHTML = '';
       document.getElementById('bol-email-list').appendChild(Object.assign(document.createElement('div'), {
-        className: 'bol-email-empty', textContent: 'Failed to load candidates: ' + (error || 'unknown error'),
+        className: 'bol-email-empty', textContent: t('logistics.bolEmailFailedLoadCandidates', { error: error || t('common.unknownError') }),
       }));
       return;
     }
     shipDate = data.ship_date || '';
-    document.getElementById('bol-email-intro').textContent = `BOL Email Queue — Lisma shipments for ${shipDate}`;
+    document.getElementById('bol-email-intro').textContent = t('logistics.bolEmailIntroWithDate', { date: shipDate });
     rows.clear();
     for (const record of (data.candidates || [])) {
       rows.set(record.id, { record, checked: true, nonLisma: isNonLisma(record) });
@@ -533,7 +543,7 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
     }
     const results = data.bols.slice(0, 20);
     if (results.length === 0) {
-      searchResults.innerHTML = '<div class="bol-email-search-row">No matches.</div>';
+      searchResults.innerHTML = `<div class="bol-email-search-row">${esc(t('logistics.bolEmailNoMatches'))}</div>`;
       searchResults.classList.add('open');
       return;
     }
@@ -572,11 +582,11 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
         const editRow = document.createElement('div');
         editRow.className = 'bol-email-recipient-edit-row';
         editRow.innerHTML = `
-          <input type="text" id="bol-email-edit-name-${r.id}" value="${esc(r.name)}" placeholder="Name">
-          <input type="email" id="bol-email-edit-email-${r.id}" value="${esc(r.email)}" placeholder="email@example.com">
+          <input type="text" id="bol-email-edit-name-${r.id}" value="${esc(r.name)}" placeholder="${esc(t('logistics.bolEmailNamePlaceholder'))}">
+          <input type="email" id="bol-email-edit-email-${r.id}" value="${esc(r.email)}" placeholder="${esc(t('logistics.bolEmailEmailPlaceholder'))}">
           <div class="bol-email-edit-actions">
-            <button class="bol-email-small-btn" data-save-rid="${r.id}">Save</button>
-            <button class="bol-email-small-btn" data-cancel-edit-rid>Cancel</button>
+            <button class="bol-email-small-btn" data-save-rid="${r.id}">${esc(t('logistics.save'))}</button>
+            <button class="bol-email-small-btn" data-cancel-edit-rid>${esc(t('logistics.cancel'))}</button>
           </div>
         `;
         el.appendChild(editRow);
@@ -593,8 +603,8 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
           <span>${displayName}${esc(r.email)}</span>
         </label>
         ${editMode ? `<div class="bol-email-recipient-actions">
-          <button data-edit-rid="${r.id}" title="Edit">&#9998;</button>
-          <button data-remove-rid="${r.id}" title="Remove">&times;</button>
+          <button data-edit-rid="${r.id}" title="${esc(t('logistics.edit'))}">&#9998;</button>
+          <button data-remove-rid="${r.id}" title="${esc(t('logistics.bolEmailRemoveTitle'))}">&times;</button>
         </div>` : ''}
       `;
       el.appendChild(row);
@@ -617,7 +627,7 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
       });
       el.querySelectorAll('[data-remove-rid]').forEach(btn => {
         btn.addEventListener('click', () => {
-          if (confirm('Remove this recipient?')) deleteRecipient(Number(btn.dataset.removeRid));
+          if (confirm(t('logistics.bolEmailRemoveRecipientConfirm'))) deleteRecipient(Number(btn.dataset.removeRid));
         });
       });
       el.querySelectorAll('[data-save-rid]').forEach(btn => {
@@ -639,9 +649,9 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
       const addRow = document.createElement('div');
       addRow.className = 'bol-email-add-recipient';
       addRow.innerHTML = `
-        <input type="text" id="bol-email-new-name" placeholder="Name (optional)">
-        <input type="email" id="bol-email-new-email" placeholder="email@example.com">
-        <button class="bol-email-small-btn" id="bol-email-new-save">+ Add recipient</button>
+        <input type="text" id="bol-email-new-name" placeholder="${esc(t('logistics.bolEmailNameOptionalPlaceholder'))}">
+        <input type="email" id="bol-email-new-email" placeholder="${esc(t('logistics.bolEmailEmailPlaceholder'))}">
+        <button class="bol-email-small-btn" id="bol-email-new-save">${esc(t('logistics.bolEmailAddRecipientBtn'))}</button>
       `;
       el.appendChild(addRow);
       document.getElementById('bol-email-new-save').addEventListener('click', () => {
@@ -657,14 +667,14 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
   window.toggleRecipientEdit = function () {
     editMode = !editMode;
     editingRecipientId = null;
-    document.getElementById('bol-email-edit-toggle').textContent = editMode ? 'Done' : 'Edit';
+    document.getElementById('bol-email-edit-toggle').textContent = editMode ? t('logistics.bolEmailDoneBtn') : t('logistics.edit');
     renderRecipients();
   };
 
   async function loadRecipients() {
     const { ok, data, error } = await window.api.get('/api/bol-email/recipients');
     if (!ok) {
-      alert('Failed to load recipients: ' + (error || 'unknown error'));
+      alert(t('logistics.bolEmailFailedLoadRecipients', { error: error || t('common.unknownError') }));
       return;
     }
     const prevIds = new Set(recipients.map(r => r.id));
@@ -679,12 +689,12 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
 
   async function addRecipient(email, name) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      alert('Enter a valid email.');
+      alert(t('logistics.bolEmailEnterValidEmail'));
       return;
     }
     const { ok, data, error } = await window.api.post('/api/bol-email/recipients', { email, name });
     if (!ok) {
-      alert('Failed to add recipient: ' + (data?.error || error || 'Unknown error'));
+      alert(t('logistics.bolEmailFailedAddRecipient', { error: data?.error || error || t('common.unknownError') }));
       return;
     }
     await loadRecipients();
@@ -692,13 +702,13 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
 
   async function updateRecipient(id, email, name) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      alert('Enter a valid email.');
+      alert(t('logistics.bolEmailEnterValidEmail'));
       renderRecipients();
       return;
     }
     const { ok, data, error } = await window.api.put(`/api/bol-email/recipients/${id}`, { email, name });
     if (!ok) {
-      alert('Failed to update recipient: ' + (data?.error || error || 'Unknown error'));
+      alert(t('logistics.bolEmailFailedUpdateRecipient', { error: data?.error || error || t('common.unknownError') }));
     }
     await loadRecipients();
   }
@@ -706,7 +716,7 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
   async function deleteRecipient(id) {
     const { ok, data, error } = await window.api.del(`/api/bol-email/recipients/${id}`);
     if (!ok) {
-      alert('Failed to remove recipient: ' + (data?.error || error || 'Unknown error'));
+      alert(t('logistics.bolEmailFailedRemoveRecipient', { error: data?.error || error || t('common.unknownError') }));
       return;
     }
     checkedRecipientIds.delete(id);
@@ -717,19 +727,19 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
   function renderHolidays() {
     const el = document.getElementById('bol-email-holidays-list');
     if (holidays.length === 0) {
-      el.innerHTML = '<div class="bol-email-holiday-row"><span class="muted">No plant closures listed.</span></div>';
+      el.innerHTML = `<div class="bol-email-holiday-row"><span class="muted">${esc(t('logistics.bolEmailNoClosuresListed'))}</span></div>`;
       return;
     }
     el.innerHTML = holidays.map(h => `
       <div class="bol-email-holiday-row">
         <span>${esc(h.holiday_date)}</span>
         <span class="muted">${h.label ? esc(h.label) : ''}</span>
-        <button data-remove-hid="${h.id}" title="Remove">&times;</button>
+        <button data-remove-hid="${h.id}" title="${esc(t('logistics.bolEmailRemoveTitle'))}">&times;</button>
       </div>
     `).join('');
     el.querySelectorAll('[data-remove-hid]').forEach(btn => {
       btn.addEventListener('click', () => {
-        if (confirm('Remove this plant closure date?')) deleteHoliday(Number(btn.dataset.removeHid));
+        if (confirm(t('logistics.bolEmailRemoveClosureConfirm'))) deleteHoliday(Number(btn.dataset.removeHid));
       });
     });
   }
@@ -737,7 +747,7 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
   async function loadHolidays() {
     const { ok, data, error } = await window.api.get('/api/bol-email/holidays');
     if (!ok) {
-      alert('Failed to load plant closures: ' + (error || 'unknown error'));
+      alert(t('logistics.bolEmailFailedLoadClosures', { error: error || t('common.unknownError') }));
       return;
     }
     holidays = data.holidays || [];
@@ -748,12 +758,12 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
     const date = document.getElementById('bol-email-holiday-date').value;
     const label = document.getElementById('bol-email-holiday-label').value.trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      alert('Pick a date.');
+      alert(t('logistics.bolEmailPickDate'));
       return;
     }
     const { ok, data, error } = await window.api.post('/api/bol-email/holidays', { holiday_date: date, label });
     if (!ok) {
-      alert('Failed to add closure: ' + (data?.error || error || 'Unknown error'));
+      alert(t('logistics.bolEmailFailedAddClosure', { error: data?.error || error || t('common.unknownError') }));
       return;
     }
     document.getElementById('bol-email-holiday-date').value = '';
@@ -765,7 +775,7 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
   async function deleteHoliday(id) {
     const { ok, data, error } = await window.api.del(`/api/bol-email/holidays/${id}`);
     if (!ok) {
-      alert('Failed to remove closure: ' + (data?.error || error || 'Unknown error'));
+      alert(t('logistics.bolEmailFailedRemoveClosure', { error: data?.error || error || t('common.unknownError') }));
       return;
     }
     await loadHolidays();
@@ -791,21 +801,21 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
   window.sendNow = async function () {
     const selected = [...rows.values()].filter(e => e.checked);
     if (selected.length === 0) {
-      alert('Select at least one BOL to send.');
+      alert(t('logistics.bolEmailSelectOneBol'));
       return;
     }
     if (checkedRecipientIds.size === 0) {
-      alert('Select at least one recipient.');
+      alert(t('logistics.bolEmailSelectOneRecipient'));
       return;
     }
     if (!window.BolShared || !window.PDFLib) {
-      alert('BOL renderer failed to load. Refresh the page and try again.');
+      alert(t('logistics.bolEmailRendererFailed'));
       return;
     }
 
     const sendBtn = document.getElementById('bol-email-send-btn');
     sendBtn.disabled = true;
-    sendBtn.textContent = 'Rendering…';
+    sendBtn.textContent = t('logistics.bolEmailRenderingEllipsis');
 
     renderCache = new Map();
     try {
@@ -815,9 +825,9 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
       }
     } catch (e) {
       console.error('BOL render failed:', e);
-      alert('Failed to render one or more BOLs: ' + (e?.message || e));
+      alert(t('logistics.bolEmailFailedRenderBols', { error: e?.message || e }));
       sendBtn.disabled = false;
-      sendBtn.textContent = 'Send';
+      sendBtn.textContent = t('logistics.bolEmailSend');
       return;
     }
 
@@ -826,7 +836,7 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
       content: bytesToBase64(v.pdfBytes),
     }));
 
-    sendBtn.textContent = 'Sending…';
+    sendBtn.textContent = t('logistics.bolEmailSendingEllipsis');
 
     const { ok, data, error } = await window.api.post('/api/bol-email/send', {
       ship_date: shipDate,
@@ -835,17 +845,17 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
       recipient_ids: [...checkedRecipientIds],
     });
 
-    sendBtn.textContent = 'Send';
+    sendBtn.textContent = t('logistics.bolEmailSend');
     sendBtn.disabled = false;
 
     if (!ok) {
-      alert('Send failed: ' + (data?.error || error || 'Unknown error') + (data?.detail ? '\n' + data.detail : ''));
+      alert(t('logistics.bolEmailSendFailed', { error: data?.error || error || t('common.unknownError') }) + (data?.detail ? '\n' + data.detail : ''));
       return;
     }
 
     const toast = document.createElement('div');
     toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:10000;';
-    toast.innerHTML = `<span style="color:#34d399;">✓</span> Sent ${data.sent} BOL${data.sent === 1 ? '' : 's'} to ${data.recipients} recipient${data.recipients === 1 ? '' : 's'}`;
+    toast.innerHTML = `<span style="color:#34d399;">✓</span> ${esc(t('logistics.bolEmailSentToast', { sent: data.sent, recipients: data.recipients }))}`;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
 
@@ -869,7 +879,7 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
     const entry = rows.get(id);
     if (!entry) return;
     if (!window.BolShared || !window.PDFLib) {
-      alert('BOL renderer not ready — try again in a moment.');
+      alert(t('logistics.bolViewerNotReady'));
       return;
     }
     const ov = document.getElementById('bol-email-preview-modal');
@@ -883,7 +893,7 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
     frame.src = 'about:blank';
     frame.style.visibility = 'hidden';
     spinner.style.display = 'flex';
-    spinner.textContent = 'Rendering BOL…';
+    spinner.textContent = t('logistics.bolEmailRenderingBol');
     openTab.style.display = 'none';
     ov.classList.remove('hidden');
 
@@ -897,7 +907,7 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
       // Fallback: some devices don't fire onload for blob PDFs.
       setTimeout(() => { spinner.style.display = 'none'; frame.style.visibility = 'visible'; }, 1500);
     } catch (e) {
-      spinner.textContent = 'Could not render this BOL: ' + (e?.message || e);
+      spinner.textContent = t('logistics.bolEmailCouldNotRender', { error: e?.message || e });
     }
   }
   window.openPreview = openPreview;
@@ -912,14 +922,14 @@ document.getElementById('logistics-page-subtitle').textContent = "Next shipping 
 <div class="logistics-modal-overlay hidden" id="bol-email-preview-modal" onclick="if(event.target===this)closePreview()">
   <div class="bol-email-preview-panel">
     <div class="bol-email-preview-head">
-      <h3 id="bol-email-preview-title" style="margin:0;font-size:15px;">BOL preview</h3>
+      <h3 id="bol-email-preview-title" style="margin:0;font-size:15px;" data-i18n="logistics.bolEmailPreviewTitle">BOL preview</h3>
       <div style="display:flex;gap:8px;align-items:center;">
-        <a id="bol-email-preview-newtab" class="logistics-btn logistics-btn-outline" target="_blank" rel="noopener" style="display:none;text-decoration:none;">Open in tab</a>
+        <a id="bol-email-preview-newtab" class="logistics-btn logistics-btn-outline" target="_blank" rel="noopener" style="display:none;text-decoration:none;" data-i18n="logistics.bolEmailOpenInTab">Open in tab</a>
         <button class="logistics-modal-close" onclick="closePreview()" aria-label="Close">×</button>
       </div>
     </div>
     <div class="bol-email-preview-body">
-      <div id="bol-email-preview-loading" class="bol-email-preview-loading">Rendering BOL…</div>
+      <div id="bol-email-preview-loading" class="bol-email-preview-loading" data-i18n="logistics.bolEmailRenderingBol">Rendering BOL…</div>
       <iframe id="bol-email-preview-frame" class="bol-email-preview-frame" title="BOL preview" src="about:blank"></iframe>
     </div>
   </div>
