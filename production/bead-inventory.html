@@ -467,8 +467,9 @@
 
 <script src="/production/production-header.js"></script>
 <script>
-document.getElementById('prod-page-title').textContent = 'Bead Inventory';
-document.getElementById('prod-page-subtitle').textContent = 'Raw bead tracking by silo';
+function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+document.getElementById('prod-page-title').textContent = tt('layout.beadInventoryTitle', 'Bead Inventory');
+document.getElementById('prod-page-subtitle').textContent = tt('layout.beadInventorySubtitle', 'Raw bead tracking by silo');
 </script>
 
 <div class="bead-wrap">
@@ -476,77 +477,77 @@ document.getElementById('prod-page-subtitle').textContent = 'Raw bead tracking b
   <!-- Stats Row -->
   <div class="bead-stats">
     <div class="bead-stat-card">
-      <div class="bead-stat-label">Total Silos</div>
+      <div class="bead-stat-label" data-i18n="production.statTotalSilos">Total Silos</div>
       <div class="bead-stat-value" id="stat-total-silos">—</div>
     </div>
     <div class="bead-stat-card">
-      <div class="bead-stat-label">Total Inventory</div>
+      <div class="bead-stat-label" data-i18n="production.statTotalInventory">Total Inventory</div>
       <div class="bead-stat-value" id="stat-total-lbs">—</div>
-      <div class="bead-stat-sub">lbs across all silos</div>
+      <div class="bead-stat-sub" data-i18n="production.statTotalInventorySub">lbs across all silos</div>
     </div>
     <div class="bead-stat-card">
-      <div class="bead-stat-label">Below Reorder</div>
+      <div class="bead-stat-label" data-i18n="production.statBelowReorder">Below Reorder</div>
       <div class="bead-stat-value alert" id="stat-reorder-count">—</div>
-      <div class="bead-stat-sub">silos need attention</div>
+      <div class="bead-stat-sub" data-i18n="production.statBelowReorderSub">silos need attention</div>
     </div>
     <div class="bead-stat-card">
-      <div class="bead-stat-label">Transactions (30d)</div>
+      <div class="bead-stat-label" data-i18n="production.statTransactions">Transactions (30d)</div>
       <div class="bead-stat-value" id="stat-tx-count">—</div>
     </div>
   </div>
 
   <!-- Toolbar -->
   <div class="bead-toolbar">
-    <button class="bead-btn bead-btn-receive"  onclick="openTxModal('receive')">+ Receive</button>
-    <button class="bead-btn bead-btn-consume"  onclick="openTxModal('consume')">− Consume</button>
-    <button class="bead-btn bead-btn-adjust"   onclick="openTxModal('adjust')">⟳ Adjust</button>
-    <button class="bead-btn bead-btn-transfer" onclick="openTxModal('transfer')">⇄ Transfer</button>
+    <button class="bead-btn bead-btn-receive"  onclick="openTxModal('receive')" data-i18n="production.btnReceive">+ Receive</button>
+    <button class="bead-btn bead-btn-consume"  onclick="openTxModal('consume')" data-i18n="production.btnConsume">− Consume</button>
+    <button class="bead-btn bead-btn-adjust"   onclick="openTxModal('adjust')" data-i18n="production.btnAdjust">⟳ Adjust</button>
+    <button class="bead-btn bead-btn-transfer" onclick="openTxModal('transfer')" data-i18n="production.btnTransfer">⇄ Transfer</button>
     <div class="bead-toolbar-right">
-      <button class="bead-btn bead-btn-manage" onclick="openManageModal()">Manage Silos &amp; Types</button>
+      <button class="bead-btn bead-btn-manage" onclick="openManageModal()" data-i18n="production.btnManage">Manage Silos &amp; Types</button>
     </div>
   </div>
 
   <!-- Silo Cards -->
-  <p class="bead-silos-heading">Silos</p>
+  <p class="bead-silos-heading" data-i18n="production.silosHeading">Silos</p>
   <div class="bead-silos-grid" id="silos-grid">
-    <div style="color:var(--text-hint);font-size:14px;">Loading silos…</div>
+    <div style="color:var(--text-hint);font-size:14px;" data-i18n="production.loadingSilos">Loading silos…</div>
   </div>
 
   <!-- Transaction History -->
   <div class="bead-history-section">
     <div class="bead-history-header">
-      <h3>Transaction History</h3>
+      <h3 data-i18n="production.historyHeading">Transaction History</h3>
       <select class="bead-filter-select" id="filter-silo" onchange="loadTransactions()">
-        <option value="">All Silos</option>
+        <option value="" data-i18n="production.filterAllSilos">All Silos</option>
       </select>
       <select class="bead-filter-select" id="filter-type" onchange="loadTransactions()">
-        <option value="">All Types</option>
-        <option value="receive">Receive</option>
-        <option value="consume">Consume</option>
-        <option value="adjust">Adjust</option>
-        <option value="transfer">Transfer</option>
+        <option value="" data-i18n="production.filterAllTypes">All Types</option>
+        <option value="receive" data-i18n="production.typeReceive">Receive</option>
+        <option value="consume" data-i18n="production.typeConsume">Consume</option>
+        <option value="adjust" data-i18n="production.typeAdjust">Adjust</option>
+        <option value="transfer" data-i18n="production.typeTransfer">Transfer</option>
       </select>
       <select class="bead-filter-select" id="filter-days" onchange="loadTransactions()">
-        <option value="30">Last 30 days</option>
-        <option value="7">Last 7 days</option>
-        <option value="90">Last 90 days</option>
+        <option value="30" data-i18n="production.filterLast30">Last 30 days</option>
+        <option value="7" data-i18n="production.filterLast7">Last 7 days</option>
+        <option value="90" data-i18n="production.filterLast90">Last 90 days</option>
       </select>
     </div>
     <div class="bead-table-wrap">
       <table class="bead-table">
         <thead>
           <tr>
-            <th>Date/Time</th>
-            <th>Type</th>
-            <th>Silo</th>
-            <th>Bead Type</th>
-            <th>Qty (lbs)</th>
-            <th>Reference</th>
-            <th>Notes</th>
+            <th data-i18n="production.colDateTime">Date/Time</th>
+            <th data-i18n="production.colType">Type</th>
+            <th data-i18n="production.colSilo">Silo</th>
+            <th data-i18n="production.colBeadType">Bead Type</th>
+            <th data-i18n="production.colQtyLbs">Qty (lbs)</th>
+            <th data-i18n="production.colReference">Reference</th>
+            <th data-i18n="production.colNotes">Notes</th>
           </tr>
         </thead>
         <tbody id="tx-tbody">
-          <tr class="bead-empty-row"><td colspan="7">Loading…</td></tr>
+          <tr class="bead-empty-row"><td colspan="7" data-i18n="production.loadingEllipsis">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -564,60 +565,60 @@ document.getElementById('prod-page-subtitle').textContent = 'Raw bead tracking b
       <div class="bead-error" id="tx-error"></div>
 
       <div class="bead-field">
-        <label>Transaction Type</label>
+        <label data-i18n="production.txTypeLabel">Transaction Type</label>
         <select id="tx-type" onchange="onTxTypeChange()">
-          <option value="receive">Receive (inbound delivery)</option>
-          <option value="consume">Consume (production use)</option>
-          <option value="adjust">Adjust (correction)</option>
-          <option value="transfer">Transfer (silo-to-silo)</option>
+          <option value="receive" data-i18n="production.txTypeOptReceive">Receive (inbound delivery)</option>
+          <option value="consume" data-i18n="production.txTypeOptConsume">Consume (production use)</option>
+          <option value="adjust" data-i18n="production.txTypeOptAdjust">Adjust (correction)</option>
+          <option value="transfer" data-i18n="production.txTypeOptTransfer">Transfer (silo-to-silo)</option>
         </select>
       </div>
 
       <div class="bead-field">
-        <label>Source Silo</label>
+        <label data-i18n="production.sourceSiloLabel">Source Silo</label>
         <select id="tx-silo-id">
-          <option value="">— select silo —</option>
+          <option value="" data-i18n="production.selectSiloPlaceholder">— select silo —</option>
         </select>
       </div>
 
       <div class="bead-field" id="tx-dest-field" style="display:none;">
-        <label>Destination Silo</label>
+        <label data-i18n="production.destSiloLabel">Destination Silo</label>
         <select id="tx-dest-silo-id">
-          <option value="">— select destination —</option>
+          <option value="" data-i18n="production.selectDestPlaceholder">— select destination —</option>
         </select>
       </div>
 
       <div class="bead-field-row">
         <div class="bead-field">
-          <label>Quantity (lbs)</label>
+          <label data-i18n="production.quantityLbsLabel">Quantity (lbs)</label>
           <input type="number" id="tx-qty" min="0.01" step="0.01" placeholder="0.00">
         </div>
         <div class="bead-field">
-          <label>Bead Type (override)</label>
+          <label data-i18n="production.beadTypeOverrideLabel">Bead Type (override)</label>
           <select id="tx-bead-type-id">
-            <option value="">— use silo default —</option>
+            <option value="" data-i18n="production.useSiloDefaultPlaceholder">— use silo default —</option>
           </select>
         </div>
       </div>
 
       <div class="bead-field" id="tx-job-field">
-        <label>Job ID (optional)</label>
-        <input type="text" id="tx-job-id" placeholder="link to a job">
+        <label data-i18n="production.jobIdLabel">Job ID (optional)</label>
+        <input type="text" id="tx-job-id" placeholder="link to a job" data-i18n-placeholder="production.jobIdPlaceholder">
       </div>
 
       <div class="bead-field">
-        <label>Reference / PO#</label>
-        <input type="text" id="tx-reference" placeholder="delivery note, PO, etc.">
+        <label data-i18n="production.referenceLabel">Reference / PO#</label>
+        <input type="text" id="tx-reference" placeholder="delivery note, PO, etc." data-i18n-placeholder="production.referencePlaceholder">
       </div>
 
       <div class="bead-field">
-        <label>Notes</label>
-        <textarea id="tx-notes" rows="2" placeholder="optional notes"></textarea>
+        <label data-i18n="production.notesLabel">Notes</label>
+        <textarea id="tx-notes" rows="2" placeholder="optional notes" data-i18n-placeholder="production.notesPlaceholder"></textarea>
       </div>
     </div>
     <div class="bead-modal-footer">
-      <button class="bead-btn bead-btn-outline" onclick="closeTxModal()">Cancel</button>
-      <button class="bead-btn bead-btn-receive" id="tx-save-btn" onclick="saveTx()">Log Transaction</button>
+      <button class="bead-btn bead-btn-outline" onclick="closeTxModal()" data-i18n="production.cancelBtn">Cancel</button>
+      <button class="bead-btn bead-btn-receive" id="tx-save-btn" onclick="saveTx()" data-i18n="production.logTransactionBtn">Log Transaction</button>
     </div>
   </div>
 </div>
@@ -626,53 +627,53 @@ document.getElementById('prod-page-subtitle').textContent = 'Raw bead tracking b
 <div class="bead-modal-overlay hidden" id="manage-modal">
   <div class="bead-modal-panel" style="max-width:600px;">
     <div class="bead-modal-header">
-      <h2>Manage Silos &amp; Bead Types</h2>
+      <h2 data-i18n="production.manageModalTitle">Manage Silos &amp; Bead Types</h2>
       <button class="bead-modal-close" onclick="closeManageModal()">×</button>
     </div>
     <div class="bead-modal-body">
       <div class="bead-tabs">
-        <button class="bead-tab active" onclick="switchManageTab('silos', this)">Silos</button>
-        <button class="bead-tab" onclick="switchManageTab('types', this)">Bead Types</button>
+        <button class="bead-tab active" onclick="switchManageTab('silos', this)" data-i18n="production.tabSilos">Silos</button>
+        <button class="bead-tab" onclick="switchManageTab('types', this)" data-i18n="production.tabBeadTypes">Bead Types</button>
       </div>
 
       <!-- Silos Tab -->
       <div class="bead-tab-pane active" id="manage-tab-silos">
         <ul class="bead-manage-list" id="manage-silos-list"></ul>
-        <button class="bead-add-form-toggle" onclick="toggleSiloForm()" id="silo-form-toggle">+ Add Silo</button>
+        <button class="bead-add-form-toggle" onclick="toggleSiloForm()" id="silo-form-toggle" data-i18n="production.addSiloBtn">+ Add Silo</button>
         <div class="bead-add-subform" id="silo-subform" style="display:none;">
           <div class="bead-error" id="silo-error"></div>
           <div class="bead-field">
-            <label>Silo Name</label>
-            <input type="text" id="sf-name" placeholder="e.g. Silo A">
+            <label data-i18n="production.siloNameLabel">Silo Name</label>
+            <input type="text" id="sf-name" placeholder="e.g. Silo A" data-i18n-placeholder="production.siloNamePlaceholder">
           </div>
           <div class="bead-field">
-            <label>Bead Type</label>
+            <label data-i18n="production.beadTypeLabel">Bead Type</label>
             <select id="sf-bead-type-id">
-              <option value="">— unassigned —</option>
+              <option value="" data-i18n="production.unassignedPlaceholder">— unassigned —</option>
             </select>
           </div>
           <div class="bead-field-row">
             <div class="bead-field">
-              <label>Capacity (lbs)</label>
+              <label data-i18n="production.capacityLbsLabel">Capacity (lbs)</label>
               <input type="number" id="sf-capacity" min="0" step="1" placeholder="0">
             </div>
             <div class="bead-field">
-              <label>Reorder Point (lbs)</label>
+              <label data-i18n="production.reorderPointLbsLabel">Reorder Point (lbs)</label>
               <input type="number" id="sf-reorder" min="0" step="1" placeholder="0">
             </div>
           </div>
           <div class="bead-field">
-            <label>Location</label>
-            <input type="text" id="sf-location" placeholder="e.g. Bay 2">
+            <label data-i18n="production.locationLabel">Location</label>
+            <input type="text" id="sf-location" placeholder="e.g. Bay 2" data-i18n-placeholder="production.locationPlaceholder">
           </div>
           <div class="bead-field">
-            <label>Notes</label>
+            <label data-i18n="production.notesLabel">Notes</label>
             <input type="text" id="sf-notes">
           </div>
           <input type="hidden" id="sf-id">
           <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
-            <button class="bead-btn bead-btn-outline" onclick="cancelSiloForm()">Cancel</button>
-            <button class="bead-btn bead-btn-manage" onclick="saveSilo()">Save Silo</button>
+            <button class="bead-btn bead-btn-outline" onclick="cancelSiloForm()" data-i18n="production.cancelBtn">Cancel</button>
+            <button class="bead-btn bead-btn-manage" onclick="saveSilo()" data-i18n="production.saveSiloBtn">Save Silo</button>
           </div>
         </div>
       </div>
@@ -680,49 +681,49 @@ document.getElementById('prod-page-subtitle').textContent = 'Raw bead tracking b
       <!-- Bead Types Tab -->
       <div class="bead-tab-pane" id="manage-tab-types">
         <ul class="bead-manage-list" id="manage-types-list"></ul>
-        <button class="bead-add-form-toggle" onclick="toggleTypeForm()" id="type-form-toggle">+ Add Bead Type</button>
+        <button class="bead-add-form-toggle" onclick="toggleTypeForm()" id="type-form-toggle" data-i18n="production.addBeadTypeBtn">+ Add Bead Type</button>
         <div class="bead-add-subform" id="type-subform" style="display:none;">
           <div class="bead-error" id="type-error"></div>
           <div class="bead-field-row">
             <div class="bead-field">
-              <label>Name</label>
-              <input type="text" id="tf-name" placeholder="e.g. EPS 1.5 PCF">
+              <label data-i18n="production.nameLabel">Name</label>
+              <input type="text" id="tf-name" placeholder="e.g. EPS 1.5 PCF" data-i18n-placeholder="production.nameFieldPlaceholder">
             </div>
             <div class="bead-field">
-              <label>Grade</label>
-              <input type="text" id="tf-grade" placeholder="e.g. Standard">
+              <label data-i18n="production.gradeLabel">Grade</label>
+              <input type="text" id="tf-grade" placeholder="e.g. Standard" data-i18n-placeholder="production.gradePlaceholder">
             </div>
           </div>
           <div class="bead-field-row">
             <div class="bead-field">
-              <label>Color</label>
-              <input type="text" id="tf-color" placeholder="e.g. White">
+              <label data-i18n="production.colorLabel">Color</label>
+              <input type="text" id="tf-color" placeholder="e.g. White" data-i18n-placeholder="production.colorPlaceholder">
             </div>
             <div class="bead-field">
-              <label>Notes</label>
+              <label data-i18n="production.notesLabel">Notes</label>
               <input type="text" id="tf-notes">
             </div>
           </div>
           <input type="hidden" id="tf-id">
           <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
-            <button class="bead-btn bead-btn-outline" onclick="cancelTypeForm()">Cancel</button>
-            <button class="bead-btn bead-btn-manage" onclick="saveBeadType()">Save Bead Type</button>
+            <button class="bead-btn bead-btn-outline" onclick="cancelTypeForm()" data-i18n="production.cancelBtn">Cancel</button>
+            <button class="bead-btn bead-btn-manage" onclick="saveBeadType()" data-i18n="production.saveBeadTypeBtn">Save Bead Type</button>
           </div>
         </div>
       </div>
     </div>
     <div class="bead-modal-footer">
-      <button class="bead-btn bead-btn-outline" onclick="closeManageModal()">Done</button>
+      <button class="bead-btn bead-btn-outline" onclick="closeManageModal()" data-i18n="production.doneBtn">Done</button>
     </div>
   </div>
 </div>
 
 <!-- ── Bead Prompt Banner (job integration) ─────────────────────────────────── -->
 <div class="bead-prompt-banner" id="bead-banner">
-  <p id="bead-banner-msg">Log bead consumption for this job?</p>
+  <p id="bead-banner-msg" data-i18n="production.beadBannerDefaultMsg">Log bead consumption for this job?</p>
   <div class="bead-prompt-banner-actions">
-    <button class="bead-btn bead-btn-consume" onclick="openTxFromBanner()">Log Consumption</button>
-    <button class="bead-btn bead-btn-outline" onclick="dismissBanner()">Dismiss</button>
+    <button class="bead-btn bead-btn-consume" onclick="openTxFromBanner()" data-i18n="production.logConsumptionBtn">Log Consumption</button>
+    <button class="bead-btn bead-btn-outline" onclick="dismissBanner()" data-i18n="production.dismissBtn">Dismiss</button>
   </div>
 </div>
 
@@ -732,6 +733,17 @@ let allSilos     = [];
 let allBeadTypes = [];
 let pendingJobId = null;
 
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
+const TX_TYPE_LABEL_KEY = {
+  receive: 'production.typeReceive', consume: 'production.typeConsume',
+  adjust: 'production.typeAdjust', transfer: 'production.typeTransfer'
+};
+function txTypeLabel(type) {
+  const key = TX_TYPE_LABEL_KEY[type];
+  return key ? t(key) : type;
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
 (async () => {
   const params = new URLSearchParams(location.search);
@@ -740,7 +752,7 @@ let pendingJobId = null;
     pendingJobId = jobId;
     const banner = document.getElementById("bead-banner");
     document.getElementById("bead-banner-msg").textContent =
-      `Job ${jobId} moved to Done. Log bead consumption?`;
+      t('production.beadBannerJobMsg', { jobId });
     banner.classList.add("visible");
   }
 
@@ -784,7 +796,7 @@ async function loadTransactions() {
 function renderSilos() {
   const grid = document.getElementById("silos-grid");
   if (!allSilos.length) {
-    grid.innerHTML = `<div style="color:var(--text-hint);font-size:14px;">No silos configured. Use Manage to add one.</div>`;
+    grid.innerHTML = `<div style="color:var(--text-hint);font-size:14px;">${esc(t('production.noSilosConfigured'))}</div>`;
     return;
   }
   grid.innerHTML = allSilos.map(s => {
@@ -793,7 +805,7 @@ function renderSilos() {
     const cls    = s.below_reorder ? "bead-silo-card alert-reorder" : (pct <= 20 ? "bead-silo-card alert-low" : "bead-silo-card");
     const typeLabel = s.bead_type_name
       ? `${s.bead_type_name}${s.bead_type_grade ? " · " + s.bead_type_grade : ""}`
-      : "No bead type assigned";
+      : t('production.noBeadTypeAssigned');
     return `
       <div class="${cls}" onclick="openTxModal('consume', '${s.id}')">
         <div class="bead-silo-name">${esc(s.name)}</div>
@@ -803,10 +815,10 @@ function renderSilos() {
           <div class="bead-progress-fill ${fill}" style="width:${pct.toFixed(1)}%"></div>
         </div>
         <div class="bead-silo-meta">
-          <span>${pct.toFixed(0)}% full</span>
+          <span>${esc(t('production.pctFull', { pct: pct.toFixed(0) }))}</span>
           <span>${s.location ? esc(s.location) : ""}</span>
         </div>
-        ${s.below_reorder ? `<div class="bead-reorder-badge">⚠ Below Reorder Point</div>` : ""}
+        ${s.below_reorder ? `<div class="bead-reorder-badge">${esc(t('production.belowReorderBadge'))}</div>` : ""}
       </div>`;
   }).join("");
 }
@@ -823,21 +835,21 @@ function updateStats() {
 function renderTransactions(rows) {
   const tbody = document.getElementById("tx-tbody");
   if (!rows.length) {
-    tbody.innerHTML = `<tr class="bead-empty-row"><td colspan="7">No transactions found.</td></tr>`;
+    tbody.innerHTML = `<tr class="bead-empty-row"><td colspan="7">${esc(t('production.noTransactionsFound'))}</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(t => {
-    const qtyClass = t.quantity_lbs >= 0 ? "qty-positive" : "qty-negative";
-    const qtyStr   = (t.quantity_lbs >= 0 ? "+" : "") + fmtLbs(t.quantity_lbs);
-    const dt = t.created_at ? t.created_at.replace("T", " ").slice(0, 16) : "—";
+  tbody.innerHTML = rows.map(tx => {
+    const qtyClass = tx.quantity_lbs >= 0 ? "qty-positive" : "qty-negative";
+    const qtyStr   = (tx.quantity_lbs >= 0 ? "+" : "") + fmtLbs(tx.quantity_lbs);
+    const dt = tx.created_at ? tx.created_at.replace("T", " ").slice(0, 16) : "—";
     return `<tr>
       <td style="white-space:nowrap;">${esc(dt)}</td>
-      <td><span class="bead-type-badge type-${t.type}">${t.type}</span></td>
-      <td>${esc(t.silo_name || "—")}</td>
-      <td>${esc(t.bead_type_name || "—")}</td>
+      <td><span class="bead-type-badge type-${tx.type}">${esc(txTypeLabel(tx.type))}</span></td>
+      <td>${esc(tx.silo_name || "—")}</td>
+      <td>${esc(tx.bead_type_name || "—")}</td>
       <td class="${qtyClass}">${qtyStr}</td>
-      <td>${esc(t.reference || "—")}</td>
-      <td>${esc(t.notes || "")}</td>
+      <td>${esc(tx.reference || "—")}</td>
+      <td>${esc(tx.notes || "")}</td>
     </tr>`;
   }).join("");
 }
@@ -849,35 +861,35 @@ function populateSiloSelects() {
   ).join("");
 
   document.getElementById("tx-silo-id").innerHTML =
-    `<option value="">— select silo —</option>${siloOpts}`;
+    `<option value="">${esc(t('production.selectSiloPlaceholder'))}</option>${siloOpts}`;
   document.getElementById("tx-dest-silo-id").innerHTML =
-    `<option value="">— select destination —</option>${siloOpts}`;
+    `<option value="">${esc(t('production.selectDestPlaceholder'))}</option>${siloOpts}`;
 
   // Filter select in history
   const filterSilo = document.getElementById("filter-silo");
   const currentVal = filterSilo.value;
-  filterSilo.innerHTML = `<option value="">All Silos</option>${siloOpts}`;
+  filterSilo.innerHTML = `<option value="">${esc(t('production.filterAllSilos'))}</option>${siloOpts}`;
   filterSilo.value = currentVal;
 
   // Silo form type select
   const sfBead = document.getElementById("sf-bead-type-id");
   if (sfBead) {
-    sfBead.innerHTML = `<option value="">— unassigned —</option>` +
-      allBeadTypes.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("");
+    sfBead.innerHTML = `<option value="">${esc(t('production.unassignedPlaceholder'))}</option>` +
+      allBeadTypes.map(bt => `<option value="${bt.id}">${esc(bt.name)}</option>`).join("");
   }
 }
 
 function populateTypeSelects() {
-  const typeOpts = allBeadTypes.map(t =>
-    `<option value="${t.id}">${esc(t.name)}</option>`
+  const typeOpts = allBeadTypes.map(bt =>
+    `<option value="${bt.id}">${esc(bt.name)}</option>`
   ).join("");
   document.getElementById("tx-bead-type-id").innerHTML =
-    `<option value="">— use silo default —</option>${typeOpts}`;
+    `<option value="">${esc(t('production.useSiloDefaultPlaceholder'))}</option>${typeOpts}`;
 
   // Silo form
   const sfBead = document.getElementById("sf-bead-type-id");
   if (sfBead) {
-    sfBead.innerHTML = `<option value="">— unassigned —</option>${typeOpts}`;
+    sfBead.innerHTML = `<option value="">${esc(t('production.unassignedPlaceholder'))}</option>${typeOpts}`;
   }
 }
 
@@ -893,14 +905,14 @@ function openTxModal(type, siloId) {
   };
   const btn = document.getElementById("tx-save-btn");
   btn.className = `bead-btn ${colors[type] || "bead-btn-receive"}`;
-  btn.textContent = "Log Transaction";
+  btn.textContent = t('production.logTransactionBtn');
 
   document.getElementById("tx-modal-title").textContent = {
-    receive: "Receive Beads",
-    consume: "Log Consumption",
-    adjust:  "Adjust Inventory",
-    transfer: "Transfer Between Silos"
-  }[type] || "Log Transaction";
+    receive: t('production.modalTitleReceive'),
+    consume: t('production.modalTitleConsume'),
+    adjust:  t('production.modalTitleAdjust'),
+    transfer: t('production.modalTitleTransfer')
+  }[type] || t('production.modalTitleDefault');
 
   showError("tx-error", "");
   document.getElementById("tx-qty").value       = "";
@@ -930,8 +942,8 @@ async function saveTx() {
   const siloId = document.getElementById("tx-silo-id").value.trim();
   const qty    = parseFloat(document.getElementById("tx-qty").value);
 
-  if (!siloId) { showError("tx-error", "Please select a silo."); return; }
-  if (!qty || qty <= 0) { showError("tx-error", "Quantity must be greater than 0."); return; }
+  if (!siloId) { showError("tx-error", t('production.errPleaseSelectSilo')); return; }
+  if (!qty || qty <= 0) { showError("tx-error", t('production.errQtyPositive')); return; }
 
   const payload = {
     type,
@@ -944,18 +956,18 @@ async function saveTx() {
   };
   if (type === "transfer") {
     payload.dest_silo_id = document.getElementById("tx-dest-silo-id").value.trim();
-    if (!payload.dest_silo_id) { showError("tx-error", "Please select a destination silo."); return; }
-    if (payload.dest_silo_id === siloId) { showError("tx-error", "Source and destination must be different."); return; }
+    if (!payload.dest_silo_id) { showError("tx-error", t('production.errPleaseSelectDest')); return; }
+    if (payload.dest_silo_id === siloId) { showError("tx-error", t('production.errSourceDestDiffer')); return; }
   }
 
   const btn = document.getElementById("tx-save-btn");
   btn.disabled = true;
-  btn.textContent = "Saving…";
+  btn.textContent = t('production.savingEllipsis');
 
   try {
     const r = await window.api.post("/api/bead-transactions", payload);
     if (!r.ok) {
-      showError("tx-error", r.error || "Error saving transaction.");
+      showError("tx-error", r.error || t('production.errSavingTx'));
       return;
     }
     // Update local silo state
@@ -969,10 +981,10 @@ async function saveTx() {
     updateStats();
     await loadTransactions();
   } catch (e) {
-    showError("tx-error", "Network error. Please try again.");
+    showError("tx-error", t('production.errNetworkRetry'));
   } finally {
     btn.disabled = false;
-    btn.textContent = "Log Transaction";
+    btn.textContent = t('production.logTransactionBtn');
   }
 }
 
@@ -1000,7 +1012,7 @@ function switchManageTab(tab, btn) {
 function renderManageSilos() {
   const list = document.getElementById("manage-silos-list");
   if (!allSilos.length) {
-    list.innerHTML = `<li style="color:var(--text-hint);font-size:13px;padding:8px;">No silos yet.</li>`;
+    list.innerHTML = `<li style="color:var(--text-hint);font-size:13px;padding:8px;">${esc(t('production.noSilosYet'))}</li>`;
     return;
   }
   list.innerHTML = allSilos.map(s => `
@@ -1010,18 +1022,24 @@ function renderManageSilos() {
         <div class="bead-manage-item-sub">${fmtLbs(s.current_lbs)} lbs · cap ${fmtLbs(s.capacity_lbs)} lbs${s.bead_type_name ? " · " + esc(s.bead_type_name) : ""}</div>
       </div>
       <div class="bead-manage-item-actions">
-        <button class="bead-manage-btn" onclick="editSilo('${s.id}')">Edit</button>
-        <button class="bead-manage-btn danger" onclick="deleteSilo('${s.id}')">Delete</button>
+        <button class="bead-manage-btn" onclick="editSilo('${s.id}')">${esc(t('production.editBtn'))}</button>
+        <button class="bead-manage-btn danger" onclick="deleteSilo('${s.id}')">${esc(t('production.deleteBtn'))}</button>
       </div>
     </li>
   `).join("");
+}
+
+function setSiloToggleLabel(key) {
+  const btn = document.getElementById("silo-form-toggle");
+  btn.setAttribute("data-i18n", key);
+  btn.textContent = t(key);
 }
 
 function toggleSiloForm() {
   const form = document.getElementById("silo-subform");
   const isHidden = form.style.display === "none";
   form.style.display = isHidden ? "" : "none";
-  document.getElementById("silo-form-toggle").textContent = isHidden ? "− Cancel" : "+ Add Silo";
+  setSiloToggleLabel(isHidden ? 'production.toggleCancelLabel' : 'production.addSiloBtn');
   if (isHidden) clearSiloForm();
 }
 
@@ -1034,7 +1052,7 @@ function clearSiloForm() {
 
 function cancelSiloForm() {
   document.getElementById("silo-subform").style.display = "none";
-  document.getElementById("silo-form-toggle").textContent = "+ Add Silo";
+  setSiloToggleLabel('production.addSiloBtn');
   clearSiloForm();
 }
 
@@ -1049,14 +1067,14 @@ function editSilo(id) {
   document.getElementById("sf-location").value     = s.location;
   document.getElementById("sf-notes").value        = s.notes;
   document.getElementById("silo-subform").style.display = "";
-  document.getElementById("silo-form-toggle").textContent = "− Cancel";
+  setSiloToggleLabel('production.toggleCancelLabel');
 }
 
 async function saveSilo() {
   showError("silo-error", "");
   const id   = document.getElementById("sf-id").value.trim();
   const name = document.getElementById("sf-name").value.trim();
-  if (!name) { showError("silo-error", "Name is required."); return; }
+  if (!name) { showError("silo-error", t('production.nameRequiredError')); return; }
 
   const payload = {
     name,
@@ -1071,7 +1089,7 @@ async function saveSilo() {
   const r = id
     ? await window.api.put("/api/silos", payload)
     : await window.api.post("/api/silos", payload);
-  if (!r.ok) { showError("silo-error", r.error || "Error saving silo."); return; }
+  if (!r.ok) { showError("silo-error", r.error || t('production.errSavingSilo')); return; }
 
   if (id) {
     const idx = allSilos.findIndex(s => s.id === id);
@@ -1087,9 +1105,9 @@ async function saveSilo() {
 }
 
 async function deleteSilo(id) {
-  if (!confirm("Delete this silo? All transactions for this silo will also be removed.")) return;
+  if (!confirm(t('production.confirmDeleteSilo'))) return;
   const r = await window.api.raw("/api/silos", { method: "DELETE", body: { id } });
-  if (!r.ok) { alert(r.error || "Error deleting silo."); return; }
+  if (!r.ok) { alert(r.error || t('production.errDeletingSilo')); return; }
   allSilos = allSilos.filter(s => s.id !== id);
   renderManageSilos();
   renderSilos();
@@ -1102,28 +1120,34 @@ async function deleteSilo(id) {
 function renderManageTypes() {
   const list = document.getElementById("manage-types-list");
   if (!allBeadTypes.length) {
-    list.innerHTML = `<li style="color:var(--text-hint);font-size:13px;padding:8px;">No bead types yet.</li>`;
+    list.innerHTML = `<li style="color:var(--text-hint);font-size:13px;padding:8px;">${esc(t('production.noBeadTypesYet'))}</li>`;
     return;
   }
-  list.innerHTML = allBeadTypes.map(t => `
+  list.innerHTML = allBeadTypes.map(bt => `
     <li class="bead-manage-item">
       <div>
-        <div class="bead-manage-item-name">${esc(t.name)}</div>
-        <div class="bead-manage-item-sub">${[t.grade, t.color].filter(Boolean).join(" · ")}</div>
+        <div class="bead-manage-item-name">${esc(bt.name)}</div>
+        <div class="bead-manage-item-sub">${[bt.grade, bt.color].filter(Boolean).join(" · ")}</div>
       </div>
       <div class="bead-manage-item-actions">
-        <button class="bead-manage-btn" onclick="editBeadType('${t.id}')">Edit</button>
-        <button class="bead-manage-btn danger" onclick="deleteBeadType('${t.id}')">Delete</button>
+        <button class="bead-manage-btn" onclick="editBeadType('${bt.id}')">${esc(t('production.editBtn'))}</button>
+        <button class="bead-manage-btn danger" onclick="deleteBeadType('${bt.id}')">${esc(t('production.deleteBtn'))}</button>
       </div>
     </li>
   `).join("");
+}
+
+function setTypeToggleLabel(key) {
+  const btn = document.getElementById("type-form-toggle");
+  btn.setAttribute("data-i18n", key);
+  btn.textContent = t(key);
 }
 
 function toggleTypeForm() {
   const form = document.getElementById("type-subform");
   const isHidden = form.style.display === "none";
   form.style.display = isHidden ? "" : "none";
-  document.getElementById("type-form-toggle").textContent = isHidden ? "− Cancel" : "+ Add Bead Type";
+  setTypeToggleLabel(isHidden ? 'production.toggleCancelLabel' : 'production.addBeadTypeBtn');
   if (isHidden) clearTypeForm();
 }
 
@@ -1135,27 +1159,27 @@ function clearTypeForm() {
 
 function cancelTypeForm() {
   document.getElementById("type-subform").style.display = "none";
-  document.getElementById("type-form-toggle").textContent = "+ Add Bead Type";
+  setTypeToggleLabel('production.addBeadTypeBtn');
   clearTypeForm();
 }
 
 function editBeadType(id) {
-  const t = allBeadTypes.find(t => t.id === id);
-  if (!t) return;
-  document.getElementById("tf-id").value    = t.id;
-  document.getElementById("tf-name").value  = t.name;
-  document.getElementById("tf-grade").value = t.grade;
-  document.getElementById("tf-color").value = t.color;
-  document.getElementById("tf-notes").value = t.notes;
+  const bt = allBeadTypes.find(bt => bt.id === id);
+  if (!bt) return;
+  document.getElementById("tf-id").value    = bt.id;
+  document.getElementById("tf-name").value  = bt.name;
+  document.getElementById("tf-grade").value = bt.grade;
+  document.getElementById("tf-color").value = bt.color;
+  document.getElementById("tf-notes").value = bt.notes;
   document.getElementById("type-subform").style.display = "";
-  document.getElementById("type-form-toggle").textContent = "− Cancel";
+  setTypeToggleLabel('production.toggleCancelLabel');
 }
 
 async function saveBeadType() {
   showError("type-error", "");
   const id   = document.getElementById("tf-id").value.trim();
   const name = document.getElementById("tf-name").value.trim();
-  if (!name) { showError("type-error", "Name is required."); return; }
+  if (!name) { showError("type-error", t('production.nameRequiredError')); return; }
 
   const payload = {
     name,
@@ -1168,7 +1192,7 @@ async function saveBeadType() {
   const r = id
     ? await window.api.put("/api/bead-types", payload)
     : await window.api.post("/api/bead-types", payload);
-  if (!r.ok) { showError("type-error", r.error || "Error saving bead type."); return; }
+  if (!r.ok) { showError("type-error", r.error || t('production.errSavingBeadType')); return; }
 
   if (id) {
     const idx = allBeadTypes.findIndex(t => t.id === id);
@@ -1183,9 +1207,9 @@ async function saveBeadType() {
 }
 
 async function deleteBeadType(id) {
-  if (!confirm("Delete this bead type? Silos using it will become unassigned.")) return;
+  if (!confirm(t('production.confirmDeleteBeadType'))) return;
   const r = await window.api.raw("/api/bead-types", { method: "DELETE", body: { id } });
-  if (!r.ok) { alert(r.error || "Error deleting bead type."); return; }
+  if (!r.ok) { alert(r.error || t('production.errDeletingBeadType')); return; }
   allBeadTypes = allBeadTypes.filter(t => t.id !== id);
   renderManageTypes();
   populateTypeSelects();

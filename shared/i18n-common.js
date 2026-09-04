@@ -250,7 +250,9 @@
       blockCalculatorTitle: 'Block Calculator',
       blockCalculatorSubtitle: 'Parts per block, cut list, and layout diagrams',
       holeyBoardCalculatorTitle: 'Holey Board Calculator',
-      holeyBoardCalculatorSubtitle: 'Calculate chunks needed for board orders'
+      holeyBoardCalculatorSubtitle: 'Calculate chunks needed for board orders',
+      beadInventoryTitle: 'Bead Inventory',
+      beadInventorySubtitle: 'Raw bead tracking by silo'
     },
     es: {
       jobsTitle: 'Tablero de Trabajos',
@@ -276,7 +278,9 @@
       blockCalculatorTitle: 'Calculadora de Bloques',
       blockCalculatorSubtitle: 'Piezas por bloque, lista de corte y diagramas de disposición',
       holeyBoardCalculatorTitle: 'Calculadora de Tableros Perforados',
-      holeyBoardCalculatorSubtitle: 'Calcule los trozos necesarios para pedidos de tableros'
+      holeyBoardCalculatorSubtitle: 'Calcule los trozos necesarios para pedidos de tableros',
+      beadInventoryTitle: 'Inventario de Perlas',
+      beadInventorySubtitle: 'Seguimiento de perlas crudas por silo'
     },
     ht: {
       jobsTitle: 'Tablo Travay',
@@ -302,7 +306,9 @@
       blockCalculatorTitle: 'Kalkilatè Blòk',
       blockCalculatorSubtitle: 'Pyès pa blòk, lis koupe, ak dyagram plan',
       holeyBoardCalculatorTitle: 'Kalkilatè Tablo Twou',
-      holeyBoardCalculatorSubtitle: 'Kalkile kantite moso ki nesesè pou kòmand tablo'
+      holeyBoardCalculatorSubtitle: 'Kalkile kantite moso ki nesesè pou kòmand tablo',
+      beadInventoryTitle: 'Envantè Grenn',
+      beadInventorySubtitle: 'Swiv grenn brit pa silo'
     }
   });
 })();

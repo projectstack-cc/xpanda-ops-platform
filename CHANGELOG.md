@@ -3664,6 +3664,43 @@ Entries within each module are ordered by prompt # descending (newest first).
   for correct en/es/ht resolution), and an en/es/ht key parity check across all catalogs (`manufacturing`
   213, `jobs`/`logistics`/`common`/`home` unchanged, `layout` 24 with the 4 new title/subtitle keys —
   no drift).
+- **i18n sweep, phase 5 — Production module (`production/index.html`, `bead-inventory.html`) now
+  speaks en/es/ht.** Same wiring-gap pattern found in every prior module this sweep:
+  `production-header.js` had no module-catalog `document.write` at all, so a page would have stayed
+  fully English with no error to flag it. New `production/production-i18n.js` registers a
+  `production` catalog shared by both pages (108 keys × 3 langs, verified parity), wired into
+  `production-header.js` right after the `i18n-common.js` load and before `shared-header.js`, same
+  position as every other module's catalog script. `index.html`'s title/subtitle override matched the
+  module default (`layout.productionTitle`/`Subtitle`) exactly and was deleted outright.
+  `bead-inventory.html`'s override text ("Bead Inventory" / "Raw bead tracking by silo") didn't match,
+  so it got a new `layout.beadInventoryTitle`/`Subtitle` key pair added to `shared/i18n-common.js`,
+  with the override converted to the same guarded `tt()` IIFE pattern used on every prior module's
+  non-matching title/subtitle fix. Tagged: the dashboard's tool-section intro (`index.html`); the
+  stats row, toolbar, silo cards, and transaction-history table/filters; the Transaction modal (type
+  select, source/destination silo, quantity, bead-type override, job ID, reference, notes, and the
+  per-type modal-title/button-text JS); the Manage Silos & Bead Types modal (both tabs, add/edit
+  subforms, list items, all validation and network-error messages); the job-integration prompt banner
+  (including its interpolated `Job {jobId} moved to Done…` message); and every `alert()`/`confirm()`
+  dialog (silo/bead-type delete confirmations and their error fallbacks). Three dynamic/static
+  collision points were caught before commit and fixed: the transaction-modal `<h2>` title and the
+  silo/bead-type "+ Add …" ⇄ "− Cancel" toggle buttons each had a static `data-i18n` tag *and* a JS
+  `.textContent` writer targeting different catalog keys depending on UI state — a language switch
+  mid-interaction would have silently reverted the JS-set text back to the tag's default, desyncing
+  the label from the visible state. The modal title (only ever shown after JS sets it, since the modal
+  starts hidden) had its `data-i18n` tag dropped entirely in favor of the JS writer owning it fully;
+  the toggle buttons (visible on initial page load, so still need `data-i18n` for correct first-paint
+  translation) instead got their `data-i18n` attribute updated in lockstep with their text on every
+  state change, so a language switch mid-interaction re-resolves the *current* state's key instead of
+  reverting to the closed-state default. `renderTransactions`' loop variable and two `.map()`/`.find()`
+  callback parameters were renamed away from `t` (one, in `editBeadType`, was an outright shadow of the
+  new global `t()` helper — caught directly rather than needing a grep pass, per the trap flagged in
+  the Job Board and Manufacturing phases). Verified via `node --check` on all three inline `<script>`
+  blocks across both files, a scripted reference-integrity scan (108 direct `t('production.…')`/
+  `data-i18n` usages resolve, 0 gaps, 0 unused catalog keys — the broad `/'production\.…'/g` sweep
+  picked up the `TX_TYPE_LABEL_KEY` lookup-map values directly, so unlike prior phases there were no
+  false positives needing manual triage), an en/es/ht key parity check across all catalogs
+  (`production` 108, `jobs`/`logistics`/`manufacturing`/`common`/`home` unchanged, `layout` 26 with the
+  2 new title/subtitle keys — no drift), and an interpolation spot-check across all three languages.
 - **i18n sweep, phase 2c — Logistics: `load-builder.html` gets a labels/buttons/toasts pass
   (en/es/ht), completing the Logistics module's floor+desk screens.** Deliberately narrower than the
   full tag-everything treatment given to the other three Logistics pages: this file is a bin-packing
