@@ -114,60 +114,62 @@
 
 <script src="/jobs/jobs-header.js"></script>
 <script>
-  document.getElementById('jobs-page-title').textContent = 'Job Board';
-  document.getElementById('jobs-page-subtitle').textContent = 'Track production jobs from order entry through shipment';
+(function () {
+  function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+  document.getElementById('jobs-page-subtitle').textContent = tt('layout.jobsBoardSubtitle', 'Track production jobs from order entry through shipment');
+})();
 </script>
 
 <!-- Toolbar -->
 <div class="jobs-toolbar">
   <div class="jobs-toolbar-filters">
-    <span class="jobs-week-label">Week:</span>
-    <input type="date" id="week-filter" class="jobs-week-input" title="Filter by ship week (Monday)">
-    <button class="btn ghost small" id="btn-load-week">Apply</button>
-    <button class="btn ghost small" id="btn-all-jobs">Show All</button>
+    <span class="jobs-week-label" data-i18n="jobs.weekLabel">Week:</span>
+    <input type="date" id="week-filter" class="jobs-week-input" title="Filter by ship week (Monday)" data-i18n-attr="title:jobs.filterByShipWeek">
+    <button class="btn ghost small" id="btn-load-week" data-i18n="jobs.apply">Apply</button>
+    <button class="btn ghost small" id="btn-all-jobs" data-i18n="jobs.showAll">Show All</button>
   </div>
   <div class="jobs-toolbar-actions">
     <div class="jobs-view-toggle" style="display:inline-flex;border:1px solid var(--input-border);border-radius:8px;overflow:hidden;">
-      <button id="view-list" class="jobs-view-btn active" onclick="setView('list')">List</button>
-      <button id="view-kanban" class="jobs-view-btn" onclick="setView('kanban')">Kanban</button>
-      <button id="view-calendar" class="jobs-view-btn" onclick="setView('calendar')">Calendar</button>
+      <button id="view-list" class="jobs-view-btn active" onclick="setView('list')" data-i18n="jobs.viewList">List</button>
+      <button id="view-kanban" class="jobs-view-btn" onclick="setView('kanban')" data-i18n="jobs.viewKanban">Kanban</button>
+      <button id="view-calendar" class="jobs-view-btn" onclick="setView('calendar')" data-i18n="jobs.viewCalendar">Calendar</button>
     </div>
-    <button class="btn ghost small" id="btn-upload-slip">📄 Upload Packing Slip</button>
-    <button class="jobs-archive-toggle" id="toggle-archived" title="Show/hide archived jobs">📦 Show Archived</button>
-    <button class="btn primary small" id="btn-new-job">+ New Job</button>
+    <button class="btn ghost small" id="btn-upload-slip" data-i18n="jobs.uploadSlip">📄 Upload Packing Slip</button>
+    <button class="jobs-archive-toggle" id="toggle-archived" title="Show/hide archived jobs" data-i18n="jobs.showArchived" data-i18n-attr="title:jobs.toggleArchivedTitle">📦 Show Archived</button>
+    <button class="btn primary small" id="btn-new-job" data-i18n="jobs.newJob">+ New Job</button>
   </div>
   <input type="file" id="packing-slip-upload" accept=".pdf" style="display:none">
 </div>
 
 <!-- Mobile tabs -->
 <div class="jobs-tabs" id="jobs-tabs" role="tablist">
-  <button class="jobs-tab active" data-status="not_started" role="tab">Not Started</button>
-  <button class="jobs-tab" data-status="in_production" role="tab">In Production</button>
-  <button class="jobs-tab" data-status="done" role="tab">Done</button>
+  <button class="jobs-tab active" data-status="not_started" role="tab" data-i18n="jobs.statusNotStarted">Not Started</button>
+  <button class="jobs-tab" data-status="in_production" role="tab" data-i18n="jobs.statusInProduction">In Production</button>
+  <button class="jobs-tab" data-status="done" role="tab" data-i18n="jobs.statusDone">Done</button>
 </div>
 
 <!-- List view -->
 <div id="list-container" style="padding:0 16px 24px;">
   <div id="list-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0;"></div>
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-    <input type="text" id="list-search" placeholder="Search customer or invoice…" oninput="listSearchChanged(this.value)" style="flex:1;min-width:220px;max-width:340px;padding:8px 12px;border:1px solid var(--input-border);border-radius:8px;font-size:14px;">
-    <button id="list-week-btn" class="jobs-view-btn" style="border:1px solid var(--input-border);border-radius:8px;" onclick="toggleListWeek()">This Week</button>
+    <input type="text" id="list-search" placeholder="Search customer or invoice…" data-i18n-placeholder="jobs.searchPlaceholder" oninput="listSearchChanged(this.value)" style="flex:1;min-width:220px;max-width:340px;padding:8px 12px;border:1px solid var(--input-border);border-radius:8px;font-size:14px;">
+    <button id="list-week-btn" class="jobs-view-btn" style="border:1px solid var(--input-border);border-radius:8px;" onclick="toggleListWeek()" data-i18n="jobs.thisWeek">This Week</button>
   </div>
   <div style="border:1px solid var(--card-border);border-radius:12px;overflow:hidden;background:var(--card-bg);">
     <table style="width:100%;border-collapse:collapse;">
       <thead>
         <tr style="background:var(--surface-2);">
-          <th onclick="sortList('invoice_number')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">INV#</th>
-          <th onclick="sortList('customer')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">Customer</th>
-          <th onclick="sortList('ship_date')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">Ship Date</th>
-          <th onclick="sortList('total_bdft')" style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;">BDFT</th>
-          <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Status</th>
-          <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Loading</th>
+          <th onclick="sortList('invoice_number')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" data-i18n="jobs.colInv">INV#</th>
+          <th onclick="sortList('customer')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" data-i18n="jobs.colCustomer">Customer</th>
+          <th onclick="sortList('ship_date')" style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" data-i18n="jobs.colShipDate">Ship Date</th>
+          <th onclick="sortList('total_bdft')" style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" data-i18n="jobs.colBdft">BDFT</th>
+          <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;" data-i18n="jobs.colStatus">Status</th>
+          <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;" data-i18n="jobs.colLoading">Loading</th>
         </tr>
       </thead>
       <tbody id="list-tbody"></tbody>
     </table>
-    <div id="list-empty" style="display:none;padding:24px;text-align:center;color:var(--text-hint);font-size:14px;">No jobs match.</div>
+    <div id="list-empty" style="display:none;padding:24px;text-align:center;color:var(--text-hint);font-size:14px;" data-i18n="jobs.noJobsMatch">No jobs match.</div>
   </div>
   <div id="list-foot" style="margin-top:8px;font-size:12px;color:var(--text-hint);"></div>
 </div>
@@ -178,7 +180,7 @@
 
     <div class="jobs-col tab-active" data-status="not_started">
       <div class="jobs-col-header">
-        <span class="jobs-col-title">Not Started</span>
+        <span class="jobs-col-title" data-i18n="jobs.statusNotStarted">Not Started</span>
         <span class="jobs-col-count" id="count-not_started">0</span>
       </div>
       <div class="jobs-col-body" id="col-not_started" data-status="not_started"></div>
@@ -186,7 +188,7 @@
 
     <div class="jobs-col" data-status="in_production">
       <div class="jobs-col-header">
-        <span class="jobs-col-title">In Production</span>
+        <span class="jobs-col-title" data-i18n="jobs.statusInProduction">In Production</span>
         <span class="jobs-col-count" id="count-in_production">0</span>
       </div>
       <div class="jobs-col-body" id="col-in_production" data-status="in_production"></div>
@@ -194,7 +196,7 @@
 
     <div class="jobs-col" data-status="done">
       <div class="jobs-col-header">
-        <span class="jobs-col-title">Done</span>
+        <span class="jobs-col-title" data-i18n="jobs.statusDone">Done</span>
         <span class="jobs-col-count" id="count-done">0</span>
       </div>
       <div class="jobs-col-body" id="col-done" data-status="done"></div>
@@ -209,7 +211,7 @@
     <button onclick="changeMonth(-1)" style="background:none;border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">←</button>
     <h3 id="calendar-month-label" style="margin:0;font-size:18px;font-weight:700;min-width:180px;text-align:center;"></h3>
     <button onclick="changeMonth(1)" style="background:none;border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">→</button>
-    <button onclick="goToToday()" style="background:var(--ghost-bg);border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
+    <button onclick="goToToday()" style="background:var(--ghost-bg);border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;" data-i18n="jobs.today">Today</button>
   </div>
   <div id="calendar-grid"></div>
 
@@ -220,7 +222,7 @@
     <div class="jobs-modal-panel" role="dialog" aria-modal="true" aria-labelledby="day-jobs-title">
       <div class="jobs-modal-header">
         <h2 id="day-jobs-title">Jobs</h2>
-        <button class="jobs-modal-close" aria-label="Close" onclick="closeDayJobsModal()">&times;</button>
+        <button class="jobs-modal-close" aria-label="Close" data-i18n-attr="aria-label:jobs.close" onclick="closeDayJobsModal()">&times;</button>
       </div>
       <div class="jobs-modal-body" id="day-jobs-body"></div>
     </div>
@@ -231,16 +233,16 @@
 <div class="jobs-modal-overlay" id="split-days-modal" hidden onclick="if(event.target===this)closeSplitDaysModal()" style="z-index:160;">
   <div class="jobs-modal-panel" role="dialog" aria-modal="true" aria-labelledby="split-days-title" style="max-width:420px;">
     <div class="jobs-modal-header">
-      <h2 id="split-days-title">Assign Ship Days</h2>
-      <button class="jobs-modal-close" aria-label="Close" onclick="closeSplitDaysModal()">&times;</button>
+      <h2 id="split-days-title" data-i18n="jobs.splitDaysTitle">Assign Ship Days</h2>
+      <button class="jobs-modal-close" aria-label="Close" data-i18n-attr="aria-label:jobs.close" onclick="closeSplitDaysModal()">&times;</button>
     </div>
     <div class="jobs-modal-body">
-      <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px;">Set the ship day for each load. Leave blank to use the job&rsquo;s ship date. Loads on different days show as a split on the board.</p>
+      <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px;" data-i18n="jobs.splitDaysDesc">Set the ship day for each load. Leave blank to use the job&rsquo;s ship date. Loads on different days show as a split on the board.</p>
       <div id="split-days-rows"></div>
       <div id="split-days-error" style="color:#ef4444;font-size:13px;margin-top:8px;" hidden></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
-        <button class="btn ghost small" onclick="closeSplitDaysModal()">Cancel</button>
-        <button class="btn small" id="split-days-save" onclick="saveSplitDays()">Save</button>
+        <button class="btn ghost small" onclick="closeSplitDaysModal()" data-i18n="jobs.cancel">Cancel</button>
+        <button class="btn small" id="split-days-save" onclick="saveSplitDays()" data-i18n="jobs.save">Save</button>
       </div>
     </div>
   </div>
@@ -252,7 +254,7 @@
 
     <div class="jobs-modal-header">
       <h2 id="modal-title">New Job</h2>
-      <button class="jobs-modal-close" id="modal-close" aria-label="Close">&times;</button>
+      <button class="jobs-modal-close" id="modal-close" aria-label="Close" data-i18n-attr="aria-label:jobs.close">&times;</button>
     </div>
 
     <div class="jobs-modal-body">
@@ -260,49 +262,49 @@
       <!-- Status + View BOL (edit mode only) -->
       <div id="status-section" hidden style="margin-bottom:16px;display:flex;align-items:flex-end;gap:12px;">
         <div class="jobs-field" style="flex:1;margin-bottom:0;">
-          <label for="f-status">Job Status</label>
+          <label for="f-status" data-i18n="jobs.jobStatus">Job Status</label>
           <select id="f-status">
-            <option value="not_started">Not Started</option>
-            <option value="in_production">In Production</option>
-            <option value="done">Done</option>
+            <option value="not_started" data-i18n="jobs.statusNotStarted">Not Started</option>
+            <option value="in_production" data-i18n="jobs.statusInProduction">In Production</option>
+            <option value="done" data-i18n="jobs.statusDone">Done</option>
           </select>
         </div>
         <div class="jobs-field" style="flex:1;margin-bottom:0;">
-          <label for="f-priority-level">Priority</label>
+          <label for="f-priority-level" data-i18n="jobs.priority">Priority</label>
           <select id="f-priority-level">
-            <option value="0">Normal</option>
-            <option value="1">Elevated</option>
-            <option value="2">High</option>
-            <option value="3">Critical</option>
+            <option value="0" data-i18n="jobs.priorityNormal">Normal</option>
+            <option value="1" data-i18n="jobs.priorityElevated">Elevated</option>
+            <option value="2" data-i18n="jobs.priorityHigh">High</option>
+            <option value="3" data-i18n="jobs.priorityCritical">Critical</option>
           </select>
         </div>
         <label for="f-rush" style="flex-shrink:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin-bottom:9px;cursor:pointer;white-space:nowrap;">
           <input type="checkbox" id="f-rush" style="width:18px;height:18px;cursor:pointer;" />
-          Rush
+          <span data-i18n="jobs.rush">Rush</span>
         </label>
-        <button id="modal-view-bol" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;">View BOL</button>
-        <button id="modal-split-days" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;">Assign Ship Days</button>
-        <button id="modal-print-diversitech" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;">🏷️ Print DiversiTech Labels</button>
+        <button id="modal-view-bol" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;" data-i18n="jobs.viewBol">View BOL</button>
+        <button id="modal-split-days" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;" data-i18n="jobs.assignShipDays">Assign Ship Days</button>
+        <button id="modal-print-diversitech" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;" data-i18n="jobs.printDiversitech">🏷️ Print DiversiTech Labels</button>
       </div>
 
       <!-- Assigned to (P334): read-only chips always visible; add/remove is manager-only (jobs.manage) -->
       <div id="assign-section" hidden style="margin-bottom:16px;">
-        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Assigned to</label>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;" data-i18n="jobs.assignedTo">Assigned to</label>
         <div id="assign-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
         <div id="assign-add-wrap" hidden style="display:flex;gap:8px;">
           <select id="assign-user-select" style="flex:1;min-height:44px;" onchange="onAssignSelectChange(this)">
-            <option value="">Add team member…</option>
+            <option value="" data-i18n="jobs.addTeamMember">Add team member…</option>
           </select>
         </div>
       </div>
 
       <!-- Shift (P356): mirrors "Assigned to" — read-only chips always visible; add/remove is manager-only (jobs.manage) -->
       <div id="shift-section" hidden style="margin-bottom:16px;">
-        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Shift</label>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;" data-i18n="jobs.shift">Shift</label>
         <div id="shift-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
         <div id="shift-add-wrap" hidden style="display:flex;gap:8px;">
           <select id="shift-select" style="flex:1;min-height:44px;" onchange="onShiftSelectChange(this)">
-            <option value="">Add shift…</option>
+            <option value="" data-i18n="jobs.addShift">Add shift…</option>
           </select>
         </div>
       </div>
@@ -311,8 +313,8 @@
       <div id="slip-dropzone" style="border:2px dashed var(--input-border);border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;transition:all 0.2s;cursor:pointer;" onclick="document.getElementById('packing-slip-upload').click()">
         <div style="font-size:14px;color:var(--text-muted);">
           <span style="font-size:20px;">📄</span><br>
-          Drag &amp; drop a packing slip PDF here<br>
-          <span style="font-size:12px;color:var(--text-hint);">or click to browse</span>
+          <span data-i18n="jobs.dropzoneDrag">Drag &amp; drop a packing slip PDF here</span><br>
+          <span style="font-size:12px;color:var(--text-hint);" data-i18n="jobs.dropzoneClick">or click to browse</span>
         </div>
       </div>
 
@@ -323,7 +325,7 @@
       <div id="slip-inline-viewer" hidden style="margin:8px 0 12px;">
         <div id="slip-viewer-toggle" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;margin-bottom:6px;">
           <span id="slip-viewer-chevron" style="font-size:12px;transition:transform 0.2s;">&#9658;</span>
-          <span style="font-size:13px;font-weight:600;color:var(--link);">View Packing Slip</span>
+          <span style="font-size:13px;font-weight:600;color:var(--link);" data-i18n="jobs.viewPackingSlip">View Packing Slip</span>
         </div>
         <div id="slip-viewer-content" hidden>
           <iframe id="slip-viewer-iframe" style="width:100%;height:500px;border:1px solid var(--input-border);border-radius:8px;" src="about:blank"></iframe>
@@ -333,11 +335,11 @@
       <!-- P381: live Holey Board chunk requirement (shown only when the order has HB line items) -->
       <div id="holey-chunks-summary" hidden style="margin:8px 0 12px;padding:10px 12px;border:1px solid var(--input-border);border-radius:8px;">
         <div style="display:flex;align-items:baseline;gap:8px;">
-          <span style="font-size:13px;font-weight:600;color:var(--text);">Chunks required</span>
+          <span style="font-size:13px;font-weight:600;color:var(--text);" data-i18n="jobs.chunksRequired">Chunks required</span>
           <span id="holey-chunks-count" style="font-size:18px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;">—</span>
           <span id="holey-chunks-meta" style="font-size:12px;color:var(--muted);"></span>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;" data-i18n="jobs.chunksHint">
           48×24×50 chunk · 0.079" kerf · live estimate; the value saved on the order is authoritative.
         </div>
       </div>
@@ -347,7 +349,7 @@
       <div id="cutlist-inline-viewer" hidden style="margin:8px 0 12px;">
         <div id="cutlist-viewer-toggle" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;margin-bottom:6px;">
           <span id="cutlist-viewer-chevron" style="font-size:12px;transition:transform 0.2s;">&#9658;</span>
-          <span id="cutlist-viewer-label" style="font-size:13px;font-weight:600;color:var(--link);">View Cut List</span>
+          <span id="cutlist-viewer-label" style="font-size:13px;font-weight:600;color:var(--link);" data-i18n="jobs.viewCutList">View Cut List</span>
         </div>
         <div id="cutlist-viewer-content" hidden>
           <iframe id="cutlist-viewer-iframe" style="width:100%;height:500px;border:1px solid var(--input-border);border-radius:8px;" src="about:blank"></iframe>
@@ -356,99 +358,99 @@
 
       <!-- Customer & Order -->
       <div class="jobs-form-section">
-        <p class="jobs-form-section-title">Customer &amp; Order</p>
+        <p class="jobs-form-section-title" data-i18n="jobs.sectionCustomerOrder">Customer &amp; Order</p>
         <div class="jobs-field">
-          <label for="f-customer">Customer *</label>
-          <input type="text" id="f-customer" placeholder="Customer name">
+          <label for="f-customer" data-i18n="jobs.customer">Customer *</label>
+          <input type="text" id="f-customer" placeholder="Customer name" data-i18n-placeholder="jobs.customerPlaceholder">
         </div>
         <div class="jobs-form-group" style="grid-column: 1 / -1;">
           <div id="ship-to-toggle" style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; margin-bottom:6px;">
             <span id="ship-to-chevron" style="font-size:12px; transition:transform 0.2s;">&#9658;</span>
-            <label style="cursor:pointer; font-weight:600; font-size:13px;">Ship-To Address</label>
+            <label style="cursor:pointer; font-weight:600; font-size:13px;" data-i18n="jobs.shipToAddress">Ship-To Address</label>
             <span id="ship-to-summary" style="font-size:12px; color:var(--muted); margin-left:4px;"></span>
             <span id="ship-to-verify-badge" style="margin-left:4px;"></span>
           </div>
           <div id="ship-to-fields" hidden>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
               <div class="jobs-field">
-                <label for="f-ship-to-company">Company</label>
-                <input type="text" id="f-ship-to-company" placeholder="Ship-to company name">
+                <label for="f-ship-to-company" data-i18n="jobs.shipToCompany">Company</label>
+                <input type="text" id="f-ship-to-company" placeholder="Ship-to company name" data-i18n-placeholder="jobs.shipToCompanyPlaceholder">
               </div>
               <div class="jobs-field">
-                <label for="f-ship-to-attention">Attention</label>
-                <input type="text" id="f-ship-to-attention" placeholder="ATTN: name">
+                <label for="f-ship-to-attention" data-i18n="jobs.shipToAttention">Attention</label>
+                <input type="text" id="f-ship-to-attention" placeholder="ATTN: name" data-i18n-placeholder="jobs.shipToAttentionPlaceholder">
               </div>
             </div>
             <div class="jobs-field" style="margin-top:8px;">
-              <label for="f-ship-to-street">Street</label>
-              <input type="text" id="f-ship-to-street" placeholder="Street address">
+              <label for="f-ship-to-street" data-i18n="jobs.shipToStreet">Street</label>
+              <input type="text" id="f-ship-to-street" placeholder="Street address" data-i18n-placeholder="jobs.shipToStreetPlaceholder">
             </div>
             <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:8px; margin-top:8px;">
               <div class="jobs-field">
-                <label for="f-ship-to-city">City</label>
-                <input type="text" id="f-ship-to-city" placeholder="City">
+                <label for="f-ship-to-city" data-i18n="jobs.shipToCity">City</label>
+                <input type="text" id="f-ship-to-city" placeholder="City" data-i18n-placeholder="jobs.shipToCityPlaceholder">
               </div>
               <div class="jobs-field">
-                <label for="f-ship-to-state">State</label>
-                <input type="text" id="f-ship-to-state" placeholder="ST" maxlength="2" style="text-transform:uppercase;">
+                <label for="f-ship-to-state" data-i18n="jobs.shipToState">State</label>
+                <input type="text" id="f-ship-to-state" placeholder="ST" data-i18n-placeholder="jobs.shipToStatePlaceholder" maxlength="2" style="text-transform:uppercase;">
               </div>
               <div class="jobs-field">
-                <label for="f-ship-to-zip">Zip</label>
-                <input type="text" id="f-ship-to-zip" placeholder="Zip" maxlength="10">
+                <label for="f-ship-to-zip" data-i18n="jobs.shipToZip">Zip</label>
+                <input type="text" id="f-ship-to-zip" placeholder="Zip" data-i18n-placeholder="jobs.shipToZipPlaceholder" maxlength="10">
               </div>
             </div>
           </div>
         </div>
         <div class="jobs-form-grid-2">
           <div class="jobs-field">
-            <label for="f-po-number">PO Number</label>
-            <input type="text" id="f-po-number" placeholder="PO #">
+            <label for="f-po-number" data-i18n="jobs.poNumber">PO Number</label>
+            <input type="text" id="f-po-number" placeholder="PO #" data-i18n-placeholder="jobs.poPlaceholder">
           </div>
           <div class="jobs-field">
-            <label for="f-invoice-number">Invoice Number</label>
-            <input type="text" id="f-invoice-number" placeholder="INV #">
+            <label for="f-invoice-number" data-i18n="jobs.invoiceNumber">Invoice Number</label>
+            <input type="text" id="f-invoice-number" placeholder="INV #" data-i18n-placeholder="jobs.invoicePlaceholder">
           </div>
         </div>
       </div>
 
       <!-- Shipping -->
       <div class="jobs-form-section">
-        <p class="jobs-form-section-title">Shipping</p>
+        <p class="jobs-form-section-title" data-i18n="jobs.sectionShipping">Shipping</p>
         <div class="jobs-form-grid-3">
           <div class="jobs-field">
-            <label for="f-ship-date">Ship Date</label>
+            <label for="f-ship-date" data-i18n="jobs.shipDate">Ship Date</label>
             <input type="date" id="f-ship-date">
             <span class="jobs-field-hint" id="f-ship-day-display"></span>
           </div>
           <div class="jobs-field">
-            <label for="f-delivery-time">Delivery Time</label>
-            <input type="text" id="f-delivery-time" placeholder="e.g. 7:00 am &amp; HRLY">
+            <label for="f-delivery-time" data-i18n="jobs.deliveryTime">Delivery Time</label>
+            <input type="text" id="f-delivery-time" placeholder="e.g. 7:00 am &amp; HRLY" data-i18n-placeholder="jobs.deliveryTimePlaceholder">
           </div>
           <div class="jobs-field">
-            <label for="f-load-count">Load Count</label>
+            <label for="f-load-count" data-i18n="jobs.loadCount">Load Count</label>
             <input type="number" id="f-load-count" value="1" min="1">
           </div>
         </div>
         <div class="jobs-field">
-          <label for="f-location">Location</label>
-          <input type="text" id="f-location" placeholder="City, State">
+          <label for="f-location" data-i18n="jobs.location">Location</label>
+          <input type="text" id="f-location" placeholder="City, State" data-i18n-placeholder="jobs.locationPlaceholder">
         </div>
         <div class="jobs-form-grid-3">
           <div class="jobs-field">
-            <label for="f-method">Method</label>
+            <label for="f-method" data-i18n="jobs.method">Method</label>
             <select id="f-method">
-              <option value="">— Select —</option>
-              <option value="dry van">Dry Van</option>
-              <option value="flatbed">Flatbed</option>
-              <option value="XPanda truck">XPanda Truck</option>
-              <option value="customer pickup">Customer Pickup</option>
-              <option value="hand deliver">Hand Deliver</option>
-              <option value="other">Other</option>
+              <option value="" data-i18n="jobs.methodSelect">— Select —</option>
+              <option value="dry van" data-i18n="jobs.methodDryVan">Dry Van</option>
+              <option value="flatbed" data-i18n="jobs.methodFlatbed">Flatbed</option>
+              <option value="XPanda truck" data-i18n="jobs.methodXpandaTruck">XPanda Truck</option>
+              <option value="customer pickup" data-i18n="jobs.methodCustomerPickup">Customer Pickup</option>
+              <option value="hand deliver" data-i18n="jobs.methodHandDeliver">Hand Deliver</option>
+              <option value="other" data-i18n="jobs.methodOther">Other</option>
             </select>
           </div>
           <div class="jobs-field">
-            <label for="f-carrier">Carrier</label>
-            <input type="text" id="f-carrier" placeholder="e.g. LISMA" list="carrier-list">
+            <label for="f-carrier" data-i18n="jobs.carrier">Carrier</label>
+            <input type="text" id="f-carrier" placeholder="e.g. LISMA" data-i18n-placeholder="jobs.carrierPlaceholder" list="carrier-list">
             <datalist id="carrier-list">
               <option value="LISMA">
               <option value="XPanda truck">
@@ -456,106 +458,106 @@
             </datalist>
           </div>
           <div class="jobs-field">
-            <label for="f-total-bdft">Total BDFT</label>
+            <label for="f-total-bdft" data-i18n="jobs.totalBdft">Total BDFT</label>
             <input type="number" id="f-total-bdft" value="0" min="0" step="1">
           </div>
         </div>
         <div class="jobs-field">
-          <label for="f-scrap-pickup">Scrap Pickup</label>
+          <label for="f-scrap-pickup" data-i18n="jobs.scrapPickup">Scrap Pickup</label>
           <select id="f-scrap-pickup">
-            <option value="">— N/A —</option>
-            <option value="YES">YES</option>
-            <option value="NO">NO</option>
-            <option value="N/A">N/A</option>
+            <option value="" data-i18n="jobs.scrapNA">— N/A —</option>
+            <option value="YES" data-i18n="jobs.scrapYes">YES</option>
+            <option value="NO" data-i18n="jobs.scrapNo">NO</option>
+            <option value="N/A" data-i18n="jobs.scrapNaOpt">N/A</option>
           </select>
         </div>
       </div>
 
       <!-- Details -->
       <div class="jobs-form-section">
-        <p class="jobs-form-section-title">Details</p>
+        <p class="jobs-form-section-title" data-i18n="jobs.sectionDetails">Details</p>
         <div class="jobs-form-grid-2">
           <div class="jobs-field">
-            <label for="f-contact-name">Contact Name</label>
-            <input type="text" id="f-contact-name" placeholder="Contact person">
+            <label for="f-contact-name" data-i18n="jobs.contactName">Contact Name</label>
+            <input type="text" id="f-contact-name" placeholder="Contact person" data-i18n-placeholder="jobs.contactNamePlaceholder">
           </div>
           <div class="jobs-field">
-            <label for="f-contact-phone">Contact Phone</label>
-            <input type="tel" id="f-contact-phone" placeholder="Phone number">
+            <label for="f-contact-phone" data-i18n="jobs.contactPhone">Contact Phone</label>
+            <input type="tel" id="f-contact-phone" placeholder="Phone number" data-i18n-placeholder="jobs.contactPhonePlaceholder">
           </div>
         </div>
       </div>
 
       <!-- Production Processes -->
       <div class="jobs-form-section">
-        <p class="jobs-form-section-title">Production Processes</p>
-        <p style="font-size:12px;color:var(--muted);margin:0 0 10px">Select which processes this job requires. Check off as completed.</p>
+        <p class="jobs-form-section-title" data-i18n="jobs.sectionProcesses">Production Processes</p>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px" data-i18n="jobs.processesHint">Select which processes this job requires. Check off as completed.</p>
         <div class="jobs-processes-grid">
-          <label class="jobs-checkbox-row" id="proc-cross-cutter-label"><input type="checkbox" id="proc-cross-cutter"> Cross Cutter</label>
-          <label class="jobs-checkbox-row" id="proc-hole-cutter-label"><input type="checkbox" id="proc-hole-cutter"> Hole Cutter</label>
-          <label class="jobs-checkbox-row" id="proc-main-line-label"><input type="checkbox" id="proc-main-line"> Main Line</label>
-          <label class="jobs-checkbox-row" id="proc-blue-line-label"><input type="checkbox" id="proc-blue-line"> Blue Line</label>
-          <label class="jobs-checkbox-row" id="proc-laminate-label"><input type="checkbox" id="proc-laminate"> Laminate</label>
+          <label class="jobs-checkbox-row" id="proc-cross-cutter-label"><input type="checkbox" id="proc-cross-cutter"> <span data-i18n="jobs.procCrossCutter">Cross Cutter</span></label>
+          <label class="jobs-checkbox-row" id="proc-hole-cutter-label"><input type="checkbox" id="proc-hole-cutter"> <span data-i18n="jobs.procHoleCutter">Hole Cutter</span></label>
+          <label class="jobs-checkbox-row" id="proc-main-line-label"><input type="checkbox" id="proc-main-line"> <span data-i18n="jobs.procMainLine">Main Line</span></label>
+          <label class="jobs-checkbox-row" id="proc-blue-line-label"><input type="checkbox" id="proc-blue-line"> <span data-i18n="jobs.procBlueLine">Blue Line</span></label>
+          <label class="jobs-checkbox-row" id="proc-laminate-label"><input type="checkbox" id="proc-laminate"> <span data-i18n="jobs.procLaminate">Laminate</span></label>
         </div>
       </div>
 
       <!-- Line Items -->
       <div class="jobs-form-section">
-        <p class="jobs-form-section-title">Line Items</p>
+        <p class="jobs-form-section-title" data-i18n="jobs.sectionLineItems">Line Items</p>
         <div class="jobs-li-scroll">
           <div class="jobs-li-header" style="grid-template-columns:90px 1fr 58px 88px 70px 30px;min-width:450px;">
-            <span>Part #</span>
-            <span>Description</span>
-            <span>Qty</span>
-            <span>Dimensions</span>
-            <span>Density</span>
+            <span data-i18n="jobs.colPart">Part #</span>
+            <span data-i18n="jobs.colDescription">Description</span>
+            <span data-i18n="jobs.colQty">Qty</span>
+            <span data-i18n="jobs.colDimensions">Dimensions</span>
+            <span data-i18n="jobs.colDensity">Density</span>
             <span></span>
           </div>
           <div id="li-container"></div>
         </div>
         <div class="jobs-li-footer">
-          <button type="button" class="btn ghost small" id="btn-add-li">+ Add Line Item</button>
-          <button type="button" class="btn ghost small" id="btn-load-parts">From Parts Library</button>
-          <label class="jobs-checkbox-row" style="margin-left:auto;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;" title="Sales sometimes enters total board feet instead of a piece count. Uses each row's Dimensions to convert BDFT → pieces.">
-            <input type="checkbox" id="li-bdft-convert"> Qty entered as BDFT — convert to pieces
+          <button type="button" class="btn ghost small" id="btn-add-li" data-i18n="jobs.addLineItem">+ Add Line Item</button>
+          <button type="button" class="btn ghost small" id="btn-load-parts" data-i18n="jobs.fromPartsLibrary">From Parts Library</button>
+          <label class="jobs-checkbox-row" style="margin-left:auto;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;" title="Sales sometimes enters total board feet instead of a piece count. Uses each row's Dimensions to convert BDFT → pieces." data-i18n-attr="title:jobs.bdftConvertTitle">
+            <input type="checkbox" id="li-bdft-convert"> <span data-i18n="jobs.bdftConvertLabel">Qty entered as BDFT — convert to pieces</span>
           </label>
         </div>
       </div>
 
       <!-- Block Calculator Combo -->
       <div class="jobs-form-section">
-        <p class="jobs-form-section-title">Block Calculator Combo</p>
+        <p class="jobs-form-section-title" data-i18n="jobs.sectionCombo">Block Calculator Combo</p>
         <div class="jobs-combo-area" id="combo-area">
-          <button type="button" class="btn ghost small" id="btn-link-combo">Link Combo</button>
+          <button type="button" class="btn ghost small" id="btn-link-combo" data-i18n="jobs.linkCombo">Link Combo</button>
           <span id="combo-badge-wrap" hidden></span>
         </div>
       </div>
 
       <!-- Trailer Group (linked jobs sharing a trailer) -->
       <div class="jobs-form-section" id="trailer-group-section" hidden>
-        <p class="jobs-form-section-title">Trailer Group</p>
-        <p style="font-size:12px;color:var(--muted);margin:0 0 10px">Link this job to another job shipping on the same trailer (same ship date required). They'll appear as a linked set on the schedule board.</p>
+        <p class="jobs-form-section-title" data-i18n="jobs.sectionTrailerGroup">Trailer Group</p>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px" data-i18n="jobs.trailerGroupHint">Link this job to another job shipping on the same trailer (same ship date required). They'll appear as a linked set on the schedule board.</p>
         <div class="jobs-combo-area" id="trailer-group-area">
           <div id="trailer-group-members" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
-          <button type="button" class="btn ghost small" id="btn-link-trailer-group">Link to Another Job</button>
-          <button type="button" class="btn ghost small" id="btn-unlink-trailer-group" hidden>Unlink from Trailer Group</button>
+          <button type="button" class="btn ghost small" id="btn-link-trailer-group" data-i18n="jobs.linkTrailerGroup">Link to Another Job</button>
+          <button type="button" class="btn ghost small" id="btn-unlink-trailer-group" hidden data-i18n="jobs.unlinkTrailerGroup">Unlink from Trailer Group</button>
         </div>
       </div>
 
       <!-- Instructions -->
       <div class="jobs-form-section">
-        <p class="jobs-form-section-title">Instructions</p>
+        <p class="jobs-form-section-title" data-i18n="jobs.sectionInstructions">Instructions</p>
         <div class="jobs-field">
-          <label for="f-cutting">Cutting Instructions</label>
-          <textarea id="f-cutting" placeholder="Cutting-floor instructions — routing, taper notes, batch sizes…" rows="3"></textarea>
+          <label for="f-cutting" data-i18n="jobs.cuttingInstructions">Cutting Instructions</label>
+          <textarea id="f-cutting" placeholder="Cutting-floor instructions — routing, taper notes, batch sizes…" data-i18n-placeholder="jobs.cuttingPlaceholder" rows="3"></textarea>
         </div>
         <div class="jobs-field">
-          <label for="f-packing">Packing Instructions</label>
-          <textarea id="f-packing" placeholder="Floor operator instructions — labeling, load on risers, QC requirements, unloading notes…" rows="3"></textarea>
+          <label for="f-packing" data-i18n="jobs.packingInstructions">Packing Instructions</label>
+          <textarea id="f-packing" placeholder="Floor operator instructions — labeling, load on risers, QC requirements, unloading notes…" data-i18n-placeholder="jobs.packingPlaceholder" rows="3"></textarea>
         </div>
         <div class="jobs-field">
-          <label for="f-notes">Notes</label>
-          <textarea id="f-notes" placeholder="General notes, scheduling history, internal comments" rows="3"></textarea>
+          <label for="f-notes" data-i18n="jobs.notes">Notes</label>
+          <textarea id="f-notes" placeholder="General notes, scheduling history, internal comments" data-i18n-placeholder="jobs.notesPlaceholder" rows="3"></textarea>
         </div>
       </div>
 
@@ -564,9 +566,9 @@
     </div><!-- /.jobs-modal-body -->
 
     <div class="jobs-modal-footer">
-      <button class="btn primary" id="modal-save">Save Job</button>
-      <button class="btn ghost" id="modal-cancel">Cancel</button>
-      <button class="btn danger" id="modal-delete" hidden>Delete Job</button>
+      <button class="btn primary" id="modal-save" data-i18n="jobs.saveJob">Save Job</button>
+      <button class="btn ghost" id="modal-cancel" data-i18n="jobs.cancel">Cancel</button>
+      <button class="btn danger" id="modal-delete" hidden data-i18n="jobs.deleteJob">Delete Job</button>
     </div>
 
   </div>
@@ -576,11 +578,11 @@
 <div class="jobs-picker-overlay" id="parts-picker" hidden>
   <div class="jobs-picker-panel">
     <div class="jobs-picker-header">
-      <h3>Select Part</h3>
-      <button class="jobs-modal-close" id="parts-picker-close">&times;</button>
+      <h3 data-i18n="jobs.selectPart">Select Part</h3>
+      <button class="jobs-modal-close" id="parts-picker-close" aria-label="Close" data-i18n-attr="aria-label:jobs.close">&times;</button>
     </div>
     <div class="jobs-picker-search">
-      <input type="text" id="parts-picker-search" placeholder="Search by part # or customer…">
+      <input type="text" id="parts-picker-search" placeholder="Search by part # or customer…" data-i18n-placeholder="jobs.searchPartOrCustomer">
     </div>
     <div class="jobs-picker-body" id="parts-picker-body"></div>
   </div>
@@ -590,8 +592,8 @@
 <div class="jobs-picker-overlay" id="combo-picker" hidden>
   <div class="jobs-picker-panel">
     <div class="jobs-picker-header">
-      <h3>Select Combo</h3>
-      <button class="jobs-modal-close" id="combo-picker-close">&times;</button>
+      <h3 data-i18n="jobs.selectCombo">Select Combo</h3>
+      <button class="jobs-modal-close" id="combo-picker-close" aria-label="Close" data-i18n-attr="aria-label:jobs.close">&times;</button>
     </div>
     <div class="jobs-picker-body" id="combo-picker-body"></div>
   </div>
@@ -601,11 +603,11 @@
 <div class="jobs-picker-overlay" id="trailer-group-picker" hidden>
   <div class="jobs-picker-panel">
     <div class="jobs-picker-header">
-      <h3>Link to Job</h3>
-      <button class="jobs-modal-close" id="trailer-group-picker-close">&times;</button>
+      <h3 data-i18n="jobs.linkToJob">Link to Job</h3>
+      <button class="jobs-modal-close" id="trailer-group-picker-close" aria-label="Close" data-i18n-attr="aria-label:jobs.close">&times;</button>
     </div>
     <div class="jobs-picker-search">
-      <input type="text" id="trailer-group-picker-search" placeholder="Search by customer or invoice #…">
+      <input type="text" id="trailer-group-picker-search" placeholder="Search by customer or invoice #…" data-i18n-placeholder="jobs.searchCustomerOrInvoice">
     </div>
     <div class="jobs-picker-body" id="trailer-group-picker-body"></div>
   </div>
@@ -621,15 +623,23 @@
    State
 ═══════════════════════════════════════════ */
 
-const STATUS_ORDER  = ['not_started', 'in_production', 'done'];
-const STATUS_LABELS = {
-  not_started:   'Not Started',
-  in_production: 'In Production',
-  done:          'Done',
-  loading:       'Loading',
-  shipped:       'Shipped',
-};
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
 
+const STATUS_ORDER  = ['not_started', 'in_production', 'done'];
+// Status display strings are translated at access time (Proxy get trap) rather than baked into
+// the object, so every existing STATUS_LABELS[x] call site keeps working unchanged.
+const STATUS_KEYS = {
+  not_started:   'statusNotStarted',
+  in_production: 'statusInProduction',
+  done:          'statusDone',
+  loading:       'statusLoading',
+  shipped:       'statusShipped',
+};
+const STATUS_LABELS = new Proxy({}, { get: (_, key) => STATUS_KEYS[key] ? t('jobs.' + STATUS_KEYS[key]) : key });
+
+// PROCESSES[].name/abbr are data values matched against the API's job.processes records
+// (see collectProcesses/toggleProcessPill) and are NOT translated — only the checkbox labels
+// in the static HTML above are. Translating these would break the match against saved data.
 const PROCESSES = [
   { name: 'Cross Cutter', abbr: 'CC',  id: 'proc-cross-cutter' },
   { name: 'Hole Cutter',  abbr: 'HC',  id: 'proc-hole-cutter'  },
@@ -705,15 +715,23 @@ function getCurrentWeekMonday() {
 function formatShipDate(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  return `${days[d.getDay()]} ${d.getMonth() + 1}/${d.getDate()}`;
+  return `${t('jobs.dowShort' + d.getDay())} ${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+// English weekday name — this is what gets PERSISTED as job.ship_day (see saveJob's payload),
+// so it must stay untranslated regardless of UI language. Use getShipDayLabel() for display.
 function getShipDay(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   return days[d.getDay()];
+}
+
+// Translated weekday name for display only (f-ship-day-display). Never persisted.
+function getShipDayLabel(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  return t('jobs.dow' + d.getDay());
 }
 
 /* ═══════════════════════════════════════════
@@ -727,7 +745,7 @@ async function loadJobs(params) {
   if (showArchived) q.set('include_archived', '1');
 
   const r = await api.get('/api/jobs?' + q.toString());
-  if (!r.ok) { showToast('Error loading jobs: ' + r.error); return; }
+  if (!r.ok) { showToast(t('jobs.errorLoadingJobs', { msg: r.error })); return; }
   allJobs = r.data.jobs;
   renderBoard(allJobs);
 }
@@ -753,7 +771,7 @@ function renderBoard(jobs) {
     body.innerHTML    = '';
 
     if (colJobs.length === 0) {
-      body.innerHTML = '<p class="jobs-empty-col">No jobs</p>';
+      body.innerHTML = `<p class="jobs-empty-col">${esc(t('jobs.noJobs'))}</p>`;
     } else {
       for (const job of colJobs) body.appendChild(buildCard(job));
     }
@@ -769,16 +787,23 @@ function renderBoard(jobs) {
 }
 
 const STATUS_LIST_TABS = ['all', 'not_started', 'in_production', 'done', 'loading', 'shipped'];
-const LIST_LOADING = {
-  not_started: { label: 'Not Loaded',  color: '#ef4444' },
-  awaiting:    { label: 'Awaiting Bay', color: '#6b7280' },
-  loading:     { label: 'Loading',      color: '#f59e0b' },
-  loaded:      { label: 'Loaded',       color: '#10b981' },
-  in_transit:  { label: 'In Transit',   color: '#6366f1' },
-  delivered:   { label: 'Delivered',    color: '#0d9488' },
+// Loading-indicator display meta (color + translated label), evaluated lazily at access time so
+// language switches don't require rebuilding the object. Shared by renderList() and buildCard().
+const LOADING_INDICATOR_META = {
+  not_started: { color: '#ef4444', key: 'loadingNotStarted' },
+  awaiting:    { color: '#6b7280', key: 'loadingAwaitingBay' },
+  loading:     { color: '#f59e0b', key: 'loadingInProgress' },
+  loaded:      { color: '#10b981', key: 'loadingLoaded' },
+  in_transit:  { color: '#6366f1', key: 'loadingInTransit' },
+  delivered:   { color: '#0d9488', key: 'loadingDelivered' },
 };
+function loadingIndicatorMeta(status) {
+  const m = LOADING_INDICATOR_META[status];
+  return m ? { color: m.color, label: t('jobs.' + m.key) } : null;
+}
+const LIST_LOADING = new Proxy({}, { get: (_, status) => loadingIndicatorMeta(status) });
 
-function listTabLabel(s) { return s === 'all' ? 'All' : (STATUS_LABELS[s] || s); }
+function listTabLabel(s) { return s === 'all' ? t('jobs.listTabAll') : (STATUS_LABELS[s] || s); }
 function setListTab(s)   { listTab = s; renderList(allJobs); }
 function listSearchChanged(v) { listSearch = v; renderList(allJobs); }
 function toggleListWeek() {
@@ -835,27 +860,34 @@ function listStatusChange(jobId, newStatus) {
   moveCard(jobId, newStatus);
 }
 
-const PRIORITY_LABELS = ['', 'Elevated', 'High', 'Critical'];
+const PRIORITY_KEYS = ['', 'priorityElevated', 'priorityHigh', 'priorityCritical'];
+function priorityLabel(lvl) { return lvl > 0 ? t('jobs.' + PRIORITY_KEYS[lvl]) : ''; }
 
 function priorityBadge(job) {
   if (job.priority === 'rush') {
-    return ` <span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.03em;background:var(--danger-bg);color:var(--danger-text);">RUSH</span>`;
+    return ` <span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.03em;background:var(--danger-bg);color:var(--danger-text);">${esc(t('jobs.rush').toUpperCase())}</span>`;
   }
   const lvl = Number(job.priority_level || 0);
   if (lvl <= 0) return '';
-  return ` <span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.03em;background:var(--warn-bg);color:var(--warn-text);">${PRIORITY_LABELS[lvl]}</span>`;
+  return ` <span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.03em;background:var(--warn-bg);color:var(--warn-text);">${esc(priorityLabel(lvl))}</span>`;
 }
 
 // Ship-to address verification (Lob) status pill. `unverified` (the pre-feature/never-validated
 // default) is suppressed on cards/list to avoid noise across every legacy job — it's still shown
-// on the edit form, where there's no such noise cost.
-const SHIP_TO_VERIFY_STYLES = {
-  verified:      { label: 'Verified',      bg: 'var(--success-bg)', text: 'var(--success-text)' },
-  corrected:     { label: 'Standardized',  bg: 'var(--info-bg)',    text: 'var(--info-text)', border: 'var(--info-border)' },
-  kept_original: { label: 'Kept Original', bg: 'var(--warn-bg)',    text: 'var(--warn-text)',  border: 'var(--warn-border)' },
-  unverifiable:  { label: 'Unverifiable',  bg: 'var(--warn-bg)',    text: 'var(--warn-text)',  border: 'var(--warn-border)' },
-  unverified:    { label: 'Unverified',    bg: 'var(--ghost-bg)',   text: 'var(--muted)',      border: 'var(--line)' },
+// on the edit form, where there's no such noise cost. Labels translated lazily (Proxy) so every
+// existing SHIP_TO_VERIFY_STYLES[x] call site keeps working unchanged.
+const SHIP_TO_VERIFY_META = {
+  verified:      { bg: 'var(--success-bg)', text: 'var(--success-text)', key: 'shipToVerified' },
+  corrected:     { bg: 'var(--info-bg)',    text: 'var(--info-text)', border: 'var(--info-border)', key: 'shipToStandardized' },
+  kept_original: { bg: 'var(--warn-bg)',    text: 'var(--warn-text)',  border: 'var(--warn-border)', key: 'shipToKeptOriginal' },
+  unverifiable:  { bg: 'var(--warn-bg)',    text: 'var(--warn-text)',  border: 'var(--warn-border)', key: 'shipToUnverifiable' },
+  unverified:    { bg: 'var(--ghost-bg)',   text: 'var(--muted)',      border: 'var(--line)', key: 'shipToUnverified' },
 };
+function shipToVerifyMeta(status) {
+  const m = SHIP_TO_VERIFY_META[status];
+  return m ? { bg: m.bg, text: m.text, border: m.border, label: t('jobs.' + m.key) } : null;
+}
+const SHIP_TO_VERIFY_STYLES = new Proxy({}, { get: (_, status) => shipToVerifyMeta(status) });
 
 function shipToVerifiedBadge(status, showUnverified) {
   const s = SHIP_TO_VERIFY_STYLES[status];
@@ -870,7 +902,7 @@ function shipToVerifiedBadge(status, showUnverified) {
 function assigneeChips(assignees) {
   if (!Array.isArray(assignees) || !assignees.length) return '';
   return assignees.map(a => {
-    const shiftSuffix = a.shift ? ` (${esc(a.shift)})` : '';
+    const shiftSuffix = a.shift ? ` (${esc(shiftLabel(a.shift))})` : '';
     return ` <span style="display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">${esc(a.name || '')}${shiftSuffix}</span>`;
   }).join('');
 }
@@ -917,7 +949,10 @@ function renderList(jobs) {
   }
   document.getElementById('list-empty').style.display = rows.length ? 'none' : 'block';
   const foot = document.getElementById('list-foot');
-  if (foot) foot.textContent = `${rows.length} of ${listActiveJobs().length} jobs${listWeekOnly ? ' · this week' : ''}`;
+  if (foot) {
+    const vars = { shown: rows.length, total: listActiveJobs().length };
+    foot.textContent = t(listWeekOnly ? 'jobs.listFootThisWeek' : 'jobs.listFoot', vars);
+  }
 }
 
 async function fetchJobBols(jobIds) {
@@ -972,8 +1007,7 @@ function renderCalendar(jobs) {
 
   const year  = calendarMonth.getFullYear();
   const month = calendarMonth.getMonth();
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  label.textContent = `${monthNames[month]} ${year}`;
+  label.textContent = `${t('jobs.month' + month)} ${year}`;
 
   const firstDay  = new Date(year, month, 1);
   const lastDay   = new Date(year, month + 1, 0);
@@ -996,7 +1030,7 @@ function renderCalendar(jobs) {
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
   let html = '<div class="cal-header-row">';
-  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => { html += `<div class="cal-header-cell">${d}</div>`; });
+  for (let dow = 0; dow < 7; dow++) { html += `<div class="cal-header-cell">${esc(t('jobs.dowShort' + dow))}</div>`; }
   html += '</div><div class="cal-body">';
 
   const totalCells = Math.ceil((startDow + totalDays) / 7) * 7;
@@ -1018,12 +1052,12 @@ function renderCalendar(jobs) {
 
       dayJobs.slice(0, maxVisible).forEach(job => {
         const sc = STATUS_COLORS[job.status] || STATUS_COLORS.not_started;
-        html += `<div class="cal-pill" style="background:${sc.bg};color:${sc.text};border-left:3px solid ${sc.border};" onclick="openJobFromCalendar('${job.id}')" title="${esc(job.customer)} — ${job.status.replace(/_/g,' ')}">`;
-        html += `${esc(job.customer || 'Untitled')}</div>`;
+        html += `<div class="cal-pill" style="background:${sc.bg};color:${sc.text};border-left:3px solid ${sc.border};" onclick="openJobFromCalendar('${job.id}')" title="${esc(job.customer)} — ${esc(STATUS_LABELS[job.status] || job.status)}">`;
+        html += `${esc(job.customer || t('jobs.untitledJob'))}</div>`;
       });
 
       if (dayJobs.length > maxVisible) {
-        html += `<div class="cal-more" onclick="showDayJobs('${dateStr}')">+${dayJobs.length - maxVisible} more</div>`;
+        html += `<div class="cal-more" onclick="showDayJobs('${dateStr}')">${esc(t('jobs.moreCount', { n: dayJobs.length - maxVisible }))}</div>`;
       }
 
       html += '</div>';
@@ -1058,14 +1092,14 @@ function showDayJobs(dateStr) {
   });
 
   const dt = new Date(dateStr + 'T00:00:00');
-  const wd = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
-  const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
+  const wd = t('jobs.dowShort' + dt.getDay());
+  const mo = t('jobs.monthShort' + dt.getMonth());
   document.getElementById('day-jobs-title').textContent =
-    `${wd}, ${mo} ${dt.getDate()} — ${dayJobs.length} job${dayJobs.length === 1 ? '' : 's'}`;
+    t('jobs.dayJobsTitle', { wd, mo, day: dt.getDate(), n: dayJobs.length });
 
   const body = document.getElementById('day-jobs-body');
   if (!dayJobs.length) {
-    body.innerHTML = '<p style="padding:12px;color:var(--muted);margin:0;">No jobs on this day.</p>';
+    body.innerHTML = `<p style="padding:12px;color:var(--muted);margin:0;">${esc(t('jobs.noJobsOnDay'))}</p>`;
   } else {
     body.innerHTML = dayJobs.map(job => {
       const sc    = STATUS_COLORS[job.status] || STATUS_COLORS.not_started;
@@ -1075,7 +1109,7 @@ function showDayJobs(dateStr) {
         + `margin-bottom:6px;border:1px solid var(--card-border);border-radius:8px;background:var(--card-bg);`
         + `color:var(--text);cursor:pointer;font-size:14px;">`
         + `<span style="flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:${sc.border};"></span>`
-        + `<span style="flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(job.customer || 'Untitled')}</span>`
+        + `<span style="flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(job.customer || t('jobs.untitledJob'))}</span>`
         + `<span style="flex:0 0 auto;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;`
         + `background:${sc.bg};color:${sc.text};">${esc(label)}</span>`
         + `</button>`;
@@ -1126,22 +1160,14 @@ function buildCard(job) {
     }).join('')}</div>`;
 
   const slipIcon = job.packing_slip_filename
-    ? ` <span class="jobs-card-slip" onclick="event.stopPropagation();window.open('/api/jobs/${encodeURIComponent(job.id)}/packing-slip','_blank')" title="View packing slip: ${esc(job.packing_slip_filename)}">📄</span>`
+    ? ` <span class="jobs-card-slip" onclick="event.stopPropagation();window.open('/api/jobs/${encodeURIComponent(job.id)}/packing-slip','_blank')" title="${esc(t('jobs.viewPackingSlipTitle', { filename: job.packing_slip_filename }))}">📄</span>`
     : '';
   const shipmentIcon = job.has_shipment
-    ? ` <span class="jobs-card-shipment" title="Outbound shipment record exists">🚚</span>`
+    ? ` <span class="jobs-card-shipment" title="${esc(t('jobs.shipmentExistsTitle'))}">🚚</span>`
     : '';
   const trailerBadge = job.assigned_trailers
-    ? `<div class="jobs-card-trailer" title="Trailer ${esc(job.assigned_trailers)} assigned on the loading dashboard">🚛 Trailer Assigned</div>`
+    ? `<div class="jobs-card-trailer" title="${esc(t('jobs.trailerAssignedTitle', { n: job.assigned_trailers }))}">${esc(t('jobs.trailerAssigned'))}</div>`
     : '';
-  const LOADING_BADGE = {
-    not_started: { label: 'Not Loaded',   color: '#ef4444' },
-    awaiting:    { label: 'Awaiting Bay',  color: '#6b7280' },
-    loading:     { label: 'Loading',       color: '#f59e0b' },
-    loaded:      { label: 'Loaded',        color: '#10b981' },
-    in_transit:  { label: 'In Transit',    color: '#6366f1' },
-    delivered:   { label: 'Delivered',     color: '#0d9488' },
-  };
   let splitBadge = '';
   try {
     const _loads = job.loads_summary ? JSON.parse(job.loads_summary) : [];
@@ -1158,12 +1184,13 @@ function buildCard(job) {
     const _SHIPPED = new Set(['in_transit', 'delivered']);
     const _shipped = _loads.filter(l => l && _SHIPPED.has(l.s)).length;
     if (_loads.length > 1 && _shipped > 0 && _shipped < _loads.length) {
-      splitBadge += `<div class="jobs-card-partial" style="font-size:11px;font-weight:700;color:#f59e0b;margin-top:4px;">◐ Partially shipped (${_shipped}/${_loads.length})</div>`;
+      splitBadge += `<div class="jobs-card-partial" style="font-size:11px;font-weight:700;color:#f59e0b;margin-top:4px;">${esc(t('jobs.partiallyShipped', { shipped: _shipped, total: _loads.length }))}</div>`;
     }
   } catch (e) {}
   const _ls = job.loading_status_indicator;
-  const loadingBadge = (_ls && LOADING_BADGE[_ls])
-    ? `<div class="jobs-card-loading" style="font-size:11px;font-weight:700;color:${LOADING_BADGE[_ls].color};margin-top:4px;">● ${LOADING_BADGE[_ls].label}</div>`
+  const _loadMeta = _ls && LIST_LOADING[_ls];
+  const loadingBadge = _loadMeta
+    ? `<div class="jobs-card-loading" style="font-size:11px;font-weight:700;color:${_loadMeta.color};margin-top:4px;">● ${esc(_loadMeta.label)}</div>`
     : '';
 
   card.innerHTML = `
@@ -1184,16 +1211,16 @@ function buildCard(job) {
     ${loadingBadge}
     ${splitBadge}
     ${shipToVerifiedBadge(job.ship_to_verified) ? `<div style="margin-top:4px;">${shipToVerifiedBadge(job.ship_to_verified)}</div>` : ''}
-    <button id="bol-view-btn-${esc(job.id)}" class="jobs-bol-view-btn" hidden onclick="event.stopPropagation();viewBolForJob('${esc(job.id)}')">View BOL</button>
-    ${(job.status === 'shipped' && !job.archived_at) ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="Archive this job">Archive</button>` : ''}
-    ${job.archived_at ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="Restore to its real status">Unarchive</button>` : ''}
+    <button id="bol-view-btn-${esc(job.id)}" class="jobs-bol-view-btn" hidden onclick="event.stopPropagation();viewBolForJob('${esc(job.id)}')">${esc(t('jobs.viewBol'))}</button>
+    ${(job.status === 'shipped' && !job.archived_at) ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="${esc(t('jobs.archiveTitle'))}">${esc(t('jobs.archive'))}</button>` : ''}
+    ${job.archived_at ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();unarchiveJob('${esc(job.id)}')" title="${esc(t('jobs.unarchiveTitle'))}">${esc(t('jobs.unarchive'))}</button>` : ''}
     <div class="jobs-card-actions">
       ${prev
-        ? `<button class="jobs-arrow-btn" data-dir="prev" data-id="${esc(job.id)}" title="Move to ${STATUS_LABELS[prev]}">←</button>`
+        ? `<button class="jobs-arrow-btn" data-dir="prev" data-id="${esc(job.id)}" title="${esc(t('jobs.moveTo', { status: STATUS_LABELS[prev] }))}">←</button>`
         : '<span></span>'}
       <span></span>
       ${next
-        ? `<button class="jobs-arrow-btn" data-dir="next" data-id="${esc(job.id)}" title="Move to ${STATUS_LABELS[next]}">→</button>`
+        ? `<button class="jobs-arrow-btn" data-dir="next" data-id="${esc(job.id)}" title="${esc(t('jobs.moveTo', { status: STATUS_LABELS[next] }))}">→</button>`
         : '<span></span>'}
     </div>
   `;
@@ -1227,7 +1254,7 @@ async function archiveJob(jobId, customerName) {
       allJobs = allJobs.filter(j => j.id !== jobId);
       renderBoard(allJobs);
     }
-    showArchiveToast(customerName || 'Job');
+    showArchiveToast(customerName || t('jobs.untitledJob'));
   }
 }
 
@@ -1253,7 +1280,7 @@ function showArchiveToast(customerName) {
     z-index:10000;display:flex;align-items:center;gap:8px;
     animation:toastSlideUp 0.3s ease-out;
   `;
-  toast.innerHTML = `<span style="color:#34d399;">✓</span><span>${customerName} archived</span>`;
+  toast.innerHTML = `<span style="color:#34d399;">✓</span><span>${t('jobs.archivedToast', { customer: customerName })}</span>`;
   document.body.appendChild(toast);
 
   setTimeout(() => {
@@ -1279,13 +1306,13 @@ function setupToolbar() {
     uploadInput.value = '';
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.pdf')) {
-      showToast('Please upload a PDF file.');
+      showToast(t('jobs.pleaseUploadPdf'));
       return;
     }
 
     const btn = document.getElementById('btn-upload-slip');
     btn.disabled    = true;
-    btn.textContent = 'Parsing…';
+    btn.textContent = t('jobs.uploadSlipParsing');
 
     const base64 = await new Promise((resolve) => {
       const reader = new FileReader();
@@ -1302,7 +1329,7 @@ function setupToolbar() {
     }
 
     btn.disabled    = false;
-    btn.textContent = '📄 Upload Packing Slip';
+    btn.textContent = t('jobs.uploadSlip');
 
     pendingSlip = {
       pdf:      base64,
@@ -1317,7 +1344,7 @@ function setupToolbar() {
       showSlipBadge(pendingSlip.invoice, pendingSlip.filename, false, null);
     } else {
       const errMsg = parseResult.error ? ': ' + parseResult.error : '';
-      showToast('Could not parse packing slip' + errMsg + '. You can still create the job manually.');
+      showToast(t('jobs.couldNotParseSlip', { err: errMsg }));
       showSlipBadge('', pendingSlip.filename, false, null);
     }
   });
@@ -1337,7 +1364,7 @@ function setupToolbar() {
     showArchived = !showArchived;
     const btn = document.getElementById('toggle-archived');
     btn.classList.toggle('active', showArchived);
-    btn.textContent = showArchived ? '📦 Hide Archived' : '📦 Show Archived';
+    btn.textContent = showArchived ? t('jobs.hideArchived') : t('jobs.showArchived');
     const v = document.getElementById('week-filter').value;
     loadJobs(v ? { week: v } : {});
   });
@@ -1442,7 +1469,7 @@ async function moveCard(jobId, newStatus) {
   if (!r.ok) {
     job.status = oldStatus;
     renderBoard(allJobs);
-    showToast('Error: ' + (r.error || 'Could not move job.'));
+    showToast(t('jobs.errorPrefix', { msg: r.error || t('jobs.couldNotMoveJob') }));
   } else if (newStatus === 'done') {
     showBeadPrompt(jobId, job.customer);
   }
@@ -1462,16 +1489,16 @@ function showBeadPrompt(jobId, customer) {
     document.body.appendChild(banner);
   }
   banner.innerHTML = `
-    <div style="font-weight:700;">Job moved to Done</div>
-    <div style="font-size:13px;color:#94a3b8;">Log bead consumption for <strong style="color:#fff;">${esc(customer)}</strong>?</div>
+    <div style="font-weight:700;">${esc(t('jobs.jobMovedToDone'))}</div>
+    <div style="font-size:13px;color:#94a3b8;">${t('jobs.logBeadFor', { customer: `<strong style="color:#fff;">${esc(customer)}</strong>` })}</div>
     <div style="display:flex;gap:8px;">
       <a href="/production/bead-inventory.html?job_id=${encodeURIComponent(jobId)}"
          style="background:#dc2626;color:#fff;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:700;text-decoration:none;">
-        Log Consumption
+        ${esc(t('jobs.logConsumption'))}
       </a>
       <button onclick="document.getElementById('bead-prompt-banner').remove()"
               style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer;">
-        Dismiss
+        ${esc(t('jobs.dismiss'))}
       </button>
     </div>`;
   banner.style.display = 'flex';
@@ -1491,7 +1518,7 @@ function setupModal() {
   document.getElementById('modal-print-diversitech').addEventListener('click', () => printDiversiTechLabels(editingJobId));
 
   document.getElementById('f-ship-date').addEventListener('change', (e) => {
-    document.getElementById('f-ship-day-display').textContent = getShipDay(e.target.value);
+    document.getElementById('f-ship-day-display').textContent = getShipDayLabel(e.target.value);
   });
 
   document.getElementById('btn-add-li').addEventListener('click', () => addLineItemRow());
@@ -1558,7 +1585,7 @@ async function openSplitDaysModal(jobId) {
   const rows = document.getElementById('split-days-rows');
   const err  = document.getElementById('split-days-error');
   err.hidden = true;
-  rows.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Loading…</div>';
+  rows.innerHTML = `<div style="color:var(--text-muted);font-size:13px;">${esc(t('jobs.loadingEllipsis'))}</div>`;
   const modal = document.getElementById('split-days-modal');
   modal.dataset.jobId = jobId;
   modal.hidden = false;
@@ -1573,7 +1600,7 @@ async function openSplitDaysModal(jobId) {
   for (let n = 1; n <= loadCount; n++) {
     const a = byLoad[n] || {};
     html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-      <span style="min-width:70px;font-weight:600;font-size:13px;">Load ${String(n).padStart(2, '0')}</span>
+      <span style="min-width:70px;font-weight:600;font-size:13px;">${esc(t('jobs.splitDaysLoad', { n: String(n).padStart(2, '0') }))}</span>
       <input type="date" data-load="${n}" value="${esc(a.load_ship_date || '')}" style="flex:1;padding:8px;border:1px solid var(--input-border);border-radius:8px;font-size:14px;" />
     </div>`;
   }
@@ -1596,11 +1623,11 @@ async function saveSplitDays() {
   btn.disabled = true;
   try {
     const r = await api.put('/api/loading-assignments/load-days', { job_id: jobId, days });
-    if (!r.ok) { err.textContent = r.error || 'Save failed.'; err.hidden = false; btn.disabled = false; return; }
+    if (!r.ok) { err.textContent = r.error || t('jobs.saveFailed'); err.hidden = false; btn.disabled = false; return; }
     closeSplitDaysModal();
     await loadJobs();
   } catch (e) {
-    err.textContent = 'Save failed.'; err.hidden = false; btn.disabled = false;
+    err.textContent = t('jobs.saveFailed'); err.hidden = false; btn.disabled = false;
   } finally {
     btn.disabled = false;
   }
@@ -1614,7 +1641,7 @@ function openModal(jobId) {
   clearForm();
 
   const isNew = !jobId;
-  document.getElementById('modal-title').textContent  = isNew ? 'New Job' : 'Edit Job';
+  document.getElementById('modal-title').textContent  = isNew ? t('jobs.modalTitleNew') : t('jobs.modalTitleEdit');
   document.getElementById('modal-delete').hidden      = isNew;
 
   if (!isNew) {
@@ -1696,13 +1723,13 @@ function renderAssignChips(assignees, canManage) {
   const wrap = document.getElementById('assign-chips');
   if (!wrap) return;
   if (!Array.isArray(assignees) || !assignees.length) {
-    wrap.innerHTML = '<span style="font-size:12px;color:var(--text-hint);">No one assigned</span>';
+    wrap.innerHTML = `<span style="font-size:12px;color:var(--text-hint);">${esc(t('jobs.noOneAssigned'))}</span>`;
     return;
   }
   wrap.innerHTML = assignees.map(a => `
     <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">
-      ${esc(a.name || '')}${a.shift ? ` (${esc(a.shift)})` : ''}
-      ${canManage ? `<button type="button" onclick="removeAssignee('${esc(a.user_id)}')" title="Remove" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:700;font-size:13px;padding:0;line-height:1;">&times;</button>` : ''}
+      ${esc(a.name || '')}${a.shift ? ` (${esc(shiftLabel(a.shift))})` : ''}
+      ${canManage ? `<button type="button" onclick="removeAssignee('${esc(a.user_id)}')" title="${esc(t('jobs.slipRemove'))}" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:700;font-size:13px;padding:0;line-height:1;">&times;</button>` : ''}
     </span>
   `).join('');
 }
@@ -1717,7 +1744,7 @@ async function setupAssignSection(job, canManage) {
   const select = document.getElementById('assign-user-select');
   if (!select) return;
   const assignedIds = new Set((job.assignees || []).map(a => a.user_id));
-  select.innerHTML = '<option value="">Add team member…</option>' +
+  select.innerHTML = `<option value="">${esc(t('jobs.addTeamMember'))}</option>` +
     users.filter(u => !assignedIds.has(u.id))
       .map(u => `<option value="${esc(u.id)}">${esc(u.name || u.username || '')}</option>`).join('');
 }
@@ -1733,10 +1760,10 @@ async function addAssignee(userId) {
   if (!userId || !editingJobId) return;
   try {
     const r = await api.post(`/api/jobs/${encodeURIComponent(editingJobId)}/assignments`, { user_id: userId });
-    if (!r.ok) { showToast(r.error || 'Failed to assign.'); return; }
+    if (!r.ok) { showToast(r.error || t('jobs.failedToAssign')); return; }
     await refreshAssignments();
   } catch (e) {
-    showToast('Failed to assign.');
+    showToast(t('jobs.failedToAssign'));
   }
 }
 
@@ -1744,10 +1771,10 @@ async function removeAssignee(userId) {
   if (!userId || !editingJobId) return;
   try {
     const r = await api.del(`/api/jobs/${encodeURIComponent(editingJobId)}/assignments/${encodeURIComponent(userId)}`);
-    if (!r.ok) { showToast(r.error || 'Failed to unassign.'); return; }
+    if (!r.ok) { showToast(r.error || t('jobs.failedToUnassign')); return; }
     await refreshAssignments();
   } catch (e) {
-    showToast('Failed to unassign.');
+    showToast(t('jobs.failedToUnassign'));
   }
 }
 
@@ -1769,24 +1796,27 @@ async function refreshAssignments() {
    Job Shift assignment (P356) — mirrors P334 assignments above
 ═══════════════════════════════════════════ */
 
-const SHIFT_LABELS = { '1st': '1st Shift', '2nd': '2nd Shift', '3rd': '3rd Shift' };
+// SHIFT_KEYS holds the raw shift codes (used by Object.keys() below to build the <select>
+// options) mapped to their catalog key; shiftLabel() resolves the translated display text.
+const SHIFT_KEYS = { '1st': 'shift1st', '2nd': 'shift2nd', '3rd': 'shift3rd' };
+function shiftLabel(s) { return SHIFT_KEYS[s] ? t('jobs.' + SHIFT_KEYS[s]) : s; }
 
 function shiftChips(shifts) {
   if (!Array.isArray(shifts) || !shifts.length) return '';
-  return shifts.map(s => ` <span style="display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">${esc(SHIFT_LABELS[s] || s)}</span>`).join('');
+  return shifts.map(s => ` <span style="display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">${esc(shiftLabel(s))}</span>`).join('');
 }
 
 function renderShiftChips(shifts, canManage) {
   const wrap = document.getElementById('shift-chips');
   if (!wrap) return;
   if (!Array.isArray(shifts) || !shifts.length) {
-    wrap.innerHTML = '<span style="font-size:12px;color:var(--text-hint);">No shift assigned</span>';
+    wrap.innerHTML = `<span style="font-size:12px;color:var(--text-hint);">${esc(t('jobs.noShiftAssigned'))}</span>`;
     return;
   }
   wrap.innerHTML = shifts.map(s => `
     <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);">
-      ${esc(SHIFT_LABELS[s] || s)}
-      ${canManage ? `<button type="button" onclick="removeShift('${esc(s)}')" title="Remove" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:700;font-size:13px;padding:0;line-height:1;">&times;</button>` : ''}
+      ${esc(shiftLabel(s))}
+      ${canManage ? `<button type="button" onclick="removeShift('${esc(s)}')" title="${esc(t('jobs.slipRemove'))}" style="border:none;background:none;cursor:pointer;color:inherit;font-weight:700;font-size:13px;padding:0;line-height:1;">&times;</button>` : ''}
     </span>
   `).join('');
 }
@@ -1800,9 +1830,9 @@ function setupShiftSection(job, canManage) {
   const select = document.getElementById('shift-select');
   if (!select) return;
   const assigned = new Set(job.shifts || []);
-  select.innerHTML = '<option value="">Add shift…</option>' +
-    Object.keys(SHIFT_LABELS).filter(s => !assigned.has(s))
-      .map(s => `<option value="${esc(s)}">${esc(SHIFT_LABELS[s])}</option>`).join('');
+  select.innerHTML = `<option value="">${esc(t('jobs.addShift'))}</option>` +
+    Object.keys(SHIFT_KEYS).filter(s => !assigned.has(s))
+      .map(s => `<option value="${esc(s)}">${esc(shiftLabel(s))}</option>`).join('');
 }
 
 function onShiftSelectChange(select) {
@@ -1816,10 +1846,10 @@ async function addShift(shift) {
   if (!shift || !editingJobId) return;
   try {
     const r = await api.post(`/api/jobs/${encodeURIComponent(editingJobId)}/shifts`, { shift });
-    if (!r.ok) { showToast(r.error || 'Failed to assign shift.'); return; }
+    if (!r.ok) { showToast(r.error || t('jobs.failedToAssignShift')); return; }
     await refreshShifts();
   } catch (e) {
-    showToast('Failed to assign shift.');
+    showToast(t('jobs.failedToAssignShift'));
   }
 }
 
@@ -1827,10 +1857,10 @@ async function removeShift(shift) {
   if (!shift || !editingJobId) return;
   try {
     const r = await api.del(`/api/jobs/${encodeURIComponent(editingJobId)}/shifts/${encodeURIComponent(shift)}`);
-    if (!r.ok) { showToast(r.error || 'Failed to unassign shift.'); return; }
+    if (!r.ok) { showToast(r.error || t('jobs.failedToUnassignShift')); return; }
     await refreshShifts();
   } catch (e) {
-    showToast('Failed to unassign shift.');
+    showToast(t('jobs.failedToUnassignShift'));
   }
 }
 
@@ -2018,7 +2048,7 @@ async function prefillForm(data) {
       const dateEl = document.getElementById('f-ship-date');
       if (dateEl) {
         dateEl.value = iso;
-        document.getElementById('f-ship-day-display').textContent = getShipDay(iso);
+        document.getElementById('f-ship-day-display').textContent = getShipDayLabel(iso);
         highlight(dateEl);
       }
     }
@@ -2058,10 +2088,10 @@ async function prefillForm(data) {
       badge.style.cssText = 'font-size:11px;font-weight:600;margin:-4px 0 6px;padding-left:96px;min-width:380px;';
       if (li.part_id) {
         badge.style.color = '#059669';
-        badge.textContent = '✓ Matched: ' + li.part_number;
+        badge.textContent = t('jobs.matchedPart', { part: li.part_number });
       } else {
         badge.style.color = '#d97706';
-        badge.textContent = '⚠ No match — new part will be created on load build';
+        badge.textContent = t('jobs.noMatchNewPart');
       }
       document.getElementById('li-container').appendChild(badge);
       row.querySelector('.jobs-li-remove').addEventListener('click', () => badge.remove());
@@ -2072,15 +2102,15 @@ async function prefillForm(data) {
 function showSlipBadge(invoice, filename, isExisting, jobId) {
   const badge = document.getElementById('slip-badge');
   const invLine = invoice
-    ? `📄 Created from Packing Slip: Invoice #${esc(invoice)}`
-    : '📄 Packing Slip Attached';
+    ? esc(t('jobs.slipCreatedFrom', { inv: invoice }))
+    : esc(t('jobs.slipAttached'));
   badge.innerHTML = `
     <div class="jobs-slip-badge-info">
       <div class="jobs-slip-badge-title">${invLine}</div>
-      <div class="jobs-slip-badge-file">&#128206; ${esc(filename || 'Unknown file')}</div>
+      <div class="jobs-slip-badge-file">&#128206; ${esc(filename || t('jobs.slipUnknownFile'))}</div>
     </div>
     <div class="jobs-slip-badge-actions">
-      <button type="button" class="jobs-slip-remove" id="slip-remove-btn">${isExisting ? 'Remove Attachment' : 'Remove'}</button>
+      <button type="button" class="jobs-slip-remove" id="slip-remove-btn">${esc(isExisting ? t('jobs.slipRemoveAttachment') : t('jobs.slipRemove'))}</button>
     </div>
   `;
   badge.hidden = false;
@@ -2226,7 +2256,7 @@ function populateForm(job) {
   };
   renderShipToVerifyBadge(job.ship_to_verified);
 
-  document.getElementById('f-ship-day-display').textContent = getShipDay(job.ship_date);
+  document.getElementById('f-ship-day-display').textContent = getShipDayLabel(job.ship_date);
 
   document.getElementById('li-container').innerHTML = '';
   if (Array.isArray(job.line_items)) {
@@ -2357,10 +2387,10 @@ async function updateHoleyChunkPreview() {
     const d = r.data;
     box.hidden = false;
     countEl.textContent = d.chunks_required ?? '—';
-    metaEl.textContent = `${d.total_boards} board${d.total_boards === 1 ? '' : 's'} · ${d.avg_util}% avg fill`;
+    metaEl.textContent = t('jobs.boardsAvgFill', { n: d.total_boards, pct: d.avg_util });
   } catch {
     if (seq !== _holeyPreviewSeq) return;
-    box.hidden = false; countEl.textContent = '—'; metaEl.textContent = 'preview unavailable';
+    box.hidden = false; countEl.textContent = '—'; metaEl.textContent = t('jobs.previewUnavailable');
   }
 }
 
@@ -2651,7 +2681,7 @@ async function loadCutListIntoViewer() {
   const job = allJobs.find(j => j.id === editingJobId);
   if (!job) return;
   const label = document.getElementById('cutlist-viewer-label');
-  label.textContent = 'Generating Cut List…';
+  label.textContent = t('jobs.generatingCutList');
   try {
     const pdfBytes = await buildCutListPdf(job);
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
@@ -2660,9 +2690,9 @@ async function loadCutListIntoViewer() {
     document.getElementById('cutlist-viewer-iframe').src = _cutListBlobUrl;
   } catch (e) {
     console.error('Cut list PDF failed:', e);
-    showToast('Could not generate cut list.');
+    showToast(t('jobs.couldNotGenerateCutList'));
   } finally {
-    label.textContent = 'View Cut List';
+    label.textContent = t('jobs.viewCutList');
   }
 }
 
@@ -2730,7 +2760,7 @@ function renderTrailerGroupSection(job) {
 
   linkBtn.hidden   = true;
   unlinkBtn.hidden = false;
-  membersWrap.innerHTML = '<span style="font-size:12px;color:var(--muted);">Loading group…</span>';
+  membersWrap.innerHTML = `<span style="font-size:12px;color:var(--muted);">${esc(t('jobs.loadingGroup'))}</span>`;
 
   api.get('/api/jobs/' + encodeURIComponent(job.id) + '/group').then(r => {
     if (!r.ok) { membersWrap.innerHTML = ''; return; }
@@ -2739,7 +2769,7 @@ function renderTrailerGroupSection(job) {
     const others = members.filter(m => m.id !== job.id);
     if (others.length === 0) { membersWrap.innerHTML = ''; return; }
     membersWrap.innerHTML = others.map(m =>
-      `<span class="jobs-combo-badge" title="${esc(m.customer || '')}">🚛 ${esc(m.invoice_number || m.customer || 'Job')}</span>`
+      `<span class="jobs-combo-badge" title="${esc(m.customer || '')}">🚛 ${esc(m.invoice_number || m.customer || t('jobs.untitledJob'))}</span>`
     ).join('');
   }).catch(() => { membersWrap.innerHTML = ''; });
 }
@@ -2774,7 +2804,7 @@ function filterTrailerGroupPicker() {
 function renderTrailerGroupPickerList(candidates) {
   const body = document.getElementById('trailer-group-picker-body');
   if (!candidates.length) {
-    body.innerHTML = '<p style="padding:12px;color:var(--muted)">No eligible jobs on this ship date.</p>';
+    body.innerHTML = `<p style="padding:12px;color:var(--muted)">${esc(t('jobs.noEligibleJobs'))}</p>`;
     return;
   }
   body.innerHTML = '';
@@ -2782,7 +2812,7 @@ function renderTrailerGroupPickerList(candidates) {
     const item = document.createElement('div');
     item.className = 'jobs-picker-item';
     item.innerHTML = `
-      <div style="font-weight:600;">${esc(j.customer || 'Untitled')}</div>
+      <div style="font-weight:600;">${esc(j.customer || t('jobs.untitledJob'))}</div>
       <div class="jobs-picker-item-sub">${esc(j.invoice_number || '—')} · ${esc(formatShipDate(j.ship_date))}</div>
     `;
     item.addEventListener('click', () => linkTrailerGroup(j.id));
@@ -2792,10 +2822,10 @@ function renderTrailerGroupPickerList(candidates) {
 
 async function linkTrailerGroup(targetJobId) {
   document.getElementById('trailer-group-picker').hidden = true;
-  setModalStatus('Linking…');
+  setModalStatus(t('jobs.linkingEllipsis'));
   const r = await api.put('/api/jobs', { id: editingJobId, trailer_group_id: targetJobId });
   if (!r.ok) {
-    setModalStatus(r.error || 'Could not link job.', true);
+    setModalStatus(r.error || t('jobs.couldNotLinkJob'), true);
     return;
   }
   setModalStatus('');
@@ -2803,17 +2833,17 @@ async function linkTrailerGroup(targetJobId) {
   if (idx !== -1) allJobs[idx] = r.data.job;
   const targetIdx = allJobs.findIndex(j => j.id === targetJobId);
   if (targetIdx !== -1) allJobs[targetIdx] = { ...allJobs[targetIdx], trailer_group_id: r.data.job.trailer_group_id };
-  showToast('Jobs linked.');
+  showToast(t('jobs.jobsLinked'));
   renderTrailerGroupSection(r.data.job);
 }
 
 async function unlinkTrailerGroup() {
   if (!editingJobId) return;
-  setModalStatus('Unlinking…');
+  setModalStatus(t('jobs.unlinkingEllipsis'));
   const priorMembers = trailerGroupMemberIds.slice();
   const r = await api.put('/api/jobs', { id: editingJobId, trailer_group_id: null });
   if (!r.ok) {
-    setModalStatus(r.error || 'Could not unlink job.', true);
+    setModalStatus(r.error || t('jobs.couldNotUnlinkJob'), true);
     return;
   }
   setModalStatus('');
@@ -2826,7 +2856,7 @@ async function unlinkTrailerGroup() {
     const otherIdx = allJobs.findIndex(j => j.id === otherId);
     if (otherIdx !== -1) allJobs[otherIdx] = { ...allJobs[otherIdx], trailer_group_id: null };
   }
-  showToast('Job unlinked.');
+  showToast(t('jobs.jobUnlinked'));
   renderTrailerGroupSection(r.data.job);
 }
 
@@ -2896,7 +2926,7 @@ function openAddressCorrectionModal(entered, standardized) {
 async function saveJob() {
   const customer = document.getElementById('f-customer').value.trim();
   if (!customer) {
-    setModalStatus('Customer is required.', true);
+    setModalStatus(t('jobs.customerRequired'), true);
     document.getElementById('f-customer').focus();
     return;
   }
@@ -2904,7 +2934,7 @@ async function saveJob() {
   const shipDate = document.getElementById('f-ship-date').value;
 
   const loadCountVal = parseInt(document.getElementById('f-load-count').value, 10) || 1;
-  if (loadCountVal > 10 && !confirm('Are you sure you want more than 10 trailers?')) {
+  if (loadCountVal > 10 && !confirm(t('jobs.moreThan10Trailers'))) {
     return;
   }
 
@@ -2963,7 +2993,7 @@ async function saveJob() {
   const shouldValidateShipTo = hasShipToAddress && (!editingJobId || shipToChanged(shipToFields));
 
   if (shouldValidateShipTo) {
-    setModalStatus('Verifying ship-to address…');
+    setModalStatus(t('jobs.verifyingShipTo'));
     const result = await validateShipToAddress(shipToFields);
     let finalStatus = result.status;
 
@@ -2985,9 +3015,9 @@ async function saveJob() {
         key_mode: result.key_mode, error_detail: result.error_detail,
       });
       if (result.reason === 'lob_error') {
-        showToast('Address service unavailable — saved as entered.');
+        showToast(t('jobs.addressServiceUnavailable'));
       } else {
-        showToast('Address not found by USPS — saved as entered.');
+        showToast(t('jobs.addressNotFound'));
       }
     }
 
@@ -2999,7 +3029,7 @@ async function saveJob() {
 
   const btn = document.getElementById('modal-save');
   btn.disabled    = true;
-  btn.textContent = 'Saving…';
+  btn.textContent = t('jobs.savingEllipsis');
   setModalStatus('');
 
   try {
@@ -3017,7 +3047,7 @@ async function saveJob() {
       : await api.post('/api/jobs', payload);
 
     if (!r.ok) {
-      setModalStatus(r.error || 'Save failed.', true);
+      setModalStatus(r.error || t('jobs.saveFailed'), true);
       return;
     }
 
@@ -3031,28 +3061,28 @@ async function saveJob() {
 
     renderBoard(allJobs);
     closeModal();
-    showToast(editingJobId ? 'Job updated.' : 'Job created.');
+    showToast(editingJobId ? t('jobs.jobUpdated') : t('jobs.jobCreated'));
   } catch {
-    setModalStatus('Network error. Please try again.', true);
+    setModalStatus(t('jobs.networkError'), true);
   } finally {
     btn.disabled    = false;
-    btn.textContent = 'Save Job';
+    btn.textContent = t('jobs.saveJob');
   }
 }
 
 async function confirmDelete() {
   if (!editingJobId) return;
   const job  = allJobs.find(j => j.id === editingJobId);
-  const name = job ? job.customer : 'this job';
-  if (!confirm(`Delete job for "${name}"? This cannot be undone.`)) return;
+  const name = job ? job.customer : t('jobs.untitledJob');
+  if (!confirm(t('jobs.deleteJobConfirm', { name }))) return;
 
   const r = await api.raw('/api/jobs', { method: 'DELETE', body: { id: editingJobId } });
-  if (!r.ok) { showToast('Error: ' + (r.error || 'Delete failed.')); return; }
+  if (!r.ok) { showToast(t('jobs.errorPrefix', { msg: r.error || t('jobs.deleteFailed') })); return; }
 
   allJobs = allJobs.filter(j => j.id !== editingJobId);
   renderBoard(allJobs);
   closeModal();
-  showToast('Job deleted.');
+  showToast(t('jobs.jobDeleted'));
 }
 
 /* ═══════════════════════════════════════════
@@ -3095,13 +3125,13 @@ let partsAll = [];
 async function openPartsPicker() {
   const body = document.getElementById('parts-picker-body');
   document.getElementById('parts-picker-search').value = '';
-  body.innerHTML = '<p style="padding:12px;color:var(--muted)">Loading…</p>';
+  body.innerHTML = `<p style="padding:12px;color:var(--muted)">${esc(t('jobs.loadingEllipsis'))}</p>`;
   document.getElementById('parts-picker').hidden = false;
 
   if (!partsCache) {
     const r = await api.get('/api/parts');
     if (!r.ok) {
-      body.innerHTML = '<p style="padding:12px;color:var(--muted)">Failed to load parts.</p>';
+      body.innerHTML = `<p style="padding:12px;color:var(--muted)">${esc(t('jobs.failedToLoadParts'))}</p>`;
       return;
     }
     partsCache = r.data.parts || [];
@@ -3122,7 +3152,7 @@ function filterParts() {
 function renderPartsList(parts) {
   const body = document.getElementById('parts-picker-body');
   if (!parts.length) {
-    body.innerHTML = '<p style="padding:12px;color:var(--muted)">No parts found.</p>';
+    body.innerHTML = `<p style="padding:12px;color:var(--muted)">${esc(t('jobs.noPartsFound'))}</p>`;
     return;
   }
   body.innerHTML = '';
@@ -3149,20 +3179,20 @@ function renderPartsList(parts) {
 
 async function openComboPicker() {
   const body = document.getElementById('combo-picker-body');
-  body.innerHTML = '<p style="padding:12px;color:var(--muted)">Loading…</p>';
+  body.innerHTML = `<p style="padding:12px;color:var(--muted)">${esc(t('jobs.loadingEllipsis'))}</p>`;
   document.getElementById('combo-picker').hidden = false;
 
   if (!combosCache) {
     const r = await api.get('/api/combos');
     if (!r.ok) {
-      body.innerHTML = '<p style="padding:12px;color:var(--muted)">Failed to load combos.</p>';
+      body.innerHTML = `<p style="padding:12px;color:var(--muted)">${esc(t('jobs.failedToLoadCombos'))}</p>`;
       return;
     }
     combosCache = r.data.combos || [];
   }
 
   if (!combosCache.length) {
-    body.innerHTML = '<p style="padding:12px;color:var(--muted)">No saved combos.</p>';
+    body.innerHTML = `<p style="padding:12px;color:var(--muted)">${esc(t('jobs.noSavedCombos'))}</p>`;
     return;
   }
 
@@ -3212,7 +3242,7 @@ async function toggleProcessPill(jobId, processName) {
     proc.completed = !proc.completed;
     job.processes  = procs;
     renderBoard(allJobs);
-    showToast('Error: ' + (r.error || 'Could not update process.'));
+    showToast(t('jobs.errorPrefix', { msg: r.error || t('jobs.couldNotUpdateProcess') }));
   }
 }
 
@@ -3252,9 +3282,9 @@ async function viewBolForJob(jobId) {
   if (!jobId) return;
   try {
     const { ok, data } = await api.get('/api/bols?job_id=' + encodeURIComponent(jobId));
-    if (!ok || !data?.bols?.length) { alert('No BOL found for this job.'); return; }
+    if (!ok || !data?.bols?.length) { alert(t('jobs.noBolFound')); return; }
     const bol = data.bols[data.bols.length - 1];
-    if (!window.BolShared) { alert('BOL viewer not ready — try again in a moment.'); return; }
+    if (!window.BolShared) { alert(t('jobs.bolViewerNotReady')); return; }
     const result = await BolShared.generatePdf([bol], { previewOnly: true });
     if (_jobBolBlobUrl) { try { URL.revokeObjectURL(_jobBolBlobUrl); } catch {} }
     _jobBolBlobUrl = result.blobUrl;
@@ -3263,7 +3293,7 @@ async function viewBolForJob(jobId) {
     document.getElementById('jobs-bol-view-modal').hidden = false;
   } catch (e) {
     console.error('viewBolForJob failed:', e);
-    alert('Failed to load BOL. Please try again.');
+    alert(t('jobs.failedToLoadBol'));
   }
 }
 
@@ -3302,10 +3332,10 @@ gateJobsWrite();
 <div id="jobs-bol-view-modal" class="jobs-modal-overlay" hidden onclick="if(event.target===this)closeBolViewModal()" style="z-index:1100;">
   <div style="background:var(--card-bg);border-radius:12px;max-width:95vw;width:95vw;max-height:95vh;height:95vh;display:flex;flex-direction:column;overflow:hidden;">
     <div style="padding:10px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
-      <h3 style="margin:0;font-size:16px;font-weight:700;">Bill of Lading</h3>
+      <h3 style="margin:0;font-size:16px;font-weight:700;" data-i18n="jobs.billOfLading">Bill of Lading</h3>
       <div style="display:flex;gap:8px;align-items:center;">
-        <button onclick="downloadBolFromViewer()" class="btn ghost small">Download</button>
-        <button onclick="closeBolViewModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);padding:0;line-height:1;">×</button>
+        <button onclick="downloadBolFromViewer()" class="btn ghost small" data-i18n="jobs.download">Download</button>
+        <button onclick="closeBolViewModal()" aria-label="Close" data-i18n-attr="aria-label:jobs.close" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);padding:0;line-height:1;">×</button>
       </div>
     </div>
     <iframe id="jobs-bol-view-iframe" style="flex:1;width:100%;border:none;background:#525659;"></iframe>
@@ -3316,26 +3346,26 @@ gateJobsWrite();
 <div class="jobs-modal-overlay" id="address-correct-modal" hidden style="z-index:200;">
   <div class="jobs-modal-panel" style="max-width:520px;" role="dialog" aria-modal="true" aria-labelledby="addr-correct-title">
     <div class="jobs-modal-header">
-      <h2 id="addr-correct-title" style="font-size:16px;">Verify Ship-To Address</h2>
+      <h2 id="addr-correct-title" style="font-size:16px;" data-i18n="jobs.verifyShipToAddress">Verify Ship-To Address</h2>
     </div>
     <div class="jobs-modal-body">
-      <p style="font-size:13px;color:var(--muted);margin:0 0 14px;">
+      <p style="font-size:13px;color:var(--muted);margin:0 0 14px;" data-i18n="jobs.addressVerifyDesc">
         The carrier's address verification suggests a standardized version of this address.
       </p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
         <div>
-          <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin:0 0 4px;">Entered</p>
+          <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin:0 0 4px;" data-i18n="jobs.entered">Entered</p>
           <p id="addr-correct-entered" style="font-size:13px;line-height:1.5;margin:0;"></p>
         </div>
         <div>
-          <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin:0 0 4px;">Standardized</p>
+          <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin:0 0 4px;" data-i18n="jobs.standardized">Standardized</p>
           <p id="addr-correct-standardized" style="font-size:13px;line-height:1.5;margin:0;"></p>
         </div>
       </div>
     </div>
     <div class="jobs-modal-footer">
-      <button class="btn primary" id="addr-correct-use">Use suggested</button>
-      <button class="btn ghost" id="addr-correct-keep">Keep original</button>
+      <button class="btn primary" id="addr-correct-use" data-i18n="jobs.useSuggested">Use suggested</button>
+      <button class="btn ghost" id="addr-correct-keep" data-i18n="jobs.keepOriginal">Keep original</button>
     </div>
   </div>
 </div>

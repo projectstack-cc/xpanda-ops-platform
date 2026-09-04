@@ -3574,6 +3574,46 @@ Entries within each module are ordered by prompt # descending (newest first).
   Verified via `node --check` on the catalog and every inline `<script>` block, plus an en/es/ht key
   parity check (221/221/221, no drift). `load-builder.html`, `loading.html`, `bol-email.html`,
   `bol-test.html` not yet tagged — next in this sweep.
+- **i18n sweep, phase 3 — Job Board (`jobs/index.html`) now speaks en/es/ht, completing the
+  Logistics wave and opening the next module.** Per direction ("Logistics first and then the order
+  frankly doesn't matter from there"), Job Board picked next. New `jobs/jobs-i18n.js` registers a
+  `jobs` catalog (276 keys × 3 langs, verified parity) — this module had no catalog file at all
+  before this prompt, so the first step was wiring `jobs/jobs-header.js` to `document.write` the
+  new `<script>` tag (same pattern as `logistics-header.js`'s load of `logistics-i18n.js`), since a
+  missing wire-up would have produced a fully-English page with no catalog errors to catch it.
+  Tagged the toolbar, mobile tabs, List/Kanban/Calendar views (table headers, empty states, the
+  calendar's month/weekday names and day-detail modal), the Split Ship-Days modal, and the entire
+  Job modal — status/priority selects, Assigned To / Shift sections, the packing-slip dropzone and
+  badge, the Holey Board chunk-requirement preview, every form section (Customer & Order, Shipping,
+  Details, Production Processes, Line Items, Block Calculator Combo, Trailer Group, Instructions),
+  and the footer buttons. Also tagged the Parts/Combo/Trailer-Group picker modals, the BOL viewer
+  modal, and the ship-to address correction modal, plus every `alert()`/`confirm()`/toast reachable
+  from `saveJob()`, `confirmDelete()`, the assignment/shift management flow, and the trailer-group
+  link/unlink flow. Several lookup tables (`STATUS_LABELS`, loading-status-indicator colors,
+  ship-to-verification badges) were converted to `Proxy`-wrapped lazy translators so every existing
+  bracket-access call site kept working unchanged, mirroring `loading.html`'s `LD_STATUS_COLORS`
+  pattern from phase 2b; `SHIFT_LABELS` (renamed `SHIFT_KEYS`) was kept as a plain keys-only object
+  instead, because `Object.keys(SHIFT_LABELS)` drives the shift `<select>`'s options and a Proxy
+  would have returned an empty option list. Fixed the title/subtitle dead-code override: the
+  inline script's hardcoded title matched the module default exactly (`layout.jobsTitle` already
+  resolves to "Job Board"), so that line was deleted outright rather than converted; the subtitle
+  differs from the module default, so it got a new `layout.jobsBoardSubtitle` key added to
+  `shared/i18n-common.js` behind the same guarded `window.I18n.t()` pattern used on `bol-email.html`
+  and `load-builder.html`. `job.ship_day` (persisted on save, read from `getShipDay()`) is
+  deliberately left as an English weekday name — it's written to the database, not just displayed —
+  so a new `getShipDayLabel()` was added for the three display-only call sites and `getShipDay()`
+  itself was left untouched. Deliberately NOT translated, matching prior sessions' data-vs-display
+  distinction: `PROCESSES[].name`/`.abbr` (matched against `job.processes` API records — only the
+  checkbox *labels* in the static HTML are tagged), the `f-method`/`f-scrap-pickup`/carrier-list
+  option `value` attributes (persisted data, only the visible option text is tagged), and the Cut
+  List PDF generator (`buildCutListPdf` and its helpers) — a printed shipping-floor document in the
+  same category as `load-builder.html`'s excluded BOL/diagram export text, tracked in `BACKLOG.md`
+  if flagged later. `jobs/packing-slip-test.html` (dev tool) remains out of scope. Verified via
+  `node --check` on both inline `<script>` blocks, a scripted reference-integrity scan (224 direct
+  `t('jobs.…')`/`data-i18n` usages resolve; the 4 apparent misses were dynamically-concatenated keys
+  — `dow`/`dowShort`/`month`/`monthShort` + index — manually confirmed present), and an en/es/ht key
+  parity check across all catalogs (`jobs` 276, `logistics`/`common`/`home` unchanged, `layout` 20
+  with the new subtitle key — no drift).
 - **i18n sweep, phase 2c — Logistics: `load-builder.html` gets a labels/buttons/toasts pass
   (en/es/ht), completing the Logistics module's floor+desk screens.** Deliberately narrower than the
   full tag-everything treatment given to the other three Logistics pages: this file is a bin-packing

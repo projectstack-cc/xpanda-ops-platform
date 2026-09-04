@@ -245,7 +245,8 @@
       bolEmailTitle: 'BOL Email Queue',
       bolEmailSubtitle: "Next shipping day's Lisma shipments",
       loadBuilderTitle: 'Load Builder',
-      loadBuilderSubtitle: 'Load planning and truck configuration'
+      loadBuilderSubtitle: 'Load planning and truck configuration',
+      jobsBoardSubtitle: 'Track production jobs from order entry through shipment'
     },
     es: {
       jobsTitle: 'Tablero de Trabajos',
@@ -266,7 +267,8 @@
       bolEmailTitle: 'Cola de Correo BOL',
       bolEmailSubtitle: 'Envíos Lisma del próximo día de envío',
       loadBuilderTitle: 'Armador de Carga',
-      loadBuilderSubtitle: 'Planificación de carga y configuración de camiones'
+      loadBuilderSubtitle: 'Planificación de carga y configuración de camiones',
+      jobsBoardSubtitle: 'Seguimiento de trabajos de producción desde la entrada del pedido hasta el envío'
     },
     ht: {
       jobsTitle: 'Tablo Travay',
@@ -287,7 +289,8 @@
       bolEmailTitle: 'Fil Atant Imèl BOL',
       bolEmailSubtitle: 'Ekspedisyon Lisma pou pwochen jou ekspedisyon an',
       loadBuilderTitle: 'Konstriktè Chaj',
-      loadBuilderSubtitle: 'Planifikasyon chaj ak konfigirasyon kamyon'
+      loadBuilderSubtitle: 'Planifikasyon chaj ak konfigirasyon kamyon',
+      jobsBoardSubtitle: 'Swiv travay pwodiksyon soti nan antre kòmand rive nan ekspedisyon'
     }
   });
 })();
