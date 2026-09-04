@@ -16,37 +16,38 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Scrap Reports';
+function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+document.getElementById('reports-page-title').textContent = tt('layout.scrapReportsTitle', 'Scrap Reports');
 </script>
 
 <div class="reports-wrap">
 
-<a href="/reports/" class="reports-back-link">← Back to Reports Dashboard</a>
+<a href="/reports/" class="reports-back-link" data-i18n="reports.backToReportsDashboard">← Back to Reports Dashboard</a>
 
 <div class="reports-section-intro">
-<h2 class="reports-section-title">Scrap Reports</h2>
-<p class="reports-section-subtitle">
+<h2 class="reports-section-title" data-i18n="layout.scrapReportsTitle">Scrap Reports</h2>
+<p class="reports-section-subtitle" data-i18n="reports.scrapReportsIntro">
 Scrap reporting, trend visibility, and reason analysis.
 </p>
 </div>
 
 <a class="reports-tile" href="/reports/scrap/summary.html">
-  <h2>Scrap Summary</h2>
-  <p>Monthly scrap totals, entry count, weekly totals, and reason grouping.</p>
+  <h2 data-i18n="layout.scrapSummaryTitle">Scrap Summary</h2>
+  <p data-i18n="reports.scrapSummaryDesc">Monthly scrap totals, entry count, weekly totals, and reason grouping.</p>
 </a>
 
 <a class="reports-tile" href="/reports/scrap/trend.html">
-  <h2>Scrap Trend</h2>
-  <p>Multi-month scrap performance visibility and KPI direction.</p>
+  <h2 data-i18n="layout.scrapTrendTitle">Scrap Trend</h2>
+  <p data-i18n="reports.scrapTrendDesc">Multi-month scrap performance visibility and KPI direction.</p>
 </a>
 
 <a class="reports-tile" href="/reports/scrap/reasons.html">
-  <h2>Scrap by Reason</h2>
-  <p>Monthly scrap totals grouped by standardized scrap reasons.</p>
+  <h2 data-i18n="layout.scrapReasonsTitle">Scrap by Reason</h2>
+  <p data-i18n="reports.scrapByReasonDesc">Monthly scrap totals grouped by standardized scrap reasons.</p>
 </a>
 
 <div class="reports-platform-footer">
-<a href="/">← Back to Operations Platform</a>
+<a href="/" data-i18n="common.backToPlatform">← Back to Operations Platform</a>
 </div>
 
 </div>

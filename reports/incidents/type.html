@@ -17,16 +17,17 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Incident by Type';
+function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+document.getElementById('reports-page-title').textContent = tt('layout.incidentTypeTitle', 'Incident by Type');
 </script>
 
 <div class="reports-wrap">
 
-  <a href="/reports/incidents/" class="reports-back-link">← Back to Incident Reports</a>
+  <a href="/reports/incidents/" class="reports-back-link" data-i18n="reports.backToIncidentReports">← Back to Incident Reports</a>
 
   <div class="reports-section-intro">
-    <h2 class="reports-section-title">Incident by Type</h2>
-    <p class="reports-section-subtitle">
+    <h2 class="reports-section-title" data-i18n="layout.incidentTypeTitle">Incident by Type</h2>
+    <p class="reports-section-subtitle" data-i18n="reports.incidentByTypeSubtitle">
       Breakdown of incident volume by category for the selected year.
     </p>
   </div>
@@ -34,19 +35,19 @@ document.getElementById('reports-page-title').textContent = 'Incident by Type';
   <div class="card">
     <div class="reports-actions">
       <div class="reports-field" style="min-width: 180px; margin-bottom: 0;">
-        <label for="yearPicker">Select Year</label>
+        <label for="yearPicker" data-i18n="reports.selectYearLabel">Select Year</label>
         <select id="yearPicker"></select>
       </div>
 
       <div class="reports-field" style="min-width: 160px; margin-bottom: 0;">
-        <label for="chartTypePicker">Chart Type</label>
+        <label for="chartTypePicker" data-i18n="reports.chartTypeLabel">Chart Type</label>
         <select id="chartTypePicker">
-          <option value="bar">Bar</option>
-          <option value="line">Line</option>
+          <option value="bar" data-i18n="reports.chartTypeBar">Bar</option>
+          <option value="line" data-i18n="reports.chartTypeLine">Line</option>
         </select>
       </div>
 
-      <button class="btn primary" type="button" id="loadBtn">Load Report</button>
+      <button class="btn primary" type="button" id="loadBtn" data-i18n="reports.loadReportBtn">Load Report</button>
     </div>
 
     <p id="status" class="report-status"></p>
@@ -54,47 +55,49 @@ document.getElementById('reports-page-title').textContent = 'Incident by Type';
 
   <div class="report-stats">
     <div class="report-stat-card">
-      <div class="report-stat-label">Total Incidents</div>
+      <div class="report-stat-label" data-i18n="reports.totalIncidentsLabel">Total Incidents</div>
       <div class="report-stat-value" id="statTotal">--</div>
     </div>
 
     <div class="report-stat-card">
-      <div class="report-stat-label">Most Common Type</div>
+      <div class="report-stat-label" data-i18n="reports.mostCommonTypeLabel">Most Common Type</div>
       <div class="report-stat-value" id="statTopType">--</div>
     </div>
 
     <div class="report-stat-card">
-      <div class="report-stat-label">Top Type Count</div>
+      <div class="report-stat-label" data-i18n="reports.topTypeCountLabel">Top Type Count</div>
       <div class="report-stat-value" id="statTopCount">--</div>
     </div>
   </div>
 
   <div class="card">
-    <h2>Incident Count by Type</h2>
+    <h2 data-i18n="reports.incidentCountByTypeTitle">Incident Count by Type</h2>
     <div class="report-chart-wrap">
       <canvas id="typeChart"></canvas>
     </div>
   </div>
 
   <div class="card">
-    <h2>Type Totals</h2>
+    <h2 data-i18n="reports.typeTotalsTitle">Type Totals</h2>
     <div class="report-table-wrap">
       <table class="report-table" id="typeTable">
         <tr>
-          <th>Incident Type</th>
-          <th>Incident Count</th>
+          <th data-i18n="reports.incidentTypeLabel">Incident Type</th>
+          <th data-i18n="reports.incidentCountCol">Incident Count</th>
         </tr>
       </table>
     </div>
   </div>
 
   <div class="reports-platform-footer">
-    <a href="/">← Back to Operations Platform</a>
+    <a href="/" data-i18n="common.backToPlatform">← Back to Operations Platform</a>
   </div>
 
 </div>
 
 <script>
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
 let typeChart = null;
 let currentLabels = [];
 let currentValues = [];
@@ -134,7 +137,7 @@ function renderChart() {
     data: {
       labels: currentLabels,
       datasets: [{
-        label: "Incident Count",
+        label: t('reports.incidentCountCol'),
         data: currentValues,
         tension: chartType === "line" ? 0.25 : 0,
         fill: false
@@ -172,8 +175,8 @@ function renderTable(rows) {
 
   table.innerHTML = `
     <tr>
-      <th>Incident Type</th>
-      <th>Incident Count</th>
+      <th>${t('reports.incidentTypeLabel')}</th>
+      <th>${t('reports.incidentCountCol')}</th>
     </tr>
   `;
 
@@ -192,19 +195,19 @@ async function loadTypeReport() {
   const status = document.getElementById("status");
 
   if (!year) {
-    status.textContent = "Select a year.";
+    status.textContent = t('reports.selectAYear');
     status.classList.add("error");
     return;
   }
 
-  status.textContent = "Loading...";
+  status.textContent = t('reports.loadingDots');
   status.classList.remove("error");
 
   try {
     const { ok, data, error } = await window.api.get(`/api/reports/incidents-summary?year=${encodeURIComponent(year)}`);
 
     if (!ok) {
-      status.textContent = data?.error || error || "Load failed";
+      status.textContent = data?.error || error || t('reports.loadFailed');
       status.classList.add("error");
       return;
     }
@@ -222,9 +225,9 @@ async function loadTypeReport() {
     renderChart();
     renderTable(rows);
 
-    status.textContent = `Loaded ${year}`;
+    status.textContent = t('reports.loadedYear', { year });
   } catch (err) {
-    status.textContent = `Error: ${err.message}`;
+    status.textContent = t('reports.errorPrefix', { msg: err.message });
     status.classList.add("error");
   }
 }

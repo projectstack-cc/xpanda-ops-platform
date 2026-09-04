@@ -17,16 +17,17 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Incident Trend';
+function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+document.getElementById('reports-page-title').textContent = tt('layout.incidentTrendTitle', 'Incident Trend');
 </script>
 
 <div class="reports-wrap">
 
-<a href="/reports/incidents/" class="reports-back-link">← Back to Incident Reports</a>
+<a href="/reports/incidents/" class="reports-back-link" data-i18n="reports.backToIncidentReports">← Back to Incident Reports</a>
 
 <div class="reports-section-intro">
-  <h2 class="reports-section-title">Incident Trend</h2>
-  <p class="reports-section-subtitle">
+  <h2 class="reports-section-title" data-i18n="layout.incidentTrendTitle">Incident Trend</h2>
+  <p class="reports-section-subtitle" data-i18n="reports.incidentTrendSubtitle">
     Yearly incident count by month with chart view switching.
   </p>
 </div>
@@ -34,19 +35,19 @@ document.getElementById('reports-page-title').textContent = 'Incident Trend';
 <div class="card">
   <div class="reports-actions">
     <div class="reports-field" style="min-width: 180px; margin-bottom: 0;">
-      <label for="yearPicker">Select Year</label>
+      <label for="yearPicker" data-i18n="reports.selectYearLabel">Select Year</label>
       <select id="yearPicker"></select>
     </div>
 
     <div class="reports-field" style="min-width: 160px; margin-bottom: 0;">
-      <label for="chartTypePicker">Chart Type</label>
+      <label for="chartTypePicker" data-i18n="reports.chartTypeLabel">Chart Type</label>
       <select id="chartTypePicker">
-        <option value="bar">Bar</option>
-        <option value="line">Line</option>
+        <option value="bar" data-i18n="reports.chartTypeBar">Bar</option>
+        <option value="line" data-i18n="reports.chartTypeLine">Line</option>
       </select>
     </div>
 
-    <button class="btn primary" type="button" id="loadBtn">Load Report</button>
+    <button class="btn primary" type="button" id="loadBtn" data-i18n="reports.loadReportBtn">Load Report</button>
   </div>
 
   <p id="status" class="report-status"></p>
@@ -54,61 +55,52 @@ document.getElementById('reports-page-title').textContent = 'Incident Trend';
 
 <div class="report-stats">
   <div class="report-stat-card">
-    <div class="report-stat-label">Total Incidents</div>
+    <div class="report-stat-label" data-i18n="reports.totalIncidentsLabel">Total Incidents</div>
     <div class="report-stat-value" id="statTotal">--</div>
   </div>
 
   <div class="report-stat-card">
-    <div class="report-stat-label">Highest Month</div>
+    <div class="report-stat-label" data-i18n="reports.highestMonthLabel">Highest Month</div>
     <div class="report-stat-value" id="statPeak">--</div>
   </div>
 </div>
 
 <div class="card">
-  <h2>Incident Count by Month</h2>
+  <h2 data-i18n="reports.incidentCountByMonthTitle">Incident Count by Month</h2>
   <div class="report-chart-wrap">
     <canvas id="incidentTrendChart"></canvas>
   </div>
 </div>
 
 <div class="card">
-  <h2>Monthly Totals</h2>
+  <h2 data-i18n="reports.monthlyTotalsTitle">Monthly Totals</h2>
   <div class="report-table-wrap">
     <table class="report-table" id="trendTable">
       <tr>
-        <th>Month</th>
-        <th>Incident Count</th>
+        <th data-i18n="reports.monthCol">Month</th>
+        <th data-i18n="reports.incidentCountCol">Incident Count</th>
       </tr>
     </table>
   </div>
 </div>
 
 <div class="reports-platform-footer">
-  <a href="/">← Back to Operations Platform</a>
+  <a href="/" data-i18n="common.backToPlatform">← Back to Operations Platform</a>
 </div>
 
 </div>
 
 <script>
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
 let incidentTrendChart = null;
 let currentLabels = [];
 let currentValues = [];
 let currentMonths = [];
 
-const monthNames = {
-  "01": "January",
-  "02": "February",
-  "03": "March",
-  "04": "April",
-  "05": "May",
-  "06": "June",
-  "07": "July",
-  "08": "August",
-  "09": "September",
-  "10": "October",
-  "11": "November",
-  "12": "December"
-};
+function monthName(monthPart) {
+  return monthPart ? t('reports.month' + monthPart) : '';
+}
 
 function num(v) {
   const n = Number(v);
@@ -144,7 +136,7 @@ function renderChart() {
     data: {
       labels: currentLabels,
       datasets: [{
-        label: "Incident Count",
+        label: t('reports.incidentCountCol'),
         data: currentValues,
         tension: chartType === "line" ? 0.25 : 0,
         fill: false
@@ -184,26 +176,26 @@ async function loadTrendReport() {
   const status = document.getElementById("status");
 
   if (!year) {
-    status.textContent = "Select a year.";
+    status.textContent = t('reports.selectAYear');
     status.classList.add("error");
     return;
   }
 
-  status.textContent = "Loading...";
+  status.textContent = t('reports.loadingDots');
   status.classList.remove("error");
 
   try {
     const { ok, data, error } = await window.api.get(`/api/reports/incidents-trend?year=${encodeURIComponent(year)}`);
 
     if (!ok) {
-      status.textContent = data?.error || error || "Load failed";
+      status.textContent = data?.error || error || t('reports.loadFailed');
       status.classList.add("error");
       return;
     }
 
     currentLabels = data.months.map(row => {
       const monthPart = row.month.split("-")[1];
-      return monthNames[monthPart] || row.month;
+      return monthName(monthPart) || row.month;
     });
 
     currentMonths = data.months.map(row => row.month);
@@ -218,7 +210,7 @@ async function loadTrendReport() {
       const count = num(row.count);
       if (count > peakCount) {
         peakCount = count;
-        peakLabel = `${monthNames[row.month.split("-")[1]]} (${count})`;
+        peakLabel = `${monthName(row.month.split("-")[1])} (${count})`;
       }
     });
 
@@ -229,8 +221,8 @@ async function loadTrendReport() {
     const table = document.getElementById("trendTable");
     table.innerHTML = `
       <tr>
-        <th>Month</th>
-        <th>Incident Count</th>
+        <th>${t('reports.monthCol')}</th>
+        <th>${t('reports.incidentCountCol')}</th>
       </tr>
     `;
 
@@ -238,15 +230,15 @@ async function loadTrendReport() {
       const monthPart = row.month.split("-")[1];
       table.innerHTML += `
         <tr>
-          <td>${monthNames[monthPart] || row.month}</td>
+          <td>${monthName(monthPart) || row.month}</td>
           <td>${num(row.count)}</td>
         </tr>
       `;
     });
 
-    status.textContent = `Loaded ${year}`;
+    status.textContent = t('reports.loadedYear', { year });
   } catch (err) {
-    status.textContent = `Error: ${err.message}`;
+    status.textContent = t('reports.errorPrefix', { msg: err.message });
     status.classList.add("error");
   }
 }

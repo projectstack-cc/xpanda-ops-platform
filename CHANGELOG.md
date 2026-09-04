@@ -3759,6 +3759,80 @@ Entries within each module are ordered by prompt # descending (newest first).
   fixes above reference real keys), an en/es/ht key parity check across all catalogs (`qc` 188,
   `jobs`/`logistics`/`manufacturing`/`production`/`common`/`home` unchanged, `layout` 34 with the 8 new
   title/subtitle keys — no drift), and an interpolation spot-check across all three languages.
+- **i18n sweep, phase 7 — Reports module (`reports/index.html` plus all 12 sub-pages under
+  `scrap/`, `incidents/`, `orders/`, `cutting/`) now speaks en/es/ht.** Same wiring-gap pattern as
+  every prior module: `reports-header.js` had no module-catalog `document.write` at all, so a page
+  would have stayed fully English with no error to flag it. New `reports/reports-i18n.js` registers
+  a `reports` catalog shared by all 13 pages (170 keys × 3 langs, verified parity), wired into
+  `reports-header.js` right after the `i18n-common.js` load and before `shared-header.js`.
+
+  This module's title/subtitle wiring is architecturally different from every prior module and
+  needed to be understood before touching anything: `reports-header.js` deliberately passes
+  `pageTitle: ''` and `backLinkLabel: ''` to `shared-header.js` (both sites carry an explanatory
+  comment — reports sub-pages set their own title via `getElementById` and their own inline back-link,
+  since `shared-header.js` renders an empty title/back-link when the config value is falsy). So unlike
+  every prior module, these per-page title overrides are load-bearing, not dead code — deleting them
+  would have blanked every reports page's title. Instead, all 13 pages got a dedicated new
+  `layout.*Title` key (`incidentDetail` also needed a `Subtitle`, since its topbar `<p>` is likewise
+  page-owned) — 14 new `layout` keys total, converted to the standard guarded `tt()` IIFE pattern.
+  The shared `layout.reportsSubtitle` key from phase 1 needed no changes: it resolves correctly via
+  the module default and is never overridden by individual pages. The inline `← Back to X` links are
+  similarly page-owned literals (not shared-header chrome), tagged with page-local `reports.*` keys
+  rather than `layout.*`.
+
+  Tagged: the dashboard's workflow tiles; all four Scrap Reports pages (index, summary, trend,
+  reasons — headers, filters, chart legends, tables); the Incident Reports dashboard, filtered list
+  (year/type/month/risk pickers, results table), detail view (overview/classification grids), summary
+  (stat cards, both Chart.js dataset labels, customer table), trend (stat cards, chart, table — see
+  month-name fix below), and by-type views; the Orders Report (search/status/date filters, sortable
+  table headers, status badges, pagination footer); and Cutting Line Activity (board filter, operator
+  filter, operator-accountability summary, invoice-grouped session/cut-item tables, cross/hole-cutter
+  chunk table, print/expand/collapse controls). Every `alert()`/`confirm()` literal was swept to zero.
+
+  Persisted-vs-display distinctions were preserved throughout, following the pattern established in
+  Job Board's `dow`/`month` arrays: incident `type`/`risk_level` values stay English in the underlying
+  data (they round-trip through URL query params to the backend filter API) with only the rendered
+  label text translated; Orders' job `status` enum (`not_started`/`in_production`/`done`/`loading`/
+  `shipped`/`archived`) stays English for `===` comparisons and `<option value>`, with a new
+  `labelKeys` lookup resolved through `t()` at render time replacing the old hardcoded `labels` object;
+  and Cutting's `board`/`line` fields (`Main Line`/`Blue Line`/`Cross Cutter`/`Hole Cutter`) stay
+  English in both `<option value>` and the API-compared `s.board`/`c.line` data, with a new
+  `BOARD_LABEL_KEY`/`boardLabel()` lookup translating only the displayed text — the same
+  keep-the-value-translate-the-label shape used three separate times in one module. Operator/customer
+  names (`s.operator`, `c.cut_by`, `row.customer`) and handoff notes/work-item descriptions are
+  persisted human-entered data and were left untranslated per the sweep's standing exception.
+
+  `trend.html` repeated the exact hardcoded-month-array trap first found in Job Board: a
+  `monthNames = {"01": "January", ...}` object feeding chart labels, stat display, and table cells.
+  Replaced with a `monthName(monthPart)` function calling `t('reports.month' + monthPart)` against
+  12 new `month01`–`month12` catalog keys, updated at all four usage sites.
+
+  This phase's fork stalled after completing 7 of 13 files (it had, notably, front-loaded the entire
+  170-key catalog and all 14 `layout` keys before starting the mechanical tagging pass, so the
+  in-progress work was verified file-by-file and continued directly rather than re-delegated): the
+  remaining 6 files (`incidents/detail.html`, `summary.html`, `trend.html`, `type.html`,
+  `orders/index.html`, `cutting/index.html`) plus `incidents/list.html`'s JS body were completed
+  by hand, then the full verification suite was re-run across all 13 files.
+
+  One collision-discipline class of bug, first flagged by advisor: two of the newly-tagged pages
+  rebuild a placeholder `<option>` via `innerHTML` after initial page load — `incidents/list.html`'s
+  "All Months" option (rebuilt once in `buildMonthOptions()` on `DOMContentLoaded`) and
+  `cutting/index.html`'s "All Operators" option (rebuilt every `loadReport()` in
+  `populateOperatorOptions()`) — both wiping the static `data-i18n` attribute the initial HTML carried,
+  so a language switch after the rebuild found nothing to update and the option stayed frozen in
+  whichever language was active at rebuild time. Fixed by setting `data-i18n` directly in the
+  template string each rebuild writes, matching the lockstep-attribute pattern used for QC's toggle
+  buttons and Production's silo/bead-type controls.
+
+  Verified via `node --check` on all 23 inline `<script>` blocks plus `reports-i18n.js` across the 13
+  files, a scripted reference-integrity scan (159 direct `t('reports.…')`/`data-i18n` usages resolve;
+  the only non-match was the literal string `month` from the dynamic `'reports.month' + monthPart`
+  concatenation, correctly triaged against the 12 `month01`–`month12` catalog keys it resolves to at
+  runtime — 0 real gaps), an en/es/ht key parity check across all catalogs (`reports` 170,
+  `jobs`/`logistics`/`manufacturing`/`production`/`qc`/`common`/`home` unchanged, `layout` 48 with the
+  14 new title/subtitle keys — no drift), and a shadow-variable grep sweep (two harmless
+  `const t = parseUtc(...)` two-line closures in `cutting/index.html` that never call the global `t()`
+  internally — left as-is, matching the precedent set in prior phases).
 - **i18n sweep, phase 2c — Logistics: `load-builder.html` gets a labels/buttons/toasts pass
   (en/es/ht), completing the Logistics module's floor+desk screens.** Deliberately narrower than the
   full tag-everything treatment given to the other three Logistics pages: this file is a bin-packing

@@ -171,51 +171,52 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Cutting Line Activity';
+function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+document.getElementById('reports-page-title').textContent = tt('layout.cuttingActivityTitle', 'Cutting Line Activity');
 </script>
 
 <div class="reports-wrap">
 
-  <a href="/reports/" class="reports-back-link">← Back to Reports</a>
+  <a href="/reports/" class="reports-back-link" data-i18n="reports.backToReports">← Back to Reports</a>
 
   <div class="reports-section-intro">
-    <h2 class="reports-section-title">Cutting Line Activity</h2>
-    <p class="reports-section-subtitle">Grouped by invoice — click an invoice to see exactly what was cut and by whom.</p>
+    <h2 class="reports-section-title" data-i18n="layout.cuttingActivityTitle">Cutting Line Activity</h2>
+    <p class="reports-section-subtitle" data-i18n="reports.cuttingActivitySubtitle">Grouped by invoice — click an invoice to see exactly what was cut and by whom.</p>
   </div>
 
   <!-- Filters -->
   <div class="card cutting-filters">
 
     <div class="reports-field">
-      <label>From</label>
+      <label data-i18n="reports.fromLabel">From</label>
       <input type="date" id="f-from">
     </div>
 
     <div class="reports-field">
-      <label>To</label>
+      <label data-i18n="reports.toLabel">To</label>
       <input type="date" id="f-to">
     </div>
 
     <div class="reports-field">
-      <label>Operator</label>
+      <label data-i18n="reports.operatorLabel">Operator</label>
       <select id="f-operator">
-        <option value="">All Operators</option>
+        <option value="" data-i18n="reports.allOperators">All Operators</option>
       </select>
     </div>
 
     <div class="reports-field">
-      <label>Board</label>
+      <label data-i18n="reports.boardLabel">Board</label>
       <select id="f-board">
-        <option value="">All</option>
-        <option value="Main Line">Main Line</option>
-        <option value="Blue Line">Blue Line</option>
-        <option value="Cross Cutter">Cross Cutter</option>
-        <option value="Hole Cutter">Hole Cutter</option>
+        <option value="" data-i18n="reports.allOption">All</option>
+        <option value="Main Line" data-i18n="reports.boardMainLine">Main Line</option>
+        <option value="Blue Line" data-i18n="reports.boardBlueLine">Blue Line</option>
+        <option value="Cross Cutter" data-i18n="reports.boardCrossCutter">Cross Cutter</option>
+        <option value="Hole Cutter" data-i18n="reports.boardHoleCutter">Hole Cutter</option>
       </select>
     </div>
 
     <div class="cutting-filters-actions">
-      <button class="btn ghost" onclick="window.print()">Print</button>
+      <button class="btn ghost" onclick="window.print()" data-i18n="reports.printBtn">Print</button>
     </div>
 
   </div>
@@ -223,26 +224,39 @@ document.getElementById('reports-page-title').textContent = 'Cutting Line Activi
   <div id="operator-summary"></div>
 
   <div class="cutting-section-header">
-    <h3 class="cutting-section-title">Invoices</h3>
+    <h3 class="cutting-section-title" data-i18n="reports.invoicesTitle">Invoices</h3>
     <div class="cutting-section-actions">
-      <button class="btn ghost" onclick="setAllInvoiceGroups(true)">Expand all</button>
-      <button class="btn ghost" onclick="setAllInvoiceGroups(false)">Collapse all</button>
+      <button class="btn ghost" onclick="setAllInvoiceGroups(true)" data-i18n="reports.expandAllBtn">Expand all</button>
+      <button class="btn ghost" onclick="setAllInvoiceGroups(false)" data-i18n="reports.collapseAllBtn">Collapse all</button>
     </div>
   </div>
   <div id="invoice-wrap"></div>
 
   <div class="cutting-section-header">
-    <h3 class="cutting-section-title">Cross / Hole Cutter (no invoice)</h3>
+    <h3 class="cutting-section-title" data-i18n="reports.crossHoleCutterNoInvoiceTitle">Cross / Hole Cutter (no invoice)</h3>
   </div>
   <div id="chunk-wrap"></div>
 
   <div class="reports-platform-footer">
-    <a href="/reports/">← Back to Reports</a>
+    <a href="/reports/" data-i18n="reports.backToReports">← Back to Reports</a>
   </div>
 
 </div>
 
 <script>
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
+const BOARD_LABEL_KEY = {
+  'Main Line': 'reports.boardMainLine',
+  'Blue Line': 'reports.boardBlueLine',
+  'Cross Cutter': 'reports.boardCrossCutter',
+  'Hole Cutter': 'reports.boardHoleCutter'
+};
+function boardLabel(board) {
+  const key = BOARD_LABEL_KEY[board];
+  return key ? t(key) : board;
+}
+
 const ET_TZ = 'America/New_York';
 const etDayFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: ET_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
 const etTimeFormatter = new Intl.DateTimeFormat('en-US', { timeZone: ET_TZ, hour: 'numeric', minute: '2-digit', hour12: true });
@@ -333,7 +347,7 @@ async function loadReport() {
 
   const operator = document.getElementById('f-operator').value;
 
-  document.getElementById('invoice-wrap').innerHTML = '<p class="report-empty">Loading…</p>';
+  document.getElementById('invoice-wrap').innerHTML = `<p class="report-empty">${t('reports.loadingEllipsis')}</p>`;
   document.getElementById('chunk-wrap').innerHTML = '';
   document.getElementById('operator-summary').innerHTML = '';
 
@@ -343,7 +357,7 @@ async function loadReport() {
 
     const { ok, data } = await window.api.get(url);
     if (!ok) {
-      document.getElementById('invoice-wrap').innerHTML = '<p class="report-empty cutting-error">Error loading cutting activity.</p>';
+      document.getElementById('invoice-wrap').innerHTML = `<p class="report-empty cutting-error">${t('reports.errorLoadingCuttingActivity')}</p>`;
       return;
     }
 
@@ -366,14 +380,14 @@ async function loadReport() {
 
     render();
   } catch (e) {
-    document.getElementById('invoice-wrap').innerHTML = '<p class="report-empty cutting-error">Network error.</p>';
+    document.getElementById('invoice-wrap').innerHTML = `<p class="report-empty cutting-error">${t('reports.networkError')}</p>`;
   }
 }
 
 function populateOperatorOptions(selected) {
   const sel = document.getElementById('f-operator');
   const names = Array.from(knownOperators).sort((a, b) => a.localeCompare(b));
-  sel.innerHTML = '<option value="">All Operators</option>' +
+  sel.innerHTML = `<option value="" data-i18n="reports.allOperators">${t('reports.allOperators')}</option>` +
     names.map((n) => `<option value="${escAttr(n)}">${esc(n)}</option>`).join('');
   if (selected && names.includes(selected)) sel.value = selected;
 }
@@ -411,12 +425,12 @@ function renderOperatorSummary(sessions, cutItems) {
 
   el.innerHTML = `
     <div class="card cutting-op-summary">
-      <h2>Per-Operator Accountability (range total)</h2>
+      <h2>${t('reports.operatorAccountabilityTitle')}</h2>
       <div class="cutting-op-summary-grid">
         ${rows.map((r) => `
           <div class="cutting-op-summary-item">
             <div class="cutting-op-summary-name">${esc(r.name)}${r.shift ? `<span class="cutting-op-summary-shift">${esc(r.shift)}</span>` : ''}</div>
-            <div class="cutting-op-summary-stats">${r.sessionCount} session${r.sessionCount !== 1 ? 's' : ''} · ${formatDuration(r.secs)} · ${r.itemCount} item${r.itemCount !== 1 ? 's' : ''} cut</div>
+            <div class="cutting-op-summary-stats">${t('reports.sessionCountText', { n: r.sessionCount })} · ${formatDuration(r.secs)} · ${t('reports.itemsCutText', { n: r.itemCount })}</div>
           </div>
         `).join('')}
       </div>
@@ -476,7 +490,7 @@ function renderInvoiceGroups(sessions, cutItems) {
   const groups = buildInvoiceGroups(sessions, cutItems);
 
   if (!groups.length) {
-    wrap.innerHTML = '<p class="report-empty">No invoice cutting activity found for this filter.</p>';
+    wrap.innerHTML = `<p class="report-empty">${t('reports.noInvoiceCuttingActivity')}</p>`;
     return;
   }
 
@@ -492,15 +506,15 @@ function renderInvoiceGroups(sessions, cutItems) {
             <span class="invoice-customer">${muted(g.customer)}</span>
             <span class="invoice-meta-spacer"></span>
             <span class="invoice-meta">${operators.length ? esc(operators.join(', ')) : '—'}</span>
-            <span class="invoice-meta">${g.sessions.length} session${g.sessions.length !== 1 ? 's' : ''}</span>
+            <span class="invoice-meta">${t('reports.sessionCountText', { n: g.sessions.length })}</span>
             <span class="invoice-meta">${formatDuration(totalSecs)}</span>
-            <span class="invoice-meta">${g.cutItems.length} item${g.cutItems.length !== 1 ? 's' : ''} cut</span>
+            <span class="invoice-meta">${t('reports.itemsCutText', { n: g.cutItems.length })}</span>
           </span>
         </summary>
         <div class="invoice-body">
-          <div class="invoice-subsection-title">Sessions on this invoice</div>
+          <div class="invoice-subsection-title">${t('reports.sessionsOnInvoiceTitle')}</div>
           ${sessionsTable(g.sessions)}
-          <div class="invoice-subsection-title">What was cut</div>
+          <div class="invoice-subsection-title">${t('reports.whatWasCutTitle')}</div>
           ${cutItemsTable(g.cutItems)}
         </div>
       </details>
@@ -509,29 +523,29 @@ function renderInvoiceGroups(sessions, cutItems) {
 }
 
 function sessionsTable(sessions) {
-  if (!sessions.length) return '<p class="report-empty">No sessions on this invoice.</p>';
+  if (!sessions.length) return `<p class="report-empty">${t('reports.noSessionsOnInvoice')}</p>`;
   const sorted = [...sessions].sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
   return `
     <div class="report-table-wrap">
       <table class="report-table">
         <thead>
           <tr>
-            <th>Operator</th>
-            <th>Line</th>
-            <th>Start</th>
-            <th>Stop</th>
-            <th>Duration</th>
-            <th>Handoff Note</th>
+            <th>${t('reports.operatorLabel')}</th>
+            <th>${t('reports.lineCol')}</th>
+            <th>${t('reports.startCol')}</th>
+            <th>${t('reports.stopCol')}</th>
+            <th>${t('reports.durationCol')}</th>
+            <th>${t('reports.handoffNoteCol')}</th>
           </tr>
         </thead>
         <tbody>
           ${sorted.map((s) => {
             const isOpen = s.status === 'open' || !s.ended_at;
-            const stopCell = isOpen ? '<span class="pill-open">In progress</span>' : etTimeLabel(s.ended_at);
+            const stopCell = isOpen ? `<span class="pill-open">${t('reports.inProgressPill')}</span>` : etTimeLabel(s.ended_at);
             return `
               <tr>
                 <td>${muted(s.operator)}</td>
-                <td>${muted(s.board)}</td>
+                <td>${muted(boardLabel(s.board))}</td>
                 <td>${etTimeLabel(s.started_at)}</td>
                 <td>${stopCell}</td>
                 <td>${formatDuration(durationSeconds(s))}</td>
@@ -546,18 +560,18 @@ function sessionsTable(sessions) {
 }
 
 function cutItemsTable(items) {
-  if (!items.length) return '<p class="report-empty">No completed line items on this invoice yet.</p>';
+  if (!items.length) return `<p class="report-empty">${t('reports.noCompletedItemsOnInvoice')}</p>`;
   const sorted = [...items].sort((a, b) => (b.cut_at || '').localeCompare(a.cut_at || ''));
   return `
     <div class="report-table-wrap">
       <table class="report-table">
         <thead>
           <tr>
-            <th>Description</th>
-            <th>Dimensions</th>
-            <th>Line</th>
-            <th>Cut By</th>
-            <th>Cut At (ET)</th>
+            <th>${t('reports.descriptionCol')}</th>
+            <th>${t('reports.dimensionsCol')}</th>
+            <th>${t('reports.lineCol')}</th>
+            <th>${t('reports.cutByCol')}</th>
+            <th>${t('reports.cutAtEtCol')}</th>
           </tr>
         </thead>
         <tbody>
@@ -565,7 +579,7 @@ function cutItemsTable(items) {
             <tr>
               <td>${muted(c.description)}</td>
               <td>${muted(c.dimensions)}</td>
-              <td>${muted(c.line)}</td>
+              <td>${muted(boardLabel(c.line))}</td>
               <td>${muted(c.cut_by)}</td>
               <td>${etTimeLabel(c.cut_at)}</td>
             </tr>
@@ -579,7 +593,7 @@ function cutItemsTable(items) {
 function renderChunkSection(chunkSessions) {
   const wrap = document.getElementById('chunk-wrap');
   if (!chunkSessions.length) {
-    wrap.innerHTML = '<p class="report-empty">No Cross/Hole Cutter activity found for this filter.</p>';
+    wrap.innerHTML = `<p class="report-empty">${t('reports.noCrossHoleCutterActivity')}</p>`;
     return;
   }
 
@@ -590,22 +604,22 @@ function renderChunkSection(chunkSessions) {
       <table class="report-table">
         <thead>
           <tr>
-            <th>Operator</th>
-            <th>Board</th>
-            <th>Work Item</th>
-            <th>Start</th>
-            <th>Stop</th>
-            <th>Duration</th>
+            <th>${t('reports.operatorLabel')}</th>
+            <th>${t('reports.boardLabel')}</th>
+            <th>${t('reports.workItemCol')}</th>
+            <th>${t('reports.startCol')}</th>
+            <th>${t('reports.stopCol')}</th>
+            <th>${t('reports.durationCol')}</th>
           </tr>
         </thead>
         <tbody>
           ${sorted.map((c) => {
             const isOpen = c.status === 'open' || !c.ended_at;
-            const stopCell = isOpen ? '<span class="pill-open">In progress</span>' : etTimeLabel(c.ended_at);
+            const stopCell = isOpen ? `<span class="pill-open">${t('reports.inProgressPill')}</span>` : etTimeLabel(c.ended_at);
             return `
               <tr>
                 <td>${muted(c.operator)}</td>
-                <td>${muted(c.board)}</td>
+                <td>${muted(boardLabel(c.board))}</td>
                 <td class="cutting-italic">${muted(c.work_item)}</td>
                 <td>${etTimeLabel(c.started_at)}</td>
                 <td>${stopCell}</td>

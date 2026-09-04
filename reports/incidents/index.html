@@ -16,48 +16,49 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Incident Reports';
+function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+document.getElementById('reports-page-title').textContent = tt('layout.incidentReportsTitle', 'Incident Reports');
 </script>
 
 <div class="reports-wrap">
 
-<a href="/reports/" class="reports-back-link">← Back to Reports Dashboard</a>
+<a href="/reports/" class="reports-back-link" data-i18n="reports.backToReportsDashboard">← Back to Reports Dashboard</a>
 
 <div class="reports-section-intro">
-<h2 class="reports-section-title">Incident Reports</h2>
-<p class="reports-section-subtitle">
+<h2 class="reports-section-title" data-i18n="layout.incidentReportsTitle">Incident Reports</h2>
+<p class="reports-section-subtitle" data-i18n="reports.incidentReportsSubtitle">
 Incident analytics and operational event reporting.
 </p>
 </div>
 
 <a class="reports-tile" href="/reports/incidents/summary.html">
-  <h2>Incident Summary</h2>
-  <p>
+  <h2 data-i18n="layout.incidentSummaryTitle">Incident Summary</h2>
+  <p data-i18n="reports.incidentSummaryDesc">
     Executive overview of incident volume, severity distribution, most common incident types, and affected customers.
   </p>
 </a>
 
 <a class="reports-tile" href="/reports/incidents/trend.html">
-  <h2>Incident Trend</h2>
-  <p>Yearly incident count by month with bar or line chart views.</p>
+  <h2 data-i18n="layout.incidentTrendTitle">Incident Trend</h2>
+  <p data-i18n="reports.incidentTrendDesc">Yearly incident count by month with bar or line chart views.</p>
 </a>
 
 <a class="reports-tile" href="/reports/incidents/type.html">
-  <h2>Incident by Type</h2>
-  <p>
+  <h2 data-i18n="layout.incidentTypeTitle">Incident by Type</h2>
+  <p data-i18n="reports.incidentByTypeDesc">
     Yearly breakdown of incidents by category, including chart and table views for quick comparison.
   </p>
 </a>
 
 <a class="reports-tile" href="/reports/incidents/list.html">
-  <h2>Incident List</h2>
-  <p>
+  <h2 data-i18n="reports.incidentListTileTitle">Incident List</h2>
+  <p data-i18n="reports.incidentListDesc">
     Browse incident records directly with filters for year, type, month, and risk level.
   </p>
 </a>
 
 <div class="reports-platform-footer">
-<a href="/">← Back to Operations Platform</a>
+<a href="/" data-i18n="common.backToPlatform">← Back to Operations Platform</a>
 </div>
 
 </div>

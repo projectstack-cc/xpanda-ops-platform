@@ -260,7 +260,21 @@
       incidentReportTitle: 'Incident Report',
       incidentReportSubtitle: 'Document quality-related incidents for customer, product, and process issues',
       finalInspectionTitle: 'Final Inspection',
-      finalInspectionSubtitle: 'Perform dimensional inspection and generate controlled PDF records'
+      finalInspectionSubtitle: 'Perform dimensional inspection and generate controlled PDF records',
+      reportsIndexTitle: 'Reports Dashboard',
+      scrapReportsTitle: 'Scrap Reports',
+      scrapSummaryTitle: 'Scrap Summary',
+      scrapTrendTitle: 'Scrap Trend',
+      scrapReasonsTitle: 'Scrap by Reason',
+      incidentReportsTitle: 'Incident Reports',
+      incidentDetailTitle: 'Incident Detail',
+      incidentDetailSubtitle: 'Read-only incident visibility from the incident tracker.',
+      incidentListTitle: 'Incident Reports — List',
+      incidentSummaryTitle: 'Incident Summary',
+      incidentTrendTitle: 'Incident Trend',
+      incidentTypeTitle: 'Incident by Type',
+      ordersReportTitle: 'Orders Report',
+      cuttingActivityTitle: 'Cutting Line Activity'
     },
     es: {
       jobsTitle: 'Tablero de Trabajos',
@@ -296,7 +310,21 @@
       incidentReportTitle: 'Informe de Incidente',
       incidentReportSubtitle: 'Documente incidentes de calidad relacionados con el cliente, el producto y el proceso',
       finalInspectionTitle: 'Inspección Final',
-      finalInspectionSubtitle: 'Realice la inspección dimensional y genere registros PDF controlados'
+      finalInspectionSubtitle: 'Realice la inspección dimensional y genere registros PDF controlados',
+      reportsIndexTitle: 'Panel de Informes',
+      scrapReportsTitle: 'Informes de Desperdicio',
+      scrapSummaryTitle: 'Resumen de Desperdicio',
+      scrapTrendTitle: 'Tendencia de Desperdicio',
+      scrapReasonsTitle: 'Desperdicio por Motivo',
+      incidentReportsTitle: 'Informes de Incidentes',
+      incidentDetailTitle: 'Detalle de Incidente',
+      incidentDetailSubtitle: 'Visibilidad de incidentes de solo lectura desde el rastreador de incidentes.',
+      incidentListTitle: 'Informes de Incidentes — Lista',
+      incidentSummaryTitle: 'Resumen de Incidentes',
+      incidentTrendTitle: 'Tendencia de Incidentes',
+      incidentTypeTitle: 'Incidentes por Tipo',
+      ordersReportTitle: 'Informe de Pedidos',
+      cuttingActivityTitle: 'Actividad de Línea de Corte'
     },
     ht: {
       jobsTitle: 'Tablo Travay',
@@ -332,7 +360,21 @@
       incidentReportTitle: 'Rapò Ensidan',
       incidentReportSubtitle: 'Dokimante ensidan kalite ki gen rapò ak kliyan, pwodwi, ak pwosesis',
       finalInspectionTitle: 'Enspeksyon Final',
-      finalInspectionSubtitle: 'Fè enspeksyon dimansyonèl epi jenere rejis PDF kontwole'
+      finalInspectionSubtitle: 'Fè enspeksyon dimansyonèl epi jenere rejis PDF kontwole',
+      reportsIndexTitle: 'Tablodbò Rapò',
+      scrapReportsTitle: 'Rapò Debri',
+      scrapSummaryTitle: 'Rezime Debri',
+      scrapTrendTitle: 'Tandans Debri',
+      scrapReasonsTitle: 'Debri pa Rezon',
+      incidentReportsTitle: 'Rapò Ensidan',
+      incidentDetailTitle: 'Detay Ensidan',
+      incidentDetailSubtitle: 'Vizibilite ensidan pou li sèlman soti nan swivè ensidan an.',
+      incidentListTitle: 'Rapò Ensidan — Lis',
+      incidentSummaryTitle: 'Rezime Ensidan',
+      incidentTrendTitle: 'Tandans Ensidan',
+      incidentTypeTitle: 'Ensidan pa Kalite',
+      ordersReportTitle: 'Rapò Kòmand',
+      cuttingActivityTitle: 'Aktivite Liy Koupe'
     }
   });
 })();

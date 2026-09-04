@@ -16,18 +16,19 @@
   <body>
     <script src="/reports/reports-header.js"></script>
     <script>
+      function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
       document.getElementById("reports-page-title").textContent =
-        "Incident Summary";
+        tt("layout.incidentSummaryTitle", "Incident Summary");
     </script>
 
     <div class="reports-wrap">
-      <a href="/reports/incidents/" class="reports-back-link"
+      <a href="/reports/incidents/" class="reports-back-link" data-i18n="reports.backToIncidentReports"
         >← Back to Incident Reports</a
       >
 
       <div class="reports-section-intro">
-        <h2 class="reports-section-title">Incident Summary</h2>
-        <p class="reports-section-subtitle">
+        <h2 class="reports-section-title" data-i18n="layout.incidentSummaryTitle">Incident Summary</h2>
+        <p class="reports-section-subtitle" data-i18n="reports.incidentSummarySubtitle">
           Executive overview of incident volume, risk, type distribution, and
           affected customers.
         </p>
@@ -36,11 +37,11 @@
       <div class="card">
         <div class="reports-actions">
           <div class="reports-field" style="min-width: 180px; margin-bottom: 0">
-            <label for="yearPicker">Select Year</label>
+            <label for="yearPicker" data-i18n="reports.selectYearLabel">Select Year</label>
             <select id="yearPicker"></select>
           </div>
 
-          <button class="btn primary" type="button" id="loadBtn">
+          <button class="btn primary" type="button" id="loadBtn" data-i18n="reports.loadReportBtn">
             Load Report
           </button>
         </div>
@@ -50,58 +51,60 @@
 
       <div class="report-stats">
         <div class="report-stat-card">
-          <div class="report-stat-label">Total Incidents</div>
+          <div class="report-stat-label" data-i18n="reports.totalIncidentsLabel">Total Incidents</div>
           <div class="report-stat-value" id="statTotal">--</div>
         </div>
 
         <div class="report-stat-card">
-          <div class="report-stat-label">High Risk Incidents</div>
+          <div class="report-stat-label" data-i18n="reports.highRiskIncidentsLabel">High Risk Incidents</div>
           <div class="report-stat-value" id="statHighRisk">--</div>
         </div>
 
         <div class="report-stat-card">
-          <div class="report-stat-label">Unique Customers</div>
+          <div class="report-stat-label" data-i18n="reports.uniqueCustomersLabel">Unique Customers</div>
           <div class="report-stat-value" id="statCustomers">--</div>
         </div>
 
         <div class="report-stat-card">
-          <div class="report-stat-label">Most Common Type</div>
+          <div class="report-stat-label" data-i18n="reports.mostCommonTypeLabel">Most Common Type</div>
           <div class="report-stat-value" id="statTopType">--</div>
         </div>
       </div>
 
       <div class="card">
-        <h2>Incidents by Type</h2>
+        <h2 data-i18n="reports.incidentsByTypeTitle">Incidents by Type</h2>
         <div class="report-chart-wrap">
           <canvas id="typeChart"></canvas>
         </div>
       </div>
 
       <div class="card">
-        <h2>Risk Level Breakdown</h2>
+        <h2 data-i18n="reports.riskLevelBreakdownTitle">Risk Level Breakdown</h2>
         <div class="report-chart-wrap">
           <canvas id="riskChart"></canvas>
         </div>
       </div>
 
       <div class="card">
-        <h2>Customer Breakdown</h2>
+        <h2 data-i18n="reports.customerBreakdownTitle">Customer Breakdown</h2>
         <div class="report-table-wrap">
           <table class="report-table" id="customerTable">
             <tr>
-              <th>Customer</th>
-              <th>Incident Count</th>
+              <th data-i18n="reports.customerLabel">Customer</th>
+              <th data-i18n="reports.incidentCountCol">Incident Count</th>
             </tr>
           </table>
         </div>
       </div>
 
       <div class="reports-platform-footer">
-        <a href="/">← Back to Operations Platform</a>
+        <a href="/" data-i18n="common.backToPlatform">← Back to Operations Platform</a>
       </div>
     </div>
 
     <script>
+      function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
       let typeChart = null;
       let riskChart = null;
 
@@ -158,7 +161,7 @@
             labels: rows.map((row) => row.type),
             datasets: [
               {
-                label: "Incident Count",
+                label: t('reports.incidentCountCol'),
                 data: rows.map((row) => num(row.count)),
               },
             ],
@@ -200,7 +203,7 @@
             labels: rows.map((row) => row.risk),
             datasets: [
               {
-                label: "Incident Count",
+                label: t('reports.incidentCountCol'),
                 data: rows.map((row) => num(row.count)),
               },
             ],
@@ -236,8 +239,8 @@
 
         table.innerHTML = `
     <tr>
-      <th>Customer</th>
-      <th>Incident Count</th>
+      <th>${t('reports.customerLabel')}</th>
+      <th>${t('reports.incidentCountCol')}</th>
     </tr>
   `;
 
@@ -256,12 +259,12 @@
         const status = document.getElementById("status");
 
         if (!year) {
-          status.textContent = "Select a year.";
+          status.textContent = t('reports.selectAYear');
           status.classList.add("error");
           return;
         }
 
-        status.textContent = "Loading...";
+        status.textContent = t('reports.loadingDots');
         status.classList.remove("error");
 
         try {
@@ -271,7 +274,7 @@
 
           if (!ok) {
             destroyCharts();
-            status.textContent = data?.error || error || "Load failed";
+            status.textContent = data?.error || error || t('reports.loadFailed');
             status.classList.add("error");
             return;
           }
@@ -313,10 +316,10 @@
           renderRiskChart(data.riskBreakdown || []);
           renderCustomerTable(data.customerBreakdown || []);
 
-          status.textContent = `Loaded ${year}`;
+          status.textContent = t('reports.loadedYear', { year });
         } catch (err) {
           destroyCharts();
-          status.textContent = `Error: ${err.message}`;
+          status.textContent = t('reports.errorPrefix', { msg: err.message });
           status.classList.add("error");
         }
       }

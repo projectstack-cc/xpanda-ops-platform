@@ -16,16 +16,17 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Scrap Summary';
+function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+document.getElementById('reports-page-title').textContent = tt('layout.scrapSummaryTitle', 'Scrap Summary');
 </script>
 
 <div class="reports-wrap">
 
-  <a href="/reports/scrap/" class="reports-back-link">← Back to Scrap Reports</a>
+  <a href="/reports/scrap/" class="reports-back-link" data-i18n="reports.backToScrapReports">← Back to Scrap Reports</a>
 
 <div class="reports-section-intro">
-<h2 class="reports-section-title">Scrap Analytics</h2>
-<p class="reports-section-subtitle">
+<h2 class="reports-section-title" data-i18n="reports.scrapAnalyticsHeading">Scrap Analytics</h2>
+<p class="reports-section-subtitle" data-i18n="reports.scrapAnalyticsSubtitle">
 Monthly scrap totals and operational trend visibility.
 </p>
 </div>
@@ -33,12 +34,12 @@ Monthly scrap totals and operational trend visibility.
 <div class="card">
 
 <div class="reports-field">
-<label>Select Month</label>
+<label data-i18n="reports.selectMonthLabel">Select Month</label>
 <input type="month" id="monthPicker">
 </div>
 
 <div class="reports-actions">
-<button class="btn primary" onclick="loadReport()">Load Report</button>
+<button class="btn primary" onclick="loadReport()" data-i18n="reports.loadReportBtn">Load Report</button>
 </div>
 
 <p id="status" class="report-status"></p>
@@ -48,39 +49,39 @@ Monthly scrap totals and operational trend visibility.
 <div class="report-stats">
 
 <div class="report-stat-card">
-<div class="report-stat-label">Total Scrap</div>
+<div class="report-stat-label" data-i18n="reports.totalScrapLabel">Total Scrap</div>
 <div class="report-stat-value" id="statScrap">--</div>
 </div>
 
 <div class="report-stat-card">
-<div class="report-stat-label">Entries</div>
+<div class="report-stat-label" data-i18n="reports.entriesLabel">Entries</div>
 <div class="report-stat-value" id="statEntries">--</div>
 </div>
 
 </div>
 
 <div class="card">
-<h2>Scrap By Week</h2>
+<h2 data-i18n="reports.scrapByWeekTitle">Scrap By Week</h2>
 
 <div class="report-table-wrap">
 <table class="report-table" id="weekTable">
-<tr><th>Week</th><th>Board Ft</th></tr>
+<tr><th data-i18n="reports.weekCol">Week</th><th data-i18n="reports.boardFtCol">Board Ft</th></tr>
 </table>
 </div>
 
 </div>
 
 <div class="card">
-<h2>Scrap By Reason</h2>
+<h2 data-i18n="reports.scrapByReasonSectionTitle">Scrap By Reason</h2>
 
 <div class="report-table-wrap">
 <table class="report-table" id="reasonTable">
-<tr><th>Reason</th><th>Board Ft</th></tr>
+<tr><th data-i18n="reports.reasonCol">Reason</th><th data-i18n="reports.boardFtCol">Board Ft</th></tr>
 </table>
 </div>
 
 <div class="reports-platform-footer">
-<a href="/">← Back to Operations Platform</a>
+<a href="/" data-i18n="common.backToPlatform">← Back to Operations Platform</a>
 </div>
 
 </div>
@@ -88,6 +89,8 @@ Monthly scrap totals and operational trend visibility.
 </div>
 
 <script>
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
 function num(v){
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -98,19 +101,19 @@ async function loadReport(){
   const status = document.getElementById("status");
 
   if(!month){
-    status.textContent = "Select a month.";
+    status.textContent = t('reports.selectAMonth');
     status.classList.add("error");
     return;
   }
 
-  status.textContent = "Loading...";
+  status.textContent = t('reports.loadingDots');
   status.classList.remove("error");
 
   try {
     const { ok, data, error } = await window.api.get(`/api/reports/scrap-summary?month=${encodeURIComponent(month)}`);
 
     if(!ok){
-      status.textContent = data?.error || error || "Load failed";
+      status.textContent = data?.error || error || t('reports.loadFailed');
       status.classList.add("error");
       return;
     }
@@ -122,7 +125,7 @@ async function loadReport(){
       num(data.entry_count);
 
     const weekTable = document.getElementById("weekTable");
-    weekTable.innerHTML = "<tr><th>Week</th><th>Board Ft</th></tr>";
+    weekTable.innerHTML = `<tr><th>${t('reports.weekCol')}</th><th>${t('reports.boardFtCol')}</th></tr>`;
 
     if (Array.isArray(data.by_week) && data.by_week.length) {
       data.by_week.forEach(w => {
@@ -135,12 +138,12 @@ async function loadReport(){
     } else {
       weekTable.innerHTML += `
         <tr>
-          <td colspan="2" class="report-empty">No weekly data for this month.</td>
+          <td colspan="2" class="report-empty">${t('reports.noWeeklyData')}</td>
         </tr>`;
     }
 
     const reasonTable = document.getElementById("reasonTable");
-    reasonTable.innerHTML = "<tr><th>Reason</th><th>Board Ft</th></tr>";
+    reasonTable.innerHTML = `<tr><th>${t('reports.reasonCol')}</th><th>${t('reports.boardFtCol')}</th></tr>`;
 
     if (Array.isArray(data.by_reason) && data.by_reason.length) {
       data.by_reason.forEach(r => {
@@ -153,13 +156,13 @@ async function loadReport(){
     } else {
       reasonTable.innerHTML += `
         <tr>
-          <td colspan="2" class="report-empty">No reason data for this month.</td>
+          <td colspan="2" class="report-empty">${t('reports.noReasonData')}</td>
         </tr>`;
     }
 
-    status.textContent = `Loaded ${month}`;
+    status.textContent = t('reports.loadedMonth', { month });
   } catch (err) {
-    status.textContent = `Error: ${err.message}`;
+    status.textContent = t('reports.errorPrefix', { msg: err.message });
     status.classList.add("error");
   }
 }

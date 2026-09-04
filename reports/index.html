@@ -16,45 +16,46 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Reports Dashboard';
+function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+document.getElementById('reports-page-title').textContent = tt('layout.reportsIndexTitle', 'Reports Dashboard');
 </script>
 
 <div class="reports-wrap">
 
 <div class="reports-section-intro">
-<h2 class="reports-section-title">Reports Dashboard</h2>
-<p class="reports-section-subtitle">
+<h2 class="reports-section-title" data-i18n="layout.reportsIndexTitle">Reports Dashboard</h2>
+<p class="reports-section-subtitle" data-i18n="reports.dashboardIntro">
 Operational analytics and trend visibility.
 </p>
 </div>
 
 <a class="reports-tile" href="/reports/scrap/">
-  <h2>Scrap Reports</h2>
-  <p>Monthly scrap totals, trend visibility, and reason-based reporting.</p>
+  <h2 data-i18n="layout.scrapReportsTitle">Scrap Reports</h2>
+  <p data-i18n="reports.scrapReportsDesc">Monthly scrap totals, trend visibility, and reason-based reporting.</p>
 </a>
 
 <a class="reports-tile" href="/reports/incidents/">
-  <h2>Incident Reports</h2>
-  <p>Incident summaries, trends, and operational event analytics.</p>
+  <h2 data-i18n="layout.incidentReportsTitle">Incident Reports</h2>
+  <p data-i18n="reports.incidentReportsDesc">Incident summaries, trends, and operational event analytics.</p>
 </a>
 
 <a class="reports-tile" href="/reports/orders/">
-  <h2>Orders Report</h2>
-  <p>All active and archived orders — searchable by customer, PO#, or invoice#.</p>
+  <h2 data-i18n="layout.ordersReportTitle">Orders Report</h2>
+  <p data-i18n="reports.ordersReportDesc">All active and archived orders — searchable by customer, PO#, or invoice#.</p>
 </a>
 
 <a class="reports-tile" href="/reports/cutting/">
-  <h2>Cutting Line Activity</h2>
-  <p>Operator start/stop log and the order or work item cut, across Main/Blue Line and Cross/Hole Cutter.</p>
+  <h2 data-i18n="layout.cuttingActivityTitle">Cutting Line Activity</h2>
+  <p data-i18n="reports.cuttingActivityDesc">Operator start/stop log and the order or work item cut, across Main/Blue Line and Cross/Hole Cutter.</p>
 </a>
 
 <div class="reports-tile is-disabled">
-  <h2>Inspection Trends</h2>
-  <p>Coming soon.</p>
+  <h2 data-i18n="reports.inspectionTrendsTitle">Inspection Trends</h2>
+  <p data-i18n="reports.comingSoon">Coming soon.</p>
 </div>
 
 <div class="reports-platform-footer">
-<a href="/">← Back to Operations Platform</a>
+<a href="/" data-i18n="common.backToPlatform">← Back to Operations Platform</a>
 </div>
 
 </div>

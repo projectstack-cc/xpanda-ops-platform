@@ -15,52 +15,53 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Orders Report';
+function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+document.getElementById('reports-page-title').textContent = tt('layout.ordersReportTitle', 'Orders Report');
 </script>
 
 <div class="reports-wrap">
 
-  <a href="/reports/" class="reports-back-link">← Back to Reports</a>
+  <a href="/reports/" class="reports-back-link" data-i18n="reports.backToReports">← Back to Reports</a>
 
   <div class="reports-section-intro">
-    <h2 class="reports-section-title">Orders Report</h2>
-    <p class="reports-section-subtitle">All jobs — active and archived. Search by customer, PO#, or invoice#.</p>
+    <h2 class="reports-section-title" data-i18n="layout.ordersReportTitle">Orders Report</h2>
+    <p class="reports-section-subtitle" data-i18n="reports.ordersReportSubtitle">All jobs — active and archived. Search by customer, PO#, or invoice#.</p>
   </div>
 
   <!-- Filters -->
   <div class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
 
     <div class="reports-field" style="flex:1;min-width:200px;">
-      <label>Search</label>
-      <input type="text" id="f-search" placeholder="Customer, PO#, or Invoice#" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+      <label data-i18n="reports.searchLabel">Search</label>
+      <input type="text" id="f-search" placeholder="Customer, PO#, or Invoice#" data-i18n-placeholder="reports.searchPlaceholder" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
     </div>
 
     <div class="reports-field">
-      <label>Status</label>
+      <label data-i18n="reports.statusLabel">Status</label>
       <select id="f-status" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
-        <option value="">All</option>
-        <option value="not_started">Not Started</option>
-        <option value="in_production">In Production</option>
-        <option value="done">Done</option>
-        <option value="loading">Loading</option>
-        <option value="shipped">Shipped</option>
-        <option value="archived">Archived</option>
+        <option value="" data-i18n="reports.allOption">All</option>
+        <option value="not_started" data-i18n="reports.statusNotStarted">Not Started</option>
+        <option value="in_production" data-i18n="reports.statusInProduction">In Production</option>
+        <option value="done" data-i18n="reports.statusDone">Done</option>
+        <option value="loading" data-i18n="reports.statusLoadingEnum">Loading</option>
+        <option value="shipped" data-i18n="reports.statusShipped">Shipped</option>
+        <option value="archived" data-i18n="reports.statusArchived">Archived</option>
       </select>
     </div>
 
     <div class="reports-field">
-      <label>Ship Date From</label>
+      <label data-i18n="reports.shipDateFromLabel">Ship Date From</label>
       <input type="date" id="f-date-from" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
     </div>
 
     <div class="reports-field">
-      <label>Ship Date To</label>
+      <label data-i18n="reports.shipDateToLabel">Ship Date To</label>
       <input type="date" id="f-date-to" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
     </div>
 
     <div>
-      <button class="btn primary" onclick="loadReport()">Load</button>
-      <button class="btn ghost" onclick="clearFilters()">Clear</button>
+      <button class="btn primary" onclick="loadReport()" data-i18n="reports.loadBtn">Load</button>
+      <button class="btn ghost" onclick="clearFilters()" data-i18n="reports.clearBtn">Clear</button>
     </div>
 
   </div>
@@ -68,19 +69,19 @@ document.getElementById('reports-page-title').textContent = 'Orders Report';
   <!-- Stats -->
   <div class="report-stats">
     <div class="report-stat-card">
-      <div class="report-stat-label">Total Orders</div>
+      <div class="report-stat-label" data-i18n="reports.totalOrdersLabel">Total Orders</div>
       <div class="report-stat-value" id="stat-total">--</div>
     </div>
     <div class="report-stat-card">
-      <div class="report-stat-label">Active</div>
+      <div class="report-stat-label" data-i18n="reports.activeLabel">Active</div>
       <div class="report-stat-value" id="stat-active">--</div>
     </div>
     <div class="report-stat-card">
-      <div class="report-stat-label">Shipped</div>
+      <div class="report-stat-label" data-i18n="reports.statusShipped">Shipped</div>
       <div class="report-stat-value" id="stat-shipped">--</div>
     </div>
     <div class="report-stat-card">
-      <div class="report-stat-label">Archived</div>
+      <div class="report-stat-label" data-i18n="reports.statusArchived">Archived</div>
       <div class="report-stat-value" id="stat-archived">--</div>
     </div>
   </div>
@@ -91,6 +92,8 @@ document.getElementById('reports-page-title').textContent = 'Orders Report';
 </div>
 
 <script>
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
 let allJobs = [];
 let sortCol = 'ship_date';
 let sortDir = 'desc';
@@ -102,7 +105,7 @@ async function loadReport() {
   const dateTo   = document.getElementById('f-date-to').value;
 
   const wrap = document.getElementById('results-wrap');
-  wrap.innerHTML = '<p style="color:#94a3b8;padding:12px;">Loading…</p>';
+  wrap.innerHTML = `<p style="color:#94a3b8;padding:12px;">${t('reports.loadingJobs')}</p>`;
 
   try {
     // Fetch all jobs including archived
@@ -110,7 +113,7 @@ async function loadReport() {
     if (search) url += '&search=' + encodeURIComponent(search);
 
     const { ok, data } = await window.api.get(url);
-    if (!ok) { wrap.innerHTML = '<p style="color:#ef4444;">Error loading jobs.</p>'; return; }
+    if (!ok) { wrap.innerHTML = `<p style="color:#ef4444;">${t('reports.errorLoadingJobs')}</p>`; return; }
 
     allJobs = data.jobs || [];
 
@@ -133,7 +136,7 @@ async function loadReport() {
     updateStats(filtered);
     renderTable(filtered);
   } catch {
-    wrap.innerHTML = '<p style="color:#ef4444;">Network error.</p>';
+    wrap.innerHTML = `<p style="color:#ef4444;">${t('reports.networkError')}</p>`;
   }
 }
 
@@ -172,7 +175,7 @@ function getFiltered() {
 function renderTable(jobs) {
   const wrap = document.getElementById('results-wrap');
   if (!jobs.length) {
-    wrap.innerHTML = '<p style="color:#94a3b8;padding:12px;">No orders found.</p>';
+    wrap.innerHTML = `<p style="color:#94a3b8;padding:12px;">${t('reports.noOrdersFound')}</p>`;
     return;
   }
 
@@ -194,13 +197,13 @@ function renderTable(jobs) {
       <table class="report-table">
         <thead>
           <tr>
-            <th onclick="sortBy('customer')" style="cursor:pointer;">Customer${arrow('customer')}</th>
-            <th onclick="sortBy('invoice_number')" style="cursor:pointer;">Invoice#${arrow('invoice_number')}</th>
-            <th onclick="sortBy('po_number')" style="cursor:pointer;">PO#${arrow('po_number')}</th>
-            <th onclick="sortBy('ship_date')" style="cursor:pointer;">Ship Date${arrow('ship_date')}</th>
-            <th onclick="sortBy('status')" style="cursor:pointer;">Status${arrow('status')}</th>
-            <th>Source</th>
-            <th onclick="sortBy('created_at')" style="cursor:pointer;">Created${arrow('created_at')}</th>
+            <th onclick="sortBy('customer')" style="cursor:pointer;">${t('reports.customerLabel')}${arrow('customer')}</th>
+            <th onclick="sortBy('invoice_number')" style="cursor:pointer;">${t('reports.invoiceCol')}${arrow('invoice_number')}</th>
+            <th onclick="sortBy('po_number')" style="cursor:pointer;">${t('reports.poCol')}${arrow('po_number')}</th>
+            <th onclick="sortBy('ship_date')" style="cursor:pointer;">${t('reports.shipDateCol')}${arrow('ship_date')}</th>
+            <th onclick="sortBy('status')" style="cursor:pointer;">${t('reports.statusLabel')}${arrow('status')}</th>
+            <th>${t('reports.sourceCol')}</th>
+            <th onclick="sortBy('created_at')" style="cursor:pointer;">${t('reports.createdCol')}${arrow('created_at')}</th>
           </tr>
         </thead>
         <tbody>
@@ -218,7 +221,7 @@ function renderTable(jobs) {
         </tbody>
       </table>
     </div>
-    <p style="font-size:11px;color:#9ca3af;padding:8px 0;">Showing ${sorted.length} order${sorted.length !== 1 ? 's' : ''}. Click a row to open in Job Board.</p>
+    <p style="font-size:11px;color:#9ca3af;padding:8px 0;">${t('reports.showingOrders', { n: sorted.length })}</p>
   `;
 }
 
@@ -232,9 +235,9 @@ function clearFilters() {
 
 function statusBadge(j) {
   const status = isArchived(j) ? 'archived' : j.status;
-  const labels = {
-    not_started: 'Not Started', in_production: 'In Production', done: 'Done',
-    loading: 'Loading', shipped: 'Shipped', archived: 'Archived',
+  const labelKeys = {
+    not_started: 'reports.statusNotStarted', in_production: 'reports.statusInProduction', done: 'reports.statusDone',
+    loading: 'reports.statusLoadingEnum', shipped: 'reports.statusShipped', archived: 'reports.statusArchived',
   };
   const colors = {
     not_started:   'background:#f3f4f6;color:#374151;',
@@ -244,7 +247,8 @@ function statusBadge(j) {
     shipped:       'background:#e0e7ff;color:#3730a3;',
     archived:      'background:#f9fafb;color:#9ca3af;',
   };
-  return `<span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;${colors[status] || ''}">${labels[status] || status}</span>`;
+  const label = labelKeys[status] ? t(labelKeys[status]) : status;
+  return `<span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;${colors[status] || ''}">${label}</span>`;
 }
 
 function formatDate(d) {

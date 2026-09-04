@@ -16,16 +16,17 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Incident Reports — List';
+function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+document.getElementById('reports-page-title').textContent = tt('layout.incidentListTitle', 'Incident Reports — List');
 </script>
 
 <div class="reports-wrap">
 
-<a href="/reports/incidents/" class="reports-back-link">← Back to Incident Reports</a>
+<a href="/reports/incidents/" class="reports-back-link" data-i18n="reports.backToIncidentReports">← Back to Incident Reports</a>
 
 <div class="reports-section-intro">
-  <h2 class="reports-section-title">Incident Reports — List</h2>
-  <p class="reports-section-subtitle">
+  <h2 class="reports-section-title" data-i18n="layout.incidentListTitle">Incident Reports — List</h2>
+  <p class="reports-section-subtitle" data-i18n="reports.incidentListSubtitle">
     Filtered incident lookup by year, type, month, and risk level.
   </p>
 </div>
@@ -33,14 +34,14 @@ document.getElementById('reports-page-title').textContent = 'Incident Reports �
 <div class="card">
   <div class="reports-actions">
     <div class="reports-field" style="min-width: 160px; margin-bottom: 0;">
-      <label for="yearPicker">Select Year</label>
+      <label for="yearPicker" data-i18n="reports.selectYearLabel">Select Year</label>
       <select id="yearPicker"></select>
     </div>
 
     <div class="reports-field" style="min-width: 160px; margin-bottom: 0;">
-      <label for="typePicker">Incident Type</label>
+      <label for="typePicker" data-i18n="reports.incidentTypeLabel">Incident Type</label>
       <select id="typePicker">
-        <option value="">All Types</option>
+        <option value="" data-i18n="reports.allTypes">All Types</option>
         <option value="Fusion">Fusion</option>
         <option value="Density">Density</option>
         <option value="Tolerances">Tolerances</option>
@@ -51,16 +52,16 @@ document.getElementById('reports-page-title').textContent = 'Incident Reports �
     </div>
 
     <div class="reports-field" style="min-width: 160px; margin-bottom: 0;">
-      <label for="monthPicker">Month</label>
+      <label for="monthPicker" data-i18n="reports.monthLabel">Month</label>
       <select id="monthPicker">
-        <option value="">All Months</option>
+        <option value="" data-i18n="reports.allMonths">All Months</option>
       </select>
     </div>
 
     <div class="reports-field" style="min-width: 180px; margin-bottom: 0;">
-      <label for="riskPicker">Risk Level</label>
+      <label for="riskPicker" data-i18n="reports.riskLevelLabel">Risk Level</label>
       <select id="riskPicker">
-        <option value="">All Risk Levels</option>
+        <option value="" data-i18n="reports.allRiskLevels">All Risk Levels</option>
         <option value="1 - Low Risk">1 - Low Risk</option>
         <option value="2 - Medium Risk">2 - Medium Risk</option>
         <option value="3 - High Risk">3 - High Risk</option>
@@ -68,7 +69,7 @@ document.getElementById('reports-page-title').textContent = 'Incident Reports �
       </select>
     </div>
 
-    <button class="btn primary" type="button" id="loadBtn">Load Report</button>
+    <button class="btn primary" type="button" id="loadBtn" data-i18n="reports.loadReportBtn">Load Report</button>
   </div>
 
   <p id="status" class="report-status"></p>
@@ -76,33 +77,35 @@ document.getElementById('reports-page-title').textContent = 'Incident Reports �
 
 <div class="report-stats">
   <div class="report-stat-card">
-    <div class="report-stat-label">Matching Incidents</div>
+    <div class="report-stat-label" data-i18n="reports.matchingIncidentsLabel">Matching Incidents</div>
     <div class="report-stat-value" id="statCount">--</div>
   </div>
 </div>
 
 <div class="card">
-  <h2>Incident Results</h2>
+  <h2 data-i18n="reports.incidentResultsTitle">Incident Results</h2>
   <div class="report-table-wrap">
     <table class="report-table" id="incidentTable">
       <tr>
-        <th>Date (Month)</th>
-        <th>Customer</th>
-        <th>Incident Type</th>
-        <th>Risk Level</th>
-        <th>Summary</th>
+        <th data-i18n="reports.dateMonthCol">Date (Month)</th>
+        <th data-i18n="reports.customerLabel">Customer</th>
+        <th data-i18n="reports.incidentTypeLabel">Incident Type</th>
+        <th data-i18n="reports.riskLevelLabel">Risk Level</th>
+        <th data-i18n="reports.summaryLabel">Summary</th>
       </tr>
     </table>
   </div>
 </div>
 
 <div class="reports-platform-footer">
-  <a href="/">← Back to Operations Platform</a>
+  <a href="/" data-i18n="common.backToPlatform">← Back to Operations Platform</a>
 </div>
 
 </div>
 
 <script>
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
 function getQueryParams() {
   return new URLSearchParams(window.location.search);
 }
@@ -142,7 +145,7 @@ function ensureSelectValue(select, value) {
 
 function buildMonthOptions() {
   const monthPicker = document.getElementById("monthPicker");
-  monthPicker.innerHTML = '<option value="">All Months</option>';
+  monthPicker.innerHTML = `<option value="" data-i18n="reports.allMonths">${t('reports.allMonths')}</option>`;
 
   for (let month = 1; month <= 12; month++) {
     const monthValue = String(month).padStart(2, "0");
@@ -157,11 +160,11 @@ function resetTable() {
   const table = document.getElementById("incidentTable");
   table.innerHTML = `
     <tr>
-      <th>Date (Month)</th>
-      <th>Customer</th>
-      <th>Incident Type</th>
-      <th>Risk Level</th>
-      <th>Summary</th>
+      <th>${t('reports.dateMonthCol')}</th>
+      <th>${t('reports.customerLabel')}</th>
+      <th>${t('reports.incidentTypeLabel')}</th>
+      <th>${t('reports.riskLevelLabel')}</th>
+      <th>${t('reports.summaryLabel')}</th>
     </tr>
   `;
 }
@@ -223,7 +226,7 @@ function renderTable(items) {
   if (!items.length) {
     table.innerHTML += `
       <tr>
-        <td colspan="5">No incidents found for the selected filters.</td>
+        <td colspan="5">${t('reports.noIncidentsFiltered')}</td>
       </tr>
     `;
     return;
@@ -250,12 +253,12 @@ async function loadIncidentList() {
   const year = params.get("year");
 
   if (!year) {
-    status.textContent = "Select a year.";
+    status.textContent = t('reports.selectAYear');
     status.classList.add("error");
     return;
   }
 
-  status.textContent = "Loading...";
+  status.textContent = t('reports.loadingDots');
   status.classList.remove("error");
   window.history.replaceState(
     null,
@@ -271,18 +274,18 @@ async function loadIncidentList() {
     if (!ok) {
       document.getElementById("statCount").textContent = "--";
       resetTable();
-      status.textContent = error || "Unable to load incidents.";
+      status.textContent = error || t('reports.unableToLoadIncidents');
       status.classList.add("error");
       return;
     }
 
     document.getElementById("statCount").textContent = String(data.count || 0);
     renderTable(data.items || []);
-    status.textContent = `Loaded ${data.count || 0} incidents for ${year}`;
+    status.textContent = t('reports.loadedIncidentsCount', { count: data.count || 0, year });
   } catch (err) {
     document.getElementById("statCount").textContent = "--";
     resetTable();
-    status.textContent = "Unable to load incidents.";
+    status.textContent = t('reports.unableToLoadIncidents');
     status.classList.add("error");
   }
 }

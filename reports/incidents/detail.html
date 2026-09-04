@@ -56,17 +56,18 @@
 
 <script src="/reports/reports-header.js"></script>
 <script>
-document.getElementById('reports-page-title').textContent = 'Incident Detail';
-document.querySelector('.topbar p').textContent = 'Read-only incident visibility from the incident tracker.';
+function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+document.getElementById('reports-page-title').textContent = tt('layout.incidentDetailTitle', 'Incident Detail');
+document.querySelector('.topbar p').textContent = tt('layout.incidentDetailSubtitle', 'Read-only incident visibility from the incident tracker.');
 </script>
 
 <div class="reports-wrap">
 
-<a href="/reports/incidents/list.html" class="reports-back-link">← Back to Incident List</a>
+<a href="/reports/incidents/list.html" class="reports-back-link" data-i18n="reports.backToIncidentList">← Back to Incident List</a>
 
 <div class="reports-section-intro">
-  <h2 class="reports-section-title">Incident Detail</h2>
-  <p class="reports-section-subtitle">
+  <h2 class="reports-section-title" data-i18n="layout.incidentDetailTitle">Incident Detail</h2>
+  <p class="reports-section-subtitle" data-i18n="layout.incidentDetailSubtitle">
     Read-only incident visibility from the incident tracker.
   </p>
 </div>
@@ -77,46 +78,46 @@ document.querySelector('.topbar p').textContent = 'Read-only incident visibility
 
 <div id="content" style="display: none;">
   <div class="card">
-    <h2>Incident Overview</h2>
+    <h2 data-i18n="reports.incidentOverviewTitle">Incident Overview</h2>
     <div class="detail-grid">
       <div class="detail-field">
-        <div class="detail-label">Date</div>
+        <div class="detail-label" data-i18n="reports.dateLabel">Date</div>
         <div class="detail-value" id="fieldDate">--</div>
       </div>
       <div class="detail-field">
-        <div class="detail-label">Customer</div>
+        <div class="detail-label" data-i18n="reports.customerLabel">Customer</div>
         <div class="detail-value" id="fieldCustomer">--</div>
       </div>
       <div class="detail-field">
-        <div class="detail-label">Incident Type</div>
+        <div class="detail-label" data-i18n="reports.incidentTypeLabel">Incident Type</div>
         <div class="detail-value" id="fieldIncidentType">--</div>
       </div>
       <div class="detail-field">
-        <div class="detail-label">Risk Level</div>
+        <div class="detail-label" data-i18n="reports.riskLevelLabel">Risk Level</div>
         <div class="detail-value" id="fieldRiskLevel">--</div>
       </div>
     </div>
   </div>
 
   <div class="card">
-    <h2>Classification</h2>
+    <h2 data-i18n="reports.classificationTitle">Classification</h2>
     <div class="detail-grid">
       <div class="detail-field">
-        <div class="detail-label">Month</div>
+        <div class="detail-label" data-i18n="reports.monthLabel">Month</div>
         <div class="detail-value" id="fieldMonth">--</div>
       </div>
       <div class="detail-field">
-        <div class="detail-label">Year</div>
+        <div class="detail-label" data-i18n="reports.yearLabel">Year</div>
         <div class="detail-value" id="fieldYear">--</div>
       </div>
     </div>
   </div>
 
   <div class="card">
-    <h2>Summary</h2>
+    <h2 data-i18n="reports.summaryLabel">Summary</h2>
     <div class="detail-grid">
       <div class="detail-field full">
-        <div class="detail-label">Summary</div>
+        <div class="detail-label" data-i18n="reports.summaryLabel">Summary</div>
         <div class="detail-value" id="fieldSummary">--</div>
       </div>
     </div>
@@ -124,12 +125,14 @@ document.querySelector('.topbar p').textContent = 'Read-only incident visibility
 </div>
 
 <div class="reports-platform-footer">
-  <a href="/">← Back to Operations Platform</a>
+  <a href="/" data-i18n="common.backToPlatform">← Back to Operations Platform</a>
 </div>
 
 </div>
 
 <script>
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
 function getQueryParam(name) {
   return new URLSearchParams(window.location.search).get(name) || "";
 }
@@ -155,13 +158,13 @@ async function loadIncident() {
 
   if (!id) {
     status.style.display = "block";
-    status.textContent = "Missing incident id.";
+    status.textContent = t('reports.missingIncidentId');
     status.classList.add("error");
     return;
   }
 
   status.style.display = "block";
-  status.textContent = "Loading...";
+  status.textContent = t('reports.loadingDots');
   status.classList.remove("error");
 
   try {
@@ -171,14 +174,14 @@ async function loadIncident() {
 
     if (httpStatus === 404) {
       status.style.display = "block";
-      status.textContent = "Incident not found.";
+      status.textContent = t('reports.incidentNotFound');
       status.classList.add("error");
       return;
     }
 
     if (!ok || !data || !data.item) {
       status.style.display = "block";
-      status.textContent = "Unable to load incident";
+      status.textContent = t('reports.unableToLoadIncident');
       status.classList.add("error");
       return;
     }
@@ -189,7 +192,7 @@ async function loadIncident() {
     status.textContent = "";
   } catch (err) {
     status.style.display = "block";
-    status.textContent = "Unable to load incident";
+    status.textContent = t('reports.unableToLoadIncident');
     status.classList.add("error");
   }
 }
