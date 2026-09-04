@@ -27,17 +27,17 @@
 <div id="log-bol-view-modal" onclick="if(event.target===this) closeBolViewModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1100;align-items:center;justify-content:center;">
   <div style="max-width:95vw;width:95vw;max-height:95vh;height:95vh;display:flex;flex-direction:column;background:var(--card-bg);border-radius:10px;overflow:hidden;">
     <div style="padding:10px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--text);">Bill of Lading</h3>
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--text);" data-i18n="logistics.billOfLading">Bill of Lading</h3>
       <div style="display:flex;gap:8px;align-items:center;">
-        <button id="log-bol-edit-btn" onclick="openBolEditor()" style="display:none;padding:6px 12px;background:var(--ghost-bg);color:var(--muted);border:1px solid var(--input-border);border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">Edit</button>
-        <button onclick="downloadBolFromViewer()" style="padding:6px 12px;background:var(--ghost-bg);color:var(--muted);border:1px solid var(--input-border);border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">Download</button>
+        <button id="log-bol-edit-btn" onclick="openBolEditor()" style="display:none;padding:6px 12px;background:var(--ghost-bg);color:var(--muted);border:1px solid var(--input-border);border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;" data-i18n="logistics.edit">Edit</button>
+        <button onclick="downloadBolFromViewer()" style="padding:6px 12px;background:var(--ghost-bg);color:var(--muted);border:1px solid var(--input-border);border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;" data-i18n="logistics.download">Download</button>
         <button onclick="closeBolViewModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);padding:0;line-height:1;">×</button>
       </div>
     </div>
     <iframe id="log-bol-view-iframe" style="flex:1;width:100%;border:none;background:#525659;"></iframe>
     <div id="log-bol-edit-host" style="display:none;flex:1;flex-direction:column;overflow:hidden;background:var(--card-bg);">
       <div id="log-bol-edit-picker" style="display:none;padding:8px 16px;border-bottom:1px solid var(--line);">
-        <label style="font-size:13px;color:var(--muted);margin-right:8px;">Editing load:</label>
+        <label style="font-size:13px;color:var(--muted);margin-right:8px;" data-i18n="logistics.editingLoad">Editing load:</label>
         <select id="log-bol-edit-select" style="padding:6px 10px;border:1px solid var(--input-border);border-radius:6px;background:var(--card-bg);color:var(--text);font-size:13px;"></select>
       </div>
       <div id="log-bol-edit-mount" style="flex:1;overflow:auto;"></div>
@@ -46,38 +46,36 @@
 </div>
 
 <script src="/logistics/logistics-header.js"></script>
-<script>
-document.getElementById('logistics-page-title').textContent = 'Logistics';
-document.getElementById('logistics-page-subtitle').textContent = 'Inbound deliveries and outbound shipments';
-</script>
+<!-- Title/subtitle are already set correctly (and translated) by shared-header.js
+     via layout.logisticsTitle/logisticsSubtitle — no override needed here. -->
 
 <div class="logistics-wrap">
 
   <!-- Stats Row -->
   <div class="logistics-stats">
     <div class="logistics-stat-card">
-      <div class="logistics-stat-label">This Week Outbound</div>
+      <div class="logistics-stat-label" data-i18n="logistics.statOutboundWeek">This Week Outbound</div>
       <div class="logistics-stat-value" id="stat-outbound-week">—</div>
     </div>
     <div class="logistics-stat-card">
-      <div class="logistics-stat-label">Pending Inbound</div>
+      <div class="logistics-stat-label" data-i18n="logistics.statInboundPending">Pending Inbound</div>
       <div class="logistics-stat-value" id="stat-inbound-pending">—</div>
-      <div class="logistics-stat-sub">not yet delivered</div>
+      <div class="logistics-stat-sub" data-i18n="logistics.statInboundPendingSub">not yet delivered</div>
     </div>
     <div class="logistics-stat-card">
-      <div class="logistics-stat-label">In Transit</div>
+      <div class="logistics-stat-label" data-i18n="logistics.statInTransit">In Transit</div>
       <div class="logistics-stat-value" id="stat-in-transit">—</div>
     </div>
     <div class="logistics-stat-card">
-      <div class="logistics-stat-label">Delivered (30d)</div>
+      <div class="logistics-stat-label" data-i18n="logistics.statDelivered">Delivered (30d)</div>
       <div class="logistics-stat-value" id="stat-delivered">—</div>
     </div>
   </div>
 
   <!-- Main Tab Strip -->
   <div class="logistics-main-tabs">
-    <button class="logistics-main-tab active" onclick="switchTab('outbound', this)">Outbound Shipments</button>
-    <button class="logistics-main-tab" onclick="switchTab('inbound', this)">Inbound Deliveries</button>
+    <button class="logistics-main-tab active" onclick="switchTab('outbound', this)" data-i18n="logistics.tabOutbound">Outbound Shipments</button>
+    <button class="logistics-main-tab" onclick="switchTab('inbound', this)" data-i18n="logistics.tabInbound">Inbound Deliveries</button>
   </div>
 
   <!-- ── Outbound Tab ──────────────────────────────────────────────────── -->
@@ -85,38 +83,38 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
 
     <div class="logistics-toolbar">
       <div class="logistics-view-toggle">
-        <button class="logistics-view-btn active" id="outbound-view-list" onclick="setOutboundView('list')">List</button>
-        <button class="logistics-view-btn" id="outbound-view-calendar" onclick="setOutboundView('calendar')">Calendar</button>
+        <button class="logistics-view-btn active" id="outbound-view-list" onclick="setOutboundView('list')" data-i18n="logistics.viewList">List</button>
+        <button class="logistics-view-btn" id="outbound-view-calendar" onclick="setOutboundView('calendar')" data-i18n="logistics.viewCalendar">Calendar</button>
       </div>
-      <button class="logistics-btn logistics-btn-outbound" onclick="openModal('outbound')">+ New Shipment</button>
-      <button class="logistics-btn logistics-btn-outline" onclick="openShipJobPicker()">Ship from Job…</button>
-      <a class="logistics-btn logistics-btn-outline" href="/logistics/load-builder.html" style="text-decoration:none;">Load Builder</a>
-      <a class="logistics-btn logistics-btn-outline" href="/logistics/loading.html" style="text-decoration:none;">Loading Dashboard</a>
-      <a class="logistics-btn logistics-btn-outline" href="/logistics/bol-email.html" style="text-decoration:none;">BOL Email Queue</a>
+      <button class="logistics-btn logistics-btn-outbound" onclick="openModal('outbound')" data-i18n="logistics.newShipment">+ New Shipment</button>
+      <button class="logistics-btn logistics-btn-outline" onclick="openShipJobPicker()" data-i18n="logistics.shipFromJob">Ship from Job…</button>
+      <a class="logistics-btn logistics-btn-outline" href="/logistics/load-builder.html" style="text-decoration:none;" data-i18n="logistics.loadBuilderLink">Load Builder</a>
+      <a class="logistics-btn logistics-btn-outline" href="/logistics/loading.html" style="text-decoration:none;" data-i18n="logistics.loadingDashboardLink">Loading Dashboard</a>
+      <a class="logistics-btn logistics-btn-outline" href="/logistics/bol-email.html" style="text-decoration:none;" data-i18n="logistics.bolEmailQueueLink">BOL Email Queue</a>
 
       <div class="logistics-toolbar-right">
         <div class="logistics-filter-row" style="margin:0;">
           <input type="week" id="outbound-week-input" class="logistics-filter-input" onchange="loadOutbound()">
           <select class="logistics-filter-select" id="outbound-status-filter" onchange="loadOutbound()">
-            <option value="">All Statuses</option>
-            <option value="not_started">Not Started</option>
-            <option value="in_production">In Production</option>
-            <option value="ready_to_ship">Ready to Ship</option>
-            <option value="loading">Loading</option>
-            <option value="loaded">Loaded</option>
-            <option value="in_transit">In Transit</option>
-            <option value="delivered">Delivered</option>
-            <option value="cancelled">Cancelled</option>
+            <option value="" data-i18n="logistics.statusAll">All Statuses</option>
+            <option value="not_started" data-i18n="logistics.statusNotStarted">Not Started</option>
+            <option value="in_production" data-i18n="logistics.statusInProduction">In Production</option>
+            <option value="ready_to_ship" data-i18n="logistics.statusReadyToShip">Ready to Ship</option>
+            <option value="loading" data-i18n="logistics.statusLoading">Loading</option>
+            <option value="loaded" data-i18n="logistics.statusLoaded">Loaded</option>
+            <option value="in_transit" data-i18n="logistics.statusInTransit">In Transit</option>
+            <option value="delivered" data-i18n="logistics.statusDelivered">Delivered</option>
+            <option value="cancelled" data-i18n="logistics.statusCancelled">Cancelled</option>
           </select>
-          <button class="logistics-btn logistics-btn-outline" onclick="setOutboundWeekOffset(0)">This Week</button>
-          <button class="logistics-btn logistics-btn-outline" onclick="setOutboundWeekOffset(1)">Next Week</button>
-          <button class="logistics-btn logistics-btn-outline" onclick="clearOutboundWeek()">Show All</button>
+          <button class="logistics-btn logistics-btn-outline" onclick="setOutboundWeekOffset(0)" data-i18n="logistics.thisWeek">This Week</button>
+          <button class="logistics-btn logistics-btn-outline" onclick="setOutboundWeekOffset(1)" data-i18n="logistics.nextWeek">Next Week</button>
+          <button class="logistics-btn logistics-btn-outline" onclick="clearOutboundWeek()" data-i18n="logistics.showAll">Show All</button>
         </div>
       </div>
     </div>
 
     <div id="outbound-content">
-      <div style="color:#94a3b8;font-size:14px;padding:20px 0;">Loading…</div>
+      <div style="color:#94a3b8;font-size:14px;padding:20px 0;" data-i18n="logistics.loadingEllipsis">Loading…</div>
     </div>
 
     <!-- Outbound calendar view -->
@@ -125,7 +123,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
         <button onclick="changeShipCalMonth('outbound', -1)" style="background:none;border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">←</button>
         <h3 id="outbound-cal-label" style="margin:0;font-size:18px;font-weight:700;min-width:180px;text-align:center;"></h3>
         <button onclick="changeShipCalMonth('outbound', 1)" style="background:none;border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">→</button>
-        <button onclick="goToShipCalToday('outbound')" style="background:var(--ghost-bg);border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
+        <button onclick="goToShipCalToday('outbound')" style="background:var(--ghost-bg);border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;" data-i18n="logistics.today">Today</button>
       </div>
       <div id="outbound-cal-grid"></div>
     </div>
@@ -137,34 +135,34 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
 
     <div class="logistics-toolbar">
       <div class="logistics-view-toggle">
-        <button class="logistics-view-btn active" id="inbound-view-list" onclick="setInboundView('list')">List</button>
-        <button class="logistics-view-btn" id="inbound-view-calendar" onclick="setInboundView('calendar')">Calendar</button>
+        <button class="logistics-view-btn active" id="inbound-view-list" onclick="setInboundView('list')" data-i18n="logistics.viewList">List</button>
+        <button class="logistics-view-btn" id="inbound-view-calendar" onclick="setInboundView('calendar')" data-i18n="logistics.viewCalendar">Calendar</button>
       </div>
-      <button class="logistics-btn logistics-btn-inbound" onclick="openModal('inbound')">+ New Delivery</button>
+      <button class="logistics-btn logistics-btn-inbound" onclick="openModal('inbound')" data-i18n="logistics.newDelivery">+ New Delivery</button>
 
       <div class="logistics-toolbar-right">
         <div class="logistics-filter-row" style="margin:0;">
           <select class="logistics-filter-select" id="inbound-status-filter" onchange="loadInbound()">
-            <option value="">All Statuses</option>
-            <option value="awaiting">Awaiting</option>
-            <option value="not_started">Not Started</option>
-            <option value="loading">Loading</option>
-            <option value="loaded">Loaded</option>
-            <option value="in_transit">In Transit</option>
-            <option value="delivered">Delivered</option>
-            <option value="cancelled">Cancelled</option>
+            <option value="" data-i18n="logistics.statusAll">All Statuses</option>
+            <option value="awaiting" data-i18n="logistics.statusAwaiting">Awaiting</option>
+            <option value="not_started" data-i18n="logistics.statusNotStarted">Not Started</option>
+            <option value="loading" data-i18n="logistics.statusLoading">Loading</option>
+            <option value="loaded" data-i18n="logistics.statusLoaded">Loaded</option>
+            <option value="in_transit" data-i18n="logistics.statusInTransit">In Transit</option>
+            <option value="delivered" data-i18n="logistics.statusDelivered">Delivered</option>
+            <option value="cancelled" data-i18n="logistics.statusCancelled">Cancelled</option>
           </select>
           <select class="logistics-filter-select" id="inbound-days-filter" onchange="loadInbound()">
-            <option value="30">Last 30 days</option>
-            <option value="7">Last 7 days</option>
-            <option value="90">Last 90 days</option>
+            <option value="30" data-i18n="logistics.last30Days">Last 30 days</option>
+            <option value="7" data-i18n="logistics.last7Days">Last 7 days</option>
+            <option value="90" data-i18n="logistics.last90Days">Last 90 days</option>
           </select>
         </div>
       </div>
     </div>
 
     <div id="inbound-content">
-      <div style="color:#94a3b8;font-size:14px;padding:20px 0;">Loading…</div>
+      <div style="color:#94a3b8;font-size:14px;padding:20px 0;" data-i18n="logistics.loadingEllipsis">Loading…</div>
     </div>
 
     <!-- Inbound calendar view -->
@@ -173,7 +171,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
         <button onclick="changeShipCalMonth('inbound', -1)" style="background:none;border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">←</button>
         <h3 id="inbound-cal-label" style="margin:0;font-size:18px;font-weight:700;min-width:180px;text-align:center;"></h3>
         <button onclick="changeShipCalMonth('inbound', 1)" style="background:none;border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:16px;">→</button>
-        <button onclick="goToShipCalToday('inbound')" style="background:var(--ghost-bg);border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Today</button>
+        <button onclick="goToShipCalToday('inbound')" style="background:var(--ghost-bg);border:1px solid var(--input-border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;" data-i18n="logistics.today">Today</button>
       </div>
       <div id="inbound-cal-grid"></div>
     </div>
@@ -186,7 +184,7 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
 <div class="logistics-modal-overlay hidden" id="shipment-modal">
   <div class="logistics-modal-panel">
     <div class="logistics-modal-header">
-      <h2 id="modal-title">New Shipment</h2>
+      <h2 id="modal-title" data-i18n="logistics.newShipmentTitle">New Shipment</h2>
       <button class="logistics-modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="logistics-modal-body">
@@ -198,176 +196,176 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
       <!-- Direction toggle — hidden when editing (direction is locked) -->
       <div id="dir-toggle-wrap">
         <div class="logistics-dir-toggle">
-          <button class="logistics-dir-btn active-outbound" id="dir-btn-outbound" onclick="setDirection('outbound')">Outbound</button>
-          <button class="logistics-dir-btn" id="dir-btn-inbound" onclick="setDirection('inbound')">Inbound</button>
+          <button class="logistics-dir-btn active-outbound" id="dir-btn-outbound" onclick="setDirection('outbound')" data-i18n="logistics.directionOutbound">Outbound</button>
+          <button class="logistics-dir-btn" id="dir-btn-inbound" onclick="setDirection('inbound')" data-i18n="logistics.directionInbound">Inbound</button>
         </div>
       </div>
 
       <!-- Common fields -->
       <div class="logistics-field-row">
         <div class="logistics-field">
-          <label>Ship Date</label>
+          <label data-i18n="logistics.fieldShipDate">Ship Date</label>
           <input type="date" id="f-ship-date">
         </div>
         <div class="logistics-field">
-          <label>Status</label>
+          <label data-i18n="logistics.fieldStatus">Status</label>
           <select id="f-status">
-            <option value="not_started">Not Started</option>
-            <option value="in_production">In Production</option>
-            <option value="ready_to_ship">Ready to Ship</option>
-            <option value="loading">Loading</option>
-            <option value="loaded">Loaded</option>
-            <option value="in_transit">In Transit</option>
-            <option value="delivered">Delivered</option>
-            <option value="cancelled">Cancelled</option>
+            <option value="not_started" data-i18n="logistics.statusNotStarted">Not Started</option>
+            <option value="in_production" data-i18n="logistics.statusInProduction">In Production</option>
+            <option value="ready_to_ship" data-i18n="logistics.statusReadyToShip">Ready to Ship</option>
+            <option value="loading" data-i18n="logistics.statusLoading">Loading</option>
+            <option value="loaded" data-i18n="logistics.statusLoaded">Loaded</option>
+            <option value="in_transit" data-i18n="logistics.statusInTransit">In Transit</option>
+            <option value="delivered" data-i18n="logistics.statusDelivered">Delivered</option>
+            <option value="cancelled" data-i18n="logistics.statusCancelled">Cancelled</option>
           </select>
         </div>
       </div>
 
       <div class="logistics-field-row">
         <div class="logistics-field">
-          <label>Method</label>
+          <label data-i18n="logistics.fieldMethod">Method</label>
           <select id="f-method">
-            <option value="">— select —</option>
-            <option value="Dry Van">Dry Van</option>
-            <option value="Flatbed">Flatbed</option>
-            <option value="XPanda Truck">XPanda Truck</option>
-            <option value="Customer Pickup">Customer Pickup</option>
-            <option value="LTL">LTL</option>
-            <option value="Other">Other</option>
+            <option value="" data-i18n="logistics.selectPlaceholder">— select —</option>
+            <option value="Dry Van" data-i18n="logistics.methodDryVan">Dry Van</option>
+            <option value="Flatbed" data-i18n="logistics.methodFlatbed">Flatbed</option>
+            <option value="XPanda Truck" data-i18n="logistics.methodXpandaTruck">XPanda Truck</option>
+            <option value="Customer Pickup" data-i18n="logistics.methodCustomerPickup">Customer Pickup</option>
+            <option value="LTL" data-i18n="logistics.methodLtl">LTL</option>
+            <option value="Other" data-i18n="logistics.methodOther">Other</option>
           </select>
         </div>
         <div class="logistics-field">
-          <label>Carrier</label>
-          <input type="text" id="f-carrier" placeholder="e.g. LISMA, XPanda Truck">
+          <label data-i18n="logistics.fieldCarrier">Carrier</label>
+          <input type="text" id="f-carrier" placeholder="e.g. LISMA, XPanda Truck" data-i18n-placeholder="logistics.carrierPlaceholder">
         </div>
       </div>
 
       <div class="logistics-field">
-        <label>BOL Number</label>
-        <input type="text" id="f-bol-number" placeholder="BOL / tracking #">
+        <label data-i18n="logistics.fieldBolNumber">BOL Number</label>
+        <input type="text" id="f-bol-number" placeholder="BOL / tracking #" data-i18n-placeholder="logistics.bolPlaceholder">
       </div>
 
       <!-- Outbound-specific -->
       <div class="logistics-field-section" id="outbound-fields">
-        <div class="logistics-field-section-label">Customer &amp; Order</div>
+        <div class="logistics-field-section-label" data-i18n="logistics.sectionCustomerOrder">Customer &amp; Order</div>
 
         <div class="logistics-field">
-          <label>Customer <span style="color:#dc2626;">*</span></label>
-          <input type="text" id="f-customer" placeholder="Customer name">
+          <label data-i18n="logistics.fieldCustomer">Customer</label> <span style="color:#dc2626;">*</span>
+          <input type="text" id="f-customer" placeholder="Customer name" data-i18n-placeholder="logistics.customerPlaceholder">
         </div>
 
         <div class="logistics-field-row">
           <div class="logistics-field">
-            <label>PO Number</label>
-            <input type="text" id="f-po-number" placeholder="PO #">
+            <label data-i18n="logistics.fieldPoNumber">PO Number</label>
+            <input type="text" id="f-po-number" placeholder="PO #" data-i18n-placeholder="logistics.poPlaceholder">
           </div>
           <div class="logistics-field">
-            <label>Invoice Number</label>
-            <input type="text" id="f-invoice-number" placeholder="INV #">
+            <label data-i18n="logistics.fieldInvoiceNumber">Invoice Number</label>
+            <input type="text" id="f-invoice-number" placeholder="INV #" data-i18n-placeholder="logistics.invoicePlaceholder">
           </div>
         </div>
 
-        <div class="logistics-field-section-label" style="margin-top:12px;">Ship-To Address</div>
+        <div class="logistics-field-section-label" style="margin-top:12px;" data-i18n="logistics.sectionShipToAddress">Ship-To Address</div>
 
         <div class="logistics-field-row">
           <div class="logistics-field">
-            <label>Company</label>
-            <input type="text" id="f-ship-to-company" placeholder="Ship-to company name">
+            <label data-i18n="logistics.fieldCompany">Company</label>
+            <input type="text" id="f-ship-to-company" placeholder="Ship-to company name" data-i18n-placeholder="logistics.companyPlaceholder">
           </div>
           <div class="logistics-field">
-            <label>Attention</label>
-            <input type="text" id="f-ship-to-attention" placeholder="ATTN: name">
+            <label data-i18n="logistics.fieldAttention">Attention</label>
+            <input type="text" id="f-ship-to-attention" placeholder="ATTN: name" data-i18n-placeholder="logistics.attentionPlaceholder">
           </div>
         </div>
 
         <div class="logistics-field">
-          <label>Street</label>
-          <input type="text" id="f-ship-to-street" placeholder="Street address">
+          <label data-i18n="logistics.fieldStreet">Street</label>
+          <input type="text" id="f-ship-to-street" placeholder="Street address" data-i18n-placeholder="logistics.streetPlaceholder">
         </div>
 
         <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">
           <div class="logistics-field">
-            <label>City</label>
-            <input type="text" id="f-ship-to-city" placeholder="City">
+            <label data-i18n="logistics.fieldCity">City</label>
+            <input type="text" id="f-ship-to-city" placeholder="City" data-i18n-placeholder="logistics.cityPlaceholder">
           </div>
           <div class="logistics-field">
-            <label>State</label>
-            <input type="text" id="f-ship-to-state" placeholder="ST" maxlength="2" style="text-transform:uppercase;">
+            <label data-i18n="logistics.fieldState">State</label>
+            <input type="text" id="f-ship-to-state" placeholder="ST" maxlength="2" style="text-transform:uppercase;" data-i18n-placeholder="logistics.statePlaceholder">
           </div>
           <div class="logistics-field">
-            <label>Zip</label>
-            <input type="text" id="f-ship-to-zip" placeholder="Zip" maxlength="10">
+            <label data-i18n="logistics.fieldZip">Zip</label>
+            <input type="text" id="f-ship-to-zip" placeholder="Zip" maxlength="10" data-i18n-placeholder="logistics.zipPlaceholder">
           </div>
         </div>
 
-        <div class="logistics-field-section-label" style="margin-top:12px;">Shipping</div>
+        <div class="logistics-field-section-label" style="margin-top:12px;" data-i18n="logistics.sectionShipping">Shipping</div>
 
         <div class="logistics-field">
-          <label>Trailer #</label>
-          <input type="text" id="f-trailer-number" placeholder="Trailer number">
+          <label data-i18n="logistics.fieldTrailerNumber">Trailer #</label>
+          <input type="text" id="f-trailer-number" placeholder="Trailer number" data-i18n-placeholder="logistics.trailerPlaceholder">
         </div>
 
         <div class="logistics-field-row">
           <div class="logistics-field">
-            <label>Delivery Time</label>
-            <input type="text" id="f-delivery-time" placeholder="e.g. 7:00 am">
+            <label data-i18n="logistics.fieldDeliveryTime">Delivery Time</label>
+            <input type="text" id="f-delivery-time" placeholder="e.g. 7:00 am" data-i18n-placeholder="logistics.deliveryTimePlaceholder">
           </div>
           <div class="logistics-field">
-            <label>Scrap Pickup</label>
+            <label data-i18n="logistics.fieldScrapPickup">Scrap Pickup</label>
             <select id="f-scrap-pickup">
-              <option value="">— N/A —</option>
-              <option value="YES">YES</option>
-              <option value="NO">NO</option>
+              <option value="" data-i18n="logistics.naOption">— N/A —</option>
+              <option value="YES" data-i18n="logistics.yes">YES</option>
+              <option value="NO" data-i18n="logistics.no">NO</option>
             </select>
           </div>
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
           <div class="logistics-field">
-            <label>Load Count</label>
+            <label data-i18n="logistics.fieldLoadCount">Load Count</label>
             <input type="number" id="f-load-count" min="1" step="1" value="1">
           </div>
           <div class="logistics-field">
-            <label>Total BDFT</label>
+            <label data-i18n="logistics.fieldTotalBdft">Total BDFT</label>
             <input type="number" id="f-total-bdft" min="0" step="0.01" placeholder="0.00">
           </div>
           <div class="logistics-field">
-            <label>Location</label>
-            <input type="text" id="f-destination" placeholder="City, State">
+            <label data-i18n="logistics.fieldLocation">Location</label>
+            <input type="text" id="f-destination" placeholder="City, State" data-i18n-placeholder="logistics.locationPlaceholder">
           </div>
         </div>
 
-        <div class="logistics-field-section-label" style="margin-top:12px;">Contact</div>
+        <div class="logistics-field-section-label" style="margin-top:12px;" data-i18n="logistics.sectionContact">Contact</div>
 
         <div class="logistics-field-row">
           <div class="logistics-field">
-            <label>Contact Name</label>
-            <input type="text" id="f-contact-name" placeholder="Contact person">
+            <label data-i18n="logistics.fieldContactName">Contact Name</label>
+            <input type="text" id="f-contact-name" placeholder="Contact person" data-i18n-placeholder="logistics.contactNamePlaceholder">
           </div>
           <div class="logistics-field">
-            <label>Contact Phone</label>
-            <input type="tel" id="f-contact-phone" placeholder="Phone number">
+            <label data-i18n="logistics.fieldContactPhone">Contact Phone</label>
+            <input type="tel" id="f-contact-phone" placeholder="Phone number" data-i18n-placeholder="logistics.contactPhonePlaceholder">
           </div>
         </div>
 
         <div class="logistics-field">
-          <label>Linked Job</label>
+          <label data-i18n="logistics.fieldLinkedJob">Linked Job</label>
           <select id="f-job-id">
-            <option value="">— no linked job —</option>
+            <option value="" data-i18n="logistics.noLinkedJob">— no linked job —</option>
           </select>
         </div>
 
         <!-- Read-only Line Items -->
         <div id="shipment-line-items" style="display:none;margin-top:16px;">
-          <div class="logistics-field-section-label">Line Items</div>
+          <div class="logistics-field-section-label" data-i18n="logistics.sectionLineItems">Line Items</div>
           <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;">
             <thead>
               <tr style="text-align:left;border-bottom:2px solid var(--line);">
-                <th style="padding:6px 8px;font-weight:700;color:var(--muted);">Part #</th>
-                <th style="padding:6px 8px;font-weight:700;color:var(--muted);">Description</th>
-                <th style="padding:6px 8px;font-weight:700;color:var(--muted);text-align:right;">Qty</th>
-                <th style="padding:6px 8px;font-weight:700;color:var(--muted);">Dimensions</th>
+                <th style="padding:6px 8px;font-weight:700;color:var(--muted);" data-i18n="logistics.colPartNumber">Part #</th>
+                <th style="padding:6px 8px;font-weight:700;color:var(--muted);" data-i18n="logistics.colDescription">Description</th>
+                <th style="padding:6px 8px;font-weight:700;color:var(--muted);text-align:right;" data-i18n="logistics.colQty">Qty</th>
+                <th style="padding:6px 8px;font-weight:700;color:var(--muted);" data-i18n="logistics.colDimensions">Dimensions</th>
               </tr>
             </thead>
             <tbody id="shipment-line-items-body"></tbody>
@@ -377,59 +375,59 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
 
       <!-- Inbound-specific -->
       <div class="logistics-field-section" id="inbound-fields" style="display:none;">
-        <div class="logistics-field-section-label">Inbound Details</div>
+        <div class="logistics-field-section-label" data-i18n="logistics.sectionInboundDetails">Inbound Details</div>
 
         <div class="logistics-field">
-          <label>Supplier <span style="color:#dc2626;">*</span></label>
-          <input type="text" id="f-supplier" placeholder="Supplier / vendor name">
+          <label data-i18n="logistics.fieldSupplier">Supplier</label> <span style="color:#dc2626;">*</span>
+          <input type="text" id="f-supplier" placeholder="Supplier / vendor name" data-i18n-placeholder="logistics.supplierPlaceholder">
         </div>
 
         <div class="logistics-field">
-          <label>Origin</label>
-          <input type="text" id="f-origin" placeholder="Shipping from">
+          <label data-i18n="logistics.fieldOrigin">Origin</label>
+          <input type="text" id="f-origin" placeholder="Shipping from" data-i18n-placeholder="logistics.originPlaceholder">
         </div>
 
         <div class="logistics-field-row">
           <div class="logistics-field">
-            <label>Bead Type</label>
+            <label data-i18n="logistics.fieldBeadType">Bead Type</label>
             <select id="f-bead-type-id">
-              <option value="">— select type —</option>
+              <option value="" data-i18n="logistics.selectTypePlaceholder">— select type —</option>
             </select>
           </div>
           <div class="logistics-field">
-            <label>Weight (lbs)</label>
+            <label data-i18n="logistics.fieldWeightLbs">Weight (lbs)</label>
             <input type="number" id="f-weight-lbs" min="0" step="0.01" placeholder="0.00">
           </div>
         </div>
 
         <div class="logistics-field">
-          <label>Destination Silo</label>
+          <label data-i18n="logistics.fieldDestinationSilo">Destination Silo</label>
           <select id="f-silo-id" onchange="onSiloChange()">
-            <option value="">— no silo (log separately) —</option>
+            <option value="" data-i18n="logistics.noSiloOption">— no silo (log separately) —</option>
           </select>
         </div>
 
         <div class="logistics-checkbox-row" id="auto-log-wrap" style="display:none;">
           <input type="checkbox" id="f-auto-log" checked>
-          <label for="f-auto-log" style="text-transform:none;letter-spacing:0;font-size:14px;">
+          <label for="f-auto-log" style="text-transform:none;letter-spacing:0;font-size:14px;" data-i18n="logistics.autoLogLabel">
             Auto-update silo inventory when saved
           </label>
         </div>
       </div>
 
       <div class="logistics-field">
-        <label>Notes</label>
-        <textarea id="f-notes" rows="2" placeholder="optional notes"></textarea>
+        <label data-i18n="logistics.fieldNotes">Notes</label>
+        <textarea id="f-notes" rows="2" placeholder="optional notes" data-i18n-placeholder="logistics.notesPlaceholder"></textarea>
       </div>
 
       <div class="logistics-field-section" id="delivery-incident-section" style="margin-top:4px;">
         <label style="display:flex;align-items:center;gap:8px;min-height:44px;cursor:pointer;font-weight:600;color:var(--text);">
           <input type="checkbox" id="f-delivery-incident" onchange="toggleDeliveryIncident()" style="width:18px;height:18px;">
-          Delivery incident?
+          <span data-i18n="logistics.deliveryIncidentLabel">Delivery incident?</span>
         </label>
         <div id="delivery-incident-notes-wrap" style="display:none;margin-top:8px;">
-          <label>Incident details</label>
-          <textarea id="f-delivery-incident-notes" rows="3" placeholder="Describe what happened (damage, shortage, refusal, delay, etc.)"></textarea>
+          <label data-i18n="logistics.incidentDetailsLabel">Incident details</label>
+          <textarea id="f-delivery-incident-notes" rows="3" placeholder="Describe what happened (damage, shortage, refusal, delay, etc.)" data-i18n-placeholder="logistics.incidentDetailsPlaceholder"></textarea>
         </div>
       </div>
 
@@ -437,21 +435,21 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
       <input type="hidden" id="f-direction">
 
       <div id="signed-bol-section" style="display:none;">
-        <h4 style="margin: 16px 0 4px 0; font-size: 14px; font-weight: 700; color: var(--text);">Signed BOL (Proof of Delivery)</h4>
+        <h4 style="margin: 16px 0 4px 0; font-size: 14px; font-weight: 700; color: var(--text);" data-i18n="logistics.signedBolTitle">Signed BOL (Proof of Delivery)</h4>
         <img id="signed-bol-thumb" alt="Signed BOL" style="max-width: 100%; max-height: 240px; border: 1px solid var(--card-border); border-radius: 8px; cursor: zoom-in; background: var(--surface-2);">
         <div id="signed-bol-meta" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;"></div>
       </div>
 
       <div id="logistics-photo-section" style="display:none;">
-        <h4 style="margin: 16px 0 4px 0; font-size: 14px; font-weight: 700; color: var(--text);">Loading Photos</h4>
+        <h4 style="margin: 16px 0 4px 0; font-size: 14px; font-weight: 700; color: var(--text);" data-i18n="logistics.loadingPhotosTitle">Loading Photos</h4>
         <div id="logistics-photo-gallery-mount"></div>
       </div>
     </div>
 
     <div class="logistics-modal-footer">
-      <button class="logistics-btn logistics-btn-outline" id="modal-delete-btn" onclick="confirmDelete()" style="margin-right:auto;display:none;">Delete</button>
-      <button class="logistics-btn logistics-btn-outline" onclick="closeModal()">Cancel</button>
-      <button class="logistics-btn logistics-btn-primary" id="modal-save-btn" onclick="saveShipment()">Save</button>
+      <button class="logistics-btn logistics-btn-outline" id="modal-delete-btn" onclick="confirmDelete()" style="margin-right:auto;display:none;" data-i18n="logistics.delete">Delete</button>
+      <button class="logistics-btn logistics-btn-outline" onclick="closeModal()" data-i18n="logistics.cancel">Cancel</button>
+      <button class="logistics-btn logistics-btn-primary" id="modal-save-btn" onclick="saveShipment()" data-i18n="logistics.save">Save</button>
     </div>
   </div>
 </div>
@@ -460,27 +458,27 @@ document.getElementById('logistics-page-subtitle').textContent = 'Inbound delive
 <div class="logistics-modal-overlay hidden" id="job-picker-modal">
   <div class="logistics-modal-panel" style="max-width:520px;">
     <div class="logistics-modal-header">
-      <h2>Ship from Job</h2>
+      <h2 data-i18n="logistics.shipFromJobTitle">Ship from Job</h2>
       <button class="logistics-modal-close" onclick="closeJobPicker()">×</button>
     </div>
     <div class="logistics-modal-body">
-      <p style="margin:0 0 14px;font-size:14px;color:var(--text-muted);">Select a job to pre-fill a new outbound shipment.</p>
-      <input type="text" id="job-picker-search" class="logistics-filter-input" style="width:100%;margin-bottom:12px;" placeholder="Search customer or invoice…" oninput="filterJobPickerList()">
+      <p style="margin:0 0 14px;font-size:14px;color:var(--text-muted);" data-i18n="logistics.shipFromJobDesc">Select a job to pre-fill a new outbound shipment.</p>
+      <input type="text" id="job-picker-search" class="logistics-filter-input" style="width:100%;margin-bottom:12px;" placeholder="Search customer or invoice…" oninput="filterJobPickerList()" data-i18n-placeholder="logistics.jobSearchPlaceholder">
       <div id="job-picker-list" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
     </div>
     <div class="logistics-modal-footer">
-      <button class="logistics-btn logistics-btn-outline" onclick="closeJobPicker()">Cancel</button>
+      <button class="logistics-btn logistics-btn-outline" onclick="closeJobPicker()" data-i18n="logistics.cancel">Cancel</button>
     </div>
   </div>
 </div>
 
 <!-- ── Prompt Banner ──────────────────────────────────────────────────────── -->
 <div class="logistics-prompt-banner" id="prompt-banner">
-  <div class="logistics-prompt-banner-title" id="prompt-title">Shipment delivered</div>
+  <div class="logistics-prompt-banner-title" id="prompt-title" data-i18n="logistics.shipmentDelivered">Shipment delivered</div>
   <div class="logistics-prompt-banner-msg" id="prompt-msg"></div>
   <div class="logistics-prompt-banner-actions">
-    <button class="logistics-btn logistics-btn-outbound" id="prompt-yes-btn" onclick="promptYes()">Yes, update job</button>
-    <button class="logistics-btn logistics-btn-outline" onclick="dismissPrompt()" style="color:#fff;border-color:rgba(255,255,255,.2);">Dismiss</button>
+    <button class="logistics-btn logistics-btn-outbound" id="prompt-yes-btn" onclick="promptYes()" data-i18n="logistics.yesUpdateJob">Yes, update job</button>
+    <button class="logistics-btn logistics-btn-outline" onclick="dismissPrompt()" style="color:#fff;border-color:rgba(255,255,255,.2);" data-i18n="logistics.dismiss">Dismiss</button>
   </div>
 </div>
 
@@ -640,15 +638,15 @@ async function assignBayFromDashboard(assignmentId, bayId) {
 
       const toast = document.createElement('div');
       toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:10000;';
-      toast.innerHTML = '<span style="color:#34d399;">✓</span> Bay assigned';
+      toast.innerHTML = '<span style="color:#34d399;">✓</span> ' + esc(window.I18n.t('logistics.bayAssigned'));
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 3000);
     } else {
-      alert(data?.error || 'Failed to assign bay');
+      alert(data?.error || window.I18n.t('logistics.failedAssignBay'));
     }
   } catch (e) {
     console.error('Bay assignment failed:', e);
-    alert('Failed to assign bay');
+    alert(window.I18n.t('logistics.failedAssignBay'));
   }
 }
 
@@ -746,12 +744,14 @@ function setOutboundWeekOffset(weeks) {
 }
 
 // ── Render Outbound ────────────────────────────────────────────────────────
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function DAYS() {
+  return ['daySun','dayMon','dayTue','dayWed','dayThu','dayFri','daySat'].map(k => window.I18n.t('logistics.' + k));
+}
 
 function renderOutbound() {
   const container = document.getElementById('outbound-content');
   if (!outboundData.length) {
-    container.innerHTML = `<div style="color:#94a3b8;font-size:14px;padding:20px 0;">No outbound shipments found.</div>`;
+    container.innerHTML = `<div style="color:#94a3b8;font-size:14px;padding:20px 0;">${esc(window.I18n.t('logistics.noOutbound'))}</div>`;
     updateStats();
     return;
   }
@@ -786,28 +786,29 @@ function renderOutbound() {
 
   container.innerHTML = sortedDates.map(dateKey => {
     const rows    = groups[dateKey];
-    const dayName = dateKey !== 'No Date' ? DAYS[new Date(dateKey + 'T12:00:00').getDay()] : 'No Date';
+    const noDateLabel = window.I18n.t('logistics.noDate');
+    const dayName = dateKey !== 'No Date' ? DAYS()[new Date(dateKey + 'T12:00:00').getDay()] : noDateLabel;
     const label   = dateKey !== 'No Date'
       ? `${dayName} — ${formatDate(dateKey)}`
-      : 'No Date';
+      : noDateLabel;
 
     const rowsHtml = rows.map(s => buildOutboundRow(s)).join('');
     return `
       <div class="logistics-day-group">
-        <p class="logistics-day-label">${label}</p>
+        <p class="logistics-day-label">${esc(label)}</p>
         <div class="logistics-table-wrap">
           <table class="logistics-table logistics-table--ship">
             <thead>
               <tr>
-                <th>Customer</th>
-                <th>Method / Carrier</th>
-                <th>Trailer #</th>
-                <th>Loads</th>
-                <th>BDFT</th>
-                <th>BOL #</th>
-                <th>Status</th>
-                <th>Bay</th>
-                <th style="text-align:right;">Actions</th>
+                <th>${esc(window.I18n.t('logistics.colCustomer'))}</th>
+                <th>${esc(window.I18n.t('logistics.colMethodCarrier'))}</th>
+                <th>${esc(window.I18n.t('logistics.colTrailer'))}</th>
+                <th>${esc(window.I18n.t('logistics.colLoads'))}</th>
+                <th>${esc(window.I18n.t('logistics.colBdft'))}</th>
+                <th>${esc(window.I18n.t('logistics.colBol'))}</th>
+                <th>${esc(window.I18n.t('logistics.colStatus'))}</th>
+                <th>${esc(window.I18n.t('logistics.colBay'))}</th>
+                <th style="text-align:right;">${esc(window.I18n.t('logistics.colActions'))}</th>
               </tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
@@ -823,8 +824,8 @@ function renderOutbound() {
 function buildOutboundRow(s) {
   const linkedJob = allOpenJobs.find(j => j.id === s.job_id);
   const jobLink   = linkedJob
-    ? `<a class="logistics-job-link" href="/jobs/?job_id=${linkedJob.id}" onclick="event.stopPropagation()">Job: ${esc(linkedJob.customer)}${linkedJob.invoice_number ? ' · ' + esc(linkedJob.invoice_number) : ''}</a>`
-    : (s.job_id ? `<a class="logistics-job-link" href="/jobs/" onclick="event.stopPropagation()">Job linked ↗</a>` : '');
+    ? `<a class="logistics-job-link" href="/jobs/?job_id=${linkedJob.id}" onclick="event.stopPropagation()">${esc(window.I18n.t('logistics.jobPrefix'))}${esc(linkedJob.customer)}${linkedJob.invoice_number ? ' · ' + esc(linkedJob.invoice_number) : ''}</a>`
+    : (s.job_id ? `<a class="logistics-job-link" href="/jobs/" onclick="event.stopPropagation()">${esc(window.I18n.t('logistics.jobLinked'))}</a>` : '');
 
   const methodCarrier = [s.method, s.carrier].filter(Boolean).join(' · ');
   const bdft = s.total_bdft ? fmtNum(s.total_bdft) : '—';
@@ -839,7 +840,7 @@ function buildOutboundRow(s) {
         ? `<span style="font-weight:700;color:var(--text);">INV# ${esc(linkedJob.invoice_number)}</span>`
         : '<span style="color:#94a3b8;">—</span>'}
       ${(s.load_count || 1) > 1
-        ? `<span style="font-size:11px;font-weight:700;color:#6366f1;margin-left:6px;">Load count: ${s.load_count}</span>`
+        ? `<span style="font-size:11px;font-weight:700;color:#6366f1;margin-left:6px;">${esc(window.I18n.t('logistics.loadCountLabel', { n: s.load_count }))}</span>`
         : ''}
       <br><span style="color:var(--text-muted);font-size:12px;" title="${esc(s.customer || '')}">${esc(utils.truncate(s.customer || 'Unknown', 20))}</span>
       ${jobLink ? `<br>${jobLink}` : ''}
@@ -861,17 +862,17 @@ function buildBayCell(shipment, loadingAssignment) {
   if (!shipment.job_id) return '—';
 
   if (loadingAssignment && loadingAssignment.bay_number) {
-    return `<span style="font-size:12px;font-weight:600;">Bay ${loadingAssignment.bay_number}</span>`;
+    return `<span style="font-size:12px;font-weight:600;">${esc(window.I18n.t('logistics.bayLabel', { n: loadingAssignment.bay_number }))}</span>`;
   }
 
   if (['ready_to_ship'].includes(shipment.status) && allLoadingBays.length > 0) {
     const laId = loadingAssignment?.id || '';
     if (!laId) return '—';
     const opts = allLoadingBays.map(b =>
-      `<option value="${b.id}">Bay ${b.bay_number}${b.label ? ' — ' + esc(b.label) : ''}</option>`
+      `<option value="${b.id}">${esc(window.I18n.t('logistics.bayLabel', { n: b.bay_number }))}${b.label ? ' — ' + esc(b.label) : ''}</option>`
     ).join('');
     return `<select class="logistics-bay-select" onchange="assignBayFromDashboard('${laId}', this.value)" onclick="event.stopPropagation()">
-      <option value="">Assign…</option>
+      <option value="">${esc(window.I18n.t('logistics.assignEllipsis'))}</option>
       ${opts}
     </select>`;
   }
@@ -880,16 +881,16 @@ function buildBayCell(shipment, loadingAssignment) {
 }
 
 async function deleteAllBolsForJob(jobId, count) {
-  if (!confirm('Delete ALL ' + count + ' BOL(s) for this job, including any signed copies? This cannot be undone.')) return;
+  if (!confirm(window.I18n.t('logistics.deleteAllBolsConfirm', { count }))) return;
   try {
     const { ok, data } = await api.del('/api/bols?job_id=' + encodeURIComponent(jobId));
-    if (!ok) { alert((data && data.error) || 'Failed to delete BOLs.'); return; }
+    if (!ok) { alert((data && data.error) || window.I18n.t('logistics.failedDeleteBols')); return; }
     loadBolDocuments({ job_id: jobId });
     if (typeof loadOutbound === 'function') loadOutbound();
     if (typeof loadInbound === 'function') loadInbound();
   } catch (e) {
     console.error('deleteAllBolsForJob failed:', e);
-    alert('Failed to delete BOLs.');
+    alert(window.I18n.t('logistics.failedDeleteBols'));
   }
 }
 
@@ -913,9 +914,9 @@ async function loadBolDocuments(s) {
     }
     const bols = Object.keys(byLoad).sort((a, c) => Number(a) - Number(c)).map(k => byLoad[k]);
 
-    const labelFor = (t) => t === 'original_signed' ? 'Original — signed'
-                          : t === 'driver_signed'   ? 'Driver — signed'
-                          : t === 'customer_signed' ? 'Customer — signed' : t;
+    const labelFor = (t) => t === 'original_signed' ? window.I18n.t('logistics.bolOriginalSigned')
+                          : t === 'driver_signed'   ? window.I18n.t('logistics.bolDriverSigned')
+                          : t === 'customer_signed' ? window.I18n.t('logistics.bolCustomerSigned') : t;
     // Show a single signed copy of record: prefer original_signed, else the most recent (docs are
     // returned newest-first), so legacy shipments with driver/customer copies still show one.
     const pickSignedDoc = (docs) => docs.find(d => d.doc_type === 'original_signed') || docs[0] || null;
@@ -939,19 +940,19 @@ async function loadBolDocuments(s) {
 
     const blocks = results.map(({ bol, docs, failed }) => {
       const loadLabel = (bol.load_number != null && bol.load_count != null && Number(bol.load_count) > 1)
-        ? `Load ${esc(String(bol.load_number))} of ${esc(String(bol.load_count))} — `
+        ? esc(window.I18n.t('logistics.loadOfLabel', { n: bol.load_number, count: bol.load_count }))
         : '';
       const chosen = pickSignedDoc(docs);
       const signedLinks = chosen
         ? `<a href="/api/bols/documents/${esc(chosen.id)}" target="_blank" rel="noopener" style="font-size:13px;">📄 ${esc(labelFor(chosen.doc_type))}</a>`
         : '';
       const fallback = failed
-        ? '<span style="font-size:12px;color:var(--danger,#ef4444);">Could not load signed copies</span>'
-        : '<span style="font-size:12px;color:var(--muted,#4b5563);">No signed copies yet</span>';
+        ? `<span style="font-size:12px;color:var(--danger,#ef4444);">${esc(window.I18n.t('logistics.couldNotLoadSignedCopies'))}</span>`
+        : `<span style="font-size:12px;color:var(--muted,#4b5563);">${esc(window.I18n.t('logistics.noSignedCopiesYet'))}</span>`;
       return `<div style="margin-bottom:8px;padding:8px;border:1px solid var(--input-border);border-radius:8px;">
           <div style="font-size:12px;color:var(--muted,#4b5563);margin-bottom:4px;">${loadLabel}BOL ${esc(bol.bol_number || bol.id)}</div>
           <div style="display:flex;flex-wrap:wrap;gap:10px;">
-            <a href="#" onclick="event.preventDefault();viewBolForJob('${esc(s.job_id)}')" style="font-size:13px;">📄 View BOL</a>
+            <a href="#" onclick="event.preventDefault();viewBolForJob('${esc(s.job_id)}')" style="font-size:13px;">📄 ${esc(window.I18n.t('logistics.viewBol'))}</a>
             ${signedLinks || fallback}
           </div>
         </div>`;
@@ -960,9 +961,9 @@ async function loadBolDocuments(s) {
     const _u = window.__xpandaUser;
     const _isMgr = _u && (_u.isAdministrator || (_u.permissions && _u.permissions['logistics.loading.manage'] && _u.permissions['logistics.loading.manage'].edit));
     const delBtn = _isMgr
-      ? `<button onclick="deleteAllBolsForJob('${esc(s.job_id)}', ${all.length})" style="margin-left:auto;font-size:12px;color:var(--danger,#ef4444);background:none;border:1px solid var(--danger,#ef4444);border-radius:6px;padding:2px 8px;cursor:pointer;">Delete all BOLs</button>`
+      ? `<button onclick="deleteAllBolsForJob('${esc(s.job_id)}', ${all.length})" style="margin-left:auto;font-size:12px;color:var(--danger,#ef4444);background:none;border:1px solid var(--danger,#ef4444);border-radius:6px;padding:2px 8px;cursor:pointer;">${esc(window.I18n.t('logistics.deleteAllBols'))}</button>`
       : '';
-    host.innerHTML = `<div style="display:flex;align-items:center;font-weight:600;font-size:13px;margin:4px 0 6px;">Documents${delBtn}</div>${blocks.join('')}`;
+    host.innerHTML = `<div style="display:flex;align-items:center;font-weight:600;font-size:13px;margin:4px 0 6px;">${esc(window.I18n.t('logistics.documentsLabel'))}${delBtn}</div>${blocks.join('')}`;
   } catch (e) {
     console.error('loadBolDocuments failed:', e);
     host.innerHTML = '';
@@ -978,8 +979,8 @@ async function viewBolForJob(jobId) {
   if (!jobId) return;
   try {
     const { ok, data } = await api.get('/api/bols?job_id=' + encodeURIComponent(jobId));
-    if (!ok || !data?.bols?.length) { alert('No BOL found for this job.'); return; }
-    if (!window.BolShared || !window.PDFLib) { alert('BOL viewer not ready — try again in a moment.'); return; }
+    if (!ok || !data?.bols?.length) { alert(window.I18n.t('logistics.noBolFound')); return; }
+    if (!window.BolShared || !window.PDFLib) { alert(window.I18n.t('logistics.bolViewerNotReady')); return; }
     // Dedupe to the latest BOL per load_number (regenerations may leave stale rows), then
     // render every load in order — the same combined packet Generate produces. BOLs with no
     // load_number (legacy/manual) are keyed under 0 and still included.
@@ -1026,13 +1027,13 @@ async function viewBolForJob(jobId) {
     document.getElementById('log-bol-view-modal').style.display = 'flex';
   } catch (e) {
     console.error('viewBolForJob failed:', e);
-    alert('Failed to load BOL. Please try again.');
+    alert(window.I18n.t('logistics.failedLoadBol'));
   }
 }
 
 function openBolEditor() {
-  if (bolViewState.locked) { alert('This load has shipped — the BOL is read-only.'); return; }
-  if (typeof BolEditor === 'undefined' || !BolEditor.open) { alert('Editor failed to load. Refresh and try again.'); return; }
+  if (bolViewState.locked) { alert(window.I18n.t('logistics.loadShippedReadOnly')); return; }
+  if (typeof BolEditor === 'undefined' || !BolEditor.open) { alert(window.I18n.t('logistics.editorFailedToLoad')); return; }
   const bols = bolViewState.bols || [];
   if (!bols.length) return;
 
@@ -1044,7 +1045,7 @@ function openBolEditor() {
       const o = document.createElement('option');
       o.value = String(i);
       const load = (b.load_number != null && b.load_number !== '') ? b.load_number : (i + 1);
-      o.textContent = `Load ${load} — BOL ${b.bol_number || b.id}`;
+      o.textContent = window.I18n.t('logistics.loadEditorOption', { n: load, bol: b.bol_number || b.id });
       sel.appendChild(o);
     });
     // Rebind change handler cleanly (avoid stacking listeners across opens):
@@ -1095,9 +1096,9 @@ async function bolEditorApply(updatedBol) {
     const res = await api.put('/api/bols/' + encodeURIComponent(updatedBol.id), payload);
     if (!res.ok) {
       if (res.status === 409 || (res.data && res.data.locked)) {
-        alert('This load has shipped — the BOL can no longer be edited.');
+        alert(window.I18n.t('logistics.loadShippedNoEdit'));
       } else {
-        alert('Failed to save BOL changes.');
+        alert(window.I18n.t('logistics.failedSaveBolChanges'));
       }
       closeBolEditor();
       return;
@@ -1107,7 +1108,7 @@ async function bolEditorApply(updatedBol) {
     await viewBolForJob(bolViewState.jobId);
   } catch (e) {
     console.error('BOL edit save failed:', e);
-    alert('Failed to save BOL changes.');
+    alert(window.I18n.t('logistics.failedSaveBolChanges'));
     closeBolEditor();
   }
 }
@@ -1145,16 +1146,16 @@ function buildActionButtons(shipment) {
 
   const hasBol = Number(shipment.bol_count || 0) > 0;
   const bolBtn = hasBol
-    ? `<a class="logistics-action-btn action-bol" href="#" onclick="event.stopPropagation();event.preventDefault();viewBolForJob('${shipment.job_id}')">View BOL</a>`
-    : `<a class="logistics-action-btn action-bol" href="#" onclick="event.stopPropagation();event.preventDefault();openBolModalForJob('${shipment.job_id}')">Generate BOL</a>`;
-  return `<a class="logistics-action-btn action-load" href="/logistics/load-builder.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">Build Load</a> ${bolBtn}`;
+    ? `<a class="logistics-action-btn action-bol" href="#" onclick="event.stopPropagation();event.preventDefault();viewBolForJob('${shipment.job_id}')">${esc(window.I18n.t('logistics.viewBol'))}</a>`
+    : `<a class="logistics-action-btn action-bol" href="#" onclick="event.stopPropagation();event.preventDefault();openBolModalForJob('${shipment.job_id}')">${esc(window.I18n.t('logistics.generateBol'))}</a>`;
+  return `<a class="logistics-action-btn action-load" href="/logistics/load-builder.html?job_id=${shipment.job_id}" onclick="event.stopPropagation()">${esc(window.I18n.t('logistics.buildLoad'))}</a> ${bolBtn}`;
 }
 
 async function openBolModalForJob(jobId) {
-  if (typeof BolCompose === 'undefined') { alert('BOL tool failed to load. Refresh and try again.'); return; }
+  if (typeof BolCompose === 'undefined') { alert(window.I18n.t('logistics.bolToolFailedToLoad')); return; }
   try {
     const res = await api.get('/api/jobs/' + encodeURIComponent(jobId));
-    if (!res.ok || !res.data || !res.data.job) { alert('Could not load job for BOL.'); return; }
+    if (!res.ok || !res.data || !res.data.job) { alert(window.I18n.t('logistics.couldNotLoadJobForBol')); return; }
     const job = res.data.job;
     const today = new Date().toISOString().slice(0, 10);
 
@@ -1206,7 +1207,7 @@ async function openBolModalForJob(jobId) {
       const assignment = assignmentsByLoad[i + 1] || {};
       trailerData.push(Object.assign({}, base, {
         trailerIndex: i,
-        trailerLabel: loadCount > 1 ? ('Load ' + (i + 1) + ' of ' + loadCount) : 'BOL',
+        trailerLabel: loadCount > 1 ? window.I18n.t('logistics.trailerLabelMulti', { n: i + 1, count: loadCount }) : window.I18n.t('logistics.trailerLabelSingle'),
         invNumber: i === 0 ? (job.invoice_number || '') : '',
         trailerNo: assignment.trailer_number || '',
         date: assignment.load_ship_date || base.date,
@@ -1223,7 +1224,7 @@ async function openBolModalForJob(jobId) {
     });
   } catch (e) {
     console.error('openBolModalForJob failed:', e);
-    alert('Could not open the BOL generator.');
+    alert(window.I18n.t('logistics.couldNotOpenBolGenerator'));
   }
 }
 
@@ -1231,7 +1232,7 @@ async function openBolModalForJob(jobId) {
 function renderInbound() {
   const container = document.getElementById('inbound-content');
   if (!inboundData.length) {
-    container.innerHTML = `<div style="color:#94a3b8;font-size:14px;padding:20px 0;">No inbound deliveries found.</div>`;
+    container.innerHTML = `<div style="color:#94a3b8;font-size:14px;padding:20px 0;">${esc(window.I18n.t('logistics.noInbound'))}</div>`;
     updateStats();
     return;
   }
@@ -1247,13 +1248,13 @@ function renderInbound() {
       <table class="logistics-table">
         <thead>
           <tr>
-            <th>Supplier</th>
-            <th>Bead Type</th>
-            <th>Weight (lbs)</th>
-            <th>Ship Date</th>
-            <th>Carrier</th>
-            <th>BOL #</th>
-            <th>Status</th>
+            <th>${esc(window.I18n.t('logistics.colSupplier'))}</th>
+            <th>${esc(window.I18n.t('logistics.colBeadType'))}</th>
+            <th>${esc(window.I18n.t('logistics.colWeight'))}</th>
+            <th>${esc(window.I18n.t('logistics.colShipDate'))}</th>
+            <th>${esc(window.I18n.t('logistics.colCarrier'))}</th>
+            <th>${esc(window.I18n.t('logistics.colBol'))}</th>
+            <th>${esc(window.I18n.t('logistics.colStatus'))}</th>
           </tr>
         </thead>
         <tbody>${allRows.map(s => buildInboundRow(s)).join('')}</tbody>
@@ -1292,10 +1293,10 @@ function openModal(direction, prefill) {
   showError('');
 
   document.getElementById('modal-title').textContent =
-    currentDirection === 'outbound' ? 'New Outbound Shipment' : 'New Inbound Delivery';
+    currentDirection === 'outbound' ? window.I18n.t('logistics.modalTitleNewOutbound') : window.I18n.t('logistics.modalTitleNewInbound');
   document.getElementById('dir-toggle-wrap').style.display = '';
   document.getElementById('modal-delete-btn').style.display = 'none';
-  document.getElementById('modal-save-btn').textContent = 'Save';
+  document.getElementById('modal-save-btn').textContent = window.I18n.t('logistics.save');
 
   if (prefill) applyPrefill(prefill);
 
@@ -1316,10 +1317,10 @@ async function openEdit(id) {
   setDirection(currentDirection, true); // locked
 
   document.getElementById('modal-title').textContent =
-    currentDirection === 'outbound' ? 'Edit Outbound Shipment' : 'Edit Inbound Delivery';
+    currentDirection === 'outbound' ? window.I18n.t('logistics.modalTitleEditOutbound') : window.I18n.t('logistics.modalTitleEditInbound');
   document.getElementById('dir-toggle-wrap').style.display = 'none';
   document.getElementById('modal-delete-btn').style.display = '';
-  document.getElementById('modal-save-btn').textContent = 'Save Changes';
+  document.getElementById('modal-save-btn').textContent = window.I18n.t('logistics.saveChanges');
   showError('');
 
   // Populate
@@ -1577,7 +1578,7 @@ async function saveShipment() {
 
   if (dir === 'outbound') {
     const customer = document.getElementById('f-customer').value.trim();
-    if (!customer) { showError('Customer is required for outbound shipments.'); return; }
+    if (!customer) { showError(window.I18n.t('logistics.customerRequiredOutbound')); return; }
     payload.customer       = customer;
     payload.destination    = document.getElementById('f-destination').value.trim();
     payload.load_count     = parseInt(document.getElementById('f-load-count').value || 1, 10);
@@ -1587,7 +1588,7 @@ async function saveShipment() {
     payload.trailer_number = document.getElementById('f-trailer-number').value.trim();
   } else {
     const supplier = document.getElementById('f-supplier').value.trim();
-    if (!supplier) { showError('Supplier is required for inbound deliveries.'); return; }
+    if (!supplier) { showError(window.I18n.t('logistics.supplierRequiredInbound')); return; }
     payload.customer   = supplier;
     payload.origin     = document.getElementById('f-origin').value.trim();
     payload.weight_lbs = parseFloat(document.getElementById('f-weight-lbs').value) || 0;
@@ -1612,7 +1613,7 @@ async function saveShipment() {
 
   const btn = document.getElementById('modal-save-btn');
   btn.disabled = true;
-  btn.textContent = 'Saving…';
+  btn.textContent = window.I18n.t('logistics.saving');
 
   try {
     const { ok, data } = editingId
@@ -1620,7 +1621,7 @@ async function saveShipment() {
       : await api.post('/api/shipments', payload);
 
     if (!ok) {
-      showError(data?.error || 'Error saving shipment.');
+      showError(data?.error || window.I18n.t('logistics.errorSavingShipment'));
       return;
     }
 
@@ -1636,19 +1637,19 @@ async function saveShipment() {
     await Promise.all([loadOutbound(), loadInbound()]);
     updateStats();
   } catch {
-    showError('Network error. Please try again.');
+    showError(window.I18n.t('logistics.networkError'));
   } finally {
     btn.disabled = false;
-    btn.textContent = editingId ? 'Save Changes' : 'Save';
+    btn.textContent = editingId ? window.I18n.t('logistics.saveChanges') : window.I18n.t('logistics.save');
   }
 }
 
 async function confirmDelete() {
   if (!editingId) return;
-  if (!confirm('Delete this shipment? This cannot be undone.')) return;
+  if (!confirm(window.I18n.t('logistics.confirmDeleteShipment'))) return;
 
   const { ok, data } = await api.raw('/api/shipments', { method: 'DELETE', body: { id: editingId } });
-  if (!ok) { alert(data?.error || 'Error deleting shipment.'); return; }
+  if (!ok) { alert(data?.error || window.I18n.t('logistics.errorDeletingShipment')); return; }
 
   closeModal();
   await Promise.all([loadOutbound(), loadInbound()]);
@@ -1659,7 +1660,7 @@ async function confirmDelete() {
 async function openShipJobPicker() {
   document.getElementById('job-picker-search').value = '';
   document.getElementById('job-picker-list').innerHTML =
-    '<div style="color:#94a3b8;font-size:13px;padding:12px;">Loading jobs…</div>';
+    `<div style="color:#94a3b8;font-size:13px;padding:12px;">${esc(window.I18n.t('logistics.loadingJobs'))}</div>`;
   document.getElementById('job-picker-modal').classList.remove('hidden');
 
   try {
@@ -1696,11 +1697,16 @@ function filterJobPickerList() {
   );
 
   if (!jobs.length) {
-    list.innerHTML = `<div style="color:#94a3b8;font-size:13px;padding:12px;">No open jobs found.</div>`;
+    list.innerHTML = `<div style="color:#94a3b8;font-size:13px;padding:12px;">${esc(window.I18n.t('logistics.noOpenJobsFound'))}</div>`;
     return;
   }
 
-  const statusLabels = { not_started: 'Not Started', in_production: 'In Production', done: 'Done', shipped: 'Shipped' };
+  const statusLabels = {
+    not_started: window.I18n.t('logistics.statusNotStarted'),
+    in_production: window.I18n.t('logistics.statusInProduction'),
+    done: window.I18n.t('logistics.statusDone'),
+    shipped: window.I18n.t('logistics.statusShipped'),
+  };
   list.innerHTML = jobs.map(j => {
     const label      = `${esc(j.customer)}${j.invoice_number ? ' · ' + esc(j.invoice_number) : ''}`;
     const statusText = statusLabels[j.status] || esc(j.status || '');
@@ -1745,7 +1751,7 @@ function applyPrefill(prefill) {
 function promptUpdateJob(jobId, customer) {
   promptJobId = jobId;
   document.getElementById('prompt-msg').textContent =
-    `Update job "${customer}" to Shipped on the Job Board?`;
+    window.I18n.t('logistics.updateJobPrompt', { customer });
   document.getElementById('prompt-banner').classList.add('visible');
 }
 
@@ -1823,7 +1829,7 @@ function renderShipmentCalendar(direction) {
 
   const year  = calMonth.getFullYear();
   const month = calMonth.getMonth();
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthNames = ['monthJan','monthFeb','monthMar','monthApr','monthMay','monthJun','monthJul','monthAug','monthSep','monthOct','monthNov','monthDec'].map(k => window.I18n.t('logistics.' + k));
   labelEl.textContent = `${monthNames[month]} ${year}`;
 
   const firstDay  = new Date(year, month, 1);
@@ -1842,7 +1848,7 @@ function renderShipmentCalendar(direction) {
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
   let html = '<div class="cal-header-row">';
-  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => { html += `<div class="cal-header-cell">${d}</div>`; });
+  ['dayAbbrSun','dayAbbrMon','dayAbbrTue','dayAbbrWed','dayAbbrThu','dayAbbrFri','dayAbbrSat'].forEach(k => { html += `<div class="cal-header-cell">${esc(window.I18n.t('logistics.' + k))}</div>`; });
   html += '</div><div class="cal-body">';
 
   const totalCells = Math.ceil((startDow + totalDays) / 7) * 7;
@@ -1870,7 +1876,7 @@ function renderShipmentCalendar(direction) {
       });
 
       if (dayShipments.length > maxVisible) {
-        html += `<div class="cal-more" onclick="showCalDay('${direction}','${dateStr}')">+${dayShipments.length - maxVisible} more</div>`;
+        html += `<div class="cal-more" onclick="showCalDay('${direction}','${dateStr}')">${esc(window.I18n.t('logistics.moreCount', { n: dayShipments.length - maxVisible }))}</div>`;
       }
 
       html += '</div>';
@@ -1910,18 +1916,18 @@ function showCalDay(direction, dateStr) {
 
 function statusBadge(status) {
   const labels = {
-    not_started:    'Not Started',
-    in_production:  'In Production',
-    ready_to_ship:  'Ready to Ship',
-    loading:        'Loading',
-    loaded:         'Loaded',
-    in_transit:     'In Transit',
-    delivered:      'Delivered',
-    cancelled:      'Cancelled',
-    scheduled:      'Scheduled',
-    awaiting:       'Awaiting',  // legacy — keep for old records
+    not_started:    window.I18n.t('logistics.statusNotStarted'),
+    in_production:  window.I18n.t('logistics.statusInProduction'),
+    ready_to_ship:  window.I18n.t('logistics.statusReadyToShip'),
+    loading:        window.I18n.t('logistics.statusLoading'),
+    loaded:         window.I18n.t('logistics.statusLoaded'),
+    in_transit:     window.I18n.t('logistics.statusInTransit'),
+    delivered:      window.I18n.t('logistics.statusDelivered'),
+    cancelled:      window.I18n.t('logistics.statusCancelled'),
+    scheduled:      window.I18n.t('logistics.statusScheduled'),
+    awaiting:       window.I18n.t('logistics.statusAwaiting'),  // legacy — keep for old records
   };
-  return `<span class="logistics-status-badge status-${status}">${labels[status] || status}</span>`;
+  return `<span class="logistics-status-badge status-${status}">${esc(labels[status] || status)}</span>`;
 }
 
 function formatDate(dateStr) {

@@ -3542,6 +3542,56 @@ Entries within each module are ordered by prompt # descending (newest first).
   var, selected by the existing singular/plural branch) and routed all three dynamic states through
   `window.I18n.t()`, falling back to the original hardcoded English only if `window.I18n` isn't
   loaded. No catalog restructuring, no new `data-i18n` mechanism — same pattern as every other card.
+- **i18n sweep, phase 2 — Logistics module content (`logistics/index.html`) now speaks en/es/ht.**
+  First module tackled in the "translate everything except customer names" sweep (Logistics chosen
+  first per direction — floor-facing module, order doesn't matter after it). New
+  `logistics/logistics-i18n.js` registers a `logistics` catalog (221 keys × 3 langs, verified
+  parity) covering the stats row, both tab strips (Outbound/Inbound), all toolbar buttons and
+  status/view filters, the outbound and inbound tables (headers + empty states + the day-grouped
+  label row), the full shipment modal (direction toggle, every field label/placeholder, the
+  Customer & Order / Ship-To Address / Shipping / Contact / Inbound Details sections, Line Items
+  table, delivery-incident block, Signed BOL / Loading Photos headers, footer buttons), the Ship
+  from Job picker modal, the delivery prompt banner, and the BOL viewer modal at the top of the
+  page. Also routed through `window.I18n.t()`: all `alert()`/`confirm()` dialogs (bay assignment,
+  BOL delete/view/edit/generate failures, save/delete validation and network errors), the BOL
+  documents panel (labels, signed/unsigned states, "Delete all BOLs"), status badges and job-picker
+  status labels (shared `logistics.status*` keys reused across filters/badges/picker so they can't
+  drift), the outbound day-group label (day-of-week + "No Date"), the shipment calendar (month
+  names, day-abbreviation header, "+N more"), and every dynamic modal title
+  ("New/Edit Outbound Shipment" etc.). Wired into the module by adding one more `document.write`
+  line to `logistics/logistics-header.js` (after the `i18n.js`/`i18n-common.js` loads phase 1
+  already added there), so all four pages that load the shim (`index.html`, `load-builder.html`,
+  `loading.html`, `bol-email.html`) get the catalog automatically; `bol-test.html` doesn't load the
+  shim (dev tool, out of scope). Customer/supplier names, invoice numbers, and other real data
+  values are left untranslated by design — only labels/chrome/messages were tagged. Also fixed a
+  real (not just cosmetic) bug found while surveying the page: `index.html` had its own inline
+  `document.getElementById('logistics-page-title').textContent = 'Logistics'` /
+  `...page-subtitle'...= 'Inbound deliveries and outbound shipments'` running *after*
+  `shared-header.js` already set those elements correctly from `layout.logisticsTitle`/
+  `logisticsSubtitle` — dead code that happened to match phase 1's English text exactly, silently
+  overwriting the translation in any non-English language. Removed; the same override pattern was
+  found (but not yet fixed) on the other 5 legacy modules' index/sub-pages, tracked in `BACKLOG.md`.
+  Verified via `node --check` on the catalog and every inline `<script>` block, plus an en/es/ht key
+  parity check (221/221/221, no drift). `load-builder.html`, `loading.html`, `bol-email.html`,
+  `bol-test.html` not yet tagged — next in this sweep.
+- **fix (unprompted) — i18n phase-1 load order: the nav HTML was built before `window.I18n` was
+  ready, so the module nav/notifications/settings chrome silently stayed in English no matter what
+  language was selected.** `shared/shared-header.js` originally tried to auto-load
+  `/shared/i18n.js` + `/shared/i18n-common.js` via `document.write` at the top of its own file,
+  reasoning (incorrectly) that `document.write`-ing a `<script src>` blocks and executes before the
+  rest of the current script continues — it doesn't; the new tag is only processed once the
+  *current* script's own top-level code finishes and control returns to the parser. So the nav HTML
+  (built later in the same file, using `t()`) ran before the catalogs had registered. Fixed by
+  moving the two `document.write` calls out of `shared-header.js` and into each of the 6 module
+  `<module>-header.js` shims (`jobs`, `logistics`, `manufacturing`, `production`, `qc`, `reports`),
+  positioned as separate `document.write` calls immediately before the shim's own
+  `document.write('<script src=".../shared-header.js">')` — genuine parser-level sequential
+  `<script>` tags block correctly, unlike calls within one script's own body. Verified with an
+  isolated local Node-served test harness reproducing the exact script chain (confirmed
+  `window.I18n` exists and nav labels render translated at `shared-header.js` execution time);
+  live-browser re-verification on `www.xpandaops.com` was inconclusive due to the 1-hour
+  `Cache-Control: max-age=3600` on `/shared/*.js` serving a pre-fix cached copy to the test tab —
+  confirmed via `performance.getEntriesByType('resource')` (`transferSize: 0`), not a deployment bug.
 - **i18n sweep, phase 1 — `shared/shared-header.js` (the module nav/notifications/sign-out chrome
   every legacy page renders) now speaks en/es/ht.** Requested after manual QA found the language
   selector had zero effect once you left the home page — every module (Job Board, Logistics,
