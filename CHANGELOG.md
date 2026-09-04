@@ -3833,6 +3833,75 @@ Entries within each module are ordered by prompt # descending (newest first).
   14 new title/subtitle keys — no drift), and a shadow-variable grep sweep (two harmless
   `const t = parseUtc(...)` two-line closures in `cutting/index.html` that never call the global `t()`
   internally — left as-is, matching the precedent set in prior phases).
+- **i18n sweep, phase 8 — Admin module (`admin/users.html`, `parts.html`, `roles.html`,
+  `activity-log.html`) now speaks en/es/ht.** Architecturally different from every prior module:
+  admin has no `<module>-header.js` shim and doesn't use `shared/shared-header.js` at all — each page
+  hand-rolls its own bespoke topbar (inline `<h1>`/`<p>` title/subtitle, duplicated notification-bell/
+  dropdown/sign-out markup and JS) with only `/shared/auth-interceptor.js` in `<head>`. So instead of
+  the `document.write` chain used everywhere else, each page got three plain `<script src>` tags
+  (`/shared/i18n.js`, `/shared/i18n-common.js`, new `/admin/admin-i18n.js`) added directly to `<head>`
+  after the auth-interceptor script — genuine parser-level sequential `<script>` tags block correctly
+  (unlike the `document.write`-from-within-a-script-body bug fixed in phase 1), and `i18n.js` is fully
+  self-contained (reads `localStorage` and sets `document.documentElement.lang` itself), so no
+  shared-header dependency exists to work around. New `admin/admin-i18n.js` registers a 173-key
+  `admin` catalog. **No language switcher exists on these pages** (the switcher lives in
+  `shared-header.js`'s settings chrome, absent here) — a deliberate scope boundary, not an oversight:
+  admin pages render in whatever language the user last selected on a real module page, persisted in
+  `localStorage['xpanda_lang']`. The dead-code title/subtitle override bug from every prior module
+  doesn't apply either — these are plain static `<h1>`/`<p>` tags, not JS-set-after-shared-header
+  overrides — so all 4 pages just got `data-i18n` tags against 8 new `layout.admin*Title`/`Subtitle`
+  keys (`adminUsersTitle`/`Subtitle`, `adminPartsTitle`/`Subtitle`, `adminRolesTitle`/`Subtitle`,
+  `adminActivityLogTitle`/`Subtitle`).
+
+  Tagged: all 4 topbars (title/subtitle, nav links, notification dropdown, sign-out — reusing 19
+  existing `common`/`home` keys already registered by phase 1, rather than minting duplicates); the
+  Users page's table/toolbar/Add-Edit modal/shift picker/confirm dialogs; the Parts page's
+  search/category filter, table, and full Add/Edit Part form; the Roles page's role list, permission
+  editor, and Add Role modal — including a `PERM_GROUP_LABEL_KEY`/`PERM_ITEM_LABEL_KEY`/
+  `NOTIF_TYPE_LABEL_KEY` triple that translates the displayed permission-group headings, individual
+  permission-row labels, and notification-subscription labels while leaving the underlying dot-path
+  strings (`'jobs.manage'`, `'loading.assigned'`, etc.) untouched, since they're persisted directly
+  into `role.permissions`/`role.notification_types` JSON — the same `BOARD_LABEL_KEY`-style
+  keep-the-value-translate-the-label pattern used repeatedly in Reports, reusing 11 existing module-
+  name keys (`common.logistics`, `common.manufacturing`, `home.shiftNotes`, etc.) for the group
+  headings that match real module names; and the Activity Log page's filters, table, and empty/error
+  states. Activity Log needed a persisted-vs-display split: `e.summary` (server-composed free text,
+  e.g. "User X changed role to Y") and `formatDetail()`'s raw JSON dump are excluded as persisted log
+  content, same category as printed BOL/PDF export text excluded in prior phases; `e.action`
+  (`create`/`update`/`delete`) and `formatEntityLabel()`'s `type`-to-label switch ARE client-side
+  enum-to-label lookups, so both got new `ACTION_LABEL_KEY`/`ENTITY_LABEL_KEY` translation maps while
+  the underlying enum values stay untouched (compared via `===` and used in badge CSS classes).
+  `formatTs()`'s hardcoded `toLocaleString('en-US', ...)` was left as-is — not worth the complexity
+  for a fast pass. Every `alert()`/`confirm()` literal was swept to zero.
+
+  This phase's fork stalled a second time (after Reports), on `activity-log.html` specifically, having
+  completed `users.html`/`parts.html`/`roles.html` cleanly first — `activity-log.html` was left with
+  only the three engine `<script>` tags added and no tagging done, so it was completed by hand.
+  Reading the fork's partial catalog against the untouched file surfaced two real gaps before they
+  shipped: the catalog had plural keys for the four irregularly-pluralized entity types (`entityBols`,
+  `entityShipments`, `entityCustomers`, `entityCarriers`) but missed the two regular ones the filter
+  dropdown also needed (`entityJobs`, `entityParts`), and had `actionCreate`/`actionUpdate` but no
+  `actionDelete` despite the action filter having a third "Delete" option — both added (en/es/ht)
+  before tagging the file, otherwise the dropdown would have rendered three raw `admin.entityJobs`-
+  style key echoes instead of translated text. A second collision was found and fixed in `parts.html`
+  during verification: its category `<select>` had static `data-i18n`-tagged options that were
+  immediately overwritten on load by JS-rebuilt options (to fix a pre-existing All/Uncategorized
+  value-collision in the original markup, unrelated to i18n) carrying no `data-i18n` attribute — fixed
+  by adding `data-i18n` to the rebuild template, same fix shape as Reports' `incidents/list.html`/
+  `cutting/index.html`. A third was caught in `activity-log.html`'s `loadMore()`: the button's
+  `data-i18n` tag needs to toggle between `admin.loadMore` and `admin.loading` in lockstep across
+  three different code paths (initial click, success, and two failure paths in `fetchEntries()`) —
+  fixed by always `setAttribute`-ing rather than removing the tag on the loading transition, so every
+  path leaves a resolvable key in place.
+
+  Verified via `node --check` on all 4 inline `<script>` blocks plus `admin-i18n.js`, a scripted
+  reference-integrity scan (`used: 173 missing: 0`, `catalog keys not referenced: 0` — every catalog
+  key resolves to a real usage and vice versa, a stronger result than any prior phase since the
+  `ENTITY_LABEL_KEY`/`ACTION_LABEL_KEY` explicit-map pattern left no dynamic-concatenation false
+  positives to triage), an en/es/ht key parity check across all catalogs (`admin` 173, `layout` 56
+  with the 8 new title/subtitle keys, all other catalogs unchanged — no drift), and a shadow-variable
+  grep sweep (one harmless `.filter(t => t !== type)` callback in `roles.html` that never calls the
+  global `t()` internally — left as-is, matching precedent).
 - **i18n sweep, phase 2c — Logistics: `load-builder.html` gets a labels/buttons/toasts pass
   (en/es/ht), completing the Logistics module's floor+desk screens.** Deliberately narrower than the
   full tag-everything treatment given to the other three Logistics pages: this file is a bin-packing

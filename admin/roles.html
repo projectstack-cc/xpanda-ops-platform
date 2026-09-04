@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <script src="/shared/auth-interceptor.js"></script>
+  <script src="/shared/i18n.js"></script>
+  <script src="/shared/i18n-common.js"></script>
+  <script src="/admin/admin-i18n.js"></script>
   <title>Role Management — xPanda Admin</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -319,33 +322,33 @@
 
 <div class="topbar">
   <a class="topbar-logo" href="/">xPanda</a>
-  <span class="topbar-badge">xPanda Foam &bull; Admin</span>
+  <span class="topbar-badge" data-i18n="admin.badgeText">xPanda Foam &bull; Admin</span>
   <div class="topbar-title">
-    <h1>Role Management</h1>
-    <p>Configure roles and module permissions</p>
+    <h1 data-i18n="layout.adminRolesTitle">Role Management</h1>
+    <p data-i18n="layout.adminRolesSubtitle">Configure roles and module permissions</p>
   </div>
   <div class="topbar-nav">
-    <a href="/admin/parts.html">Parts</a>
-    <a href="/admin/activity-log.html">Activity Log</a>
-    <a href="/admin/users.html">Users</a>
-    <a href="/admin/roles.html">Roles</a>
-    <a href="/">← Back to Platform</a>
+    <a href="/admin/parts.html" data-i18n="common.parts">Parts</a>
+    <a href="/admin/activity-log.html" data-i18n="admin.navActivityLog">Activity Log</a>
+    <a href="/admin/users.html" data-i18n="common.users">Users</a>
+    <a href="/admin/roles.html" data-i18n="common.roles">Roles</a>
+    <a href="/" data-i18n="admin.navBackToPlatform">← Back to Platform</a>
   </div>
   <div class="header-user-bar">
     <span id="hdr-notif-bell" onclick="toggleNotifDropdown()" style="position:relative;cursor:pointer;font-size:18px;line-height:1;">🔔<span id="hdr-notif-badge" style="display:none;position:absolute;top:-4px;right:-6px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:16px;height:16px;text-align:center;line-height:16px;"></span></span>
     <div id="hdr-notif-dropdown" style="display:none;position:absolute;top:36px;right:0;width:340px;max-height:420px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);overflow:hidden;z-index:9999;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #e5e7eb;">
-        <span style="font-weight:700;font-size:14px;">Notifications</span>
-        <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
+        <span style="font-weight:700;font-size:14px;" data-i18n="home.notifications">Notifications</span>
+        <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;" data-i18n="home.markAllRead">Mark all read</button>
       </div>
       <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:#eff6ff;border-bottom:1px solid #e5e7eb;cursor:pointer;" onclick="enablePushFromBanner()">
-        <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 Enable push notifications</div>
-        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Tap to get alerts on this device</div>
+        <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 <span data-i18n="home.enablePush">Enable push notifications</span></div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;" data-i18n="home.enablePushSub">Tap to get alerts on this device</div>
       </div>
       <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
     </div>
     <span id="hdr-user-name"></span>
-    <a href="#" id="hdr-logout">Sign Out</a>
+    <a href="#" id="hdr-logout" data-i18n="common.signOut">Sign Out</a>
   </div>
 </div>
 
@@ -353,36 +356,36 @@
   <!-- Left: role list -->
   <div class="roles-panel">
     <div class="roles-panel-header">
-      <h2>Roles</h2>
-      <button class="btn btn-primary btn-sm" onclick="openAddRoleModal()">+ Add Role</button>
+      <h2 data-i18n="common.roles">Roles</h2>
+      <button class="btn btn-primary btn-sm" onclick="openAddRoleModal()" data-i18n="admin.addRole">+ Add Role</button>
     </div>
     <div id="roles-list">
-      <div style="color:var(--muted);font-size:14px;padding:12px 0;">Loading…</div>
+      <div style="color:var(--muted);font-size:14px;padding:12px 0;" data-i18n="admin.loading">Loading…</div>
     </div>
   </div>
 
   <!-- Right: permission editor -->
   <div class="editor-panel" id="editor-panel">
-    <div class="empty-editor">Select a role to edit its permissions</div>
+    <div class="empty-editor" data-i18n="admin.selectRolePrompt">Select a role to edit its permissions</div>
   </div>
 </div>
 
 <!-- Add Role Modal -->
 <div class="modal-overlay" id="add-role-modal" hidden>
   <div class="modal">
-    <h2>Add Role</h2>
+    <h2 data-i18n="admin.addRoleTitle">Add Role</h2>
     <div class="form-group">
-      <label>Role Name <span style="color:#dc2626">*</span></label>
-      <input type="text" id="new-role-name" placeholder="e.g. Logistics Manager" autocomplete="off" />
+      <label><span data-i18n="admin.roleNameLabel">Role Name</span> <span style="color:#dc2626">*</span></label>
+      <input type="text" id="new-role-name" placeholder="e.g. Logistics Manager" data-i18n-placeholder="admin.roleNamePlaceholder" autocomplete="off" />
     </div>
     <div class="form-group">
-      <label>Description</label>
-      <input type="text" id="new-role-desc" placeholder="Optional description" autocomplete="off" />
+      <label data-i18n="admin.descriptionLabel">Description</label>
+      <input type="text" id="new-role-desc" placeholder="Optional description" data-i18n-placeholder="admin.descriptionPlaceholder" autocomplete="off" />
     </div>
     <div class="modal-error" id="add-role-error"></div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeAddRoleModal()">Cancel</button>
-      <button class="btn btn-primary" id="add-role-save-btn" onclick="saveNewRole()">Create Role</button>
+      <button class="btn btn-ghost" onclick="closeAddRoleModal()" data-i18n="admin.cancel">Cancel</button>
+      <button class="btn btn-primary" id="add-role-save-btn" onclick="saveNewRole()" data-i18n="admin.createRole">Create Role</button>
     </div>
   </div>
 </div>
@@ -390,6 +393,12 @@
 <script>
 // 401/503 interceptor now lives in /shared/auth-interceptor.js (loaded in <head>, P407).
 
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
+// Enum keys (dot-path strings) stay English — persisted in role.notification_types /
+// role.permissions JSON — only the displayed group/label TEXT is translated, via the
+// *_KEY lookups below (matches the BOARD_LABEL_KEY / boardLabel() pattern from
+// reports/cutting/index.html).
 const NOTIFICATION_TYPE_LABELS = {
   'loading.assigned':   'Job assigned to loading',
   'loading.started':    'Trailer loading started',
@@ -397,6 +406,17 @@ const NOTIFICATION_TYPE_LABELS = {
   'loading.in_transit': 'Trailer in transit',
   'loading.delivered':  'Delivery confirmed',
 };
+const NOTIF_TYPE_LABEL_KEY = {
+  'loading.assigned':   'admin.notifTypeAssigned',
+  'loading.started':    'admin.notifTypeStarted',
+  'loading.loaded':     'admin.notifTypeLoaded',
+  'loading.in_transit': 'admin.notifTypeInTransit',
+  'loading.delivered':  'admin.notifTypeDelivered',
+};
+function notifTypeLabel(type) {
+  const key = NOTIF_TYPE_LABEL_KEY[type];
+  return key ? t(key) : NOTIFICATION_TYPE_LABELS[type] || type;
+}
 
 const PERMISSION_LABELS = {
   'jobs':                      { group: 'Jobs',       label: 'Job Board' },
@@ -426,6 +446,58 @@ const PERMISSION_LABELS = {
   'admin':                     { group: 'Admin',      label: 'Administration' },
 };
 
+// group/label are the internal English grouping keys used by renderPermissionEditor() below
+// (grouping + PUT payload logic is unaffected); these two lookups translate only the displayed
+// text. QC's group has no translated heading — "QC" stays the same abbreviation in every
+// language, matching the qcTitle precedent from phase 6.
+const PERM_GROUP_LABEL_KEY = {
+  'Jobs': 'admin.permGroupJobs',
+  'Logistics': 'common.logistics',
+  'Manufacturing': 'common.manufacturing',
+  'Shift Notes': 'home.shiftNotes',
+  'Production': 'common.production',
+  'Safety': 'common.safety',
+  'Reports': 'common.reports',
+  'Orders': 'common.orders',
+  'Schedule': 'common.schedule',
+  'Admin': 'common.admin',
+};
+function permGroupLabel(groupName) {
+  const key = PERM_GROUP_LABEL_KEY[groupName];
+  return key ? t(key) : groupName;
+}
+const PERM_ITEM_LABEL_KEY = {
+  'jobs': 'common.jobBoard',
+  'jobs.manage': 'admin.permLabelJobsManage',
+  'logistics.dashboard': 'admin.permLabelLogisticsDashboard',
+  'logistics.bol': 'admin.permLabelLogisticsBol',
+  'logistics.load-builder': 'common.loadBuilder',
+  'logistics.loading': 'admin.permLabelLoadingDashboard',
+  'logistics.loading.manage': 'admin.permLabelLoadingManage',
+  'logistics.loading.tv': 'admin.permLabelLoadingTv',
+  'logistics.carrier_view': 'admin.permLabelCarrierView',
+  'manufacturing.calculators': 'admin.permLabelCalculators',
+  'manufacturing.cutting': 'admin.permLabelCuttingDashboard',
+  'manufacturing.cutting.manage': 'admin.permLabelCuttingManage',
+  'manufacturing.cutting.override': 'admin.permLabelCuttingOverride',
+  'notes': 'admin.permLabelNotesView',
+  'notes.manage': 'admin.permLabelNotesManage',
+  'manufacturing.blocks': 'admin.permLabelBlockNesting',
+  'production.inventory': 'admin.permLabelInventoryLegacy',
+  'production.log': 'admin.permLabelProductionLog',
+  'qc': 'admin.permLabelQualityControl',
+  'safety': 'admin.permLabelSafetyPortal',
+  'reports': 'admin.permLabelReportsAnalytics',
+  'orders': 'admin.permLabelOrderEntry',
+  'schedule': 'admin.permLabelScheduleTv',
+  'schedule.desk': 'admin.permLabelScheduleDesk',
+  'admin': 'admin.permLabelAdministration',
+};
+function permItemLabel(key, fallback) {
+  const labelKey = PERM_ITEM_LABEL_KEY[key];
+  return labelKey ? t(labelKey) : fallback;
+}
+
 let allRoles = [];
 let selectedRoleId = null;
 let saveTimeout = null;
@@ -452,26 +524,26 @@ async function loadRoles() {
       const statusDiv = document.createElement('div');
       statusDiv.id = 'sim-status-bar';
       statusDiv.style.cssText = 'background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;';
-      statusDiv.innerHTML = `<span><strong>🔍 Currently testing as:</strong> ${meData.user.simulatingRole.name}</span><button id="roles-stop-sim" style="background:#dc2626;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:600;">Stop Testing</button>`;
+      statusDiv.innerHTML = `<span><strong>${t('admin.currentlyTestingAsLabel')}</strong> ${esc(meData.user.simulatingRole.name)}</span><button id="roles-stop-sim" style="background:#dc2626;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:600;">${t('common.stopTesting')}</button>`;
       const container = document.getElementById('roles-list');
       if (container) container.parentNode.insertBefore(statusDiv, container);
       document.getElementById('roles-stop-sim').addEventListener('click', async () => {
         try {
           const res = await fetch('/api/auth/simulate-role', { method: 'DELETE' });
           const d = await res.json();
-          if (d.ok) { window.location.reload(); } else { alert('Failed: ' + (d.error || 'Unknown error')); }
-        } catch (e) { alert('Error: ' + e.message); }
+          if (d.ok) { window.location.reload(); } else { alert(t('admin.stopSimFailed', { error: d.error || t('common.unknownError') })); }
+        } catch (e) { alert(t('admin.genericError', { error: e.message })); }
       });
     }
   } catch {
-    document.getElementById('roles-list').innerHTML = '<div style="color:#dc2626;font-size:14px;">Failed to load roles.</div>';
+    document.getElementById('roles-list').innerHTML = `<div style="color:#dc2626;font-size:14px;">${t('admin.loadRolesFailed')}</div>`;
   }
 }
 
 function renderRoleList() {
   const container = document.getElementById('roles-list');
   if (allRoles.length === 0) {
-    container.innerHTML = '<div style="color:var(--muted);font-size:14px;">No roles found.</div>';
+    container.innerHTML = `<div style="color:var(--muted);font-size:14px;">${t('admin.noRolesFound')}</div>`;
     return;
   }
   container.innerHTML = allRoles.map(r => `
@@ -479,11 +551,11 @@ function renderRoleList() {
       <div class="role-card-top">
         <div>
           <div class="role-card-name">${esc(r.name)}</div>
-          <div class="role-card-meta">${r.user_count || 0} user${(r.user_count || 0) !== 1 ? 's' : ''}</div>
+          <div class="role-card-meta">${(r.user_count || 0) === 1 ? t('admin.userCountOne', { count: r.user_count || 0 }) : t('admin.userCountMany', { count: r.user_count || 0 })}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
-          ${r.id !== 'role-administrator' ? `<button class="btn btn-sm" style="background:#f59e0b;color:#000;border:none;" onclick="event.stopPropagation();testAsRole('${esc(r.id)}','${esc(r.name)}')" title="Preview platform as this role">Test</button>` : ''}
-          ${r.is_system ? '<span class="badge-system">System</span>' : `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteRole('${esc(r.id)}','${esc(r.name)}')">Delete</button>`}
+          ${r.id !== 'role-administrator' ? `<button class="btn btn-sm" style="background:#f59e0b;color:#000;border:none;" onclick="event.stopPropagation();testAsRole('${esc(r.id)}','${esc(r.name)}')" title="${t('admin.testRoleTooltip')}">${t('admin.testRole')}</button>` : ''}
+          ${r.is_system ? `<span class="badge-system">${t('admin.systemBadge')}</span>` : `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteRole('${esc(r.id)}','${esc(r.name)}')">${t('admin.delete')}</button>`}
         </div>
       </div>
       ${r.description ? `<div class="role-card-meta" style="margin-top:4px;">${esc(r.description)}</div>` : ''}
@@ -513,7 +585,7 @@ function renderPermissionEditor(role) {
   }
 
   const gridRows = Object.entries(groups).map(([groupName, items]) => {
-    const header = `<div class="perm-group-header">${esc(groupName)}</div>`;
+    const header = `<div class="perm-group-header">${esc(permGroupLabel(groupName))}</div>`;
     const rows = items.map(({ key, label }) => {
       const perm = isAdmin ? { view: true, edit: true } : (perms[key] || { view: false, edit: false });
       const viewChecked = perm.view ? 'checked' : '';
@@ -521,7 +593,7 @@ function renderPermissionEditor(role) {
       const disabled = isAdmin ? 'disabled' : '';
       return `
         <div class="perm-row">
-          <div class="perm-label">${esc(label)}</div>
+          <div class="perm-label">${esc(permItemLabel(key, label))}</div>
           <div class="perm-toggle">
             <input type="checkbox" data-key="${esc(key)}" data-action="view" ${viewChecked} ${disabled} onchange="onPermissionToggle('${esc(key)}','view',this.checked)">
           </div>
@@ -538,11 +610,11 @@ function renderPermissionEditor(role) {
 
   const notifSection = `
     <div class="perm-grid" style="margin-top:16px;">
-      <h4 style="margin:0 0 6px;font-size:14px;font-weight:700;color:#374151;">Notification Subscriptions</h4>
-      <p style="margin:0 0 10px;font-size:12px;color:#6b7280;">Users with this role will receive these notifications</p>
-      ${Object.entries(NOTIFICATION_TYPE_LABELS).map(([type, label]) => `
+      <h4 style="margin:0 0 6px;font-size:14px;font-weight:700;color:#374151;">${t('admin.notifSubsHeading')}</h4>
+      <p style="margin:0 0 10px;font-size:12px;color:#6b7280;">${t('admin.notifSubsDesc')}</p>
+      ${Object.entries(NOTIFICATION_TYPE_LABELS).map(([type]) => `
         <div class="perm-row">
-          <div class="perm-label">${esc(label)}</div>
+          <div class="perm-label">${esc(notifTypeLabel(type))}</div>
           <div class="perm-toggle" style="grid-column:span 2;text-align:center;">
             <input type="checkbox" data-notif-type="${esc(type)}" ${notifTypes.includes(type) ? 'checked' : ''}
               onchange="onNotifTypeToggle('${esc(type)}', this.checked)">
@@ -556,25 +628,25 @@ function renderPermissionEditor(role) {
       <div class="editor-card-header">
         <div class="editor-fields">
           <div class="editor-field">
-            <label>Name</label>
+            <label>${t('admin.name')}</label>
             <input type="text" id="ed-name" value="${esc(role.name)}" ${isAdmin ? 'readonly' : ''}
               onchange="onRoleFieldChange()" oninput="onRoleFieldChange()">
           </div>
           <div class="editor-field">
-            <label>Description</label>
+            <label>${t('admin.descriptionLabel')}</label>
             <input type="text" id="ed-desc" value="${esc(role.description || '')}"
               onchange="onRoleFieldChange()" oninput="onRoleFieldChange()">
           </div>
         </div>
         <div class="save-status" id="save-status"></div>
       </div>
-      ${isAdmin ? '<div class="admin-notice">Administrator has unrestricted access. Permission toggles are disabled.</div>' : ''}
+      ${isAdmin ? `<div class="admin-notice">${t('admin.adminNotice')}</div>` : ''}
     </div>
     <div class="perm-grid">
       <div class="perm-header-row">
-        <div>Permission</div>
-        <div style="text-align:center">View</div>
-        <div style="text-align:center">Edit</div>
+        <div>${t('admin.permHeaderPermission')}</div>
+        <div style="text-align:center">${t('admin.permHeaderView')}</div>
+        <div style="text-align:center">${t('admin.edit')}</div>
       </div>
       ${gridRows}
     </div>
@@ -630,7 +702,7 @@ async function saveRolePermissions() {
   if (!role) return;
 
   const statusEl = document.getElementById('save-status');
-  if (statusEl) statusEl.textContent = 'Saving…';
+  if (statusEl) statusEl.textContent = t('admin.savingStatus');
 
   const nameInput = document.getElementById('ed-name');
   const descInput = document.getElementById('ed-desc');
@@ -656,13 +728,13 @@ async function saveRolePermissions() {
         allRoles[idx] = { ...allRoles[idx], ...data.role };
         try { allRoles[idx].permissions = typeof data.role.permissions === 'string' ? JSON.parse(data.role.permissions) : data.role.permissions; } catch {}
       }
-      if (statusEl) { statusEl.textContent = 'Saved ✓'; setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2000); }
+      if (statusEl) { statusEl.textContent = t('admin.savedStatus'); setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2000); }
       renderRoleList();
     } else {
-      if (statusEl) statusEl.textContent = 'Error: ' + (data.error || 'Save failed');
+      if (statusEl) statusEl.textContent = t('admin.genericError', { error: data.error || t('admin.saveFailed') });
     }
   } catch {
-    if (statusEl) statusEl.textContent = 'Network error';
+    if (statusEl) statusEl.textContent = t('admin.saveNetworkErrorStatus');
   }
 }
 
@@ -684,7 +756,7 @@ async function saveNewRole() {
   const errEl = document.getElementById('add-role-error');
   errEl.textContent = '';
 
-  if (!name) { errEl.textContent = 'Role name is required.'; return; }
+  if (!name) { errEl.textContent = t('admin.roleNameRequired'); return; }
 
   const btn = document.getElementById('add-role-save-btn');
   btn.disabled = true;
@@ -706,17 +778,17 @@ async function saveNewRole() {
       await loadRoles();
       if (data.role) selectRole(data.role.id);
     } else {
-      errEl.textContent = data.error || 'Failed to create role.';
+      errEl.textContent = data.error || t('admin.createRoleFailed');
     }
   } catch {
-    errEl.textContent = 'Network error.';
+    errEl.textContent = t('admin.networkError');
   }
 
   btn.disabled = false;
 }
 
 async function deleteRole(id, name) {
-  if (!confirm(`Delete role "${name}"? Users assigned to this role will need to be reassigned.`)) return;
+  if (!confirm(t('admin.confirmDeleteRole', { name: name }))) return;
   try {
     const res = await fetch('/api/roles', {
       method: 'DELETE',
@@ -727,19 +799,19 @@ async function deleteRole(id, name) {
     if (data.ok) {
       if (selectedRoleId === id) {
         selectedRoleId = null;
-        document.getElementById('editor-panel').innerHTML = '<div class="empty-editor">Select a role to edit its permissions</div>';
+        document.getElementById('editor-panel').innerHTML = `<div class="empty-editor">${t('admin.selectRolePrompt')}</div>`;
       }
       loadRoles();
     } else {
-      alert(data.error || 'Delete failed.');
+      alert(data.error || t('admin.deleteFailed'));
     }
   } catch {
-    alert('Network error.');
+    alert(t('admin.networkError'));
   }
 }
 
 async function testAsRole(roleId, roleName) {
-  if (!confirm(`Start testing as "${roleName}"? You'll see the platform as this role would. Admin pages will remain accessible.`)) return;
+  if (!confirm(t('admin.confirmTestRole', { name: roleName }))) return;
   try {
     const res = await fetch('/api/auth/simulate-role', {
       method: 'POST',
@@ -750,10 +822,10 @@ async function testAsRole(roleId, roleName) {
     if (data.ok) {
       window.location.href = '/';
     } else {
-      alert('Failed to start simulation: ' + (data.error || 'Unknown error'));
+      alert(t('admin.testRoleFailed', { error: data.error || t('common.unknownError') }));
     }
   } catch (e) {
-    alert('Error: ' + e.message);
+    alert(t('admin.genericError', { error: e.message }));
   }
 }
 
@@ -772,15 +844,15 @@ fetch('/api/auth/me').then(r => r.json()).then(d => {
       const simBanner = document.createElement('div');
       simBanner.id = 'sim-role-banner';
       simBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:#f59e0b;color:#000;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:14px;font-weight:600;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
-      simBanner.innerHTML = `<span>🔍 Testing as: ${d.user.simulatingRole.name}</span><button id="sim-stop-btn" style="background:#fff;color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">Stop Testing</button>`;
+      simBanner.innerHTML = `<span>🔍 ${t('common.testingAs', { role: d.user.simulatingRole.name })}</span><button id="sim-stop-btn" style="background:#fff;color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">${t('common.stopTesting')}</button>`;
       document.body.prepend(simBanner);
       document.body.style.paddingTop = simBanner.offsetHeight + 'px';
       document.getElementById('sim-stop-btn').addEventListener('click', async () => {
         try {
           const res = await fetch('/api/auth/simulate-role', { method: 'DELETE' });
           const data = await res.json();
-          if (data.ok) { window.location.reload(); } else { alert('Failed to stop simulation: ' + (data.error || 'Unknown error')); }
-        } catch (e) { alert('Error stopping simulation: ' + e.message); }
+          if (data.ok) { window.location.reload(); } else { alert(t('common.stopTestingFailed', { error: data.error || t('common.unknownError') })); }
+        } catch (e) { alert(t('common.stopTestingError', { error: e.message })); }
       });
     }
   }
@@ -806,9 +878,9 @@ async function _loadNotifs() {
     const d = await (await fetch('/api/notifications')).json(); if (!d.ok) return;
     const badge = document.getElementById('hdr-notif-badge'); if (badge) { badge.textContent = d.unreadCount > 99 ? '99+' : d.unreadCount; badge.style.display = d.unreadCount > 0 ? '' : 'none'; }
     const list = document.getElementById('hdr-notif-list'); if (!list) return;
-    if (!d.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">No notifications</div>'; return; }
+    if (!d.notifications.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">${t('home.noNotifications')}</div>`; return; }
     const e2 = s => { const el = document.createElement('div'); el.textContent = s||''; return el.innerHTML; };
-    const ago = iso => { const m=Math.floor((Date.now()-new Date(iso))/60000); return m<1?'Just now':m<60?m+'m ago':Math.floor(m/60)<24?Math.floor(m/60)+'h ago':Math.floor(m/1440)+'d ago'; };
+    const ago = iso => { const m=Math.floor((Date.now()-new Date(iso))/60000); return m<1?t('common.justNow'):m<60?t('common.minsAgo',{m:m}):Math.floor(m/60)<24?t('common.hoursAgo',{h:Math.floor(m/60)}):t('common.daysAgo',{d:Math.floor(m/1440)}); };
     list.innerHTML = d.notifications.map(n=>`<div style="padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;${n.is_read?'opacity:0.6;':'background:#eff6ff;'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')"><div style="font-size:13px;font-weight:${n.is_read?'400':'600'};color:#111827;">${e2(n.title)}</div><div style="font-size:12px;color:#6b7280;">${e2(n.message)}</div><div style="font-size:10px;color:#9ca3af;margin-top:4px;">${ago(n.created_at)}</div></div>`).join('');
   } catch {}
 }

@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <script src="/shared/auth-interceptor.js"></script>
+  <script src="/shared/i18n.js"></script>
+  <script src="/shared/i18n-common.js"></script>
+  <script src="/admin/admin-i18n.js"></script>
   <title>Parts Library — xPanda Admin</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -319,164 +322,166 @@
 
 <div class="topbar" style="position:relative;">
   <a class="topbar-logo" href="/">xPanda</a>
-  <span class="topbar-badge">xPanda Foam &bull; Admin</span>
+  <span class="topbar-badge" data-i18n="admin.badgeText">xPanda Foam &bull; Admin</span>
   <div class="topbar-title">
-    <h1>Parts Library</h1>
-    <p>Manage parts across all platform modules</p>
+    <h1 data-i18n="layout.adminPartsTitle">Parts Library</h1>
+    <p data-i18n="layout.adminPartsSubtitle">Manage parts across all platform modules</p>
   </div>
   <div class="topbar-nav">
-    <a href="/admin/parts.html">Parts</a>
-    <a href="/admin/activity-log.html">Activity Log</a>
-    <a href="/admin/users.html">Users</a>
-    <a href="/admin/roles.html">Roles</a>
-    <a href="/">← Back to Platform</a>
+    <a href="/admin/parts.html" data-i18n="common.parts">Parts</a>
+    <a href="/admin/activity-log.html" data-i18n="admin.navActivityLog">Activity Log</a>
+    <a href="/admin/users.html" data-i18n="common.users">Users</a>
+    <a href="/admin/roles.html" data-i18n="common.roles">Roles</a>
+    <a href="/" data-i18n="admin.navBackToPlatform">← Back to Platform</a>
   </div>
   <div style="position:absolute;top:10px;right:16px;font-size:12px;color:#5b6472;display:flex;align-items:center;gap:8px;">
     <span id="hdr-notif-bell" onclick="toggleNotifDropdown()" style="position:relative;cursor:pointer;font-size:18px;line-height:1;">🔔<span id="hdr-notif-badge" style="display:none;position:absolute;top:-4px;right:-6px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:16px;height:16px;text-align:center;line-height:16px;"></span></span>
     <div id="hdr-notif-dropdown" style="display:none;position:absolute;top:36px;right:0;width:340px;max-height:420px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);overflow:hidden;z-index:9999;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #e5e7eb;">
-        <span style="font-weight:700;font-size:14px;">Notifications</span>
-        <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
+        <span style="font-weight:700;font-size:14px;" data-i18n="home.notifications">Notifications</span>
+        <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;" data-i18n="home.markAllRead">Mark all read</button>
       </div>
       <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:#eff6ff;border-bottom:1px solid #e5e7eb;cursor:pointer;" onclick="enablePushFromBanner()">
-        <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 Enable push notifications</div>
-        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Tap to get alerts on this device</div>
+        <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 <span data-i18n="home.enablePush">Enable push notifications</span></div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;" data-i18n="home.enablePushSub">Tap to get alerts on this device</div>
       </div>
       <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
     </div>
     <span id="hdr-user-name"></span>
-    <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;">Sign Out</a>
+    <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;" data-i18n="common.signOut">Sign Out</a>
   </div>
 </div>
 
 <div class="wrap">
   <div class="filterbar">
-    <input type="text" id="searchInput" placeholder="Search by part number, name, or customer…" oninput="applyFilters()">
+    <input type="text" id="searchInput" placeholder="Search by part number, name, or customer…" data-i18n-placeholder="admin.searchPartsPlaceholder" oninput="applyFilters()">
     <select id="categoryFilter" onchange="applyFilters()">
-      <option value="">All Categories</option>
-      <option value="Holey Board">Holey Board</option>
-      <option value="Blocks">Blocks</option>
-      <option value="Sheets">Sheets</option>
-      <option value="">Uncategorized</option>
+      <option value="" data-i18n="admin.catAll">All Categories</option>
+      <option value="Holey Board" data-i18n="admin.catHoleyBoard">Holey Board</option>
+      <option value="Blocks" data-i18n="admin.catBlocks">Blocks</option>
+      <option value="Sheets" data-i18n="admin.catSheets">Sheets</option>
+      <option value="" data-i18n="admin.catUncategorized">Uncategorized</option>
     </select>
-    <button class="btn btn-primary" onclick="openModal(null)">+ Add Part</button>
-    <span class="count-badge" id="countBadge">— parts</span>
+    <button class="btn btn-primary" onclick="openModal(null)" data-i18n="admin.addPart">+ Add Part</button>
+    <span class="count-badge" id="countBadge" data-i18n="admin.partsCountPlaceholder">— parts</span>
   </div>
 
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th>Part Number</th>
-          <th>Name</th>
-          <th>Customer</th>
-          <th>Category</th>
-          <th>Dimensions (L&times;W&times;H)</th>
-          <th>Density / Material</th>
-          <th>Weight</th>
-          <th>Bundle</th>
-          <th>Notes</th>
-          <th>Actions</th>
+          <th data-i18n="admin.colPartNumber">Part Number</th>
+          <th data-i18n="admin.name">Name</th>
+          <th data-i18n="admin.customer">Customer</th>
+          <th data-i18n="admin.category">Category</th>
+          <th data-i18n="admin.colDimensions">Dimensions (L&times;W&times;H)</th>
+          <th data-i18n="admin.densityMaterial">Density / Material</th>
+          <th data-i18n="admin.weight">Weight</th>
+          <th data-i18n="admin.colBundle">Bundle</th>
+          <th data-i18n="admin.notes">Notes</th>
+          <th data-i18n="admin.colActions">Actions</th>
         </tr>
       </thead>
       <tbody id="partsBody">
-        <tr><td colspan="10" class="empty-state">Loading…</td></tr>
+        <tr><td colspan="10" class="empty-state" data-i18n="admin.loading">Loading…</td></tr>
       </tbody>
     </table>
   </div>
 
   <div class="footer-back">
-    <a href="/">&larr; Back to Operations Platform</a>
+    <a href="/" data-i18n="common.backToPlatform">&larr; Back to Operations Platform</a>
   </div>
 </div>
 
 <!-- Add/Edit Modal -->
 <div class="overlay" id="overlay" onclick="handleOverlayClick(event)">
   <div class="modal" id="modal">
-    <h2 id="modalTitle">Add Part</h2>
+    <h2 id="modalTitle" data-i18n="admin.addPartTitle">Add Part</h2>
     <div class="error-msg" id="errorMsg"></div>
     <div class="form-row">
       <div class="form-group">
-        <label for="fPartNumber">Part Number *</label>
-        <input type="text" id="fPartNumber" placeholder="e.g. HB-06">
+        <label for="fPartNumber" data-i18n="admin.partNumberLabel">Part Number *</label>
+        <input type="text" id="fPartNumber" placeholder="e.g. HB-06" data-i18n-placeholder="admin.partNumberPlaceholder">
       </div>
       <div class="form-group">
-        <label for="fName">Name</label>
-        <input type="text" id="fName" placeholder="Display name">
+        <label for="fName" data-i18n="admin.name">Name</label>
+        <input type="text" id="fName" placeholder="Display name" data-i18n-placeholder="admin.partNamePlaceholder">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label for="fCustomer">Customer</label>
-        <input type="text" id="fCustomer" placeholder="Customer name">
+        <label for="fCustomer" data-i18n="admin.customer">Customer</label>
+        <input type="text" id="fCustomer" placeholder="Customer name" data-i18n-placeholder="admin.customerPlaceholder">
       </div>
       <div class="form-group">
-        <label for="fCategory">Category</label>
+        <label for="fCategory" data-i18n="admin.category">Category</label>
         <select id="fCategory">
-          <option value="">Uncategorized</option>
-          <option value="Holey Board">Holey Board</option>
-          <option value="Blocks">Blocks</option>
-          <option value="Sheets">Sheets</option>
+          <option value="" data-i18n="admin.catUncategorized">Uncategorized</option>
+          <option value="Holey Board" data-i18n="admin.catHoleyBoard">Holey Board</option>
+          <option value="Blocks" data-i18n="admin.catBlocks">Blocks</option>
+          <option value="Sheets" data-i18n="admin.catSheets">Sheets</option>
         </select>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label for="fLength">Length (in) *</label>
+        <label for="fLength" data-i18n="admin.lengthLabel">Length (in) *</label>
         <input type="number" id="fLength" placeholder="48" step="0.01" min="0.01">
       </div>
       <div class="form-group">
-        <label for="fWidth">Width (in) *</label>
+        <label for="fWidth" data-i18n="admin.widthLabel">Width (in) *</label>
         <input type="number" id="fWidth" placeholder="24" step="0.01" min="0.01">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label for="fHeight">Height (in) *</label>
+        <label for="fHeight" data-i18n="admin.heightLabel">Height (in) *</label>
         <input type="number" id="fHeight" placeholder="6" step="0.01" min="0.01">
       </div>
       <div class="form-group">
-        <label for="fWeight">Weight</label>
+        <label for="fWeight" data-i18n="admin.weight">Weight</label>
         <input type="number" id="fWeight" placeholder="1" step="0.01" min="0">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label for="fDensity">Density / Material</label>
-        <input type="text" id="fDensity" placeholder="e.g. 1.0 RC">
+        <label for="fDensity" data-i18n="admin.densityMaterial">Density / Material</label>
+        <input type="text" id="fDensity" placeholder="e.g. 1.0 RC" data-i18n-placeholder="admin.densityPlaceholder">
       </div>
       <div class="form-group">
-        <label for="fColor">Color</label>
+        <label for="fColor" data-i18n="admin.colorLabel">Color</label>
         <input type="color" id="fColor" value="#D97706" style="padding:3px 6px;height:36px;">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label for="fParentGroup">Parent Group</label>
-        <input type="text" id="fParentGroup" placeholder="e.g. 1in HB">
+        <label for="fParentGroup" data-i18n="admin.parentGroupLabel">Parent Group</label>
+        <input type="text" id="fParentGroup" placeholder="e.g. 1in HB" data-i18n-placeholder="admin.parentGroupPlaceholder">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label for="fBundleQty">Bundle Qty</label>
-        <input type="number" id="fBundleQty" min="0" value="0" placeholder="0 = no bundling">
-        <small style="color:var(--muted);font-size:11px;">Pieces per bundle (0 = individual pieces)</small>
+        <label for="fBundleQty" data-i18n="admin.bundleQtyLabel">Bundle Qty</label>
+        <input type="number" id="fBundleQty" min="0" value="0" placeholder="0 = no bundling" data-i18n-placeholder="admin.bundleQtyPlaceholder">
+        <small style="color:var(--muted);font-size:11px;" data-i18n="admin.bundleQtyHelp">Pieces per bundle (0 = individual pieces)</small>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group full">
-        <label for="fNotes">Notes</label>
-        <textarea id="fNotes" placeholder="Optional notes"></textarea>
+        <label for="fNotes" data-i18n="admin.notes">Notes</label>
+        <textarea id="fNotes" placeholder="Optional notes" data-i18n-placeholder="admin.notesPlaceholder"></textarea>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="savePart()">Save Part</button>
+      <button class="btn btn-cancel" onclick="closeModal()" data-i18n="admin.cancel">Cancel</button>
+      <button class="btn btn-primary" onclick="savePart()" data-i18n="admin.savePart">Save Part</button>
     </div>
   </div>
 </div>
 
 <script>
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
 let allParts = [];
 let filteredParts = [];
 let editingPart = null;
@@ -488,7 +493,7 @@ async function loadParts() {
     allParts = (data.parts || []).sort((a, b) => (a.part_number || '').localeCompare(b.part_number || ''));
     applyFilters();
   } catch (e) {
-    document.getElementById('partsBody').innerHTML = '<tr><td colspan="10" class="empty-state">Failed to load parts.</td></tr>';
+    document.getElementById('partsBody').innerHTML = `<tr><td colspan="10" class="empty-state">${t('admin.loadPartsFailed')}</td></tr>`;
   }
 }
 
@@ -515,7 +520,7 @@ function applyFilters() {
   });
 
   renderTable();
-  document.getElementById('countBadge').textContent = `${filteredParts.length} part${filteredParts.length !== 1 ? 's' : ''}`;
+  document.getElementById('countBadge').textContent = filteredParts.length === 1 ? t('admin.partCountOne', { count: filteredParts.length }) : t('admin.partCountMany', { count: filteredParts.length });
 }
 
 function esc(s) {
@@ -525,7 +530,7 @@ function esc(s) {
 function renderTable() {
   const tbody = document.getElementById('partsBody');
   if (filteredParts.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No parts found. Add your first part or adjust your filters.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-state">${t('admin.noPartsFound')}</td></tr>`;
     return;
   }
 
@@ -545,7 +550,7 @@ function renderTable() {
       <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(p.notes || '')}">${esc(p.notes || '—')}</td>
       <td>
         <div class="actions-col">
-          <button class="btn btn-edit" onclick='editPart(${JSON.stringify(p.id)})'>Edit</button>
+          <button class="btn btn-edit" onclick='editPart(${JSON.stringify(p.id)})'>${t('admin.edit')}</button>
           <button class="btn btn-danger" onclick='deletePart(${JSON.stringify(p.id)}, ${JSON.stringify(p.part_number)})'>×</button>
         </div>
       </td>
@@ -561,7 +566,7 @@ function formatDims(p) {
 
 function openModal(part) {
   editingPart = part;
-  document.getElementById('modalTitle').textContent = part ? 'Edit Part' : 'Add Part';
+  document.getElementById('modalTitle').textContent = part ? t('admin.editPartTitle') : t('admin.addPartTitle');
   document.getElementById('fPartNumber').value = part?.part_number || '';
   document.getElementById('fName').value = part?.name || '';
   document.getElementById('fCustomer').value = part?.customer || '';
@@ -611,10 +616,10 @@ async function savePart() {
   const width_in    = parseFloat(document.getElementById('fWidth').value);
   const height_in   = parseFloat(document.getElementById('fHeight').value);
 
-  if (!part_number) return showError('Part number is required.');
-  if (!length_in || length_in <= 0) return showError('Length must be greater than 0.');
-  if (!width_in  || width_in  <= 0) return showError('Width must be greater than 0.');
-  if (!height_in || height_in <= 0) return showError('Height must be greater than 0.');
+  if (!part_number) return showError(t('admin.partNumberRequired'));
+  if (!length_in || length_in <= 0) return showError(t('admin.lengthRequired'));
+  if (!width_in  || width_in  <= 0) return showError(t('admin.widthRequired'));
+  if (!height_in || height_in <= 0) return showError(t('admin.heightRequired'));
 
   const payload = {
     part_number,
@@ -642,16 +647,16 @@ async function savePart() {
       body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (!data.ok) return showError(data.error || 'Save failed.');
+    if (!data.ok) return showError(data.error || t('admin.saveFailed'));
     closeModal();
     loadParts();
   } catch (e) {
-    showError('Network error. Please try again.');
+    showError(t('admin.networkErrorRetry'));
   }
 }
 
 async function deletePart(id, partNumber) {
-  if (!confirm(`Delete part ${partNumber}? This cannot be undone.`)) return;
+  if (!confirm(t('admin.confirmDeletePart', { partNumber: partNumber }))) return;
   try {
     const res = await fetch('/api/parts', {
       method: 'DELETE',
@@ -659,20 +664,20 @@ async function deletePart(id, partNumber) {
       body: JSON.stringify({ id }),
     });
     const data = await res.json();
-    if (!data.ok) return alert(data.error || 'Delete failed.');
+    if (!data.ok) return alert(data.error || t('admin.deleteFailed'));
     loadParts();
   } catch (e) {
-    alert('Network error. Please try again.');
+    alert(t('admin.networkErrorRetry'));
   }
 }
 
 // Fix category filter: "All" = empty string dropdown value, handle Uncategorized separately
 document.getElementById('categoryFilter').innerHTML = `
-  <option value="all">All Categories</option>
-  <option value="Holey Board">Holey Board</option>
-  <option value="Blocks">Blocks</option>
-  <option value="Sheets">Sheets</option>
-  <option value="uncategorized">Uncategorized</option>
+  <option value="all" data-i18n="admin.catAll">${t('admin.catAll')}</option>
+  <option value="Holey Board" data-i18n="admin.catHoleyBoard">${t('admin.catHoleyBoard')}</option>
+  <option value="Blocks" data-i18n="admin.catBlocks">${t('admin.catBlocks')}</option>
+  <option value="Sheets" data-i18n="admin.catSheets">${t('admin.catSheets')}</option>
+  <option value="uncategorized" data-i18n="admin.catUncategorized">${t('admin.catUncategorized')}</option>
 `;
 
 document.getElementById('categoryFilter').addEventListener('change', function() {
@@ -703,7 +708,7 @@ function applyFilters() {
   });
 
   renderTable();
-  document.getElementById('countBadge').textContent = `${filteredParts.length} part${filteredParts.length !== 1 ? 's' : ''}`;
+  document.getElementById('countBadge').textContent = filteredParts.length === 1 ? t('admin.partCountOne', { count: filteredParts.length }) : t('admin.partCountMany', { count: filteredParts.length });
 }
 
 loadParts();
@@ -718,15 +723,15 @@ fetch('/api/auth/me').then(r => r.json()).then(d => {
       const simBanner = document.createElement('div');
       simBanner.id = 'sim-role-banner';
       simBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:#f59e0b;color:#000;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:14px;font-weight:600;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
-      simBanner.innerHTML = `<span>🔍 Testing as: ${d.user.simulatingRole.name}</span><button id="sim-stop-btn" style="background:#fff;color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">Stop Testing</button>`;
+      simBanner.innerHTML = `<span>🔍 ${t('common.testingAs', { role: d.user.simulatingRole.name })}</span><button id="sim-stop-btn" style="background:#fff;color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">${t('common.stopTesting')}</button>`;
       document.body.prepend(simBanner);
       document.body.style.paddingTop = simBanner.offsetHeight + 'px';
       document.getElementById('sim-stop-btn').addEventListener('click', async () => {
         try {
           const res = await fetch('/api/auth/simulate-role', { method: 'DELETE' });
           const data = await res.json();
-          if (data.ok) { window.location.reload(); } else { alert('Failed to stop simulation: ' + (data.error || 'Unknown error')); }
-        } catch (e) { alert('Error stopping simulation: ' + e.message); }
+          if (data.ok) { window.location.reload(); } else { alert(t('common.stopTestingFailed', { error: data.error || t('common.unknownError') })); }
+        } catch (e) { alert(t('common.stopTestingError', { error: e.message })); }
       });
     }
   }
@@ -771,9 +776,9 @@ async function _loadNotifs() {
     if (badge) { badge.textContent = d.unreadCount > 99 ? '99+' : d.unreadCount; badge.style.display = d.unreadCount > 0 ? '' : 'none'; }
     const list = document.getElementById('hdr-notif-list');
     if (!list) return;
-    if (!d.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">No notifications</div>'; return; }
+    if (!d.notifications.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">${t('home.noNotifications')}</div>`; return; }
     const esc2 = s => { const el = document.createElement('div'); el.textContent = s || ''; return el.innerHTML; };
-    const ago = iso => { const m = Math.floor((Date.now()-new Date(iso))/60000); return m<1?'Just now':m<60?m+'m ago':Math.floor(m/60)<24?Math.floor(m/60)+'h ago':Math.floor(m/1440)+'d ago'; };
+    const ago = iso => { const m = Math.floor((Date.now()-new Date(iso))/60000); return m<1?t('common.justNow'):m<60?t('common.minsAgo',{m:m}):Math.floor(m/60)<24?t('common.hoursAgo',{h:Math.floor(m/60)}):t('common.daysAgo',{d:Math.floor(m/1440)}); };
     list.innerHTML = d.notifications.map(n => `<div style="padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;${n.is_read?'opacity:0.6;':'background:#eff6ff;'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')"><div style="font-size:13px;font-weight:${n.is_read?'400':'600'};color:#111827;">${esc2(n.title)}</div><div style="font-size:12px;color:#6b7280;">${esc2(n.message)}</div><div style="font-size:10px;color:#9ca3af;margin-top:4px;">${ago(n.created_at)}</div></div>`).join('');
   } catch {}
 }

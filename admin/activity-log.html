@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <script src="/shared/auth-interceptor.js"></script>
+  <script src="/shared/i18n.js"></script>
+  <script src="/shared/i18n-common.js"></script>
+  <script src="/admin/admin-i18n.js"></script>
   <title>Activity Log — xPanda Admin</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -260,70 +263,72 @@
 
 <div class="topbar" style="position:relative;">
   <a class="topbar-logo" href="/">xPanda</a>
-  <span class="topbar-badge">xPanda Foam &bull; Admin</span>
+  <span class="topbar-badge" data-i18n="admin.badgeText">xPanda Foam &bull; Admin</span>
   <div class="topbar-title">
-    <h1>Activity Log</h1>
-    <p>Platform-wide audit trail</p>
+    <h1 data-i18n="layout.adminActivityLogTitle">Activity Log</h1>
+    <p data-i18n="layout.adminActivityLogSubtitle">Platform-wide audit trail</p>
   </div>
   <div class="topbar-nav">
-    <a href="/admin/parts.html">Parts</a>
-    <a href="/admin/activity-log.html">Activity Log</a>
-    <a href="/admin/users.html">Users</a>
-    <a href="/admin/roles.html">Roles</a>
-    <a href="/">← Back to Platform</a>
+    <a href="/admin/parts.html" data-i18n="common.parts">Parts</a>
+    <a href="/admin/activity-log.html" data-i18n="admin.navActivityLog">Activity Log</a>
+    <a href="/admin/users.html" data-i18n="common.users">Users</a>
+    <a href="/admin/roles.html" data-i18n="common.roles">Roles</a>
+    <a href="/" data-i18n="admin.navBackToPlatform">← Back to Platform</a>
   </div>
   <div style="position:absolute;top:10px;right:16px;font-size:12px;color:#5b6472;display:flex;align-items:center;gap:8px;">
     <span id="hdr-notif-bell" onclick="toggleNotifDropdown()" style="position:relative;cursor:pointer;font-size:18px;line-height:1;">🔔<span id="hdr-notif-badge" style="display:none;position:absolute;top:-4px;right:-6px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:16px;height:16px;text-align:center;line-height:16px;"></span></span>
     <div id="hdr-notif-dropdown" style="display:none;position:absolute;top:36px;right:0;width:340px;max-height:420px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);overflow:hidden;z-index:9999;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #e5e7eb;">
-        <span style="font-weight:700;font-size:14px;">Notifications</span>
-        <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
+        <span style="font-weight:700;font-size:14px;" data-i18n="home.notifications">Notifications</span>
+        <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;" data-i18n="home.markAllRead">Mark all read</button>
       </div>
       <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:#eff6ff;border-bottom:1px solid #e5e7eb;cursor:pointer;" onclick="enablePushFromBanner()">
-        <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 Enable push notifications</div>
-        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Tap to get alerts on this device</div>
+        <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 <span data-i18n="home.enablePush">Enable push notifications</span></div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;" data-i18n="home.enablePushSub">Tap to get alerts on this device</div>
       </div>
       <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
     </div>
     <span id="hdr-user-name"></span>
-    <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;">Sign Out</a>
+    <a href="#" id="hdr-logout" style="color:#dc2626;text-decoration:none;font-weight:600;" data-i18n="common.signOut">Sign Out</a>
   </div>
 </div>
 
 <div class="wrap">
   <div class="filterbar">
     <select id="entityFilter" onchange="reload()">
-      <option value="">All Entity Types</option>
-      <option value="job">Jobs</option>
-      <option value="bol">BOLs</option>
-      <option value="part">Parts</option>
-      <option value="shipment">Shipments</option>
-      <option value="bol_customer">Customers</option>
-      <option value="bol_carrier">Carriers</option>
+      <option value="" data-i18n="admin.entityFilterAll">All Entity Types</option>
+      <option value="job" data-i18n="admin.entityJobs">Jobs</option>
+      <option value="bol" data-i18n="admin.entityBols">BOLs</option>
+      <option value="part" data-i18n="admin.entityParts">Parts</option>
+      <option value="shipment" data-i18n="admin.entityShipments">Shipments</option>
+      <option value="bol_customer" data-i18n="admin.entityCustomers">Customers</option>
+      <option value="bol_carrier" data-i18n="admin.entityCarriers">Carriers</option>
     </select>
     <select id="actionFilter" onchange="reload()">
-      <option value="">All Actions</option>
-      <option value="create">Create</option>
-      <option value="update">Update</option>
-      <option value="delete">Delete</option>
+      <option value="" data-i18n="admin.actionFilterAll">All Actions</option>
+      <option value="create" data-i18n="admin.actionCreate">Create</option>
+      <option value="update" data-i18n="admin.actionUpdate">Update</option>
+      <option value="delete" data-i18n="admin.actionDelete">Delete</option>
     </select>
     <span class="count-info" id="countInfo"></span>
   </div>
 
   <div class="log-list" id="logList">
-    <div class="empty-state">Loading…</div>
+    <div class="empty-state" data-i18n="admin.loading">Loading…</div>
   </div>
 
   <div class="load-more-wrap" id="loadMoreWrap" style="display:none;">
-    <button class="btn btn-primary" id="loadMoreBtn" onclick="loadMore()">Load More</button>
+    <button class="btn btn-primary" id="loadMoreBtn" onclick="loadMore()" data-i18n="admin.loadMore">Load More</button>
   </div>
 
   <div class="footer-back">
-    <a href="/">&larr; Back to Operations Platform</a>
+    <a href="/" data-i18n="common.backToPlatform">&larr; Back to Operations Platform</a>
   </div>
 </div>
 
 <script>
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
 const PAGE = 50;
 let offset = 0;
 let total = 0;
@@ -333,7 +338,7 @@ function reload() {
   offset = 0;
   entries = [];
   total = 0;
-  document.getElementById('logList').innerHTML = '<div class="empty-state">Loading…</div>';
+  document.getElementById('logList').innerHTML = `<div class="empty-state">${t('admin.loading')}</div>`;
   document.getElementById('loadMoreWrap').style.display = 'none';
   fetchEntries();
 }
@@ -351,7 +356,7 @@ async function fetchEntries() {
     const data = await res.json();
 
     if (!data.ok) {
-      document.getElementById('logList').innerHTML = '<div class="empty-state">Failed to load activity log.</div>';
+      document.getElementById('logList').innerHTML = `<div class="empty-state">${t('admin.loadLogFailed')}</div>`;
       return;
     }
 
@@ -368,19 +373,21 @@ async function fetchEntries() {
     if (offset < total) {
       loadMoreWrap.style.display = 'block';
       loadMoreBtn.disabled = false;
-      loadMoreBtn.textContent = 'Load More';
+      loadMoreBtn.setAttribute('data-i18n', 'admin.loadMore');
+      loadMoreBtn.textContent = t('admin.loadMore');
     } else {
       loadMoreWrap.style.display = 'none';
     }
   } catch (e) {
-    document.getElementById('logList').innerHTML = '<div class="empty-state">Network error.</div>';
+    document.getElementById('logList').innerHTML = `<div class="empty-state">${t('admin.networkError')}</div>`;
   }
 }
 
 async function loadMore() {
   const btn = document.getElementById('loadMoreBtn');
   btn.disabled = true;
-  btn.textContent = 'Loading…';
+  btn.setAttribute('data-i18n', 'admin.loading');
+  btn.textContent = t('admin.loading');
   await fetchEntries();
 }
 
@@ -389,20 +396,21 @@ function updateCountInfo() {
   if (total === 0) {
     el.textContent = '';
   } else {
-    el.textContent = `Showing ${entries.length} of ${total} entries`;
+    el.textContent = t('admin.showingEntries', { shown: entries.length, total });
   }
 }
 
+const ENTITY_LABEL_KEY = {
+  job: 'admin.entityJob',
+  bol: 'admin.entityBol',
+  part: 'admin.entityPart',
+  shipment: 'admin.entityShipment',
+  bol_customer: 'admin.entityCustomer',
+  bol_carrier: 'admin.entityCarrier',
+};
 function formatEntityLabel(type, id) {
-  switch (type) {
-    case 'job':          return `Job`;
-    case 'bol':          return `BOL`;
-    case 'part':         return `Part`;
-    case 'shipment':     return `Shipment`;
-    case 'bol_customer': return `Customer`;
-    case 'bol_carrier':  return `Carrier`;
-    default:             return type || '—';
-  }
+  const key = ENTITY_LABEL_KEY[type];
+  return key ? t(key) : (type || '—');
 }
 
 function formatTs(ts) {
@@ -429,11 +437,21 @@ function formatDetail(detail) {
   }
 }
 
+const ACTION_LABEL_KEY = {
+  create: 'admin.actionCreate',
+  update: 'admin.actionUpdate',
+  delete: 'admin.actionDelete',
+};
+function actionLabel(action) {
+  const key = ACTION_LABEL_KEY[action];
+  return key ? t(key) : (action || '—');
+}
+
 function renderEntries() {
   const list = document.getElementById('logList');
 
   if (entries.length === 0) {
-    list.innerHTML = '<div class="empty-state">No activity recorded yet.</div>';
+    list.innerHTML = `<div class="empty-state">${t('admin.noActivityFound')}</div>`;
     return;
   }
 
@@ -445,7 +463,7 @@ function renderEntries() {
       <div class="log-entry" onclick="toggleDetail(${i})">
         <div class="log-entry-row">
           <span class="log-ts">${esc(formatTs(e.timestamp))}</span>
-          <span class="badge ${badgeClass}">${esc(e.action)}</span>
+          <span class="badge ${badgeClass}">${esc(actionLabel(e.action))}</span>
           <span class="log-entity">${esc(formatEntityLabel(e.entity_type, e.entity_id))}</span>
           <span class="log-summary">${esc(e.summary || '—')}</span>
         </div>
@@ -474,15 +492,15 @@ fetch('/api/auth/me').then(r => r.json()).then(d => {
       const simBanner = document.createElement('div');
       simBanner.id = 'sim-role-banner';
       simBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:#f59e0b;color:#000;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:14px;font-weight:600;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
-      simBanner.innerHTML = `<span>🔍 Testing as: ${d.user.simulatingRole.name}</span><button id="sim-stop-btn" style="background:#fff;color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">Stop Testing</button>`;
+      simBanner.innerHTML = `<span>🔍 ${t('common.testingAs', { role: d.user.simulatingRole.name })}</span><button id="sim-stop-btn" style="background:#fff;color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">${t('common.stopTesting')}</button>`;
       document.body.prepend(simBanner);
       document.body.style.paddingTop = simBanner.offsetHeight + 'px';
       document.getElementById('sim-stop-btn').addEventListener('click', async () => {
         try {
           const res = await fetch('/api/auth/simulate-role', { method: 'DELETE' });
           const data = await res.json();
-          if (data.ok) { window.location.reload(); } else { alert('Failed to stop simulation: ' + (data.error || 'Unknown error')); }
-        } catch (e) { alert('Error stopping simulation: ' + e.message); }
+          if (data.ok) { window.location.reload(); } else { alert(t('common.stopTestingFailed', { error: data.error || t('common.unknownError') })); }
+        } catch (e) { alert(t('common.stopTestingError', { error: e.message })); }
       });
     }
   }
@@ -506,9 +524,9 @@ async function _loadNotifs() {
     const d = await (await fetch('/api/notifications')).json(); if (!d.ok) return;
     const badge = document.getElementById('hdr-notif-badge'); if (badge) { badge.textContent = d.unreadCount > 99 ? '99+' : d.unreadCount; badge.style.display = d.unreadCount > 0 ? '' : 'none'; }
     const list = document.getElementById('hdr-notif-list'); if (!list) return;
-    if (!d.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">No notifications</div>'; return; }
+    if (!d.notifications.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">${t('home.noNotifications')}</div>`; return; }
     const e2 = s => { const el = document.createElement('div'); el.textContent = s||''; return el.innerHTML; };
-    const ago = iso => { const m=Math.floor((Date.now()-new Date(iso))/60000); return m<1?'Just now':m<60?m+'m ago':Math.floor(m/60)<24?Math.floor(m/60)+'h ago':Math.floor(m/1440)+'d ago'; };
+    const ago = iso => { const m=Math.floor((Date.now()-new Date(iso))/60000); return m<1?t('common.justNow'):m<60?t('common.minsAgo',{m:m}):Math.floor(m/60)<24?t('common.hoursAgo',{h:Math.floor(m/60)}):t('common.daysAgo',{d:Math.floor(m/1440)}); };
     list.innerHTML = d.notifications.map(n=>`<div style="padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;${n.is_read?'opacity:0.6;':'background:#eff6ff;'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')"><div style="font-size:13px;font-weight:${n.is_read?'400':'600'};color:#111827;">${e2(n.title)}</div><div style="font-size:12px;color:#6b7280;">${e2(n.message)}</div><div style="font-size:10px;color:#9ca3af;margin-top:4px;">${ago(n.created_at)}</div></div>`).join('');
   } catch {}
 }

@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <script src="/shared/auth-interceptor.js"></script>
+  <script src="/shared/i18n.js"></script>
+  <script src="/shared/i18n-common.js"></script>
+  <script src="/admin/admin-i18n.js"></script>
   <title>User Management — xPanda Admin</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -298,105 +301,107 @@
 
 <div class="topbar">
   <a class="topbar-logo" href="/">xPanda</a>
-  <span class="topbar-badge">xPanda Foam &bull; Admin</span>
+  <span class="topbar-badge" data-i18n="admin.badgeText">xPanda Foam &bull; Admin</span>
   <div class="topbar-title">
-    <h1>User Management</h1>
-    <p>Manage platform users and roles</p>
+    <h1 data-i18n="layout.adminUsersTitle">User Management</h1>
+    <p data-i18n="layout.adminUsersSubtitle">Manage platform users and roles</p>
   </div>
   <div class="topbar-nav">
-    <a href="/admin/parts.html">Parts</a>
-    <a href="/admin/activity-log.html">Activity Log</a>
-    <a href="/admin/users.html">Users</a>
-    <a href="/admin/roles.html">Roles</a>
-    <a href="/">← Back to Platform</a>
+    <a href="/admin/parts.html" data-i18n="common.parts">Parts</a>
+    <a href="/admin/activity-log.html" data-i18n="admin.navActivityLog">Activity Log</a>
+    <a href="/admin/users.html" data-i18n="common.users">Users</a>
+    <a href="/admin/roles.html" data-i18n="common.roles">Roles</a>
+    <a href="/" data-i18n="admin.navBackToPlatform">← Back to Platform</a>
   </div>
   <div class="header-user-bar">
     <span id="hdr-notif-bell" onclick="toggleNotifDropdown()" style="position:relative;cursor:pointer;font-size:18px;line-height:1;">🔔<span id="hdr-notif-badge" style="display:none;position:absolute;top:-4px;right:-6px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:16px;height:16px;text-align:center;line-height:16px;"></span></span>
     <div id="hdr-notif-dropdown" style="display:none;position:absolute;top:36px;right:0;width:340px;max-height:420px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.12);overflow:hidden;z-index:9999;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #e5e7eb;">
-        <span style="font-weight:700;font-size:14px;">Notifications</span>
-        <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;">Mark all read</button>
+        <span style="font-weight:700;font-size:14px;" data-i18n="home.notifications">Notifications</span>
+        <button onclick="markAllRead()" style="background:none;border:none;color:#3b82f6;font-size:12px;font-weight:600;cursor:pointer;" data-i18n="home.markAllRead">Mark all read</button>
       </div>
       <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:#eff6ff;border-bottom:1px solid #e5e7eb;cursor:pointer;" onclick="enablePushFromBanner()">
-        <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 Enable push notifications</div>
-        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Tap to get alerts on this device</div>
+        <div style="font-size:13px;font-weight:600;color:#1e40af;">🔔 <span data-i18n="home.enablePush">Enable push notifications</span></div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;" data-i18n="home.enablePushSub">Tap to get alerts on this device</div>
       </div>
       <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
     </div>
     <span id="hdr-user-name"></span>
-    <a href="#" id="hdr-logout">Sign Out</a>
+    <a href="#" id="hdr-logout" data-i18n="common.signOut">Sign Out</a>
   </div>
 </div>
 
 <div class="wrap">
   <div class="toolbar">
     <div style="font-size:13px;color:var(--muted);" id="user-count"></div>
-    <button class="btn btn-primary" onclick="openModal(null)">+ Add User</button>
+    <button class="btn btn-primary" onclick="openModal(null)" data-i18n="admin.addUser">+ Add User</button>
   </div>
 
   <div class="table-wrap">
     <table id="users-table">
       <thead>
         <tr>
-          <th>Username</th>
-          <th>Display Name</th>
-          <th>Role</th>
-          <th>Password</th>
-          <th>Status</th>
-          <th>First Login</th>
-          <th>Actions</th>
+          <th data-i18n="admin.username">Username</th>
+          <th data-i18n="admin.displayName">Display Name</th>
+          <th data-i18n="admin.colRole">Role</th>
+          <th data-i18n="admin.password">Password</th>
+          <th data-i18n="admin.colStatus">Status</th>
+          <th data-i18n="admin.colFirstLogin">First Login</th>
+          <th data-i18n="admin.colActions">Actions</th>
         </tr>
       </thead>
       <tbody id="users-tbody">
-        <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+        <tr><td colspan="7" class="empty-state" data-i18n="admin.loading">Loading…</td></tr>
       </tbody>
     </table>
   </div>
 
   <div class="footer-back">
-    <a href="/">&larr; Back to Operations Platform</a>
+    <a href="/" data-i18n="common.backToPlatform">&larr; Back to Operations Platform</a>
   </div>
 </div>
 
 <!-- Add/Edit Modal -->
 <div class="modal-overlay" id="modal" hidden>
   <div class="modal">
-    <h2 id="modal-title">Add User</h2>
+    <h2 id="modal-title" data-i18n="admin.addUserTitle">Add User</h2>
     <div class="form-group">
-      <label>Username</label>
-      <input type="text" id="m-username" placeholder="e.g. crosscutter" autocomplete="off" />
+      <label data-i18n="admin.username">Username</label>
+      <input type="text" id="m-username" placeholder="e.g. crosscutter" data-i18n-placeholder="admin.usernamePlaceholder" autocomplete="off" />
     </div>
     <div class="form-group">
-      <label>Display Name</label>
-      <input type="text" id="m-display-name" placeholder="e.g. Cross Cutter" autocomplete="off" />
+      <label data-i18n="admin.displayName">Display Name</label>
+      <input type="text" id="m-display-name" placeholder="e.g. Cross Cutter" data-i18n-placeholder="admin.displayNamePlaceholder" autocomplete="off" />
     </div>
     <div class="form-group" id="m-password-group">
-      <label>Password</label>
-      <input type="text" id="m-password" placeholder="Leave blank to use username as password" autocomplete="off" />
+      <label data-i18n="admin.password">Password</label>
+      <input type="text" id="m-password" placeholder="Leave blank to use username as password" data-i18n-placeholder="admin.passwordPlaceholder" autocomplete="off" />
     </div>
     <div class="form-group">
-      <label>Roles</label>
+      <label data-i18n="common.roles">Roles</label>
       <div id="f-role-checks" style="max-height:200px;overflow-y:auto;border:1px solid #d1d5db;border-radius:8px;padding:8px;"></div>
     </div>
     <div class="form-group">
-      <label>Shift</label>
+      <label data-i18n="admin.shiftLabel">Shift</label>
       <select id="m-shift">
-        <option value="">— None —</option>
-        <option value="1st">1st Shift</option>
-        <option value="2nd">2nd Shift</option>
-        <option value="3rd">3rd Shift</option>
+        <option value="" data-i18n="admin.shiftNone">— None —</option>
+        <option value="1st" data-i18n="admin.shift1st">1st Shift</option>
+        <option value="2nd" data-i18n="admin.shift2nd">2nd Shift</option>
+        <option value="3rd" data-i18n="admin.shift3rd">3rd Shift</option>
       </select>
     </div>
     <div class="modal-error" id="modal-error"></div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="modal-save-btn" onclick="saveUser()">Save</button>
+      <button class="btn btn-ghost" onclick="closeModal()" data-i18n="admin.cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save-btn" onclick="saveUser()" data-i18n="admin.save">Save</button>
     </div>
   </div>
 </div>
 
 <script>
 // 401/503 interceptor now lives in /shared/auth-interceptor.js (loaded in <head>, P407).
+
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
 
 let users = [];
 let allRoles = [];
@@ -435,12 +440,12 @@ async function loadUsers() {
   try {
     const res = await fetch('/api/users');
     const data = await res.json();
-    if (!data.ok) { showTableError('Failed to load users.'); return; }
+    if (!data.ok) { showTableError(t('admin.loadUsersFailed')); return; }
     users = data.users || [];
     renderTable();
-    document.getElementById('user-count').textContent = `${users.length} user${users.length !== 1 ? 's' : ''}`;
+    document.getElementById('user-count').textContent = users.length === 1 ? t('admin.userCountOne', { count: users.length }) : t('admin.userCountMany', { count: users.length });
   } catch {
-    showTableError('Network error.');
+    showTableError(t('admin.networkError'));
   }
 }
 
@@ -471,7 +476,7 @@ function roleLabel(u) {
 function renderTable() {
   const tbody = document.getElementById('users-tbody');
   if (users.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No users found.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${t('admin.noUsersFound')}</td></tr>`;
     return;
   }
 
@@ -483,15 +488,15 @@ function renderTable() {
       <td class="pw-cell" title="${esc(u.password)}">${esc(u.password)}</td>
       <td>
         <span class="status-dot ${u.is_active ? 'dot-active' : 'dot-disabled'}"></span>
-        ${u.is_active ? 'Active' : 'Disabled'}
+        ${u.is_active ? t('admin.statusActive') : t('admin.statusDisabled')}
       </td>
-      <td>${u.first_login ? 'Yes' : 'No'}</td>
+      <td>${u.first_login ? t('admin.yes') : t('admin.no')}</td>
       <td>
         <div class="actions-cell">
-          <button class="btn btn-ghost btn-sm" onclick="openModal(${i})">Edit</button>
-          <button class="btn btn-ghost btn-sm" onclick="resetPassword('${esc(u.id)}', '${esc(u.display_name)}')">Reset PW</button>
-          <button class="btn btn-ghost btn-sm" onclick="toggleActive('${esc(u.id)}', ${u.is_active})">${u.is_active ? 'Disable' : 'Enable'}</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteUser('${esc(u.id)}', '${esc(u.display_name)}')">Delete</button>
+          <button class="btn btn-ghost btn-sm" onclick="openModal(${i})">${t('admin.edit')}</button>
+          <button class="btn btn-ghost btn-sm" onclick="resetPassword('${esc(u.id)}', '${esc(u.display_name)}')">${t('admin.resetPw')}</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleActive('${esc(u.id)}', ${u.is_active})">${u.is_active ? t('admin.disable') : t('admin.enable')}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteUser('${esc(u.id)}', '${esc(u.display_name)}')">${t('admin.delete')}</button>
         </div>
       </td>
     </tr>
@@ -500,7 +505,7 @@ function renderTable() {
 
 function openModal(idx) {
   editingId = null;
-  document.getElementById('modal-title').textContent = 'Add User';
+  document.getElementById('modal-title').textContent = t('admin.addUserTitle');
   document.getElementById('m-username').value = '';
   document.getElementById('m-username').readOnly = false;
   document.getElementById('m-display-name').value = '';
@@ -512,7 +517,7 @@ function openModal(idx) {
   if (idx !== null && idx !== undefined) {
     const u = users[idx];
     editingId = u.id;
-    document.getElementById('modal-title').textContent = 'Edit User';
+    document.getElementById('modal-title').textContent = t('admin.editUserTitle');
     document.getElementById('m-username').value = u.username;
     document.getElementById('m-username').readOnly = true;
     document.getElementById('m-display-name').value = u.display_name;
@@ -542,9 +547,9 @@ async function saveUser() {
   const errEl = document.getElementById('modal-error');
   errEl.textContent = '';
 
-  if (!editingId && !username) { errEl.textContent = 'Username is required.'; return; }
-  if (!displayName) { errEl.textContent = 'Display name is required.'; return; }
-  if (role_ids.length === 0) { errEl.textContent = 'At least one role is required.'; return; }
+  if (!editingId && !username) { errEl.textContent = t('admin.usernameRequired'); return; }
+  if (!displayName) { errEl.textContent = t('admin.displayNameRequired'); return; }
+  if (role_ids.length === 0) { errEl.textContent = t('admin.roleRequired'); return; }
 
   const btn = document.getElementById('modal-save-btn');
   btn.disabled = true;
@@ -574,17 +579,17 @@ async function saveUser() {
       closeModal();
       loadUsers();
     } else {
-      errEl.textContent = data.error || 'Save failed.';
+      errEl.textContent = data.error || t('admin.saveFailed');
     }
   } catch {
-    errEl.textContent = 'Network error.';
+    errEl.textContent = t('admin.networkError');
   }
 
   btn.disabled = false;
 }
 
 async function toggleActive(id, currentState) {
-  if (!confirm(`${currentState ? 'Disable' : 'Enable'} this user?`)) return;
+  if (!confirm(currentState ? t('admin.confirmDisableUser') : t('admin.confirmEnableUser'))) return;
   try {
     const res = await fetch(`/api/users/${id}`, {
       method: 'PUT',
@@ -593,12 +598,12 @@ async function toggleActive(id, currentState) {
     });
     const data = await res.json();
     if (data.ok) loadUsers();
-    else alert(data.error || 'Failed.');
-  } catch { alert('Network error.'); }
+    else alert(data.error || t('admin.actionFailed'));
+  } catch { alert(t('admin.networkError')); }
 }
 
 async function resetPassword(id, displayName) {
-  if (!confirm(`Reset password for ${displayName}? They will be prompted to set a new password on next login.`)) return;
+  if (!confirm(t('admin.confirmResetPassword', { name: displayName }))) return;
   try {
     const res = await fetch(`/api/users/${id}`, {
       method: 'PUT',
@@ -606,19 +611,19 @@ async function resetPassword(id, displayName) {
       body: JSON.stringify({ first_login: 1 }),
     });
     const data = await res.json();
-    if (data.ok) { alert('Password reset. User must set a new password on next login.'); loadUsers(); }
-    else alert(data.error || 'Failed.');
-  } catch { alert('Network error.'); }
+    if (data.ok) { alert(t('admin.passwordResetDone')); loadUsers(); }
+    else alert(data.error || t('admin.actionFailed'));
+  } catch { alert(t('admin.networkError')); }
 }
 
 async function deleteUser(id, displayName) {
-  if (!confirm(`Delete user ${displayName}? This will also end their active sessions.`)) return;
+  if (!confirm(t('admin.confirmDeleteUser', { name: displayName }))) return;
   try {
     const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
     const data = await res.json();
     if (data.ok) loadUsers();
-    else alert(data.error || 'Failed.');
-  } catch { alert('Network error.'); }
+    else alert(data.error || t('admin.actionFailed'));
+  } catch { alert(t('admin.networkError')); }
 }
 
 // Click-outside-close disabled — use Cancel button to close
@@ -632,15 +637,15 @@ fetch('/api/auth/me').then(r => r.json()).then(d => {
       const simBanner = document.createElement('div');
       simBanner.id = 'sim-role-banner';
       simBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:#f59e0b;color:#000;padding:6px 16px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:14px;font-weight:600;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
-      simBanner.innerHTML = `<span>🔍 Testing as: ${d.user.simulatingRole.name}</span><button id="sim-stop-btn" style="background:#fff;color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">Stop Testing</button>`;
+      simBanner.innerHTML = `<span>🔍 ${t('common.testingAs', { role: d.user.simulatingRole.name })}</span><button id="sim-stop-btn" style="background:#fff;color:#000;border:1px solid #000;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:13px;font-weight:600;">${t('common.stopTesting')}</button>`;
       document.body.prepend(simBanner);
       document.body.style.paddingTop = simBanner.offsetHeight + 'px';
       document.getElementById('sim-stop-btn').addEventListener('click', async () => {
         try {
           const res = await fetch('/api/auth/simulate-role', { method: 'DELETE' });
           const data = await res.json();
-          if (data.ok) { window.location.reload(); } else { alert('Failed to stop simulation: ' + (data.error || 'Unknown error')); }
-        } catch (e) { alert('Error stopping simulation: ' + e.message); }
+          if (data.ok) { window.location.reload(); } else { alert(t('common.stopTestingFailed', { error: data.error || t('common.unknownError') })); }
+        } catch (e) { alert(t('common.stopTestingError', { error: e.message })); }
       });
     }
   }
@@ -667,9 +672,9 @@ async function _loadNotifs() {
     const d = await (await fetch('/api/notifications')).json(); if (!d.ok) return;
     const badge = document.getElementById('hdr-notif-badge'); if (badge) { badge.textContent = d.unreadCount > 99 ? '99+' : d.unreadCount; badge.style.display = d.unreadCount > 0 ? '' : 'none'; }
     const list = document.getElementById('hdr-notif-list'); if (!list) return;
-    if (!d.notifications.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">No notifications</div>'; return; }
+    if (!d.notifications.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:#9ca3af;font-size:13px;">${t('home.noNotifications')}</div>`; return; }
     const e2 = s => { const el = document.createElement('div'); el.textContent = s||''; return el.innerHTML; };
-    const ago = iso => { const m=Math.floor((Date.now()-new Date(iso))/60000); return m<1?'Just now':m<60?m+'m ago':Math.floor(m/60)<24?Math.floor(m/60)+'h ago':Math.floor(m/1440)+'d ago'; };
+    const ago = iso => { const m=Math.floor((Date.now()-new Date(iso))/60000); return m<1?t('common.justNow'):m<60?t('common.minsAgo',{m:m}):Math.floor(m/60)<24?t('common.hoursAgo',{h:Math.floor(m/60)}):t('common.daysAgo',{d:Math.floor(m/1440)}); };
     list.innerHTML = d.notifications.map(n=>`<div style="padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;${n.is_read?'opacity:0.6;':'background:#eff6ff;'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')"><div style="font-size:13px;font-weight:${n.is_read?'400':'600'};color:#111827;">${e2(n.title)}</div><div style="font-size:12px;color:#6b7280;">${e2(n.message)}</div><div style="font-size:10px;color:#9ca3af;margin-top:4px;">${ago(n.created_at)}</div></div>`).join('');
   } catch {}
 }

@@ -274,7 +274,15 @@
       incidentTrendTitle: 'Incident Trend',
       incidentTypeTitle: 'Incident by Type',
       ordersReportTitle: 'Orders Report',
-      cuttingActivityTitle: 'Cutting Line Activity'
+      cuttingActivityTitle: 'Cutting Line Activity',
+      adminUsersTitle: 'User Management',
+      adminUsersSubtitle: 'Manage platform users and roles',
+      adminPartsTitle: 'Parts Library',
+      adminPartsSubtitle: 'Manage parts across all platform modules',
+      adminRolesTitle: 'Role Management',
+      adminRolesSubtitle: 'Configure roles and module permissions',
+      adminActivityLogTitle: 'Activity Log',
+      adminActivityLogSubtitle: 'Platform-wide audit trail'
     },
     es: {
       jobsTitle: 'Tablero de Trabajos',
@@ -324,7 +332,15 @@
       incidentTrendTitle: 'Tendencia de Incidentes',
       incidentTypeTitle: 'Incidentes por Tipo',
       ordersReportTitle: 'Informe de Pedidos',
-      cuttingActivityTitle: 'Actividad de Línea de Corte'
+      cuttingActivityTitle: 'Actividad de Línea de Corte',
+      adminUsersTitle: 'Gestión de Usuarios',
+      adminUsersSubtitle: 'Gestione usuarios y roles de la plataforma',
+      adminPartsTitle: 'Biblioteca de Piezas',
+      adminPartsSubtitle: 'Gestione piezas en todos los módulos de la plataforma',
+      adminRolesTitle: 'Gestión de Roles',
+      adminRolesSubtitle: 'Configure roles y permisos de módulos',
+      adminActivityLogTitle: 'Registro de Actividad',
+      adminActivityLogSubtitle: 'Registro de auditoría de toda la plataforma'
     },
     ht: {
       jobsTitle: 'Tablo Travay',
@@ -374,7 +390,15 @@
       incidentTrendTitle: 'Tandans Ensidan',
       incidentTypeTitle: 'Ensidan pa Kalite',
       ordersReportTitle: 'Rapò Kòmand',
-      cuttingActivityTitle: 'Aktivite Liy Koupe'
+      cuttingActivityTitle: 'Aktivite Liy Koupe',
+      adminUsersTitle: 'Jesyon Itilizatè',
+      adminUsersSubtitle: 'Jere itilizatè ak wòl platfòm nan',
+      adminPartsTitle: 'Bibliyotèk Pyès',
+      adminPartsSubtitle: 'Jere pyès nan tout modil platfòm nan',
+      adminRolesTitle: 'Jesyon Wòl',
+      adminRolesSubtitle: 'Konfigire wòl ak pèmisyon modil',
+      adminActivityLogTitle: 'Jounal Aktivite',
+      adminActivityLogSubtitle: 'Rejis odit pou tout platfòm nan'
     }
   });
 })();
