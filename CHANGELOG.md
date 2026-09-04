@@ -3574,6 +3574,34 @@ Entries within each module are ordered by prompt # descending (newest first).
   Verified via `node --check` on the catalog and every inline `<script>` block, plus an en/es/ht key
   parity check (221/221/221, no drift). `load-builder.html`, `loading.html`, `bol-email.html`,
   `bol-test.html` not yet tagged — next in this sweep.
+- **i18n sweep, phase 2c — Logistics: `load-builder.html` gets a labels/buttons/toasts pass
+  (en/es/ht), completing the Logistics module's floor+desk screens.** Deliberately narrower than the
+  full tag-everything treatment given to the other three Logistics pages: this file is a bin-packing
+  trailer-load planner whose UI text is entangled with the packing algorithm and printed BOL/diagram
+  output. Translated: the LOAD/SKUS/RESULTS tab bar and SAVED LOADS/PULL FROM JOB buttons; the Load
+  tab's options bar (trailer type, runners, auto-downsize/force-sizes toggles, forced-trailer rows),
+  SKU picker (search, empty states, category rail), and cart summary; the full SKU library tab
+  (header, copy/paste-import/reset/new-SKU actions, the add/edit SKU form and its validation
+  messages, category expand/collapse, per-row edit/copy/delete); the Results tab's top action row,
+  runner quick-toggle, stats grid, load-warnings header, and every per-trailer control (customize,
+  dissolve, refresh-load + its toasts, clear-custom, print-loading-diagram) and panel title; the
+  Saved Loads and Pull-from-Job modals; and every `alert()`/`confirm()`/`prompt()`/toast message
+  reachable from `saveLoad()`, `openLoadModal()`, `openPullJobPicker()`, and `showJobBanner()`.
+  Extended the `logistics` catalog to 487 keys × 3 langs (verified parity). Also fixed this page's
+  title/subtitle dead-code override (added `layout.loadBuilderTitle`/`Subtitle` to
+  `shared/i18n-common.js`, switched the inline script to a guarded `window.I18n.t()` call, same
+  pattern as `bol-email.html`). Deliberately NOT translated, and not attempted: the SKU
+  orientation-suffix labels baked into `sku.name` (`" (on side)"`, `" (rotated)"`, etc. — these flow
+  into printed BOL/diagram exports, so translating them would put translated text into shipping
+  documents); `TRAILER_TYPES` object keys and the `['Holey Board','Blocks','Sheets']` category list
+  (used as data lookup values / branch conditions elsewhere in the file, not just display text); and
+  the row/column/layer trailer-customize editor (`renderTrailerEditor`/`renderEditorContent`/
+  `applyEditorRows`) plus the dissolve-preview modal's algorithmic move-list descriptions — both
+  lower-priority power-user tools, tracked in `BACKLOG.md` if flagged later. `bol-test.html` (dev
+  tool, no header shim) remains out of scope, completing the Logistics module wave. Verified via
+  `node --check` on both inline `<script>` blocks, a scripted scan confirming every `t('logistics.…')`
+  key referenced in the file resolves in the catalog, and an en/es/ht key-parity check across all
+  four catalogs (`logistics` 487, `common`/`home`/`layout` unchanged elsewhere — no drift).
 - **i18n sweep, phase 2b — Logistics module: `loading.html` (Loading Dashboard) and `bol-email.html`
   (BOL Email Queue) now speak en/es/ht.** Picked these two next instead of `load-builder.html`
   because they're the module's other floor-facing screens (bay assignments, loading-team view,

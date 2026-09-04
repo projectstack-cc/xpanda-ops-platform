@@ -243,7 +243,9 @@
       qcBackLink: '← Back to Dashboard',
       reportsSubtitle: 'Select a reporting workflow to begin',
       bolEmailTitle: 'BOL Email Queue',
-      bolEmailSubtitle: "Next shipping day's Lisma shipments"
+      bolEmailSubtitle: "Next shipping day's Lisma shipments",
+      loadBuilderTitle: 'Load Builder',
+      loadBuilderSubtitle: 'Load planning and truck configuration'
     },
     es: {
       jobsTitle: 'Tablero de Trabajos',
@@ -262,7 +264,9 @@
       qcBackLink: '← Volver al Panel',
       reportsSubtitle: 'Seleccione un flujo de informes para comenzar',
       bolEmailTitle: 'Cola de Correo BOL',
-      bolEmailSubtitle: 'Envíos Lisma del próximo día de envío'
+      bolEmailSubtitle: 'Envíos Lisma del próximo día de envío',
+      loadBuilderTitle: 'Armador de Carga',
+      loadBuilderSubtitle: 'Planificación de carga y configuración de camiones'
     },
     ht: {
       jobsTitle: 'Tablo Travay',
@@ -281,7 +285,9 @@
       qcBackLink: '← Retounen nan Tablodbò',
       reportsSubtitle: 'Chwazi yon pwosesis rapò pou kòmanse',
       bolEmailTitle: 'Fil Atant Imèl BOL',
-      bolEmailSubtitle: 'Ekspedisyon Lisma pou pwochen jou ekspedisyon an'
+      bolEmailSubtitle: 'Ekspedisyon Lisma pou pwochen jou ekspedisyon an',
+      loadBuilderTitle: 'Konstriktè Chaj',
+      loadBuilderSubtitle: 'Planifikasyon chaj ak konfigirasyon kamyon'
     }
   });
 })();

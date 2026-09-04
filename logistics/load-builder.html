@@ -433,8 +433,11 @@
 
 <script src="/logistics/logistics-header.js"></script>
 <script>
-document.getElementById('logistics-page-title').textContent = 'Load Builder';
-document.getElementById('logistics-page-subtitle').textContent = 'Load planning and truck configuration';
+(function () {
+  function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+  document.getElementById('logistics-page-title').textContent = tt('layout.loadBuilderTitle', 'Load Builder');
+  document.getElementById('logistics-page-subtitle').textContent = tt('layout.loadBuilderSubtitle', 'Load planning and truck configuration');
+})();
 </script>
 
 <div class="container">
@@ -1232,6 +1235,7 @@ function h(tag, attrs = {}, ...children) {
 }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
 
 // ═══════════════════════════════════════════════════════════════
 // STATE HELPERS
@@ -1416,14 +1420,14 @@ function renderTabs() {
   const cont = document.getElementById('headerTabs');
   cont.innerHTML = '';
   const totalPcs = state.cart.reduce((s, c) => s + c.qty, 0);
-  [["load", `LOAD${state.cart.length ? ` (${totalPcs})` : ""}`], ["skus", "SKUS"], ["results", "RESULTS"]].forEach(([id, label]) => {
+  [["load", `${t('logistics.lbTabLoad')}${state.cart.length ? ` (${totalPcs})` : ""}`], ["skus", t('logistics.lbTabSkus')], ["results", t('logistics.lbTabResults')]].forEach(([id, label]) => {
     const active = state.tab === id;
     const btn = h('button', { className: `btn ${active ? 'btn-dark' : 'btn-white'}`, onClick: () => { state.tab = id; render(); } }, label);
     cont.appendChild(btn);
   });
   if (state.tab === 'load') {
-    cont.appendChild(h('button', { className: 'btn btn-white', style: { marginLeft: 'auto' }, onClick: () => openLoadModal() }, 'SAVED LOADS'));
-    cont.appendChild(h('button', { className: 'btn btn-white', style: { marginLeft: '8px' }, onClick: () => openPullJobPicker() }, 'PULL FROM JOB'));
+    cont.appendChild(h('button', { className: 'btn btn-white', style: { marginLeft: 'auto' }, onClick: () => openLoadModal() }, t('logistics.lbSavedLoads')));
+    cont.appendChild(h('button', { className: 'btn btn-white', style: { marginLeft: '8px' }, onClick: () => openPullJobPicker() }, t('logistics.lbPullFromJob')));
   }
 }
 
@@ -1451,30 +1455,30 @@ function renderLoadTab() {
     if (state.trailerType === t) opt.selected = true;
     typeSel.appendChild(opt);
   });
-  optBar.appendChild(optGroup(optLabel('TRAILER TYPE'), typeSel));
+  optBar.appendChild(optGroup(optLabel(t('logistics.lbTrailerType')), typeSel));
 
   // Runners dropdown
   const runnerSel = h('select', { className: 'inp', style: { width: 'auto', minWidth: '120px' }, onChange: e => { state.runnerHeight = parseInt(e.target.value, 10) || 0; state.manualRowsByTrailer = {}; state.editorTrailer = null; render(); } });
   [0, 3, 4].forEach(rh => {
-    const opt = h('option', { value: String(rh) }, rh === 0 ? 'None' : `${rh}" Runners`);
+    const opt = h('option', { value: String(rh) }, rh === 0 ? t('logistics.lbRunnersNone') : t('logistics.lbRunnersOption', { n: rh }));
     if (state.runnerHeight === rh) opt.selected = true;
     runnerSel.appendChild(opt);
   });
-  optBar.appendChild(optGroup(optLabel('RUNNERS'), runnerSel));
+  optBar.appendChild(optGroup(optLabel(t('logistics.lbRunners')), runnerSel));
 
   // Auto-downsize ON/OFF
-  const downsizeGroup = optGroup(optLabel('AUTO-DOWNSIZE'));
+  const downsizeGroup = optGroup(optLabel(t('logistics.lbAutoDownsize')));
   ['ON', 'OFF'].forEach(v => {
     const active = state.autoDownsize === (v === 'ON');
-    downsizeGroup.appendChild(h('button', { className: `btn ${active ? 'btn-accent' : 'btn-white'}`, onClick: () => { state.autoDownsize = v === 'ON'; render(); } }, v));
+    downsizeGroup.appendChild(h('button', { className: `btn ${active ? 'btn-accent' : 'btn-white'}`, onClick: () => { state.autoDownsize = v === 'ON'; render(); } }, t('logistics.' + (v === 'ON' ? 'lbOn' : 'lbOff'))));
   });
   optBar.appendChild(downsizeGroup);
 
   // Force sizes ON/OFF (replaces the Advanced disclosure)
-  const forceGroup = optGroup(optLabel('FORCE SIZES'));
+  const forceGroup = optGroup(optLabel(t('logistics.lbForceSizes')));
   ['ON', 'OFF'].forEach(v => {
     const active = state.forcedMode === (v === 'ON');
-    forceGroup.appendChild(h('button', { className: `btn ${active ? 'btn-accent' : 'btn-white'}`, onClick: () => { state.forcedMode = v === 'ON'; render(); } }, v));
+    forceGroup.appendChild(h('button', { className: `btn ${active ? 'btn-accent' : 'btn-white'}`, onClick: () => { state.forcedMode = v === 'ON'; render(); } }, t('logistics.' + (v === 'ON' ? 'lbOn' : 'lbOff'))));
   });
   optBar.appendChild(forceGroup);
 
@@ -1484,8 +1488,8 @@ function renderLoadTab() {
   typeCard.appendChild(optBar);
 
   // Condensed helper line
-  const optHints = ['Auto-downsizes last trailer to 26ft Box Truck when it fits'];
-  if (state.runnerHeight > 0) optHints.push(`Runner height deducted from stacking height (${dims.height}" → ${dims.height - state.runnerHeight}")`);
+  const optHints = [t('logistics.lbAutoDownsizeHint')];
+  if (state.runnerHeight > 0) optHints.push(t('logistics.lbRunnerHeightHint', { from: dims.height, to: dims.height - state.runnerHeight }));
   typeCard.appendChild(h('div', { style: { marginTop: '10px', fontSize: '12px', color: 'var(--text-faint)', fontWeight: 600 } }, optHints.join('  ·  ')));
 
   // Force-sizes editor (inline, shown when ON)
@@ -1502,11 +1506,11 @@ function renderLoadTab() {
       ftRow.appendChild(typeSelect);
       const countInput = h('input', { type: 'number', min: '1', max: '10', className: 'inp', value: String(ft.count), style: { width: '70px', padding: '8px 10px' }, onInput: e => { state.forcedTrailers[fti].count = Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)); } });
       ftRow.appendChild(countInput);
-      ftRow.appendChild(h('span', { style: { fontSize: '13px', color: 'var(--text-muted)' } }, ft.count === 1 ? 'trailer' : 'trailers'));
+      ftRow.appendChild(h('span', { style: { fontSize: '13px', color: 'var(--text-muted)' } }, ft.count === 1 ? t('logistics.lbTrailerSingular') : t('logistics.lbTrailerPlural')));
       ftRow.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { state.forcedTrailers.splice(fti, 1); render(); } }, '×'));
       forcedBody.appendChild(ftRow);
     });
-    forcedBody.appendChild(h('button', { className: 'btn btn-white', style: { marginTop: '4px' }, onClick: () => { state.forcedTrailers.push({ type: state.trailerType, count: 1 }); render(); } }, '+ ADD TRAILER'));
+    forcedBody.appendChild(h('button', { className: 'btn btn-white', style: { marginTop: '4px' }, onClick: () => { state.forcedTrailers.push({ type: state.trailerType, count: 1 }); render(); } }, t('logistics.lbAddTrailer')));
     typeCard.appendChild(forcedBody);
   }
   cont.appendChild(typeCard);
@@ -1540,7 +1544,7 @@ function renderLoadTab() {
       actions.appendChild(h('button', { className: 'btn btn-white', style: { padding: '4px 9px', fontSize: '15px', fontWeight: 800 }, onClick: () => { const f = state.cart.find(x => x.skuId === s.id); if (f) f.qty++; else state.cart.push({ skuId: s.id, qty: 1 }); render(); } }, '+'));
       foot.appendChild(actions);
     } else {
-      foot.appendChild(h('button', { className: 'btn btn-white', style: { padding: '5px 14px', fontSize: '13px' }, onClick: () => { state.cart.push({ skuId: s.id, qty: 1 }); render(); } }, '+ ADD'));
+      foot.appendChild(h('button', { className: 'btn btn-white', style: { padding: '5px 14px', fontSize: '13px' }, onClick: () => { state.cart.push({ skuId: s.id, qty: 1 }); render(); } }, t('logistics.lbAddBtn')));
     }
     card.appendChild(foot);
     return card;
@@ -1558,26 +1562,26 @@ function renderLoadTab() {
     const right = h('span', { className: 'skp-rail-right' });
     right.appendChild(h('span', { className: 'skp-rail-count' }, String(list.length)));
     const picked = inCartCount(list);
-    if (picked) right.appendChild(h('span', { className: 'skp-rail-dot', title: `${picked} in load` }));
+    if (picked) right.appendChild(h('span', { className: 'skp-rail-dot', title: t('logistics.lbInLoadTooltip', { n: picked }) }));
     item.appendChild(right);
     return item;
   };
-  rail.appendChild(mkRailItem('All', 'All SKUs', sorted));
+  rail.appendChild(mkRailItem('All', t('logistics.lbAllSkus'), sorted));
   mdCatKeys.forEach(cat => rail.appendChild(mkRailItem(cat, cat, mdGroups[cat])));
   md.appendChild(rail);
 
   // Detail pane (search + card grid)
   const detail = h('div', { className: 'skp-detail' });
-  detail.appendChild(h('input', { className: 'inp', value: state.search, placeholder: 'Search all SKUs…', style: { width: '100%', marginBottom: '12px' }, onInput: e => { state.search = e.target.value; render(); } }));
+  detail.appendChild(h('input', { className: 'inp', value: state.search, placeholder: t('logistics.lbSearchAllSkus'), style: { width: '100%', marginBottom: '12px' }, onInput: e => { state.search = e.target.value; render(); } }));
 
   const grid = h('div', { className: 'skp-grid' });
   if (isSearching) {
-    if (!filtered.length) detail.appendChild(h('div', { className: 'skp-empty' }, 'No SKUs match your search.'));
+    if (!filtered.length) detail.appendChild(h('div', { className: 'skp-empty' }, t('logistics.lbNoSkusMatchSearch')));
     else filtered.forEach(s => grid.appendChild(buildSkuCard(s)));
   } else {
     const catSkus = activeCat === 'All' ? sorted : (mdGroups[activeCat] || []);
     if (!catSkus.length) {
-      detail.appendChild(h('div', { className: 'skp-empty' }, 'No SKUs in this category.'));
+      detail.appendChild(h('div', { className: 'skp-empty' }, t('logistics.lbNoSkusInCategory')));
     } else {
       catSkus.filter(s => !(s.parent_group || '')).forEach(s => grid.appendChild(buildSkuCard(s)));
       const parentMap = new Map();
@@ -1597,8 +1601,8 @@ function renderLoadTab() {
   if (state.cart.length > 0) {
     const cartCard = h('div', { className: 'card skp-actionbar' });
     const cartHeader = h('div', { className: 'flex justify-between mb-12' });
-    cartHeader.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 800, fontSize: '13px' } }, 'LOAD LIST'));
-    cartHeader.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.cart = []; render(); } }, 'CLEAR'));
+    cartHeader.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 800, fontSize: '13px' } }, t('logistics.lbLoadList')));
+    cartHeader.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.cart = []; render(); } }, t('logistics.lbClear')));
     cartCard.appendChild(cartHeader);
 
     state.cart.forEach(c => {
@@ -1610,13 +1614,13 @@ function renderLoadTab() {
       if (s.category) nameWrap.appendChild(h('div', { style: { fontSize: '11px', color: 'var(--text-ghost)', fontWeight: 700, marginBottom: '1px' } }, s.category));
       nameWrap.appendChild(h('div', { style: { fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.name));
       row.appendChild(nameWrap);
-      row.appendChild(h('span', { style: { color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' } }, `${c.qty} pcs`));
+      row.appendChild(h('span', { style: { color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' } }, t('logistics.lbPcsCount', { n: c.qty })));
       cartCard.appendChild(row);
     });
 
     const btnGrid = h('div', { className: 'calc-btn-grid' });
-    btnGrid.appendChild(h('button', { className: 'btn btn-dark', style: { width: '100%', fontWeight: 800, fontSize: '16px', padding: '12px 0' }, onClick: () => { state.manualRowsByTrailer = {}; state.editorTrailer = null; state.tab = 'results'; render(); } }, 'CALCULATE LOAD'));
-    btnGrid.appendChild(h('button', { className: 'btn btn-blue-light', style: { width: '100%', fontWeight: 800, fontSize: '16px', padding: '12px 0' }, onClick: () => { state.manualRowsByTrailer = {}; state.editorTrailer = null; state.variant++; state.tab = 'results'; render(); } }, 'RECALCULATE DIFFERENT'));
+    btnGrid.appendChild(h('button', { className: 'btn btn-dark', style: { width: '100%', fontWeight: 800, fontSize: '16px', padding: '12px 0' }, onClick: () => { state.manualRowsByTrailer = {}; state.editorTrailer = null; state.tab = 'results'; render(); } }, t('logistics.lbCalculateLoad')));
+    btnGrid.appendChild(h('button', { className: 'btn btn-blue-light', style: { width: '100%', fontWeight: 800, fontSize: '16px', padding: '12px 0' }, onClick: () => { state.manualRowsByTrailer = {}; state.editorTrailer = null; state.variant++; state.tab = 'results'; render(); } }, t('logistics.lbRecalculateDifferent')));
     cartCard.appendChild(btnGrid);
     cont.appendChild(cartCard);
   }
@@ -1627,7 +1631,7 @@ function renderSkusTab() {
   cont.innerHTML = '';
 
   if (state.skuLoading) {
-    cont.appendChild(h('div', { style: { color: 'var(--text-faint)', fontSize: '15px', padding: '40px', textAlign: 'center', fontWeight: 600 } }, 'Loading SKUs…'));
+    cont.appendChild(h('div', { style: { color: 'var(--text-faint)', fontSize: '15px', padding: '40px', textAlign: 'center', fontWeight: 600 } }, t('logistics.lbLoadingSkus')));
     return;
   }
 
@@ -1637,19 +1641,19 @@ function renderSkusTab() {
   // Header
   const hdr = h('div', { className: 'flex justify-between items-center mb-14 gap-8 flex-wrap' });
   const left = h('div', { className: 'flex items-center gap-10' });
-  left.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 800, fontSize: '14px' } }, `SKU LIBRARY (${sorted.length})`));
-  left.appendChild(h('span', { style: { fontSize: '12px', color: 'var(--text-ghost)', fontWeight: 700 } }, state.skuError ? 'LOCAL FALLBACK' : 'CLOUD SAVED'));
+  left.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 800, fontSize: '14px' } }, t('logistics.lbSkuLibrary', { n: sorted.length })));
+  left.appendChild(h('span', { style: { fontSize: '12px', color: 'var(--text-ghost)', fontWeight: 700 } }, state.skuError ? t('logistics.lbLocalFallback') : t('logistics.lbCloudSaved')));
   hdr.appendChild(left);
 
   const right = h('div', { className: 'flex gap-8 flex-wrap' });
-  right.appendChild(h('button', { className: 'btn btn-white', disabled: state.skuMutating, onClick: async () => { try { await navigator.clipboard.writeText(toCSV(sorted)); } catch (_) {} } }, 'COPY ALL'));
-  right.appendChild(h('button', { className: `btn ${state.pasteMode ? 'btn-dark' : 'btn-white'}`, disabled: state.skuMutating, onClick: () => { state.pasteMode = !state.pasteMode; state.pasteErr = ''; state.pasteText = ''; render(); } }, state.pasteMode ? 'CANCEL' : 'PASTE IMPORT'));
-  right.appendChild(h('button', { className: 'btn btn-red-light', disabled: state.skuMutating, onClick: () => { if (confirm('Reset to defaults?')) { resetSkus(); } } }, 'RESET'));
+  right.appendChild(h('button', { className: 'btn btn-white', disabled: state.skuMutating, onClick: async () => { try { await navigator.clipboard.writeText(toCSV(sorted)); } catch (_) {} } }, t('logistics.lbCopyAll')));
+  right.appendChild(h('button', { className: `btn ${state.pasteMode ? 'btn-dark' : 'btn-white'}`, disabled: state.skuMutating, onClick: () => { state.pasteMode = !state.pasteMode; state.pasteErr = ''; state.pasteText = ''; render(); } }, state.pasteMode ? t('logistics.lbCancel') : t('logistics.lbPasteImport')));
+  right.appendChild(h('button', { className: 'btn btn-red-light', disabled: state.skuMutating, onClick: () => { if (confirm(t('logistics.lbResetConfirm'))) { resetSkus(); } } }, t('logistics.lbReset')));
   right.appendChild(h('button', { className: 'btn btn-accent', disabled: state.skuMutating, onClick: () => {
     if (state.showForm && !state.editId) { state.showForm = false; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false, category: '' }; }
     else { state.showForm = true; state.editId = null; state.formErr = ''; }
     render();
-  } }, state.showForm && !state.editId ? 'CANCEL' : '+ NEW SKU'));
+  } }, state.showForm && !state.editId ? t('logistics.lbCancel') : t('logistics.lbNewSku')));
   hdr.appendChild(right);
   cont.appendChild(hdr);
 
@@ -1657,54 +1661,54 @@ function renderSkusTab() {
     cont.appendChild(h('div', { style: { marginBottom: '14px', color: '#92400E', fontSize: '13px', border: '1px solid #FDE68A', background: '#FFFBEB', padding: '10px 12px', borderRadius: 'var(--radius)', fontWeight: 600 } }, `⚠ ${state.skuError}`));
   }
   if (state.skuMutating) {
-    cont.appendChild(h('div', { style: { marginBottom: '14px', color: 'var(--text-faint)', fontSize: '13px', fontWeight: 600 } }, 'Saving…'));
+    cont.appendChild(h('div', { style: { marginBottom: '14px', color: 'var(--text-faint)', fontSize: '13px', fontWeight: 600 } }, t('logistics.lbSaving')));
   }
 
   // Search
-  cont.appendChild(h('input', { className: 'inp', value: state.search, placeholder: 'Search library…', style: { width: '360px', maxWidth: '100%', marginBottom: '12px' }, onInput: e => { state.search = e.target.value; render(); } }));
+  cont.appendChild(h('input', { className: 'inp', value: state.search, placeholder: t('logistics.lbSearchLibrary'), style: { width: '360px', maxWidth: '100%', marginBottom: '12px' }, onInput: e => { state.search = e.target.value; render(); } }));
 
   // Paste mode
   if (state.pasteMode) {
     const pasteCard = h('div', { className: 'card mb-14', style: { border: '2px solid var(--teal-border)' } });
-    pasteCard.appendChild(h('div', { style: { color: 'var(--teal)', fontWeight: 800, fontSize: '13px', marginBottom: '6px' } }, 'PASTE SKU DATA'));
-    pasteCard.appendChild(h('div', { style: { fontSize: '13px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: '1.7' }, innerHTML: 'Format: <strong>name, sku, length, width, height, weight, notes</strong>' }));
+    pasteCard.appendChild(h('div', { style: { color: 'var(--teal)', fontWeight: 800, fontSize: '13px', marginBottom: '6px' } }, t('logistics.lbPasteSkuData')));
+    pasteCard.appendChild(h('div', { style: { fontSize: '13px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: '1.7' }, innerHTML: t('logistics.lbPasteFormatHint') }));
     const ta = h('textarea', { className: 'inp', value: state.pasteText, placeholder: '4in block, HB-04, 48, 24, 4, 1,', style: { height: '120px', resize: 'vertical' }, onInput: e => { state.pasteText = e.target.value; state.pasteErr = ''; } });
     pasteCard.appendChild(ta);
     if (state.pasteErr) pasteCard.appendChild(h('div', { style: { color: 'var(--red-dark)', fontSize: '13px', marginTop: '6px' } }, state.pasteErr));
     pasteCard.appendChild(h('button', { className: 'btn btn-teal', style: { marginTop: '10px' }, disabled: state.skuMutating, onClick: () => {
       const rows = fromCSV(state.pasteText, sorted.length);
-      if (!rows.length) { state.pasteErr = 'No valid rows found.'; render(); return; }
+      if (!rows.length) { state.pasteErr = t('logistics.lbNoValidRows'); render(); return; }
       state.pasteText = ''; state.pasteMode = false; state.pasteErr = '';
       importSkus(rows);
-    } }, 'IMPORT'));
+    } }, t('logistics.lbImport')));
     cont.appendChild(pasteCard);
   }
 
   // Form
   if (state.showForm) {
     const formCard = h('div', { className: 'card mb-20', style: { border: '2px solid var(--accent-light)' } });
-    formCard.appendChild(h('div', { style: { color: 'var(--accent)', fontWeight: 800, fontSize: '14px', marginBottom: '14px' } }, state.editId ? 'EDIT SKU' : 'NEW SKU'));
+    formCard.appendChild(h('div', { style: { color: 'var(--accent)', fontWeight: 800, fontSize: '14px', marginBottom: '14px' } }, state.editId ? t('logistics.lbEditSku') : t('logistics.lbNewSkuTitle')));
     if (state.formErr) formCard.appendChild(h('div', { style: { marginBottom: '12px', color: 'var(--red-dark)', fontSize: '13px', border: '1px solid var(--red-border)', background: 'var(--red-bg)', padding: '10px 12px', borderRadius: 'var(--radius)' } }, state.formErr));
 
     const grid = h('div', { className: 'form-grid' });
-    [['name','Name'],['sku','SKU Code'],['length','Length (in)'],['width','Width (in)'],['height','Height (in)'],['weight','Weight per piece']].forEach(([k, label]) => {
+    [['name','lbFieldName'],['sku','lbFieldSkuCode'],['length','lbFieldLength'],['width','lbFieldWidth'],['height','lbFieldHeight'],['weight','lbFieldWeightPerPiece']].forEach(([k, labelKey]) => {
       const wrap = h('div');
-      wrap.appendChild(h('div', { className: 'form-label' }, label));
+      wrap.appendChild(h('div', { className: 'form-label' }, t('logistics.' + labelKey)));
       wrap.appendChild(h('input', { className: 'inp', value: state.form[k], onInput: e => { state.form[k] = e.target.value; state.formErr = ''; } }));
       grid.appendChild(wrap);
     });
     const bundleWrap = h('div');
-    bundleWrap.appendChild(h('div', { className: 'form-label' }, 'BUNDLE QTY'));
+    bundleWrap.appendChild(h('div', { className: 'form-label' }, t('logistics.lbFieldBundleQty')));
     bundleWrap.appendChild(h('input', { type: 'number', min: '0', className: 'inp', value: String(state.form.bundleQty || 0), placeholder: '0 = no bundling', onInput: e => { state.form.bundleQty = parseInt(e.target.value, 10) || 0; state.formErr = ''; } }));
     grid.appendChild(bundleWrap);
 
     const notesWrap = h('div', { className: 'full-width' });
-    notesWrap.appendChild(h('div', { className: 'form-label' }, 'NOTES'));
+    notesWrap.appendChild(h('div', { className: 'form-label' }, t('logistics.lbFieldNotes')));
     notesWrap.appendChild(h('textarea', { className: 'inp', value: state.form.notes, style: { minHeight: '70px', resize: 'vertical' }, onInput: e => { state.form.notes = e.target.value; state.formErr = ''; } }));
     grid.appendChild(notesWrap);
 
     const catWrap = h('div');
-    catWrap.appendChild(h('div', { className: 'form-label' }, 'CATEGORY'));
+    catWrap.appendChild(h('div', { className: 'form-label' }, t('logistics.lbFieldCategory')));
     const catList = h('datalist', { id: 'sku-cat-list' });
     ['Holey Board', 'Blocks', 'Sheets'].forEach(c => catList.appendChild(h('option', { value: c })));
     catWrap.appendChild(catList);
@@ -1716,8 +1720,8 @@ function renderSkusTab() {
     const rotCheckbox = h('input', { type: 'checkbox', onChange: e => { state.form.allowRotation = e.target.checked; } });
     rotCheckbox.checked = state.form.allowRotation === true;
     const rotTextWrap = h('div');
-    rotTextWrap.appendChild(h('div', { style: { fontWeight: 700, fontSize: '14px', color: 'var(--text-mid)' } }, 'Allow rotation when loading'));
-    rotTextWrap.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-ghost)', marginTop: '3px', lineHeight: '1.5' } }, "When checked, the algorithm may rotate this SKU’s length and width for better trailer fit"));
+    rotTextWrap.appendChild(h('div', { style: { fontWeight: 700, fontSize: '14px', color: 'var(--text-mid)' } }, t('logistics.lbAllowRotation')));
+    rotTextWrap.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-ghost)', marginTop: '3px', lineHeight: '1.5' } }, t('logistics.lbAllowRotationHint')));
     rotLabel.appendChild(rotCheckbox);
     rotLabel.appendChild(rotTextWrap);
     rotWrap.appendChild(rotLabel);
@@ -1728,16 +1732,16 @@ function renderSkusTab() {
     const formBtns = h('div', { className: 'flex gap-8 mt-14' });
     formBtns.appendChild(h('button', { className: 'btn btn-accent', disabled: state.skuMutating, onClick: () => {
       const f = state.form;
-      if (!f.name.trim()) { state.formErr = 'Name required.'; render(); return; }
-      if (!f.sku.trim()) { state.formErr = 'SKU code required.'; render(); return; }
-      if (!+f.length || !+f.width || !+f.height || !+f.weight) { state.formErr = 'All dimensions and weight must be positive.'; render(); return; }
+      if (!f.name.trim()) { state.formErr = t('logistics.lbNameRequired'); render(); return; }
+      if (!f.sku.trim()) { state.formErr = t('logistics.lbSkuCodeRequired'); render(); return; }
+      if (!+f.length || !+f.width || !+f.height || !+f.weight) { state.formErr = t('logistics.lbDimsWeightPositive'); render(); return; }
       const payload = { name: f.name.trim(), sku: f.sku.trim(), length: +f.length, width: +f.width, height: +f.height, weight: +f.weight, notes: f.notes || '', allowRotation: f.allowRotation === true, category: (f.category || '').trim(), bundleQty: parseInt(f.bundleQty, 10) || 0 };
       const savedEditId = state.editId;
       state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false, category: '', bundleQty: 0 };
       if (savedEditId) updateSku(savedEditId, payload);
       else addSku({ ...payload, color: COLORS[state.skus.length % COLORS.length] });
-    } }, state.editId ? 'SAVE CHANGES' : 'ADD SKU'));
-    formBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false, category: '', bundleQty: 0 }; render(); } }, 'CANCEL'));
+    } }, state.editId ? t('logistics.lbSaveChanges') : t('logistics.lbAddSku')));
+    formBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.showForm = false; state.editId = null; state.formErr = ''; state.form = { name:'',sku:'',length:'',width:'',height:'',weight:'',notes:'', allowRotation: false, category: '', bundleQty: 0 }; render(); } }, t('logistics.lbCancel')));
     formCard.appendChild(formBtns);
     cont.appendChild(formCard);
   }
@@ -1754,7 +1758,7 @@ function renderSkusTab() {
     if (skuAllCollapsed) { state.collapsedCategories = {}; }
     else { const nc = {}; allSkuCatKeys.forEach(c => nc[c] = true); state.collapsedCategories = nc; }
     render();
-  }}, skuAllCollapsed ? 'EXPAND ALL' : 'COLLAPSE ALL'));
+  }}, skuAllCollapsed ? t('logistics.lbExpandAll') : t('logistics.lbCollapseAll')));
   cont.appendChild(skuListHeader);
 
   const skuListWrap = h('div', { style: { marginBottom: '14px' } });
@@ -1787,12 +1791,12 @@ function renderSkusTab() {
         btns.appendChild(h('button', { className: 'btn btn-white', style: { padding: '5px 10px', fontSize: '13px' }, onClick: () => {
           state.form = { name: s.name, sku: s.sku, length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true, category: s.category || '', bundleQty: s.bundleQty || 0 };
           state.editId = s.id; state.showForm = true; state.tab = 'skus'; state.formErr = ''; render();
-        } }, 'EDIT'));
+        } }, t('logistics.lbEdit')));
         btns.appendChild(h('button', { className: 'btn btn-teal-light', style: { padding: '5px 10px', fontSize: '13px' }, onClick: () => {
           state.form = { name: s.name + ' Copy', sku: s.sku + '-2', length: String(s.length), width: String(s.width), height: String(s.height), weight: String(s.weight), notes: s.notes || '', allowRotation: s.allowRotation === true, category: s.category || '', bundleQty: s.bundleQty || 0 };
           state.editId = null; state.showForm = true; state.tab = 'skus'; state.formErr = ''; render();
-        } }, 'COPY'));
-        btns.appendChild(h('button', { className: 'btn btn-red-light', style: { padding: '5px 10px', fontSize: '13px' }, disabled: state.skuMutating, onClick: () => { deleteSku(s.id); } }, 'DEL'));
+        } }, t('logistics.lbCopy')));
+        btns.appendChild(h('button', { className: 'btn btn-red-light', style: { padding: '5px 10px', fontSize: '13px' }, disabled: state.skuMutating, onClick: () => { deleteSku(s.id); } }, t('logistics.lbDel')));
         row.appendChild(btns);
         catBody.appendChild(row);
       });
@@ -2083,8 +2087,8 @@ function openDissolvePreview(srcTi) {
   box.appendChild(listEl);
 
   const btns = h('div', { className: 'flex gap-10 justify-end' });
-  btns.appendChild(h('button', { className: 'btn btn-white', onClick: () => backdrop.remove() }, 'CANCEL'));
-  const approve = h('button', { className: 'btn btn-dark' }, 'APPROVE & COMMIT');
+  btns.appendChild(h('button', { className: 'btn btn-white', onClick: () => backdrop.remove() }, t('logistics.lbCancel')));
+  const approve = h('button', { className: 'btn btn-dark' }, t('logistics.lbApproveCommit'));
   btns.appendChild(approve);
   box.appendChild(btns);
 
@@ -2137,7 +2141,7 @@ function renderResultsTab() {
   const sorted = getSortedSkus();
 
   if (!state.cart.length) {
-    cont.appendChild(h('div', { className: 'card', style: { textAlign: 'center', color: 'var(--text-faint)', padding: '60px', fontSize: '16px' } }, 'NO ITEMS — GO TO LOAD TAB'));
+    cont.appendChild(h('div', { className: 'card', style: { textAlign: 'center', color: 'var(--text-faint)', padding: '60px', fontSize: '16px' } }, t('logistics.lbNoItemsGoToLoad')));
     return;
   }
 
@@ -2145,26 +2149,26 @@ function renderResultsTab() {
 
   // Top buttons
   const topBtns = h('div', { className: 'flex gap-10 flex-wrap mb-14' });
-  topBtns.appendChild(h('button', { className: 'btn btn-blue-light', onClick: () => { state.manualRowsByTrailer = {}; state.editorTrailer = null; state.variant++; render(); } }, 'RECALCULATE DIFFERENT'));
-  topBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.manualRowsByTrailer = {}; state.editorTrailer = null; state.variant = 0; render(); } }, 'RESET VARIANTS'));
-  if (state.committedTrailers) topBtns.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { state.committedTrailers = null; state.committedSig = null; render(); } }, 'UNDO DISSOLVE'));
-  if (result.trailers.length > 0) topBtns.appendChild(h('button', { className: 'btn btn-dark', onClick: () => openBolModal(result) }, 'GENERATE BOLs'));
-  topBtns.appendChild(h('button', { className: 'btn btn-white', onClick: saveLoad }, 'SAVE LOAD'));
-  topBtns.appendChild(h('button', { className: 'btn btn-white', onClick: openLoadModal }, 'LOAD'));
+  topBtns.appendChild(h('button', { className: 'btn btn-blue-light', onClick: () => { state.manualRowsByTrailer = {}; state.editorTrailer = null; state.variant++; render(); } }, t('logistics.lbRecalculateDifferent')));
+  topBtns.appendChild(h('button', { className: 'btn btn-white', onClick: () => { state.manualRowsByTrailer = {}; state.editorTrailer = null; state.variant = 0; render(); } }, t('logistics.lbResetVariants')));
+  if (state.committedTrailers) topBtns.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { state.committedTrailers = null; state.committedSig = null; render(); } }, t('logistics.lbUndoDissolve')));
+  if (result.trailers.length > 0) topBtns.appendChild(h('button', { className: 'btn btn-dark', onClick: () => openBolModal(result) }, t('logistics.lbGenerateBols')));
+  topBtns.appendChild(h('button', { className: 'btn btn-white', onClick: saveLoad }, t('logistics.lbSaveLoad')));
+  topBtns.appendChild(h('button', { className: 'btn btn-white', onClick: openLoadModal }, t('logistics.lbLoadBtn')));
   cont.appendChild(topBtns);
 
   // Runner quick-toggle
   const runnerToggle = h('div', { className: 'flex items-center gap-10 flex-wrap mb-14' });
-  runnerToggle.appendChild(h('span', { style: { color: 'var(--text-muted)', fontWeight: 800, fontSize: '13px' } }, 'RUNNERS'));
+  runnerToggle.appendChild(h('span', { style: { color: 'var(--text-muted)', fontWeight: 800, fontSize: '13px' } }, t('logistics.lbRunners')));
   [0, 3, 4].forEach(rh => {
-    const label = rh === 0 ? 'NONE' : `${rh}" RUNNERS`;
+    const label = rh === 0 ? t('logistics.lbRunnersNone').toUpperCase() : t('logistics.lbRunnersOption', { n: rh }).toUpperCase();
     runnerToggle.appendChild(h('button', { className: `btn ${state.runnerHeight === rh ? 'btn-accent' : 'btn-white'}`, onClick: () => { state.runnerHeight = rh; state.manualRowsByTrailer = {}; state.editorTrailer = null; render(); } }, label));
   });
   cont.appendChild(runnerToggle);
 
   // Stats
   const statsGrid = h('div', { className: 'stats-grid mb-20' });
-  [["TRAILERS NEEDED", result.trailers.length, "var(--accent)"], ["TOTAL PIECES", result.totalUnits, "var(--teal)"], ["TOTAL STACKS", result.totalStacks, "var(--blue)"], ["MIXED STACKS", result.mixedStacks, "var(--purple)"]].forEach(([label, val, color]) => {
+  [[t('logistics.lbTrailersNeeded'), result.trailers.length, "var(--accent)"], [t('logistics.lbTotalPieces'), result.totalUnits, "var(--teal)"], [t('logistics.lbTotalStacks'), result.totalStacks, "var(--blue)"], [t('logistics.lbMixedStacks'), result.mixedStacks, "var(--purple)"]].forEach(([label, val, color]) => {
     const c = h('div', { className: 'card stat-card', style: { borderTopColor: color } });
     c.appendChild(h('div', { className: 'stat-label' }, label));
     c.appendChild(h('div', { className: 'stat-value', style: { color } }, String(val)));
@@ -2175,7 +2179,7 @@ function renderResultsTab() {
   // Warnings
   if (result.warnings.length) {
     const warnCard = h('div', { className: 'card mb-18', style: { border: '2px solid var(--warn-border)', background: 'var(--warn-bg)' } });
-    warnCard.appendChild(h('div', { style: { color: 'var(--warn-text)', fontWeight: 800, fontSize: '13px', marginBottom: '8px' } }, '⚠ LOAD WARNINGS'));
+    warnCard.appendChild(h('div', { style: { color: 'var(--warn-text)', fontWeight: 800, fontSize: '13px', marginBottom: '8px' } }, t('logistics.lbLoadWarnings')));
     result.warnings.forEach(w => warnCard.appendChild(h('div', { style: { color: 'var(--warn-text-dark)', fontSize: '14px', marginBottom: '4px' } }, `• ${w}`)));
     cont.appendChild(warnCard);
   }
@@ -2195,16 +2199,16 @@ function renderResultsTab() {
     const tHdr = h('div', { className: 'flex justify-between items-center mb-10 flex-wrap gap-10', style: { alignItems: 'flex-start' } });
     const tLeft = h('div');
     const titleRow = h('div', { className: 'flex items-center gap-10 flex-wrap' });
-    titleRow.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 900, fontSize: '18px' } }, `TRAILER ${ti + 1} — ${trailerLabel}`));
+    titleRow.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 900, fontSize: '18px' } }, `${t('logistics.lbTrailerNum', { n: ti + 1 })} — ${trailerLabel}`));
     titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--blue-bg)', color: 'var(--blue-dark)' } }, `${trailer.totalStacks} stacks · ${trailer.totalUnits} pcs`));
-    if (trailer.downsizedType) titleRow.appendChild(h('span', { className: 'tag', style: { background: '#FEF3C7', color: '#92400E' } }, 'AUTO-DOWNSIZED'));
-    if (trailer.forcedType && trailer.forcedType !== state.trailerType) titleRow.appendChild(h('span', { className: 'tag', style: { background: '#EDE9FE', color: '#5B21B6' } }, `FORCED: ${trailer.forcedType}`));
-    if (isManual) titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--teal-bg)', color: 'var(--green-dark)' } }, 'CUSTOMIZED'));
+    if (trailer.downsizedType) titleRow.appendChild(h('span', { className: 'tag', style: { background: '#FEF3C7', color: '#92400E' } }, t('logistics.lbAutoDownsized')));
+    if (trailer.forcedType && trailer.forcedType !== state.trailerType) titleRow.appendChild(h('span', { className: 'tag', style: { background: '#EDE9FE', color: '#5B21B6' } }, `${t('logistics.lbForcedPrefix')} ${trailer.forcedType}`));
+    if (isManual) titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--teal-bg)', color: 'var(--green-dark)' } }, t('logistics.lbCustomized')));
     tLeft.appendChild(titleRow);
     const remainingIn = trailerDims.length - (trailer.usedLength || 0);
-    const remLabel = remainingIn === 0 ? 'FULL' : remainingIn >= 12
-      ? `${Math.floor(remainingIn / 12)}' ${remainingIn % 12}" remaining`
-      : `${remainingIn}" remaining`;
+    const remLabel = remainingIn === 0 ? t('logistics.lbFull') : remainingIn >= 12
+      ? t('logistics.lbRemainingFtIn', { ft: Math.floor(remainingIn / 12), in: remainingIn % 12 })
+      : t('logistics.lbRemainingIn', { in: remainingIn });
     const totalBdft = Math.round((trailerDims.length * trailerDims.width * trailerDims.height) / 144);
     const usedBdft = Math.round(Object.values(trailer.skuBreakdown).reduce((s, entry) => {
       const sku = state.skus.find(x => x.id === entry.skuId);
@@ -2212,25 +2216,25 @@ function renderResultsTab() {
     }, 0));
     const bdftPct = totalBdft > 0 ? Math.round((usedBdft / totalBdft) * 100) : 0;
     const subtitleEl = h('div', { style: { fontSize: '14px', color: 'var(--text-muted)', fontWeight: 600, marginTop: '6px' } });
-    const runnerPart = state.runnerHeight > 0 ? ` · <span style="color:#92400E">${state.runnerHeight}" runners</span>` : '';
+    const runnerPart = state.runnerHeight > 0 ? ` · <span style="color:#92400E">${esc(t('logistics.lbRunnersSuffix', { n: state.runnerHeight }))}</span>` : '';
     subtitleEl.innerHTML = `${Math.round(usedPct)}% length · ${Math.round(floorPct)}% floor · ${trailer.mixedStacks} mixed stacks · ${usedBdft.toLocaleString()} / ${totalBdft.toLocaleString()} BDFT (${bdftPct}%) · <span style="color:#D97706">${remLabel}</span>${runnerPart}`;
     tLeft.appendChild(subtitleEl);
     tHdr.appendChild(tLeft);
 
     const tRight = h('div', { className: 'flex gap-8 flex-wrap items-center' });
-    tRight.appendChild(h('button', { className: 'btn btn-blue-light', onClick: () => { state.editorTrailer = state.editorTrailer === ti ? null : ti; render(); } }, state.editorTrailer === ti ? 'CLOSE CUSTOMIZE' : 'CUSTOMIZE TRAILER'));
-    if (result.trailers.length > 1) tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => openDissolvePreview(ti) }, 'DISSOLVE → OTHER'));
+    tRight.appendChild(h('button', { className: 'btn btn-blue-light', onClick: () => { state.editorTrailer = state.editorTrailer === ti ? null : ti; render(); } }, state.editorTrailer === ti ? t('logistics.lbCloseCustomize') : t('logistics.lbCustomizeTrailer')));
+    if (result.trailers.length > 1) tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => openDissolvePreview(ti) }, t('logistics.lbDissolveOther')));
     tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => {
       const dense = compactTrailerRows(trailer.rows);
-      if (dense === trailer.rows) { showToast('Couldn’t compact this trailer — kept current layout.', 'warn'); return; }
+      if (dense === trailer.rows) { showToast(t('logistics.lbCouldntCompact'), 'warn'); return; }
       const sig = rs => (rs || []).map(r => r.rowLength + '/' + r.columns.map(c => c.colWidth + ':' + c.layers.map(l => l.skuId + 'x' + l.count).join('+')).join('|')).join(';');
-      if (sig(dense) === sig(trailer.rows)) { showToast('Load already compact — nothing to shift.', 'warn'); return; }
+      if (sig(dense) === sig(trailer.rows)) { showToast(t('logistics.lbAlreadyCompact'), 'warn'); return; }
       state.manualRowsByTrailer[ti] = dense;
-      showToast('Load refreshed — pieces shifted to fill gaps.', 'success');
+      showToast(t('logistics.lbLoadRefreshed'), 'success');
       render();
-    } }, 'REFRESH LOAD'));
-    if (isManual) tRight.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { delete state.manualRowsByTrailer[ti]; render(); } }, 'CLEAR CUSTOM'));
-    const invInput = h('input', { type: 'text', placeholder: 'BOL / INV #', value: state.trailerInvNumbers[ti] || '', className: 'inp', style: { width: '120px', padding: '8px 10px', fontSize: '13px' }, 'data-trailer-inv': String(ti), 'data-auto-filled': 'false' });
+    } }, t('logistics.lbRefreshLoad')));
+    if (isManual) tRight.appendChild(h('button', { className: 'btn btn-red-light', onClick: () => { delete state.manualRowsByTrailer[ti]; render(); } }, t('logistics.lbClearCustom')));
+    const invInput = h('input', { type: 'text', placeholder: t('logistics.lbBolInvPlaceholder'), value: state.trailerInvNumbers[ti] || '', className: 'inp', style: { width: '120px', padding: '8px 10px', fontSize: '13px' }, 'data-trailer-inv': String(ti), 'data-auto-filled': 'false' });
     invInput.addEventListener('input', () => {
       state.trailerInvNumbers[ti] = invInput.value;
       if (ti === 0) {
@@ -2254,13 +2258,13 @@ function renderResultsTab() {
       }
     });
     tRight.appendChild(invInput);
-    tRight.appendChild(h('button', { className: 'btn btn-teal', onClick: () => printPackingSlip(trailer, trailerDims, trailerLabel, ti + 1, packList, state.trailerInvNumbers[ti] || '') }, 'PRINT LOADING DIAGRAM'));
+    tRight.appendChild(h('button', { className: 'btn btn-teal', onClick: () => printPackingSlip(trailer, trailerDims, trailerLabel, ti + 1, packList, state.trailerInvNumbers[ti] || '') }, t('logistics.lbPrintLoadingDiagram')));
     tHdr.appendChild(tRight);
     tCard.appendChild(tHdr);
 
     // Progress bars
     const progGrid = h('div', { className: 'progress-grid mb-14' });
-    [["LENGTH USED", usedPct, "var(--teal)"], ["FLOOR USED", floorPct, "var(--blue)"]].forEach(([label, pct, color]) => {
+    [[t('logistics.lbLengthUsed'), usedPct, "var(--teal)"], [t('logistics.lbFloorUsed'), floorPct, "var(--blue)"]].forEach(([label, pct, color]) => {
       const wrap = h('div');
       wrap.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-faint)', marginBottom: '6px', fontWeight: 700 } }, label));
       const track = h('div', { className: 'progress-track' });
@@ -2272,7 +2276,7 @@ function renderResultsTab() {
 
     // SVG layout
     const layoutPanel = h('div', { className: 'panel' });
-    layoutPanel.appendChild(h('div', { className: 'panel-title' }, 'TRAILER LAYOUT'));
+    layoutPanel.appendChild(h('div', { className: 'panel-title' }, t('logistics.lbTrailerLayout')));
     const svgWrap = h('div', { className: 'svg-wrap', innerHTML: buildTopViewSVG(trailer, trailerDims) });
     layoutPanel.appendChild(svgWrap);
     tCard.appendChild(layoutPanel);
@@ -2284,7 +2288,7 @@ function renderResultsTab() {
 
     // Packing list
     const packPanel = h('div', { className: 'panel' });
-    packPanel.appendChild(h('div', { className: 'panel-title' }, 'PACKING LIST'));
+    packPanel.appendChild(h('div', { className: 'panel-title' }, t('logistics.lbPackingList')));
     const packGrid = h('div', { className: 'pack-grid' });
     packList.pieces.forEach(item => {
       const pill = h('div', { style: { background: 'var(--surface)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: '15px', fontWeight: 700, color: 'var(--text-mid)', display: 'flex', alignItems: 'center', gap: '10px' } });
@@ -2294,7 +2298,7 @@ function renderResultsTab() {
     });
     packPanel.appendChild(packGrid);
 
-    const stackTitle = h('div', { className: 'panel-title', style: { marginTop: '14px' } }, 'STACK BREAKDOWN');
+    const stackTitle = h('div', { className: 'panel-title', style: { marginTop: '14px' } }, t('logistics.lbStackBreakdown'));
     packPanel.appendChild(stackTitle);
     const stackGrid = h('div', { className: 'stack-grid' });
     packList.stacks.forEach(s => {
@@ -2308,7 +2312,7 @@ function renderResultsTab() {
 
     // Trailer totals
     const totalsPanel = h('div', { className: 'panel' });
-    totalsPanel.appendChild(h('div', { className: 'panel-title' }, 'TRAILER TOTALS'));
+    totalsPanel.appendChild(h('div', { className: 'panel-title' }, t('logistics.lbTrailerTotals')));
     Object.values(trailer.skuBreakdown).forEach(entry => {
       const row = h('div', { className: 'flex items-center gap-8', style: { fontSize: '14px', color: 'var(--text-mid)', padding: '6px 0', borderBottom: '1px solid var(--border-light)' } });
       row.appendChild(h('div', { style: { width: '10px', height: '10px', background: entry.color, borderRadius: '2px' } }));
@@ -2776,12 +2780,12 @@ function showJobBanner(job, pieceCount) {
   const invPart = invNum ? ` | INV# ${invNum}` : '';
   const hasSlip = job.packing_slip_filename || job.packing_slip_pdf;
   const slipLink = hasSlip
-    ? ` <a href="/api/jobs/${encodeURIComponent(job.id)}/packing-slip" target="_blank" style="color:#1e40af;margin-left:12px;text-decoration:underline;font-size:12px;">View Packing Slip</a>`
+    ? ` <a href="/api/jobs/${encodeURIComponent(job.id)}/packing-slip" target="_blank" style="color:#1e40af;margin-left:12px;text-decoration:underline;font-size:12px;">${esc(t('logistics.lbViewPackingSlip'))}</a>`
     : '';
   banner.innerHTML = `
     <div>
-      <strong>Pre-loaded from job:</strong> ${job.customer || '(no customer)'}${invPart}
-      <span style="margin-left:8px;opacity:0.7;">${pieceCount} piece${pieceCount !== 1 ? 's' : ''} added</span>${slipLink}
+      <strong>${esc(t('logistics.lbPreloadedFromJob'))}</strong> ${job.customer || esc(t('logistics.lbNoCustomer'))}${invPart}
+      <span style="margin-left:8px;opacity:0.7;">${esc(t('logistics.lbPiecesAdded', { n: pieceCount }))}</span>${slipLink}
     </div>
     <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;font-size:16px;color:#1e40af;padding:0 4px;">&times;</button>
   `;
@@ -2795,7 +2799,7 @@ async function saveLoad() {
   const customer = (state.prefillJobData?.customer || '').trim();
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const defaultName = customer ? `${customer} — ${dateStr}` : dateStr;
-  const name = prompt('Save load as:', state.currentSavedLoadId ? '' : defaultName);
+  const name = prompt(t('logistics.lbSaveLoadAs'), state.currentSavedLoadId ? '' : defaultName);
   if (name === null) return;
 
   const stateJson = {
@@ -2829,11 +2833,11 @@ async function saveLoad() {
       : '/api/saved-loads';
     const res = isUpdate ? await api.put(url, payload) : await api.post(url, payload);
     const data = res.data;
-    if (!res.ok) { showToast('Failed to save load: ' + (res.error || 'Unknown error'), 'error'); return; }
+    if (!res.ok) { showToast(t('logistics.lbFailedSaveLoad', { error: res.error || t('common.unknownError') }), 'error'); return; }
     state.currentSavedLoadId = data.load.id;
-    showToast('Load saved.', 'success');
+    showToast(t('logistics.lbLoadSavedToast'), 'success');
   } catch {
-    showToast('Network error saving load.', 'error');
+    showToast(t('logistics.lbNetworkErrorSaving'), 'error');
   }
 }
 
@@ -2841,10 +2845,10 @@ async function openLoadModal() {
   let loads = [];
   try {
     const res = await api.get('/api/saved-loads');
-    if (!res.ok) { showToast('Failed to load saved loads.', 'error'); return; }
+    if (!res.ok) { showToast(t('logistics.lbFailedLoadSavedLoads'), 'error'); return; }
     loads = res.data.loads || [];
   } catch {
-    showToast('Network error loading saved loads.', 'error');
+    showToast(t('logistics.lbNetworkErrorLoadingSavedLoads'), 'error');
     return;
   }
 
@@ -2852,27 +2856,27 @@ async function openLoadModal() {
   const modal = h('div', { style: { background: '#fff', borderRadius: '12px', padding: '24px', width: '560px', maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' } });
 
   const hdr = h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } });
-  hdr.appendChild(h('strong', { style: { fontSize: '16px' } }, 'Saved Loads'));
+  hdr.appendChild(h('strong', { style: { fontSize: '16px' } }, t('logistics.lbSavedLoadsTitle')));
   hdr.appendChild(h('button', { style: { background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }, onClick: () => backdrop.remove() }, '×'));
   modal.appendChild(hdr);
 
   if (!loads.length) {
-    modal.appendChild(h('p', { style: { color: 'var(--text-muted)', fontSize: '14px' } }, 'No saved loads.'));
+    modal.appendChild(h('p', { style: { color: 'var(--text-muted)', fontSize: '14px' } }, t('logistics.lbNoSavedLoads')));
   } else {
     const list = h('div', { style: { display: 'grid', gap: '8px' } });
     for (const load of loads) {
       const row = h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', background: '#f9fafb' } });
       const info = h('div', { style: { flex: '1', minWidth: '0' } });
-      info.appendChild(h('div', { style: { fontWeight: '700', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, load.name || '(unnamed)'));
-      info.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-muted)' } }, `${load.customer || ''}${load.customer && load.trailer_type ? ' · ' : ''}${load.trailer_type || ''} · Saved ${new Date(load.updated_at).toLocaleDateString()}`));
+      info.appendChild(h('div', { style: { fontWeight: '700', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, load.name || t('logistics.lbUnnamed')));
+      info.appendChild(h('div', { style: { fontSize: '12px', color: 'var(--text-muted)' } }, `${load.customer || ''}${load.customer && load.trailer_type ? ' · ' : ''}${load.trailer_type || ''} · ${t('logistics.lbSavedOn', { date: new Date(load.updated_at).toLocaleDateString() })}`));
       row.appendChild(info);
 
-      const loadBtn = h('button', { className: 'btn btn-white', style: { padding: '6px 12px', fontSize: '12px', whiteSpace: 'nowrap' } }, 'Load');
+      const loadBtn = h('button', { className: 'btn btn-white', style: { padding: '6px 12px', fontSize: '12px', whiteSpace: 'nowrap' } }, t('logistics.lbLoadItemBtn'));
       loadBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         try {
           const res = await api.get('/api/saved-loads/' + encodeURIComponent(load.id));
-          if (!res.ok) { showToast('Failed to load: ' + (res.error || ''), 'error'); return; }
+          if (!res.ok) { showToast(t('logistics.lbFailedLoad', { error: res.error || '' }), 'error'); return; }
           const s = JSON.parse(res.data.load.state_json || '{}');
           if (s.trailerType)          state.trailerType          = s.trailerType;
           if (s.trailerInvNumbers)    state.trailerInvNumbers    = s.trailerInvNumbers;
@@ -2891,9 +2895,9 @@ async function openLoadModal() {
           state.editorTrailer = null;
           backdrop.remove();
           render();
-          showToast('Load restored.', 'success');
+          showToast(t('logistics.lbLoadRestored'), 'success');
         } catch {
-          showToast('Network error loading saved load.', 'error');
+          showToast(t('logistics.lbNetworkErrorLoadingSaved'), 'error');
         }
       });
       row.appendChild(loadBtn);
@@ -2901,14 +2905,14 @@ async function openLoadModal() {
       const delBtn = h('button', { className: 'btn btn-red-light', style: { padding: '6px 10px', fontSize: '12px', whiteSpace: 'nowrap' } }, '×');
       delBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (!confirm(`Delete saved load "${load.name || '(unnamed)'}"?`)) return;
+        if (!confirm(t('logistics.lbDeleteSavedLoadConfirm', { name: load.name || t('logistics.lbUnnamed') }))) return;
         try {
           const res = await api.del('/api/saved-loads/' + encodeURIComponent(load.id));
-          if (!res.ok) { showToast('Delete failed.', 'error'); return; }
+          if (!res.ok) { showToast(t('logistics.lbDeleteFailed'), 'error'); return; }
           row.remove();
-          if (!list.children.length) list.appendChild(h('p', { style: { color: 'var(--text-muted)', fontSize: '14px' } }, 'No saved loads.'));
+          if (!list.children.length) list.appendChild(h('p', { style: { color: 'var(--text-muted)', fontSize: '14px' } }, t('logistics.lbNoSavedLoads')));
         } catch {
-          showToast('Network error.', 'error');
+          showToast(t('logistics.lbNetworkError'), 'error');
         }
       });
       row.appendChild(delBtn);
@@ -2925,13 +2929,13 @@ async function openPullJobPicker() {
   const modal = document.getElementById('pull-job-picker-modal');
   const list  = document.getElementById('pull-job-list');
   modal.style.display = 'flex';
-  list.innerHTML = '<div style="color:#6b7280;padding:12px;">Loading jobs…</div>';
+  list.innerHTML = `<div style="color:#6b7280;padding:12px;">${esc(t('logistics.loadingJobs'))}</div>`;
   try {
     const res = await api.get('/api/jobs?status=done,loading');
     const data = res.data;
     const jobs = (data.jobs || data.data || []).filter(j => j.status === 'done' || j.status === 'loading');
     if (!jobs.length) {
-      list.innerHTML = '<div style="color:#6b7280;padding:12px;">No Done or Loading jobs found.</div>';
+      list.innerHTML = `<div style="color:#6b7280;padding:12px;">${esc(t('logistics.lbNoDoneLoadingJobs'))}</div>`;
       return;
     }
     list.innerHTML = '';
@@ -2940,8 +2944,8 @@ async function openPullJobPicker() {
       item.style.cssText = 'padding:10px 14px;cursor:pointer;border-bottom:1px solid #f3f4f6;';
       item.onmouseenter = () => item.style.background = '#f9fafb';
       item.onmouseleave = () => item.style.background = '';
-      const invPart = job.invoice_number ? ` — INV# ${job.invoice_number}` : '';
-      item.textContent = `${job.customer || '(no customer)'}${invPart}`;
+      const invPart = job.invoice_number ? ` — ${t('logistics.invHash')} ${job.invoice_number}` : '';
+      item.textContent = `${job.customer || t('logistics.lbNoCustomer')}${invPart}`;
       item.onclick = () => {
         closePullJobPicker();
         prefillFromJob(job.id);
@@ -2949,7 +2953,7 @@ async function openPullJobPicker() {
       list.appendChild(item);
     });
   } catch (e) {
-    list.innerHTML = '<div style="color:#ef4444;padding:12px;">Failed to load jobs.</div>';
+    list.innerHTML = `<div style="color:#ef4444;padding:12px;">${esc(t('logistics.lbFailedLoadJobs'))}</div>`;
   }
 }
 
@@ -3043,7 +3047,7 @@ initSkus().then(() => {
     box-shadow:0 8px 32px rgba(0,0,0,0.2);
   ">
     <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #e5e7eb;">
-      <h3 style="margin:0; font-size:16px; font-weight:700; color:#111827;">Pull from Job</h3>
+      <h3 style="margin:0; font-size:16px; font-weight:700; color:#111827;" data-i18n="logistics.lbPullFromJobTitle">Pull from Job</h3>
       <button onclick="closePullJobPicker()" style="background:none; border:none; font-size:22px; cursor:pointer; color:#6b7280; padding:0; line-height:1;">&times;</button>
     </div>
     <div id="pull-job-list" style="overflow-y:auto; flex:1; font-size:14px; color:#111827;"></div>
