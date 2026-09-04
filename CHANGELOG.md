@@ -3614,6 +3614,56 @@ Entries within each module are ordered by prompt # descending (newest first).
   — `dow`/`dowShort`/`month`/`monthShort` + index — manually confirmed present), and an en/es/ht key
   parity check across all catalogs (`jobs` 276, `logistics`/`common`/`home` unchanged, `layout` 20
   with the new subtitle key — no drift).
+- **i18n sweep, phase 4 — Manufacturing module (`manufacturing/index.html`,
+  `block-calculator.html`, `holey-board-calculator.html`) now speaks en/es/ht.** Same wiring-gap
+  pattern as Job Board: `manufacturing-header.js` had no module-catalog `document.write` at all
+  (only the shared `i18n.js`/`i18n-common.js` loads), so a page would have stayed fully English with
+  no catalog error to flag it. New `manufacturing/manufacturing-i18n.js` registers a `manufacturing`
+  catalog shared by all three pages (213 keys × 3 langs, verified parity), wired into
+  `manufacturing-header.js` right after the `i18n-common.js` load and before `shared-header.js`, same
+  position as `jobs-i18n.js`'s block in `jobs-header.js`. Tagged: the dashboard's tool tiles
+  (`index.html`); Block Calculator's sticky bar, Parts Library panel, Block Size/Primary
+  Part/Secondary Part cards, Options (kerf, orientation toggle, machine routing checkboxes with
+  reroute notes), the full Results section (stat grid, cut list table, save-combination flow, cut
+  diagrams with zoom modal, saved-combinations panel), and the Parts management modal (list/add/edit
+  views, validation errors); Holey Board Calculator's chunk settings, quick-calc, order line items
+  (including the dynamically-built line-item rows, which needed their own `t()` wiring since they're
+  built via `element.innerHTML =` in JS, not static markup), results (stat grid, order breakdown
+  table, chunk packing cards with grouped/ranged chunk-number labels), and every `alert()`/`confirm()`
+  dialog across both calculators (part/combo delete confirms, save/network-error fallbacks, the
+  "kerf must be ≥ 0" and dimension-validation messages). Fixed the title/subtitle dead-code override
+  on all three pages: `index.html`'s override matched the module default
+  (`layout.manufacturingTitle`/`Subtitle`) exactly, so it was deleted outright; `block-calculator.html`
+  and `holey-board-calculator.html` each had page-specific text that didn't match the module default,
+  so each got a new `layout.blockCalculatorTitle`/`Subtitle` and `layout.holeyBoardCalculatorTitle`/
+  `Subtitle` key pair added to `shared/i18n-common.js`, with the override scripts converted to the
+  same guarded `tt()` IIFE pattern used on Job Board's subtitle fix. Persisted-vs-display distinctions
+  preserved, same rationale as Job Board's `ship_day`/`PROCESSES[]`: `DIM_NAMES` and the
+  `partNameL`/`W`/`H`/`axis`/`zoneName` identifiers stay English literals everywhere they're used for
+  `===` comparisons or object-key lookups (`renderOrientNote`, `buildOrientNoteText`,
+  `machineFor`/`buildCutListRows`); only the *display* copies shown in the cut-list table, the
+  orientation note, and the on-screen cut diagrams route through new `axisLabel()`/`machineLabel()`
+  helpers that map the English identifier to a translated string at render time. `buildCutListRows()`
+  (the data-structure builder, distinct from the HTML-rendering `renderCutList()`) and the XLSX export
+  it feeds (`exportXlsxFromCalc`/`exportXlsxFromCombo`/`buildAndDownloadXlsx`) were deliberately left
+  untranslated — same category as Job Board's Cut List PDF and `load-builder.html`'s BOL/diagram
+  exports: machine names, axis directions, and sheet headers in a downloaded `.xlsx` are exported
+  document content, not on-screen UI (only the "XLSX library not loaded" on-screen alert was
+  translated). `buildOrientNoteText()` — a second, English-only sentence builder alongside the
+  translated on-screen `renderOrientNote()` — was likewise left untranslated: its return value is
+  persisted verbatim into the saved combo's `result_snapshot.orient_note`, same
+  persisted-document-content exclusion as `buildCutListRows()`. The `"Manual Entry"` sentinel string
+  (used both as a persisted marker in combo snapshots and compared via `!==` when deciding what to
+  display) was left as an English identifier for the same reason as `DIM_NAMES`. Verified via
+  `node --check` on every inline `<script>` block
+  across all three files, a scripted reference-integrity scan (207 direct `t('manufacturing.…')`/
+  `data-i18n` usages resolve, 0 real gaps — the scan first caught a genuine miss, the dynamically-built
+  Holey Board line-item row's labels/aria-labels, which was fixed and reconfirmed; the remaining 6
+  apparent misses after that fix are dynamically-concatenated axis/zone keys built via `'manufacturing.' +
+  AXIS_KEY[axis]` / `ZONE_LABEL_KEY[zoneName]` lookup objects, manually confirmed present and spot-checked
+  for correct en/es/ht resolution), and an en/es/ht key parity check across all catalogs (`manufacturing`
+  213, `jobs`/`logistics`/`common`/`home` unchanged, `layout` 24 with the 4 new title/subtitle keys —
+  no drift).
 - **i18n sweep, phase 2c — Logistics: `load-builder.html` gets a labels/buttons/toasts pass
   (en/es/ht), completing the Logistics module's floor+desk screens.** Deliberately narrower than the
   full tag-everything treatment given to the other three Logistics pages: this file is a bin-packing

@@ -246,7 +246,11 @@
       bolEmailSubtitle: "Next shipping day's Lisma shipments",
       loadBuilderTitle: 'Load Builder',
       loadBuilderSubtitle: 'Load planning and truck configuration',
-      jobsBoardSubtitle: 'Track production jobs from order entry through shipment'
+      jobsBoardSubtitle: 'Track production jobs from order entry through shipment',
+      blockCalculatorTitle: 'Block Calculator',
+      blockCalculatorSubtitle: 'Parts per block, cut list, and layout diagrams',
+      holeyBoardCalculatorTitle: 'Holey Board Calculator',
+      holeyBoardCalculatorSubtitle: 'Calculate chunks needed for board orders'
     },
     es: {
       jobsTitle: 'Tablero de Trabajos',
@@ -268,7 +272,11 @@
       bolEmailSubtitle: 'Envíos Lisma del próximo día de envío',
       loadBuilderTitle: 'Armador de Carga',
       loadBuilderSubtitle: 'Planificación de carga y configuración de camiones',
-      jobsBoardSubtitle: 'Seguimiento de trabajos de producción desde la entrada del pedido hasta el envío'
+      jobsBoardSubtitle: 'Seguimiento de trabajos de producción desde la entrada del pedido hasta el envío',
+      blockCalculatorTitle: 'Calculadora de Bloques',
+      blockCalculatorSubtitle: 'Piezas por bloque, lista de corte y diagramas de disposición',
+      holeyBoardCalculatorTitle: 'Calculadora de Tableros Perforados',
+      holeyBoardCalculatorSubtitle: 'Calcule los trozos necesarios para pedidos de tableros'
     },
     ht: {
       jobsTitle: 'Tablo Travay',
@@ -290,7 +298,11 @@
       bolEmailSubtitle: 'Ekspedisyon Lisma pou pwochen jou ekspedisyon an',
       loadBuilderTitle: 'Konstriktè Chaj',
       loadBuilderSubtitle: 'Planifikasyon chaj ak konfigirasyon kamyon',
-      jobsBoardSubtitle: 'Swiv travay pwodiksyon soti nan antre kòmand rive nan ekspedisyon'
+      jobsBoardSubtitle: 'Swiv travay pwodiksyon soti nan antre kòmand rive nan ekspedisyon',
+      blockCalculatorTitle: 'Kalkilatè Blòk',
+      blockCalculatorSubtitle: 'Pyès pa blòk, lis koupe, ak dyagram plan',
+      holeyBoardCalculatorTitle: 'Kalkilatè Tablo Twou',
+      holeyBoardCalculatorSubtitle: 'Kalkile kantite moso ki nesesè pou kòmand tablo'
     }
   });
 })();
