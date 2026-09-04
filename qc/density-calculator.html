@@ -155,81 +155,82 @@
 
   <script src="/qc/qc-header.js"></script>
   <script>
-    document.getElementById('qc-page-title').textContent = 'Density Calculator';
-    document.getElementById('qc-page-subtitle').textContent = 'Calculate foam density from dimensions and weight.';
+    function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+    document.getElementById('qc-page-title').textContent = tt('layout.densityCalculatorTitle', 'Density Calculator');
+    document.getElementById('qc-page-subtitle').textContent = tt('layout.densityCalculatorSubtitle', 'Calculate foam density from dimensions and weight.');
   </script>
 
   <div class="page-wrap">
     <div class="sticky">
       <div class="bar">
         <div class="left">
-          <div><strong>Density Calculator</strong></div>
+          <div><strong data-i18n="qc.densityCalcHeading">Density Calculator</strong></div>
           <div class="pill" id="statusPill">Ready</div>
         </div>
         <div class="right">
-          <button class="btn ghost" type="button" id="resetBtn">Reset</button>
-          <button class="btn primary" type="button" id="calculateBtn">Calculate</button>
+          <button class="btn ghost" type="button" id="resetBtn" data-i18n="qc.resetBtn">Reset</button>
+          <button class="btn primary" type="button" id="calculateBtn" data-i18n="qc.calculateBtn">Calculate</button>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <h1>Calculator</h1>
-      <div class="small">Enter dimensions in inches and weight in pounds.</div>
+      <h1 data-i18n="qc.calculatorHeading">Calculator</h1>
+      <div class="small" data-i18n="qc.enterDimsHelp">Enter dimensions in inches and weight in pounds.</div>
 
       <div class="grid two">
         <div>
-          <label for="length">Length (in)</label>
+          <label for="length" data-i18n="qc.lengthInLabel">Length (in)</label>
           <input id="length" inputmode="decimal" autocomplete="off" />
         </div>
         <div>
-          <label for="width">Width (in)</label>
+          <label for="width" data-i18n="qc.widthInLabel">Width (in)</label>
           <input id="width" inputmode="decimal" autocomplete="off" />
         </div>
       </div>
 
       <div class="grid two">
         <div>
-          <label for="height">Height (in)</label>
+          <label for="height" data-i18n="qc.heightInLabel">Height (in)</label>
           <input id="height" inputmode="decimal" autocomplete="off" />
         </div>
         <div>
-          <label for="weight">Weight (lbs)</label>
+          <label for="weight" data-i18n="qc.weightLbsLabel">Weight (lbs)</label>
           <input id="weight" inputmode="decimal" autocomplete="off" />
         </div>
       </div>
 
       <div>
-        <label for="targetDensity">Target Density (lb/ft^3) - Optional</label>
+        <label for="targetDensity" data-i18n="qc.targetDensityLabel">Target Density (lb/ft^3) - Optional</label>
         <input id="targetDensity" inputmode="decimal" autocomplete="off" />
       </div>
     </div>
 
     <div class="card">
-      <h1>Results</h1>
+      <h1 data-i18n="qc.resultsHeading">Results</h1>
       <div class="result-grid">
         <div class="result-item">
-          <div class="result-label">Cubic Inches</div>
+          <div class="result-label" data-i18n="qc.cubicInchesLabel">Cubic Inches</div>
           <div class="result-value" id="cubicInchesValue">--</div>
         </div>
         <div class="result-item">
-          <div class="result-label">Cubic Feet</div>
+          <div class="result-label" data-i18n="qc.cubicFeetLabel">Cubic Feet</div>
           <div class="result-value" id="cubicFeetValue">--</div>
         </div>
         <div class="result-item">
-          <div class="result-label">Density (lb/ft^3)</div>
+          <div class="result-label" data-i18n="qc.densityLbFt3Label">Density (lb/ft^3)</div>
           <div class="result-value" id="densityValue">--</div>
         </div>
         <div class="result-item" id="targetCard" style="display:none;">
-          <div class="result-label">Target Density</div>
+          <div class="result-label" data-i18n="qc.targetDensityResultLabel">Target Density</div>
           <div class="result-value" id="targetDensityValue">--</div>
         </div>
         <div class="result-item" id="varianceCard" style="display:none;">
-          <div class="result-label">Variance</div>
+          <div class="result-label" data-i18n="qc.varianceLabel">Variance</div>
           <div class="result-value" id="varianceValue">--</div>
         </div>
         <div class="result-item" id="comparisonCard" style="display:none;">
-          <div class="result-label">Comparison Result</div>
+          <div class="result-label" data-i18n="qc.comparisonResultLabel">Comparison Result</div>
           <div class="result-value" id="comparisonValue">--</div>
         </div>
       </div>
@@ -257,6 +258,11 @@
     const varianceValue = document.getElementById('varianceValue');
     const comparisonValue = document.getElementById('comparisonValue');
 
+    function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
+    // statusPill has no static data-i18n tag: JS is its sole writer (init seeds it
+    // below), same pattern as sampleTitle/sampleProgress on final-inspection.html --
+    // a static tag here would collide with setStatus()'s dynamic messages on langchange.
     function setStatus(text, cls) {
       statusPill.textContent = text;
       statusPill.className = 'pill ' + (cls || '');
@@ -303,9 +309,9 @@
         !inputs.weight || inputs.weight <= 0
       ) {
         if (showErrors) {
-          setStatus('Enter valid values greater than 0 for length, width, height, and weight.', 'err');
+          setStatus(t('qc.errEnterValidValues'), 'err');
         } else {
-          setStatus('Ready', '');
+          setStatus(t('qc.statusReady'), '');
         }
         resetResults();
         return;
@@ -313,7 +319,7 @@
 
       if (targetDensityEl.value.trim() !== '' && (!inputs.targetDensity || inputs.targetDensity <= 0)) {
         if (showErrors) {
-          setStatus('Target density must be greater than 0 when provided.', 'err');
+          setStatus(t('qc.errTargetDensityPositive'), 'err');
         }
         targetCard.style.display = 'none';
         varianceCard.style.display = 'none';
@@ -347,11 +353,11 @@
         varianceValue.textContent = variance >= 0 ? `+${formatFixed(variance)}` : formatFixed(variance);
 
         if (roundedDensity === roundedTarget) {
-          comparisonValue.textContent = 'On Target';
+          comparisonValue.textContent = t('qc.onTarget');
         } else if (roundedDensity > roundedTarget) {
-          comparisonValue.textContent = 'Above Target';
+          comparisonValue.textContent = t('qc.aboveTarget');
         } else {
-          comparisonValue.textContent = 'Below Target';
+          comparisonValue.textContent = t('qc.belowTarget');
         }
       } else {
         targetCard.style.display = 'none';
@@ -359,7 +365,7 @@
         comparisonCard.style.display = 'none';
       }
 
-      setStatus('Density calculated', 'ok');
+      setStatus(t('qc.densityCalculated'), 'ok');
     }
 
     function resetCalculator() {
@@ -369,7 +375,7 @@
       weightEl.value = '';
       targetDensityEl.value = '';
       resetResults();
-      setStatus('Ready', '');
+      setStatus(t('qc.statusReady'), '');
       lengthEl.focus();
     }
 
@@ -387,13 +393,15 @@
 
         if (!valuesPresent) {
           resetResults();
-          setStatus('Ready', '');
+          setStatus(t('qc.statusReady'), '');
           return;
         }
 
         calculateDensity(false);
       });
     });
+
+    setStatus(t('qc.statusReady'), '');
   </script>
 
 </body>

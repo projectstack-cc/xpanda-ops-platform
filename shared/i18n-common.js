@@ -252,7 +252,15 @@
       holeyBoardCalculatorTitle: 'Holey Board Calculator',
       holeyBoardCalculatorSubtitle: 'Calculate chunks needed for board orders',
       beadInventoryTitle: 'Bead Inventory',
-      beadInventorySubtitle: 'Raw bead tracking by silo'
+      beadInventorySubtitle: 'Raw bead tracking by silo',
+      qcIndexSubtitle: 'Launch quality workflows',
+      densityCalculatorTitle: 'Density Calculator',
+      densityCalculatorSubtitle: 'Calculate foam density from dimensions and weight.',
+      scrapLogTitle: 'Scrap Log',
+      incidentReportTitle: 'Incident Report',
+      incidentReportSubtitle: 'Document quality-related incidents for customer, product, and process issues',
+      finalInspectionTitle: 'Final Inspection',
+      finalInspectionSubtitle: 'Perform dimensional inspection and generate controlled PDF records'
     },
     es: {
       jobsTitle: 'Tablero de Trabajos',
@@ -280,7 +288,15 @@
       holeyBoardCalculatorTitle: 'Calculadora de Tableros Perforados',
       holeyBoardCalculatorSubtitle: 'Calcule los trozos necesarios para pedidos de tableros',
       beadInventoryTitle: 'Inventario de Perlas',
-      beadInventorySubtitle: 'Seguimiento de perlas crudas por silo'
+      beadInventorySubtitle: 'Seguimiento de perlas crudas por silo',
+      qcIndexSubtitle: 'Iniciar flujos de calidad',
+      densityCalculatorTitle: 'Calculadora de Densidad',
+      densityCalculatorSubtitle: 'Calcule la densidad de la espuma a partir de dimensiones y peso.',
+      scrapLogTitle: 'Registro de Desperdicio',
+      incidentReportTitle: 'Informe de Incidente',
+      incidentReportSubtitle: 'Documente incidentes de calidad relacionados con el cliente, el producto y el proceso',
+      finalInspectionTitle: 'Inspección Final',
+      finalInspectionSubtitle: 'Realice la inspección dimensional y genere registros PDF controlados'
     },
     ht: {
       jobsTitle: 'Tablo Travay',
@@ -308,7 +324,15 @@
       holeyBoardCalculatorTitle: 'Kalkilatè Tablo Twou',
       holeyBoardCalculatorSubtitle: 'Kalkile kantite moso ki nesesè pou kòmand tablo',
       beadInventoryTitle: 'Envantè Grenn',
-      beadInventorySubtitle: 'Swiv grenn brit pa silo'
+      beadInventorySubtitle: 'Swiv grenn brit pa silo',
+      qcIndexSubtitle: 'Lanse pwosesis kalite',
+      densityCalculatorTitle: 'Kalkilatè Dansite',
+      densityCalculatorSubtitle: 'Kalkile dansite espòm apati dimansyon ak pwa.',
+      scrapLogTitle: 'Rejis Debri',
+      incidentReportTitle: 'Rapò Ensidan',
+      incidentReportSubtitle: 'Dokimante ensidan kalite ki gen rapò ak kliyan, pwodwi, ak pwosesis',
+      finalInspectionTitle: 'Enspeksyon Final',
+      finalInspectionSubtitle: 'Fè enspeksyon dimansyonèl epi jenere rejis PDF kontwole'
     }
   });
 })();

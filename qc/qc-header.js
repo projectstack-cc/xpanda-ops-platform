@@ -27,6 +27,10 @@ if (!window.__xpandaI18nCommonLoaded) {
   window.__xpandaI18nCommonLoaded = true;
   document.write('<script src="/shared/i18n-common.js"><\/script>');
 }
+if (!window.__xpandaQcI18nLoaded) {
+  window.__xpandaQcI18nLoaded = true;
+  document.write('<script src="/qc/qc-i18n.js"><\/script>');
+}
 if (!window.__xpandaSharedHeaderLoaded) {
   window.__xpandaSharedHeaderLoaded = true;
   document.write('<script src="/shared/shared-header.js"><\/script>');

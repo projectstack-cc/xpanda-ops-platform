@@ -253,8 +253,9 @@ textarea {
 
   <script src="/qc/qc-header.js"></script>
   <script>
-    document.getElementById('qc-page-title').textContent = 'Final Inspection';
-    document.getElementById('qc-page-subtitle').textContent = 'Perform dimensional inspection and generate controlled PDF records';
+    function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+    document.getElementById('qc-page-title').textContent = tt('layout.finalInspectionTitle', 'Final Inspection');
+    document.getElementById('qc-page-subtitle').textContent = tt('layout.finalInspectionSubtitle', 'Perform dimensional inspection and generate controlled PDF records');
   </script>
 
   <div class="page-wrap">
@@ -262,110 +263,110 @@ textarea {
     <div class="sticky">
       <div class="bar">
         <div class="left">
-          <div><strong>Final Inspection</strong></div>
+          <div><strong data-i18n="layout.finalInspectionTitle">Final Inspection</strong></div>
           <div class="pill" id="statusPill">Ready</div>
         </div>
         <div class="right">
-          <button class="btn ghost" type="button" id="resetBtn">Reset</button>
-          <button class="btn ghost" type="button" id="addBatchBtn">Add Inspection to Batch</button>
-          <button class="btn primary" type="button" id="submitBtn">Submit</button>
+          <button class="btn ghost" type="button" id="resetBtn" data-i18n="qc.resetBtn">Reset</button>
+          <button class="btn ghost" type="button" id="addBatchBtn" data-i18n="qc.addInspectionToBatchBtn">Add Inspection to Batch</button>
+          <button class="btn primary" type="button" id="submitBtn" data-i18n="qc.submitBtn">Submit</button>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <h1>Job Info</h1>
+      <h1 data-i18n="qc.jobInfoHeading">Job Info</h1>
 
       <div class="grid two">
         <div>
-          <label for="jobId">Job ID</label>
+          <label for="jobId" data-i18n="qc.jobIdLabel">Job ID</label>
           <input id="jobId" autocomplete="off" />
         </div>
         <div>
-          <label for="inspector">Inspector</label>
+          <label for="inspector" data-i18n="qc.inspectorLabel">Inspector</label>
           <input id="inspector" value="Stephen Cook" autocomplete="off" />
         </div>
       </div>
 
       <div class="grid two">
         <div>
-          <label for="productCut">Product Cut</label>
+          <label for="productCut" data-i18n="qc.productCutLabel">Product Cut</label>
           <input id="productCut" autocomplete="off" />
         </div>
         <div>
-          <label for="totalPieces">Total Pieces in Job</label>
+          <label for="totalPieces" data-i18n="qc.totalPiecesLabel">Total Pieces in Job</label>
           <input id="totalPieces" inputmode="numeric" pattern="[0-9]*" autocomplete="off" />
         </div>
       </div>
 
       <div class="grid two">
         <div>
-          <label for="customerSelect">Customer</label>
+          <label for="customerSelect" data-i18n="qc.customerLabel">Customer</label>
           <select id="customerSelect">
-            <option value="">Loading customers...</option>
+            <option value="" data-i18n="qc.loadingCustomers">Loading customers...</option>
           </select>
         </div>
 
         <div>
-          <label for="newCustomer">Add New Customer</label>
+          <label for="newCustomer" data-i18n="qc.addNewCustomerLabel">Add New Customer</label>
           <div class="row add-customer-row">
-            <input id="newCustomer" placeholder="Enter new customer name..." />
-            <button class="btn ghost" type="button" id="addCustomerBtn">Add</button>
+            <input id="newCustomer" placeholder="Enter new customer name..." data-i18n-placeholder="qc.enterNewCustomerPlaceholder" />
+            <button class="btn ghost" type="button" id="addCustomerBtn" data-i18n="qc.addBtn">Add</button>
           </div>
-          <div class="small">Only use if customer is not in dropdown.</div>
+          <div class="small" data-i18n="qc.onlyIfNotInDropdown">Only use if customer is not in dropdown.</div>
         </div>
       </div>
 
       <div class="grid three">
         <div>
-          <label for="date">Date</label>
+          <label for="date" data-i18n="qc.dateLabel">Date</label>
           <input id="date" />
         </div>
         <div>
-          <label for="time">Time</label>
+          <label for="time" data-i18n="qc.timeLabel">Time</label>
           <input id="time" />
         </div>
         <div>
-          <label for="lotSize">Lot Size</label>
+          <label for="lotSize" data-i18n="qc.lotSizeLabel">Lot Size</label>
           <input id="lotSize" inputmode="numeric" pattern="[0-9]*" autocomplete="off" />
         </div>
       </div>
 
       <div class="grid two">
         <div>
-          <label for="sampleSizeRequired">Sample Size Required</label>
+          <label for="sampleSizeRequired" data-i18n="qc.sampleSizeRequiredLabel">Sample Size Required</label>
           <input id="sampleSizeRequired" readonly />
-          <div class="small" id="sampleHelp">Enter lot size (or total pieces) to calculate required sample size.</div>
+          <div class="small" id="sampleHelp" data-i18n="qc.enterLotSizeHelp">Enter lot size (or total pieces) to calculate required sample size.</div>
         </div>
         <div>
-          <label for="tolerance">Tolerance</label>
+          <label for="tolerance" data-i18n="qc.toleranceLabel">Tolerance</label>
           <select id="tolerance">
-            <option value="1/16 (.0625) inch">1/16 (.0625) inch</option>
-            <option value="3/16 (.1875) inch">3/16 (.1875) inch</option>
-            <option value="1/8 (.125) inch" selected>1/8 (.125) inch</option>
-            <option value="1/4 (.25) inch">1/4 (.25) inch</option>
+            <option value="1/16 (.0625) inch" data-i18n="qc.tol1_16">1/16 (.0625) inch</option>
+            <option value="3/16 (.1875) inch" data-i18n="qc.tol3_16">3/16 (.1875) inch</option>
+            <option value="1/8 (.125) inch" data-i18n="qc.tol1_8" selected>1/8 (.125) inch</option>
+            <option value="1/4 (.25) inch" data-i18n="qc.tol1_4">1/4 (.25) inch</option>
           </select>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <h1>Specific Product Dimensions</h1>
+      <h1 data-i18n="qc.specificDimsHeading">Specific Product Dimensions</h1>
       <div class="grid four">
         <div>
-          <label for="dimLength">Length</label>
+          <label for="dimLength" data-i18n="qc.lengthLabel">Length</label>
           <input id="dimLength" inputmode="decimal" />
         </div>
         <div>
-          <label for="dimWidth">Width</label>
+          <label for="dimWidth" data-i18n="qc.widthLabel">Width</label>
           <input id="dimWidth" inputmode="decimal" />
         </div>
         <div>
-          <label for="dimHeight">Height</label>
+          <label for="dimHeight" data-i18n="qc.heightLabel">Height</label>
           <input id="dimHeight" inputmode="decimal" />
         </div>
         <div>
-          <label for="dimTapers">Tapers</label>
+          <label for="dimTapers" data-i18n="qc.tapersLabel">Tapers</label>
           <input id="dimTapers" autocomplete="off" />
         </div>
       </div>
@@ -373,89 +374,89 @@ textarea {
 
     <div class="card">
       <div class="row" style="justify-content: space-between;">
-        <h1 style="margin:0;">Samples</h1>
-        <div class="pill" id="sampleProgress">Sample - of -</div>
+        <h1 style="margin:0;" data-i18n="qc.samplesHeading">Samples</h1>
+        <div class="pill" id="sampleProgress" data-i18n="qc.sampleProgressNeutral">Sample - of -</div>
       </div>
 
       <div class="row sample-nav">
-        <button class="btn ghost" type="button" id="prevSample" disabled>Back</button>
-        <button class="btn ghost" type="button" id="repeatLastBtn" disabled>Repeat Last</button>
-        <button class="btn ghost" type="button" id="nextSample" disabled>Next</button>
+        <button class="btn ghost" type="button" id="prevSample" disabled data-i18n="qc.backBtn">Back</button>
+        <button class="btn ghost" type="button" id="repeatLastBtn" disabled data-i18n="qc.repeatLastBtn">Repeat Last</button>
+        <button class="btn ghost" type="button" id="nextSample" disabled data-i18n="qc.nextBtn">Next</button>
       </div>
 
       <div class="card sample-card" id="sampleCard">
-        <h2 id="sampleTitle">Sample #-</h2>
+        <h2 id="sampleTitle" data-i18n="qc.sampleTitleNeutral">Sample #-</h2>
 
         <div class="grid four">
           <div>
-            <label for="sLen">Length</label>
+            <label for="sLen" data-i18n="qc.lengthLabel">Length</label>
             <input id="sLen" inputmode="decimal" disabled />
           </div>
           <div>
-            <label for="sWid">Width</label>
+            <label for="sWid" data-i18n="qc.widthLabel">Width</label>
             <input id="sWid" inputmode="decimal" disabled />
           </div>
           <div>
-            <label for="sHei">Height</label>
+            <label for="sHei" data-i18n="qc.heightLabel">Height</label>
             <input id="sHei" inputmode="decimal" disabled />
           </div>
           <div>
-            <label for="sTap">Taper</label>
+            <label for="sTap" data-i18n="qc.taperLabel">Taper</label>
             <input id="sTap" inputmode="decimal" disabled />
           </div>
         </div>
 
         <div class="grid two">
           <div>
-            <label>Visual/Surface (checked = pass)</label>
+            <label data-i18n="qc.visualSurfaceLabel">Visual/Surface (checked = pass)</label>
             <div class="checkbox-row">
               <label for="sVisual" class="checkbox-row-label">
                 <input type="checkbox" id="sVisual" disabled />
-                <span class="pill">Mark checked if visual/surface is acceptable.</span>
+                <span class="pill" data-i18n="qc.markCheckedVisualHelp">Mark checked if visual/surface is acceptable.</span>
               </label>
             </div>
           </div>
 
           <div>
-            <label>Pass/Fail (part as a whole)</label>
+            <label data-i18n="qc.passFailLabel">Pass/Fail (part as a whole)</label>
             <div class="toggle">
               <button type="button" id="pfY" disabled>Y</button>
               <button type="button" id="pfN" disabled>N</button>
             </div>
-            <div class="small">This corresponds to the Pass/Fail (Y/N) column on the approved form.</div>
+            <div class="small" data-i18n="qc.passFailFormNote">This corresponds to the Pass/Fail (Y/N) column on the approved form.</div>
           </div>
         </div>
 
         <div>
-          <label for="sNotes">Notes (optional)</label>
-          <textarea id="sNotes" placeholder="Optional notes for this sample..." disabled></textarea>
+          <label for="sNotes" data-i18n="qc.sampleNotesLabel">Notes (optional)</label>
+          <textarea id="sNotes" placeholder="Optional notes for this sample..." disabled data-i18n-placeholder="qc.sampleNotesPlaceholder"></textarea>
         </div>
       </div>
 
-      <div class="small">
+      <div class="small" data-i18n="qc.defectiveScrapNote">
         *** Any product identified as defective should be sent directly to scrap ***
       </div>
     </div>
 
     <div class="card">
-      <h1>Batch Queue</h1>
+      <h1 data-i18n="qc.batchQueueHeading">Batch Queue</h1>
       <div class="batch-actions">
-        <button class="btn primary" type="button" id="submitBatchBtn">Submit Batch</button>
-        <button class="btn ghost" type="button" id="clearBatchBtn">Clear Batch</button>
+        <button class="btn primary" type="button" id="submitBatchBtn" data-i18n="qc.submitBatchBtn">Submit Batch</button>
+        <button class="btn ghost" type="button" id="clearBatchBtn" data-i18n="qc.clearBatchBtn">Clear Batch</button>
       </div>
       <div class="small" id="batchCount">Queued inspections: 0</div>
       <div style="overflow-x:auto; margin-top:10px;">
         <table class="batch-table" id="batchTable">
           <tr>
-            <th>#</th>
-            <th>Customer</th>
-            <th>Product Cut</th>
-            <th>Samples</th>
-            <th>Queued</th>
-            <th>Action</th>
+            <th data-i18n="qc.colNum">#</th>
+            <th data-i18n="qc.colCustomer">Customer</th>
+            <th data-i18n="qc.colProductCut">Product Cut</th>
+            <th data-i18n="qc.colSamples">Samples</th>
+            <th data-i18n="qc.colQueued">Queued</th>
+            <th data-i18n="qc.colAction">Action</th>
           </tr>
           <tr>
-            <td colspan="6" class="small">No inspections queued.</td>
+            <td colspan="6" class="small" data-i18n="qc.noInspectionsQueued">No inspections queued.</td>
           </tr>
         </table>
       </div>
@@ -531,6 +532,11 @@ textarea {
     const addCustomerBtn = document.getElementById('addCustomerBtn');
 
     // ====== HELPERS ======
+    function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
+    // statusPill has no static data-i18n tag: JS is its sole writer (init seeds it),
+    // same pattern as sampleTitle/sampleProgress below -- a static tag would collide
+    // with setStatus()'s dynamic messages on langchange.
     function setStatus(text, cls) {
       statusPill.textContent = text;
       statusPill.className = 'pill ' + (cls || '');
@@ -658,13 +664,19 @@ textarea {
       setPassFail(s.passFail || '');
     }
 
+    // sampleTitle/sampleProgress are rebuilt by JS every time the sample state
+    // changes (they carry interpolated numbers apply()'s generic re-render can't
+    // supply), so they intentionally have no data-i18n tag in the HTML -- these
+    // setters are the only writer and always call t() with the current vars.
     function setNeutralSampleState() {
       sampleCount = 0;
       activeSampleIndex = 0;
       samples = [];
 
-      sampleTitle.textContent = 'Sample #-';
-      sampleProgress.textContent = 'Sample - of -';
+      sampleTitle.removeAttribute('data-i18n');
+      sampleTitle.textContent = t('qc.sampleTitleNeutral');
+      sampleProgress.removeAttribute('data-i18n');
+      sampleProgress.textContent = t('qc.sampleProgressNeutral');
 
       prevSample.disabled = true;
       repeatLastBtn.disabled = true;
@@ -680,8 +692,8 @@ textarea {
         return;
       }
 
-      sampleTitle.textContent = `Sample #${activeSampleIndex + 1}`;
-      sampleProgress.textContent = `Sample ${activeSampleIndex + 1} of ${sampleCount}`;
+      sampleTitle.textContent = t('qc.sampleTitleNum', { n: activeSampleIndex + 1 });
+      sampleProgress.textContent = t('qc.sampleProgress', { n: activeSampleIndex + 1, total: sampleCount });
 
       prevSample.disabled = activeSampleIndex === 0;
       repeatLastBtn.disabled = activeSampleIndex === 0;
@@ -702,7 +714,7 @@ textarea {
       curr.taper = prev.taper || '';
 
       loadActiveSampleToUI();
-      setStatus(`Copied measurements from Sample #${activeSampleIndex} to Sample #${activeSampleIndex + 1}`, 'ok');
+      setStatus(t('qc.copiedMeasurements', { prev: activeSampleIndex, curr: activeSampleIndex + 1 }), 'ok');
     }
 
     function applySampleCount(required) {
@@ -725,13 +737,15 @@ textarea {
 
       if (suggested !== null) {
         sampleSizeRequiredEl.value = String(suggested);
-        sampleHelp.innerHTML = `Calculated automatically: <span class="ok">${suggested}</span>`;
+        sampleHelp.removeAttribute('data-i18n');
+        sampleHelp.innerHTML = `${t('qc.calculatedAutomatically')} <span class="ok">${suggested}</span>`;
         applySampleCount(suggested);
         return;
       }
 
       sampleSizeRequiredEl.value = '';
-      sampleHelp.textContent = 'Enter lot size (or total pieces) to calculate required sample size.';
+      sampleHelp.setAttribute('data-i18n', 'qc.enterLotSizeHelp');
+      sampleHelp.textContent = t('qc.enterLotSizeHelp');
       setNeutralSampleState();
     }
 
@@ -767,7 +781,8 @@ textarea {
       document.getElementById('dimTapers').value = '';
 
       sampleSizeRequiredEl.value = '';
-      sampleHelp.textContent = 'Enter lot size (or total pieces) to calculate required sample size.';
+      sampleHelp.setAttribute('data-i18n', 'qc.enterLotSizeHelp');
+      sampleHelp.textContent = t('qc.enterLotSizeHelp');
       toleranceEl.value = '1/8 (.125) inch';
 
       customerSelect.value = '';
@@ -778,7 +793,7 @@ textarea {
 
       setNeutralSampleState();
       renderBatchQueue();
-      setStatus('Ready', '');
+      setStatus(t('qc.statusReady'), '');
     }
 
     function buildInspectionPayload(requiredCount) {
@@ -815,25 +830,25 @@ textarea {
       saveActiveSampleFromUI();
 
       if (!jobId.value.trim()) {
-        return { ok: false, error: 'Job ID required' };
+        return { ok: false, error: t('qc.jobIdRequired') };
       }
       if (!sampleSizeRequiredEl.value) {
-        return { ok: false, error: 'Enter lot size to calculate required sample size' };
+        return { ok: false, error: t('qc.enterLotSizeToCalc') };
       }
       if (!customerSelect.value) {
-        return { ok: false, error: 'Select customer' };
+        return { ok: false, error: t('qc.errSelectCustomer') };
       }
 
       const requiredCount = toInt(sampleSizeRequiredEl.value);
       if (!requiredCount || requiredCount < 1) {
-        return { ok: false, error: 'Invalid required sample count' };
+        return { ok: false, error: t('qc.invalidRequiredSampleCount') };
       }
 
       const incompleteSamples = getIncompleteSampleNumbers(requiredCount);
       if (incompleteSamples.length) {
         return {
           ok: false,
-          error: `Complete required sample(s): ${incompleteSamples.join(', ')}`
+          error: t('qc.completeRequiredSamples', { list: incompleteSamples.join(', ') })
         };
       }
 
@@ -850,23 +865,23 @@ textarea {
     }
 
     function renderBatchQueue() {
-      batchCount.textContent = `Queued inspections: ${inspectionBatch.length}`;
+      batchCount.textContent = t('qc.queuedInspections', { n: inspectionBatch.length });
 
       batchTable.innerHTML = `
         <tr>
-          <th>#</th>
-          <th>Customer</th>
-          <th>Product Cut</th>
-          <th>Samples</th>
-          <th>Queued</th>
-          <th>Action</th>
+          <th>${t('qc.colNum')}</th>
+          <th>${t('qc.colCustomer')}</th>
+          <th>${t('qc.colProductCut')}</th>
+          <th>${t('qc.colSamples')}</th>
+          <th>${t('qc.colQueued')}</th>
+          <th>${t('qc.colAction')}</th>
         </tr>
       `;
 
       if (!inspectionBatch.length) {
         batchTable.innerHTML += `
           <tr>
-            <td colspan="6" class="small">No inspections queued.</td>
+            <td colspan="6" class="small">${t('qc.noInspectionsQueued')}</td>
           </tr>
         `;
       } else {
@@ -879,7 +894,7 @@ textarea {
               <td>${entry.payload.samples.length}</td>
               <td>${entry.queuedAt}</td>
               <td>
-                <button class="btn ghost" type="button" data-remove-batch="${index}" ${batchSubmitting ? 'disabled' : ''}>Remove</button>
+                <button class="btn ghost" type="button" data-remove-batch="${index}" ${batchSubmitting ? 'disabled' : ''}>${t('qc.removeBtn')}</button>
               </td>
             </tr>
           `;
@@ -909,14 +924,14 @@ textarea {
 
       renderBatchQueue();
       resetInspectionOnly();
-      setStatus(`Inspection added to batch (${inspectionBatch.length} queued)`, 'ok');
+      setStatus(t('qc.inspectionAddedToBatch', { n: inspectionBatch.length }), 'ok');
     }
 
     function clearBatch() {
       if (batchSubmitting) return;
       inspectionBatch = [];
       renderBatchQueue();
-      setStatus('Batch cleared', '');
+      setStatus(t('qc.batchCleared'), '');
     }
 
     async function submitBatch() {
@@ -929,16 +944,16 @@ textarea {
         const queuedItems = [...inspectionBatch];
 
         for (let i = 0; i < queuedItems.length; i++) {
-          setStatus(`Submitting batch item ${i + 1} of ${queuedItems.length}...`, '');
+          setStatus(t('qc.submittingBatchItem', { i: i + 1, total: queuedItems.length }), '');
           submitInspectionPayload(queuedItems[i].payload);
           await wait(1200);
         }
 
         inspectionBatch = [];
         resetInspectionOnly();
-        setStatus(`Batch submission sent (${queuedItems.length} inspections)`, 'ok');
+        setStatus(t('qc.batchSubmissionSent', { n: queuedItems.length }), 'ok');
       } catch (err) {
-        setStatus(`Batch submission stopped: ${String(err?.message || err)}`, 'err');
+        setStatus(t('qc.batchSubmissionStopped', { err: String(err?.message || err) }), 'err');
       } finally {
         batchSubmitting = false;
         renderBatchQueue();
@@ -949,7 +964,7 @@ textarea {
       try {
         const { data: list } = await window.api.get(GAS_URL + "?action=getCustomers");
 
-        customerSelect.innerHTML = '<option value="">Select customer...</option>';
+        customerSelect.innerHTML = `<option value="">${t('qc.selectCustomer')}</option>`;
 
         list.forEach((name) => {
           const opt = document.createElement('option');
@@ -959,8 +974,8 @@ textarea {
         });
 
       } catch (err) {
-        customerSelect.innerHTML = '<option value="">Failed to load</option>';
-        setStatus('Customer list failed', 'warn');
+        customerSelect.innerHTML = `<option value="">${t('qc.failedToLoad')}</option>`;
+        setStatus(t('qc.customerListFailed'), 'warn');
       }
     }
 
@@ -971,6 +986,7 @@ textarea {
       loadCustomers();
       setNeutralSampleState();
       renderBatchQueue();
+      setStatus(t('qc.statusReady'), '');
     })();
 
     // ====== EVENTS ======
@@ -1029,9 +1045,9 @@ textarea {
         return setStatus(validation.error, 'err');
       }
 
-      setStatus('Submitting...', '');
+      setStatus(t('qc.submittingEllipsis'), '');
       submitInspectionPayload(validation.payload);
-      setStatus('Submitted (check Drive)', 'ok');
+      setStatus(t('qc.submittedCheckDrive'), 'ok');
     });
 
     setInterval(() => {
@@ -1042,11 +1058,11 @@ textarea {
       const name = newCustomerInput.value.trim();
 
       if (!name) {
-        setStatus('Enter customer name', 'err');
+        setStatus(t('qc.errEnterCustomerName'), 'err');
         return;
       }
 
-      setStatus('Adding customer...', '');
+      setStatus(t('qc.addingCustomerEllipsis'), '');
 
       try {
         const { data: list } = await window.api.get(
@@ -1054,7 +1070,7 @@ textarea {
         );
 
         newCustomerInput.value = '';
-        customerSelect.innerHTML = '<option value="">Select customer...</option>';
+        customerSelect.innerHTML = `<option value="">${t('qc.selectCustomer')}</option>`;
 
         list.forEach((n) => {
           const opt = document.createElement('option');
@@ -1064,10 +1080,10 @@ textarea {
         });
 
         customerSelect.value = name;
-        setStatus('Customer added', 'ok');
+        setStatus(t('qc.customerAdded'), 'ok');
 
       } catch {
-        setStatus('Add failed', 'err');
+        setStatus(t('qc.addFailed'), 'err');
       }
     });
 
@@ -1080,7 +1096,7 @@ textarea {
 
       inspectionBatch.splice(index, 1);
       renderBatchQueue();
-      setStatus('Removed inspection from batch', '');
+      setStatus(t('qc.removedFromBatch'), '');
     });
   </script>
 

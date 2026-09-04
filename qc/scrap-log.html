@@ -17,25 +17,26 @@
 
   <script src="/qc/qc-header.js"></script>
   <script>
-    document.getElementById('qc-page-title').textContent = 'Scrap Log';
+    function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+    document.getElementById('qc-page-title').textContent = tt('layout.scrapLogTitle', 'Scrap Log');
   </script>
 
   <main class="qc-wrap">
     <form id="scrap-form" class="qc-form">
 
       <div class="card">
-        <h2>Basic Info</h2>
+        <h2 data-i18n="qc.basicInfoHeading">Basic Info</h2>
 
         <div class="qc-form-grid qc-form-grid-2">
           <div class="qc-field">
-            <label for="date">Date</label>
+            <label for="date" data-i18n="qc.dateLabel">Date</label>
             <input type="date" id="date" name="date" required>
           </div>
 
           <div class="qc-field">
-            <label for="shift">Shift</label>
+            <label for="shift" data-i18n="qc.shiftLabel">Shift</label>
             <select id="shift" name="shift" required>
-              <option value="">Select shift</option>
+              <option value="" data-i18n="qc.selectShift">Select shift</option>
               <option value="1">1</option>
               <option value="2">2</option>
               <option value="3">3</option>
@@ -45,83 +46,83 @@
       </div>
 
       <div class="card">
-        <h2>Operator & Machine</h2>
+        <h2 data-i18n="qc.operatorMachineHeading">Operator & Machine</h2>
 
         <div class="qc-form-grid qc-form-grid-2">
           <div class="qc-field">
-            <label for="operator">Operator</label>
+            <label for="operator" data-i18n="qc.operatorLabel">Operator</label>
             <input type="text" id="operator" name="operator" required>
           </div>
 
           <div class="qc-field">
-            <label for="lineMachine">Line / Machine</label>
+            <label for="lineMachine" data-i18n="qc.lineMachineLabel">Line / Machine</label>
             <select id="lineMachine" name="lineMachine" required>
-              <option value="">Select line / machine</option>
-              <option value="Blue Line">Blue Line</option>
-              <option value="Main Line">Main Line</option>
-              <option value="Cross Cutter">Cross Cutter</option>
-              <option value="Hole Cutter">Hole Cutter</option>
+              <option value="" data-i18n="qc.selectLineMachine">Select line / machine</option>
+              <option value="Blue Line" data-i18n="qc.lineBlue">Blue Line</option>
+              <option value="Main Line" data-i18n="qc.lineMain">Main Line</option>
+              <option value="Cross Cutter" data-i18n="qc.lineCross">Cross Cutter</option>
+              <option value="Hole Cutter" data-i18n="qc.lineHole">Hole Cutter</option>
             </select>
           </div>
         </div>
       </div>
 
       <div class="card">
-        <h2>Job Details</h2>
+        <h2 data-i18n="qc.jobDetailsHeading">Job Details</h2>
 
         <div class="qc-form-grid qc-form-grid-2">
           <div class="qc-field">
-            <label for="invNumber">INV #</label>
+            <label for="invNumber" data-i18n="qc.invNumberLabel">INV #</label>
             <input type="text" id="invNumber" name="invNumber" required>
           </div>
 
           <div class="qc-field">
-            <label for="partProduct">Part / Product</label>
+            <label for="partProduct" data-i18n="qc.partProductLabel">Part / Product</label>
             <input type="text" id="partProduct" name="partProduct" required>
           </div>
         </div>
 
         <div class="qc-field">
-          <label for="materialDensity">Material / Density</label>
+          <label for="materialDensity" data-i18n="qc.materialDensityLabel">Material / Density</label>
           <input type="text" id="materialDensity" name="materialDensity" required>
         </div>
       </div>
 
       <div class="card">
-        <h2>Scrap Details</h2>
+        <h2 data-i18n="qc.scrapDetailsHeading">Scrap Details</h2>
 
         <div class="qc-field">
-          <label for="scrapReason">Scrap Reason</label>
+          <label for="scrapReason" data-i18n="qc.scrapReasonLabel">Scrap Reason</label>
           <select id="scrapReason" name="scrapReason" required>
-            <option value="">Select scrap reason</option>
-            <option value="Incorrect Cut">Incorrect Cut</option>
-            <option value="Hole Pass Issue">Hole Pass Issue</option>
-            <option value="Dirty / Wet Foam">Dirty / Wet Foam</option>
-            <option value="Equipment Issue">Equipment Issue</option>
-            <option value="Setup Error">Setup Error</option>
+            <option value="" data-i18n="qc.selectScrapReason">Select scrap reason</option>
+            <option value="Incorrect Cut" data-i18n="qc.reasonIncorrectCut">Incorrect Cut</option>
+            <option value="Hole Pass Issue" data-i18n="qc.reasonHolePassIssue">Hole Pass Issue</option>
+            <option value="Dirty / Wet Foam" data-i18n="qc.reasonDirtyWetFoam">Dirty / Wet Foam</option>
+            <option value="Equipment Issue" data-i18n="qc.reasonEquipmentIssue">Equipment Issue</option>
+            <option value="Setup Error" data-i18n="qc.reasonSetupError">Setup Error</option>
           </select>
         </div>
 
         <div class="qc-field">
-          <label for="notes">Notes</label>
+          <label for="notes" data-i18n="qc.notesLabel">Notes</label>
           <textarea id="notes" name="notes" rows="4"></textarea>
         </div>
       </div>
 
       <div class="card">
-        <h2>Volume</h2>
+        <h2 data-i18n="qc.volumeHeading">Volume</h2>
 
         <div class="qc-field">
-          <label for="scrapCubicIn">Scrap Cubic In</label>
+          <label for="scrapCubicIn" data-i18n="qc.scrapCubicInLabel">Scrap Cubic In</label>
           <input type="number" id="scrapCubicIn" name="scrapCubicIn" min="0.01" step="any" required>
         </div>
 
-        <p class="qc-help-text">Board feet will be calculated automatically on submit.</p>
+        <p class="qc-help-text" data-i18n="qc.bdftAutoCalcHelp">Board feet will be calculated automatically on submit.</p>
       </div>
 
       <div class="card">
         <div class="qc-actions">
-          <button type="submit" id="scrap-submit" class="btn primary">Submit Scrap Entry</button>
+          <button type="submit" id="scrap-submit" class="btn primary" data-i18n="qc.submitScrapEntryBtn">Submit Scrap Entry</button>
         </div>
 
         <div id="scrap-status" class="qc-status" aria-live="polite"></div>
@@ -135,12 +136,19 @@
     const statusEl = document.getElementById('scrap-status');
     const submitBtn = document.getElementById('scrap-submit');
 
+    function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
+    function setSubmitBtnLabel(key) {
+      submitBtn.setAttribute('data-i18n', key);
+      submitBtn.textContent = t(key);
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
       statusEl.textContent = '';
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Saving...';
+      setSubmitBtnLabel('qc.savingEllipsis');
 
       const payload = {
         date: document.getElementById('date').value.trim(),
@@ -167,9 +175,9 @@
         !Number.isFinite(payload.scrapCubicIn) ||
         payload.scrapCubicIn <= 0
       ) {
-        statusEl.textContent = 'Please complete all required fields and enter a valid Scrap Cubic In value.';
+        statusEl.textContent = t('qc.errCompleteRequiredFields');
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Scrap Entry';
+        setSubmitBtnLabel('qc.submitScrapEntryBtn');
         return;
       }
 
@@ -177,18 +185,18 @@
         const { ok, data, error } = await window.api.post('/api/scrap-log', payload);
 
         if (!ok) {
-          throw new Error(data?.error || error || 'Failed to save scrap entry.');
+          throw new Error(data?.error || error || t('qc.errFailedSaveScrap'));
         }
 
         form.reset();
-        statusEl.textContent = 'Scrap entry saved successfully.';
+        statusEl.textContent = t('qc.scrapSavedSuccess');
         document.getElementById('date').focus();
 
       } catch (err) {
-        statusEl.textContent = err.message || 'Failed to save scrap entry.';
+        statusEl.textContent = err.message || t('qc.errFailedSaveScrap');
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Scrap Entry';
+        setSubmitBtnLabel('qc.submitScrapEntryBtn');
       }
     });
   </script>

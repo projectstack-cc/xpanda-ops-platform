@@ -165,8 +165,9 @@
 
   <script src="/qc/qc-header.js"></script>
   <script>
-    document.getElementById('qc-page-title').textContent = 'Incident Report';
-    document.getElementById('qc-page-subtitle').textContent = 'Document quality-related incidents for customer, product, and process issues';
+    function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
+    document.getElementById('qc-page-title').textContent = tt('layout.incidentReportTitle', 'Incident Report');
+    document.getElementById('qc-page-subtitle').textContent = tt('layout.incidentReportSubtitle', 'Document quality-related incidents for customer, product, and process issues');
   </script>
 
   <div class="page-wrap">
@@ -174,127 +175,127 @@
     <div class="sticky">
       <div class="bar">
         <div class="left">
-          <div><strong>Incident Report</strong></div>
+          <div><strong data-i18n="layout.incidentReportTitle">Incident Report</strong></div>
           <div class="pill" id="statusPill">Ready</div>
         </div>
         <div class="right">
-          <button class="btn ghost" type="button" id="resetBtn">Reset</button>
-          <button class="btn primary" type="button" id="submitBtn">Submit</button>
+          <button class="btn ghost" type="button" id="resetBtn" data-i18n="qc.resetBtn">Reset</button>
+          <button class="btn primary" type="button" id="submitBtn" data-i18n="qc.submitBtn">Submit</button>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <h1>Report Info</h1>
+      <h1 data-i18n="qc.reportInfoHeading">Report Info</h1>
 
       <div class="grid two">
         <div>
-          <label for="date">Date</label>
+          <label for="date" data-i18n="qc.dateLabel">Date</label>
           <input id="date" />
         </div>
         <div>
-          <label for="personCompleting">Person Completing Report</label>
+          <label for="personCompleting" data-i18n="qc.personCompletingLabel">Person Completing Report</label>
           <input id="personCompleting" value="Stephen Cook" autocomplete="off" />
         </div>
       </div>
 
       <div>
-        <label for="reportingIndividual">Reporting Individual</label>
+        <label for="reportingIndividual" data-i18n="qc.reportingIndividualLabel">Reporting Individual</label>
         <input id="reportingIndividual" autocomplete="off" />
       </div>
     </div>
 
     <div class="card">
-      <h1>Incident Information</h1>
+      <h1 data-i18n="qc.incidentInfoHeading">Incident Information</h1>
 
       <div class="grid two">
         <div>
-          <label for="customerSelect">Customer Name</label>
+          <label for="customerSelect" data-i18n="qc.customerNameLabel">Customer Name</label>
           <select id="customerSelect">
-            <option value="">Loading customers...</option>
+            <option value="" data-i18n="qc.loadingCustomers">Loading customers...</option>
           </select>
         </div>
 
         <div>
-          <label for="newCustomer">Add New Customer</label>
+          <label for="newCustomer" data-i18n="qc.addNewCustomerLabel">Add New Customer</label>
           <div class="row add-customer-row">
-            <input id="newCustomer" placeholder="Enter new customer name..." />
-            <button class="btn ghost" type="button" id="addCustomerBtn">Add</button>
+            <input id="newCustomer" placeholder="Enter new customer name..." data-i18n-placeholder="qc.enterNewCustomerPlaceholder" />
+            <button class="btn ghost" type="button" id="addCustomerBtn" data-i18n="qc.addBtn">Add</button>
           </div>
-          <div class="small">Only use if customer is not in dropdown.</div>
+          <div class="small" data-i18n="qc.onlyIfNotInDropdown">Only use if customer is not in dropdown.</div>
         </div>
       </div>
 
       <div class="grid three">
         <div>
-          <label for="jobId">Job ID</label>
+          <label for="jobId" data-i18n="qc.jobIdLabel">Job ID</label>
           <input id="jobId" autocomplete="off" />
         </div>
         <div>
-          <label for="productDelivered">Product Delivered</label>
+          <label for="productDelivered" data-i18n="qc.productDeliveredLabel">Product Delivered</label>
           <select id="productDelivered">
-            <option value="">Select product...</option>
-            <option value="Block">Block</option>
-            <option value="Holey Board">Holey Board</option>
-            <option value="Sheets">Sheets</option>
-            <option value="Other">Other</option>
+            <option value="" data-i18n="qc.selectProduct">Select product...</option>
+            <option value="Block" data-i18n="qc.productBlock">Block</option>
+            <option value="Holey Board" data-i18n="qc.productHoleyBoard">Holey Board</option>
+            <option value="Sheets" data-i18n="qc.productSheets">Sheets</option>
+            <option value="Other" data-i18n="qc.productOther">Other</option>
           </select>
         </div>
         <div>
-          <label for="deliveryDate">Delivery Date</label>
+          <label for="deliveryDate" data-i18n="qc.deliveryDateLabel">Delivery Date</label>
           <input id="deliveryDate" />
         </div>
       </div>
 
       <div>
-        <label for="incidentCategory">Incident Category</label>
+        <label for="incidentCategory" data-i18n="qc.incidentCategoryLabel">Incident Category</label>
         <select id="incidentCategory">
-          <option value="">Select category...</option>
-          <option value="Fusion">Fusion</option>
-          <option value="Density">Density</option>
-          <option value="Tolerances">Tolerances</option>
-          <option value="Packaging">Packaging</option>
-          <option value="Delivery">Delivery</option>
-          <option value="Other">Other</option>
+          <option value="" data-i18n="qc.selectCategory">Select category...</option>
+          <option value="Fusion" data-i18n="qc.categoryFusion">Fusion</option>
+          <option value="Density" data-i18n="qc.categoryDensity">Density</option>
+          <option value="Tolerances" data-i18n="qc.categoryTolerances">Tolerances</option>
+          <option value="Packaging" data-i18n="qc.categoryPackaging">Packaging</option>
+          <option value="Delivery" data-i18n="qc.categoryDelivery">Delivery</option>
+          <option value="Other" data-i18n="qc.categoryOther">Other</option>
         </select>
       </div>
 
         <div>
-         <label for="riskLevel">Risk Level</label>
+         <label for="riskLevel" data-i18n="qc.riskLevelLabel">Risk Level</label>
          <select id="riskLevel">
-         <option value="">Select risk level...</option>
-         <option value="Low">Low</option>
-         <option value="Medium">Medium</option>
-         <option value="High">High</option>
+         <option value="" data-i18n="qc.selectRiskLevel">Select risk level...</option>
+         <option value="Low" data-i18n="qc.riskLow">Low</option>
+         <option value="Medium" data-i18n="qc.riskMedium">Medium</option>
+         <option value="High" data-i18n="qc.riskHigh">High</option>
         </select>
     </div>
       <div>
-        <label for="incidentDetails">Incident Details</label>
-        <textarea id="incidentDetails" placeholder="Describe the incident in clear detail..."></textarea>
+        <label for="incidentDetails" data-i18n="qc.incidentDetailsLabel">Incident Details</label>
+        <textarea id="incidentDetails" placeholder="Describe the incident in clear detail..." data-i18n-placeholder="qc.describeIncidentPlaceholder"></textarea>
       </div>
     </div>
 
     <div class="card">
-      <h1>Root Cause and Corrective Action</h1>
+      <h1 data-i18n="qc.rootCauseHeading">Root Cause and Corrective Action</h1>
 
       <div>
-        <label for="rootCauseDescription">Root Cause Description</label>
-        <textarea id="rootCauseDescription" placeholder="Optional at initial submission..."></textarea>
+        <label for="rootCauseDescription" data-i18n="qc.rootCauseDescLabel">Root Cause Description</label>
+        <textarea id="rootCauseDescription" placeholder="Optional at initial submission..." data-i18n-placeholder="qc.optionalAtInitialPlaceholder"></textarea>
       </div>
 
       <div>
-        <label>Implicated Departments</label>
+        <label data-i18n="qc.implicatedDeptsLabel">Implicated Departments</label>
         <div class="checks">
-          <label class="check-item"><input type="checkbox" value="Molding"> <span>Molding</span></label>
-          <label class="check-item"><input type="checkbox" value="Cutting"> <span>Cutting</span></label>
-          <label class="check-item"><input type="checkbox" value="Packaging and Loading"> <span>Packaging and Loading</span></label>
-          <label class="check-item"><input type="checkbox" value="Delivery"> <span>Delivery</span></label>
+          <label class="check-item"><input type="checkbox" value="Molding"> <span data-i18n="qc.deptMolding">Molding</span></label>
+          <label class="check-item"><input type="checkbox" value="Cutting"> <span data-i18n="qc.deptCutting">Cutting</span></label>
+          <label class="check-item"><input type="checkbox" value="Packaging and Loading"> <span data-i18n="qc.deptPackagingLoading">Packaging and Loading</span></label>
+          <label class="check-item"><input type="checkbox" value="Delivery"> <span data-i18n="qc.deptDelivery">Delivery</span></label>
         </div>
       </div>
 
       <div>
-        <label for="correctiveActions">Corrective Actions</label>
-        <textarea id="correctiveActions" placeholder="Optional at initial submission..."></textarea>
+        <label for="correctiveActions" data-i18n="qc.correctiveActionsLabel">Corrective Actions</label>
+        <textarea id="correctiveActions" placeholder="Optional at initial submission..." data-i18n-placeholder="qc.optionalAtInitialPlaceholder"></textarea>
       </div>
     </div>
 
@@ -339,6 +340,11 @@
     const payloadEl = document.getElementById('payload');
 
     // ====== HELPERS ======
+    function t(key, vars) { return window.I18n ? window.I18n.t(key, vars) : key; }
+
+    // statusPill has no static data-i18n tag: JS is its sole writer (init seeds it),
+    // same pattern used on final-inspection.html -- a static tag would collide with
+    // setStatus()'s dynamic messages on langchange.
     function setStatus(text, cls) {
       statusPill.textContent = text;
       statusPill.className = 'pill ' + (cls || '');
@@ -351,7 +357,7 @@
     }
 
     function populateCustomerSelect(list, selectedValue = '') {
-      customerSelect.innerHTML = '<option value="">Select customer...</option>';
+      customerSelect.innerHTML = `<option value="">${t('qc.selectCustomer')}</option>`;
 
       list.forEach(name => {
         const opt = document.createElement('option');
@@ -383,12 +389,12 @@
         cb.checked = false;
       });
 
-      setStatus('Ready', '');
+      setStatus(t('qc.statusReady'), '');
     }
 
     async function loadCustomers() {
       if (!GAS_URL) {
-        customerSelect.innerHTML = '<option value="">Apps Script URL not set yet</option>';
+        customerSelect.innerHTML = `<option value="">${t('qc.appsScriptUrlNotSet')}</option>`;
         return;
       }
 
@@ -401,8 +407,8 @@
 
         populateCustomerSelect(list);
       } catch (err) {
-        customerSelect.innerHTML = '<option value="">Failed to load</option>';
-        setStatus('Customer list failed', 'warn');
+        customerSelect.innerHTML = `<option value="">${t('qc.failedToLoad')}</option>`;
+        setStatus(t('qc.customerListFailed'), 'warn');
       }
     }
 
@@ -410,6 +416,7 @@
     (function init() {
       dateEl.value = utils.todayIso();
       loadCustomers();
+      setStatus(t('qc.statusReady'), '');
     })();
 
     // ====== EVENTS ======
@@ -419,16 +426,16 @@
       const name = newCustomerInput.value.trim();
 
       if (!name) {
-        setStatus('Enter customer name', 'err');
+        setStatus(t('qc.errEnterCustomerName'), 'err');
         return;
       }
 
       if (!GAS_URL) {
-        setStatus('Apps Script URL not set yet', 'warn');
+        setStatus(t('qc.appsScriptUrlNotSet'), 'warn');
         return;
       }
 
-      setStatus('Adding customer...', '');
+      setStatus(t('qc.addingCustomerEllipsis'), '');
 
       try {
         const { data: list } = await window.api.get(
@@ -441,20 +448,20 @@
 
         newCustomerInput.value = '';
         populateCustomerSelect(list, name);
-        setStatus('Customer added', 'ok');
+        setStatus(t('qc.customerAdded'), 'ok');
       } catch (err) {
-        setStatus('Add failed', 'err');
+        setStatus(t('qc.addFailed'), 'err');
       }
     });
 
     submitBtn.addEventListener('click', () => {
-      if (!dateEl.value.trim()) return setStatus('Date required', 'err');
-      if (!personCompleting.value.trim()) return setStatus('Person completing report required', 'err');
-      if (!customerSelect.value) return setStatus('Select customer', 'err');
-      if (!productDelivered.value) return setStatus('Select product delivered', 'err');
-      if (!incidentCategory.value) return setStatus('Select incident category', 'err');
-      if (!incidentDetails.value.trim()) return setStatus('Incident details required', 'err');
-        if (!riskLevel.value) return setStatus('Select risk level', 'err');
+      if (!dateEl.value.trim()) return setStatus(t('qc.errDateRequired'), 'err');
+      if (!personCompleting.value.trim()) return setStatus(t('qc.errPersonCompletingRequired'), 'err');
+      if (!customerSelect.value) return setStatus(t('qc.errSelectCustomer'), 'err');
+      if (!productDelivered.value) return setStatus(t('qc.errSelectProductDelivered'), 'err');
+      if (!incidentCategory.value) return setStatus(t('qc.errSelectIncidentCategory'), 'err');
+      if (!incidentDetails.value.trim()) return setStatus(t('qc.errIncidentDetailsRequired'), 'err');
+        if (!riskLevel.value) return setStatus(t('qc.errSelectRiskLevel'), 'err');
 
       const payload = {
         action: "createIncidentReport",
@@ -474,17 +481,17 @@
       };
 
       if (!GAS_URL) {
-        setStatus('HTML ready — add Apps Script URL next', 'warn');
+        setStatus(t('qc.htmlReadyAddUrl'), 'warn');
         return;
       }
 
-      setStatus('Submitting...', '');
+      setStatus(t('qc.submittingEllipsis'), '');
 
       postForm.action = GAS_URL;
       payloadEl.value = JSON.stringify(payload);
       postForm.submit();
 
-      setStatus('Submitted (check Drive)', 'ok');
+      setStatus(t('qc.submittedCheckDrive'), 'ok');
     });
   </script>
 

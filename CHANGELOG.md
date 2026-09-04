@@ -3701,6 +3701,64 @@ Entries within each module are ordered by prompt # descending (newest first).
   false positives needing manual triage), an en/es/ht key parity check across all catalogs
   (`production` 108, `jobs`/`logistics`/`manufacturing`/`common`/`home` unchanged, `layout` 26 with the
   2 new title/subtitle keys — no drift), and an interpolation spot-check across all three languages.
+- **i18n sweep, phase 6 — QC module (`qc/index.html`, `density-calculator.html`, `scrap-log.html`,
+  `incident-report.html`, `final-inspection.html`) now speaks en/es/ht.** Same wiring-gap pattern as
+  every prior module: `qc-header.js` had no module-catalog `document.write` at all, so a page would
+  have stayed fully English with no error to flag it. New `qc/qc-i18n.js` registers a `qc` catalog
+  shared by all five pages (188 keys × 3 langs, verified parity), wired into `qc-header.js` right
+  after the `i18n-common.js` load and before `shared-header.js`. Title/subtitle overrides resolved
+  per page: `index.html`'s title matched the module default (`layout.qcTitle`) exactly and was deleted
+  outright, but its subtitle ("Launch quality workflows") differs from `layout.qcSubtitle`, so it got a
+  new `layout.qcIndexSubtitle` key; the other four pages each have page-specific title/subtitle text
+  that doesn't match the module default, so each got its own `layout.densityCalculatorTitle`/
+  `Subtitle`, `layout.scrapLogTitle` (no subtitle override on that page — it inherits
+  `layout.qcSubtitle`), `layout.incidentReportTitle`/`Subtitle`, and `layout.finalInspectionTitle`/
+  `Subtitle` key pair, all converted to the guarded `tt()` IIFE pattern. Tagged: the dashboard's
+  workflow tiles; the Density Calculator's full input/results UI; the Scrap Log form (all five card
+  sections, all `<select>` option text with `value` attributes left untouched since they're persisted
+  API payload fields); the Incident Report form (report info, incident information, root-cause and
+  corrective-action sections, department checkboxes, all category/product/risk-level option text with
+  values untouched for the same reason); and Final Inspection's job info, product dimensions, sample
+  navigation/entry, and batch-queue UI, including the dynamically-rebuilt batch table (header row and
+  "no inspections queued" row are regenerated via `innerHTML` on every `renderBatchQueue()` call, not
+  static markup, so those needed their own `t()` wiring rather than static tags).
+
+  Three dynamic/static collision points were found and fixed before commit, all following the
+  precedent set by Production's advisor-caught issue: (1) the `statusPill` status indicator on
+  `density-calculator.html`, `incident-report.html`, and `final-inspection.html` had a static
+  `data-i18n="qc.statusReady"` tag, but `setStatus()` overwrites its text with dozens of different
+  dynamic messages — a language switch mid-status would have silently reverted whatever message was
+  showing back to "Ready". Fixed by dropping the static tag entirely and having each page's init flow
+  call `setStatus(t('qc.statusReady'), '')` once synchronously on load (same "JS owns it fully, with a
+  correct initial seed" approach used for Final Inspection's `sampleTitle`/`sampleProgress`, which
+  carry interpolated numbers `apply()`'s generic re-render can't supply and so were never tag-based to
+  begin with). (2) `final-inspection.html`'s `sampleHelp` help text toggles between the static
+  "Enter lot size…" prompt and a dynamically-built "Calculated automatically: N" — kept a static
+  `data-i18n="qc.enterLotSizeHelp"` tag for correct first paint, but each JS writer now calls
+  `setAttribute('data-i18n', …)` (or `removeAttribute` for the non-catalog computed message) in
+  lockstep with the text, so a language switch always re-resolves whichever state is actually showing.
+  (3) `scrap-log.html`'s submit button toggles between "Submit Scrap Entry" and "Saving..." — same
+  lockstep-attribute-update fix via a new `setSubmitBtnLabel()` helper, mirroring Production's
+  "+ Add Silo" ⇄ "− Cancel" toggle-button fix exactly.
+
+  Deliberately left untranslated: the `tolerance`/`productDelivered`/`incidentCategory`/`riskLevel`/
+  `lineMachine`/`scrapReason`/department-checkbox `value` attributes (persisted directly into the
+  Google Apps Script / D1 payloads — only the visible option/label *text* is tagged); the `personCompleting`/
+  `inspector` fields' `"Stephen Cook"` default value (a real employee name, not UI text); customer names
+  loaded from the customer-list APIs and rendered via `opt.textContent = name` (data, not translatable
+  UI copy — the sweep's standing customer-name exception); and the sample Pass/Fail `Y`/`N` toggle
+  button labels on Final Inspection, left as the single-letter codes matching the physical approved
+  paper form's "Pass/Fail (Y/N) column" the help text explicitly references. No PDF-generation code was
+  found client-side in `final-inspection.html` — the "controlled PDF record" the dashboard tile
+  describes is generated server-side by the Google Apps Script backend, so unlike Job Board/Manufacturing
+  there was no client-side export function needing a persisted-content exclusion.
+
+  Verified via `node --check` on all nine inline `<script>` blocks across the five files, a scripted
+  reference-integrity scan (188 direct `t('qc.…')`/`data-i18n` usages resolve, 0 gaps, 0 unused catalog
+  keys — the broad `/'qc\.…'/g` sweep also confirmed the `setAttribute('data-i18n', 'qc.…')` collision
+  fixes above reference real keys), an en/es/ht key parity check across all catalogs (`qc` 188,
+  `jobs`/`logistics`/`manufacturing`/`production`/`common`/`home` unchanged, `layout` 34 with the 8 new
+  title/subtitle keys — no drift), and an interpolation spot-check across all three languages.
 - **i18n sweep, phase 2c — Logistics: `load-builder.html` gets a labels/buttons/toasts pass
   (en/es/ht), completing the Logistics module's floor+desk screens.** Deliberately narrower than the
   full tag-everything treatment given to the other three Logistics pages: this file is a bin-packing
