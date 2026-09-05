@@ -10,16 +10,6 @@
 
 ## Auth / Session
 
-- [ ] **QC Cleanup-10 — confirm `MIN_PASSWORD_LENGTH` = 8.** `_worker.js/routes/auth.js`
-  top-of-file constant implements the prompt's own recommended value since Steve wasn't
-  available to confirm synchronously. Needs an explicit yes/no (or a different number) from
-  Steve, weighing floor-tablet UX vs. brute-force resistance. One-line change once decided
-  (`login.html`'s client-side check + placeholder would need the matching number too).
-- [ ] **QC Cleanup-10 — KV namespace prerequisite (hard blocker on pushing).** Run
-  `wrangler kv namespace create xpanda-rate-limit`, then paste the returned id into both
-  placeholder `id = "REPLACE_WITH_NAMESPACE_ID"` lines in `wrangler.toml`
-  (`[[kv_namespaces]]` and `[[env.production.kv_namespaces]]`, binding `RATE_LIMIT`) before
-  the commit can be pushed.
 - [ ] **(Optional) Consider a self-service "change my password" settings page.** Discovered
   during QC Cleanup-10: `login.html`'s first-login forced form is currently the *only* caller
   of `/api/auth/change-password` anywhere in the platform — no way for a user to voluntarily
@@ -32,9 +22,10 @@
   still shows transient hits persisting after P405–P408 all ship, look for other sequential
   per-row write loops against the shared D1 (legacy `_worker.js` bulk-insert/import paths,
   the QBO sync path) as the next contention source to batch.
-- [ ] **P406 follow-up — nine v2 `page.tsx` server components re-call `validateSession()`
-  independently of `middleware.ts`.** `schedule`, `orders`, `board`, `blocks`, `loading`, `notes`,
-  `production`, `cutting`, `cutting/crosscutter` each call `validateSession()` a second time (to
+- [ ] **P406 follow-up — ten v2 `page.tsx` server components re-call `validateSession()`
+  independently of `middleware.ts`.** `schedule`, `schedule/desk` (added by P425, after this item
+  was first written), `orders`, `board`, `blocks`, `loading`, `notes`, `production`, `cutting`,
+  `cutting/crosscutter` each call `validateSession()` a second time (to
   read `isAdmin`/`permissions` for client props) after the middleware already validated the same
   request. Low risk (middleware's matcher covers every page route and already 503s on the common
   transient case before the page runs; Next.js's Server Component error boundary handles an
@@ -193,10 +184,6 @@
   every v2-created order is hardcoded `source: "manual"` regardless of how it was filled in.
 - [ ] Dedup the parts-library fetch cache — PartsPicker (P429) and partMatch.ts (P432) each hold
   their own /api/parts cache; centralize into one loader.
-- [x] Persist the order-entry packing slip to R2 on save (mirror legacy `jobs.js` R2 upload) —
-  `cutting-pilot/src/app/api/orders/route.ts` currently inserts `null` for
-  `packing_slip_key`/`packing_slip_pdf`, so v2-entered orders don't carry their uploaded slip into
-  the board's order-detail modal (P345) — only legacy/imported jobs show one there today.
 - [ ] **v2 per-surface i18n extraction** (P442 shipped the `src/lib/i18n.ts` + `LangProvider`/
   `useLang` spine and a bounded 6-string proof-slice on `OrderEntryForm.tsx` only) — the rest of
   `OrderEntryForm.tsx` (dropzone, ship-to, process toggles, line items), plus `/v2/board`, `/v2/
@@ -212,30 +199,12 @@
 
 ## Schedule Board (v2)
 
-- [x] P260 — `schedule_rows` D1 migration (schema only)
-- [x] P261 — v2 schedule cron poller — imports the Google-Sheet schedule into `schedule_rows`, matching rows to `jobs` on `invoice_number`
-- [x] P262 — `GET /v2/api/schedule-board` read endpoint — reads `schedule_rows` (+ matched job data) for the TV board, derives live status
-- [x] P263 — `/v2/schedule` TV board UI — two stacked week bands, shrink-to-fit day columns, live status badges
-- [x] P264 — `schedule` permission key added to `PERMISSION_LABELS` (`admin/roles.html`) — the board is now grantable; an admin still needs to actually check the box for whichever role(s) should see it
-- [x] P261 hotfix — poller switched from Sheets API to Drive API + XLSX parsing (source file is an uploaded Excel doc, not a native Sheet; Sheets API refused it outright). Steve enabled the Drive API and minted a new `drive.readonly`-scoped refresh token (secret updated, validated end-to-end against the real spreadsheet before commit — confirmed working). Also fixed two bugs the real data surfaced: a false-positive PENDING section match on a totals row, and an upsert key too narrow to survive a large order split across multiple delivery days under one base invoice (widened to `invoice_number, ship_week, day_of_week`).
-- [x] P261 hotfix #2 — even after the Drive/XLSX fix + working token, `schedule_rows` still stayed empty: `wrangler tail` caught the real cause, the scheduled handler was hitting the Workers CPU time limit parsing all 190+ historical tabs in the workbook by default. Fixed with SheetJS's `sheets` read option (parse only the 2 needed tabs, ~16s → ~5s). Turned out this account was on the Workers **Free** plan, whose Cron Trigger CPU budget is a fixed, non-configurable 10ms — no parse optimization could ever fit under that, so Steve upgraded to Workers Paid ($5/mo) specifically to unblock this. **Confirmed working live 2026-07-22**: 48 rows written on the first successful poll post-upgrade, correct distribution across both ship weeks, cron back to the normal `*/15 * * * *`.
-- [x] P265 — archived jobs resolve to `Shipped` on the schedule board (highest precedence in `deriveStatuses`), instead of falling through to a stale mid-production status when the floor data was never fully ticked.
-- [x] P266 — truck-type load labels (`FB`/`TL`/`XP` + raw fallback), INV# typography matched to the customer name, collapsible/auto-hiding nav on `/v2/schedule` only, and density retuning so a day column fits 8–9 orders instead of visually clipping around 6.
-- [x] P267 — `/v2/schedule` now has an entry point from the home dashboard (`index.html`) — a `schedule`-permission-gated module card between Cutting and Production, matching sibling card markup exactly.
-- [x] P268 — Production-status badges suppressed behind `SHOW_STATUS_BADGES` (frontend-only; derivation/API untouched); unmatched-row flagging retained.
-- [x] P268 follow-up — restore schedule board status badges. Done in P278: audited `deriveStatuses()` against the real `loading_assignments`/`cutting_lines`/`cutting_sessions` write sites, found and fixed three defects (assignment-row-existence misread as dock activity, `in_transit`/`delivered` missing from the ladder, confirmed v2-only cutting rungs by design), then flipped `SHOW_STATUS_BADGES` to `true`. Flag itself kept in place as a kill switch. Not live until `wrangler deploy` from `cutting-pilot/`.
-- [x] P268 follow-up — reclaimed row space with badges hidden. No longer applicable — badges are restored (P278), so the "hidden" premise this item was tracking is gone. `density.ts` was untouched by P278 (out of scope); no retune was needed since rows are back to their pre-P268 content.
-- [x] P300 — `source_updated_at` (real sheet-pull time, `max(last_seen_at)`) added to `GET /v2/api/schedule-board`, alongside the unchanged `generated_at`.
-- [x] P301 — Honest freshness clock (relative + absolute, ticks on its own, amber past 20 min, explicit "no data") sourced from `source_updated_at`, replacing the old render-time stamp; plus 24/7-TV burn-in mitigation (continuous pixel-shift + 5-min branded logo sweep).
-- [x] P420 — shift assignment badges on `/v2/schedule` order rows — `job_shifts` data surfaced via a new `fetchShiftsByJob` enrichment query on the schedule-board API, rendered as compact slate badges next to the status pill on each order row's second line.
+*(All shipped items moved to `CHANGELOG.md` — 2026-09-04 backlog cleanup.)*
 
 ## Loading Board (v2)
 
-- [x] P304 — Board-wide notes (view→text, edit→textbox, gated on `logistics.loading.tv`'s `edit` action) on `/v2/loading`; bays reversed to high→low (30…20) to match the physical dock; pixel-shift removed from both TV boards (motion discomfort) — logo sweep + freshness clock kept on both.
-- [x] P303 — View-only Loading TV board at `/v2/loading` (new `logistics.loading.tv` permission, all active bays on one screen, bay tint from dominant active load status, self-contained freshness/pixel-shift/logo-sweep hardening); home page Loading card gained a "TV Board" button.
 - [ ] Extract a shared `components/tv/` (freshness-clock) used by both `/v2/schedule` and `/v2/loading` — currently each board is self-contained. (The pixel-shift half of this item was moot as of P304; the logo-sweep half is moot as of P306 — both removed from both boards entirely. Only the freshness clock remains a duplication candidate.)
 - [ ] **P261 follow-up — no `UNIQUE(invoice_number, ship_week, day_of_week)` on `schedule_rows`.** The 1/5 migration didn't add one, so the poller's upsert is done in application code (select-then-insert/update) rather than SQL `ON CONFLICT`. Works fine at 15-min-cron scale, but if `schedule_rows` ever gets a second writer, add the unique index and switch to a real upsert.
-- [x] P263 follow-up — verify shrink-to-fit against a real TV. Steve confirmed 2026-07-24: fits the real wall-mounted TV. Unblocks P277 (linked-jobs 3/3 side rail), which required this to have landed first since it touches the same density/DayColumn/ScheduleBoard files.
 - [ ] **P263 follow-up — late/at-risk highlighting on the schedule board.** Explicitly out of scope for the first UI pass; would need a definition of "late"/"at-risk" (vs. `ship_date`? vs. status stalling?) before scoping.
 - [ ] **P263 follow-up — per-day totals on the schedule board** (load count / bdft sum per `DayColumn`) if useful once the board is in daily use.
 
@@ -317,9 +286,6 @@
   modal.** P319 only added the split-day-groups badge + Partially-shipped indicator to the Kanban
   card render; the list/table view (`jobs/index.html` ~line 823) and the calendar day-detail modal
   (~line 991) don't show it yet.
-- [x] P275/276/277 sequence — linked jobs (trailer sharing). 1/3 (P275, migration), 2/3 (P276,
-  worker + legacy entry UI), 3/3 (P277, `/v2/schedule` side rail) have all shipped. **P277 still
-  needs `wrangler deploy` from `cutting-pilot/` before the rail is live** — v2 doesn't auto-deploy.
 - [ ] **`DELETE /api/jobs` does not cascade the v2 cutting tables.** The child-delete list covers
   neither `cutting_lines` nor `cutting_sessions` (QC Cleanup-13 removed the old legacy
   `cutting_steps` cascade line, which never covered these v2 tables either), so deleting a job that was
@@ -390,14 +356,12 @@ schedule badge):**
 - [ ] **Native-speaker review pass on the Safety i18n catalog** (es/ht) — the SDS/training strings are machine-translated; given liability exposure on a safety portal this should get verified by a native speaker before being treated as authoritative. Non-blocking.
 - [ ] **Dark mode Bucket A — remaining passes** — P184 audit identified Bucket A hits in Safety (0% token adoption — highest priority), `logistics/load-builder.html` (local token system, separate batch), and `track/index.html` (standalone, no tokens.css). P186 covered all other modules. These three remain for dedicated prompts.
 - [ ] Backfill historical `activity_log`/`parts` timestamp rows to SQLite-native space format (QC Cleanup-5 was forward-only — new writes use `nowSqlite()`, but ~5,835 existing `activity_log` rows and historical `parts.created_at`/`updated_at` rows still carry the old ISO-Z format). Same TEXT column, no schema change — a one-off UPDATE/backfill script (`REPLACE(col, 'T', ' ')` truncated to 19 chars, guarded to only touch rows matching the ISO-Z shape) would fully resolve the `admin/activity-log.html` `ORDER BY timestamp DESC` misordering for old rows too, not just new ones.
-- [ ] (Optional, not required for correctness) Refactor the 12+ v2 inline `.replace("T"," ").slice(0,19)` timestamp inserts to a shared `nowSqlite()`-equivalent helper in a v2 lib, for mechanism consistency with the legacy side (QC Cleanup-5 left these as-is per the prompt's explicit optionality — they already emit the correct space format, so this is DRY/consistency only, not a bug fix).
+- [ ] (Optional, not required for correctness) Refactor the 29 v2 inline `.replace("T"," ").slice(0,19)` timestamp inserts (across 29 route files, re-counted 2026-09-04) to a shared `nowSqlite()`-equivalent helper in a v2 lib, for mechanism consistency with the legacy side (QC Cleanup-5 left these as-is per the prompt's explicit optionality — they already emit the correct space format, so this is DRY/consistency only, not a bug fix).
 
 ---
 
 ## Infra / CI-CD
 
-- [x] P302 — GitHub Actions CI/CD for the v2 Worker (`.github/workflows/deploy-v2-worker.yml`): auto build+typecheck on `cutting-pilot/**` pushes.
-- [x] Dropped the deploy approval gate — full auto-deploy on green build, no required reviewer. Steve is enforcing "never push code that depends on a migration before running that migration in the D1 console" as a human rule (updating `AGENTS.md`/`xpanda-ops-agents.md` himself) rather than a CI checkpoint.
 - [ ] Optional: evaluate Cloudflare Workers Builds as the native alternative to this Action.
 
 ---
@@ -414,19 +378,8 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 
 ### Cutting v2 React pilot (`cutting-pilot/`)
 
-- [x] P196 — Route-tree reconcile, dev server green at `/v2/cutting`
-- [x] P197 — Worker build: `opennextjs-cloudflare` build green + local workerd preview boots
-- [x] P198 — Operator loop: queue with per-line state, clock-in/out, handoff notes, complete-line, job-done signal
-- [x] P206 — Cutting v2 UI redesign: tablet-first master-detail board (JobRow/LineRow/Sheet/StatusPill primitives, lucide icons, designed states)
-- [x] P209 — Queue toolbar: client-side search (customer + invoice #) and This-Week/Show-All filter
-- [x] P210 — Theme engine: `ThemeProvider`/`useTheme`, pre-hydration anti-flash script, token-audit fix (`--danger-text`/`--success-text` in dark block)
-- [x] P211 — `<ThemeToggle>` control consuming P210 engine, dropped into the v2 header
-- [x] P212 — `<PlatformHeader>` React port (replaces bare `AppHeader`)
-- [x] P213 — Nav wiring + legacy visual-parity pass
-- [x] P214 — `<CompleteLineModal>`: replaced `window.confirm` with tokenized modal (completion note as `handoff_note`; scrap placeholder hidden on Laminate)
-- [ ] Block-calc planner: 2D canvas cut diagram (port the legacy Canvas render) — optional polish.
+- [ ] Block-calc: per-setup 2D cut diagram (port the legacy Canvas render) — optional polish.
 - [ ] Block-calc: optional per-setup secondary/scrap nesting (small parts into a big part's block remnants) — the old single-part secondaries feature, re-expressed per setup, if yield demands it.
-- [ ] Block-calc: 2D cut diagram per setup (port the legacy Canvas) — optional polish.
 - [ ] Cutting route is tribal knowledge (supervisor decides which line cuts which axis; Main Line can chunk, Blue Line can run standalone). Consider capturing the route on the job so chunk/part targets stop depending on unwritten context.
 - [ ] Wire scrap capture into `<CompleteLineModal>` once the native scrap DB lands (reason + cubic-in + shift + density; derive operator/inv/line/date from session+job; no Laminate scrap)
 - [ ] Material-consumption capture at line-complete — needs a job→block_inventory link + on-hand block picker (block_consumption_log decrements real stock)
@@ -436,14 +389,10 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [ ] Units/hour throughput once qty entry is routine (qty_done_delta + qty_target) — pair with first-pass yield
 - [ ] Throughput/time-tracking report surface (per-line bottleneck rollups across jobs/date range) if a separate analytics view is wanted beyond the on-board badges
 - [ ] Cutting v2: port notifications bell + settings gear into `PlatformHeader` once v2 notification backend exists (deferred from P212)
-- [ ] Deploy + domain attach (Steve — requires wrangler auth + real hostname; workers.dev cannot host the cookie-shared `/v2/*` route)
-- [x] Auth-bridge + operator loop validation — validated end-to-end on the real host (clock-in→handoff→complete→job-done)
-- [x] Nav/cutover surfacing — P234 repointed the Manufacturing tile at `/v2/cutting`; no separate header nav link (P213 deliberately decided against one; that decision stands)
 - [ ] Block-calc engine landed as a pure module in P228 (`blockEngine.ts`) + save route + `blocks_needed`. Remaining: the planner screen (P229), non-taper chunk model, per-job block-dimension defaults, regenerate-on-change.
 - [ ] Taper blocks-needed (materials pull): compute `ceil(chunks ÷ chunks-per-block)` once a chunks-per-block datum exists.
 - [ ] Verify the live `job_line_items.dimensions` taper format matches the P227 regex; widen if needed.
 - [ ] Structured taper/chunk geometry capture (chunk L×W×H + kerf) to compute yield instead of manual entry.
-- [x] P233 — Per-line throughput raw readout (`qty_done[/qty_target] unit · wall · active`) in v2 job-detail `LineRow`, using existing `qty_target` from P225.
 - [ ] v2 cut-plan: units/hr rate and progress bars still open (raw throughput numbers shipped in P233; the rate needs qty-entry to be routine first).
 - [ ] First-pass yield (v2) — blocked on native scrap DB (defect denominator)
 

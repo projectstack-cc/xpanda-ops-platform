@@ -1539,7 +1539,9 @@ Entries within each module are ordered by prompt # descending (newest first).
   `wrangler dev` smoke confirms `/v2/schedule` redirects to legacy login when unauthenticated and a
   `/v2/_next/static/*` chunk serves 200 (asset-prefix wiring intact). No UI polish pass against a real
   TV yet — the density thresholds and clamp floors are engineering judgment, not measured against
-  hardware (flagged below).
+  hardware (flagged below). **Follow-up confirmed 2026-07-24**: Steve verified shrink-to-fit against
+  the real wall-mounted TV — fits as designed. This unblocked P277 (linked-jobs 3/3 side rail), which
+  needed this confirmed first since it touches the same density/DayColumn/ScheduleBoard files.
 - **P262** — `GET /v2/api/schedule-board` read endpoint + live-status derivation (new
   `src/app/api/schedule-board/route.ts`, read-only, no mutations). Reads `schedule_rows` for
   `ship_week IN (currentTab, nextTab)` (reuses `schedule-ingest.ts`'s tab-name helper, no duplicated
