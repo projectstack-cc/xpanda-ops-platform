@@ -214,14 +214,6 @@
 
 ### Standing Logistics Backlog
 
-- [ ] **`load-builder.html` Results tab: `state.trailers` referenced but never declared.** Found
-  2026-09-04 while reviewing the file for the i18n sweep (unrelated to that work, not fixed here).
-  The INV# auto-fill input handler in `renderResultsTab` (near the trailer-numbering loop) reads
-  `state.trailers.length`, but `state` only ever declares `cart`/`skus`/`forcedTrailers`/
-  `manualRowsByTrailer`/`committedTrailers`/`trailerInvNumbers`/`trailerType` — no `trailers`. If
-  reachable, this throws on every keystroke in trailer 0's INV field. Needs its own investigation
-  (confirm the loop is actually reachable, find whether a rename left this stale) rather than a
-  blind fix.
 - [ ] **P392 follow-up — emit `loading_assignment` entity_type from `public.js`'s in_transit/delivered
   dispatch instead of `shipment`.** Would let future shipment-status notifications skip the
   `/api/shipments?id=` → `job_id` → assignment resolve hop entirely. Existing ~850 historical
@@ -232,9 +224,6 @@
   lightweight periodic job that flags any job whose non-archived `loading_assignments` count exceeds
   its `load_count`, so future regressions in the reconcile/backfill/adopt paths surface proactively
   instead of silently accumulating orphan `awaiting` cards again.
-- [ ] **P320 follow-up — ship-day label parity on loading bay-view and shipping-info renders.**
-  P320 only added the ship-day pill to `renderAssignmentCard`; the bay-view card render
-  (`loading.html` ~line 1001) and shipping-info render (~line 1236) don't show it yet.
 - [ ] **P325 follow-up — harden `/api/loading-assignments/load-days`** to return matched-row count
   and warn on 0-row saves.
 - [ ] **P326 follow-up — outbound calendar view: mirror the per-load day split.** Only the outbound
@@ -265,9 +254,6 @@
 
 ## Job Board
 
-- [ ] **P390 follow-up — HB chunk backfill doesn't clear `hb_chunks_required` on jobs that lost
-  all HB line items.** The recompute endpoint only touches jobs that still have HB items; a job
-  edited to remove its last HB line keeps its stale persisted chunk count until resaved.
 - [ ] **P387 follow-up — alias table for made-to-order / customer-worded parts.** Packing-slip
   match audit corpus still has unresolved lines needing a dedicated alias table (Spa Cover `ITEM#`
   keys, block variants, laminate) — separate prompt, not touched by P387/P389.
@@ -282,18 +268,6 @@
   native toolbar (unreliable on tablets); the legacy BOL modal is now the odd one out. Low priority
   — add an explicit Print button (`iframe.contentWindow.print()`, same pattern as v2) if it comes up
   on the floor.
-- [ ] **P319 follow-up — split badge parity on jobs list/table view and calendar day-detail
-  modal.** P319 only added the split-day-groups badge + Partially-shipped indicator to the Kanban
-  card render; the list/table view (`jobs/index.html` ~line 823) and the calendar day-detail modal
-  (~line 991) don't show it yet.
-- [ ] **`DELETE /api/jobs` does not cascade the v2 cutting tables.** The child-delete list covers
-  neither `cutting_lines` nor `cutting_sessions` (QC Cleanup-13 removed the old legacy
-  `cutting_steps` cascade line, which never covered these v2 tables either), so deleting a job that was
-  tracked in v2 orphans those rows. Impact is currently contained: P282's `my-session` route uses a
-  `LEFT JOIN` specifically so an operator whose job row was hard-deleted can still see and close
-  the session, and P258's backstop only ever runs from live delivery/loading write-points. Worth
-  adding both tables to the cascade in a scoped prompt — coordinate with §9a, since the cascade
-  lives in the legacy worker but the tables belong to v2.
 - [ ] **P272 follow-up — unarchiving a legacy `status='archived'` row leaves it in a limbo state.**
   Manual Unarchive now only clears `archived_at`, never writes `status` (P272, by design — a job's
   real status should be restored exactly as it was). But for the finite legacy population backfilled
@@ -355,7 +329,6 @@ schedule badge):**
 - [ ] **JS-built table/card content doesn't re-render on language switch (`xpanda:langchange`)** — found 2026-09-04 during the Reports i18n phase (advisor-flagged), but present across every module this sweep has touched so far. `shared/i18n.js`'s `apply(root)` walks `[data-i18n]`/`[data-i18n-attr]`/`[data-i18n-placeholder]` and re-runs on `xpanda:langchange`, but rows/cells built by JS via `innerHTML`/template literals at data-load time (Job Board's `renderList`/`buildCard`, Manufacturing's cut-list rows, QC's dynamically-built rows, Reports' `renderTable`/`sessionsTable`/`cutItemsTable`/invoice groups, etc.) carry no `data-i18n` nodes at all — a language switch after data has loaded leaves that content frozen in whichever language was active at render time until the next reload/refetch. Two narrower instances of the same root cause (a rebuilt placeholder `<option>` losing its tag) were fixed directly in Reports (`incidents/list.html`, `cutting/index.html` — see the i18n sweep bullet above), but the general case — full tables/cards — needs a platform-wide fix, not a per-page patch: likely a shared `xpanda:langchange` listener convention that re-invokes each page's own render function. Revisit once the sweep reaches full-module coverage; not blocking since content is correct on load and after any refetch.
 - [ ] **Native-speaker review pass on the Safety i18n catalog** (es/ht) — the SDS/training strings are machine-translated; given liability exposure on a safety portal this should get verified by a native speaker before being treated as authoritative. Non-blocking.
 - [ ] **Dark mode Bucket A — remaining passes** — P184 audit identified Bucket A hits in Safety (0% token adoption — highest priority), `logistics/load-builder.html` (local token system, separate batch), and `track/index.html` (standalone, no tokens.css). P186 covered all other modules. These three remain for dedicated prompts.
-- [ ] Backfill historical `activity_log`/`parts` timestamp rows to SQLite-native space format (QC Cleanup-5 was forward-only — new writes use `nowSqlite()`, but ~5,835 existing `activity_log` rows and historical `parts.created_at`/`updated_at` rows still carry the old ISO-Z format). Same TEXT column, no schema change — a one-off UPDATE/backfill script (`REPLACE(col, 'T', ' ')` truncated to 19 chars, guarded to only touch rows matching the ISO-Z shape) would fully resolve the `admin/activity-log.html` `ORDER BY timestamp DESC` misordering for old rows too, not just new ones.
 - [ ] (Optional, not required for correctness) Refactor the 29 v2 inline `.replace("T"," ").slice(0,19)` timestamp inserts (across 29 route files, re-counted 2026-09-04) to a shared `nowSqlite()`-equivalent helper in a v2 lib, for mechanism consistency with the legacy side (QC Cleanup-5 left these as-is per the prompt's explicit optionality — they already emit the correct space format, so this is DRY/consistency only, not a bug fix).
 
 ---

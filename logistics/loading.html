@@ -1313,6 +1313,9 @@ function populateShippingInfo(job, a) {
     <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:10px;">
       ${esc(t('logistics.invHash'))} ${esc(a.invoice_number || job.invoice_number || '—')}
       ${(a.load_count || 1) > 1 ? `<span style="font-weight:700;color:#6366f1;margin-left:8px;font-size:12px;">${esc(t('logistics.loadingLoadOfShort', { n: a.load_number || 1, count: a.load_count }))}</span>` : ''}
+      ${a.load_ship_date
+        ? `<span style="font-weight:700;color:var(--text-muted);margin-left:8px;font-size:12px;">🗓️ ${esc(new Date(a.load_ship_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }))}</span>`
+        : ''}
     </div>
     ${row(t('logistics.fieldCustomer'), job.customer)}
     ${row(t('logistics.fieldShipTo'), job.ship_to_company)}

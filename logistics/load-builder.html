@@ -2243,7 +2243,7 @@ function renderResultsTab() {
         if (match) {
           const prefix = match[1];
           const startNum = parseInt(match[2], 10);
-          for (let j = 1; j < state.trailers.length; j++) {
+          for (let j = 1; j < result.trailers.length; j++) {
             const nextInput = document.querySelector(`[data-trailer-inv="${j}"]`);
             if (nextInput && (!nextInput.value || nextInput.dataset.autoFilled === 'true')) {
               const suffix = String(startNum + j).padStart(match[2].length, '0');

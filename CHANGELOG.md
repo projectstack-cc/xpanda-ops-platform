@@ -2157,6 +2157,23 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **Hotfix (unprompted) — Load builder Results tab: fixed a crash-on-keystroke in the trailer 0
+  INV# auto-fill (logistics-agent).** The auto-fill handler read `state.trailers.length`, but
+  `state` never declares a `trailers` key (it has `cart`/`skus`/`forcedTrailers`/
+  `manualRowsByTrailer`/`committedTrailers`/`trailerInvNumbers`/`trailerType` instead) — every
+  other reference in the same `renderResultsTab` closure correctly uses the local `result`
+  (`getResult()`'s return value, in scope), so this was almost certainly a typo. Fixed to
+  `result.trailers.length`. `node --check` clean on the extracted inline script. Found and closed
+  during a 2026-09-04 backlog audit (originally flagged 2026-09-04 during the i18n sweep, held for
+  investigation rather than a blind fix at the time).
+- **Hotfix (unprompted) — P320 ship-day pill parity on the loading dashboard's shipping-info
+  modal (logistics-agent).** P320's ship-day pill (`🗓️` + short weekday/date) only rendered via
+  `renderAssignmentCard`, which is shared by every `.ld-card` render including the drilled-into-bay
+  Team View (confirmed already covered, no separate bay-view template exists) — but
+  `populateShippingInfo` (opened via the invoice-number link) built its own header markup and never
+  included it. Added the same pill next to the load-count badge in that header, reusing the
+  identical format string. `node --check` clean. Found and closed during a 2026-09-04 backlog
+  audit.
 - **P434 — Load builder: REFRESH LOAD compacts the customized layout instead of re-optimizing
   (logistics-agent).** REFRESH previously called `repackTrailerDense`, which reduced the trailer to
   per-SKU counts and re-ran the auto-packer (`calcLoading`), discarding the operator's customizations
@@ -2711,6 +2728,33 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **Hotfix (unprompted) — `DELETE /api/jobs` now cascades `cutting_lines`/`cutting_sessions`
+  (db-api-agent).** The child-delete cascade in `_worker.js/routes/jobs.js` covered
+  `loading_photos`/`loading_assignments`/`bols`/`saved_loads`/`shipments`/`job_line_items` but never
+  the two v2 cutting tables — QC Cleanup-13 removed the old legacy `cutting_steps` cascade line,
+  which never covered these v2 tables either, so a job tracked in v2 orphaned its `cutting_lines`/
+  `cutting_sessions` rows on delete. Added both `DELETE FROM cutting_sessions WHERE job_id = ?` and
+  `DELETE FROM cutting_lines WHERE job_id = ?` to the existing cascade block, sessions before lines
+  to match the child→parent order convention already documented in the cascade's own comment.
+  `node --check` clean. Found and closed during a 2026-09-04 backlog audit.
+- **Hotfix (unprompted) — P319 split-day/partially-shipped badge parity on list view and the
+  calendar day-detail modal (job-board-agent).** P319 only rendered the split-ship-day badge and
+  Partially-shipped indicator on the Kanban card. Extracted the existing badge logic out of
+  `buildCard` into a shared `buildSplitBadgeHtml(job)` helper (byte-identical behavior, `buildCard`
+  now calls it) and wired it into `renderList`'s invoice-number cell and the day-jobs-modal's row
+  template (which needed a small layout change — `align-items:center` → `flex-start` and the
+  customer-name span wrapped in a column container — so a second badge line doesn't visually
+  collide with the single-line flex row). `node --check` clean. Found and closed during a
+  2026-09-04 backlog audit.
+- **Hotfix (unprompted) — HB chunk backfill now clears stale `hb_chunks_required` on jobs that lost
+  their last HB line item (db-api-agent).** `handleHoleyChunksBackfill` (P390) only selects jobs via
+  a JOIN through a live Holey Board line item, so a job edited down to zero HB items never appeared
+  in that query and kept its stale persisted `hb_chunks_required`/`hb_chunk_breakdown` indefinitely.
+  `computeAndPersistHoleyChunks` itself already nulls both columns correctly when it finds zero HB
+  items (confirmed via its existing zero-items branch) — the gap was purely the backfill's job
+  selection. Added a second query finding jobs with non-NULL `hb_chunks_required`, no archived_at,
+  and no surviving Holey Board line item, then runs them through the same helper. `node --check`
+  clean. Found and closed during a 2026-09-04 backlog audit.
 - **Legacy `matchLineItemToPart` dimension matching is now exact, no tolerance** — same fix as
   the `/v2/orders` `partMatch.ts` port, applied here for bilateral parity (see Orders (v2)
   changelog for full rationale: Steve reported a past wrong-part pull traced to the ± dimension
@@ -3502,6 +3546,19 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Admin / Platform
 
+- **Hotfix (unprompted) — backfilled historical `activity_log`/`parts` timestamps to the
+  SQLite-native space format (db-api-agent).** QC Cleanup-5 (2026-08-31) made new writes use
+  `nowSqlite()`'s `"YYYY-MM-DD HH:MM:SS"` format but was forward-only, leaving ~5,835 existing
+  `activity_log` rows and a few dozen `parts.created_at`/`updated_at` rows in the old ISO-Z shape
+  (sorts incorrectly against the new format — the `"T"` sorts after the space, breaking
+  `admin/activity-log.html`'s `ORDER BY timestamp DESC` for old rows). Ran
+  `DB_Migrations/backfill-sqlite-timestamps.sql` (`UPDATE ... SET col = SUBSTR(REPLACE(col, 'T',
+  ' '), 1, 19) WHERE col LIKE '%T%'` across `activity_log.timestamp`/`.created_at` and
+  `parts.created_at`/`.updated_at`) via `wrangler d1 execute DB --remote`, per Steve's explicit
+  go-ahead. Verified row counts before (5,506 `activity_log` rows, 45/42 `parts` rows) and after
+  (zero remaining in ISO-Z shape) via `PRAGMA`-adjacent `LIKE '%T%'` counts, plus a spot check of
+  sample rows confirming the exact 19-character `nowSqlite()` format. No schema change. Found and
+  closed during a 2026-09-04 backlog audit.
 - **P440 — platform-wide i18n engine + home page (en/es/ht), mirrors the `ThemeManager` singleton
   pattern.** New vanilla `shared/i18n.js`: `window.I18n` singleton (`<script src>`-loadable, no ES
   modules, guarded against double-init like `ThemeManager`), storing the chosen language in

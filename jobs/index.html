@@ -938,7 +938,7 @@ function renderList(jobs) {
     tr.onmouseout  = () => { tr.style.background = ''; };
     tr.onclick     = () => openModal(job.id);
     tr.innerHTML = `
-      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}${priorityBadge(job)}${shipToVerifiedBadge(job.ship_to_verified)}${assigneeChips(job.assignees)}${shiftChips(job.shifts)}</td>
+      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}${priorityBadge(job)}${shipToVerifiedBadge(job.ship_to_verified)}${assigneeChips(job.assignees)}${shiftChips(job.shifts)}${buildSplitBadgeHtml(job)}</td>
       <td style="padding:9px 12px;font-size:13px;">${esc(job.customer || '')}</td>
       <td style="padding:9px 12px;font-size:13px;color:var(--text-muted);">${esc(formatShipDate(job.ship_date)) || '—'}</td>
       <td style="padding:9px 12px;font-size:13px;text-align:right;">${job.total_bdft ? Number(job.total_bdft).toLocaleString() : '—'}</td>
@@ -1105,11 +1105,14 @@ function showDayJobs(dateStr) {
       const sc    = STATUS_COLORS[job.status] || STATUS_COLORS.not_started;
       const label = (STATUS_LABELS[job.status] || job.status || '').toString();
       return `<button type="button" class="day-jobs-row" onclick="openJobFromDayModal('${esc(job.id)}')" `
-        + `style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;`
+        + `style="display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;padding:10px 12px;`
         + `margin-bottom:6px;border:1px solid var(--card-border);border-radius:8px;background:var(--card-bg);`
         + `color:var(--text);cursor:pointer;font-size:14px;">`
-        + `<span style="flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:${sc.border};"></span>`
-        + `<span style="flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(job.customer || t('jobs.untitledJob'))}</span>`
+        + `<span style="flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:${sc.border};margin-top:5px;"></span>`
+        + `<span style="flex:1;overflow:hidden;">`
+        + `<span style="display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(job.customer || t('jobs.untitledJob'))}</span>`
+        + buildSplitBadgeHtml(job)
+        + `</span>`
         + `<span style="flex:0 0 auto;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;`
         + `background:${sc.bg};color:${sc.text};">${esc(label)}</span>`
         + `</button>`;
@@ -1134,6 +1137,29 @@ function esc(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function buildSplitBadgeHtml(job) {
+  let splitBadge = '';
+  try {
+    const _loads = job.loads_summary ? JSON.parse(job.loads_summary) : [];
+    const _dated = _loads.filter(l => l && l.d);
+    if (_dated.length && new Set(_dated.map(l => l.d)).size > 1) {
+      const _byDay = {};
+      _dated.forEach(l => { (_byDay[l.d] = _byDay[l.d] || []).push(Number(l.n)); });
+      const _parts = Object.keys(_byDay).sort().map(d => {
+        const nums = _byDay[d].sort((a, b) => a - b).map(n => String(n).padStart(2, '0'));
+        return `${esc(formatShipDate(d))}: ${nums.join(', ')}`;
+      });
+      splitBadge += `<div class="jobs-card-split" style="font-size:11px;font-weight:600;color:var(--text-muted);margin-top:4px;border-top:1px dashed var(--input-border);padding-top:4px;">🗓️ ${_parts.join(' • ')}</div>`;
+    }
+    const _SHIPPED = new Set(['in_transit', 'delivered']);
+    const _shipped = _loads.filter(l => l && _SHIPPED.has(l.s)).length;
+    if (_loads.length > 1 && _shipped > 0 && _shipped < _loads.length) {
+      splitBadge += `<div class="jobs-card-partial" style="font-size:11px;font-weight:700;color:#f59e0b;margin-top:4px;">${esc(t('jobs.partiallyShipped', { shipped: _shipped, total: _loads.length }))}</div>`;
+    }
+  } catch (e) {}
+  return splitBadge;
 }
 
 function buildCard(job) {
@@ -1168,25 +1194,7 @@ function buildCard(job) {
   const trailerBadge = job.assigned_trailers
     ? `<div class="jobs-card-trailer" title="${esc(t('jobs.trailerAssignedTitle', { n: job.assigned_trailers }))}">${esc(t('jobs.trailerAssigned'))}</div>`
     : '';
-  let splitBadge = '';
-  try {
-    const _loads = job.loads_summary ? JSON.parse(job.loads_summary) : [];
-    const _dated = _loads.filter(l => l && l.d);
-    if (_dated.length && new Set(_dated.map(l => l.d)).size > 1) {
-      const _byDay = {};
-      _dated.forEach(l => { (_byDay[l.d] = _byDay[l.d] || []).push(Number(l.n)); });
-      const _parts = Object.keys(_byDay).sort().map(d => {
-        const nums = _byDay[d].sort((a, b) => a - b).map(n => String(n).padStart(2, '0'));
-        return `${esc(formatShipDate(d))}: ${nums.join(', ')}`;
-      });
-      splitBadge += `<div class="jobs-card-split" style="font-size:11px;font-weight:600;color:var(--text-muted);margin-top:4px;border-top:1px dashed var(--input-border);padding-top:4px;">🗓️ ${_parts.join(' • ')}</div>`;
-    }
-    const _SHIPPED = new Set(['in_transit', 'delivered']);
-    const _shipped = _loads.filter(l => l && _SHIPPED.has(l.s)).length;
-    if (_loads.length > 1 && _shipped > 0 && _shipped < _loads.length) {
-      splitBadge += `<div class="jobs-card-partial" style="font-size:11px;font-weight:700;color:#f59e0b;margin-top:4px;">${esc(t('jobs.partiallyShipped', { shipped: _shipped, total: _loads.length }))}</div>`;
-    }
-  } catch (e) {}
+  const splitBadge = buildSplitBadgeHtml(job);
   const _ls = job.loading_status_indicator;
   const _loadMeta = _ls && LIST_LOADING[_ls];
   const loadingBadge = _loadMeta

@@ -1049,6 +1049,8 @@ export async function handleApiJobs(request, env) {
       await db.prepare("DELETE FROM saved_loads WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM shipments WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM job_line_items WHERE job_id = ?").bind(id).run();
+      await db.prepare("DELETE FROM cutting_sessions WHERE job_id = ?").bind(id).run();
+      await db.prepare("DELETE FROM cutting_lines WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM jobs WHERE id = ?").bind(id).run();
 
       // Linking Rule 1 — never leave a group of one. The deleted job may have been half of a
@@ -1542,6 +1544,25 @@ export async function handleHoleyChunksBackfill(request, env) {
   const ids = (rows.results || []).map((r) => r.id);
   let updated = 0;
   for (const id of ids) { await computeAndPersistHoleyChunks(db, id, null); updated++; }
-  return json({ ok: true, updated, total: ids.length });
+
+  // P390 follow-up: the query above only finds jobs with a LIVE Holey Board line item, so a job
+  // edited to remove its last HB line never appears here and keeps a stale persisted chunk count.
+  // Find those separately (non-NULL hb_chunks_required, no HB line item left) and clear them via
+  // the same helper, which already nulls both columns out when it finds zero HB items.
+  const staleRows = await db.prepare(
+    `SELECT j.id AS id
+       FROM jobs j
+      WHERE j.hb_chunks_required IS NOT NULL
+        AND j.archived_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM job_line_items jli
+            JOIN parts p ON p.id = jli.part_id
+           WHERE jli.job_id = j.id AND p.category = 'Holey Board'
+        )`
+  ).all();
+  const staleIds = (staleRows.results || []).map((r) => r.id);
+  for (const id of staleIds) { await computeAndPersistHoleyChunks(db, id, null); updated++; }
+
+  return json({ ok: true, updated, total: ids.length + staleIds.length });
 }
 
