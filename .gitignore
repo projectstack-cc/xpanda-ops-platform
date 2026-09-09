@@ -4,6 +4,7 @@ Prompts/
 logistics/assets/Master copies/
 qc-slop-audit.md
 status-write-site-inventory.md
+v2-logistics-audit.report.md
 
 # QC Cleanup-3 (AUDIT-702): local/account build+runtime state, same class of issue as the
 # DB_Migrations incident below — never belonged in a shared repo. cutting-pilot/.gitignore
