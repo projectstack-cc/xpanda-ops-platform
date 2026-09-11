@@ -22,7 +22,10 @@ const STATUS_VARIANTS: Record<string, { label: string; cls: string }> = {
   awaiting: { label: "Awaiting", cls: "border border-[var(--border)] text-[var(--text-hint)]" },
 };
 
-function StatusBadge({ status }: { status: string }) {
+// Exported so the Shipment Edit Modal (ShipmentEditModal.tsx) and the KPI drilldown
+// (StatBreakdownModal.tsx) can reuse the same status → label/color mapping instead of
+// duplicating it — one definition, many call sites, per xpanda-ops-agents.md §9b.
+export function StatusBadge({ status }: { status: string }) {
   const v = STATUS_VARIANTS[status] ?? { label: status, cls: "border border-[var(--border)] text-[var(--text-hint)]" };
   return <span className={`${badgeBase} ${v.cls}`}>{v.label}</span>;
 }
@@ -65,13 +68,17 @@ interface ShipmentRowProps {
   shipment: ShipmentListItem;
   onViewBol: (jobId: string) => void;
   onGenerateBol: (jobId: string) => void;
+  onEdit: (shipment: ShipmentListItem) => void;
 }
 
-export default function ShipmentRow({ shipment: s, onViewBol, onGenerateBol }: ShipmentRowProps) {
+export default function ShipmentRow({ shipment: s, onViewBol, onGenerateBol, onEdit }: ShipmentRowProps) {
   const methodCarrier = [s.method, s.carrier].filter(Boolean).join(" · ") || "—";
 
   return (
-    <tr className="border-b border-[var(--line)] last:border-0">
+    <tr
+      className="border-b border-[var(--line)] last:border-0 cursor-pointer hover:bg-[var(--ghost-bg)] transition-colors"
+      onClick={() => onEdit(s)}
+    >
       <td className="px-3 py-2 align-top">
         <div className="font-mono tabular-nums text-sm font-semibold text-text">
           {s.invoice_number ? `INV# ${s.invoice_number}` : "—"}
@@ -81,13 +88,14 @@ export default function ShipmentRow({ shipment: s, onViewBol, onGenerateBol }: S
             </span>
           )}
         </div>
-        <div className="text-xs text-muted truncate max-w-[220px]" title={s.customer || ""}>
+        <div className="text-xs text-muted whitespace-normal break-words" title={s.customer || ""}>
           {s.customer || "Unknown"}
         </div>
         {s.job_id && (
           <a
             href={`/jobs/?job_id=${s.job_id}`}
             className="text-xs text-[var(--brand)] no-underline hover:underline"
+            onClick={(e) => e.stopPropagation()}
           >
             View job →
           </a>
@@ -104,7 +112,7 @@ export default function ShipmentRow({ shipment: s, onViewBol, onGenerateBol }: S
       <td className="px-3 py-2 align-top">
         <StatusBadge status={s.status} />
       </td>
-      <td className="px-3 py-2 align-top text-right">
+      <td className="px-3 py-2 align-top text-right" onClick={(e) => e.stopPropagation()}>
         <BolActions shipment={s} onViewBol={onViewBol} onGenerateBol={onGenerateBol} />
       </td>
     </tr>

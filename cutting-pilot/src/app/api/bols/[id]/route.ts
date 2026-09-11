@@ -9,8 +9,7 @@
 // with no token yet gets one minted here.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
-
-const V2_LOGISTICS_WRITES_ENABLED = false;
+import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 
 function generateAccessToken(): string {
   const bytes = new Uint8Array(16);

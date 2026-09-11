@@ -81,52 +81,46 @@ async function attachDistanceEta(DB: D1Database, rows: any[]): Promise<void> {
   });
 }
 
+// Hoisted so the same exact predicate text backs both the stats CASE clauses below AND the
+// optional ?stat= drilldown WHERE clause -- a drilldown fetch must return exactly the rows the
+// tile counted, so the two can never drift. Every predicate is qualified `shipments.*` (never a
+// bare column) because the row-list query is `FROM shipments LEFT JOIN jobs j`, and `jobs` has
+// its own status/ship_date/created_at columns -- an unqualified predicate reused there throws
+// "ambiguous column name". Each predicate already includes its own
+// `shipments.direction = 'outbound'` clause, so the base outbound scope travels with it into the
+// ?stat= path with no separate concatenation needed.
+const STAT_PREDICATES: Record<string, { sql: string; binds: (curMonStr: string) => unknown[] }> = {
+  outbound_this_week: {
+    sql: "shipments.direction = 'outbound' AND shipments.ship_date >= ? AND shipments.ship_date <= date(?, '+6 days')",
+    binds: (curMonStr) => [curMonStr, curMonStr],
+  },
+  pending_outbound: {
+    sql: "shipments.direction = 'outbound' AND shipments.status IN ('not_started', 'in_production', 'ready_to_ship')",
+    binds: () => [],
+  },
+  in_transit: {
+    sql: "shipments.direction = 'outbound' AND shipments.status = 'in_transit'",
+    binds: () => [],
+  },
+  delivered_30d: {
+    sql: "shipments.direction = 'outbound' AND shipments.status = 'delivered' AND (shipments.ship_date >= date('now', '-30 days') OR shipments.created_at >= datetime('now', '-30 days'))",
+    binds: () => [],
+  },
+};
+
 export async function GET(request: NextRequest) {
   const { DB } = await getEnv();
   const url = new URL(request.url);
-  const direction = url.searchParams.get("direction") || "outbound";
   const jobId = url.searchParams.get("job_id");
   const week = url.searchParams.get("week"); // YYYY-MM-DD Monday start
   const status = url.searchParams.get("status");
   const daysParam = url.searchParams.get("days");
   const days = daysParam !== null ? parseInt(daysParam, 10) : 60;
   const q = url.searchParams.get("q")?.trim().toLowerCase();
+  const statKey = url.searchParams.get("stat");
 
-  // Qualified with the `shipments.` prefix throughout -- the LEFT JOIN below pulls in `jobs`,
-  // which has its own created_at/direction-shaped columns; an unqualified WHERE would be
-  // ambiguous (or silently bind to the wrong table).
-  const where = ["shipments.direction = ?"];
-  const binds: unknown[] = [direction];
-
-  if (jobId) {
-    // A specific job's shipment is wanted regardless of date window (e.g. an older shipment
-    // whose ship_date/created_at has aged out of the default range) -- mirrors legacy's
-    // job_id-bypasses-the-date-filter behavior on GET /api/bols.
-    where.push("shipments.job_id = ?");
-    binds.push(jobId);
-  } else if (week) {
-    where.push("shipments.ship_date >= ? AND shipments.ship_date <= date(?, '+6 days')");
-    binds.push(week, week);
-  } else if (days > 0) {
-    where.push("(shipments.created_at >= datetime('now', ? || ' days') OR (shipments.ship_date IS NOT NULL AND shipments.ship_date >= date('now', '-7 days')))");
-    binds.push(`-${days}`);
-  }
-
-  if (status) {
-    const statuses = status.split(",").map((s) => s.trim()).filter(Boolean);
-    if (statuses.length === 1) {
-      where.push("shipments.status = ?");
-      binds.push(statuses[0]);
-    } else if (statuses.length > 1) {
-      where.push(`shipments.status IN (${statuses.map(() => "?").join(",")})`);
-      binds.push(...statuses);
-    }
-  }
-
-  if (q) {
-    where.push("(LOWER(shipments.customer) LIKE ? OR LOWER(j.invoice_number) LIKE ? OR LOWER(shipments.trailer_number) LIKE ? OR LOWER(shipments.carrier) LIKE ? OR LOWER(shipments.bol_number) LIKE ?)");
-    const qPattern = `%${q}%`;
-    binds.push(qPattern, qPattern, qPattern, qPattern, qPattern);
+  if (statKey && !Object.prototype.hasOwnProperty.call(STAT_PREDICATES, statKey)) {
+    return NextResponse.json({ ok: false, error: "Invalid stat key." }, { status: 400 });
   }
 
   // Calculate Monday of current week for stats
@@ -136,6 +130,56 @@ export async function GET(request: NextRequest) {
   const curMon = new Date(now);
   curMon.setUTCDate(now.getUTCDate() + diffToMon);
   const curMonStr = curMon.toISOString().slice(0, 10);
+
+  // Qualified with the `shipments.` prefix throughout -- the LEFT JOIN below pulls in `jobs`,
+  // which has its own created_at/direction-shaped columns; an unqualified WHERE would be
+  // ambiguous (or silently bind to the wrong table). This route is outbound-only end to end
+  // (its own original purpose), so direction is a hardcoded literal, never a query-param
+  // override -- there is no inbound consumer anywhere in cutting-pilot/src.
+  let where: string[];
+  let binds: unknown[];
+
+  if (statKey) {
+    // Drilldown mode: bypass the normal week/days/status/q filtering entirely so the row list
+    // matches exactly what the stat tile counted.
+    const predicate = STAT_PREDICATES[statKey];
+    where = [predicate.sql];
+    binds = predicate.binds(curMonStr);
+  } else {
+    where = ["shipments.direction = 'outbound'"];
+    binds = [];
+
+    if (jobId) {
+      // A specific job's shipment is wanted regardless of date window (e.g. an older shipment
+      // whose ship_date/created_at has aged out of the default range) -- mirrors legacy's
+      // job_id-bypasses-the-date-filter behavior on GET /api/bols.
+      where.push("shipments.job_id = ?");
+      binds.push(jobId);
+    } else if (week) {
+      where.push("shipments.ship_date >= ? AND shipments.ship_date <= date(?, '+6 days')");
+      binds.push(week, week);
+    } else if (days > 0) {
+      where.push("(shipments.created_at >= datetime('now', ? || ' days') OR (shipments.ship_date IS NOT NULL AND shipments.ship_date >= date('now', '-7 days')))");
+      binds.push(`-${days}`);
+    }
+
+    if (status) {
+      const statuses = status.split(",").map((s) => s.trim()).filter(Boolean);
+      if (statuses.length === 1) {
+        where.push("shipments.status = ?");
+        binds.push(statuses[0]);
+      } else if (statuses.length > 1) {
+        where.push(`shipments.status IN (${statuses.map(() => "?").join(",")})`);
+        binds.push(...statuses);
+      }
+    }
+
+    if (q) {
+      where.push("(LOWER(shipments.customer) LIKE ? OR LOWER(j.invoice_number) LIKE ? OR LOWER(shipments.trailer_number) LIKE ? OR LOWER(shipments.carrier) LIKE ? OR LOWER(shipments.bol_number) LIKE ?)");
+      const qPattern = `%${q}%`;
+      binds.push(qPattern, qPattern, qPattern, qPattern, qPattern);
+    }
+  }
 
   try {
     const [listResult, statsResult] = await Promise.all([
@@ -151,12 +195,17 @@ export async function GET(request: NextRequest) {
       ).bind(...binds).all(),
       DB.prepare(
         `SELECT
-           COUNT(CASE WHEN direction = 'outbound' AND ship_date >= ? AND ship_date <= date(?, '+6 days') THEN 1 END) AS outbound_this_week,
-           COUNT(CASE WHEN direction = 'outbound' AND status IN ('not_started', 'in_production', 'ready_to_ship') THEN 1 END) AS pending_outbound,
-           COUNT(CASE WHEN status = 'in_transit' THEN 1 END) AS in_transit,
-           COUNT(CASE WHEN status = 'delivered' AND (ship_date >= date('now', '-30 days') OR created_at >= datetime('now', '-30 days')) THEN 1 END) AS delivered_30d
+           COUNT(CASE WHEN ${STAT_PREDICATES.outbound_this_week.sql} THEN 1 END) AS outbound_this_week,
+           COUNT(CASE WHEN ${STAT_PREDICATES.pending_outbound.sql} THEN 1 END) AS pending_outbound,
+           COUNT(CASE WHEN ${STAT_PREDICATES.in_transit.sql} THEN 1 END) AS in_transit,
+           COUNT(CASE WHEN ${STAT_PREDICATES.delivered_30d.sql} THEN 1 END) AS delivered_30d
          FROM shipments`
-      ).bind(curMonStr, curMonStr).first(),
+      ).bind(
+        ...STAT_PREDICATES.outbound_this_week.binds(curMonStr),
+        ...STAT_PREDICATES.pending_outbound.binds(curMonStr),
+        ...STAT_PREDICATES.in_transit.binds(curMonStr),
+        ...STAT_PREDICATES.delivered_30d.binds(curMonStr)
+      ).first(),
     ]);
 
     const rows = (listResult.results ?? []) as any[];

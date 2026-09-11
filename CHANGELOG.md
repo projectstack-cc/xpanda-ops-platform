@@ -1871,6 +1871,85 @@ Entries within each module are ordered by prompt # descending (newest first).
 ## Logistics (v2)
 
 - **Feature (unprompted, conversational request, no prompt file, no prompt number yet) —
+  Shipment Dashboard wrap-up batch: commodity description editing, Freight Terms removal, order
+  edit modal, column layout fix, clickable KPI tiles (next-platform-agent §9a +
+  react-component-agent §9b, sequenced — API layer landed first, UI layer built against it).**
+  Steve asked for five fixes to close out the `/v2/logistics` Shipment Dashboard (still dark-launched
+  admin-only, unlinked from nav). Research first: three explore passes mapped the current v2 board,
+  the legacy `logistics/` module's full BOL/edit-modal/widget feature set, and the CHANGELOG/BACKLOG
+  history — confirming address-book search, packing-slip/loading-diagram include, and hide-tracking-QR
+  stay deliberately dropped (Steve confirmed), while the commodity-description textarea's absence was
+  an unflagged regression, not a decision (`BolGenerateModal.tsx`'s own code comments call out the
+  other three cuts but never this one). A Plan-agent pass, then an Opus review pass before execution,
+  caught 6 blocking defects in the first draft: a permission check missing the admin-bypass-first order
+  (would have 403'd every real user, since no role currently holds `logistics.v2` — literally everyone
+  who can reach this board today is an admin); unqualified SQL columns that would throw "ambiguous
+  column name" once reused in a joined WHERE; `method`/`scrap_pickup` as free text/checkbox when both
+  are behavior-bearing enums matched by exact string elsewhere in the codebase; NaN/empty-string
+  binding risk on `load_count`/`total_bdft` (a latent bug legacy already has, not to be inherited); and
+  a pre-existing dirty working tree (`_worker.js/routes/jobs.js`, `BACKLOG.md`, `CHANGELOG.md` — P446's
+  duplicate-invoice-guard fix, unrelated, predates this session) that had to stay untouched rather than
+  get swept into this commit by a broad `git add`.
+  - **Commodity description**: was computed silently and unseeable/uneditable before Generate — now a
+    real `<textarea>` (mirrors legacy's `commTA`, `logistics/bol-compose.js:284`), with a working "Part
+    # and qty only (hide dimensions)" checkbox. This one goes further than legacy: traced both engines
+    and confirmed legacy's own job-based flow (`logistics/index.html:1175-1177`) seeds
+    `commodityDescriptionFull`/`commodityDescriptionNoDims` identically, making its checkbox a genuine
+    no-op there too — v2's version is real, built from `job_line_items.dimensions` (already flowing
+    through `GET /v2/api/jobs/:id`'s `SELECT *`, just not on the narrower TS type) formatted through the
+    existing `formatCutListDims()` helper (`cutting-pilot/src/lib/cutList.ts`) rather than duplicating
+    formatting logic. **This means v2's printed commodity block can now differ from legacy's for the
+    same job** — a deliberate engine divergence on a legal shipping doc; noting it explicitly here so it
+    doesn't get "fixed" back to parity later without realizing why it changed. Also fixed a real submit
+    bug: the POST payload recomputed the description fresh at submit time, discarding anything typed.
+  - **Freight Terms**: removed the 3-way radio from v2's Generate BOL modal (v2-only — legacy keeps it,
+    out of scope). Confirmed safe: `freight_terms` is stored (`bols` table, `NOT NULL DEFAULT 'prepaid'`)
+    but never drawn onto the PDF in either engine, and the existing BOL edit route already silently
+    resets it to `'prepaid'` on every edit today regardless. Payload now hardcodes `"prepaid"`.
+  - **Order/Shipment Edit Modal**: v2 rows previously had zero click behavior. New
+    `ShipmentEditModal.tsx`, built on the shared `Modal.tsx` primitive (not hand-rolled — flagging that
+    `ShipmentCalendar.tsx`'s existing preview popover is a pre-existing violation of that rule, not
+    extended further here). New `PUT /v2/api/shipments/[id]` route (didn't exist before; only GET did),
+    fenced behind the same `V2_LOGISTICS_WRITES_ENABLED` flag as BOL writes — now hoisted out of its
+    per-file duplication into `cutting-pilot/src/lib/logistics/writeFence.ts` so the eventual flip is a
+    one-file change. Two scope calls made explicitly with Steve: (1) **Status is read-only in v1** —
+    editing it would require porting legacy's job/`loading_assignments`/cutting-lines cascade sync,
+    logged as a BACKLOG follow-up rather than built here; (2) **6 of 12 candidate fields (customer,
+    carrier, method, ship_date, total_bdft, load_count) are read-only whenever the shipment is
+    job-linked** — legacy syncs these one-way from the linked job on every job edit, so an unsynced v2
+    edit would get silently overwritten the next time anyone touches the job in legacy; only
+    non-job-linked shipments get to edit them. `trailer_number` stays editable but gated specifically
+    behind `X-User-Can-Manage-Loading` (matches legacy's original, if server-side-unenforced, intent —
+    v2 middleware already deliberately closed that same gap elsewhere). `method`/`scrap_pickup` render
+    as selects, not free text/checkbox, since both are exact-string-matched enums elsewhere in the
+    codebase. Every write sets `updated_at` (the BOL lock-status check depends on it) and calls
+    `logActivity()`; the route refuses the whole PUT (409) when shipment status is
+    `in_transit|delivered|archived|cancelled`. Delete actions (shipment delete, BOL-history delete) are
+    deliberately not in v1 — logged as a BACKLOG follow-up rather than adding destructive actions to a
+    still-fenced, still-unlinked board.
+  - **Column layout**: table now uses `table-fixed` with explicit per-column widths (was auto-width,
+    could drift); the customer name now wraps (`whitespace-normal break-words`) instead of truncating,
+    growing row height for long names rather than clipping them — matches legacy's
+    `.logistics-table--ship` approach (`logistics-shared.css:234-249`) without inheriting its redundant
+    double-truncation (legacy also JS-truncates to 20 chars on top of the CSS wrap; v2 just wraps).
+  - **KPI tiles**: all 4 (Outbound This Week / Pending Outbound / In Transit / Delivered 30d) are now
+    clickable, opening a brief breakdown (`StatBreakdownModal.tsx`, also on `Modal.tsx`) of the
+    orders behind that count. Building the drilldown surfaced a real data-correctness bug: `In Transit`
+    and `Delivered (30d)` had no `direction='outbound'` filter (unlike the other two tiles), silently
+    counting inbound/bead shipments on an otherwise fully outbound-scoped dashboard — Steve confirmed
+    fixing this ("removing inbound as a whole" from this board's scope). All four stat predicates are
+    now hoisted into one qualified (`shipments.*`, avoiding an ambiguous-column crash once reused
+    against the row-list's `LEFT JOIN jobs`) map, reused by both the stats query and a new `?stat=<key>`
+    param on `GET /v2/api/shipments` that the drilldown modal fetches — guaranteeing the modal's list
+    always matches the tile's count exactly, not an approximation. Also removed the now-fully-dead
+    `direction` query-param override (v2 has no inbound UI anywhere; the 3 client call sites that
+    passed `direction=outbound` explicitly had it dropped as dead weight in the same pass).
+  - No DB migration — `freight_terms`, `commodity_description`, and `job_line_items.dimensions` all
+    already existed; every gap was in what the v2 API/frontend exposed, not the schema.
+    `npx tsc --noEmit` + `npm run cf-build` green (API layer verified independently, then UI layer
+    verified again after building against it).
+
+- **Feature (unprompted, conversational request, no prompt file, no prompt number yet) —
   Shipment Dashboard: per-order Distance/ETA field, ORS-cached (next-platform-agent §9a +
   react-component-agent §9b).** Steve asked for a miles-to-destination + estimated-drive-time
   field on each `/v2/logistics` shipment row, reusing the ORS integration already built for

@@ -6,10 +6,7 @@
 // `wrangler dev` writes hit production. See BACKLOG.md for the flip-the-flag follow-up.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
-
-// Read/write fence (DEFAULT prod-D1 safety, see prompt §Read/write fence). Flip only in the
-// dedicated write-enable phase, once Steve has reviewed the fenced logic below live.
-const V2_LOGISTICS_WRITES_ENABLED = false;
+import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 
 function generateAccessToken(): string {
   const bytes = new Uint8Array(16);

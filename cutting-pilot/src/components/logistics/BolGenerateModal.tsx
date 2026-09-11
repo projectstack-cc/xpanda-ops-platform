@@ -24,6 +24,7 @@
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
 import { confirmNoBolNumber } from "@/lib/bolDomGlue";
+import { formatCutListDims } from "@/lib/cutList";
 import type { JobForBol, LoadingAssignmentForJob } from "./types";
 
 interface BolGenerateModalProps {
@@ -32,8 +33,6 @@ interface BolGenerateModalProps {
    * happens while the fence is on) so the dashboard knows to refetch (Bug 2 fix). */
   onClose: (generated: boolean) => void;
 }
-
-type FreightTerms = "prepaid" | "collect" | "3rd_party";
 
 // Same token-driven input styling as OrderEntryForm.tsx's `inputClass` — kept as a local literal
 // (small, single-purpose) rather than importing across feature-component boundaries.
@@ -56,9 +55,16 @@ interface TrailerForm {
   carrierName: string;
   poNumber: string;
   deliveryTime: string;
-  freightTerms: FreightTerms;
   specialInstructions: string;
   trailerNo: string;
+  // Commodity description (Task 1): computed once at job-load time in both variants, seeded
+  // into the live/editable `commodityDescription` field. Toggling "hide dimensions" swaps the
+  // active variant; typing in the textarea writes back into whichever variant is currently
+  // active so the other one isn't silently discarded.
+  commodityDescriptionFull: string;
+  commodityDescriptionNoDims: string;
+  hideDimensions: boolean;
+  commodityDescription: string;
 }
 
 function today(): string {
@@ -74,10 +80,21 @@ function piecesGuess(job: JobForBol): number {
   return job.line_items.reduce((sum, li) => sum + (Number(li.quantity) || 0), 0);
 }
 
-function buildCommodityDescription(job: JobForBol): string {
+// withDims=true appends each line item's pre-formatted dimensions (via the shared
+// formatCutListDims() helper -- raw `dimensions` values are inconsistently formatted depending
+// on source, so this normalization matters; never reformat them locally). Neither legacy's
+// job-based BOL flow nor v2's prior code ever appended dimensions here -- this is genuinely new,
+// opt-in behavior via the "hide dimensions" checkbox below (unchecked = dims shown, by default).
+function buildCommodityDescription(job: JobForBol, withDims: boolean): string {
   if (!Array.isArray(job.line_items) || !job.line_items.length) return "";
   return job.line_items
-    .map((li) => [li.quantity ? `${li.quantity} ×` : "", li.part_number || "", li.description || ""].filter(Boolean).join(" "))
+    .map((li) => {
+      const base = [li.quantity ? `${li.quantity} ×` : "", li.part_number || "", li.description || ""]
+        .filter(Boolean)
+        .join(" ");
+      const dims = withDims && li.dimensions ? formatCutListDims(li.dimensions) : "";
+      return dims ? `${base} — ${dims}` : base;
+    })
     .join("\n");
 }
 
@@ -131,7 +148,8 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
         for (const a of assignments) if (a.load_number != null) byLoad.set(Number(a.load_number), a);
 
         const loadCount = Math.max(1, Number(j.load_count) || 1);
-        const commodityDescription = buildCommodityDescription(j);
+        const commodityDescriptionFull = buildCommodityDescription(j, true);
+        const commodityDescriptionNoDims = buildCommodityDescription(j, false);
         const cityStateFromLocation = (j.location || "").split(",");
 
         const built: TrailerForm[] = [];
@@ -153,9 +171,12 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
             carrierName: j.carrier || "",
             poNumber: j.po_number || "",
             deliveryTime: j.delivery_time || "",
-            freightTerms: "prepaid",
             specialInstructions: "",
             trailerNo: assignment?.trailer_number || "",
+            commodityDescriptionFull,
+            commodityDescriptionNoDims,
+            hideDimensions: false,
+            commodityDescription: commodityDescriptionFull,
           });
         }
         setTrailers(built);
@@ -175,6 +196,39 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
     setTrailers((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  }
+
+  // Textarea write-back (mirrors bol-compose.js:286-293): a hand-typed edit updates whichever
+  // stored variant (dims-included / dims-excluded) is currently active, so toggling the
+  // checkbox afterward doesn't silently discard the edit.
+  function handleCommodityDescriptionChange(index: number, value: string) {
+    setTrailers((prev) => {
+      const next = [...prev];
+      const t = next[index];
+      next[index] = {
+        ...t,
+        commodityDescription: value,
+        ...(t.hideDimensions
+          ? { commodityDescriptionNoDims: value }
+          : { commodityDescriptionFull: value }),
+      };
+      return next;
+    });
+  }
+
+  // Checkbox toggle (mirrors bol-compose.js:296-305): swaps the visible/live value to the other
+  // stored variant without touching either stored string.
+  function handleHideDimensionsToggle(index: number, checked: boolean) {
+    setTrailers((prev) => {
+      const next = [...prev];
+      const t = next[index];
+      next[index] = {
+        ...t,
+        hideDimensions: checked,
+        commodityDescription: checked ? t.commodityDescriptionNoDims : t.commodityDescriptionFull,
+      };
       return next;
     });
   }
@@ -251,7 +305,10 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
         ship_to_zip: td.shipToZip,
         carrier_name: td.carrierName,
         trailer_no: td.trailerNo || "",
-        freight_terms: td.freightTerms,
+        // Freight Terms UI removed in v2 (Task 2) -- never printed on the BOL in either engine,
+        // and 'prepaid' is the confirmed-safe DB default. Legacy's edit path already resets it
+        // to 'prepaid' unconditionally too, so this introduces no inconsistency.
+        freight_terms: "prepaid",
         is_scrap_pickup: job?.scrap_pickup === "YES" ? 1 : 0,
         special_instructions: td.specialInstructions,
         contact_info: [td.contactName ? `POC: ${td.contactName}` : "", td.contactPhone || ""].filter(Boolean).join(" "),
@@ -265,7 +322,10 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
         bol_group_id: bolGroupId,
         load_number: i + 1,
         load_count: trailers.length,
-        commodity_description: job ? buildCommodityDescription(job) : "",
+        // Send the live, possibly hand-edited value -- NOT a fresh recompute, which would
+        // silently discard anything typed in the Commodity Description textarea (the bug this
+        // task fixes).
+        commodity_description: td.commodityDescription,
         handling_unit_qty: "",
         handling_unit_type: "stacks",
         package_qty: job ? String(piecesGuess(job) || "") : "",
@@ -469,21 +529,22 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
             </Field>
           </div>
 
-          <Field label="Freight Terms">
-            <div className="flex gap-4 flex-wrap">
-              {(["prepaid", "collect", "3rd_party"] as FreightTerms[]).map((val) => (
-                <label key={val} className="flex items-center gap-1.5 text-sm text-text cursor-pointer">
-                  <input
-                    type="radio"
-                    name={`freight-${page}`}
-                    checked={trailer.freightTerms === val}
-                    onChange={() => updateField(page, "freightTerms", val)}
-                  />
-                  {val === "prepaid" ? "Prepaid" : val === "collect" ? "Collect" : "3rd Party"}
-                </label>
-              ))}
-            </div>
+          <Field label="Commodity Description">
+            <textarea
+              className={`${inputClass} min-h-[90px] resize-y font-mono`}
+              value={trailer.commodityDescription}
+              onChange={(e) => handleCommodityDescriptionChange(page, e.target.value)}
+            />
           </Field>
+
+          <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
+            <input
+              type="checkbox"
+              checked={trailer.hideDimensions}
+              onChange={(e) => handleHideDimensionsToggle(page, e.target.checked)}
+            />
+            Part # and qty only (hide dimensions)
+          </label>
 
           <Field label="Special Instructions">
             <textarea

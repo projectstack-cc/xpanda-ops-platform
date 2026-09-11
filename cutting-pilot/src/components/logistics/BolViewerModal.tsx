@@ -75,7 +75,7 @@ export default function BolViewerModal({ jobId, onClose, onEdit, loadNumber = nu
         const [bolsJson, laJson, shipJson] = await Promise.all([
           fetch(`/v2/api/bols?job_id=${encodeURIComponent(jobId)}`).then((r) => r.json()),
           fetch(`/v2/api/loading-assignments?job_id=${encodeURIComponent(jobId)}`).then((r) => r.json()),
-          fetch(`/v2/api/shipments?direction=outbound&job_id=${encodeURIComponent(jobId)}`).then((r) => r.json()),
+          fetch(`/v2/api/shipments?job_id=${encodeURIComponent(jobId)}`).then((r) => r.json()),
         ]);
         if (cancelled) return;
 

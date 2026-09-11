@@ -8,7 +8,7 @@
 // - Instant client-side search across customer, invoice, trailer, carrier, BOL
 // - Daily grouping of shipments with day headers, piece/bdft sums, and status badges
 // - Alternating Generate BOL ↔ View BOL actions with live refresh on generation
-import { useCallback, useEffect, useState, useMemo, useRef } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef, type KeyboardEvent } from "react";
 import {
   Search,
   X,
@@ -28,6 +28,8 @@ import ShipmentCalendar from "./ShipmentCalendar";
 import BolViewerModal from "@/components/logistics/BolViewerModal";
 import BolGenerateModal from "@/components/logistics/BolGenerateModal";
 import BolEditorModal, { type EditorTarget } from "@/components/logistics/BolEditorModal";
+import ShipmentEditModal from "@/components/logistics/ShipmentEditModal";
+import StatBreakdownModal from "@/components/logistics/StatBreakdownModal";
 import type { ShipmentListItem, LogisticsStats } from "@/components/logistics/types";
 import type { BolRecord } from "@/lib/bolShared";
 
@@ -73,6 +75,15 @@ function formatDayHeader(dateStr: string): { title: string; isToday: boolean } {
   return { title: `${weekday} — ${formatted}`, isToday };
 }
 
+// Matches shipments/route.ts's STAT_PREDICATES keys exactly -- the KPI tile drilldown
+// (StatBreakdownModal) fetches GET /v2/api/shipments?stat=<key> with these.
+const STAT_LABELS: Record<string, string> = {
+  outbound_this_week: "Outbound This Week",
+  pending_outbound: "Pending Outbound",
+  in_transit: "In Transit",
+  delivered_30d: "Delivered (30d)",
+};
+
 export default function ShipmentDashboard({
   userName,
   isAdmin,
@@ -98,6 +109,13 @@ export default function ShipmentDashboard({
   const [viewerJobId, setViewerJobId] = useState<string | null>(null);
   const [generateJobId, setGenerateJobId] = useState<string | null>(null);
   const [editorTarget, setEditorTarget] = useState<EditorTarget | null>(null);
+  const [editingShipment, setEditingShipment] = useState<ShipmentListItem | null>(null);
+  const [statModalKey, setStatModalKey] = useState<string | null>(null);
+
+  // Mirrors DockBoard.tsx's existing client-side pattern for this exact permission key -- the
+  // Shipment Edit Modal gates Trailer # editability on it, matching the server's
+  // X-User-Can-Manage-Loading check in shipments/[id]/route.ts.
+  const canManageLoading = isAdmin || permissions?.["logistics.loading.manage"]?.edit === true;
 
   const activeWeekInfo = useMemo(() => {
     if (weekOffset === null) return null;
@@ -108,7 +126,7 @@ export default function ShipmentDashboard({
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams({ direction: "outbound" });
+      const params = new URLSearchParams();
 
       if (viewMode === "list" && weekOffset !== null) {
         const { mondayStr } = getMondayForOffset(weekOffset);
@@ -145,7 +163,7 @@ export default function ShipmentDashboard({
     if (viewMode === "calendar") {
       (async () => {
         try {
-          const res = await fetch("/v2/api/shipments?direction=outbound&days=365");
+          const res = await fetch("/v2/api/shipments?days=365");
           const json = await res.json();
           if (res.ok && json.ok) {
             setCalendarRows(json.data ?? []);
@@ -229,6 +247,29 @@ export default function ShipmentDashboard({
     if (generated) {
       load(); // Refreshes bol_count so the row flips to "View BOL"
     }
+  }
+
+  function handleShipmentEditClose(saved: boolean) {
+    setEditingShipment(null);
+    if (saved) {
+      load();
+    }
+  }
+
+  // Shared click + keyboard-activation props for the 4 clickable KPI tiles (Task 5) -- opens
+  // StatBreakdownModal with the matching key from shipments/route.ts's STAT_PREDICATES map.
+  function statTileProps(key: string) {
+    return {
+      role: "button" as const,
+      tabIndex: 0,
+      onClick: () => setStatModalKey(key),
+      onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setStatModalKey(key);
+        }
+      },
+    };
   }
 
   // Filtered rows for list view
@@ -323,7 +364,10 @@ export default function ShipmentDashboard({
 
         {/* Top KPI Stats Widgets */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-          <div className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between">
+          <div
+            {...statTileProps("outbound_this_week")}
+            className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between cursor-pointer hover:border-[var(--brand)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+          >
             <div>
               <div className="text-xs font-semibold text-muted uppercase tracking-wider">Outbound This Week</div>
               <div className="text-2xl font-bold tabular-nums text-text mt-1">
@@ -336,7 +380,10 @@ export default function ShipmentDashboard({
             </div>
           </div>
 
-          <div className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between">
+          <div
+            {...statTileProps("pending_outbound")}
+            className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between cursor-pointer hover:border-[var(--brand)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+          >
             <div>
               <div className="text-xs font-semibold text-muted uppercase tracking-wider">Pending Outbound</div>
               <div className="text-2xl font-bold tabular-nums text-text mt-1">
@@ -349,7 +396,10 @@ export default function ShipmentDashboard({
             </div>
           </div>
 
-          <div className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between">
+          <div
+            {...statTileProps("in_transit")}
+            className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between cursor-pointer hover:border-[var(--brand)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+          >
             <div>
               <div className="text-xs font-semibold text-muted uppercase tracking-wider">In Transit</div>
               <div className="text-2xl font-bold tabular-nums text-text mt-1">
@@ -362,7 +412,10 @@ export default function ShipmentDashboard({
             </div>
           </div>
 
-          <div className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between">
+          <div
+            {...statTileProps("delivered_30d")}
+            className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between cursor-pointer hover:border-[var(--brand)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+          >
             <div>
               <div className="text-xs font-semibold text-muted uppercase tracking-wider">Delivered (30d)</div>
               <div className="text-2xl font-bold tabular-nums text-text mt-1">
@@ -617,18 +670,18 @@ export default function ShipmentDashboard({
 
                     {/* Day Table */}
                     <div className="overflow-x-auto rounded-xl border border-[var(--card-border)] bg-surface shadow-xs">
-                      <table className="w-full text-sm">
+                      <table className="w-full min-w-[900px] table-fixed text-sm">
                         <thead>
                           <tr className="border-b border-[var(--line)] bg-[var(--ghost-bg)] text-left text-xs font-semibold text-muted">
-                            <th className="px-3.5 py-2.5">Customer</th>
-                            <th className="px-3.5 py-2.5">Ship date</th>
-                            <th className="px-3.5 py-2.5">Method / Carrier</th>
-                            <th className="px-3.5 py-2.5">Distance / ETA</th>
-                            <th className="px-3.5 py-2.5">Trailer</th>
-                            <th className="px-3.5 py-2.5">BDFT</th>
-                            <th className="px-3.5 py-2.5">BOL #</th>
-                            <th className="px-3.5 py-2.5">Status</th>
-                            <th className="px-3.5 py-2.5 text-right">Actions</th>
+                            <th className="px-3.5 py-2.5 w-[22%]">Customer</th>
+                            <th className="px-3.5 py-2.5 w-[10%]">Ship date</th>
+                            <th className="px-3.5 py-2.5 w-[14%]">Method / Carrier</th>
+                            <th className="px-3.5 py-2.5 w-[10%]">Distance / ETA</th>
+                            <th className="px-3.5 py-2.5 w-[9%]">Trailer</th>
+                            <th className="px-3.5 py-2.5 w-[7%]">BDFT</th>
+                            <th className="px-3.5 py-2.5 w-[10%]">BOL #</th>
+                            <th className="px-3.5 py-2.5 w-[10%]">Status</th>
+                            <th className="px-3.5 py-2.5 w-[8%] text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -638,6 +691,7 @@ export default function ShipmentDashboard({
                               shipment={s}
                               onViewBol={setViewerJobId}
                               onGenerateBol={setGenerateJobId}
+                              onEdit={setEditingShipment}
                             />
                           ))}
                         </tbody>
@@ -667,6 +721,18 @@ export default function ShipmentDashboard({
         target={editorTarget}
         onCancel={handleEditorCancel}
         onSaved={handleEditorSaved}
+      />
+
+      <ShipmentEditModal
+        shipment={editingShipment}
+        canManageLoading={canManageLoading}
+        onClose={handleShipmentEditClose}
+      />
+
+      <StatBreakdownModal
+        statKey={statModalKey}
+        label={statModalKey ? STAT_LABELS[statModalKey] ?? "" : ""}
+        onClose={() => setStatModalKey(null)}
       />
     </div>
   );
