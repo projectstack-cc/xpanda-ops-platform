@@ -1949,6 +1949,22 @@ Entries within each module are ordered by prompt # descending (newest first).
     `npx tsc --noEmit` + `npm run cf-build` green (API layer verified independently, then UI layer
     verified again after building against it).
 
+- **Fix (unprompted, conversational request, no prompt file, no prompt number yet) —
+  Shipment Dashboard: Actions-column button wrap + missing BOL Email Queue quick link
+  (react-component-agent §9b).** Follow-up to the column-layout fix above: the locked
+  `table-fixed` widths left the `Actions` column (`w-[8%]`) too narrow for "Build Load" +
+  "Generate BOL"/"View BOL" side by side, so button *text* was wrapping mid-word inside the
+  button, growing it awkwardly. `BolActions.tsx`'s container is now `flex flex-wrap` (whole
+  buttons stack onto a second line when tight, never mid-word) and every button/link got
+  `whitespace-nowrap` so text itself can never wrap. To give the actions cell more room without
+  touching the other five columns, `Customer` was trimmed `22%→20%` and `Actions` grown
+  `8%→10%` in `ShipmentDashboard.tsx`'s `<thead>`; `ShipmentRow.tsx`'s per-cell vertical padding
+  went `py-2→py-[8.8px]` (+10%) so a two-line stacked action pair has breathing room. Also
+  added the `BOL Email Queue` link (`/logistics/bol-email.html`) to the dashboard's top Quick
+  Links row alongside `Load Builder` and `Dock Loading` — it existed on the legacy
+  `logistics/index.html` toolbar but was missed when the v2 quick-links row was built. `npx tsc
+  --noEmit` + `npm run build` green.
+
 - **Feature (unprompted, conversational request, no prompt file, no prompt number yet) —
   Shipment Dashboard: per-order Distance/ETA field, ORS-cached (next-platform-agent §9a +
   react-component-agent §9b).** Steve asked for a miles-to-destination + estimated-drive-time

@@ -22,11 +22,11 @@ export default function BolActions({ shipment, onViewBol, onGenerateBol }: BolAc
   if (isCancelled && !hasBol) return null;
 
   return (
-    <div className="flex items-center justify-end gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
       {jobId && !isDelivered && !isCancelled && (
         <a
           href={`/logistics/load-builder.html?job_id=${jobId}`}
-          className="inline-flex items-center gap-1.5 min-h-[38px] px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-text no-underline hover:bg-[var(--ghost-bg)] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 min-h-[38px] px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-text no-underline hover:bg-[var(--ghost-bg)] transition-colors cursor-pointer whitespace-nowrap"
           title="Open Load Builder"
         >
           <Truck size={14} aria-hidden="true" />
@@ -39,7 +39,7 @@ export default function BolActions({ shipment, onViewBol, onGenerateBol }: BolAc
           type="button"
           onClick={() => jobId && onViewBol(jobId)}
           disabled={!jobId}
-          className="inline-flex items-center gap-1.5 min-h-[38px] px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1.5 min-h-[38px] px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           title="View Bill of Lading"
         >
           <Eye size={14} aria-hidden="true" className="text-muted" />
@@ -50,7 +50,7 @@ export default function BolActions({ shipment, onViewBol, onGenerateBol }: BolAc
           type="button"
           onClick={() => jobId && onGenerateBol(jobId)}
           disabled={!jobId || isCancelled}
-          className="inline-flex items-center gap-1.5 min-h-[38px] px-3 rounded-lg bg-[var(--brand)] text-white text-xs font-semibold shadow-sm hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1.5 min-h-[38px] px-3 rounded-lg bg-[var(--brand)] text-white text-xs font-semibold shadow-sm hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           title={jobId ? "Generate Bill of Lading" : "No linked job"}
         >
           <FileText size={14} aria-hidden="true" />

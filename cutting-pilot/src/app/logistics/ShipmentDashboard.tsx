@@ -21,6 +21,7 @@ import {
   Clock,
   Navigation,
   RefreshCw,
+  Mail,
 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import ShipmentRow from "@/components/logistics/ShipmentRow";
@@ -350,6 +351,13 @@ export default function ShipmentDashboard({
             >
               Dock Loading
             </a>
+            <a
+              href="/logistics/bol-email.html"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] no-underline transition-colors"
+            >
+              <Mail size={14} className="text-muted" />
+              BOL Email Queue
+            </a>
             <button
               type="button"
               onClick={load}
@@ -673,7 +681,7 @@ export default function ShipmentDashboard({
                       <table className="w-full min-w-[900px] table-fixed text-sm">
                         <thead>
                           <tr className="border-b border-[var(--line)] bg-[var(--ghost-bg)] text-left text-xs font-semibold text-muted">
-                            <th className="px-3.5 py-2.5 w-[22%]">Customer</th>
+                            <th className="px-3.5 py-2.5 w-[20%]">Customer</th>
                             <th className="px-3.5 py-2.5 w-[10%]">Ship date</th>
                             <th className="px-3.5 py-2.5 w-[14%]">Method / Carrier</th>
                             <th className="px-3.5 py-2.5 w-[10%]">Distance / ETA</th>
@@ -681,7 +689,7 @@ export default function ShipmentDashboard({
                             <th className="px-3.5 py-2.5 w-[7%]">BDFT</th>
                             <th className="px-3.5 py-2.5 w-[10%]">BOL #</th>
                             <th className="px-3.5 py-2.5 w-[10%]">Status</th>
-                            <th className="px-3.5 py-2.5 w-[8%] text-right">Actions</th>
+                            <th className="px-3.5 py-2.5 w-[10%] text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody>

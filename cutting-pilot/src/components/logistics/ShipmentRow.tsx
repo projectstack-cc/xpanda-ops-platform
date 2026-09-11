@@ -79,7 +79,7 @@ export default function ShipmentRow({ shipment: s, onViewBol, onGenerateBol, onE
       className="border-b border-[var(--line)] last:border-0 cursor-pointer hover:bg-[var(--ghost-bg)] transition-colors"
       onClick={() => onEdit(s)}
     >
-      <td className="px-3 py-2 align-top">
+      <td className="px-3 py-[8.8px] align-top">
         <div className="font-mono tabular-nums text-sm font-semibold text-text">
           {s.invoice_number ? `INV# ${s.invoice_number}` : "—"}
           {(s.load_count ?? 1) > 1 && (
@@ -101,18 +101,18 @@ export default function ShipmentRow({ shipment: s, onViewBol, onGenerateBol, onE
           </a>
         )}
       </td>
-      <td className="px-3 py-2 align-top text-sm text-text">{fmtDate(s.ship_date)}</td>
-      <td className="px-3 py-2 align-top text-sm text-text">{methodCarrier}</td>
-      <td className="px-3 py-2 align-top">
+      <td className="px-3 py-[8.8px] align-top text-sm text-text">{fmtDate(s.ship_date)}</td>
+      <td className="px-3 py-[8.8px] align-top text-sm text-text">{methodCarrier}</td>
+      <td className="px-3 py-[8.8px] align-top">
         <DistanceEta shipment={s} />
       </td>
-      <td className="px-3 py-2 align-top text-sm font-mono tabular-nums text-text">{s.trailer_number || "—"}</td>
-      <td className="px-3 py-2 align-top text-sm font-mono tabular-nums text-text">{fmtNum(s.total_bdft)}</td>
-      <td className="px-3 py-2 align-top text-sm font-mono tabular-nums text-text">{s.bol_number || "—"}</td>
-      <td className="px-3 py-2 align-top">
+      <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{s.trailer_number || "—"}</td>
+      <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{fmtNum(s.total_bdft)}</td>
+      <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{s.bol_number || "—"}</td>
+      <td className="px-3 py-[8.8px] align-top">
         <StatusBadge status={s.status} />
       </td>
-      <td className="px-3 py-2 align-top text-right" onClick={(e) => e.stopPropagation()}>
+      <td className="px-3 py-[8.8px] align-top text-right" onClick={(e) => e.stopPropagation()}>
         <BolActions shipment={s} onViewBol={onViewBol} onGenerateBol={onGenerateBol} />
       </td>
     </tr>
