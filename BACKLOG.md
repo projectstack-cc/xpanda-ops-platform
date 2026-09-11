@@ -429,6 +429,22 @@ schedule badge):**
 ## Infra / CI-CD
 
 - [ ] Optional: evaluate Cloudflare Workers Builds as the native alternative to this Action.
+- [ ] **P446 follow-up — repo-wide CRLF/LF working-tree drift, masked by a stale git index
+  stat-cache.** While fixing P446, found ~13 files (`_worker.js/lib/core.js`, `push.js`,
+  `routes/{admin,auth,bols,loading,notifications,qc,reports}.js`, `jobs/jobs-header.js`,
+  `jobs/packing-slip-parser.js`, `logistics/logistics-header.js` — likely more, this list came
+  from a partial scan) whose on-disk content is CRLF-terminated while the committed `HEAD` blob is
+  LF-only. Confirmed content is otherwise byte-identical (no hidden uncommitted edits) via
+  `git hash-object <file>` vs `git rev-parse HEAD:<file>`, then diffing with CRLF stripped from
+  both sides. `git status`/`git diff` report these files clean because the index's cached stat
+  entry (size/mtime) happens to match the current CRLF-on-disk size, so git skips re-hashing —
+  it's "racily clean," not actually clean. The trap: any edit that changes a file's byte size
+  busts that stale cache and makes git suddenly diff the *entire* file (every line touched),
+  burying the real change. Low priority (cosmetic, no functional risk — JS doesn't care about line
+  endings) but worth a deliberate one-time normalization pass (pick LF, since that's what `HEAD`
+  already stores) so future edits to these files produce clean diffs. Do this as its own prompt,
+  not bundled with a feature change, so the normalization commit is easy to skip over in `git
+  blame`.
 
 ---
 

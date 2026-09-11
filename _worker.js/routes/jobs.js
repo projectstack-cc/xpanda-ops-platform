@@ -456,9 +456,14 @@ export async function handleApiJobs(request, env) {
     }
 
     // Reject duplicate invoice numbers (also guards future QB auto-intake webhook re-fires).
+    // Checks ALL jobs regardless of archived_at: the cleanup-on-read sweep (below, on GET)
+    // auto-archives routine finished jobs after 14 days, which used to make this guard blind to
+    // re-uploads of already-shipped invoices (P446 — 12 duplicate jobs created from re-scanned
+    // packing slips for invoices archived weeks earlier). A genuinely cancelled/archived job that
+    // needs redoing should be restored, not silently duplicated under the same invoice number.
     if (invoice_number) {
       const dupe = await db.prepare(
-        "SELECT id FROM jobs WHERE invoice_number = ? AND archived_at IS NULL LIMIT 1"
+        "SELECT id FROM jobs WHERE invoice_number = ? LIMIT 1"
       ).bind(invoice_number).first();
       if (dupe) {
         return json({ ok: false, error: `A job with invoice # ${invoice_number} already exists.`, code: 'duplicate_invoice' }, 409);

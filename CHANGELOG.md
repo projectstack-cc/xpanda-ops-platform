@@ -3858,6 +3858,33 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Job Board
 
+- **P446 — Duplicate-invoice guard now blind-spots archived jobs closed; cleared 12 stale
+  duplicate jobs off the Loading Dashboard (db-api-agent).** Steve found 14 old, already-shipped
+  invoices still showing on `/logistics/loading.html` with no way to act on them from the Job
+  Board. Root cause: the cleanup-on-read sweep (`_worker.js/routes/jobs.js` GET handler)
+  auto-archives finished jobs whose ship date is >14 days old by setting `archived_at` — but the
+  duplicate-invoice guard on job creation (`POST /api/jobs`) only checked
+  `WHERE invoice_number = ? AND archived_at IS NULL`, so once a finished job aged past 14 days and
+  got auto-archived, the guard went blind to its invoice number. Re-uploading an old packing slip
+  for that invoice (as happened for 12 invoices in a ~20-minute window on 2026-09-10) silently
+  created a second job stuck at `status = 'done'` instead of being rejected as a duplicate — and
+  since the Loading Dashboard's `/api/loading-assignments` query is driven entirely by
+  `loading_assignments.loading_status`, not `jobs.status` or `archived_at`, the duplicate's
+  loading card kept showing up with nowhere on the visible Job Board to resolve it from. **Fix:**
+  dropped the `archived_at IS NULL` clause from the guard — it now checks all jobs regardless of
+  archive state, so re-uploading a shipped invoice's packing slip is rejected with the same 409
+  `duplicate_invoice` error every time. A genuinely cancelled job that needs redoing should be
+  restored (cleared `archived_at`) rather than re-created under the same invoice number. **Data
+  cleanup (direct D1 write, not through the API — no `activity_log` entry):** for invoices 4123,
+  4126, 4127, 4146, 4147, 4154, 4174, 4175, 4186, 4202, 4204, 4212 — archived the 18 lingering
+  `loading_assignments` rows (10 `awaiting` duplicates + 6 stale `delivered` cards + 2 orphaned
+  `awaiting` rows on already-shipped jobs) and pushed the 12 duplicate `done` jobs to `shipped`
+  (their real ship dates were already weeks/months past). Invoices 4124/4125/4261/4316 from
+  Steve's original list needed no change — already clean or already resolved. Confirmed via
+  `git hash-object` vs `git rev-parse HEAD:<file>` that ~13 files in `_worker.js/`, `jobs/`, and
+  `logistics/` have working-tree content that's drifted to CRLF while `HEAD` stores them LF-only,
+  hidden by a stale index stat-cache (`git status`/`git diff` report clean until an edit changes
+  file size); left the other drifted files untouched (out of scope for this fix).
 - **P444 — DiversiTech label print: SKU checklist before generating (job-board-agent).** Clicking
   "🏷️ Print DiversiTech Labels" no longer prints every line item unconditionally — it now opens a
   new `#diversitech-print-modal` (mirrors the existing `#split-days-modal` pattern) listing each
