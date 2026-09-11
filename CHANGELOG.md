@@ -3133,6 +3133,38 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics
 
+- **P445 — Customer-pickup orders skip "Confirm Pickup" on the driver/customer QR tracking page
+  (logistics-agent).** `track/index.html` (`/track/<access_token>`) previously always opened on
+  the "Confirm Pickup" screen (`renderPickup()`) for a fresh BOL, regardless of whether the order
+  is carrier-delivered or a customer-pickup order (`jobs.method === 'customer pickup'`,
+  case-insensitive — the same source of truth already used in `routes/jobs.js:824,545,1443` and
+  `routes/loading.js:74,119`; not to be confused with `bols.carrier_name`'s unrelated "Customer
+  Pickup (CPU)" carrier-list entry). Customer-pickup orders have no driver to tap "Confirm
+  Pickup" — the customer goes straight from opening the link to signing for their own pickup.
+  `handleApiPublicBolLookup` (`_worker.js/routes/public.js`) now resolves `jobs.method` via a
+  guarded second query (mirrors the existing `bol.job_id`-gated job lookup already in this file's
+  `handleApiPublicBolPickup`) and returns `is_customer_pickup: boolean` on the payload — `false`
+  by construction when `bols.job_id IS NULL`, and deliberately not added to the minimal
+  `stage === 'delivered'` early-return payload. `track/index.html`'s `render()` now checks
+  `is_customer_pickup` for the `stage === 'issued'` case: it silently POSTs the same
+  `/api/public/bol-pickup/:token` endpoint `confirmPickup()`'s button already uses (no new route,
+  no endpoint change — the delivery endpoint's existing `must be in_transit before delivery` gate
+  in `handleApiPublicBolDelivery` keeps working unmodified because pickup is still confirmed
+  first, just silently), then renders the signature page (`renderDelivery()`) directly — no
+  loading/pickup screen ever shown for these orders. A failed auto-pickup call (e.g.
+  `no_shipment_linked`) falls back to the normal manual `renderPickup()` screen rather than
+  breaking the page. `render()` is now `async` (`load()` updated to `await` it) so the auto-pickup
+  fetch can complete before deciding which screen to show; the fire-and-forget initial `load();`
+  call is unchanged. Trade-off worth flagging: for customer-pickup orders, simply opening the
+  tracking link now flips `loading_assignments`/`shipments` to `in_transit` and fires the
+  existing `loading.in_transit` push — inherent to removing the manual tap, and the pickup
+  endpoint's existing idempotency guard (`already: true` short-circuit) makes a second/prefetched
+  open harmless. Multi-load jobs unaffected (`is_customer_pickup` is job-level, identical across
+  every load's BOL); a BOL re-visited after `in_transit` behaves identically to today for both
+  order types (stage check short-circuits before the new branch); non-customer-pickup orders are
+  byte-for-byte unchanged. No DB migration — reads the existing `jobs.method` column only; no
+  db-api-agent involvement needed. `node --check` clean on `_worker.js/routes/public.js` and the
+  inline script in `track/index.html`.
 - **Hotfix (unprompted, conversational request, no prompt file) — BOL generator: page order +
   two edit-persistence bugs, legacy engine (logistics-agent; bilateral with the v2 fix below).**
   Steve reported three issues on the legacy BOL generator (`logistics/index.html` +

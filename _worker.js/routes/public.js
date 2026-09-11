@@ -51,9 +51,19 @@ export async function handleApiPublicBolLookup(request, env) {
     return json({ ok: true, bol: { stage: 'delivered', bol_number: bol.bol_number } });
   }
 
+  // P445: expose whether the linked job is a customer-pickup order, so track/index.html can
+  // skip the "Confirm Pickup" screen. Source of truth is jobs.method (case-insensitive), the
+  // same field already used in routes/jobs.js:824,545,1443 and routes/loading.js:74,119 — NOT
+  // bols.carrier_name's unrelated "Customer Pickup (CPU)" carrier-list entry.
+  let isCustomerPickup = false;
+  if (bol.job_id) {
+    const job = await db.prepare("SELECT method FROM jobs WHERE id = ?").bind(bol.job_id).first();
+    isCustomerPickup = (job?.method || '').toLowerCase() === 'customer pickup';
+  }
+
   // Don't leak the token back; the caller already has it.
   delete bol.access_token;
-  return json({ ok: true, bol: { ...bol, stage } });
+  return json({ ok: true, bol: { ...bol, stage, is_customer_pickup: isCustomerPickup } });
 }
 
 export async function handleApiPublicBolPickup(request, env) {

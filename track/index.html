@@ -65,6 +65,7 @@
   }
 
   let currentBol = null;
+  let autoPickupAttempted = false; // P445: prevents a second silent bol-pickup call this page-load
 
   async function load() {
     contentEl.innerHTML = '<div class="muted">Loading…</div>';
@@ -78,16 +79,43 @@
         return;
       }
       currentBol = data.bol;
-      render();
+      await render();
     } catch {
       contentEl.innerHTML = '<div class="err">Network error. Check your connection and refresh.</div>';
     }
   }
 
-  function render() {
+  async function render() {
     if (currentBol.stage === 'delivered') return renderDelivered();
     if (currentBol.stage === 'in_transit') return renderDelivery();
+    // P445: customer-pickup orders skip the "Confirm Pickup" screen — silently fire the same
+    // pickup-confirmation call confirmPickup() uses, then go straight to the signature page.
+    if (currentBol.stage === 'issued' && currentBol.is_customer_pickup && !autoPickupAttempted) {
+      autoPickupAttempted = true;
+      const ok = await autoConfirmPickup();
+      if (ok) return renderDelivery();
+      // Fall through to renderPickup() below — e.g. no_shipment_linked, network error, etc.
+    }
     return renderPickup();
+  }
+
+  // Silent counterpart to confirmPickup() for customer-pickup orders (P445). Same endpoint, no
+  // button/DOM interaction. Returns true on success (caller renders delivery), false on any
+  // failure (caller falls back to the normal renderPickup() screen).
+  async function autoConfirmPickup() {
+    try {
+      const res = await fetch('/api/public/bol-pickup/' + encodeURIComponent(token), { method: 'POST' });
+      const data = await res.json();
+      if (!data.ok) {
+        console.error('[track] auto pickup confirm failed', data.error);
+        return false;
+      }
+      currentBol.stage = data.stage || 'in_transit'; // guards a response that omits `stage`
+      return true;
+    } catch (e) {
+      console.error('[track] auto pickup confirm network error', e);
+      return false;
+    }
   }
 
   function fmtAddress(b) {
