@@ -19,10 +19,12 @@
 import {
   pack,
   validatePlan,
+  planMetrics,
   skuOrientations,
   familyOrientationOptions,
   HOLEY_BOARD_CATEGORY,
   TRAILER_TYPES,
+  type PlanMetrics,
   type PackPlan,
   type PackTrailer,
   type PackRow,
@@ -251,6 +253,64 @@ function makeBaselinePlan(): PackPlan {
 
 function ruleViolations(violations: { rule: string }[], rule: string): number {
   return violations.filter((v) => v.rule === rule).length;
+}
+
+// --- lb-engine-04 Part B2: the metrics ratchet ---
+//
+// These are MUST-NOT-REGRESS bars, measured against the live engine at lb-engine-04 and pinned
+// here. A future prompt that makes packing worse fails these checks instead of quietly shipping.
+//
+// LOWERING A BAR IS A DELIBERATE DECISION, NOT A QUIET EDIT. If a change genuinely trades one of
+// these numbers for something better (say, more rows but a materially better weight distribution),
+// that is a real call to make — but make it explicitly: change the constant in the same commit as
+// the change that moved it, and say in the CHANGELOG entry why the trade is worth it. Do not
+// re-measure and paste in whatever the engine now happens to emit.
+//
+// trailerCount / rowCount / usedLength are `<=` bars (fewer/shorter is better).
+// meanHeightUtilization is a `>=` bar (fuller columns are better), compared with an epsilon so
+// float accumulation across 50+ columns can't trip a bar the engine actually still clears. The
+// pinned utilization figures are the observed values truncated to 4 decimal places for the same
+// reason — the bar is "no worse than this", not "bit-identical to this".
+interface RatchetBar {
+  trailerCount: number;
+  rowCount: number;
+  usedLength: number;
+  meanHeightUtilization: number;
+}
+
+const RATCHET: Record<string, RatchetBar> = {
+  // INV_4202 — the load legacy could not fit on one truck. 6 rows / 508.5" matches the figure
+  // quoted in the lb-engine-04 prompt.
+  FIXTURE_BLOCKS_PAIRING: { trailerCount: 1, rowCount: 6, usedLength: 508.5, meanHeightUtilization: 0.7691 },
+  // The simplest case: a 4-across x 13-deep holey grid, every column topped off to 109" exact, so
+  // height utilization is a full 1.0 here and any future change that leaves even one column short
+  // of the roof will fail this bar. That is intended.
+  FIXTURE_HOLEY_SIPLAST: { trailerCount: 1, rowCount: 13, usedLength: 624, meanHeightUtilization: 1 },
+  // INV_4347 — 94 pieces across six footprints, the messiest of the three.
+  FIXTURE_BLOCKS_MIXED: { trailerCount: 1, rowCount: 7, usedLength: 635.25, meanHeightUtilization: 0.6229 },
+};
+
+const RATCHET_EPS = 1e-9;
+
+// Pure predicate: returns one string per violated bar, empty when the metrics clear every bar.
+// Deliberately NOT wired to check() internally — that is what lets the "prove the bar has teeth"
+// check below feed it a knowingly-worse plan and assert it comes back non-empty, without polluting
+// the results table with a deliberate failure.
+function ratchetFailures(metrics: PlanMetrics, bar: RatchetBar): string[] {
+  const failures: string[] = [];
+  if (metrics.trailerCount > bar.trailerCount) {
+    failures.push(`trailerCount ${metrics.trailerCount} > pinned ${bar.trailerCount}`);
+  }
+  if (metrics.rowCount > bar.rowCount) {
+    failures.push(`rowCount ${metrics.rowCount} > pinned ${bar.rowCount}`);
+  }
+  if (metrics.usedLength > bar.usedLength + RATCHET_EPS) {
+    failures.push(`usedLength ${metrics.usedLength} > pinned ${bar.usedLength}`);
+  }
+  if (metrics.meanHeightUtilization < bar.meanHeightUtilization - RATCHET_EPS) {
+    failures.push(`meanHeightUtilization ${metrics.meanHeightUtilization} < pinned ${bar.meanHeightUtilization}`);
+  }
+  return failures;
 }
 
 export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[] } {
@@ -659,6 +719,10 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
 
   const TRAILER_53FT = TRAILER_TYPES["53ft Standard"];
 
+  // lb-engine-04 B2: each fixture records its metrics here as it runs, so the ratchet checks can
+  // be reported together at the end rather than scattered through the three fixture blocks.
+  const fixtureMetrics = new Map<string, PlanMetrics>();
+
   // C8/D11 (checked before C7 below since the holey grid is the simplest case — B4 in the
   // lb-engine-02 prompt: "if the general algorithm can't reproduce the obvious answer on the
   // simplest case, it is wrong"). Base qty 676 = 52 columns * 13 per column exactly, so the base
@@ -711,6 +775,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("FIXTURE_HOLEY_SIPLAST: with top-off active, every column mixes both thicknesses to 109\" exact", allColumnsToppedOff);
     const validationOnSiplast = validatePlan(siplastPlan, TRAILER_53FT, siplastCart, siplastSkus, OPTS);
     check("FIXTURE_HOLEY_SIPLAST: validatePlan reports zero violations (top-off satisfies K)", validationOnSiplast.length === 0, JSON.stringify(validationOnSiplast));
+    fixtureMetrics.set("FIXTURE_HOLEY_SIPLAST", planMetrics(siplastPlan, TRAILER_53FT));
   }
 
   // C7. FIXTURE_BLOCKS_PAIRING end-to-end (INV_4202) — the load legacy could not fit on one
@@ -757,6 +822,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       pairingUsedLength <= PAIRING_BASELINE_LENGTH,
       String(pairingUsedLength)
     );
+    fixtureMetrics.set("FIXTURE_BLOCKS_PAIRING", planMetrics(pairingPlan, TRAILER_53FT));
   }
 
   // C9 / D10. FIXTURE_BLOCKS_MIXED — real INV_4347 data (lb-engine-03 Part C; replaces the
@@ -805,6 +871,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   const mixedPlan = pack(mixedCart, mixedSkus, TRAILER_53FT);
   const mixedViolations = validatePlan(mixedPlan, TRAILER_53FT, mixedCart, mixedSkus, OPTS);
   check("FIXTURE_BLOCKS_MIXED: validatePlan reports zero violations", mixedViolations.length === 0, JSON.stringify(mixedViolations));
+  fixtureMetrics.set("FIXTURE_BLOCKS_MIXED", planMetrics(mixedPlan, TRAILER_53FT));
 
   const footprintKey = (l: number, w: number) => `${Math.min(l, w)}x${Math.max(l, w)}`;
   const footprintsBySku = new Map<string, string>();
@@ -1017,6 +1084,176 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
 
     const balViolations = validatePlan(balPlan, TRAILER_53FT, balCart, [balSku], { ...OPTS, trailerLimit: 1 });
     check("D8: 0 violations — conservation holds exactly across the trailerLimit cut", balViolations.length === 0, JSON.stringify(balViolations));
+  }
+
+  // --- lb-engine-04 Part C: rationale honesty (E1-E5) + planMetrics/ratchet (E6-E8) ---
+
+  // E1. Below-K: a footprint-mate WITH remaining demand exists but is under K, so the rationale
+  // must name it and the threshold — not claim the footprint is empty and not claim demand is
+  // used up. Both members are declared below K (2.5" and 1.75") for the reason D3 documents: if
+  // only one were below K, the search would legitimately promote the thin one to "base" and use
+  // the thick one as an ELIGIBLE top-off, which is an accepted pairing, not a rejection. With
+  // 100 of each, the mate still has remaining demand when the first column is decided.
+  {
+    const bkA: PackSku = { id: "BK_A", name: "2.5in", sku: "BK_A", length: 54.75, width: 90.75, height: 2.5, weight: 15, category: "Blocks", allowRotation: true };
+    const bkB: PackSku = { id: "BK_B", name: "1.75in", sku: "BK_B", length: 54.75, width: 90.75, height: 1.75, weight: 10, category: "Blocks", allowRotation: true };
+    const bkCart: CartLine[] = [{ skuId: "BK_A", qty: 100 }, { skuId: "BK_B", qty: 100 }];
+    const bkPlan = pack(bkCart, [bkA, bkB], TRAILER_53FT);
+    const bkRationale = findColumn(bkPlan, (c) => c.layers.length === 1)?.rationale ?? "";
+
+    check("E1: below-K rationale names the best top-off candidate and the K threshold", bkRationale.includes("below K of"), bkRationale);
+    check("E1: below-K rationale does NOT claim the footprint has no other SKU", !bkRationale.includes("no other SKU"), bkRationale);
+    check("E1: below-K rationale does NOT claim demand is exhausted", !bkRationale.includes("no remaining demand"), bkRationale);
+  }
+
+  // E2. Demand exhausted, the real INV_4347 42.75x54.75 family (KAB CA Comps qty 2 + Westwego GW
+  // Comp qty 1, both 7"). Before lb-engine-04 this column read
+  //   `2 x 7" = 14", topped off with 1 x 7" = 7" — 21" of 109", 88" left`
+  // which reads as 88" of wasted trailer. It was never waste: there were only three pieces in the
+  // whole order. The prompt requires the string not to claim "no other SKU"; asserting only that
+  // would pass vacuously (that wording never applied to this branch), so the positive assertion
+  // that it actually says the pieces ran out is the one with teeth.
+  {
+    const kabRationales = (rationalesBySku.get("MIX_KAB") ?? []).concat(rationalesBySku.get("MIX_WESTWEGO_GW") ?? []);
+    const kabRationale = kabRationales[0] ?? "";
+    check("E2: INV_4347 42.75x54.75 column reports that all available pieces were placed", kabRationale.includes("all available pieces placed"), kabRationale);
+    check("E2: INV_4347 42.75x54.75 column does NOT claim \"no other SKU\"", kabRationale.length > 0 && !kabRationale.includes("no other SKU"), kabRationale);
+    check("E2: INV_4347 42.75x54.75 column no longer reports a bare 88\" leftover gap", !kabRationale.includes("88\" left"), kabRationale);
+
+    // The same three-way split on the else branch: the last STOCK piece lands alone on the
+    // dominant 54.75x90.75 footprint after every footprint-mate is used up, so it must take the
+    // demand-exhausted wording rather than "no other SKU on this footprint".
+    const exhaustedElse = findColumn(
+      mixedPlan,
+      (c) => c.layers.length === 1 && c.rationale.includes("no remaining demand for this footprint")
+    );
+    check("E2: a single-layer column on a shared footprint uses the demand-exhausted wording", exhaustedElse !== null, exhaustedElse?.rationale);
+    check("E2: that column does NOT claim \"no other SKU\"", !(exhaustedElse?.rationale ?? "no other SKU").includes("no other SKU"), exhaustedElse?.rationale);
+  }
+
+  // E3. No footprint-mate at all — a genuine single-member family keeps the original wording.
+  // 9 x 12" = 108" leaves 1" on a 109" trailer, matching the prompt's example exactly.
+  {
+    const soloSku: PackSku = { id: "SOLO", name: "solo 12in", sku: "SOLO", length: 54.75, width: 90.75, height: 12, weight: 25, category: "Blocks", allowRotation: false };
+    const soloCart: CartLine[] = [{ skuId: "SOLO", qty: 9 }];
+    const soloPlan = pack(soloCart, [soloSku], TRAILER_53FT);
+    const soloRationale = findColumn(soloPlan, () => true)?.rationale ?? "";
+
+    check("E3: single-member family keeps the no-footprint-mate wording", soloRationale.includes("no other SKU on this footprint"), soloRationale);
+    check("E3: single-member family does NOT claim demand exhaustion", !soloRationale.includes("no remaining demand"), soloRationale);
+    check("E3: single-member family rationale still shows the fill (9 x 12\" = 108\", 1\" left)", soloRationale.startsWith("9 × 12\" = 108\", 1\" left"), soloRationale);
+  }
+
+  // E4. Equal thickness is not a "top-off". Same INV_4347 column as E2: two 7" labels stacked is a
+  // second label at the same thickness, not a thinner piece filling a residual gap, so it names
+  // both SKUs and drops the "topped off with" verb.
+  {
+    const kabRationale = (rationalesBySku.get("MIX_KAB") ?? [])[0] ?? "";
+    check("E4: equal-thickness pairing does NOT say \"topped off with\"", kabRationale.length > 0 && !kabRationale.includes("topped off with"), kabRationale);
+    check("E4: equal-thickness pairing names both SKUs", kabRationale.includes("(KAB CA Comps)") && kabRationale.includes("(Westwego GW Comp)"), kabRationale);
+    check("E4: a genuinely thinner top-off still uses \"topped off with\"", ((rationalesBySku.get("MIX_KANSAS525") ?? [])[0] ?? "").includes("topped off with"), (rationalesBySku.get("MIX_KANSAS525") ?? [])[0]);
+  }
+
+  // E5 (A4). applyStabilityWarnings appends onto rationale after buildFamilyColumns has written
+  // it. Nothing in Part A may overwrite the string later, so a column that earns a stability note
+  // must still carry its Part A rationale, with the note appended AFTER it.
+  {
+    const stabilityColumn = findColumn(mixedPlan, (c) => c.rationale.includes("[stability:"));
+    const stabilityRationale = stabilityColumn?.rationale ?? "";
+    const partAIndex = stabilityRationale.indexOf("no other SKU on this footprint");
+    const noteIndex = stabilityRationale.indexOf("[stability:");
+    check("E5: a column with a stability note still carries its Part A rationale", partAIndex >= 0, stabilityRationale);
+    check("E5: the stability note is appended AFTER the Part A rationale, not over it", partAIndex >= 0 && noteIndex > partAIndex, stabilityRationale);
+    check("E5: the stability note is still the tail of the string", stabilityRationale.endsWith("]"), stabilityRationale);
+  }
+
+  // E6. planMetrics() against a hand-built plan whose every field is known by construction: two
+  // rows (20" and 10" deep) on a 100x50x40 trailer, three columns at 20"/30"/40" tall.
+  {
+    const metricsDims: Dimensions = { length: 100, width: 50, height: 40, maxWeight: 1000 };
+    const mkLayer = (unitHeight: number, count: number): PackLayer => ({
+      skuId: "A", skuName: "SKU A", skuCode: "A-1", color: "#111111", unitHeight, count,
+      orientation: { length: 20, width: 10, height: unitHeight, label: "flat" },
+    });
+    const mkColumn = (colWidth: number, colLength: number, unitHeight: number, count: number, mixed: boolean): PackColumn => ({
+      posY: 0, colWidth, colLength, totalHeight: unitHeight * count, totalWeight: count * 2,
+      stackCount: count, layers: [mkLayer(unitHeight, count)], mixed, rationale: "hand-built",
+    });
+    const mkRow = (rowLength: number, columns: PackColumn[]): PackRow => ({
+      posFromFront: 0, rowLength, rowWidthUsed: 0, wastedFloorArea: 0, columns, totalUnits: 0, totalWeight: 0,
+    });
+    const metricsPlan: PackPlan = {
+      trailers: [{
+        type: "Custom", dims: metricsDims,
+        rows: [
+          mkRow(20, [mkColumn(10, 20, 10, 2, true), mkColumn(15, 10, 10, 3, false)]),
+          mkRow(10, [mkColumn(20, 10, 10, 4, false)]),
+        ],
+        usedLength: 0, usedFloorArea: 0, usedWeight: 0, totalStacks: 0, totalUnits: 0, mixedStacks: 0,
+        widthUtilization: 0, heightUtilization: 0,
+      }],
+      balance: [{ skuId: "A", remaining: 4 }, { skuId: "B", remaining: 6 }],
+      warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0,
+    };
+    recompute(metricsPlan);
+    const m = planMetrics(metricsPlan, metricsDims);
+
+    check("E6: planMetrics trailerCount", m.trailerCount === 1, String(m.trailerCount));
+    check("E6: planMetrics rowCount", m.rowCount === 2, String(m.rowCount));
+    check("E6: planMetrics usedLength sums row lengths (20 + 10 = 30)", m.usedLength === 30, String(m.usedLength));
+    // (20/40 + 30/40 + 40/40) / 3 = 0.75
+    check("E6: planMetrics meanHeightUtilization averages across columns (0.75)", Math.abs(m.meanHeightUtilization - 0.75) < 1e-9, String(m.meanHeightUtilization));
+    // (25/50 + 20/50) / 2 = 0.45
+    check("E6: planMetrics meanWidthUtilization averages across rows (0.45)", Math.abs(m.meanWidthUtilization - 0.45) < 1e-9, String(m.meanWidthUtilization));
+    // row 0: (20-20)*10 + (20-10)*15 = 150; row 1: (10-10)*20 = 0
+    check("E6: planMetrics wastedFloorArea sums across rows (150)", m.wastedFloorArea === 150, String(m.wastedFloorArea));
+    check("E6: planMetrics mixedStacks", m.mixedStacks === 1, String(m.mixedStacks));
+    check("E6: planMetrics balancePieces sums remaining demand (4 + 6 = 10)", m.balancePieces === 10, String(m.balancePieces));
+
+    const emptyMetrics = planMetrics({ trailers: [], balance: [], warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 }, metricsDims);
+    check("E6: planMetrics on an empty plan returns zeroes, not NaN", emptyMetrics.meanHeightUtilization === 0 && emptyMetrics.meanWidthUtilization === 0 && emptyMetrics.rowCount === 0);
+  }
+
+  // E7. The ratchet passes for all three real fixtures.
+  for (const [name, bar] of Object.entries(RATCHET)) {
+    const metrics = fixtureMetrics.get(name);
+    if (!metrics) {
+      check(`E7: ${name} recorded metrics for the ratchet`, false, "fixture did not run");
+      continue;
+    }
+    const failures = ratchetFailures(metrics, bar);
+    check(
+      `E7: ${name} clears the ratchet (${metrics.rowCount} rows, ${metrics.usedLength}" used, ${metrics.meanHeightUtilization.toFixed(4)} mean height util)`,
+      failures.length === 0,
+      failures.join("; ")
+    );
+  }
+
+  // E8. Prove the bar has teeth: a ratchet that cannot fail is not a ratchet. Take the real
+  // FIXTURE_BLOCKS_PAIRING metrics and degrade each dimension the ratchet guards, one at a time,
+  // then confirm ratchetFailures() catches each on its own and all of them together.
+  {
+    const good = fixtureMetrics.get("FIXTURE_BLOCKS_PAIRING");
+    const bar = RATCHET.FIXTURE_BLOCKS_PAIRING;
+    if (!good) {
+      check("E8: FIXTURE_BLOCKS_PAIRING metrics available to degrade", false, "fixture did not run");
+    } else {
+      check("E8: the unmodified fixture is the control — it clears the bar", ratchetFailures(good, bar).length === 0);
+      check("E8: an extra trailer fails the ratchet", ratchetFailures({ ...good, trailerCount: good.trailerCount + 1 }, bar).length > 0);
+      check("E8: an extra row fails the ratchet", ratchetFailures({ ...good, rowCount: good.rowCount + 1 }, bar).length > 0);
+      check("E8: more used length fails the ratchet", ratchetFailures({ ...good, usedLength: good.usedLength + 12 }, bar).length > 0);
+      check("E8: worse height utilization fails the ratchet", ratchetFailures({ ...good, meanHeightUtilization: good.meanHeightUtilization - 0.05 }, bar).length > 0);
+
+      const allWorse = ratchetFailures(
+        { ...good, trailerCount: good.trailerCount + 1, rowCount: good.rowCount + 1, usedLength: good.usedLength + 12, meanHeightUtilization: good.meanHeightUtilization - 0.05 },
+        bar
+      );
+      check("E8: a plan worse on every guarded dimension reports all four failures", allWorse.length === 4, allWorse.join("; "));
+
+      // A strictly BETTER plan must still pass — the bar is "no worse than", not "equal to".
+      const better = ratchetFailures({ ...good, rowCount: good.rowCount - 1, usedLength: good.usedLength - 20, meanHeightUtilization: good.meanHeightUtilization + 0.05 }, bar);
+      check("E8: a strictly better plan still clears the ratchet", better.length === 0, better.join("; "));
+    }
   }
 
   return { pass: results.every((r) => r.pass), results };

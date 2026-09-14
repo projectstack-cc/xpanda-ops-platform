@@ -1836,6 +1836,53 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics (v2)
 
+- **lb-engine-04 — v2 Load Builder packing engine: rationale honesty, `planMetrics()`, regression
+  ratchet (engine close-out).** The last engine prompt; `lb-ui-01` builds the React surface on top.
+  **A (rationale honesty):** rationale strings are the engine's trust feature, and a misleading one
+  is worse than none — it sends the reader hunting for a bug that doesn't exist. `buildFamilyColumns`
+  skipped exhausted footprint-mates (`cand.remaining <= 0`) *before* they could be recorded, so a
+  column that was short purely because all demand for that footprint was already placed fell through
+  to `"no other SKU on this footprint"` — false; there were other SKUs, they were just used up. The
+  candidate scan now tracks a third state (`sawExhaustedCandidate`) separately from below-K
+  ineligibility, threaded through the `winner` object, and the no-top-off rationale picks one of
+  three wordings in precedence order: **below-K** first (an actionable tuning signal), then
+  **demand-exhausted** (`"all available pieces placed — 101" open, no remaining demand for this
+  footprint"`), then **no-footprint-mate** (unchanged). The demand-exhausted string deliberately
+  drops the `c1 × height = filled` prefix the other two carry — it is the prompt's given wording and
+  should not be "fixed" back to the longer form. **Equal-thickness wording:** when a selected
+  top-off's `unitHeight` equals the base's (`approxEq`, not `===`, for consistency with the file's
+  other comparisons), it isn't filling a residual gap, it's a second label at the same thickness, so
+  it now names both SKUs and drops the verb: INV_4347's 42.75x54.75 family went from
+  `2 × 7" = 14", topped off with 1 × 7" = 7" — 21" of 109", 88" left` (reads as 88" of wasted
+  trailer) to `2 × 7" (KAB CA Comps) + 1 × 7" (Westwego GW Comp) = 21" — all available pieces
+  placed` (there were only three pieces in the whole order). Whole-family exhaustion is checked
+  *after* both the base and top-off decrements, since a residual gap alone doesn't imply exhaustion.
+  `applyStabilityWarnings` still appends `[stability: ...]` onto the finished string — nothing in
+  Part A writes `rationale` more than once.
+  **B (`planMetrics()`):** new exported pure function returning `PlanMetrics` — trailer/row counts,
+  summed used length, mean height utilization across columns, mean width utilization across rows,
+  summed wasted floor area, mixed stacks, and total pieces left in balance. This is what `lb-ui-01`
+  will display and what the ratchet asserts against.
+  **B2/C (metrics ratchet):** the selfcheck pins each real fixture's current metrics as a
+  must-not-regress bar (`RATCHET`) — `trailerCount`/`rowCount`/`usedLength` as `<=` bars, mean
+  height utilization as a `>=` bar compared with an epsilon and pinned truncated to 4dp so float
+  accumulation across 50+ columns can't trip a bar the engine still clears. Measured live:
+  `FIXTURE_BLOCKS_PAIRING` 1 trailer / 6 rows / 508.5" / 0.7691, `FIXTURE_HOLEY_SIPLAST` 1 / 13 /
+  624" / 1.0000 (every column topped off to 109" exact, so any future change leaving one column
+  short of the roof fails — intended), `FIXTURE_BLOCKS_MIXED` 1 / 7 / 635.25" / 0.6230. The bar
+  logic is a pure predicate (`ratchetFailures`) rather than something that calls `check()` directly,
+  which is what lets E8 hand it a deliberately degraded plan and assert the failures come back
+  without polluting the results table. Selfcheck grew 84 → 120 checks; no existing check changed.
+  **Legacy comparison harness dropped by decision.** The original scope called for a frozen
+  TypeScript port of `calcLoading` asserting the new engine uses fewer trailers and more
+  utilization. A faithful port means porting `buildDemand`, `buildRow`, `buildColumn`,
+  `sortDemandPriority`, `getFullTrailerThreshold` and the two-pass structure — hundreds of lines
+  where a subtle mis-port produces a wrong baseline and therefore false confidence in *either*
+  direction. The comparison's answer is already known and already demonstrated by
+  `FIXTURE_BLOCKS_PAIRING` (the INV_4202 load legacy could not fit on one truck, which the new
+  engine fits in 6 rows / 508.5"). The absolute metrics ratchet above replaces it as the objective
+  bar.
+
 - **lb-engine-03 — v2 Load Builder packing engine: column fill with K top-off, rear->front
   ordering, running balance (completes `pack()`).** Two carry-over fixes plus the height/ordering/
   balance work the lb-engine-02 placeholder deferred.
