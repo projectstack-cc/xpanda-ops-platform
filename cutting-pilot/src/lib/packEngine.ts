@@ -1,16 +1,18 @@
 // src/lib/packEngine.ts
 // v2 Load Builder packing engine — typed contracts + invariant harness (lb-engine-01), joint
-// orientation selection + width pairing + row assembly (lb-engine-02). Pure, dependency-free: no
-// React, no Cloudflare bindings, no fetch. Importable from a Node script and from a client
-// component alike.
+// orientation selection + width pairing + row assembly (lb-engine-02), multi-SKU column fill with
+// K top-off, rear->front ordering and running balance (lb-engine-03, completes pack()). Pure,
+// dependency-free: no React, no Cloudflare bindings, no fetch. Importable from a Node script and
+// from a client component alike.
 //
 // Output shape is rows[] -> columns[] -> layers[], matching legacy exactly, so the diagram,
 // customize editor, dissolve, saved loads and bolShared.ts can all consume it unchanged.
-// lb-engine-03 (column fill/top-off across multiple SKUs, rear->front ordering, running balance)
-// still lands on top of this: lb-engine-02's pack() fills each column with a single SKU, stacked
-// to the trailer height by simple division — real height optimisation is lb-engine-03's job.
 //
-// posFromFront = 0 is the REAR of the trailer (locked decision, do not re-litigate).
+// posFromFront = 0 is the REAR of the trailer (locked decision, do not re-litigate). Rows are
+// ordered thickest-base first at the rear, thinnest toward the nose (lb-engine-03 B3) — rear is
+// where the doors are, so the thickest boards are loaded last and are the first ones unloaded. If
+// the floor crew loads nose-first instead, the pick list runs in reverse of the on-screen diagram
+// order. Open question for Steve, not resolved here — see BACKLOG.md.
 // Support policy is strict-only for now: every piece sits on a single matching footprint (no
 // bridging) — supportPolicy is reserved on PackOptions but only "strict" is implemented.
 // Mode A (holey board) and Mode B (blocks) are one engine, differing by allowRotation; holey
@@ -75,9 +77,8 @@ export interface Orientation {
 // --- Plan output shape (rows -> columns -> layers), matching legacy ---
 
 // layers[0] is always the base of the stack; subsequent entries stack upward on top of it
-// (top-off — lb-engine-03 is the first to actually populate more than one layer per column;
-// lb-engine-02's pack() always emits a single-layer column). topoff-threshold below and
-// lb-engine-03's fill logic both depend on this ordering.
+// (top-off — lb-engine-03's buildFamilyColumns is what actually populates more than one layer per
+// column now). topoff-threshold below and buildFamilyColumns both depend on this ordering.
 export interface PackLayer {
   skuId: string;
   skuName: string;
@@ -243,35 +244,38 @@ interface Family {
   members: Demand[];
 }
 
-// A family-level orientation choice: only "flat" (native) and "flat-rotated" (length/width
-// swapped) are offered, never on-edge/on-end. This isn't a shortcut: a family with more than one
+// A family-level orientation choice. A family of 2+ members offers only "flat" (native) and
+// "flat-rotated" (length/width swapped), never on-edge/on-end: a family with more than one
 // distinct member height cannot use an orientation that swaps height into the footprint without
 // giving each member a different footprint, which dissolves the family the search is trying to
-// place as one unit. A family of exactly one member could legally use all six orientations
-// (skuOrientations returns them), but the joint search here only ever needs the two that keep
-// height untouched — no observed order needs a block stood on end, and doing so would only ever
-// look worse under this scorer (a much taller, narrower column). Holey board collapses to one
-// option because skuOrientations already locks it to identity.
+// place as one unit. A family of exactly one member has no such constraint — it may legally use
+// all six orientations (lb-engine-03 A1; skuOrientations already computes exactly this set, so
+// familyOrientationOptions defers to it for the single-member case), which is precisely how odd
+// one-off pieces tip to squeeze into leftover floor. `height` carries the orientation's own height
+// contribution — for a tipped single-member family this is NOT the same as the member SKU's
+// declared height, so buildFamilyColumns must read unitHeight from here rather than from
+// member.sku.height directly. For a 2+ member family, "flat"/"flat-rotated" never tip height, so
+// `height` here is only representative (the first member's); each member keeps its own height.
+// Holey board collapses to one option because skuOrientations already locks it to identity.
 interface FamilyOrientation {
   length: number;
   width: number;
+  height: number;
   label: string;
 }
 
-interface ColumnBlueprint {
+// One fully-resolved physical column, produced by buildFamilyColumns (lb-engine-03 B1). Unlike
+// lb-engine-02's ColumnBlueprint (one SKU, replicated into uniform ColumnInstances), a ColumnPlan
+// already carries its final layer composition — base first, optional single top-off second — so
+// no separate "instance" wrapper/count is needed; each ColumnPlan IS one column.
+interface ColumnPlan {
   colLength: number;
   colWidth: number;
   orientationLabel: string;
-  sku: PackSku;
-  unitHeight: number;
-  perColumnCount: number;
-  columnsNeeded: number;
-  totalQty: number;
-}
-
-interface ColumnInstance {
-  blueprint: ColumnBlueprint;
-  count: number;
+  layers: { sku: PackSku; unitHeight: number; count: number }[];
+  totalHeight: number;
+  totalWeight: number;
+  rationale: string;
 }
 
 interface SimResult {
@@ -301,145 +305,226 @@ function groupIntoFamilies(demand: Demand[]): Family[] {
   return families;
 }
 
-function familyOrientationOptions(fam: Family, opts: PackOptions): FamilyOrientation[] {
+/**
+ * Legal family-level orientation choices (lb-engine-03 A1). A single-member family defers
+ * entirely to skuOrientations — up to all six axis-aligned permutations, already deduplicated and
+ * already gated on holey/allowRotation — since with only one member there's no risk of a tipped
+ * orientation giving different members different footprints. A 2+ member family keeps the
+ * lb-engine-02 restriction: only "flat" and "flat-rotated", gated on every member allowing
+ * rotation (and holey, which never rotates regardless).
+ */
+export function familyOrientationOptions(fam: Family, opts: PackOptions): FamilyOrientation[] {
   const rep = fam.members[0].sku;
+  if (fam.members.length === 1) {
+    return skuOrientations(rep, opts).map((o) => ({ length: o.length, width: o.width, height: o.height, label: o.label }));
+  }
   const isHoley = rep.category === HOLEY_BOARD_CATEGORY;
   const rotationAllowed = !isHoley && opts.allowRotation && fam.members.every((m) => m.sku.allowRotation);
-  const flat: FamilyOrientation = { length: fam.length, width: fam.width, label: "flat" };
+  const flat: FamilyOrientation = { length: fam.length, width: fam.width, height: rep.height, label: "flat" };
   if (!rotationAllowed || approxEq(fam.length, fam.width)) return [flat];
-  const rotated: FamilyOrientation = { length: fam.width, width: fam.length, label: "flat-rotated" };
+  const rotated: FamilyOrientation = { length: fam.width, width: fam.length, height: rep.height, label: "flat-rotated" };
   return [flat, rotated];
 }
 
-// Builds one column-type per (family, member SKU) under the family's chosen orientation. A
-// member that can never stack even once (height alone exceeds the trailer, or weight alone
-// exceeds maxWeight) is reported to `leftover`/`warnings` and produces no blueprint.
-function buildBlueprints(
-  families: Family[],
-  chosen: FamilyOrientation[],
+function fmt(n: number): string {
+  return String(Math.round(n * 1000) / 1000);
+}
+
+// Solves the 1D column-height fill exactly against dims.height for one family (lb-engine-03 B1).
+// A member that can never stack even once (height alone exceeds the trailer, or weight alone
+// exceeds maxWeight) is reported to `leftover`/`warnings` up front and excluded from the fill
+// pool. Then, one column at a time, tries every (base, top-off) pair drawn from the family's
+// remaining demand: for a fixed base SKU, "pure" count is not fixed at floor(height/unitHeight) —
+// that's merely the fallback baseline — the search also tries every smaller base count paired
+// with every count of an eligible top-off SKU (unitHeight >= topOffMinInchesPerPiece), because an
+// exact fill sometimes needs FEWER of the base than the max (e.g. 11x8" + 4x5.25" = 109" exact
+// beats the naive 13x8" = 104", 5" wasted). Top-off eligibility is filtered by K *before* the
+// search, never after — an ineligible candidate is never placed, only remembered (by its own
+// unitHeight, a fixed per-SKU property) for the rejection rationale. Bounded: candidates and base
+// counts are small integers (board thicknesses, trailer height in inches), so this is a small
+// polynomial search per column, not exponential — and it runs once per column, not once per
+// combination trial beyond what simulate() already does.
+function buildFamilyColumns(
+  fam: Family,
+  orient: FamilyOrientation,
   dims: Dimensions,
+  opts: PackOptions,
   warnings: string[],
   leftover: Map<string, number>
-): ColumnBlueprint[] {
-  const blueprints: ColumnBlueprint[] = [];
-  families.forEach((fam, i) => {
-    const orient = chosen[i];
-    if (!approxLte(orient.length, dims.length) || !approxLte(orient.width, dims.width)) {
-      for (const member of fam.members) {
-        warnings.push(
-          `sku ${member.sku.id}: chosen footprint ${orient.length}x${orient.width} exceeds trailer ${dims.length}x${dims.width} — ${member.qty} unplaced`
-        );
-        leftover.set(member.sku.id, (leftover.get(member.sku.id) ?? 0) + member.qty);
-      }
-      return;
-    }
+): ColumnPlan[] {
+  if (!approxLte(orient.length, dims.length) || !approxLte(orient.width, dims.width)) {
     for (const member of fam.members) {
-      const unitHeight = member.sku.height;
-      const heightCount = Math.floor(dims.height / unitHeight);
-      const weightCount = member.sku.weight > 0 ? Math.floor(dims.maxWeight / member.sku.weight) : Infinity;
-      const perColumnCount = Math.min(heightCount, weightCount);
-      if (perColumnCount < 1) {
-        warnings.push(
-          `sku ${member.sku.id}: cannot stack even one unit (height ${unitHeight} vs trailer height ${dims.height}, weight ${member.sku.weight} vs maxWeight ${dims.maxWeight}) — ${member.qty} unplaced`
-        );
-        leftover.set(member.sku.id, (leftover.get(member.sku.id) ?? 0) + member.qty);
-        continue;
-      }
-      blueprints.push({
-        colLength: orient.length,
-        colWidth: orient.width,
-        orientationLabel: orient.label,
-        sku: member.sku,
-        unitHeight,
-        perColumnCount,
-        columnsNeeded: Math.ceil(member.qty / perColumnCount),
-        totalQty: member.qty,
-      });
+      warnings.push(
+        `sku ${member.sku.id}: chosen footprint ${orient.length}x${orient.width} exceeds trailer ${dims.length}x${dims.width} — ${member.qty} unplaced`
+      );
+      leftover.set(member.sku.id, (leftover.get(member.sku.id) ?? 0) + member.qty);
     }
-  });
-  return blueprints;
-}
-
-function expandInstances(blueprints: ColumnBlueprint[]): ColumnInstance[] {
-  const instances: ColumnInstance[] = [];
-  for (const bp of blueprints) {
-    let remaining = bp.totalQty;
-    for (let i = 0; i < bp.columnsNeeded && remaining > 0; i++) {
-      const count = Math.min(bp.perColumnCount, remaining);
-      instances.push({ blueprint: bp, count });
-      remaining -= count;
-    }
+    return [];
   }
-  return instances;
+
+  interface PoolMember {
+    sku: PackSku;
+    unitHeight: number;
+    remaining: number;
+    weightCap: number;
+  }
+  const pool: PoolMember[] = [];
+  for (const member of fam.members) {
+    const unitHeight = fam.members.length === 1 ? orient.height : member.sku.height;
+    const heightCount = Math.floor(dims.height / unitHeight);
+    const weightCap = member.sku.weight > 0 ? Math.floor(dims.maxWeight / member.sku.weight) : Infinity;
+    if (heightCount < 1 || weightCap < 1) {
+      warnings.push(
+        `sku ${member.sku.id}: cannot stack even one unit (height ${unitHeight} vs trailer height ${dims.height}, weight ${member.sku.weight} vs maxWeight ${dims.maxWeight}) — ${member.qty} unplaced`
+      );
+      leftover.set(member.sku.id, (leftover.get(member.sku.id) ?? 0) + member.qty);
+      continue;
+    }
+    pool.push({ sku: member.sku, unitHeight, remaining: member.qty, weightCap });
+  }
+
+  const K = opts.topOffMinInchesPerPiece;
+  const columns: ColumnPlan[] = [];
+
+  while (pool.some((p) => p.remaining > 0)) {
+    let winner: {
+      base: PoolMember;
+      c1: number;
+      topoff: PoolMember | null;
+      c2: number;
+      total: number;
+      bestIneligible: PoolMember | null;
+    } | null = null;
+
+    for (const base of pool) {
+      if (base.remaining <= 0) continue;
+      const maxC1 = Math.min(Math.floor(dims.height / base.unitHeight), base.remaining, base.weightCap);
+      if (maxC1 < 1) continue;
+
+      let bestForBase = { c1: maxC1, topoff: null as PoolMember | null, c2: 0, total: maxC1 * base.unitHeight };
+      let bestIneligibleForBase: PoolMember | null = null;
+
+      if (opts.maxSkusPerColumn >= 2) {
+        for (const cand of pool) {
+          if (cand === base || cand.remaining <= 0) continue;
+
+          // K-filter BEFORE the search, not after: an ineligible candidate is never optimized
+          // over for placement (it could otherwise win the filled-height search and produce a
+          // sub-K topoff layer that validatePlan's topoff-threshold rule would then reject).
+          if (!approxGte(cand.unitHeight, K)) {
+            if (!bestIneligibleForBase || cand.unitHeight > bestIneligibleForBase.unitHeight) {
+              bestIneligibleForBase = cand;
+            }
+            continue;
+          }
+
+          const maxC2 = Math.min(Math.floor(dims.height / cand.unitHeight), cand.remaining, cand.weightCap);
+          if (maxC2 < 1) continue;
+
+          for (let c2 = 1; c2 <= maxC2; c2++) {
+            const remH = dims.height - c2 * cand.unitHeight;
+            const c1 = Math.min(Math.floor((remH + EPS) / base.unitHeight), maxC1);
+            if (c1 < 1) continue; // a column always needs at least one base piece
+            const total = c1 * base.unitHeight + c2 * cand.unitHeight;
+            if (total > bestForBase.total) {
+              bestForBase = { c1, topoff: cand, c2, total };
+            }
+          }
+        }
+      }
+
+      if (!winner || bestForBase.total > winner.total) {
+        winner = { base, c1: bestForBase.c1, topoff: bestForBase.topoff, c2: bestForBase.c2, total: bestForBase.total, bestIneligible: bestIneligibleForBase };
+      }
+    }
+
+    // winner is guaranteed: pool.some(remaining>0) held at loop entry, and every pooled member
+    // was pre-filtered so heightCount>=1 && weightCap>=1, so at least one base yields maxC1>=1.
+    const { base, c1, topoff, c2, bestIneligible } = winner as NonNullable<typeof winner>;
+    base.remaining -= c1;
+    const pureFilled = c1 * base.unitHeight;
+    const layers: ColumnPlan["layers"] = [{ sku: base.sku, unitHeight: base.unitHeight, count: c1 }];
+    let totalHeight = pureFilled;
+    let rationale: string;
+
+    if (topoff) {
+      topoff.remaining -= c2;
+      const topoffFilled = c2 * topoff.unitHeight;
+      layers.push({ sku: topoff.sku, unitHeight: topoff.unitHeight, count: c2 });
+      totalHeight += topoffFilled;
+      const gap = dims.height - totalHeight;
+      const tail =
+        gap > EPS
+          ? `${fmt(totalHeight)}" of ${fmt(dims.height)}", ${fmt(gap)}" left`
+          : `${fmt(totalHeight)}" exact`;
+      rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", topped off with ${c2} × ${fmt(topoff.unitHeight)}" = ${fmt(topoffFilled)}" — ${tail}`;
+    } else {
+      const gap = dims.height - pureFilled;
+      if (gap <= EPS) {
+        rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}" exact`;
+      } else if (bestIneligible) {
+        rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", ${fmt(gap)}" left — best top-off ${fmt(bestIneligible.unitHeight)}"/piece, below K of ${fmt(K)}"`;
+      } else {
+        rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", ${fmt(gap)}" left — no other SKU on this footprint`;
+      }
+    }
+
+    columns.push({
+      colLength: orient.length,
+      colWidth: orient.width,
+      orientationLabel: orient.label,
+      layers,
+      totalHeight,
+      totalWeight: layers.reduce((s, l) => s + l.count * l.sku.weight, 0),
+      rationale,
+    });
+  }
+
+  return columns;
 }
 
-function buildColumn(inst: ColumnInstance, posY: number): PackColumn {
-  const bp = inst.blueprint;
-  const orientation: Orientation = {
-    length: bp.colLength,
-    width: bp.colWidth,
-    height: bp.unitHeight,
-    label: bp.orientationLabel,
-  };
-  const layer: PackLayer = {
-    skuId: bp.sku.id,
-    skuName: bp.sku.name,
-    skuCode: bp.sku.sku,
-    color: colorForSku(bp.sku.id),
-    unitHeight: bp.unitHeight,
-    count: inst.count,
-    orientation,
-  };
+function buildColumn(plan: ColumnPlan, posY: number): PackColumn {
+  const layers: PackLayer[] = plan.layers.map((l) => ({
+    skuId: l.sku.id,
+    skuName: l.sku.name,
+    skuCode: l.sku.sku,
+    color: colorForSku(l.sku.id),
+    unitHeight: l.unitHeight,
+    count: l.count,
+    orientation: { length: plan.colLength, width: plan.colWidth, height: l.unitHeight, label: plan.orientationLabel },
+  }));
+  const distinctSkuIds = new Set(layers.map((l) => l.skuId));
   return {
     posY,
-    colWidth: bp.colWidth,
-    colLength: bp.colLength,
-    totalHeight: bp.unitHeight * inst.count,
-    totalWeight: inst.count * bp.sku.weight,
-    stackCount: inst.count,
-    layers: [layer],
-    mixed: false,
-    rationale: "lb-engine-02: provisional single-SKU fill, height optimisation pending lb-engine-03",
+    colWidth: plan.colWidth,
+    colLength: plan.colLength,
+    totalHeight: plan.totalHeight,
+    totalWeight: plan.totalWeight,
+    stackCount: layers.reduce((s, l) => s + l.count, 0),
+    layers,
+    mixed: distinctSkuIds.size > 1,
+    rationale: plan.rationale,
   };
 }
 
-// Greedy width bin-pack for one row: sort remaining column instances by width descending and take
-// each that still fits the row's remaining width AND the trailer's remaining weight budget AND
-// whose own depth fits the trailer's remaining length. This reproduces both reference shapes:
-// holey board tiles 4 identical 24"-wide columns into a 98"-wide row; INV_4202's 42.75"+54.75"
-// pairing falls out because both are the largest widths left and together they're the closest
-// sum to 98" without exceeding it.
-function buildOneRow(
-  instances: ColumnInstance[],
-  dims: Dimensions,
-  weightBudget: number,
-  lengthBudget: number
-): { row: PackRow | null; chosen: ColumnInstance[] } {
-  const sorted = [...instances].sort((a, b) => b.blueprint.colWidth - a.blueprint.colWidth);
-  const chosen: ColumnInstance[] = [];
-  let widthLeft = dims.width;
-  let weightLeft = weightBudget;
-  for (const inst of sorted) {
-    if (inst.blueprint.colLength > lengthBudget + EPS) continue;
-    const w = inst.blueprint.colWidth;
-    const wt = inst.count * inst.blueprint.sku.weight;
-    if (w <= widthLeft + EPS && wt <= weightLeft + EPS) {
-      chosen.push(inst);
-      widthLeft -= w;
-      weightLeft -= wt;
-    }
-  }
-  if (chosen.length === 0) return { row: null, chosen: [] };
+// Row-fill scorer for comparing different candidate fillings of the SAME row slot (lb-engine-03
+// A2): width utilisation first (higher is better), then wastedFloorArea (lower is better) — the
+// same priority order the prompt specifies. Returns negative when `a` is better than `b`.
+function compareRowFill(a: PackRow, b: PackRow): number {
+  if (!approxEq(a.rowWidthUsed, b.rowWidthUsed)) return b.rowWidthUsed - a.rowWidthUsed;
+  return a.wastedFloorArea - b.wastedFloorArea;
+}
 
+function assembleRowFrom(chosen: ColumnPlan[]): PackRow {
   let posY = 0;
-  const columns = chosen.map((inst) => {
-    const col = buildColumn(inst, posY);
+  const columns = chosen.map((plan) => {
+    const col = buildColumn(plan, posY);
     posY += col.colWidth;
     return col;
   });
   const rowLength = Math.max(...columns.map((c) => c.colLength));
   const wastedFloorArea = columns.reduce((s, c) => s + (rowLength - c.colLength) * c.colWidth, 0);
-  const row: PackRow = {
+  return {
     posFromFront: 0, // filled in by buildTrailer once the row's position in the trailer is known
     rowLength,
     rowWidthUsed: posY,
@@ -448,7 +533,95 @@ function buildOneRow(
     totalUnits: columns.reduce((s, c) => s + c.stackCount, 0),
     totalWeight: columns.reduce((s, c) => s + c.totalWeight, 0),
   };
-  return { row, chosen };
+}
+
+// Depth-aware width bin-pack for one row (lb-engine-03 A2). Candidates are grouped by colLength
+// (epsilon-tolerant); for each group in turn as the "seed", greedily fill the row's width from
+// that group first (widest-fit), then fall through to the other groups (deepest-first) only for
+// whatever width the seed group couldn't fill — this is what keeps a 90.75"-deep column from
+// automatically absorbing trailer depth it doesn't need just because a 66.75"-deep column happened
+// to fit beside it. A last candidate ignores grouping entirely (the lb-engine-02 behaviour: widest
+// column first regardless of depth) so a genuine cross-depth pairing (e.g. INV_4347's
+// 54.75"+42.75"=97.5", each from a different depth group) is never lost to same-depth bias — width
+// utilisation is scored first, so a real cross-depth win still surfaces. Bounded: one greedy pass
+// per depth group plus one ungrouped pass, never exponential.
+function buildOneRow(
+  instances: ColumnPlan[],
+  dims: Dimensions,
+  weightBudget: number,
+  lengthBudget: number
+): { row: PackRow | null; chosen: ColumnPlan[] } {
+  const eligible = instances.filter((inst) => approxLte(inst.colLength, lengthBudget));
+  if (eligible.length === 0) return { row: null, chosen: [] };
+
+  const groups: { colLength: number; items: ColumnPlan[] }[] = [];
+  for (const inst of eligible) {
+    let g = groups.find((x) => approxEq(x.colLength, inst.colLength));
+    if (!g) {
+      g = { colLength: inst.colLength, items: [] };
+      groups.push(g);
+    }
+    g.items.push(inst);
+  }
+  groups.sort((a, b) => b.colLength - a.colLength);
+
+  function greedyFill(pools: ColumnPlan[][]): ColumnPlan[] {
+    const chosen: ColumnPlan[] = [];
+    const used = new Set<ColumnPlan>();
+    let widthLeft = dims.width;
+    let weightLeft = weightBudget;
+
+    const takeBest = (pool: ColumnPlan[]): boolean => {
+      let best: ColumnPlan | null = null;
+      for (const p of pool) {
+        if (used.has(p)) continue;
+        if (p.colWidth > widthLeft + EPS || p.totalWeight > weightLeft + EPS) continue;
+        if (!best || p.colWidth > best.colWidth) best = p;
+      }
+      if (!best) return false;
+      chosen.push(best);
+      used.add(best);
+      widthLeft -= best.colWidth;
+      weightLeft -= best.totalWeight;
+      return true;
+    };
+
+    for (const pool of pools) {
+      while (takeBest(pool)) {
+        // keep draining this pool before moving to the next
+      }
+    }
+    return chosen;
+  }
+
+  let best: { chosen: ColumnPlan[]; row: PackRow } | null = null;
+  const consider = (chosen: ColumnPlan[]) => {
+    if (chosen.length === 0) return;
+    const row = assembleRowFrom(chosen);
+    if (!best || compareRowFill(row, best.row) < 0) best = { chosen, row };
+  };
+
+  // One candidate per seed group: same-depth first, other groups (deepest-first) fill whatever
+  // width the seed group left over.
+  for (const seed of groups) {
+    const pools = [seed.items, ...groups.filter((g) => g !== seed).map((g) => g.items)];
+    consider(greedyFill(pools));
+  }
+  // Ungrouped candidate: widest-fit across all depths, matching lb-engine-02 — catches a
+  // cross-depth pairing that a same-depth-first seed would otherwise miss or under-fill.
+  consider(greedyFill([eligible]));
+
+  if (!best) return { row: null, chosen: [] };
+  const winner = best as { chosen: ColumnPlan[]; row: PackRow };
+  return { row: winner.row, chosen: winner.chosen };
+}
+
+// A row's sort key for rear->front ordering (lb-engine-03 B3): the thickest BASE layer
+// (layers[0], never a top-off layer) among the row's columns. Rows are sorted descending by this
+// before posFromFront is assigned, so the thickest freight sits at the rear (posFromFront 0,
+// where the trailer doors are) and the thinnest sits toward the nose.
+function rowBaseThickness(row: PackRow): number {
+  return row.columns.reduce((max, c) => Math.max(max, c.layers[0]?.unitHeight ?? 0), 0);
 }
 
 function buildTrailer(rows: PackRow[], dims: Dimensions): PackTrailer {
@@ -483,11 +656,22 @@ function buildTrailer(rows: PackRow[], dims: Dimensions): PackTrailer {
 // Assembles rows into trailers for one chosen family-orientation combination. Pure: does not
 // touch any accumulator outside its own return value, so it's safe to call once per candidate
 // combination during the search and simply discard all but the winner's result.
+// Decomposes any unplaced ColumnPlans back into per-SKU leftover quantities. A plan may carry a
+// mixed base+top-off pair (lb-engine-03 B1), so this must walk `layers`, not assume one SKU per
+// plan — the old single-SKU-per-instance shortcut would silently drop top-off pieces from the
+// balance and break the `conservation` invariant the moment any mixed column went unplaced.
+function spillToLeftover(plans: ColumnPlan[], leftover: Map<string, number>): void {
+  for (const plan of plans) {
+    for (const layer of plan.layers) {
+      leftover.set(layer.sku.id, (leftover.get(layer.sku.id) ?? 0) + layer.count);
+    }
+  }
+}
+
 function simulate(families: Family[], chosen: FamilyOrientation[], dims: Dimensions, opts: PackOptions): SimResult {
   const warnings: string[] = [];
   const leftover = new Map<string, number>();
-  const blueprints = buildBlueprints(families, chosen, dims, warnings, leftover);
-  let instances = expandInstances(blueprints);
+  let instances: ColumnPlan[] = families.flatMap((fam, i) => buildFamilyColumns(fam, chosen[i], dims, opts, warnings, leftover));
   const trailers: PackTrailer[] = [];
   const trailerLimit = opts.trailerLimit ?? Infinity;
 
@@ -503,36 +687,48 @@ function simulate(families: Family[], chosen: FamilyOrientation[], dims: Dimensi
       rows.push(row);
       lengthLeft -= row.rowLength;
       weightLeft -= row.totalWeight;
-      instances = instances.filter((inst) => !used.includes(inst));
+      const usedSet = new Set(used);
+      instances = instances.filter((inst) => !usedSet.has(inst));
       progressed = true;
     }
 
     if (!progressed) {
-      for (const inst of instances) {
-        leftover.set(inst.blueprint.sku.id, (leftover.get(inst.blueprint.sku.id) ?? 0) + inst.count);
-      }
+      spillToLeftover(instances, leftover);
       warnings.push(`unable to place remaining ${instances.length} column(s) on any trailer — moved to balance`);
       instances = [];
       break;
     }
 
+    // Rear->front ordering (lb-engine-03 B3): thickest base layer at posFromFront 0 (the rear,
+    // where the doors are), thinnest toward the nose. Must sort before buildTrailer assigns
+    // posFromFront, since that assignment walks rows in array order.
+    rows.sort((a, b) => rowBaseThickness(b) - rowBaseThickness(a));
+
     trailers.push(buildTrailer(rows, dims));
   }
 
   if (instances.length > 0) {
-    for (const inst of instances) {
-      leftover.set(inst.blueprint.sku.id, (leftover.get(inst.blueprint.sku.id) ?? 0) + inst.count);
-    }
+    spillToLeftover(instances, leftover);
     warnings.push(`trailerLimit (${trailerLimit}) reached with ${instances.length} column(s) unplaced`);
   }
 
   return { trailers, leftover, warnings };
 }
 
-// Score, lower-is-better lexicographically: fewest trailers; then highest average row width
-// utilization (negated so "lower" still means "better"); then least wasted depth; then fewest
-// distinct orientation labels in play (operator predictability).
-function scoreResult(result: SimResult, labels: string[]): [number, number, number, number] {
+// Score, lower-is-better lexicographically: fewest trailers; then fewest total rows; then highest
+// average row width utilization (negated so "lower" still means "better"); then least wasted
+// depth; then fewest distinct orientation labels in play (operator predictability).
+//
+// Row count was added ahead of width utilization in lb-engine-03 (A1 fallout): once a
+// single-member family can choose any of six orientations, one of them can tip the SKU's own
+// thickness onto the length axis (e.g. colLength becomes 8" instead of 90.75"), leaving only 1
+// piece per column height-wise but letting dozens of near-perfect-width-utilization rows fit
+// inside the length budget — a trailer-count tie that average width utilization alone scored as a
+// WIN, producing 40+ physical rows out of what should be a handful. Row count catches exactly this
+// (more, thinner rows always lose to fewer, fatter ones at equal trailer count) without needing a
+// height-utilization term, and doesn't regress genuine width-utilization wins since packing more
+// tightly into a row is how row count comes down in the first place.
+function scoreResult(result: SimResult, labels: string[]): [number, number, number, number, number] {
   const trailerCount = result.trailers.length;
   let widthUtilSum = 0;
   let rowCount = 0;
@@ -546,7 +742,7 @@ function scoreResult(result: SimResult, labels: string[]): [number, number, numb
   }
   const avgWidthUtil = rowCount > 0 ? widthUtilSum / rowCount : 0;
   const distinctOrientations = new Set(labels).size;
-  return [trailerCount, -avgWidthUtil, wasteSum, distinctOrientations];
+  return [trailerCount, rowCount, -avgWidthUtil, wasteSum, distinctOrientations];
 }
 
 function compareScores(a: number[], b: number[]): number {
@@ -640,9 +836,10 @@ const COMBO_GUARD = 20000;
 
 /**
  * Packs `cart` demand (against the `skus` catalog) into trailers of `dims`. Implements joint
- * orientation selection, width pairing and row assembly (lb-engine-02). Column height fill is a
- * simple single-SKU division for now; real top-off, rear->front ordering and running balance land
- * in lb-engine-03.
+ * orientation selection, width pairing and depth-aware row assembly (lb-engine-02 + lb-engine-03
+ * A1/A2), exact multi-SKU column height fill with K top-off (lb-engine-03 B1/B2), rear->front row
+ * ordering (B3), and a running balance across up to `opts.trailerLimit` trailers (B4) — this is
+ * the complete algorithm.
  */
 export function pack(cart: CartLine[], skus: PackSku[], dims: Dimensions, options?: Partial<PackOptions>): PackPlan {
   const opts: PackOptions = { ...DEFAULT_PACK_OPTIONS, ...options };

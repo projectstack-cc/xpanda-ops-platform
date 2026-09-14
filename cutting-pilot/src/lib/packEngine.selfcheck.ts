@@ -1,22 +1,26 @@
 // src/lib/packEngine.selfcheck.ts
 // Guarded dev self-check for the packing engine (lb-engine-01 contracts + invariant harness,
-// lb-engine-02 orientation/pairing/row-assembly algorithm). Not part of the production build path
+// lb-engine-02 orientation/pairing/row-assembly algorithm, lb-engine-03 column fill/top-off,
+// rear->front ordering, running balance — completes pack()). Not part of the production build path
 // — mirrors blockNester.selfcheck.ts's / bolShared.selfcheck.ts's shape. There is no v2 load
 // builder UI yet (lb-ui-01 wires this in); exported and left unreferenced.
 //
 // Two kinds of checks live here:
-// - validatePlan() invariant checks: each of the (now 13, rule set unchanged in count by
+// - validatePlan() invariant checks: each of the (13, rule set unchanged in count since
 //   lb-engine-02) rules gets one hand-built PackPlan fixture that satisfies it and one that
 //   violates it, built from a single self-consistent baseline plan (recompute() derives every
 //   aggregate field from the structural leaves) so mutating one thing to break a target rule
 //   doesn't accidentally trip an unrelated one.
-// - pack() algorithm checks (lb-engine-02): call the real algorithm against the three real-order
-//   fixtures (FIXTURE_HOLEY_SIPLAST, FIXTURE_BLOCKS_PAIRING, FIXTURE_BLOCKS_MIXED) and assert on
-//   its actual output — these are the acceptance cases from the lb-engine-02 prompt.
+// - pack() algorithm checks: call the real algorithm against the real-order fixtures
+//   (FIXTURE_HOLEY_SIPLAST, FIXTURE_BLOCKS_PAIRING, FIXTURE_BLOCKS_MIXED — the last now the real
+//   INV_4347 data, lb-engine-03 Part C) plus lb-engine-03's own targeted fixtures for column fill,
+//   K top-off, rear->front ordering, depth-aware row assembly and running balance, and assert on
+//   actual output.
 import {
   pack,
   validatePlan,
   skuOrientations,
+  familyOrientationOptions,
   HOLEY_BOARD_CATEGORY,
   TRAILER_TYPES,
   type PackPlan,
@@ -38,6 +42,29 @@ interface CheckResult {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+// Finds the first column (searching trailers -> rows -> columns in order) matching `pred`. Used
+// throughout the lb-engine-03 fixtures below to inspect what pack() actually built, rather than
+// re-deriving the fill decision by hand.
+function findColumn(plan: PackPlan, pred: (c: PackColumn) => boolean): PackColumn | null {
+  for (const trailer of plan.trailers) {
+    for (const row of trailer.rows) {
+      for (const col of row.columns) {
+        if (pred(col)) return col;
+      }
+    }
+  }
+  return null;
+}
+
+function findRow(plan: PackPlan, pred: (r: PackRow) => boolean): PackRow | null {
+  for (const trailer of plan.trailers) {
+    for (const row of trailer.rows) {
+      if (pred(row)) return row;
+    }
+  }
+  return null;
 }
 
 // Derives every aggregate field (row/trailer/plan totals, posFromFront/posY geometry,
@@ -603,9 +630,15 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   // C6. stabilityWarnRatio produces a warning + rationale note but no violation; Infinity
   // suppresses it. Uses pack() directly since the warning is only ever emitted by the algorithm
   // (it is advisory, not part of validatePlan's invariants).
+  // Amended for lb-engine-03 A1: a rotation-allowed single-member family now gets up to six
+  // orientations, and pack() correctly PREFERS tipping this SKU onto its side (10x35 or 35x10
+  // footprint, height 10 — no stability warning at all) over standing it up tall/narrow, since the
+  // tipped placement scores better on width utilization. That's A1 working as intended, not a
+  // regression — but it defeats this fixture's premise, so allowRotation:false pins the SKU to its
+  // declared flat (10x10x35) orientation, forcing the tall/narrow placement the test needs.
   {
     // 10x10 footprint, 35" tall single unit: 35 > 3 * min(10,10) = 30, so this should warn.
-    const tallSku: PackSku = { id: "T", name: "Tall narrow slab", sku: "T-1", length: 10, width: 10, height: 35, weight: 5, category: "Blocks", allowRotation: true };
+    const tallSku: PackSku = { id: "T", name: "Tall narrow slab", sku: "T-1", length: 10, width: 10, height: 35, weight: 5, category: "Blocks", allowRotation: false };
     const tallDims: Dimensions = { length: 100, width: 50, height: 40, maxWeight: 1000 };
     const tallCart: CartLine[] = [{ skuId: "T", qty: 1 }];
 
@@ -626,10 +659,14 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
 
   const TRAILER_53FT = TRAILER_TYPES["53ft Standard"];
 
-  // C8 (checked before C7 below since the holey grid is the simplest case — B4 in the prompt:
-  // "if the general algorithm can't reproduce the obvious answer on the simplest case, it is
-  // wrong"). qty 676 = 52 columns * 13 per column exactly, so every column is full and none are
-  // left partial — isolates the grid shape from column-fill rounding.
+  // C8/D11 (checked before C7 below since the holey grid is the simplest case — B4 in the
+  // lb-engine-02 prompt: "if the general algorithm can't reproduce the obvious answer on the
+  // simplest case, it is wrong"). Base qty 676 = 52 columns * 13 per column exactly, so the base
+  // alone still gives a full grid with no partial columns. lb-engine-03 D11 adds a SECOND holey
+  // SKU sharing the same 48x24 footprint, height 5" (>= K), qty 52 — exactly enough to top off
+  // every one of the 52 base columns' 5" residual (13x8"=104", 109-104=5" left, 1x5"=5" exact).
+  // The grid shape is unaffected: base demand alone already divides into exactly 52 full columns,
+  // so top-off only fills existing columns' residual, it can't create new ones.
   {
     const siplastSku: PackSku = {
       id: "SIPLAST",
@@ -642,21 +679,38 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       category: HOLEY_BOARD_CATEGORY,
       allowRotation: false,
     };
-    const siplastCart: CartLine[] = [{ skuId: "SIPLAST", qty: 676 }];
-    const siplastPlan = pack(siplastCart, [siplastSku], TRAILER_53FT);
+    const siplastTopoffSku: PackSku = {
+      id: "SIPLAST_TOPOFF",
+      name: "Siplast holey board (5in)",
+      sku: "SIPLAST-2",
+      length: 48,
+      width: 24,
+      height: 5,
+      weight: 4,
+      category: HOLEY_BOARD_CATEGORY,
+      allowRotation: false,
+    };
+    const siplastSkus = [siplastSku, siplastTopoffSku];
+    const siplastCart: CartLine[] = [
+      { skuId: "SIPLAST", qty: 676 },
+      { skuId: "SIPLAST_TOPOFF", qty: 52 },
+    ];
+    const siplastPlan = pack(siplastCart, siplastSkus, TRAILER_53FT);
 
-    check("FIXTURE_HOLEY_SIPLAST: pack() places all 676 pieces (balance empty)", siplastPlan.balance.length === 0, JSON.stringify(siplastPlan.balance));
+    check("FIXTURE_HOLEY_SIPLAST: pack() places all 728 pieces (balance empty)", siplastPlan.balance.length === 0, JSON.stringify(siplastPlan.balance));
     check("FIXTURE_HOLEY_SIPLAST: single trailer", siplastPlan.trailers.length === 1, String(siplastPlan.trailers.length));
     const siplastTrailer = siplastPlan.trailers[0];
     check("FIXTURE_HOLEY_SIPLAST: 13 rows deep", siplastTrailer?.rows.length === 13, String(siplastTrailer?.rows.length));
     const allRowsHave4Columns = siplastTrailer?.rows.every((r) => r.columns.length === 4) ?? false;
-    check("FIXTURE_HOLEY_SIPLAST: 4 columns across in every row", allRowsHave4Columns);
+    check("FIXTURE_HOLEY_SIPLAST: 4 columns across in every row (grid shape unaffected by top-off)", allRowsHave4Columns);
     const totalColumns = siplastTrailer?.rows.reduce((s, r) => s + r.columns.length, 0) ?? 0;
     check("FIXTURE_HOLEY_SIPLAST: 52 columns total (4 x 13)", totalColumns === 52, String(totalColumns));
     const noRotation = siplastTrailer?.rows.every((r) => r.columns.every((c) => c.layers.every((l) => l.orientation.label === "flat"))) ?? false;
     check("FIXTURE_HOLEY_SIPLAST: no rotation used anywhere (every layer orientation is 'flat')", noRotation);
-    const validationOnSiplast = validatePlan(siplastPlan, TRAILER_53FT, siplastCart, [siplastSku], OPTS);
-    check("FIXTURE_HOLEY_SIPLAST: validatePlan reports zero violations", validationOnSiplast.length === 0, JSON.stringify(validationOnSiplast));
+    const allColumnsToppedOff = siplastTrailer?.rows.every((r) => r.columns.every((c) => c.mixed && c.layers.length === 2 && c.totalHeight === 109)) ?? false;
+    check("FIXTURE_HOLEY_SIPLAST: with top-off active, every column mixes both thicknesses to 109\" exact", allColumnsToppedOff);
+    const validationOnSiplast = validatePlan(siplastPlan, TRAILER_53FT, siplastCart, siplastSkus, OPTS);
+    check("FIXTURE_HOLEY_SIPLAST: validatePlan reports zero violations (top-off satisfies K)", validationOnSiplast.length === 0, JSON.stringify(validationOnSiplast));
   }
 
   // C7. FIXTURE_BLOCKS_PAIRING end-to-end (INV_4202) — the load legacy could not fit on one
@@ -680,63 +734,289 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("FIXTURE_BLOCKS_PAIRING: pack() returns exactly one trailer", pairingPlan.trailers.length === 1, String(pairingPlan.trailers.length));
     check("FIXTURE_BLOCKS_PAIRING: balance is empty (all 108 pieces placed)", pairingPlan.balance.length === 0, JSON.stringify(pairingPlan.balance));
     check("FIXTURE_BLOCKS_PAIRING: validatePlan reports zero violations", pairingViolations.length === 0, JSON.stringify(pairingViolations));
+
+    // D9: lb-engine-03 must not regress against the lb-engine-02 baseline (8 rows, 516" used) —
+    // row count and used length must both be <= baseline. lb-engine-03's B1 (multi-SKU column
+    // fill) gives this fixture nothing directly (all four SKUs are distinct footprints, so each
+    // is its own single-member family — no cross-SKU top-off is possible here); the improvement
+    // comes from A1 (six orientations now searched per single-member family) and A2 (depth-aware
+    // row assembly), scored via the row-count-first scoreResult ordering added in lb-engine-03 to
+    // stop A1 from finding degenerate many-thin-rows placements that score well on width
+    // utilization alone.
+    const PAIRING_BASELINE_ROWS = 8;
+    const PAIRING_BASELINE_LENGTH = 516;
+    const pairingRowCount = pairingPlan.trailers[0]?.rows.length ?? Infinity;
+    const pairingUsedLength = pairingPlan.trailers[0]?.usedLength ?? Infinity;
+    check(
+      `FIXTURE_BLOCKS_PAIRING: row count (${pairingRowCount}) <= lb-engine-02 baseline (${PAIRING_BASELINE_ROWS})`,
+      pairingRowCount <= PAIRING_BASELINE_ROWS,
+      String(pairingRowCount)
+    );
+    check(
+      `FIXTURE_BLOCKS_PAIRING: used length (${pairingUsedLength}") <= lb-engine-02 baseline (${PAIRING_BASELINE_LENGTH}")`,
+      pairingUsedLength <= PAIRING_BASELINE_LENGTH,
+      String(pairingUsedLength)
+    );
   }
 
-  // C9. FIXTURE_BLOCKS_MIXED — family grouping (INV_4347-shaped). The dominant 54.75 x 90.75
-  // footprint carries four different labels/thicknesses (load-bearing per the prompt: 80 of 94
-  // real pieces share this footprint across four labels); the other five footprints are
-  // deliberately synthetic placeholders (distinct, obviously-round numbers) standing in for
-  // Steve's real INV_4347 rows, which should replace them once available. The assertion is
-  // structural — "the dominant family's four labels all land on the same footprint, and there
-  // are exactly 6 distinct footprints in play" — so it holds regardless of the placeholder values.
-  {
-    const dominant = [
-      { id: "MIX_DOM_1", height: 8, qty: 30 },
-      { id: "MIX_DOM_2", height: 9, qty: 25 },
-      { id: "MIX_DOM_3", height: 5.25, qty: 15 },
-      { id: "MIX_DOM_4", height: 6.5, qty: 10 },
-    ].map((m) => ({
-      sku: { id: m.id, name: `Dominant family ${m.id}`, sku: m.id, length: 90.75, width: 54.75, height: m.height, weight: 30, category: "Blocks", allowRotation: true } as PackSku,
-      qty: m.qty,
-    }));
-    // Synthetic minor footprints — NOT from real order data, replace with Steve's INV_4347 rows.
-    const minorFootprints: Array<{ length: number; width: number; height: number; qty: number }> = [
-      { length: 40, width: 30, height: 6, qty: 8 },
-      { length: 50, width: 20, height: 6, qty: 6 },
-      { length: 60, width: 36, height: 6, qty: 5 },
-      { length: 45, width: 25, height: 6, qty: 4 },
-      { length: 35, width: 35, height: 6, qty: 3 },
-    ];
-    const minors = minorFootprints.map((f, i) => ({
-      sku: { id: `MIX_MIN_${i}`, name: `Minor family ${i}`, sku: `MIX_MIN_${i}`, length: f.length, width: f.width, height: f.height, weight: 20, category: "Blocks", allowRotation: true } as PackSku,
-      qty: f.qty,
-    }));
-    const allMembers = [...dominant, ...minors];
-    const mixedSkus = allMembers.map((m) => m.sku);
-    const mixedCart: CartLine[] = allMembers.map((m) => ({ skuId: m.sku.id, qty: m.qty }));
-    const mixedPlan = pack(mixedCart, mixedSkus, TRAILER_53FT);
+  // C9 / D10. FIXTURE_BLOCKS_MIXED — real INV_4347 data (lb-engine-03 Part C; replaces the
+  // lb-engine-02 synthetic placeholders). 94 pieces, six footprints. The dominant 54.75x90.75
+  // footprint carries four labels at three thicknesses (8", 9", 5.25") — load-bearing per the
+  // prompt, and the reason B1's multi-SKU column fill matters: the exact fills documented in the
+  // prompt (e.g. 11x8"+4x5.25"=109" exact) only exist because these four can mix. Two footprints
+  // (54.75x90.75 and 42.75x54.75) hold multiple labels at differing thicknesses, so family
+  // grouping must survive label *and* thickness differences in more than one place. Three of the
+  // six families are single-member (Noria x2, Charlotte County), exercising A1's six-orientation
+  // path. 54.75 + 42.75 = 97.5" is a second width-pairing opportunity against the 98" trailer —
+  // the same mechanism INV_4202 turns on, here across two DIFFERENT depth groups (90.75 vs
+  // 54.75), so it only surfaces through buildOneRow's ungrouped widest-fit candidate, not the
+  // same-depth-seeded ones.
+  const mixSeaRay8: PackSku = { id: "MIX_SEARAY8", name: "Sea Ray", sku: "SEARAY-8", length: 54.75, width: 90.75, height: 8, weight: 30, category: "Blocks", allowRotation: true };
+  const mixStock8: PackSku = { id: "MIX_STOCK8", name: "STOCK", sku: "STOCK-8", length: 54.75, width: 90.75, height: 8, weight: 30, category: "Blocks", allowRotation: true };
+  const mixKansas525: PackSku = { id: "MIX_KANSAS525", name: "Kansas", sku: "KANSAS-5.25", length: 54.75, width: 90.75, height: 5.25, weight: 20, category: "Blocks", allowRotation: true };
+  const mixSeaRay9: PackSku = { id: "MIX_SEARAY9", name: "Sea Ray", sku: "SEARAY-9", length: 54.75, width: 90.75, height: 9, weight: 32, category: "Blocks", allowRotation: true };
+  const mixNoriaA: PackSku = { id: "MIX_NORIA_A", name: "Noria", sku: "NORIA-A", length: 19.75, width: 30.75, height: 8, weight: 10, category: "Blocks", allowRotation: true };
+  const mixKansasComp: PackSku = { id: "MIX_KANSAS_COMP", name: "Kansas Comp", sku: "KANSAS-COMP", length: 24.75, width: 54.75, height: 8, weight: 15, category: "Blocks", allowRotation: true };
+  const mixWestwegoCA: PackSku = { id: "MIX_WESTWEGO_CA", name: "Westwego CA Comp", sku: "WESTWEGO-CA", length: 24.75, width: 54.75, height: 6, weight: 12, category: "Blocks", allowRotation: true };
+  const mixKAB: PackSku = { id: "MIX_KAB", name: "KAB CA Comps", sku: "KAB-CA", length: 42.75, width: 54.75, height: 7, weight: 18, category: "Blocks", allowRotation: true };
+  const mixWestwegoGW: PackSku = { id: "MIX_WESTWEGO_GW", name: "Westwego GW Comp", sku: "WESTWEGO-GW", length: 42.75, width: 54.75, height: 7, weight: 18, category: "Blocks", allowRotation: true };
+  const mixCharlotte: PackSku = { id: "MIX_CHARLOTTE", name: "Charlotte County", sku: "CHARLOTTE", length: 54.75, width: 66.75, height: 12, weight: 25, category: "Blocks", allowRotation: true };
+  const mixNoriaB: PackSku = { id: "MIX_NORIA_B", name: "Noria", sku: "NORIA-B", length: 30.75, width: 90.75, height: 8, weight: 20, category: "Blocks", allowRotation: true };
 
-    const footprintKey = (l: number, w: number) => `${Math.min(l, w)}x${Math.max(l, w)}`;
-    const footprintsBySku = new Map<string, string>();
-    for (const trailer of mixedPlan.trailers) {
-      for (const row of trailer.rows) {
-        for (const column of row.columns) {
-          for (const layer of column.layers) {
-            footprintsBySku.set(layer.skuId, footprintKey(column.colLength, column.colWidth));
-          }
+  const mixedSkus: PackSku[] = [
+    mixSeaRay8, mixStock8, mixKansas525, mixSeaRay9, mixNoriaA, mixKansasComp, mixWestwegoCA, mixKAB, mixWestwegoGW, mixCharlotte, mixNoriaB,
+  ];
+  const mixedCart: CartLine[] = [
+    { skuId: "MIX_SEARAY8", qty: 25 },
+    { skuId: "MIX_STOCK8", qty: 35 },
+    { skuId: "MIX_KANSAS525", qty: 18 },
+    { skuId: "MIX_SEARAY9", qty: 2 },
+    { skuId: "MIX_NORIA_A", qty: 6 },
+    { skuId: "MIX_KANSAS_COMP", qty: 2 },
+    { skuId: "MIX_WESTWEGO_CA", qty: 1 },
+    { skuId: "MIX_KAB", qty: 2 },
+    { skuId: "MIX_WESTWEGO_GW", qty: 1 },
+    { skuId: "MIX_CHARLOTTE", qty: 1 },
+    { skuId: "MIX_NORIA_B", qty: 1 },
+  ];
+  const mixedTotalQty = mixedCart.reduce((s, c) => s + c.qty, 0);
+  check("FIXTURE_BLOCKS_MIXED: fixture totals 94 pieces", mixedTotalQty === 94, String(mixedTotalQty));
+
+  const mixedPlan = pack(mixedCart, mixedSkus, TRAILER_53FT);
+  const mixedViolations = validatePlan(mixedPlan, TRAILER_53FT, mixedCart, mixedSkus, OPTS);
+  check("FIXTURE_BLOCKS_MIXED: validatePlan reports zero violations", mixedViolations.length === 0, JSON.stringify(mixedViolations));
+
+  const footprintKey = (l: number, w: number) => `${Math.min(l, w)}x${Math.max(l, w)}`;
+  const footprintsBySku = new Map<string, string>();
+  const rationalesBySku = new Map<string, string[]>();
+  for (const trailer of mixedPlan.trailers) {
+    for (const row of trailer.rows) {
+      for (const column of row.columns) {
+        for (const layer of column.layers) {
+          footprintsBySku.set(layer.skuId, footprintKey(column.colLength, column.colWidth));
+          const list = rationalesBySku.get(layer.skuId) ?? [];
+          list.push(column.rationale);
+          rationalesBySku.set(layer.skuId, list);
         }
       }
     }
-    const distinctFootprints = new Set(Array.from(footprintsBySku.values()));
-    check("FIXTURE_BLOCKS_MIXED: exactly 6 distinct footprints placed", distinctFootprints.size === 6, JSON.stringify(Array.from(distinctFootprints)));
+  }
+  const distinctFootprints = new Set(Array.from(footprintsBySku.values()));
+  check("FIXTURE_BLOCKS_MIXED: exactly 6 distinct footprints placed", distinctFootprints.size === 6, JSON.stringify(Array.from(distinctFootprints)));
 
-    const dominantFootprint = footprintKey(90.75, 54.75);
-    const dominantLabelsPlaced = dominant.map((d) => d.sku.id).filter((id) => footprintsBySku.get(id) === dominantFootprint);
-    check(
-      "FIXTURE_BLOCKS_MIXED: all four dominant-family labels land on the 54.75x90.75 footprint",
-      dominantLabelsPlaced.length === 4,
-      JSON.stringify(dominantLabelsPlaced)
+  const dominantFootprint = footprintKey(54.75, 90.75);
+  const dominantLabelsPlaced = ["MIX_SEARAY8", "MIX_STOCK8", "MIX_KANSAS525", "MIX_SEARAY9"].filter((id) => footprintsBySku.get(id) === dominantFootprint);
+  check(
+    "FIXTURE_BLOCKS_MIXED: all four dominant-family labels (Sea Ray 8/9, STOCK, Kansas) land on the 54.75x90.75 footprint",
+    dominantLabelsPlaced.length === 4,
+    JSON.stringify(dominantLabelsPlaced)
+  );
+
+  const kansasCompFootprint = footprintKey(24.75, 54.75);
+  const kansasCompLabelsPlaced = ["MIX_KANSAS_COMP", "MIX_WESTWEGO_CA"].filter((id) => footprintsBySku.get(id) === kansasCompFootprint);
+  check(
+    "FIXTURE_BLOCKS_MIXED: both 24.75x54.75 labels (Kansas Comp, Westwego CA Comp) land on the same footprint",
+    kansasCompLabelsPlaced.length === 2,
+    JSON.stringify(kansasCompLabelsPlaced)
+  );
+
+  const kabFootprint = footprintKey(42.75, 54.75);
+  const kabLabelsPlaced = ["MIX_KAB", "MIX_WESTWEGO_GW"].filter((id) => footprintsBySku.get(id) === kabFootprint);
+  check(
+    "FIXTURE_BLOCKS_MIXED: both 42.75x54.75 labels (KAB CA Comps, Westwego GW Comp) land on the same footprint",
+    kabLabelsPlaced.length === 2,
+    JSON.stringify(kabLabelsPlaced)
+  );
+
+  // D10: the 54.75 + 42.75 = 97.5" width pairing is found somewhere in the plan — a row whose
+  // columns include one at colWidth ~54.75 (from the dominant family) and one at colWidth ~42.75
+  // (from the KAB/Westwego GW family), together summing to 97.5".
+  {
+    let found = false;
+    for (const trailer of mixedPlan.trailers) {
+      for (const row of trailer.rows) {
+        const has5475 = row.columns.some((c) => Math.abs(c.colWidth - 54.75) < 1e-6);
+        const has4275 = row.columns.some((c) => Math.abs(c.colWidth - 42.75) < 1e-6);
+        if (has5475 && has4275) {
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+    check("FIXTURE_BLOCKS_MIXED: the 54.75\"+42.75\"=97.5\" width pairing is found", found);
+  }
+
+  // D1's "three of the six families are single-member" exercises A1 here too: Noria (19.75x30.75),
+  // Charlotte County (54.75x66.75), Noria (30.75x90.75) are each placed alone, so all should still
+  // be findable in the plan.
+  check(
+    "FIXTURE_BLOCKS_MIXED: the three single-member families (both Norias, Charlotte County) are all placed",
+    footprintsBySku.has("MIX_NORIA_A") && footprintsBySku.has("MIX_NORIA_B") && footprintsBySku.has("MIX_CHARLOTTE")
+  );
+
+  // --- lb-engine-03 Part D additions (beyond the fixture updates above) ---
+
+  // D1. familyOrientationOptions: 6 for a single-member non-holey family, 2 for a multi-member
+  // family, 1 for holey, 1 when allowRotation:false. Family objects are passed as plain object
+  // literals (Family isn't exported — TS structural typing accepts the matching shape).
+  {
+    const repSingle: PackSku = { id: "FO_SINGLE", name: "single", sku: "FO_SINGLE", length: 20, width: 10, height: 5, weight: 2, category: "Blocks", allowRotation: true };
+    const singleFamily = { length: 20, width: 10, members: [{ sku: repSingle, qty: 5 }] };
+    check("familyOrientationOptions: single-member non-holey family returns 6 orientations", familyOrientationOptions(singleFamily, OPTS).length === 6, String(familyOrientationOptions(singleFamily, OPTS).length));
+
+    const repMultiA: PackSku = { id: "FO_MULTI_A", name: "multiA", sku: "FO_MULTI_A", length: 20, width: 10, height: 5, weight: 2, category: "Blocks", allowRotation: true };
+    const repMultiB: PackSku = { id: "FO_MULTI_B", name: "multiB", sku: "FO_MULTI_B", length: 20, width: 10, height: 8, weight: 3, category: "Blocks", allowRotation: true };
+    const multiFamily = { length: 20, width: 10, members: [{ sku: repMultiA, qty: 3 }, { sku: repMultiB, qty: 2 }] };
+    check("familyOrientationOptions: 2-member family returns 2 orientations (flat/flat-rotated)", familyOrientationOptions(multiFamily, OPTS).length === 2);
+
+    const repHoley: PackSku = { id: "FO_HOLEY", name: "holey", sku: "FO_HOLEY", length: 48, width: 24, height: 0.75, weight: 5, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
+    const holeyFamily = { length: 48, width: 24, members: [{ sku: repHoley, qty: 10 }] };
+    check("familyOrientationOptions: holey single-member family returns 1 orientation", familyOrientationOptions(holeyFamily, OPTS).length === 1);
+
+    const repNoRotate: PackSku = { id: "FO_NOROTATE", name: "norotate", sku: "FO_NOROTATE", length: 20, width: 10, height: 5, weight: 2, category: "Blocks", allowRotation: false };
+    const noRotateFamily = { length: 20, width: 10, members: [{ sku: repNoRotate, qty: 4 }] };
+    check("familyOrientationOptions: allowRotation:false single-member family returns 1 orientation", familyOrientationOptions(noRotateFamily, OPTS).length === 1);
+  }
+
+  // D2/D4. Column fill finds 8x11 + 5.25x4 = 109" exactly for the INV_4347 dominant footprint
+  // (isolated to just those two SKUs so the search has nothing else to consider), and the
+  // resulting column is a correctly-rolled-up mixed/top-off column.
+  {
+    const fillBase: PackSku = { id: "FILL_BASE", name: "base 8in", sku: "FILL_BASE", length: 54.75, width: 90.75, height: 8, weight: 30, category: "Blocks", allowRotation: true };
+    const fillTopoff: PackSku = { id: "FILL_TOPOFF", name: "topoff 5.25in", sku: "FILL_TOPOFF", length: 54.75, width: 90.75, height: 5.25, weight: 20, category: "Blocks", allowRotation: true };
+    const fillCart: CartLine[] = [{ skuId: "FILL_BASE", qty: 100 }, { skuId: "FILL_TOPOFF", qty: 100 }];
+    const fillPlan = pack(fillCart, [fillBase, fillTopoff], TRAILER_53FT);
+
+    const exactColumn = findColumn(
+      fillPlan,
+      (c) => c.layers.length === 2 && c.layers[0].unitHeight === 8 && c.layers[0].count === 11 && c.layers[1].unitHeight === 5.25 && c.layers[1].count === 4
     );
+    check("Column fill: 8x11 + 5.25x4 = 109\" exact is found for the INV_4347 dominant footprint", exactColumn !== null);
+    check("Column fill: the exact-fill column totals 109\" with zero gap", exactColumn?.totalHeight === 109, String(exactColumn?.totalHeight));
+    check("D4: the exact-fill (base + accepted top-off) column is marked mixed", exactColumn?.mixed === true);
+
+    const fillViolations = validatePlan(fillPlan, TRAILER_53FT, fillCart, [fillBase, fillTopoff], OPTS);
+    check("Column fill: 0 violations, and mixedStacks rolls up (>0) for the accepted top-off", fillViolations.length === 0 && fillPlan.mixedStacks > 0, `violations=${fillViolations.length} mixedStacks=${fillPlan.mixedStacks}`);
+  }
+
+  // D3. Top-off is rejected when the best available candidate's inches-per-piece < K, the gap is
+  // left open (single-layer column), and the rationale says so. Both members are declared below
+  // K (2.5" and 1.75") so that neither role assignment (base vs top-off) can ever find an
+  // ELIGIBLE top-off — otherwise the search would legitimately promote the thinner member to
+  // "base" and use the thicker one as an eligible top-off, which is a real accepted case, not a
+  // rejection.
+  {
+    const rejA: PackSku = { id: "REJ_A", name: "2.5in", sku: "REJ_A", length: 54.75, width: 90.75, height: 2.5, weight: 15, category: "Blocks", allowRotation: true };
+    const rejB: PackSku = { id: "REJ_B", name: "1.75in", sku: "REJ_B", length: 54.75, width: 90.75, height: 1.75, weight: 10, category: "Blocks", allowRotation: true };
+    const rejCart: CartLine[] = [{ skuId: "REJ_A", qty: 100 }, { skuId: "REJ_B", qty: 100 }];
+    const rejPlan = pack(rejCart, [rejA, rejB], TRAILER_53FT);
+
+    const rejColumn = findColumn(rejPlan, (c) => c.layers.some((l) => l.skuId === "REJ_A" || l.skuId === "REJ_B"));
+    check("D3: below-K top-off is rejected — the column stays single-layer (gap left open)", rejColumn?.layers.length === 1, JSON.stringify(rejColumn));
+    check("D3: rejection rationale names the best top-off candidate and the K threshold", (rejColumn?.rationale ?? "").includes("below K of"), rejColumn?.rationale);
+    check("D3: rejected column is not marked mixed", rejColumn?.mixed === false);
+  }
+
+  // D5. maxSkusPerColumn:2 (the default) is never exceeded, even for a footprint where a 3-SKU
+  // fill would land exactly on dims.height (8x5 + 9x3 + 5.25x8 = 109", per the prompt) — with
+  // three candidate SKUs and the default cap, pack() must still only ever use two per column.
+  {
+    const capA: PackSku = { id: "CAP_A", name: "8in", sku: "CAP_A", length: 54.75, width: 90.75, height: 8, weight: 30, category: "Blocks", allowRotation: true };
+    const capB: PackSku = { id: "CAP_B", name: "9in", sku: "CAP_B", length: 54.75, width: 90.75, height: 9, weight: 32, category: "Blocks", allowRotation: true };
+    const capC: PackSku = { id: "CAP_C", name: "5.25in", sku: "CAP_C", length: 54.75, width: 90.75, height: 5.25, weight: 20, category: "Blocks", allowRotation: true };
+    const capCart: CartLine[] = [{ skuId: "CAP_A", qty: 50 }, { skuId: "CAP_B", qty: 50 }, { skuId: "CAP_C", qty: 50 }];
+    const capPlan = pack(capCart, [capA, capB, capC], TRAILER_53FT, { maxSkusPerColumn: 2 });
+
+    let maxLayersSeen = 0;
+    for (const trailer of capPlan.trailers) {
+      for (const row of trailer.rows) {
+        for (const col of row.columns) {
+          maxLayersSeen = Math.max(maxLayersSeen, new Set(col.layers.map((l) => l.skuId)).size);
+        }
+      }
+    }
+    check("D5: maxSkusPerColumn:2 is never exceeded, even where a 3-SKU fill would land exactly on 109\"", maxLayersSeen <= 2, String(maxLayersSeen));
+    const capViolations = validatePlan(capPlan, TRAILER_53FT, capCart, [capA, capB, capC], OPTS);
+    check("D5: 0 max-skus-per-column violations", capViolations.filter((v) => v.rule === "max-skus-per-column").length === 0, JSON.stringify(capViolations));
+  }
+
+  // D6. Rows are ordered thickest-base at posFromFront 0 (rear), thinnest at the nose.
+  // allowRotation:false on both SKUs pins them to their declared flat orientation so A1's
+  // six-orientation search can't complicate which footprint/depth each ends up at — this fixture
+  // is purely about B3's row sort, not orientation choice.
+  {
+    const rowThick: PackSku = { id: "ROWTEST_THICK", name: "thick", sku: "ROWTEST_THICK", length: 90.75, width: 90.75, height: 20, weight: 50, category: "Blocks", allowRotation: false };
+    const rowThin: PackSku = { id: "ROWTEST_THIN", name: "thin", sku: "ROWTEST_THIN", length: 40, width: 40, height: 4, weight: 10, category: "Blocks", allowRotation: false };
+    const rowCart: CartLine[] = [{ skuId: "ROWTEST_THICK", qty: 5 }, { skuId: "ROWTEST_THIN", qty: 5 }];
+    const rowPlan = pack(rowCart, [rowThick, rowThin], TRAILER_53FT);
+
+    const thickRow = findRow(rowPlan, (r) => r.columns.some((c) => c.layers[0].skuId === "ROWTEST_THICK"));
+    const thinRow = findRow(rowPlan, (r) => r.columns.some((c) => c.layers[0].skuId === "ROWTEST_THIN"));
+    check("D6: the thickest-base row sits at posFromFront 0 (the rear)", thickRow?.posFromFront === 0, String(thickRow?.posFromFront));
+    check(
+      "D6: the thinner-base row sits further from the rear (toward the nose) than the thick row",
+      (thinRow?.posFromFront ?? -1) > (thickRow?.posFromFront ?? -1),
+      `thin=${thinRow?.posFromFront} thick=${thickRow?.posFromFront}`
+    );
+  }
+
+  // D7. Depth-aware assembly: when two same-depth families can fill a row's width together
+  // (60x50 + 60x48 = 98" exactly), pack() prefers that same-depth pairing over reaching for a
+  // mismatched-depth family (40x50) even though the latter is also available — wastedFloorArea is
+  // 0 for the same-depth row.
+  {
+    const depthP: PackSku = { id: "DEPTH_P", name: "P", sku: "DEPTH_P", length: 60, width: 50, height: 8, weight: 20, category: "Blocks", allowRotation: false };
+    const depthQ: PackSku = { id: "DEPTH_Q", name: "Q", sku: "DEPTH_Q", length: 60, width: 48, height: 8, weight: 20, category: "Blocks", allowRotation: false };
+    const depthR: PackSku = { id: "DEPTH_R", name: "R", sku: "DEPTH_R", length: 40, width: 50, height: 8, weight: 20, category: "Blocks", allowRotation: false };
+    const depthCart: CartLine[] = [{ skuId: "DEPTH_P", qty: 20 }, { skuId: "DEPTH_Q", qty: 20 }, { skuId: "DEPTH_R", qty: 5 }];
+    const depthPlan = pack(depthCart, [depthP, depthQ, depthR], TRAILER_53FT);
+
+    const sameDepthRow = findRow(
+      depthPlan,
+      (r) => r.columns.some((c) => c.layers[0].skuId === "DEPTH_P") && r.columns.some((c) => c.layers[0].skuId === "DEPTH_Q") && !r.columns.some((c) => c.layers[0].skuId === "DEPTH_R")
+    );
+    check("D7: a same-depth P+Q row (50+48=98\") is found", sameDepthRow !== null);
+    check("D7: the same-depth row's wastedFloorArea is 0", sameDepthRow?.wastedFloorArea === 0, String(sameDepthRow?.wastedFloorArea));
+  }
+
+  // D8. trailerLimit:1 on a cart far exceeding one trailer's capacity places exactly one full
+  // trailer and returns the exact remainder in balance, with zero violations (conservation holds
+  // across the cut — the case B4 exists for: plan *this* truck, carry the rest forward).
+  {
+    const balSku: PackSku = { id: "BAL_SKU", name: "balance test", sku: "BAL_SKU", length: 54.75, width: 90.75, height: 8, weight: 30, category: "Blocks", allowRotation: false };
+    const balCart: CartLine[] = [{ skuId: "BAL_SKU", qty: 2000 }];
+    const balPlan = pack(balCart, [balSku], TRAILER_53FT, { trailerLimit: 1 });
+
+    check("D8: trailerLimit:1 caps the plan at exactly one trailer", balPlan.trailers.length === 1, String(balPlan.trailers.length));
+    check("D8: the remainder lands in balance", balPlan.balance.some((b) => b.remaining > 0), JSON.stringify(balPlan.balance));
+
+    const placedCount = balPlan.trailers.reduce((s, t) => s + t.totalUnits, 0);
+    const remainingCount = balPlan.balance.reduce((s, b) => s + b.remaining, 0);
+    check("D8: placed + remaining == cart qty exactly (2000)", placedCount + remainingCount === 2000, `${placedCount}+${remainingCount}`);
+
+    const balViolations = validatePlan(balPlan, TRAILER_53FT, balCart, [balSku], { ...OPTS, trailerLimit: 1 });
+    check("D8: 0 violations — conservation holds exactly across the trailerLimit cut", balViolations.length === 0, JSON.stringify(balViolations));
   }
 
   return { pass: results.every((r) => r.pass), results };

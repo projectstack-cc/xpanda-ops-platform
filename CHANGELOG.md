@@ -1836,6 +1836,66 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics (v2)
 
+- **lb-engine-03 — v2 Load Builder packing engine: column fill with K top-off, rear->front
+  ordering, running balance (completes `pack()`).** Two carry-over fixes plus the height/ordering/
+  balance work the lb-engine-02 placeholder deferred.
+  **A1 (six orientations for single-member families):** `familyOrientationOptions` (now exported)
+  defers to `skuOrientations` for a family of exactly one member — up to all six axis-aligned
+  orientations instead of just flat/flat-rotated, since a single-member family can never dissolve
+  into mismatched footprints the way a multi-member tip would. `FamilyOrientation` gained a
+  `height` field so a tipped single-member family's `unitHeight` comes from the chosen orientation,
+  not blindly from `member.sku.height`. **A2 (depth-aware row assembly):** `buildOneRow` rewritten
+  to group candidates by `colLength`, seed each row from a depth group (same-depth partners filled
+  first), then fall through to other depth groups only for whatever width the seed group couldn't
+  fill; a final ungrouped widest-fit pass (matching lb-engine-02's old behavior) is scored
+  alongside the grouped candidates so a genuine cross-depth pairing (INV_4347's 54.75"+42.75"=
+  97.5") is never lost to same-depth bias — width utilization still decides the winner. Exposed a
+  real scoring gap once A1 landed: `scoreResult` scored trailer count then average row width
+  utilization, and a single-member family tipping its own thickness onto the length axis could
+  turn one sensible row into 40+ degenerate paper-thin ones that each scored *better* on width
+  utilization alone. Fixed by adding row count as the scoring priority directly after trailer count
+  (before width utilization) — fewer, fatter rows now always beat more, thinner ones at equal
+  trailer count.
+  **B1/B2 (multi-SKU column fill + rationale):** the lb-engine-02 placeholder (`floor(dims.height /
+  unitHeight)`, single SKU, fixed rationale string) is replaced by `buildFamilyColumns`, which
+  solves the 1D height fill per column across the whole family's remaining demand: for every
+  candidate base SKU, searches every top-off SKU whose `unitHeight >= topOffMinInchesPerPiece`
+  across every top-off count (K-filtered *before* the search, never after, so an ineligible
+  candidate can never be placed and self-violate `topoff-threshold`), tracking the base count that
+  pairs with it for the tallest fill — not just the naive max-then-leftover pure count, since the
+  documented exact fills (`11x8"+4x5.25"=109"`) need a SUB-maximal base count to leave a residual
+  an eligible top-off divides evenly. Bounded (small integer search per column, not exponential).
+  Every column now carries a real rationale describing exactly what filled it and why (exact fill,
+  partial fill, or a top-off rejected below K, naming the best candidate that failed). `mixed` is
+  derived from distinct SKU ids so it can't drift from what `validatePlan`'s
+  `max-skus-per-column` counts. **B3 (rear->front ordering):** rows are sorted by descending base
+  (`layers[0]`) thickness before `buildTrailer` assigns `posFromFront` — thickest at the rear
+  (`posFromFront: 0`, where the doors are), thinnest toward the nose. Module header documents the
+  nose-first-loading open question for Steve (unresolved, not acted on). **B4 (running balance):**
+  `trailerLimit`/`balance` were already plumbed in lb-engine-02's `simulate()`; the real work was
+  correcting leftover accounting for mixed columns — a `ColumnPlan` can now carry two SKUs, so
+  unplaced columns decompose per-*layer* into `balance`, not per-column, or `conservation` would
+  silently drop top-off pieces the moment a mixed column went unplaced past `trailerLimit`.
+  **Part C:** `FIXTURE_BLOCKS_MIXED` replaced with the real INV_4347 order (94 pieces, 6 footprints,
+  the dominant 54.75x90.75 footprint carrying 4 labels across 3 thicknesses); confirms the
+  97.5" pairing and all label/thickness grouping structurally. Internals refactored:
+  `ColumnBlueprint`/`ColumnInstance` (lb-engine-02, one-SKU-per-column) replaced by `ColumnPlan`
+  (one fully-resolved physical column, base + optional top-off, own rationale) —
+  `buildBlueprints`/`expandInstances` removed, `buildColumn`/`buildOneRow`/`simulate` updated
+  accordingly; no change to any exported contract. `packEngine.selfcheck.ts`: one existing check
+  amended (not deleted) — the `stabilityWarnRatio` tall/narrow fixture now pins
+  `allowRotation:false`, since A1 correctly prefers tipping that SKU onto its side over standing it
+  up tall once six orientations are available, which defeated the fixture's original premise. 30
+  new checks (familyOrientationOptions orientation counts, exact-fill column arithmetic, K-rejected
+  top-off rationale, `maxSkusPerColumn` cap holding at a 3-SKU-exact footprint, rear->front row
+  ordering, depth-aware same-depth-preferred assembly, `trailerLimit:1` running-balance
+  conservation, plus the fixture updates above) — 84/84 selfcheck assertions pass.
+  **INV_4202** (`FIXTURE_BLOCKS_PAIRING`): 6 rows, 508.5" used (down from lb-engine-02's 8 rows/
+  516" baseline — none of this fixture's four SKUs share a footprint, so the improvement is A1/A2/
+  the row-count scoring fix, not B1's column fill, which has nothing to mix here).
+  `npx tsc --noEmit` + `npm run cf-build` both green. Still on the isolated `v2-logistics`
+  worktree/branch, not merged/deployed.
+
 - **lb-engine-02 — v2 Load Builder packing engine: joint orientation selection, width pairing, row
   assembly.** Contract amendments to `packEngine.ts`: `PackColumn` gains `colLength` (rows may now
   hold mixed-depth columns; `PackRow.rowLength = max(columns[].colLength)`) and `PackRow` gains
