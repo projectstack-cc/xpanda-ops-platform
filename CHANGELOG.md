@@ -1836,6 +1836,51 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics (v2)
 
+- **lb-engine-02 — v2 Load Builder packing engine: joint orientation selection, width pairing, row
+  assembly.** Contract amendments to `packEngine.ts`: `PackColumn` gains `colLength` (rows may now
+  hold mixed-depth columns; `PackRow.rowLength = max(columns[].colLength)`) and `PackRow` gains
+  `wastedFloorArea` (`sum((rowLength - colLength) * colWidth)`, charged by the scorer below).
+  `PackLayer` gains `orientation` (six orientations are now legal, so `unitHeight` alone no longer
+  determines a placement's footprint). `skuOrientations` rewritten: non-holey, rotation-allowed
+  SKUs now return all six axis-aligned permutations (`flat`, `flat-rotated`, `on-edge`,
+  `on-edge-rotated`, `on-end`, `on-end-rotated`), de-duplicated for SKUs with equal dimensions;
+  holey board / `allowRotation: false` still locks to `[identity]`. Three validation fixes: (1)
+  `piece-fits-trailer` split — `sku-unplaceable` keeps the old "fits in some orientation" check,
+  while a new, stricter `piece-fits-trailer` validates the layer's *declared* orientation actually
+  matches its placement (`orientation.length/width/height` vs `column.colLength/colWidth` and
+  `layer.unitHeight`), catching a piece placed in an orientation different from the one recorded;
+  (2) `holey-no-rotation` now compares against `column.colLength` instead of `row.rowLength`, since
+  mixed-depth rows (above) made the old comparison produce false violations for a correctly-placed
+  holey column sitting beside a deeper neighbor; (3) added the `trailer-length` companion check
+  `colLength <= row.rowLength` per column. Non-blocking `stabilityWarnRatio` (default `3`,
+  `Infinity` disables): when a placed layer's `unitHeight` exceeds `stabilityWarnRatio *
+  min(colLength, colWidth)`, `pack()` appends a note to that column's `rationale` and a line to
+  `plan.warnings` — never rejects the placement, advisory only.
+  `pack()` is implemented for orientation selection, footprint-family grouping and row assembly
+  (column height fill/top-off/ordering/balance remain lb-engine-03's job — every column is
+  currently filled with a single SKU stacked by simple division, rationale
+  `"lb-engine-02: provisional single-SKU fill, height optimisation pending lb-engine-03"`). SKUs
+  sharing a (length x width) footprint (regardless of thickness/label) group into families; each
+  family's orientation is chosen *jointly* across all families (not per-SKU in isolation, which was
+  legacy's bug — it scored each SKU alone and broke pairing ties arbitrarily), searching all
+  combinations of each family's flat/flat-rotated choice (exhaustive under a 20,000-combination
+  guard, else a greedy largest-family-first fallback with a warning), scored by fewest trailers,
+  then width utilization, then least wasted mixed-depth floor area, then fewest distinct
+  orientations in play. Rows are assembled by greedily selecting the widest-fitting combination of
+  columns whose widths sum as close to `dims.width` as possible without exceeding it. **INV_4202**
+  (the load legacy could not fit on one truck) now packs onto a single 53ft trailer: all 108 pieces
+  placed, `balance` empty, `usedLength` ~516" of 636", zero `validatePlan` violations — the
+  42.75"+54.75"=97.5" width pairing falls out of the search rather than being hand-tuned.
+  **FIXTURE_HOLEY_SIPLAST** still reduces to the trivial 4-across x 13-deep = 52-column grid with
+  no rotation, confirming the general search doesn't complicate the simplest case.
+  `packEngine.selfcheck.ts` extended with 19 new checks (`skuOrientations` orientation counts and
+  dedup, `piece-fits-trailer`/`sku-unplaceable` split, the holey-no-rotation mixed-depth
+  regression, `wastedFloorArea` arithmetic, `stabilityWarnRatio` warning + suppression, and the
+  three fixtures run end-to-end through the real `pack()`); existing checks fixed (not deleted) to
+  carry the new `colLength`/`orientation` fields — see commit for detail. 54/54 selfcheck
+  assertions pass. `npx tsc --noEmit` + `npm run cf-build` both green. Still on the isolated
+  `v2-logistics` worktree/branch, not merged/deployed.
+
 - **lb-engine-01 — v2 Load Builder packing engine: contracts + invariant harness.** New
   `cutting-pilot/src/lib/packEngine.ts` — pure, dependency-free TypeScript module (no React, no
   Cloudflare bindings, no `fetch`), the typed contract lb-engine-02 (joint orientation + width
