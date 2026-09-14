@@ -41,6 +41,27 @@ export interface ShipmentListItem {
   distance_status: "ok" | "pending" | "unavailable";
 }
 
+// Response shape of GET /v2/api/shipments/:id -- backs ShipmentDetailPanel's inline row
+// drill-down (shipping address + carrier + shipping time + loads + parts) on the
+// /v2/logistics dashboard. Distinct from ShipmentListItem (the list row) because the list
+// query never selects the full ship-to address or job_line_items -- both are fetched lazily,
+// only when a row is expanded.
+export interface ShipmentDetail {
+  id: string;
+  job_id: string | null;
+  carrier: string | null;
+  delivery_time: string | null;
+  load_count: number | null;
+  ship_to_company: string | null;
+  ship_to_attention: string | null;
+  ship_to_street: string | null;
+  ship_to_street2: string | null;
+  ship_to_city: string | null;
+  ship_to_state: string | null;
+  ship_to_zip: string | null;
+  line_items: JobLineItem[];
+}
+
 export interface JobLineItem {
   part_number: string | null;
   description: string | null;

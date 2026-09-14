@@ -2,9 +2,12 @@
 // One outbound shipment row for the /v2/logistics dashboard table. Presentational only —
 // ShipmentDashboard owns data + refetch, BolActions owns the Build Load / Generate-View BOL
 // buttons (kept separate so it can also be reused wherever else BOL actions get surfaced).
+import { Fragment } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import BolActions from "./BolActions";
+import ShipmentDetailPanel from "./ShipmentDetailPanel";
 import { formatDuration } from "@/lib/time";
-import type { ShipmentListItem } from "./types";
+import type { ShipmentDetail, ShipmentListItem } from "./types";
 
 const badgeBase = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap";
 
@@ -69,52 +72,81 @@ interface ShipmentRowProps {
   onViewBol: (jobId: string) => void;
   onGenerateBol: (jobId: string) => void;
   onEdit: (shipment: ShipmentListItem) => void;
+  expanded: boolean;
+  onToggleExpand: (id: string) => void;
+  detailCache: Map<string, ShipmentDetail>;
 }
 
-export default function ShipmentRow({ shipment: s, onViewBol, onGenerateBol, onEdit }: ShipmentRowProps) {
+export default function ShipmentRow({
+  shipment: s,
+  onViewBol,
+  onGenerateBol,
+  onEdit,
+  expanded,
+  onToggleExpand,
+  detailCache,
+}: ShipmentRowProps) {
   const methodCarrier = [s.method, s.carrier].filter(Boolean).join(" · ") || "—";
 
   return (
-    <tr
-      className="border-b border-[var(--line)] last:border-0 cursor-pointer hover:bg-[var(--ghost-bg)] transition-colors"
-      onClick={() => onEdit(s)}
-    >
-      <td className="px-3 py-[8.8px] align-top">
-        <div className="font-mono tabular-nums text-sm font-semibold text-text">
-          {s.invoice_number ? `INV# ${s.invoice_number}` : "—"}
-          {(s.load_count ?? 1) > 1 && (
-            <span className="ml-2 font-sans text-[11px] font-bold text-[var(--brand)]">
-              {s.load_count} loads
-            </span>
+    <Fragment>
+      <tr
+        className="border-b border-[var(--line)] last:border-0 cursor-pointer hover:bg-[var(--ghost-bg)] transition-colors"
+        onClick={() => onEdit(s)}
+      >
+        <td className="px-3 py-[8.8px] align-top">
+          <div className="font-mono tabular-nums text-sm font-semibold text-text">
+            {s.invoice_number ? `INV# ${s.invoice_number}` : "—"}
+            {(s.load_count ?? 1) > 1 && (
+              <span className="ml-2 font-sans text-[11px] font-bold text-[var(--brand)]">
+                {s.load_count} loads
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-muted whitespace-normal break-words" title={s.customer || ""}>
+            {s.customer || "Unknown"}
+          </div>
+          {s.job_id && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExpand(s.id);
+              }}
+              className="inline-flex items-center gap-0.5 text-xs text-[var(--brand)] hover:underline cursor-pointer"
+              aria-expanded={expanded}
+            >
+              {expanded ? (
+                <ChevronDown size={12} className="shrink-0" aria-hidden="true" />
+              ) : (
+                <ChevronRight size={12} className="shrink-0" aria-hidden="true" />
+              )}
+              {expanded ? "Hide details" : "View details"}
+            </button>
           )}
-        </div>
-        <div className="text-xs text-muted whitespace-normal break-words" title={s.customer || ""}>
-          {s.customer || "Unknown"}
-        </div>
-        {s.job_id && (
-          <a
-            href={`/jobs/?job_id=${s.job_id}`}
-            className="text-xs text-[var(--brand)] no-underline hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            View job →
-          </a>
-        )}
-      </td>
-      <td className="px-3 py-[8.8px] align-top text-sm text-text">{fmtDate(s.ship_date)}</td>
-      <td className="px-3 py-[8.8px] align-top text-sm text-text">{methodCarrier}</td>
-      <td className="px-3 py-[8.8px] align-top">
-        <DistanceEta shipment={s} />
-      </td>
-      <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{s.trailer_number || "—"}</td>
-      <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{fmtNum(s.total_bdft)}</td>
-      <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{s.bol_number || "—"}</td>
-      <td className="px-3 py-[8.8px] align-top">
-        <StatusBadge status={s.status} />
-      </td>
-      <td className="px-3 py-[8.8px] align-top text-right" onClick={(e) => e.stopPropagation()}>
-        <BolActions shipment={s} onViewBol={onViewBol} onGenerateBol={onGenerateBol} />
-      </td>
-    </tr>
+        </td>
+        <td className="px-3 py-[8.8px] align-top text-sm text-text">{fmtDate(s.ship_date)}</td>
+        <td className="px-3 py-[8.8px] align-top text-sm text-text">{methodCarrier}</td>
+        <td className="px-3 py-[8.8px] align-top">
+          <DistanceEta shipment={s} />
+        </td>
+        <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{s.trailer_number || "—"}</td>
+        <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{fmtNum(s.total_bdft)}</td>
+        <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{s.bol_number || "—"}</td>
+        <td className="px-3 py-[8.8px] align-top">
+          <StatusBadge status={s.status} />
+        </td>
+        <td className="px-3 py-[8.8px] align-top text-right" onClick={(e) => e.stopPropagation()}>
+          <BolActions shipment={s} onViewBol={onViewBol} onGenerateBol={onGenerateBol} />
+        </td>
+      </tr>
+      {expanded && s.job_id && (
+        <tr className="border-b border-[var(--line)] last:border-0">
+          <td colSpan={9} className="p-0">
+            <ShipmentDetailPanel shipmentId={s.id} cache={detailCache} />
+          </td>
+        </tr>
+      )}
+    </Fragment>
   );
 }

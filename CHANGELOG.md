@@ -1871,6 +1871,25 @@ Entries within each module are ordered by prompt # descending (newest first).
 ## Logistics (v2)
 
 - **Feature (unprompted, conversational request, no prompt file, no prompt number yet) —
+  Shipment Dashboard row "View job →" link replaced with an inline drill-down
+  (react-component-agent §9b + next-platform-agent §9a).** Steve flagged that the "View job →"
+  link on each `/v2/logistics` list row navigated away to the legacy `/jobs/` board instead of
+  showing anything shipment-specific. Reworked into an in-place expand: clicking "View details"
+  toggles a detail `<tr>` under the row (`ShipmentRow.tsx`, Fragment + conditional-row pattern
+  ported from `ProductionBoard.tsx`'s `expandedId`/`toggleExpand`) rendering the shipping
+  address, carrier, shipping time, load count, and the job's parts via new
+  `ShipmentDetailPanel.tsx`. Backed by a new `GET /v2/api/shipments/:id` (added alongside the
+  existing PUT in `shipments/[id]/route.ts`), which joins `jobs` for the full ship-to address and
+  reads `job_line_items` for parts itself — **deliberately not** delegating to the existing
+  `GET /v2/api/jobs/:id` or `GET /v2/api/board/:id` lookups, both gated on the separate `"jobs"`
+  permission key (`middleware.ts`); a `"logistics.dashboard"`-only viewer of this dashboard could
+  lack that key once the dark-launch admin-only gate lifts, so the new route stays under the
+  `/v2/api/shipments` prefix the dashboard itself already requires. Expand state is single-row
+  (`expandedId`) and detail fetches are cached in a plain `Map` ref (`detailCacheRef`, mirrors
+  `ShippingInfoModal.tsx`'s `jobCache`) so re-expanding an already-fetched row is instant.
+  `npx tsc --noEmit` and `npm run build` both green.
+
+- **Feature (unprompted, conversational request, no prompt file, no prompt number yet) —
   Shipment Dashboard wrap-up batch: commodity description editing, Freight Terms removal, order
   edit modal, column layout fix, clickable KPI tiles (next-platform-agent §9a +
   react-component-agent §9b, sequenced — API layer landed first, UI layer built against it).**

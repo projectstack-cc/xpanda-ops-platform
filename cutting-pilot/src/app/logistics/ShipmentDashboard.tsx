@@ -31,7 +31,7 @@ import BolGenerateModal from "@/components/logistics/BolGenerateModal";
 import BolEditorModal, { type EditorTarget } from "@/components/logistics/BolEditorModal";
 import ShipmentEditModal from "@/components/logistics/ShipmentEditModal";
 import StatBreakdownModal from "@/components/logistics/StatBreakdownModal";
-import type { ShipmentListItem, LogisticsStats } from "@/components/logistics/types";
+import type { ShipmentDetail, ShipmentListItem, LogisticsStats } from "@/components/logistics/types";
 import type { BolRecord } from "@/lib/bolShared";
 
 interface ShipmentDashboardProps {
@@ -112,6 +112,16 @@ export default function ShipmentDashboard({
   const [editorTarget, setEditorTarget] = useState<EditorTarget | null>(null);
   const [editingShipment, setEditingShipment] = useState<ShipmentListItem | null>(null);
   const [statModalKey, setStatModalKey] = useState<string | null>(null);
+
+  // Inline row drill-down (replaces the old "View job →" navigate-away link). Single-expand,
+  // matching ProductionBoard.tsx's expandedId pattern. detailCacheRef is a plain Map (not
+  // state) -- mirrors ShippingInfoModal.tsx's jobCache -- so re-expanding an already-fetched
+  // row is instant and doesn't trigger a re-render for every other row.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const detailCacheRef = useRef<Map<string, ShipmentDetail>>(new Map());
+  const handleToggleExpand = useCallback((id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  }, []);
 
   // Mirrors DockBoard.tsx's existing client-side pattern for this exact permission key -- the
   // Shipment Edit Modal gates Trailer # editability on it, matching the server's
@@ -700,6 +710,9 @@ export default function ShipmentDashboard({
                               onViewBol={setViewerJobId}
                               onGenerateBol={setGenerateJobId}
                               onEdit={setEditingShipment}
+                              expanded={expandedId === s.id}
+                              onToggleExpand={handleToggleExpand}
+                              detailCache={detailCacheRef.current}
                             />
                           ))}
                         </tbody>

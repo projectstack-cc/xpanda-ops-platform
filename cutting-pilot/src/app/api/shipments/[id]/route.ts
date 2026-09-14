@@ -1,5 +1,15 @@
-// src/app/api/shipments/[id]/route.ts  ->  PUT /v2/api/shipments/:id (fenced, partial update)
-// Backs the new Shipment Edit Modal (Task 3, xpanda-ops-agents.md §9a). Mirrors
+// src/app/api/shipments/[id]/route.ts  ->  GET /v2/api/shipments/:id (row + shipping address +
+// line items), PUT /v2/api/shipments/:id (fenced, partial update)
+//
+// GET backs ShipmentDetailPanel's inline row drill-down on the /v2/logistics dashboard (replaces
+// the old "View job →" link that navigated away to /jobs/ with nothing shipment-specific to show
+// for it). Deliberately joins `jobs` for the ship-to address and reads `job_line_items` for parts
+// itself, rather than delegating to GET /v2/api/jobs/:id or /v2/api/board/:id -- both of those are
+// gated on the "jobs" permission key (middleware.ts), which a "logistics.dashboard"-only viewer
+// of this dashboard may not hold. Living under the /v2/api/shipments prefix keeps this drill-down
+// on the exact permission the dashboard itself already requires.
+//
+// PUT backs the new Shipment Edit Modal (Task 3, xpanda-ops-agents.md §9a). Mirrors
 // bols/[id]/route.ts's fencing/auth-guard shape, but this is a partial-column UPDATE (allowlist
 // of editable fields) rather than a full-row replace -- there's no client that ever sends the
 // whole shipment row here, only the fields the modal actually renders as inputs.
@@ -50,6 +60,41 @@ const JOB_GATED_FIELDS = [
 const TRAILER_FIELD = "trailer_number";
 
 const LOCKED_STATUSES = ["in_transit", "delivered", "archived", "cancelled"];
+
+export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id: shipmentId } = await ctx.params;
+  const { DB } = await getEnv();
+
+  try {
+    const shipment = await DB.prepare(
+      `SELECT shipments.*,
+              j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_street2,
+              j.ship_to_city, j.ship_to_state, j.ship_to_zip
+         FROM shipments
+         LEFT JOIN jobs j ON j.id = shipments.job_id
+        WHERE shipments.id = ?`
+    ).bind(shipmentId).first<any>();
+
+    if (!shipment) {
+      return NextResponse.json({ ok: false, error: "Shipment not found." }, { status: 404 });
+    }
+
+    let lineItems: any[] = [];
+    if (shipment.job_id) {
+      const li = await DB.prepare(
+        "SELECT part_number, description, quantity, dimensions FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC"
+      ).bind(shipment.job_id).all();
+      lineItems = li.results ?? [];
+    }
+
+    return NextResponse.json({ ok: true, data: { ...shipment, line_items: lineItems } });
+  } catch (e: any) {
+    return NextResponse.json(
+      { ok: false, error: "Server error.", detail: String(e?.message || e) },
+      { status: 500 }
+    );
+  }
+}
 
 function canEditDashboard(request: NextRequest): boolean {
   if (request.headers.get("X-User-Is-Admin") === "1") return true;
