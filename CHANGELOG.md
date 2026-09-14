@@ -1836,6 +1836,30 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics (v2)
 
+- **lb-engine-01 — v2 Load Builder packing engine: contracts + invariant harness.** New
+  `cutting-pilot/src/lib/packEngine.ts` — pure, dependency-free TypeScript module (no React, no
+  Cloudflare bindings, no `fetch`), the typed contract lb-engine-02 (joint orientation + width
+  pairing + row assembly) and lb-engine-03 (column fill, top-off, ordering, running balance) will
+  implement against. Output shape is `rows[] -> columns[] -> layers[]`, matching legacy exactly, so
+  the diagram, customize editor, dissolve, saved loads and `bolShared.ts` can consume it unchanged
+  once the algorithm lands. `TRAILER_TYPES` (five presets) and `HOLEY_BOARD_CATEGORY = "Holey
+  Board"` transcribed and verified against the live `logistics/load-builder.html` (read-only,
+  untouched). `pack()` is a deliberate stub — throws `"packEngine: pack() not implemented until
+  lb-engine-02"` rather than a half-algorithm. `validatePlan()` is fully implemented: 13 named
+  invariant rules (piece-fits-trailer, column-height, row-width, trailer-length, row-geometry,
+  holey-no-rotation, strict-support, conservation, weight, max-skus-per-column, topoff-threshold,
+  rationale-present, totals-consistent), each documented inline with the real failure it catches.
+  New `cutting-pilot/src/lib/packEngine.selfcheck.ts` (dev-only, mirrors
+  `blockNester.selfcheck.ts`/`bolShared.selfcheck.ts`'s shape, unwired — `lb-ui-01` wires it into a
+  component): one satisfying + one violating hand-built `PackPlan` fixture per rule (26 checks),
+  plus the three real-order fixtures from the prompt (`FIXTURE_HOLEY_SIPLAST` 4x13 holey-board
+  grid, `FIXTURE_BLOCKS_PAIRING` from INV_4202, `FIXTURE_BLOCKS_MIXED` exact-fill arithmetic from
+  INV_4347) with their pure arithmetic asserted now, ahead of any algorithm, as lb-engine-02/-03's
+  future acceptance cases. 35/35 selfcheck assertions pass (verified via a throwaway `tsx`
+  invocation, deleted before commit — not part of the build). Isolated `v2-logistics`
+  worktree/branch, not merged/deployed. `npx tsc --noEmit` + `npx opennextjs-cloudflare build`
+  (via `npm run cf-build`) both green.
+
 - **PXXX — v2 logistics dark-launch gate: new admin-only `logistics.v2` permission gates the
   `/v2/logistics` and `/v2/logistics/loading` pages (first-match-wins, above the granular
   `logistics.*` rules in `cutting-pilot/src/middleware.ts`). APIs unchanged. Label registered in
