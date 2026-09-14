@@ -2639,6 +2639,134 @@ Entries within each module are ordered by prompt # descending (newest first).
   - **Alternating BOL button**: `BolActions.tsx` refactored so active shipments display "Generate BOL" (prominent brand CTA) when `bol_count === 0`, and alternate to "View BOL" once generated (also preserved on delivered shipments). Generation flow auto-refreshes so the button flips immediately.
   - **API enhancements**: `cutting-pilot/src/app/api/shipments/route.ts` updated to support `week` (Monday YYYY-MM-DD), `days`, `status`, and `q` parameters, returning both shipment rows and aggregate stats.
   - Verification: `npx tsc --noEmit` and `npm run cf-build` both green.
+- **lb-engine-03 — v2 Load Builder packing engine: column fill with K top-off, rear->front
+  ordering, running balance (completes `pack()`).** Two carry-over fixes plus the height/ordering/
+  balance work the lb-engine-02 placeholder deferred.
+  **A1 (six orientations for single-member families):** `familyOrientationOptions` (now exported)
+  defers to `skuOrientations` for a family of exactly one member — up to all six axis-aligned
+  orientations instead of just flat/flat-rotated, since a single-member family can never dissolve
+  into mismatched footprints the way a multi-member tip would. `FamilyOrientation` gained a
+  `height` field so a tipped single-member family's `unitHeight` comes from the chosen orientation,
+  not blindly from `member.sku.height`. **A2 (depth-aware row assembly):** `buildOneRow` rewritten
+  to group candidates by `colLength`, seed each row from a depth group (same-depth partners filled
+  first), then fall through to other depth groups only for whatever width the seed group couldn't
+  fill; a final ungrouped widest-fit pass (matching lb-engine-02's old behavior) is scored
+  alongside the grouped candidates so a genuine cross-depth pairing (INV_4347's 54.75"+42.75"=
+  97.5") is never lost to same-depth bias — width utilization still decides the winner. Exposed a
+  real scoring gap once A1 landed: `scoreResult` scored trailer count then average row width
+  utilization, and a single-member family tipping its own thickness onto the length axis could
+  turn one sensible row into 40+ degenerate paper-thin ones that each scored *better* on width
+  utilization alone. Fixed by adding row count as the scoring priority directly after trailer count
+  (before width utilization) — fewer, fatter rows now always beat more, thinner ones at equal
+  trailer count.
+  **B1/B2 (multi-SKU column fill + rationale):** the lb-engine-02 placeholder (`floor(dims.height /
+  unitHeight)`, single SKU, fixed rationale string) is replaced by `buildFamilyColumns`, which
+  solves the 1D height fill per column across the whole family's remaining demand: for every
+  candidate base SKU, searches every top-off SKU whose `unitHeight >= topOffMinInchesPerPiece`
+  across every top-off count (K-filtered *before* the search, never after, so an ineligible
+  candidate can never be placed and self-violate `topoff-threshold`), tracking the base count that
+  pairs with it for the tallest fill — not just the naive max-then-leftover pure count, since the
+  documented exact fills (`11x8"+4x5.25"=109"`) need a SUB-maximal base count to leave a residual
+  an eligible top-off divides evenly. Bounded (small integer search per column, not exponential).
+  Every column now carries a real rationale describing exactly what filled it and why (exact fill,
+  partial fill, or a top-off rejected below K, naming the best candidate that failed). `mixed` is
+  derived from distinct SKU ids so it can't drift from what `validatePlan`'s
+  `max-skus-per-column` counts. **B3 (rear->front ordering):** rows are sorted by descending base
+  (`layers[0]`) thickness before `buildTrailer` assigns `posFromFront` — thickest at the rear
+  (`posFromFront: 0`, where the doors are), thinnest toward the nose. Module header documents the
+  nose-first-loading open question for Steve (unresolved, not acted on). **B4 (running balance):**
+  `trailerLimit`/`balance` were already plumbed in lb-engine-02's `simulate()`; the real work was
+  correcting leftover accounting for mixed columns — a `ColumnPlan` can now carry two SKUs, so
+  unplaced columns decompose per-*layer* into `balance`, not per-column, or `conservation` would
+  silently drop top-off pieces the moment a mixed column went unplaced past `trailerLimit`.
+  **Part C:** `FIXTURE_BLOCKS_MIXED` replaced with the real INV_4347 order (94 pieces, 6 footprints,
+  the dominant 54.75x90.75 footprint carrying 4 labels across 3 thicknesses); confirms the
+  97.5" pairing and all label/thickness grouping structurally. Internals refactored:
+  `ColumnBlueprint`/`ColumnInstance` (lb-engine-02, one-SKU-per-column) replaced by `ColumnPlan`
+  (one fully-resolved physical column, base + optional top-off, own rationale) —
+  `buildBlueprints`/`expandInstances` removed, `buildColumn`/`buildOneRow`/`simulate` updated
+  accordingly; no change to any exported contract. `packEngine.selfcheck.ts`: one existing check
+  amended (not deleted) — the `stabilityWarnRatio` tall/narrow fixture now pins
+  `allowRotation:false`, since A1 correctly prefers tipping that SKU onto its side over standing it
+  up tall once six orientations are available, which defeated the fixture's original premise. 30
+  new checks (familyOrientationOptions orientation counts, exact-fill column arithmetic, K-rejected
+  top-off rationale, `maxSkusPerColumn` cap holding at a 3-SKU-exact footprint, rear->front row
+  ordering, depth-aware same-depth-preferred assembly, `trailerLimit:1` running-balance
+  conservation, plus the fixture updates above) — 84/84 selfcheck assertions pass.
+  **INV_4202** (`FIXTURE_BLOCKS_PAIRING`): 6 rows, 508.5" used (down from lb-engine-02's 8 rows/
+  516" baseline — none of this fixture's four SKUs share a footprint, so the improvement is A1/A2/
+  the row-count scoring fix, not B1's column fill, which has nothing to mix here).
+  `npx tsc --noEmit` + `npm run cf-build` both green. Still on the isolated `v2-logistics`
+  worktree/branch, not merged/deployed.
+
+- **lb-engine-02 — v2 Load Builder packing engine: joint orientation selection, width pairing, row
+  assembly.** Contract amendments to `packEngine.ts`: `PackColumn` gains `colLength` (rows may now
+  hold mixed-depth columns; `PackRow.rowLength = max(columns[].colLength)`) and `PackRow` gains
+  `wastedFloorArea` (`sum((rowLength - colLength) * colWidth)`, charged by the scorer below).
+  `PackLayer` gains `orientation` (six orientations are now legal, so `unitHeight` alone no longer
+  determines a placement's footprint). `skuOrientations` rewritten: non-holey, rotation-allowed
+  SKUs now return all six axis-aligned permutations (`flat`, `flat-rotated`, `on-edge`,
+  `on-edge-rotated`, `on-end`, `on-end-rotated`), de-duplicated for SKUs with equal dimensions;
+  holey board / `allowRotation: false` still locks to `[identity]`. Three validation fixes: (1)
+  `piece-fits-trailer` split — `sku-unplaceable` keeps the old "fits in some orientation" check,
+  while a new, stricter `piece-fits-trailer` validates the layer's *declared* orientation actually
+  matches its placement (`orientation.length/width/height` vs `column.colLength/colWidth` and
+  `layer.unitHeight`), catching a piece placed in an orientation different from the one recorded;
+  (2) `holey-no-rotation` now compares against `column.colLength` instead of `row.rowLength`, since
+  mixed-depth rows (above) made the old comparison produce false violations for a correctly-placed
+  holey column sitting beside a deeper neighbor; (3) added the `trailer-length` companion check
+  `colLength <= row.rowLength` per column. Non-blocking `stabilityWarnRatio` (default `3`,
+  `Infinity` disables): when a placed layer's `unitHeight` exceeds `stabilityWarnRatio *
+  min(colLength, colWidth)`, `pack()` appends a note to that column's `rationale` and a line to
+  `plan.warnings` — never rejects the placement, advisory only.
+  `pack()` is implemented for orientation selection, footprint-family grouping and row assembly
+  (column height fill/top-off/ordering/balance remain lb-engine-03's job — every column is
+  currently filled with a single SKU stacked by simple division, rationale
+  `"lb-engine-02: provisional single-SKU fill, height optimisation pending lb-engine-03"`). SKUs
+  sharing a (length x width) footprint (regardless of thickness/label) group into families; each
+  family's orientation is chosen *jointly* across all families (not per-SKU in isolation, which was
+  legacy's bug — it scored each SKU alone and broke pairing ties arbitrarily), searching all
+  combinations of each family's flat/flat-rotated choice (exhaustive under a 20,000-combination
+  guard, else a greedy largest-family-first fallback with a warning), scored by fewest trailers,
+  then width utilization, then least wasted mixed-depth floor area, then fewest distinct
+  orientations in play. Rows are assembled by greedily selecting the widest-fitting combination of
+  columns whose widths sum as close to `dims.width` as possible without exceeding it. **INV_4202**
+  (the load legacy could not fit on one truck) now packs onto a single 53ft trailer: all 108 pieces
+  placed, `balance` empty, `usedLength` ~516" of 636", zero `validatePlan` violations — the
+  42.75"+54.75"=97.5" width pairing falls out of the search rather than being hand-tuned.
+  **FIXTURE_HOLEY_SIPLAST** still reduces to the trivial 4-across x 13-deep = 52-column grid with
+  no rotation, confirming the general search doesn't complicate the simplest case.
+  `packEngine.selfcheck.ts` extended with 19 new checks (`skuOrientations` orientation counts and
+  dedup, `piece-fits-trailer`/`sku-unplaceable` split, the holey-no-rotation mixed-depth
+  regression, `wastedFloorArea` arithmetic, `stabilityWarnRatio` warning + suppression, and the
+  three fixtures run end-to-end through the real `pack()`); existing checks fixed (not deleted) to
+  carry the new `colLength`/`orientation` fields — see commit for detail. 54/54 selfcheck
+  assertions pass. `npx tsc --noEmit` + `npm run cf-build` both green. Still on the isolated
+  `v2-logistics` worktree/branch, not merged/deployed.
+
+- **lb-engine-01 — v2 Load Builder packing engine: contracts + invariant harness.** New
+  `cutting-pilot/src/lib/packEngine.ts` — pure, dependency-free TypeScript module (no React, no
+  Cloudflare bindings, no `fetch`), the typed contract lb-engine-02 (joint orientation + width
+  pairing + row assembly) and lb-engine-03 (column fill, top-off, ordering, running balance) will
+  implement against. Output shape is `rows[] -> columns[] -> layers[]`, matching legacy exactly, so
+  the diagram, customize editor, dissolve, saved loads and `bolShared.ts` can consume it unchanged
+  once the algorithm lands. `TRAILER_TYPES` (five presets) and `HOLEY_BOARD_CATEGORY = "Holey
+  Board"` transcribed and verified against the live `logistics/load-builder.html` (read-only,
+  untouched). `pack()` is a deliberate stub — throws `"packEngine: pack() not implemented until
+  lb-engine-02"` rather than a half-algorithm. `validatePlan()` is fully implemented: 13 named
+  invariant rules (piece-fits-trailer, column-height, row-width, trailer-length, row-geometry,
+  holey-no-rotation, strict-support, conservation, weight, max-skus-per-column, topoff-threshold,
+  rationale-present, totals-consistent), each documented inline with the real failure it catches.
+  New `cutting-pilot/src/lib/packEngine.selfcheck.ts` (dev-only, mirrors
+  `blockNester.selfcheck.ts`/`bolShared.selfcheck.ts`'s shape, unwired — `lb-ui-01` wires it into a
+  component): one satisfying + one violating hand-built `PackPlan` fixture per rule (26 checks),
+  plus the three real-order fixtures from the prompt (`FIXTURE_HOLEY_SIPLAST` 4x13 holey-board
+  grid, `FIXTURE_BLOCKS_PAIRING` from INV_4202, `FIXTURE_BLOCKS_MIXED` exact-fill arithmetic from
+  INV_4347) with their pure arithmetic asserted now, ahead of any algorithm, as lb-engine-02/-03's
+  future acceptance cases. 35/35 selfcheck assertions pass (verified via a throwaway `tsx`
+  invocation, deleted before commit — not part of the build). Isolated `v2-logistics`
+  worktree/branch, not merged/deployed. `npx tsc --noEmit` + `npx opennextjs-cloudflare build`
+  (via `npm run cf-build`) both green.
 
 - **PXXX — v2 logistics dark-launch gate: new admin-only `logistics.v2` permission gates the
   `/v2/logistics` and `/v2/logistics/loading` pages (first-match-wins, above the granular
