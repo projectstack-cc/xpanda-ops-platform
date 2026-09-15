@@ -394,6 +394,7 @@ function buildFamilyColumns(
       c2: number;
       total: number;
       bestIneligible: PoolMember | null;
+      sawExhaustedCandidate: boolean;
     } | null = null;
 
     for (const base of pool) {
@@ -403,10 +404,19 @@ function buildFamilyColumns(
 
       let bestForBase = { c1: maxC1, topoff: null as PoolMember | null, c2: 0, total: maxC1 * base.unitHeight };
       let bestIneligibleForBase: PoolMember | null = null;
+      // lb-engine-04 A1/A2: a candidate skipped ONLY because its own demand is used up (not
+      // because it doesn't exist, and not because it's below K) must be tracked separately from
+      // bestIneligibleForBase — otherwise the rationale falls through to "no other SKU on this
+      // footprint", which is false: there WAS another SKU, it's just already fully placed.
+      let sawExhaustedCandidateForBase = false;
 
       if (opts.maxSkusPerColumn >= 2) {
         for (const cand of pool) {
-          if (cand === base || cand.remaining <= 0) continue;
+          if (cand === base) continue;
+          if (cand.remaining <= 0) {
+            sawExhaustedCandidateForBase = true;
+            continue;
+          }
 
           // K-filter BEFORE the search, not after: an ineligible candidate is never optimized
           // over for placement (it could otherwise win the filled-height search and produce a
@@ -434,13 +444,21 @@ function buildFamilyColumns(
       }
 
       if (!winner || bestForBase.total > winner.total) {
-        winner = { base, c1: bestForBase.c1, topoff: bestForBase.topoff, c2: bestForBase.c2, total: bestForBase.total, bestIneligible: bestIneligibleForBase };
+        winner = {
+          base,
+          c1: bestForBase.c1,
+          topoff: bestForBase.topoff,
+          c2: bestForBase.c2,
+          total: bestForBase.total,
+          bestIneligible: bestIneligibleForBase,
+          sawExhaustedCandidate: sawExhaustedCandidateForBase,
+        };
       }
     }
 
     // winner is guaranteed: pool.some(remaining>0) held at loop entry, and every pooled member
     // was pre-filtered so heightCount>=1 && weightCap>=1, so at least one base yields maxC1>=1.
-    const { base, c1, topoff, c2, bestIneligible } = winner as NonNullable<typeof winner>;
+    const { base, c1, topoff, c2, bestIneligible, sawExhaustedCandidate } = winner as NonNullable<typeof winner>;
     base.remaining -= c1;
     const pureFilled = c1 * base.unitHeight;
     const layers: ColumnPlan["layers"] = [{ sku: base.sku, unitHeight: base.unitHeight, count: c1 }];
@@ -453,18 +471,39 @@ function buildFamilyColumns(
       layers.push({ sku: topoff.sku, unitHeight: topoff.unitHeight, count: c2 });
       totalHeight += topoffFilled;
       const gap = dims.height - totalHeight;
-      const tail =
-        gap > EPS
-          ? `${fmt(totalHeight)}" of ${fmt(dims.height)}", ${fmt(gap)}" left`
-          : `${fmt(totalHeight)}" exact`;
-      rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", topped off with ${c2} × ${fmt(topoff.unitHeight)}" = ${fmt(topoffFilled)}" — ${tail}`;
+
+      // lb-engine-04 A3: at equal thickness, "topped off with" is the wrong verb — this isn't a
+      // smaller piece filling a residual gap, it's another label at the same thickness. Name both
+      // SKUs and, when the whole family's demand is now used up (checked AFTER both decrements
+      // above — a residual gap here doesn't necessarily mean exhaustion, e.g. two same-height SKUs
+      // whose combined max simply doesn't divide dims.height evenly, with plenty of supply left for
+      // future columns), say so instead of reporting a bare leftover gap.
+      if (approxEq(topoff.unitHeight, base.unitHeight)) {
+        const allExhausted = pool.every((p) => p.remaining <= 0);
+        const tail = gap <= EPS ? "exact" : allExhausted ? "all available pieces placed" : `${fmt(gap)}" left`;
+        rationale = `${c1} × ${fmt(base.unitHeight)}" (${base.sku.name}) + ${c2} × ${fmt(topoff.unitHeight)}" (${topoff.sku.name}) = ${fmt(totalHeight)}" — ${tail}`;
+      } else {
+        const tail =
+          gap > EPS
+            ? `${fmt(totalHeight)}" of ${fmt(dims.height)}", ${fmt(gap)}" left`
+            : `${fmt(totalHeight)}" exact`;
+        rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", topped off with ${c2} × ${fmt(topoff.unitHeight)}" = ${fmt(topoffFilled)}" — ${tail}`;
+      }
     } else {
       const gap = dims.height - pureFilled;
       if (gap <= EPS) {
         rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}" exact`;
       } else if (bestIneligible) {
+        // Below K (A2 precedence #1): an actionable tuning signal, checked ahead of exhaustion.
         rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", ${fmt(gap)}" left — best top-off ${fmt(bestIneligible.unitHeight)}"/piece, below K of ${fmt(K)}"`;
+      } else if (sawExhaustedCandidate) {
+        // Demand exhausted (A2 precedence #2, NEW): a footprint-mate exists but all of ITS demand
+        // is already placed — "no other SKU on this footprint" would be false here. Deliberately
+        // drops the "c1 x height = filled" prefix the other cases carry, matching the prompt's
+        // given wording exactly; a future prompt should not "fix" this back to the longer form.
+        rationale = `all available pieces placed — ${fmt(gap)}" open, no remaining demand for this footprint`;
       } else {
+        // No footprint-mate at all (A2 precedence #3): a genuine single-member family.
         rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", ${fmt(gap)}" left — no other SKU on this footprint`;
       }
     }
@@ -912,6 +951,42 @@ export function pack(cart: CartLine[], skus: PackSku[], dims: Dimensions, option
     totalUnits: trailers.reduce((s, t) => s + t.totalUnits, 0),
     totalStacks: trailers.reduce((s, t) => s + t.totalStacks, 0),
     mixedStacks: trailers.reduce((s, t) => s + t.mixedStacks, 0),
+  };
+}
+
+// --- planMetrics() ---
+// lb-engine-04 Part B: the numbers the UI will show and the regression ratchet asserts against.
+// Pure — reads only what pack() already produced plus the trailer dims used to size it.
+
+export interface PlanMetrics {
+  trailerCount: number;
+  rowCount: number;
+  usedLength: number; // summed across trailers
+  meanHeightUtilization: number; // mean column totalHeight / dims.height, across all columns
+  meanWidthUtilization: number; // mean row rowWidthUsed / dims.width, across all rows
+  wastedFloorArea: number; // summed across rows
+  mixedStacks: number;
+  balancePieces: number; // total pieces left in balance
+}
+
+export function planMetrics(plan: PackPlan, dims: Dimensions): PlanMetrics {
+  const rows = plan.trailers.flatMap((t) => t.rows);
+  const columns = rows.flatMap((r) => r.columns);
+
+  const meanHeightUtilization =
+    columns.length > 0 ? columns.reduce((s, c) => s + c.totalHeight / dims.height, 0) / columns.length : 0;
+  const meanWidthUtilization =
+    rows.length > 0 ? rows.reduce((s, r) => s + r.rowWidthUsed / dims.width, 0) / rows.length : 0;
+
+  return {
+    trailerCount: plan.trailers.length,
+    rowCount: rows.length,
+    usedLength: plan.trailers.reduce((s, t) => s + t.usedLength, 0),
+    meanHeightUtilization,
+    meanWidthUtilization,
+    wastedFloorArea: rows.reduce((s, r) => s + r.wastedFloorArea, 0),
+    mixedStacks: plan.mixedStacks,
+    balancePieces: plan.balance.reduce((s, b) => s + b.remaining, 0),
   };
 }
 
