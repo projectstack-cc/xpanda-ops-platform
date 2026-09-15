@@ -8,10 +8,20 @@
 // equivalent: select a column, choose target, confirm) and renders what evaluateGuards()/
 // validateForApply() returns. No API routes, no D1, no persistence — Apply hands the finished
 // PackPlan back to LoadPlanView, which holds it in memory; saved loads are lb-ui-04.
+//
+// lb-ui-07: manual/custom load building. Every operation above REDISTRIBUTES pieces pack() already
+// placed; addRow/addColumn/addLayer/setLayerCount/removeRow (loadEditor.ts) CREATE placement pack()
+// never chose to make. Surfaced here as one "Edit trailer N" modal per trailer (TrailerEditModal
+// below, opened from TrailerDiagram's existing headerAction slot next to Dissolve) rather than new
+// per-row/per-column affordances inside TrailerDiagram.tsx itself — that file is outside this
+// prompt's fence, so every new control lives in this file instead, matching legacy's own per-trailer
+// editor box (load-builder.html:2335-2580) in shape if not in chrome (a Modal, this codebase's one
+// reusable primitive, rather than an inline box). A new "Unassigned pieces" panel reuses
+// planForApply()'s existing balance+holding merge directly — no fourth bucket invented.
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Undo2, Rows3, XCircle, Check, PackageMinus, Shuffle } from "lucide-react";
+import { Undo2, Rows3, XCircle, Check, PackageMinus, Shuffle, Plus, Trash2, PackageX } from "lucide-react";
 import type { CartLine, Dimensions, PackOptions, PackPlan, PackSku } from "@/lib/packEngine";
 import {
   createEditorState,
@@ -23,6 +33,11 @@ import {
   canDrop,
   evaluateGuards,
   planForApply,
+  addRow,
+  addColumn,
+  addLayer,
+  setLayerCount,
+  removeRow,
   type EditorState,
   type ColumnRef,
 } from "@/lib/loadEditor";
@@ -57,6 +72,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showBlockedHint, setShowBlockedHint] = useState(false);
   const [dissolveTi, setDissolveTi] = useState<number | null>(null);
+  const [editTi, setEditTi] = useState<number | null>(null);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -80,6 +96,14 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
       }),
     [state.holding]
   );
+
+  // lb-ui-07: "unassigned" = plan.balance merged with holding, by SKU — the exact same computation
+  // planForApply already does to feed validateForApply's conservation check (not a fourth bucket:
+  // pieces from the original cart/job-pull that would NOT ship if Apply ran right now, whether
+  // because pack() never placed them or a planner pulled them into holding).
+  const unassignedBalance = useMemo(() => planForApply(state).balance, [state]);
+  const unassignedTotal = useMemo(() => unassignedBalance.reduce((s, b) => s + b.remaining, 0), [unassignedBalance]);
+  const skuNameById = useMemo(() => new Map(state.skus.map((s) => [s.id, s.name])), [state.skus]);
 
   const selectedDetail: SelectedColumnDetail | null = useMemo(() => {
     if (!selectedColumn) return null;
@@ -216,6 +240,31 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
     setDissolveTi(null);
   }
 
+  function handleAddRow(skuId: string, count: number) {
+    if (editTi === null) return;
+    commit(addRow(state, editTi, skuId, count));
+  }
+
+  function handleAddColumn(rowIndex: number, skuId: string, count: number) {
+    if (editTi === null) return;
+    commit(addColumn(state, editTi, rowIndex, skuId, count));
+  }
+
+  function handleAddLayer(rowIndex: number, columnIndex: number, skuId: string, count: number) {
+    if (editTi === null) return;
+    commit(addLayer(state, { t: editTi, r: rowIndex, c: columnIndex }, skuId, count));
+  }
+
+  function handleSetLayerCount(rowIndex: number, columnIndex: number, layerIndex: number, count: number) {
+    if (editTi === null) return;
+    commit(setLayerCount(state, { t: editTi, r: rowIndex, c: columnIndex }, layerIndex, count));
+  }
+
+  function handleRemoveRow(rowIndex: number) {
+    if (editTi === null) return;
+    commit(removeRow(state, editTi, rowIndex));
+  }
+
   function handleApply() {
     if (!guards.canApply) {
       setShowBlockedHint(true);
@@ -309,14 +358,24 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                 targetPickerActive={targetPicker !== null}
                 onChooseTargetRow={(r) => handleChooseTarget(t, r)}
                 headerAction={
-                  <button
-                    type="button"
-                    onClick={() => setDissolveTi(t)}
-                    className="min-h-[28px] px-2.5 rounded-md text-[12px] font-medium border border-[var(--border)] text-text flex items-center gap-1 cursor-pointer transition-colors hover:bg-[var(--ghost-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-                  >
-                    <Shuffle className="w-3 h-3" aria-hidden="true" />
-                    Dissolve…
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditTi(t)}
+                      className="min-h-[28px] px-2.5 rounded-md text-[12px] font-medium border border-[var(--border)] text-text flex items-center gap-1 cursor-pointer transition-colors hover:bg-[var(--ghost-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                    >
+                      <Plus className="w-3 h-3" aria-hidden="true" />
+                      Edit…
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDissolveTi(t)}
+                      className="min-h-[28px] px-2.5 rounded-md text-[12px] font-medium border border-[var(--border)] text-text flex items-center gap-1 cursor-pointer transition-colors hover:bg-[var(--ghost-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                    >
+                      <Shuffle className="w-3 h-3" aria-hidden="true" />
+                      Dissolve…
+                    </button>
+                  </div>
                 }
               />
             ))
@@ -367,8 +426,40 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
             onDragOverHolding={() => setHoldingDropActive(true)}
             onDropOnHolding={handleDropOnHolding}
           />
+
+          {unassignedBalance.length > 0 && (
+            <div className="rounded-lg border px-3 py-2 flex items-start gap-2 bg-[var(--warn-bg)] border-[var(--warn-border)]">
+              <PackageX className="w-4 h-4 shrink-0 mt-0.5 text-[var(--warn-text)]" aria-hidden="true" />
+              <div className="text-sm text-[var(--warn-text)] min-w-0">
+                <p className="font-semibold">
+                  {unassignedTotal} unassigned piece{unassignedTotal === 1 ? "" : "s"} — won&apos;t ship if you apply now
+                </p>
+                <ul className="mt-1 space-y-0.5 font-mono text-[13px] tabular-nums">
+                  {unassignedBalance.map((b) => (
+                    <li key={b.skuId}>
+                      {b.remaining} × {skuNameById.get(b.skuId) ?? b.skuId}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {editTi !== null && (
+        <TrailerEditModal
+          trailerIndex={editTi}
+          trailer={state.plan.trailers[editTi]}
+          skus={state.skus}
+          onAddRow={handleAddRow}
+          onAddColumn={handleAddColumn}
+          onAddLayer={handleAddLayer}
+          onSetLayerCount={handleSetLayerCount}
+          onRemoveRow={handleRemoveRow}
+          onClose={() => setEditTi(null)}
+        />
+      )}
 
       {dissolveTi !== null && (
         <DissolvePreview
@@ -405,5 +496,225 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
         </div>
       </Modal>
     </div>
+  );
+}
+
+// --- lb-ui-07: manual/custom load building UI, local to this file (TrailerDiagram.tsx is outside
+// this prompt's scope fence, so no per-row/per-column affordance can live there — everything below
+// is reached through the single "Edit…" entry point already added to headerAction above). ---
+
+interface AddPieceFormProps {
+  skus: PackSku[];
+  buttonLabel: string;
+  onSubmit: (skuId: string, count: number) => void;
+}
+
+/** SKU + count picker, shared by every "add" sub-form below (new row, new column, new layer).
+ * Stays mounted after submit (Design Decision: the planner adds several pieces in one modal
+ * session, matching legacy's own editor staying open across repeat adds) rather than closing. */
+function AddPieceForm({ skus, buttonLabel, onSubmit }: AddPieceFormProps) {
+  const [skuId, setSkuId] = useState(skus[0]?.id ?? "");
+  const [count, setCount] = useState("1");
+
+  if (skus.length === 0) {
+    return <p className="text-[12px] text-muted">No SKUs loaded to add from.</p>;
+  }
+
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <label className="text-[12px] font-medium text-muted">
+        SKU
+        <select
+          value={skuId}
+          onChange={(e) => setSkuId(e.target.value)}
+          className="block mt-0.5 h-9 pl-2 pr-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-[13px] cursor-pointer"
+        >
+          {skus.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="text-[12px] font-medium text-muted">
+        Count
+        <input
+          type="number"
+          min={1}
+          value={count}
+          onChange={(e) => setCount(e.target.value)}
+          className="block mt-0.5 h-9 w-16 px-2 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-[13px] font-mono tabular-nums"
+        />
+      </label>
+      <button
+        type="button"
+        onClick={() => {
+          const n = Math.max(1, Math.floor(Number(count)) || 1);
+          if (skuId) onSubmit(skuId, n);
+        }}
+        className="min-h-[36px] px-3 rounded-md text-[12px] font-semibold border border-[var(--brand)] text-[var(--brand)] cursor-pointer hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+      >
+        {buttonLabel}
+      </button>
+    </div>
+  );
+}
+
+interface LayerCountInputProps {
+  value: number;
+  onCommit: (next: number) => void;
+}
+
+/** A free-typed count field (legacy's own load-builder.html:2462) that commits on blur/Enter rather
+ * than on every keystroke — typing "25" should produce one undo step, not two. */
+function LayerCountInput({ value, onCommit }: LayerCountInputProps) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+
+  function commit() {
+    const n = Math.max(0, Math.floor(Number(text)) || 0);
+    if (n !== value) onCommit(n);
+    else setText(String(value));
+  }
+
+  return (
+    <input
+      type="number"
+      min={0}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className="h-8 w-16 px-2 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-[13px] font-mono tabular-nums"
+    />
+  );
+}
+
+interface TrailerEditModalProps {
+  trailerIndex: number;
+  trailer: PackPlan["trailers"][number];
+  skus: PackSku[];
+  onAddRow: (skuId: string, count: number) => void;
+  onAddColumn: (rowIndex: number, skuId: string, count: number) => void;
+  onAddLayer: (rowIndex: number, columnIndex: number, skuId: string, count: number) => void;
+  onSetLayerCount: (rowIndex: number, columnIndex: number, layerIndex: number, count: number) => void;
+  onRemoveRow: (rowIndex: number) => void;
+  onClose: () => void;
+}
+
+/** One trailer's manual editor: pick a row (existing, or "+ New row"); within an existing row, pick
+ * a column (existing, or "+ New column"); within an existing column, edit/remove its layers or add
+ * a new one. Covers addRow/addColumn/addLayer/setLayerCount/removeRow in a single modal, matching
+ * legacy's own per-trailer editor box in shape (load-builder.html:2335-2580) — implemented as a
+ * Modal since that's this codebase's one reusable primitive, not an inline box.
+ * selectedRow/selectedCol reset to "new" whenever a row disappears out from under them (removeRow)
+ * — everywhere else the modal deliberately stays exactly where the planner left it after a
+ * mutation, so adding several pieces in a row doesn't require re-navigating the pickers each time. */
+function TrailerEditModal({ trailerIndex, trailer, skus, onAddRow, onAddColumn, onAddLayer, onSetLayerCount, onRemoveRow, onClose }: TrailerEditModalProps) {
+  const [selectedRow, setSelectedRow] = useState<number | "new">(trailer.rows.length > 0 ? 0 : "new");
+  const [selectedCol, setSelectedCol] = useState<number | "new">("new");
+
+  const row = selectedRow === "new" ? null : trailer.rows[selectedRow] ?? null;
+  // The row the planner was looking at may have been removed elsewhere (or by this modal's own
+  // Delete row button) — fall back to "new" rather than rendering a stale/undefined row.
+  useEffect(() => {
+    if (selectedRow !== "new" && !trailer.rows[selectedRow]) setSelectedRow("new");
+  }, [trailer, selectedRow]);
+
+  const column = row && selectedCol !== "new" ? row.columns[selectedCol] ?? null : null;
+  // Same staleness risk one level down: setLayerCount(..., 0) on a column's last layer splices the
+  // whole column out of row.columns (loadEditor.selfcheck.ts #18) — without this, selectedCol could
+  // silently point at a DIFFERENT column after indices shift, and the next add/setLayerCount call
+  // would hit the wrong target instead of just rendering nothing.
+  useEffect(() => {
+    if (row && selectedCol !== "new" && !row.columns[selectedCol]) setSelectedCol("new");
+  }, [row, selectedCol]);
+
+  return (
+    <Modal isOpen onClose={onClose} title={`Edit trailer ${trailerIndex + 1}`} size="lg">
+      <div className="space-y-3">
+        <label className="block text-xs font-semibold text-text">
+          Row
+          <select
+            value={String(selectedRow)}
+            onChange={(e) => {
+              setSelectedRow(e.target.value === "new" ? "new" : Number(e.target.value));
+              setSelectedCol("new");
+            }}
+            className="block mt-1 h-9 pl-2 pr-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-[13px] cursor-pointer"
+          >
+            {trailer.rows.map((r, i) => (
+              <option key={i} value={i}>
+                Row {i + 1} ({r.columns.length} column{r.columns.length === 1 ? "" : "s"})
+              </option>
+            ))}
+            <option value="new">+ New row</option>
+          </select>
+        </label>
+
+        {selectedRow === "new" ? (
+          <AddPieceForm skus={skus} buttonLabel="Add row" onSubmit={(skuId, count) => onAddRow(skuId, count)} />
+        ) : row ? (
+          <>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => onRemoveRow(selectedRow)}
+                className="min-h-[32px] px-2.5 rounded-md text-[12px] font-medium border border-[var(--border)] text-[var(--danger-text)] flex items-center gap-1 cursor-pointer hover:bg-[color-mix(in_srgb,var(--danger-bg)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+              >
+                <Trash2 className="w-3 h-3" aria-hidden="true" />
+                Delete row (moves its columns to holding)
+              </button>
+            </div>
+
+            <label className="block text-xs font-semibold text-text">
+              Column
+              <select
+                value={String(selectedCol)}
+                onChange={(e) => setSelectedCol(e.target.value === "new" ? "new" : Number(e.target.value))}
+                className="block mt-1 h-9 pl-2 pr-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-[13px] cursor-pointer"
+              >
+                {row.columns.map((c, i) => (
+                  <option key={i} value={i}>
+                    Col {i + 1} — {c.layers.map((l) => l.skuName).join(" + ")}
+                  </option>
+                ))}
+                <option value="new">+ New column</option>
+              </select>
+            </label>
+
+            {selectedCol === "new" ? (
+              <AddPieceForm skus={skus} buttonLabel="Add column" onSubmit={(skuId, count) => onAddColumn(selectedRow, skuId, count)} />
+            ) : column ? (
+              <>
+                <ul className="space-y-1.5">
+                  {column.layers.map((layer, li) => (
+                    <li key={li} className="flex items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--ghost-bg)] px-2.5 py-1.5 text-sm">
+                      <span className="min-w-0 truncate text-text">
+                        {layer.skuName} <span className="text-muted font-mono tabular-nums text-[12px]">({layer.unitHeight}&quot;)</span>
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <LayerCountInput value={layer.count} onCommit={(n) => onSetLayerCount(selectedRow, selectedCol, li, n)} />
+                        <button
+                          type="button"
+                          onClick={() => onSetLayerCount(selectedRow, selectedCol, li, 0)}
+                          aria-label={`Remove ${layer.skuName} layer`}
+                          className="min-h-[32px] min-w-[32px] rounded-md border border-[var(--border)] text-[var(--danger-text)] cursor-pointer hover:bg-[color-mix(in_srgb,var(--danger-bg)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <AddPieceForm skus={skus} buttonLabel="Add layer" onSubmit={(skuId, count) => onAddLayer(selectedRow, selectedCol, skuId, count)} />
+              </>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+    </Modal>
   );
 }

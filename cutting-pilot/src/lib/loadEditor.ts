@@ -14,12 +14,25 @@
 //
 // Conservation model — three distinct, non-overlapping buckets (see loadEditor.selfcheck.ts #5):
 // pieces on trailers (state.plan.trailers) + pieces in holding (state.holding) + pieces never
-// placed at all (state.plan.balance) must sum to cart qty, at every step. state.plan.balance is
-// NEVER touched by these operations — it is the original pack() leftover, untouched by editing.
-// validatePlan()'s own `conservation` rule only knows about trailers + plan.balance, so it would
-// spuriously fire the moment a column sits in holding; validateForApply() below builds a MERGED
-// balance (plan.balance + holding, by SKU) for that one call only, without mutating
-// state.plan.balance itself.
+// placed at all (state.plan.balance) must sum to cart qty, at every step. validatePlan()'s own
+// `conservation` rule only knows about trailers + plan.balance, so it would spuriously fire the
+// moment a column sits in holding; validateForApply() below builds a MERGED balance (plan.balance +
+// holding, by SKU) for that one call only, without mutating state.plan.balance itself.
+//
+// lb-ui-02/03's operations (moveColumn, pullToHolding, placeFromHolding, compactLoad, dissolve.ts)
+// never touch state.plan.balance — they only ever RELOCATE pieces the auto-pack already placed
+// somewhere, so total placed count never changes and balance is correctly left alone.
+//
+// lb-ui-07's operations (addRow/addColumn/addLayer/setLayerCount below) are different in kind: they
+// CREATE placement the auto-pack never chose to make, drawing on previously-unplaced demand. They
+// DO adjust plan.balance — adjustBalance() below moves exactly `count` units from "unplaced" to
+// "placed" (or back, for a count decrease) for the SKU involved. If a planner adds more of a SKU
+// than plan.balance actually has remaining, the operation still completes (Part C's "don't
+// pre-validate, let validateForApply catch it" contract, same as moveColumn's own width/length
+// behavior) — balance clamps at zero rather than going negative, so the excess surfaces as a real
+// `conservation` violation at Apply time instead of a nonsensical negative "remaining" figure.
+// removeRow is relocation-only (its columns move to holding, exactly like pullToHolding) and does
+// NOT touch balance, for the same reason the pre-existing relocation ops don't.
 //
 // Derived-geometry recompute (recomputeRow/recomputeTrailer/recomputePlan below) re-implements the
 // same math as packEngine.ts's private assembleRowFrom/buildTrailer. Those functions aren't
@@ -32,6 +45,7 @@ import type {
   PackTrailer,
   PackRow,
   PackColumn,
+  PackLayer,
   Dimensions,
   PackOptions,
   CartLine,
@@ -39,7 +53,12 @@ import type {
   PackBalance,
   PackViolation,
 } from "./packEngine";
-import { validatePlan } from "./packEngine";
+import { validatePlan, skuOrientations } from "./packEngine";
+// Reuses lb-ui-05's reproduction of packEngine.ts's private, unexported colorForSku rather than
+// duplicating the palette/hash a third time — packEngine.ts is closed/ratchet-guarded and exports
+// neither. See jobPull.ts's own header note; BACKLOG.md's existing "export colorForSku instead of
+// duplicating it" follow-up now has two consumers, not one.
+import { colorForSkuId } from "./jobPull";
 
 export interface EditorState {
   plan: PackPlan;
@@ -93,6 +112,10 @@ const EPS = 1e-6;
 
 function fmtInches(n: number): string {
   return String(Math.round(n * 100) / 100);
+}
+
+function approxEq(a: number, b: number): boolean {
+  return Math.abs(a - b) <= EPS;
 }
 
 // --- cloning (deep enough that no mutation below ever leaks back into the caller's plan) ---
@@ -416,4 +439,222 @@ export function evaluateGuards(state: EditorState): EditorGuardState {
     overflowingRows: findOverflowingRows(state),
     canApply: blocking.length === 0 && bug.length === 0 && otherViolations.length === 0,
   };
+}
+
+// --- lb-ui-07: manual/custom load building — a new operation family, additive alongside the
+// operations above. Every existing operation redistributes pieces already placed by pack(); these
+// four CREATE placement pack() never chose to make, drawing on previously-unplaced demand
+// (state.plan.balance) via adjustBalance() below — see this file's header comment. ---
+
+/** Moves `delta` units of a SKU between "placed" and "unplaced" in plan.balance (in place on the
+ * given array reference's shape, but always returns a new array — caller assigns it to a cloned
+ * plan). Positive delta = pieces returning to balance (a count decrease); negative delta = pieces
+ * leaving balance to become newly placed (a count increase). Clamps at zero rather than going
+ * negative: over-adding beyond what's actually remaining surfaces as a real `conservation`
+ * violation at Apply time (see validateForApply), not a nonsensical negative "remaining" figure —
+ * the same "operation doesn't pre-validate, validateForApply catches it" contract row-width and
+ * max-skus-per-column already rely on for moveColumn/addLayer. */
+function adjustBalance(balance: PackBalance, skuId: string, delta: number): PackBalance {
+  const next = balance.map((b) => ({ ...b }));
+  const entry = next.find((b) => b.skuId === skuId);
+  if (entry) {
+    entry.remaining = Math.max(0, entry.remaining + delta);
+  } else if (delta > 0) {
+    next.push({ skuId, remaining: delta });
+  }
+  // Match pack()'s own convention (packEngine.ts's balance construction filters qty > 0) — a
+  // zero-remaining entry would otherwise leak into LoadPlanView's "Carried to next trailer" panel,
+  // which renders plan.balance directly, as a spurious "0 x SKU" row.
+  return next.filter((b) => b.remaining > 0);
+}
+
+/** Builds a brand-new single-SKU, single-layer column from scratch, always in the SKU's identity
+ * ("flat") orientation — skuOrientations(sku, options)[0] is guaranteed to be that orientation
+ * regardless of rotation policy (allPermutations lists identity first; the no-rotation branch
+ * returns exactly identity). This matches legacy's own manual-add behavior exactly: a manually
+ * added row/column always uses the SKU's native L/W/H, never an auto-chosen rotation
+ * (load-builder.html:2559-2569 — colWidth/unitHeight always read straight off the SKU, no
+ * orientation search). posY is a placeholder; recomputeRow (invoked via recomputePlan below) sets
+ * it for real, the same as every other operation in this file. */
+function buildColumn(sku: PackSku, count: number, options: PackOptions): PackColumn {
+  const orientation = skuOrientations(sku, options)[0];
+  const layer: PackLayer = {
+    skuId: sku.id,
+    skuName: sku.name,
+    skuCode: sku.sku,
+    color: colorForSkuId(sku.id),
+    unitHeight: orientation.height,
+    count,
+    orientation,
+  };
+  return {
+    posY: 0,
+    colWidth: orientation.width,
+    colLength: orientation.length,
+    totalHeight: orientation.height * count,
+    totalWeight: sku.weight * count,
+    stackCount: count,
+    layers: [layer],
+    mixed: false,
+    rationale: `Manually added — ${count} × ${fmtInches(orientation.height)}" = ${fmtInches(orientation.height * count)}"`,
+  };
+}
+
+/** Derives a column's rationale from its ORIGINAL text (the part before the first manually-added
+ * layer) plus a description of every layer beyond index 0 — regenerated fresh on every addLayer /
+ * setLayerCount call rather than appended to. Appending would grow the string without bound across
+ * repeated edits and never shrink back when a layer is removed; deriving it fresh from the current
+ * layers list is O(layer count), and reverting to zero extra layers reverts the text exactly, which
+ * is what loadEditor.selfcheck.ts #18's "round-trips to the pre-addLayer state" actually needs. */
+const MANUAL_LAYERS_MARKER = " + manually added:";
+function baseRationale(column: PackColumn): string {
+  const idx = column.rationale.indexOf(MANUAL_LAYERS_MARKER);
+  return idx >= 0 ? column.rationale.slice(0, idx) : column.rationale;
+}
+function describeManualLayers(column: PackColumn): string {
+  const extras = column.layers.slice(1);
+  const base = baseRationale(column);
+  if (extras.length === 0) return base;
+  const parts = extras.map((l) => `${l.count} × ${fmtInches(l.unitHeight)}" (${l.skuName})`);
+  return `${base}${MANUAL_LAYERS_MARKER} ${parts.join(", ")}`;
+}
+
+/** Appends a brand-new row (one new column, one SKU) to the end of an existing trailer's rows —
+ * matching legacy's own "+ ADD ROW" (always appended, never inserted mid-stack). No-op (returns
+ * `state` unchanged) if the trailer doesn't exist, the SKU isn't in state.skus, or count <= 0 — the
+ * same defensive-no-op contract every existing operation in this file already follows. Does not
+ * pre-validate width/length/height/balance sufficiency; validateForApply is the sole gate, same
+ * contract moveColumn already has for row-width. */
+export function addRow(state: EditorState, trailerIndex: number, skuId: string, count: number): EditorState {
+  const sku = state.skus.find((s) => s.id === skuId);
+  const trailer = state.plan.trailers[trailerIndex];
+  if (!sku || !trailer || count <= 0) return state;
+
+  const plan = clonePlan(state.plan);
+  const column = buildColumn(sku, count, state.options);
+  const row: PackRow = { posFromFront: 0, rowLength: 0, rowWidthUsed: 0, wastedFloorArea: 0, columns: [column], totalUnits: 0, totalWeight: 0 };
+  plan.trailers[trailerIndex].rows.push(row);
+  plan.balance = adjustBalance(plan.balance, skuId, -count);
+
+  recomputePlan(plan, state.dims, state.options);
+  return { ...state, plan, history: withHistory(state) };
+}
+
+/** Appends a brand-new column (one SKU) to the end of an existing row — matching legacy's own
+ * "+ COL" (always appended within the row). Same no-pre-validate contract as addRow: a column wide
+ * enough to overflow row-width, or deep enough to overflow trailer-length via the row's recomputed
+ * rowLength, still gets created; validateForApply flags it afterward, same as a forced moveColumn. */
+export function addColumn(state: EditorState, trailerIndex: number, rowIndex: number, skuId: string, count: number): EditorState {
+  const sku = state.skus.find((s) => s.id === skuId);
+  const row = state.plan.trailers[trailerIndex]?.rows[rowIndex];
+  if (!sku || !row || count <= 0) return state;
+
+  const plan = clonePlan(state.plan);
+  const column = buildColumn(sku, count, state.options);
+  plan.trailers[trailerIndex].rows[rowIndex].columns.push(column);
+  plan.balance = adjustBalance(plan.balance, skuId, -count);
+
+  recomputePlan(plan, state.dims, state.options);
+  return { ...state, plan, history: withHistory(state) };
+}
+
+/** Adds a new layer to an EXISTING column — matching legacy's own "+ LAYER". Unlike a brand-new
+ * column, an added layer must share the column's already-fixed footprint (colLength/colWidth):
+ * validatePlan's `piece-fits-trailer` rule requires layer.orientation to match column geometry
+ * exactly. Searches the SKU's legal orientations for one matching this column's footprint; if none
+ * exists (an SKU that simply can't sit on this footprint in any legal orientation), falls back to
+ * the SKU's identity orientation rather than refusing the add — same no-pre-validate contract as
+ * addRow/addColumn/moveColumn. The mismatch then surfaces as a real `piece-fits-trailer` (and/or
+ * `sku-unplaceable`) violation at Apply time, not a blocked operation and not a silent no-op. */
+export function addLayer(state: EditorState, ref: ColumnRef, skuId: string, count: number): EditorState {
+  const sku = state.skus.find((s) => s.id === skuId);
+  const existingColumn = getColumn(state.plan, ref);
+  if (!sku || !existingColumn || count <= 0) return state;
+
+  const plan = clonePlan(state.plan);
+  const column = getColumn(plan, ref)!;
+  const orientations = skuOrientations(sku, state.options);
+  const matched = orientations.find((o) => approxEq(o.length, column.colLength) && approxEq(o.width, column.colWidth));
+  const orientation = matched ?? orientations[0];
+  const layer: PackLayer = {
+    skuId: sku.id,
+    skuName: sku.name,
+    skuCode: sku.sku,
+    color: colorForSkuId(sku.id),
+    unitHeight: orientation.height,
+    count,
+    orientation,
+  };
+  column.layers.push(layer);
+  column.totalHeight += orientation.height * count;
+  column.totalWeight += sku.weight * count;
+  column.stackCount += count;
+  column.mixed = new Set(column.layers.map((l) => l.skuId)).size > 1;
+  column.rationale = describeManualLayers(column);
+  plan.balance = adjustBalance(plan.balance, skuId, -count);
+
+  recomputePlan(plan, state.dims, state.options);
+  return { ...state, plan, history: withHistory(state) };
+}
+
+/** Sets a layer's count directly (legacy's own free-typed count field, load-builder.html:2462) —
+ * also the removal path: count <= 0 drops the layer entirely (legacy's separate "×" button is the
+ * same operation at count 0, unified here rather than two code paths for one outcome). If removing
+ * the layer empties the column, the column itself is dropped from its row — an empty column has no
+ * footprint left to render or validate, the same fate `compactLoad` gives an emptied row. Adjusts
+ * plan.balance by exactly the count delta in either direction (see adjustBalance's own doc
+ * comment) — a decrease genuinely returns pieces to unplaced demand, an increase draws on it. */
+export function setLayerCount(state: EditorState, ref: ColumnRef, layerIndex: number, count: number): EditorState {
+  const existingColumn = getColumn(state.plan, ref);
+  const existingLayer = existingColumn?.layers[layerIndex];
+  if (!existingColumn || !existingLayer) return state;
+  const priorCount = existingLayer.count;
+  const nextCount = Math.max(0, Math.floor(count));
+  const delta = nextCount - priorCount;
+  if (delta === 0) return state;
+
+  const plan = clonePlan(state.plan);
+  const column = getColumn(plan, ref)!;
+  if (nextCount === 0) {
+    column.layers.splice(layerIndex, 1);
+  } else {
+    column.layers[layerIndex].count = nextCount;
+  }
+  column.totalHeight = column.layers.reduce((s, l) => s + l.unitHeight * l.count, 0);
+  column.totalWeight = column.layers.reduce((s, l) => {
+    const sku = state.skus.find((x) => x.id === l.skuId);
+    return s + (sku ? sku.weight * l.count : 0);
+  }, 0);
+  column.stackCount = column.layers.reduce((s, l) => s + l.count, 0);
+  column.mixed = new Set(column.layers.map((l) => l.skuId)).size > 1;
+  if (column.layers.length > 0) column.rationale = describeManualLayers(column);
+  plan.balance = adjustBalance(plan.balance, existingLayer.skuId, -delta);
+
+  if (column.layers.length === 0) {
+    const row = plan.trailers[ref.t].rows[ref.r];
+    const idx = row.columns.indexOf(column);
+    if (idx >= 0) row.columns.splice(idx, 1);
+  }
+
+  recomputePlan(plan, state.dims, state.options);
+  return { ...state, plan, history: withHistory(state) };
+}
+
+/** Removes a row entirely — its columns move to holding first (lb-ui-02's "nothing vanishes
+ * silently" pattern, same as pullToHolding), never hard-deleted. Purely relocation, like
+ * pullToHolding/moveColumn: does not touch plan.balance, since total placed-or-held count is
+ * unchanged, only where it sits. Legacy's own "DEL ROW" hard-deletes with no such safety net
+ * (load-builder.html:2403-2406) — this is a deliberate improvement, not a like-for-like port,
+ * consistent with lb-ui-02's own CHANGELOG precedent for the same divergence on column delete. */
+export function removeRow(state: EditorState, trailerIndex: number, rowIndex: number): EditorState {
+  const row = state.plan.trailers[trailerIndex]?.rows[rowIndex];
+  if (!row) return state;
+
+  const plan = clonePlan(state.plan);
+  const removedRow = plan.trailers[trailerIndex].rows[rowIndex];
+  const movedToHolding = removedRow.columns.map(cloneColumn);
+  plan.trailers[trailerIndex].rows.splice(rowIndex, 1);
+
+  recomputePlan(plan, state.dims, state.options);
+  return { ...state, plan, holding: [...state.holding, ...movedToHolding], history: withHistory(state) };
 }

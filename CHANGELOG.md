@@ -1873,6 +1873,104 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-ui-07 — v2 Load Builder: manual/custom load building (add row/column/layer)
+  (react-component-agent §9b). Sprint step 3 of 7, `Prompts/sprint-load-builder-parity.md`.** New
+  operation family in `loadEditor.ts` — `addRow`, `addColumn`, `addLayer`, `setLayerCount`,
+  `removeRow` — reached via a single new "Edit…" button on `TrailerDiagram`'s existing
+  `headerAction` prop slot (already used for `lb-ui-03`'s "Dissolve…" button, so `TrailerDiagram.tsx`
+  itself needed no changes) opening a new local (non-exported) `TrailerEditModal` component defined
+  inside `CustomizeEditor.tsx` — both `TrailerDiagram.tsx` and `ColumnDetailPanel.tsx` are outside
+  this prompt's file fence, so all new Row→Column→Layer picker UI lives in `CustomizeEditor.tsx`
+  itself rather than a new file. Every operation reuses the exact same `recomputePlan`/
+  `validateForApply` path every pre-existing operation already runs through — no bespoke validation
+  was added, and `EditorGuards.tsx` needed zero changes: its existing generic `otherViolations`
+  banner already renders whatever new violation these operations can trigger.
+  **Balance/conservation architecture change (documented in `loadEditor.ts`'s own header comment):**
+  every operation through `lb-ui-03` (`moveColumn`, `pullToHolding`, `placeFromHolding`,
+  `compactLoad`, `dissolve.ts`) is relocation-only and never touches `plan.balance` — that was true
+  and stated as an invariant in those prompts' own comments. This prompt's four create-style
+  operations (`addRow`/`addColumn`/`addLayer`/`setLayerCount`) are architecturally different: they
+  draw real pieces out of unplaced cart demand, so they necessarily adjust `plan.balance` via a new
+  `adjustBalance(balance, skuId, delta)` helper (signed delta, clamps at zero, filters out
+  zero-remaining entries — matching `pack()`'s own convention so no spurious "0 × SKU" row leaks
+  into `LoadPlanView.tsx`'s existing balance panel). A future prompt reading only the old
+  "balance is never touched" sentence would reason wrongly about conservation — the updated header
+  comment states the split explicitly. `removeRow` stays relocation-only (moves both columns to
+  holding, matching `pullToHolding`'s own divergence from legacy's hard delete) — balance
+  provably untouched, asserted directly in a selfcheck.
+  **Step 0 finding — `validatePlan` is not missing a rule relative to legacy's bespoke Apply
+  guards, so no bespoke guard was added.** Legacy's manual editor (`load-builder.html`) has exactly
+  two Apply-time checks: stack-height (`:2530`, maps 1:1 onto `validatePlan`'s existing
+  `column-height` rule) and a coarse BDFT-vs-trailer-volume backstop (`:2548`, comparing total
+  placed board-feet against `dims.length × dims.width × dims.height`). `validatePlan` has no
+  same-named "BDFT" rule, but the check is implied by rules it already has: given `row-width`
+  (Σ colWidth ≤ width), `trailer-length` (Σ rowLength ≤ length), the `colLength ≤ rowLength`
+  companion, and `column-height` (≤ effectiveHeight), then
+  Σ(colWidth × colLength × totalHeight) ≤ width × length × effectiveHeight ≤ trailerBdft × 144 always
+  holds — legacy's BDFT check is strictly redundant given those four rules, not a missing
+  capability. Legacy's own check also uses the raw `dims.height`, not the runner-adjusted effective
+  height `lb-ui-06` exposed, so `validatePlan` is strictly *stronger* here. Worth noting separately:
+  legacy's manual editor has **no** row-width or trailer-length check of its own at all, which is
+  the actual reason it needs a coarse volumetric backstop — v2's per-rule geometric checks make that
+  backstop unnecessary rather than something to port.
+  **Unassigned-pieces tracker** — a new conditionally-rendered card in `CustomizeEditor.tsx` showing
+  every SKU with cart demand not yet placed on a trailer or sitting in holding. This is
+  deliberately **not** a fourth bucket: it's `planForApply(state).balance`, the same balance+holding
+  merge `validateForApply`'s own `conservation` rule already computes — asserted directly in a new
+  selfcheck rather than trusted by inspection. This is a deliberate divergence from legacy, not a
+  port: legacy computes `editorOriginalSkuCounts - editorSkuCounts` per trailer (`:2500`) and its
+  over-place check at `:2489` is advisory only (no `return` — legacy lets you Apply an over-placed
+  layout). v2 routes the same concept through the existing balance/holding machinery, so
+  over-adding beyond available demand becomes a hard `conservation` violation via the existing
+  `otherViolations` banner, not a silent overage.
+  **Orientation**: a brand-new column (`addRow`/`addColumn`) always uses
+  `skuOrientations(sku, options)[0]`, proven to always be the SKU's identity/"flat" orientation
+  regardless of rotation policy (from reading `allPermutations`'s construction and the no-rotation
+  branch) — matches legacy's own manual-add behavior exactly, which always reads the SKU's native
+  L×W×H and never auto-rotates (`load-builder.html:2559-2569`). `addLayer` onto an *existing* column
+  searches the SKU's legal orientations for one matching that column's already-fixed footprint,
+  falling back to identity if none matches — and deliberately does **not** pre-check the mismatch
+  case, the same "let `validateForApply` catch it" contract this codebase already has for
+  `moveColumn`'s row-width overflow; a dedicated selfcheck (#16) proves the mismatch is still added
+  and then correctly flagged as `piece-fits-trailer`, not silently refused. Column colors for new
+  layers reuse `jobPull.ts`'s `colorForSkuId` (a `lb-ui-05` duplicate of the engine's own private
+  `colorForSku`) rather than a third copy of the palette/hash — a new `loadEditor.ts → jobPull.ts`
+  dependency, and it makes the existing `BACKLOG.md` "export `colorForSku`" follow-up more valuable
+  now that two files depend on the duplicate.
+  **Rationale-string fix found during review**: `addLayer`'s first draft appended a fixed suffix to
+  `column.rationale` on every call, which would grow without bound across repeated edits and never
+  shrink back when a layer was later removed via `setLayerCount`. Replaced with
+  `describeManualLayers`, which regenerates the "manually added" portion fresh from the column's
+  current `layers` array (bounded by layer count, not edit count) on every `addLayer`/
+  `setLayerCount` call — reverting to zero extra layers now reverts the text exactly, matching what
+  `loadEditor.selfcheck.ts` #18 actually needs from a "round-trips to the pre-addLayer state" claim.
+  **`selectedCol` staleness fix found during review**: `TrailerEditModal` already resets
+  `selectedRow` to `"new"` when the selected row disappears, but had no equivalent guard for
+  `selectedCol` — `setLayerCount(..., 0)` on a column's last layer splices the whole column out of
+  `row.columns` (selfcheck #18), and without the guard, `selectedCol` could point at a *different*
+  column after indices shift while the picker still showed the old label, sending a subsequent
+  add/setLayerCount call to the wrong target. Added a matching `useEffect` guard.
+  **Verification**: no live browser session available in this environment (same standing limitation
+  as `lb-ui-01`/`lb-ui-02`/`lb-ui-05`/`lb-ui-06`). Ran a headless "build from scratch" script
+  (`addRow`/`addColumn` three times against a hand-built zero-row `PackTrailer` shell) confirming
+  the resulting plan has zero `validateForApply` violations — reported honestly as verifying the
+  *operations* from an empty trailer shell, not as proof the scenario is reachable in the running
+  UI today: `pack()` never emits a zero-row trailer and there is no "add a trailer from nothing"
+  entry point in this prompt's locked scope (flagged in `BACKLOG.md`, matches legacy's own
+  limitation — its manual editor only ever opens against an existing trailer). Also noted: a
+  zero-trailer plan has no "Edit…" button at all, since it hangs off `TrailerDiagram`'s
+  `headerAction` and there's no trailer to render one for — pre-existing shape, more reachable after
+  `lb-ui-06` added small trailer presets, flagged in `BACKLOG.md`.
+  `packEngine.selfcheck.ts` ratchet unchanged **144/144** (`packEngine.ts` not touched — closed per
+  sprint rule). `loadEditor.selfcheck.ts` grew from 42 to **87/87** (45 new checks: 5 legal-add
+  cases across `addRow`/`addColumn`/`addLayer`, 2 no-pre-validate-let-Apply-catch-it cases
+  mirroring `moveColumn`'s existing contract, the full `setLayerCount`
+  increase/decrease/zero/only-layer-removes-column round trip, undo after `addRow`, undo after
+  `setLayerCount`-to-zero specifically — the one new op that both mutates balance bidirectionally
+  and splices a column, not covered by the simpler `addRow` undo check — `removeRow`'s
+  relocate-to-holding behavior, and the unassigned-pieces `planForApply` merge). `dissolve.selfcheck.ts`
+  **21/21**, `jobPull.selfcheck.ts` **17/17**. `npx tsc --noEmit` and `npm run cf-build` both green.
+  No hardcoded hex colors in the diff (grepped before commit).
 - **lb-ui-06 — v2 Load Builder: trailer type / runner height UI (react-component-agent §9b). Sprint
   step 2 of 7, `Prompts/sprint-load-builder-parity.md`.** Design Read: inline option controls for a
   logistics planner on desktop, dense + industrial, plain `<select>`s beside the existing fixture

@@ -19,6 +19,12 @@ import {
   validateForApply,
   findOverflowingRows,
   normalizeState,
+  addRow,
+  addColumn,
+  addLayer,
+  setLayerCount,
+  removeRow,
+  planForApply,
   type EditorState,
 } from "./loadEditor";
 
@@ -64,8 +70,17 @@ const SKU_C = makeSku("C", 20, 20, 5);
 const SKU_D = makeSku("D", 40, 20, 5); // deep column, starts in holding
 const SKU_E = makeSku("E", 10, 40, 3); // wide column, lives on trailer 1
 const SKU_F = makeSku("F", 20, 20, 5);
+// lb-ui-07: two SKUs dedicated to the new add* operations — neither is placed anywhere in the base
+// fixture, so both stay in plan.balance (unlike A-F, which are fully accounted for by trailers +
+// holding with zero balance), giving the add* checks real unplaced demand to legally draw from.
+const SKU_G: PackSku = { id: "G", name: "SKU G", sku: "G-1", length: 15, width: 15, height: 4, weight: 4, category: "Blocks", allowRotation: true };
+// G's 15x15 footprint deliberately matches NO existing column (A/B/C/F are all 20x20, E is 10x40) —
+// doubles as the "mismatched footprint" addLayer test SKU (check 16).
+const SKU_H: PackSku = { id: "H", name: "SKU H", sku: "H-1", length: 20, width: 20, height: 8, weight: 2, category: "Blocks", allowRotation: true };
+// H's 20x20 footprint deliberately matches A/B/C/F's column footprint exactly — the "legal,
+// matched-footprint" addLayer test SKU (check 15).
 
-const SKUS: PackSku[] = [SKU_A, SKU_B, SKU_C, SKU_D, SKU_E, SKU_F];
+const SKUS: PackSku[] = [SKU_A, SKU_B, SKU_C, SKU_D, SKU_E, SKU_F, SKU_G, SKU_H];
 const CART: CartLine[] = [
   { skuId: "A", qty: 1 },
   { skuId: "B", qty: 1 },
@@ -73,6 +88,8 @@ const CART: CartLine[] = [
   { skuId: "D", qty: 1 },
   { skuId: "E", qty: 1 },
   { skuId: "F", qty: 1 },
+  { skuId: "G", qty: 3 },
+  { skuId: "H", qty: 2 },
 ];
 
 function makeColumn(sku: PackSku, rationale: string): PackColumn {
@@ -127,7 +144,12 @@ function makeFixture(): EditorState {
   const trailer1 = makeTrailer([makeRow([makeColumn(SKU_E, "Single column E")])]);
   const plan: PackPlan = {
     trailers: [trailer0, trailer1],
-    balance: [],
+    // lb-ui-07: G and H are in CART but placed nowhere above and not in holding — their full cart
+    // qty must sit here as unplaced demand for the fixture's own baseline conservation check to pass.
+    balance: [
+      { skuId: "G", remaining: 3 },
+      { skuId: "H", remaining: 2 },
+    ],
     warnings: [],
     totalWeight: 0,
     totalUnits: 0,
@@ -416,6 +438,220 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
       eFeedback.lengthOk === true && eFeedback.ok === false,
       JSON.stringify(eFeedback)
     );
+  }
+
+  // --- lb-ui-07: manual/custom load building (addRow/addColumn/addLayer/setLayerCount/removeRow) ---
+
+  // 13. addRow: a legal new row on trailer1 (SKU G, count 1) — zero violations, balance decrements,
+  //     conservation holds.
+  {
+    const state = makeFixture();
+    const before = state.plan.trailers[1].rows.length;
+    const added = addRow(state, 1, "G", 1);
+    check("addRow: trailer1 gains a new row (1 -> 2)", added.plan.trailers[1].rows.length === before + 1, String(added.plan.trailers[1].rows.length));
+    const newRow = added.plan.trailers[1].rows[added.plan.trailers[1].rows.length - 1];
+    check(
+      "addRow: new row is [G], colWidth 15, colLength 15, unitHeight 4, count 1 (identity orientation)",
+      newRow.columns.length === 1 && newRow.columns[0].colWidth === 15 && newRow.columns[0].colLength === 15 && newRow.columns[0].layers[0].unitHeight === 4,
+      JSON.stringify(newRow)
+    );
+    const gBalance = added.plan.balance.find((b) => b.skuId === "G");
+    check("addRow: balance for G decrements from 3 to 2", (gBalance?.remaining ?? 0) === 2, JSON.stringify(added.plan.balance));
+    const violations = validateForApply(added);
+    check("addRow: validateForApply reports zero violations for a legal add", violations.length === 0, JSON.stringify(violations));
+    const conservation = conservationHolds(added);
+    check("addRow: conservation holds", conservation.ok, conservation.detail);
+  }
+
+  // 14. addColumn: a legal new column on trailer0/row1 (SKU G, count 1, alongside existing C) —
+  //     zero violations, row1's rowLength unchanged (G is shallower than C), balance decrements.
+  {
+    const state = makeFixture();
+    const added = addColumn(state, 0, 1, "G", 1);
+    const row1 = added.plan.trailers[0].rows[1];
+    check("addColumn: row1 gains a second column (C, G)", row1.columns.length === 2 && row1.columns[1].layers[0].skuId === "G", JSON.stringify(row1));
+    check("addColumn: row1.rowWidthUsed is 35 (20 + 15)", row1.rowWidthUsed === 35, String(row1.rowWidthUsed));
+    check("addColumn: row1.rowLength stays 20 (G's colLength 15 < C's 20)", row1.rowLength === 20, String(row1.rowLength));
+    const gBalance = added.plan.balance.find((b) => b.skuId === "G");
+    check("addColumn: balance for G decrements from 3 to 2", (gBalance?.remaining ?? 0) === 2, JSON.stringify(added.plan.balance));
+    const violations = validateForApply(added);
+    check("addColumn: validateForApply reports zero violations for a legal add", violations.length === 0, JSON.stringify(violations));
+    const conservation = conservationHolds(added);
+    check("addColumn: conservation holds", conservation.ok, conservation.detail);
+  }
+
+  // 15. addLayer, matched footprint: SKU H (20x20x8) onto trailer0/row0/col0 (SKU A's column, also
+  //     20x20) — a legal top-off, column becomes mixed, zero violations, balance decrements.
+  {
+    const state = makeFixture();
+    const added = addLayer(state, { t: 0, r: 0, c: 0 }, "H", 1);
+    const column = added.plan.trailers[0].rows[0].columns[0];
+    check("addLayer: column now has 2 layers (A base, H top-off)", column.layers.length === 2 && column.layers[1].skuId === "H", JSON.stringify(column));
+    check("addLayer: column.mixed is now true", column.mixed === true);
+    check("addLayer: column.totalHeight is 18 (A's 10 + H's 8)", column.totalHeight === 18, String(column.totalHeight));
+    const hBalance = added.plan.balance.find((b) => b.skuId === "H");
+    check("addLayer: balance for H decrements from 2 to 1", (hBalance?.remaining ?? 0) === 1, JSON.stringify(added.plan.balance));
+    const violations = validateForApply(added);
+    check("addLayer: validateForApply reports zero violations for a legal, matched-footprint add", violations.length === 0, JSON.stringify(violations));
+    const conservation = conservationHolds(added);
+    check("addLayer: conservation holds", conservation.ok, conservation.detail);
+  }
+
+  // 16. addLayer, mismatched footprint: SKU G (15x15) has no orientation matching column A's 20x20
+  //     footprint. Part C #3's chosen contract: the operation does NOT pre-check this — it still
+  //     adds the layer (falling back to G's identity orientation) and validateForApply catches the
+  //     mismatch via piece-fits-trailer, the same "operation doesn't pre-validate" behavior
+  //     moveColumn already has for row-width.
+  {
+    const state = makeFixture();
+    const added = addLayer(state, { t: 0, r: 0, c: 0 }, "G", 1);
+    const column = added.plan.trailers[0].rows[0].columns[0];
+    check("addLayer (mismatched): the layer is still added, not silently refused", column.layers.length === 2 && column.layers[1].skuId === "G", JSON.stringify(column));
+    const violations = validateForApply(added);
+    check(
+      "addLayer (mismatched): validateForApply flags piece-fits-trailer, NOT a pre-emptive block",
+      ruleViolations(violations, "piece-fits-trailer") > 0,
+      JSON.stringify(violations)
+    );
+  }
+
+  // 17. addColumn causing row-width overflow: SKU G (colWidth 15) onto trailer1/row0 (already E,
+  //     colWidth 40) — 40 + 15 = 55 > 50. Same no-pre-check contract as check 16, mirrored for
+  //     row-width (Part C #2's exact scenario).
+  {
+    const state = makeFixture();
+    const added = addColumn(state, 1, 0, "G", 1);
+    const row0 = added.plan.trailers[1].rows[0];
+    check("addColumn (overflow): the column is still added, not silently refused", row0.columns.length === 2, JSON.stringify(row0));
+    const violations = validateForApply(added);
+    check(
+      "addColumn (overflow): validateForApply flags row-width, NOT a pre-emptive block",
+      ruleViolations(violations, "row-width") > 0,
+      JSON.stringify(violations)
+    );
+  }
+
+  // 18. setLayerCount: increase draws further from balance, decrease returns it, and zeroing a
+  //     layer removes it (reverting a mixed column back to single-SKU) — round-tripping back to
+  //     the exact pre-addLayer state including balance.
+  {
+    const state = makeFixture();
+    const withLayer = addLayer(state, { t: 0, r: 0, c: 0 }, "H", 1); // H balance 2 -> 1
+
+    const increased = setLayerCount(withLayer, { t: 0, r: 0, c: 0 }, 1, 2); // H count 1 -> 2
+    const hAfterIncrease = increased.plan.balance.find((b) => b.skuId === "H");
+    check("setLayerCount (increase): H layer count is now 2", increased.plan.trailers[0].rows[0].columns[0].layers[1].count === 2);
+    check("setLayerCount (increase): balance for H drops to 0 and the entry is removed (not left at 0)", hAfterIncrease === undefined, JSON.stringify(increased.plan.balance));
+
+    const decreased = setLayerCount(increased, { t: 0, r: 0, c: 0 }, 1, 1); // H count 2 -> 1
+    const hAfterDecrease = decreased.plan.balance.find((b) => b.skuId === "H");
+    check("setLayerCount (decrease): balance for H returns to 1", (hAfterDecrease?.remaining ?? 0) === 1, JSON.stringify(decreased.plan.balance));
+
+    const zeroed = setLayerCount(decreased, { t: 0, r: 0, c: 0 }, 1, 0); // H layer removed entirely
+    const columnAfterZero = zeroed.plan.trailers[0].rows[0].columns[0];
+    check("setLayerCount (zero): the H layer is removed, column reverts to just A", columnAfterZero.layers.length === 1 && columnAfterZero.layers[0].skuId === "A", JSON.stringify(columnAfterZero));
+    check("setLayerCount (zero): column.mixed is false again", columnAfterZero.mixed === false);
+    check("setLayerCount (zero): column.totalHeight reverts to 10 (just A)", columnAfterZero.totalHeight === 10, String(columnAfterZero.totalHeight));
+    const hAfterZero = zeroed.plan.balance.find((b) => b.skuId === "H");
+    check("setLayerCount (zero): balance for H fully restored to 2 — round-trips to the pre-addLayer state", (hAfterZero?.remaining ?? 0) === 2, JSON.stringify(zeroed.plan.balance));
+    const conservation = conservationHolds(zeroed);
+    check("setLayerCount round-trip: conservation holds throughout", conservation.ok, conservation.detail);
+
+    // Zeroing a column's ONLY layer drops the column from its row (not just the layer) — matching
+    // pullToHolding's own convention of leaving an emptied row in place rather than compacting
+    // automatically (see this file's #3 comment above pullToHolding in loadEditor.ts).
+    const withNewRow = addRow(state, 1, "G", 1); // fresh new row on trailer1, single G column
+    const newRowIndex = withNewRow.plan.trailers[1].rows.length - 1;
+    const columnZeroed = setLayerCount(withNewRow, { t: 1, r: newRowIndex, c: 0 }, 0, 0);
+    check(
+      "setLayerCount (zero, only layer): the whole column is dropped from the row, row stays present (possibly empty)",
+      columnZeroed.plan.trailers[1].rows[newRowIndex] !== undefined && columnZeroed.plan.trailers[1].rows[newRowIndex].columns.length === 0,
+      JSON.stringify(columnZeroed.plan.trailers[1].rows[newRowIndex])
+    );
+    const gAfterColumnZeroed = columnZeroed.plan.balance.find((b) => b.skuId === "G");
+    check("setLayerCount (zero, only layer): balance for G fully restored to 3", (gAfterColumnZeroed?.remaining ?? 0) === 3, JSON.stringify(columnZeroed.plan.balance));
+  }
+
+  // 19. undo after a new operation restores the exact prior state — no special-casing needed since
+  //     addRow uses withHistory() exactly like every existing operation (mirrors check 6).
+  {
+    const state = makeFixture();
+    const originalPlan = clone(state.plan);
+    const originalBalance = clone(state.plan.balance);
+    const added = addRow(state, 1, "G", 1);
+    check("undo fixture (addRow): the add actually changed the plan", JSON.stringify(clone(added.plan)) !== JSON.stringify(originalPlan));
+
+    const undone = undo(added);
+    check(
+      "undo (addRow): restores the prior plan exactly, including balance",
+      JSON.stringify(clone(undone.plan)) === JSON.stringify(originalPlan) && JSON.stringify(clone(undone.plan.balance)) === JSON.stringify(originalBalance),
+      JSON.stringify({ undonePlan: undone.plan, originalPlan })
+    );
+    check("undo (addRow): history is one shorter after undo", undone.history.length === added.history.length - 1, String(undone.history.length));
+  }
+
+  // 20. removeRow: trailer0/row0 ([A, B]) removed — both columns move to holding (not
+  //     hard-deleted), row0 disappears, balance untouched (relocation only), conservation holds,
+  //     validateForApply stays clean (holdingCount is advisory, not a validatePlan rule).
+  {
+    const state = makeFixture();
+    const originalBalance = clone(state.plan.balance);
+    const removed = removeRow(state, 0, 0);
+    check("removeRow: trailer0 now has 2 rows (was 3)", removed.plan.trailers[0].rows.length === 2, String(removed.plan.trailers[0].rows.length));
+    check(
+      "removeRow: A and B both moved to holding (1 held -> 3 held: D, A, B)",
+      removed.holding.length === 3 && removed.holding.some((c) => c.layers[0].skuId === "A") && removed.holding.some((c) => c.layers[0].skuId === "B"),
+      JSON.stringify(removed.holding.map((c) => c.layers[0].skuId))
+    );
+    check("removeRow: plan.balance is untouched (relocation only)", JSON.stringify(removed.plan.balance) === JSON.stringify(originalBalance), JSON.stringify(removed.plan.balance));
+    const conservation = conservationHolds(removed);
+    check("removeRow: conservation holds", conservation.ok, conservation.detail);
+    const violations = validateForApply(removed);
+    check("removeRow: validateForApply reports zero violations (nothing was placed illegally, just relocated)", violations.length === 0, JSON.stringify(violations));
+
+    const undone = undo(removed);
+    check("removeRow: undo restores trailer0 to 3 rows and holding to 1", undone.plan.trailers[0].rows.length === 3 && undone.holding.length === 1, JSON.stringify({ rows: undone.plan.trailers[0].rows.length, holding: undone.holding.length }));
+  }
+
+  // 21. Unassigned pieces = planForApply(state).balance — the same balance+holding merge
+  //     validateForApply already relies on, not a fourth bucket. Against the base fixture
+  //     (balance [G:3, H:2], holding [D:1]), the merge must be exactly those three entries.
+  {
+    const state = makeFixture();
+    const unassigned = planForApply(state).balance;
+    const bySku = new Map(unassigned.map((b) => [b.skuId, b.remaining]));
+    check(
+      "unassigned pieces (planForApply merge): exactly {D:1, G:3, H:2}, nothing more or less",
+      unassigned.length === 3 && bySku.get("D") === 1 && bySku.get("G") === 3 && bySku.get("H") === 2,
+      JSON.stringify(unassigned)
+    );
+  }
+
+  // 22. undo after setLayerCount-to-zero: the only new op that both mutates balance bidirectionally
+  //     AND splices a column out of its row — check 19 only covers addRow's simpler (add-a-row,
+  //     decrement-balance) case. H's layer is zeroed (column reverts to just A, balance restored to
+  //     2 — check 18's zeroed state), then undo must restore the 2-layer column AND re-decrement
+  //     balance back to 1 in one step, not leave either half stale.
+  {
+    const state = makeFixture();
+    const withLayer = addLayer(state, { t: 0, r: 0, c: 0 }, "H", 1); // H balance 2 -> 1, column has [A,H]
+    const beforeZero = clone(withLayer.plan);
+    const zeroed = setLayerCount(withLayer, { t: 0, r: 0, c: 0 }, 1, 0); // H layer removed, balance -> 2
+    check(
+      "undo fixture (setLayerCount zero): the zero-out actually changed the plan",
+      JSON.stringify(clone(zeroed.plan)) !== JSON.stringify(beforeZero)
+    );
+
+    const undone = undo(zeroed);
+    check(
+      "undo (setLayerCount zero): restores the 2-layer column exactly, including balance back to 1",
+      JSON.stringify(clone(undone.plan)) === JSON.stringify(beforeZero),
+      JSON.stringify({ undonePlan: undone.plan, beforeZero })
+    );
+    const hAfterUndo = undone.plan.balance.find((b) => b.skuId === "H");
+    check("undo (setLayerCount zero): H balance back to 1, not left at zeroed-state's 2", (hAfterUndo?.remaining ?? 0) === 1, JSON.stringify(undone.plan.balance));
+    const conservation = conservationHolds(undone);
+    check("undo (setLayerCount zero): conservation holds after undo", conservation.ok, conservation.detail);
   }
 
   return { pass: results.every((r) => r.pass), results };
