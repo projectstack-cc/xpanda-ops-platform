@@ -1836,6 +1836,47 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics (v2)
 
+- **lb-engine-05 — v2 Load Builder: runner height, weight-warning removal.** Small, surgical
+  correctness prompt closing a real gap before UI work starts. **A (runner height):**
+  `PackOptions.runnerHeight` existed since lb-engine-01/02 but was never read by `pack()` — every
+  column was packed against the full nominal trailer height. Worse, `validatePlan`'s
+  `column-height` rule checked the exact same `dims.height`, so a runnered load that overfilled
+  every stack by the runner's thickness passed validation clean — producer and checker shared the
+  same blind spot, the worst shape a bug can have, since nothing in the pipeline would ever catch
+  it. Fixed by introducing `effectiveHeight = dims.height - (runnerHeight ?? 0)` (via a new
+  `resolveEffectiveHeight` helper, shared by `pack()` and independently by `validatePlan()` and
+  `planMetrics()` since they don't share a call graph) and threading it through every place a
+  column's vertical budget is computed: `buildFamilyColumns`'s `heightCount` pre-filter, `maxC1`,
+  `maxC2`, and the `remH` residual search; `validatePlan`'s `column-height` rule (violation detail
+  now names the runner: `"column totalHeight 108 exceeds effective height 105 (trailer 109 −
+  runner 4)"`); `planMetrics().meanHeightUtilization`; and `buildTrailer`'s
+  `PackTrailer.heightUtilization`. A `runnerHeight` that's negative, non-finite, or ≥ trailer
+  height is nonsense — clamped to 0 and pushed to `plan.warnings` naming the bad value, rather than
+  producing a zero/negative budget. Rationale strings now report against the effective height, and
+  when a runner is set, a single injection point appends the usable-height/runner context onto
+  whatever branch-specific wording buildFamilyColumns already produced (e.g. `"9 × 12" = 108", 1"
+  left — no other SKU on this footprint — 105" usable (109" trailer − 4" runner)"`); with no
+  runner set the appended suffix is empty, so every lb-engine-04 rationale string is byte-identical
+  to before. **Breaking change:** `planMetrics()` gained a required third `options: PackOptions`
+  parameter (was `(plan, dims)`) so it can resolve effective height the same way `validatePlan`
+  does — `lb-ui-01` is the only planned consumer and hasn't landed yet, so this has no callers
+  outside this repo at the time of the change. **B (weight advisory removed):** legacy's
+  `"Trailer N is near weight limit."` advisory (fires at `usedWeight/maxWeight > 0.95`) was never
+  ported to v2 — confirmed by grep, nothing to remove. `validatePlan`'s `weight` rule stays exactly
+  as implemented, but its comment now says what it actually is: not a load-planning warning but a
+  **data canary** — foam at ~1 lb/ft³ cannot approach a 636×98×109 trailer's 44,000 lb rated
+  capacity by any realistic load, so if this rule ever fires it means a SKU weight in the parts
+  library is wrong by orders of magnitude, and nobody should delete it later as dead weight.
+  **C (selfcheck):** all 120 existing checks still pass unchanged (no fixture sets `runnerHeight`,
+  so the regression ratchet's pinned `meanHeightUtilization`/`rowCount`/`usedLength` figures are
+  bit-identical); added 7 new items (F1–F7, 24 `check()` calls) covering the 105"-cap-at-4"-runner
+  arithmetic, `column-height` firing on the exact under-nominal/over-effective scenario A1
+  describes, `meanHeightUtilization` reading higher with a runner set (smaller denominator, same
+  plan), rationale wording with and without a runner (the negative case is the one with teeth —
+  proves the no-runner path is untouched), the negative/NaN/Infinity/≥-height clamp-and-warn (both
+  through `pack()` and independently through `validatePlan()`), absence of any near-weight
+  advisory at a deterministic 96% of `maxWeight`, and the weight canary still firing for a
+  genuinely over-weight plan. `npx tsc --noEmit` and `npm run cf-build` both green.
 - **lb-engine-04 — v2 Load Builder packing engine: rationale honesty, `planMetrics()`, regression
   ratchet (engine close-out).** The last engine prompt; `lb-ui-01` builds the React surface on top.
   **A (rationale honesty):** rationale strings are the engine's trust feature, and a misleading one

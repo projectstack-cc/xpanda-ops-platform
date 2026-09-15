@@ -187,6 +187,29 @@ function approxEq(a: number, b: number, eps = EPS): boolean {
   return Math.abs(a - b) <= eps;
 }
 
+// --- runner height / effective column budget ---
+
+// A runner is a raised strip (wood or steel) the trailer floor rides on; freight stacks on top of
+// the runners, not the bare floor, so the vertical space a column can actually use is the
+// trailer's nominal height minus the runner height, not the nominal height itself. A runnerHeight
+// that is negative, non-finite, or >= the trailer height can't produce a usable budget, so it is
+// clamped to 0 (no runner) and reported via `warnings` rather than silently producing a zero or
+// negative vertical budget.
+function resolveEffectiveHeight(
+  dims: Dimensions,
+  options: PackOptions,
+  warnings: string[]
+): { effectiveHeight: number; runnerHeight: number } {
+  let runnerHeight = options.runnerHeight ?? 0;
+  if (!Number.isFinite(runnerHeight) || runnerHeight < 0 || runnerHeight >= dims.height) {
+    warnings.push(
+      `runnerHeight ${runnerHeight} is invalid (must be finite, >= 0, and less than trailer height ${dims.height}) — clamped to 0`
+    );
+    runnerHeight = 0;
+  }
+  return { effectiveHeight: dims.height - runnerHeight, runnerHeight };
+}
+
 // --- orientation ---
 
 // All six axis-aligned permutations of a SKU's (length, width, height). Not deduplicated —
@@ -348,10 +371,12 @@ function buildFamilyColumns(
   fam: Family,
   orient: FamilyOrientation,
   dims: Dimensions,
+  effectiveHeight: number,
   opts: PackOptions,
   warnings: string[],
   leftover: Map<string, number>
 ): ColumnPlan[] {
+  const runnerHeight = dims.height - effectiveHeight;
   if (!approxLte(orient.length, dims.length) || !approxLte(orient.width, dims.width)) {
     for (const member of fam.members) {
       warnings.push(
@@ -371,11 +396,11 @@ function buildFamilyColumns(
   const pool: PoolMember[] = [];
   for (const member of fam.members) {
     const unitHeight = fam.members.length === 1 ? orient.height : member.sku.height;
-    const heightCount = Math.floor(dims.height / unitHeight);
+    const heightCount = Math.floor(effectiveHeight / unitHeight);
     const weightCap = member.sku.weight > 0 ? Math.floor(dims.maxWeight / member.sku.weight) : Infinity;
     if (heightCount < 1 || weightCap < 1) {
       warnings.push(
-        `sku ${member.sku.id}: cannot stack even one unit (height ${unitHeight} vs trailer height ${dims.height}, weight ${member.sku.weight} vs maxWeight ${dims.maxWeight}) — ${member.qty} unplaced`
+        `sku ${member.sku.id}: cannot stack even one unit (height ${unitHeight} vs effective height ${effectiveHeight}${runnerHeight > EPS ? ` [trailer ${dims.height} − runner ${runnerHeight}]` : ""}, weight ${member.sku.weight} vs maxWeight ${dims.maxWeight}) — ${member.qty} unplaced`
       );
       leftover.set(member.sku.id, (leftover.get(member.sku.id) ?? 0) + member.qty);
       continue;
@@ -399,7 +424,7 @@ function buildFamilyColumns(
 
     for (const base of pool) {
       if (base.remaining <= 0) continue;
-      const maxC1 = Math.min(Math.floor(dims.height / base.unitHeight), base.remaining, base.weightCap);
+      const maxC1 = Math.min(Math.floor(effectiveHeight / base.unitHeight), base.remaining, base.weightCap);
       if (maxC1 < 1) continue;
 
       let bestForBase = { c1: maxC1, topoff: null as PoolMember | null, c2: 0, total: maxC1 * base.unitHeight };
@@ -428,11 +453,11 @@ function buildFamilyColumns(
             continue;
           }
 
-          const maxC2 = Math.min(Math.floor(dims.height / cand.unitHeight), cand.remaining, cand.weightCap);
+          const maxC2 = Math.min(Math.floor(effectiveHeight / cand.unitHeight), cand.remaining, cand.weightCap);
           if (maxC2 < 1) continue;
 
           for (let c2 = 1; c2 <= maxC2; c2++) {
-            const remH = dims.height - c2 * cand.unitHeight;
+            const remH = effectiveHeight - c2 * cand.unitHeight;
             const c1 = Math.min(Math.floor((remH + EPS) / base.unitHeight), maxC1);
             if (c1 < 1) continue; // a column always needs at least one base piece
             const total = c1 * base.unitHeight + c2 * cand.unitHeight;
@@ -470,7 +495,7 @@ function buildFamilyColumns(
       const topoffFilled = c2 * topoff.unitHeight;
       layers.push({ sku: topoff.sku, unitHeight: topoff.unitHeight, count: c2 });
       totalHeight += topoffFilled;
-      const gap = dims.height - totalHeight;
+      const gap = effectiveHeight - totalHeight;
 
       // lb-engine-04 A3: at equal thickness, "topped off with" is the wrong verb — this isn't a
       // smaller piece filling a residual gap, it's another label at the same thickness. Name both
@@ -485,12 +510,12 @@ function buildFamilyColumns(
       } else {
         const tail =
           gap > EPS
-            ? `${fmt(totalHeight)}" of ${fmt(dims.height)}", ${fmt(gap)}" left`
+            ? `${fmt(totalHeight)}" of ${fmt(effectiveHeight)}", ${fmt(gap)}" left`
             : `${fmt(totalHeight)}" exact`;
         rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", topped off with ${c2} × ${fmt(topoff.unitHeight)}" = ${fmt(topoffFilled)}" — ${tail}`;
       }
     } else {
-      const gap = dims.height - pureFilled;
+      const gap = effectiveHeight - pureFilled;
       if (gap <= EPS) {
         rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}" exact`;
       } else if (bestIneligible) {
@@ -506,6 +531,13 @@ function buildFamilyColumns(
         // No footprint-mate at all (A2 precedence #3): a genuine single-member family.
         rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", ${fmt(gap)}" left — no other SKU on this footprint`;
       }
+    }
+
+    // A3: with a runner in play, "exact"/"left" only means something against the effective height
+    // — surface the usable height and the runner deduction so the number is self-explanatory.
+    // No runner set (runnerHeight 0) leaves the rationale byte-identical to lb-engine-04.
+    if (runnerHeight > EPS) {
+      rationale += ` — ${fmt(effectiveHeight)}" usable (${fmt(dims.height)}" trailer − ${fmt(runnerHeight)}" runner)`;
     }
 
     columns.push({
@@ -663,7 +695,7 @@ function rowBaseThickness(row: PackRow): number {
   return row.columns.reduce((max, c) => Math.max(max, c.layers[0]?.unitHeight ?? 0), 0);
 }
 
-function buildTrailer(rows: PackRow[], dims: Dimensions): PackTrailer {
+function buildTrailer(rows: PackRow[], dims: Dimensions, effectiveHeight: number): PackTrailer {
   let runningLength = 0;
   for (const row of rows) {
     row.posFromFront = runningLength;
@@ -677,7 +709,7 @@ function buildTrailer(rows: PackRow[], dims: Dimensions): PackTrailer {
   const widthUtilization = rows.length > 0 ? rows.reduce((s, r) => s + r.rowWidthUsed / dims.width, 0) / rows.length : 0;
   const allHeights = rows.flatMap((r) => r.columns.map((c) => c.totalHeight));
   const heightUtilization =
-    allHeights.length > 0 ? allHeights.reduce((s, h) => s + h, 0) / allHeights.length / dims.height : 0;
+    allHeights.length > 0 ? allHeights.reduce((s, h) => s + h, 0) / allHeights.length / effectiveHeight : 0;
   return {
     dims,
     rows,
@@ -707,10 +739,18 @@ function spillToLeftover(plans: ColumnPlan[], leftover: Map<string, number>): vo
   }
 }
 
-function simulate(families: Family[], chosen: FamilyOrientation[], dims: Dimensions, opts: PackOptions): SimResult {
+function simulate(
+  families: Family[],
+  chosen: FamilyOrientation[],
+  dims: Dimensions,
+  effectiveHeight: number,
+  opts: PackOptions
+): SimResult {
   const warnings: string[] = [];
   const leftover = new Map<string, number>();
-  let instances: ColumnPlan[] = families.flatMap((fam, i) => buildFamilyColumns(fam, chosen[i], dims, opts, warnings, leftover));
+  let instances: ColumnPlan[] = families.flatMap((fam, i) =>
+    buildFamilyColumns(fam, chosen[i], dims, effectiveHeight, opts, warnings, leftover)
+  );
   const trailers: PackTrailer[] = [];
   const trailerLimit = opts.trailerLimit ?? Infinity;
 
@@ -743,7 +783,7 @@ function simulate(families: Family[], chosen: FamilyOrientation[], dims: Dimensi
     // posFromFront, since that assignment walks rows in array order.
     rows.sort((a, b) => rowBaseThickness(b) - rowBaseThickness(a));
 
-    trailers.push(buildTrailer(rows, dims));
+    trailers.push(buildTrailer(rows, dims, effectiveHeight));
   }
 
   if (instances.length > 0) {
@@ -812,12 +852,13 @@ function bestCombo(
   families: Family[],
   familyOptions: FamilyOrientation[][],
   dims: Dimensions,
+  effectiveHeight: number,
   opts: PackOptions
 ): { chosen: FamilyOrientation[]; result: SimResult } {
   const combos = enumerateCombos(familyOptions);
   let best: { chosen: FamilyOrientation[]; result: SimResult; score: number[] } | null = null;
   for (const combo of combos) {
-    const result = simulate(families, combo, dims, opts);
+    const result = simulate(families, combo, dims, effectiveHeight, opts);
     const score = scoreResult(
       result,
       combo.map((c) => c.label)
@@ -883,6 +924,7 @@ const COMBO_GUARD = 20000;
 export function pack(cart: CartLine[], skus: PackSku[], dims: Dimensions, options?: Partial<PackOptions>): PackPlan {
   const opts: PackOptions = { ...DEFAULT_PACK_OPTIONS, ...options };
   const warnings: string[] = [];
+  const { effectiveHeight } = resolveEffectiveHeight(dims, opts, warnings);
   const skuById = new Map(skus.map((s) => [s.id, s]));
   const balanceMap = new Map<string, number>();
 
@@ -922,12 +964,12 @@ export function pack(cart: CartLine[], skus: PackSku[], dims: Dimensions, option
   } else {
     const comboCount = familyOptions.reduce((p, o) => p * o.length, 1);
     if (comboCount <= COMBO_GUARD) {
-      simResult = bestCombo(families, familyOptions, dims, opts).result;
+      simResult = bestCombo(families, familyOptions, dims, effectiveHeight, opts).result;
     } else {
       warnings.push(
         `orientation search space (${comboCount}) exceeds guard (${COMBO_GUARD}) — using greedy largest-family-first fallback`
       );
-      simResult = simulate(families, greedyCombo(families, familyOptions), dims, opts);
+      simResult = simulate(families, greedyCombo(families, familyOptions), dims, effectiveHeight, opts);
     }
   }
 
@@ -962,19 +1004,24 @@ export interface PlanMetrics {
   trailerCount: number;
   rowCount: number;
   usedLength: number; // summed across trailers
-  meanHeightUtilization: number; // mean column totalHeight / dims.height, across all columns
+  meanHeightUtilization: number; // mean column totalHeight / effective height (dims.height - runnerHeight), across all columns
   meanWidthUtilization: number; // mean row rowWidthUsed / dims.width, across all rows
   wastedFloorArea: number; // summed across rows
   mixedStacks: number;
   balancePieces: number; // total pieces left in balance
 }
 
-export function planMetrics(plan: PackPlan, dims: Dimensions): PlanMetrics {
+// lb-engine-05: gained the `options` param (was `(plan, dims)`) so meanHeightUtilization can be
+// computed against effective height rather than nominal — a breaking signature change; lb-ui-01
+// is the only planned consumer and hasn't landed yet, so this has no callers outside this file's
+// own selfcheck at the time of the change.
+export function planMetrics(plan: PackPlan, dims: Dimensions, options: PackOptions): PlanMetrics {
+  const { effectiveHeight } = resolveEffectiveHeight(dims, options, []);
   const rows = plan.trailers.flatMap((t) => t.rows);
   const columns = rows.flatMap((r) => r.columns);
 
   const meanHeightUtilization =
-    columns.length > 0 ? columns.reduce((s, c) => s + c.totalHeight / dims.height, 0) / columns.length : 0;
+    columns.length > 0 ? columns.reduce((s, c) => s + c.totalHeight / effectiveHeight, 0) / columns.length : 0;
   const meanWidthUtilization =
     rows.length > 0 ? rows.reduce((s, r) => s + r.rowWidthUsed / dims.width, 0) / rows.length : 0;
 
@@ -1014,6 +1061,7 @@ export function validatePlan(
 ): PackViolation[] {
   const violations: PackViolation[] = [];
   const skuById = new Map(skus.map((s) => [s.id, s]));
+  const { effectiveHeight, runnerHeight } = resolveEffectiveHeight(dims, options, []);
 
   function violate(rule: string, detail: string, trailerIndex?: number, rowIndex?: number, columnIndex?: number) {
     violations.push({ rule, detail, trailerIndex, rowIndex, columnIndex });
@@ -1038,7 +1086,10 @@ export function validatePlan(
       violate("trailer-length", `sum of row lengths ${summedRowLength} exceeds trailer length ${dims.length}`, ti);
     }
 
-    // weight: catches a plan that would overload the trailer's rated capacity.
+    // weight: NOT a load-planning warning — it is a data canary. Foam at ~1 lb/ft³ cannot approach
+    // a 636x98x109 trailer's 44,000 lb rated capacity by any realistic load, so if this rule ever
+    // fires it means a SKU weight in the parts library is wrong by orders of magnitude, not that
+    // the load is actually heavy. Keep it for that reason — do not delete it as dead weight.
     if (!approxLte(trailer.usedWeight, dims.maxWeight)) {
       violate("weight", `trailer usedWeight ${trailer.usedWeight} exceeds maxWeight ${dims.maxWeight}`, ti);
     }
@@ -1065,11 +1116,14 @@ export function validatePlan(
         }
         runningWidth += column.colWidth;
 
-        // column-height: catches a stack taller than the trailer's clearance.
-        if (!approxLte(column.totalHeight, dims.height)) {
+        // column-height: catches a stack taller than the trailer's usable clearance (nominal
+        // height minus any runner — see resolveEffectiveHeight).
+        if (!approxLte(column.totalHeight, effectiveHeight)) {
           violate(
             "column-height",
-            `column totalHeight ${column.totalHeight} exceeds trailer height ${dims.height}`,
+            runnerHeight > EPS
+              ? `column totalHeight ${column.totalHeight} exceeds effective height ${effectiveHeight} (trailer ${dims.height} − runner ${runnerHeight})`
+              : `column totalHeight ${column.totalHeight} exceeds trailer height ${dims.height}`,
             ti,
             ri,
             ci

@@ -775,7 +775,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("FIXTURE_HOLEY_SIPLAST: with top-off active, every column mixes both thicknesses to 109\" exact", allColumnsToppedOff);
     const validationOnSiplast = validatePlan(siplastPlan, TRAILER_53FT, siplastCart, siplastSkus, OPTS);
     check("FIXTURE_HOLEY_SIPLAST: validatePlan reports zero violations (top-off satisfies K)", validationOnSiplast.length === 0, JSON.stringify(validationOnSiplast));
-    fixtureMetrics.set("FIXTURE_HOLEY_SIPLAST", planMetrics(siplastPlan, TRAILER_53FT));
+    fixtureMetrics.set("FIXTURE_HOLEY_SIPLAST", planMetrics(siplastPlan, TRAILER_53FT, OPTS));
   }
 
   // C7. FIXTURE_BLOCKS_PAIRING end-to-end (INV_4202) — the load legacy could not fit on one
@@ -822,7 +822,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       pairingUsedLength <= PAIRING_BASELINE_LENGTH,
       String(pairingUsedLength)
     );
-    fixtureMetrics.set("FIXTURE_BLOCKS_PAIRING", planMetrics(pairingPlan, TRAILER_53FT));
+    fixtureMetrics.set("FIXTURE_BLOCKS_PAIRING", planMetrics(pairingPlan, TRAILER_53FT, OPTS));
   }
 
   // C9 / D10. FIXTURE_BLOCKS_MIXED — real INV_4347 data (lb-engine-03 Part C; replaces the
@@ -871,7 +871,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   const mixedPlan = pack(mixedCart, mixedSkus, TRAILER_53FT);
   const mixedViolations = validatePlan(mixedPlan, TRAILER_53FT, mixedCart, mixedSkus, OPTS);
   check("FIXTURE_BLOCKS_MIXED: validatePlan reports zero violations", mixedViolations.length === 0, JSON.stringify(mixedViolations));
-  fixtureMetrics.set("FIXTURE_BLOCKS_MIXED", planMetrics(mixedPlan, TRAILER_53FT));
+  fixtureMetrics.set("FIXTURE_BLOCKS_MIXED", planMetrics(mixedPlan, TRAILER_53FT, OPTS));
 
   const footprintKey = (l: number, w: number) => `${Math.min(l, w)}x${Math.max(l, w)}`;
   const footprintsBySku = new Map<string, string>();
@@ -1196,7 +1196,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0,
     };
     recompute(metricsPlan);
-    const m = planMetrics(metricsPlan, metricsDims);
+    const m = planMetrics(metricsPlan, metricsDims, OPTS);
 
     check("E6: planMetrics trailerCount", m.trailerCount === 1, String(m.trailerCount));
     check("E6: planMetrics rowCount", m.rowCount === 2, String(m.rowCount));
@@ -1210,7 +1210,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("E6: planMetrics mixedStacks", m.mixedStacks === 1, String(m.mixedStacks));
     check("E6: planMetrics balancePieces sums remaining demand (4 + 6 = 10)", m.balancePieces === 10, String(m.balancePieces));
 
-    const emptyMetrics = planMetrics({ trailers: [], balance: [], warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 }, metricsDims);
+    const emptyMetrics = planMetrics({ trailers: [], balance: [], warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 }, metricsDims, OPTS);
     check("E6: planMetrics on an empty plan returns zeroes, not NaN", emptyMetrics.meanHeightUtilization === 0 && emptyMetrics.meanWidthUtilization === 0 && emptyMetrics.rowCount === 0);
   }
 
@@ -1254,6 +1254,142 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       const better = ratchetFailures({ ...good, rowCount: good.rowCount - 1, usedLength: good.usedLength - 20, meanHeightUtilization: good.meanHeightUtilization + 0.05 }, bar);
       check("E8: a strictly better plan still clears the ratchet", better.length === 0, better.join("; "));
     }
+  }
+
+  // --- lb-engine-05 Part C: runner height (F1-F5) + near-weight advisory removal (F6-F7) ---
+
+  // F1. runnerHeight caps columns at the effective height, not the nominal trailer height. Pinned
+  // to a single orientation (allowRotation:false) so the search can't tip the 8" dimension onto
+  // another axis — the exact trap C6/D6 already document elsewhere in this file. Weight is kept
+  // low (1 lb) so weightCap is never the binding constraint, only height is under test.
+  {
+    const f1Sku: PackSku = { id: "F1_SKU", name: "8in runner test", sku: "F1", length: 20, width: 10, height: 8, weight: 1, category: "Blocks", allowRotation: false };
+    const f1Cart: CartLine[] = [{ skuId: "F1_SKU", qty: 20 }];
+
+    const noRunnerPlan = pack(f1Cart, [f1Sku], TRAILER_53FT);
+    const noRunnerCount = findColumn(noRunnerPlan, () => true)?.layers[0]?.count;
+    check("F1: no runner — 8in SKU stacks 13 per column (13x8=104 <= 109)", noRunnerCount === 13, String(noRunnerCount));
+
+    const runner4Plan = pack(f1Cart, [f1Sku], TRAILER_53FT, { runnerHeight: 4 });
+    const runner4Count = findColumn(runner4Plan, () => true)?.layers[0]?.count;
+    check("F1: 4in runner — 8in SKU still stacks 13 per column (13x8=104 <= 105 effective)", runner4Count === 13, String(runner4Count));
+
+    const runner8Plan = pack(f1Cart, [f1Sku], TRAILER_53FT, { runnerHeight: 8 });
+    const runner8Count = findColumn(runner8Plan, () => true)?.layers[0]?.count;
+    check("F1: 8in runner — 8in SKU drops to 12 per column (13x8=104 > 101 effective)", runner8Count === 12, String(runner8Count));
+  }
+
+  // F2. This is the exact bug A1 describes: a column that fits under the nominal trailer height
+  // but overflows the runner-adjusted effective height must now be caught by column-height, and
+  // must NOT be caught when no runner is set (same plan, same column, only the options differ).
+  {
+    const runnerOpts: PackOptions = { ...OPTS, runnerHeight: 5 }; // effectiveHeight = 40 - 5 = 35
+    const bad = clone(baseline);
+    bad.trailers[0].rows[0].columns[0].totalHeight = 38; // < DIMS.height (40), > effective height (35)
+
+    const violationsWithRunner = validatePlan(bad, DIMS, CART, SKUS, runnerOpts);
+    check(
+      "F2: column exceeding effective height (35) but under trailer height (40) triggers column-height",
+      ruleViolations(violationsWithRunner, "column-height") > 0,
+      JSON.stringify(violationsWithRunner)
+    );
+
+    const violationsNoRunner = validatePlan(bad, DIMS, CART, SKUS, OPTS);
+    check(
+      "F2: the identical column is clean when no runner is set (38 <= trailer height 40)",
+      ruleViolations(violationsNoRunner, "column-height") === 0,
+      JSON.stringify(violationsNoRunner)
+    );
+  }
+
+  // F3. Same plan, same nominal dims — a runner shrinks the denominator, so meanHeightUtilization
+  // must read HIGHER with a runner set, not lower or unchanged (a runnered load isn't actually
+  // less full than the algorithm believed; the old dims.height denominator just under-reported it).
+  {
+    const noRunnerMetrics = planMetrics(baseline, DIMS, OPTS);
+    const runnerMetrics = planMetrics(baseline, DIMS, { ...OPTS, runnerHeight: 5 });
+    check(
+      "F3: meanHeightUtilization is higher against effective height than nominal height for the same plan",
+      runnerMetrics.meanHeightUtilization > noRunnerMetrics.meanHeightUtilization,
+      `no-runner=${noRunnerMetrics.meanHeightUtilization} runner=${runnerMetrics.meanHeightUtilization}`
+    );
+  }
+
+  // F4. Rationale names the runner and the usable height when one is set, and is byte-for-byte
+  // silent about both when it isn't (the negative case has teeth: it's what proves the no-runner
+  // path is untouched, not merely that the runner path adds something).
+  {
+    const f4Sku: PackSku = { id: "F4_SKU", name: "12in solo", sku: "F4", length: 20, width: 10, height: 12, weight: 5, category: "Blocks", allowRotation: false };
+    const f4Cart: CartLine[] = [{ skuId: "F4_SKU", qty: 9 }];
+    const f4Dims: Dimensions = { length: 100, width: 50, height: 109, maxWeight: 1000 };
+
+    const noRunnerPlan = pack(f4Cart, [f4Sku], f4Dims);
+    const noRunnerRationale = findColumn(noRunnerPlan, () => true)?.rationale ?? "";
+    check(
+      "F4: no runner set — rationale mentions neither usable height nor a runner",
+      !noRunnerRationale.includes("usable") && !noRunnerRationale.includes("runner"),
+      noRunnerRationale
+    );
+
+    const runnerPlan = pack(f4Cart, [f4Sku], f4Dims, { runnerHeight: 4 });
+    const runnerRationale = findColumn(runnerPlan, () => true)?.rationale ?? "";
+    check("F4: runner set — rationale reports the usable height", runnerRationale.includes("usable ("), runnerRationale);
+    check("F4: runner set — rationale names the runner", runnerRationale.includes(" runner)"), runnerRationale);
+    check("F4: runner set — usable height is the effective 105 (109 trailer - 4 runner)", runnerRationale.includes("105"), runnerRationale);
+  }
+
+  // F5. A negative, NaN, Infinity, or >= dims.height runnerHeight is nonsense — pack() must clamp
+  // it to 0 (behaving exactly as if unset) and warn, rather than produce a zero/negative budget.
+  // Checked against pack()'s own clamp-and-warn AND against validatePlan's independent resolution
+  // of the same invalid option, since the two don't share a call graph.
+  {
+    const f5Sku: PackSku = { id: "F5_SKU", name: "12in clamp test", sku: "F5", length: 20, width: 10, height: 12, weight: 5, category: "Blocks", allowRotation: false };
+    const f5Cart: CartLine[] = [{ skuId: "F5_SKU", qty: 9 }];
+    const f5Dims: Dimensions = { length: 100, width: 50, height: 109, maxWeight: 1000 };
+    const badValues = [-5, NaN, Infinity, 109, 200];
+
+    for (const rh of badValues) {
+      const plan = pack(f5Cart, [f5Sku], f5Dims, { runnerHeight: rh });
+      const hasWarning = plan.warnings.some((w) => w.includes("runnerHeight") && w.includes("clamped to 0"));
+      check(`F5: runnerHeight ${rh} is invalid — pack() warns and clamps to 0`, hasWarning, JSON.stringify(plan.warnings));
+      const count = findColumn(plan, () => true)?.layers[0]?.count;
+      check(`F5: runnerHeight ${rh} clamped — column still fills against the full 109" (count 9)`, count === 9, String(count));
+    }
+
+    const badOpts: PackOptions = { ...OPTS, runnerHeight: -5 };
+    const violations = validatePlan(baseline, DIMS, CART, SKUS, badOpts);
+    check(
+      "F5: validatePlan independently clamps an invalid runnerHeight (baseline stack stays clean against DIMS.height 40)",
+      ruleViolations(violations, "column-height") === 0,
+      JSON.stringify(violations)
+    );
+  }
+
+  // F6. Part B: legacy's near-weight-limit advisory (usedWeight/maxWeight > 0.95) is not carried
+  // forward. A single piece at exactly 96% of a small trailer's maxWeight, deterministically.
+  {
+    const f6Sku: PackSku = { id: "F6_SKU", name: "weight test", sku: "F6", length: 10, width: 10, height: 5, weight: 96, category: "Blocks", allowRotation: false };
+    const f6Dims: Dimensions = { length: 100, width: 100, height: 40, maxWeight: 100 };
+    const f6Cart: CartLine[] = [{ skuId: "F6_SKU", qty: 1 }];
+    const f6Plan = pack(f6Cart, [f6Sku], f6Dims);
+
+    check(
+      "F6: fixture lands at exactly 96% of maxWeight",
+      Math.abs(f6Plan.totalWeight / f6Dims.maxWeight - 0.96) < 1e-9,
+      String(f6Plan.totalWeight)
+    );
+    const hasNearWeightWarning = f6Plan.warnings.some((w) => /near|weight limit/i.test(w));
+    check("F6: no near-weight-limit advisory is emitted at 96% of maxWeight", !hasNearWeightWarning, JSON.stringify(f6Plan.warnings));
+  }
+
+  // F7. The weight rule is a data canary now (Part B), not a load warning — it must still fire for
+  // a genuinely over-weight plan, or the canary would be silently disarmed.
+  {
+    const bad = clone(baseline);
+    bad.trailers[0].rows[0].columns[0].totalWeight = 99999;
+    recompute(bad);
+    const violations = validatePlan(bad, DIMS, CART, SKUS, OPTS);
+    check("F7: the weight canary still fires for a genuinely over-weight plan", ruleViolations(violations, "weight") > 0, JSON.stringify(violations));
   }
 
   return { pass: results.every((r) => r.pass), results };
