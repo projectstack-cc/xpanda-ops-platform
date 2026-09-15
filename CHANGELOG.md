@@ -1873,6 +1873,59 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-ui-06 — v2 Load Builder: trailer type / runner height UI (react-component-agent §9b). Sprint
+  step 2 of 7, `Prompts/sprint-load-builder-parity.md`.** Design Read: inline option controls for a
+  logistics planner on desktop, dense + industrial, plain `<select>`s beside the existing fixture
+  picker — matches this codebase's own established control (`DockBoard.tsx`'s bay/sort selects), not
+  a new pattern. Exposes two engine options `LoadPlanView.tsx` never surfaced: the module constant
+  `TRAILER_53FT = TRAILER_TYPES["53ft Standard"]` is now component state (`trailerTypeKey`,
+  default unchanged) driving a dropdown across all 5 `TRAILER_TYPES` presets; `PackOptions.runnerHeight`
+  (previously never set — `DEFAULT_PACK_OPTIONS` has no `runnerHeight`, engine-exercised since
+  `lb-engine-05` but with no UI control) is now a second dropdown, values **0/3/4 inches**, confirmed
+  against legacy's own dropdown before shipping (`load-builder.html:1462` —
+  `[0, 3, 4].forEach(rh => ...)`, not assumed). Both flow into the same `pack()`/`planMetrics()` call
+  every cart source (fixture or `lb-ui-05`'s pulled job) already runs through, plus
+  `CustomizeEditor`/`ColumnDetailPanel`'s `dims`/`options` props — one `packOptions` memo, no parallel
+  path. Changing either control resets `editedPlan`/`selected`/edit mode, mirroring legacy's own
+  `state.manualRowsByTrailer = {}; state.editorTrailer = null` reset on both dropdowns
+  (`load-builder.html:1452`/`1461`) — an in-progress manual edit's columns were built for the previous
+  dims/effective-height and are no longer valid once either changes.
+  **Step 0 findings — 2 of legacy's 4 trailer-option controls have no engine equivalent**: grepped
+  `packEngine.ts` for `downsize`/`autoDownsize`/`forceSize`/`variant` — zero real matches (`variant`
+  only appears as a substring of "invariant"). Legacy's auto-downsize toggle and "Force Sizes" queue
+  have no engine-side concept to bind to, so neither shipped — not built-but-disabled, genuinely out
+  of scope (new engine work, not a UI-wiring job); flagged in `BACKLOG.md` as a prerequisite for a
+  future `lb-engine-NN` prompt. `PackOptions.isFlatbed` is declared (`packEngine.ts:156`) but
+  grep-confirmed never *read* anywhere in the engine — reserved, not implemented; no UI wired to it,
+  also flagged in `BACKLOG.md` rather than building a control with no effect.
+  **Verification**: no live browser session available in this environment (same limitation as
+  `lb-ui-01`/`lb-ui-02`/`lb-ui-05` — the route is admin-gated). Read `TrailerDiagram.tsx` and
+  `PlanMetricsStrip.tsx` (the two components step 5 names) directly, as the substitute for the
+  browser check: both derive every geometry value from their `dims` prop (`rowWidthPct`/`heightPct`/
+  `topPct` as percentages of `dims.length`/`dims.width`; `PlanMetricsStrip`'s "of N&quot; per trailer"
+  sub-line reads `dims.length`) — no hardcoded `636`/`98`/`109` literal, no hardcoded "53ft Standard"
+  string, in either file; both were already dims-driven before this prompt (they just never received
+  anything but the one hardcoded preset until now). Since the diagram is percentage-of-self, not
+  fixed-px-per-inch, the aspect-ratio swing across presets (636×98 down to 240×90) doesn't overflow or
+  collapse the container. Verified the engine-level effect headlessly as well (`npx tsx` against a
+  real fixture): switching trailer type produces a packed plan whose `trailer.dims` matches the
+  selected preset exactly (all 5 checked); switching runner height from 0→3→4 shrinks a column's
+  remaining headroom (23.5"→20.5"→19.5" left on the same
+  footprint) and the column's own rationale string reports the usable-height math
+  (`"106" usable (109" trailer − 3" runner)"`) — confirming the UI's `packOptions.runnerHeight` reaches
+  `resolveEffectiveHeight` correctly. Dark mode: grepped for `color-scheme` — not set anywhere in
+  `globals.css`, so the two new native `<select>` popups render `<option>` lists with the OS light
+  palette in dark mode; pre-existing gap (`DockBoard.tsx:524`'s select has the same behavior today),
+  not introduced by this prompt, not fixed here. Two new selects both visible/usable/token-correct in
+  their closed state in both themes. `TrailerDiagram.tsx` has no runner-strip visualization for the
+  new runner-height control (flagged in `BACKLOG.md` for `lb-ui-08`); the zero-trailer empty state
+  ("This fixture placed nothing") is inaccurate copy for a pulled job and is now more reachable
+  (small trailer presets can't fit every SKU) — pre-existing copy, noted rather than chased. No new
+  selfcheck file (UI wiring over already-tested engine fields, per this prompt's own scope note) —
+  `packEngine.selfcheck.ts` ratchet unchanged **144/144**,
+  `loadEditor.selfcheck.ts` **42/42**, `dissolve.selfcheck.ts` **21/21**, `jobPull.selfcheck.ts`
+  **17/17**. `npx tsc --noEmit` and `npm run cf-build` both green. No hardcoded hex colors in the diff
+  (grepped before commit) — both new `<select>`s use only existing tokens/classes.
 - **lb-ui-05 — v2 Load Builder: job pull-in → cart (react-component-agent §9b). Sprint step 1 of 7,
   `Prompts/sprint-load-builder-parity.md`.** New headless `jobPull.ts` (no React/DOM, mirrors
   `dissolve.ts`'s staying-pure discipline): `parseDimensionString` ports legacy's exact fraction-

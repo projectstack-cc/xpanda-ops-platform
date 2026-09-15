@@ -32,9 +32,20 @@
 // Deliberately reads `?job_id=` via `window.location.search` in a useEffect rather than
 // `useSearchParams` — the latter can force page.tsx into a <Suspense> boundary to satisfy
 // `cf-build`, and page.tsx is outside this prompt's file fence.
+//
+// lb-ui-06: exposes two engine options the UI never surfaced — trailer type (all 5
+// `TRAILER_TYPES` presets, was hardcoded to "53ft Standard") and runner height (0/3/4in, wired to
+// `PackOptions.runnerHeight`). Design Read: building this as inline option controls for a
+// logistics planner on desktop, dense + industrial, plain `<select>`s beside the existing fixture
+// picker — matches this codebase's own established control (DockBoard.tsx's bay/sort selects),
+// not a new pattern. Step 0 confirmed two of legacy's four trailer-option controls have no engine
+// equivalent: `downsize`/`autoDownsize`/`forceSize`/`variant` are all zero matches in
+// `packEngine.ts` — auto-downsize and Force Sizes are out of scope (new engine work, not UI
+// wiring). `PackOptions.isFlatbed` is declared but grep-confirmed never read anywhere in the
+// engine — reserved, not implemented; not wired to anything here.
 import { useEffect, useMemo, useState } from "react";
 import { Truck } from "lucide-react";
-import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan } from "@/lib/packEngine";
+import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan, type PackOptions } from "@/lib/packEngine";
 import { runPackEngineSelfCheck } from "@/lib/packEngine.selfcheck";
 import { LOAD_BUILDER_FIXTURES, type LoadBuilderFixture } from "@/lib/loadBuilderFixtures";
 import PlanMetricsStrip from "@/components/logistics/PlanMetricsStrip";
@@ -43,7 +54,11 @@ import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logis
 import JobPullModal, { type PulledLoadSource } from "@/components/logistics/JobPullModal";
 import CustomizeEditor from "./CustomizeEditor";
 
-const TRAILER_53FT = TRAILER_TYPES["53ft Standard"];
+// lb-ui-06: shipped runner-height values, confirmed against legacy's own dropdown
+// (logistics/load-builder.html:1462 — `[0, 3, 4].forEach(rh => ...)`), not invented here.
+const RUNNER_HEIGHT_OPTIONS = [0, 3, 4] as const;
+const TRAILER_TYPE_KEYS = Object.keys(TRAILER_TYPES);
+const DEFAULT_TRAILER_TYPE = "53ft Standard";
 
 function footprintKey(l: number, w: number): string {
   return `${Math.min(l, w)}x${Math.max(l, w)}`;
@@ -63,6 +78,11 @@ export default function LoadPlanView() {
   // lb-ui-03 Step 0 dev aid — see file header. Always 1 in production (the control that changes it
   // is gated out of the bundle's runtime behavior below), so this has no effect on the shipped UI.
   const [multiplier, setMultiplier] = useState(1);
+
+  // lb-ui-06: trailer type / runner height — engine options that existed before this prompt but had
+  // no UI control. Defaults match today's shipped behavior exactly (53ft Standard, no runner).
+  const [trailerTypeKey, setTrailerTypeKey] = useState(DEFAULT_TRAILER_TYPE);
+  const [runnerHeight, setRunnerHeight] = useState(0);
 
   // lb-ui-05: pulled-job source, deep-link state, and the dismissible pull banner.
   const [pulledSource, setPulledSource] = useState<PulledLoadSource | null>(null);
@@ -84,9 +104,12 @@ export default function LoadPlanView() {
     [fixture, multiplier]
   );
 
-  const packedPlan = useMemo(() => pack(scaledCart, fixture.skus, TRAILER_53FT), [scaledCart, fixture]);
+  const dims = useMemo(() => TRAILER_TYPES[trailerTypeKey] ?? TRAILER_TYPES[DEFAULT_TRAILER_TYPE], [trailerTypeKey]);
+  const packOptions: PackOptions = useMemo(() => ({ ...DEFAULT_PACK_OPTIONS, runnerHeight }), [runnerHeight]);
+
+  const packedPlan = useMemo(() => pack(scaledCart, fixture.skus, dims, packOptions), [scaledCart, fixture, dims, packOptions]);
   const plan = editedPlan ?? packedPlan;
-  const metrics = useMemo(() => planMetrics(plan, TRAILER_53FT, DEFAULT_PACK_OPTIONS), [plan]);
+  const metrics = useMemo(() => planMetrics(plan, dims, packOptions), [plan, dims, packOptions]);
 
   const pieceCount = useMemo(() => scaledCart.reduce((s, c) => s + c.qty, 0), [scaledCart]);
   const footprintCount = useMemo(
@@ -126,6 +149,24 @@ export default function LoadPlanView() {
     setDeepLinkJobId(null);
   }
 
+  // lb-ui-06: changing either option invalidates any in-progress manual edit (the edited plan's
+  // columns were built for the previous dims/effective-height) — same reset legacy performs on
+  // both dropdowns (`state.manualRowsByTrailer = {}; state.editorTrailer = null`,
+  // load-builder.html:1452/1461).
+  function handleTrailerTypeChange(key: string) {
+    setTrailerTypeKey(key);
+    setSelected(null);
+    setEditedPlan(null);
+    setMode("view");
+  }
+
+  function handleRunnerHeightChange(rh: number) {
+    setRunnerHeight(rh);
+    setSelected(null);
+    setEditedPlan(null);
+    setMode("view");
+  }
+
   function handleApplyEdit(appliedPlan: PackPlan) {
     setEditedPlan(appliedPlan);
     setSelected(null);
@@ -158,11 +199,45 @@ export default function LoadPlanView() {
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-muted font-mono tabular-nums">
             <span>{pieceCount} pieces</span>
             <span>{footprintCount} footprints</span>
-            <span>53ft Standard trailer</span>
+            <span>
+              {trailerTypeKey} trailer{runnerHeight > 0 ? ` · ${runnerHeight}" runners` : ""}
+            </span>
             {editedPlan && <span className="text-[var(--brand)] font-sans font-semibold">edited</span>}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
+            Trailer
+            <select
+              value={trailerTypeKey}
+              onChange={(e) => handleTrailerTypeChange(e.target.value)}
+              disabled={mode === "edit"}
+              aria-label="Trailer type"
+              className="h-9 pl-2 pr-1 rounded-lg border border-[var(--border)] bg-[var(--card-bg)] text-text text-[13px] font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+            >
+              {TRAILER_TYPE_KEYS.map((key) => (
+                <option key={key} value={key}>
+                  {key}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
+            Runners
+            <select
+              value={runnerHeight}
+              onChange={(e) => handleRunnerHeightChange(Number(e.target.value))}
+              disabled={mode === "edit"}
+              aria-label="Runner height"
+              className="h-9 pl-2 pr-1 rounded-lg border border-[var(--border)] bg-[var(--card-bg)] text-text text-[13px] font-medium font-mono tabular-nums cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+            >
+              {RUNNER_HEIGHT_OPTIONS.map((rh) => (
+                <option key={rh} value={rh}>
+                  {rh === 0 ? "None" : `${rh}"`}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             type="button"
             onClick={() => setShowJobPull(true)}
@@ -261,14 +336,14 @@ export default function LoadPlanView() {
       )}
 
       {/* 2. Metrics strip */}
-      <PlanMetricsStrip metrics={metrics} dims={TRAILER_53FT} />
+      <PlanMetricsStrip metrics={metrics} dims={dims} />
 
       {mode === "edit" ? (
         <CustomizeEditor
           key={pulledSource ? pulledSource.id : fixtureId}
           plan={plan}
-          dims={TRAILER_53FT}
-          options={DEFAULT_PACK_OPTIONS}
+          dims={dims}
+          options={packOptions}
           cart={scaledCart}
           skus={fixture.skus}
           onApply={handleApplyEdit}
@@ -287,7 +362,7 @@ export default function LoadPlanView() {
                 <TrailerDiagram
                   key={trailerIndex}
                   trailer={trailer}
-                  dims={TRAILER_53FT}
+                  dims={dims}
                   trailerIndex={trailerIndex}
                   selectedColumn={
                     selected && selected.trailerIndex === trailerIndex
@@ -302,7 +377,7 @@ export default function LoadPlanView() {
 
           {/* 4. Detail panel + warnings + balance */}
           <div className="space-y-4">
-            <ColumnDetailPanel selected={selectedDetail} dims={TRAILER_53FT} options={DEFAULT_PACK_OPTIONS} />
+            <ColumnDetailPanel selected={selectedDetail} dims={dims} options={packOptions} />
 
             <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
               <h3 className="text-sm font-semibold text-text mb-2">Warnings</h3>
