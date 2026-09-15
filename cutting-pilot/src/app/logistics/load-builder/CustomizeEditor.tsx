@@ -18,6 +18,12 @@
 // editor box (load-builder.html:2335-2580) in shape if not in chrome (a Modal, this codebase's one
 // reusable primitive, rather than an inline box). A new "Unassigned pieces" panel reuses
 // planForApply()'s existing balance+holding merge directly — no fourth bucket invented.
+//
+// lb-ui-08: a "Print / Export" action (LoadingDiagramPrintButton) added alongside Edit…/Dissolve…
+// in the same headerAction slot — builds a standalone loading-diagram PDF per trailer via
+// loadingDiagramPdf.ts and opens it in a new tab. No new state here beyond the props the button
+// itself needs (state.options.runnerHeight, state.plan.warnings); see loadingDiagramPdf.ts for the
+// PDF builder and its own Step 0 notes.
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -46,6 +52,7 @@ import HoldingArea from "@/components/logistics/HoldingArea";
 import EditorGuards, { type HoldingSummaryLine } from "@/components/logistics/EditorGuards";
 import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logistics/ColumnDetailPanel";
 import DissolvePreview from "@/components/logistics/DissolvePreview";
+import LoadingDiagramPrintButton from "@/components/logistics/LoadingDiagramPrintButton";
 import Modal from "@/components/Modal";
 
 interface CustomizeEditorProps {
@@ -375,6 +382,14 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                       <Shuffle className="w-3 h-3" aria-hidden="true" />
                       Dissolve…
                     </button>
+                    <LoadingDiagramPrintButton
+                      trailer={trailer}
+                      trailerIndex={t}
+                      dims={state.dims}
+                      skus={state.skus}
+                      runnerHeight={state.options.runnerHeight}
+                      warnings={state.plan.warnings}
+                    />
                   </div>
                 }
               />

@@ -43,6 +43,13 @@
 // `packEngine.ts` — auto-downsize and Force Sizes are out of scope (new engine work, not UI
 // wiring). `PackOptions.isFlatbed` is declared but grep-confirmed never read anywhere in the
 // engine — reserved, not implemented; not wired to anything here.
+//
+// lb-ui-08: each trailer diagram in view mode now carries a "Print / Export" action
+// (LoadingDiagramPrintButton, via TrailerDiagram's existing headerAction slot — same seam
+// CustomizeEditor.tsx already uses for Edit…/Dissolve…) that builds a standalone per-trailer PDF.
+// fixture.invoiceNumber is free to pass here (already in scope for the fixture-picker button
+// labels); CustomizeEditor's edit-mode button omits it rather than threading a new prop through
+// CustomizeEditorProps for one cosmetic field.
 import { useEffect, useMemo, useState } from "react";
 import { Truck } from "lucide-react";
 import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan, type PackOptions } from "@/lib/packEngine";
@@ -52,6 +59,7 @@ import PlanMetricsStrip from "@/components/logistics/PlanMetricsStrip";
 import TrailerDiagram from "@/components/logistics/TrailerDiagram";
 import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logistics/ColumnDetailPanel";
 import JobPullModal, { type PulledLoadSource } from "@/components/logistics/JobPullModal";
+import LoadingDiagramPrintButton from "@/components/logistics/LoadingDiagramPrintButton";
 import CustomizeEditor from "./CustomizeEditor";
 
 // lb-ui-06: shipped runner-height values, confirmed against legacy's own dropdown
@@ -370,6 +378,17 @@ export default function LoadPlanView() {
                       : null
                   }
                   onSelectColumn={(rowIndex, columnIndex) => setSelected({ trailerIndex, rowIndex, columnIndex })}
+                  headerAction={
+                    <LoadingDiagramPrintButton
+                      trailer={trailer}
+                      trailerIndex={trailerIndex}
+                      dims={dims}
+                      skus={fixture.skus}
+                      runnerHeight={runnerHeight}
+                      warnings={plan.warnings}
+                      invoiceNumber={fixture.invoiceNumber}
+                    />
+                  }
                 />
               ))
             )}

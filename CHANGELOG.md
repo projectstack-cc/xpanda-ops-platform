@@ -1873,6 +1873,103 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-ui-08 — v2 Load Builder: print / export loading diagrams (react-component-agent §9b).
+  Sprint step 4 of 7, `Prompts/sprint-load-builder-parity.md`.** New `loadingDiagramPdf.ts`: pure
+  layout/aggregation helpers (`layoutColumnRects`, `buildPiecesTable`, `buildStackBreakdown`,
+  `formatStackLines`, `formatRemainingLabel`, `filterTrailerWarnings`) plus
+  `buildLoadingDiagramPdf(trailer, trailerIndex, dims, skus, options?)` assembling a single-page
+  US-Letter-landscape PDF via `pdf-lib` directly (`PDFDocument.create()`, `StandardFonts.Helvetica`/
+  `HelveticaBold`, `drawText`/`drawRectangle`/`drawLine`) — no DOM, no canvas, no new dependency.
+  New `LoadingDiagramPrintButton.tsx`: a per-trailer "Print / Export" action that builds the PDF and
+  opens it in a new tab as a `blob:` URL, reused from both `TrailerDiagram`'s existing `headerAction`
+  slot in `CustomizeEditor.tsx` (edit mode, alongside Edit…/Dissolve…) and `LoadPlanView.tsx` (view
+  mode, newly wired — that file never used `headerAction` before this prompt).
+  **Step 0 findings**: legacy's `buildTopViewSVG` (on-screen) and `buildPrintSvg` (print) ARE the
+  same top-down projection `TrailerDiagram.tsx` already renders — confirmed by reading both
+  directly, not assumed; `buildPrintSvg`'s only real differences are print-only (a `fitScale` that
+  caps total width to one page, plain white/black boxes with dense multi-line stack labels instead
+  of on-screen color tinting). `layoutColumnRects` ports that SAME percentage-of-self math
+  (`rowWidthPct = rowLength/dims.length`, `heightPct = colWidth/dims.width`,
+  `topPct = posY/dims.width`, `widthPct = colLength/rowLength`, flush to the row's near/rear edge)
+  from CSS top-down percentages into `pdf-lib`'s bottom-left-origin points — verified in its own
+  selfcheck against hand-computed rect coordinates, not trusted by inspection. Also found: legacy's
+  `printPackingSlip` (popup + `window.print()`) and `buildLoadingDiagramPdfBytes` are two OUTPUT
+  PATHS for the exact same HTML (`buildLoadingDiagramInnerHtml`) — the PDF path rasterizes that HTML
+  with `html2canvas` and embeds the PNG as one full-page image. **Deliberate divergence, per this
+  prompt's locked Design Decision**: a native vector PDF (matching `bolShared.ts`'s own approach) —
+  no `html2canvas`, no raster step, sharper output, smaller files, one builder instead of two output
+  paths (the browser's own PDF viewer handles printing a PDF natively, so legacy's separate
+  popup-print path isn't needed). Confirmed per-trailer, not whole-plan (legacy's own call site is
+  inside its per-trailer row loop; no combined multi-trailer export exists there either).
+  **Content set** (matches legacy's `buildLoadingDiagramInnerHtml`, nothing invented): title +
+  trailer dims/inv# subtitle, a runner-dunnage note when `runnerHeight > 0` (driven straight off
+  that option, the same as legacy — `packEngine.ts` has no dedicated runner-dunnage warning string),
+  the diagram, a pieces table (swatch + name + **native L×W×H from the SKU record** + count,
+  `buildPiecesTable(trailer, skus)`), and a stack breakdown table (`buildStackBreakdown`). v2's
+  `PackTrailer` has no precomputed `skuBreakdown`/`stackPatterns` equivalent to legacy's, so both
+  tables are derived directly from `trailer.rows[].columns[].layers[]` — pure, deterministic, and
+  unit-tested rather than trusted. **Caught in review**: an earlier draft `void`ed the `skus` param
+  and shipped SKU + count only, two columns instead of the three the Content decision locks. Missed
+  because `INV_4202`'s SKU names happen to be dimension strings ("24.75x90.75x4"), which reads like
+  a dims column at a glance but isn't one — `INV_4356`'s "Siplast holey board" names expose the gap
+  immediately. Fixed: `buildPiecesTable` now takes `skus` and reads each row's native dims from the
+  SKU record (not from `skuName`, and not from the as-placed `layer.orientation` — a SKU placed in
+  two different orientations across columns has no single as-placed footprint to print, while the
+  SKU's native L×W×H is unambiguous and matches what the parts library itself shows). Selfcheck
+  fixture now gives SKU A/B native dims that deliberately differ from their as-placed orientation
+  dims, so the assertion proves the table reads the SKU record and not the column data.
+  **Signature note**: the prompt's starting-point signature (`trailer, trailerIndex, dims, skus`)
+  can't carry `PackPlan.warnings` or `options.runnerHeight`, both needed by the locked Design
+  Decision to surface warnings/runner info — extended with one trailing optional options object
+  rather than widening the first four params, a minimal additive extension, not a rewrite.
+  **Two bugs found and fixed during manual PDF review** (see below): (1) an early draft printed
+  every trailer-scoped stability warning as its own line with no height cap — a real fixture with 32
+  stability notes pushed the diagram and both tables off the bottom of the page. Fixed by
+  summarizing to one fixed-height line ("N stacks flagged for stability — see the on-screen detail
+  panel for specifics") regardless of count, matching legacy's own single-notice style for the
+  runner-dunnage warning rather than a growing list. (2) the missing pieces-table dims column above.
+  Also fixed on inspection (not review-visible, caught by re-deriving the math by hand):
+  `formatRemainingLabel` rounded the *remainder* after `% 12` instead of the total inches first, so a
+  23.7"-remaining trailer would have printed `"1' 12" remaining"` instead of `"2' 0" remaining"`.
+  Now rounds the total before the feet/inches divmod; two new selfcheck cases assert both the
+  no-carry (11.7" -> 1'0") and carry (23.7" -> 2'0") edges. Side effect of that fix: the
+  nothing-left gate moved from "raw remainder <= 0.5" to "rounded remainder <= 0", so an exact 0.5"
+  remainder now prints `"1" remaining"` instead of being suppressed — a sub-inch edge, not covered
+  by a selfcheck case, flagged here rather than silently shipped.
+  **Verification**: no live browser session available in this environment (same standing limitation
+  as `lb-ui-01`/`lb-ui-02`/`lb-ui-05`/`lb-ui-06`/`lb-ui-07`). Headless substitute: packed two of the
+  three bundled real-order fixtures (`INV_4202`, `INV_4356`) against `pack()`, built a PDF for
+  trailer 0 of each, re-loaded the bytes through `pdf-lib` to confirm a well-formed single page, and
+  — critically — **read both PDFs directly** (the harness's PDF-reading tool renders pages as
+  images) to visually confirm the diagram's row/column layout, stack-size labels, REAR/FRONT
+  orientation, pieces table (dims column included), and stack breakdown all render correctly and
+  match the trailer's actual data; this is what caught the stability-warning overflow bug above
+  before it shipped, and re-confirmed the dims-column fix after it (`INV_4356`'s "Siplast holey
+  board" rows now show real `48"×24"×8"`/`48"×24"×5"` dims, not blank or name-derived text). **Not
+  exercised**: the job-pulled path specifically — verification step 4 asks for one job-pulled
+  trailer and one fixture trailer, but there's no live API access in this environment (same fence as
+  `lb-ui-05`'s own limitation), so both fixtures used here are bundled sample orders, not a real pull.
+  A zero-row trailer (`pack()` never emits one, matching `lb-ui-07`'s own noted gap) was also
+  confirmed to build without throwing. `packEngine.selfcheck.ts` ratchet unchanged **144/144**
+  (`packEngine.ts` not touched — closed per sprint rule). New `loadingDiagramPdf.selfcheck.ts`:
+  **24/24** (layout-math exactness against hand-computed rects, table aggregation/sort order incl.
+  dims-from-SKU-record and missing-SKU fallback, text-formatting edge cases incl. the remaining-label
+  rounding-carry cases, zero-dims division guard). `loadEditor.selfcheck.ts` **87/87**,
+  `dissolve.selfcheck.ts` **21/21**, `jobPull.selfcheck.ts` **17/17**. `npx tsc --noEmit` and
+  `npm run cf-build` both green. No hardcoded hex colors in the token-driven UI files (the PDF
+  builder itself legitimately draws literal RGB — PDFs have no CSS custom properties to reference).
+  **CRLF-verification correction, found this session**: the sprint charter's "byte-level CRLF check"
+  rule, and this segment's own working assumption going in, had the repo's line-ending convention
+  backwards — the real convention is **LF**, confirmed via `git show HEAD:<file>` on every touched
+  file back through `lb-ui-05`/`06`/`07` (including a follow-up pass over `JobPullModal.tsx` and
+  `LoadPlanView.tsx` specifically, closing a gap in the first audit pass) and on `packEngine.ts`
+  (closed, untouched, so its history is a clean baseline) — none of it was ever CRLF. Also found:
+  `grep -cU $'\r' "$f"` run inside a bash `$(...)` command substitution returned false-positive
+  "fully CRLF" counts on this Windows box for files independently confirmed LF-only via `git
+  show`/Python — the two prior prompts' "CRLF: OK" claims were therefore checking the wrong thing,
+  though no actual file drift occurred anywhere in the sprint's commit history (verified after the
+  fact, gap included). Corrected in `memory/edit-tool-crlf-changelog.md`; this prompt's own CRLF
+  check used a reliable Python byte-count instead, confirming every touched/new file is LF-only.
 - **lb-ui-07 — v2 Load Builder: manual/custom load building (add row/column/layer)
   (react-component-agent §9b). Sprint step 3 of 7, `Prompts/sprint-load-builder-parity.md`.** New
   operation family in `loadEditor.ts` — `addRow`, `addColumn`, `addLayer`, `setLayerCount`,
