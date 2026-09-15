@@ -50,8 +50,16 @@
 // fixture.invoiceNumber is free to pass here (already in scope for the fixture-picker button
 // labels); CustomizeEditor's edit-mode button omits it rather than threading a new prop through
 // CustomizeEditorProps for one cosmetic field.
+//
+// lb-ui-09: adds a "Generate BOLs" entry point beside "Customize load" (view mode only, per Step
+// 0's own finding — a mid-edit plan isn't applied yet, and CustomizeEditor has no job/invoice data
+// in scope anyway, the same asymmetry BACKLOG.md already notes for lb-ui-08's Print/Export). Opens
+// BolGenerateModal.tsx's new PackPlanSource-driven path against the EFFECTIVE plan (`plan` below —
+// editedPlan when one exists, else the auto-pack) so a manually-customized load's BOLs match what's
+// actually on screen. `bolPackPlanSource` is memoized so re-renders triggered by the modal's own
+// internal state don't recreate the object and re-trigger its data-loading effect.
 import { useEffect, useMemo, useState } from "react";
-import { Truck } from "lucide-react";
+import { Truck, FileText } from "lucide-react";
 import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan, type PackOptions } from "@/lib/packEngine";
 import { runPackEngineSelfCheck } from "@/lib/packEngine.selfcheck";
 import { LOAD_BUILDER_FIXTURES, type LoadBuilderFixture } from "@/lib/loadBuilderFixtures";
@@ -60,6 +68,7 @@ import TrailerDiagram from "@/components/logistics/TrailerDiagram";
 import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logistics/ColumnDetailPanel";
 import JobPullModal, { type PulledLoadSource } from "@/components/logistics/JobPullModal";
 import LoadingDiagramPrintButton from "@/components/logistics/LoadingDiagramPrintButton";
+import BolGenerateModal, { type PackPlanSource } from "@/components/logistics/BolGenerateModal";
 import CustomizeEditor from "./CustomizeEditor";
 
 // lb-ui-06: shipped runner-height values, confirmed against legacy's own dropdown
@@ -98,6 +107,10 @@ export default function LoadPlanView() {
   const [deepLinkJobId, setDeepLinkJobId] = useState<string | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
+  // lb-ui-09: "Generate BOLs" trigger — nullable-object convention BolGenerateModal's own jobId
+  // prop already uses, not a bare boolean, so the effect that builds it stays keyed off real data.
+  const [genBolOpen, setGenBolOpen] = useState(false);
+
   useEffect(() => {
     const jobId = new URLSearchParams(window.location.search).get("job_id");
     if (jobId) {
@@ -118,6 +131,14 @@ export default function LoadPlanView() {
   const packedPlan = useMemo(() => pack(scaledCart, fixture.skus, dims, packOptions), [scaledCart, fixture, dims, packOptions]);
   const plan = editedPlan ?? packedPlan;
   const metrics = useMemo(() => planMetrics(plan, dims, packOptions), [plan, dims, packOptions]);
+
+  // lb-ui-09: only recreated when the actual data changes (or the modal opens/closes) — plan/dims/
+  // fixture.skus are already stable refs from the memos/state above, so this doesn't recreate on
+  // every LoadPlanView render, which would otherwise re-trigger BolGenerateModal's data-load effect.
+  const bolPackPlanSource: PackPlanSource | null = useMemo(
+    () => (genBolOpen ? { plan, dims, skus: fixture.skus, jobId: pulledSource?.jobId ?? null, runnerHeight } : null),
+    [genBolOpen, plan, dims, fixture, pulledSource, runnerHeight]
+  );
 
   const pieceCount = useMemo(() => scaledCart.reduce((s, c) => s + c.qty, 0), [scaledCart]);
   const footprintCount = useMemo(
@@ -306,13 +327,23 @@ export default function LoadPlanView() {
             </div>
           )}
           {mode === "view" && (
-            <button
-              type="button"
-              onClick={() => setMode("edit")}
-              className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-            >
-              Customize load
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setMode("edit")}
+                className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+              >
+                Customize load
+              </button>
+              <button
+                type="button"
+                onClick={() => setGenBolOpen(true)}
+                disabled={plan.trailers.length === 0}
+                className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+              >
+                <FileText size={15} aria-hidden="true" /> Generate BOLs
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -457,6 +488,8 @@ export default function LoadPlanView() {
       {showJobPull && (
         <JobPullModal initialJobId={deepLinkJobId ?? undefined} onClose={handleJobPullClose} onConfirm={handlePullConfirm} />
       )}
+
+      <BolGenerateModal jobId={null} packPlanSource={bolPackPlanSource} onClose={() => setGenBolOpen(false)} />
     </div>
   );
 }

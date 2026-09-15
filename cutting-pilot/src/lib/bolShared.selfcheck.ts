@@ -7,6 +7,7 @@
 // comparing against the SAME numbers hard-coded straight from logistics/bol-shared.js. This
 // catches transcription drift in the coordinate map; it does NOT render a PDF (that's
 // scripts/bol-parity.mjs's job — pixel parity against a real pdf-lib render).
+import { PDFDocument } from "pdf-lib";
 import {
   COORDS,
   PAGE,
@@ -16,7 +17,9 @@ import {
   wrapText,
   formatBolDate,
   pickCommodityTier,
+  generatePdf,
   type WidthMeasurer,
+  type BolRecord,
 } from "./bolShared";
 
 interface CheckResult {
@@ -192,6 +195,73 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
     const { size } = pickCommodityTier(nOneLineWords(words), FIXED_WIDTH_MEASURER);
     check(`pickCommodityTier: ${words}-line commodity text -> size ${expectedSize}`, size === expectedSize, `got size=${size}`);
   }
+
+  return { pass: results.every((r) => r.pass), results };
+}
+
+// --- generatePdf's append-PDF merge paths (lb-ui-09) ---
+// Neither packingSlipPdfBytes nor its new sibling loadingDiagramPdfBytes had any test coverage
+// before this prompt — confirmed by reading this file in full during lb-ui-09's Step 0 (no
+// generatePdf call anywhere above). Part C: "if it isn't tested today, add coverage for both while
+// you're in there, and say so." This is that coverage, split into its own async export since
+// generatePdf itself is async and runBolSharedSelfCheck above is synchronous (changing its
+// signature would break the convention every other run*SelfCheck() export in this codebase follows
+// — see loadingDiagramPdf.selfcheck.ts etc. — so a second export, not a widened one).
+async function makeMinimalPdfBytes(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  doc.addPage([200, 200]);
+  return doc.save();
+}
+
+export async function runBolSharedPdfMergeSelfCheck(): Promise<{ pass: boolean; results: CheckResult[] }> {
+  const results: CheckResult[] = [];
+  function check(name: string, pass: boolean, detail?: string) {
+    results.push({ name, pass, detail });
+  }
+
+  const templateBytes = await makeMinimalPdfBytes();
+  const bolRecords: BolRecord[] = [{ bol_number: "TEST-1", ship_to_company: "Test Co" }];
+
+  const basePdf = await generatePdf(bolRecords, { templateBytes });
+  const baseDoc = await PDFDocument.load(basePdf);
+  check("generatePdf with no append option: 1 page (1 bolRecord, no merge)", baseDoc.getPageCount() === 1, `pages=${baseDoc.getPageCount()}`);
+
+  const packingSlipPdfBytes = await makeMinimalPdfBytes();
+  const withPackingSlip = await generatePdf(bolRecords, { templateBytes, packingSlipPdfBytes });
+  const packingDoc = await PDFDocument.load(withPackingSlip);
+  check(
+    "generatePdf with packingSlipPdfBytes: 2 pages (base + 1 merged page)",
+    packingDoc.getPageCount() === 2,
+    `pages=${packingDoc.getPageCount()}`
+  );
+
+  const loadingDiagramPdfBytes = await makeMinimalPdfBytes();
+  const withDiagram = await generatePdf(bolRecords, { templateBytes, loadingDiagramPdfBytes });
+  const diagramDoc = await PDFDocument.load(withDiagram);
+  check(
+    "generatePdf with loadingDiagramPdfBytes: 2 pages (base + 1 merged page)",
+    diagramDoc.getPageCount() === 2,
+    `pages=${diagramDoc.getPageCount()}`
+  );
+
+  const withBoth = await generatePdf(bolRecords, { templateBytes, packingSlipPdfBytes, loadingDiagramPdfBytes });
+  const bothDoc = await PDFDocument.load(withBoth);
+  check(
+    "generatePdf with BOTH options: 3 pages (base + packing slip + diagram, packing slip first)",
+    bothDoc.getPageCount() === 3,
+    `pages=${bothDoc.getPageCount()}`
+  );
+
+  // Malformed append bytes must not throw generatePdf itself — both merge blocks catch-and-log,
+  // matching the existing packingSlipPdfBytes try/catch this mirrors.
+  const malformed = new Uint8Array([1, 2, 3]);
+  let threw = false;
+  try {
+    await generatePdf(bolRecords, { templateBytes, loadingDiagramPdfBytes: malformed });
+  } catch {
+    threw = true;
+  }
+  check("generatePdf: malformed loadingDiagramPdfBytes is caught internally, does not throw", !threw);
 
   return { pass: results.every((r) => r.pass), results };
 }

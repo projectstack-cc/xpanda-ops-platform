@@ -21,14 +21,46 @@
 // false) -- Generate All still runs the full save loop per trailer so the wiring is exercised
 // end-to-end; a 501 shows a clear, non-blocking banner instead of ever spinning forever or
 // silently failing, and never closes the modal (so the operator doesn't lose typed data).
+//
+// lb-ui-09: adds a second, alternate trigger -- `packPlanSource` -- alongside the original `jobId`
+// (dock-assignment, Shipment Dashboard) path. When set, this modal sources its per-trailer form
+// data from a Load Builder `PackPlan` instead of `job.load_count`/`LoadingAssignmentForJob[]`: one
+// `TrailerForm` per `plan.trailers[]`, commodity description computed from that trailer's own
+// placed SKUs (buildPiecesTable, from lb-ui-08) instead of job.line_items -- mirrors legacy's own
+// load-builder BOL flow exactly (load-builder.html:2652-2702's openBolModal derives commodity from
+// `trailer.skuBreakdown`, not job line items). `packPlanSource.jobId` (optional -- null for a
+// fixture-sourced or from-scratch plan) still drives the SAME `/v2/api/jobs/:id` fetch this file
+// already had for ship-to/carrier/PO/contact/date prefill -- not a second, redundant fetch, the
+// ONLY fetch for that data on either path. The two trigger props are mutually exclusive and
+// intentionally decoupled from each other's null-checks (Step 0 finding: a load-builder plan with
+// no jobId must still be able to open this modal, which the original `if (!jobId) return` did not
+// allow) -- see LoadPlanView.tsx for the caller, ShipmentDashboard.tsx for the unchanged original.
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
 import { confirmNoBolNumber } from "@/lib/bolDomGlue";
 import { formatCutListDims } from "@/lib/cutList";
+import { buildPiecesTable, buildLoadingDiagramPdf } from "@/lib/loadingDiagramPdf";
+import type { PackPlan, Dimensions, PackSku } from "@/lib/packEngine";
 import type { JobForBol, LoadingAssignmentForJob } from "./types";
 
-interface BolGenerateModalProps {
+/** lb-ui-09: a Load Builder plan as an alternate BOL-generation source. `jobId` here is optional
+ * (set only when the plan came from lb-ui-05's job pull) -- unlike the top-level `jobId` prop below,
+ * which is the ORIGINAL dock-assignment trigger and is left untouched for ShipmentDashboard.tsx. */
+export interface PackPlanSource {
+  plan: PackPlan;
+  dims: Dimensions;
+  skus: PackSku[];
   jobId: string | null;
+  runnerHeight?: number;
+}
+
+interface BolGenerateModalProps {
+  /** Dock-assignment path (Shipment Dashboard) -- unchanged. */
+  jobId: string | null;
+  /** lb-ui-09: Load-Builder path -- see file header. Pass a referentially-stable object (e.g.
+   * useMemo'd in the caller) only while the modal should be open; null/undefined otherwise, same
+   * nullable-trigger convention `jobId` already uses. */
+  packPlanSource?: PackPlanSource | null;
   /** Called on close. `generated=true` only when at least one trailer actually saved (never
    * happens while the fence is on) so the dashboard knows to refetch (Bug 2 fix). */
   onClose: (generated: boolean) => void;
@@ -65,6 +97,11 @@ interface TrailerForm {
   commodityDescriptionNoDims: string;
   hideDimensions: boolean;
   commodityDescription: string;
+  // lb-ui-09: plan-sourced trailers only (undefined/false on the dock-assignment path).
+  // packageQtyOverride carries that trailer's own totalUnits (legacy: `totalPieces: trailer.totalUnits`
+  // per trailer, load-builder.html:2671) instead of the job-wide piecesGuess() below.
+  packageQtyOverride?: number;
+  includeLoadingDiagram: boolean;
 }
 
 function today(): string {
@@ -98,7 +135,24 @@ function buildCommodityDescription(job: JobForBol, withDims: boolean): string {
     .join("\n");
 }
 
-export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalProps) {
+// lb-ui-09: plan-sourced commodity description, one line per SKU placed on THIS trailer (not the
+// whole job) -- mirrors legacy's load-builder BOL flow exactly (load-builder.html:2656-2663:
+// `${pieces} pcs — ${name} (${sku}) ${L}"x${W}"x${H}"`, no-dims variant drops the trailing size).
+// Deliberately NOT formatCutListDims (that helper is for job.line_items' pre-formatted dimension
+// strings; a PackSku's length/width/height are already plain numbers, same source
+// loadingDiagramPdf.ts's formatSkuDims uses for the SAME reason).
+function buildPlanCommodityDescription(pieces: ReturnType<typeof buildPiecesTable>, skuById: Map<string, PackSku>, withDims: boolean): string {
+  return pieces
+    .map((p) => {
+      const sku = skuById.get(p.skuId);
+      const codeSuffix = sku?.sku ? ` (${sku.sku})` : "";
+      const base = `${p.pieces} pcs — ${p.name}${codeSuffix}`;
+      return withDims ? `${base} ${p.dimsLabel}` : base;
+    })
+    .join("\n");
+}
+
+export default function BolGenerateModal({ jobId, packPlanSource, onClose }: BolGenerateModalProps) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [job, setJob] = useState<JobForBol | null>(null);
@@ -124,62 +178,117 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
     setFenced(false);
     setSavedAny(false);
     setProgress([]);
-    if (!jobId) return;
+    if (!jobId && !packPlanSource) return;
 
     let cancelled = false;
     setLoading(true);
 
     (async () => {
       try {
-        const [jobJson, laJson] = await Promise.all([
-          fetch(`/v2/api/jobs/${encodeURIComponent(jobId)}`).then((r) => r.json()),
-          fetch(`/v2/api/loading-assignments?job_id=${encodeURIComponent(jobId)}`).then((r) => r.json()),
-        ]);
-        if (cancelled) return;
-        if (!jobJson.ok || !jobJson.job) {
-          setLoadError("Could not load this job.");
-          return;
-        }
-        const j: JobForBol = jobJson.job;
-        setJob(j);
+        if (packPlanSource) {
+          // lb-ui-09: Load-Builder path. Fetch the job only when the plan actually came from one
+          // (pullJobPreview/lb-ui-05) -- the SAME single fetch the dock-assignment branch below
+          // already made, not an extra one (Design Decision's "don't re-fetch" read literally).
+          let j: JobForBol | null = null;
+          if (packPlanSource.jobId) {
+            const jobJson = await fetch(`/v2/api/jobs/${encodeURIComponent(packPlanSource.jobId)}`).then((r) => r.json());
+            if (cancelled) return;
+            if (jobJson.ok && jobJson.job) {
+              j = jobJson.job;
+              setJob(j);
+            }
+            // A failed job fetch here is non-fatal for this path (unlike the dock-assignment
+            // branch, which has nothing else to build a form from): fall through with blank
+            // ship-to/carrier/PO fields rather than blocking BOL generation for a load whose only
+            // problem is a stale/deleted job link.
+          }
 
-        const assignments: LoadingAssignmentForJob[] = laJson.ok && Array.isArray(laJson.assignments) ? laJson.assignments : [];
-        const byLoad = new Map<number, LoadingAssignmentForJob>();
-        for (const a of assignments) if (a.load_number != null) byLoad.set(Number(a.load_number), a);
-
-        const loadCount = Math.max(1, Number(j.load_count) || 1);
-        const commodityDescriptionFull = buildCommodityDescription(j, true);
-        const commodityDescriptionNoDims = buildCommodityDescription(j, false);
-        const cityStateFromLocation = (j.location || "").split(",");
-
-        const built: TrailerForm[] = [];
-        for (let i = 0; i < loadCount; i++) {
-          const assignment = byLoad.get(i + 1);
-          built.push({
-            invNumber: i === 0 ? j.invoice_number || "" : "",
-            invAutoFilled: false,
-            date: assignment?.load_ship_date || j.ship_date || today(),
-            shipToCompany: j.ship_to_company || j.customer || "",
-            shipToAttention: j.ship_to_attention || "",
-            shipToStreet: j.ship_to_street || "",
-            shipToStreet2: j.ship_to_street2 || "",
-            shipToCity: j.ship_to_city || (cityStateFromLocation[0] || "").trim(),
-            shipToState: j.ship_to_state || (cityStateFromLocation[1] || "").trim(),
-            shipToZip: j.ship_to_zip || "",
-            contactName: j.contact_name || "",
-            contactPhone: j.contact_phone || "",
-            carrierName: j.carrier || "",
-            poNumber: j.po_number || "",
-            deliveryTime: j.delivery_time || "",
-            specialInstructions: "",
-            trailerNo: assignment?.trailer_number || "",
-            commodityDescriptionFull,
-            commodityDescriptionNoDims,
-            hideDimensions: false,
-            commodityDescription: commodityDescriptionFull,
+          const skuById = new Map(packPlanSource.skus.map((s) => [s.id, s]));
+          const built: TrailerForm[] = packPlanSource.plan.trailers.map((trailer, i) => {
+            const pieces = buildPiecesTable(trailer, packPlanSource.skus);
+            const commodityDescriptionFull = buildPlanCommodityDescription(pieces, skuById, true);
+            const commodityDescriptionNoDims = buildPlanCommodityDescription(pieces, skuById, false);
+            return {
+              invNumber: i === 0 ? j?.invoice_number || "" : "",
+              invAutoFilled: false,
+              date: j?.ship_date || today(),
+              shipToCompany: j?.ship_to_company || j?.customer || "",
+              shipToAttention: j?.ship_to_attention || "",
+              shipToStreet: j?.ship_to_street || "",
+              shipToStreet2: j?.ship_to_street2 || "",
+              shipToCity: j?.ship_to_city || "",
+              shipToState: j?.ship_to_state || "",
+              shipToZip: j?.ship_to_zip || "",
+              contactName: j?.contact_name || "",
+              contactPhone: j?.contact_phone || "",
+              carrierName: j?.carrier || "",
+              poNumber: j?.po_number || "",
+              deliveryTime: j?.delivery_time || "",
+              specialInstructions: "",
+              // No dock assignment exists yet for a plan that hasn't shipped -- planner fills in
+              // manually, same as legacy's manual-load path (load-builder.html:2675, empty default).
+              trailerNo: "",
+              commodityDescriptionFull,
+              commodityDescriptionNoDims,
+              hideDimensions: false,
+              commodityDescription: commodityDescriptionFull,
+              packageQtyOverride: trailer.totalUnits,
+              includeLoadingDiagram: false,
+            };
           });
+          setTrailers(built);
+        } else if (jobId) {
+          const [jobJson, laJson] = await Promise.all([
+            fetch(`/v2/api/jobs/${encodeURIComponent(jobId)}`).then((r) => r.json()),
+            fetch(`/v2/api/loading-assignments?job_id=${encodeURIComponent(jobId)}`).then((r) => r.json()),
+          ]);
+          if (cancelled) return;
+          if (!jobJson.ok || !jobJson.job) {
+            setLoadError("Could not load this job.");
+            return;
+          }
+          const j: JobForBol = jobJson.job;
+          setJob(j);
+
+          const assignments: LoadingAssignmentForJob[] = laJson.ok && Array.isArray(laJson.assignments) ? laJson.assignments : [];
+          const byLoad = new Map<number, LoadingAssignmentForJob>();
+          for (const a of assignments) if (a.load_number != null) byLoad.set(Number(a.load_number), a);
+
+          const loadCount = Math.max(1, Number(j.load_count) || 1);
+          const commodityDescriptionFull = buildCommodityDescription(j, true);
+          const commodityDescriptionNoDims = buildCommodityDescription(j, false);
+          const cityStateFromLocation = (j.location || "").split(",");
+
+          const built: TrailerForm[] = [];
+          for (let i = 0; i < loadCount; i++) {
+            const assignment = byLoad.get(i + 1);
+            built.push({
+              invNumber: i === 0 ? j.invoice_number || "" : "",
+              invAutoFilled: false,
+              date: assignment?.load_ship_date || j.ship_date || today(),
+              shipToCompany: j.ship_to_company || j.customer || "",
+              shipToAttention: j.ship_to_attention || "",
+              shipToStreet: j.ship_to_street || "",
+              shipToStreet2: j.ship_to_street2 || "",
+              shipToCity: j.ship_to_city || (cityStateFromLocation[0] || "").trim(),
+              shipToState: j.ship_to_state || (cityStateFromLocation[1] || "").trim(),
+              shipToZip: j.ship_to_zip || "",
+              contactName: j.contact_name || "",
+              contactPhone: j.contact_phone || "",
+              carrierName: j.carrier || "",
+              poNumber: j.po_number || "",
+              deliveryTime: j.delivery_time || "",
+              specialInstructions: "",
+              trailerNo: assignment?.trailer_number || "",
+              commodityDescriptionFull,
+              commodityDescriptionNoDims,
+              hideDimensions: false,
+              commodityDescription: commodityDescriptionFull,
+              includeLoadingDiagram: false,
+            });
+          }
+          setTrailers(built);
         }
-        setTrailers(built);
       } catch {
         if (!cancelled) setLoadError("Network error — could not load this job.");
       } finally {
@@ -190,7 +299,7 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [jobId, packPlanSource]);
 
   function updateField<K extends keyof TrailerForm>(index: number, field: K, value: TrailerForm[K]) {
     setTrailers((prev) => {
@@ -317,7 +426,8 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
         siplast: siplast ? 1 : 0,
         // No v2 address-book search exists yet (legacy's GET /api/bol-customers, driven from a
         // search panel in bol-compose.js:361-404) -- customer_id stays unset here, same scope cut
-        // as packing slip / loading diagram above. The server already tolerates a missing value.
+        // as packing slip above (lb-ui-09 restored "Include Loading Diagram" -- see below). The
+        // server already tolerates a missing value.
         customer_id: null,
         bol_group_id: bolGroupId,
         load_number: i + 1,
@@ -328,13 +438,47 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
         commodity_description: td.commodityDescription,
         handling_unit_qty: "",
         handling_unit_type: "stacks",
-        package_qty: job ? String(piecesGuess(job) || "") : "",
+        package_qty: td.packageQtyOverride != null ? String(td.packageQtyOverride) : job ? String(piecesGuess(job) || "") : "",
         package_type: "pcs",
         weight: "",
         delivery_time: td.deliveryTime,
-        job_id: jobId,
+        job_id: jobId || packPlanSource?.jobId || null,
         notes: "",
       };
+
+      // lb-ui-09: "Include Loading Diagram" -- exercises lb-ui-08's buildLoadingDiagramPdf for
+      // real (Step 0/Part B), opened in its own tab, the same pattern LoadingDiagramPrintButton.tsx
+      // already uses. Built BEFORE the save POST below (not after) so it still runs while
+      // V2_LOGISTICS_WRITES_ENABLED is false -- Phase 2 step 6 ("attach the loading diagram... and
+      // confirm it's in the generated PDF") has to be exercisable before the write fence lifts, and
+      // a post-success placement would make it unreachable under the fence. Deliberately NOT routed
+      // through bolShared.ts's new loadingDiagramPdfBytes merge here: that option has no live
+      // combined-PDF caller yet (bolDomGlue.ts/BolViewerModal.tsx are out of this prompt's file
+      // fence -- see the CHANGELOG), so a standalone tab per checked trailer is the only way to give
+      // the planner something real today, and it sidesteps legacy's own "only the current page's
+      // trailer" limitation (buildBolAppendBytes, load-builder.html:2606-2627) entirely: check as
+      // many trailers as needed, one tab each. A build failure here is non-blocking -- the save
+      // below still proceeds regardless.
+      let diagramError: string | null = null;
+      if (td.includeLoadingDiagram && packPlanSource) {
+        try {
+          const planTrailer = packPlanSource.plan.trailers[i];
+          const bytes = await buildLoadingDiagramPdf(planTrailer, i, packPlanSource.dims, packPlanSource.skus, {
+            runnerHeight: packPlanSource.runnerHeight,
+            warnings: packPlanSource.plan.warnings,
+            invoiceNumber: td.invNumber || undefined,
+          });
+          const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
+          const url = URL.createObjectURL(blob);
+          const opened = window.open(url, "_blank");
+          if (!opened) {
+            diagramError = `Trailer ${i + 1}: loading diagram pop-up was blocked — allow pop-ups to view it.`;
+          }
+          window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        } catch {
+          diagramError = `Trailer ${i + 1}: loading diagram failed to build.`;
+        }
+      }
 
       try {
         const res = await fetch("/v2/api/bols", {
@@ -361,6 +505,8 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
           n[i] = { text: `Trailer ${i + 1} — ${data.bol?.bol_number ? `BOL #${data.bol.bol_number}` : "BOL"} saved`, done: true };
           return n;
         });
+
+        if (diagramError) setFormError(diagramError);
       } catch {
         setFormError(`Trailer ${i + 1}: network error.`);
         setGenerating(false);
@@ -373,7 +519,7 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
   }
 
   const trailer = trailers[page];
-  const isOpen = !!jobId;
+  const isOpen = !!jobId || !!packPlanSource;
 
   return (
     <Modal isOpen={isOpen} onClose={() => onClose(savedAny)} title="Generate BOL" size="lg">
@@ -558,6 +704,17 @@ export default function BolGenerateModal({ jobId, onClose }: BolGenerateModalPro
             <input type="checkbox" checked={siplast} onChange={(e) => setSiplast(e.target.checked)} />
             Siplast product?
           </label>
+
+          {packPlanSource && (
+            <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
+              <input
+                type="checkbox"
+                checked={trailer.includeLoadingDiagram}
+                onChange={(e) => updateField(page, "includeLoadingDiagram", e.target.checked)}
+              />
+              Include loading diagram (opens in a new tab once this trailer saves)
+            </label>
+          )}
 
           {progress.length > 0 && (
             <ul className="text-xs text-muted space-y-1 list-none p-0 m-0">

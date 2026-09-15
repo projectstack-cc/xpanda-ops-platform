@@ -332,6 +332,16 @@ export interface GeneratePdfOptions {
   /** FRSCRIPT.TTF cursive signature font bytes, or null/omitted to skip the signature line. */
   scriptFontBytes?: Uint8Array | ArrayBuffer | null;
   packingSlipPdfBytes?: Uint8Array | ArrayBuffer;
+  /** lb-ui-09: restores legacy's "Include Loading Diagram" BOL option (load-builder.html:2606-2627
+   * — buildBolAppendBytes). Merged the exact same way packingSlipPdfBytes above is: appended once,
+   * after every bolRecords page in this call, not per-record — generatePdf is called once for the
+   * whole batch, so at most one diagram can be attached per call, the same structural constraint
+   * legacy's own comment names ("generatePdf is called once for all BOLs (not per-trailer)").
+   * No live v2 caller threads this through today — bolDomGlue.ts's buildCombinedBolPdf does its
+   * OWN separate packingSlipPdfBytes merge and never passes either option into generatePdf itself,
+   * so this sits at the same "proven, not yet wired" status as packingSlipPdfBytes already has on
+   * this interface. Proven correct by bolShared.selfcheck.ts's runBolSharedPdfMergeSelfCheck. */
+  loadingDiagramPdfBytes?: Uint8Array | ArrayBuffer;
   hideQr?: boolean;
   /** Replaces `window.location.origin` for the QR tracking URL (`${trackingBaseUrl}/track/<token>`). */
   trackingBaseUrl?: string;
@@ -574,6 +584,17 @@ export async function generatePdf(bolRecords: BolRecord[], opts: GeneratePdfOpti
       packingPages.forEach((p) => combinedPdf.addPage(p));
     } catch (e) {
       console.error("Failed to append packing slip:", e);
+    }
+  }
+
+  // Append loading diagram PDF if provided (lb-ui-09) — same merge shape as packingSlipPdfBytes above.
+  if (opts.loadingDiagramPdfBytes) {
+    try {
+      const diagramDoc = await PDFDocument.load(opts.loadingDiagramPdfBytes);
+      const diagramPages = await combinedPdf.copyPages(diagramDoc, diagramDoc.getPageIndices());
+      diagramPages.forEach((p) => combinedPdf.addPage(p));
+    } catch (e) {
+      console.error("Failed to append loading diagram:", e);
     }
   }
 

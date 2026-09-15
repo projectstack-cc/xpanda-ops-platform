@@ -1873,6 +1873,160 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-ui-09 — v2 Load Builder: BOL generation wired to a `PackPlan` + per-trailer numbering
+  (react-component-agent §9b). Sprint step 5 of 7, `Prompts/sprint-load-builder-parity.md`.**
+  Merges what were originally scoped as two separate items ("BOL generation" and "BOL numbering")
+  after Step 0 confirmed `BolGenerateModal.tsx` already implements legacy's per-trailer
+  auto-increment numbering (`invNumber`/`invAutoFilled`, `handleInvNumberChange`) — it just had
+  never been exercised against a Load Builder `PackPlan`, only against `job.load_count` +
+  `LoadingAssignmentForJob[]` (dock assignments). This prompt is the wiring, not new numbering
+  logic — `handleInvNumberChange` is untouched.
+  **Step 0 findings**: (1) `BolGenerateModal.tsx`'s existing `jobId`-driven `useEffect` builds one
+  `TrailerForm` per `job.load_count`, prefilling ship-to/carrier/contact/PO/date from a single
+  `/v2/api/jobs/:id` fetch and `trailerNo`/`date` per-trailer from `GET
+  /v2/api/loading-assignments?job_id=`; every trailer gets the SAME ship-to/carrier/contact/PO
+  (there was already no per-trailer variation on that side, so no "carry-over" logic needed
+  building — it's the existing behavior). (2) Commodity description is job.line_items-derived on
+  that path; legacy's OWN load-builder BOL flow (`load-builder.html:2652-2702`, `openBolModal`)
+  computes it per-trailer from `trailer.skuBreakdown` instead — confirming Part A's instruction
+  that a `PackPlan` source needs commodity computed from each trailer's own placed SKUs, not
+  `job.line_items` (a job's line items describe the whole order; a plan's trailer 2 carries
+  different SKUs than trailer 1). (3) Two structural findings that revise the prompt's own stated
+  premises, reported per Step 0's own invitation rather than worked around silently: **(a)**
+  `bolShared.ts`'s existing `GeneratePdfOptions.packingSlipPdfBytes` is dead code — its only real
+  caller, `bolDomGlue.ts`'s `buildCombinedBolPdf`, does its own SEPARATE `packingSlipPdfBytes`
+  merge and never threads that option into `generatePdf` at all (confirmed by grep: `generatePdf(`
+  has exactly one call site, and it omits the option). **(b)** Legacy's own "Include Loading
+  Diagram" has the identical one-diagram-per-call constraint this port would inherit —
+  `buildBolAppendBytes`'s own comment states it plainly: `generatePdf` (bolShared's, legacy's
+  equivalent) is called once for the whole batch, so legacy attaches only the CURRENTLY DISPLAYED
+  trailer's diagram, not one per trailer. **(c)** `PulledLoadSource`/`LoadBuilderFixture` (the
+  `EditorState`/`LoadPlanView` job-pull carrier from `lb-ui-05`) carries only `jobId`, `customer`,
+  `invoiceNumber` — never ship-to address, carrier, PO, or contact. The locked Design Decision's
+  "reuse whatever job data is already attached... don't re-fetch" is therefore not literally
+  achievable — there is nothing more attached to reuse. Resolved per Step 0's own escape hatch: the
+  ONE `/v2/api/jobs/:jobId` fetch `BolGenerateModal.tsx` already performs for its existing path is
+  reused verbatim for the plan-sourced path too (triggered by the SAME jobId, when present) — this
+  is not a second, redundant fetch; it is the modal's one and only job fetch, now serving both
+  trigger paths.
+  **Part A wiring**: `BolGenerateModal.tsx` gains a new, additive `packPlanSource?:
+  PackPlanSource | null` prop (`{ plan, dims, skus, jobId, runnerHeight }`) alongside the original
+  `jobId` prop, which stays completely unchanged for its one existing caller
+  (`ShipmentDashboard.tsx`, confirmed the only caller via grep — no other consumer needed
+  preserving-alongside logic beyond simply not breaking it). `isOpen` is now `!!jobId ||
+  !!packPlanSource` (Step 0 finding: the original `if (!jobId) return` early-out could never open
+  for a load-builder plan built from a bundled fixture or from scratch, which legitimately has no
+  `jobId`) — the two trigger paths are fully decoupled, matching field-by-field to avoid any
+  cross-talk (LoadPlanView.tsx never passes its own top-level `jobId` prop; the plan-sourced job
+  reference travels only inside `packPlanSource.jobId`). One `TrailerForm` per `plan.trailers[]`;
+  commodity description via a new `buildPlanCommodityDescription` helper over `lb-ui-08`'s own
+  `buildPiecesTable(trailer, skus)` (reused directly, not re-derived a third time), formatted to
+  match legacy's exact pattern (`"${pieces} pcs — ${name} (${sku}) ${L}"×${W}"×${H}""`, no-dims
+  variant drops the trailing size) — deliberately NOT `formatCutListDims` (that helper parses
+  job-line-item dimension strings; a `PackSku`'s length/width/height are already plain numbers, the
+  same reason `loadingDiagramPdf.ts`'s `formatSkuDims` avoids it too). `package_qty` on this path
+  sends that trailer's own `totalUnits` (new `TrailerForm.packageQtyOverride` field) instead of the
+  job-wide `piecesGuess()`, matching legacy's own `totalPieces: trailer.totalUnits` per trailer. No
+  dock assignment exists yet for a plan that hasn't shipped, so `trailerNo` starts blank on this
+  path (planner fills in manually) and the `loading-assignments` fetch is skipped entirely. A
+  failed job fetch on this path is non-fatal (falls through to blank ship-to/carrier/PO fields)
+  rather than blocking BOL generation, unlike the dock-assignment path where a job fetch failure IS
+  fatal (there's nothing else to build a form from there).
+  **Part B — "Include Loading Diagram" restored**, but its actual live wiring diverges from the
+  prompt's literal instruction for a reason surfaced in Step 0 finding (a) above: `bolShared.ts`
+  gains `loadingDiagramPdfBytes?: Uint8Array | ArrayBuffer` on `GeneratePdfOptions`, merged in
+  `generatePdf` the exact same way `packingSlipPdfBytes` already is (one more `try { PDFDocument
+  .load → copyPages → addPage } catch` block, appended once after the packing-slip block) — proven
+  correct by a new `runBolSharedPdfMergeSelfCheck` (below). But since NO live v2 caller threads
+  `packingSlipPdfBytes` through `generatePdf` today (dead code, per finding (a)), wiring
+  `loadingDiagramPdfBytes` into that same unused seam would be equally inert — nothing renders it.
+  `bolDomGlue.ts`/`BolViewerModal.tsx` (the actual live combined-PDF render path) are both outside
+  this prompt's file fence. Instead, the per-trailer "Include Loading Diagram" checkbox in
+  `BolGenerateModal.tsx` — rendered only when `packPlanSource` is set — calls `lb-ui-08`'s
+  `buildLoadingDiagramPdf` directly and opens the result in its own new tab (the exact pattern
+  `LoadingDiagramPrintButton.tsx` already uses), non-blocking on failure. Built **before** that
+  trailer's `POST /v2/api/bols` call, not after a successful save: an advisor review caught that a
+  post-success placement is unreachable while `V2_LOGISTICS_WRITES_ENABLED` is `false` (every save
+  returns 501 first), which would have made Phase 2 step 6 ("attach the loading diagram to a BOL...
+  and confirm it's in the generated PDF") impossible to actually exercise before the write fence
+  lifts. With the build moved earlier, it runs regardless of fence state, then the save attempt
+  follows — a build failure doesn't block the save. Under the fence today this means only trailer
+  1's checked diagram opens (the loop returns at trailer 1's 501, same as any other field), which is
+  correct, not a bug. This is a **deliberate, disclosed improvement over legacy**, not a workaround:
+  legacy can only ever attach the diagram for whichever trailer page happened to be displayed at
+  Generate-click time (its own comment says so); checking this per-trailer checkbox on several
+  trailers opens several tabs, one diagram each — no such limitation. The `bolShared.ts` merge
+  capability still exists, tested, and ready for a future prompt to wire into `buildCombinedBolPdf`'s
+  real render path once that file is back in scope (flagged in `BACKLOG.md`).
+  **Part C selfcheck**: `bolShared.selfcheck.ts` had ZERO coverage of `generatePdf`'s append-PDF
+  merge paths before this prompt (confirmed by reading the whole file — no `generatePdf` call
+  anywhere in it), so per Part C's own instruction ("if it isn't tested today, add coverage for
+  both while you're in there"), a new async `runBolSharedPdfMergeSelfCheck` export (kept separate
+  from the existing synchronous `runBolSharedSelfCheck` — `generatePdf` is async, and widening the
+  existing export's signature would break the `run*SelfCheck(): {pass,results}` convention every
+  other selfcheck file in this codebase follows) verifies: a base call with a 1-page template
+  produces 1 page; `packingSlipPdfBytes` set produces 2; `loadingDiagramPdfBytes` set produces 2;
+  both set produces 3 (packing slip page before the diagram page, matching merge-block order); and
+  malformed append bytes are caught internally (log-and-continue, matching the existing
+  `packingSlipPdfBytes` try/catch this mirrors) rather than throwing out of `generatePdf`.
+  **Entry point** (Step 0 item 4): a new "Generate BOLs" button in `LoadPlanView.tsx`'s header row,
+  beside "Customize load", view mode only — not `CustomizeEditor.tsx` (a mid-edit plan isn't
+  applied yet, and that file has no job/invoice data in scope regardless, the same asymmetry
+  `BACKLOG.md` already noted for `lb-ui-08`'s Print/Export button). Runs against the EFFECTIVE plan
+  (`editedPlan ?? packedPlan`, i.e. what's actually on screen after any manual customization), and
+  is disabled when `plan.trailers.length === 0`. The `packPlanSource` object passed down is
+  `useMemo`'d against `[genBolOpen, plan, dims, fixture, pulledSource, runnerHeight]` — `plan`/
+  `dims`/`fixture.skus` are already stable references from LoadPlanView's own existing memos, so
+  this doesn't recreate (and re-trigger `BolGenerateModal`'s data-loading effect) on every render;
+  it only changes when the modal actually opens/closes or the underlying data genuinely changes.
+  **Verification**: no live browser session available in this environment (same standing limitation
+  as `lb-ui-01`/`02`/`05`/`06`/`07`/`08`) — the modal's own rendering, checkbox interaction, page
+  navigation, live fetch/POST, 501-banner display, and diagram-tab opening could NOT be exercised
+  in a browser. Headless substitute: packed a bundled fixture at 4× cart quantity (lb-ui-03's own
+  dev-aid technique, since none of the three bundled fixtures reach 3 trailers on their own) to get
+  a real 3-trailer plan, then re-derived the SAME per-trailer commodity-description logic
+  `BolGenerateModal.tsx`'s effect uses against it — confirmed all 3 trailers produce genuinely
+  DISTINCT commodity descriptions (not the same job-wide string repeated 3×, the exact class of bug
+  this design avoids relative to using `job.line_items`), `packageQtyOverride` matches
+  `trailer.totalUnits` exactly for every trailer, and pieces conservation holds
+  (placed-across-trailers + plan.balance === full multiplied cart, `432 = 432 + 0`). Fence behavior
+  confirmed by direct source read rather than a live 501 click-through: `writeFence.ts`'s
+  `V2_LOGISTICS_WRITES_ENABLED` is untouched (still `false`), and `POST /v2/api/bols` checks it
+  FIRST, before any D1 read/write — unchanged from before this prompt. Item 5 (Shipment Dashboard's
+  dock-assignment BOL path unaffected): preserved by construction rather than a browser check — the
+  `else if (jobId)` branch is byte-for-byte the pre-existing logic, `packPlanSource` is an additive
+  optional prop, `ShipmentDashboard.tsx` is confirmed by grep as the sole `jobId`-path caller, and
+  `tsc --noEmit` is clean against the unchanged call site. Item 6 (dark mode): not visually
+  confirmed (no browser available); the two new surfaces — the `LoadPlanView.tsx` "Generate BOLs"
+  button and the checkbox label — reuse existing token classes (`var(--brand)`, `text-muted`, etc.),
+  the same no-hardcoded-color statement already made for `lb-ui-08`'s new UI.
+  `packEngine.selfcheck.ts` ratchet unchanged **144/144** (`packEngine.ts` not touched — closed per
+  sprint rule). `loadingDiagramPdf.selfcheck.ts` unchanged **24/24** (imported, not modified).
+  `loadEditor.selfcheck.ts` **87/87**, `dissolve.selfcheck.ts` **21/21**, `jobPull.selfcheck.ts`
+  **17/17**. `bolShared.selfcheck.ts` — file edited (new imports, new async export appended) but its
+  22 pre-existing checks are unchanged — **22/22**; new `runBolSharedPdfMergeSelfCheck` **5/5**.
+  `npx tsc --noEmit` and `npm run cf-build` both green. Confirmed **`V2_LOGISTICS_WRITES_ENABLED`
+  was not touched** — still `false` in `cutting-pilot/src/lib/logistics/writeFence.ts`.
+  **CRLF drift caught and fixed this session**: the `Edit` tool flipped `bolShared.ts` and
+  `bolShared.selfcheck.ts` entirely to CRLF on the FIRST edit to each (confirmed via the Python
+  byte-count check the corrected `memory/edit-tool-crlf-changelog.md` methodology specifies, not
+  `git status`/`git diff --stat` — exactly the drift class that memory documents). Both files'
+  `HEAD` blobs confirmed LF-only beforehand via `git show HEAD:<file>`. Fixed with a Python
+  `\r\n` → `\n` byte replace preserving all intended content; `git diff --stat` after the fix shows
+  the real, proportionate change (91 lines inserted, matching the actual additions) rather than a
+  ~34,000-line full-file rewrite. `BolGenerateModal.tsx` and `LoadPlanView.tsx` — edited in the same
+  session — stayed LF-only on every edit; no trigger identified for which files flip, consistent
+  with every prior entry in that memory file.
+  Follow-ups (see `BACKLOG.md`): the `bolShared.ts` `loadingDiagramPdfBytes` merge has no live
+  combined-PDF caller yet (same status as its sibling `packingSlipPdfBytes`); no "carry
+  ship-to/carrier from trailer 1" UI exists for a planner who wants to override one trailer only
+  (every trailer starts identical, same as the existing dock-assignment path already behaves — not
+  a regression, just an existing limitation now also true for this path); checking "Include Loading
+  Diagram" on multiple trailers opens one `window.open` per trailer in a tight `await`-separated
+  loop, which loses the original click's user-gesture context after the first save round-trip —
+  browsers are more likely to block tab 2+ than the single-tab case `LoadingDiagramPrintButton.tsx`
+  already handles; the existing `!opened` form-error path covers it per-trailer but doesn't prevent
+  it.
 - **lb-ui-08 — v2 Load Builder: print / export loading diagrams (react-component-agent §9b).
   Sprint step 4 of 7, `Prompts/sprint-load-builder-parity.md`.** New `loadingDiagramPdf.ts`: pure
   layout/aggregation helpers (`layoutColumnRects`, `buildPiecesTable`, `buildStackBreakdown`,
