@@ -24,13 +24,23 @@
 // the same technique the dissolve eligibility research behind this prompt used (scaled multiples of
 // the real orders). Debug/demo aid only — gated out of production the same way the self-check table
 // below already is.
-import { useMemo, useState } from "react";
+//
+// lb-ui-05: adds a "Pull from Job" source alongside the three fixtures — a real order's line items
+// matched against the live SKU library (JobPullModal.tsx / jobPull.ts), replacing `fixture` in the
+// same seam pack() already consumes. `pulledSource` is additive and in-memory only (same "no
+// persistence yet" scope every lb-ui-NN prompt so far has had — lb-ui-04 is what saves this).
+// Deliberately reads `?job_id=` via `window.location.search` in a useEffect rather than
+// `useSearchParams` — the latter can force page.tsx into a <Suspense> boundary to satisfy
+// `cf-build`, and page.tsx is outside this prompt's file fence.
+import { useEffect, useMemo, useState } from "react";
+import { Truck } from "lucide-react";
 import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan } from "@/lib/packEngine";
 import { runPackEngineSelfCheck } from "@/lib/packEngine.selfcheck";
-import { LOAD_BUILDER_FIXTURES } from "@/lib/loadBuilderFixtures";
+import { LOAD_BUILDER_FIXTURES, type LoadBuilderFixture } from "@/lib/loadBuilderFixtures";
 import PlanMetricsStrip from "@/components/logistics/PlanMetricsStrip";
 import TrailerDiagram from "@/components/logistics/TrailerDiagram";
 import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logistics/ColumnDetailPanel";
+import JobPullModal, { type PulledLoadSource } from "@/components/logistics/JobPullModal";
 import CustomizeEditor from "./CustomizeEditor";
 
 const TRAILER_53FT = TRAILER_TYPES["53ft Standard"];
@@ -54,7 +64,21 @@ export default function LoadPlanView() {
   // is gated out of the bundle's runtime behavior below), so this has no effect on the shipped UI.
   const [multiplier, setMultiplier] = useState(1);
 
-  const fixture = LOAD_BUILDER_FIXTURES.find((f) => f.id === fixtureId) ?? LOAD_BUILDER_FIXTURES[0];
+  // lb-ui-05: pulled-job source, deep-link state, and the dismissible pull banner.
+  const [pulledSource, setPulledSource] = useState<PulledLoadSource | null>(null);
+  const [showJobPull, setShowJobPull] = useState(false);
+  const [deepLinkJobId, setDeepLinkJobId] = useState<string | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    const jobId = new URLSearchParams(window.location.search).get("job_id");
+    if (jobId) {
+      setDeepLinkJobId(jobId);
+      setShowJobPull(true);
+    }
+  }, []);
+
+  const fixture: LoadBuilderFixture = pulledSource ?? (LOAD_BUILDER_FIXTURES.find((f) => f.id === fixtureId) ?? LOAD_BUILDER_FIXTURES[0]);
   const scaledCart = useMemo(
     () => (multiplier === 1 ? fixture.cart : fixture.cart.map((c) => ({ ...c, qty: c.qty * multiplier }))),
     [fixture, multiplier]
@@ -73,10 +97,33 @@ export default function LoadPlanView() {
 
   function handleFixtureChange(id: string) {
     setFixtureId(id);
+    setPulledSource(null);
     setSelected(null);
     setEditedPlan(null);
     setMode("view");
     setMultiplier(1);
+    // advisor (pre-commit review): drop a stale ?job_id= so a reload doesn't re-open the pull modal
+    // for a job the planner deliberately navigated away from.
+    if (new URLSearchParams(window.location.search).has("job_id")) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }
+
+  function handlePullConfirm(source: PulledLoadSource) {
+    setPulledSource(source);
+    setSelected(null);
+    setEditedPlan(null);
+    setMode("view");
+    setMultiplier(1);
+    setBannerDismissed(false);
+    setShowJobPull(false);
+    setDeepLinkJobId(null);
+    window.history.replaceState(null, "", `?job_id=${encodeURIComponent(source.jobId)}`);
+  }
+
+  function handleJobPullClose() {
+    setShowJobPull(false);
+    setDeepLinkJobId(null);
   }
 
   function handleApplyEdit(appliedPlan: PackPlan) {
@@ -116,9 +163,17 @@ export default function LoadPlanView() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowJobPull(true)}
+            disabled={mode === "edit"}
+            className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+          >
+            <Truck size={15} aria-hidden="true" /> Pull from job
+          </button>
           <div className="flex gap-1.5" role="group" aria-label="Fixture picker">
             {LOAD_BUILDER_FIXTURES.map((f) => {
-              const active = f.id === fixtureId;
+              const active = !pulledSource && f.id === fixtureId;
               return (
                 <button
                   key={f.id}
@@ -179,12 +234,38 @@ export default function LoadPlanView() {
         </div>
       </div>
 
+      {/* Pull banner — informational, not blocking (Design Decision): dismissible, doesn't gate
+          anything downstream. Piece count reflects the matched cart that actually feeds pack();
+          unmatched items are named, never silently dropped or auto-created. */}
+      {pulledSource && !bannerDismissed && (
+        <div className="rounded-xl border border-[var(--brand)] bg-[color-mix(in_srgb,var(--brand)_6%,transparent)] px-4 py-3 flex items-start justify-between gap-3">
+          <div className="text-sm text-text">
+            <span className="font-semibold">Pulled from job:</span> {pulledSource.customer}
+            {pulledSource.invoiceNumber && <span className="font-mono tabular-nums"> · INV# {pulledSource.invoiceNumber}</span>}
+            <span className="font-mono tabular-nums"> · {pulledSource.cart.reduce((s, c) => s + c.qty, 0)} pieces matched</span>
+            {pulledSource.unmatchedCount > 0 && (
+              <div className="mt-1 text-[var(--warn-text)]">
+                {pulledSource.unmatchedCount} line item{pulledSource.unmatchedCount === 1 ? "" : "s"} have no matching SKU in the parts
+                library: {pulledSource.unmatchedDescriptions.join(", ")}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setBannerDismissed(true)}
+            className="shrink-0 text-xs font-semibold text-muted hover:text-text cursor-pointer min-h-[32px] px-2"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* 2. Metrics strip */}
       <PlanMetricsStrip metrics={metrics} dims={TRAILER_53FT} />
 
       {mode === "edit" ? (
         <CustomizeEditor
-          key={fixtureId}
+          key={pulledSource ? pulledSource.id : fixtureId}
           plan={plan}
           dims={TRAILER_53FT}
           options={DEFAULT_PACK_OPTIONS}
@@ -277,6 +358,10 @@ export default function LoadPlanView() {
             </table>
           </div>
         </details>
+      )}
+
+      {showJobPull && (
+        <JobPullModal initialJobId={deepLinkJobId ?? undefined} onClose={handleJobPullClose} onConfirm={handlePullConfirm} />
       )}
     </div>
   );

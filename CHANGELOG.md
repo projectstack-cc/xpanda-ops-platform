@@ -1873,6 +1873,105 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-ui-05 — v2 Load Builder: job pull-in → cart (react-component-agent §9b). Sprint step 1 of 7,
+  `Prompts/sprint-load-builder-parity.md`.** New headless `jobPull.ts` (no React/DOM, mirrors
+  `dissolve.ts`'s staying-pure discipline): `parseDimensionString` ports legacy's exact fraction-
+  aware parser (`load-builder.html:2731-2750`, including its `height: height || width` two-part-
+  string fallback, kept faithfully rather than "fixed"); `matchLineItemsToSkus` ports
+  `prefillFromJob`'s match order byte-for-byte — `part_id` exact → `part_number` exact
+  (case-insensitive) → parsed-dimension match (each axis within 0.1in) — first hit wins, an
+  unmatched line stays in the result array (`matchedSkuId: null`), never dropped;
+  `buildCartFromMatches` excludes unmatched lines and sums quantity across repeated SKUs (legacy's
+  `cartMap` behavior). **The one piece of `prefillFromJob` NOT ported: on-the-fly part creation for
+  an unmatched line** (`createPartOnTheFly`, `:2752`) — that writes to `/api/parts`, which (per the
+  sprint charter's "one sprint-wide exception") is legacy's own endpoint on live, completely
+  unfenced production D1, unlike every other v2-authored write in this codebase
+  (`V2_LOGISTICS_WRITES_ENABLED`). Explicitly deferred to the sprint's Phase 3, not built-but-
+  disabled — no `POST /api/parts` call exists anywhere in this prompt's diff (confirmed by grep
+  before commit). An unmatched line instead surfaces in `LoadPlanView.tsx`'s new pull banner as a
+  named warning ("N line items have no matching SKU in the parts library: …") — a deliberate
+  improvement over legacy's silent auto-create, not a like-for-like port.
+  **Step 0 finding that changed the SKU-source question**: v2's Load Builder had no live SKU source
+  at all before this prompt — `loadBuilderFixtures.ts`'s three fixtures each bundle their own
+  synthetic `skus[]` array (`PAIR_A`, `SIPLAST`, …), and nothing in the codebase fetched the real
+  parts library into that seam. Legacy's own `initSkus()`/`fetchSkusFromApi()` uses
+  `GET /api/load-builder-skus` — **not** `/api/parts`, confirmed by reading
+  `load-builder.html:1246-1250` before picking an endpoint (the two are easy to conflate; `AGENTS.md`
+  lists both). `_worker.js/routes/bols.js`'s `handleApiLoadBuilderSkus` GET branch already returns
+  `SELECT * FROM parts` mapped through `mapPartToSku` into field names that align with v2's own
+  `PackSku` shape (`id/name/sku/length/width/height/weight/category/allowRotation/bundleQty`) almost
+  1:1 — `JobPullModal.tsx`'s `coerceSku` still defensively `Number()`-coerces every numeric field and
+  drops any row that isn't finite/positive before it reaches `pack()`, since raw D1 rows are not
+  guaranteed typed on the wire (same caution `PartsPicker.tsx`'s own `Part` interface already
+  documents for `/api/parts`). This is a same-origin, no-`/v2`-prefix, read-only GET — the identical
+  cross-app-call pattern `PartsPicker.tsx` already uses for `/api/parts`, not a new pattern.
+  **Cart seam**: `LoadPlanView.tsx`'s `fixture` (previously always one of the three
+  `LOAD_BUILDER_FIXTURES`) is now `pulledSource ?? <fixture picker selection>` — a pulled job
+  produces a `PulledLoadSource` (`JobPullModal.tsx`) that is structurally a `LoadBuilderFixture`
+  (`id/invoiceNumber/customer/label/cart/skus`) plus `jobId`/`unmatchedCount`/`unmatchedDescriptions`,
+  so it drops into the exact same `pack(scaledCart, fixture.skus, TRAILER_53FT)` call, the same
+  `CustomizeEditor` props, and the same header/footprint-count/balance derivations every fixture
+  already flows through — no parallel code path. `skus` is deliberately narrowed to only the
+  matched SKUs (not the whole live library) before being handed to the seam, matching a fixture's own
+  shape (`FIXTURE_BLOCKS_PAIRING`: 4 skus for 4 cart lines) — handing `pack()` the full library would
+  change `footprintCount` and its footprint-mate search in ways no fixture scenario has ever
+  exercised. Selecting one of the three canned fixtures clears `pulledSource`; pulling a job clears
+  `editedPlan`/`selected`/the dev multiplier, same reset `handleFixtureChange` already did.
+  **`?job_id=` deep link**: reads `window.location.search` in a `useEffect` (not
+  `next/navigation`'s `useSearchParams`, which can force `page.tsx` into a `<Suspense>` boundary to
+  satisfy `cf-build` — `page.tsx` is outside this prompt's file fence) and opens `JobPullModal` with
+  `initialJobId` set, which skips the search step and runs the fetch+match immediately. **Deliberate
+  design choice, reported rather than silently decided**: the deep-link path still lands on the
+  modal's review/confirm step instead of auto-confirming into the cart with zero review (which is
+  what legacy's own deep link does) — applying the unmatched-item safety net on the manual "Pull from
+  job" button but not on the deep link would undercut the whole reason that safety net exists.
+  Confirming a pull rewrites the URL to `?job_id=<id>` via `history.replaceState` (not a Next
+  navigation); since `pulledSource` is in-memory only (same no-persistence scope every `lb-ui-NN`
+  prompt has had — `lb-ui-04` is what saves this), a full reload re-opens the modal at the review
+  step rather than silently re-populating the cart, which is the closest a stateless page can get to
+  "a reload doesn't lose context" without inventing persistence this prompt doesn't own.
+  **Per Steve's mid-task request, color-coded part identification**: `JobPullModal.tsx`'s
+  preview lists a color swatch next to each matched line, and the color is not arbitrary —
+  `jobPull.ts`'s new `colorForSkuId` mirrors `packEngine.ts`'s own private, unexported `colorForSku`
+  (identical 16-color palette, identical hash) exactly, so the swatch the planner reviews before
+  confirming is the SAME color that SKU will render as on the trailer diagram once `pack()` runs, not
+  merely *a* distinct color. Deliberately duplicated rather than imported — `packEngine.ts` is
+  closed/ratchet-guarded and does not export this helper; flagged in `BACKLOG.md` as a follow-up to
+  export it instead and delete the duplicate, the same "never duplicate, edit the one source" concern
+  `bol-shared.js`'s own `AGENTS.md` rule exists to prevent. An unmatched line gets a warning triangle
+  in place of a swatch (it has no SKU yet to color).
+  **Search/status scoping**: `GET /v2/api/jobs?search=` has no server-side status filter (confirmed
+  by reading `route.ts`), so `done`/`loading` scoping (matching legacy's exact
+  `j.status === 'done' || j.status === 'loading'` check) happens client-side on the fetched page —
+  same as legacy's own client-side `.filter()` on that endpoint's response. When a search matches
+  jobs that exist but aren't yet Done/Loading, the empty state says so explicitly ("N jobs found, but
+  none are Done or Loading yet") rather than a bare "No matches."
+  `jobPull.selfcheck.ts` (new, 17/17 pass): `parseDimensionString` (whole numbers, decimals, mixed
+  fractions in all three positions, plain fractions, the two-part height-defaults-to-width quirk,
+  null-not-throw on unparseable/empty/single-segment input), `matchLineItemsToSkus`'s three-way match
+  order including the `part_id`-wins-over-a-would-also-match `part_number` case, the fall-through
+  cases, the stays-present-unmatched case, `buildCartFromMatches`'s exclude+sum behavior, and
+  `colorForSkuId`'s determinism/palette-membership. `packEngine.selfcheck.ts` (engine ratchet)
+  unchanged — **144/144**. `loadEditor.selfcheck.ts` unchanged — **42/42**. `dissolve.selfcheck.ts`
+  unchanged — **21/21**. `npx tsc --noEmit` and `npm run cf-build` both green. No hardcoded hex
+  colors in either new UI file (grepped before commit); `jobPull.ts`'s `SKU_COLOR_PALETTE` literal is
+  the one deliberate, documented exception (a duplicated engine constant, not a theme color). Full
+  interactive/browser verification was not attempted, same reason as `lb-ui-01`/`lb-ui-02`: the route
+  is admin-gated and there is no test session available in this environment.
+  **Pre-commit review pass (`advisor()`) surfaced three follow-ups, all applied before this commit**:
+  (1) a job whose line items all fail to match produces an empty cart — `pack([], [], dims)` and
+  `planMetrics` were verified directly (`npx tsx`) to return clean zero-valued results rather than
+  throwing or producing `NaN`, so `LoadPlanView.tsx`'s existing `plan.trailers.length === 0` empty
+  state already covers it safely, but confirming into a plan with nothing on it is never useful
+  regardless — `JobPullModal`'s Confirm button is now disabled with an explicit "No line items
+  matched — add them to the parts library first, then pull again" message whenever zero matches
+  exist; (2) `handleFixtureChange` now clears a stale `?job_id=` from the URL
+  (`history.replaceState(null, "", pathname)`) when the planner switches back to a canned fixture, so
+  a reload doesn't re-open the pull modal for a job they deliberately navigated away from; (3)
+  `CustomizeEditor`'s remount `key` is `pulledSource ? pulledSource.id : fixtureId` rather than bare
+  `fixtureId` — switching between a pulled source and an already-selected canned fixture sharing the
+  same underlying `fixtureId` is a real data-source change and must remount the editor, not carry
+  stale internal state across it.
 - **lb-ui-03 — v2 Load Builder: dissolve (propose/apply) + `canDrop` depth-check fix
   (react-component-agent §9b).** New `dissolve.ts` (headless, no React/DOM): `proposeDissolve(state,
   srcTi)` expands a source trailer's placed pieces into individual units (mirrors legacy's
