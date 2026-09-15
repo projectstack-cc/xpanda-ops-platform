@@ -23,8 +23,13 @@
 // HTML5 drag source/drop target on rows, a persistent guard tint, and a keyboard target-picker
 // overlay ("select column, choose target, confirm"). Every addition is an optional prop; omitting
 // all of them (LoadPlanView's read-only panel does) renders byte-identical to lb-ui-01.
+//
+// lb-ui-03: one more optional addition — `headerAction`, an arbitrary node rendered in the header
+// row next to the usedLength/row-count stat, so CustomizeEditor can put a per-trailer "Dissolve…"
+// action there without a second header row or forking the component.
 "use client";
 
+import type { ReactNode } from "react";
 import type { Dimensions, PackTrailer } from "@/lib/packEngine";
 
 interface SelectedColumn {
@@ -63,6 +68,8 @@ interface TrailerDiagramProps {
    * keyboard-focusable "Move here" target. */
   targetPickerActive?: boolean;
   onChooseTargetRow?: (rowIndex: number) => void;
+  /** lb-ui-03: rendered in the header row, right of the usedLength stat. */
+  headerAction?: ReactNode;
 }
 
 const DIAGRAM_HEIGHT_PX = 176;
@@ -87,14 +94,18 @@ export default function TrailerDiagram({
   rowGuardTint,
   targetPickerActive = false,
   onChooseTargetRow,
+  headerAction,
 }: TrailerDiagramProps) {
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
-      <div className="flex items-baseline justify-between mb-3">
+      <div className="flex items-baseline justify-between gap-3 mb-3">
         <h3 className="text-sm font-semibold text-text">Trailer {trailerIndex + 1}</h3>
-        <span className="text-xs font-mono tabular-nums text-muted">
-          {Math.round(trailer.usedLength)}&quot; of {Math.round(dims.length)}&quot; used · {trailer.rows.length} row{trailer.rows.length === 1 ? "" : "s"}
-        </span>
+        <div className="flex items-center gap-3 ml-auto">
+          <span className="text-xs font-mono tabular-nums text-muted">
+            {Math.round(trailer.usedLength)}&quot; of {Math.round(dims.length)}&quot; used · {trailer.rows.length} row{trailer.rows.length === 1 ? "" : "s"}
+          </span>
+          {headerAction}
+        </div>
       </div>
 
       <div className="flex items-center justify-between text-[11px] text-text-hint mb-1">

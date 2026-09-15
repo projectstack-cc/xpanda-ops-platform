@@ -15,6 +15,15 @@
 // entirely — `fixtureId`/`selected` below are unchanged and still only used by view mode. Apply
 // hands back a finished PackPlan held in `editedPlan` (in memory only — no persistence, per scope);
 // switching fixtures clears it and returns to view mode. No API routes, no D1, no new dependency.
+//
+// lb-ui-03 Step 0: all three shipped fixtures pack onto a single trailer (confirmed live —
+// pack()'d each against TRAILER_53FT: INV_4202 trailers=1, INV_4356 trailers=1, INV_4347
+// trailers=1), so dissolve has no cross-trailer receiver to work against out of the box. Added a
+// dev-only quantity multiplier (x1-x4) that repeats the fixture's cart lines before pack() runs —
+// the cheapest way to reach a multi-trailer scenario in the browser without a new real dataset, and
+// the same technique the dissolve eligibility research behind this prompt used (scaled multiples of
+// the real orders). Debug/demo aid only — gated out of production the same way the self-check table
+// below already is.
 import { useMemo, useState } from "react";
 import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan } from "@/lib/packEngine";
 import { runPackEngineSelfCheck } from "@/lib/packEngine.selfcheck";
@@ -41,14 +50,21 @@ export default function LoadPlanView() {
   const [selected, setSelected] = useState<SelectedRef | null>(null);
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [editedPlan, setEditedPlan] = useState<PackPlan | null>(null);
+  // lb-ui-03 Step 0 dev aid — see file header. Always 1 in production (the control that changes it
+  // is gated out of the bundle's runtime behavior below), so this has no effect on the shipped UI.
+  const [multiplier, setMultiplier] = useState(1);
 
   const fixture = LOAD_BUILDER_FIXTURES.find((f) => f.id === fixtureId) ?? LOAD_BUILDER_FIXTURES[0];
+  const scaledCart = useMemo(
+    () => (multiplier === 1 ? fixture.cart : fixture.cart.map((c) => ({ ...c, qty: c.qty * multiplier }))),
+    [fixture, multiplier]
+  );
 
-  const packedPlan = useMemo(() => pack(fixture.cart, fixture.skus, TRAILER_53FT), [fixture]);
+  const packedPlan = useMemo(() => pack(scaledCart, fixture.skus, TRAILER_53FT), [scaledCart, fixture]);
   const plan = editedPlan ?? packedPlan;
   const metrics = useMemo(() => planMetrics(plan, TRAILER_53FT, DEFAULT_PACK_OPTIONS), [plan]);
 
-  const pieceCount = useMemo(() => fixture.cart.reduce((s, c) => s + c.qty, 0), [fixture]);
+  const pieceCount = useMemo(() => scaledCart.reduce((s, c) => s + c.qty, 0), [scaledCart]);
   const footprintCount = useMemo(
     () => new Set(fixture.skus.map((s) => footprintKey(s.length, s.width))).size,
     [fixture]
@@ -60,6 +76,7 @@ export default function LoadPlanView() {
     setSelected(null);
     setEditedPlan(null);
     setMode("view");
+    setMultiplier(1);
   }
 
   function handleApplyEdit(appliedPlan: PackPlan) {
@@ -123,6 +140,33 @@ export default function LoadPlanView() {
               );
             })}
           </div>
+          {process.env.NODE_ENV !== "production" && (
+            <div className="flex gap-1 items-center" role="group" aria-label="Dev-only fixture quantity multiplier">
+              <span className="text-[11px] text-muted mr-0.5">qty ×</span>
+              {[1, 2, 3, 4].map((n) => {
+                const active = multiplier === n;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setMultiplier(n)}
+                    disabled={mode === "edit"}
+                    aria-pressed={active}
+                    className={[
+                      "min-w-[28px] h-[28px] rounded-md text-[12px] font-mono tabular-nums cursor-pointer transition-colors border",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]",
+                      "disabled:opacity-40 disabled:cursor-not-allowed",
+                      active
+                        ? "border-[var(--brand)] text-[var(--brand)] font-semibold"
+                        : "border-[var(--border)] text-muted hover:text-text hover:bg-[var(--ghost-bg)]",
+                    ].join(" ")}
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {mode === "view" && (
             <button
               type="button"
@@ -144,7 +188,7 @@ export default function LoadPlanView() {
           plan={plan}
           dims={TRAILER_53FT}
           options={DEFAULT_PACK_OPTIONS}
-          cart={fixture.cart}
+          cart={scaledCart}
           skus={fixture.skus}
           onApply={handleApplyEdit}
           onDiscard={handleDiscardEdit}

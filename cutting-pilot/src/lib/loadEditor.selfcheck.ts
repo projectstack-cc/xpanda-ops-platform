@@ -355,5 +355,68 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     check("moveColumn: column-height guard does not fire (the invariant it protects held)", ruleViolations(violations, "column-height") === 0, JSON.stringify(violations));
   }
 
+  // 10. lb-ui-03 Part C: canDrop predicts a length problem BEFORE the drop, naming the overflowing
+  //     row — not just after validateForApply runs. D (colLength 40) is first placed into row0
+  //     (already [A,B], rowLength 20 -> 40), which alone pushes trailer0 to 80" (over dims.length
+  //     65", overflowing at row2 — same total as check 3, D just starts somewhere else this time).
+  //     From there, predict moving D from row0 to row1 (currently [C], rowLength 20).
+  {
+    const state = makeFixture();
+    const withD = placeFromHolding(state, 0, { t: 0, r: 0, slot: 2 });
+    check("fixture: placing D into row0 already overflows trailer0 (setup for this check)", findOverflowingRows(withD).some((o) => o.trailerIndex === 0), JSON.stringify(findOverflowingRows(withD)));
+
+    const dRef = { t: 0, r: 0, c: 2 };
+    const dColumn = withD.plan.trailers[0].rows[0].columns[2];
+    const feedback = canDrop(withD, dColumn, { t: 0, r: 1 }, dRef);
+    check(
+      "canDrop: predicts D row0->row1 is still too deep (row0's shrink doesn't fix it, it just relocates which row overflows), names the trailer",
+      feedback.lengthOk === false && feedback.ok === false && feedback.reason.includes("too deep"),
+      JSON.stringify(feedback)
+    );
+  }
+
+  // 11. The same move computed via moveColumn (actually performed) and via canDrop's simulation
+  //     (predicted) agree — the simulation is not a second, drifting formula. Reuses check 10's setup.
+  {
+    const state = makeFixture();
+    const withD = placeFromHolding(state, 0, { t: 0, r: 0, slot: 2 });
+    const dRef = { t: 0, r: 0, c: 2 };
+    const dColumn = withD.plan.trailers[0].rows[0].columns[2];
+
+    const predicted = canDrop(withD, dColumn, { t: 0, r: 1 }, dRef);
+    const actual = moveColumn(withD, dRef, { t: 0, r: 1, slot: 1 });
+    const actuallyOverflows = findOverflowingRows(actual).length > 0;
+    check(
+      "canDrop's length prediction agrees with findOverflowingRows on the actually-performed move",
+      predicted.lengthOk === !actuallyOverflows,
+      JSON.stringify({ predictedLengthOk: predicted.lengthOk, actuallyOverflows })
+    );
+  }
+
+  // 12. No regression on the width-only behavior lb-ui-02 already covers: (a) a same-row reorder
+  //     (B within row0) predicts lengthOk true — nothing about depth changes; (b) E into row0
+  //     (check 2's width-overflow scenario) still predicts lengthOk true even with `from` supplied,
+  //     because E (colLength 10) is SHALLOWER than row0's existing rowLength (20) and can't grow
+  //     it — the two checks are independent, and this one confirms the depth-check doesn't spill
+  //     over into scenarios it has no business flagging.
+  {
+    const state = makeFixture();
+    const bColumn = state.plan.trailers[0].rows[0].columns[1];
+    const reorderFeedback = canDrop(state, bColumn, { t: 0, r: 0 }, { t: 0, r: 0, c: 1 });
+    check(
+      "canDrop: same-row reorder (B within row0) predicts lengthOk true",
+      reorderFeedback.lengthOk === true,
+      JSON.stringify(reorderFeedback)
+    );
+
+    const eColumn = state.plan.trailers[1].rows[0].columns[0];
+    const eFeedback = canDrop(state, eColumn, { t: 0, r: 0 }, { t: 1, r: 0, c: 0 });
+    check(
+      "canDrop: E into row0 still blocks on width alone (lengthOk true, ok false) — matches check 2's pre-fix behavior",
+      eFeedback.lengthOk === true && eFeedback.ok === false,
+      JSON.stringify(eFeedback)
+    );
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }

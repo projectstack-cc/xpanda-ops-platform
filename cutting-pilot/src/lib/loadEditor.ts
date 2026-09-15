@@ -68,6 +68,9 @@ export interface DropFeedback {
   reason: string;
   widthAfter: number;
   widthLimit: number;
+  // lb-ui-03 Part C: length-side prediction. Additive — every existing caller that only read
+  // ok/reason/widthAfter/widthLimit keeps working unchanged.
+  lengthOk: boolean;
 }
 
 export interface RowOverflow {
@@ -94,7 +97,11 @@ function fmtInches(n: number): string {
 
 // --- cloning (deep enough that no mutation below ever leaks back into the caller's plan) ---
 
-function cloneColumn(column: PackColumn): PackColumn {
+// Exported for dissolve.ts (lb-ui-03): dissolve mutates column layers directly (a customize
+// operation never needs to — it only ever relocates whole, already-formed columns), so it needs
+// its own clone-before-mutate and the same recompute/history plumbing every other operation in this
+// file already uses, rather than re-deriving a third copy of the same clone/recompute math.
+export function cloneColumn(column: PackColumn): PackColumn {
   return { ...column, layers: column.layers.map((l) => ({ ...l, orientation: { ...l.orientation } })) };
 }
 
@@ -106,7 +113,7 @@ function cloneTrailer(trailer: PackTrailer): PackTrailer {
   return { ...trailer, rows: trailer.rows.map(cloneRow) };
 }
 
-function clonePlan(plan: PackPlan): PackPlan {
+export function clonePlan(plan: PackPlan): PackPlan {
   return {
     ...plan,
     trailers: plan.trailers.map(cloneTrailer),
@@ -173,7 +180,7 @@ function recomputeTrailer(trailer: PackTrailer, dims: Dimensions, effectiveHeigh
     allHeights.length > 0 ? allHeights.reduce((s, h) => s + h, 0) / allHeights.length / effectiveHeight : 0;
 }
 
-function recomputePlan(plan: PackPlan, dims: Dimensions, options: PackOptions): void {
+export function recomputePlan(plan: PackPlan, dims: Dimensions, options: PackOptions): void {
   const effectiveHeight = dims.height - (options.runnerHeight ?? 0);
   for (const trailer of plan.trailers) recomputeTrailer(trailer, dims, effectiveHeight);
   plan.totalWeight = plan.trailers.reduce((s, t) => s + t.usedWeight, 0);
@@ -196,7 +203,9 @@ function snapshotFor(state: EditorState): EditorState {
   };
 }
 
-function withHistory(state: EditorState): EditorState[] {
+// Exported for dissolve.ts (lb-ui-03), which needs to push its own undo snapshot — Apply's Undo
+// button must be able to reverse a dissolve exactly like any other edit.
+export function withHistory(state: EditorState): EditorState[] {
   const history = [...state.history, snapshotFor(state)];
   return history.length > MAX_HISTORY_DEPTH ? history.slice(history.length - MAX_HISTORY_DEPTH) : history;
 }
@@ -294,22 +303,56 @@ export function compactLoad(state: EditorState): EditorState {
   return { ...state, plan, history: withHistory(state) };
 }
 
-/** Pure width-fit predictor for live drag feedback — does not mutate state. If `column` is already
- * in the target row, its own current width is excluded from the "before" sum (a same-row reorder
- * nets zero width change). */
-export function canDrop(state: EditorState, column: PackColumn, to: { t: number; r: number }): DropFeedback {
+/** Live drag-feedback predictor — does not mutate state. If `column` is already in the target row,
+ * its own current width is excluded from the "before" sum (a same-row reorder nets zero width
+ * change).
+ *
+ * Depth/length side (lb-ui-03 Part C, fixing a carry-over defect from lb-ui-02: this function used
+ * to check width only). Pass `from` when the column being dropped is already on a trailer — a deep
+ * column dropped into a shallow row raises that row's rowLength, which can overflow the trailer at
+ * the nose, on a row downstream of the drop; findOverflowingRows already does this analysis but only
+ * after the fact. The prediction is NOT "target row grows by colLength": the source row's rowLength
+ * can shrink when the column leaves it (if it was that row's deepest), partially or fully offsetting
+ * the target's growth, and for a cross-trailer move the shrink lands on a different trailer's total
+ * entirely. Rather than hand-roll that arithmetic a second time, this simulates the move through the
+ * exact same recompute path moveColumn already uses and reads the result — the same defence-in-depth
+ * relationship canDrop already has with row-width via findOverflowingRows below.
+ * `from` is omitted for a holding→trailer placement, where there is no source row to shrink; the
+ * depth risk there (a held column dropped into a shallow row can still overflow downstream) is not
+ * covered by this pass — see the CHANGELOG entry for lb-ui-03. */
+export function canDrop(state: EditorState, column: PackColumn, to: { t: number; r: number }, from?: ColumnRef): DropFeedback {
   const widthLimit = state.dims.width;
   const row = state.plan.trailers[to.t]?.rows[to.r];
   if (!row) {
-    return { ok: false, reason: "no such row", widthAfter: 0, widthLimit };
+    return { ok: false, reason: "no such row", widthAfter: 0, widthLimit, lengthOk: true };
   }
   const existingWidth = row.columns.reduce((s, c) => s + (c === column ? 0 : c.colWidth), 0);
   const widthAfter = existingWidth + column.colWidth;
-  const ok = widthAfter <= widthLimit + EPS;
-  const reason = ok
-    ? `fits · ${fmtInches(widthAfter)}" of ${fmtInches(widthLimit)}"`
-    : `too wide · would be ${fmtInches(widthAfter)}"`;
-  return { ok, reason, widthAfter, widthLimit };
+  const widthOk = widthAfter <= widthLimit + EPS;
+
+  let lengthOk = true;
+  let lengthReason = "";
+  if (from) {
+    const slot = row.columns.length;
+    const simulated = moveColumn(state, from, { t: to.t, r: to.r, slot });
+    const overflow = findOverflowingRows(simulated).find((o) => o.trailerIndex === to.t || o.trailerIndex === from.t);
+    if (overflow) {
+      lengthOk = false;
+      const overflowTotal = state.dims.length + overflow.overflowBy;
+      lengthReason = `too deep · pushes trailer ${overflow.trailerIndex + 1} to ${fmtInches(overflowTotal)}"`;
+    }
+  }
+
+  const ok = widthOk && lengthOk;
+  const reason = !widthOk
+    ? lengthOk
+      ? `too wide · would be ${fmtInches(widthAfter)}"`
+      : `too wide · would be ${fmtInches(widthAfter)}" — and ${lengthReason}`
+    : !lengthOk
+      ? lengthReason
+      : `fits · ${fmtInches(widthAfter)}" of ${fmtInches(widthLimit)}"`;
+
+  return { ok, reason, widthAfter, widthLimit, lengthOk };
 }
 
 /** validatePlan()'s own `conservation` rule only knows trailers + plan.balance — it would

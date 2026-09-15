@@ -189,7 +189,7 @@ When a user request arrives:
 - **Module headers**: Each module has `*-header.js` for auth bar, user display, 401 handling.
 - **Module CSS**: Each module has `*-shared.css`. Page-specific styles use wrapper classes.
 - **DB migrations**: All schema changes as `.sql` files in `DB_Migrations/`, run manually in D1 console. **`DB_Migrations/` is gitignored, not committed (as of 2026-07-31)** — past migration files leaked plaintext employee/admin credentials, so the folder (and git history containing it) was purged. Files are still created there for Steve to run manually; they just never get committed. Confirm `.gitignore` still covers it before writing a new migration file.
-- **BACKLOG/CHANGELOG discipline**: Every code-change prompt must update `BACKLOG.md` and `CHANGELOG.md` as part of the same change. When work ships: add a `CHANGELOG.md` entry keyed to its prompt number (newest-first within its module section) and remove the corresponding item from `BACKLOG.md`. New follow-on work discovered during the change goes into `BACKLOG.md`. Docs-only and report-only prompts note themselves in the appropriate `CHANGELOG.md` section too. Drift check: any prompt in `Prompts/` missing from `CHANGELOG.md` is a gap.
+- **BACKLOG/CHANGELOG discipline**: Every code-change prompt must update `BACKLOG.md` and `CHANGELOG.md` as part of the same change. When work ships: add a `CHANGELOG.md` entry keyed to its prompt/task name (`PNNN` for the legacy numbered series, `<task>-NN` such as `lb-ui-02` for the current task-grouped series; newest-first within its module section) and remove the corresponding item from `BACKLOG.md`. New follow-on work discovered during the change goes into `BACKLOG.md`. Docs-only and report-only prompts note themselves in the appropriate `CHANGELOG.md` section too. Drift check: any `Prompts/` filename missing a mention in `CHANGELOG.md` is a gap.
 
 ## Response Format
 ```
@@ -772,7 +772,7 @@ async function logActivity(env, userId, action, entityType, entityId, details) {
 6. Build frontend page
 7. Connect navigation (homepage card, module header links)
 8. Add permission key label to `admin/roles.html` if new
-9. Update `BACKLOG.md` (remove completed item) and add a `CHANGELOG.md` entry keyed to the prompt number
+9. Update `BACKLOG.md` (remove completed item) and add a `CHANGELOG.md` entry keyed to the prompt/task name
 
 ---
 
@@ -859,7 +859,7 @@ API: reads `GET /v2/api/cutting/cc-assignments`, `GET /v2/api/cutting/hc-slots`;
 ## Always
 - Read both `AGENTS.md` and `xpanda-ops-agents.md` and identify yourself as the Next/Cloudflare
   Platform Agent at the start of every task.
-- Update `CHANGELOG.md` (entry keyed to prompt #) and `BACKLOG.md` as part of the same change
+- Update `CHANGELOG.md` (entry keyed to prompt/task name) and `BACKLOG.md` as part of the same change
   (platform-wide rule — see Cross-Cutting Rules).
 - `.gitignore` build output (`.open-next/`, `.next/`, `.wrangler/`, `node_modules/`, `.dev.vars`).
 

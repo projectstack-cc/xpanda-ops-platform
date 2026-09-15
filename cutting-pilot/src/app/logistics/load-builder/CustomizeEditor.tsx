@@ -11,7 +11,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Undo2, Rows3, XCircle, Check, PackageMinus } from "lucide-react";
+import { Undo2, Rows3, XCircle, Check, PackageMinus, Shuffle } from "lucide-react";
 import type { CartLine, Dimensions, PackOptions, PackPlan, PackSku } from "@/lib/packEngine";
 import {
   createEditorState,
@@ -30,6 +30,7 @@ import TrailerDiagram, { type RowDropFeedback } from "@/components/logistics/Tra
 import HoldingArea from "@/components/logistics/HoldingArea";
 import EditorGuards, { type HoldingSummaryLine } from "@/components/logistics/EditorGuards";
 import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logistics/ColumnDetailPanel";
+import DissolvePreview from "@/components/logistics/DissolvePreview";
 import Modal from "@/components/Modal";
 
 interface CustomizeEditorProps {
@@ -55,6 +56,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
   const [compactMessage, setCompactMessage] = useState<string | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showBlockedHint, setShowBlockedHint] = useState(false);
+  const [dissolveTi, setDissolveTi] = useState<number | null>(null);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -144,7 +146,11 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
       if (hoverRow?.t !== t || hoverRow.r !== rowIndex) return null;
       const column = draggedColumn();
       if (!column) return null;
-      const feedback = canDrop(state, column, { t, r: rowIndex });
+      // lb-ui-03 Part C: only a trailer-sourced drag has a source row that can shrink and offset
+      // the target's growth — a holding→trailer placement has no `from` to simulate against (see
+      // canDrop's own doc comment).
+      const from = dragSource?.kind === "trailer" ? dragSource.ref : undefined;
+      const feedback = canDrop(state, column, { t, r: rowIndex }, from);
       return { ok: feedback.ok, reason: feedback.reason };
     };
   }
@@ -203,6 +209,11 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
   function handleDiscardConfirmed() {
     setShowDiscardConfirm(false);
     onDiscard();
+  }
+
+  function handleApplyDissolve(next: EditorState) {
+    commit(next);
+    setDissolveTi(null);
   }
 
   function handleApply() {
@@ -297,6 +308,16 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                 rowGuardTint={rowGuardTintFor(t)}
                 targetPickerActive={targetPicker !== null}
                 onChooseTargetRow={(r) => handleChooseTarget(t, r)}
+                headerAction={
+                  <button
+                    type="button"
+                    onClick={() => setDissolveTi(t)}
+                    className="min-h-[28px] px-2.5 rounded-md text-[12px] font-medium border border-[var(--border)] text-text flex items-center gap-1 cursor-pointer transition-colors hover:bg-[var(--ghost-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                  >
+                    <Shuffle className="w-3 h-3" aria-hidden="true" />
+                    Dissolve…
+                  </button>
+                }
               />
             ))
           )}
@@ -348,6 +369,16 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
           />
         </div>
       </div>
+
+      {dissolveTi !== null && (
+        <DissolvePreview
+          isOpen={dissolveTi !== null}
+          state={state}
+          srcTi={dissolveTi}
+          onApply={handleApplyDissolve}
+          onClose={() => setDissolveTi(null)}
+        />
+      )}
 
       <Modal isOpen={showDiscardConfirm} onClose={() => setShowDiscardConfirm(false)} title="Discard changes?">
         <p className="text-sm text-text">

@@ -1,10 +1,13 @@
 # xPanda Ops Platform — Changelog
 
-> **Process:** When an item ships, its entry moves to `CHANGELOG.md` (keyed to its prompt #) and is
-> deleted from `BACKLOG.md`. BACKLOG is forward-looking only. Drift check: diff `Prompts/` against
-> `CHANGELOG.md` — any prompt missing from the changelog is a gap.
+> **Process:** When an item ships, its entry moves to `CHANGELOG.md` (keyed to its prompt/task name —
+> `PNNN` for the legacy numbered series, `<task>-NN` such as `lb-ui-02` for the current task-grouped
+> series) and is deleted from `BACKLOG.md`. BACKLOG is forward-looking only. Drift check: every
+> filename in `Prompts/` should have a matching mention in `CHANGELOG.md` — one missing is a gap.
 
-Entries within each module are ordered by prompt # descending (newest first).
+Entries within each module are ordered newest-first by when they shipped (by prompt number for the
+legacy `PNNN` series; by sequence within a task group, e.g. `lb-ui-01` before `lb-ui-02`, for the
+current series).
 
 ---
 
@@ -1870,6 +1873,119 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics (v2)
 
+- **lb-ui-03 — v2 Load Builder: dissolve (propose/apply) + `canDrop` depth-check fix
+  (react-component-agent §9b).** New `dissolve.ts` (headless, no React/DOM): `proposeDissolve(state,
+  srcTi)` expands a source trailer's placed pieces into individual units (mirrors legacy's
+  `planDissolve`, `logistics/load-builder.html:1912`) and greedily proposes moving each onto the
+  first eligible receiver column elsewhere in the plan; `applyDissolve(state, proposal,
+  excludedKeys)` subtractively re-applies the non-excluded subset (legacy: `assembleDissolve`,
+  `:1973`), shrinking/dropping empty source layers/columns/rows exactly as legacy does. **Piece,
+  not column, is the move unit** — deliberately different from `lb-ui-02`'s customize editor, which
+  moves whole columns; dissolve is automatic, customize is manual. **Eligibility mirrors
+  `validatePlan`'s own rules rather than legacy's** (legacy only checked height headroom and
+  weight): a different-SKU piece needs the receiver column under `maxSkusPerColumn` distinct SKUs
+  AND the piece's `unitHeight >= topOffMinInchesPerPiece` (the same two checks `packEngine.ts`'s
+  `validatePlan` runs), while a same-SKU piece is bounded only by headroom — so a proposed-and-
+  accepted move can never fail the apply gate every other edit already goes through
+  (`validateForApply`). Legacy's exact footprint match between source and receiver is kept, but on
+  each column's own `colLength`/`colWidth`, not the row's `rowLength` (dissolve moves a piece into an
+  *existing* column shape, never reshapes one) — see the pre-commit-review fix below. The preview
+  (`DissolvePreview.tsx`) groups moves by `dissolveGroupKey` (`skuCode|unitHeight|toTi`, matching
+  legacy) with a per-group exclude checkbox, surfaces `eligibleReceiverCount` up front — including a
+  designed "0 eligible — nothing to dissolve" empty state, not a blank panel — and composes the
+  existing `Modal` primitive. Wired into `CustomizeEditor.tsx` via a small additive extension to
+  `TrailerDiagram.tsx` (`headerAction?: ReactNode`, rendered next to the usedLength stat) rather than
+  a second header row or a fork — a per-trailer "Dissolve…" button opens the preview. **Deliberate
+  deviation from the prompt's disabled-button spec**: rather than disabling the button when
+  `eligibleReceiverCount` is 0, it stays enabled and the preview's own empty state explains why —
+  matching the disabled-controls doctrine `lb-ui-02`'s Apply button already established ("prefer an
+  enabled control that explains itself"), and it costs nothing extra since `proposeDissolve` is cheap
+  and pure. `loadEditor.ts` gained a few additive exports (`clonePlan`, `cloneColumn`,
+  `recomputePlan`, `withHistory`) so `dissolve.ts` reuses the exact same clone/recompute/undo-history
+  plumbing every other edit operation already uses, rather than re-deriving a third copy of
+  `packEngine.ts`'s row/trailer geometry math — the one thing dissolve genuinely adds on top is a
+  small, additive `recomputeColumnAggregates` helper (`totalHeight`/`totalWeight`/`stackCount`/
+  `mixed` from a column's own layers) for the one kind of mutation no `loadEditor.ts` operation
+  needed before: changing what's *inside* a column, not just which row it sits in.
+  **Step 0 finding, live-verified before writing any UI**: all three shipped fixtures in
+  `loadBuilderFixtures.ts` pack onto a single trailer (`pack()`'d against `TRAILER_53FT`: INV_4202
+  trailers=1, INV_4356 trailers=1, INV_4347 trailers=1) — dissolve has no cross-trailer receiver to
+  work against out of the box, confirming the handoff research (whose eligibility table was measured
+  on scaled multiples of these orders, not the orders as shipped). Added a **dev-only fixture
+  quantity multiplier** (`LoadPlanView.tsx`, x1-x4 buttons gated on `NODE_ENV !== "production"`,
+  same gate as the existing self-check table) that repeats a fixture's cart lines before `pack()`
+  runs, purely a demo/debug aid with zero effect on the shipped UI. Live-verified after implementing:
+  at x2-x4 the AccuDock fixtures (INV_4202, INV_4347) reach 2-3 trailers with 1-2 eligible dissolve
+  receivers; the Siplast holey-board fixture (INV_4356) reaches up to 4 trailers but **0 eligible
+  receivers at every multiplier** — expected, not a bug: the engine already top-offs every holey
+  column to the 2-SKU cap, so there is never distinct-SKU headroom left for dissolve to find,
+  matching the handoff's "dissolve is dead on holey board" research finding exactly.
+  **Pre-commit review caught a real eligibility bug before it ever reached the UI**: the first draft
+  matched a source unit's depth and a receiver column's depth against `row.rowLength` (both sides),
+  not `colLength`. That's a v2-only hazard — `PackRow`'s own comment says rows may hold columns of
+  differing depth, so `rowLength` is only the row's *deepest* column, not every column's. A piece
+  from a shallower column in a mixed-depth row could match a receiver column whose real depth
+  belonged to a *different, deeper* column in that same row (matching on width alone once past the
+  row-level check) — an orientation the SKU doesn't have, which `applyDissolve` would hand
+  `validateForApply` as a `piece-fits-trailer` violation, exactly the class of bug the
+  eligibility-mirrors-`validatePlan` design exists to rule out. Fixed by matching each unit's own
+  `colLength` against each candidate receiver column's own `colLength` directly; the row-level check
+  is now redundant (stacking into an existing column never changes that column's own footprint) and
+  was removed rather than kept as a no-op. Added a dedicated mixed-depth-row regression case to
+  `dissolve.selfcheck.ts` (source row with two differently-deep columns so the row's `rowLength`
+  matches neither column's own depth; receiver rows built so the *wrong* row's `rowLength`
+  coincidentally equals the source row's) and separately re-ran `proposeDissolve`→`applyDissolve`→
+  `validateForApply` end-to-end against the three real fixtures at every multiplier that produces
+  eligible receivers (INV_4202 ×3/×4, INV_4347 ×2/×3/×4) — all report zero violations.
+  **Also caught by the same review: a dissolved column's `rationale` string goes stale.**
+  `packEngine.ts`'s rationale describes a specific fill (e.g. `"3 × 10\" = 30\", 10\" left — no other
+  SKU on this footprint"`), which is exactly what dissolve invalidates by adding/removing layers on
+  that column. The first draft appended `"— adjusted via dissolve"` onto the existing string, which
+  would leave stale numbers standing next to the layer table (`ColumnDetailPanel.tsx`) — the one
+  panel this codebase designates the trust feature — now genuinely disagreeing with it on the same
+  screen. Changed to replace the rationale outright (`"composition changed by dissolve — see layer
+  table"`) rather than append; the layer table itself needs no fix since it always renders fresh from
+  `column.layers`. **A second pre-commit pass caught that the naive replace then clobbered
+  `packEngine.ts`'s own `"[stability: ...]"` bracketed note** (`applyStabilityWarnings`,
+  `packEngine.ts:906`, the loader-rearrange flag on tall/narrow columns) — dissolve stacks pieces
+  onto receiver columns, i.e. makes them taller, so the receiver is exactly the column most likely to
+  be carrying that flag, and nothing downstream would have caught it silently disappearing (stability
+  is a warning, not a `validateForApply` violation). `noteDissolved` now extracts and re-appends any
+  existing `[stability: ...]` bracket rather than discarding it. Dissolve still doesn't *recompute*
+  stability for a column it newly makes tall/narrow (that logic lives inside closed `packEngine.ts`)
+  — flagged as a known limitation, added to `BACKLOG.md`, not silently shipped.
+  **Carry-over defect fix from `lb-ui-02` (not new scope, bundled here because it shares the
+  `canDrop` surface dissolve's UI also touches)**: `canDrop` (`loadEditor.ts`) checked row width
+  only — dropping a column into a row deeper than itself raises that row's `rowLength`, which can
+  overflow the trailer at the nose on a *downstream* row, invisibly (the drop showed "fits," then
+  `trailer-length` fired only on release). Fixed by giving `canDrop` an optional `from?: ColumnRef`
+  and, when present, simulating the move through `moveColumn`'s own recompute path (a scratch
+  `EditorState`, never mutating the real one) and reading `findOverflowingRows` on the result —
+  deliberately NOT a hand-rolled "target row grows by X" delta, because the *source* row's
+  `rowLength` can shrink when the column leaves it (if it was that row's deepest), partially or
+  fully offsetting the target's growth, and for a cross-trailer move the shrink lands on a different
+  trailer's total entirely. `DropFeedback` gained an additive `lengthOk` field and a `"too deep ·
+  pushes trailer N to X\""` reason string naming the actual overflowing row/trailer; every existing
+  field (`ok`/`reason`/`widthAfter`/`widthLimit`) is unchanged so no caller broke. Grepped every
+  `canDrop` call site (`rg canDrop\(`): exactly one production call site
+  (`CustomizeEditor.tsx`'s drag-hover handler) — updated to pass `from` only for a trailer-sourced
+  drag (a holding→trailer placement has no source row to shrink, and is explicitly out of scope for
+  this pass, same as the depth risk there). The prompt anticipated a second call site in the
+  keyboard target-picker flow; there isn't one — `handleChooseTarget` commits directly without a
+  `canDrop` pre-check today, so nothing else needed updating; noted here rather than inventing one.
+  `dissolve.selfcheck.ts` (new, 21 checks — 15 per-rule, 4 from the mixed-depth-row regression above,
+  2 from the stability-note-preservation regression above — targeted per-rule fixtures rather than
+  one shared fixture, since dissolve's eligibility rules are combinatorial enough that a shared
+  fixture risks one rule's pass masking another's silent no-op) — **21/21 pass**.
+  `loadEditor.selfcheck.ts` gained 5 checks (3 new blocks) covering the `canDrop` depth-check
+  prediction, agreement with the actually-performed
+  move, and no regression on the existing width-only behavior — **42/42 pass** (was 37/37).
+  `packEngine.selfcheck.ts` (engine ratchet) unchanged — **144/144 pass**. `npx tsc --noEmit` and
+  `npm run cf-build` both green. Also fixed the stale "keyed to prompt number" process text in
+  `CHANGELOG.md`'s own header note and two of three matching spots in `xpanda-ops-agents.md`
+  (Cross-Cutting Rules and §9a's "Always") now that prompt numbering is task-grouped
+  (`lb-engine-01`, `lb-ui-02`, …) rather than sequential `PNNN` — **`AGENTS.md:235` has the same
+  stale phrase and was left untouched**, out of this prompt's file fence; worth a follow-up.
 - **lb-ui-02 — v2 Load Builder: customize editor (react-component-agent §9b).** Adds a view/edit
   toggle to `LoadPlanView.tsx` ("Customize load") that swaps the read-only panel for
   `CustomizeEditor.tsx`, built on a new headless module (`loadEditor.ts`, no React/DOM) exposing six
