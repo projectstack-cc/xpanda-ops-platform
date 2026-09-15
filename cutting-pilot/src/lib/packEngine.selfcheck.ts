@@ -35,6 +35,7 @@ import {
   type PackOptions,
   type Dimensions,
 } from "./packEngine";
+import { FIXTURE_BLOCKS_PAIRING, FIXTURE_HOLEY_SIPLAST, FIXTURE_BLOCKS_MIXED } from "./loadBuilderFixtures";
 
 interface CheckResult {
   name: string;
@@ -732,33 +733,9 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   // The grid shape is unaffected: base demand alone already divides into exactly 52 full columns,
   // so top-off only fills existing columns' residual, it can't create new ones.
   {
-    const siplastSku: PackSku = {
-      id: "SIPLAST",
-      name: "Siplast holey board",
-      sku: "SIPLAST-1",
-      length: 48,
-      width: 24,
-      height: 8,
-      weight: 5,
-      category: HOLEY_BOARD_CATEGORY,
-      allowRotation: false,
-    };
-    const siplastTopoffSku: PackSku = {
-      id: "SIPLAST_TOPOFF",
-      name: "Siplast holey board (5in)",
-      sku: "SIPLAST-2",
-      length: 48,
-      width: 24,
-      height: 5,
-      weight: 4,
-      category: HOLEY_BOARD_CATEGORY,
-      allowRotation: false,
-    };
-    const siplastSkus = [siplastSku, siplastTopoffSku];
-    const siplastCart: CartLine[] = [
-      { skuId: "SIPLAST", qty: 676 },
-      { skuId: "SIPLAST_TOPOFF", qty: 52 },
-    ];
+    // lb-ui-01: fixture SKUs/cart now live in loadBuilderFixtures.ts (shared with the plan view's
+    // fixture picker) rather than being duplicated here.
+    const { skus: siplastSkus, cart: siplastCart } = FIXTURE_HOLEY_SIPLAST;
     const siplastPlan = pack(siplastCart, siplastSkus, TRAILER_53FT);
 
     check("FIXTURE_HOLEY_SIPLAST: pack() places all 728 pieces (balance empty)", siplastPlan.balance.length === 0, JSON.stringify(siplastPlan.balance));
@@ -782,17 +759,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   // truck. Declared with 90.75" as the length axis already, matching the "orient with 90.75 down
   // the trailer length" pairing decision, so the winning combination is each family's own "flat".
   {
-    const skuPairA: PackSku = { id: "PAIR_A", name: "42.75x90.75x8", sku: "PAIR-A", length: 90.75, width: 42.75, height: 8, weight: 40, category: "Blocks", allowRotation: true };
-    const skuPairB: PackSku = { id: "PAIR_B", name: "54.75x90.75x8", sku: "PAIR-B", length: 90.75, width: 54.75, height: 8, weight: 40, category: "Blocks", allowRotation: true };
-    const skuPairC: PackSku = { id: "PAIR_C", name: "54.75x66.75x8", sku: "PAIR-C", length: 66.75, width: 54.75, height: 8, weight: 40, category: "Blocks", allowRotation: true };
-    const skuPairD: PackSku = { id: "PAIR_D", name: "24.75x90.75x4", sku: "PAIR-D", length: 90.75, width: 24.75, height: 4, weight: 25, category: "Blocks", allowRotation: true };
-    const pairingSkus = [skuPairA, skuPairB, skuPairC, skuPairD];
-    const pairingCart: CartLine[] = [
-      { skuId: "PAIR_A", qty: 43 },
-      { skuId: "PAIR_B", qty: 40 },
-      { skuId: "PAIR_C", qty: 15 },
-      { skuId: "PAIR_D", qty: 10 },
-    ];
+    const { skus: pairingSkus, cart: pairingCart } = FIXTURE_BLOCKS_PAIRING;
     const pairingPlan = pack(pairingCart, pairingSkus, TRAILER_53FT);
     const pairingViolations = validatePlan(pairingPlan, TRAILER_53FT, pairingCart, pairingSkus, OPTS);
 
@@ -837,34 +804,9 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   // the same mechanism INV_4202 turns on, here across two DIFFERENT depth groups (90.75 vs
   // 54.75), so it only surfaces through buildOneRow's ungrouped widest-fit candidate, not the
   // same-depth-seeded ones.
-  const mixSeaRay8: PackSku = { id: "MIX_SEARAY8", name: "Sea Ray", sku: "SEARAY-8", length: 54.75, width: 90.75, height: 8, weight: 30, category: "Blocks", allowRotation: true };
-  const mixStock8: PackSku = { id: "MIX_STOCK8", name: "STOCK", sku: "STOCK-8", length: 54.75, width: 90.75, height: 8, weight: 30, category: "Blocks", allowRotation: true };
-  const mixKansas525: PackSku = { id: "MIX_KANSAS525", name: "Kansas", sku: "KANSAS-5.25", length: 54.75, width: 90.75, height: 5.25, weight: 20, category: "Blocks", allowRotation: true };
-  const mixSeaRay9: PackSku = { id: "MIX_SEARAY9", name: "Sea Ray", sku: "SEARAY-9", length: 54.75, width: 90.75, height: 9, weight: 32, category: "Blocks", allowRotation: true };
-  const mixNoriaA: PackSku = { id: "MIX_NORIA_A", name: "Noria", sku: "NORIA-A", length: 19.75, width: 30.75, height: 8, weight: 10, category: "Blocks", allowRotation: true };
-  const mixKansasComp: PackSku = { id: "MIX_KANSAS_COMP", name: "Kansas Comp", sku: "KANSAS-COMP", length: 24.75, width: 54.75, height: 8, weight: 15, category: "Blocks", allowRotation: true };
-  const mixWestwegoCA: PackSku = { id: "MIX_WESTWEGO_CA", name: "Westwego CA Comp", sku: "WESTWEGO-CA", length: 24.75, width: 54.75, height: 6, weight: 12, category: "Blocks", allowRotation: true };
-  const mixKAB: PackSku = { id: "MIX_KAB", name: "KAB CA Comps", sku: "KAB-CA", length: 42.75, width: 54.75, height: 7, weight: 18, category: "Blocks", allowRotation: true };
-  const mixWestwegoGW: PackSku = { id: "MIX_WESTWEGO_GW", name: "Westwego GW Comp", sku: "WESTWEGO-GW", length: 42.75, width: 54.75, height: 7, weight: 18, category: "Blocks", allowRotation: true };
-  const mixCharlotte: PackSku = { id: "MIX_CHARLOTTE", name: "Charlotte County", sku: "CHARLOTTE", length: 54.75, width: 66.75, height: 12, weight: 25, category: "Blocks", allowRotation: true };
-  const mixNoriaB: PackSku = { id: "MIX_NORIA_B", name: "Noria", sku: "NORIA-B", length: 30.75, width: 90.75, height: 8, weight: 20, category: "Blocks", allowRotation: true };
-
-  const mixedSkus: PackSku[] = [
-    mixSeaRay8, mixStock8, mixKansas525, mixSeaRay9, mixNoriaA, mixKansasComp, mixWestwegoCA, mixKAB, mixWestwegoGW, mixCharlotte, mixNoriaB,
-  ];
-  const mixedCart: CartLine[] = [
-    { skuId: "MIX_SEARAY8", qty: 25 },
-    { skuId: "MIX_STOCK8", qty: 35 },
-    { skuId: "MIX_KANSAS525", qty: 18 },
-    { skuId: "MIX_SEARAY9", qty: 2 },
-    { skuId: "MIX_NORIA_A", qty: 6 },
-    { skuId: "MIX_KANSAS_COMP", qty: 2 },
-    { skuId: "MIX_WESTWEGO_CA", qty: 1 },
-    { skuId: "MIX_KAB", qty: 2 },
-    { skuId: "MIX_WESTWEGO_GW", qty: 1 },
-    { skuId: "MIX_CHARLOTTE", qty: 1 },
-    { skuId: "MIX_NORIA_B", qty: 1 },
-  ];
+  // lb-ui-01: fixture SKUs/cart now live in loadBuilderFixtures.ts (shared with the plan view's
+  // fixture picker) rather than being duplicated here.
+  const { skus: mixedSkus, cart: mixedCart } = FIXTURE_BLOCKS_MIXED;
   const mixedTotalQty = mixedCart.reduce((s, c) => s + c.qty, 0);
   check("FIXTURE_BLOCKS_MIXED: fixture totals 94 pieces", mixedTotalQty === 94, String(mixedTotalQty));
 

@@ -1836,6 +1836,51 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics (v2)
 
+- **lb-ui-01 — v2 Load Builder: read-only plan view (react-component-agent §9b + next-platform-agent
+  §9a).** First reachable route in the unit: `/v2/logistics/load-builder`, admin-only via the
+  existing `{ prefix: "/v2/logistics", keys: ["logistics.v2"] }` dark-launch rule — no middleware
+  change needed (verified, not assumed). Runs `pack()` against one of three real orders and renders
+  the resulting `PackPlan`; no editing, no dragging, no persistence, no BOL, no API routes, no D1 —
+  a pure read of the closed engine's output. **Top-down diagram (Decision, locked), not the legacy
+  side elevation:** rear at the left (`posFromFront = 0`), nose at the right, trailer length
+  horizontal, trailer width vertical, stack height left out of the geometry entirely (labels +
+  detail panel instead). The reason: the engine's defining behaviour since `lb-engine-02`/`-03` is
+  width pairing — columns of different footprints sharing a row across the 98" width — which a
+  side elevation can't show; the legacy diagram optimised for a thing this engine no longer does
+  the hard way. A column shallower than its row renders its unused depth as a visible striped
+  backdrop rather than being silently absorbed. `PlanMetricsStrip.tsx` consumes
+  `planMetrics(plan, dims, options)` — flat cards (no near-full-length warning treatment; the
+  planner reads the number plainly, per locked decision). `ColumnDetailPanel.tsx` puts the
+  `rationale` string in its own monospace panel (the trust feature gets a panel, not a tooltip),
+  plus a layer table showing each top-off's gain-per-piece against K with a pass/fail indicator.
+  `plan.warnings` and `plan.balance` get their own sections — balance worded neutrally ("carried to
+  next trailer"), not as a failure. Fixture data (`loadBuilderFixtures.ts`, labeled by real invoice
+  number: INV_4202 AccuDock 108pc, INV_4356 Siplast holey board 728pc, INV_4347 AccuDock mixed
+  94pc) is extracted from `packEngine.selfcheck.ts`'s three real-order fixtures so the picker and
+  the selfcheck read from one place instead of duplicating the SKU/cart literals — **this required
+  editing `packEngine.selfcheck.ts`**, one file outside this prompt's literal scope-fence list but
+  required by the prompt's own body text ("extract it into the shared module and have the selfcheck
+  import from there rather than duplicating it"); flagged here since the fence and the body
+  disagreed. All 144 selfcheck checks still pass after the extraction. A dev-only
+  `<details>` section (guarded on `process.env.NODE_ENV !== "production"`) renders the full
+  selfcheck pass/fail table on the page itself, extending the existing console-log-only convention
+  (`BlocksApp.tsx`) to an actual rendered table per this prompt's spec. **Token substitution note:**
+  the prompt named `var(--surface-1)` and a `--bg-accent`/`--border-accent`/`--text-accent` trio for
+  card backgrounds and the mixed-column tint — none of those four tokens exist in `globals.css`
+  (only `--surface`/`--surface-2`/`--card-bg` are defined and exposed to Tailwind). Substituted the
+  closest real, already dark-mode-covered tokens instead of inventing new ones outside this
+  prompt's file list: `--surface-2` for flat cards, and the platform's existing `--info-*` semantic
+  trio for the mixed-column tint. If Steve wants dedicated tokens, that's a one-line `globals.css`
+  addition for a future prompt. Identity for the page header reads directly from the
+  middleware-injected `X-User-Name`/`X-User-Is-Admin`/`X-User-Permissions` headers — no
+  `validateSession()`/`getEnv()` call, unlike every other page in this module — since this prompt's
+  own scope fence is "no API routes, no D1, no data layer" and there is no reason to touch D1 just
+  to render the platform header. `npx tsc --noEmit` and `npm run cf-build` both green; all three
+  fixtures confirmed to render without runtime error with diagram column count matching
+  `plan.totalStacks` exactly. No hardcoded colors (verified by grep); every token used carries both
+  a light and dark definition. Full interactive/browser verification was not done — the route is
+  admin-gated and there is no test session available in this environment; static/build verification
+  only.
 - **lb-engine-05 — v2 Load Builder: runner height, weight-warning removal.** Small, surgical
   correctness prompt closing a real gap before UI work starts. **A (runner height):**
   `PackOptions.runnerHeight` existed since lb-engine-01/02 but was never read by `pack()` — every
