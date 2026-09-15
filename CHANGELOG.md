@@ -1870,6 +1870,117 @@ Entries within each module are ordered by prompt # descending (newest first).
 
 ## Logistics (v2)
 
+- **lb-ui-02 — v2 Load Builder: customize editor (react-component-agent §9b).** Adds a view/edit
+  toggle to `LoadPlanView.tsx` ("Customize load") that swaps the read-only panel for
+  `CustomizeEditor.tsx`, built on a new headless module (`loadEditor.ts`, no React/DOM) exposing six
+  pure operations (`moveColumn`, `pullToHolding`, `placeFromHolding`, `compactLoad`, `undo`,
+  `canDrop`) over an `EditorState`. **Column, not layer, is the move unit (Decision, locked):**
+  columns drag from row to row (or to a holding area and back) whole, carrying their full layer
+  composition — legacy peeled individual pieces off a stack, but the engine's column is now the
+  atomic placement unit, so the editor's atomic *edit* unit matches it. **`validatePlan()` is the
+  sole apply gate** — every edit recomputes the same derived geometry `packEngine.ts`'s own
+  `buildTrailer`/`assembleRowFrom` produce (`posY`, `posFromFront`, `rowLength = max(colLength)`,
+  `wastedFloorArea`, every rollup) and calls `validatePlan()` to render whatever comes back; nothing
+  is reimplemented in the UI. **Guard profile differs from legacy's** because the move unit changed:
+  two blocking rules (`row-width` — a dropped column pushes a row past 98", the thing `canDrop`
+  exists to catch pre-drop; `trailer-length` — a deep column dropped into a shallow row raises that
+  row's `rowLength` and can overflow a *downstream* row at the trailer's nose, so the guard banner
+  names the specific overflowing row via a new `findOverflowingRows()` helper rather than echoing
+  `validatePlan`'s own trailer-only detail string), one advisory (columns left in holding — "N
+  columns will be dropped from the load if you apply now," never blocking, since holding it
+  deliberately is a legitimate planner move), and one should-never-fire invariant (`column-height` —
+  moving a column can't change its own height; if it fires it's worded as a bug report, not a
+  planner-facing guard). Guards render as **persistent banners** (`EditorGuards.tsx`), not
+  fire-and-fade toasts — legacy's toast-at-apply-time left the planner to work out which column was
+  at fault; the offending row is also tinted in the diagram for as long as the condition holds.
+  **Conservation across three buckets, not two:** `validatePlan`'s own `conservation` rule only
+  knows trailers + `plan.balance`; a column sitting in holding is neither, so calling it directly
+  mid-edit would spuriously fire. `loadEditor.ts` never touches `state.plan.balance` itself (pull/
+  place only move columns into/out of `state.holding`) and instead exposes `planForApply(state)`,
+  which folds holding into a *merged* balance for validation and — critically — is the same function
+  `CustomizeEditor`'s Apply button commits, so a column left in holding at apply time becomes
+  unplaced demand in the resulting plan rather than silently vanishing. Applying hands the finished
+  `PackPlan` back to `LoadPlanView`, held in a new `editedPlan` state var (in-memory only, cleared on
+  fixture switch — no persistence, per scope; saved loads are `lb-ui-04`). **Two flagged scope
+  divergences:** (1) `TrailerDiagram.tsx` is not in this prompt's file list but Part C's body text
+  explicitly requires extending it ("do not fork it") — extended additively with ~12 new optional
+  props (drag source/target, persistent guard tint, keyboard target-picker overlay) so every prop
+  read-only mode omits renders byte-identical to `lb-ui-01`; same fence/body tension already resolved
+  once for `packEngine.selfcheck.ts` in `lb-ui-01`, same resolution here. (2) the prompt named
+  `var(--bg-danger)`/`--border-danger`/`--text-danger` and `var(--bg-warning)`/`--border-warning`/
+  `--text-warning` — grep confirms none of the six exist in `globals.css`. The advisory banner uses
+  the real `--warn-bg`/`--warn-border`/`--warn-text` trio (exact match apart from "warn" vs
+  "warning"); blocking/bug banners have no matching pre-built tint token (`--danger-bg` is a solid
+  accent, not a light background, and there is no `--danger-border`), so — following the
+  `color-mix(in srgb, var(--token) N%, transparent)` pattern already established in
+  `PlatformHeader.tsx`/`NoteRow.tsx` rather than inventing new CSS variables (`globals.css` isn't in
+  this prompt's fence either) — the tint is derived from `--danger-bg` with `--danger-bg` itself as
+  the border. **Drag-and-drop is native HTML5 DnD**, scoped to whole-row drop targets (a drop always
+  appends to the target row; precise in-row reordering is the keyboard flow's job, below) — a
+  deliberate simplification flagged here rather than silently narrowed, since building pixel-accurate
+  per-column drop zones against the diagram's absolutely-positioned layout bought little the keyboard
+  path doesn't already cover. **Every drag interaction has a full keyboard equivalent:** select a
+  column (or a held column's Place button) → every row grows a focusable "Move here" target → Enter/
+  Space confirms, Escape cancels — and the keyboard path is strictly more precise than DnD, since
+  `moveColumn`'s `slot` lets it insert anywhere in the target row, not just append. `moveColumn`
+  itself supports `from.t !== to.t` (cross-trailer) generically — the recompute is symmetric per
+  trailer either way — but `CustomizeEditor`'s actual drag wiring only exercises same-trailer moves
+  for now; cross-trailer relocation today only happens via pull-to-holding/place-from-holding
+  (already trailer-agnostic). Full cross-trailer *drag* UX is `lb-ui-03`'s job (dissolve). Apply
+  follows the doctrine's disabled-controls guidance: it stays clickable while blocked and explains
+  why on click, rather than going dead and low-contrast. `loadEditor.selfcheck.ts` adds all 9
+  specified checks (37 `check()` calls total) against a hand-built two-trailer fixture, every one
+  ending in a `validateForApply()` zero-violations assertion except the two deliberately testing a
+  violation (row-width overflow, trailer-length overflow) — **37/37 pass**. `packEngine.selfcheck.ts`
+  unchanged, still **144/144**. `npx tsc --noEmit` and `npm run cf-build` both green. No hardcoded
+  colors (verified by grep); every token used carries both a light and dark definition. Full
+  interactive/browser verification was not attempted for the same reason as `lb-ui-01`: the route is
+  admin-gated and there is no test session available in this environment.
+- **lb-ui-01 — v2 Load Builder: read-only plan view (react-component-agent §9b + next-platform-agent
+  §9a).** First reachable route in the unit: `/v2/logistics/load-builder`, admin-only via the
+  existing `{ prefix: "/v2/logistics", keys: ["logistics.v2"] }` dark-launch rule — no middleware
+  change needed (verified, not assumed). Runs `pack()` against one of three real orders and renders
+  the resulting `PackPlan`; no editing, no dragging, no persistence, no BOL, no API routes, no D1 —
+  a pure read of the closed engine's output. **Top-down diagram (Decision, locked), not the legacy
+  side elevation:** rear at the left (`posFromFront = 0`), nose at the right, trailer length
+  horizontal, trailer width vertical, stack height left out of the geometry entirely (labels +
+  detail panel instead). The reason: the engine's defining behaviour since `lb-engine-02`/`-03` is
+  width pairing — columns of different footprints sharing a row across the 98" width — which a
+  side elevation can't show; the legacy diagram optimised for a thing this engine no longer does
+  the hard way. A column shallower than its row renders its unused depth as a visible striped
+  backdrop rather than being silently absorbed. `PlanMetricsStrip.tsx` consumes
+  `planMetrics(plan, dims, options)` — flat cards (no near-full-length warning treatment; the
+  planner reads the number plainly, per locked decision). `ColumnDetailPanel.tsx` puts the
+  `rationale` string in its own monospace panel (the trust feature gets a panel, not a tooltip),
+  plus a layer table showing each top-off's gain-per-piece against K with a pass/fail indicator.
+  `plan.warnings` and `plan.balance` get their own sections — balance worded neutrally ("carried to
+  next trailer"), not as a failure. Fixture data (`loadBuilderFixtures.ts`, labeled by real invoice
+  number: INV_4202 AccuDock 108pc, INV_4356 Siplast holey board 728pc, INV_4347 AccuDock mixed
+  94pc) is extracted from `packEngine.selfcheck.ts`'s three real-order fixtures so the picker and
+  the selfcheck read from one place instead of duplicating the SKU/cart literals — **this required
+  editing `packEngine.selfcheck.ts`**, one file outside this prompt's literal scope-fence list but
+  required by the prompt's own body text ("extract it into the shared module and have the selfcheck
+  import from there rather than duplicating it"); flagged here since the fence and the body
+  disagreed. All 144 selfcheck checks still pass after the extraction. A dev-only
+  `<details>` section (guarded on `process.env.NODE_ENV !== "production"`) renders the full
+  selfcheck pass/fail table on the page itself, extending the existing console-log-only convention
+  (`BlocksApp.tsx`) to an actual rendered table per this prompt's spec. **Token substitution note:**
+  the prompt named `var(--surface-1)` and a `--bg-accent`/`--border-accent`/`--text-accent` trio for
+  card backgrounds and the mixed-column tint — none of those four tokens exist in `globals.css`
+  (only `--surface`/`--surface-2`/`--card-bg` are defined and exposed to Tailwind). Substituted the
+  closest real, already dark-mode-covered tokens instead of inventing new ones outside this
+  prompt's file list: `--surface-2` for flat cards, and the platform's existing `--info-*` semantic
+  trio for the mixed-column tint. If Steve wants dedicated tokens, that's a one-line `globals.css`
+  addition for a future prompt. Identity for the page header reads directly from the
+  middleware-injected `X-User-Name`/`X-User-Is-Admin`/`X-User-Permissions` headers — no
+  `validateSession()`/`getEnv()` call, unlike every other page in this module — since this prompt's
+  own scope fence is "no API routes, no D1, no data layer" and there is no reason to touch D1 just
+  to render the platform header. `npx tsc --noEmit` and `npm run cf-build` both green; all three
+  fixtures confirmed to render without runtime error with diagram column count matching
+  `plan.totalStacks` exactly. No hardcoded colors (verified by grep); every token used carries both
+  a light and dark definition. Full interactive/browser verification was not done — the route is
+  admin-gated and there is no test session available in this environment; static/build verification
+  only.
 - **Feature (unprompted, conversational request, no prompt file, no prompt number yet) —
   Shipment Dashboard row "View job →" link replaced with an inline drill-down
   (react-component-agent §9b + next-platform-agent §9a).** Steve flagged that the "View job →"
