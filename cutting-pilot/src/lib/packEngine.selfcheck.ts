@@ -1367,5 +1367,112 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("Holey max-base-first: validatePlan reports zero violations", maxHoleyViolations.length === 0, JSON.stringify(maxHoleyViolations));
   }
 
+  // --- lb-ui-12: auto-downsize + trailerTypeLabel (G1-G5) ---
+
+  const TRAILER_53FT_G = TRAILER_TYPES["53ft Standard"];
+  const BOX_TRUCK = TRAILER_TYPES["26ft Box Truck"];
+
+  // G1. Off by default: DEFAULT_PACK_OPTIONS.autoDownsize is false, so an ordinary pack() call
+  // (no options override) never downsizes, even when everything placed would fit a box truck.
+  {
+    const g1Sku: PackSku = { id: "G1_SKU", name: "Small Block", sku: "G1", length: 40, width: 20, height: 8, weight: 30, category: "Blocks", allowRotation: true };
+    const g1Cart: CartLine[] = [{ skuId: "G1_SKU", qty: 20 }];
+    const g1Plan = pack(g1Cart, [g1Sku], TRAILER_53FT_G);
+    check(
+      "G1: autoDownsize off by default — trailer keeps primary dims",
+      g1Plan.trailers.length === 1 && g1Plan.trailers[0].dims.length === TRAILER_53FT_G.length,
+      JSON.stringify(g1Plan.trailers.map((t) => ({ type: t.type, length: t.dims.length })))
+    );
+  }
+
+  // G2. On, and everything placed fits a box truck: the trailer is repacked to box-truck dims,
+  // tagged with the "26ft Box Truck" label, loses no units, and the repacked trailer is itself
+  // clean under validatePlan (trailer.dims now IS the box truck's dims, per lb-ui-12's earlier
+  // validatePlan change, so this exercises that the two features compose correctly).
+  {
+    const g2Sku: PackSku = { id: "G2_SKU", name: "Small Block", sku: "G2", length: 40, width: 20, height: 8, weight: 30, category: "Blocks", allowRotation: true };
+    const g2Cart: CartLine[] = [{ skuId: "G2_SKU", qty: 20 }];
+    const g2PlanOff = pack(g2Cart, [g2Sku], TRAILER_53FT_G, { autoDownsize: false });
+    const g2PlanOn = pack(g2Cart, [g2Sku], TRAILER_53FT_G, { autoDownsize: true, trailerTypeLabel: "53ft Standard" });
+    check(
+      "G2: autoDownsize on — the sole trailer is repacked to box-truck dims and labeled",
+      g2PlanOn.trailers.length === 1 &&
+        g2PlanOn.trailers[0].dims.length === BOX_TRUCK.length &&
+        g2PlanOn.trailers[0].type === "26ft Box Truck",
+      JSON.stringify(g2PlanOn.trailers.map((t) => ({ type: t.type, length: t.dims.length })))
+    );
+    const totalOff = g2PlanOff.trailers.reduce((s, t) => s + t.totalUnits, 0);
+    const totalOn = g2PlanOn.trailers.reduce((s, t) => s + t.totalUnits, 0);
+    check("G2: unit count is conserved across the downsize", totalOff === totalOn && totalOn === 20, `off=${totalOff} on=${totalOn}`);
+    const g2Violations = validatePlan(g2PlanOn, g2Cart, [g2Sku], OPTS);
+    check("G2: downsized plan is clean under validatePlan (validates against trailer.dims, not the primary dims)", g2Violations.length === 0, JSON.stringify(g2Violations));
+  }
+
+  // G3. Rejected: a SKU with no legal orientation fitting the box truck at all (too long, and
+  // allowRotation:false forbids reorienting it) — downsize must be refused and the primary-dims
+  // trailer kept exactly as built, not silently dropped or half-repacked.
+  {
+    const g3Sku: PackSku = { id: "G3_SKU", name: "Big Panel", sku: "G3", length: 400, width: 20, height: 8, weight: 30, category: "Blocks", allowRotation: false };
+    const g3Cart: CartLine[] = [{ skuId: "G3_SKU", qty: 2 }];
+    const g3Plan = pack(g3Cart, [g3Sku], TRAILER_53FT_G, { autoDownsize: true, trailerTypeLabel: "53ft Standard" });
+    check(
+      "G3: SKU too big for the box truck in any orientation — downsize rejected, primary dims kept",
+      g3Plan.trailers.length === 1 && g3Plan.trailers[0].dims.length === TRAILER_53FT_G.length && g3Plan.trailers[0].type === "53ft Standard",
+      JSON.stringify(g3Plan.trailers.map((t) => ({ type: t.type, length: t.dims.length })))
+    );
+  }
+
+  // G4. Rejected: every SKU individually fits the box truck's envelope, but the last trailer's
+  // total demand needs more length than one box truck offers (it fit the primary trailer's 636"
+  // only because that's nearly double the box truck's 312") — the recursive repack would need 2
+  // box trucks, so it must be rejected as a whole, not accepted as a 2-trailer "downsize".
+  {
+    const g4Sku: PackSku = { id: "G4_SKU", name: "Panel", sku: "G4", length: 180, width: 60, height: 50, weight: 50, category: "Blocks", allowRotation: false };
+    const g4Cart: CartLine[] = [{ skuId: "G4_SKU", qty: 6 }];
+    const g4PlanOff = pack(g4Cart, [g4Sku], TRAILER_53FT_G);
+    const g4PlanOn = pack(g4Cart, [g4Sku], TRAILER_53FT_G, { autoDownsize: true, trailerTypeLabel: "53ft Standard" });
+    // Pins WHY the downsize must fail, not just that it did — the fixture's actual rejection lives
+    // or dies on this fitting into 1 primary trailer while exceeding 1 box truck's length; without
+    // this, a future engine change (e.g. different width-pairing) could make these 6 units collapse
+    // into fewer rows than expected and this check would start silently testing nothing.
+    check(
+      "G4 premise: fixture's row layout actually exceeds the box truck's length (else this test proves nothing)",
+      g4PlanOff.trailers.length === 1 && g4PlanOff.trailers[0].usedLength > BOX_TRUCK.length,
+      `usedLength=${g4PlanOff.trailers[0]?.usedLength} boxTruckLength=${BOX_TRUCK.length}`
+    );
+    check(
+      "G4: fits the box truck's envelope per-SKU but needs 2 of them lengthwise — downsize rejected",
+      g4PlanOff.trailers.length === 1 &&
+        g4PlanOn.trailers.length === 1 &&
+        g4PlanOn.trailers[0].dims.length === TRAILER_53FT_G.length &&
+        g4PlanOn.trailers[0].type === "53ft Standard",
+      JSON.stringify({ off: g4PlanOff.trailers.length, on: g4PlanOn.trailers.map((t) => ({ type: t.type, length: t.dims.length })) })
+    );
+  }
+
+  // G5. trailerTypeLabel: populated on EVERY trailer from a call that sets it (not just a
+  // downsized one) — a multi-trailer load where only the last one downsizes still labels the
+  // earlier, primary-dims trailers correctly, so the UI never needs a `type ?? primaryKey`
+  // fallback (the whole point of threading the label through pack() at all).
+  {
+    const g5Sku: PackSku = { id: "G5_SKU", name: "Small Block", sku: "G5", length: 40, width: 20, height: 8, weight: 30, category: "Blocks", allowRotation: true };
+    // Enough demand to force 2+ trailers under the primary type, so the downsize (if it fires) only
+    // ever touches the LAST one — the rest must still carry the primary label. A 53ft trailer holds
+    // several hundred of this small a SKU, so this needs to be a large multiple of that, not just
+    // "more than one truck's worth" by a rough estimate.
+    const g5Cart: CartLine[] = [{ skuId: "G5_SKU", qty: 2000 }];
+    const g5Plan = pack(g5Cart, [g5Sku], TRAILER_53FT_G, { autoDownsize: true, trailerTypeLabel: "53ft Standard" });
+    check(
+      "G5: multi-trailer load — every trailer is labeled, not just the (possibly downsized) last one",
+      g5Plan.trailers.length >= 2 && g5Plan.trailers.every((t) => !!t.type),
+      JSON.stringify(g5Plan.trailers.map((t) => t.type))
+    );
+    check(
+      "G5: every non-last trailer keeps the primary label (only the last one may read \"26ft Box Truck\")",
+      g5Plan.trailers.slice(0, -1).every((t) => t.type === "53ft Standard"),
+      JSON.stringify(g5Plan.trailers.map((t) => t.type))
+    );
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }

@@ -12,6 +12,11 @@ import type { Dimensions, PlanMetrics } from "@/lib/packEngine";
 interface PlanMetricsStripProps {
   metrics: PlanMetrics;
   dims: Dimensions;
+  // lb-ui-12: true when the plan's trailers don't all share `dims` (an auto-downsized last
+  // trailer) — the "of N&quot; per trailer" denominator below describes every trailer only when
+  // this is false; when true it would misreport a downsized trailer's actual, smaller capacity, so
+  // the sub-label switches to a plain "(mixed trailer sizes)" note instead of a specific number.
+  mixedTrailerTypes?: boolean;
 }
 
 function round(n: number): number {
@@ -28,14 +33,14 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub?:
   );
 }
 
-export default function PlanMetricsStrip({ metrics, dims }: PlanMetricsStripProps) {
+export default function PlanMetricsStrip({ metrics, dims, mixedTrailerTypes }: PlanMetricsStripProps) {
   return (
     <div className="flex flex-wrap gap-3" role="group" aria-label="Plan metrics">
       <MetricCard label="Trailers" value={String(metrics.trailerCount)} />
       <MetricCard
         label="Length used"
         value={`${round(metrics.usedLength)}"`}
-        sub={`of ${round(dims.length)}" per trailer`}
+        sub={mixedTrailerTypes ? "mixed trailer sizes" : `of ${round(dims.length)}" per trailer`}
       />
       <MetricCard label="Height fill" value={`${round(metrics.meanHeightUtilization * 100)}%`} />
       <MetricCard label="Width fill" value={`${round(metrics.meanWidthUtilization * 100)}%`} />

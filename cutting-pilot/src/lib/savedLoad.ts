@@ -63,6 +63,14 @@ export interface SavedLoadSnapshot {
   // cart/skus," not as an incompatible row.
   editedCart?: CartLine[] | null;
   editedSkus?: PackSku[] | null;
+  // lb-ui-12: the planner's auto-downsize toggle at save time. Optional and additive (absent on
+  // every pre-lb-ui-12 row), defaulting to FALSE on a missing/malformed value — NOT the UI's own
+  // live default of true (LoadPlanView's `useState(true)`). A pre-existing saved row was written
+  // before auto-downsize existed at all; defaulting it to true would change what a plain
+  // editedPlan: null reload regenerates (packOptions.autoDownsize flows into pack()) for a load
+  // that never had this feature applied when it was saved. Every NEW save always writes the
+  // toggle's actual current value explicitly, so this fallback only ever fires for old rows.
+  autoDownsize?: boolean;
 }
 
 export function buildSnapshot(args: {
@@ -73,6 +81,7 @@ export function buildSnapshot(args: {
   editedPlan: PackPlan | null;
   editedCart?: CartLine[] | null;
   editedSkus?: PackSku[] | null;
+  autoDownsize?: boolean;
 }): SavedLoadSnapshot {
   const source: SavedLoadSource = args.pulledSource
     ? { kind: "pulled", pulledSource: args.pulledSource }
@@ -85,6 +94,7 @@ export function buildSnapshot(args: {
     editedPlan: args.editedPlan,
     editedCart: args.editedCart ?? null,
     editedSkus: args.editedSkus ?? null,
+    autoDownsize: args.autoDownsize ?? false,
   };
 }
 
@@ -162,6 +172,7 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
   if (parsed.editedPlan !== null && !isValidPlan(parsed.editedPlan)) return { ok: false, reason: INCOMPATIBLE_REASON };
   const editedCart = isValidCartLineArray(parsed.editedCart) ? parsed.editedCart : null;
   const editedSkus = isValidSkuArray(parsed.editedSkus) ? parsed.editedSkus : null;
+  const autoDownsize = typeof parsed.autoDownsize === "boolean" ? parsed.autoDownsize : false;
 
   return {
     ok: true,
@@ -173,6 +184,7 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
       editedPlan: (parsed.editedPlan ?? null) as PackPlan | null,
       editedCart,
       editedSkus,
+      autoDownsize,
     },
   };
 }

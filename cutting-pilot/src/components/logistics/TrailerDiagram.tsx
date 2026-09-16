@@ -84,6 +84,11 @@ interface TrailerDiagramProps {
   onChooseTargetRow?: (rowIndex: number) => void;
   /** lb-ui-03: rendered in the header row, right of the usedLength stat. */
   headerAction?: ReactNode;
+  /** lb-ui-12: set by the caller (who knows the plan's primary trailer type — this component only
+   * ever sees ONE trailer's own dims) when trailer.type diverges from it, e.g. "Auto-downsized ·
+   * 26ft Box Truck". Rendered as a small pill next to the "Trailer N" title. Omitted/undefined
+   * renders nothing — the common case where every trailer is the primary type. */
+  typeBadge?: string;
 }
 
 // Rows are drawn nose-first (visual left) to rear-most (visual right) — the reverse of
@@ -116,11 +121,19 @@ export default function TrailerDiagram({
   targetPickerActive = false,
   onChooseTargetRow,
   headerAction,
+  typeBadge,
 }: TrailerDiagramProps) {
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
       <div className="flex items-baseline justify-between gap-3 mb-3">
-        <h3 className="text-sm font-semibold text-text">Trailer {trailerIndex + 1}</h3>
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-sm font-semibold text-text">Trailer {trailerIndex + 1}</h3>
+          {typeBadge && (
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] text-[var(--brand)]">
+              {typeBadge}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3 ml-auto">
           <span className="text-xs font-mono tabular-nums text-muted">
             {Math.round(trailer.usedLength)}&quot; of {Math.round(dims.length)}&quot; used · {trailer.rows.length} row{trailer.rows.length === 1 ? "" : "s"}

@@ -113,6 +113,12 @@ export default function LoadPlanView() {
   // no UI control. Defaults match today's shipped behavior exactly (53ft Standard, no runner).
   const [trailerTypeKey, setTrailerTypeKey] = useState(DEFAULT_TRAILER_TYPE);
   const [runnerHeight, setRunnerHeight] = useState(0);
+  // lb-ui-12: matches legacy's own default (load-builder.html: `autoDownsize: true`) — this is a
+  // UI-level default, NOT packEngine.ts's DEFAULT_PACK_OPTIONS.autoDownsize (which stays false so
+  // every other caller of pack() — selfchecks, a saved load regenerating via editedPlan: null —
+  // doesn't change behavior just because this field exists). This toggle is what actually opts a
+  // v2 load into the feature.
+  const [autoDownsize, setAutoDownsize] = useState(true);
 
   // lb-ui-05: pulled-job source, deep-link state, and the dismissible pull banner.
   const [pulledSource, setPulledSource] = useState<PulledLoadSource | null>(null);
@@ -165,11 +171,21 @@ export default function LoadPlanView() {
   const effectiveSkus = editedSkus ?? fixture.skus;
 
   const dims = useMemo(() => TRAILER_TYPES[trailerTypeKey] ?? TRAILER_TYPES[DEFAULT_TRAILER_TYPE], [trailerTypeKey]);
-  const packOptions: PackOptions = useMemo(() => ({ ...DEFAULT_PACK_OPTIONS, runnerHeight }), [runnerHeight]);
+  // trailerTypeLabel (lb-ui-12): stamped onto every trailer pack() builds (PackTrailer.type) so a
+  // downsized last trailer's type reads "26ft Box Truck" while every other trailer still correctly
+  // reads the primary type — see PackOptions.trailerTypeLabel's own comment.
+  const packOptions: PackOptions = useMemo(
+    () => ({ ...DEFAULT_PACK_OPTIONS, runnerHeight, autoDownsize, trailerTypeLabel: trailerTypeKey }),
+    [runnerHeight, autoDownsize, trailerTypeKey]
+  );
 
   const packedPlan = useMemo(() => pack(scaledCart, fixture.skus, dims, packOptions), [scaledCart, fixture, dims, packOptions]);
   const plan = editedPlan ?? packedPlan;
   const metrics = useMemo(() => planMetrics(plan, packOptions), [plan, packOptions]);
+  const mixedTrailerTypes = useMemo(
+    () => plan.trailers.some((t) => t.dims.length !== dims.length || t.dims.width !== dims.width || t.dims.height !== dims.height),
+    [plan, dims]
+  );
 
   // lb-ui-09: only recreated when the actual data changes (or the modal opens/closes) — plan/dims/
   // effectiveSkus are already stable refs from the memos/state above, so this doesn't recreate on
@@ -227,7 +243,7 @@ export default function LoadPlanView() {
     setSaving(true);
     setSaveError(null);
     try {
-      const snapshot = buildSnapshot({ fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus });
+      const snapshot = buildSnapshot({ fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize });
       const payload = buildSavePayload(name, fixture.customer, snapshot);
       const isUpdate = !!currentSavedLoadId;
       const url = isUpdate ? `/v2/api/saved-loads/${encodeURIComponent(currentSavedLoadId!)}` : "/v2/api/saved-loads";
@@ -268,6 +284,15 @@ export default function LoadPlanView() {
     }
     setTrailerTypeKey(snapshot.trailerTypeKey);
     setRunnerHeight(snapshot.runnerHeight);
+    // Deliberately overwrites the toggle even for a pre-lb-ui-12 row (snapshot.autoDownsize
+    // undefined -> deserializeSnapshot's own `false` fallback), same as trailerTypeKey/runnerHeight
+    // above: a Load restores the SESSION-LEVEL engine settings the saved plan was actually built
+    // with, not just the plan object, so the toggle visibly reads what regenerating this load with
+    // editedPlan: null would actually produce. The alternative (leave the live toggle alone when
+    // the field is absent) avoids that one flip but means an old row can silently regenerate WITH
+    // downsizing under a toggle the planner left on from a previous load — a bigger surprise than
+    // the toggle itself changing, and inconsistent with how the two older engine settings behave.
+    setAutoDownsize(snapshot.autoDownsize ?? false);
     setEditedPlan(snapshot.editedPlan);
     // Only restore editedCart/editedSkus alongside a non-null editedPlan -- these two describe
     // divergence FROM the frozen source that a materialized plan already accounts for; restoring
@@ -308,6 +333,17 @@ export default function LoadPlanView() {
 
   function handleRunnerHeightChange(rh: number) {
     setRunnerHeight(rh);
+    setSelected(null);
+    setEditedPlan(null);
+    setEditedCart(null);
+    setEditedSkus(null);
+    setMode("view");
+  }
+
+  // lb-ui-12: same reset contract as trailer type / runner height above — the previous auto-pack's
+  // trailers (and any manual edit built on them) no longer reflect the toggle's new value.
+  function handleAutoDownsizeChange(value: boolean) {
+    setAutoDownsize(value);
     setSelected(null);
     setEditedPlan(null);
     setEditedCart(null);
@@ -393,6 +429,31 @@ export default function LoadPlanView() {
               ))}
             </select>
           </label>
+          <div className="flex items-center gap-1.5" role="group" aria-label="Auto-downsize last trailer">
+            <span className="text-[13px] font-medium text-muted">Downsize</span>
+            {([true, false] as const).map((v) => {
+              const active = autoDownsize === v;
+              return (
+                <button
+                  key={String(v)}
+                  type="button"
+                  onClick={() => handleAutoDownsizeChange(v)}
+                  disabled={mode === "edit"}
+                  aria-pressed={active}
+                  className={[
+                    "min-h-[36px] px-2.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors border",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]",
+                    "disabled:opacity-40 disabled:cursor-not-allowed",
+                    active
+                      ? "border-[var(--brand)] text-[var(--brand)] font-semibold"
+                      : "border-[var(--border)] text-muted hover:text-text hover:bg-[var(--ghost-bg)]",
+                  ].join(" ")}
+                >
+                  {v ? "ON" : "OFF"}
+                </button>
+              );
+            })}
+          </div>
           <button
             type="button"
             onClick={() => setShowJobPull(true)}
@@ -526,7 +587,7 @@ export default function LoadPlanView() {
       )}
 
       {/* 2. Metrics strip */}
-      <PlanMetricsStrip metrics={metrics} dims={dims} />
+      <PlanMetricsStrip metrics={metrics} dims={dims} mixedTrailerTypes={mixedTrailerTypes} />
 
       {mode === "edit" ? (
         <CustomizeEditor
@@ -552,8 +613,9 @@ export default function LoadPlanView() {
                 <TrailerDiagram
                   key={trailerIndex}
                   trailer={trailer}
-                  dims={dims}
+                  dims={trailer.dims}
                   trailerIndex={trailerIndex}
+                  typeBadge={trailer.type && trailer.type !== trailerTypeKey ? `Auto-downsized · ${trailer.type}` : undefined}
                   selectedColumn={
                     selected && selected.trailerIndex === trailerIndex
                       ? { rowIndex: selected.rowIndex, columnIndex: selected.columnIndex }
@@ -564,7 +626,7 @@ export default function LoadPlanView() {
                     <LoadingDiagramPrintButton
                       trailer={trailer}
                       trailerIndex={trailerIndex}
-                      dims={dims}
+                      dims={trailer.dims}
                       skus={effectiveSkus}
                       runnerHeight={runnerHeight}
                       warnings={plan.warnings}
@@ -578,7 +640,7 @@ export default function LoadPlanView() {
 
           {/* 4. Detail panel + warnings + balance */}
           <div className="space-y-4">
-            <ColumnDetailPanel selected={selectedDetail} dims={dims} options={packOptions} />
+            <ColumnDetailPanel selected={selectedDetail} dims={selected ? (plan.trailers[selected.trailerIndex]?.dims ?? dims) : dims} options={packOptions} />
 
             <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
               <h3 className="text-sm font-semibold text-text mb-2">Warnings</h3>

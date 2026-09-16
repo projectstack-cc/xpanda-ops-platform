@@ -238,5 +238,44 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
     );
   }
 
+  // 10. lb-ui-12: round-trip with autoDownsize: true.
+  {
+    const snapshot = buildSnapshot({
+      fixtureId: "inv-4202",
+      pulledSource: null,
+      trailerTypeKey: "53ft Standard",
+      runnerHeight: 0,
+      editedPlan: null,
+      autoDownsize: true,
+    });
+    const result = deserializeSnapshot(serializeSnapshot(snapshot));
+    check(
+      "round-trip: autoDownsize: true survives intact",
+      result.ok === true && result.snapshot.autoDownsize === true,
+      JSON.stringify(result)
+    );
+  }
+
+  // 11. Backward compat: a pre-lb-ui-12 row (no autoDownsize key at all) still deserializes
+  //     successfully and comes back false — not true (the UI's own live default), which would
+  //     silently start auto-downsizing a load that never had the feature applied when it was saved
+  //     — see this fallback's own comment on SavedLoadSnapshot.autoDownsize.
+  {
+    const preLb12Row = {
+      version: 1,
+      source: { kind: "fixture", fixtureId: "inv-4202" },
+      trailerTypeKey: "53ft Standard",
+      runnerHeight: 0,
+      editedPlan: null,
+      // no autoDownsize key at all
+    };
+    const result = deserializeSnapshot(JSON.stringify(preLb12Row));
+    check(
+      "deserializeSnapshot: pre-lb-ui-12 row (missing autoDownsize) still loads, defaults to false",
+      result.ok === true && result.snapshot.autoDownsize === false,
+      JSON.stringify(result)
+    );
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }

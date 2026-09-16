@@ -382,6 +382,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                 trailer={trailer}
                 dims={trailer.dims}
                 trailerIndex={t}
+                typeBadge={trailer.type && trailer.type !== state.options.trailerTypeLabel ? `Auto-downsized · ${trailer.type}` : undefined}
                 selectedColumn={selectedColumn && selectedColumn.t === t ? { rowIndex: selectedColumn.r, columnIndex: selectedColumn.c } : null}
                 onSelectColumn={(r, c) => handleSelectColumn(t, r, c)}
                 editable

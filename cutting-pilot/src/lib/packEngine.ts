@@ -160,6 +160,22 @@ export interface PackOptions {
   // rationale and a line to plan.warnings (a tall narrow stack is a loader-rearrange candidate,
   // not a structural violation). Infinity disables the check entirely.
   stabilityWarnRatio: number;
+  // lb-ui-12: when true, pack() checks whether the LAST trailer's already-placed demand would
+  // also fit a "26ft Box Truck" and, if so, repacks just that trailer against box-truck dims — see
+  // pack()'s own comment at the call site for the full acceptance contract. Defaults to false
+  // (below) rather than legacy's `true`: flipping this on changes trailer.dims for real plans,
+  // including every saved load that regenerates via pack() with editedPlan: null on reload — the
+  // caller (LoadPlanView's own toggle state) opts in explicitly instead of the engine changing
+  // behavior for every existing consumer the moment this field was added.
+  autoDownsize?: boolean;
+  // lb-ui-12: a display label stamped onto every trailer this pack() call produces (PackTrailer.type)
+  // — NOT read by the engine itself for any geometry/placement decision, purely a UI convenience so
+  // "what type is trailer N" never needs a `trailer.type ?? primaryTrailerTypeKey` fallback (the
+  // field is either populated on every trailer from a given call, or the caller omitted it and it's
+  // absent on all of them — never populated on some and not others). The auto-downsize repack above
+  // passes "26ft Box Truck" here on its own recursive pack() call so the one repacked trailer is
+  // labeled correctly.
+  trailerTypeLabel?: string;
 }
 
 export const DEFAULT_PACK_OPTIONS: PackOptions = {
@@ -169,6 +185,7 @@ export const DEFAULT_PACK_OPTIONS: PackOptions = {
   supportPolicy: "strict",
   trailerLimit: 20,
   stabilityWarnRatio: 3,
+  autoDownsize: false,
 };
 
 // --- shared numeric helpers ---
@@ -1006,6 +1023,59 @@ export function pack(cart: CartLine[], skus: PackSku[], dims: Dimensions, option
   warnings.push(...simResult.warnings);
 
   const trailers = simResult.trailers;
+  if (opts.trailerTypeLabel) {
+    for (const trailer of trailers) trailer.type = opts.trailerTypeLabel;
+  }
+
+  // lb-ui-12: auto-downsize. The last trailer built above is the one most likely to be only
+  // partially filled — if everything already placed on it would ALSO fit a smaller "26ft Box
+  // Truck", repack just that trailer's demand against box-truck dims instead of shipping it on the
+  // primary (larger) trailer type. Mirrors legacy's own auto-downsize (load-builder.html, the
+  // `calcLoading` "Auto-downsize last trailer" step), reimplemented against skuOrientations — the
+  // actual fit primitive, matching every other fit check in this file — rather than ported
+  // verbatim: legacy's own check sorts [length,width,height] on both the SKU and the box and
+  // compares elementwise, which asks "could this piece fit the box in SOME orientation" while
+  // ignoring allowRotation and the piece's already-fixed placement orientation; that can green-
+  // light a downsize whose repacked trailer then fails validatePlan's sku-unplaceable rule.
+  // Recurses into pack() itself with autoDownsize forced off (so it can't recurse a second time)
+  // and only accepts the result if it collapses to exactly ONE trailer with NOTHING left in its
+  // balance — a downsize that would actually need two box trucks, or strand a piece that doesn't
+  // fit the smaller envelope at all, is rejected outright and the original, primary-dims trailer
+  // is kept exactly as built above.
+  if (opts.autoDownsize && trailers.length >= 1) {
+    const boxDims = TRAILER_TYPES["26ft Box Truck"];
+    if (dims.length > boxDims.length) {
+      const lastTrailer = trailers[trailers.length - 1];
+      const lastTrailerCartMap = new Map<string, number>();
+      for (const row of lastTrailer.rows) {
+        for (const column of row.columns) {
+          for (const layer of column.layers) {
+            lastTrailerCartMap.set(layer.skuId, (lastTrailerCartMap.get(layer.skuId) ?? 0) + layer.count);
+          }
+        }
+      }
+      const allSkusFitBox =
+        lastTrailerCartMap.size > 0 &&
+        Array.from(lastTrailerCartMap.keys()).every((skuId) => {
+          const sku = skuById.get(skuId);
+          return (
+            !!sku &&
+            skuOrientations(sku, opts).some(
+              (o) => approxLte(o.length, boxDims.length) && approxLte(o.width, boxDims.width) && approxLte(o.height, boxDims.height)
+            )
+          );
+        });
+      if (allSkusFitBox) {
+        const boxCart: CartLine[] = Array.from(lastTrailerCartMap.entries()).map(([skuId, qty]) => ({ skuId, qty }));
+        const boxResult = pack(boxCart, skus, boxDims, { ...opts, autoDownsize: false, trailerTypeLabel: "26ft Box Truck" });
+        if (boxResult.trailers.length === 1 && boxResult.balance.length === 0) {
+          trailers[trailers.length - 1] = boxResult.trailers[0];
+          warnings.push(...boxResult.warnings);
+        }
+      }
+    }
+  }
+
   const balance: PackBalance = Array.from(balanceMap.entries())
     .filter(([, qty]) => qty > 0)
     .map(([skuId, remaining]) => ({ skuId, remaining }));
