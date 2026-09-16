@@ -4095,6 +4095,39 @@ current series).
   migration required or created by this unit** — pure lib + its checks, no API route, no DB
   read/write, no R2 write, no nav link, no middleware change.
 
+- **`holey-sequential-fill` / row-order-nose-first — Holey Board sequential stacking, and the
+  lb-engine-03 B3 open question finally resolved.** Two direct, Steve-requested engine-behavior
+  changes, both 2026-09-16, not part of the lb-engine-NN sprint numbering (the tag
+  `holey-sequential-fill` is used in code comments instead — commit `341ee58`'s own message
+  mislabeled the first of these `lb-engine-05`, which collides with the earlier runner-height
+  work of the same name; this entry is the correction). **Holey Board column fill** (`341ee58`):
+  replaced the combinatorial (base, top-off) exact-fill search with strict sequential
+  descending-height chaining — the tallest board with remaining demand is stacked to its physical
+  max (height, remaining demand, or weight cap, whichever binds first), and any leftover column
+  height is filled by the next-tallest board with demand, through as many thicknesses as fit, with
+  no reducing an already-placed count to hunt for an exact fill ("papering"). Confirmed every
+  column tops off this way (not only once a size's demand runs out — Siplast's own ratchet fixture,
+  52 columns each independently topped off, depends on this). Scoped to Holey Board only; Blocks
+  keeps the exact-fill search unchanged. `validatePlan`'s `max-skus-per-column` rule and
+  `dissolve.ts`'s own mirrored copy of that rule both gained a matching Holey Board exemption (the
+  chain can legitimately exceed the default cap of 2) — the `dissolve.ts` gap was real: without it,
+  dissolve would have refused moves `validatePlan` now accepts, breaking that file's own "never
+  fails the apply gate" invariant. **Row order** (this commit): closes the B3 open question logged
+  in `BACKLOG.md` since lb-engine-03 — the floor crew loads nose-first, and biggest sizes go in
+  first. `pack()`'s row sort was backwards: it put the thickest-base row at `posFromFront: 0` (the
+  rear, where the doors are), which under nose-first loading means the thickest freight was loaded
+  LAST, not first. Flipped to ascending by base thickness, so the thinnest row now sits at the rear
+  (loaded last, unloaded first) and the thickest at the nose (loaded first). `TrailerDiagram.tsx`
+  and `loadingDiagramPdf.ts` needed no code change — their nose-left/doors-right mirror is purely
+  index-based, thickness-agnostic — only their header comments, which had baked in the old (wrong)
+  "thickest/rear-most row loaded last" assumption, were corrected. `packEngine.selfcheck.ts`'s D6
+  fixture (pinning the row-sort direction) and the H1/H2 "holey max-base-first" fixture's
+  now-stale "declined trade" framing (there's no search to decline anymore, just a single greedy
+  pass) were both updated; a new fixture (5 thicknesses, none dividing evenly) asserts all demand
+  placed and at least one 3+-layer column, closing a coverage gap the prior tests didn't reach.
+  162 packEngine + 21 dissolve + 119 loadEditor + 14 savedLoad + 24 loadingDiagramPdf self-check
+  assertions, `npx tsc --noEmit`, and `npm run cf-build` all green throughout.
+
 ---
 
 ## Database / API

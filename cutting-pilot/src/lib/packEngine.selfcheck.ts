@@ -970,8 +970,10 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("D5: 0 max-skus-per-column violations", capViolations.filter((v) => v.rule === "max-skus-per-column").length === 0, JSON.stringify(capViolations));
   }
 
-  // D6. Rows are ordered thickest-base at posFromFront 0 (rear), thinnest at the nose.
-  // allowRotation:false on both SKUs pins them to their declared flat orientation so A1's
+  // D6. row-order-nose-first (2026-09-16, superseding B3's original "thickest at the rear"
+  // assumption): rows are ordered thinnest-base at posFromFront 0 (rear, where the doors are —
+  // loaded last), thickest at the nose (loaded first — "biggest sizes go in first," confirmed with
+  // Steve). allowRotation:false on both SKUs pins them to their declared flat orientation so A1's
   // six-orientation search can't complicate which footprint/depth each ends up at — this fixture
   // is purely about B3's row sort, not orientation choice.
   {
@@ -982,10 +984,10 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
 
     const thickRow = findRow(rowPlan, (r) => r.columns.some((c) => c.layers[0].skuId === "ROWTEST_THICK"));
     const thinRow = findRow(rowPlan, (r) => r.columns.some((c) => c.layers[0].skuId === "ROWTEST_THIN"));
-    check("D6: the thickest-base row sits at posFromFront 0 (the rear)", thickRow?.posFromFront === 0, String(thickRow?.posFromFront));
+    check("D6: the thinnest-base row sits at posFromFront 0 (the rear)", thinRow?.posFromFront === 0, String(thinRow?.posFromFront));
     check(
-      "D6: the thinner-base row sits further from the rear (toward the nose) than the thick row",
-      (thinRow?.posFromFront ?? -1) > (thickRow?.posFromFront ?? -1),
+      "D6: the thicker-base row sits further from the rear (toward the nose) than the thin row",
+      (thickRow?.posFromFront ?? -1) > (thinRow?.posFromFront ?? -1),
       `thin=${thinRow?.posFromFront} thick=${thickRow?.posFromFront}`
     );
   }
@@ -1334,9 +1336,9 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("F7: the weight canary still fires for a genuinely over-weight plan", ruleViolations(violations, "weight") > 0, JSON.stringify(violations));
   }
 
-  // Steve, 2026-09-16 (superseded by lb-engine-05 below, same day — see that section's own comment
-  // for the full redesign). Kept as a regression check on the resulting single-SKU-column shape,
-  // not on a "declined trade" mechanism that no longer exists: lb-engine-05's sequential fill has
+  // Steve, 2026-09-16 (superseded by holey-sequential-fill below, same day — see that section's own
+  // comment for the full redesign). Kept as a regression check on the resulting single-SKU-column
+  // shape, not on a "declined trade" mechanism that no longer exists: the new sequential fill has
   // no search to decline — it simply visits H1 (8", the tallest with demand) first, stacks it to
   // its true physical max (2, both units — that's just floor(19/8) capped by remaining/weight, not
   // a choice among alternatives), then tries H2 (5") in the 3" gap left over, which doesn't fit.
@@ -1366,13 +1368,13 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("Holey max-base-first: validatePlan reports zero violations", maxHoleyViolations.length === 0, JSON.stringify(maxHoleyViolations));
   }
 
-  // lb-engine-05, 2026-09-16: Holey Board's sequential-stacking redesign (replacing the exact-fill
-  // search above with strict descending-height chaining — Steve's own description of how the floor
-  // crew loads a truck). Five distinct thicknesses on one footprint, none dividing effectiveHeight
-  // (40") evenly and none dividing each other evenly either, forcing the fill to chain through 3+
-  // SKUs in a single column — something the pre-lb-engine-05 cap (maxSkusPerColumn: 2) made
-  // structurally impossible. Also exercises the validatePlan exemption end to end: without it, this
-  // fixture would fail max-skus-per-column even though the column shape itself is correct.
+  // holey-sequential-fill, 2026-09-16: Holey Board's sequential-stacking redesign (replacing the
+  // exact-fill search above with strict descending-height chaining — Steve's own description of how
+  // the floor crew loads a truck). Five distinct thicknesses on one footprint, none dividing
+  // effectiveHeight (40") evenly and none dividing each other evenly either, forcing the fill to
+  // chain through 3+ SKUs in a single column — something the pre-existing cap (maxSkusPerColumn: 2)
+  // made structurally impossible. Also exercises the validatePlan exemption end to end: without it,
+  // this fixture would fail max-skus-per-column even though the column shape itself is correct.
   {
     const mkHoley = (h: number): PackSku => ({
       id: `CHAIN_${h}`,

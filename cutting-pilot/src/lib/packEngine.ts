@@ -9,10 +9,11 @@
 // customize editor, dissolve, saved loads and bolShared.ts can all consume it unchanged.
 //
 // posFromFront = 0 is the REAR of the trailer (locked decision, do not re-litigate). Rows are
-// ordered thickest-base first at the rear, thinnest toward the nose (lb-engine-03 B3) — rear is
-// where the doors are, so the thickest boards are loaded last and are the first ones unloaded. If
-// the floor crew loads nose-first instead, the pick list runs in reverse of the on-screen diagram
-// order. Open question for Steve, not resolved here — see BACKLOG.md.
+// ordered thinnest-base first at the rear, thickest toward the nose (lb-engine-03 B3's open
+// question, resolved by Steve 2026-09-16, row-order-nose-first: the floor crew loads nose-first,
+// biggest sizes go in first — so the thickest freight sits at the nose, loaded first/unloaded
+// last, and the thinnest sits at the rear where the doors are, loaded last/unloaded first). Was
+// thickest-at-the-rear until this fix — see CHANGELOG.md for the prior (wrong) assumption.
 // Support policy is strict-only for now: every piece sits on a single matching footprint (no
 // bridging) — supportPolicy is reserved on PackOptions but only "strict" is implemented.
 // Mode A (holey board) and Mode B (blocks) are one engine, differing by allowRotation; holey
@@ -373,7 +374,7 @@ function fmt(n: number): string {
 // Solves the 1D column-height fill exactly against dims.height for one family (lb-engine-03 B1).
 // A member that can never stack even once (height alone exceeds the trailer, or weight alone
 // exceeds maxWeight) is reported to `leftover`/`warnings` up front and excluded from the fill
-// pool. Holey Board and ordinary Blocks then diverge (lb-engine-05, 2026-09-16 — Steve wants Holey
+// pool. Holey Board and ordinary Blocks then diverge (holey-sequential-fill, 2026-09-16 — Steve wants Holey
 // Board to match how the floor crew actually stacks a truck, not an exact-fill optimization) and
 // are handled by two separate functions below:
 //   - Blocks (buildBlockColumns): one column at a time, tries every (base, top-off) pair drawn
@@ -582,7 +583,7 @@ function buildFamilyColumns(
   return columns;
 }
 
-// lb-engine-05, 2026-09-16: Holey Board's column fill, replacing the exact-fill search above with
+// holey-sequential-fill, 2026-09-16: Holey Board's column fill, replacing the exact-fill search above with
 // strict sequential descending-height stacking — Steve's own description of how the floor crew
 // loads a truck: the tallest board is stacked to its physical max (height cap, remaining demand, or
 // weight cap, whichever binds first), and if the column still has room, the next-tallest SKU with
@@ -806,10 +807,10 @@ function buildOneRow(
   return { row: winner.row, chosen: winner.chosen };
 }
 
-// A row's sort key for rear->front ordering (lb-engine-03 B3): the thickest BASE layer
-// (layers[0], never a top-off layer) among the row's columns. Rows are sorted descending by this
-// before posFromFront is assigned, so the thickest freight sits at the rear (posFromFront 0,
-// where the trailer doors are) and the thinnest sits toward the nose.
+// A row's sort key for rear->front ordering (lb-engine-03 B3, row-order-nose-first): the thickest
+// BASE layer (layers[0], never a top-off layer) among the row's columns. Rows are sorted ascending
+// by this before posFromFront is assigned, so the thinnest freight sits at the rear (posFromFront
+// 0, where the trailer doors are, loaded last) and the thickest sits at the nose (loaded first).
 function rowBaseThickness(row: PackRow): number {
   return row.columns.reduce((max, c) => Math.max(max, c.layers[0]?.unitHeight ?? 0), 0);
 }
@@ -897,10 +898,11 @@ function simulate(
       break;
     }
 
-    // Rear->front ordering (lb-engine-03 B3): thickest base layer at posFromFront 0 (the rear,
-    // where the doors are), thinnest toward the nose. Must sort before buildTrailer assigns
-    // posFromFront, since that assignment walks rows in array order.
-    rows.sort((a, b) => rowBaseThickness(b) - rowBaseThickness(a));
+    // Rear->front ordering (lb-engine-03 B3, row-order-nose-first, 2026-09-16): thinnest base
+    // layer at posFromFront 0 (the rear, where the doors are — loaded last), thickest toward the
+    // nose (loaded first — "biggest sizes go in first," confirmed with Steve). Must sort before
+    // buildTrailer assigns posFromFront, since that assignment walks rows in array order.
+    rows.sort((a, b) => rowBaseThickness(a) - rowBaseThickness(b));
 
     trailers.push(buildTrailer(rows, dims, effectiveHeight));
   }
@@ -1351,7 +1353,7 @@ export function validatePlan(
         const distinctSkuIds = new Set(column.layers.map((l) => l.skuId));
 
         // max-skus-per-column: catches a column mixing more SKUs than the top-off policy allows.
-        // Holey Board is exempt (lb-engine-05, 2026-09-16) — it sequentially chains through as many
+        // Holey Board is exempt (holey-sequential-fill, 2026-09-16) — it sequentially chains through as many
         // distinct thicknesses as physically fit in one column's height, by design, not a policy
         // violation; the real constraint there is already physical (column-height/weight above).
         const firstColumnSku = column.layers[0] ? skuById.get(column.layers[0].skuId) : undefined;

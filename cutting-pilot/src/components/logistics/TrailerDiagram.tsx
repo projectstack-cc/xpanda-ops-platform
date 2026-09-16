@@ -7,15 +7,21 @@
 // across the trailer's width) — a side elevation can't show that, so this reads top-down instead.
 //
 // Steve, 2026-09-16: nose (cab end) on the left, rear (doors) on the right — readers scan left to
-// right, and loading runs nose-first (thickest/rear-most row loaded last, closest to the doors —
-// lb-engine-03 B3). Was rear-left/nose-right (matching legacy's own diagram and this file's
-// original lb-ui-01 layout); deliberately flipped on this direct instruction. `trailer.rows` itself
-// is still ordered rear-first (index 0 = posFromFront 0, unchanged — every rowIndex-keyed prop
-// below, e.g. onSelectColumn/onRowDrop/rowGuardTint, still addresses that same original array
-// position); only the VISUAL draw order is reversed, via `displayRowIndices` below, so the
-// rear-most row now renders rightmost. Each row's own shallow-column anchor (left-0) is UNCHANGED
-// by the mirror — see the geometry note below for why that's a rendering convention, not a
-// physical placement, and so has nothing to flip.
+// right, and loading runs nose-first (lb-engine-03 B3). Was rear-left/nose-right (matching legacy's
+// own diagram and this file's original lb-ui-01 layout); deliberately flipped on this direct
+// instruction. `trailer.rows` itself is still ordered rear-first (index 0 = posFromFront 0,
+// unchanged — every rowIndex-keyed prop below, e.g. onSelectColumn/onRowDrop/rowGuardTint, still
+// addresses that same original array position); only the VISUAL draw order is reversed, via
+// `displayRowIndices` below, so the rear-most row now renders rightmost. Each row's own shallow-
+// column anchor (left-0) is UNCHANGED by the mirror — see the geometry note below for why that's a
+// rendering convention, not a physical placement, and so has nothing to flip.
+//
+// row-order-nose-first, same day: packEngine.ts's row sort was ALSO backwards until this fix — it
+// put the thickest-base row at the rear/posFromFront 0, which under nose-first loading means the
+// thickest freight was loaded LAST, not first. Steve confirmed the actual rule: biggest sizes go
+// in first, so they sit at the nose (loaded first). The array is now thinnest-at-rear/thickest-at-
+// nose — this component's own left/right mirror logic didn't change (it's thickness-agnostic, just
+// an index reversal), so this file needed no code change, only this corrected comment.
 //
 // Geometry: each PackRow is a vertical slice, on-screen WIDTH proportional to rowLength/dims.length.
 // Within a slice, each PackColumn is a block stacked by posY, on-screen HEIGHT proportional to

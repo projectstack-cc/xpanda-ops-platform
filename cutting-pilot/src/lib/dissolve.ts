@@ -188,7 +188,7 @@ export function proposeDissolve(state: EditorState, srcTi: number): DissolveProp
             // A different SKU is a top-off, mirroring validatePlan's two rules exactly: the
             // column must not already be at the distinct-SKU cap, and the incoming piece must
             // clear K. Same-SKU stacking (the `isSameSku` branch above) is bound only by headroom.
-            // lb-engine-05: Holey Board is exempt from the distinct-SKU cap, same as validatePlan —
+            // holey-sequential-fill: Holey Board is exempt from the distinct-SKU cap, same as validatePlan —
             // it's meant to chain through as many thicknesses as fit, and dissolve proposing a move
             // validatePlan would then accept is exactly the "can never fail the apply gate" invariant
             // this file's header promises.

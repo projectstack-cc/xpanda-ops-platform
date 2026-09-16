@@ -167,11 +167,12 @@ interface DiagramBox {
  * that doesn't match what the planner saw on screen.
  *
  * Steve, 2026-09-16: mirrored so the nose (cab end) draws on the left and the rear (doors) draws on
- * the right — readers scan left to right, and loading runs nose-first (lb-engine-03 B3's own
- * ordering: thickest/rear-most row is loaded last, closest to the doors). Was rear-left/nose-right
- * (matching legacy's own buildTopViewSVG/buildPrintSvg, and the previous TrailerDiagram.tsx
- * convention) — deliberately deviated from both on this direct instruction. `rowX` below is a mirror
- * transform (`1 - endFrac`, not `startFrac`) so each row's on-screen LEFT edge is its true nose-ward
+ * the right — readers scan left to right, and loading runs nose-first (lb-engine-03 B3's own row
+ * ordering). Was rear-left/nose-right (matching legacy's own buildTopViewSVG/buildPrintSvg, and the
+ * previous TrailerDiagram.tsx convention) — deliberately deviated from both on this direct
+ * instruction. This mirror is thickness-agnostic (index-based only); see packEngine.ts's own
+ * row-order-nose-first comment for which end the thickest freight actually sits at. `rowX` below is
+ * a mirror transform (`1 - endFrac`, not `startFrac`) so each row's on-screen LEFT edge is its true nose-ward
  * (far) edge — this flips ROW order only. A shallow column's own anchor within its row (flush to the
  * row's left edge, colX = rowX) is UNCHANGED: PackColumn carries no along-length offset within its
  * row (only posY, on the width axis), so which end of the row's depth a shallow column visually sits
