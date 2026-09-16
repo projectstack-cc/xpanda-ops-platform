@@ -104,6 +104,25 @@ function displayRowIndices(rowCount: number): number[] {
   return Array.from({ length: rowCount }, (_, i) => rowCount - 1 - i);
 }
 
+// Every distinct SKU placed on this trailer, name-sorted, one entry per skuId — the legend
+// decoding the per-SKU border-stripe colors added to each column box below. Colors come straight
+// off PackLayer.color (packEngine.ts's colorForSku, already computed, previously unused by this
+// component — see loadingDiagramPdf.ts's PIECES table and JobPullModal's SKU swatches for the
+// same palette used elsewhere).
+function skuLegendFor(trailer: PackTrailer): { skuId: string; name: string; color: string }[] {
+  const bySku = new Map<string, { skuId: string; name: string; color: string }>();
+  for (const row of trailer.rows) {
+    for (const column of row.columns) {
+      for (const layer of column.layers) {
+        if (!bySku.has(layer.skuId)) {
+          bySku.set(layer.skuId, { skuId: layer.skuId, name: layer.skuName, color: layer.color });
+        }
+      }
+    }
+  }
+  return Array.from(bySku.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 const DIAGRAM_HEIGHT_PX = 176;
 // Below these fractions a column's on-screen box is too small to hold ≥11px text legibly —
 // drop the label rather than shrinking the type (per spec).
@@ -129,6 +148,7 @@ export default function TrailerDiagram({
   headerAction,
   typeBadge,
 }: TrailerDiagramProps) {
+  const skuLegend = skuLegendFor(trailer);
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
       <div className="flex items-baseline justify-between gap-3 mb-3">
@@ -234,6 +254,14 @@ export default function TrailerDiagram({
                 const isDragging = draggingFrom?.rowIndex === rowIndex && draggingFrom?.columnIndex === columnIndex;
                 const showLabel = column.colWidth / dims.width >= MIN_WIDTH_FRACTION_FOR_LABEL && column.colLength / row.rowLength >= MIN_DEPTH_FRACTION_FOR_LABEL;
                 const baseLayer = column.layers[0];
+                // Per-SKU color stripes (Steve's requested color coding — colorForSku already
+                // computed by packEngine.ts onto every PackLayer, but never rendered here). Left
+                // edge is always the base SKU's color; a topped-off column also gets its last
+                // (topmost) layer's color on the right edge, so a two-colored box reads as "two
+                // SKUs stacked here" at a glance, without depending on the text label fitting.
+                // Existing pure/mixed background/border stays as the "was this topped off" status
+                // signal — the stripes are layered ON TOP of that, not a replacement for it.
+                const topLayer = column.layers[column.layers.length - 1];
 
                 return (
                   <button
@@ -260,6 +288,11 @@ export default function TrailerDiagram({
                       top: `${topPct}%`,
                       height: `${heightPct}%`,
                       width: `${widthPct}%`,
+                      borderLeftWidth: 4,
+                      borderLeftColor: baseLayer?.color,
+                      ...(column.mixed && topLayer
+                        ? { borderRightWidth: 4, borderRightColor: topLayer.color }
+                        : {}),
                     }}
                   >
                     {showLabel && baseLayer && (
@@ -282,7 +315,7 @@ export default function TrailerDiagram({
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block w-3 h-3 rounded-sm bg-[var(--info-bg)] border border-[var(--info-border)]" aria-hidden="true" />
-          Mixed (base + top-off)
+          Mixed (multiple SKUs)
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span
@@ -296,6 +329,17 @@ export default function TrailerDiagram({
           Unused floor
         </span>
       </div>
+
+      {skuLegend.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 pt-1.5 border-t border-[var(--line)] text-[11px] text-muted">
+          {skuLegend.map((s) => (
+            <span key={s.skuId} className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: s.color }} aria-hidden="true" />
+              <span className="truncate max-w-[160px]">{s.name}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
