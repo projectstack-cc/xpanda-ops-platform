@@ -902,7 +902,22 @@ function simulate(
     // layer at posFromFront 0 (the rear, where the doors are — loaded last), thickest toward the
     // nose (loaded first — "biggest sizes go in first," confirmed with Steve). Must sort before
     // buildTrailer assigns posFromFront, since that assignment walks rows in array order.
-    rows.sort((a, b) => rowBaseThickness(a) - rowBaseThickness(b));
+    //
+    // Secondary key, same day (row-order-tail-placement): buildOneRow's greedy width-pack can't
+    // always fill every row to dims.width — when a thickness's own column supply runs out mid-tier,
+    // one row is left with fewer columns than its same-thickness neighbors (e.g. 1 of 4 width-lanes
+    // used). Without a tiebreak, JS's stable sort leaves that partial row wherever it was greedily
+    // assembled, which can land it sandwiched between two FULL same-thickness rows — reads as a
+    // random gap in the middle of the diagram, not an intentional "ran out" tail. Breaking same-
+    // thickness ties by rowWidthUsed ascending (sparsest first, i.e. lowest posFromFront/most-rear
+    // within the tie group) puts the partial row at the tier's rear-adjacent edge instead — the
+    // position a real loader would leave it, having run through the full rows first and hit this
+    // size's remainder right before moving on to the next, thinner size.
+    rows.sort((a, b) => {
+      const dt = rowBaseThickness(a) - rowBaseThickness(b);
+      if (!approxEq(dt, 0)) return dt;
+      return a.rowWidthUsed - b.rowWidthUsed;
+    });
 
     trailers.push(buildTrailer(rows, dims, effectiveHeight));
   }

@@ -992,6 +992,40 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     );
   }
 
+  // D9, row-order-tail-placement (2026-09-16): when a thickness's own column supply runs out
+  // mid-tier, buildOneRow's greedy width-pack leaves one row with fewer columns than its
+  // same-thickness neighbors. Without a same-thickness tiebreak, that sparse row can land
+  // sandwiched between two full rows of its own thickness — a gap in the middle of the diagram a
+  // loader would read as a mistake, not an intentional "ran out." The fix's secondary sort key
+  // (rowWidthUsed ascending on a thickness tie) should push the sparse row to the rear-adjacent edge
+  // of its tier instead. Quantities picked so 6.5" holey board's own tail column (8 of its 16/column
+  // max) has enough leftover room to chain into 10 units of 5.5" (holey-sequential-fill) before
+  // 5.5" continues as pure columns of its own — ground-truthed by running pack() directly rather
+  // than hand-derived, since the chain absorbs some of 5.5"'s demand into that mixed column: 169
+  // total 5.5" demand, minus 10 chained, leaves 159 = 8 full columns (152) + a 7pc tail, not a
+  // clean 8-full+17-tail split.
+  {
+    const tailA: PackSku = { id: "TAIL_65", name: "6.5in holey", sku: "TAIL_65", length: 48, width: 24, height: 6.5, weight: 10, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
+    const tailB: PackSku = { id: "TAIL_55", name: "5.5in holey", sku: "TAIL_55", length: 48, width: 24, height: 5.5, weight: 10, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
+    const tailCart: CartLine[] = [{ skuId: "TAIL_65", qty: 16 * 12 + 8 }, { skuId: "TAIL_55", qty: 19 * 8 + 17 }];
+    const tailPlan = pack(tailCart, [tailA, tailB], TRAILER_53FT);
+    const tailRows = tailPlan.trailers[0]?.rows ?? [];
+
+    const sparse55Row = tailRows.find(
+      (r) => r.columns.length === 2 && r.columns.some((c) => c.layers[0]?.skuId === "TAIL_55" && c.layers[0]?.count === 7)
+    );
+    check("D9: the sparse tail row (1 full lane + the 7pc remainder) exists", !!sparse55Row, JSON.stringify(tailRows.map((r) => r.columns.length)));
+    check(
+      "D9: the sparse 5.5\" row is the rear-most row of its thickness tier (every full 5.5\" row sits farther toward the nose)",
+      tailRows.every((r) => {
+        if (!sparse55Row || r === sparse55Row) return true;
+        const isFull55 = r.columns.length === 4 && r.columns.every((c) => c.layers[0]?.unitHeight === 5.5);
+        return !isFull55 || r.posFromFront > sparse55Row.posFromFront;
+      }),
+      JSON.stringify(tailRows.map((r) => ({ posFromFront: r.posFromFront, cols: r.columns.length })))
+    );
+  }
+
   // D7. Depth-aware assembly: when two same-depth families can fill a row's width together
   // (60x50 + 60x48 = 98" exactly), pack() prefers that same-depth pairing over reaching for a
   // mismatched-depth family (40x50) even though the latter is also available — wastedFloorArea is
