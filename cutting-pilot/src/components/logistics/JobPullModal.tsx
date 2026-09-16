@@ -6,9 +6,11 @@
 //
 // lb-ui-05 Part B. Search step copies PullJobModal.tsx's debounced GET /v2/api/jobs?search=
 // pattern (loading/dockTypes' picker) rather than reusing that component directly — different data
-// shape, different caller. GET /v2/api/jobs has no server-side status filter, so "done"/"loading"
-// scoping (matching legacy's exact check, load-builder.html:2942) happens client-side on the
-// fetched page, same as legacy's own client-side .filter() on that endpoint's response.
+// shape, different caller. GET /v2/api/jobs has no server-side status filter and this component
+// applies none client-side either — every job status is pullable regardless of where it sits in
+// production (Steve, 2026-09-16: a deliberate deviation from legacy's own done/loading-only
+// restriction, load-builder.html:2942 — most loading diagrams are built as floor paperwork well
+// before a job starts being cut).
 //
 // Preview step ports legacy's prefillFromJob matching (jobPull.ts) against the SKU universe legacy
 // itself used — GET /api/load-builder-skus (NOT /api/parts; confirmed via legacy's fetchSkusFromApi,
@@ -53,8 +55,9 @@ export interface PulledLoadSource extends LoadBuilderFixture {
   unmatchedDescriptions: string[];
 }
 
-const READY_STATUSES = new Set(["done", "loading"]);
-
+// Steve, 2026-09-16: legacy restricted job-pull to "done"/"loading" status (load-builder.html:2942),
+// but that's wrong for how the floor actually uses this — most loading diagrams are generated as
+// paperwork well before a job starts being cut, against any job status. No status filter here.
 function coerceSku(raw: any): PackSku | null {
   const length = Number(raw?.length);
   const width = Number(raw?.width);
@@ -149,7 +152,7 @@ export default function JobPullModal({ initialJobId, onClose, onConfirm }: JobPu
   const seqRef = useRef(0);
   const initialRanRef = useRef(false);
 
-  const results = rawResults.filter((j) => READY_STATUSES.has(j.status || ""));
+  const results = rawResults;
 
   async function loadPreview(jobId: string) {
     setLoadingPreview(true);
