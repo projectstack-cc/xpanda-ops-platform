@@ -68,6 +68,15 @@ export interface EditorState {
   skus: PackSku[];
   holding: PackColumn[];
   history: EditorState[];
+  // lb-ui-11: the SKU ids known to the session at createEditorState() time (the pulled job's own
+  // SKUs, or a fixture's). Immutable for the life of the session — never added to or removed from
+  // after creation, regardless of what state.skus grows to. addRow/addColumn/addLayer use this (not
+  // state.cart's current contents) to decide whether a placed SKU is job-known demand (draw down
+  // plan.balance, existing behavior) or a parts-library SKU introduced mid-session (grow state.cart
+  // instead — see growCartForSku's own comment). A Set, not derived from state.cart, because
+  // state.cart itself grows for library SKUs; checking cart membership would only correctly answer
+  // "have we added this library SKU before," not "was this part of the original job."
+  originalSkuIds: Set<string>;
 }
 
 export interface ColumnRef {
@@ -162,7 +171,7 @@ export function createEditorState(
   cart: CartLine[],
   skus: PackSku[]
 ): EditorState {
-  return { plan: clonePlan(plan), dims, options, cart, skus, holding: [], history: [] };
+  return { plan: clonePlan(plan), dims, options, cart, skus, holding: [], history: [], originalSkuIds: new Set(skus.map((s) => s.id)) };
 }
 
 // --- derived-geometry recompute ---
@@ -223,6 +232,7 @@ function snapshotFor(state: EditorState): EditorState {
     skus: state.skus,
     holding: state.holding.map(cloneColumn),
     history: [],
+    originalSkuIds: state.originalSkuIds,
   };
 }
 
@@ -241,10 +251,11 @@ export function undo(state: EditorState): EditorState {
     plan: clonePlan(prior.plan),
     dims: state.dims,
     options: state.options,
-    cart: state.cart,
-    skus: state.skus,
+    cart: prior.cart,
+    skus: prior.skus,
     holding: prior.holding.map(cloneColumn),
     history: state.history.slice(0, -1),
+    originalSkuIds: state.originalSkuIds,
   };
 }
 
@@ -468,6 +479,45 @@ function adjustBalance(balance: PackBalance, skuId: string, delta: number): Pack
   return next.filter((b) => b.remaining > 0);
 }
 
+/** lb-ui-11: grows (or creates) a CartLine's qty by `amount` — the counterpart to adjustBalance for
+ * a SKU that ISN'T job-known demand (see EditorState.originalSkuIds's own comment). */
+function growCartForSku(cart: CartLine[], skuId: string, amount: number): CartLine[] {
+  const next = cart.map((c) => ({ ...c }));
+  const entry = next.find((c) => c.skuId === skuId);
+  if (entry) entry.qty += amount;
+  else next.push({ skuId, qty: amount });
+  return next;
+}
+
+/** Returns the cart addRow/addColumn/addLayer should attach to their returned state: unchanged for
+ * a job-known SKU (originalSkuIds — existing balance-draw behavior, including the intentional
+ * over-add-surfaces-a-violation case). For a parts-library SKU, grows cart by only the SHORTFALL
+ * beyond what plan.balance can already cover, not by the full `count` — a library SKU that's had
+ * some of its placed units later returned via setLayerCount (which, via adjustBalance's own
+ * existing fallback, synthesizes a `remaining` balance entry for it — see setLayerCount's doc
+ * comment) should draw that returned balance down first, exactly like a normal job SKU, and only
+ * grow cart for the genuinely-new amount beyond it. validatePlan's `conservation` rule requires
+ * placed + remaining == cartQty; growing by the full count every time would double-count units that
+ * setLayerCount had already returned to balance. */
+function cartAfterPlacement(state: EditorState, skuId: string, count: number): CartLine[] {
+  if (state.originalSkuIds.has(skuId)) return state.cart;
+  const available = state.plan.balance.find((b) => b.skuId === skuId)?.remaining ?? 0;
+  const shortfall = Math.max(0, count - available);
+  return shortfall > 0 ? growCartForSku(state.cart, skuId, shortfall) : state.cart;
+}
+
+/** lb-ui-11: makes a parts-library SKU (see partsLibrary.ts / PartRecord, converted to a PackSku by
+ * the caller) available to this session's addRow/addColumn/addLayer, which all look up `skuId`
+ * against state.skus. Idempotent — a no-op (same state reference) if a SKU with this id is already
+ * known, whether from the original job pull or a prior library add. Deliberately does NOT touch
+ * state.cart or plan.balance itself: those are adjusted by addRow/addColumn/addLayer's own
+ * cartAfterPlacement, at the moment a count is actually placed, not at introduction time — a SKU
+ * introduced but never placed should add zero demand. */
+export function introduceSku(state: EditorState, sku: PackSku): EditorState {
+  if (state.skus.some((s) => s.id === sku.id)) return state;
+  return { ...state, skus: [...state.skus, sku] };
+}
+
 /** Builds a brand-new single-SKU, single-layer column from scratch, always in the SKU's identity
  * ("flat") orientation — skuOrientations(sku, options)[0] is guaranteed to be that orientation
  * regardless of rotation policy (allPermutations lists identity first; the no-rotation branch
@@ -535,9 +585,10 @@ export function addRow(state: EditorState, trailerIndex: number, skuId: string, 
   const row: PackRow = { posFromFront: 0, rowLength: 0, rowWidthUsed: 0, wastedFloorArea: 0, columns: [column], totalUnits: 0, totalWeight: 0 };
   plan.trailers[trailerIndex].rows.push(row);
   plan.balance = adjustBalance(plan.balance, skuId, -count);
+  const cart = cartAfterPlacement(state, skuId, count);
 
   recomputePlan(plan, state.dims, state.options);
-  return { ...state, plan, history: withHistory(state) };
+  return { ...state, plan, cart, history: withHistory(state) };
 }
 
 /** Appends a brand-new column (one SKU) to the end of an existing row — matching legacy's own
@@ -553,9 +604,10 @@ export function addColumn(state: EditorState, trailerIndex: number, rowIndex: nu
   const column = buildColumn(sku, count, state.options);
   plan.trailers[trailerIndex].rows[rowIndex].columns.push(column);
   plan.balance = adjustBalance(plan.balance, skuId, -count);
+  const cart = cartAfterPlacement(state, skuId, count);
 
   recomputePlan(plan, state.dims, state.options);
-  return { ...state, plan, history: withHistory(state) };
+  return { ...state, plan, cart, history: withHistory(state) };
 }
 
 /** Adds a new layer to an EXISTING column — matching legacy's own "+ LAYER". Unlike a brand-new
@@ -592,9 +644,42 @@ export function addLayer(state: EditorState, ref: ColumnRef, skuId: string, coun
   column.mixed = new Set(column.layers.map((l) => l.skuId)).size > 1;
   column.rationale = describeManualLayers(column);
   plan.balance = adjustBalance(plan.balance, skuId, -count);
+  const cart = cartAfterPlacement(state, skuId, count);
 
   recomputePlan(plan, state.dims, state.options);
-  return { ...state, plan, history: withHistory(state) };
+  return { ...state, plan, cart, history: withHistory(state) };
+}
+
+/** lb-ui-11: addRow/addColumn/addLayer + introduceSku, composed so undo reverts BOTH in one step.
+ * Calling introduceSku(state, sku) and then addRow(introduced, ...) separately (as two expressions)
+ * would still work structurally, but addRow's own withHistory(introduced) snapshots the ALREADY-
+ * introduced state as "prior" — introduceSku pushes no history entry of its own, so undo would only
+ * revert the placement, leaving the library SKU permanently listed in state.skus with nothing placed
+ * or demanded for it. These wrappers run the same two steps but overwrite the result's `history`
+ * with withHistory(state) — a snapshot of the TRUE pre-introduction state — so one undo removes the
+ * SKU from the session exactly as if the whole add had never happened. Each is a no-op (returns
+ * `state` unchanged) if the underlying add operation itself declined (bad trailerIndex/count/etc,
+ * the same defensive-no-op contract addRow/addColumn/addLayer already have) — nothing is left
+ * introduced with no corresponding undo step. */
+export function addRowFromLibrary(state: EditorState, trailerIndex: number, sku: PackSku, count: number): EditorState {
+  const introduced = introduceSku(state, sku);
+  const placed = addRow(introduced, trailerIndex, sku.id, count);
+  if (placed === introduced) return state;
+  return { ...placed, history: withHistory(state) };
+}
+
+export function addColumnFromLibrary(state: EditorState, trailerIndex: number, rowIndex: number, sku: PackSku, count: number): EditorState {
+  const introduced = introduceSku(state, sku);
+  const placed = addColumn(introduced, trailerIndex, rowIndex, sku.id, count);
+  if (placed === introduced) return state;
+  return { ...placed, history: withHistory(state) };
+}
+
+export function addLayerFromLibrary(state: EditorState, ref: ColumnRef, sku: PackSku, count: number): EditorState {
+  const introduced = introduceSku(state, sku);
+  const placed = addLayer(introduced, ref, sku.id, count);
+  if (placed === introduced) return state;
+  return { ...placed, history: withHistory(state) };
 }
 
 /** Sets a layer's count directly (legacy's own free-typed count field, load-builder.html:2462) —
@@ -603,7 +688,17 @@ export function addLayer(state: EditorState, ref: ColumnRef, skuId: string, coun
  * the layer empties the column, the column itself is dropped from its row — an empty column has no
  * footprint left to render or validate, the same fate `compactLoad` gives an emptied row. Adjusts
  * plan.balance by exactly the count delta in either direction (see adjustBalance's own doc
- * comment) — a decrease genuinely returns pieces to unplaced demand, an increase draws on it. */
+ * comment) — a decrease genuinely returns pieces to unplaced demand, an increase draws on it.
+ *
+ * Deliberately does NOT touch state.cart, unlike addRow/addColumn/addLayer — this only ever
+ * resizes a layer that one of those three already placed, it never introduces a SKU's first unit.
+ * For a parts-library SKU (not in originalSkuIds), a decrease here relies on adjustBalance's own
+ * existing "create an entry if none exists and delta > 0" fallback to synthesize a `remaining`
+ * balance for the returned units — cartAfterPlacement's cart total was fixed at that SKU's
+ * highest-ever-placed count, so the synthesized balance is exactly what keeps placed + remaining ==
+ * cartQty true afterward, the same equation a real job SKU's balance satisfies. A later increase
+ * draws it back down like any normal balance draw; only a fresh addRow/addColumn/addLayer call (not
+ * a setLayerCount increase) can grow that SKU's cart total further. */
 export function setLayerCount(state: EditorState, ref: ColumnRef, layerIndex: number, count: number): EditorState {
   const existingColumn = getColumn(state.plan, ref);
   const existingLayer = existingColumn?.layers[layerIndex];

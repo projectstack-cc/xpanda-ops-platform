@@ -119,3 +119,39 @@ export function colorForSkuId(skuId: string): string {
   for (let i = 0; i < skuId.length; i++) hash = (hash * 31 + skuId.charCodeAt(i)) % SKU_COLOR_PALETTE.length;
   return SKU_COLOR_PALETTE[Math.abs(hash) % SKU_COLOR_PALETTE.length];
 }
+
+// lb-ui-05/lb-ui-11: /api/load-builder-skus — a camelCase wrapper over the same `parts` D1 table
+// PartsLibraryPanel.tsx manages via /api/parts (partsLibrary.ts's own header comment) — already
+// returns records close enough to PackSku shape that coerceSku below only needs to validate/coerce
+// types, not remap field names. Originally local to JobPullModal.tsx (lb-ui-05); moved here so
+// lb-ui-11's parts-library-in-custom-builds picker (CustomizeEditor.tsx) can fetch the exact same
+// SKU universe a job pull already draws from, rather than inventing a second conversion off
+// PartRecord's snake_case /api/parts shape for the same underlying table.
+function coerceSku(raw: any): PackSku | null {
+  const length = Number(raw?.length);
+  const width = Number(raw?.width);
+  const height = Number(raw?.height);
+  const weight = Number(raw?.weight);
+  if (!raw?.id || !Number.isFinite(length) || length <= 0 || !Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    return null;
+  }
+  return {
+    id: String(raw.id),
+    name: String(raw.name || raw.sku || raw.id),
+    sku: String(raw.sku || ""),
+    length,
+    width,
+    height,
+    weight: Number.isFinite(weight) && weight > 0 ? weight : 1,
+    category: raw.category || undefined,
+    allowRotation: !!raw.allowRotation,
+    bundleQty: Number.isFinite(Number(raw.bundleQty)) && Number(raw.bundleQty) > 0 ? Number(raw.bundleQty) : undefined,
+  };
+}
+
+export async function fetchLoadBuilderSkus(): Promise<PackSku[]> {
+  const res = await fetch("/api/load-builder-skus");
+  const json = await res.json();
+  if (!res.ok || !Array.isArray(json)) throw new Error("Couldn't load the SKU library.");
+  return json.map(coerceSku).filter((s): s is PackSku => s !== null);
+}

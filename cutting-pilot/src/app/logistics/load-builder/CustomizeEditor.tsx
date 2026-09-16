@@ -44,9 +44,13 @@ import {
   addLayer,
   setLayerCount,
   removeRow,
+  addRowFromLibrary,
+  addColumnFromLibrary,
+  addLayerFromLibrary,
   type EditorState,
   type ColumnRef,
 } from "@/lib/loadEditor";
+import { fetchLoadBuilderSkus } from "@/lib/jobPull";
 import TrailerDiagram, { type RowDropFeedback } from "@/components/logistics/TrailerDiagram";
 import HoldingArea from "@/components/logistics/HoldingArea";
 import EditorGuards, { type HoldingSummaryLine } from "@/components/logistics/EditorGuards";
@@ -61,7 +65,14 @@ interface CustomizeEditorProps {
   options: PackOptions;
   cart: CartLine[];
   skus: PackSku[];
-  onApply: (appliedPlan: PackPlan) => void;
+  // lb-ui-11: cart/skus report the FINAL, post-edit state.cart/state.skus alongside the plan — not
+  // just the plan. A parts-library add grows state.cart and appends to state.skus (see loadEditor.ts's
+  // introduceSku/cartAfterPlacement); the caller must carry those forward into whatever it re-mounts
+  // this editor with next (or persists), or a reopened/reloaded session's originalSkuIds would be
+  // rebuilt without the library SKU and immediately misclassify further edits to it, surfacing a
+  // conservation violation for pieces that are legitimately already placed on the plan being handed
+  // back right now.
+  onApply: (appliedPlan: PackPlan, cart: CartLine[], skus: PackSku[]) => void;
   onDiscard: () => void;
 }
 
@@ -262,6 +273,25 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
     commit(addLayer(state, { t: editTi, r: rowIndex, c: columnIndex }, skuId, count));
   }
 
+  // lb-ui-11: parts-library variants — `sku` isn't necessarily in state.skus yet (it's picked from
+  // the full /api/load-builder-skus catalog, not this job's own SKU set). addRowFromLibrary etc.
+  // introduce it and grow state.cart to cover the new demand in one combined, single-undo-step
+  // operation (see loadEditor.ts's own doc comment on why introduceSku isn't composed inline here).
+  function handleAddRowFromLibrary(sku: PackSku, count: number) {
+    if (editTi === null) return;
+    commit(addRowFromLibrary(state, editTi, sku, count));
+  }
+
+  function handleAddColumnFromLibrary(rowIndex: number, sku: PackSku, count: number) {
+    if (editTi === null) return;
+    commit(addColumnFromLibrary(state, editTi, rowIndex, sku, count));
+  }
+
+  function handleAddLayerFromLibrary(rowIndex: number, columnIndex: number, sku: PackSku, count: number) {
+    if (editTi === null) return;
+    commit(addLayerFromLibrary(state, { t: editTi, r: rowIndex, c: columnIndex }, sku, count));
+  }
+
   function handleSetLayerCount(rowIndex: number, columnIndex: number, layerIndex: number, count: number) {
     if (editTi === null) return;
     commit(setLayerCount(state, { t: editTi, r: rowIndex, c: columnIndex }, layerIndex, count));
@@ -277,7 +307,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
       setShowBlockedHint(true);
       return;
     }
-    onApply(planForApply(state));
+    onApply(planForApply(state), state.cart, state.skus);
   }
 
   const hasEdits = state.history.length > 0 || state.holding.length > 0;
@@ -470,6 +500,9 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
           onAddRow={handleAddRow}
           onAddColumn={handleAddColumn}
           onAddLayer={handleAddLayer}
+          onAddRowFromLibrary={handleAddRowFromLibrary}
+          onAddColumnFromLibrary={handleAddColumnFromLibrary}
+          onAddLayerFromLibrary={handleAddLayerFromLibrary}
           onSetLayerCount={handleSetLayerCount}
           onRemoveRow={handleRemoveRow}
           onClose={() => setEditTi(null)}
@@ -520,57 +553,124 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
 
 interface AddPieceFormProps {
   skus: PackSku[];
+  // lb-ui-11: the parts library catalog, already filtered by the caller (TrailerEditModal) to
+  // exclude ids already present in `skus` — a part known to this job is only ever offered once,
+  // through the "This job" list, whichever way it originally got there.
+  libraryParts: PackSku[];
   buttonLabel: string;
   onSubmit: (skuId: string, count: number) => void;
+  onSubmitFromLibrary: (sku: PackSku, count: number) => void;
 }
 
 /** SKU + count picker, shared by every "add" sub-form below (new row, new column, new layer).
  * Stays mounted after submit (Design Decision: the planner adds several pieces in one modal
- * session, matching legacy's own editor staying open across repeat adds) rather than closing. */
-function AddPieceForm({ skus, buttonLabel, onSubmit }: AddPieceFormProps) {
+ * session, matching legacy's own editor staying open across repeat adds) rather than closing.
+ *
+ * lb-ui-11: a second source alongside the job's own SKUs — the full parts library (/api/load-
+ * builder-skus, the same universe a job pull matches against). Picking a library part that isn't
+ * yet part of this job routes through onSubmitFromLibrary, which introduces the SKU to the session
+ * and grows the job's own demand to cover it (see loadEditor.ts's introduceSku/cartAfterPlacement) —
+ * distinct from onSubmit, which only ever draws down already-known job demand. */
+function AddPieceForm({ skus, libraryParts, buttonLabel, onSubmit, onSubmitFromLibrary }: AddPieceFormProps) {
+  const hasJobSkus = skus.length > 0;
+  const hasLibraryParts = libraryParts.length > 0;
+  const [source, setSource] = useState<"job" | "library">(hasJobSkus ? "job" : "library");
   const [skuId, setSkuId] = useState(skus[0]?.id ?? "");
+  const [libraryId, setLibraryId] = useState(libraryParts[0]?.id ?? "");
   const [count, setCount] = useState("1");
 
-  if (skus.length === 0) {
-    return <p className="text-[12px] text-muted">No SKUs loaded to add from.</p>;
+  // Keep selections valid as the underlying lists change — e.g. a library part moves out of
+  // libraryParts into skus the render after it's added, so a stale libraryId would point at
+  // nothing.
+  useEffect(() => {
+    if (!skus.some((s) => s.id === skuId)) setSkuId(skus[0]?.id ?? "");
+  }, [skus, skuId]);
+  useEffect(() => {
+    if (!libraryParts.some((s) => s.id === libraryId)) setLibraryId(libraryParts[0]?.id ?? "");
+  }, [libraryParts, libraryId]);
+
+  if (!hasJobSkus && !hasLibraryParts) {
+    return <p className="text-[12px] text-muted">No SKUs available to add from.</p>;
+  }
+
+  const effectiveSource = source === "job" && !hasJobSkus ? "library" : source === "library" && !hasLibraryParts ? "job" : source;
+
+  function submit() {
+    const n = Math.max(1, Math.floor(Number(count)) || 1);
+    if (effectiveSource === "job") {
+      if (skuId) onSubmit(skuId, n);
+    } else {
+      const sku = libraryParts.find((s) => s.id === libraryId);
+      if (sku) onSubmitFromLibrary(sku, n);
+    }
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-2">
-      <label className="text-[12px] font-medium text-muted">
-        SKU
-        <select
-          value={skuId}
-          onChange={(e) => setSkuId(e.target.value)}
-          className="block mt-0.5 h-9 pl-2 pr-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-[13px] cursor-pointer"
-        >
-          {skus.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
+    <div className="space-y-1.5">
+      {hasJobSkus && hasLibraryParts && (
+        <div className="flex gap-1">
+          {(["job", "library"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSource(s)}
+              className={[
+                "min-h-[24px] px-2 rounded text-[11px] font-medium cursor-pointer transition-colors",
+                effectiveSource === s ? "bg-[var(--brand)] text-white" : "text-muted hover:bg-[var(--ghost-bg)]",
+              ].join(" ")}
+            >
+              {s === "job" ? "This job's SKUs" : "Parts library"}
+            </button>
           ))}
-        </select>
-      </label>
-      <label className="text-[12px] font-medium text-muted">
-        Count
-        <input
-          type="number"
-          min={1}
-          value={count}
-          onChange={(e) => setCount(e.target.value)}
-          className="block mt-0.5 h-9 w-16 px-2 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-[13px] font-mono tabular-nums"
-        />
-      </label>
-      <button
-        type="button"
-        onClick={() => {
-          const n = Math.max(1, Math.floor(Number(count)) || 1);
-          if (skuId) onSubmit(skuId, n);
-        }}
-        className="min-h-[36px] px-3 rounded-md text-[12px] font-semibold border border-[var(--brand)] text-[var(--brand)] cursor-pointer hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-      >
-        {buttonLabel}
-      </button>
+        </div>
+      )}
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-[12px] font-medium text-muted">
+          SKU
+          {effectiveSource === "job" ? (
+            <select
+              value={skuId}
+              onChange={(e) => setSkuId(e.target.value)}
+              className="block mt-0.5 h-9 pl-2 pr-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-[13px] cursor-pointer"
+            >
+              {skus.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              value={libraryId}
+              onChange={(e) => setLibraryId(e.target.value)}
+              className="block mt-0.5 h-9 pl-2 pr-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-[13px] cursor-pointer"
+            >
+              {libraryParts.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </label>
+        <label className="text-[12px] font-medium text-muted">
+          Count
+          <input
+            type="number"
+            min={1}
+            value={count}
+            onChange={(e) => setCount(e.target.value)}
+            className="block mt-0.5 h-9 w-16 px-2 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-[13px] font-mono tabular-nums"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={submit}
+          className="min-h-[36px] px-3 rounded-md text-[12px] font-semibold border border-[var(--brand)] text-[var(--brand)] cursor-pointer hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+        >
+          {buttonLabel}
+        </button>
+      </div>
     </div>
   );
 }
@@ -614,6 +714,9 @@ interface TrailerEditModalProps {
   onAddRow: (skuId: string, count: number) => void;
   onAddColumn: (rowIndex: number, skuId: string, count: number) => void;
   onAddLayer: (rowIndex: number, columnIndex: number, skuId: string, count: number) => void;
+  onAddRowFromLibrary: (sku: PackSku, count: number) => void;
+  onAddColumnFromLibrary: (rowIndex: number, sku: PackSku, count: number) => void;
+  onAddLayerFromLibrary: (rowIndex: number, columnIndex: number, sku: PackSku, count: number) => void;
   onSetLayerCount: (rowIndex: number, columnIndex: number, layerIndex: number, count: number) => void;
   onRemoveRow: (rowIndex: number) => void;
   onClose: () => void;
@@ -626,10 +729,47 @@ interface TrailerEditModalProps {
  * Modal since that's this codebase's one reusable primitive, not an inline box.
  * selectedRow/selectedCol reset to "new" whenever a row disappears out from under them (removeRow)
  * — everywhere else the modal deliberately stays exactly where the planner left it after a
- * mutation, so adding several pieces in a row doesn't require re-navigating the pickers each time. */
-function TrailerEditModal({ trailerIndex, trailer, skus, onAddRow, onAddColumn, onAddLayer, onSetLayerCount, onRemoveRow, onClose }: TrailerEditModalProps) {
+ * mutation, so adding several pieces in a row doesn't require re-navigating the pickers each time.
+ *
+ * lb-ui-11: fetches the full parts library ONCE per modal open (not once per AddPieceForm — there
+ * are up to three mounted at a time) and filters out anything already in `skus`, so a part already
+ * reachable through the normal "This job's SKUs" list never appears twice. Fetch failure degrades
+ * to an empty library list rather than blocking the modal — the job's own SKUs stay usable either
+ * way, matching this file's existing no-pre-validate-let-it-surface-later posture. */
+function TrailerEditModal({
+  trailerIndex,
+  trailer,
+  skus,
+  onAddRow,
+  onAddColumn,
+  onAddLayer,
+  onAddRowFromLibrary,
+  onAddColumnFromLibrary,
+  onAddLayerFromLibrary,
+  onSetLayerCount,
+  onRemoveRow,
+  onClose,
+}: TrailerEditModalProps) {
   const [selectedRow, setSelectedRow] = useState<number | "new">(trailer.rows.length > 0 ? 0 : "new");
   const [selectedCol, setSelectedCol] = useState<number | "new">("new");
+  const [allLibraryParts, setAllLibraryParts] = useState<PackSku[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchLoadBuilderSkus()
+      .then((parts) => {
+        if (!cancelled) setAllLibraryParts(parts);
+      })
+      .catch(() => {
+        if (!cancelled) setAllLibraryParts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const knownIds = useMemo(() => new Set(skus.map((s) => s.id)), [skus]);
+  const libraryParts = useMemo(() => allLibraryParts.filter((p) => !knownIds.has(p.id)), [allLibraryParts, knownIds]);
 
   const row = selectedRow === "new" ? null : trailer.rows[selectedRow] ?? null;
   // The row the planner was looking at may have been removed elsewhere (or by this modal's own
@@ -670,7 +810,13 @@ function TrailerEditModal({ trailerIndex, trailer, skus, onAddRow, onAddColumn, 
         </label>
 
         {selectedRow === "new" ? (
-          <AddPieceForm skus={skus} buttonLabel="Add row" onSubmit={(skuId, count) => onAddRow(skuId, count)} />
+          <AddPieceForm
+            skus={skus}
+            libraryParts={libraryParts}
+            buttonLabel="Add row"
+            onSubmit={(skuId, count) => onAddRow(skuId, count)}
+            onSubmitFromLibrary={(sku, count) => onAddRowFromLibrary(sku, count)}
+          />
         ) : row ? (
           <>
             <div className="flex justify-end">
@@ -701,7 +847,13 @@ function TrailerEditModal({ trailerIndex, trailer, skus, onAddRow, onAddColumn, 
             </label>
 
             {selectedCol === "new" ? (
-              <AddPieceForm skus={skus} buttonLabel="Add column" onSubmit={(skuId, count) => onAddColumn(selectedRow, skuId, count)} />
+              <AddPieceForm
+                skus={skus}
+                libraryParts={libraryParts}
+                buttonLabel="Add column"
+                onSubmit={(skuId, count) => onAddColumn(selectedRow, skuId, count)}
+                onSubmitFromLibrary={(sku, count) => onAddColumnFromLibrary(selectedRow, sku, count)}
+              />
             ) : column ? (
               <>
                 <ul className="space-y-1.5">
@@ -724,7 +876,13 @@ function TrailerEditModal({ trailerIndex, trailer, skus, onAddRow, onAddColumn, 
                     </li>
                   ))}
                 </ul>
-                <AddPieceForm skus={skus} buttonLabel="Add layer" onSubmit={(skuId, count) => onAddLayer(selectedRow, selectedCol, skuId, count)} />
+                <AddPieceForm
+                  skus={skus}
+                  libraryParts={libraryParts}
+                  buttonLabel="Add layer"
+                  onSubmit={(skuId, count) => onAddLayer(selectedRow, selectedCol, skuId, count)}
+                  onSubmitFromLibrary={(sku, count) => onAddLayerFromLibrary(selectedRow, selectedCol, sku, count)}
+                />
               </>
             ) : null}
           </>

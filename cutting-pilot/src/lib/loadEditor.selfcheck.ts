@@ -25,6 +25,10 @@ import {
   setLayerCount,
   removeRow,
   planForApply,
+  introduceSku,
+  addRowFromLibrary,
+  addColumnFromLibrary,
+  addLayerFromLibrary,
   type EditorState,
 } from "./loadEditor";
 
@@ -79,6 +83,10 @@ const SKU_G: PackSku = { id: "G", name: "SKU G", sku: "G-1", length: 15, width: 
 const SKU_H: PackSku = { id: "H", name: "SKU H", sku: "H-1", length: 20, width: 20, height: 8, weight: 2, category: "Blocks", allowRotation: true };
 // H's 20x20 footprint deliberately matches A/B/C/F's column footprint exactly — the "legal,
 // matched-footprint" addLayer test SKU (check 15).
+// lb-ui-11: SKU L deliberately does NOT appear in SKUS or CART below — it stands in for a
+// parts-library part the job never ordered, so makeFixture()'s state.skus/originalSkuIds start
+// without it, matching what a real /api/load-builder-skus pick looks like before introduceSku runs.
+const SKU_L: PackSku = { id: "L", name: "SKU L", sku: "L-1", length: 12, width: 12, height: 5, weight: 3, category: "Blocks", allowRotation: true };
 
 const SKUS: PackSku[] = [SKU_A, SKU_B, SKU_C, SKU_D, SKU_E, SKU_F, SKU_G, SKU_H];
 const CART: CartLine[] = [
@@ -652,6 +660,130 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     check("undo (setLayerCount zero): H balance back to 1, not left at zeroed-state's 2", (hAfterUndo?.remaining ?? 0) === 1, JSON.stringify(undone.plan.balance));
     const conservation = conservationHolds(undone);
     check("undo (setLayerCount zero): conservation holds after undo", conservation.ok, conservation.detail);
+  }
+
+  // --- lb-ui-11: parts library in custom builds (introduceSku + cartAfterPlacement) ---
+  // SKU L is absent from SKUS/CART — makeFixture()'s originalSkuIds never includes it, matching a
+  // real parts-library pick that isn't part of the pulled job's own demand.
+
+  // 23. introduceSku: merges an unknown SKU into state.skus without touching plan/cart/balance;
+  //     idempotent for both an unknown SKU (second call) and an already-known one (SKU_G) — the
+  //     latter returns the exact same state reference, a true no-op.
+  {
+    const state = makeFixture();
+    check("introduceSku fixture: L is not yet known", !state.skus.some((s) => s.id === "L"));
+
+    const withL = introduceSku(state, SKU_L);
+    check("introduceSku: L now in state.skus", withL.skus.some((s) => s.id === "L"), JSON.stringify(withL.skus.map((s) => s.id)));
+    check("introduceSku: plan unchanged", JSON.stringify(clone(withL.plan)) === JSON.stringify(clone(state.plan)));
+    check("introduceSku: cart unchanged (introducing ≠ placing)", JSON.stringify(withL.cart) === JSON.stringify(state.cart), JSON.stringify(withL.cart));
+
+    const introducedAgain = introduceSku(withL, SKU_L);
+    check("introduceSku: introducing the same SKU again is a no-op (same skus length, no duplicate)", introducedAgain.skus.length === withL.skus.length, String(introducedAgain.skus.length));
+
+    const noopOnKnown = introduceSku(state, SKU_G);
+    check("introduceSku: introducing an already-known SKU (G) returns the exact same state reference", noopOnKnown === state);
+  }
+
+  // 24. addRowFromLibrary (the real call path CustomizeEditor.tsx uses): balance for L stays
+  //     untouched (nothing to draw down), cart grows a brand-new {L: 3} line, conservation holds,
+  //     zero violations.
+  {
+    const state = makeFixture();
+    const added = addRowFromLibrary(state, 1, SKU_L, 3);
+    const lBalance = added.plan.balance.find((b) => b.skuId === "L");
+    check("addRowFromLibrary: no plan.balance entry created for L", lBalance === undefined, JSON.stringify(added.plan.balance));
+    const lCart = added.cart.find((c) => c.skuId === "L");
+    check("addRowFromLibrary: cart gains a new {L: 3} line", lCart?.qty === 3, JSON.stringify(added.cart));
+    const violations = validateForApply(added);
+    check("addRowFromLibrary: validateForApply reports zero violations", violations.length === 0, JSON.stringify(violations));
+    const conservation = conservationHolds(added);
+    check("addRowFromLibrary: conservation holds (cart grew to cover the new demand)", conservation.ok, conservation.detail);
+  }
+
+  // 25. A second, later addRowFromLibrary of the SAME library SKU grows cart cumulatively
+  //     (3 -> 3+2=5), not just once — the bug this design specifically avoids (see
+  //     cartAfterPlacement's doc comment). The 2nd call still goes through addRowFromLibrary (not
+  //     plain addRow), matching how CustomizeEditor.tsx always calls it via the library picker.
+  {
+    const state = makeFixture();
+    const first = addRowFromLibrary(state, 1, SKU_L, 3);
+    const second = addRowFromLibrary(first, 1, SKU_L, 2); // introduceSku no-ops; L already in first.skus
+    const lCart = second.cart.find((c) => c.skuId === "L");
+    check("addRowFromLibrary (2nd add): cart's L qty accumulates to 5 (3 + 2)", lCart?.qty === 5, JSON.stringify(second.cart));
+    const violations = validateForApply(second);
+    check("addRowFromLibrary (2nd add): validateForApply reports zero violations", violations.length === 0, JSON.stringify(violations));
+    const conservation = conservationHolds(second);
+    check("addRowFromLibrary (2nd add): conservation holds", conservation.ok, conservation.detail);
+  }
+
+  // 26. setLayerCount on a library-placed layer: a decrease synthesizes a plan.balance `remaining`
+  //     entry for L (adjustBalance's own existing fallback) rather than needing cart touched; a
+  //     later increase draws it back down, exactly like a normal job SKU's balance. Cart's L total
+  //     (fixed at the highest-ever-placed count) never changes across this round-trip.
+  {
+    const state = makeFixture();
+    const withRow = addRowFromLibrary(state, 1, SKU_L, 5);
+    const newRowIndex = withRow.plan.trailers[1].rows.length - 1;
+    const cartAfterAdd = withRow.cart.find((c) => c.skuId === "L")?.qty;
+
+    const decreased = setLayerCount(withRow, { t: 1, r: newRowIndex, c: 0 }, 0, 2); // L count 5 -> 2
+    const lBalanceAfterDecrease = decreased.plan.balance.find((b) => b.skuId === "L");
+    check("setLayerCount (library, decrease): balance for L synthesized at 3 (the returned units)", lBalanceAfterDecrease?.remaining === 3, JSON.stringify(decreased.plan.balance));
+    check("setLayerCount (library, decrease): cart's L qty unchanged by the decrease", decreased.cart.find((c) => c.skuId === "L")?.qty === cartAfterAdd, JSON.stringify(decreased.cart));
+    const conservationAfterDecrease = conservationHolds(decreased);
+    check("setLayerCount (library, decrease): conservation holds", conservationAfterDecrease.ok, conservationAfterDecrease.detail);
+
+    const increased = setLayerCount(decreased, { t: 1, r: newRowIndex, c: 0 }, 0, 4); // L count 2 -> 4
+    const lBalanceAfterIncrease = increased.plan.balance.find((b) => b.skuId === "L");
+    check("setLayerCount (library, increase): balance for L drawn back down to 1", (lBalanceAfterIncrease?.remaining ?? 0) === 1, JSON.stringify(increased.plan.balance));
+    check("setLayerCount (library, increase): cart's L qty still unchanged", increased.cart.find((c) => c.skuId === "L")?.qty === cartAfterAdd, JSON.stringify(increased.cart));
+    const conservationAfterIncrease = conservationHolds(increased);
+    check("setLayerCount (library, increase): conservation holds", conservationAfterIncrease.ok, conservationAfterIncrease.detail);
+  }
+
+  // 27. undo after addRowFromLibrary restores the prior cart AND skus exactly (not just plan) — one
+  //     undo step reverts both the SKU introduction and the placement together (see
+  //     addRowFromLibrary's own doc comment for why plain addRow(introduceSku(...), ...) composed
+  //     inline would NOT do this: introduceSku pushes no history entry of its own, so addRow's
+  //     snapshot would capture the already-introduced state as "prior").
+  {
+    const state = makeFixture();
+    const originalCart = clone(state.cart);
+    const originalSkuIds = state.skus.map((s) => s.id).sort();
+    const added = addRowFromLibrary(state, 1, SKU_L, 3);
+    check("undo fixture (addRowFromLibrary): cart/skus actually changed", added.cart.length > state.cart.length && added.skus.length > state.skus.length);
+
+    const undone = undo(added);
+    check("undo (addRowFromLibrary): cart restored exactly (L's line gone)", JSON.stringify(undone.cart) === JSON.stringify(originalCart), JSON.stringify(undone.cart));
+    check(
+      "undo (addRowFromLibrary): skus restored exactly (L gone)",
+      JSON.stringify(undone.skus.map((s) => s.id).sort()) === JSON.stringify(originalSkuIds),
+      JSON.stringify(undone.skus.map((s) => s.id))
+    );
+    const conservation = conservationHolds(undone);
+    check("undo (addRowFromLibrary): conservation holds on the restored state", conservation.ok, conservation.detail);
+  }
+
+  // 28. addColumnFromLibrary and addLayerFromLibrary (the other two library entry points
+  //     CustomizeEditor.tsx wires up) behave the same way as addRowFromLibrary: cart grows to cover
+  //     the new SKU, balance stays untouched, conservation holds.
+  {
+    const state = makeFixture();
+    const withColumn = addColumnFromLibrary(state, 0, 1, SKU_L, 2); // trailer0/row1, alongside C
+    const row1 = withColumn.plan.trailers[0].rows[1];
+    check("addColumnFromLibrary: row1 gains an L column", row1.columns.some((c) => c.layers[0].skuId === "L"), JSON.stringify(row1));
+    check("addColumnFromLibrary: cart gains {L: 2}", withColumn.cart.find((c) => c.skuId === "L")?.qty === 2, JSON.stringify(withColumn.cart));
+    check("addColumnFromLibrary: no balance entry for L", withColumn.plan.balance.find((b) => b.skuId === "L") === undefined, JSON.stringify(withColumn.plan.balance));
+    check("addColumnFromLibrary: conservation holds", conservationHolds(withColumn).ok, conservationHolds(withColumn).detail);
+    check("addColumnFromLibrary: validateForApply reports zero violations", validateForApply(withColumn).length === 0, JSON.stringify(validateForApply(withColumn)));
+
+    const withLayer = addLayerFromLibrary(state, { t: 0, r: 0, c: 0 }, SKU_L, 1); // top-off column A
+    const column = withLayer.plan.trailers[0].rows[0].columns[0];
+    check("addLayerFromLibrary: column A now has an L top-off layer", column.layers.some((l) => l.skuId === "L"), JSON.stringify(column));
+    check("addLayerFromLibrary: cart gains {L: 1}", withLayer.cart.find((c) => c.skuId === "L")?.qty === 1, JSON.stringify(withLayer.cart));
+    check("addLayerFromLibrary: no balance entry for L", withLayer.plan.balance.find((b) => b.skuId === "L") === undefined, JSON.stringify(withLayer.plan.balance));
+    check("addLayerFromLibrary: conservation holds", conservationHolds(withLayer).ok, conservationHolds(withLayer).detail);
   }
 
   return { pass: results.every((r) => r.pass), results };

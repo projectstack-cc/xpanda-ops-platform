@@ -27,7 +27,7 @@
 // unrelated to this module's shape -- a legacy-authored row and a v2-authored row sit side by side
 // in one list. `deserializeSnapshot` below returns a typed ok/reason result rather than throwing, so
 // the picker UI can show "not loadable here" for a legacy row instead of crashing on Load.
-import type { PackPlan } from "./packEngine";
+import type { CartLine, PackPlan, PackSku } from "./packEngine";
 import type { PulledLoadSource } from "@/components/logistics/JobPullModal";
 
 export const SAVED_LOAD_SNAPSHOT_VERSION = 1 as const;
@@ -50,6 +50,19 @@ export interface SavedLoadSnapshot {
   trailerTypeKey: string;
   runnerHeight: number;
   editedPlan: PackPlan | null;
+  // lb-ui-11: the cart/skus CustomizeEditor's own edit session ended with, ONLY when they diverge
+  // from source.pulledSource.cart/.skus (or the bundled fixture's) — a parts-library add grows
+  // state.cart and appends to state.skus mid-session (loadEditor.ts's introduceSku/
+  // cartAfterPlacement), and source is deliberately round-tripped exactly as job-pull time left it
+  // (this file's own header comment) — it never reflects those in-session mutations. Without this,
+  // reloading a saved load with library-added parts would reconstruct originalSkuIds/cart from the
+  // frozen job-pull source, which doesn't know about SKUs editedPlan's trailers already have placed
+  // — an immediate conservation violation on a plan that was valid when it was saved. Optional and
+  // additive (undefined on every pre-lb-ui-11 row, and whenever editedPlan is null — nothing to
+  // diverge from): deserializeSnapshot treats an absent value as "fall back to source's own
+  // cart/skus," not as an incompatible row.
+  editedCart?: CartLine[] | null;
+  editedSkus?: PackSku[] | null;
 }
 
 export function buildSnapshot(args: {
@@ -58,6 +71,8 @@ export function buildSnapshot(args: {
   trailerTypeKey: string;
   runnerHeight: number;
   editedPlan: PackPlan | null;
+  editedCart?: CartLine[] | null;
+  editedSkus?: PackSku[] | null;
 }): SavedLoadSnapshot {
   const source: SavedLoadSource = args.pulledSource
     ? { kind: "pulled", pulledSource: args.pulledSource }
@@ -68,6 +83,8 @@ export function buildSnapshot(args: {
     trailerTypeKey: args.trailerTypeKey,
     runnerHeight: args.runnerHeight,
     editedPlan: args.editedPlan,
+    editedCart: args.editedCart ?? null,
+    editedSkus: args.editedSkus ?? null,
   };
 }
 
@@ -119,6 +136,17 @@ function isValidPlan(v: unknown): v is PackPlan {
   );
 }
 
+// lb-ui-11: light duck-typing only, matching isValidPulledSource's own proportionality note above —
+// a missing/malformed editedCart/editedSkus degrades to "fall back to source's own cart/skus"
+// (see deserializeSnapshot below), never to INCOMPATIBLE_REASON, since these two fields are optional
+// and additive on a row that's otherwise perfectly loadable.
+function isValidCartLineArray(v: unknown): v is CartLine[] {
+  return Array.isArray(v) && v.every((c) => isPlainObject(c) && typeof c.skuId === "string" && typeof c.qty === "number");
+}
+function isValidSkuArray(v: unknown): v is PackSku[] {
+  return Array.isArray(v) && v.every((s) => isPlainObject(s) && typeof s.id === "string" && typeof s.name === "string");
+}
+
 export function deserializeSnapshot(raw: string): DeserializeResult {
   let parsed: unknown;
   try {
@@ -132,6 +160,8 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
   if (typeof parsed.trailerTypeKey !== "string") return { ok: false, reason: INCOMPATIBLE_REASON };
   if (typeof parsed.runnerHeight !== "number") return { ok: false, reason: INCOMPATIBLE_REASON };
   if (parsed.editedPlan !== null && !isValidPlan(parsed.editedPlan)) return { ok: false, reason: INCOMPATIBLE_REASON };
+  const editedCart = isValidCartLineArray(parsed.editedCart) ? parsed.editedCart : null;
+  const editedSkus = isValidSkuArray(parsed.editedSkus) ? parsed.editedSkus : null;
 
   return {
     ok: true,
@@ -141,6 +171,8 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
       trailerTypeKey: parsed.trailerTypeKey as string,
       runnerHeight: parsed.runnerHeight as number,
       editedPlan: (parsed.editedPlan ?? null) as PackPlan | null,
+      editedCart,
+      editedSkus,
     },
   };
 }

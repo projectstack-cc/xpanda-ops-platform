@@ -60,7 +60,7 @@
 // internal state don't recreate the object and re-trigger its data-loading effect.
 import { useEffect, useMemo, useState } from "react";
 import { Truck, FileText, Package, Save, FolderOpen } from "lucide-react";
-import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan, type PackOptions } from "@/lib/packEngine";
+import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan, type PackOptions, type CartLine, type PackSku } from "@/lib/packEngine";
 import { runPackEngineSelfCheck } from "@/lib/packEngine.selfcheck";
 import { LOAD_BUILDER_FIXTURES, type LoadBuilderFixture } from "@/lib/loadBuilderFixtures";
 import PlanMetricsStrip from "@/components/logistics/PlanMetricsStrip";
@@ -96,6 +96,15 @@ export default function LoadPlanView() {
   const [selected, setSelected] = useState<SelectedRef | null>(null);
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [editedPlan, setEditedPlan] = useState<PackPlan | null>(null);
+  // lb-ui-11: the FINAL state.cart/state.skus a completed edit session ended with — only diverge
+  // from scaledCart/fixture.skus when the session added a parts-library SKU (see
+  // CustomizeEditorProps.onApply's own comment). Reset alongside editedPlan at every "start fresh"
+  // point below (source switch, dims/runner change) — but NOT on discard, which only abandons an
+  // in-progress edit session and correctly leaves the last Apply's result (editedPlan and these)
+  // exactly as they were — so a stale library addition from a PREVIOUS load never leaks into a new
+  // one, while a discarded in-progress edit doesn't lose the load's actual prior state.
+  const [editedCart, setEditedCart] = useState<CartLine[] | null>(null);
+  const [editedSkus, setEditedSkus] = useState<PackSku[] | null>(null);
   // lb-ui-03 Step 0 dev aid — see file header. Always 1 in production (the control that changes it
   // is gated out of the bundle's runtime behavior below), so this has no effect on the shipped UI.
   const [multiplier, setMultiplier] = useState(1);
@@ -149,6 +158,11 @@ export default function LoadPlanView() {
     () => (multiplier === 1 ? fixture.cart : fixture.cart.map((c) => ({ ...c, qty: c.qty * multiplier }))),
     [fixture, multiplier]
   );
+  // lb-ui-11: once an edit session has Applied, these are what everything downstream of the plan
+  // should treat as "the load's actual cart/SKU set" — scaledCart/fixture.skus describe only the
+  // ORIGINAL source, unaware of any parts-library SKU a completed edit session introduced.
+  const effectiveCart = editedCart ?? scaledCart;
+  const effectiveSkus = editedSkus ?? fixture.skus;
 
   const dims = useMemo(() => TRAILER_TYPES[trailerTypeKey] ?? TRAILER_TYPES[DEFAULT_TRAILER_TYPE], [trailerTypeKey]);
   const packOptions: PackOptions = useMemo(() => ({ ...DEFAULT_PACK_OPTIONS, runnerHeight }), [runnerHeight]);
@@ -158,25 +172,30 @@ export default function LoadPlanView() {
   const metrics = useMemo(() => planMetrics(plan, dims, packOptions), [plan, dims, packOptions]);
 
   // lb-ui-09: only recreated when the actual data changes (or the modal opens/closes) — plan/dims/
-  // fixture.skus are already stable refs from the memos/state above, so this doesn't recreate on
+  // effectiveSkus are already stable refs from the memos/state above, so this doesn't recreate on
   // every LoadPlanView render, which would otherwise re-trigger BolGenerateModal's data-load effect.
   const bolPackPlanSource: PackPlanSource | null = useMemo(
-    () => (genBolOpen ? { plan, dims, skus: fixture.skus, jobId: pulledSource?.jobId ?? null, runnerHeight } : null),
-    [genBolOpen, plan, dims, fixture, pulledSource, runnerHeight]
+    () => (genBolOpen ? { plan, dims, skus: effectiveSkus, jobId: pulledSource?.jobId ?? null, runnerHeight } : null),
+    [genBolOpen, plan, dims, effectiveSkus, pulledSource, runnerHeight]
   );
 
+  // Describe the ORIGINAL source (fixture/job pull), deliberately not effectiveCart/effectiveSkus —
+  // these are the header's "N pieces, M footprints" summary of what was pulled in, not a live
+  // recount of the current edited state.
   const pieceCount = useMemo(() => scaledCart.reduce((s, c) => s + c.qty, 0), [scaledCart]);
   const footprintCount = useMemo(
     () => new Set(fixture.skus.map((s) => footprintKey(s.length, s.width))).size,
     [fixture]
   );
-  const skuNameById = useMemo(() => new Map(fixture.skus.map((s) => [s.id, s.name])), [fixture]);
+  const skuNameById = useMemo(() => new Map(effectiveSkus.map((s) => [s.id, s.name])), [effectiveSkus]);
 
   function handleFixtureChange(id: string) {
     setFixtureId(id);
     setPulledSource(null);
     setSelected(null);
     setEditedPlan(null);
+    setEditedCart(null);
+    setEditedSkus(null);
     setMode("view");
     setMultiplier(1);
     setCurrentSavedLoadId(null);
@@ -192,6 +211,8 @@ export default function LoadPlanView() {
     setPulledSource(source);
     setSelected(null);
     setEditedPlan(null);
+    setEditedCart(null);
+    setEditedSkus(null);
     setMode("view");
     setMultiplier(1);
     setBannerDismissed(false);
@@ -206,7 +227,7 @@ export default function LoadPlanView() {
     setSaving(true);
     setSaveError(null);
     try {
-      const snapshot = buildSnapshot({ fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan });
+      const snapshot = buildSnapshot({ fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus });
       const payload = buildSavePayload(name, fixture.customer, snapshot);
       const isUpdate = !!currentSavedLoadId;
       const url = isUpdate ? `/v2/api/saved-loads/${encodeURIComponent(currentSavedLoadId!)}` : "/v2/api/saved-loads";
@@ -248,6 +269,14 @@ export default function LoadPlanView() {
     setTrailerTypeKey(snapshot.trailerTypeKey);
     setRunnerHeight(snapshot.runnerHeight);
     setEditedPlan(snapshot.editedPlan);
+    // Only restore editedCart/editedSkus alongside a non-null editedPlan -- these two describe
+    // divergence FROM the frozen source that a materialized plan already accounts for; restoring
+    // them next to a null editedPlan would claim library-part demand for a plan that's about to be
+    // regenerated fresh from scaledCart/fixture.skus (no knowledge of that SKU), an immediate
+    // conservation violation on entering edit mode. buildSnapshot can't produce that pair today, but
+    // nothing enforces it against a hand-edited or future-format row, so guard here too.
+    setEditedCart(snapshot.editedPlan ? snapshot.editedCart ?? null : null);
+    setEditedSkus(snapshot.editedPlan ? snapshot.editedSkus ?? null : null);
     setSelected(null);
     setMode("view");
     setMultiplier(1);
@@ -272,6 +301,8 @@ export default function LoadPlanView() {
     setTrailerTypeKey(key);
     setSelected(null);
     setEditedPlan(null);
+    setEditedCart(null);
+    setEditedSkus(null);
     setMode("view");
   }
 
@@ -279,11 +310,15 @@ export default function LoadPlanView() {
     setRunnerHeight(rh);
     setSelected(null);
     setEditedPlan(null);
+    setEditedCart(null);
+    setEditedSkus(null);
     setMode("view");
   }
 
-  function handleApplyEdit(appliedPlan: PackPlan) {
+  function handleApplyEdit(appliedPlan: PackPlan, cart: CartLine[], skus: PackSku[]) {
     setEditedPlan(appliedPlan);
+    setEditedCart(cart);
+    setEditedSkus(skus);
     setSelected(null);
     setMode("view");
   }
@@ -499,8 +534,8 @@ export default function LoadPlanView() {
           plan={plan}
           dims={dims}
           options={packOptions}
-          cart={scaledCart}
-          skus={fixture.skus}
+          cart={effectiveCart}
+          skus={effectiveSkus}
           onApply={handleApplyEdit}
           onDiscard={handleDiscardEdit}
         />
@@ -530,7 +565,7 @@ export default function LoadPlanView() {
                       trailer={trailer}
                       trailerIndex={trailerIndex}
                       dims={dims}
-                      skus={fixture.skus}
+                      skus={effectiveSkus}
                       runnerHeight={runnerHeight}
                       warnings={plan.warnings}
                       invoiceNumber={fixture.invoiceNumber}

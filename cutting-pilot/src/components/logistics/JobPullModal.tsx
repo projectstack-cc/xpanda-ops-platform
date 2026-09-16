@@ -28,7 +28,7 @@ import { useEffect, useRef, useState } from "react";
 import { Search, AlertTriangle, CheckCircle2 } from "lucide-react";
 import Modal from "@/components/Modal";
 import type { CartLine, PackSku } from "@/lib/packEngine";
-import { matchLineItemsToSkus, buildCartFromMatches, colorForSkuId, type JobLineItem, type JobPullMatch } from "@/lib/jobPull";
+import { matchLineItemsToSkus, buildCartFromMatches, colorForSkuId, fetchLoadBuilderSkus, type JobLineItem, type JobPullMatch } from "@/lib/jobPull";
 import type { LoadBuilderFixture } from "@/lib/loadBuilderFixtures";
 
 interface JobSearchResult {
@@ -58,27 +58,6 @@ export interface PulledLoadSource extends LoadBuilderFixture {
 // Steve, 2026-09-16: legacy restricted job-pull to "done"/"loading" status (load-builder.html:2942),
 // but that's wrong for how the floor actually uses this — most loading diagrams are generated as
 // paperwork well before a job starts being cut, against any job status. No status filter here.
-function coerceSku(raw: any): PackSku | null {
-  const length = Number(raw?.length);
-  const width = Number(raw?.width);
-  const height = Number(raw?.height);
-  const weight = Number(raw?.weight);
-  if (!raw?.id || !Number.isFinite(length) || length <= 0 || !Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
-    return null;
-  }
-  return {
-    id: String(raw.id),
-    name: String(raw.name || raw.sku || raw.id),
-    sku: String(raw.sku || ""),
-    length,
-    width,
-    height,
-    weight: Number.isFinite(weight) && weight > 0 ? weight : 1,
-    category: raw.category || undefined,
-    allowRotation: !!raw.allowRotation,
-    bundleQty: Number.isFinite(Number(raw.bundleQty)) && Number(raw.bundleQty) > 0 ? Number(raw.bundleQty) : undefined,
-  };
-}
 
 interface PreviewState {
   job: JobDetail;
@@ -91,13 +70,6 @@ async function fetchJobDetail(jobId: string): Promise<JobDetail> {
   const json = await res.json();
   if (!res.ok || !json.ok || !json.job) throw new Error(json.error || "Job not found.");
   return json.job as JobDetail;
-}
-
-async function fetchLoadBuilderSkus(): Promise<PackSku[]> {
-  const res = await fetch("/api/load-builder-skus");
-  const json = await res.json();
-  if (!res.ok || !Array.isArray(json)) throw new Error("Couldn't load the SKU library.");
-  return json.map(coerceSku).filter((s): s is PackSku => s !== null);
 }
 
 /** Fetches the job + SKU universe and runs the match — the same path the modal's own job-selection

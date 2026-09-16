@@ -187,5 +187,56 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
     );
   }
 
+  // 8. lb-ui-11: round-trip with editedCart/editedSkus present — a saved load whose edit session
+  //    introduced a parts-library SKU (source.pulledSource.cart/.skus stay frozen at job-pull time;
+  //    these two carry the session's actual final state so a reload doesn't lose track of it).
+  {
+    const pulled = makePulledSource(); // cart: [SKU-1 x10], skus: [SKU-1]
+    const editedCart = [{ skuId: "SKU-1", qty: 10 }, { skuId: "LIB-1", qty: 3 }];
+    const editedSkus = [...pulled.skus, { id: "LIB-1", name: "Library Part", sku: "LIB-1", length: 12, width: 12, height: 5, weight: 3, category: "Blocks", allowRotation: true }];
+    const snapshot = buildSnapshot({
+      fixtureId: "inv-4202",
+      pulledSource: pulled,
+      trailerTypeKey: "53ft Standard",
+      runnerHeight: 0,
+      editedPlan: makePlan(),
+      editedCart,
+      editedSkus,
+    });
+    const raw = serializeSnapshot(snapshot);
+    const result = deserializeSnapshot(raw);
+    check(
+      "round-trip: editedCart/editedSkus (library SKU) survive intact",
+      result.ok === true && JSON.stringify(result.snapshot) === JSON.stringify(snapshot),
+      JSON.stringify(result)
+    );
+    check(
+      "round-trip: editedSkus still has the library SKU LIB-1 the frozen pulledSource.skus never had",
+      result.ok === true && !!result.snapshot.editedSkus?.some((s) => s.id === "LIB-1") && !pulled.skus.some((s) => s.id === "LIB-1"),
+      JSON.stringify(result.ok ? result.snapshot.editedSkus : result)
+    );
+  }
+
+  // 9. Backward compat: a pre-lb-ui-11 row (no editedCart/editedSkus keys at all in the persisted
+  //    JSON, not even null) still deserializes successfully — these two fields are additive, never
+  //    a compatibility break — and the two fields come back as null (fall back to source's own
+  //    cart/skus), not undefined or a throw.
+  {
+    const preLb11Row = {
+      version: 1,
+      source: { kind: "fixture", fixtureId: "inv-4202" },
+      trailerTypeKey: "53ft Standard",
+      runnerHeight: 0,
+      editedPlan: null,
+      // no editedCart / editedSkus keys at all
+    };
+    const result = deserializeSnapshot(JSON.stringify(preLb11Row));
+    check(
+      "deserializeSnapshot: pre-lb-ui-11 row (missing editedCart/editedSkus) still loads",
+      result.ok === true && result.snapshot.editedCart === null && result.snapshot.editedSkus === null,
+      JSON.stringify(result)
+    );
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }
