@@ -1873,6 +1873,127 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-ui-10 — v2 Load Builder: parts / SKU library CRUD (react-component-agent §9b). Sprint step 6
+  of 7, `Prompts/sprint-load-builder-parity.md`.** Writes to LIVE, unfenced production data —
+  `/api/parts` (`handleApiParts`, `_worker.js/routes/production.js`) has no
+  `V2_LOGISTICS_WRITES_ENABLED` gate; there is no scratch/staging version of it. Phase 2 live
+  create/edit/delete testing against clearly-marked test SKUs is Steve's, per the sprint charter —
+  not exercised by this prompt's own verification (see below).
+  **Step 0 findings**: (1) `handleApiParts` supports full CRUD — `GET`, `POST`, `PUT`, `DELETE`, all
+  four confirmed by reading the whole function (`_worker.js/routes/production.js:3-138`). `POST`
+  requires `part_number` + positive `length_in`/`width_in`/`height_in` (each checked independently,
+  409 on duplicate `part_number`). **`PUT` only ever updates `part_number`, `customer`,
+  `density_material`, `length_in`, `width_in`, `height_in`, `notes`, and `bundle_qty` when sent — its
+  `UPDATE` statement never sets `name`, `color`, `allow_rotation`, `sort_order`, `category`, or
+  `parent_group`, no matter what the payload contains** (lines 94-99). This is a genuine backend
+  limitation, not a decision this prompt gets to make (`_worker.js/` is fenced) — the edit form only
+  exposes the fields `PUT` actually persists; the rest render read-only, labeled "set at creation —
+  PUT doesn't update this" (an advisor review caught that the first wording, "not editable here,"
+  reads as "edit it somewhere else" — there is nowhere else in v2, so a typo in `name` at creation is
+  currently permanent; the corrected label names the real constraint). Flagged in `BACKLOG.md` as a
+  specific `_worker.js` follow-up (`production.js:94-99`) for whenever Steve wants full-field edit.
+  (2) **Legacy's own SKU-tab CRUD UI (`load-builder.html:1629-1807`, `addSku`/`updateSku`/
+  `deleteSku`) does NOT call `/api/parts` at all — it calls a sibling endpoint,
+  `/api/load-builder-skus` (`handleApiLoadBuilderSkus`, `_worker.js/routes/bols.js:872-937`), a
+  camelCase-shaped wrapper over the SAME `parts` D1 table** (`mapPartToSku` translates rows on read;
+  writes go to the identical columns under different field names, e.g. `sku`→`part_number`,
+  `allowRotation`→`allow_rotation`). This prompt is scoped to `/api/parts`/`handleApiParts` per its
+  own locked instruction ("this is the ONLY backend this prompt talks to"), which already supports
+  everything needed without porting the camelCase indirection — reported per Step 0's own
+  instruction rather than silently building against the endpoint legacy's UI actually calls. (3)
+  Legacy's delete button (`btn-red-light`, line 1799) fires `deleteSku(s.id)` immediately with **no
+  confirmation at all**. This prompt's own scope fence requires one; legacy is not the bar here. (4)
+  Legacy's SKU tab also has a "Reset" button wiping the ENTIRE `parts` table
+  (`DELETE /api/load-builder-skus/all`) then attempting a reseed that no-ops once rows exist
+  (`handleApiPartsSeed` returns `{seeded:false}` if `COUNT(*) > 0`) — i.e. legacy's own reset
+  button, ported faithfully, would not even restore the defaults it claims to. **Excluded entirely**:
+  a whole-table destructive wipe is not "parts/SKU library CRUD," it isn't restorable via the path
+  legacy itself uses, and it would wipe rows Orders and job matching both depend on. (5) Legacy's
+  paste-import (`toCSV`/`fromCSV`, lines 548-571, wired to `importSkus` → N sequential
+  `/api/load-builder-skus` POSTs) is real but **deferred to `BACKLOG.md`**: the Design Decision
+  explicitly grants this discretion, and N sequential POSTs to production with no dry-run and no
+  undo is exactly the class of action the sprint charter says needs Steve present, not a bulk-import
+  path an agent ships unsupervised.
+  **Cache-invalidation finding** (Design Decision, `partsCache` in `PartsPicker.tsx`): TWO
+  module-level parts caches exist elsewhere in this codebase, neither in this prompt's file fence —
+  `PartsPicker.tsx:28` (Orders' "add from parts library" flow) and `partMatch.ts:159`
+  (`loadPartsLibrary()`, called only from `OrderEntryForm.tsx`, also Orders-only). Grepped every
+  caller of `loadPartsLibrary` to confirm: it is NOT used anywhere in Load Builder. Load Builder's
+  own job-pull matching (`JobPullModal.tsx`'s `fetchLoadBuilderSkus`) has **no cache of its own** —
+  it fetches `GET /api/load-builder-skus` fresh on every job pull — so within the page this panel
+  actually lives on, staleness is a genuine non-issue, not a workaround. The real (narrower) risk is
+  cross-page: create/edit/delete a part in this panel, then navigate to Orders in the same tab
+  without a hard reload — Next.js client-side routing can keep `PartsPicker.tsx`'s and
+  `partMatch.ts`'s module-level caches alive across that navigation, so Orders would show pre-edit
+  data until a real page load. Both files are out of this prompt's fence (adding an invalidation
+  export to either would be a scope violation, and a full-page reload from this panel was
+  considered and rejected — it would discard the user's in-progress cart/plan/manual edits on the
+  SAME page, a worse cost than the narrow cross-page staleness it would avoid). Resolution:
+  `PartsLibraryPanel.tsx` owns its own fetch and list state, refetched after every write, so its own
+  view is always correct; the cross-page staleness is named plainly here and filed in `BACKLOG.md`
+  citing both exact lines.
+  **Part A — `partsLibrary.ts`**: pure validation mirroring `handleApiParts`'s own checks exactly
+  (`part_number` required; `length_in`/`width_in`/`height_in` each independently `> 0`) plus payload
+  builders (`buildCreatePayload`/`buildUpdatePayload`) and form↔record converters. `nextSortOrder`
+  addresses a separate small finding: `handleApiParts`'s `POST` defaults `sort_order` to `0` when
+  absent (unlike `/api/load-builder-skus`'s `POST`, which appends via `COUNT(*)`), so every part
+  created through this panel would otherwise sort to the top of its category
+  (`GET`'s own `ORDER BY category ASC, sort_order ASC, part_number ASC`) instead of appending after
+  existing ones. `nextSortOrder` computes `max(existing sort_order) + 1` client-side from the
+  currently loaded list before each create — a display-order nicety only; grepped
+  `cutting-pilot/src/` for every read of `parts.sort_order`/`sortOrder` and confirmed nothing
+  functional (pack ordering, job-pull matching) consumes it. Two concurrent planners creating parts
+  in the same moment could compute the same `nextSortOrder` value — harmless, since it only affects
+  list-display tie-breaking, not correctness.
+  **Part B — `PartsLibraryPanel.tsx`**: list view (own fetch/state, not the shared caches above),
+  search across `part_number`/`name`/`customer`, category grouping with per-category collapse
+  (ported cheaply from legacy's own `groupByCategory`/collapse pattern). Create form covers every
+  field `POST` persists; validated client-side via Part A before the request. Edit form covers only
+  the fields `PUT` persists (see Step 0 finding above), with the rest shown read-only rather than as
+  broken controls. **Delete is a two-step arm/confirm inline control** (Delete → "Remove {part
+  number} from the shared catalog (Orders + job matching), permanently?" + Confirm/Cancel), not a
+  bare button — an advisor review flagged that the first draft's confirm text named only the part
+  number, which understates the blast radius given `DELETE FROM parts WHERE id = ?` has no FK guard
+  and `job_line_items.part_id` references these rows (`api/orders/route.ts:117`,
+  `api/orders/[id]/route.ts:153`); the corrected copy states what shared surfaces the delete affects,
+  not just which row. **Not `window.confirm()`**: this session's own system prompt prohibits
+  triggering browser modal dialogs (they block the Chrome extension and would break Phase 2 browser
+  testing); the codebase's one existing precedent (`BolEditorModal.tsx`'s `window.confirm` for a
+  discard-changes prompt) is also a weaker case than a permanent production delete, so it wasn't
+  treated as the bar to match. Tokens throughout, no hardcoded chrome colors — the one hex literal
+  (`#D97706`) is `handleApiParts`'s own documented default part color (line 32), rendered from data
+  as a swatch exactly the way `PartsPicker.tsx` already renders `p.color`, not UI chrome.
+  **Entry point**: new "Parts library" button in `LoadPlanView.tsx`'s header, beside "Pull from job"
+  — unlike that button (and the fixture picker), NOT disabled in edit mode, since managing the
+  shared catalog doesn't touch the current trailer plan.
+  **Part C selfcheck**: `partsLibrary.selfcheck.ts`, pure, no network calls — accepts a well-formed
+  part; rejects missing `part_number` (including whitespace-only); rejects each of
+  `length_in`/`width_in`/`height_in` non-positive independently, plus all three at once producing
+  three distinct errors; mirrors the same checks for update plus its `id`-required rule;
+  `nextSortOrder` on an empty list and on a list with gaps (appends after the max, not the count);
+  payload builders trim/coerce correctly; `groupByCategory` buckets, sorts, and blank-bucket
+  ("Uncategorized") correctly. CSV round-trip check from the prompt's own Part C spec is N/A — CSV
+  import/export was deferred (see above).
+  **Verification**: no live browser session available (same standing limitation as every prior
+  `lb-ui-NN` this sprint) — rendering, category collapse, and the two-step delete UI could not be
+  exercised in a browser; confirmed by reading the component against `Modal.tsx`'s known contract
+  and the same field/class conventions `BolGenerateModal.tsx`/`PartsPicker.tsx` already use.
+  **Verification step 7 confirmed literally**: this prompt's own selfcheck (`partsLibrary.selfcheck.ts`)
+  is pure — no network calls anywhere in it — and no throwaway verification script in this session
+  ever issued a non-`GET` request to `/api/parts`; the only live call made during verification was
+  none at all (`tsc`/`cf-build`/selfchecks only). `packEngine.selfcheck.ts` ratchet unchanged
+  **144/144** (`packEngine.ts` not touched — closed per sprint rule). `loadEditor.selfcheck.ts`
+  **87/87**, `dissolve.selfcheck.ts` **21/21**, `jobPull.selfcheck.ts` **17/17**,
+  `loadingDiagramPdf.selfcheck.ts` **24/24**, `bolShared.selfcheck.ts` **22/22** + PDF-merge **5/5**
+  (all four unchanged, imported/re-run only). New `partsLibrary.selfcheck.ts` **15/15**. `npx tsc
+  --noEmit` and `npm run cf-build` both green. `V2_LOGISTICS_WRITES_ENABLED` untouched — irrelevant
+  to this endpoint anyway (`/api/parts` was never gated by it; see "the one sprint-wide exception" in
+  the sprint charter).
+  Follow-ups (see `BACKLOG.md`): `handleApiParts`'s `PUT` doesn't update `name`/`color`/
+  `allow_rotation`/`sort_order`/`category`/`parent_group` (`production.js:94-99`) — a part's name
+  can only ever be fixed by deleting and recreating it; CSV paste-import deferred, real legacy
+  feature, needs Steve present for the first live run; cross-page stale-cache risk between this
+  panel and Orders' `PartsPicker.tsx:28`/`partMatch.ts:159`, both out of this prompt's fence.
 - **lb-ui-09 — v2 Load Builder: BOL generation wired to a `PackPlan` + per-trailer numbering
   (react-component-agent §9b). Sprint step 5 of 7, `Prompts/sprint-load-builder-parity.md`.**
   Merges what were originally scoped as two separate items ("BOL generation" and "BOL numbering")

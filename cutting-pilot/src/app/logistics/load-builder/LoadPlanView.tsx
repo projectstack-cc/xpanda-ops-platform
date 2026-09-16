@@ -59,7 +59,7 @@
 // actually on screen. `bolPackPlanSource` is memoized so re-renders triggered by the modal's own
 // internal state don't recreate the object and re-trigger its data-loading effect.
 import { useEffect, useMemo, useState } from "react";
-import { Truck, FileText } from "lucide-react";
+import { Truck, FileText, Package } from "lucide-react";
 import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan, type PackOptions } from "@/lib/packEngine";
 import { runPackEngineSelfCheck } from "@/lib/packEngine.selfcheck";
 import { LOAD_BUILDER_FIXTURES, type LoadBuilderFixture } from "@/lib/loadBuilderFixtures";
@@ -69,6 +69,7 @@ import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logis
 import JobPullModal, { type PulledLoadSource } from "@/components/logistics/JobPullModal";
 import LoadingDiagramPrintButton from "@/components/logistics/LoadingDiagramPrintButton";
 import BolGenerateModal, { type PackPlanSource } from "@/components/logistics/BolGenerateModal";
+import PartsLibraryPanel from "@/components/logistics/PartsLibraryPanel";
 import CustomizeEditor from "./CustomizeEditor";
 
 // lb-ui-06: shipped runner-height values, confirmed against legacy's own dropdown
@@ -110,6 +111,11 @@ export default function LoadPlanView() {
   // lb-ui-09: "Generate BOLs" trigger — nullable-object convention BolGenerateModal's own jobId
   // prop already uses, not a bare boolean, so the effect that builds it stays keyed off real data.
   const [genBolOpen, setGenBolOpen] = useState(false);
+
+  // lb-ui-10: "Parts library" trigger. Independent of plan/mode state -- managing the shared parts
+  // catalog doesn't touch the current trailer plan, so (unlike Pull from job / fixture switching)
+  // this isn't disabled in edit mode.
+  const [partsLibraryOpen, setPartsLibraryOpen] = useState(false);
 
   useEffect(() => {
     const jobId = new URLSearchParams(window.location.search).get("job_id");
@@ -274,6 +280,13 @@ export default function LoadPlanView() {
             className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
           >
             <Truck size={15} aria-hidden="true" /> Pull from job
+          </button>
+          <button
+            type="button"
+            onClick={() => setPartsLibraryOpen(true)}
+            className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--border)] text-muted hover:text-text hover:bg-[var(--ghost-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] inline-flex items-center gap-1.5"
+          >
+            <Package size={15} aria-hidden="true" /> Parts library
           </button>
           <div className="flex gap-1.5" role="group" aria-label="Fixture picker">
             {LOAD_BUILDER_FIXTURES.map((f) => {
@@ -490,6 +503,8 @@ export default function LoadPlanView() {
       )}
 
       <BolGenerateModal jobId={null} packPlanSource={bolPackPlanSource} onClose={() => setGenBolOpen(false)} />
+
+      <PartsLibraryPanel isOpen={partsLibraryOpen} onClose={() => setPartsLibraryOpen(false)} />
     </div>
   );
 }
