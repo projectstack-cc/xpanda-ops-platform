@@ -85,6 +85,16 @@ function footprintKey(l: number, w: number): string {
   return `${Math.min(l, w)}x${Math.max(l, w)}`;
 }
 
+// 2026-09-16: the fixture picker (INV_4202/4356/4347 — three real orders bundled for dev/QA, see
+// loadBuilderFixtures.ts's own header) used to be the default landing state and an always-visible
+// header control. Steve: those shouldn't be in a production-facing view now that Job Pull covers
+// testing with real jobs. loadBuilderFixtures.ts itself is untouched (packEngine.selfcheck.ts's dev
+// panel and savedLoad.ts's "fixture"-kind backward compat for pre-existing saved rows both still
+// need it) -- only this file's picker UI and its default-selected state are removed. EMPTY_FIXTURE
+// is the new default: an empty cart/skus pair pack() handles the same as any other (0 trailers),
+// giving a clean "nothing selected" state instead of silently showing a real-looking invoice.
+const EMPTY_FIXTURE: LoadBuilderFixture = { id: "__none__", invoiceNumber: "", customer: "", label: "No load selected", cart: [], skus: [] };
+
 interface SelectedRef {
   trailerIndex: number;
   rowIndex: number;
@@ -92,7 +102,7 @@ interface SelectedRef {
 }
 
 export default function LoadPlanView() {
-  const [fixtureId, setFixtureId] = useState(LOAD_BUILDER_FIXTURES[0].id);
+  const [fixtureId, setFixtureId] = useState<string | null>(null);
   const [selected, setSelected] = useState<SelectedRef | null>(null);
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [editedPlan, setEditedPlan] = useState<PackPlan | null>(null);
@@ -137,7 +147,7 @@ export default function LoadPlanView() {
 
   // lb-ui-04: saved loads. currentSavedLoadId/Name track "this is the saved load you loaded or last
   // saved" -- set on a successful Save (create) or Load, cleared only on a genuine source switch
-  // (handleFixtureChange/handlePullConfirm below), NOT on trailer-type/runner/edit changes to the
+  // (handlePullConfirm/handlePickerLoad below), NOT on trailer-type/runner/edit changes to the
   // same load -- so tweak-then-Save-again defaults to updating the same row, not creating a
   // duplicate. currentSavedLoadName prefills the save modal on update: legacy's own prompt() shows
   // BLANK on update (load-builder.html:2808), which silently renames the save to the auto-generated
@@ -159,7 +169,8 @@ export default function LoadPlanView() {
     }
   }, []);
 
-  const fixture: LoadBuilderFixture = pulledSource ?? (LOAD_BUILDER_FIXTURES.find((f) => f.id === fixtureId) ?? LOAD_BUILDER_FIXTURES[0]);
+  const hasSource = !!pulledSource || !!fixtureId;
+  const fixture: LoadBuilderFixture = pulledSource ?? (fixtureId ? (LOAD_BUILDER_FIXTURES.find((f) => f.id === fixtureId) ?? EMPTY_FIXTURE) : EMPTY_FIXTURE);
   const scaledCart = useMemo(
     () => (multiplier === 1 ? fixture.cart : fixture.cart.map((c) => ({ ...c, qty: c.qty * multiplier }))),
     [fixture, multiplier]
@@ -205,24 +216,6 @@ export default function LoadPlanView() {
   );
   const skuNameById = useMemo(() => new Map(effectiveSkus.map((s) => [s.id, s.name])), [effectiveSkus]);
 
-  function handleFixtureChange(id: string) {
-    setFixtureId(id);
-    setPulledSource(null);
-    setSelected(null);
-    setEditedPlan(null);
-    setEditedCart(null);
-    setEditedSkus(null);
-    setMode("view");
-    setMultiplier(1);
-    setCurrentSavedLoadId(null);
-    setCurrentSavedLoadName(null);
-    // advisor (pre-commit review): drop a stale ?job_id= so a reload doesn't re-open the pull modal
-    // for a job the planner deliberately navigated away from.
-    if (new URLSearchParams(window.location.search).has("job_id")) {
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-  }
-
   function handlePullConfirm(source: PulledLoadSource) {
     setPulledSource(source);
     setSelected(null);
@@ -243,7 +236,12 @@ export default function LoadPlanView() {
     setSaving(true);
     setSaveError(null);
     try {
-      const snapshot = buildSnapshot({ fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize });
+      // fixtureId ?? EMPTY_FIXTURE.id only satisfies buildSnapshot's non-null argument type -- it
+      // never actually reaches a written row. buildSnapshot itself ignores the fixtureId argument
+      // whenever pulledSource is non-null (writes kind:"pulled" instead, savedLoad.ts:87-89); and
+      // Save is disabled (plan.trailers.length === 0) for every case where pulledSource is null AND
+      // fixtureId is null (that's !hasSource, whose plan is always the empty EMPTY_FIXTURE pack).
+      const snapshot = buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize });
       const payload = buildSavePayload(name, fixture.customer, snapshot);
       const isUpdate = !!currentSavedLoadId;
       const url = isUpdate ? `/v2/api/saved-loads/${encodeURIComponent(currentSavedLoadId!)}` : "/v2/api/saved-loads";
@@ -383,8 +381,12 @@ export default function LoadPlanView() {
         <div>
           <h1 className="text-xl font-semibold text-text">{fixture.label}</h1>
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-muted font-mono tabular-nums">
-            <span>{pieceCount} pieces</span>
-            <span>{footprintCount} footprints</span>
+            {hasSource && (
+              <>
+                <span>{pieceCount} pieces</span>
+                <span>{footprintCount} footprints</span>
+              </>
+            )}
             <span>
               {trailerTypeKey} trailer{runnerHeight > 0 ? ` · ${runnerHeight}" runners` : ""}
             </span>
@@ -469,30 +471,6 @@ export default function LoadPlanView() {
           >
             <Package size={15} aria-hidden="true" /> Parts library
           </button>
-          <div className="flex gap-1.5" role="group" aria-label="Fixture picker">
-            {LOAD_BUILDER_FIXTURES.map((f) => {
-              const active = !pulledSource && f.id === fixtureId;
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => handleFixtureChange(f.id)}
-                  disabled={mode === "edit"}
-                  aria-pressed={active}
-                  className={[
-                    "px-3 py-1.5 rounded-lg text-[13px] font-medium min-h-[36px] cursor-pointer transition-colors border",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]",
-                    "disabled:opacity-40 disabled:cursor-not-allowed",
-                    active
-                      ? "border-[var(--brand)] text-[var(--brand)] bg-transparent font-semibold"
-                      : "border-[var(--border)] text-muted hover:text-text hover:bg-[var(--ghost-bg)]",
-                  ].join(" ")}
-                >
-                  {f.invoiceNumber}
-                </button>
-              );
-            })}
-          </div>
           {process.env.NODE_ENV !== "production" && (
             <div className="flex gap-1 items-center" role="group" aria-label="Dev-only fixture quantity multiplier">
               <span className="text-[11px] text-muted mr-0.5">qty ×</span>
@@ -586,93 +564,111 @@ export default function LoadPlanView() {
         </div>
       )}
 
-      {/* 2. Metrics strip */}
-      <PlanMetricsStrip metrics={metrics} dims={dims} mixedTrailerTypes={mixedTrailerTypes} />
-
-      {mode === "edit" ? (
-        <CustomizeEditor
-          key={pulledSource ? pulledSource.id : fixtureId}
-          plan={plan}
-          dims={dims}
-          options={packOptions}
-          cart={effectiveCart}
-          skus={effectiveSkus}
-          onApply={handleApplyEdit}
-          onDiscard={handleDiscardEdit}
-        />
-      ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-4 items-start">
-          {/* 3. Trailer diagram(s) */}
-          <div className="space-y-4">
-            {plan.trailers.length === 0 ? (
-              <div className="rounded-xl border border-[var(--card-border)] bg-surface p-6 text-sm text-muted">
-                This fixture placed nothing — every piece is in the balance below.
-              </div>
-            ) : (
-              plan.trailers.map((trailer, trailerIndex) => (
-                <TrailerDiagram
-                  key={trailerIndex}
-                  trailer={trailer}
-                  dims={trailer.dims}
-                  trailerIndex={trailerIndex}
-                  typeBadge={trailer.type && trailer.type !== trailerTypeKey ? `Auto-downsized · ${trailer.type}` : undefined}
-                  selectedColumn={
-                    selected && selected.trailerIndex === trailerIndex
-                      ? { rowIndex: selected.rowIndex, columnIndex: selected.columnIndex }
-                      : null
-                  }
-                  onSelectColumn={(rowIndex, columnIndex) => setSelected({ trailerIndex, rowIndex, columnIndex })}
-                  headerAction={
-                    <LoadingDiagramPrintButton
-                      trailer={trailer}
-                      trailerIndex={trailerIndex}
-                      dims={trailer.dims}
-                      skus={effectiveSkus}
-                      runnerHeight={runnerHeight}
-                      warnings={plan.warnings}
-                      invoiceNumber={fixture.invoiceNumber}
-                    />
-                  }
-                />
-              ))
-            )}
-          </div>
-
-          {/* 4. Detail panel + warnings + balance */}
-          <div className="space-y-4">
-            <ColumnDetailPanel selected={selectedDetail} dims={selected ? (plan.trailers[selected.trailerIndex]?.dims ?? dims) : dims} options={packOptions} />
-
-            <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
-              <h3 className="text-sm font-semibold text-text mb-2">Warnings</h3>
-              {plan.warnings.length === 0 ? (
-                <p className="text-sm text-muted">No warnings for this plan.</p>
-              ) : (
-                <ul className="space-y-1.5 text-sm text-[var(--warn-text)]">
-                  {plan.warnings.map((w, i) => (
-                    <li key={i} className="rounded-md bg-[var(--warn-bg)] border border-[var(--warn-border)] px-2.5 py-1.5">
-                      {w}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
-              <h3 className="text-sm font-semibold text-text mb-2">Carried to next trailer</h3>
-              {plan.balance.length === 0 ? (
-                <p className="text-sm text-muted">Nothing carried forward — the full order placed.</p>
-              ) : (
-                <ul className="space-y-1 text-sm font-mono tabular-nums text-text">
-                  {plan.balance.map((b) => (
-                    <li key={b.skuId}>
-                      {b.remaining} × {skuNameById.get(b.skuId) ?? b.skuId}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
+      {!hasSource ? (
+        <div className="rounded-xl border border-[var(--card-border)] bg-surface p-10 text-center space-y-3">
+          <Truck size={28} className="mx-auto text-muted" aria-hidden="true" />
+          <p className="text-sm text-muted max-w-sm mx-auto">
+            Pull a job to build a load — its line items are matched against the parts library automatically.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowJobPull(true)}
+            className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] inline-flex items-center gap-1.5"
+          >
+            <Truck size={15} aria-hidden="true" /> Pull from job
+          </button>
         </div>
+      ) : (
+        <>
+          {/* 2. Metrics strip */}
+          <PlanMetricsStrip metrics={metrics} dims={dims} mixedTrailerTypes={mixedTrailerTypes} />
+
+          {mode === "edit" ? (
+            <CustomizeEditor
+              key={pulledSource ? pulledSource.id : fixtureId}
+              plan={plan}
+              dims={dims}
+              options={packOptions}
+              cart={effectiveCart}
+              skus={effectiveSkus}
+              onApply={handleApplyEdit}
+              onDiscard={handleDiscardEdit}
+            />
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-4 items-start">
+              {/* 3. Trailer diagram(s) */}
+              <div className="space-y-4">
+                {plan.trailers.length === 0 ? (
+                  <div className="rounded-xl border border-[var(--card-border)] bg-surface p-6 text-sm text-muted">
+                    Nothing placed — every piece is in the balance below.
+                  </div>
+                ) : (
+                  plan.trailers.map((trailer, trailerIndex) => (
+                    <TrailerDiagram
+                      key={trailerIndex}
+                      trailer={trailer}
+                      dims={trailer.dims}
+                      trailerIndex={trailerIndex}
+                      typeBadge={trailer.type && trailer.type !== trailerTypeKey ? `Auto-downsized · ${trailer.type}` : undefined}
+                      selectedColumn={
+                        selected && selected.trailerIndex === trailerIndex
+                          ? { rowIndex: selected.rowIndex, columnIndex: selected.columnIndex }
+                          : null
+                      }
+                      onSelectColumn={(rowIndex, columnIndex) => setSelected({ trailerIndex, rowIndex, columnIndex })}
+                      headerAction={
+                        <LoadingDiagramPrintButton
+                          trailer={trailer}
+                          trailerIndex={trailerIndex}
+                          dims={trailer.dims}
+                          skus={effectiveSkus}
+                          runnerHeight={runnerHeight}
+                          warnings={plan.warnings}
+                          invoiceNumber={fixture.invoiceNumber}
+                        />
+                      }
+                    />
+                  ))
+                )}
+              </div>
+
+              {/* 4. Detail panel + warnings + balance */}
+              <div className="space-y-4">
+                <ColumnDetailPanel selected={selectedDetail} dims={selected ? (plan.trailers[selected.trailerIndex]?.dims ?? dims) : dims} options={packOptions} />
+
+                <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
+                  <h3 className="text-sm font-semibold text-text mb-2">Warnings</h3>
+                  {plan.warnings.length === 0 ? (
+                    <p className="text-sm text-muted">No warnings for this plan.</p>
+                  ) : (
+                    <ul className="space-y-1.5 text-sm text-[var(--warn-text)]">
+                      {plan.warnings.map((w, i) => (
+                        <li key={i} className="rounded-md bg-[var(--warn-bg)] border border-[var(--warn-border)] px-2.5 py-1.5">
+                          {w}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
+                  <h3 className="text-sm font-semibold text-text mb-2">Carried to next trailer</h3>
+                  {plan.balance.length === 0 ? (
+                    <p className="text-sm text-muted">Nothing carried forward — the full order placed.</p>
+                  ) : (
+                    <ul className="space-y-1 text-sm font-mono tabular-nums text-text">
+                      {plan.balance.map((b) => (
+                        <li key={b.skuId}>
+                          {b.remaining} × {skuNameById.get(b.skuId) ?? b.skuId}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {selfCheck && (

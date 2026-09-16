@@ -29,6 +29,7 @@
 // the picker UI can show "not loadable here" for a legacy row instead of crashing on Load.
 import type { CartLine, PackPlan, PackSku } from "./packEngine";
 import type { PulledLoadSource } from "@/components/logistics/JobPullModal";
+import { LOAD_BUILDER_FIXTURES } from "./loadBuilderFixtures";
 
 export const SAVED_LOAD_SNAPSHOT_VERSION = 1 as const;
 
@@ -107,6 +108,16 @@ export type DeserializeResult = { ok: true; snapshot: SavedLoadSnapshot } | { ok
 const INCOMPATIBLE_REASON =
   "This saved load isn't compatible with the v2 Load Builder — it may have been saved from the legacy Load Builder.";
 
+// 2026-09-16: LoadPlanView.tsx removed its always-visible fixture picker (INV_4202/4356/4347 —
+// bundled test/demo orders) since Job Pull now covers real testing, but a "fixture"-kind row saved
+// while the picker still existed (or a hand-edited one) can reference a fixtureId that's no longer
+// bundled. isValidSource's own `typeof fixtureId === "string"` check can't catch that -- it's a
+// well-formed string, just not one LOAD_BUILDER_FIXTURES resolves anymore -- so without this, a
+// stale fixtureId would pass validation and LoadPlanView would silently fall back to its own
+// EMPTY_FIXTURE sentinel, showing "No load selected" instead of a "why didn't this load" explanation.
+const FIXTURE_REMOVED_REASON =
+  "This saved load references a bundled test fixture that's no longer available. Pull the original job again to rebuild it.";
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -167,6 +178,10 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
   if (!isPlainObject(parsed)) return { ok: false, reason: INCOMPATIBLE_REASON };
   if (parsed.version !== SAVED_LOAD_SNAPSHOT_VERSION) return { ok: false, reason: INCOMPATIBLE_REASON };
   if (!isValidSource(parsed.source)) return { ok: false, reason: INCOMPATIBLE_REASON };
+  const source: SavedLoadSource = parsed.source;
+  if (source.kind === "fixture" && !LOAD_BUILDER_FIXTURES.some((f) => f.id === source.fixtureId)) {
+    return { ok: false, reason: FIXTURE_REMOVED_REASON };
+  }
   if (typeof parsed.trailerTypeKey !== "string") return { ok: false, reason: INCOMPATIBLE_REASON };
   if (typeof parsed.runnerHeight !== "number") return { ok: false, reason: INCOMPATIBLE_REASON };
   if (parsed.editedPlan !== null && !isValidPlan(parsed.editedPlan)) return { ok: false, reason: INCOMPATIBLE_REASON };
@@ -178,7 +193,7 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
     ok: true,
     snapshot: {
       version: SAVED_LOAD_SNAPSHOT_VERSION,
-      source: parsed.source as SavedLoadSource,
+      source,
       trailerTypeKey: parsed.trailerTypeKey as string,
       runnerHeight: parsed.runnerHeight as number,
       editedPlan: (parsed.editedPlan ?? null) as PackPlan | null,

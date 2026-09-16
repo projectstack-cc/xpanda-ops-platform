@@ -11,6 +11,17 @@ import {
 } from "./savedLoad";
 import type { PackPlan } from "./packEngine";
 import type { PulledLoadSource } from "@/components/logistics/JobPullModal";
+import { LOAD_BUILDER_FIXTURES } from "./loadBuilderFixtures";
+
+// 2026-09-16: deserializeSnapshot now checks a "fixture"-kind source's fixtureId against
+// LOAD_BUILDER_FIXTURES (savedLoad.ts) rather than accepting any string, so every fixture-source
+// test below needs a REAL id, not an arbitrary placeholder — using the bundled list's own first
+// entry rather than hardcoding one of its ids keeps these tests correct if that list's contents
+// ever change. If LOAD_BUILDER_FIXTURES is ever emptied entirely, every round-trip test below
+// fails by design (no fixtureId can resolve, so every fixture-kind row becomes unloadable) — that's
+// not a bug in this file, it's this suite correctly reporting a real consequence for anyone who
+// still has a "fixture"-kind saved_loads row.
+const REAL_FIXTURE_ID = LOAD_BUILDER_FIXTURES[0].id;
 
 interface CheckResult {
   name: string;
@@ -55,7 +66,7 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
   // 1. Round-trip: fixture source, no manual edits (editedPlan null) -- deep-equal to the original.
   {
     const snapshot = buildSnapshot({
-      fixtureId: "inv-4202",
+      fixtureId: REAL_FIXTURE_ID,
       pulledSource: null,
       trailerTypeKey: "53ft Standard",
       runnerHeight: 3,
@@ -75,7 +86,7 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
     const pulled = makePulledSource();
     const plan = makePlan({ trailers: [] });
     const snapshot = buildSnapshot({
-      fixtureId: "inv-4202",
+      fixtureId: REAL_FIXTURE_ID,
       pulledSource: pulled,
       trailerTypeKey: "48ft",
       runnerHeight: 0,
@@ -142,7 +153,7 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
   // 5. deserializeSnapshot rejects a wrong-version snapshot (forward-compat guard).
   {
     const snapshot = buildSnapshot({
-      fixtureId: "inv-4202",
+      fixtureId: REAL_FIXTURE_ID,
       pulledSource: null,
       trailerTypeKey: "53ft Standard",
       runnerHeight: 0,
@@ -151,6 +162,27 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
     const tampered = { ...snapshot, version: 2 } as unknown as SavedLoadSnapshot;
     const result = deserializeSnapshot(JSON.stringify(tampered));
     check("deserializeSnapshot: wrong version rejected", result.ok === false, JSON.stringify(result));
+  }
+
+  // 5b. 2026-09-16: LoadPlanView.tsx dropped its fixture picker, but a "fixture"-kind row saved
+  //     while it still existed can name a fixtureId LOAD_BUILDER_FIXTURES no longer has (the
+  //     picker's own three ids, or any hand-edited id). deserializeSnapshot must reject that
+  //     specifically -- not fall through to the generic "may have been saved from legacy" message,
+  //     which would be actively wrong for a well-formed, current-version, v2-authored row.
+  {
+    const staleRow = {
+      version: 1,
+      source: { kind: "fixture", fixtureId: "FIXTURE_NO_LONGER_BUNDLED" },
+      trailerTypeKey: "53ft Standard",
+      runnerHeight: 0,
+      editedPlan: null,
+    };
+    const result = deserializeSnapshot(JSON.stringify(staleRow));
+    check(
+      "deserializeSnapshot: fixture-kind row with an unresolvable fixtureId is rejected, not silently accepted",
+      result.ok === false && result.reason.includes("no longer available"),
+      JSON.stringify(result)
+    );
   }
 
   // 6. defaultSaveName: matches legacy's own format exactly, falls back to bare date when no
@@ -170,7 +202,7 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
   //    name falls back to the default.
   {
     const pulled = makePulledSource({ jobId: "job-77" });
-    const pulledSnapshot = buildSnapshot({ fixtureId: "inv-4202", pulledSource: pulled, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
+    const pulledSnapshot = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: pulled, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
     const pulledPayload = buildSavePayload("  My Load  ", "AccuDock", pulledSnapshot);
     check(
       "buildSavePayload: job_id from pulled source, name trimmed",
@@ -178,7 +210,7 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
       JSON.stringify(pulledPayload)
     );
 
-    const fixtureSnapshot = buildSnapshot({ fixtureId: "inv-4202", pulledSource: null, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
+    const fixtureSnapshot = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: null, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
     const fixturePayload = buildSavePayload("   ", "AccuDock", fixtureSnapshot);
     check(
       "buildSavePayload: job_id null for fixture source, blank name -> default",
@@ -195,7 +227,7 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
     const editedCart = [{ skuId: "SKU-1", qty: 10 }, { skuId: "LIB-1", qty: 3 }];
     const editedSkus = [...pulled.skus, { id: "LIB-1", name: "Library Part", sku: "LIB-1", length: 12, width: 12, height: 5, weight: 3, category: "Blocks", allowRotation: true }];
     const snapshot = buildSnapshot({
-      fixtureId: "inv-4202",
+      fixtureId: REAL_FIXTURE_ID,
       pulledSource: pulled,
       trailerTypeKey: "53ft Standard",
       runnerHeight: 0,
@@ -224,7 +256,7 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
   {
     const preLb11Row = {
       version: 1,
-      source: { kind: "fixture", fixtureId: "inv-4202" },
+      source: { kind: "fixture", fixtureId: REAL_FIXTURE_ID },
       trailerTypeKey: "53ft Standard",
       runnerHeight: 0,
       editedPlan: null,
@@ -241,7 +273,7 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
   // 10. lb-ui-12: round-trip with autoDownsize: true.
   {
     const snapshot = buildSnapshot({
-      fixtureId: "inv-4202",
+      fixtureId: REAL_FIXTURE_ID,
       pulledSource: null,
       trailerTypeKey: "53ft Standard",
       runnerHeight: 0,
@@ -263,7 +295,7 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
   {
     const preLb12Row = {
       version: 1,
-      source: { kind: "fixture", fixtureId: "inv-4202" },
+      source: { kind: "fixture", fixtureId: REAL_FIXTURE_ID },
       trailerTypeKey: "53ft Standard",
       runnerHeight: 0,
       editedPlan: null,
