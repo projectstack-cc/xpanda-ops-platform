@@ -1334,5 +1334,38 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("F7: the weight canary still fires for a genuinely over-weight plan", ruleViolations(violations, "weight") > 0, JSON.stringify(violations));
   }
 
+  // Steve, 2026-09-16 (not part of the lb-engine-NN sprint — a direct engine-behavior change,
+  // requested and confirmed scoped to Holey Board only, not blocks). Two holey-board footprint-mates,
+  // H1 (8") supply 2, H2 (5") supply 6, effectiveHeight 19": maxing H1 alone fills 16" with a 3" gap
+  // H2 (5") can't fit into; maxing H2 alone fills 15" with a 4" gap H1 (8") can't fit into either — so
+  // the unconstrained (pre-fix) search would instead have REDUCED H1's count to 1 (8") to make room
+  // for 2 units of H2 (10"), reaching an exact 18" column. The fix must reject that trade: H1 stays
+  // at its true physical max (2, both units), the 3" gap is left open, and H2's demand (6, untouched)
+  // is available for a later column instead of being folded into this one.
+  {
+    const holeyBase: PackSku = { id: "HOLEY_MAX_BASE", name: "8in holey", sku: "HOLEY_MAX_BASE", length: 48, width: 24, height: 8, weight: 5, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
+    const holeyOther: PackSku = { id: "HOLEY_MAX_OTHER", name: "5in holey", sku: "HOLEY_MAX_OTHER", length: 48, width: 24, height: 5, weight: 4, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
+    const holeyMaxCart: CartLine[] = [{ skuId: "HOLEY_MAX_BASE", qty: 2 }, { skuId: "HOLEY_MAX_OTHER", qty: 6 }];
+    const holeyMaxDims: Dimensions = { length: 100, width: 100, height: 19, maxWeight: 100000 };
+    const holeyMaxPlan = pack(holeyMaxCart, [holeyBase, holeyOther], holeyMaxDims);
+
+    const maxedColumn = findColumn(holeyMaxPlan, (c) => c.layers.length === 1 && c.layers[0].skuId === "HOLEY_MAX_BASE" && c.layers[0].count === 2);
+    check(
+      "Holey max-base-first: H1 is stacked to its true max (2 x 8\") — not reduced to 1 to make room for a mixed exact fill",
+      maxedColumn !== null,
+      JSON.stringify(findColumn(holeyMaxPlan, (c) => c.layers.some((l) => l.skuId === "HOLEY_MAX_BASE")))
+    );
+    check("Holey max-base-first: that column totals 16\" (not the 18\" a reduced-base mix would reach)", maxedColumn?.totalHeight === 16, String(maxedColumn?.totalHeight));
+    check("Holey max-base-first: that column is not mixed — H2 never enters it", maxedColumn?.mixed === false && !maxedColumn?.layers.some((l) => l.skuId === "HOLEY_MAX_OTHER"));
+    check(
+      "Holey max-base-first: rationale names the blocked candidate and explains why, not a bare \"no other SKU\" (which would be false — H2 exists and has demand)",
+      (maxedColumn?.rationale ?? "").includes("doesn't fit the remaining gap") && (maxedColumn?.rationale ?? "").includes("5\""),
+      maxedColumn?.rationale
+    );
+
+    const maxHoleyViolations = validatePlan(holeyMaxPlan, holeyMaxDims, holeyMaxCart, [holeyBase, holeyOther], OPTS);
+    check("Holey max-base-first: validatePlan reports zero violations", maxHoleyViolations.length === 0, JSON.stringify(maxHoleyViolations));
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }

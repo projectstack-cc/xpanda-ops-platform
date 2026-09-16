@@ -410,6 +410,12 @@ function buildFamilyColumns(
 
   const K = opts.topOffMinInchesPerPiece;
   const columns: ColumnPlan[] = [];
+  // Steve, 2026-09-16: Holey Board must exhaust one SKU's max physical stack (by height AND
+  // weight/demand caps — maxC1 below) before a different SKU tops it off; ordinary blocks keep the
+  // pre-existing "reduce the base count if a mixed combo fills more of the column" behavior
+  // (lb-engine-04's own documented exact-fill search). Same rep-based category check
+  // familyOrientationOptions already uses.
+  const isHoley = fam.members[0].sku.category === HOLEY_BOARD_CATEGORY;
 
   while (pool.some((p) => p.remaining > 0)) {
     let winner: {
@@ -420,6 +426,7 @@ function buildFamilyColumns(
       total: number;
       bestIneligible: PoolMember | null;
       sawExhaustedCandidate: boolean;
+      holeyBlocked: PoolMember | null;
     } | null = null;
 
     for (const base of pool) {
@@ -434,6 +441,10 @@ function buildFamilyColumns(
       // bestIneligibleForBase — otherwise the rationale falls through to "no other SKU on this
       // footprint", which is false: there WAS another SKU, it's just already fully placed.
       let sawExhaustedCandidateForBase = false;
+      // Steve, 2026-09-16: a candidate that would only have fit by reducing the base below maxC1 —
+      // valid otherwise, just disallowed by the isHoley rule above — must also be tracked
+      // separately, for the same reason: "no other SKU on this footprint" would be false.
+      let holeyBlockedForBase: PoolMember | null = null;
 
       if (opts.maxSkusPerColumn >= 2) {
         for (const cand of pool) {
@@ -460,6 +471,14 @@ function buildFamilyColumns(
             const remH = effectiveHeight - c2 * cand.unitHeight;
             const c1 = Math.min(Math.floor((remH + EPS) / base.unitHeight), maxC1);
             if (c1 < 1) continue; // a column always needs at least one base piece
+            // Holey Board: a topoff may only fill what's left AFTER the base is already stacked to
+            // its physical max (maxC1) — never trade away base units to fit more topoff.
+            if (isHoley && c1 < maxC1) {
+              if (!holeyBlockedForBase || cand.unitHeight > holeyBlockedForBase.unitHeight) {
+                holeyBlockedForBase = cand;
+              }
+              continue;
+            }
             const total = c1 * base.unitHeight + c2 * cand.unitHeight;
             if (total > bestForBase.total) {
               bestForBase = { c1, topoff: cand, c2, total };
@@ -477,13 +496,14 @@ function buildFamilyColumns(
           total: bestForBase.total,
           bestIneligible: bestIneligibleForBase,
           sawExhaustedCandidate: sawExhaustedCandidateForBase,
+          holeyBlocked: holeyBlockedForBase,
         };
       }
     }
 
     // winner is guaranteed: pool.some(remaining>0) held at loop entry, and every pooled member
     // was pre-filtered so heightCount>=1 && weightCap>=1, so at least one base yields maxC1>=1.
-    const { base, c1, topoff, c2, bestIneligible, sawExhaustedCandidate } = winner as NonNullable<typeof winner>;
+    const { base, c1, topoff, c2, bestIneligible, sawExhaustedCandidate, holeyBlocked } = winner as NonNullable<typeof winner>;
     base.remaining -= c1;
     const pureFilled = c1 * base.unitHeight;
     const layers: ColumnPlan["layers"] = [{ sku: base.sku, unitHeight: base.unitHeight, count: c1 }];
@@ -527,6 +547,11 @@ function buildFamilyColumns(
         // drops the "c1 x height = filled" prefix the other cases carry, matching the prompt's
         // given wording exactly; a future prompt should not "fix" this back to the longer form.
         rationale = `all available pieces placed — ${fmt(gap)}" open, no remaining demand for this footprint`;
+      } else if (holeyBlocked) {
+        // Steve, 2026-09-16 (new precedence tier, Holey Board only): a footprint-mate exists and
+        // has demand, it just doesn't fit in what's left AFTER maxing out the base — "no other SKU
+        // on this footprint" would be false here too.
+        rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", ${fmt(gap)}" left — ${fmt(holeyBlocked.unitHeight)}" ${holeyBlocked.sku.name} doesn't fit the remaining gap (Holey Board keeps the base maxed rather than reducing it to fit)`;
       } else {
         // No footprint-mate at all (A2 precedence #3): a genuine single-member family.
         rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", ${fmt(gap)}" left — no other SKU on this footprint`;
