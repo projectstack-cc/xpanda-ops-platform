@@ -49,6 +49,10 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   // in _worker.js/lib/core.js exactly (logistics.dashboard, logistics.bol, logistics.loading,
   // jobs) — no new permission keys introduced.
   { prefix: "/v2/api/bols", keys: ["logistics.bol"] },
+  // lb-ui-04: saved loads live under Load Builder (/v2/logistics/load-builder, gated
+  // "logistics.v2" below via the dark-launch lines) -- gate its API the same way rather than
+  // borrowing "logistics.bol" (a different sub-feature) or inventing a new key.
+  { prefix: "/v2/api/saved-loads", keys: ["logistics.v2"] },
   { prefix: "/v2/api/loading-assignments", keys: ["logistics.loading"] },
   { prefix: "/v2/api/loading-bays", keys: ["logistics.loading"] },
   { prefix: "/v2/api/loading-photos", keys: ["logistics.loading"] },

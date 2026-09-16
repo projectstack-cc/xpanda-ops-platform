@@ -1873,6 +1873,113 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-ui-04 — v2 Load Builder: saved loads (react-component-agent §9b + next-platform-agent §9a).
+  Sprint step 7 of 7, `Prompts/sprint-load-builder-parity.md` — the LAST item; all 7 boxes are now
+  checked. Writes are fenced behind `V2_LOGISTICS_WRITES_ENABLED` (currently `false`); reads are
+  live.**
+  **Step 0 findings**: (1) the prompt's own premise — that `loadEditor.ts`'s `EditorState`
+  (`{plan, dims, options, cart, skus, holding, history}`) "is what gets serialized" — does not hold.
+  `EditorState` is `CustomizeEditor.tsx`'s own transient, mid-edit-session-only type;
+  `LoadPlanView.tsx` never holds an instance of it. What actually needs to persist for a saved load
+  is `LoadPlanView.tsx`'s own page-level state: `fixtureId` OR the frozen `pulledSource` object,
+  `trailerTypeKey`, `runnerHeight`, and `editedPlan: PackPlan | null` (`null` = re-run the
+  deterministic `pack()` on restore). Confirmed with advisor() and designed a new, purpose-built
+  `SavedLoadSnapshot` shape in a new pure module, `savedLoad.ts` — the prompt's own Part D
+  explicitly allows "a new small module," so this is a disclosed correction, not a silent fence
+  expansion. Excluded from the snapshot: `multiplier` (dev/demo-only quantity aid, gated out of
+  production runtime) and `history`/`holding` (`CustomizeEditor`'s transient mid-session state;
+  legacy persists neither equivalent either). (2) **`saved_loads` already exists in production**
+  (`DB_Migrations/saved-loads.sql`: `id, name, job_id, customer, trailer_type, state_json TEXT,
+  created_at, updated_at, expires_at`, 90-day TTL, two indexes) with a full legacy CRUD handler
+  already live over it (`handleApiSavedLoads`, `_worker.js/routes/bols.js:770-869`, plus a
+  job-delete cascade in `jobs.js:1054`). **No new migration was needed or written** — the same
+  reused-shared-table precedent `bols/route.ts` already set for the `bols` table. The migration
+  file's own header ("MANUAL STEP: Run in Cloudflare D1 Dashboard Console") confirms this was
+  applied by hand at some point in legacy's own history; nothing is pending for Steve on the schema.
+  (3) legacy's `saveLoad()` (`load-builder.html:2804-2932`) builds a "descriptor replay" `state_json`
+  (`trailerType, trailerInvNumbers, runnerHeight, autoDownsize, forcedTrailers, forcedMode, variant,
+  manualRowsByTrailer, committedTrailers, committedSig, skus, cart, prefillJobId`) — re-derives the
+  plan from stored inputs + manual-row descriptors on load. v2 has no descriptor-replay equivalent,
+  so persisting the actual materialized `PackPlan` (`editedPlan`) is the correct, disclosed
+  architectural deviation, not an oversight. Because both apps' rows share the same table/column,
+  `deserializeSnapshot()` returns a typed `{ok:true,snapshot} | {ok:false,reason}` result rather
+  than throwing, so `LoadPickerModal.tsx` can show "not loadable here" per legacy-authored row
+  instead of crashing on Load — proven by a selfcheck case built from legacy's own exact 13-key
+  `state_json` shape.
+  **Part A — `savedLoad.ts`**: pure. `SavedLoadSnapshot` (`version, source, trailerTypeKey,
+  runnerHeight, editedPlan`), `buildSnapshot`/`serializeSnapshot`/`deserializeSnapshot` (never
+  throws — version/source/trailerTypeKey/runnerHeight/editedPlan each checked in order, all
+  mismatches returning "isn't compatible with the v2 Load Builder" except a genuine JSON.parse
+  failure, which returns "Corrupt save data"), `defaultSaveName` (matches legacy's
+  `${customer} — ${date}` / bare-date fallback), `buildSavePayload`, list/record types.
+  **Part B — API routes** (`app/api/saved-loads/route.ts`, `[id]/route.ts`): mirror
+  `bols/route.ts`/`bols/[id]/route.ts`'s exact fence-check-first pattern (fence checked before any
+  D1 access) for `POST`/`PUT`/`DELETE`; `GET` (list) and `GET` (one) are live. **The list `GET`
+  originally also ran legacy's unconditional expiry sweep (`DELETE FROM saved_loads WHERE
+  expires_at < ?`) as a mirror of `bols.js:781`** — an advisor review caught that this reasoning
+  doesn't survive deploy: this route is reachable from a dark-launched, admin-only page with no
+  other write path open, so an ungated `DELETE` reachable from `GET` is exactly the category the
+  fence exists to prevent, regardless of legacy's own equivalent surface already doing the same
+  thing unconditionally. **Fixed**: the sweep is now gated on `V2_LOGISTICS_WRITES_ENABLED` too,
+  the `SELECT` stays live. Until the flag flips, v2's list may show a handful of rows legacy has
+  already swept — a named, bounded, cosmetic divergence, not an ungated prod write. Uses
+  `logActivity` (`@/lib/activityLog`) rather than inlining a third copy of the activity-log
+  `INSERT` (the pattern `bols/route.ts`/`bols/[id]/route.ts`, predating that helper, still use).
+  **`middleware.ts`**: new `{ prefix: "/v2/api/saved-loads", keys: ["logistics.v2"] }` entry —
+  dark-launch, admin-only, matching the page's own gate rather than borrowing `logistics.bol` (a
+  different sub-feature) or inventing a new key.
+  **Part C — `SaveLoadModal.tsx`/`LoadPickerModal.tsx`**: real modals, **not**
+  `window.prompt()`/`window.confirm()` — this session's own system prompt prohibits triggering
+  browser dialogs (breaks the Chrome extension / Phase 2 browser testing), the same constraint
+  already established for `lb-ui-10`'s delete confirmation. `LoadPickerModal` reuses that same
+  two-step arm/confirm delete pattern. **Deliberate UX improvement over legacy**: legacy's own
+  save-name prompt is BLANK on update, so leaving it empty silently overwrites the custom name with
+  the auto-generated default — judged a real legacy rough edge, not something to port faithfully.
+  `SaveLoadModal` prefills with the CURRENT saved name instead. `currentSavedLoadId`/
+  `currentSavedLoadName` (new `LoadPlanView.tsx` state) persist across trailer-type/runner-height/
+  edit changes (same conceptual load being tweaked → Save-again defaults to Update) and clear ONLY
+  on a genuine source switch (`handleFixtureChange`/`handlePullConfirm`), matching legacy's own
+  `state.currentSavedLoadId` persistence model. A 501 on save surfaces the fence message in
+  `SaveLoadModal`'s existing error slot (the modal stays open) — this is the fence UX for this
+  surface, not the same presentation as `BolGenerateModal.tsx`'s dedicated fenced banner.
+  **Verification**: `packEngine.selfcheck.ts` ratchet unchanged **144/144** (`packEngine.ts` not
+  touched). `loadEditor.selfcheck.ts` **87/87**, `dissolve.selfcheck.ts` **21/21**,
+  `jobPull.selfcheck.ts` **17/17**, `loadingDiagramPdf.selfcheck.ts` **24/24**,
+  `bolShared.selfcheck.ts` **22/22** + PDF-merge **5/5**, `partsLibrary.selfcheck.ts` **15/15**
+  (all unchanged, imported/re-run only). New `savedLoad.selfcheck.ts` **9/9**: round-trip
+  fixture-source (no edits) and pulled-source (materialized `editedPlan`); corrupt JSON rejected
+  without throwing; legacy's real 13-key `state_json` shape rejected without throwing, reason names
+  "legacy"; wrong `version` rejected; `defaultSaveName` with/without customer; `buildSavePayload`
+  job_id/name-trim/default-name-fallback behavior. `npx tsc --noEmit` and `npm run cf-build` both
+  green (re-run after the sweep-gating fix above). **Live fence verification**: started a properly
+  backgrounded local dev server (`npm run dev -- -p 3411`, confirmed real startup via its own
+  output file) and curled `POST /v2/api/saved-loads`, `PUT /v2/api/saved-loads/nonexistent-id`,
+  `DELETE /v2/api/saved-loads/nonexistent-id` — all three returned genuine `HTTP 501` with the
+  expected fence body. This is stronger, literal verification than any prior fenced-route prompt
+  in this sprint produced. **`GET` (list and single-record) has NOT been exercised at all** —
+  neither live nor by selfcheck. It was skipped live because its sweep was a real `DELETE` before
+  the gating fix above; that reason no longer applies, but local dev's Miniflare D1 has no
+  `saved_loads` table (a fresh emulated DB, confirmed empty), so a local curl there would only
+  prove the 500-on-missing-table path, not the real read shape. Confirmed by code review that both
+  `GET` handlers return `{ok:true, load: row}` (matching `LoadPickerModal`'s `body.load` read) and
+  the list returns `{ok:true, loads: [...]}` — but this is unverified against a real row. This is
+  Phase 2's first real test, not something this prompt could close out. **Local-dev-D1
+  finding**: `next dev` (via `getCloudflareContext()`'s `getPlatformProxy`) uses a fully local,
+  isolated Miniflare SQLite emulation (`.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite`)
+  — confirmed present, NOT a live connection to prod or even the declared
+  `preview_database_id` in `wrangler.toml`. `bols/route.ts`'s own header comment asserts
+  "`wrangler dev` writes hit production" — this may not actually conflict (`wrangler dev --remote`
+  does hit prod; the comment may predate the current toolchain / describe a different invocation),
+  so this is flagged as needing confirmation rather than asserted wrong; not edited (out of fence).
+  Follow-ups (see `BACKLOG.md`): confirm whether `bols/route.ts`'s "wrangler dev hits production"
+  comment is still accurate for the current `next dev` toolchain; legacy-authored rows appearing in
+  v2's saved-loads picker list is an existing, expected condition (handled via
+  `deserializeSnapshot`'s reject path), not a bug to fix.
+  **This completes all 7 items of the Load Builder Parity sprint.** Phase 2 (Steve's manual
+  integration testing) and Phase 3 (gate-lifting: push to origin, flip
+  `V2_LOGISTICS_WRITES_ENABLED`, adjust `middleware.ts`'s dark-launch gate, enable `lb-ui-05`'s
+  deferred on-the-fly part-creation, eventually retire legacy) are both explicitly Steve's next
+  steps, not performed here.
 - **lb-ui-10 — v2 Load Builder: parts / SKU library CRUD (react-component-agent §9b). Sprint step 6
   of 7, `Prompts/sprint-load-builder-parity.md`.** Writes to LIVE, unfenced production data —
   `/api/parts` (`handleApiParts`, `_worker.js/routes/production.js`) has no

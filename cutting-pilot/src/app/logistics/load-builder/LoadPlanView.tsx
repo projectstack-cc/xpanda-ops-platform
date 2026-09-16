@@ -59,7 +59,7 @@
 // actually on screen. `bolPackPlanSource` is memoized so re-renders triggered by the modal's own
 // internal state don't recreate the object and re-trigger its data-loading effect.
 import { useEffect, useMemo, useState } from "react";
-import { Truck, FileText, Package } from "lucide-react";
+import { Truck, FileText, Package, Save, FolderOpen } from "lucide-react";
 import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan, type PackOptions } from "@/lib/packEngine";
 import { runPackEngineSelfCheck } from "@/lib/packEngine.selfcheck";
 import { LOAD_BUILDER_FIXTURES, type LoadBuilderFixture } from "@/lib/loadBuilderFixtures";
@@ -70,6 +70,9 @@ import JobPullModal, { type PulledLoadSource } from "@/components/logistics/JobP
 import LoadingDiagramPrintButton from "@/components/logistics/LoadingDiagramPrintButton";
 import BolGenerateModal, { type PackPlanSource } from "@/components/logistics/BolGenerateModal";
 import PartsLibraryPanel from "@/components/logistics/PartsLibraryPanel";
+import SaveLoadModal from "@/components/logistics/SaveLoadModal";
+import LoadPickerModal from "@/components/logistics/LoadPickerModal";
+import { buildSnapshot, buildSavePayload, defaultSaveName, type SavedLoadRecord, type SavedLoadSnapshot } from "@/lib/savedLoad";
 import CustomizeEditor from "./CustomizeEditor";
 
 // lb-ui-06: shipped runner-height values, confirmed against legacy's own dropdown
@@ -117,6 +120,22 @@ export default function LoadPlanView() {
   // this isn't disabled in edit mode.
   const [partsLibraryOpen, setPartsLibraryOpen] = useState(false);
 
+  // lb-ui-04: saved loads. currentSavedLoadId/Name track "this is the saved load you loaded or last
+  // saved" -- set on a successful Save (create) or Load, cleared only on a genuine source switch
+  // (handleFixtureChange/handlePullConfirm below), NOT on trailer-type/runner/edit changes to the
+  // same load -- so tweak-then-Save-again defaults to updating the same row, not creating a
+  // duplicate. currentSavedLoadName prefills the save modal on update: legacy's own prompt() shows
+  // BLANK on update (load-builder.html:2808), which silently renames the save to the auto-generated
+  // default the moment someone re-saves without retyping -- a real rough edge, not something worth
+  // porting faithfully. Prefilling the current name instead means leaving it unchanged keeps it
+  // unchanged, a deliberate, disclosed improvement (see CHANGELOG).
+  const [currentSavedLoadId, setCurrentSavedLoadId] = useState<string | null>(null);
+  const [currentSavedLoadName, setCurrentSavedLoadName] = useState<string | null>(null);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [pickerModalOpen, setPickerModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   useEffect(() => {
     const jobId = new URLSearchParams(window.location.search).get("job_id");
     if (jobId) {
@@ -160,6 +179,8 @@ export default function LoadPlanView() {
     setEditedPlan(null);
     setMode("view");
     setMultiplier(1);
+    setCurrentSavedLoadId(null);
+    setCurrentSavedLoadName(null);
     // advisor (pre-commit review): drop a stale ?job_id= so a reload doesn't re-open the pull modal
     // for a job the planner deliberately navigated away from.
     if (new URLSearchParams(window.location.search).has("job_id")) {
@@ -176,7 +197,66 @@ export default function LoadPlanView() {
     setBannerDismissed(false);
     setShowJobPull(false);
     setDeepLinkJobId(null);
+    setCurrentSavedLoadId(null);
+    setCurrentSavedLoadName(null);
     window.history.replaceState(null, "", `?job_id=${encodeURIComponent(source.jobId)}`);
+  }
+
+  async function handleSaveConfirm(name: string) {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const snapshot = buildSnapshot({ fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan });
+      const payload = buildSavePayload(name, fixture.customer, snapshot);
+      const isUpdate = !!currentSavedLoadId;
+      const url = isUpdate ? `/v2/api/saved-loads/${encodeURIComponent(currentSavedLoadId!)}` : "/v2/api/saved-loads";
+      const res = await fetch(url, {
+        method: isUpdate ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.status === 501) {
+        setSaveError("Saving is disabled in the v2 preview phase. Use the legacy Logistics dashboard to save this load for now.");
+        return;
+      }
+      if (!res.ok || !data.ok) {
+        setSaveError(data.error || `HTTP ${res.status}`);
+        return;
+      }
+      setCurrentSavedLoadId(data.load.id);
+      setCurrentSavedLoadName(data.load.name);
+      setSaveModalOpen(false);
+    } catch {
+      setSaveError("Network error.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handlePickerLoad(record: SavedLoadRecord, snapshot: SavedLoadSnapshot) {
+    if (snapshot.source.kind === "pulled") {
+      setPulledSource(snapshot.source.pulledSource);
+      window.history.replaceState(null, "", `?job_id=${encodeURIComponent(snapshot.source.pulledSource.jobId)}`);
+    } else {
+      setPulledSource(null);
+      setFixtureId(snapshot.source.fixtureId);
+      if (new URLSearchParams(window.location.search).has("job_id")) {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    }
+    setTrailerTypeKey(snapshot.trailerTypeKey);
+    setRunnerHeight(snapshot.runnerHeight);
+    setEditedPlan(snapshot.editedPlan);
+    setSelected(null);
+    setMode("view");
+    setMultiplier(1);
+    setBannerDismissed(false);
+    setShowJobPull(false);
+    setDeepLinkJobId(null);
+    setCurrentSavedLoadId(record.id);
+    setCurrentSavedLoadName(record.name);
+    setPickerModalOpen(false);
   }
 
   function handleJobPullClose() {
@@ -238,6 +318,11 @@ export default function LoadPlanView() {
               {trailerTypeKey} trailer{runnerHeight > 0 ? ` · ${runnerHeight}" runners` : ""}
             </span>
             {editedPlan && <span className="text-[var(--brand)] font-sans font-semibold">edited</span>}
+            {currentSavedLoadName && (
+              <span className="font-sans">
+                saved as <span className="font-semibold text-text">{currentSavedLoadName}</span>
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -355,6 +440,24 @@ export default function LoadPlanView() {
                 className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
               >
                 <FileText size={15} aria-hidden="true" /> Generate BOLs
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSaveError(null);
+                  setSaveModalOpen(true);
+                }}
+                disabled={plan.trailers.length === 0}
+                className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+              >
+                <Save size={15} aria-hidden="true" /> {currentSavedLoadId ? "Update save" : "Save load"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerModalOpen(true)}
+                className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--border)] text-muted hover:text-text hover:bg-[var(--ghost-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] inline-flex items-center gap-1.5"
+              >
+                <FolderOpen size={15} aria-hidden="true" /> Load saved
               </button>
             </>
           )}
@@ -505,6 +608,18 @@ export default function LoadPlanView() {
       <BolGenerateModal jobId={null} packPlanSource={bolPackPlanSource} onClose={() => setGenBolOpen(false)} />
 
       <PartsLibraryPanel isOpen={partsLibraryOpen} onClose={() => setPartsLibraryOpen(false)} />
+
+      <SaveLoadModal
+        isOpen={saveModalOpen}
+        defaultName={currentSavedLoadName ?? defaultSaveName(fixture.customer)}
+        isUpdate={!!currentSavedLoadId}
+        saving={saving}
+        error={saveError}
+        onClose={() => setSaveModalOpen(false)}
+        onSave={handleSaveConfirm}
+      />
+
+      <LoadPickerModal isOpen={pickerModalOpen} onClose={() => setPickerModalOpen(false)} onLoad={handlePickerLoad} />
     </div>
   );
 }
