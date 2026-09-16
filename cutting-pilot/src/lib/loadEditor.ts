@@ -368,8 +368,9 @@ export function compactLoad(state: EditorState): EditorState {
  * depth risk there (a held column dropped into a shallow row can still overflow downstream) is not
  * covered by this pass — see the CHANGELOG entry for lb-ui-03. */
 export function canDrop(state: EditorState, column: PackColumn, to: { t: number; r: number }, from?: ColumnRef): DropFeedback {
-  const widthLimit = state.dims.width;
-  const row = state.plan.trailers[to.t]?.rows[to.r];
+  const targetTrailer = state.plan.trailers[to.t];
+  const widthLimit = (targetTrailer ?? { dims: state.dims }).dims.width;
+  const row = targetTrailer?.rows[to.r];
   if (!row) {
     return { ok: false, reason: "no such row", widthAfter: 0, widthLimit, lengthOk: true };
   }
@@ -385,7 +386,8 @@ export function canDrop(state: EditorState, column: PackColumn, to: { t: number;
     const overflow = findOverflowingRows(simulated).find((o) => o.trailerIndex === to.t || o.trailerIndex === from.t);
     if (overflow) {
       lengthOk = false;
-      const overflowTotal = state.dims.length + overflow.overflowBy;
+      const overflowTrailerDims = simulated.plan.trailers[overflow.trailerIndex]?.dims ?? state.dims;
+      const overflowTotal = overflowTrailerDims.length + overflow.overflowBy;
       lengthReason = `too deep · pushes trailer ${overflow.trailerIndex + 1} to ${fmtInches(overflowTotal)}"`;
     }
   }
@@ -427,16 +429,18 @@ export function validateForApply(state: EditorState): PackViolation[] {
   return validatePlan(plan, state.cart, state.skus, state.options);
 }
 
-/** First row (per trailer) whose cumulative rowLength pushes past dims.length — the row where the
- * overflow becomes visible, not just the summed total validatePlan's own detail string reports. */
+/** First row (per trailer) whose cumulative rowLength pushes past that trailer's OWN dims.length
+ * (lb-ui-12: not state.dims — a downsized trailer overflows against its own, smaller envelope) —
+ * the row where the overflow becomes visible, not just the summed total validatePlan's own detail
+ * string reports. */
 export function findOverflowingRows(state: EditorState): RowOverflow[] {
   const overflows: RowOverflow[] = [];
   state.plan.trailers.forEach((trailer, trailerIndex) => {
     let running = 0;
     for (let rowIndex = 0; rowIndex < trailer.rows.length; rowIndex++) {
       running += trailer.rows[rowIndex].rowLength;
-      if (running > state.dims.length + EPS) {
-        overflows.push({ trailerIndex, rowIndex, overflowBy: running - state.dims.length });
+      if (running > trailer.dims.length + EPS) {
+        overflows.push({ trailerIndex, rowIndex, overflowBy: running - trailer.dims.length });
         break;
       }
     }

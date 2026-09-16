@@ -463,7 +463,7 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
       if (td.includeLoadingDiagram && packPlanSource) {
         try {
           const planTrailer = packPlanSource.plan.trailers[i];
-          const bytes = await buildLoadingDiagramPdf(planTrailer, i, packPlanSource.dims, packPlanSource.skus, {
+          const bytes = await buildLoadingDiagramPdf(planTrailer, i, planTrailer.dims, packPlanSource.skus, {
             runnerHeight: packPlanSource.runnerHeight,
             warnings: packPlanSource.plan.warnings,
             invoiceNumber: td.invNumber || undefined,

@@ -380,7 +380,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
               <TrailerDiagram
                 key={t}
                 trailer={trailer}
-                dims={state.dims}
+                dims={trailer.dims}
                 trailerIndex={t}
                 selectedColumn={selectedColumn && selectedColumn.t === t ? { rowIndex: selectedColumn.r, columnIndex: selectedColumn.c } : null}
                 onSelectColumn={(r, c) => handleSelectColumn(t, r, c)}
@@ -415,7 +415,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                     <LoadingDiagramPrintButton
                       trailer={trailer}
                       trailerIndex={t}
-                      dims={state.dims}
+                      dims={trailer.dims}
                       skus={state.skus}
                       runnerHeight={state.options.runnerHeight}
                       warnings={state.plan.warnings}
@@ -430,7 +430,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
         <div className="space-y-4">
           {selectedColumn && selectedDetail ? (
             <div className="space-y-2">
-              <ColumnDetailPanel selected={selectedDetail} dims={state.dims} options={state.options} />
+              <ColumnDetailPanel selected={selectedDetail} dims={state.plan.trailers[selectedColumn.t]?.dims ?? state.dims} options={state.options} />
               <div className="flex gap-2">
                 <button
                   type="button"
