@@ -1,5 +1,5 @@
 // src/components/logistics/PlanMetricsStrip.tsx
-// lb-ui-01: the metrics strip consuming planMetrics(plan, dims, options). Flat cards, no border,
+// lb-ui-01: the metrics strip consuming planMetrics(plan, options). Flat cards, no border,
 // muted 13px label, 24px/500 value (Decision, locked). No warning treatment on near-full length —
 // the planner reads the number plainly, it is never colored or badged (Decision, locked).
 //

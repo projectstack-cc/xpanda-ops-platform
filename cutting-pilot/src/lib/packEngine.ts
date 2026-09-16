@@ -1040,22 +1040,34 @@ export interface PlanMetrics {
 // computed against effective height rather than nominal — a breaking signature change; lb-ui-01
 // is the only planned consumer and hasn't landed yet, so this has no callers outside this file's
 // own selfcheck at the time of the change.
-export function planMetrics(plan: PackPlan, dims: Dimensions, options: PackOptions): PlanMetrics {
-  const { effectiveHeight } = resolveEffectiveHeight(dims, options, []);
+// lb-ui-12: dropped the plan-wide `dims` param — each column/row is now weighted against its OWN
+// trailer's dims (trailer.dims), not one global envelope. With every trailer sharing dims (the
+// only case before auto-downsize existed) this is numerically identical to the old flattened
+// computation; it only diverges once a trailer's dims differ from the rest.
+export function planMetrics(plan: PackPlan, options: PackOptions): PlanMetrics {
   const rows = plan.trailers.flatMap((t) => t.rows);
-  const columns = rows.flatMap((r) => r.columns);
-
-  const meanHeightUtilization =
-    columns.length > 0 ? columns.reduce((s, c) => s + c.totalHeight / effectiveHeight, 0) / columns.length : 0;
-  const meanWidthUtilization =
-    rows.length > 0 ? rows.reduce((s, r) => s + r.rowWidthUsed / dims.width, 0) / rows.length : 0;
+  let heightRatioSum = 0;
+  let heightRatioCount = 0;
+  let widthRatioSum = 0;
+  let widthRatioCount = 0;
+  for (const trailer of plan.trailers) {
+    const { effectiveHeight } = resolveEffectiveHeight(trailer.dims, options, []);
+    for (const row of trailer.rows) {
+      widthRatioSum += row.rowWidthUsed / trailer.dims.width;
+      widthRatioCount += 1;
+      for (const column of row.columns) {
+        heightRatioSum += column.totalHeight / effectiveHeight;
+        heightRatioCount += 1;
+      }
+    }
+  }
 
   return {
     trailerCount: plan.trailers.length,
     rowCount: rows.length,
     usedLength: plan.trailers.reduce((s, t) => s + t.usedLength, 0),
-    meanHeightUtilization,
-    meanWidthUtilization,
+    meanHeightUtilization: heightRatioCount > 0 ? heightRatioSum / heightRatioCount : 0,
+    meanWidthUtilization: widthRatioCount > 0 ? widthRatioSum / widthRatioCount : 0,
     wastedFloorArea: rows.reduce((s, r) => s + r.wastedFloorArea, 0),
     mixedStacks: plan.mixedStacks,
     balancePieces: plan.balance.reduce((s, b) => s + b.remaining, 0),
@@ -1079,14 +1091,12 @@ export interface PackViolation {
  */
 export function validatePlan(
   plan: PackPlan,
-  dims: Dimensions,
   cart: CartLine[],
   skus: PackSku[],
   options: PackOptions
 ): PackViolation[] {
   const violations: PackViolation[] = [];
   const skuById = new Map(skus.map((s) => [s.id, s]));
-  const { effectiveHeight, runnerHeight } = resolveEffectiveHeight(dims, options, []);
 
   function violate(rule: string, detail: string, trailerIndex?: number, rowIndex?: number, columnIndex?: number) {
     violations.push({ rule, detail, trailerIndex, rowIndex, columnIndex });
@@ -1103,6 +1113,11 @@ export function validatePlan(
   }
 
   plan.trailers.forEach((trailer, ti) => {
+    // Every check below is scoped to THIS trailer, so it reads trailer.dims rather than a single
+    // plan-wide dims — lb-ui-12: a trailer auto-downsized to a smaller type carries its own dims,
+    // and validating it against the plan's primary dims would be checking the wrong envelope.
+    const dims = trailer.dims;
+    const { effectiveHeight, runnerHeight } = resolveEffectiveHeight(dims, options, []);
     let runningLength = 0;
 
     const summedRowLength = trailer.rows.reduce((sum, r) => sum + r.rowLength, 0);

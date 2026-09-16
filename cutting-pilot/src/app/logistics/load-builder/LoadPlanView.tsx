@@ -169,7 +169,7 @@ export default function LoadPlanView() {
 
   const packedPlan = useMemo(() => pack(scaledCart, fixture.skus, dims, packOptions), [scaledCart, fixture, dims, packOptions]);
   const plan = editedPlan ?? packedPlan;
-  const metrics = useMemo(() => planMetrics(plan, dims, packOptions), [plan, dims, packOptions]);
+  const metrics = useMemo(() => planMetrics(plan, packOptions), [plan, packOptions]);
 
   // lb-ui-09: only recreated when the actual data changes (or the modal opens/closes) — plan/dims/
   // effectiveSkus are already stable refs from the memos/state above, so this doesn't recreate on

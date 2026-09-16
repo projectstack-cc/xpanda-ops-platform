@@ -298,6 +298,6 @@ export function applyDissolve(state: EditorState, proposal: DissolveProposal, ex
     srcTrailer.rows = srcTrailer.rows.filter((r) => r.columns.length > 0);
   }
 
-  recomputePlan(plan, state.dims, state.options);
+  recomputePlan(plan, state.options);
   return { ...state, plan, history: withHistory(state) };
 }

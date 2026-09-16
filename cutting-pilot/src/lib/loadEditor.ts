@@ -6,11 +6,20 @@
 // stack; a column carries its full layer composition wherever it goes.
 //
 // EditorState extends the prompt's stated 3-field shape (plan/holding/history) with dims/options/
-// cart/skus. This is a necessary, not cosmetic, extension: PackPlan carries no dims of its own — by
-// packEngine.ts's own design, pack()/validatePlan()/planMetrics() all take dims as a separate
-// argument — and validatePlan (the apply gate) additionally needs cart+skus+options. Carrying them
-// in EditorState means every operation's signature matches the prompt's pseudocode exactly (state +
-// move descriptors, nothing else) instead of threading four extra parameters through every call.
+// cart/skus. This is a necessary, not cosmetic, extension: pack() still takes dims as a separate
+// argument (it has no plan yet to read one from) — and validatePlan (the apply gate) additionally
+// needs cart+skus+options. Carrying them in EditorState means every operation's signature matches
+// the prompt's pseudocode exactly (state + move descriptors, nothing else) instead of threading
+// four extra parameters through every call.
+//
+// state.dims (lb-ui-12): the dims for a trailer that does NOT YET EXIST — i.e. the type new
+// overflow trailers are created as. Once a trailer exists, every operation scoped to it (addRow/
+// addColumn/addLayer/setLayerCount, overflow checks, recompute, validate) reads that trailer's OWN
+// state.plan.trailers[i].dims instead, never state.dims — a trailer auto-downsized to a smaller
+// type (packEngine.ts's pack({ autoDownsize: true })) carries different dims than state.dims, and
+// using state.dims for it would validate/constrain it against the wrong physical envelope. Do not
+// collapse these two back into one field: they answer different questions ("what type should the
+// NEXT trailer be" vs "what type IS this existing trailer").
 //
 // Conservation model — three distinct, non-overlapping buckets (see loadEditor.selfcheck.ts #5):
 // pieces on trailers (state.plan.trailers) + pieces in holding (state.holding) + pieces never
@@ -160,7 +169,7 @@ export function clonePlan(plan: PackPlan): PackPlan {
  * field, the same way every edit operation above already does internally. */
 export function normalizeState(state: EditorState): EditorState {
   const plan = clonePlan(state.plan);
-  recomputePlan(plan, state.dims, state.options);
+  recomputePlan(plan, state.options);
   return { ...state, plan };
 }
 
@@ -189,7 +198,9 @@ function recomputeRow(row: PackRow): void {
   row.totalWeight = row.columns.reduce((s, c) => s + c.totalWeight, 0);
 }
 
-function recomputeTrailer(trailer: PackTrailer, dims: Dimensions, effectiveHeight: number): void {
+function recomputeTrailer(trailer: PackTrailer, options: PackOptions): void {
+  const dims = trailer.dims;
+  const effectiveHeight = dims.height - (options.runnerHeight ?? 0);
   let runningLength = 0;
   for (const row of trailer.rows) {
     recomputeRow(row);
@@ -212,9 +223,11 @@ function recomputeTrailer(trailer: PackTrailer, dims: Dimensions, effectiveHeigh
     allHeights.length > 0 ? allHeights.reduce((s, h) => s + h, 0) / allHeights.length / effectiveHeight : 0;
 }
 
-export function recomputePlan(plan: PackPlan, dims: Dimensions, options: PackOptions): void {
-  const effectiveHeight = dims.height - (options.runnerHeight ?? 0);
-  for (const trailer of plan.trailers) recomputeTrailer(trailer, dims, effectiveHeight);
+// lb-ui-12: dropped the plan-wide `dims` param — each trailer recomputes against its OWN
+// trailer.dims (see recomputeTrailer), so a trailer auto-downsized to a smaller type stays
+// consistent with its actual envelope instead of the plan's primary trailer type.
+export function recomputePlan(plan: PackPlan, options: PackOptions): void {
+  for (const trailer of plan.trailers) recomputeTrailer(trailer, options);
   plan.totalWeight = plan.trailers.reduce((s, t) => s + t.usedWeight, 0);
   plan.totalUnits = plan.trailers.reduce((s, t) => s + t.totalUnits, 0);
   plan.totalStacks = plan.trailers.reduce((s, t) => s + t.totalStacks, 0);
@@ -283,7 +296,7 @@ export function moveColumn(state: EditorState, from: ColumnRef, to: DropTarget):
   const slot = Math.max(0, Math.min(to.slot, toRow.columns.length));
   toRow.columns.splice(slot, 0, moved);
 
-  recomputePlan(plan, state.dims, state.options);
+  recomputePlan(plan, state.options);
   return { ...state, plan, history: withHistory(state) };
 }
 
@@ -298,7 +311,7 @@ export function pullToHolding(state: EditorState, from: ColumnRef): EditorState 
   const fromRow = plan.trailers[from.t].rows[from.r];
   const [pulled] = fromRow.columns.splice(from.c, 1);
   if (!pulled) return state;
-  recomputePlan(plan, state.dims, state.options);
+  recomputePlan(plan, state.options);
 
   return { ...state, plan, holding: [...state.holding, pulled], history: withHistory(state) };
 }
@@ -313,7 +326,7 @@ export function placeFromHolding(state: EditorState, holdingIndex: number, to: D
   const toRow = plan.trailers[to.t].rows[to.r];
   const slot = Math.max(0, Math.min(to.slot, toRow.columns.length));
   toRow.columns.splice(slot, 0, cloneColumn(column));
-  recomputePlan(plan, state.dims, state.options);
+  recomputePlan(plan, state.options);
 
   const holding = state.holding.filter((_, i) => i !== holdingIndex);
   return { ...state, plan, holding, history: withHistory(state) };
@@ -333,7 +346,7 @@ export function compactLoad(state: EditorState): EditorState {
   }
   if (!changed) return state;
 
-  recomputePlan(plan, state.dims, state.options);
+  recomputePlan(plan, state.options);
   return { ...state, plan, history: withHistory(state) };
 }
 
@@ -411,7 +424,7 @@ export function planForApply(state: EditorState): PackPlan {
 
 export function validateForApply(state: EditorState): PackViolation[] {
   const plan = planForApply(state);
-  return validatePlan(plan, state.dims, state.cart, state.skus, state.options);
+  return validatePlan(plan, state.cart, state.skus, state.options);
 }
 
 /** First row (per trailer) whose cumulative rowLength pushes past dims.length — the row where the
@@ -587,7 +600,7 @@ export function addRow(state: EditorState, trailerIndex: number, skuId: string, 
   plan.balance = adjustBalance(plan.balance, skuId, -count);
   const cart = cartAfterPlacement(state, skuId, count);
 
-  recomputePlan(plan, state.dims, state.options);
+  recomputePlan(plan, state.options);
   return { ...state, plan, cart, history: withHistory(state) };
 }
 
@@ -606,7 +619,7 @@ export function addColumn(state: EditorState, trailerIndex: number, rowIndex: nu
   plan.balance = adjustBalance(plan.balance, skuId, -count);
   const cart = cartAfterPlacement(state, skuId, count);
 
-  recomputePlan(plan, state.dims, state.options);
+  recomputePlan(plan, state.options);
   return { ...state, plan, cart, history: withHistory(state) };
 }
 
@@ -646,7 +659,7 @@ export function addLayer(state: EditorState, ref: ColumnRef, skuId: string, coun
   plan.balance = adjustBalance(plan.balance, skuId, -count);
   const cart = cartAfterPlacement(state, skuId, count);
 
-  recomputePlan(plan, state.dims, state.options);
+  recomputePlan(plan, state.options);
   return { ...state, plan, cart, history: withHistory(state) };
 }
 
@@ -731,7 +744,7 @@ export function setLayerCount(state: EditorState, ref: ColumnRef, layerIndex: nu
     if (idx >= 0) row.columns.splice(idx, 1);
   }
 
-  recomputePlan(plan, state.dims, state.options);
+  recomputePlan(plan, state.options);
   return { ...state, plan, history: withHistory(state) };
 }
 
@@ -750,6 +763,6 @@ export function removeRow(state: EditorState, trailerIndex: number, rowIndex: nu
   const movedToHolding = removedRow.columns.map(cloneColumn);
   plan.trailers[trailerIndex].rows.splice(rowIndex, 1);
 
-  recomputePlan(plan, state.dims, state.options);
+  recomputePlan(plan, state.options);
   return { ...state, plan, holding: [...state.holding, ...movedToHolding], history: withHistory(state) };
 }

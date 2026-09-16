@@ -321,18 +321,18 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   }
 
   function expectClean(rule: string, plan: PackPlan, label: string) {
-    const violations = validatePlan(plan, DIMS, CART, SKUS, OPTS);
+    const violations = validatePlan(plan, CART, SKUS, OPTS);
     check(`${rule}: ${label} has no ${rule} violation`, ruleViolations(violations, rule) === 0, JSON.stringify(violations));
   }
 
   function expectViolation(rule: string, plan: PackPlan, label: string, skus: PackSku[] = SKUS, cart: CartLine[] = CART) {
-    const violations = validatePlan(plan, DIMS, cart, skus, OPTS);
+    const violations = validatePlan(plan, cart, skus, OPTS);
     check(`${rule}: ${label} triggers ${rule}`, ruleViolations(violations, rule) > 0, JSON.stringify(violations));
   }
 
   // The baseline plan alone satisfies all 13 rules simultaneously.
   const baseline = makeBaselinePlan();
-  const baselineViolations = validatePlan(baseline, DIMS, CART, SKUS, OPTS);
+  const baselineViolations = validatePlan(baseline, CART, SKUS, OPTS);
   check("baseline: zero violations", baselineViolations.length === 0, JSON.stringify(baselineViolations));
 
   // 1. sku-unplaceable (renamed from piece-fits-trailer in lb-engine-01 — A4 split the old
@@ -444,7 +444,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   };
 
   const goodHoley = makeHoleyPlan(48, 24, 48); // matches sku.length=48, sku.width=24
-  const goodHoleyViolations = validatePlan(goodHoley, DIMS, holeyCart, holeySkus, OPTS);
+  const goodHoleyViolations = validatePlan(goodHoley, holeyCart, holeySkus, OPTS);
   check(
     "holey-no-rotation: declared orientation (48x24) has no violation",
     ruleViolations(goodHoleyViolations, "holey-no-rotation") === 0,
@@ -452,7 +452,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   );
 
   const badHoley = makeHoleyPlan(24, 48, 24); // swapped: footprint no longer matches declared L/W
-  const badHoleyViolations = validatePlan(badHoley, DIMS, holeyCart, holeySkus, OPTS);
+  const badHoleyViolations = validatePlan(badHoley, holeyCart, holeySkus, OPTS);
   check(
     "holey-no-rotation: swapped footprint (24x48) triggers holey-no-rotation",
     ruleViolations(badHoleyViolations, "holey-no-rotation") > 0,
@@ -602,7 +602,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     const mixedDepthHoley = makeHoleyPlan(48, 24, 90.75, deepDummy);
     const mixedDepthSkus = [...holeySkus, dummySku];
     const mixedDepthCart: CartLine[] = [...holeyCart, { skuId: "DUMMY", qty: 1 }];
-    const mixedDepthViolations = validatePlan(mixedDepthHoley, DIMS, mixedDepthCart, mixedDepthSkus, OPTS);
+    const mixedDepthViolations = validatePlan(mixedDepthHoley, mixedDepthCart, mixedDepthSkus, OPTS);
     check(
       "holey-no-rotation: correctly-placed holey column in a mixed-depth row (rowLength 90.75 > colLength 48) has no violation",
       ruleViolations(mixedDepthViolations, "holey-no-rotation") === 0,
@@ -671,7 +671,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       mixedDepthPlan.trailers[0].rows[0].wastedFloorArea === 50,
       String(mixedDepthPlan.trailers[0].rows[0].wastedFloorArea)
     );
-    const cleanViolations = validatePlan(mixedDepthPlan, DIMS, mixedDepthCart, mixedDepthSkus, OPTS);
+    const cleanViolations = validatePlan(mixedDepthPlan, mixedDepthCart, mixedDepthSkus, OPTS);
     check(
       "trailer-length: mixed-depth row with colLength <= rowLength for both columns has no violation",
       ruleViolations(cleanViolations, "trailer-length") === 0,
@@ -680,7 +680,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
 
     const overDepth = clone(mixedDepthPlan);
     overDepth.trailers[0].rows[0].columns[1].colLength = 999; // now exceeds rowLength (20)
-    const overDepthViolations = validatePlan(overDepth, DIMS, mixedDepthCart, mixedDepthSkus, OPTS);
+    const overDepthViolations = validatePlan(overDepth, mixedDepthCart, mixedDepthSkus, OPTS);
     check(
       "trailer-length: column colLength (999) exceeding row rowLength (20) triggers trailer-length",
       ruleViolations(overDepthViolations, "trailer-length") > 0,
@@ -708,7 +708,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     const hasRationaleNote = warnedPlan.trailers.some((t) => t.rows.some((r) => r.columns.some((c) => c.rationale.includes("[stability"))));
     check("stabilityWarnRatio: tall/narrow placement produces a plan.warnings entry", hasStabilityWarning, JSON.stringify(warnedPlan.warnings));
     check("stabilityWarnRatio: tall/narrow placement adds a rationale note", hasRationaleNote);
-    const warnedViolations = validatePlan(warnedPlan, tallDims, tallCart, [tallSku], { ...OPTS, stabilityWarnRatio: 3 });
+    const warnedViolations = validatePlan(warnedPlan, tallCart, [tallSku], { ...OPTS, stabilityWarnRatio: 3 });
     check("stabilityWarnRatio: warning is advisory only, produces zero validatePlan violations", warnedViolations.length === 0, JSON.stringify(warnedViolations));
 
     const suppressedPlan = pack(tallCart, [tallSku], tallDims, { stabilityWarnRatio: Infinity });
@@ -750,9 +750,9 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("FIXTURE_HOLEY_SIPLAST: no rotation used anywhere (every layer orientation is 'flat')", noRotation);
     const allColumnsToppedOff = siplastTrailer?.rows.every((r) => r.columns.every((c) => c.mixed && c.layers.length === 2 && c.totalHeight === 109)) ?? false;
     check("FIXTURE_HOLEY_SIPLAST: with top-off active, every column mixes both thicknesses to 109\" exact", allColumnsToppedOff);
-    const validationOnSiplast = validatePlan(siplastPlan, TRAILER_53FT, siplastCart, siplastSkus, OPTS);
+    const validationOnSiplast = validatePlan(siplastPlan, siplastCart, siplastSkus, OPTS);
     check("FIXTURE_HOLEY_SIPLAST: validatePlan reports zero violations (top-off satisfies K)", validationOnSiplast.length === 0, JSON.stringify(validationOnSiplast));
-    fixtureMetrics.set("FIXTURE_HOLEY_SIPLAST", planMetrics(siplastPlan, TRAILER_53FT, OPTS));
+    fixtureMetrics.set("FIXTURE_HOLEY_SIPLAST", planMetrics(siplastPlan, OPTS));
   }
 
   // C7. FIXTURE_BLOCKS_PAIRING end-to-end (INV_4202) — the load legacy could not fit on one
@@ -761,7 +761,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   {
     const { skus: pairingSkus, cart: pairingCart } = FIXTURE_BLOCKS_PAIRING;
     const pairingPlan = pack(pairingCart, pairingSkus, TRAILER_53FT);
-    const pairingViolations = validatePlan(pairingPlan, TRAILER_53FT, pairingCart, pairingSkus, OPTS);
+    const pairingViolations = validatePlan(pairingPlan, pairingCart, pairingSkus, OPTS);
 
     check("FIXTURE_BLOCKS_PAIRING: pack() returns exactly one trailer", pairingPlan.trailers.length === 1, String(pairingPlan.trailers.length));
     check("FIXTURE_BLOCKS_PAIRING: balance is empty (all 108 pieces placed)", pairingPlan.balance.length === 0, JSON.stringify(pairingPlan.balance));
@@ -789,7 +789,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       pairingUsedLength <= PAIRING_BASELINE_LENGTH,
       String(pairingUsedLength)
     );
-    fixtureMetrics.set("FIXTURE_BLOCKS_PAIRING", planMetrics(pairingPlan, TRAILER_53FT, OPTS));
+    fixtureMetrics.set("FIXTURE_BLOCKS_PAIRING", planMetrics(pairingPlan, OPTS));
   }
 
   // C9 / D10. FIXTURE_BLOCKS_MIXED — real INV_4347 data (lb-engine-03 Part C; replaces the
@@ -811,9 +811,9 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   check("FIXTURE_BLOCKS_MIXED: fixture totals 94 pieces", mixedTotalQty === 94, String(mixedTotalQty));
 
   const mixedPlan = pack(mixedCart, mixedSkus, TRAILER_53FT);
-  const mixedViolations = validatePlan(mixedPlan, TRAILER_53FT, mixedCart, mixedSkus, OPTS);
+  const mixedViolations = validatePlan(mixedPlan, mixedCart, mixedSkus, OPTS);
   check("FIXTURE_BLOCKS_MIXED: validatePlan reports zero violations", mixedViolations.length === 0, JSON.stringify(mixedViolations));
-  fixtureMetrics.set("FIXTURE_BLOCKS_MIXED", planMetrics(mixedPlan, TRAILER_53FT, OPTS));
+  fixtureMetrics.set("FIXTURE_BLOCKS_MIXED", planMetrics(mixedPlan, OPTS));
 
   const footprintKey = (l: number, w: number) => `${Math.min(l, w)}x${Math.max(l, w)}`;
   const footprintsBySku = new Map<string, string>();
@@ -925,7 +925,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("Column fill: the exact-fill column totals 109\" with zero gap", exactColumn?.totalHeight === 109, String(exactColumn?.totalHeight));
     check("D4: the exact-fill (base + accepted top-off) column is marked mixed", exactColumn?.mixed === true);
 
-    const fillViolations = validatePlan(fillPlan, TRAILER_53FT, fillCart, [fillBase, fillTopoff], OPTS);
+    const fillViolations = validatePlan(fillPlan, fillCart, [fillBase, fillTopoff], OPTS);
     check("Column fill: 0 violations, and mixedStacks rolls up (>0) for the accepted top-off", fillViolations.length === 0 && fillPlan.mixedStacks > 0, `violations=${fillViolations.length} mixedStacks=${fillPlan.mixedStacks}`);
   }
 
@@ -966,7 +966,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       }
     }
     check("D5: maxSkusPerColumn:2 is never exceeded, even where a 3-SKU fill would land exactly on 109\"", maxLayersSeen <= 2, String(maxLayersSeen));
-    const capViolations = validatePlan(capPlan, TRAILER_53FT, capCart, [capA, capB, capC], OPTS);
+    const capViolations = validatePlan(capPlan, capCart, [capA, capB, capC], OPTS);
     check("D5: 0 max-skus-per-column violations", capViolations.filter((v) => v.rule === "max-skus-per-column").length === 0, JSON.stringify(capViolations));
   }
 
@@ -1024,7 +1024,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     const remainingCount = balPlan.balance.reduce((s, b) => s + b.remaining, 0);
     check("D8: placed + remaining == cart qty exactly (2000)", placedCount + remainingCount === 2000, `${placedCount}+${remainingCount}`);
 
-    const balViolations = validatePlan(balPlan, TRAILER_53FT, balCart, [balSku], { ...OPTS, trailerLimit: 1 });
+    const balViolations = validatePlan(balPlan, balCart, [balSku], { ...OPTS, trailerLimit: 1 });
     check("D8: 0 violations — conservation holds exactly across the trailerLimit cut", balViolations.length === 0, JSON.stringify(balViolations));
   }
 
@@ -1138,7 +1138,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0,
     };
     recompute(metricsPlan);
-    const m = planMetrics(metricsPlan, metricsDims, OPTS);
+    const m = planMetrics(metricsPlan, OPTS);
 
     check("E6: planMetrics trailerCount", m.trailerCount === 1, String(m.trailerCount));
     check("E6: planMetrics rowCount", m.rowCount === 2, String(m.rowCount));
@@ -1152,7 +1152,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("E6: planMetrics mixedStacks", m.mixedStacks === 1, String(m.mixedStacks));
     check("E6: planMetrics balancePieces sums remaining demand (4 + 6 = 10)", m.balancePieces === 10, String(m.balancePieces));
 
-    const emptyMetrics = planMetrics({ trailers: [], balance: [], warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 }, metricsDims, OPTS);
+    const emptyMetrics = planMetrics({ trailers: [], balance: [], warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 }, OPTS);
     check("E6: planMetrics on an empty plan returns zeroes, not NaN", emptyMetrics.meanHeightUtilization === 0 && emptyMetrics.meanWidthUtilization === 0 && emptyMetrics.rowCount === 0);
   }
 
@@ -1229,14 +1229,14 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     const bad = clone(baseline);
     bad.trailers[0].rows[0].columns[0].totalHeight = 38; // < DIMS.height (40), > effective height (35)
 
-    const violationsWithRunner = validatePlan(bad, DIMS, CART, SKUS, runnerOpts);
+    const violationsWithRunner = validatePlan(bad, CART, SKUS, runnerOpts);
     check(
       "F2: column exceeding effective height (35) but under trailer height (40) triggers column-height",
       ruleViolations(violationsWithRunner, "column-height") > 0,
       JSON.stringify(violationsWithRunner)
     );
 
-    const violationsNoRunner = validatePlan(bad, DIMS, CART, SKUS, OPTS);
+    const violationsNoRunner = validatePlan(bad, CART, SKUS, OPTS);
     check(
       "F2: the identical column is clean when no runner is set (38 <= trailer height 40)",
       ruleViolations(violationsNoRunner, "column-height") === 0,
@@ -1248,8 +1248,8 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   // must read HIGHER with a runner set, not lower or unchanged (a runnered load isn't actually
   // less full than the algorithm believed; the old dims.height denominator just under-reported it).
   {
-    const noRunnerMetrics = planMetrics(baseline, DIMS, OPTS);
-    const runnerMetrics = planMetrics(baseline, DIMS, { ...OPTS, runnerHeight: 5 });
+    const noRunnerMetrics = planMetrics(baseline, OPTS);
+    const runnerMetrics = planMetrics(baseline, { ...OPTS, runnerHeight: 5 });
     check(
       "F3: meanHeightUtilization is higher against effective height than nominal height for the same plan",
       runnerMetrics.meanHeightUtilization > noRunnerMetrics.meanHeightUtilization,
@@ -1299,7 +1299,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     }
 
     const badOpts: PackOptions = { ...OPTS, runnerHeight: -5 };
-    const violations = validatePlan(baseline, DIMS, CART, SKUS, badOpts);
+    const violations = validatePlan(baseline, CART, SKUS, badOpts);
     check(
       "F5: validatePlan independently clamps an invalid runnerHeight (baseline stack stays clean against DIMS.height 40)",
       ruleViolations(violations, "column-height") === 0,
@@ -1330,7 +1330,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     const bad = clone(baseline);
     bad.trailers[0].rows[0].columns[0].totalWeight = 99999;
     recompute(bad);
-    const violations = validatePlan(bad, DIMS, CART, SKUS, OPTS);
+    const violations = validatePlan(bad, CART, SKUS, OPTS);
     check("F7: the weight canary still fires for a genuinely over-weight plan", ruleViolations(violations, "weight") > 0, JSON.stringify(violations));
   }
 
@@ -1363,7 +1363,7 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       maxedColumn?.rationale
     );
 
-    const maxHoleyViolations = validatePlan(holeyMaxPlan, holeyMaxDims, holeyMaxCart, [holeyBase, holeyOther], OPTS);
+    const maxHoleyViolations = validatePlan(holeyMaxPlan, holeyMaxCart, [holeyBase, holeyOther], OPTS);
     check("Holey max-base-first: validatePlan reports zero violations", maxHoleyViolations.length === 0, JSON.stringify(maxHoleyViolations));
   }
 
