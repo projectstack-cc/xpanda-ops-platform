@@ -185,6 +185,16 @@ export function runLoadingDiagramPdfSelfCheck(): { pass: boolean; results: Check
   // (rowWidthPct = rowLength/dims.length, heightPct = colWidth/dims.width, topPct = posY/dims.width,
   // widthPct = colLength/rowLength) — box scaled ×10 from dims (width 650×500) so the fractions
   // produce round numbers to assert against exactly.
+  //
+  // Steve, 2026-09-16: mirrored (nose-left/doors-right — see layoutColumnRects' own header comment
+  // in loadingDiagramPdf.ts). Row0 (posFromFront 0, the rear-most row) now sits flush to the box's
+  // own right edge (450..650 of a 650-wide box) instead of its left (0..200); row1 sits immediately
+  // to row0's left (300..450); the 30-unit (of 65 total) unused length beyond row1 now shows as a
+  // gap on the LEFT (nose) side of the box (0..300) instead of the right. y/height are unaffected —
+  // the mirror is length-axis (x), row-position only. A shallow column's own anchor WITHIN its row
+  // is unchanged (still flush to the row's own left edge, colX = rowX): PackColumn carries no
+  // along-length offset within its row, so that anchor was never a physical fact to mirror — colB
+  // (colLength 15 of rowLength 20) sits at row0's rowX (450), same as colA, not at its far edge.
   {
     const box = { x: 0, yTop: 100, width: 650, height: 500 };
     const rects = layoutColumnRects(trailer, DIMS, box);
@@ -192,22 +202,22 @@ export function runLoadingDiagramPdfSelfCheck(): { pass: boolean; results: Check
 
     const rectA = rects.find((r) => r.rowIndex === 0 && r.columnIndex === 0)!;
     check(
-      "layoutColumnRects: colA (row0, full row width+depth) -> x0 y-100 w200 h200",
-      rectA.x === 0 && rectA.y === -100 && rectA.width === 200 && rectA.height === 200,
+      "layoutColumnRects: colA (row0, full row width+depth) -> x450 y-100 w200 h200",
+      rectA.x === 450 && rectA.y === -100 && rectA.width === 200 && rectA.height === 200,
       JSON.stringify(rectA)
     );
 
     const rectB = rects.find((r) => r.rowIndex === 0 && r.columnIndex === 1)!;
     check(
-      "layoutColumnRects: colB (row0, posY 20 of 50, colLength 15 of rowLength 20) -> x0 y-400 w150 h300",
-      rectB.x === 0 && rectB.y === -400 && rectB.width === 150 && rectB.height === 300,
+      "layoutColumnRects: colB (row0, posY 20 of 50, colLength 15 of rowLength 20, flush left) -> x450 y-400 w150 h300",
+      rectB.x === 450 && rectB.y === -400 && rectB.width === 150 && rectB.height === 300,
       JSON.stringify(rectB)
     );
 
     const rectC = rects.find((r) => r.rowIndex === 1 && r.columnIndex === 0)!;
     check(
-      "layoutColumnRects: colC (row1, posFromFront 20 of 65) -> x200 y-400 w150 h500",
-      rectC.x === 200 && rectC.y === -400 && rectC.width === 150 && rectC.height === 500,
+      "layoutColumnRects: colC (row1, posFromFront 20 of 65) -> x300 y-400 w150 h500",
+      rectC.x === 300 && rectC.y === -400 && rectC.width === 150 && rectC.height === 500,
       JSON.stringify(rectC)
     );
 

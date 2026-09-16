@@ -1,17 +1,31 @@
 // src/components/logistics/TrailerDiagram.tsx
-// lb-ui-01: top-down trailer diagram (Decision, locked — not the legacy side elevation). Rear at
-// the left (posFromFront = 0), nose at the right. Trailer length runs horizontally; trailer width
-// runs vertically. Stack height is not drawn as geometry — see ColumnDetailPanel for that.
+// lb-ui-01: top-down trailer diagram (Decision, locked — not the legacy side elevation). Trailer
+// length runs horizontally; trailer width runs vertically. Stack height is not drawn as geometry —
+// see ColumnDetailPanel for that.
 //
 // The engine's defining behaviour is width pairing (columns of different footprints sharing a row
 // across the trailer's width) — a side elevation can't show that, so this reads top-down instead.
 //
+// Steve, 2026-09-16: nose (cab end) on the left, rear (doors) on the right — readers scan left to
+// right, and loading runs nose-first (thickest/rear-most row loaded last, closest to the doors —
+// lb-engine-03 B3). Was rear-left/nose-right (matching legacy's own diagram and this file's
+// original lb-ui-01 layout); deliberately flipped on this direct instruction. `trailer.rows` itself
+// is still ordered rear-first (index 0 = posFromFront 0, unchanged — every rowIndex-keyed prop
+// below, e.g. onSelectColumn/onRowDrop/rowGuardTint, still addresses that same original array
+// position); only the VISUAL draw order is reversed, via `displayRowIndices` below, so the
+// rear-most row now renders rightmost. Each row's own shallow-column anchor (left-0) is UNCHANGED
+// by the mirror — see the geometry note below for why that's a rendering convention, not a
+// physical placement, and so has nothing to flip.
+//
 // Geometry: each PackRow is a vertical slice, on-screen WIDTH proportional to rowLength/dims.length.
 // Within a slice, each PackColumn is a block stacked by posY, on-screen HEIGHT proportional to
 // colWidth/dims.width. A column shallower than its row (colLength < rowLength) is rendered at a
-// fraction of the slice's width (colLength/rowLength) flush to the slice's near edge — the
+// fraction of the slice's width (colLength/rowLength) flush to the slice's own left edge — the
 // remainder is that lane's wastedFloorArea, left showing the slice's own striped "unused floor"
-// backdrop rather than being covered by the column block.
+// backdrop rather than being covered by the column block. This is a display convention, not a
+// physical placement decision: PackColumn carries no along-length offset within its row (only
+// posY, on the width axis), so the engine itself doesn't model where in the row's depth a shallow
+// column actually sits — nothing here to preserve "flush to the rear" under the mirror above.
 //
 // Token note: the prompt's spec named var(--surface-2)/var(--border-strong) for pure columns and
 // var(--bg-accent)/var(--border-accent)/var(--text-accent) for mixed columns — none of the accent
@@ -72,6 +86,13 @@ interface TrailerDiagramProps {
   headerAction?: ReactNode;
 }
 
+// Rows are drawn nose-first (visual left) to rear-most (visual right) — the reverse of
+// trailer.rows' own array order (rear-first, index 0 = posFromFront 0). Returns original array
+// indices in draw order, so every rowIndex-keyed callback still addresses the true array position.
+function displayRowIndices(rowCount: number): number[] {
+  return Array.from({ length: rowCount }, (_, i) => rowCount - 1 - i);
+}
+
 const DIAGRAM_HEIGHT_PX = 176;
 // Below these fractions a column's on-screen box is too small to hold ≥11px text legibly —
 // drop the label rather than shrinking the type (per spec).
@@ -109,22 +130,24 @@ export default function TrailerDiagram({
       </div>
 
       <div className="flex items-center justify-between text-[11px] text-text-hint mb-1">
-        <span>Rear (doors)</span>
         <span>Nose</span>
+        <span>Rear (doors)</span>
       </div>
 
       <div
         className="flex w-full rounded-md overflow-hidden border border-[var(--line)]"
         style={{ height: DIAGRAM_HEIGHT_PX }}
       >
-        {trailer.rows.map((row, rowIndex) => {
+        {displayRowIndices(trailer.rows.length).map((rowIndex, displayPos, displayOrder) => {
+          const row = trailer.rows[rowIndex];
           const rowWidthPct = dims.length > 0 ? (row.rowLength / dims.length) * 100 : 0;
           const feedback = editable ? rowDropFeedback?.(rowIndex) ?? null : null;
           const guarded = editable ? rowGuardTint?.(rowIndex) ?? false : false;
+          const isLastDisplayed = displayPos === displayOrder.length - 1;
           return (
             <div
               key={rowIndex}
-              className="relative shrink-0 border-r border-[var(--line)] last:border-r-0"
+              className={`relative shrink-0 border-[var(--line)] ${isLastDisplayed ? "" : "border-r"}`}
               style={{
                 width: `${rowWidthPct}%`,
                 // Striped "unused floor" backdrop — shows through wherever a column doesn't cover

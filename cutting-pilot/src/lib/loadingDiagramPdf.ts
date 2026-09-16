@@ -3,12 +3,14 @@
 //
 // Step 0 findings (load-builder.html):
 // - buildTopViewSVG (:1054, on-screen) and buildPrintSvg (:1113, print) ARE the same top-down
-//   projection TrailerDiagram.tsx already uses — both key off row.posFromFront/rowLength and
+//   projection TrailerDiagram.tsx originally used — both key off row.posFromFront/rowLength and
 //   column.posY/colWidth scaled against dims.length/dims.width, rear-at-origin, front at the far
-//   edge. buildPrintSvg's only real differences are print-only: a fitScale that caps total width to
-//   SVG_PRINT_MAX_WIDTH (fit-to-page), plain white/black boxes with dense multi-line stack labels
-//   (getStackPrintLines) instead of on-screen color tinting, and heavier stroke/text weights for
-//   print legibility. Both carried forward here: layoutColumnRects below is the same percentage-of-
+//   edge. **Steve, 2026-09-16: v2 no longer matches this** — row order is mirrored to nose-left/
+//   doors-right, see layoutColumnRects' own header comment. buildPrintSvg's only real differences
+//   are print-only: a fitScale that caps total width to SVG_PRINT_MAX_WIDTH (fit-to-page), plain
+//   white/black boxes with dense multi-line stack labels (getStackPrintLines) instead of on-screen
+//   color tinting, and heavier stroke/text weights for print legibility. Both carried forward here:
+//   layoutColumnRects below is the same percentage-of-
 //   self math TrailerDiagram.tsx uses (verified against that file directly), and the PDF page size
 //   is fixed (not auto-scaled) the same way buildPrintSvg fits within one bound.
 // - printPackingSlip (:1174, popup + window.print()) and buildLoadingDiagramPdfBytes (:1182) are two
@@ -159,23 +161,35 @@ interface DiagramBox {
 
 /** Same percentage-of-self geometry TrailerDiagram.tsx uses on screen (rowWidthPct =
  * rowLength/dims.length, heightPct = colWidth/dims.width, topPct = posY/dims.width, widthPct =
- * colLength/rowLength, flush to the row's near/rear edge) — ported from CSS percentages (top-down,
- * origin top-left) into pdf-lib points (origin bottom-left), not re-derived. Pure and deterministic:
- * the one piece of layout math worth isolating and testing per Part C, since a transposed axis here
- * would silently draw a diagram that doesn't match what the planner saw on screen. */
+ * colLength/rowLength) — ported from CSS percentages (top-down, origin top-left) into pdf-lib
+ * points (origin bottom-left), not re-derived. Pure and deterministic: the one piece of layout math
+ * worth isolating and testing per Part C, since a transposed axis here would silently draw a diagram
+ * that doesn't match what the planner saw on screen.
+ *
+ * Steve, 2026-09-16: mirrored so the nose (cab end) draws on the left and the rear (doors) draws on
+ * the right — readers scan left to right, and loading runs nose-first (lb-engine-03 B3's own
+ * ordering: thickest/rear-most row is loaded last, closest to the doors). Was rear-left/nose-right
+ * (matching legacy's own buildTopViewSVG/buildPrintSvg, and the previous TrailerDiagram.tsx
+ * convention) — deliberately deviated from both on this direct instruction. `rowX` below is a mirror
+ * transform (`1 - endFrac`, not `startFrac`) so each row's on-screen LEFT edge is its true nose-ward
+ * (far) edge — this flips ROW order only. A shallow column's own anchor within its row (flush to the
+ * row's left edge, colX = rowX) is UNCHANGED: PackColumn carries no along-length offset within its
+ * row (only posY, on the width axis), so which end of the row's depth a shallow column visually sits
+ * against was never a physical placement fact to begin with — it's a display convention for showing
+ * the lane's wastedFloorArea, and has nothing to mirror. */
 export function layoutColumnRects(trailer: PackTrailer, dims: Dimensions, box: DiagramBox): LayoutRect[] {
   const rects: LayoutRect[] = [];
   trailer.rows.forEach((row: PackRow, rowIndex) => {
-    const rowXFrac = dims.length > 0 ? row.posFromFront / dims.length : 0;
+    const rowEndFrac = dims.length > 0 ? (row.posFromFront + row.rowLength) / dims.length : 0;
     const rowWFrac = dims.length > 0 ? row.rowLength / dims.length : 0;
-    const rowX = box.x + rowXFrac * box.width;
+    const rowX = box.x + (1 - rowEndFrac) * box.width;
     const rowW = rowWFrac * box.width;
     row.columns.forEach((column: PackColumn, columnIndex) => {
       const topFrac = dims.width > 0 ? column.posY / dims.width : 0;
       const heightFrac = dims.width > 0 ? column.colWidth / dims.width : 0;
       const widthFrac = row.rowLength > 0 ? column.colLength / row.rowLength : 1;
-      const colX = rowX; // flush to the row's near (rear) edge, matching TrailerDiagram's left-0
       const colW = widthFrac * rowW;
+      const colX = rowX; // flush to the row's own left edge — a display convention, not mirrored
       const colH = heightFrac * box.height;
       const colTopY = box.yTop - topFrac * box.height;
       const colY = colTopY - colH;
@@ -275,16 +289,33 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
   // Outer trailer boundary
   page.drawRectangle({ x: box.x, y: boxBottomY, width: box.width, height: box.height, borderColor: LINE, borderWidth: 2, color: rgb(1, 1, 1) });
 
-  // Row R{n} labels + dashed row-boundary lines
+  // Row R{n} labels + dashed row-boundary lines.
+  //
+  // Labels stay tied to array index (R${rowIndex+1}), NOT visual left-to-right position — even
+  // though the mirror now draws row 0 (rear-most) on the right, so the printed R-numbers descend
+  // left to right on a multi-row trailer. This is deliberate: `row ${rowIndex+1}` (1-based, same
+  // array index) is what TrailerDiagram.tsx's aria-label, TrailerEditModal's row list/move-target
+  // picker, and packEngine's own stability-warning strings ("trailer 0 row 1 column 0: ...") all
+  // use — renumbering just the PDF's printed label to match reading order would make the printout
+  // and the app name different physical rows for the same number. The nose-left/doors-right mirror
+  // itself is what Steve asked for; row numbering wasn't part of that complaint.
+  //
+  // Boundary lines: drawn at each row's own left edge, skipped only when that edge coincides with
+  // the box's own left or right border (which the outer rectangle already strokes) — checked by
+  // position, not by array index, since the packed rows don't always span the full dims.length (a
+  // trailer with unused length leaves a gap that isn't flush to either border).
+  const EPS = 0.01;
   trailer.rows.forEach((row, rowIndex) => {
-    const rowXFrac = dims.length > 0 ? row.posFromFront / dims.length : 0;
+    const rowEndFrac = dims.length > 0 ? (row.posFromFront + row.rowLength) / dims.length : 0;
     const rowWFrac = dims.length > 0 ? row.rowLength / dims.length : 0;
-    const rowX = box.x + rowXFrac * box.width;
+    const rowX = box.x + (1 - rowEndFrac) * box.width;
     const rowW = rowWFrac * box.width;
     const label = `R${rowIndex + 1}`;
     const labelWidth = fontBold.widthOfTextAtSize(label, 9);
     page.drawText(label, { x: rowX + rowW / 2 - labelWidth / 2, y: box.yTop + 4, size: 9, font: fontBold, color: MUTED });
-    if (rowIndex > 0) {
+    const atLeftBorder = Math.abs(rowX - box.x) < EPS;
+    const atRightBorder = Math.abs(rowX - (box.x + box.width)) < EPS;
+    if (!atLeftBorder && !atRightBorder) {
       page.drawLine({ start: { x: rowX, y: box.yTop }, end: { x: rowX, y: boxBottomY }, thickness: 0.75, color: MUTED, dashArray: [3, 2] });
     }
   });
@@ -308,9 +339,10 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
     }
   }
 
-  // REAR / FRONT + dims caption
-  page.drawText("REAR", { x: box.x - 28, y: boxBottomY - 12, size: 10, font: fontBold, color: MUTED });
-  page.drawText("FRONT", { x: box.x + box.width + 6, y: box.yTop - box.height / 2 - 4, size: 10, font: fontBold, color: rgb(0.85, 0.55, 0.02) });
+  // FRONT (nose) / REAR (doors) + dims caption — nose on the left, doors on the right (see
+  // layoutColumnRects' header comment for why).
+  page.drawText("FRONT", { x: box.x - 32, y: boxBottomY - 12, size: 10, font: fontBold, color: rgb(0.85, 0.55, 0.02) });
+  page.drawText("REAR", { x: box.x + box.width + 6, y: box.yTop - box.height / 2 - 4, size: 10, font: fontBold, color: MUTED });
   const remaining = formatRemainingLabel(dims, trailer);
   const caption = remaining ? `${dims.length}"L × ${dims.width}"W — ${remaining}` : `${dims.length}"L × ${dims.width}"W`;
   const capW = font.widthOfTextAtSize(caption, 10);
