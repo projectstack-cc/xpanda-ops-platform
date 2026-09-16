@@ -373,17 +373,23 @@ function fmt(n: number): string {
 // Solves the 1D column-height fill exactly against dims.height for one family (lb-engine-03 B1).
 // A member that can never stack even once (height alone exceeds the trailer, or weight alone
 // exceeds maxWeight) is reported to `leftover`/`warnings` up front and excluded from the fill
-// pool. Then, one column at a time, tries every (base, top-off) pair drawn from the family's
-// remaining demand: for a fixed base SKU, "pure" count is not fixed at floor(height/unitHeight) —
-// that's merely the fallback baseline — the search also tries every smaller base count paired
-// with every count of an eligible top-off SKU (unitHeight >= topOffMinInchesPerPiece), because an
-// exact fill sometimes needs FEWER of the base than the max (e.g. 11x8" + 4x5.25" = 109" exact
-// beats the naive 13x8" = 104", 5" wasted). Top-off eligibility is filtered by K *before* the
-// search, never after — an ineligible candidate is never placed, only remembered (by its own
-// unitHeight, a fixed per-SKU property) for the rejection rationale. Bounded: candidates and base
-// counts are small integers (board thicknesses, trailer height in inches), so this is a small
-// polynomial search per column, not exponential — and it runs once per column, not once per
-// combination trial beyond what simulate() already does.
+// pool. Holey Board and ordinary Blocks then diverge (lb-engine-05, 2026-09-16 — Steve wants Holey
+// Board to match how the floor crew actually stacks a truck, not an exact-fill optimization) and
+// are handled by two separate functions below:
+//   - Blocks (buildBlockColumns): one column at a time, tries every (base, top-off) pair drawn
+//     from the family's remaining demand — for a fixed base SKU, "pure" count is not fixed at
+//     floor(height/unitHeight), the search also tries every smaller base count paired with every
+//     count of an eligible top-off SKU (unitHeight >= topOffMinInchesPerPiece), because an exact
+//     fill sometimes needs FEWER of the base than the max (e.g. 11x8" + 4x5.25" = 109" exact beats
+//     the naive 13x8" = 104", 5" wasted). Bounded: candidates and base counts are small integers
+//     (board thicknesses, trailer height in inches), so this is a small polynomial search per
+//     column, not exponential.
+//   - Holey Board (buildHoleyColumns): no search, no reducing an already-placed count to hunt for
+//     an exact fit ("papering") — strict sequential descending-height stacking instead. See that
+//     function's own comment.
+// Both paths filter top-off eligibility by K *before* placing, never after — an ineligible
+// candidate is never placed, only remembered (by its own unitHeight, a fixed per-SKU property) for
+// the rejection rationale.
 function buildFamilyColumns(
   fam: Family,
   orient: FamilyOrientation,
@@ -426,14 +432,13 @@ function buildFamilyColumns(
   }
 
   const K = opts.topOffMinInchesPerPiece;
-  const columns: ColumnPlan[] = [];
-  // Steve, 2026-09-16: Holey Board must exhaust one SKU's max physical stack (by height AND
-  // weight/demand caps — maxC1 below) before a different SKU tops it off; ordinary blocks keep the
-  // pre-existing "reduce the base count if a mixed combo fills more of the column" behavior
-  // (lb-engine-04's own documented exact-fill search). Same rep-based category check
-  // familyOrientationOptions already uses.
+  // Same rep-based category check familyOrientationOptions already uses.
   const isHoley = fam.members[0].sku.category === HOLEY_BOARD_CATEGORY;
+  if (isHoley) {
+    return buildHoleyColumns(pool, orient, dims, effectiveHeight, runnerHeight, K);
+  }
 
+  const columns: ColumnPlan[] = [];
   while (pool.some((p) => p.remaining > 0)) {
     let winner: {
       base: PoolMember;
@@ -443,7 +448,6 @@ function buildFamilyColumns(
       total: number;
       bestIneligible: PoolMember | null;
       sawExhaustedCandidate: boolean;
-      holeyBlocked: PoolMember | null;
     } | null = null;
 
     for (const base of pool) {
@@ -458,10 +462,6 @@ function buildFamilyColumns(
       // bestIneligibleForBase — otherwise the rationale falls through to "no other SKU on this
       // footprint", which is false: there WAS another SKU, it's just already fully placed.
       let sawExhaustedCandidateForBase = false;
-      // Steve, 2026-09-16: a candidate that would only have fit by reducing the base below maxC1 —
-      // valid otherwise, just disallowed by the isHoley rule above — must also be tracked
-      // separately, for the same reason: "no other SKU on this footprint" would be false.
-      let holeyBlockedForBase: PoolMember | null = null;
 
       if (opts.maxSkusPerColumn >= 2) {
         for (const cand of pool) {
@@ -488,14 +488,6 @@ function buildFamilyColumns(
             const remH = effectiveHeight - c2 * cand.unitHeight;
             const c1 = Math.min(Math.floor((remH + EPS) / base.unitHeight), maxC1);
             if (c1 < 1) continue; // a column always needs at least one base piece
-            // Holey Board: a topoff may only fill what's left AFTER the base is already stacked to
-            // its physical max (maxC1) — never trade away base units to fit more topoff.
-            if (isHoley && c1 < maxC1) {
-              if (!holeyBlockedForBase || cand.unitHeight > holeyBlockedForBase.unitHeight) {
-                holeyBlockedForBase = cand;
-              }
-              continue;
-            }
             const total = c1 * base.unitHeight + c2 * cand.unitHeight;
             if (total > bestForBase.total) {
               bestForBase = { c1, topoff: cand, c2, total };
@@ -513,14 +505,13 @@ function buildFamilyColumns(
           total: bestForBase.total,
           bestIneligible: bestIneligibleForBase,
           sawExhaustedCandidate: sawExhaustedCandidateForBase,
-          holeyBlocked: holeyBlockedForBase,
         };
       }
     }
 
     // winner is guaranteed: pool.some(remaining>0) held at loop entry, and every pooled member
     // was pre-filtered so heightCount>=1 && weightCap>=1, so at least one base yields maxC1>=1.
-    const { base, c1, topoff, c2, bestIneligible, sawExhaustedCandidate, holeyBlocked } = winner as NonNullable<typeof winner>;
+    const { base, c1, topoff, c2, bestIneligible, sawExhaustedCandidate } = winner as NonNullable<typeof winner>;
     base.remaining -= c1;
     const pureFilled = c1 * base.unitHeight;
     const layers: ColumnPlan["layers"] = [{ sku: base.sku, unitHeight: base.unitHeight, count: c1 }];
@@ -564,11 +555,6 @@ function buildFamilyColumns(
         // drops the "c1 x height = filled" prefix the other cases carry, matching the prompt's
         // given wording exactly; a future prompt should not "fix" this back to the longer form.
         rationale = `all available pieces placed — ${fmt(gap)}" open, no remaining demand for this footprint`;
-      } else if (holeyBlocked) {
-        // Steve, 2026-09-16 (new precedence tier, Holey Board only): a footprint-mate exists and
-        // has demand, it just doesn't fit in what's left AFTER maxing out the base — "no other SKU
-        // on this footprint" would be false here too.
-        rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", ${fmt(gap)}" left — ${fmt(holeyBlocked.unitHeight)}" ${holeyBlocked.sku.name} doesn't fit the remaining gap (Holey Board keeps the base maxed rather than reducing it to fit)`;
       } else {
         // No footprint-mate at all (A2 precedence #3): a genuine single-member family.
         rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", ${fmt(gap)}" left — no other SKU on this footprint`;
@@ -578,6 +564,97 @@ function buildFamilyColumns(
     // A3: with a runner in play, "exact"/"left" only means something against the effective height
     // — surface the usable height and the runner deduction so the number is self-explanatory.
     // No runner set (runnerHeight 0) leaves the rationale byte-identical to lb-engine-04.
+    if (runnerHeight > EPS) {
+      rationale += ` — ${fmt(effectiveHeight)}" usable (${fmt(dims.height)}" trailer − ${fmt(runnerHeight)}" runner)`;
+    }
+
+    columns.push({
+      colLength: orient.length,
+      colWidth: orient.width,
+      orientationLabel: orient.label,
+      layers,
+      totalHeight,
+      totalWeight: layers.reduce((s, l) => s + l.count * l.sku.weight, 0),
+      rationale,
+    });
+  }
+
+  return columns;
+}
+
+// lb-engine-05, 2026-09-16: Holey Board's column fill, replacing the exact-fill search above with
+// strict sequential descending-height stacking — Steve's own description of how the floor crew
+// loads a truck: the tallest board is stacked to its physical max (height cap, remaining demand, or
+// weight cap, whichever binds first), and if the column still has room, the next-tallest SKU with
+// remaining demand chains on top, through as many distinct thicknesses as fit in one column. No
+// search, no reducing an already-placed count to hunt for an exact fill ("papering") — that's
+// deliberately not attempted; per Steve, it's only worth doing when a load spills into extra
+// trailers, which this function doesn't handle (recomputePlan's caller-level concerns).
+// Confirmed with Steve: leftover room is topped off on EVERY column this way, not only once a
+// size's demand is fully used up — pool is sorted once, and each column re-scans it top to bottom,
+// so a tall SKU with plenty of demand left still gets whatever short-SKU demand fits in its own
+// column's leftover gap (this is what keeps FIXTURE_HOLEY_SIPLAST's "every column topped off"
+// ratchet intact: 52 columns of 13×8" + 1×5", not just the last one).
+function buildHoleyColumns(
+  pool: { sku: PackSku; unitHeight: number; remaining: number; weightCap: number }[],
+  orient: FamilyOrientation,
+  dims: Dimensions,
+  effectiveHeight: number,
+  runnerHeight: number,
+  K: number
+): ColumnPlan[] {
+  type PoolMember = (typeof pool)[number];
+  const sorted = [...pool].sort((a, b) => b.unitHeight - a.unitHeight);
+  const columns: ColumnPlan[] = [];
+
+  while (sorted.some((p) => p.remaining > 0)) {
+    const layers: ColumnPlan["layers"] = [];
+    let remainingHeight = effectiveHeight;
+    // Tracked purely for the rationale, same "why did the gap stay open" intent as the block
+    // path's bestIneligible/sawExhaustedCandidate — but there's no combinatorial winner to compare
+    // here, just whichever candidate the single top-to-bottom scan first couldn't place.
+    let blockedByHeight: PoolMember | null = null;
+    let blockedByK: PoolMember | null = null;
+
+    for (const member of sorted) {
+      if (member.remaining <= 0) continue;
+      // K only gates a chained (non-first) layer — a lone piece below K is still placed rather
+      // than left unplaced, matching the block path's own "K is about whether it's worth adding on
+      // top of a stack," not "whether it can be placed at all."
+      if (layers.length > 0 && !approxGte(member.unitHeight, K)) {
+        if (!blockedByK) blockedByK = member;
+        continue;
+      }
+      const maxFit = Math.floor((remainingHeight + EPS) / member.unitHeight);
+      if (maxFit < 1) {
+        if (!blockedByHeight) blockedByHeight = member;
+        continue;
+      }
+      const count = Math.min(maxFit, member.remaining, member.weightCap);
+      if (count < 1) continue;
+      layers.push({ sku: member.sku, unitHeight: member.unitHeight, count });
+      member.remaining -= count;
+      remainingHeight -= count * member.unitHeight;
+      if (remainingHeight <= EPS) break;
+    }
+
+    // layers is guaranteed non-empty: sorted.some(remaining>0) held at loop entry, and the pool was
+    // pre-filtered so every member's heightCount (floor(effectiveHeight/unitHeight)) >= 1 — so the
+    // first sorted member with remaining>0 always clears the K gate (layers.length is still 0) and
+    // the height gate (remainingHeight is still the full effectiveHeight).
+    const totalHeight = layers.reduce((s, l) => s + l.count * l.unitHeight, 0);
+    const gap = effectiveHeight - totalHeight;
+    const parts = layers.map((l) => `${l.count} × ${fmt(l.unitHeight)}" (${l.sku.name})`).join(" + ");
+    let rationale: string;
+    if (gap <= EPS) {
+      rationale = `${parts} = ${fmt(totalHeight)}" exact`;
+    } else if (blockedByHeight) {
+      rationale = `${parts} = ${fmt(totalHeight)}", ${fmt(gap)}" left — ${fmt(blockedByHeight.unitHeight)}" (${blockedByHeight.sku.name}) doesn't fit the remaining gap`;
+    } else if (blockedByK) {
+      rationale = `${parts} = ${fmt(totalHeight)}", ${fmt(gap)}" left — best top-off ${fmt(blockedByK.unitHeight)}"/piece, below K of ${fmt(K)}"`;
+    } else {
+      rationale = `${parts} = ${fmt(totalHeight)}", ${fmt(gap)}" left — no remaining demand for this footprint`;
+    }
     if (runnerHeight > EPS) {
       rationale += ` — ${fmt(effectiveHeight)}" usable (${fmt(dims.height)}" trailer − ${fmt(runnerHeight)}" runner)`;
     }
@@ -1274,7 +1351,12 @@ export function validatePlan(
         const distinctSkuIds = new Set(column.layers.map((l) => l.skuId));
 
         // max-skus-per-column: catches a column mixing more SKUs than the top-off policy allows.
-        if (distinctSkuIds.size > options.maxSkusPerColumn) {
+        // Holey Board is exempt (lb-engine-05, 2026-09-16) — it sequentially chains through as many
+        // distinct thicknesses as physically fit in one column's height, by design, not a policy
+        // violation; the real constraint there is already physical (column-height/weight above).
+        const firstColumnSku = column.layers[0] ? skuById.get(column.layers[0].skuId) : undefined;
+        const isHoleyColumn = firstColumnSku?.category === HOLEY_BOARD_CATEGORY;
+        if (!isHoleyColumn && distinctSkuIds.size > options.maxSkusPerColumn) {
           violate(
             "max-skus-per-column",
             `column has ${distinctSkuIds.size} distinct SKUs, exceeds maxSkusPerColumn ${options.maxSkusPerColumn}`,

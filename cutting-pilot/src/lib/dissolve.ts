@@ -26,7 +26,7 @@
 // so this file owns that one small, additive recompute (recomputeColumnAggregates below), mirroring
 // packEngine.ts's buildColumn formula (totalHeight = sum(count*unitHeight), totalWeight =
 // sum(count*sku.weight), stackCount = sum(count), mixed = distinct SKU count > 1).
-import type { PackColumn, PackSku } from "./packEngine";
+import { HOLEY_BOARD_CATEGORY, type PackColumn, type PackSku } from "./packEngine";
 import { clonePlan, recomputePlan, withHistory, type EditorState } from "./loadEditor";
 
 const EPS = 1e-6;
@@ -188,7 +188,13 @@ export function proposeDissolve(state: EditorState, srcTi: number): DissolveProp
             // A different SKU is a top-off, mirroring validatePlan's two rules exactly: the
             // column must not already be at the distinct-SKU cap, and the incoming piece must
             // clear K. Same-SKU stacking (the `isSameSku` branch above) is bound only by headroom.
-            if (distinctSkuIds.size >= state.options.maxSkusPerColumn) continue;
+            // lb-engine-05: Holey Board is exempt from the distinct-SKU cap, same as validatePlan —
+            // it's meant to chain through as many thicknesses as fit, and dissolve proposing a move
+            // validatePlan would then accept is exactly the "can never fail the apply gate" invariant
+            // this file's header promises.
+            const baseSku = col.layers[0] ? skuById.get(col.layers[0].skuId) : undefined;
+            const isHoleyColumn = baseSku?.category === HOLEY_BOARD_CATEGORY;
+            if (!isHoleyColumn && distinctSkuIds.size >= state.options.maxSkusPerColumn) continue;
             if (!approxGte(unit.unitHeight, state.options.topOffMinInchesPerPiece)) continue;
           }
           const runWeight = trailerRunWeight.get(ti) ?? trailer.usedWeight;

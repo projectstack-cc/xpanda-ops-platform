@@ -1334,14 +1334,13 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("F7: the weight canary still fires for a genuinely over-weight plan", ruleViolations(violations, "weight") > 0, JSON.stringify(violations));
   }
 
-  // Steve, 2026-09-16 (not part of the lb-engine-NN sprint — a direct engine-behavior change,
-  // requested and confirmed scoped to Holey Board only, not blocks). Two holey-board footprint-mates,
-  // H1 (8") supply 2, H2 (5") supply 6, effectiveHeight 19": maxing H1 alone fills 16" with a 3" gap
-  // H2 (5") can't fit into; maxing H2 alone fills 15" with a 4" gap H1 (8") can't fit into either — so
-  // the unconstrained (pre-fix) search would instead have REDUCED H1's count to 1 (8") to make room
-  // for 2 units of H2 (10"), reaching an exact 18" column. The fix must reject that trade: H1 stays
-  // at its true physical max (2, both units), the 3" gap is left open, and H2's demand (6, untouched)
-  // is available for a later column instead of being folded into this one.
+  // Steve, 2026-09-16 (superseded by lb-engine-05 below, same day — see that section's own comment
+  // for the full redesign). Kept as a regression check on the resulting single-SKU-column shape,
+  // not on a "declined trade" mechanism that no longer exists: lb-engine-05's sequential fill has
+  // no search to decline — it simply visits H1 (8", the tallest with demand) first, stacks it to
+  // its true physical max (2, both units — that's just floor(19/8) capped by remaining/weight, not
+  // a choice among alternatives), then tries H2 (5") in the 3" gap left over, which doesn't fit.
+  // H2's demand (6, untouched) rolls into later columns instead.
   {
     const holeyBase: PackSku = { id: "HOLEY_MAX_BASE", name: "8in holey", sku: "HOLEY_MAX_BASE", length: 48, width: 24, height: 8, weight: 5, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
     const holeyOther: PackSku = { id: "HOLEY_MAX_OTHER", name: "5in holey", sku: "HOLEY_MAX_OTHER", length: 48, width: 24, height: 5, weight: 4, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
@@ -1351,11 +1350,11 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
 
     const maxedColumn = findColumn(holeyMaxPlan, (c) => c.layers.length === 1 && c.layers[0].skuId === "HOLEY_MAX_BASE" && c.layers[0].count === 2);
     check(
-      "Holey max-base-first: H1 is stacked to its true max (2 x 8\") — not reduced to 1 to make room for a mixed exact fill",
+      "Holey max-base-first: H1 is stacked to its true max (2 x 8\") in a column of its own",
       maxedColumn !== null,
       JSON.stringify(findColumn(holeyMaxPlan, (c) => c.layers.some((l) => l.skuId === "HOLEY_MAX_BASE")))
     );
-    check("Holey max-base-first: that column totals 16\" (not the 18\" a reduced-base mix would reach)", maxedColumn?.totalHeight === 16, String(maxedColumn?.totalHeight));
+    check("Holey max-base-first: that column totals 16\" (H2 can't fit the 3\" residual gap)", maxedColumn?.totalHeight === 16, String(maxedColumn?.totalHeight));
     check("Holey max-base-first: that column is not mixed — H2 never enters it", maxedColumn?.mixed === false && !maxedColumn?.layers.some((l) => l.skuId === "HOLEY_MAX_OTHER"));
     check(
       "Holey max-base-first: rationale names the blocked candidate and explains why, not a bare \"no other SKU\" (which would be false — H2 exists and has demand)",
@@ -1365,6 +1364,55 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
 
     const maxHoleyViolations = validatePlan(holeyMaxPlan, holeyMaxCart, [holeyBase, holeyOther], OPTS);
     check("Holey max-base-first: validatePlan reports zero violations", maxHoleyViolations.length === 0, JSON.stringify(maxHoleyViolations));
+  }
+
+  // lb-engine-05, 2026-09-16: Holey Board's sequential-stacking redesign (replacing the exact-fill
+  // search above with strict descending-height chaining — Steve's own description of how the floor
+  // crew loads a truck). Five distinct thicknesses on one footprint, none dividing effectiveHeight
+  // (40") evenly and none dividing each other evenly either, forcing the fill to chain through 3+
+  // SKUs in a single column — something the pre-lb-engine-05 cap (maxSkusPerColumn: 2) made
+  // structurally impossible. Also exercises the validatePlan exemption end to end: without it, this
+  // fixture would fail max-skus-per-column even though the column shape itself is correct.
+  {
+    const mkHoley = (h: number): PackSku => ({
+      id: `CHAIN_${h}`,
+      name: `${h}in holey`,
+      sku: `CHAIN_${h}`,
+      length: 48,
+      width: 24,
+      height: h,
+      weight: 10,
+      category: HOLEY_BOARD_CATEGORY,
+      allowRotation: false,
+    });
+    const chainSkus = [10, 9, 8, 7, 6].map(mkHoley);
+    const chainQtys: Record<number, number> = { 10: 22, 9: 15, 8: 6, 7: 4, 6: 3 };
+    const chainCart: CartLine[] = chainSkus.map((s) => ({ skuId: s.id, qty: chainQtys[s.height] }));
+    const chainDims: Dimensions = { length: 200, width: 48, height: 40, maxWeight: 100000 };
+    const chainPlan = pack(chainCart, chainSkus, chainDims);
+
+    const allColumns = chainPlan.trailers.flatMap((t) => t.rows.flatMap((r) => r.columns));
+    check(
+      "Holey sequential chain: every piece placed, none left in balance",
+      chainPlan.balance.length === 0,
+      JSON.stringify(chainPlan.balance)
+    );
+    check(
+      "Holey sequential chain: at least one column chains through 3+ distinct thicknesses",
+      allColumns.some((c) => c.layers.length >= 3),
+      JSON.stringify(allColumns.map((c) => c.layers.length))
+    );
+    check(
+      "Holey sequential chain: descending order within every column (base tallest, chained layers strictly shorter)",
+      allColumns.every((c) => c.layers.every((l, i) => i === 0 || l.unitHeight < c.layers[i - 1].unitHeight)),
+      JSON.stringify(allColumns.map((c) => c.layers.map((l) => l.unitHeight)))
+    );
+    const chainViolations = validatePlan(chainPlan, chainCart, chainSkus, OPTS);
+    check(
+      "Holey sequential chain: validatePlan reports zero violations (max-skus-per-column exemption is load-bearing here)",
+      chainViolations.length === 0,
+      JSON.stringify(chainViolations)
+    );
   }
 
   // --- lb-ui-12: auto-downsize + trailerTypeLabel (G1-G5) ---
