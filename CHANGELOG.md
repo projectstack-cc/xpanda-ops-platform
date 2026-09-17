@@ -1873,6 +1873,118 @@ current series).
 
 ## Logistics (v2)
 
+- **`lb-ui` test-invoice picker removal — bundled fixtures (INV_4202/4356/4347) are no longer
+  selectable in Load Builder.** Steve: those three fixtures shouldn't be choosable in a
+  production-facing view now that `lb-ui-05`'s Job Pull covers testing with real jobs. Removed the
+  always-visible "Fixture picker" button row and its handler (`handleFixtureChange`) entirely — gone
+  in dev too, not just prod-gated, since this session's own engine verification already runs through
+  scratch scripts rather than the UI. The page no longer defaults to a bundled fixture on landing: a
+  new `EMPTY_FIXTURE` sentinel (empty cart/skus — `pack()` handles that the same as any other input)
+  backs a "no load selected" state, replaced in the view by a "Pull a job to build a load" prompt
+  whenever neither a pulled job nor a legacy-compatible saved fixture is active. `loadBuilderFixtures.ts`
+  itself is untouched — `packEngine.selfcheck.ts`'s dev panel and `savedLoad.ts`'s `"fixture"`-kind
+  backward compat for pre-existing saved rows both still need it. That backward-compat path gets a
+  real fix alongside the removal: `deserializeSnapshot` only ever checked that a fixture-kind row's
+  `fixtureId` was a string, never that it resolved against `LOAD_BUILDER_FIXTURES` — a stale id
+  (reachable through the ordinary "Load saved" flow, not just a hand-edited row) would have passed
+  validation and silently landed on the new empty state with no explanation. Now rejected with a
+  specific reason ("references a bundled test fixture that's no longer available"), reusing
+  `LoadPickerModal`'s existing per-row inline-error display — no new prop plumbing needed. If Steve
+  has any saved loads from the `lb-ui-01`..`04` era that reference one of the three removed fixtures
+  directly (not a job pull), loading them now shows that message instead of opening — correct, but a
+  visible change to a flow he may have rows in. `savedLoad.selfcheck.ts`'s fixture-source tests used
+  an arbitrary placeholder id (`"inv-4202"`) that never matched a real fixture — repointed at
+  `LOAD_BUILDER_FIXTURES[0].id`, plus a new case pinning the rejection itself (savedLoad 15/15).
+  **Not visually verified live** — `/v2/logistics/load-builder` is admin-gated with no test session
+  available; the new empty-state landing is brand-new UI Steve should eyeball once deployed.
+  `tsc`/`cf-build` green.
+
+- **`lb-ui` trailer-diagram color coding — per-SKU colors now render on-screen, not just in the PDF.**
+  `packEngine.ts` already computed a `color` per SKU (used by the loading-diagram PDF and the
+  job-pull picker's swatches) but `TrailerDiagram.tsx` never rendered it — a known, tracked gap
+  (`BACKLOG.md`'s `lb-ui-05` follow-up on the `colorForSku`/`colorForSkuId` duplication, which stays
+  open — this closes only the rendering half). Added left/right border-color stripes per column
+  (base SKU / top SKU when mixed, via inline `style` to override the Tailwind border utility on
+  specific sides only) and a per-trailer color-swatch legend. Also fixed the "Mixed (base + top-off)"
+  legend label, now inaccurate since a mixed column can be a chained sequence of 3+ thicknesses (see
+  `holey-sequential-fill` below), not just a base+top-off pair. **Not visually verified live** — same
+  admin-gated constraint as above; verified via `tsc --noEmit`, a clean `cf-build`, and manual
+  CSS-specificity review only. Flagged for a look once deployed: a shallow column in a deep row (4px
+  border eating a large share of its width) and label truncation on a mixed column (border eats ~8px
+  of the existing text padding).
+
+- **`row-order-tail-placement` — the sparse tail row in a thickness tier now sorts to the tier's rear
+  edge, closing a gap the `row-order-nose-first` fix (below) left open.** `buildOneRow`'s greedy
+  width-pack leaves one sparse row (fewer columns than its neighbors) whenever a thickness tier's
+  column count isn't a clean multiple of the row's column capacity — correct, space-efficient
+  behavior, but that row's sort position among same-thickness rows was previously an incidental
+  artifact of assembly order (`Array.sort` stability), so it could land sandwiched between two full
+  rows instead of at the tier's rear edge — read by a loader as a mistake ("gaps in the middle of
+  stacking"), not an intentional "ran out." Fixed with a secondary sort key (`rowWidthUsed` ascending)
+  on thickness ties in `simulate()`. New D9 selfcheck test, ground-truthed against real `pack()`
+  output rather than hand-derived, since Holey Board's sequential-chaining logic changes exact
+  per-column counts in non-obvious ways (an initial hand-derived expected count was wrong and had to
+  be corrected against the real engine output). packEngine 164/164, `tsc`/`cf-build` green.
+
+- **lb-ui-12 — v2 Load Builder: auto-downsize the last trailer to a 26ft Box Truck.** Three
+  sequential commits, one logical change. **Step 1** (`validatePlan`/`recomputePlan`/`planMetrics`
+  read `trailer.dims`): every check/computation in those three was already scoped inside a
+  per-trailer loop, so each now sources dims from `trailer.dims` (already carried by every
+  `PackTrailer`) instead of one plan-wide `dims` argument — a signature simplification with no
+  behavior change while every trailer still shares one dims. `planMetrics` needed a real math fix,
+  not just a signature drop: it used to flatten all trailers into one array and divide by a single
+  `effectiveHeight`/`dims.width`; now it weights each column/row against its OWN trailer's dims
+  while iterating trailer-by-trailer — numerically identical today, the only correct math once a
+  trailer can diverge. packEngine 149/149, loadEditor 119/119, dissolve 21/21, all others unchanged.
+  **Step 2** (per-trailer dims plumbed through the editor UI + BOL export): `loadEditor.ts`'s
+  `canDrop`/`findOverflowingRows` switched from the session-wide `state.dims` to the TARGET
+  trailer's own dims (falling back to `state.dims` only for a not-yet-existing trailer);
+  `CustomizeEditor.tsx`'s `TrailerDiagram`/`LoadingDiagramPrintButton`/`ColumnDetailPanel` and
+  `BolGenerateModal.tsx`'s per-trailer diagram build each now read their own trailer's dims instead
+  of one shared value. Still a no-op until a divergent trailer actually exists; selfcheck held at
+  prior counts across all 8 modules. **Step 3** (the auto-downsize itself): `pack()` gains
+  `autoDownsize` (off by default in `DEFAULT_PACK_OPTIONS` — opt-in, never a behavior change for
+  existing callers) and `trailerTypeLabel` (stamped onto every trailer a call builds, not just a
+  downsized one, so the UI never needs a `trailer.type ?? primaryKey` fallback). When on, checks
+  whether the LAST trailer's already-placed demand would also fit a 26ft Box Truck via
+  `skuOrientations` — the same fit primitive every other check in the file uses, not legacy's
+  sorted-dimension trick, which ignores `allowRotation` and can green-light a downsize that then
+  fails `validatePlan`'s sku-unplaceable rule — and only accepts the result if it recursively
+  repacks to exactly ONE box-truck trailer with nothing left unplaced; a downsize needing two box
+  trucks, or stranding an oversized piece, is rejected outright and the original trailer kept as
+  built. `LoadPlanView.tsx` gets the toggle (defaults on, matching legacy's own
+  `autoDownsize: true`; the engine's own default stays off — this UI toggle is what opts a real
+  session in) and persists it in saved loads (`savedLoad.ts`'s `autoDownsize` field, optional/
+  additive, defaulting to `false` on a pre-existing row so an old save never silently starts
+  downsizing on reload). `TrailerDiagram` grows an optional `typeBadge` pill reading
+  "Auto-downsized · 26ft Box Truck". `PlanMetricsStrip`'s "of N″ per trailer" denominator switches
+  to "mixed trailer sizes" once trailers actually diverge. packEngine 158/158 (7 new checks:
+  default-off, accept+conserve+validate, two rejection paths, the type-label-on-every-trailer
+  contract), savedLoad 14/14 (round-trip + pre-`lb-ui-12` backward compat). `tsc`/`cf-build` green
+  on all three commits. Closes the auto-downsize half of the `lb-ui-06` follow-up in `BACKLOG.md`
+  (Force Sizes, the other half, is still unbuilt — no engine-side concept to bind to).
+
+- **lb-ui-11 — v2 Load Builder: parts library in custom builds.** `CustomizeEditor`'s Edit modal can
+  now add rows/columns/layers from the full parts library (`GET /api/load-builder-skus`), not just
+  the job's own pulled SKUs. `loadEditor.ts` tracks `originalSkuIds` at session start to tell
+  job-known demand (drawn from `plan.balance`, existing behavior) apart from library-introduced
+  demand (grows `state.cart` by the shortfall beyond what balance already covers); new
+  `addRowFromLibrary`/`addColumnFromLibrary`/`addLayerFromLibrary` compose `introduceSku` with the
+  placement so undo reverts both the SKU introduction and the placement in one step. Also fixes a
+  conservation-violation-on-reopen bug this surfaced: `LoadPlanView.tsx`'s `cart`/`skus` were frozen
+  from the job-pull source and never picked up a library part added during editing, so the SECOND
+  time a planner opened Edit after adding one, `originalSkuIds` would rebuild without it and
+  immediately flag the plan as invalid. `onApply` now also returns `cart`/`skus`; `LoadPlanView`
+  threads them through as `editedCart`/`editedSkus` (`effectiveCart`/`effectiveSkus` downstream),
+  resetting them at the same points `editedPlan` resets; `savedLoad.ts` persists them additively so
+  a saved load round-trips a library part too, and `handlePickerLoad` only restores them alongside a
+  non-null `editedPlan` (a null plan rebuilds fresh from the frozen source with no knowledge of the
+  SKU). `coerceSku`/`fetchLoadBuilderSkus` moved from `JobPullModal.tsx` into `jobPull.ts` so
+  `JobPullModal` and the new library picker share one SKU universe. `pieceCount`/`footprintCount`
+  deliberately stay sourced from the original pull, not `effectiveCart` — they describe what was
+  pulled in, not live edited state. loadEditor 119/119, savedLoad 12/12 (both up from 87/9 with new
+  library-SKU and backward-compat coverage). `tsc` clean, `cf-build` green.
+
 - **lb-ui-04 — v2 Load Builder: saved loads (react-component-agent §9b + next-platform-agent §9a).
   Sprint step 7 of 7, `Prompts/sprint-load-builder-parity.md` — the LAST item; all 7 boxes are now
   checked. Writes are fenced behind `V2_LOGISTICS_WRITES_ENABLED` (currently `false`); reads are
