@@ -731,6 +731,8 @@ export default function ShipmentDashboard({
         jobId={viewerJobId}
         onClose={() => setViewerJobId(null)}
         onEdit={handleEditFromViewer}
+        canManageLoading={canManageLoading}
+        onDeleted={load}
       />
 
       <BolGenerateModal

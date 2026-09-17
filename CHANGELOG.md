@@ -1873,6 +1873,43 @@ current series).
 
 ## Logistics (v2)
 
+- **Shipment status cascade + delete actions — the v2 launch-blocker engineering pieces of the
+  "v2 logistics live-launch plan," both still behind the closed `V2_LOGISTICS_WRITES_ENABLED` fence.**
+  `ShipmentEditModal.tsx`'s Status field was read-only in v2 because the sync chain that makes an
+  edit safe didn't exist yet; now it's a live `<select>` (8-value allowlist matching legacy's manual
+  form exactly, rejecting board-only `awaiting`/`scheduled`). `shipments/[id]/route.ts`'s PUT ports
+  legacy's shipment-status reverse cascade (`_worker.js/routes/jobs.js:1372-1458`) verbatim: (1) a
+  forward-only, rank-guarded `jobs.status` sync; (2) a `loading_assignments.loading_status` mirror for
+  `loading/loaded/in_transit/delivered`; (3) a `completeCuttingLinesForJob` backstop for
+  `loaded/in_transit/delivered` — deliberately runs *after* block 2, since its gate query depends on
+  block 2's write; (4) a re-queue-to-`awaiting` on `ready_to_ship` for non-"customer pickup" jobs.
+  Each block is independently try/caught so one failing block never blocks the shipment row's own
+  commit, matching legacy. Caught mid-implementation: seeding `form.status` with a substitute value
+  (e.g. defaulting an out-of-set `awaiting`/`scheduled` shipment to `not_started`) would either
+  silently downgrade a real status on an untouched save, or — once the server got its own strict
+  validator — 400-reject the *entire* save (including unrelated field edits) for any shipment
+  currently sitting in a board-only state; fixed by always seeding the true value and only sending
+  `payload.status` when it actually changed. Also added: `DELETE /v2/api/shipments/:id` (fenced,
+  `canEditDashboard()`-gated, no `LOCKED_STATUSES` check — matches legacy, and deliberately not
+  lock-gated so a status-locked row isn't also un-deletable) and `DELETE /v2/api/bols/:id` (fenced,
+  gated on the stricter `X-User-Can-Manage-Loading` header, matching legacy's manager-only gate on
+  this specific action; single-BOL scope only, not legacy's separate bulk per-job branch — no v2 UI
+  surface calls that). Both wired into the UI with this repo's existing two-step arm/confirm delete
+  pattern (`PartsLibraryPanel.tsx`'s inline confirm swap — no `window.confirm()`): a "Delete shipment"
+  button in `ShipmentEditModal.tsx`'s footer, and a new "BOL History" panel in `BolViewerModal.tsx`
+  (gated on a new `canManageLoading` prop, passed only from `ShipmentDashboard.tsx`, never from
+  `DockBoard.tsx`'s read-only call) with a per-row delete. A known, pre-existing parity gap flagged
+  for follow-up rather than fixed here: single-BOL delete doesn't clean up `bol_documents`/R2 objects,
+  matching legacy's own single-delete omission exactly (only its bulk branch does that cleanup).
+  Flagged for Steve's review, not blocking: `LOCKED_STATUSES` (`in_transit/delivered/archived/
+  cancelled`) already 409s the whole PUT once reached — previously inert since status was unreachable
+  via v2, now newly reachable, so a v2-set terminal status can lock v2 out of further edits to that
+  shipment (mitigated by DELETE not being lock-gated). Verified via `tsc --noEmit`, `cf-build`, and
+  all 6 existing selfcheck suites (this is D1-side-effecting API logic, not a pure function, so it
+  doesn't fit the `*.selfcheck.ts` pattern) — nothing here is live-verifiable while the fence stays
+  closed; a `wrangler dev --remote` smoke pass is the correct follow-up once Steve reviews and flips
+  it.
+
 - **`lb-ui` test-invoice picker removal — bundled fixtures (INV_4202/4356/4347) are no longer
   selectable in Load Builder.** Steve: those three fixtures shouldn't be choosable in a
   production-facing view now that `lb-ui-05`'s Job Pull covers testing with real jobs. Removed the

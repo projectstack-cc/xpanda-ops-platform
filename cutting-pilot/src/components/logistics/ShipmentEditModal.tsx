@@ -24,6 +24,16 @@
 //     job-synced and stay editable regardless of job_id.
 //   - delivery_time is deliberately free text (see src/lib/deliveryTime.ts's own doc comment) --
 //     never reformatted here.
+//   - status is ALWAYS editable (flows shipment -> job, never job -> shipment) but restricted to
+//     the 8-value set legacy's own manual edit form offers -- rendered as a <select> using
+//     ShipmentRow.tsx's own STATUS_VARIANTS labels, not hand-written copy. A change cascades
+//     server-side onto jobs/loading_assignments/cutting_lines; this modal has no special-case UI
+//     for that, it just surfaces whatever the PUT returns (success, or the LOCKED_STATUSES 409)
+//     through the existing generic error banner.
+//
+// Delete is a two-step arm/confirm inline control (PartsLibraryPanel.tsx's own pattern) -- not
+// window.confirm(), same constraint as every other destructive action in this codebase. Gated by
+// the same canEditDashboard() as Save server-side; no client-side permission gate on the button.
 //
 // Ship-to address display for job-linked shipments comes from a dedicated GET /v2/api/jobs/:id
 // fetch, NOT the already-loaded list row -- attachDistanceEta() in shipments/route.ts deletes
@@ -33,9 +43,23 @@
 // Save is FENCED (PUT returns 501 while V2_LOGISTICS_WRITES_ENABLED is false) -- same
 // fenced-banner UX as BolGenerateModal.tsx: banner shown, modal stays open, no typed data lost.
 import { useEffect, useState } from "react";
+import { Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
-import { StatusBadge } from "./ShipmentRow";
+import { STATUS_VARIANTS } from "./ShipmentRow";
 import type { ShipmentListItem, JobForBol } from "./types";
+
+// The exact 8-option set the server (shipments/[id]/route.ts) accepts -- deliberately excludes
+// "awaiting"/"scheduled" (board-driven-only in legacy, never hand-set from this form).
+const EDITABLE_STATUS_VALUES = [
+  "not_started",
+  "in_production",
+  "ready_to_ship",
+  "loading",
+  "loaded",
+  "in_transit",
+  "delivered",
+  "cancelled",
+] as const;
 
 interface ShipmentEditModalProps {
   shipment: ShipmentListItem | null;
@@ -50,6 +74,7 @@ const inputClass =
 const readOnlyClass = "min-h-[44px] flex items-center text-sm text-text px-3 py-2 rounded-md bg-[var(--ghost-bg)] border border-[var(--border)]";
 
 interface EditForm {
+  status: string;
   customer: string;
   carrier: string;
   method: string;
@@ -66,6 +91,7 @@ interface EditForm {
 
 function emptyForm(): EditForm {
   return {
+    status: "not_started",
     customer: "",
     carrier: "",
     method: "",
@@ -94,6 +120,9 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [fenced, setFenced] = useState(false);
+  const [deleteArmed, setDeleteArmed] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const isOpen = !!shipment;
   const jobLinked = !!shipment?.job_id;
@@ -103,12 +132,20 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     setSaveError(null);
     setFenced(false);
     setSaving(false);
+    setDeleteArmed(false);
+    setDeleting(false);
+    setDeleteError(null);
     if (!shipment) {
       setForm(emptyForm());
       setJob(null);
       return;
     }
     setForm({
+      // Seeded with the REAL current value even when it's outside EDITABLE_STATUS_VALUES
+      // (board-driven "awaiting"/"scheduled") -- handleSave only sends `status` when it actually
+      // differs from shipment.status, so leaving an out-of-set value untouched never round-trips
+      // it through the server's stricter validator and never 400s an otherwise-unrelated save.
+      status: shipment.status || "not_started",
       customer: shipment.customer || "",
       carrier: shipment.carrier || "",
       method: shipment.method === "customer pickup" ? "customer pickup" : "",
@@ -178,6 +215,12 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
       delivery_incident_notes: form.deliveryIncidentNotes,
     };
 
+    // Only sent when actually changed -- see the seed effect's comment on why an untouched
+    // out-of-set value (board-driven "awaiting"/"scheduled") must never round-trip unchanged.
+    if (form.status !== shipment.status) {
+      payload.status = form.status;
+    }
+
     // trailer_number omitted entirely unless the user can manage loading -- its mere presence
     // in the payload is checked server-side too, but never send it if the control was read-only.
     if (canManageLoading) {
@@ -221,18 +264,57 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     }
   }
 
+  async function handleDelete() {
+    if (!shipment) return;
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      const res = await fetch(`/v2/api/shipments/${encodeURIComponent(shipment.id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+
+      if (res.status === 501) {
+        setFenced(true);
+        return;
+      }
+      if (!res.ok || !data.ok) {
+        setDeleteError(data.detail || data.error || `HTTP ${res.status}`);
+        return;
+      }
+
+      onClose(true);
+    } catch {
+      setDeleteError("Network error — could not delete.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={() => onClose(false)} title="Edit Shipment" size="lg">
       {shipment && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted uppercase tracking-wider">Status</span>
-            <StatusBadge status={shipment.status} />
-          </div>
+          <Field label="Status">
+            <select
+              className={inputClass}
+              value={form.status}
+              onChange={(e) => set("status", e.target.value)}
+            >
+              {!(EDITABLE_STATUS_VALUES as readonly string[]).includes(form.status) && (
+                <option value={form.status}>{STATUS_VARIANTS[form.status]?.label ?? form.status}</option>
+              )}
+              {EDITABLE_STATUS_VALUES.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_VARIANTS[s]?.label ?? s}
+                </option>
+              ))}
+            </select>
+          </Field>
 
           {fenced && (
             <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
-              Editing is disabled in the v2 preview phase. Use the legacy Logistics dashboard to edit this shipment for now.
+              Editing and deleting are disabled in the v2 preview phase. Use the legacy Logistics dashboard for this shipment for now.
             </div>
           )}
 
@@ -401,22 +483,63 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
             </Field>
           )}
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--line)]">
-            <button
-              type="button"
-              onClick={() => onClose(false)}
-              className="min-h-[44px] px-4 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold text-text cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!canSave}
-              onClick={handleSave}
-              className="min-h-[44px] px-5 rounded-md bg-[var(--brand)] text-white text-sm font-semibold disabled:opacity-50 cursor-pointer hover:opacity-90"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
+          {deleteError && (
+            <div className="rounded-md bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm px-4 py-3 font-medium">
+              {deleteError}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--line)]">
+            {deleteArmed ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-semibold text-[var(--danger-text)]">
+                  Delete this shipment permanently?
+                </span>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-2.5 py-1.5 rounded-md text-xs font-semibold bg-[var(--danger-bg)] text-white cursor-pointer disabled:opacity-50"
+                >
+                  {deleting ? "Deleting…" : "Confirm delete"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteArmed(false)}
+                  disabled={deleting}
+                  className="px-2.5 py-1.5 rounded-md text-xs font-semibold border border-[var(--border)] text-text cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setDeleteArmed(true)}
+                className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-md text-sm font-semibold text-[var(--danger-text)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_10%,transparent)] cursor-pointer"
+              >
+                <Trash2 size={14} aria-hidden="true" />
+                Delete shipment
+              </button>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onClose(false)}
+                className="min-h-[44px] px-4 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold text-text cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!canSave}
+                onClick={handleSave}
+                className="min-h-[44px] px-5 rounded-md bg-[var(--brand)] text-white text-sm font-semibold disabled:opacity-50 cursor-pointer hover:opacity-90"
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
           </div>
         </div>
       )}

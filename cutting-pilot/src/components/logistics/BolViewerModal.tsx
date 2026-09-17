@@ -19,8 +19,17 @@
 // -- so any edit-and-save on a BOL also heals its stored `trailer_no` to the current dock value.
 // Legacy has no equivalent (it edits the frozen stored value in place); this is a deliberate,
 // desirable improvement, not a bug, but it is new behavior worth calling out.
+//
+// BOL-history delete: a per-BOL list with a two-step arm/confirm delete (PartsLibraryPanel.tsx's
+// own pattern, not window.confirm()), gated on `canManageLoading` -- mirrors legacy's single-BOL
+// DELETE gate (admin OR logistics.loading.manage edit). Only ShipmentDashboard.tsx passes
+// `canManageLoading`; DockBoard.tsx's read-only call (`viewOnly`) never does, so the list stays
+// hidden there regardless. `historyBols` is deliberately a SEPARATE state from `bols` -- `bols` is
+// sometimes narrowed to one load via `loadNumber` for the PDF preview, but the history list always
+// needs the job's full BOL set. `onDeleted` is a NEW, additive callback (not a widened `onClose`)
+// so DockBoard.tsx's call site, which never deletes, needs no change.
 import { useEffect, useRef, useState } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
 import PdfViewer from "@/components/PdfViewer";
 import { buildCombinedBolPdf } from "@/lib/bolDomGlue";
@@ -42,14 +51,33 @@ interface BolViewerModalProps {
   // hides the Edit button regardless of lock state. Unit 2's shipment dashboard omits this
   // (defaults to false) and keeps its existing edit affordance.
   viewOnly?: boolean;
+  /** Shows the BOL-history delete list when true. Only ShipmentDashboard.tsx passes this. */
+  canManageLoading?: boolean;
+  /** Called after a successful BOL delete so the parent dashboard can refetch (bol_count/
+   * bol_number would otherwise go stale). Additive -- does not replace onClose. */
+  onDeleted?: () => void;
 }
 
-export default function BolViewerModal({ jobId, onClose, onEdit, loadNumber = null, viewOnly = false }: BolViewerModalProps) {
+export default function BolViewerModal({
+  jobId,
+  onClose,
+  onEdit,
+  loadNumber = null,
+  viewOnly = false,
+  canManageLoading = false,
+  onDeleted,
+}: BolViewerModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [src, setSrc] = useState<string | null>(null);
   const [bols, setBols] = useState<BolRecord[]>([]);
+  const [historyBols, setHistoryBols] = useState<BolRecord[]>([]);
   const [locked, setLocked] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [confirmDeleteBolId, setConfirmDeleteBolId] = useState<string | null>(null);
+  const [deletingBolId, setDeletingBolId] = useState<string | null>(null);
+  const [deleteFenced, setDeleteFenced] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const blobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -64,7 +92,12 @@ export default function BolViewerModal({ jobId, onClose, onEdit, loadNumber = nu
     setSrc(null);
     setError(null);
     setBols([]);
+    setHistoryBols([]);
     setLocked(false);
+    setConfirmDeleteBolId(null);
+    setDeletingBolId(null);
+    setDeleteFenced(false);
+    setDeleteError(null);
     if (!jobId) return;
 
     let cancelled = false;
@@ -125,6 +158,7 @@ export default function BolViewerModal({ jobId, onClose, onEdit, loadNumber = nu
           }
         }
         setBols(enriched);
+        setHistoryBols(enrichedAll);
 
         const shipRow = shipJson.ok && Array.isArray(shipJson.data) ? shipJson.data[0] : null;
         setLocked(!!(shipRow && BOL_LOCKED_STATUSES.includes(String(shipRow.status))));
@@ -144,7 +178,7 @@ export default function BolViewerModal({ jobId, onClose, onEdit, loadNumber = nu
     return () => {
       cancelled = true;
     };
-  }, [jobId, loadNumber]);
+  }, [jobId, loadNumber, refreshKey]);
 
   // Revoke on unmount too, not just on job-context change.
   useEffect(
@@ -160,6 +194,34 @@ export default function BolViewerModal({ jobId, onClose, onEdit, loadNumber = nu
     []
   );
 
+  async function handleDeleteBol(bolId: string) {
+    setDeleteError(null);
+    setDeleteFenced(false);
+    setDeletingBolId(bolId);
+    try {
+      const res = await fetch(`/v2/api/bols/${encodeURIComponent(bolId)}`, { method: "DELETE" });
+      const data = await res.json();
+
+      if (res.status === 501) {
+        setDeleteFenced(true);
+        setConfirmDeleteBolId(null);
+        return;
+      }
+      if (!res.ok || !data.ok) {
+        setDeleteError(data.detail || data.error || `HTTP ${res.status}`);
+        return;
+      }
+
+      setConfirmDeleteBolId(null);
+      onDeleted?.();
+      setRefreshKey((k) => k + 1);
+    } catch {
+      setDeleteError("Network error — could not delete.");
+    } finally {
+      setDeletingBolId(null);
+    }
+  }
+
   return (
     <Modal isOpen={!!jobId} onClose={onClose} title="Bill of Lading" size="xl">
       {loading && <p className="text-sm text-muted py-6 text-center">Building BOL preview…</p>}
@@ -170,6 +232,63 @@ export default function BolViewerModal({ jobId, onClose, onEdit, loadNumber = nu
 
       {!loading && !error && src && (
         <div className="space-y-3">
+          {!viewOnly && canManageLoading && historyBols.length > 0 && (
+            <div className="rounded-md border border-[var(--border)] bg-[var(--ghost-bg)] p-3 space-y-2">
+              <div className="text-xs font-semibold text-muted uppercase tracking-wider">BOL History</div>
+              {deleteFenced && (
+                <p className="text-xs text-[var(--warn-text)]">
+                  Deleting is disabled in the v2 preview phase.
+                </p>
+              )}
+              {deleteError && <p className="text-xs text-[var(--danger-text)]">{deleteError}</p>}
+              <div className="space-y-1.5">
+                {historyBols.map((b) => {
+                  const bolId = String(b.id);
+                  const isConfirming = confirmDeleteBolId === bolId;
+                  const isDeleting = deletingBolId === bolId;
+                  return (
+                    <div key={bolId} className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-text truncate">
+                        {b.load_number != null ? `Load ${b.load_number} — ` : ""}
+                        BOL {b.bol_number || bolId}
+                        {b.date ? ` · ${b.date}` : ""}
+                        {b.carrier_name ? ` · ${b.carrier_name}` : ""}
+                      </span>
+                      {isConfirming ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBol(bolId)}
+                            disabled={isDeleting}
+                            className="px-2 py-1 rounded-md text-xs font-semibold bg-[var(--danger-bg)] text-white cursor-pointer disabled:opacity-50"
+                          >
+                            {isDeleting ? "Deleting…" : "Confirm"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteBolId(null)}
+                            disabled={isDeleting}
+                            className="px-2 py-1 rounded-md text-xs font-semibold border border-[var(--border)] text-text cursor-pointer disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteBolId(bolId)}
+                          className="p-1.5 rounded-md text-[var(--danger-text)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_10%,transparent)] cursor-pointer shrink-0"
+                          aria-label={`Delete BOL ${b.bol_number || bolId}`}
+                        >
+                          <Trash2 size={14} aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {!locked && !viewOnly && (
             <div className="flex justify-end">
               <button

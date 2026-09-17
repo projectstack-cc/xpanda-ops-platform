@@ -12,7 +12,7 @@ import type { ShipmentDetail, ShipmentListItem } from "./types";
 const badgeBase = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap";
 
 // Tokenized per xpanda-ops-agents.md §9b — status is color + text, never color alone.
-const STATUS_VARIANTS: Record<string, { label: string; cls: string }> = {
+export const STATUS_VARIANTS: Record<string, { label: string; cls: string }> = {
   not_started: { label: "Not started", cls: "border border-[var(--border)] text-[var(--text-hint)]" },
   in_production: { label: "In production", cls: "bg-[var(--info-bg)] text-[var(--info-text)] border border-[var(--info-border)]" },
   ready_to_ship: { label: "Ready to ship", cls: "bg-[var(--info-bg)] text-[var(--info-text)] border border-[var(--info-border)]" },

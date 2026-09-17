@@ -1,4 +1,5 @@
-// src/app/api/bols/[id]/route.ts  ->  PUT /v2/api/bols/:id (fenced, full-row replace)
+// src/app/api/bols/[id]/route.ts  ->  PUT /v2/api/bols/:id (fenced, full-row replace),
+// DELETE /v2/api/bols/:id (fenced, single-BOL delete)
 // AUTHORED but FENCED behind V2_LOGISTICS_WRITES_ENABLED (see ../route.ts and the prompt's
 // §Read/write fence) -- the BOL Editor's Apply action calls this. Mirrors legacy's
 // PUT /api/bols/:id (_worker.js/routes/bols.js) column-for-column, INCLUDING its omissions:
@@ -7,9 +8,19 @@
 // full-row replace even though the client sends the whole row. access_token is read-modify-
 // write -- an existing token is never overwritten (printed-QR invariant); only a legacy row
 // with no token yet gets one minted here.
+//
+// DELETE mirrors legacy's single-BOL DELETE (bols.js:597-616) exactly: gated on
+// X-User-Is-Admin/logistics.loading.manage (a STRICTER gate than PUT's bare auth check above --
+// matches legacy's own route, which applies this check only to the delete branch), 404 if
+// missing, deletes the row + logs activity. Deliberately single-BOL only, not legacy's separate
+// bulk per-job branch (bols.js:567-595) -- no v2 UI surface calls that today. Also deliberately
+// does NOT clean up bol_documents/R2 objects, matching legacy's own single-delete exactly (only
+// its bulk branch does that cleanup, see ../route.ts's regenerate-replace path for the pattern
+// if this needs to be added later).
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
+import { logActivity } from "@/lib/activityLog";
 
 function generateAccessToken(): string {
   const bytes = new Uint8Array(16);
@@ -132,6 +143,37 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
     }
 
     return NextResponse.json({ ok: true, message: "BOL updated.", bol: row });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!V2_LOGISTICS_WRITES_ENABLED) {
+    return NextResponse.json(
+      { ok: false, error: "v2 logistics writes disabled (read-only migration phase)" },
+      { status: 501 }
+    );
+  }
+
+  const { id: bolId } = await ctx.params;
+  const { DB } = await getEnv();
+  const actorId = request.headers.get("X-User-Id") || "";
+  if (!actorId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+
+  // X-User-Can-Manage-Loading is already exactly "admin OR logistics.loading.manage edit"
+  // (middleware.ts), matching legacy's own stricter gate on this specific delete branch.
+  if (request.headers.get("X-User-Can-Manage-Loading") !== "1") {
+    return NextResponse.json({ ok: false, error: "Manager access required to delete BOLs." }, { status: 403 });
+  }
+
+  const existing = await DB.prepare("SELECT id, bol_number FROM bols WHERE id = ?").bind(bolId).first<any>();
+  if (!existing) return NextResponse.json({ ok: false, error: "BOL not found." }, { status: 404 });
+
+  try {
+    await DB.prepare("DELETE FROM bols WHERE id = ?").bind(bolId).run();
+    await logActivity(DB, "delete", "bol", bolId, `Deleted BOL #${existing.bol_number || bolId}`, { id: bolId }, actorId);
+    return NextResponse.json({ ok: true, message: "BOL deleted." });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, { status: 500 });
   }
