@@ -61,6 +61,7 @@ const API_ROUTES = [
 
   // Jobs / shipments / manufacturing
   { path: '/api/address/validate', method: 'POST', handler: (req, env) => handleApiAddressValidate(req, env) },
+  // Subroutes :id/{packing-slip,group,assignments,shifts,zones} are handled inside handleApiJobs.
   { prefix: '/api/jobs',      handler: (req, env) => handleApiJobs(req, env) },
   { path: '/api/holey-chunks/preview', method: 'POST', handler: (req, env) => handleHoleyChunksPreview(req, env) },
   { path: '/api/holey-chunks/backfill', method: 'POST', handler: (req, env) => handleHoleyChunksBackfill(req, env) },

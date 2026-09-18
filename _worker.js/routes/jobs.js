@@ -34,6 +34,15 @@ async function computeAndPersistHoleyChunks(db, jobId, job) {
   }
 }
 
+// lbz-db-01: coerce an optional numeric zone field (offload_seq / zone_bdft). Number(null) === 0
+// (finite), so null/''/undefined must be special-cased BEFORE the isFinite check, or a client
+// sending that to explicitly clear the field would silently persist 0 instead of NULL.
+function nullableInt(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function handleApiJobs(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
@@ -50,7 +59,7 @@ export async function handleApiJobs(request, env) {
     j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
     j.cutting_instructions, j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
     j.priority, j.priority_level, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
-    j.hb_chunks_required, j.hb_chunk_breakdown,
+    j.hb_chunks_required, j.hb_chunk_breakdown, j.offload_zones_enabled,
     j.packing_slip_filename, j.packing_slip_invoice, j.source, j.ship_to_verified,
     j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_street2,
     j.ship_to_city, j.ship_to_state, j.ship_to_zip,
@@ -197,6 +206,57 @@ export async function handleApiJobs(request, env) {
       await db.prepare(`DELETE FROM job_shifts WHERE job_id = ? AND shift = ?`).bind(jobId, targetShift).run();
       await logActivity(db, "unassign_shift", "job", jobId, `Unassigned ${targetShift} shift`, { shift: targetShift }, actorId);
       return json({ ok: true });
+    }
+  }
+
+  // lbz-db-01: manual offload-zone editor. PUT /api/jobs/:id/zones body
+  // { enabled, items:[{id, offload_seq, zone_label}] } — toggles jobs.offload_zones_enabled and
+  // updates per-line zone fields in one batch. No dedicated permission check here: API_PERMISSION_MAP
+  // already maps /api/jobs -> 'jobs' and the session gate enforces PUT -> edit, i.e. the same
+  // permission as any other job edit.
+  if (jobId && subRoute === "zones" && request.method === "PUT") {
+    let body;
+    try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const jobRow = await db.prepare("SELECT id FROM jobs WHERE id = ?").bind(jobId).first();
+    if (!jobRow) return json({ ok: false, error: "Job not found." }, 404);
+
+    const enabled     = body?.enabled ? 1 : 0;
+    const items       = Array.isArray(body?.items) ? body.items : [];
+    const actorIdZone = request.headers.get("X-User-Id");
+    const nowZ        = new Date().toISOString();
+
+    try {
+      const stmts = [
+        db.prepare("UPDATE jobs SET offload_zones_enabled = ?, updated_at = ? WHERE id = ?")
+          .bind(enabled, nowZ, jobId),
+      ];
+      for (const it of items) {
+        const liId = it?.id ? String(it.id).trim() : null;
+        if (!liId) continue;
+        const seq   = nullableInt(it.offload_seq);
+        const label = it.zone_label ? String(it.zone_label).trim() : null;
+        // Scoped to job_id too so a forged line-item id can't write another job's row.
+        stmts.push(
+          db.prepare("UPDATE job_line_items SET offload_seq = ?, zone_label = ? WHERE id = ? AND job_id = ?")
+            .bind(seq, label, liId, jobId)
+        );
+      }
+      await db.batch(stmts);
+
+      await logActivity(db, 'update', 'job', jobId,
+        `Updated offload zones — enabled: ${!!enabled}, ${items.length} line item(s)`,
+        { enabled: !!enabled, items_updated: items.length }, actorIdZone
+      );
+
+      const job    = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(jobId).first();
+      const liRows = await db.prepare("SELECT * FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC").bind(jobId).all();
+      return json({
+        ok: true,
+        job: { ...job, processes: safeJsonParse(job.processes, []), line_items: liRows.results || [] },
+      });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
   }
 
@@ -431,6 +491,7 @@ export async function handleApiJobs(request, env) {
     const load_count           = Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1;
     const total_bdft           = Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0;
     const confirmed_to_ship    = payload.confirmed_to_ship ? 1 : 0;
+    const offload_zones_enabled = payload.offload_zones_enabled ? 1 : 0;
     const processes            = Array.isArray(payload.processes) ? JSON.stringify(payload.processes) : '[]';
 
     // Packing slip fields (optional — present when job is created from an uploaded PDF)
@@ -481,8 +542,9 @@ export async function handleApiJobs(request, env) {
           packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
           ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
           ship_to_city, ship_to_state, ship_to_zip,
-          ship_to_verified, ship_to_standardized, ship_to_verified_at, trailer_group_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ship_to_verified, ship_to_standardized, ship_to_verified_at, trailer_group_id,
+          offload_zones_enabled
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, status, customer, po_number, invoice_number, ship_date, ship_day,
         location, delivery_time, method, carrier, load_count, total_bdft,
@@ -493,6 +555,7 @@ export async function handleApiJobs(request, env) {
         ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
         ship_to_city, ship_to_state, ship_to_zip,
         ship_to_verified, ship_to_standardized, ship_to_verified_at, null,
+        offload_zones_enabled,
       ).run();
 
       // Insert line items
@@ -500,8 +563,8 @@ export async function handleApiJobs(request, env) {
       for (let i = 0; i < lineItems.length; i++) {
         const li = lineItems[i];
         await db.prepare(`
-          INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order)
-          VALUES (?,?,?,?,?,?,?,?,?)
+          INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order, offload_seq, zone_label, zone_bdft)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         `).bind(
           crypto.randomUUID(), id,
           li.part_id ? String(li.part_id).trim() : null,
@@ -511,6 +574,9 @@ export async function handleApiJobs(request, env) {
           String(li.dimensions  || "").trim(),
           li.density ? String(li.density).trim() : null,
           i,
+          nullableInt(li.offload_seq),
+          li.zone_label ? String(li.zone_label).trim() : null,
+          nullableInt(li.zone_bdft),
         ).run();
       }
 
@@ -731,6 +797,7 @@ export async function handleApiJobs(request, env) {
     if ("load_count"        in payload) { sets.push("load_count = ?");        binds.push(Number.isFinite(Number(payload.load_count)) ? Number(payload.load_count) : 1); }
     if ("total_bdft"        in payload) { sets.push("total_bdft = ?");        binds.push(Number.isFinite(Number(payload.total_bdft)) ? Number(payload.total_bdft) : 0); }
     if ("confirmed_to_ship" in payload) { sets.push("confirmed_to_ship = ?"); binds.push(payload.confirmed_to_ship ? 1 : 0); }
+    if ("offload_zones_enabled" in payload) { sets.push("offload_zones_enabled = ?"); binds.push(payload.offload_zones_enabled ? 1 : 0); }
     if ("combo_id"  in payload) { sets.push("combo_id = ?");  binds.push(payload.combo_id ? String(payload.combo_id).trim() : null); }
     if ("processes" in payload) {
       const v = Array.isArray(payload.processes) ? JSON.stringify(payload.processes) : '[]';
@@ -807,8 +874,8 @@ export async function handleApiJobs(request, env) {
         for (let i = 0; i < payload.line_items.length; i++) {
           const li = payload.line_items[i];
           await db.prepare(`
-            INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order)
-            VALUES (?,?,?,?,?,?,?,?,?)
+            INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order, offload_seq, zone_label, zone_bdft)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
           `).bind(
             crypto.randomUUID(), id,
             li.part_id ? String(li.part_id).trim() : null,
@@ -818,6 +885,9 @@ export async function handleApiJobs(request, env) {
             String(li.dimensions  || "").trim(),
             li.density ? String(li.density).trim() : null,
             i,
+            nullableInt(li.offload_seq),
+            li.zone_label ? String(li.zone_label).trim() : null,
+            nullableInt(li.zone_bdft),
           ).run();
         }
       }

@@ -379,7 +379,12 @@
   stage timestamps (`delivered_at`/`in_transit_at`/`loaded_at`) survive the overwrite independently.
 - [ ] Customer database (full CRUD) — icebox: revisit once all orders are entered here first, or it becomes a necessity
 - [ ] Consider separate dashboards for staff vs. management (TV display)
-- [ ] Zoning support for deck systems
+- [x] lbz-db-01 — Offload zone schema + API passthrough
+- [ ] lbz-parse-01
+- [ ] lbz-parse-02
+- [ ] lbz-pack-01
+- [ ] lbz-bol-01
+- [ ] lbz-bol-02
 - [ ] Load builder: make initial calculated load view larger, include the stacks visually
 - [ ] Load builder DISSOLVE: optional per-piece (sub-line) granularity within a move-group — current P378 checkbox toggles a whole skuCode|height|dest group at once.
 - [ ] **P443 follow-up — consider removing the now-vestigial COMPACT LOAD button.** Compaction is

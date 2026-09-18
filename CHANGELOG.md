@@ -4309,6 +4309,28 @@ current series).
 
 ## Database / API
 
+- **lbz-db-01 — Offload zone schema + API passthrough (db-api-agent).** First prompt in the
+  offload-zone series (zoning support for deck systems). Migration already run remotely by Steve
+  before this session: `jobs.offload_zones_enabled INTEGER NOT NULL DEFAULT 0`,
+  `job_line_items.offload_seq INTEGER`, `job_line_items.zone_label TEXT`,
+  `job_line_items.zone_bdft INTEGER` (stated BDFT of the zone/density group a line belongs to —
+  checksum source for later lbz-* prompts). Code passthrough in `_worker.js/routes/jobs.js`: both
+  `INSERT INTO job_line_items` statements (create path and the PUT replace-line-items path) now
+  write `offload_seq`/`zone_label`/`zone_bdft` (all nullable, from payload); job create/update
+  accept and persist `offload_zones_enabled` (coerced 0/1). New endpoint `PUT
+  /api/jobs/:id/zones` (body `{ enabled, items:[{id, offload_seq, zone_label}] }`) updates the
+  toggle and per-line zone fields in one `db.batch()`, scoped `WHERE id = ? AND job_id = ?` per
+  line so a forged item id can't touch another job's rows; logs via `logActivity()`. No new
+  `API_ROUTES` row — `/api/jobs` is already a prefix match, so `/api/jobs/:id/zones` was already
+  reaching `handleApiJobs`; the new subroute lives inside the handler alongside the existing
+  `assignments`/`shifts`/`group` subroutes, and permission is the same as any other job edit
+  (`API_PERMISSION_MAP` already maps `/api/jobs` → `jobs`, gate enforces PUT → edit — no extra
+  check added). Added a one-line comment in `index.js` next to the `/api/jobs` row documenting
+  which subroutes live inside the handler. Also added `j.offload_zones_enabled` to
+  `JOB_LIST_COLS` in the same file — the job-list `GET /api/jobs` endpoint enumerates columns
+  explicitly (unlike `GET /api/jobs/:id`, which is `SELECT *` and already returned the new
+  columns for free) and the flag needs to reach the Job Board list view for downstream lbz-*
+  prompts. `node --check` clean on both modified files.
 - **P422 follow-up — pill-driven status advance now also syncs the linked shipment
   (db-api-agent).** Same-day fix: the original P422 block corrected `jobs.status` but
   the logistics board (`logistics/index.html`) actually renders `shipments.status`,
