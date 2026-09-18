@@ -46,6 +46,7 @@
 .jobs-slip-badge-file { font-size: 12px; color: #3b82f6; }
 .jobs-slip-badge-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; margin-top: 2px; }
 .jobs-card-trailer { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 9999px; background: rgba(99,102,241,.12); color: #4338ca; }
+.jobs-card-zoned { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 9999px; background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-border); }
 .jobs-bol-view-btn { display: block; width: 100%; margin-top: 4px; padding: 3px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; border: 1px solid #6366f1; background: rgba(99,102,241,.08); color: #4338ca; cursor: pointer; text-align: center; }
 .jobs-slip-remove { font-size: 12px; color: #ef4444; cursor: pointer; background: none; border: none; padding: 0; text-decoration: underline; font-family: inherit; }
 .jobs-slip-view { font-size: 12px; color: #1e40af; cursor: pointer; background: none; border: 1px solid #93c5fd; border-radius: 5px; padding: 3px 8px; font-family: inherit; font-weight: 600; }
@@ -265,6 +266,30 @@
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
         <button class="btn ghost small" onclick="closeDiversiTechPrintModal()" data-i18n="jobs.cancel">Cancel</button>
         <button class="btn small" id="diversitech-print-confirm" onclick="confirmDiversiTechPrint()" data-i18n="jobs.printLabels">Print Labels</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Offload Zone editor (lbz-parse-02) — manual zone label + delivery order editor for an
+     existing job's line items. Follows the split-days-modal / diversitech-print-modal pattern:
+     small secondary jobs-modal-overlay, rows rendered into a container div, inline error box,
+     its own Cancel/Save footer. Persists via PUT /api/jobs/:id/zones (lbz-db-01), independent of
+     the main Save Job button. -->
+<div class="jobs-modal-overlay" id="zone-editor-modal" hidden onclick="if(event.target===this)closeZoneEditorModal()" style="z-index:165;">
+  <div class="jobs-modal-panel" role="dialog" aria-modal="true" aria-labelledby="zone-editor-title" style="max-width:560px;">
+    <div class="jobs-modal-header">
+      <h2 id="zone-editor-title" data-i18n="jobs.zoneEditorTitle">Edit Offload Zones</h2>
+      <button class="jobs-modal-close" aria-label="Close" data-i18n-attr="aria-label:jobs.close" onclick="closeZoneEditorModal()">&times;</button>
+    </div>
+    <div class="jobs-modal-body">
+      <p style="font-size:13px;color:var(--muted);margin:0 0 12px;" data-i18n="jobs.zoneEditorDesc">Assign each line item to a delivery zone. Give each zone a delivery order — editing one line's order updates every line in that zone.</p>
+      <datalist id="zone-editor-labels"></datalist>
+      <div id="zone-editor-rows"></div>
+      <div id="zone-editor-error" style="color:var(--danger-bg);font-size:13px;margin-top:8px;" hidden></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+        <button class="btn ghost small" style="min-height:44px;" onclick="closeZoneEditorModal()" data-i18n="jobs.cancel">Cancel</button>
+        <button class="btn small" style="min-height:44px;" id="zone-editor-save" onclick="saveZoneEditor()" data-i18n="jobs.save">Save</button>
       </div>
     </div>
   </div>
@@ -546,6 +571,25 @@
         </div>
       </div>
 
+      <!-- Offload Zones (lbz-parse-02): existing-job manual toggle + editor. Hidden for new jobs
+           (mirrors assign-section/shift-section above) since the zones endpoint needs a saved
+           job id and persisted job_line_items rows. -->
+      <div class="jobs-form-section" id="offload-zones-section" hidden>
+        <p class="jobs-form-section-title" data-i18n="jobs.sectionOffloadZones">Offload Zones</p>
+        <label class="jobs-switch-row" for="f-offload-zones-enabled">
+          <span>
+            <span class="jobs-switch-label" data-i18n="jobs.offloadZonesLabel">Offload Zones</span>
+            <div class="jobs-switch-hint" data-i18n="jobs.offloadZonesHint">Group line items into delivery zones with an unloading order.</div>
+          </span>
+          <span class="jobs-switch">
+            <input type="checkbox" id="f-offload-zones-enabled" onchange="onOffloadZonesToggle(this.checked)">
+            <span class="jobs-switch-track"></span>
+            <span class="jobs-switch-thumb"></span>
+          </span>
+        </label>
+        <button type="button" class="btn ghost small" id="btn-edit-zones" hidden style="min-height:44px;" onclick="openZoneEditorModal(editingJobId)" data-i18n="jobs.editZones">Edit Zones</button>
+      </div>
+
       <!-- Block Calculator Combo -->
       <div class="jobs-form-section">
         <p class="jobs-form-section-title" data-i18n="jobs.sectionCombo">Block Calculator Combo</p>
@@ -687,6 +731,12 @@ let selectedComboId  = null;
 let selectedComboName = '';
 let pendingDensityConflicts = 0; // lbz-parse-01: unresolved parse-review density conflicts; blocks saveJob() while > 0
 let parsedOffloadZonesEnabled = 0; // lbz-parse-01: offload_zones_enabled for the job currently loaded in the modal
+// lbz-parse-02: manual zone editor modal state (existing-job side; separate from the parse-review
+// flow above). zoneEditorSavedOk tracks whether saveZoneEditor() completed before the modal closes,
+// so closeZoneEditorModal() knows whether to run the revert callback (e.g. un-check the switch).
+let zoneEditorJobId     = null;
+let zoneEditorRevertFn  = null;
+let zoneEditorSavedOk   = false;
 let partsCache      = null;
 let combosCache     = null;
 let draggedId       = null;
@@ -1219,6 +1269,7 @@ function buildCard(job) {
     ? `<div class="jobs-card-trailer" title="${esc(t('jobs.trailerAssignedTitle', { n: job.assigned_trailers }))}">${esc(t('jobs.trailerAssigned'))}</div>`
     : '';
   const splitBadge = buildSplitBadgeHtml(job);
+  const zonedBadge = buildOffloadZonesBadgeHtml(job); // lbz-parse-02
   const _ls = job.loading_status_indicator;
   const _loadMeta = _ls && LIST_LOADING[_ls];
   const loadingBadge = _loadMeta
@@ -1242,6 +1293,7 @@ function buildCard(job) {
     ${trailerBadge}
     ${loadingBadge}
     ${splitBadge}
+    ${zonedBadge}
     ${shipToVerifiedBadge(job.ship_to_verified) ? `<div style="margin-top:4px;">${shipToVerifiedBadge(job.ship_to_verified)}</div>` : ''}
     <button id="bol-view-btn-${esc(job.id)}" class="jobs-bol-view-btn" hidden onclick="event.stopPropagation();viewBolForJob('${esc(job.id)}')">${esc(t('jobs.viewBol'))}</button>
     ${(job.status === 'shipped' && !job.archived_at) ? `<button class="jobs-archive-btn" style="width:100%;margin-top:4px;" onclick="event.stopPropagation();archiveJob('${esc(job.id)}','${esc(job.customer)}')" title="${esc(t('jobs.archiveTitle'))}">${esc(t('jobs.archive'))}</button>` : ''}
@@ -1781,6 +1833,13 @@ function openModal(jobId) {
       shiftSection.hidden = isNew;
       if (!isNew && _job) setupShiftSection(_job, _canManageAssign);
     }
+    // lbz-parse-02: offload-zones toggle + editor — existing-job only, same reasoning as
+    // assign/shift above (the /zones endpoint needs a saved job id + persisted line items).
+    const offloadZonesSection = document.getElementById('offload-zones-section');
+    if (offloadZonesSection) {
+      offloadZonesSection.hidden = isNew;
+      if (!isNew && _job) refreshOffloadZonesUI(_job);
+    }
   }
   if (!isNew) {
     api.get('/api/bols?job_id=' + jobId).then(r => {
@@ -2307,6 +2366,12 @@ function clearForm() {
   document.getElementById('li-container').innerHTML = '';
   pendingDensityConflicts = 0;
   parsedOffloadZonesEnabled = 0;
+  // lbz-parse-02: reset the existing-job zone toggle/button; openModal() re-shows and
+  // re-populates offload-zones-section afterward for edit mode only.
+  const _ofzCb = document.getElementById('f-offload-zones-enabled');
+  if (_ofzCb) _ofzCb.checked = false;
+  const _ofzBtn = document.getElementById('btn-edit-zones');
+  if (_ofzBtn) _ofzBtn.hidden = true;
 
   document.getElementById('slip-inline-viewer').hidden = true;
   document.getElementById('slip-viewer-content').hidden = true;
@@ -2579,6 +2644,273 @@ function addOffloadZoneHeader(label, seq) {
   header.style.cssText = 'font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line);';
   header.textContent = t('jobs.offloadZoneGroup', { n: seq ?? '—', label });
   document.getElementById('li-container').appendChild(header);
+}
+
+/* ═══════════════════════════════════════════
+   Offload zones — existing-job toggle + manual editor (lbz-parse-02)
+   Job-detail side companion to the parse-review display above. Operates on an already-saved
+   job's job_line_items (from allJobs, already carrying offload_seq/zone_label/zone_bdft per
+   lbz-db-01) and persists via PUT /api/jobs/:id/zones — independent of the main Save Job button,
+   same pattern as the Assigned-to / Shift sections' own endpoints.
+═══════════════════════════════════════════ */
+
+// "Zoned · N" job-card badge — N is the count of distinct zone labels in use, not line-item count.
+function buildOffloadZonesBadgeHtml(job) {
+  if (!job || !job.offload_zones_enabled) return '';
+  const items = Array.isArray(job.line_items) ? job.line_items : [];
+  const n = new Set(items.map(li => (li.zone_label || '').trim()).filter(Boolean)).size;
+  if (!n) return '';
+  return `<div class="jobs-card-zoned" title="${esc(t('jobs.offloadZonesLabel'))}">${esc(t('jobs.zonedBadge', { n }))}</div>`;
+}
+
+// collectLineItems() (used by the main Save Job button) reads offload_seq/zone_label/zone_bdft
+// off each li-container row's dataset, not off the `job` object — see addLineItemRow(). The zones
+// endpoint updates `job.line_items` directly without touching those DOM rows, so without this a
+// "Save Job" click right after a zone toggle/edit would resend line_items missing the zone fields
+// and the main PUT handler would overwrite job_line_items, silently erasing what was just saved.
+// Rows and lineItems correspond positionally: populateForm() built the rows from this same
+// job.line_items in this same (sort_order) sequence, and the /zones endpoint never reorders lines.
+function syncLineItemZoneDatasets(lineItems) {
+  if (!Array.isArray(lineItems)) return;
+  const rows = document.querySelectorAll('#li-container .jobs-li-row');
+  rows.forEach((row, i) => {
+    const li = lineItems[i];
+    if (!li) return;
+    if (li.offload_seq != null) row.dataset.offloadSeq = String(li.offload_seq); else delete row.dataset.offloadSeq;
+    if (li.zone_label)          row.dataset.zoneLabel  = li.zone_label;          else delete row.dataset.zoneLabel;
+    if (li.zone_bdft != null)   row.dataset.zoneBdft   = String(li.zone_bdft);   else delete row.dataset.zoneBdft;
+  });
+}
+
+// Syncs the modal's switch + "Edit Zones" button to a job object's current state. Called from
+// openModal() (edit mode only) and after every toggle/save/revert so the UI always reflects the
+// last-known-good persisted value, never an optimistic guess.
+function refreshOffloadZonesUI(job) {
+  const cb = document.getElementById('f-offload-zones-enabled');
+  const editBtn = document.getElementById('btn-edit-zones');
+  const enabled = !!(job && job.offload_zones_enabled);
+  if (cb) cb.checked = enabled;
+  if (editBtn) editBtn.hidden = !enabled;
+  // The dedicated /zones endpoint persists immediately, independent of the main Save Job button —
+  // but saveJob() always sends offload_zones_enabled from this module var (lbz-parse-01). Keep it
+  // in sync here so a later "Save Job" click (e.g. after just toggling zones) doesn't stomp the
+  // just-persisted value back to whatever it was when the modal was opened.
+  parsedOffloadZonesEnabled = enabled ? 1 : 0;
+}
+
+// Validates a list of { zone_label, offload_seq } — every line needs a non-empty label, every
+// label needs a numeric order, and those per-label orders must be contiguous starting at 1.
+// offload_seq may arrive as a DB integer, a string from an <input>, or null/undefined/'' —
+// Number(null) is 0 (finite!), so null/''/undefined must be caught before the isFinite check
+// (same pitfall as the worker's nullableInt() — see _worker.js/routes/jobs.js).
+// Returns null when valid, or a translated error string.
+function validateZoneRows(rows) {
+  if (!Array.isArray(rows) || !rows.length) return t('jobs.zoneErrorNoLines');
+  const orderByLabel = new Map();
+  const labelsInOrder = [];
+  for (const r of rows) {
+    const label = (r.zone_label || '').toString().trim();
+    if (!label) return t('jobs.zoneErrorMissingZone');
+    const raw = r.offload_seq;
+    if (raw === null || raw === undefined || raw === '') return t('jobs.zoneErrorMissingOrder');
+    const order = Number(raw);
+    if (!Number.isFinite(order)) return t('jobs.zoneErrorMissingOrder');
+    if (!orderByLabel.has(label)) {
+      orderByLabel.set(label, order);
+      labelsInOrder.push(label);
+    } else if (orderByLabel.get(label) !== order) {
+      return t('jobs.zoneErrorInconsistentOrder');
+    }
+  }
+  const orders = labelsInOrder.map(l => orderByLabel.get(l)).sort((a, b) => a - b);
+  for (let i = 0; i < orders.length; i++) {
+    if (orders[i] !== i + 1) return t('jobs.zoneErrorNotContiguous');
+  }
+  return null;
+}
+
+// Switch onchange handler. Turning OFF always just persists enabled:0 with items:[] (job_line_items
+// zone columns are left untouched — "keeps zone data, just not applied"). Turning ON persists
+// directly ONLY when the job's current line items already pass validateZoneRows(); otherwise (no
+// zone data, or incomplete/inconsistent data) it opens the manual editor instead, and reverts the
+// switch if that editor is cancelled without saving.
+async function onOffloadZonesToggle(checked) {
+  if (!editingJobId) return;
+  const job = allJobs.find(j => j.id === editingJobId);
+  if (!job) return;
+
+  if (checked) {
+    const items = Array.isArray(job.line_items) ? job.line_items : [];
+    const rowsForValidation = items.map(li => ({ zone_label: li.zone_label, offload_seq: li.offload_seq }));
+    if (validateZoneRows(rowsForValidation)) {
+      openZoneEditorModal(editingJobId, { onCancelRevert: () => refreshOffloadZonesUI(job) });
+      return;
+    }
+  }
+
+  try {
+    const r = await api.put(`/api/jobs/${encodeURIComponent(editingJobId)}/zones`, { enabled: checked, items: [] });
+    if (!r.ok) {
+      showToast(r.error || t('jobs.saveFailed'));
+      refreshOffloadZonesUI(job);
+      return;
+    }
+    if (r.data?.job) {
+      job.offload_zones_enabled = r.data.job.offload_zones_enabled;
+      job.line_items = r.data.job.line_items;
+      syncLineItemZoneDatasets(job.line_items);
+    }
+    refreshOffloadZonesUI(job);
+    renderBoard(allJobs);
+  } catch (e) {
+    showToast(t('jobs.saveFailed'));
+    refreshOffloadZonesUI(job);
+  }
+}
+
+// Opens the manual zone editor for jobId. opts.onCancelRevert (optional) runs if the modal is
+// dismissed (backdrop click, × button, or Cancel) without a successful save — used by
+// onOffloadZonesToggle() to un-check the switch when the auto-opened editor is abandoned. When
+// reopened via the "Edit Zones" button (already enabled), no revert callback is passed since the
+// switch's on-state doesn't depend on this particular edit session.
+function openZoneEditorModal(jobId, opts) {
+  const job = allJobs.find(j => j.id === jobId);
+  if (!job) return;
+  const items = Array.isArray(job.line_items) ? job.line_items : [];
+  if (!items.length) {
+    showToast(t('jobs.zoneErrorNoLines'));
+    if (opts && opts.onCancelRevert) opts.onCancelRevert();
+    return;
+  }
+
+  zoneEditorJobId    = jobId;
+  zoneEditorRevertFn = (opts && opts.onCancelRevert) || null;
+  zoneEditorSavedOk  = false;
+
+  const labels = Array.from(new Set(items.map(li => (li.zone_label || '').trim()).filter(Boolean)));
+  document.getElementById('zone-editor-labels').innerHTML =
+    labels.map(l => `<option value="${esc(l)}">`).join('');
+
+  const rows = document.getElementById('zone-editor-rows');
+  rows.innerHTML = items.map(li => {
+    const desc  = li.description || li.part_number || t('jobs.untitledJob');
+    const qty   = li.quantity ?? '';
+    const label = li.zone_label || '';
+    const order = (li.offload_seq ?? '');
+    return `<div class="zone-editor-row" data-li-id="${esc(li.id || '')}" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);">
+      <div style="flex:2;min-width:0;">
+        <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(desc)}</div>
+        <div style="font-size:11px;color:var(--muted);">${esc(t('jobs.colQty'))}: ${esc(String(qty))}</div>
+      </div>
+      <input type="text" class="zone-label-input" list="zone-editor-labels" value="${esc(label)}" placeholder="${esc(t('jobs.zoneLabelPlaceholder'))}" style="flex:1;min-width:0;min-height:44px;padding:8px;border:1px solid var(--input-border);border-radius:8px;font-size:14px;background:var(--card-bg);color:var(--text);" oninput="onZoneLabelInput(this)">
+      <input type="number" class="zone-order-input" min="1" step="1" value="${esc(String(order))}" placeholder="${esc(t('jobs.zoneOrderPlaceholder'))}" style="width:70px;min-height:44px;padding:8px;border:1px solid var(--input-border);border-radius:8px;font-size:14px;text-align:center;background:var(--card-bg);color:var(--text);" oninput="onZoneOrderInput(this)">
+    </div>`;
+  }).join('');
+
+  document.getElementById('zone-editor-error').hidden = true;
+  document.getElementById('zone-editor-modal').hidden = false;
+}
+
+// Single close path for backdrop click, ×, and Cancel — all revert unless saveZoneEditor() just
+// set zoneEditorSavedOk.
+function closeZoneEditorModal() {
+  document.getElementById('zone-editor-modal').hidden = true;
+  if (!zoneEditorSavedOk && zoneEditorRevertFn) zoneEditorRevertFn();
+  zoneEditorJobId    = null;
+  zoneEditorRevertFn = null;
+  zoneEditorSavedOk  = false;
+}
+
+// Editing a row's zone label: if another row already uses that label with an order set, adopt
+// that order (keeps the group's order consistent without making the user re-type it). A brand-new
+// label is left with no order — the user fills that in, and onZoneOrderInput() below then
+// propagates it to every other row sharing the label.
+function onZoneLabelInput(input) {
+  const row = input.closest('.zone-editor-row');
+  if (!row) return;
+  const label = input.value.trim();
+  const orderInput = row.querySelector('.zone-order-input');
+  if (!label || !orderInput) return;
+  const rows = document.querySelectorAll('#zone-editor-rows .zone-editor-row');
+  for (const r of rows) {
+    if (r === row) continue;
+    const li = r.querySelector('.zone-label-input');
+    const oi = r.querySelector('.zone-order-input');
+    if (li && oi && li.value.trim() === label && oi.value !== '') {
+      orderInput.value = oi.value;
+      return;
+    }
+  }
+}
+
+// Editing a row's delivery order propagates to every other row currently sharing that row's zone
+// label — delivery order is a property of the zone, not the individual line.
+function onZoneOrderInput(input) {
+  const row = input.closest('.zone-editor-row');
+  if (!row) return;
+  const labelInput = row.querySelector('.zone-label-input');
+  const label = labelInput ? labelInput.value.trim() : '';
+  if (!label) return;
+  const val = input.value;
+  document.querySelectorAll('#zone-editor-rows .zone-editor-row').forEach(r => {
+    if (r === row) return;
+    const li = r.querySelector('.zone-label-input');
+    if (li && li.value.trim() === label) {
+      const oi = r.querySelector('.zone-order-input');
+      if (oi) oi.value = val;
+    }
+  });
+}
+
+function collectZoneEditorRows() {
+  return Array.prototype.map.call(document.querySelectorAll('#zone-editor-rows .zone-editor-row'), row => ({
+    id:          row.dataset.liId,
+    zone_label:  row.querySelector('.zone-label-input').value.trim(),
+    offload_seq: row.querySelector('.zone-order-input').value,
+  }));
+}
+
+async function saveZoneEditor() {
+  const err = document.getElementById('zone-editor-error');
+  const btn = document.getElementById('zone-editor-save');
+  err.hidden = true;
+
+  const rows = collectZoneEditorRows();
+  const validationError = validateZoneRows(rows);
+  if (validationError) {
+    err.textContent = validationError;
+    err.hidden = false;
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const r = await api.put(`/api/jobs/${encodeURIComponent(zoneEditorJobId)}/zones`, {
+      enabled: true,
+      items: rows.map(row => ({ id: row.id, zone_label: row.zone_label, offload_seq: Number(row.offload_seq) })),
+    });
+    if (!r.ok) {
+      err.textContent = r.error || t('jobs.saveFailed');
+      err.hidden = false;
+      btn.disabled = false;
+      return;
+    }
+    const job = allJobs.find(j => j.id === zoneEditorJobId);
+    if (job && r.data?.job) {
+      job.offload_zones_enabled = r.data.job.offload_zones_enabled;
+      job.line_items = r.data.job.line_items;
+      syncLineItemZoneDatasets(job.line_items);
+    }
+    zoneEditorSavedOk = true;
+    if (job) refreshOffloadZonesUI(job);
+    renderBoard(allJobs);
+    closeZoneEditorModal();
+  } catch (e) {
+    err.textContent = t('jobs.saveFailed');
+    err.hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // Renders the category-density-vs-description-density choice for a parsed line and blocks

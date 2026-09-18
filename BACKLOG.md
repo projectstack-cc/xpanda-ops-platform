@@ -381,7 +381,7 @@
 - [ ] Consider separate dashboards for staff vs. management (TV display)
 - [x] lbz-db-01 — Offload zone schema + API passthrough
 - [x] lbz-parse-01 — Parser: offload-zone detection, BDFT checksums, density-conflict flag
-- [ ] lbz-parse-02
+- [x] lbz-parse-02 — Offload-zones toggle + manual zone editor, existing-job side
 - [ ] lbz-pack-01
 - [ ] lbz-bol-01
 - [ ] lbz-bol-02

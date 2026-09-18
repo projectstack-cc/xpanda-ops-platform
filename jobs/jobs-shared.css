@@ -515,6 +515,73 @@ button, input, select, textarea { font: inherit; }
     gap: 10px;
 }
 
+/* switch row (lbz-parse-02: Offload Zones toggle) — the whole label is the tap target so it
+   clears the 44px floor-grade minimum even though the visual track is smaller */
+
+.jobs-switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 44px;
+    padding: 6px 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.jobs-switch-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.jobs-switch-hint {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 400;
+    margin-top: 2px;
+}
+
+.jobs-switch {
+    position: relative;
+    display: inline-block;
+    width: 46px;
+    height: 26px;
+    flex-shrink: 0;
+}
+
+.jobs-switch input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    margin: 0;
+    cursor: pointer;
+}
+
+.jobs-switch-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: var(--input-border);
+    transition: background .15s ease;
+}
+
+.jobs-switch-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--card-bg);
+    box-shadow: var(--shadow);
+    transition: transform .15s ease;
+}
+
+.jobs-switch input:checked ~ .jobs-switch-track { background: var(--primary-bg); }
+.jobs-switch input:checked ~ .jobs-switch-thumb { transform: translateX(20px); }
+.jobs-switch input:focus-visible ~ .jobs-switch-track { outline: 2px solid var(--primary-bg); outline-offset: 2px; }
+
 /* checkbox row */
 
 .jobs-checkbox-row {

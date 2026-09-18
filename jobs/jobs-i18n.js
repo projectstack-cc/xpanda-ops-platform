@@ -305,6 +305,22 @@
       densityConflictChoose: "Use {density}#",
       densityConflictBlockedCreate: "Resolve the density conflict(s) above before creating this job.",
 
+      // Offload-zone toggle + manual editor, existing-job side (lbz-parse-02)
+      sectionOffloadZones: "Offload Zones",
+      offloadZonesLabel: "Offload Zones",
+      offloadZonesHint: "Group line items into delivery zones with an unloading order.",
+      editZones: "Edit Zones",
+      zonedBadge: "Zoned · {n}",
+      zoneEditorTitle: "Edit Offload Zones",
+      zoneEditorDesc: "Assign each line item to a delivery zone. Give each zone a delivery order — editing one line's order updates every line in that zone.",
+      zoneLabelPlaceholder: "e.g. Dock A",
+      zoneOrderPlaceholder: "Order",
+      zoneErrorNoLines: "Add line items before enabling offload zones.",
+      zoneErrorMissingZone: "Every line item needs a zone label.",
+      zoneErrorMissingOrder: "Every zone needs a delivery order.",
+      zoneErrorInconsistentOrder: "Lines sharing a zone label must share the same delivery order.",
+      zoneErrorNotContiguous: "Delivery orders must be contiguous starting at 1.",
+
       // BOL viewer modal
       billOfLading: "Bill of Lading",
       download: "Download",
@@ -624,6 +640,22 @@
       densityConflictChoose: "Usar {density}#",
       densityConflictBlockedCreate: "Resuelva el/los conflicto(s) de densidad arriba antes de crear este trabajo.",
 
+      // Offload-zone toggle + manual editor, existing-job side (lbz-parse-02)
+      sectionOffloadZones: "Zonas de Descarga",
+      offloadZonesLabel: "Zonas de Descarga",
+      offloadZonesHint: "Agrupe las líneas en zonas de entrega con un orden de descarga.",
+      editZones: "Editar Zonas",
+      zonedBadge: "Zonificado · {n}",
+      zoneEditorTitle: "Editar Zonas de Descarga",
+      zoneEditorDesc: "Asigne cada línea a una zona de entrega. Dé a cada zona un orden de entrega — editar el orden de una línea actualiza todas las líneas de esa zona.",
+      zoneLabelPlaceholder: "ej. Muelle A",
+      zoneOrderPlaceholder: "Orden",
+      zoneErrorNoLines: "Agregue líneas antes de activar las zonas de descarga.",
+      zoneErrorMissingZone: "Cada línea necesita una zona asignada.",
+      zoneErrorMissingOrder: "Cada zona necesita un orden de entrega.",
+      zoneErrorInconsistentOrder: "Las líneas de la misma zona deben tener el mismo orden de entrega.",
+      zoneErrorNotContiguous: "Los órdenes de entrega deben ser contiguos comenzando en 1.",
+
       // BOL viewer modal
       billOfLading: "Conocimiento de Embarque",
       download: "Descargar",
@@ -942,6 +974,22 @@
       densityConflictWarning: "⚠ Konfli densite — bòdwo a montre {cat}# yon kote ak {desc}# yon lòt kote",
       densityConflictChoose: "Itilize {density}#",
       densityConflictBlockedCreate: "Rezoud konfli densite yo anwo anvan ou kreye travay sa a.",
+
+      // Offload-zone toggle + manual editor, existing-job side (lbz-parse-02)
+      sectionOffloadZones: "Zòn Dechajman",
+      offloadZonesLabel: "Zòn Dechajman",
+      offloadZonesHint: "Gwoupe atik yo nan zòn livrezon avèk yon lòd dechajman.",
+      editZones: "Modifye Zòn yo",
+      zonedBadge: "Zòn · {n}",
+      zoneEditorTitle: "Modifye Zòn Dechajman",
+      zoneEditorDesc: "Bay chak atik yon zòn livrezon. Bay chak zòn yon lòd livrezon — si w chanje lòd yon liy, tout liy nan menm zòn nan chanje tou.",
+      zoneLabelPlaceholder: "pa egzanp Dock A",
+      zoneOrderPlaceholder: "Lòd",
+      zoneErrorNoLines: "Ajoute atik anvan w aktive zòn dechajman.",
+      zoneErrorMissingZone: "Chak atik dwe gen yon zòn.",
+      zoneErrorMissingOrder: "Chak zòn dwe gen yon lòd livrezon.",
+      zoneErrorInconsistentOrder: "Liy ki nan menm zòn dwe gen menm lòd livrezon.",
+      zoneErrorNotContiguous: "Lòd livrezon yo dwe kontinyèl kòmanse nan 1.",
 
       // BOL viewer modal
       billOfLading: "Kontra Ekspedisyon (BOL)",

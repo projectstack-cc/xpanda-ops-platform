@@ -5298,6 +5298,47 @@ current series).
 
 ## Job Board
 
+- **lbz-parse-02 — Offload-zones toggle + manual zone editor, existing-job side
+  (job-board-agent).** Third prompt in the offload-zone series — the job-detail companion to
+  lbz-parse-01's parse-review display, targeting an already-saved job rather than a fresh parse.
+  `jobs/index.html`: added an "Offload Zones" switch (new `.jobs-switch-row`/`.jobs-switch`
+  component in `jobs-shared.css` — no existing toggle widget to reuse, built to the same token-only,
+  ≥44px-tap-target bar as the rest of the module) to the job-detail modal, edit-mode only (hidden
+  for new jobs, same reasoning as the Assigned-to/Shift sections: the zones endpoint needs a saved
+  job id and persisted `job_line_items` rows). The switch persists immediately via
+  `PUT /api/jobs/:id/zones` (lbz-db-01) — independent of the main Save Job button, mirroring how
+  Assigned-to/Shift each own their endpoint. Turning it off always sends `{enabled:false,
+  items:[]}`: `job_line_items.offload_seq`/`zone_label` are left untouched server-side, so the zone
+  data survives, just unapplied (no "Zoned" badge, no grouping). Turning it on checks the job's
+  current line items against `validateZoneRows()` (every line needs a zone; every zone's delivery
+  order must be contiguous from 1) — if they already pass, it persists `enabled:true` directly with
+  no data rewrite; otherwise it opens a new secondary modal, `zone-editor-modal` (same
+  split-days-modal/diversitech-print-modal pattern: rows into a container div, inline error box,
+  own Cancel/Save footer), pre-filled from the job's line items with a datalist of the job's
+  existing zone labels. Editing one row's delivery-order input propagates that value to every other
+  row sharing its zone label (order is a property of the zone, not the line); editing a row's label
+  to match another row's existing label adopts that zone's order. Save re-validates and blocks
+  (inline error, no request sent) until every line has a zone and the per-zone orders are a
+  contiguous 1..n set; on success it calls the same `/zones` endpoint with the full `items` array
+  and only then flips the switch on. Cancelling (backdrop click, ×, or Cancel) without a successful
+  save reverts the switch via a callback — it never ends up visually "on" without a persisted zone
+  set. Does not touch `zone_bdft` (parser-derived checksum data from lbz-parse-01 — out of scope
+  for manual editing here; the worker's `/zones` handler only writes `offload_seq`/`zone_label`).
+  `collectLineItems()` (used by the main Save Job button) reads zone fields off each line-item
+  row's `dataset`, not off the job object, so a new `syncLineItemZoneDatasets()` re-stamps those
+  datasets (positionally — rows and `job.line_items` share the same `sort_order` sequence) after
+  every toggle/editor save; without it, a "Save Job" click right after a zone change would resend
+  `line_items` missing the zone fields and the main PUT handler's line-item replace would silently
+  erase what was just saved. Also keeps the existing `parsedOffloadZonesEnabled` module var
+  (lbz-parse-01) in sync on every toggle/save, so that same "Save Job" payload doesn't stomp the
+  flag back to its value from when the modal was opened. Job cards gained a small "Zoned · N"
+  badge (`.jobs-card-zoned`, token-colored) when `offload_zones_enabled` is set and at least one
+  distinct zone label is in use — N counts zones, not line items; `GET /api/jobs` already returns
+  `line_items` per job (P333/P356's batched attach), so no new API call was needed.
+  `jobs/jobs-i18n.js`: added `sectionOffloadZones`/`offloadZonesLabel`/`offloadZonesHint`/
+  `editZones`/`zonedBadge`/`zoneEditorTitle`/`zoneEditorDesc`/`zoneLabelPlaceholder`/
+  `zoneOrderPlaceholder`/`zoneErrorNoLines`/`zoneErrorMissingZone`/`zoneErrorMissingOrder`/
+  `zoneErrorInconsistentOrder`/`zoneErrorNotContiguous` (en/es/ht).
 - **lbz-parse-01 — Packing-slip parser: offload-zone detection, BDFT checksums, density-conflict
   flag (job-board-agent).** Second prompt in the offload-zone series (depends on lbz-db-01's
   schema/API passthrough). `jobs/packing-slip-parser.js`: added a pattern table
