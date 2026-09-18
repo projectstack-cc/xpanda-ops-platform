@@ -2865,6 +2865,32 @@ async function buildBolAppendBytes(bm) {
   return combinedAppendBytes;
 }
 
+// lbz-bol-01: enriches one zone segment's skuBreakdown (skuId/name/sku/color/pieces, from the
+// untouched buildTrailerStats — no height or density) with the two extra fields the BOL zone
+// columns need to render. Reads only; never touches the packing/skuBreakdown data itself.
+//   height  — resolved from state.skus (always present: calcLoading only ever packs known skus).
+//   density — best-effort from the job's line items (only reachable when this load came from a
+//     job prefill), joined on the SAME (part_id, offload_seq, zone_label) key prefillFromJob uses
+//     to build the zoned cart. Only trusted when exactly one matching line item declares a
+//     density; left blank (no suffix printed) on zero or ambiguous/conflicting matches, and for
+//     manually-built zoned loads with no job — never guess a density onto the BOL.
+function enrichZoneSkuBreakdown(seg, skus, jobData) {
+  const lineItems = (jobData && Array.isArray(jobData.line_items)) ? jobData.line_items : [];
+  const out = {};
+  Object.values(seg.skuBreakdown || {}).forEach(entry => {
+    const sku = skus.find(s => s.id === entry.skuId);
+    const height = sku ? sku.height : null;
+    const matches = lineItems.filter(li =>
+      li.part_id === entry.skuId &&
+      (li.offload_seq ?? null) === (seg.offloadSeq ?? null) &&
+      (li.zone_label || '') === (seg.label || ''));
+    const densities = [...new Set(matches.map(li => (li.density || '').trim()).filter(Boolean))];
+    const density = densities.length === 1 ? densities[0] : null;
+    out[entry.skuId] = { ...entry, height, density };
+  });
+  return out;
+}
+
 function openBolModal(result) {
   const today = new Date().toISOString().slice(0, 10);
   const trailerData = result.trailers.map((trailer, i) => {
@@ -2893,15 +2919,20 @@ function openBolModal(result) {
       contactName: '', contactPhone: '', carrierName: '',
       invNumber: state.trailerInvNumbers[i] || '',
       poNumber: '', deliveryTime: '', date: today,
-      freightTerms: 'prepaid', specialInstructions: '',
+      freightTerms: 'prepaid',
+      // lbz-bol-01 §5: zone mode prepends "Truck N of M" to the special-instructions default.
+      specialInstructions: trailer.zoned ? `Truck ${i + 1} of ${result.trailers.length}` : '',
       carryOver: true,
       // lbz-pack-01 downstream handoff (lbz-bol-01): zone segments for THIS truck only,
       // each carrying its raw offloadSeq (not a physical-position proxy) so the BOL flow
       // can render ascending-delivery-order columns independently of nose→door placement.
+      // skuBreakdown is enriched with height (from state.skus) and best-effort density (from the
+      // job's line items) here — see enrichZoneSkuBreakdown — since bol-shared.js's zone-column
+      // renderer is generic and has no access to load-builder's SKU/job state.
       zoned: !!trailer.zoned,
       zoneSegments: trailer.zoned ? trailer.zoneSegments.map(seg => ({
         offloadSeq: seg.offloadSeq, label: seg.label, color: seg.color,
-        pieces: seg.pieces, skuBreakdown: seg.skuBreakdown,
+        pieces: seg.pieces, skuBreakdown: enrichZoneSkuBreakdown(seg, state.skus, state.prefillJobData),
       })) : null,
     };
     if (state.prefillJobData) {
@@ -2935,7 +2966,10 @@ function openBolModal(result) {
       td.shipToCity = prev.shipToCity; td.shipToState = prev.shipToState; td.shipToZip = prev.shipToZip;
       td.contactName = prev.contactName; td.contactPhone = prev.contactPhone;
       td.carrierName = prev.carrierName; td.freightTerms = prev.freightTerms;
-      td.specialInstructions = prev.specialInstructions;
+      // lbz-bol-01 §5: don't carry trailer 1's "Truck 1 of M" text onto later zoned trucks — each
+      // one already got its own correct "Truck N of M" default above. Non-zoned trucks are
+      // unaffected (their default was '' either way, so this is a no-op there).
+      if (!td.zoned) td.specialInstructions = prev.specialInstructions;
       td.poNumber = prev.poNumber; td.deliveryTime = prev.deliveryTime;
     }
   }

@@ -4652,6 +4652,67 @@ current series).
 
 ## Logistics
 
+- **lbz-bol-01 — Zoned BOL commodity columns, legacy side (logistics-agent).** Fourth prompt in
+  the offload-zone series (depends on lbz-pack-01). Files touched: `logistics/bol-shared.js`,
+  `logistics/bol-editor.js`, `logistics/bol-compose.js`, `logistics/load-builder.html` (BOL
+  handoff only — `openBolModal`, unchanged fenced auto-pack functions untouched). No `_worker.js`
+  change: confirmed `render_overrides` is stored as an opaque JSON blob with no per-key
+  validation, so the new `zoneColumns` key needed no backend change. **1) `bol-shared.js`**: new
+  `zonecolumns` field type (`overrideKey: 'zoneColumns'`) added to `FIELD_MAP` right after
+  `commodity`, plus `COORDS.zoneColumns` (same x/y/width as the commodity region; column 0's
+  height budget capped to 95pt to stay clear of the QR code, which partly overlaps column 0's
+  x-range — columns 1/2 reuse the existing 216pt safe ceiling). `pickCommodityTier` itself is
+  untouched (hard regression boundary) — `ZONE_COLUMN_TIERS`/`pickZoneColumnTier` are a
+  deliberate duplicate tuned against column width. `buildZoneColumnLines` renders each zone per
+  the confirmed manual-BOL format (`--"LABEL"--`, `*unload 1st*` only on the truck's
+  earliest-delivery zone, then a two-key sort: base-density lines first thickness-descending,
+  non-base-density lines thickness-descending at the bottom with a `(X density)` suffix — no
+  footer line). `buildZoneColumns` first-fit bin-packs zones left→right in ascending offloadSeq
+  across 3 columns, so a later zone can land under an earlier column once a fuller one runs out of
+  room (matches the manual BOL's "4th zone under the 2nd"); never clips — falls back to the
+  least-full column and flags `needsAttention` if even the smallest tier doesn't fit. The
+  commodity render block in `generatePdf` now branches: `_ov.zoneColumns` present → draw zone
+  columns instead; absent (every bol before this change, and every non-zoned bol going forward) →
+  the exact original commodity code, byte-for-byte, confirmed by code-path trace. **2)** Override
+  shape: `render_overrides.zoneColumns = { items: [{label,text,x,y}], zoneData, sourceHash }` —
+  `zoneData` (the frozen per-truck `zoneSegments` snapshot) and `sourceHash` are added beyond the
+  prompt's literal `[{label,text,x,y}]+sourceHash` wording because, without a DB migration (none
+  in scope), "Reset columns" and the stale guard need a frozen source to regenerate/compare
+  against; `items` alone stays the clean per-box editable shape. `sourceHash` hashes the job's
+  EDITABLE zone-assignment fields (`offload_seq`/`zone_label`/`density`/`quantity`/`part_id`) via
+  `hashJobZoneData` — not the packed per-truck piece counts, which aren't reconstructable later
+  without re-running the untouched auto-pack algorithm. **3) `bol-editor.js`**: zone columns are N
+  draggable/editable boxes (not the FIELD_MAP's 1-per-field model) — the generic per-field loops
+  skip `type:'zonecolumns'` and the `commodity` field (replaced entirely) on a zoned bol; a
+  separate code path builds/positions/drags the N boxes, using a throwaway pdf-lib font purely for
+  width measurement (fails open — no boxes — if `PDFLib` is unavailable). "Reset columns" button
+  regenerates from the frozen `zoneData` snapshot. Apply now also hydrates
+  `bol._overrides` from `bol.render_overrides` on open when missing (a real gap in the
+  `bol-compose.js` review→edit path, previously unreachable since `render_overrides` was never set
+  at BOL-create time before this prompt) and writes the WHOLE `zoneColumns` container back on
+  Apply (not just `items`) since Apply replaces `overrides` wholesale. **4)** Stale guard: on
+  editor open, if `bol.job_id` is set and `sourceHash` exists, a `GET /api/jobs/:id` fetch
+  recomputes the job's current zone hash and compares; a mismatch shows a "Load changed since this
+  BOL was edited" banner with Regenerate (rebuild from `zoneData`) / Keep edits. Fails open on
+  fetch error or missing `job_id`/`sourceHash`/`PDFLib`. Scoping note: this only covers the
+  in-editor "on open" trigger — the out-of-session BOL-view path (`viewBolForJob` in
+  `logistics/index.html`) and a live in-session "on generate" recheck are out of scope (would
+  require touching files outside this prompt's list, or a network fetch inside the shared
+  `generatePdf` render path used by every BOL). **5)** `openBolModal`'s `td.specialInstructions`
+  default now prepends `"Truck N of M"` in zone mode; the existing carry-over loop (address/
+  contact fields copied from trailer 1) now skips `specialInstructions` for zoned trucks so each
+  keeps its own correct "Truck N of M" text instead of inheriting trailer 1's. `skuBreakdown`
+  entries on each `zoneSegments` item are enriched (new `enrichZoneSkuBreakdown` helper, read-only
+  against the untouched pack output) with `height` (from `state.skus`) and best-effort `density`
+  (joined from the job's line items on the same `(part_id, offload_seq, zone_label)` key
+  `prefillFromJob` already uses — only trusted when exactly one line item matches; left blank on
+  zero/ambiguous matches or for manually-built zoned loads with no job, never guessed).
+  Zone-mode-off regression verified: traced every changed code path (FIELD_MAP consumers confined
+  to `bol-shared.js`/`bol-editor.js`; `generatePdf`'s commodity block only diverges when
+  `_ov.zoneColumns` is present) and confirmed with a synthetic 3-zone/3-column trace matching the
+  confirmed manual-BOL format exactly (header, `*unload 1st*` placement, two-key density sort,
+  no footer, first-fit column packing).
+
 - **lbz-pack-01 — Zone/truck sequencing wrapper around the untouched auto-pack algorithm
   (logistics-agent).** Third prompt in the offload-zone series (depends on lbz-db-01/parse-01/
   parse-02); load-builder side of deck-systems loading zones. `logistics/load-builder.html`

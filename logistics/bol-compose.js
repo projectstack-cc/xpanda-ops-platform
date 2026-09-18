@@ -602,6 +602,22 @@ function h(tag, attrs = {}, ...children) {
       bm.generateProgress[i] = { text: `⏳ Trailer ${i + 1} — saving...`, done: false, pending: false };
       render();
       try {
+        // lbz-bol-01: a zoned trailer's default zone-column layout isn't computed here (no pdf-lib
+        // font available at save time — the same reason commodity's own tier is picked fresh at
+        // PDF-render time, not save time). Only the frozen source snapshot (zoneData) and the
+        // stale-guard hash go into render_overrides now; BolShared.buildZoneColumns() runs inside
+        // generatePdf() whenever _ov.zoneColumns.items isn't present yet.
+        let render_overrides = null;
+        if (td.zoned && Array.isArray(td.zoneSegments) && td.zoneSegments.length) {
+          const _jobLineItems = (OPTS.prefillJobData && Array.isArray(OPTS.prefillJobData.line_items))
+            ? OPTS.prefillJobData.line_items : null;
+          render_overrides = {
+            zoneColumns: {
+              zoneData: td.zoneSegments,
+              sourceHash: _jobLineItems ? BolShared.hashJobZoneData(_jobLineItems) : null,
+            },
+          };
+        }
         const payload = {
           bol_number: td.invNumber || null,
           date: td.date, customer_id: td.customerId || null,
@@ -624,6 +640,7 @@ function h(tag, attrs = {}, ...children) {
           package_qty: String(td.totalPieces), package_type: 'pcs',
           weight: String(td.totalWeight), delivery_time: td.deliveryTime,
           job_id: td.jobId || null, notes: '',
+          render_overrides,
         };
         const res = await api.post('/api/bols', payload);
         if (!res.ok) { throw new Error(res.error || `HTTP ${res.status}`); }

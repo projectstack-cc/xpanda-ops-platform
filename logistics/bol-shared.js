@@ -47,6 +47,18 @@ window.BolShared = (function() {
     shipperDate:      { x: 157, y: 48, size: 8 },
   };
 
+  // Zone columns (lbz-bol-01): rendered INSIDE the existing commodity region, replacing it
+  // entirely on a zoned truck. Up to 3 columns left→right in ASCENDING delivery order. Column 0's
+  // height budget is capped short of the QR code (x 40–100, y 222–282), which sits partly under
+  // column 0's x-range (55–225) — column 0 stops at y=285 (95pt) to never overlap it; columns 1
+  // and 2 are clear of the QR entirely and reuse pickCommodityTier's own largest-tier ceiling
+  // (216pt = 18 lines @ size 10/lineH 12), already proven safe for this region.
+  // lbz-bol-02: mirror these exact numbers into bolShared.ts.
+  COORDS.zoneColumns = {
+    x: COORDS.commodity.x, y: COORDS.commodity.y, maxW: COORDS.commodity.maxW,
+    cols: 3, colMaxH: [95, 216, 216],
+  };
+
   const PAGE = { width: 612, height: 792 }; // template is fixed US Letter
 
   const COPY_ORDER = ['driver', 'customer', undefined]; // Driver, Customer, then remaining/original
@@ -64,6 +76,7 @@ window.BolShared = (function() {
     { key: 'contactInfo',   type: 'multiline', coord: COORDS.contactInfo,  overrideKey: 'contactInfo' },
     { key: 'poNumber',      type: 'multiline', coord: COORDS.poNumber,     overrideKey: 'poNumber' },
     { key: 'commodity',     type: 'multiline', coord: COORDS.commodity,    overrideKey: 'commodity' },
+    { key: 'zoneColumns',   type: 'zonecolumns', coord: COORDS.zoneColumns, overrideKey: 'zoneColumns' },
     { key: 'scrap',         type: 'scrap',     coords: { yes: COORDS.scrapYes, no: COORDS.scrapNo }, overrideKey: 'scrap' },
   ];
 
@@ -86,6 +99,157 @@ window.BolShared = (function() {
       }
     }
     return { size: 10, lineH: 12 };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ZONE COLUMNS (lbz-bol-01)
+  // ═══════════════════════════════════════════════════════════════════
+
+  // Duplicated from pickCommodityTier's tier table on purpose: pickCommodityTier's existing
+  // body/signature is a hard regression boundary (non-zone commodity rendering must stay
+  // byte-for-byte identical), so zone columns get their own copy tuned against COLUMN width
+  // instead of full commodity width. Keep the two lists in sync by eye if tiers ever change.
+  const ZONE_COLUMN_TIERS = [
+    { size: 26, lineH: 32, maxLines: 2 },
+    { size: 22, lineH: 28, maxLines: 4 },
+    { size: 18, lineH: 22, maxLines: 7 },
+    { size: 15, lineH: 18, maxLines: 11 },
+    { size: 12, lineH: 14, maxLines: 18 },
+    { size: 10, lineH: 12, maxLines: Infinity },
+  ];
+
+  // Picks the largest tier whose wrapped line count fits, against an arbitrary column width.
+  // `lines` is an array of PRE-WRAP raw lines (e.g. one BolShared.buildZoneColumnLines() output);
+  // each gets independently wrapped and the counts summed. The last tier's maxLines is Infinity,
+  // so this always returns.
+  function pickZoneColumnTier(lines, pdfFont, colW) {
+    for (const t of ZONE_COLUMN_TIERS) {
+      const wrapped = (lines || []).reduce((n, l) => n + wrapText(String(l), pdfFont, t.size, colW).length, 0);
+      if (wrapped <= t.maxLines) return { size: t.size, lineH: t.lineH, lineCount: wrapped };
+    }
+    /* istanbul ignore next -- unreachable: last tier's maxLines is Infinity */
+    return { size: 10, lineH: 12, lineCount: (lines || []).length };
+  }
+
+  // Treats a density string as "base/standard" (no suffix shown) when its leading numeric value
+  // is ~1.0 (matches free-text job_line_items.density values like "1.0 RC", "1.0#", "1"). Blank
+  // or unparsable values are ALSO treated as base — never show a density suffix we can't back
+  // with a clearly non-base reading (never guess).
+  function isBaseDensity(density) {
+    if (!density) return true;
+    const m = String(density).match(/-?\d+(\.\d+)?/);
+    if (!m) return true;
+    return Math.abs(parseFloat(m[0]) - 1.0) < 0.05;
+  }
+
+  // Builds the raw (pre-wrap) text lines for one zone column, per the confirmed manual-BOL format:
+  //   --"LABEL"--
+  //   *unload 1st*                 (only the truck's earliest-delivery zone — isFirst)
+  //   10" - 1 pcs                  (base-density lines, thickness DESCENDING)
+  //   9" - 13 pcs
+  //   6" - 27 pcs (2.0# density)   (non-base-density lines, thickness descending, at the BOTTOM)
+  // No base-product footer line — do not add one. Each `entry` is one BolShared.buildZoneColumns()
+  // skuBreakdown item: { skuId, name, sku, color, pieces, height, density }. Entries whose height
+  // couldn't be resolved fall back to their name/sku so nothing silently disappears.
+  function buildZoneColumnLines(seg, isFirst) {
+    const lines = [`--"${seg.label}"--`];
+    if (isFirst) lines.push('*unload 1st*');
+    const entries = Object.values(seg.skuBreakdown || {});
+    const byHeightDesc = (a, b) => (b.height || 0) - (a.height || 0);
+    const base    = entries.filter(e => isBaseDensity(e.density)).sort(byHeightDesc);
+    const nonBase = entries.filter(e => !isBaseDensity(e.density)).sort(byHeightDesc);
+    const lineFor = (e) => {
+      const h = (e.height != null && e.height !== '') ? `${e.height}"` : (e.name || e.sku || '');
+      let l = `${h} - ${e.pieces} pcs`;
+      if (!isBaseDensity(e.density)) l += ` (${e.density} density)`;
+      return l;
+    };
+    base.forEach(e => lines.push(lineFor(e)));
+    nonBase.forEach(e => lines.push(lineFor(e)));
+    return lines;
+  }
+
+  /**
+   * Default zone-column layout. Places each zone's text into one of COORDS.zoneColumns.cols
+   * columns inside the commodity region, left→right in ASCENDING delivery order (offloadSeq) —
+   * independent of the trailer diagram's nose→door physical placement, which lbz-pack-01
+   * deliberately reverses. First-fit bin-packing: each zone goes into the first (leftmost) column
+   * with enough remaining vertical room, so a zone can land under an EARLIER column if a later one
+   * is already full — this produces the "4th zone sits under the 2nd" layout confirmed against the
+   * manual BOL. Reuses pickCommodityTier's approach (same tier list, per-column width) via
+   * pickZoneColumnTier; when even the smallest tier doesn't fit, renders at min size anyway and
+   * flags needsAttention — never clips.
+   * @param {Array} zoneSegments — [{ offloadSeq, label, color, pieces, skuBreakdown }]
+   * @param {*} pdfFont — pdf-lib font used only for width measurement
+   * @returns {{ items: Array<{label,text,x,y}>, needsAttention: boolean }}
+   */
+  function buildZoneColumns(zoneSegments, pdfFont) {
+    const C = COORDS.zoneColumns;
+    const colW = C.maxW / C.cols;
+    const sorted = [...(zoneSegments || [])].sort((a, b) => (a.offloadSeq ?? Infinity) - (b.offloadSeq ?? Infinity));
+    const colUsed = new Array(C.cols).fill(0);
+    const items = [];
+    let needsAttention = false;
+
+    sorted.forEach((seg, i) => {
+      const lines = buildZoneColumnLines(seg, i === 0);
+      const tier = pickZoneColumnTier(lines, pdfFont, colW);
+      const renderH = tier.lineCount * tier.lineH;
+
+      let target = -1;
+      for (let c = 0; c < C.cols; c++) {
+        const maxH = C.colMaxH[c] != null ? C.colMaxH[c] : 216;
+        if (maxH - colUsed[c] >= renderH) { target = c; break; }
+      }
+      if (target === -1) {
+        // Never clip: nothing has room at this tier — fall back to the least-full column anyway.
+        target = colUsed.indexOf(Math.min(...colUsed));
+      }
+      const targetMaxH = C.colMaxH[target] != null ? C.colMaxH[target] : 216;
+      const segNeedsAttention = renderH > (targetMaxH - colUsed[target]);
+
+      items.push({
+        label: seg.label,
+        text: lines.join('\n'),
+        x: C.x + target * colW,
+        y: C.y - colUsed[target],
+      });
+      colUsed[target] += renderH;
+      if (segNeedsAttention) needsAttention = true;
+    });
+
+    return { items, needsAttention };
+  }
+
+  // Small deterministic, non-cryptographic hash (FNV-1a) for change-detection only — never used
+  // for security. Returns an 8-char hex string.
+  function _fnv1aHex(str) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16).padStart(8, '0');
+  }
+
+  // Stale-guard input (lbz-bol-01 §4): hashes the EDITABLE zone-assignment fields on a job's line
+  // items — offload_seq / zone_label / density / quantity / part — which is exactly what the
+  // manual zone editor (lbz-parse-02) can change after a BOL was generated. Hashing these (rather
+  // than the packed per-truck piece counts, which aren't independently reconstructable without
+  // re-running the untouched auto-pack algorithm) lets a later BolEditor.open() detect "this job's
+  // zones changed since this BOL was made" with a single fresh GET /api/jobs/:id.
+  function hashJobZoneData(lineItems) {
+    const norm = (lineItems || [])
+      .map(li => ({
+        id: String(li.id || ''),
+        part_id: li.part_id || null,
+        quantity: li.quantity || 0,
+        offload_seq: li.offload_seq ?? null,
+        zone_label: (li.zone_label || '').trim(),
+        density: (li.density || '').trim(),
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    return _fnv1aHex(JSON.stringify(norm));
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -284,14 +448,33 @@ window.BolShared = (function() {
       drawText('X', off('scrap', _isScrap ? COORDS.scrapYes : COORDS.scrapNo));
 
       // ── Commodity description (centered, auto-sized by wrapped line count) ──
-      let _commodityText = Array.isArray(_ov.commodity) ? _ov.commodity.join('\n') : bol.commodity_description;
-      if (_commodityText && bol.siplast) {
-        // Siplast products: prefix the SKU inside parens, e.g. (HB-10) -> (Siplast HB-10)
-        _commodityText = String(_commodityText).replace(/\(([^)]+)\)/g, '(Siplast $1)');
-      }
-      if (_commodityText) {
-        const _tier = pickCommodityTier(String(_commodityText), font);
-        drawMultiline(_commodityText, off('commodity', { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH }));
+      // lbz-bol-01: a zoned truck's render_overrides.zoneColumns REPLACES this block entirely
+      // (rendered inside the same region, never alongside it). Absence of _ov.zoneColumns — every
+      // bol before this change, and every non-zoned bol going forward — takes the untouched
+      // `else` branch below with zero behavior change.
+      const _zc = _ov.zoneColumns;
+      const _zcHasData = _zc && ((Array.isArray(_zc.items) && _zc.items.length) || (Array.isArray(_zc.zoneData) && _zc.zoneData.length));
+      if (_zcHasData) {
+        const _zcColW = COORDS.zoneColumns.maxW / COORDS.zoneColumns.cols;
+        const _zcItems = (Array.isArray(_zc.items) && _zc.items.length) ? _zc.items : buildZoneColumns(_zc.zoneData, font).items;
+        _zcItems.forEach((item) => {
+          const _zcLines = String(item.text || '').split('\n');
+          const _zcTier = pickZoneColumnTier(_zcLines, font, _zcColW);
+          _zcLines.forEach((line, li) => {
+            if (!line) return;
+            page.drawText(line, { x: item.x, y: item.y - li * _zcTier.lineH, size: _zcTier.size, font, color: black });
+          });
+        });
+      } else {
+        let _commodityText = Array.isArray(_ov.commodity) ? _ov.commodity.join('\n') : bol.commodity_description;
+        if (_commodityText && bol.siplast) {
+          // Siplast products: prefix the SKU inside parens, e.g. (HB-10) -> (Siplast HB-10)
+          _commodityText = String(_commodityText).replace(/\(([^)]+)\)/g, '(Siplast $1)');
+        }
+        if (_commodityText) {
+          const _tier = pickCommodityTier(String(_commodityText), font);
+          drawMultiline(_commodityText, off('commodity', { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH }));
+        }
       }
 
       // ── Shipper signature (cursive, all copies) ──
@@ -456,6 +639,11 @@ window.BolShared = (function() {
     COPY_ORDER,
     FIELD_MAP,
     pickCommodityTier,
+    pickZoneColumnTier,
+    isBaseDensity,
+    buildZoneColumnLines,
+    buildZoneColumns,
+    hashJobZoneData,
     generatePdf,
     openPdf,
     buildShipToLines,

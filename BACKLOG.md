@@ -383,7 +383,7 @@
 - [x] lbz-parse-01 — Parser: offload-zone detection, BDFT checksums, density-conflict flag
 - [x] lbz-parse-02 — Offload-zones toggle + manual zone editor, existing-job side
 - [x] lbz-pack-01 — Zone/truck sequencing wrapper around the untouched auto-pack algorithm
-- [ ] lbz-bol-01
+- [x] lbz-bol-01 — Zoned BOL commodity columns, legacy side (bol-shared.js/bol-editor.js/bol-compose.js)
 - [ ] lbz-bol-02
 - [ ] Load builder: make initial calculated load view larger, include the stacks visually
 - [ ] Load builder DISSOLVE: optional per-piece (sub-line) granularity within a move-group — current P378 checkbox toggles a whole skuCode|height|dest group at once.

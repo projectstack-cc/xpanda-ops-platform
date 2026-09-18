@@ -132,6 +132,21 @@ window.BolEditor = (function () {
   // ── Entry point ──
 
   async function open(bol, mountEl, { onApply, onCancel }) {
+    // lbz-bol-01: a bol fresh from POST /api/bols (e.g. zoneColumns data set at create time) can
+    // carry render_overrides as a JSON string with no _overrides yet. Hydrate it onto the SAME
+    // object reference so callers holding this bol (lbReviewBols[i], etc.) see it too — mirrors
+    // the equivalent hydration in BolShared.generatePdf, kept separate/untouched there so that
+    // existing rendering path stays zero-risk.
+    if (!bol._overrides && bol.render_overrides) {
+      let _parsed = null;
+      if (typeof bol.render_overrides === 'object') {
+        _parsed = bol.render_overrides;
+      } else if (typeof bol.render_overrides === 'string' && bol.render_overrides.trim()) {
+        try { _parsed = JSON.parse(bol.render_overrides); } catch (_e) { _parsed = null; }
+      }
+      if (_parsed && typeof _parsed === 'object') bol._overrides = _parsed;
+    }
+
     mountEl.innerHTML = '';
     mountEl.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden;';
 
@@ -195,7 +210,25 @@ window.BolEditor = (function () {
       if (_savedPos[_k]) posOverrides[_k] = { dx: _savedPos[_k].dx || 0, dy: _savedPos[_k].dy || 0 };
     }
 
+    // lbz-bol-01: zone columns are N boxes (one per zone), not the FIELD_MAP's 1-per-field model,
+    // so their data is read here (sync) and their DOM/positioning is built separately below — see
+    // the two `continue`s in the loop right after this. `zcZoneData` also gates skipping the
+    // regular 'commodity' box, which the zone columns replace entirely on a zoned bol.
+    let zcZoneData   = null; // frozen snapshot this BOL's zone columns were built from (→ Reset)
+    let zcSourceHash = null; // hash of the job's zone assignment at generation time (stale guard)
+    let zcItems      = null; // live working copy of [{label,text,x,y}], or null = not yet built
+    {
+      const _zc0 = bol._overrides && bol._overrides.zoneColumns;
+      if (_zc0 && Array.isArray(_zc0.zoneData) && _zc0.zoneData.length) {
+        zcZoneData   = _zc0.zoneData;
+        zcSourceHash = _zc0.sourceHash || null;
+        if (Array.isArray(_zc0.items) && _zc0.items.length) zcItems = _zc0.items.map(it => ({ ...it }));
+      }
+    }
+
     for (const field of BolShared.FIELD_MAP) {
+      if (field.type === 'zonecolumns') continue; // handled separately below (N boxes, not 1)
+      if (field.overrideKey === 'commodity' && zcZoneData) continue; // zone columns replace this field entirely on a zoned bol
       const k       = field.overrideKey;
       const initVal = deriveValue(bol, field);
       initialValues[k] = initVal;
@@ -305,6 +338,7 @@ window.BolEditor = (function () {
       _renderTask.promise.then(() => { _renderTask = null; }).catch(() => {});
 
       positionAll(s);
+      positionZc(s); // lbz-bol-01
     }
 
     function positionAll(s) {
@@ -373,6 +407,166 @@ window.BolEditor = (function () {
       }
     }
 
+    // ── Zone columns (lbz-bol-01) ──────────────────────────────────────────
+
+    const ZC_COORD         = BolShared.COORDS.zoneColumns;
+    const ZC_COL_W         = ZC_COORD.maxW / ZC_COORD.cols;
+    const ZC_PREVIEW_SIZE  = 11; // editor-only preview size; the real PDF tier is recomputed from
+    const ZC_PREVIEW_LINEH = 13; // final text at generatePdf time, so this never needs to match it
+
+    const zcInputEls  = [];
+    const zcHandleEls = [];
+
+    // Also used by the "Reset columns" button and the stale-guard's "Regenerate" action. Needs a
+    // pdf-lib font purely for text-width measurement — fails open (no boxes) if PDFLib is missing
+    // rather than throwing out of open() and breaking every other field's editing.
+    async function buildDefaultZcItems() {
+      if (!zcZoneData) return [];
+      try {
+        if (!window.PDFLib) return [];
+        const _mdoc = await PDFLib.PDFDocument.create();
+        const _font = await _mdoc.embedFont(PDFLib.StandardFonts.Helvetica);
+        return BolShared.buildZoneColumns(zcZoneData, _font).items;
+      } catch (_e) { return []; }
+    }
+
+    function attachZcDragHandle(handle, idx) {
+      let startX = 0, startY = 0, baseX = 0, baseY = 0, dragging = false;
+      handle.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        dragging = true;
+        handle.setPointerCapture(e.pointerId);
+        handle.style.cursor = 'grabbing';
+        startX = e.clientX; startY = e.clientY;
+        baseX = zcItems[idx].x; baseY = zcItems[idx].y;
+      });
+      handle.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const s = _scale || 1;
+        zcItems[idx].x = Math.round(baseX + (e.clientX - startX) / s);
+        zcItems[idx].y = Math.round(baseY - (e.clientY - startY) / s);
+        positionZc(_scale);
+      });
+      const endDrag = (e) => {
+        if (!dragging) return;
+        dragging = false;
+        try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+        handle.style.cursor = 'grab';
+      };
+      handle.addEventListener('pointerup', endDrag);
+      handle.addEventListener('pointercancel', endDrag);
+    }
+
+    function buildZcBoxes() {
+      zcInputEls.forEach(el => el.remove());
+      zcHandleEls.forEach(el => el.remove());
+      zcInputEls.length = 0; zcHandleEls.length = 0;
+      (zcItems || []).forEach((item, idx) => {
+        const el = document.createElement('textarea');
+        el.value = item.text;
+        el.title = item.label || '';
+        el.style.cssText = 'position:absolute;box-sizing:border-box;background:rgba(255,255,255,0.88);border:1.5px solid var(--border,#d1d5db);border-radius:4px;padding:2px 4px;font-family:Helvetica,Arial,sans-serif;color:var(--text,#111827);resize:none;overflow:hidden;';
+        el.addEventListener('input', function () {
+          zcItems[idx].text = this.value;
+          this.style.height = 'auto';
+          this.style.height = this.scrollHeight + 'px';
+        });
+        canvasWrap.appendChild(el);
+        zcInputEls.push(el);
+
+        const handle = document.createElement('div');
+        handle.title = 'Drag to move';
+        handle.style.cssText = 'position:absolute;width:16px;height:16px;border-radius:4px;'
+          + 'background:#1e293b;color:#fff;font-size:11px;line-height:16px;text-align:center;'
+          + 'cursor:grab;z-index:5;box-shadow:0 1px 2px rgba(0,0,0,0.3);touch-action:none;user-select:none;';
+        handle.textContent = '✥';
+        attachZcDragHandle(handle, idx);
+        canvasWrap.appendChild(handle);
+        zcHandleEls.push(handle);
+      });
+    }
+
+    function positionZc(s) {
+      const H = BolShared.PAGE.height;
+      (zcItems || []).forEach((item, idx) => {
+        const el = zcInputEls[idx]; if (!el) return;
+        const lc = Math.max(2, (el.value || '').split('\n').length);
+        el.style.left       = Math.round(item.x * s) + 'px';
+        el.style.top        = Math.round((H - item.y) * s - ZC_PREVIEW_SIZE * s + BASELINE_FUDGE) + 'px';
+        el.style.fontSize   = (ZC_PREVIEW_SIZE * s) + 'px';
+        el.style.width      = Math.round(ZC_COL_W * s) + 'px';
+        el.style.height     = Math.round(lc * ZC_PREVIEW_LINEH * s + 8 * s) + 'px';
+        el.style.lineHeight = Math.round(ZC_PREVIEW_LINEH * s) + 'px';
+        const handle = zcHandleEls[idx];
+        if (handle) {
+          handle.style.left = Math.max(0, parseFloat(el.style.left) - 2) + 'px';
+          handle.style.top  = Math.max(0, parseFloat(el.style.top) - 18) + 'px';
+        }
+      });
+    }
+
+    // Stale guard (§4): compares the job's CURRENT zone assignment against sourceHash. Fails
+    // open — a network hiccup here must never block the rest of the editor from loading.
+    let staleBannerEl = null;
+    function hideStaleBanner() {
+      if (staleBannerEl) { staleBannerEl.remove(); staleBannerEl = null; }
+    }
+    function showStaleBanner() {
+      if (staleBannerEl) return;
+      staleBannerEl = document.createElement('div');
+      staleBannerEl.style.cssText = 'width:100%;max-width:680px;margin:0 auto 10px;padding:10px 14px;border-radius:8px;background:#fef3c7;border:1px solid #f59e0b;color:#78350f;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;';
+      const msg = document.createElement('span');
+      msg.textContent = 'Load changed since this BOL was edited — zone quantities may be stale.';
+      staleBannerEl.appendChild(msg);
+      const btnWrap = document.createElement('div');
+      btnWrap.style.cssText = 'display:flex;gap:8px;';
+      const regenBtn = document.createElement('button');
+      regenBtn.textContent = 'Regenerate';
+      regenBtn.style.cssText = 'padding:6px 14px;border-radius:6px;border:none;background:#78350f;color:#fff;cursor:pointer;font-size:13px;font-weight:600;';
+      regenBtn.addEventListener('click', async () => {
+        zcItems = await buildDefaultZcItems();
+        buildZcBoxes();
+        positionZc(_scale);
+        hideStaleBanner();
+      });
+      const keepBtn = document.createElement('button');
+      keepBtn.textContent = 'Keep edits';
+      keepBtn.style.cssText = 'padding:6px 14px;border-radius:6px;border:1px solid #78350f;background:transparent;color:#78350f;cursor:pointer;font-size:13px;font-weight:600;';
+      keepBtn.addEventListener('click', hideStaleBanner);
+      btnWrap.appendChild(regenBtn); btnWrap.appendChild(keepBtn);
+      staleBannerEl.appendChild(btnWrap);
+      mountEl.insertBefore(staleBannerEl, scrollArea);
+    }
+
+    if (zcZoneData) {
+      if (!zcItems) zcItems = await buildDefaultZcItems();
+      buildZcBoxes();
+
+      const resetZcBtn = document.createElement('button');
+      resetZcBtn.textContent = 'Reset columns';
+      resetZcBtn.style.cssText = 'padding:8px 20px;border-radius:8px;border:1px solid var(--border,#d1d5db);background:var(--card-bg,#fff);cursor:pointer;font-size:14px;font-weight:600;color:var(--text,#111827);';
+      resetZcBtn.addEventListener('click', async () => {
+        zcItems = await buildDefaultZcItems();
+        buildZcBoxes();
+        positionZc(_scale);
+        hideStaleBanner();
+      });
+      actionBar.insertBefore(resetZcBtn, applyBtn);
+
+      if (zcSourceHash && bol.job_id) {
+        try {
+          const _jr = await fetch('/api/jobs/' + encodeURIComponent(bol.job_id));
+          if (_jr.ok) {
+            const _jd  = await _jr.json();
+            const _job = _jd.job || _jd;
+            if (_job && Array.isArray(_job.line_items) && BolShared.hashJobZoneData(_job.line_items) !== zcSourceHash) {
+              showStaleBanner();
+            }
+          }
+        } catch (_e) { /* fail open — never block the editor on a network hiccup */ }
+      }
+    }
+
     // ── Apply ──
 
     applyBtn.addEventListener('click', () => {
@@ -412,6 +606,17 @@ window.BolEditor = (function () {
         if (pv && (pv.dx || pv.dy)) _posOut[pk] = { dx: pv.dx, dy: pv.dy };
       }
       if (Object.keys(_posOut).length > 0) overrides._pos = _posOut;
+
+      // lbz-bol-01: persist the WHOLE zoneColumns container (items + zoneData + sourceHash) —
+      // Apply replaces `overrides` wholesale (see below), so omitting zoneData/sourceHash here
+      // would silently break "Reset columns" and the stale guard on every subsequently-edited BOL.
+      if (zcZoneData) {
+        overrides.zoneColumns = {
+          items: (zcItems || []).map(it => ({ ...it })),
+          zoneData: zcZoneData,
+          sourceHash: zcSourceHash,
+        };
+      }
 
       if (Object.keys(overrides).length > 0) {
         bol._overrides = overrides;
