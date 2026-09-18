@@ -5298,6 +5298,56 @@ current series).
 
 ## Job Board
 
+- **lbz-parse-01 — Packing-slip parser: offload-zone detection, BDFT checksums, density-conflict
+  flag (job-board-agent).** Second prompt in the offload-zone series (depends on lbz-db-01's
+  schema/API passthrough). `jobs/packing-slip-parser.js`: added a pattern table
+  (`ZONE_ORDINAL_PATTERNS`/`ZONE_LABEL_PATTERNS`, one-line-add for a third wording) recognizing
+  both known packing-slip wordings — "OFFLOAD FIRST/SECOND/... + Label & segregate as: <ZONE> -"
+  (inv 4404) and "FIRST/SECOND/... TO DELIVER > + LABEL as <ZONE>" (inv 3371) — plus a
+  `tagOffloadZones()` state machine that walks parsed line items in document order, drops
+  marker/BDFT-total declaration rows (not real line items), tags surviving piece rows with
+  `offload_seq`/`zone_label`/`zone_bdft`, and checksums each zone+density group
+  (`Σ(thickness × qty × 8) === stated BDFT`, 2'x4' board = 8 bdft/inch) — including the
+  `{N pieces}`/`{N pieces)` self-contained-line variant and format A's brace-less single-line
+  2.0# groups (no baseline to check against). A zone's delivery ordinal is resolved from
+  whichever density group states it and propagated to every line sharing that (normalized,
+  case-insensitive) label; a label with no ordinal anywhere gets a `missing_ordinal` warning
+  instead of a guess. `tagDensityConflicts()` flags any line whose category density
+  ("Holey Board:2.0#") disagrees with its own description density ("Holey Board 1.0#") — a real
+  example on inv 3371. Also added `reassemblePageBreaks()`: a description-only row immediately
+  followed by a lone bare 1-4-digit row (the QTY column re-flowed onto the next PDF page) is
+  spliced back into one logical row before the existing header/qty detection runs — needed for
+  inv 4404's "11" GIFT SHOP" piece line — tightened to only merge when the description row
+  itself carries a thickness token, so a stray page-number row after ordinary prose can't be
+  mistaken for a split piece line. `data.offload_zones_enabled` (0/1) and
+  `data.offload_warnings` are new top-level parser output fields; a slip with no OFFLOAD/LABEL
+  wording anywhere produces line items identical to before this change (regression-checked
+  against the pre-change file). `jobs/index.html`: `prefillForm()`'s parse-review now groups
+  line items under zone headers in delivery order and surfaces checksum/missing-ordinal
+  warnings above the list. `addLineItemRow()` now stashes `offload_seq`/`zone_label`/
+  `zone_bdft` as row `dataset` attrs (from a fresh parse via `prefillForm()`, or from an
+  existing zoned job's `job_line_items` rows via `populateForm()` — those columns already come
+  back on `SELECT *`), and `collectLineItems()` puts them back on the save payload when
+  present — per the lbz-00 README's locked decision ("parser auto-sets
+  `offload_zones_enabled`"), lbz-db-01 already wired the create/update SQL and endpoint to
+  accept these fields but nothing on the frontend was sending them yet. `saveJob()`'s payload
+  now also always includes `offload_zones_enabled`, tracked in a new `parsedOffloadZonesEnabled`
+  module var set from the parsed slip or the loaded job and reset in `clearForm()` — without
+  restoring it from the loaded job in `populateForm()`, an unrelated edit-and-save on an
+  already-zoned job would have silently cleared its zone flag back to 0. Also renders a
+  category-vs-description density-choice prompt on any conflicting line that blocks
+  `saveJob()` (new `pendingDensityConflicts` guard) until resolved. The toggle switch and
+  manual zone editor (`PUT /api/jobs/:id/zones`) are still lbz-parse-02 — this prompt only
+  makes sure parsed (and existing) zone data survives a save. `jobs/jobs-i18n.js`: added
+  `offloadZoneGroup`/`offloadChecksumWarning`/`offloadMissingOrdinalWarning`/
+  `densityConflictWarning`/`densityConflictChoose`/`densityConflictBlockedCreate` (en/es/ht). No
+  reference PDFs for either invoice exist in the repo; verified both wordings plus two
+  regression cases (a non-zoned slip, and a prose-then-page-number shape proving the tightened
+  merge guard above) with a node harness (a `_internal` export was added to the parser purely
+  for this — not used by any page) driving `parseDoc()` directly with synthetic PDF-item
+  coordinates authored from the wordings and checksums stated in `Prompts/lbz-parse-01.md`
+  (35/35 assertions pass) — Steve should spot-check against the real 4404/3371 slips when
+  convenient.
 - **P446 — Duplicate-invoice guard now blind-spots archived jobs closed; cleared 12 stale
   duplicate jobs off the Loading Dashboard (db-api-agent).** Steve found 14 old, already-shipped
   invoices still showing on `/logistics/loading.html` with no way to act on them from the Job

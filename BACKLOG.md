@@ -380,7 +380,7 @@
 - [ ] Customer database (full CRUD) — icebox: revisit once all orders are entered here first, or it becomes a necessity
 - [ ] Consider separate dashboards for staff vs. management (TV display)
 - [x] lbz-db-01 — Offload zone schema + API passthrough
-- [ ] lbz-parse-01
+- [x] lbz-parse-01 — Parser: offload-zone detection, BDFT checksums, density-conflict flag
 - [ ] lbz-parse-02
 - [ ] lbz-pack-01
 - [ ] lbz-bol-01

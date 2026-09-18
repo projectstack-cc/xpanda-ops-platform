@@ -220,6 +220,254 @@ window.PackingSlipParser = (function () {
     return isNaN(t) ? null : t;
   }
 
+  // ─── Page-break reassembly ────────────────────────────────────────────────
+
+  // A packing-slip row's description and its trailing QTY column can land on opposite sides
+  // of a PDF page break: pdf.js renders them as two separate y-groups (the QTY re-flows onto
+  // the next page as a lone row containing just the integer). Detect that pattern — a
+  // non-header row immediately followed by a row that is nothing but a bare 1-4 digit number —
+  // and splice the bare quantity back onto the description row as its trailing QTY item so the
+  // normal isItemHeader() detection picks the merged row up as one logical line item.
+  function reassemblePageBreaks(rows) {
+    const out = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const sorted = [...row.items].sort((a, b) => a.x - b.x);
+      const text = reconstructLine(sorted).trim();
+
+      // Require the description row to actually look like a piece line (has a thickness
+      // token) before considering the next row for a merge — otherwise a stray page-number
+      // row after ordinary prose (both single-item, non-header rows) would be merged into a
+      // fabricated line item with a bogus quantity.
+      if (text && extractThickness(text) != null && !isItemHeader(sorted) && i + 1 < rows.length) {
+        const nextSorted = [...rows[i + 1].items].sort((a, b) => a.x - b.x);
+        const nextText = reconstructLine(nextSorted).trim().replace(/,/g, '');
+        const isBareQty = nextSorted.length === 1 && /^\d{1,4}$/.test(nextText);
+
+        if (isBareQty) {
+          const last = sorted[sorted.length - 1];
+          const lastRight = last.x + (last.width || last.text.length * 5.5);
+          out.push({
+            y: row.y,
+            items: [...row.items, { ...nextSorted[0], x: lastRight + 60 }],
+          });
+          i++; // consume the bare-qty row — it has been merged into this row
+          continue;
+        }
+      }
+
+      out.push(row);
+    }
+    return out;
+  }
+
+  // ─── Offload zone detection ───────────────────────────────────────────────
+  // lbz-parse-01: some customer packing slips break a job into delivery "zones" — pieces must
+  // be offloaded/labeled in a specific sequence per drop area. Two real wordings are known
+  // (see Prompts/lbz-parse-01.md); add a new one as a single entry in each list below rather
+  // than special-casing it elsewhere.
+  const ZONE_ORDINAL_WORDS = { FIRST: 1, SECOND: 2, THIRD: 3, FOURTH: 4, FIFTH: 5, SIXTH: 6 };
+
+  const ZONE_ORDINAL_PATTERNS = [
+    /OFFLOAD\s+(FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH)\b/i,
+    /(FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH)\s+TO\s+DELIVER/i,
+  ];
+
+  const ZONE_LABEL_PATTERNS = [
+    /Label\s*&\s*segregate\s+as:\s*(.+)/i,
+    /LABEL\s+as\s+(.+)/i,
+  ];
+
+  // A zone-density group's piece count can be embedded in the packing slip as "{27 pieces}" —
+  // real slips have also been seen with a stray ")" closing the brace instead of "}".
+  const ZONE_BRACE_PIECES_RE = /\{\s*(\d+)\s*pieces?\s*[\}\)]/i;
+
+  // 2' x 4' holey board = 8 board-feet per inch of thickness (the only board size these slips
+  // use for zoned Holey Board orders).
+  const BDFT_PER_INCH_2X4 = 8;
+
+  function extractZoneOrdinal(text) {
+    if (!text) return null;
+    for (const re of ZONE_ORDINAL_PATTERNS) {
+      const m = text.match(re);
+      if (m) {
+        const n = ZONE_ORDINAL_WORDS[m[1].toUpperCase()];
+        if (n) return n;
+      }
+    }
+    return null;
+  }
+
+  // Trim, strip a trailing run of "-"/">"/whitespace (format A ends labels with "-"; format
+  // B's ordinal markers use ">" and the label capture is greedy enough to matter if a variant
+  // ever puts one after the label), collapse internal whitespace. Key = uppercase of the same
+  // normalized string, so "Ambulance Canopy" / "AMBULANCE CANOPY -" map to one zone.
+  function normalizeZoneLabel(raw) {
+    return String(raw || '')
+      .replace(/[\s\-–—>]+$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function extractZoneLabel(text) {
+    if (!text) return null;
+    for (const re of ZONE_LABEL_PATTERNS) {
+      const m = text.match(re);
+      if (m) {
+        const display = normalizeZoneLabel(m[1]);
+        if (display) return { display, key: display.toUpperCase() };
+      }
+    }
+    return null;
+  }
+
+  function extractBracePieceCount(text) {
+    if (!text) return null;
+    const m = text.match(ZONE_BRACE_PIECES_RE);
+    return m ? parseInt(m[1], 10) : null;
+  }
+
+  function extractDensityValue(text) {
+    if (!text) return null;
+    const m = String(text).match(/(\d+(?:\.\d+)?)\s*#/);
+    return m ? parseFloat(m[1]) : null;
+  }
+
+  /**
+   * Walk the parsed line items in document order, detecting "OFFLOAD <ordinal> ... Label &
+   * segregate as: <ZONE> -" / "<ordinal> TO DELIVER > ... LABEL as <ZONE>" marker rows, the
+   * BDFT-total row that (usually) follows, and the per-thickness piece rows that follow that.
+   * Tags each piece row with offload_seq / zone_label / zone_bdft, drops the marker and
+   * BDFT-total declaration rows (neither is a real line item), and returns per-zone-density-
+   * group checksum warnings plus a warning for any zone whose ordinal was never stated. Items
+   * outside any zone context pass through completely unchanged — a slip with no OFFLOAD/LABEL
+   * wording anywhere produces identical items to before this function existed.
+   */
+  function tagOffloadZones(items) {
+    const zoneInfo = new Map();   // key -> { display, seq }
+    const warnings = [];
+    const tagged   = [];
+
+    let pending         = null;   // { key, display } — zone currently open
+    let awaitingSummary = false;  // next no-thickness row may declare this group's BDFT total
+    let group            = null;  // { baseline, sum } — open BDFT-total group awaiting checksum
+
+    function closeGroup() {
+      if (group && group.baseline != null && Math.round(group.sum) !== Math.round(group.baseline)) {
+        warnings.push({
+          type: 'checksum_mismatch',
+          zone_label: pending ? pending.display : null,
+          expected_bdft: group.baseline,
+          computed_bdft: group.sum,
+        });
+      }
+      group = null;
+    }
+
+    for (const item of items) {
+      const headerText = item.category || '';
+      const ord = extractZoneOrdinal(headerText);
+      const lbl = extractZoneLabel(headerText);
+
+      if (ord != null || lbl != null) {
+        closeGroup();
+        const key = lbl ? lbl.key : (pending ? pending.key : null);
+        if (key) {
+          const display = lbl ? lbl.display : pending.display;
+          pending = { key, display };
+          const info = zoneInfo.get(key) || { display, seq: null };
+          if (!info.display) info.display = display;
+          if (ord != null && info.seq == null) info.seq = ord;
+          zoneInfo.set(key, info);
+        }
+        awaitingSummary = true;
+        continue; // marker rows aren't real line items
+      }
+
+      if (!pending) { tagged.push(item); continue; } // not inside any zone context
+
+      const wasAwaitingSummary = awaitingSummary;
+      awaitingSummary = false;
+
+      const thk   = extractThickness(item._rawText);
+      const brace = extractBracePieceCount(item._rawText);
+
+      if (thk != null) {
+        // Piece row.
+        if (brace != null) {
+          // Self-contained: the row's own QTY column is the BDFT for this single row; the
+          // real piece count is the {N pieces} brace.
+          const bdft = item.quantity;
+          const expected = thk * brace * BDFT_PER_INCH_2X4;
+          if (Math.round(expected) !== Math.round(bdft)) {
+            warnings.push({
+              type: 'checksum_mismatch', zone_label: pending.display,
+              expected_bdft: bdft, computed_bdft: expected,
+            });
+          }
+          item.quantity  = brace;
+          item.zone_bdft = bdft;
+        } else if (group) {
+          group.sum += thk * item.quantity * BDFT_PER_INCH_2X4;
+          item.zone_bdft = group.baseline;
+        } else {
+          // Single-line density group with no separate BDFT-total row (e.g. format A's 2.0#
+          // "6" pieces" line) — QTY is already the real piece count; nothing to check.
+          item.zone_bdft = null;
+        }
+        item.thickness   = thk;
+        item.offload_seq = zoneInfo.get(pending.key).seq;
+        item.zone_label  = pending.display;
+        item._zoneKey    = pending.key;
+        tagged.push(item);
+        continue;
+      }
+
+      // No thickness: a BDFT-total declaration row if we just saw a marker, else an unrelated
+      // description line (passes through untouched).
+      if (wasAwaitingSummary) {
+        group = { baseline: item.quantity, sum: 0 };
+        continue; // BDFT-total rows aren't real line items
+      }
+
+      tagged.push(item);
+    }
+
+    closeGroup();
+
+    for (const info of zoneInfo.values()) {
+      if (info.seq == null) warnings.push({ type: 'missing_ordinal', zone_label: info.display });
+    }
+
+    // Final pass: resolve every tagged piece row's seq/label from zoneInfo. A zone's ordinal
+    // can be stated on any of its density groups (format B states it only on the first); this
+    // makes the resolved seq authoritative regardless of which group it was seen on.
+    for (const item of tagged) {
+      if (item._zoneKey) {
+        const info = zoneInfo.get(item._zoneKey);
+        item.offload_seq = info.seq;
+        item.zone_label  = info.display;
+        delete item._zoneKey;
+      }
+    }
+
+    return { items: tagged, zonesFound: zoneInfo.size, warnings };
+  }
+
+  // Flags a line whose category density ("Holey Board:2.0#") disagrees with the density
+  // stated in its own description text ("Holey Board 1.0#") — both wordings appear on real
+  // slips and, when they disagree, the correct density needs a human call before job create.
+  function tagDensityConflicts(items) {
+    for (const item of items) {
+      const catDensity  = extractDensityValue(item.category);
+      const descDensity = extractDensityValue(item.description);
+      if (catDensity != null && descDensity != null && Math.abs(catDensity - descDensity) > 1e-9) {
+        item.density_conflict = { category_density: catDensity, description_density: descDensity };
+      }
+    }
+    return items;
+  }
+
   function parseLineItems(groups, descriptionY) {
     const items = [];
     let current = null;
@@ -228,7 +476,9 @@ window.PackingSlipParser = (function () {
       .filter(lg => lg.y < descriptionY)
       .sort((a, b) => b.y - a.y);
 
-    for (const lg of relevant) {
+    const reassembled = reassemblePageBreaks(relevant);
+
+    for (const lg of reassembled) {
       const sorted = [...lg.items].sort((a, b) => a.x - b.x);
       const lineText = reconstructLine(sorted).trim();
       if (!lineText) continue;
@@ -314,6 +564,9 @@ window.PackingSlipParser = (function () {
           const _thk = extractThickness(_thkSrc);
           if (_thk != null) item.thickness = _thk;
         }
+        // lbz-parse-01: full row text for offload-zone / density-conflict detection — consumed
+        // and deleted by tagOffloadZones()/parseDoc() below, never reaches the caller.
+        item._rawText = _thkSrc;
         delete item._isNotes;
         delete item._descLines;
         return item;
@@ -526,6 +779,17 @@ window.PackingSlipParser = (function () {
       data.line_items = parseLineItems(groups, lines[descriptionIdx].y);
     }
 
+    // lbz-parse-01: offload-zone detection (OFFLOAD <ordinal>/Label & segregate as: ... and
+    // <ordinal> TO DELIVER >/LABEL as ... wordings) + density-conflict flagging. A slip with no
+    // zone wording found leaves zoneResult.items === the input array untouched and
+    // offload_zones_enabled === 0.
+    const zoneResult = tagOffloadZones(data.line_items || []);
+    data.line_items = zoneResult.items;
+    data.offload_zones_enabled = zoneResult.zonesFound > 0 ? 1 : 0;
+    data.offload_warnings = zoneResult.warnings;
+    tagDensityConflicts(data.line_items);
+    data.line_items.forEach(li => { delete li._rawText; });
+
     data.line_items = (data.line_items || []).filter(li => {
       const qty = parseFloat(li.quantity);
       return qty && qty > 0;
@@ -575,6 +839,15 @@ window.PackingSlipParser = (function () {
       } catch (err) {
         return { success: false, error: err.message || 'Could not extract text from PDF' };
       }
+    },
+
+    // lbz-parse-01: exposes parseDoc() (takes raw {text,x,y,width} items directly, skipping
+    // pdf.js/file loading) plus the offload-zone helpers for the node test harness — there are
+    // no reference PDF fixtures in the repo yet. Not used by any page at runtime.
+    _internal: {
+      parseDoc, tagOffloadZones, tagDensityConflicts, reassemblePageBreaks,
+      extractZoneOrdinal, extractZoneLabel, normalizeZoneLabel, extractBracePieceCount,
+      extractDensityValue, extractThickness, isItemHeader, reconstructLine,
     },
   };
 

@@ -685,6 +685,8 @@ let pendingSlipRemoved = false;
 let originalShipTo   = null; // snapshot of loaded job's ship-to fields, for edit-change detection
 let selectedComboId  = null;
 let selectedComboName = '';
+let pendingDensityConflicts = 0; // lbz-parse-01: unresolved parse-review density conflicts; blocks saveJob() while > 0
+let parsedOffloadZonesEnabled = 0; // lbz-parse-01: offload_zones_enabled for the job currently loaded in the modal
 let partsCache      = null;
 let combosCache     = null;
 let draggedId       = null;
@@ -2168,7 +2170,25 @@ async function prefillForm(data) {
     });
 
     document.getElementById('li-container').innerHTML = '';
-    for (const li of matchedLineItems) {
+    pendingDensityConflicts = 0;
+    parsedOffloadZonesEnabled = data.offload_zones_enabled ? 1 : 0;
+    renderOffloadZoneWarnings(data.offload_warnings);
+
+    // lbz-parse-01: group in delivery order (offload_seq ascending; lines with no zone last,
+    // in their original parse order). Display grouping only — collectLineItems() still reads
+    // rows in DOM order, and zone data isn't sent to the backend by this prompt.
+    const zoned   = matchedLineItems.filter(li => li.zone_label);
+    const unzoned = matchedLineItems.filter(li => !li.zone_label);
+    zoned.sort((a, b) => (a.offload_seq ?? 999) - (b.offload_seq ?? 999));
+    const ordered = [...zoned, ...unzoned];
+
+    let lastZoneLabel;
+    for (const li of ordered) {
+      if (li.zone_label !== lastZoneLabel) {
+        lastZoneLabel = li.zone_label;
+        if (li.zone_label) addOffloadZoneHeader(li.zone_label, li.offload_seq);
+      }
+
       const descParts = [li.description];
       if (li.label) descParts.push('– ' + li.label);
       const desc = descParts.filter(Boolean).join(' ').trim();
@@ -2179,6 +2199,9 @@ async function prefillForm(data) {
         quantity:    li.quantity ?? 1,
         dimensions:  li.dimensions || li._partDims || '',
         qty_unit:    li.qty_unit || 'pcs',
+        offload_seq: li.offload_seq,
+        zone_label:  li.zone_label,
+        zone_bdft:   li.zone_bdft,
       });
       row.querySelectorAll('input').forEach(inp => highlight(inp));
 
@@ -2193,6 +2216,8 @@ async function prefillForm(data) {
       }
       document.getElementById('li-container').appendChild(badge);
       row.querySelector('.jobs-li-remove').addEventListener('click', () => badge.remove());
+
+      if (li.density_conflict) addDensityConflictResolver(row, li.density_conflict);
     }
   }
 }
@@ -2280,6 +2305,8 @@ function clearForm() {
   document.getElementById('f-load-count').value   = '1';
   document.getElementById('f-total-bdft').value   = '0';
   document.getElementById('li-container').innerHTML = '';
+  pendingDensityConflicts = 0;
+  parsedOffloadZonesEnabled = 0;
 
   document.getElementById('slip-inline-viewer').hidden = true;
   document.getElementById('slip-viewer-content').hidden = true;
@@ -2360,6 +2387,10 @@ function populateForm(job) {
   if (Array.isArray(job.line_items)) {
     job.line_items.forEach(li => addLineItemRow({ ...li, density: li.density ?? '' }));
   }
+  // lbz-parse-01: preserve the existing job's zone flag across unrelated edits — saveJob() now
+  // always sends offload_zones_enabled, so without this an edit-and-save on a zoned job would
+  // silently clear it back to 0.
+  parsedOffloadZonesEnabled = job.offload_zones_enabled ? 1 : 0;
 
   if (job.combo_id) showComboBadge(job.combo_id, 'Linked Combo');
   renderTrailerGroupSection(job);
@@ -2432,6 +2463,12 @@ function addLineItemRow(data) {
   row.className = 'jobs-li-row';
   row.style.gridTemplateColumns = '90px 1fr 58px 88px 70px 30px';
   row.dataset.partId = data?.part_id ?? '';
+  // lbz-parse-01: carry offload-zone fields through on the row so collectLineItems() can put
+  // them back on the save payload — round-trips both a fresh parse and an existing zoned job
+  // loaded via populateForm() (job_line_items already has these columns from lbz-db-01).
+  if (data?.offload_seq != null) row.dataset.offloadSeq = String(data.offload_seq);
+  if (data?.zone_label)          row.dataset.zoneLabel  = data.zone_label;
+  if (data?.zone_bdft != null)   row.dataset.zoneBdft   = String(data.zone_bdft);
   row.innerHTML = `
     <input type="text"   class="li-part" placeholder="Part #"      value="${esc(data?.part_number  ?? '')}">
     <input type="text"   class="li-desc" placeholder="Description" value="${esc(data?.description  ?? '')}">
@@ -2494,16 +2531,95 @@ async function updateHoleyChunkPreview() {
 
 function collectLineItems() {
   return Array.from(document.querySelectorAll('#li-container .jobs-li-row'))
-    .map((row, i) => ({
-      part_id:     row.dataset.partId || null,
-      part_number: row.querySelector('.li-part').value.trim(),
-      description: row.querySelector('.li-desc').value.trim(),
-      quantity:    parseInt(row.querySelector('.li-qty').value,  10) || 0,
-      dimensions:  row.querySelector('.li-dims').value.trim(),
-      density:     row.querySelector('.li-density').value.trim(),
-      sort_order:  i,
-    }))
+    .map((row, i) => {
+      const li = {
+        part_id:     row.dataset.partId || null,
+        part_number: row.querySelector('.li-part').value.trim(),
+        description: row.querySelector('.li-desc').value.trim(),
+        quantity:    parseInt(row.querySelector('.li-qty').value,  10) || 0,
+        dimensions:  row.querySelector('.li-dims').value.trim(),
+        density:     row.querySelector('.li-density').value.trim(),
+        sort_order:  i,
+      };
+      // lbz-parse-01: pass offload-zone fields through unchanged when the row carries them
+      // (from a parsed slip or a loaded zoned job); manually-added rows carry none of these.
+      if (row.dataset.offloadSeq !== undefined) li.offload_seq = parseInt(row.dataset.offloadSeq, 10);
+      if (row.dataset.zoneLabel)                li.zone_label  = row.dataset.zoneLabel;
+      if (row.dataset.zoneBdft !== undefined)   li.zone_bdft   = parseInt(row.dataset.zoneBdft, 10);
+      return li;
+    })
     .filter(li => li.description || li.part_number);
+}
+
+/* ═══════════════════════════════════════════
+   Offload zones — parse-review display (lbz-parse-01)
+   Groups parsed line items under zone headers in delivery order and surfaces the parser's
+   checksum / missing-ordinal / density-conflict warnings. Display only — the toggle + manual
+   zone editor + PUT /api/jobs/:id/zones persistence is lbz-parse-02.
+═══════════════════════════════════════════ */
+
+function renderOffloadZoneWarnings(warnings) {
+  if (!Array.isArray(warnings) || !warnings.length) return;
+  const box = document.createElement('div');
+  box.style.cssText = 'font-size:12px;font-weight:600;margin:0 0 10px;padding:8px 10px;background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);border-radius:6px;';
+  box.innerHTML = warnings.map(w => {
+    if (w.type === 'checksum_mismatch') {
+      return esc(t('jobs.offloadChecksumWarning', { label: w.zone_label || '', expected: w.expected_bdft, computed: w.computed_bdft }));
+    }
+    if (w.type === 'missing_ordinal') {
+      return esc(t('jobs.offloadMissingOrdinalWarning', { label: w.zone_label || '' }));
+    }
+    return '';
+  }).filter(Boolean).map(line => `<div>${line}</div>`).join('');
+  document.getElementById('li-container').appendChild(box);
+}
+
+function addOffloadZoneHeader(label, seq) {
+  const header = document.createElement('div');
+  header.style.cssText = 'font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line);';
+  header.textContent = t('jobs.offloadZoneGroup', { n: seq ?? '—', label });
+  document.getElementById('li-container').appendChild(header);
+}
+
+// Renders the category-density-vs-description-density choice for a parsed line and blocks
+// saveJob() (via the pendingDensityConflicts counter) until the user picks one.
+function addDensityConflictResolver(row, conflict) {
+  pendingDensityConflicts++;
+
+  const box = document.createElement('div');
+  box.style.cssText = 'font-size:11px;font-weight:600;margin:-4px 0 10px;padding:6px 10px;padding-left:96px;background:var(--danger-bg);color:var(--danger-text);border-radius:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+
+  const label = document.createElement('span');
+  label.textContent = t('jobs.densityConflictWarning', {
+    cat: conflict.category_density.toFixed(1), desc: conflict.description_density.toFixed(1),
+  });
+  box.appendChild(label);
+
+  const densityInput = row.querySelector('.li-density');
+  let resolved = false;
+  const resolve = (value) => {
+    if (resolved) return;
+    resolved = true;
+    densityInput.value = `${value.toFixed(1)} RC`;
+    box.remove();
+    pendingDensityConflicts = Math.max(0, pendingDensityConflicts - 1);
+  };
+
+  [conflict.category_density, conflict.description_density].forEach(value => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.style.cssText = 'min-height:44px;padding:4px 12px;';
+    btn.textContent = t('jobs.densityConflictChoose', { density: value.toFixed(1) });
+    btn.addEventListener('click', () => resolve(value));
+    box.appendChild(btn);
+  });
+
+  row.insertAdjacentElement('afterend', box);
+  row.querySelector('.jobs-li-remove').addEventListener('click', () => {
+    box.remove();
+    if (!resolved) pendingDensityConflicts = Math.max(0, pendingDensityConflicts - 1);
+  });
 }
 
 /* ═══════════════════════════════════════════
@@ -3022,6 +3138,11 @@ function openAddressCorrectionModal(entered, standardized) {
 ═══════════════════════════════════════════ */
 
 async function saveJob() {
+  if (pendingDensityConflicts > 0) {
+    setModalStatus(t('jobs.densityConflictBlockedCreate'), true);
+    return;
+  }
+
   const customer = document.getElementById('f-customer').value.trim();
   if (!customer) {
     setModalStatus(t('jobs.customerRequired'), true);
@@ -3055,6 +3176,7 @@ async function saveJob() {
     packing_instructions: document.getElementById('f-packing').value.trim(),
     notes:                document.getElementById('f-notes').value.trim(),
     combo_id:             selectedComboId || null,
+    offload_zones_enabled: parsedOffloadZonesEnabled,
     line_items:           collectLineItems(),
     processes:            collectProcesses(),
     ship_to_company:      document.getElementById('f-ship-to-company').value.trim(),

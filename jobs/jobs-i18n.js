@@ -297,6 +297,14 @@
       matchedPart: "✓ Matched: {part}",
       noMatchNewPart: "⚠ No match — new part will be created on load build",
 
+      // Offload-zone parse-review (lbz-parse-01)
+      offloadZoneGroup: "Zone {n} — {label}",
+      offloadChecksumWarning: "⚠ {label}: BDFT mismatch — slip states {expected}, pieces total {computed}",
+      offloadMissingOrdinalWarning: "⚠ \"{label}\" has no stated delivery order — confirm sequence manually",
+      densityConflictWarning: "⚠ Density conflict — slip shows {cat}# in one place and {desc}# in another",
+      densityConflictChoose: "Use {density}#",
+      densityConflictBlockedCreate: "Resolve the density conflict(s) above before creating this job.",
+
       // BOL viewer modal
       billOfLading: "Bill of Lading",
       download: "Download",
@@ -608,6 +616,14 @@
       matchedPart: "✓ Coincidencia: {part}",
       noMatchNewPart: "⚠ Sin coincidencia — se creará una pieza nueva al construir la carga",
 
+      // Offload-zone parse-review (lbz-parse-01)
+      offloadZoneGroup: "Zona {n} — {label}",
+      offloadChecksumWarning: "⚠ {label}: discrepancia de BDFT — la hoja indica {expected}, las piezas suman {computed}",
+      offloadMissingOrdinalWarning: "⚠ \"{label}\" no tiene un orden de entrega indicado — confirme la secuencia manualmente",
+      densityConflictWarning: "⚠ Conflicto de densidad — la hoja muestra {cat}# en un lugar y {desc}# en otro",
+      densityConflictChoose: "Usar {density}#",
+      densityConflictBlockedCreate: "Resuelva el/los conflicto(s) de densidad arriba antes de crear este trabajo.",
+
       // BOL viewer modal
       billOfLading: "Conocimiento de Embarque",
       download: "Descargar",
@@ -918,6 +934,14 @@
       // Packing-slip line-item matching badges
       matchedPart: "✓ Koresponn: {part}",
       noMatchNewPart: "⚠ Pa gen koresponn — yon nouvo pyès ap kreye lè n ap bati chajman an",
+
+      // Offload-zone parse-review (lbz-parse-01)
+      offloadZoneGroup: "Zòn {n} — {label}",
+      offloadChecksumWarning: "⚠ {label}: BDFT pa matche — bòdwo a montre {expected}, moso yo total {computed}",
+      offloadMissingOrdinalWarning: "⚠ \"{label}\" pa gen lòd livrezon ki endike — konfime sekans lan manyèlman",
+      densityConflictWarning: "⚠ Konfli densite — bòdwo a montre {cat}# yon kote ak {desc}# yon lòt kote",
+      densityConflictChoose: "Itilize {density}#",
+      densityConflictBlockedCreate: "Rezoud konfli densite yo anwo anvan ou kreye travay sa a.",
 
       // BOL viewer modal
       billOfLading: "Kontra Ekspedisyon (BOL)",
