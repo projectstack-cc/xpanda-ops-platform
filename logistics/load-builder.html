@@ -518,6 +518,10 @@ let state = {
   currentSavedLoadId: null,
   committedTrailers: null,
   committedSig: null,
+  // lbz-pack-01: offload-zone sequencing. Set true by prefillFromJob when the pulled
+  // job has offload_zones_enabled; drives getResult() to calcZonedLoading instead of
+  // calcLoading. Zone identity itself lives on state.cart entries (offloadSeq/zoneLabel).
+  zoneMode: false,
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -1034,6 +1038,134 @@ function calcLoading(cart, skus, dims, variant = 0, options = {}) {
   return { trailers, warnings, totalWeight, utilization, totalUnits, totalStacks, mixedStacks };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// lbz-pack-01: ZONE/TRUCK SEQUENCING WRAPPER
+// Composes the untouched calcLoading per zone segment; never edits its body, never
+// reuses STORAGE_KEY. Truck assignment walks zones in ASCENDING delivery order
+// (offloadSeq): each zone's pieces fill the current truck's remaining length/weight
+// budget via calcLoading (given a length- and weight-truncated `dims`), and whatever
+// doesn't fit spills to a fresh truck. Rows accumulate left-to-right (door → nose,
+// posFromFront 0 = door per buildTopViewSVG's REAR/FRONT convention) in that same
+// ascending-seq order, so within a truck the LAST zone placed sits at the nose and the
+// FIRST-to-deliver zone sits at the doors — i.e. nose→door reads in DESCENDING delivery
+// order, per lbz-00-README's locked decision. Each row/stack is single-zone by
+// construction (no side-by-side zone sharing here — see BACKLOG).
+const ZONE_COLORS = ["#D97706","#2563EB","#059669","#7C3AED","#DC2626","#0891B2","#CA8A04","#BE123C","#4F46E5","#16A34A"];
+const MAX_ZONED_TRUCKS_PER_ZONE = 40; // safety guard against runaway loops, mirrors calcLoading's own 20-trailer cap
+
+function groupCartByZone(cart) {
+  const groups = new Map();
+  cart.forEach(c => {
+    const label = c.zoneLabel || '(unzoned)';
+    const seq = c.offloadSeq != null ? c.offloadSeq : Infinity; // unzoned extras sort last (nose)
+    if (!groups.has(label)) groups.set(label, { label, offloadSeq: seq, cart: [] });
+    const g = groups.get(label);
+    if (g.offloadSeq === Infinity && seq !== Infinity) g.offloadSeq = seq;
+    g.cart.push({ skuId: c.skuId, qty: c.qty });
+  });
+  return [...groups.values()].sort((a, b) => a.offloadSeq - b.offloadSeq);
+}
+
+function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
+  if (!cart.length) return { trailers: [], warnings: [], totalWeight: 0, utilization: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0, zoneOrder: [] };
+
+  const zones = groupCartByZone(cart);
+  zones.forEach((z, i) => { z.color = ZONE_COLORS[i % ZONE_COLORS.length]; });
+
+  const warnings = [];
+  if (state.forcedMode) warnings.push('Forced trailer queue is ignored while offload zones are active.');
+  // calcLoading reads state.forcedMode/state.autoDownsize directly (untouched body) — pin
+  // them off for the duration of this wrapper's per-segment calls so the truncated `dims`
+  // we pass is always honored, then restore whatever the user had set.
+  const savedForcedMode = state.forcedMode, savedAutoDownsize = state.autoDownsize;
+  state.forcedMode = false;
+  state.autoDownsize = false;
+
+  const trucks = [];
+  let truck = { rows: [], usedLength: 0, usedWeight: 0, zoneSegments: [] };
+  function closeTruck() {
+    if (truck.rows.length) trucks.push(truck);
+    truck = { rows: [], usedLength: 0, usedWeight: 0, zoneSegments: [] };
+  }
+
+  try {
+    for (const zone of zones) {
+      let remaining = zone.cart.map(c => ({ ...c }));
+      let guard = 0;
+      while (remaining.some(c => c.qty > 0) && guard++ < MAX_ZONED_TRUCKS_PER_ZONE) {
+        const availableLength = dims.length - truck.usedLength;
+        if (availableLength <= 0) { closeTruck(); continue; }
+        const segDims = { ...dims, length: availableLength, maxWeight: dims.maxWeight - truck.usedWeight };
+        const segResult = calcLoading(remaining.filter(c => c.qty > 0), skus, segDims, variant, { isFlatbed: options.isFlatbed === true, skipDownsize: true });
+        (segResult.warnings || []).forEach(w => warnings.push(`[${zone.label}] ${w}`));
+        const segTrailer = segResult.trailers[0];
+        if (!segTrailer || !segTrailer.rows.length) {
+          if (availableLength >= dims.length) {
+            // A full, empty truck still can't take any of this zone — nothing more we can do.
+            remaining.forEach(c => { if (c.qty > 0) warnings.push(`${c.qty} pcs of zone "${zone.label}" could not be placed.`); });
+            remaining = [];
+            break;
+          }
+          closeTruck();
+          continue;
+        }
+        // Stamp zone identity on every row and offset into this truck's running length.
+        const startX = truck.usedLength;
+        segTrailer.rows.forEach(row => {
+          truck.rows.push({ ...row, posFromFront: row.posFromFront + startX, offloadSeq: zone.offloadSeq, zoneLabel: zone.label, zoneColor: zone.color });
+        });
+        truck.usedLength += segTrailer.usedLength;
+        truck.usedWeight += segTrailer.usedWeight;
+        truck.zoneSegments.push({
+          offloadSeq: zone.offloadSeq, label: zone.label, color: zone.color,
+          startX, endX: truck.usedLength,
+          pieces: segTrailer.totalUnits, skuBreakdown: segTrailer.skuBreakdown,
+        });
+
+        const packedBySku = {};
+        Object.values(segTrailer.skuBreakdown || {}).forEach(entry => { packedBySku[entry.skuId] = entry.pieces; });
+        const leftover = remaining.map(c => ({ skuId: c.skuId, qty: c.qty - (packedBySku[c.skuId] || 0) })).filter(c => c.qty > 0);
+        if (leftover.length) closeTruck();
+        remaining = leftover;
+      }
+    }
+    closeTruck();
+  } finally {
+    state.forcedMode = savedForcedMode;
+    state.autoDownsize = savedAutoDownsize;
+  }
+
+  const trailers = trucks.map(tr => {
+    const stats = buildTrailerStats(tr.rows, dims);
+    stats.zoned = true;
+    stats.zoneSegments = tr.zoneSegments;
+    return stats;
+  });
+
+  const totalWeight = cart.reduce((s, c) => { const sku = skus.find(x => x.id === c.skuId); return s + (sku ? c.qty * sku.weight : 0); }, 0);
+  const totalUnits = cart.reduce((s, c) => s + c.qty, 0);
+  const totalStacks = trailers.reduce((s, t) => s + t.totalStacks, 0);
+  const mixedStacks = trailers.reduce((s, t) => s + t.mixedStacks, 0);
+  const floorArea = dims.length * dims.width;
+  const utilization = trailers.length ? trailers.reduce((s, t) => s + t.usedFloorArea / floorArea, 0) / trailers.length : 0;
+  trailers.forEach((t, i) => { if (t.usedWeight / dims.maxWeight > 0.95) warnings.push(`Trailer ${i + 1} is near weight limit.`); });
+
+  return { trailers, warnings, totalWeight, utilization, totalUnits, totalStacks, mixedStacks, zoneOrder: zones.map(z => ({ offloadSeq: z.offloadSeq, label: z.label, color: z.color })) };
+}
+
+// Detects a manual-editor move that puts a later-delivery zone's stack door-side of an
+// earlier-delivery zone's stack (rows walked door→nose = array order; offloadSeq should
+// be non-decreasing in that direction). Warns only — never blocks (lbz-pack-01 §4).
+function checkZoneOrderWarning(rows) {
+  let maxSeq = -Infinity;
+  for (const row of rows) {
+    if (row.offloadSeq == null) continue;
+    if (row.offloadSeq < maxSeq) return true;
+    if (row.offloadSeq > maxSeq) maxSeq = row.offloadSeq;
+  }
+  return false;
+}
+
 function buildPackingList(trailer) {
   return {
     pieces: Object.values(trailer.skuBreakdown).sort((a, b) => a.name.localeCompare(b.name)),
@@ -1055,7 +1187,12 @@ function buildTopViewSVG(trailer, dims) {
   const SC = SVG_TOPVIEW_SCALE, W = 10, PAD = 64;
   const pxL = dims.length * SC, pxW = dims.width * SC;
   const runnerH = state.runnerHeight;
-  const svgW = pxL + W * 2 + PAD, svgH = pxW + W * 2 + 40 + (runnerH > 0 ? 16 : 0);
+  // lbz-pack-01: zoned trailers get a color strip (zone + legend) above the diagram and
+  // a divider-marker row below it; non-zoned trailers are laid out exactly as before.
+  const zoned = !!(trailer.zoned && Array.isArray(trailer.zoneSegments) && trailer.zoneSegments.length);
+  const zoneStripH = zoned ? 22 : 0;
+  const zoneMarkH = zoned ? 14 : 0;
+  const svgW = pxL + W * 2 + PAD, svgH = pxW + W * 2 + 40 + (runnerH > 0 ? 16 : 0) + zoneStripH + zoneMarkH;
   const rects = [];
   (trailer.rows || []).forEach((row, ri) => row.columns.forEach((col, ci) => {
     rects.push({ key: `${ri}-${ci}`, x: W + row.posFromFront * SC, y: W + col.posY * SC, w: row.rowLength * SC, h: col.colWidth * SC, col });
@@ -1065,6 +1202,14 @@ function buildTopViewSVG(trailer, dims) {
 
   let svg = `<svg width="${svgW}" height="${svgH}" style="display:block;font-family:DM Sans,Arial,sans-serif">`;
   svg += `<defs><pattern id="ep" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#CBD5E1" stroke-width="2"/></pattern></defs>`;
+  if (zoned) {
+    trailer.zoneSegments.forEach(seg => {
+      const segX = W + seg.startX * SC, segW = Math.max(0, (seg.endX - seg.startX) * SC);
+      svg += `<rect x="${segX}" y="2" width="${segW}" height="14" fill="${seg.color}" opacity="0.88" rx="2"/>`;
+      if (segW > 26) svg += `<text x="${segX + segW / 2}" y="12" text-anchor="middle" fill="#fff" font-size="9" font-weight="800">${esc(seg.label)}</text>`;
+    });
+  }
+  svg += `<g transform="translate(0, ${zoneStripH})">`;
   svg += `<rect x="${W}" y="${W}" width="${pxL}" height="${pxW}" fill="#F8FAFC" stroke="#94A3B8" stroke-width="2" rx="3"/>`;
   if (emptyW > 2) svg += `<rect x="${usedX}" y="${W}" width="${emptyW}" height="${pxW}" fill="url(#ep)"/>`;
   if (emptyW > 40) {
@@ -1106,6 +1251,15 @@ function buildTopViewSVG(trailer, dims) {
   svg += `<text x="${W + 3}" y="${W + pxW + 22}" fill="#64748B" font-size="10" font-weight="700">REAR</text>`;
   svg += `<text x="${W + pxL / 2}" y="${W + pxW + 22}" text-anchor="middle" fill="#94A3B8" font-size="10">${dims.length}"L × ${dims.width}"W</text>`;
   if (runnerH > 0) svg += `<rect x="${W}" y="${W + pxW + 30}" width="16" height="4" fill="#92400E" opacity="0.7" rx="1"/><text x="${W + 20}" y="${W + pxW + 34}" fill="#92400E" font-size="10" font-weight="700">▬ ${runnerH}" runners</text>`;
+  svg += `</g>`;
+  if (zoned) {
+    trailer.zoneSegments.forEach((seg, si) => {
+      if (si === 0) return;
+      const bx = W + seg.startX * SC;
+      svg += `<line x1="${bx}" y1="0" x2="${bx}" y2="${zoneStripH + W + pxW}" stroke="#0f172a" stroke-width="2.5" stroke-dasharray="3,2"/>`;
+      svg += `<text x="${bx + 3}" y="${zoneStripH + W + pxW + 12}" fill="#0f172a" font-size="9" font-weight="800">↦ ${esc(seg.label)}</text>`;
+    });
+  }
   svg += `</svg>`;
   return svg;
 }
@@ -1117,7 +1271,11 @@ function buildPrintSvg(trailer, dims) {
   const SC = BASE_SC * fitScale;
   const pxL = dims.length * SC, pxW = dims.width * SC;
   const printRunnerH = state.runnerHeight;
-  const svgW = pxL + M * 2 + 78, svgH = pxW + M * 2 + 64 + (printRunnerH > 0 ? 20 : 0);
+  // lbz-pack-01: same zoned strip/divider treatment as buildTopViewSVG, mirrored for print.
+  const zoned = !!(trailer.zoned && Array.isArray(trailer.zoneSegments) && trailer.zoneSegments.length);
+  const zoneStripH = zoned ? 26 : 0;
+  const zoneMarkH = zoned ? 16 : 0;
+  const svgW = pxL + M * 2 + 78, svgH = pxW + M * 2 + 64 + (printRunnerH > 0 ? 20 : 0) + zoneStripH + zoneMarkH;
   const rects = [];
   (trailer.rows || []).forEach((row, ri) => row.columns.forEach((col, ci) => {
     rects.push({ x: M + row.posFromFront * SC, y: M + col.posY * SC, w: row.rowLength * SC, h: col.colWidth * SC, lines: getStackPrintLines(col) });
@@ -1134,6 +1292,14 @@ function buildPrintSvg(trailer, dims) {
   const printEmptyW = pxL - printUsedPxL;
   let svg = `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="font-family:Arial,sans-serif;display:block;">`;
   svg += `<defs><pattern id="pep" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#CBD5E1" stroke-width="2"/></pattern></defs>`;
+  if (zoned) {
+    trailer.zoneSegments.forEach(seg => {
+      const segX = M + seg.startX * SC, segW = Math.max(0, (seg.endX - seg.startX) * SC);
+      svg += `<rect x="${segX}" y="2" width="${segW}" height="16" fill="${seg.color}" opacity="0.88" rx="2"/>`;
+      if (segW > 30) svg += `<text x="${segX + segW / 2}" y="14" text-anchor="middle" fill="#fff" font-size="11" font-weight="800">${esc(seg.label)}</text>`;
+    });
+  }
+  svg += `<g transform="translate(0, ${zoneStripH})">`;
   svg += `<rect x="${M}" y="${M}" width="${pxL}" height="${pxW}" fill="#ffffff" stroke="#475569" stroke-width="2.5" rx="4"/>`;
   if (printEmptyW > 2) svg += `<rect x="${M + printUsedPxL}" y="${M}" width="${printEmptyW}" height="${pxW}" fill="url(#pep)"/>`;
   if (printEmptyW > 40) {
@@ -1156,6 +1322,15 @@ function buildPrintSvg(trailer, dims) {
   svg += `<text x="${M + pxL + 8}" y="${M + pxW / 2 + 5}" font-size="14" font-weight="700" fill="#D97706">FRONT</text>`;
   svg += `<text x="${M + pxL / 2}" y="${M + pxW + 26}" text-anchor="middle" font-size="14" fill="#64748B">${dims.length}"L × ${dims.width}"W</text>`;
   if (printRunnerH > 0) svg += `<rect x="${M}" y="${M + pxW + 40}" width="18" height="5" fill="#92400E" opacity="0.7" rx="1"/><text x="${M + 24}" y="${M + pxW + 45}" font-size="13" font-weight="700" fill="#92400E">▬ ${printRunnerH}" runners under all stacks</text>`;
+  svg += `</g>`;
+  if (zoned) {
+    trailer.zoneSegments.forEach((seg, si) => {
+      if (si === 0) return;
+      const bx = M + seg.startX * SC;
+      svg += `<line x1="${bx}" y1="0" x2="${bx}" y2="${zoneStripH + M + pxW}" stroke="#0f172a" stroke-width="3" stroke-dasharray="4,3"/>`;
+      svg += `<text x="${bx + 4}" y="${zoneStripH + M + pxW + 14}" fill="#0f172a" font-size="11" font-weight="800">↦ ${esc(seg.label)}</text>`;
+    });
+  }
   svg += `</svg>`;
   return svg;
 }
@@ -1163,24 +1338,35 @@ function buildPrintSvg(trailer, dims) {
 // ═══════════════════════════════════════════════════════════════
 // PRINT
 // ═══════════════════════════════════════════════════════════════
-function buildLoadingDiagramInnerHtml(trailer, dims, trailerType, trailerNumber, packList, invNumber = '') {
+function buildLoadingDiagramInnerHtml(trailer, dims, trailerType, trailerNumber, packList, invNumber = '', truckCount = null) {
   const piecesHtml = packList.pieces.map(item => `<tr><td style="padding:8px 10px;border:1px solid #cbd5e1;font-weight:700;"><span style="display:inline-block;width:10px;height:10px;background:${item.color};border-radius:2px;margin-right:8px;"></span>${item.name}</td><td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;">${item.pieces}</td></tr>`).join("");
   const stackHtml = packList.stacks.map(s => `<tr><td style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;font-weight:700;">${s.stacks}</td><td style="padding:8px 10px;border:1px solid #cbd5e1;">${s.lines.join(" · ")}</td></tr>`).join("");
   const runnerNotice = state.runnerHeight > 0 ? `<div style="margin:6px 0 10px;padding:8px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;font-weight:700;font-size:13px;color:#92400E;">⚠ RUNNERS: ${state.runnerHeight}" dunnage required under all stacks</div>` : '';
   const invSuffix = invNumber ? ` · INV# ${invNumber}` : '';
-  return `<style>@page{size:landscape;margin:0.22in}body{font-family:Arial,sans-serif;color:#0f172a;margin:0;padding:0}.page{padding:10px 12px}h1{margin:0 0 4px 0;font-size:24px}h2{margin:0 0 8px 0;font-size:15px;color:#475569}.box{border:1px solid #cbd5e1;border-radius:12px;padding:9px;margin-bottom:9px}table{width:100%;border-collapse:collapse;font-size:13px}.note{font-size:11px;color:#64748b;margin-bottom:6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}</style><div class="page"><h1>Trailer ${trailerNumber} Loading Diagram</h1><h2>${trailerType}${invSuffix}</h2>${runnerNotice}<div class="box" style="overflow:hidden"><div style="font-weight:700;margin-bottom:6px">TRAILER LAYOUT</div><div class="note">Layout scaled to fit fully on one page.</div><div style="width:100%;overflow:hidden">${buildPrintSvg(trailer, dims)}</div></div><div class="grid"><div class="box"><div style="font-weight:700;margin-bottom:8px">PIECES</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Item</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Pieces</th></tr></thead><tbody>${piecesHtml}</tbody></table></div><div class="box"><div style="font-weight:700;margin-bottom:8px">STACK BREAKDOWN</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Stacks</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Sizes in stack</th></tr></thead><tbody>${stackHtml}</tbody></table></div></div></div>`;
+  // lbz-pack-01: on a zoned trailer, show "Truck N of M", a zone legend, and the
+  // nose→door load order (first-to-deliver flagged, since that's what gets unloaded first).
+  const isZoned = !!(trailer.zoned && Array.isArray(trailer.zoneSegments) && trailer.zoneSegments.length);
+  const truckOfM = isZoned && truckCount ? ` <span style="font-size:15px;color:#475569;font-weight:700;">(Truck ${trailerNumber} of ${truckCount})</span>` : '';
+  let zoneLegendHtml = '';
+  if (isZoned) {
+    const legendItems = trailer.zoneSegments.map(seg => `<span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;"><span style="width:10px;height:10px;border-radius:2px;background:${seg.color};display:inline-block;"></span>${esc(seg.label)}</span>`).join('');
+    const noseToDoor = [...trailer.zoneSegments].reverse();
+    const loadOrder = noseToDoor.map((seg, i) => i === noseToDoor.length - 1 ? `${esc(seg.label)} (unload 1st)` : esc(seg.label)).join(' → ');
+    zoneLegendHtml = `<div style="margin:6px 0 10px;padding:8px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;font-size:12px;color:#1E3A8A;"><div style="font-weight:800;margin-bottom:4px;">ZONES ON THIS TRUCK</div><div style="margin-bottom:6px;">${legendItems}</div><div><strong>Load order (nose → door):</strong> ${loadOrder}</div></div>`;
+  }
+  return `<style>@page{size:landscape;margin:0.22in}body{font-family:Arial,sans-serif;color:#0f172a;margin:0;padding:0}.page{padding:10px 12px}h1{margin:0 0 4px 0;font-size:24px}h2{margin:0 0 8px 0;font-size:15px;color:#475569}.box{border:1px solid #cbd5e1;border-radius:12px;padding:9px;margin-bottom:9px}table{width:100%;border-collapse:collapse;font-size:13px}.note{font-size:11px;color:#64748b;margin-bottom:6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}</style><div class="page"><h1>Trailer ${trailerNumber} Loading Diagram${truckOfM}</h1><h2>${trailerType}${invSuffix}</h2>${runnerNotice}${zoneLegendHtml}<div class="box" style="overflow:hidden"><div style="font-weight:700;margin-bottom:6px">TRAILER LAYOUT</div><div class="note">Layout scaled to fit fully on one page.</div><div style="width:100%;overflow:hidden">${buildPrintSvg(trailer, dims)}</div></div><div class="grid"><div class="box"><div style="font-weight:700;margin-bottom:8px">PIECES</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Item</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Pieces</th></tr></thead><tbody>${piecesHtml}</tbody></table></div><div class="box"><div style="font-weight:700;margin-bottom:8px">STACK BREAKDOWN</div><table><thead><tr><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:center;background:#f8fafc">Stacks</th><th style="padding:8px 10px;border:1px solid #cbd5e1;text-align:left;background:#f8fafc">Sizes in stack</th></tr></thead><tbody>${stackHtml}</tbody></table></div></div></div>`;
 }
 
-function printPackingSlip(trailer, dims, trailerType, trailerNumber, packList, invNumber = '') {
+function printPackingSlip(trailer, dims, trailerType, trailerNumber, packList, invNumber = '', truckCount = null) {
   // document.write() is correct here — writing into a new blank popup window for printing
   const win = window.open("", "_blank", "width=1600,height=1100");
   if (!win) return;
-  win.document.write(`<html><head><title>Loading Diagram - Trailer ${trailerNumber}</title></head><body>${buildLoadingDiagramInnerHtml(trailer, dims, trailerType, trailerNumber, packList, invNumber)}<script>window.onload=function(){setTimeout(function(){window.print()},250)};<\/script></body></html>`);
+  win.document.write(`<html><head><title>Loading Diagram - Trailer ${trailerNumber}</title></head><body>${buildLoadingDiagramInnerHtml(trailer, dims, trailerType, trailerNumber, packList, invNumber, truckCount)}<script>window.onload=function(){setTimeout(function(){window.print()},250)};<\/script></body></html>`);
   win.document.close();
 }
 
-async function buildLoadingDiagramPdfBytes(trailer, dims, trailerType, trailerNumber, packList, invNumber = '') {
-  const innerHtml = buildLoadingDiagramInnerHtml(trailer, dims, trailerType, trailerNumber, packList, invNumber);
+async function buildLoadingDiagramPdfBytes(trailer, dims, trailerType, trailerNumber, packList, invNumber = '', truckCount = null) {
+  const innerHtml = buildLoadingDiagramInnerHtml(trailer, dims, trailerType, trailerNumber, packList, invNumber, truckCount);
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed; left:-99999px; top:0; width:1100px; background:#fff; font-family:Arial, sans-serif; color:#0f172a;';
   host.innerHTML = innerHtml;
@@ -1338,7 +1524,10 @@ function getResult() {
   const dims = getDims();
   const effectiveDims = state.runnerHeight > 0 ? { ...dims, height: dims.height - state.runnerHeight } : dims;
   const sorted = getSortedSkus();
-  const autoResult = calcLoading(state.cart, sorted, effectiveDims, state.variant, { isFlatbed: state.trailerType === '48ft Flatbed' });
+  const loadingOptions = { isFlatbed: state.trailerType === '48ft Flatbed' };
+  const autoResult = state.zoneMode
+    ? calcZonedLoading(state.cart, sorted, effectiveDims, state.variant, loadingOptions)
+    : calcLoading(state.cart, sorted, effectiveDims, state.variant, loadingOptions);
   if (!Object.keys(state.manualRowsByTrailer).length) return autoResult;
   const trailers = autoResult.trailers.map((t, i) => {
     const manualRows = state.manualRowsByTrailer[i];
@@ -2201,6 +2390,7 @@ function renderResultsTab() {
     const titleRow = h('div', { className: 'flex items-center gap-10 flex-wrap' });
     titleRow.appendChild(h('span', { style: { color: 'var(--accent)', fontWeight: 900, fontSize: '18px' } }, `${t('logistics.lbTrailerNum', { n: ti + 1 })} — ${trailerLabel}`));
     titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--blue-bg)', color: 'var(--blue-dark)' } }, `${trailer.totalStacks} stacks · ${trailer.totalUnits} pcs`));
+    if (trailer.zoned) titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--teal-bg)', color: 'var(--teal)' } }, t('logistics.lbTruckOfM', { n: ti + 1, m: result.trailers.length })));
     if (trailer.downsizedType) titleRow.appendChild(h('span', { className: 'tag', style: { background: '#FEF3C7', color: '#92400E' } }, t('logistics.lbAutoDownsized')));
     if (trailer.forcedType && trailer.forcedType !== state.trailerType) titleRow.appendChild(h('span', { className: 'tag', style: { background: '#EDE9FE', color: '#5B21B6' } }, `${t('logistics.lbForcedPrefix')} ${trailer.forcedType}`));
     if (isManual) titleRow.appendChild(h('span', { className: 'tag', style: { background: 'var(--teal-bg)', color: 'var(--green-dark)' } }, t('logistics.lbCustomized')));
@@ -2223,7 +2413,7 @@ function renderResultsTab() {
 
     const tRight = h('div', { className: 'flex gap-8 flex-wrap items-center' });
     tRight.appendChild(h('button', { className: 'btn btn-blue-light', onClick: () => { state.editorTrailer = state.editorTrailer === ti ? null : ti; render(); } }, state.editorTrailer === ti ? t('logistics.lbCloseCustomize') : t('logistics.lbCustomizeTrailer')));
-    if (result.trailers.length > 1) tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => openDissolvePreview(ti) }, t('logistics.lbDissolveOther')));
+    if (result.trailers.length > 1 && !state.zoneMode) tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => openDissolvePreview(ti) }, t('logistics.lbDissolveOther')));
     tRight.appendChild(h('button', { className: 'btn btn-white', onClick: () => {
       const dense = compactTrailerRows(trailer.rows);
       if (dense === trailer.rows) { showToast(t('logistics.lbCouldntCompact'), 'warn'); return; }
@@ -2258,7 +2448,7 @@ function renderResultsTab() {
       }
     });
     tRight.appendChild(invInput);
-    tRight.appendChild(h('button', { className: 'btn btn-teal', onClick: () => printPackingSlip(trailer, trailerDims, trailerLabel, ti + 1, packList, state.trailerInvNumbers[ti] || '') }, t('logistics.lbPrintLoadingDiagram')));
+    tRight.appendChild(h('button', { className: 'btn btn-teal', onClick: () => printPackingSlip(trailer, trailerDims, trailerLabel, ti + 1, packList, state.trailerInvNumbers[ti] || '', result.trailers.length) }, t('logistics.lbPrintLoadingDiagram')));
     tHdr.appendChild(tRight);
     tCard.appendChild(tHdr);
 
@@ -2279,6 +2469,22 @@ function renderResultsTab() {
     layoutPanel.appendChild(h('div', { className: 'panel-title' }, t('logistics.lbTrailerLayout')));
     const svgWrap = h('div', { className: 'svg-wrap', innerHTML: buildTopViewSVG(trailer, trailerDims) });
     layoutPanel.appendChild(svgWrap);
+    if (trailer.zoned && Array.isArray(trailer.zoneSegments) && trailer.zoneSegments.length) {
+      const legendBox = h('div', { style: { marginTop: '10px', padding: '8px 12px', background: 'var(--blue-bg)', border: '1px solid var(--blue-border)', borderRadius: 'var(--radius)', fontSize: '12px', color: 'var(--blue-dark)' } });
+      const legendRow = h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginBottom: '6px' } });
+      trailer.zoneSegments.forEach(seg => {
+        legendRow.appendChild(h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
+          h('span', { style: { width: '10px', height: '10px', borderRadius: '2px', background: seg.color, display: 'inline-block' } }),
+          seg.label));
+      });
+      legendBox.appendChild(legendRow);
+      const noseToDoor = [...trailer.zoneSegments].reverse();
+      const orderLine = h('div');
+      orderLine.appendChild(h('strong', {}, t('logistics.lbLoadOrderLabel') + ': '));
+      orderLine.appendChild(document.createTextNode(noseToDoor.map((seg, i) => i === noseToDoor.length - 1 ? `${seg.label} (${t('logistics.lbUnloadFirst')})` : seg.label).join(' → ')));
+      legendBox.appendChild(orderLine);
+      layoutPanel.appendChild(legendBox);
+    }
     tCard.appendChild(layoutPanel);
 
     // Editor
@@ -2340,6 +2546,10 @@ function renderTrailerEditor(trailer, ti, skuLib) {
   editorRows = (trailer.rows || []).map(row => ({
     skuId: row.columns?.[0]?.layers?.[0]?.skuId || row.columns?.[0]?.skuId || skuLib[0]?.id,
     length: row.rowLength,
+    // lbz-pack-01: carry zone identity through the editor round-trip so a manual move
+    // can still be checked against delivery order in applyEditorRows.
+    zoneLabel: row.zoneLabel || null,
+    offloadSeq: row.offloadSeq != null ? row.offloadSeq : null,
     columns: row.columns.map(col => ({
       width: col.colWidth,
       layers: col.layers.map(l => ({ skuId: l.skuId, count: l.count })),
@@ -2571,9 +2781,14 @@ function applyEditorRows(ti, skuLib) {
       return built;
     }).filter(Boolean);
     if (!cols.length) return;
-    rebuiltRows.push({ posFromFront, rowLength: row.length || baseSku.length, rowWidthUsed: cols.reduce((s, c) => s + c.colWidth, 0), columns: cols, totalUnits: cols.reduce((s, c) => s + c.stackCount, 0), totalWeight: cols.reduce((s, c) => s + c.totalWeight, 0) });
+    rebuiltRows.push({ posFromFront, rowLength: row.length || baseSku.length, rowWidthUsed: cols.reduce((s, c) => s + c.colWidth, 0), columns: cols, totalUnits: cols.reduce((s, c) => s + c.stackCount, 0), totalWeight: cols.reduce((s, c) => s + c.totalWeight, 0), zoneLabel: row.zoneLabel || null, offloadSeq: row.offloadSeq != null ? row.offloadSeq : null });
     posFromFront += row.length || baseSku.length;
   });
+  // lbz-pack-01 §4: warn (don't block) if this manual layout puts a later-delivery
+  // zone's stack door-side of an earlier-delivery zone's stack.
+  if (state.zoneMode && checkZoneOrderWarning(rebuiltRows)) {
+    showToast(t('logistics.lbZoneOrderWarning'), 'warn');
+  }
   state.manualRowsByTrailer[ti] = rebuiltRows;
   state.editorTrailer = null;
   render();
@@ -2619,7 +2834,8 @@ async function buildBolAppendBytes(bm) {
         trailerLabel,
         idx + 1,
         packList,
-        state.trailerInvNumbers[idx] || ''
+        state.trailerInvNumbers[idx] || '',
+        bm.trailers.length
       );
     } catch (e) {
       console.error('Failed to build loading diagram PDF:', e);
@@ -2679,6 +2895,14 @@ function openBolModal(result) {
       poNumber: '', deliveryTime: '', date: today,
       freightTerms: 'prepaid', specialInstructions: '',
       carryOver: true,
+      // lbz-pack-01 downstream handoff (lbz-bol-01): zone segments for THIS truck only,
+      // each carrying its raw offloadSeq (not a physical-position proxy) so the BOL flow
+      // can render ascending-delivery-order columns independently of nose→door placement.
+      zoned: !!trailer.zoned,
+      zoneSegments: trailer.zoned ? trailer.zoneSegments.map(seg => ({
+        offloadSeq: seg.offloadSeq, label: seg.label, color: seg.color,
+        pieces: seg.pieces, skuBreakdown: seg.skuBreakdown,
+      })) : null,
     };
     if (state.prefillJobData) {
       const job = state.prefillJobData;
@@ -2822,6 +3046,7 @@ async function saveLoad() {
     skus:                  state.skus,
     cart:                  state.cart,
     prefillJobId:          state.prefillJobId,
+    zoneMode:              state.zoneMode, // lbz-pack-01: per-line offloadSeq/zoneLabel already ride along on `cart`
   };
 
   const payload = {
@@ -2897,6 +3122,7 @@ async function openLoadModal() {
           if (s.skus)                 state.skus                 = s.skus;
           if (s.cart)                 state.cart                 = s.cart;
           if (s.prefillJobId != null) state.prefillJobId         = s.prefillJobId;
+          state.zoneMode           = s.zoneMode === true;
           state.currentSavedLoadId = load.id;
           state.editorTrailer = null;
           backdrop.remove();
@@ -2981,6 +3207,12 @@ async function prefillFromJob(jobId) {
 
     const existingSkus = [...state.skus];
     const cartMap = new Map();
+    // lbz-pack-01: zoned jobs carry each line's offload_seq/zone_label onto its cart
+    // entry, keyed so pieces of the SAME sku in DIFFERENT zones stay separate entries
+    // (a plain skuId key would merge them and lose the zone split). Non-zoned jobs take
+    // the original path below — zero behaviour change.
+    const zoned = job.offload_zones_enabled === true || job.offload_zones_enabled === 1;
+    if (zoned) state.zoneMode = true;
 
     for (const li of lineItems) {
       let matchedSku = null;
@@ -3014,7 +3246,11 @@ async function prefillFromJob(jobId) {
 
       if (matchedSku) {
         const qty = li.quantity || 1;
-        if (cartMap.has(matchedSku.id)) { cartMap.get(matchedSku.id).qty += qty; }
+        if (zoned) {
+          const cartKey = `${matchedSku.id}|${li.offload_seq ?? ''}|${li.zone_label ?? ''}`;
+          if (cartMap.has(cartKey)) { cartMap.get(cartKey).qty += qty; }
+          else { cartMap.set(cartKey, { skuId: matchedSku.id, qty, offloadSeq: li.offload_seq ?? null, zoneLabel: li.zone_label || '' }); }
+        } else if (cartMap.has(matchedSku.id)) { cartMap.get(matchedSku.id).qty += qty; }
         else { cartMap.set(matchedSku.id, { skuId: matchedSku.id, qty }); }
       }
     }

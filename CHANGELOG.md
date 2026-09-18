@@ -4652,6 +4652,61 @@ current series).
 
 ## Logistics
 
+- **lbz-pack-01 — Zone/truck sequencing wrapper around the untouched auto-pack algorithm
+  (logistics-agent).** Third prompt in the offload-zone series (depends on lbz-db-01/parse-01/
+  parse-02); load-builder side of deck-systems loading zones. `logistics/load-builder.html`
+  (only touched file besides `logistics-i18n.js`) — the fence (`calcLoading`, `buildColumn`,
+  `buildRow`, `buildDemand`, `buildTrailerStats`, `getFullTrailerThreshold`,
+  `repackTrailerDense`, `compactTrailerRows`, `STORAGE_KEY`) is untouched, confirmed byte-identical
+  by extracting and diffing each fenced function body against the pre-change file. **1)
+  `prefillFromJob`**: when `job.offload_zones_enabled`, each line's `offload_seq`/`zone_label`
+  now rides onto its cart entry (`offloadSeq`/`zoneLabel`) and `state.zoneMode = true`; the
+  cart-merge key becomes `skuId|offloadSeq|zoneLabel` instead of plain `skuId` so pieces of the
+  same SKU in different zones don't collapse into one entry (which would silently lose the zone
+  split). Non-zoned jobs take the original merge path — zero behavior change. **2)** New
+  `calcZonedLoading(cart, skus, dims, variant, options)` — a composing wrapper, not a fenced-body
+  edit: groups the cart by zone label (`groupCartByZone`), walks zones in ascending delivery order
+  (`offloadSeq`), and for each zone calls the untouched `calcLoading` on the zone's remaining cart
+  against a length- and weight-truncated `dims` (the current truck's remaining budget) to get that
+  segment's rows; offsets the segment's `posFromFront` by the truck's running length and stamps
+  `offloadSeq`/`zoneLabel`/`zoneColor` onto each row before appending. Whatever doesn't fit in the
+  available space (computed by diffing the segment's `skuBreakdown` against the zone's remaining
+  qty) closes the truck and starts a fresh one with a full-length budget. Temporarily pins
+  `state.forcedMode`/`state.autoDownsize` off for the duration (restored in a `finally`) since
+  calcLoading reads them directly and they'd otherwise override the truncated `dims` on the first
+  internal trailer. Each truck's final `rows` array is handed to the untouched `buildTrailerStats`
+  (called, not modified) to produce the same trailer-stats shape the UI already expects, decorated
+  with `.zoned = true` and `.zoneSegments`. Each row/stack is single-zone by construction — no
+  side-by-side zone sharing (see BACKLOG). `getResult()` now branches to `calcZonedLoading` when
+  `state.zoneMode`. **3)** Rendering (not fenced): `buildTopViewSVG`/`buildPrintSvg` draw a
+  per-segment color strip + legend above the trailer and a dashed divider + zone-label marker at
+  every boundary when `trailer.zoned`; `renderResultsTab` adds a "Truck N of M" tag and an
+  on-screen zone legend + nose→door load-order list; `buildLoadingDiagramInnerHtml` (threaded an
+  optional `truckCount` param through `printPackingSlip`/`buildLoadingDiagramPdfBytes`/
+  `buildBolAppendBytes`'s call site) mirrors the same "Truck N of M" + legend + load-order block on
+  the printed/PDF diagram. **4)** Customize mode: `renderTrailerEditor`/`applyEditorRows` now carry
+  `zoneLabel`/`offloadSeq` through the manual-editor round-trip, and a new `checkZoneOrderWarning`
+  helper warns (via toast, does not block) if a manual move puts a later-delivery zone's stack
+  door-side of an earlier-delivery zone's. The "DISSOLVE → OTHER" button (moves individual units
+  across trailers with no zone awareness) is hidden while `state.zoneMode` — it would silently
+  break zone contiguity, and reconciling it was judged out of scope for this prompt. **5)**
+  Save/restore: `state.zoneMode` added to `saveLoad`'s `stateJson` and restored in
+  `openLoadModal`'s load handler; zone assignments themselves already ride along on `state.cart`
+  (no new `localStorage` key — `STORAGE_KEY` untouched per the fence). **6)** Downstream handoff
+  for lbz-bol-01: `openBolModal`'s per-truck `td` payload now carries `zoned` and `zoneSegments`
+  (each with its raw `offloadSeq`, `label`, `color`, `pieces`, `skuBreakdown` for that truck only)
+  so the BOL flow can render ascending-delivery-order columns without inferring order from
+  physical position. **Verify**: a node harness (extracting the actual post-change source of
+  `calcLoading` + its dependencies and `calcZonedLoading` byte-for-byte from the file) modeled on
+  invoice 3371's zones (AREA B seq1, AREA C seq2, AREA A seq3) confirmed Truck 1 holds AREA B +
+  AREA C at the doors and the start of AREA A toward the nose, with AREA A's remainder spilling
+  cleanly to Truck 2 — matching the prompt's `## Verify` section exactly. **Known caveat, not
+  fixed here** (out of this prompt's scope): the Load tab's SKU-quantity picker (+/−/qty input)
+  assumes one cart entry per SKU; a zoned job can create multiple entries for the same SKU (one
+  per zone), so editing quantity there for such a SKU affects all its zone entries at once — flagged
+  in BACKLOG. `node --check` clean on the extracted inline script and `logistics-i18n.js`. Added
+  `lbTruckOfM`/`lbZoneOrderWarning`/`lbLoadOrderLabel`/`lbUnloadFirst` to `logistics-i18n.js`
+  (en/es/ht).
 - **P445 — Customer-pickup orders skip "Confirm Pickup" on the driver/customer QR tracking page
   (logistics-agent).** `track/index.html` (`/track/<access_token>`) previously always opened on
   the "Confirm Pickup" screen (`renderPickup()`) for a fresh BOL, regardless of whether the order

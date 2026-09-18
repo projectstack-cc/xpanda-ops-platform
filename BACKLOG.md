@@ -382,13 +382,28 @@
 - [x] lbz-db-01 — Offload zone schema + API passthrough
 - [x] lbz-parse-01 — Parser: offload-zone detection, BDFT checksums, density-conflict flag
 - [x] lbz-parse-02 — Offload-zones toggle + manual zone editor, existing-job side
-- [ ] lbz-pack-01
+- [x] lbz-pack-01 — Zone/truck sequencing wrapper around the untouched auto-pack algorithm
 - [ ] lbz-bol-01
 - [ ] lbz-bol-02
 - [ ] Load builder: make initial calculated load view larger, include the stacks visually
 - [ ] Load builder DISSOLVE: optional per-piece (sub-line) granularity within a move-group — current P378 checkbox toggles a whole skuCode|height|dest group at once.
 - [ ] **P443 follow-up — consider removing the now-vestigial COMPACT LOAD button.** Compaction is
   automatic on move (P443) and on APPLY; the manual button is largely redundant now.
+- [ ] **lbz-pack-01 follow-up — side-by-side zone sharing (density optimization, needs the fence
+  lifted).** Per `Prompts/lbz-00-README.md`, zones "may share a width-wise row (side-by-side)" —
+  customer-allowed but explicitly NOT required by lbz-pack-01, which built each row/stack as
+  single-zone by construction. Letting two zones occupy the same row (rather than each zone always
+  starting its own row) would improve floor-area utilization on partial zones but requires editing
+  `buildRow`/`buildColumn` (currently fenced) to place columns from more than one zone-segment call
+  into a shared row — a deliberate, separate prompt with the fence lifted for that scope only.
+- [ ] **lbz-pack-01 follow-up — Load tab SKU-quantity picker isn't zone-aware.** The Load tab's
+  SKU picker (+/−/qty input, ~load-builder.html `buildSkuCard`) assumes one `state.cart` entry per
+  SKU (`state.cart.find(c => c.skuId === s.id)` and the +/−/qty handlers all `.map` over every
+  entry matching that `skuId`). A zoned job can produce multiple cart entries for the same SKU
+  (one per zone, keyed `skuId|offloadSeq|zoneLabel`), so adjusting quantity for that SKU via the
+  picker touches every matching zone entry at once instead of just one. Needs a zone-aware picker
+  (group by zone, or disable direct qty edits for multi-zone SKUs) — out of scope for lbz-pack-01,
+  which only had to wire prefill/wrapper/rendering/customize/save/BOL-handoff.
 
 ### BOL Issues
 
