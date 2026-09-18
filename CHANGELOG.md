@@ -1901,6 +1901,57 @@ current series).
 
 ## Logistics (v2)
 
+- **lbz-bol-02 — zoned BOL commodity columns, v2 port (next-platform-agent §9a +
+  react-component-agent §9b, bilateral parity with lbz-bol-01).** Sixth and last prompt in the
+  offload-zone series; ports lbz-bol-01's `zonecolumns` field type, default first-fit
+  bin-packing layout, font-tier fitting, `needsAttention` flag, and
+  `render_overrides.zoneColumns` hydration 1:1 into `cutting-pilot/src/lib/bolShared.ts`.
+  Rendering parity only — no v2 editor UI in this prompt (see `BACKLOG.md`, folded into the v2
+  load builder port note). **`bolShared.ts`**: `COORDS.zoneColumns` bolted onto `COORDS` exactly
+  as legacy does it (same x/y/maxW as commodity, `cols: 3`, `colMaxH: [95, 216, 216]`); `BolCoord`
+  grew optional `cols`/`colMaxH` fields rather than splitting a parallel coord type, so
+  `COORDS` stays a single `Record<string, BolCoord>`. New `zonecolumns` `FIELD_MAP` entry
+  inserted after `commodity`, before `scrap` — same position as legacy. `ZONE_COLUMN_TIERS` is a
+  transcribed DUPLICATE of `COMMODITY_TIERS` (not a shared reference), matching legacy's own
+  deliberate duplication tuned against column width instead of full commodity width.
+  `pickZoneColumnTier`/`isBaseDensity`/`buildZoneColumnLines`/`buildZoneColumns`/
+  `hashJobZoneData` (FNV-1a, kept module-private as `fnv1aHex` like legacy's `_fnv1aHex`) are
+  transcribed line-for-line. New exported types `ZoneColumn` (`{label,text,x,y}`), `ZoneSegment`,
+  `ZoneColumnSkuBreakdownEntry`, `JobZoneLineItem`, and **`ZoneColumnsOverride`** — the last
+  mirrors lbz-bol-01's judgment call exactly: `{items?, zoneData?, sourceHash?}`, NOT the
+  original prompt wording's bare `[{label,text,x,y}]+sourceHash` shorthand, since `zoneData` (a
+  frozen `ZoneSegment[]` snapshot) is what "Reset columns" and the stale guard need to
+  regenerate/compare against outside a live load-builder session — dropping it would break
+  parity with what actually shipped in legacy. `generatePdf`'s commodity render block now
+  branches on `_ov.zoneColumns` the same way legacy does: present with data → draw the zone
+  columns (using `_zc.items` if populated, else regenerating via `buildZoneColumns(_zc.zoneData,
+  font)`); absent → the untouched original commodity code path, confirmed unchanged by direct
+  diff (only wrapped in an `else`, no line inside it altered). **No legacy render defect surfaced
+  while porting** — nothing to report separately; the port is a straight transcription.
+  **`bolShared.selfcheck.ts`**: added a synthetic "Job 3371, Truck 1" 4-zone/3-column fixture
+  (no real job 3371 exists in this repo — built the same way lbz-bol-01's own CHANGELOG entry
+  describes its zone-mode-off regression check, "a synthetic 3-zone/3-column trace matching the
+  confirmed manual-BOL format"). Expected values were captured VERBATIM by running a `node`
+  harness directly against the real `logistics/bol-shared.js` (shimming only the `window` global
+  it assigns itself to — `buildZoneColumnLines`/`pickZoneColumnTier`/`buildZoneColumns`/
+  `hashJobZoneData`/`isBaseDensity` are pure, no DOM/fetch/PDFLib needed) using the same
+  deterministic `FIXED_WIDTH_MEASURER` fake font already used for `pickCommodityTier`'s tier-cascade
+  tests, so the packing algorithm is exercised identically in both languages without depending on
+  real pdf-lib font metrics (out of scope here — that's `scripts/bol-parity.mjs`'s job). The
+  fixture exercises first-fit column reuse end-to-end: Zone A (offloadSeq 1) itself overflows
+  column 0's 95pt QR-clearance cap and lands in column 1; Zone D (offloadSeq 4, last) then lands
+  UNDER Zone A in that same column 1 once column 0 fills — asserted as its own explicit check,
+  plus a separate overflow-zone case (30 piece-lines) confirming `needsAttention=true` with no
+  clipping. 19 new assertions added (identical line text for all 4 zones, identical tier picks,
+  identical `items` array incl. x/y column order, identical FNV-1a hash, 11 `isBaseDensity`
+  boundary cases, the column-reuse demonstration, and the overflow case), bringing
+  `runBolSharedSelfCheck` to 41 total assertions (22 before this prompt) — all pass, run via a
+  local esbuild-bundled harness (no TS test runner installed in `cutting-pilot`). `tsc --noEmit`
+  clean; `npm run cf-build` (`opennextjs-cloudflare` + `fix-asset-prefix.mjs` +
+  `copy-pdf-worker.mjs`) green.
+  Files touched: `cutting-pilot/src/lib/bolShared.ts`, `cutting-pilot/src/lib/bolShared.selfcheck.ts`
+  only. Ships in the same push as lbz-bol-01 (legacy side) — not yet pushed.
+
 - **Shipment status cascade + delete actions — the v2 launch-blocker engineering pieces of the
   "v2 logistics live-launch plan," both still behind the closed `V2_LOGISTICS_WRITES_ENABLED` fence.**
   `ShipmentEditModal.tsx`'s Status field was read-only in v2 because the sync chain that makes an

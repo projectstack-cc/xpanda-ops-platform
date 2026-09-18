@@ -281,6 +281,15 @@
 - [ ] **Unit 2 follow-up — no v2 `bol-customers` address-book search.** Legacy's Generate BOL flow has a customer search panel (`GET /api/bol-customers`) that autofills ship-to fields and sets `customer_id`; v2's `BolGenerateModal` has no equivalent endpoint yet, so `customer_id` is always sent `null`. Build `/v2/api/bol-customers` (read-only) and wire the search panel back in if Steve wants this restored.
 - [ ] **Unit 2 follow-up — verify local `wrangler dev --remote` smoke before flipping the write fence.** This unit's `tsc`/`cf-build` gates are green, but a bare `next dev` in this sandbox can't reach D1 (`getEnv()` hangs indefinitely rather than erroring) and can't route legacy-served `/logistics/assets/*` (the BOL template/font files), so the dashboard's real data load, the Generate modal's fenced-write banner, and the Viewer/Editor's PDF paths were never smoke-tested against live data. Run a real `wrangler dev --remote` (or deploy to a preview) pass first.
 - [ ] **Unit 3 — load builder port + packing-logic rework.** Ports `logistics/load-builder.html` (trailer load planning, auto-pack algorithm, saved loads, BOL generation via the unit-1/2 engine). Broken into task-grouped `lb-engine-NN`/`lb-ui-NN` prompts (see below) rather than sequential `PNNN`s.
+- [ ] **Unit 3 follow-up (lbz-bol-02) — v2 zone-column editing UI.** `bolShared.ts`'s
+  `zonecolumns` field type, `buildZoneColumns` layout algorithm, and `ZoneColumnsOverride`
+  hydration were ported 1:1 (lbz-bol-02, rendering parity only) — but legacy's `bol-editor.js`
+  zone-box drag/edit/"Reset columns"/stale-guard UI (lbz-bol-01 §3/§4) was NOT ported. Fold this
+  into the v2 load builder port (Unit 3) once its BOL generation/edit surface exists: N
+  draggable/editable zone-column boxes (skip the generic per-field FIELD_MAP loop for
+  `type:"zonecolumns"` and `commodity` on a zoned bol, same as legacy), a "Reset columns" action
+  that regenerates from `ZoneColumnsOverride.zoneData` via `buildZoneColumns`, and a stale-guard
+  banner comparing a fresh `hashJobZoneData` recompute against the stored `sourceHash`.
 - [x] lb-engine-01 — packing engine contracts + 13-rule invariant harness (`packEngine.ts` + `packEngine.selfcheck.ts`), `pack()` stubbed. See `CHANGELOG.md` for full detail.
 - [x] lb-engine-03 — column fill (K top-off against `topOffMinInchesPerPiece`), rear->front ordering, running balance, rationale strings (completes `pack()`). See `CHANGELOG.md` for full detail.
 - [x] **lb-engine-03 open question (B3) — does the floor crew load nose-first or rear-first?** Resolved 2026-09-16 (row-order-nose-first): the floor crew loads nose-first, biggest sizes go in first. `pack()` previously ordered rows thickest-base at `posFromFront: 0` (the rear/doors) on the wrong assumption that the thickest freight was loaded last; flipped so the thickest sits at the nose (loaded first) and the thinnest at the rear (loaded last, unloaded first). See `CHANGELOG.md` for full detail.
@@ -384,7 +393,7 @@
 - [x] lbz-parse-02 — Offload-zones toggle + manual zone editor, existing-job side
 - [x] lbz-pack-01 — Zone/truck sequencing wrapper around the untouched auto-pack algorithm
 - [x] lbz-bol-01 — Zoned BOL commodity columns, legacy side (bol-shared.js/bol-editor.js/bol-compose.js)
-- [ ] lbz-bol-02
+- [x] lbz-bol-02 — Zoned BOL commodity columns, v2 port (cutting-pilot/src/lib/bolShared.ts, rendering parity only)
 - [ ] Load builder: make initial calculated load view larger, include the stacks visually
 - [ ] Load builder DISSOLVE: optional per-piece (sub-line) granularity within a move-group — current P378 checkbox toggles a whole skuCode|height|dest group at once.
 - [ ] **P443 follow-up — consider removing the now-vestigial COMPACT LOAD button.** Compaction is

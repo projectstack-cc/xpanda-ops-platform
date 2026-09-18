@@ -13,13 +13,21 @@ import {
   PAGE,
   FIELD_MAP,
   COMMODITY_TIERS,
+  ZONE_COLUMN_TIERS,
   buildShipToLines,
   wrapText,
   formatBolDate,
   pickCommodityTier,
+  pickZoneColumnTier,
+  isBaseDensity,
+  buildZoneColumnLines,
+  buildZoneColumns,
+  hashJobZoneData,
   generatePdf,
   type WidthMeasurer,
   type BolRecord,
+  type ZoneSegment,
+  type JobZoneLineItem,
 } from "./bolShared";
 
 interface CheckResult {
@@ -49,11 +57,27 @@ const LEGACY_COORDS = {
   qrCode: { x: 40, y: 222, size: 60 },
   shipperSignature: { x: 37, y: 48, size: 22 },
   shipperDate: { x: 157, y: 48, size: 8 },
+  // lbz-bol-01/lbz-bol-02: COORDS.zoneColumns, bolted onto COORDS after the initial literal in
+  // legacy (`COORDS.zoneColumns = {...}`) — transcribed here the same way as every other entry.
+  zoneColumns: { x: 55, y: 380, maxW: 510, cols: 3, colMaxH: [95, 216, 216] },
 };
 
 const LEGACY_PAGE = { width: 612, height: 792 };
 
 const LEGACY_COMMODITY_TIERS = [
+  { size: 26, lineH: 32, maxLines: 2 },
+  { size: 22, lineH: 28, maxLines: 4 },
+  { size: 18, lineH: 22, maxLines: 7 },
+  { size: 15, lineH: 18, maxLines: 11 },
+  { size: 12, lineH: 14, maxLines: 18 },
+  { size: 10, lineH: 12, maxLines: Infinity },
+];
+
+// lbz-bol-01's ZONE_COLUMN_TIERS is a DELIBERATE duplicate of the commodity tier table (see
+// bolShared.ts's comment on the export) — not a shared reference — so it gets its own transcribed
+// constant here rather than reusing LEGACY_COMMODITY_TIERS, to actually catch drift if one changes
+// without the other.
+const LEGACY_ZONE_COLUMN_TIERS = [
   { size: 26, lineH: 32, maxLines: 2 },
   { size: 22, lineH: 28, maxLines: 4 },
   { size: 18, lineH: 22, maxLines: 7 },
@@ -93,8 +117,14 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
     JSON.stringify(COMMODITY_TIERS) === JSON.stringify(LEGACY_COMMODITY_TIERS),
     JSON.stringify(COMMODITY_TIERS)
   );
+  check(
+    "ZONE_COLUMN_TIERS matches legacy's deliberate duplicate tier table (lbz-bol-01)",
+    JSON.stringify(ZONE_COLUMN_TIERS) === JSON.stringify(LEGACY_ZONE_COLUMN_TIERS),
+    JSON.stringify(ZONE_COLUMN_TIERS)
+  );
 
-  // --- FIELD_MAP: same 11 entries, same order, coord refs point at the real COORDS objects ---
+  // --- FIELD_MAP: same 12 entries (zoneColumns inserted after commodity, before scrap — lbz-bol-01/
+  //     lbz-bol-02), same order, coord refs point at the real COORDS objects ---
   const expectedKeys = [
     "deliveryTime",
     "date",
@@ -106,10 +136,11 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
     "contactInfo",
     "poNumber",
     "commodity",
+    "zoneColumns",
     "scrap",
   ];
   check(
-    "FIELD_MAP has the 11 legacy entries in order",
+    "FIELD_MAP has the 12 legacy entries in order",
     JSON.stringify(FIELD_MAP.map((f) => f.key)) === JSON.stringify(expectedKeys),
     JSON.stringify(FIELD_MAP.map((f) => f.key))
   );
@@ -121,10 +152,14 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
       (FIELD_MAP[5].coords as unknown[])[3] === COORDS.shipLine4
   );
   check(
+    "FIELD_MAP.zoneColumns.coord === COORDS.zoneColumns (same object), type 'zonecolumns'",
+    FIELD_MAP[10].key === "zoneColumns" && FIELD_MAP[10].type === "zonecolumns" && FIELD_MAP[10].coord === COORDS.zoneColumns
+  );
+  check(
     "FIELD_MAP.scrap.coords === {yes:scrapYes,no:scrapNo} (same objects)",
-    !Array.isArray(FIELD_MAP[10].coords) &&
-      (FIELD_MAP[10].coords as { yes: unknown; no: unknown }).yes === COORDS.scrapYes &&
-      (FIELD_MAP[10].coords as { yes: unknown; no: unknown }).no === COORDS.scrapNo
+    !Array.isArray(FIELD_MAP[11].coords) &&
+      (FIELD_MAP[11].coords as { yes: unknown; no: unknown }).yes === COORDS.scrapYes &&
+      (FIELD_MAP[11].coords as { yes: unknown; no: unknown }).no === COORDS.scrapNo
   );
 
   // --- buildShipToLines ---
@@ -195,6 +230,153 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
     const { size } = pickCommodityTier(nOneLineWords(words), FIXED_WIDTH_MEASURER);
     check(`pickCommodityTier: ${words}-line commodity text -> size ${expectedSize}`, size === expectedSize, `got size=${size}`);
   }
+
+  // --- Zoned BOL fixture ("Job 3371, Truck 1", lbz-bol-02) ---
+  // Synthetic 4-zone/3-column fixture, run through legacy's ACTUAL logistics/bol-shared.js under
+  // plain node (per the lbz-bol-02 prompt: "export a fixture JSON from the legacy render logic via
+  // a node harness"). No real job 3371 exists in this repo (no matching row anywhere under
+  // DB_Migrations/ or CHANGELOG.md fixture references) — this is a representative synthetic fixture
+  // built the same way lbz-bol-01's own CHANGELOG entry describes verifying zone-mode-off
+  // regression: "a synthetic 3-zone/3-column trace matching the confirmed manual-BOL format
+  // exactly". The values below (LEGACY_ZONE_*) were captured VERBATIM from that node harness run
+  // against logistics/bol-shared.js's exported buildZoneColumnLines/pickZoneColumnTier/
+  // buildZoneColumns/hashJobZoneData/isBaseDensity, using the same FIXED_WIDTH_MEASURER as above so
+  // the packing algorithm is exercised identically in both languages without depending on real
+  // pdf-lib font metrics (out of scope here — that's the separate PDF-parity harness's job). This
+  // fixture also exercises first-fit column reuse: Zone A (offloadSeq 1) itself overflows column
+  // 0's 95pt cap and lands in column 1; Zone D (offloadSeq 4, last) then lands UNDER Zone A in that
+  // same column 1 once column 0 fills up — the "later zone lands under an earlier column" mechanic
+  // lbz-bol-01 built buildZoneColumns for.
+  const zoneFixtureSegments: ZoneSegment[] = [
+    {
+      offloadSeq: 1,
+      label: "Zone A - Dock 3",
+      skuBreakdown: {
+        s1: { skuId: "s1", name: "HB-10", sku: "HB-10", pieces: 12, height: 10, density: "1.0 RC" },
+        s2: { skuId: "s2", name: "HB-4", sku: "HB-4", pieces: 40, height: 4, density: "1.0#" },
+      },
+    },
+    {
+      offloadSeq: 2,
+      label: "Zone B - Dock 5",
+      skuBreakdown: {
+        s3: { skuId: "s3", name: "HB-9", sku: "HB-9", pieces: 13, height: 9, density: "1.0#" },
+        s4: { skuId: "s4", name: "HB-6", sku: "HB-6", pieces: 27, height: 6, density: "2.0#" },
+      },
+    },
+    {
+      offloadSeq: 3,
+      label: "Zone C - Dock 2",
+      skuBreakdown: {
+        s5: { skuId: "s5", name: "HB-8", sku: "HB-8", pieces: 5, height: 8, density: "1.0" },
+        s6: { skuId: "s6", name: "HB-5", sku: "HB-5", pieces: 9, height: 5, density: "1.5#" },
+        s7: { skuId: "s7", name: "HB-3", sku: "HB-3", pieces: 21, height: 3, density: "" },
+      },
+    },
+    {
+      offloadSeq: 4,
+      label: "Zone D - Dock 7",
+      skuBreakdown: {
+        s8: { skuId: "s8", name: "HB-12", sku: "HB-12", pieces: 2, height: 12, density: "1.0" },
+      },
+    },
+  ];
+
+  const zoneFixtureLineItems: JobZoneLineItem[] = [
+    { id: 11, part_id: "p1", quantity: 12, offload_seq: 1, zone_label: "Zone A - Dock 3", density: "1.0 RC" },
+    { id: 12, part_id: "p2", quantity: 40, offload_seq: 1, zone_label: "Zone A - Dock 3", density: "1.0#" },
+    { id: 13, part_id: "p3", quantity: 13, offload_seq: 2, zone_label: "Zone B - Dock 5", density: "1.0#" },
+    { id: 14, part_id: "p4", quantity: 27, offload_seq: 2, zone_label: "Zone B - Dock 5", density: "2.0#" },
+    { id: 15, part_id: "p5", quantity: 5, offload_seq: 3, zone_label: "Zone C - Dock 2", density: "1.0" },
+    { id: 16, part_id: "p6", quantity: 9, offload_seq: 3, zone_label: "Zone C - Dock 2", density: "1.5#" },
+    { id: 17, part_id: "p7", quantity: 21, offload_seq: 3, zone_label: "Zone C - Dock 2", density: "" },
+    { id: 18, part_id: "p8", quantity: 2, offload_seq: 4, zone_label: "Zone D - Dock 7", density: "1.0" },
+  ];
+
+  // Captured verbatim from `node` against logistics/bol-shared.js (see comment above).
+  const LEGACY_ZONE_PER_ZONE_LINES = [
+    ['--"Zone A - Dock 3"--', "*unload 1st*", '10" - 12 pcs', '4" - 40 pcs'],
+    ['--"Zone B - Dock 5"--', '9" - 13 pcs', '6" - 27 pcs (2.0# density)'],
+    ['--"Zone C - Dock 2"--', '8" - 5 pcs', '3" - 21 pcs', '5" - 9 pcs (1.5# density)'],
+    ['--"Zone D - Dock 7"--', '12" - 2 pcs'],
+  ];
+  const LEGACY_ZONE_PER_ZONE_TIERS = [
+    { size: 22, lineH: 28, lineCount: 4 },
+    { size: 22, lineH: 28, lineCount: 3 },
+    { size: 22, lineH: 28, lineCount: 4 },
+    { size: 26, lineH: 32, lineCount: 2 },
+  ];
+  const LEGACY_ZONE_BUILD_RESULT = {
+    items: [
+      { label: "Zone A - Dock 3", text: '--"Zone A - Dock 3"--\n*unload 1st*\n10" - 12 pcs\n4" - 40 pcs', x: 225, y: 380 },
+      { label: "Zone B - Dock 5", text: '--"Zone B - Dock 5"--\n9" - 13 pcs\n6" - 27 pcs (2.0# density)', x: 55, y: 380 },
+      { label: "Zone C - Dock 2", text: '--"Zone C - Dock 2"--\n8" - 5 pcs\n3" - 21 pcs\n5" - 9 pcs (1.5# density)', x: 395, y: 380 },
+      { label: "Zone D - Dock 7", text: '--"Zone D - Dock 7"--\n12" - 2 pcs', x: 225, y: 268 },
+    ],
+    needsAttention: false,
+  };
+  const LEGACY_ZONE_HASH = "e4fa6ed1";
+  const LEGACY_ZONE_IS_BASE_DENSITY: Array<[string | null | undefined, boolean]> = [
+    ["1.0 RC", true],
+    ["1.0#", true],
+    ["1", true],
+    ["", true],
+    [null, true],
+    [undefined, true],
+    ["2.0#", false],
+    ["1.04", true],
+    ["0.95", false],
+    ["RC", true],
+    ["1.06", false],
+  ];
+
+  const colW = (COORDS.zoneColumns.maxW as number) / (COORDS.zoneColumns.cols as number);
+  const tsPerZoneLines = zoneFixtureSegments.map((seg, i) => buildZoneColumnLines(seg, i === 0));
+  check(
+    "buildZoneColumnLines: 3371 Truck 1 fixture — identical line text to legacy (all 4 zones)",
+    JSON.stringify(tsPerZoneLines) === JSON.stringify(LEGACY_ZONE_PER_ZONE_LINES),
+    JSON.stringify(tsPerZoneLines)
+  );
+
+  const tsPerZoneTiers = tsPerZoneLines.map((lines) => pickZoneColumnTier(lines, FIXED_WIDTH_MEASURER, colW));
+  check(
+    "pickZoneColumnTier: 3371 Truck 1 fixture — identical tier picks to legacy (all 4 zones)",
+    JSON.stringify(tsPerZoneTiers) === JSON.stringify(LEGACY_ZONE_PER_ZONE_TIERS),
+    JSON.stringify(tsPerZoneTiers)
+  );
+
+  const tsZoneBuildResult = buildZoneColumns(zoneFixtureSegments, FIXED_WIDTH_MEASURER);
+  check(
+    "buildZoneColumns: 3371 Truck 1 fixture — identical items (line text + x/y column order) and needsAttention to legacy",
+    JSON.stringify(tsZoneBuildResult) === JSON.stringify(LEGACY_ZONE_BUILD_RESULT),
+    JSON.stringify(tsZoneBuildResult)
+  );
+  check(
+    "buildZoneColumns: 3371 Truck 1 fixture — column order demonstrates first-fit reuse (Zone D lands under Zone A in column 1)",
+    tsZoneBuildResult.items[0].x === tsZoneBuildResult.items[3].x && tsZoneBuildResult.items[3].y < tsZoneBuildResult.items[0].y
+  );
+
+  const tsZoneHash = hashJobZoneData(zoneFixtureLineItems);
+  check("hashJobZoneData: 3371 Truck 1 fixture — identical hash to legacy FNV-1a output", tsZoneHash === LEGACY_ZONE_HASH, `got=${tsZoneHash}`);
+
+  for (const [input, expected] of LEGACY_ZONE_IS_BASE_DENSITY) {
+    const got = isBaseDensity(input);
+    check(`isBaseDensity(${JSON.stringify(input)}) -> ${expected} (matches legacy)`, got === expected, `got=${got}`);
+  }
+
+  // needsAttention overflow path: a single zone with far more piece-lines than even the smallest
+  // tier's ceiling can fit (216pt / lineH 12 = 18 lines) — never clips, flags needsAttention true
+  // and falls back to the least-full column (captured verbatim from the same node harness run).
+  const overflowSkuBreakdown: Record<string, { skuId: string; name: string; sku: string; pieces: number; height: number; density: string }> = {};
+  for (let h = 1; h <= 30; h++) {
+    overflowSkuBreakdown["o" + h] = { skuId: "o" + h, name: `HB-${h}`, sku: `HB-${h}`, pieces: h, height: h, density: "1.0" };
+  }
+  const overflowResult = buildZoneColumns([{ offloadSeq: 1, label: "Zone Overflow", skuBreakdown: overflowSkuBreakdown }], FIXED_WIDTH_MEASURER);
+  check(
+    "buildZoneColumns: overflow zone (30 lines) never clips, flags needsAttention=true (matches legacy)",
+    overflowResult.needsAttention === true && overflowResult.items.length === 1 && overflowResult.items[0].x === COORDS.zoneColumns.x,
+    JSON.stringify({ needsAttention: overflowResult.needsAttention, x: overflowResult.items[0]?.x })
+  );
 
   return { pass: results.every((r) => r.pass), results };
 }
