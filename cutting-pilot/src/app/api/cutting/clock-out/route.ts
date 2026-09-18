@@ -77,7 +77,12 @@ export async function POST(request: NextRequest) {
       now,
       session_id,
       `${session.operator_name} clocked out of ${session.line}`,
-      JSON.stringify({ job_id: session.job_id, line: session.line, handoff_note }),
+      JSON.stringify({
+        job_id: session.job_id,
+        line: session.line,
+        handoff_note,
+        ...(hasQty ? { qty_done_delta: qtyVal } : {}),
+      }),
       operatorId,
       now
     ).run();

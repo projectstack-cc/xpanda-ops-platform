@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
+import SignOutSessionModal, { type OpenSession } from "@/components/SignOutSessionModal";
 
 // Schedule board only (`autoHide` prop) — idle delay before the overlay nav auto-hides.
 const NAV_AUTO_HIDE_IDLE_MS = 5_000;
@@ -55,6 +56,11 @@ export default function PlatformHeader({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [revealed, setRevealed] = useState(!autoHide);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [signOutGate, setSignOutGate] = useState<{
+    open: boolean;
+    sessions: OpenSession[];
+    busy: boolean;
+  }>({ open: false, sessions: [], busy: false });
 
   const reveal = useCallback(() => {
     setRevealed(true);
@@ -79,14 +85,61 @@ export default function PlatformHeader({
     (m) => isAdmin || permissions[m.perm]?.view
   );
 
-  async function handleSignOut(e: React.MouseEvent<HTMLAnchorElement>) {
-    e.preventDefault();
+  const canSeeCutting = isAdmin || !!permissions["manufacturing.cutting"]?.view;
+
+  async function performSignOut() {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {
       // ignore — redirect regardless so sign-out always completes
     }
     window.location.href = "/login.html";
+  }
+
+  // Gate: if the operator has an open cutting session, let them choose to stop it (and
+  // record final quantities) before signing out, or sign out and leave it open. Any
+  // failure in the check itself (no permission, network error, bad response) must never
+  // block sign-out — it just falls through to performSignOut() same as before.
+  async function handleSignOut(e: React.MouseEvent<HTMLAnchorElement>) {
+    e.preventDefault();
+    if (canSeeCutting) {
+      try {
+        const res = await fetch("/v2/api/cutting/my-session");
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.ok && Array.isArray(data.sessions) && data.sessions.length > 0) {
+            setSignOutGate({ open: true, sessions: data.sessions, busy: false });
+            return;
+          }
+        }
+      } catch {
+        // fall through — never block sign-out on this check
+      }
+    }
+    await performSignOut();
+  }
+
+  async function handleSignOutWithoutStopping() {
+    setSignOutGate((g) => ({ ...g, busy: true }));
+    await performSignOut();
+  }
+
+  async function handleConfirmStopped(qtyBySession: Record<string, number>) {
+    setSignOutGate((g) => ({ ...g, busy: true }));
+    await Promise.allSettled(
+      signOutGate.sessions.map((s) =>
+        fetch("/v2/api/cutting/clock-out", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: s.session_id,
+            handoff_note: "Signed out",
+            qty_done_delta: qtyBySession[s.session_id] ?? 0,
+          }),
+        })
+      )
+    );
+    await performSignOut();
   }
 
   return (
@@ -234,6 +287,15 @@ export default function PlatformHeader({
         <h1 className="text-sm font-semibold text-text tracking-tight">{title}</h1>
       </div>
       </header>
+
+      <SignOutSessionModal
+        isOpen={signOutGate.open}
+        sessions={signOutGate.sessions}
+        busy={signOutGate.busy}
+        onCancel={() => setSignOutGate({ open: false, sessions: [], busy: false })}
+        onSignOutWithoutStopping={handleSignOutWithoutStopping}
+        onConfirmStopped={handleConfirmStopped}
+      />
     </>
   );
 }

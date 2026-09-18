@@ -590,7 +590,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
               {dockLine && (
                 <section
                   aria-label="Cut list"
-                  className="shrink-0 border-t border-border bg-surface max-h-[38vh] overflow-y-auto"
+                  className="shrink-0 border-t border-border bg-surface max-h-[43.7vh] overflow-y-auto"
                   style={
                     mySessions.length > 0
                       ? { paddingBottom: `calc(${mySessions.length * 76}px + env(safe-area-inset-bottom))` }

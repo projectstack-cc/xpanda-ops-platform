@@ -132,10 +132,13 @@
   wire each session's `started_at` through it per stacked bar in `ClockedInBar.tsx` (P309 made
   `CuttingBoard.tsx`'s state an array, `mySessions`, one bar per open session) — no new duration
   logic needed.
-- [ ] **P309 follow-up — "clock out all" convenience.** With multiple concurrent open sessions now
-  possible, an operator wrapping up for the day has to stop each stacked `ClockedInBar` one at a
-  time. Consider a single action that opens the handoff flow for each open session in turn (or a
-  bulk-stop with per-line notes) once the multi-job pattern sees real floor use.
+- [ ] **P309 follow-up — "clock out all" convenience (partially addressed by cutting-signout-01).**
+  With multiple concurrent open sessions now possible, an operator wrapping up for the day has to
+  stop each stacked `ClockedInBar` one at a time *while still on the board*. `cutting-signout-01`
+  added a bulk-stop-all for the **sign-out** trigger specifically (`SignOutSessionModal.tsx` closes
+  every open session in one action when the operator chooses to stop before signing out) — this
+  item stays open for the separate case of stopping all sessions without signing out, e.g. a
+  dedicated "Stop All" action directly on the board/`ClockedInBar` stack.
 - [ ] Hard enforcement on the Work Queue (P259) — block clock-in on lower-priority jobs while higher-priority ones sit incomplete. Deferred by decision; P259 is guide-only (every job stays clickable).
 - [ ] Enable OpenNext skew protection on the v2 Worker (durable fix for hashed-asset 404s across deploys) — see https://opennext.js.org/cloudflare/howtos/skew
 - [ ] Surface completed_qty in the checklist/reports (progress bars per part, first-pass yield) once qty data accrues

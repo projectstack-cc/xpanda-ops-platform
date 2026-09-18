@@ -13,6 +13,34 @@ current series).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **cutting-signout-01 — sign-out session guard + cut-list dock height
+  (react-component-agent §9b).** Fixes the reported issue of operators signing out of the
+  platform while still clocked in on a cutting line, leaving it "in progress" for someone else
+  to notice and `kick`. `PlatformHeader.tsx`'s sign-out (shared across every `/v2/*` page) now
+  checks `GET /v2/api/cutting/my-session` first — gated behind the `manufacturing.cutting` view
+  permission the header already receives as a prop, so non-cutting staff see zero added latency
+  or console noise. If the operator has open session(s), a new `SignOutSessionModal.tsx`
+  (modeled on `KickModal.tsx` + `crosscutter/ChunkStopModal.tsx`, built on the shared `Modal`)
+  offers **"Stop & Sign Out"** (collects an optional final quantity per open session, then closes
+  each via `POST /v2/api/cutting/clock-out` with `qty_done_delta`) or **"Sign Out Without
+  Stopping"** (unchanged prior behavior — leaves the session open, now an explicit, informed
+  choice rather than an accident). Used Stop/Sign-Out wording, not "End Job" — v2 cutting's
+  documented nomenclature is strictly Start/Stop/Complete, and this flow never marks a line
+  Complete. Multiple concurrent open sessions (P309) are all listed and closed together in one
+  action, which also covers the BACKLOG "P309 follow-up — clock out all convenience" item via the
+  sign-out path (left open in BACKLOG for the separate case of stopping all while still working).
+  Any failure in the session check itself (missing permission, network error, non-OK response)
+  falls straight through to the original unconditional sign-out — it can never get an operator
+  stuck signed in. Small non-schema fix alongside: `clock-out/route.ts`'s `activity_log` detail
+  JSON now includes `qty_done_delta` when present — it was already being written to
+  `cutting_sessions` but wasn't surfaced anywhere, not even the audit trail. It's still not wired
+  into `cutting_lines.qty_done` or the per-part checklist (`cutting_line_progress` via
+  `HandoffModal` remains the source of truth for that — a deliberate, discussed scope decision).
+  Also increased the "Cut list" dock on `/v2/cutting` (`CuttingBoard.tsx`) from `max-h-[38vh]` to
+  `max-h-[43.7vh]` (+15%, exact). `npx tsc --noEmit` + `npx opennextjs-cloudflare build` both
+  green. No `Prompts/` file — ad-hoc feature request via an orchestrator session, not a
+  pre-scoped prompt.
+
 - **Hotfix (unprompted) — `/v2/orders` packing-slip attachment now persists; legacy job board and
   `/v2/board` order-detail modal can both view the PDF again (react-component-agent §9b +
   next-platform-agent §9a).** `OrderEntryForm.tsx` already parsed the PDF client-side for prefill
