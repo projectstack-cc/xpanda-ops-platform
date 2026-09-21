@@ -402,6 +402,17 @@
 - [ ] Load builder DISSOLVE: optional per-piece (sub-line) granularity within a move-group — current P378 checkbox toggles a whole skuCode|height|dest group at once.
 - [ ] **P443 follow-up — consider removing the now-vestigial COMPACT LOAD button.** Compaction is
   automatic on move (P443) and on APPLY; the manual button is largely redundant now.
+- [ ] **lbz-pack-02 follow-up — a zone whose entire cart gets absorbed by `fillBoundaryGap` (zero
+  dedicated rows, pure gap-fill sliver inside another zone's row) can have its zone-strip band and
+  label silently dropped.** Found via harness while root-causing the lbz-pack-01 follow-up #3 label
+  regression (CHANGELOG) — reproduces on the ORIGINAL pre-lbz-pack-01 packing logic too, so it's not
+  new, just newly noticed. `buildTopViewSVG`'s zoned-strip clamp (`drawStartX = Math.max(seg.startX,
+  prevEndX)`) assumes each zone's `zoneSegments` extent is roughly its own contiguous territory; a
+  zone with no dedicated rows has an extent that's a strict subset of its host row's zone, so once
+  the host zone (sorted first by `startX`) claims the full range, the sliver zone's clamped width is
+  zero and `svgZoneLabel` never renders. Would need `buildZoneSegmentsFromRows`/the band-clamp to
+  treat a gap-filled sliver as belonging to its own zone's band even when it shares a row, not a
+  "just change zone order" fix — deliberately not attempted alongside follow-up #3.
 - [x] **lbz-pack-01 follow-up — side-by-side zone sharing (density optimization, needs the fence
   lifted).** RESOLVED by lbz-pack-02's boundary gap-fill: a zone segment's partial last row is now
   topped off with the next zone(s)' stacks (chained, delivery order) when there's enough leftover

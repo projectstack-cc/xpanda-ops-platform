@@ -1041,20 +1041,38 @@ function calcLoading(cart, skus, dims, variant = 0, options = {}) {
 // ═══════════════════════════════════════════════════════════════
 // lbz-pack-01: ZONE/TRUCK SEQUENCING WRAPPER
 // Composes the untouched calcLoading per zone segment; never edits its body, never
-// reuses STORAGE_KEY. Truck assignment walks zones in ASCENDING delivery order
-// (offloadSeq): each zone's pieces fill the current truck's remaining length/weight
-// budget via calcLoading (given a length- and weight-truncated `dims`), and whatever
-// doesn't fit spills to a fresh truck. This shop's FRONT/REAR convention is the
-// OPPOSITE of standard trucking terms (confirmed with Steve): FRONT = the doors
-// (buildTopViewSVG draws FRONT at the high-posFromFront end), REAR = the far wall.
-// Rows accumulate left-to-right nose-first (low posFromFront) in ascending-seq order
-// purely so earlier-delivery zones keep first claim on truck LENGTH/WEIGHT budget and
-// preferentially land on Truck 1 — that assignment loop is untouched. Once a truck is
-// fully packed, `closeTruck()` reverses that truck's row order (and reflows
-// posFromFront from it) so the physical arrangement flips: the FIRST-to-deliver zone
-// ends up flush against the high-posFromFront/FRONT/doors end, and the LAST zone
-// placed ends up at the low-posFromFront/REAR end. Each row/stack is single-zone by
-// construction (no side-by-side zone sharing here — see BACKLOG).
+// reuses STORAGE_KEY. This shop's FRONT/REAR convention is the OPPOSITE of standard
+// trucking terms (confirmed with Steve): FRONT = the doors (buildTopViewSVG draws
+// FRONT at the high-posFromFront end), REAR = the far wall.
+//
+// lbz-pack-01 follow-up #3: earlier attempts at "zone 1 at the doors" packed zones
+// ascending (ties truck assignment to zone 1 getting first claim on each truck's
+// budget, per lbz-00-README's "Deliver-first zones on Truck 1") and then reversed the
+// ALREADY-BUILT rows — either the whole truck (flat) or per-zone groups — to flip the
+// physical arrangement after the fact. Both were reverted: any post-hoc reordering of
+// `truck.rows` breaks `fillBoundaryGap`'s forward-chaining, which stamps a LATER zone's
+// columns onto an EARLIER zone's row and assumes that row stays physically adjacent to
+// that later zone's own rows. Reordering rows after the fact can strand a gap-filled
+// column far from its own zone's other rows, inflating that zone's `zoneSegments`
+// extent (buildZoneSegmentsFromRows takes min/max across every row touching a zone)
+// enough to fully swallow a neighboring zone's segment — the band-clamp in
+// buildTopViewSVG then draws that swallowed zone at zero width, silently dropping its
+// label. Root-caused directly from a live report (blank cell mid-grid, then a vanished
+// zone label after the first fix attempt).
+//
+// The actual fix: pack zones in REVERSE delivery order (`packOrder`, last-to-deliver
+// first) so zone 1 is packed LAST and lands at the high-posFromFront/FRONT/doors end
+// via calcLoading's own curX-accumulating pass — no row ever moves after calcLoading
+// places it, so gap-fill's adjacency assumption stays valid and every zone's own
+// dense-first/partial-last packing is preserved exactly as calcLoading produces it,
+// just with which zone gets packed into a segment first flipped. `zones` (ascending,
+// delivery order) is kept as-is for color assignment and the returned `zoneOrder` —
+// only the packing loop and `fillBoundaryGap`'s chain walk `packOrder`. Per
+// lbz-00-README, "zones may span trucks" is explicit, so a zone not monopolizing a
+// truck's full length is within the locked decision, not a regression of it. Each
+// row/stack is single-zone by construction (no side-by-side zone sharing here — see
+// BACKLOG); a row can end up holding more than one zone's COLUMNS after a boundary
+// gap-fill (lbz-pack-02).
 const ZONE_COLORS = ["#D97706","#2563EB","#059669","#7C3AED","#DC2626","#0891B2","#CA8A04","#BE123C","#4F46E5","#16A34A"];
 const MAX_ZONED_TRUCKS_PER_ZONE = 40; // safety guard against runaway loops, mirrors calcLoading's own 20-trailer cap
 
@@ -1076,6 +1094,10 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
 
   const zones = groupCartByZone(cart);
   zones.forEach((z, i) => { z.color = ZONE_COLORS[i % ZONE_COLORS.length]; });
+  // packOrder packs last-to-deliver first so zone 1 is packed LAST and lands at the high-
+  // posFromFront/doors end via calcLoading's own accumulation — see header comment above.
+  // `zones` itself (ascending, delivery order) stays untouched for color/zoneOrder output.
+  const packOrder = [...zones].reverse();
 
   const warnings = [];
   if (state.forcedMode) warnings.push('Forced trailer queue is ignored while offload zones are active.');
@@ -1089,33 +1111,7 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
   const trucks = [];
   let truck = { rows: [], usedLength: 0, usedWeight: 0 };
   function closeTruck() {
-    if (truck.rows.length) {
-      // lbz-pack-01 follow-up: flip this truck's physical arrangement so the FIRST-to-deliver
-      // zone ends up nearest the doors (FRONT label, high posFromFront) instead of the nose —
-      // see the file header comment above. Reverse the ORDER OF EACH ZONE'S ROW GROUP, not
-      // every row individually: truck.rows is already contiguous per zone at this point (the
-      // per-zone loop above pushes one zone's rows before moving to the next), and within a
-      // zone's own group, calcLoading already packs dense/full rows first and any leftover
-      // partial row last (its pass 2). A flat reverse() would also flip THAT internal order,
-      // stranding a zone's partial row at the far/nose end of its own block instead of the
-      // near/doors end — which is exactly backwards from "compact to the nose, any gap at the
-      // doors" (reported directly by Steve against a live load). Reversing group order only
-      // (keeping each group's own row order intact) fixes zone placement while keeping every
-      // zone's own dense-first/partial-last packing oriented the same way as calcLoading's
-      // non-zoned output. Still array-order-based (not posFromFront rewritten in place), so
-      // compactTrailerRows/reflowRowGeometry and any future reflow of a saved load stay correct
-      // for free.
-      const rowGroups = [];
-      truck.rows.forEach(row => {
-        const lastGroup = rowGroups[rowGroups.length - 1];
-        if (lastGroup && lastGroup.offloadSeq === row.offloadSeq) lastGroup.rows.push(row);
-        else rowGroups.push({ offloadSeq: row.offloadSeq, rows: [row] });
-      });
-      rowGroups.reverse();
-      truck.rows = rowGroups.flatMap(g => g.rows);
-      reflowRowGeometry(truck.rows);
-      trucks.push(truck);
-    }
+    if (truck.rows.length) trucks.push(truck);
     truck = { rows: [], usedLength: 0, usedWeight: 0 };
   }
 
@@ -1143,8 +1139,8 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
   // sees the reduced qty when its turn comes.
   function fillBoundaryGap(fromIdx) {
     if (!truck.rows.length) return;
-    for (let j = fromIdx; j < zones.length; j++) {
-      const nextZone = zones[j];
+    for (let j = fromIdx; j < packOrder.length; j++) {
+      const nextZone = packOrder[j];
       const gapCart = nextZone.cart.filter(c => c.qty > 0);
       if (!gapCart.length) continue;
       const lastRow = truck.rows[truck.rows.length - 1];
@@ -1194,8 +1190,8 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
   }
 
   try {
-    for (let zi = 0; zi < zones.length; zi++) {
-      const zone = zones[zi];
+    for (let zi = 0; zi < packOrder.length; zi++) {
+      const zone = packOrder[zi];
       let remaining = zone.cart.map(c => ({ ...c }));
       let guard = 0;
       while (remaining.some(c => c.qty > 0) && guard++ < MAX_ZONED_TRUCKS_PER_ZONE) {

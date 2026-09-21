@@ -4714,6 +4714,47 @@ current series).
 
 ## Logistics
 
+- **lbz-pack-01 follow-up #3 — replaced post-hoc row reversal with reversed zone PACKING order;
+  follow-up #2 (below) corrupted zone extents and silently dropped zone labels.** Steve tested
+  follow-up #2 live and reported it was worse than the original bug: "It was perfect except that the
+  zones were out of order... now [there's an empty space] in the middle of the trailer... it
+  eliminated some of the labels." He asked to go back to the pre-fix logic and change only zone
+  order. Root-caused with a live harness (not guessed): `buildTopViewSVG`'s zoned-strip renderer
+  (~line 1455) sorts `zoneSegments` by `startX` and clamps each to start no earlier than the
+  previous segment's end (`drawStartX = Math.max(seg.startX, prevEndX)`) to paper over the small
+  cross-zone extent overlap that `lbz-pack-02`'s boundary gap-fill already produced (a later zone's
+  columns stamped into an earlier zone's row inflate that later zone's reported extent backward).
+  Follow-up #2's per-zone-group row reversal physically relocated a zone's block to the opposite end
+  of the truck while a stray gap-filled column (belonging to a DIFFERENT zone) stayed behind in the
+  relocated row — ballooning that other zone's extent enough to fully swallow a THIRD zone's true
+  (small) extent, at which point the clamp computes a zero-width band and `svgZoneLabel` never
+  renders — a silent drop, not an error. Any row reordering after `calcLoading`/`fillBoundaryGap`
+  finish (whole-truck flat reversal, or the group-preserving version) breaks this same geometric
+  assumption, since gap-fill's cross-zone column stamping was written assuming rows never move again.
+  Fix: don't move rows at all. `closeTruck()` is back to byte-identical with the pre-`lbz-pack-01`
+  original (`if (truck.rows.length) trucks.push(truck);`, no reversal, no reflow). Instead, a new
+  `packOrder = [...zones].reverse()` feeds the zone-processing loop and `fillBoundaryGap`'s chain
+  walk in REVERSE delivery order (last-to-deliver packed first), so zone 1 is packed LAST and lands
+  at the high-`posFromFront`/FRONT/doors end via `calcLoading`'s own accumulation — never by moving
+  anything after the fact. `zones` itself (ascending, delivery order) is untouched and still drives
+  color assignment and the returned `zoneOrder`. Checked against `lbz-00-README`'s locked decision
+  ("Load order = reverse delivery order. Deliver-first zones on Truck 1; zones may span trucks.") —
+  the wording explicitly permits a zone spanning trucks, so `packOrder` packing zone 1 last within
+  each truck (rather than giving it exclusive first claim on whole trucks) doesn't violate the
+  locked decision; re-verified with a harness that zone 1 still gets first claim on THIS truck's
+  own length budget and still monopolizes as many trucks as it needs when its volume is large.
+  Verified with a live harness: the screenshot repro (2 zones, one ending in a partial row) now
+  places the partial row adjacent to the OTHER zone, not at either wall; the "Load order (nose→door)"
+  legend text matches the physical array order exactly; `checkZoneOrderWarning` still passes/fails
+  correctly (unaffected — it only reads `posFromFront` values, never row order). Also found, and did
+  NOT fix (out of scope for this ask, and pre-existing): the same zero-width-clamp label-drop
+  reproduces on the ORIGINAL pre-`lbz-pack-01` code too, whenever a zone's entire cart ends up
+  consumed by `fillBoundaryGap` with zero dedicated rows of its own (a pure gap-fill sliver inside
+  another zone's row) — `buildZoneSegmentsFromRows`/the band-clamp were never robust to that shape,
+  regardless of processing direction. Flagging as a known latent issue in BACKLOG rather than fixing
+  now, since Steve's ask was specifically to revert to the original packing logic and only change
+  zone order — not to rework `lbz-pack-02`'s extent/label rendering.
+
 - **lbz-pack-01 follow-up #2 — a zone's own leftover/partial row was landing at the wrong end of
   its block, leaving an unexplained blank stack near the REAR/nose.** Steve caught this from a live
   screenshot: bottom-left cell of a trailer's grid was blank, and "the truck should always be
