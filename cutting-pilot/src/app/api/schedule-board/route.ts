@@ -203,7 +203,14 @@ export async function GET() {
         job_id: row.match_job_id,
         trailer_group_id: unmatched ? null : groupIdByJobId.get(row.match_job_id!) ?? null,
         chunks_required: unmatched ? null : chunksByJobId.get(row.match_job_id!) ?? null,
-        shifts: unmatched ? [] : shiftsByJobId.get(row.match_job_id!) ?? [],
+        // sched-shifts-01: cutting is finished at Ready, so hide shift chips to reduce floor
+        // confusion. Display-only; job_shifts rows are untouched and reappear if the job
+        // regresses. Ready ONLY: Loading/Loaded/Shipped keep shifts because a job can be
+        // loading while still cutting.
+        shifts:
+          unmatched || derived?.status === "Ready"
+            ? []
+            : shiftsByJobId.get(row.match_job_id!) ?? [],
       });
     }
 

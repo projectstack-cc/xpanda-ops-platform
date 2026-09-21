@@ -1034,6 +1034,17 @@ current series).
 
 ## Schedule Board (v2)
 
+- **sched-shifts-01 — Hide shift chips once a job is Ready (next-platform-agent §9a).**
+  `GET /v2/api/schedule-board` (`schedule-board/route.ts`) now returns `shifts: []` for a row once
+  its derived status is exactly `"Ready"`, in addition to the existing unmatched-row case — both
+  the TV `/v2/schedule` and the desk `/v2/schedule/desk` boards consume this one endpoint via
+  `OrderRow`, so the single server-side change covers both. Ready only: Loading, Loaded, and
+  Shipped keep showing shifts, since a job can still be loading while cutting continues on another
+  load. **Display-only** — `job_shifts` rows are untouched; if a Ready job regresses (reopened,
+  status drops), its shifts reappear automatically on the next fetch. No migration, no schema
+  change. `npx tsc --noEmit` and the full `cf-build` pipeline both green; `git diff --stat` confirms
+  only `route.ts` changed.
+
 - **Conversational request (unprompted) — week-totals bar + scroll-wrap marker on both TV and desk
   boards (react-component-agent §9b).** Steve asked for two UI/UX additions on the same week-label
   bar shared by both boards (`WeekBand.tsx`, used by `ScheduleBoard.tsx` and
