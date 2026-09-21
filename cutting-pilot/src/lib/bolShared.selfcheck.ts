@@ -25,12 +25,15 @@ import {
   hashJobZoneData,
   resolveFieldLineStyle,
   measureStyledField,
+  layoutField,
+  layoutBol,
   generatePdf,
   type WidthMeasurer,
   type BolRecord,
   type ZoneSegment,
   type JobZoneLineItem,
   type BolFieldStyle,
+  type BolLayoutFonts,
 } from "./bolShared";
 // bol-style-03: bolEditorEngine.ts's pure style logic has no dedicated selfcheck file of its own
 // (none existed before this prompt) — asserted here per that prompt's instruction.
@@ -521,6 +524,84 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
     JSON.stringify(pruneStyleOverrides({ commodity: { size: 18, bold: true, lines: { "1": { underline: true } } } })) ===
       JSON.stringify({ commodity: { size: 18, bold: true, lines: { "1": { underline: true } } } })
   );
+
+  // --- layoutField / layoutBol (bol-wysiwyg-01) ---
+  const FIXED_FONTS: BolLayoutFonts = {
+    regular: FIXED_WIDTH_MEASURER,
+    bold: FIXED_WIDTH_MEASURER,
+    italic: FIXED_WIDTH_MEASURER,
+    boldItalic: FIXED_WIDTH_MEASURER,
+  };
+  {
+    const bol: BolRecord = { commodity_description: "Short" };
+    const { runs, boxes } = layoutBol(bol, FIXED_FONTS);
+    const commodityRun = runs.find((r) => r.fieldKey === "commodity");
+    check(
+      "layoutBol: short commodity picks the largest tier (size 26)",
+      commodityRun?.size === 26 && boxes.commodity?.h === 32,
+      JSON.stringify({ size: commodityRun?.size, boxH: boxes.commodity?.h })
+    );
+  }
+  {
+    // Centered field: x = fieldX + (maxW - lineWidth) / 2. FIXED_WIDTH_MEASURER returns text.length,
+    // so a 4-char line at maxW 100 starting at x=0 centers to (100-4)/2 = 48.
+    const { runs } = layoutField("commodity", "abcd", undefined, FIXED_FONTS, {
+      fieldKey: "commodity", x: 0, y: 0, baseCoord: { x: 0, y: 0, size: 10, lineH: 12 }, maxW: 100, center: true,
+    });
+    check(
+      "layoutField: centered run.x = x + (maxW - lineWidth) / 2",
+      runs.length === 1 && runs[0].x === 48,
+      JSON.stringify(runs[0])
+    );
+  }
+  {
+    // _pos shifts both the run(s) AND the field's box by the identical {dx,dy} delta.
+    const base: BolRecord = { bol_number: "12345" };
+    const shifted: BolRecord = { bol_number: "12345", _overrides: { _pos: { bolNumber: { dx: 10, dy: -5 } } } };
+    const baseResult = layoutBol(base, FIXED_FONTS);
+    const shiftedResult = layoutBol(shifted, FIXED_FONTS);
+    const baseRun = baseResult.runs.find((r) => r.fieldKey === "bolNumber")!;
+    const shiftedRun = shiftedResult.runs.find((r) => r.fieldKey === "bolNumber")!;
+    const baseBox = baseResult.boxes.bolNumber;
+    const shiftedBox = shiftedResult.boxes.bolNumber;
+    check(
+      "layoutBol: _pos shifts a field's run by exactly {dx,dy}",
+      shiftedRun.x === baseRun.x + 10 && shiftedRun.y === baseRun.y - 5,
+      JSON.stringify({ base: { x: baseRun.x, y: baseRun.y }, shifted: { x: shiftedRun.x, y: shiftedRun.y } })
+    );
+    check(
+      "layoutBol: _pos shifts that same field's box by the identical {dx,dy} delta",
+      shiftedBox.x === baseBox.x + 10 && shiftedBox.y === baseBox.y - 5,
+      JSON.stringify({ base: baseBox, shifted: shiftedBox })
+    );
+  }
+  {
+    // Every FIELD_MAP-editable field gets a box even when the BOL has no data for it at all.
+    const { boxes } = layoutBol({}, FIXED_FONTS);
+    const expectedKeys = ["deliveryTime", "date", "bolNumber", "carrierName", "trailerNo", "shipTo", "specialInstr", "contactInfo", "poNumber", "scrap", "commodity"];
+    const missing = expectedKeys.filter((k) => !boxes[k]);
+    check("layoutBol: every editable field gets a box even on a completely empty BOL", missing.length === 0, `missing=${JSON.stringify(missing)}`);
+  }
+  {
+    // Zone columns replace the commodity box with per-item zoneCol<N> boxes, and never wrap a
+    // line pdf-lib would otherwise auto-wrap via `maxWidth` (the bol-wysiwyg-01 regression this
+    // exact case caught in logistics/bol-shared.js before this file was ported).
+    const bol: BolRecord = {
+      _overrides: {
+        zoneColumns: {
+          items: [{ label: "Zone A", text: "a very long zone column line", x: 55, y: 380 }],
+          zoneData: [],
+        },
+      },
+    };
+    const { runs, boxes } = layoutBol(bol, FIXED_FONTS);
+    const zc0 = runs.filter((r) => r.fieldKey === "zoneCol0");
+    check(
+      "layoutBol: zoned commodity draws one unwrapped run per zone-column line (maxWidth never set)",
+      zc0.length === 1 && zc0[0].maxWidth === undefined && !boxes.commodity,
+      JSON.stringify({ count: zc0.length, maxWidth: zc0[0]?.maxWidth, hasCommodityBox: !!boxes.commodity })
+    );
+  }
 
   return { pass: results.every((r) => r.pass), results };
 }

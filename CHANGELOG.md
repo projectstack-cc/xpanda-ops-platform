@@ -4714,6 +4714,63 @@ current series).
 
 ## Logistics
 
+- **bol-wysiwyg-01 — paired renderer: extracted a shared `layoutBol`/`layoutField` layout engine
+  from `generatePdf` (logistics-agent, lead; next-platform-agent for the `bolShared.ts` mirror,
+  same commit — bilateral parity).** Root cause: the BOL editors (`bol-editor.js`
+  `positionAll`, `bolEditorEngine.ts` `positionAll`) re-derived field placement from static
+  `COORDS`, while `generatePdf` computed real layout (tier-picked commodity/zone-column size,
+  centering, per-source-line wrapping, `_pos`/`_style` overrides) at render time — the two could
+  never agree, so what an operator saw in the editor never matched the generated PDF. Fix: extracted
+  the per-bol layout computation into two new pure functions in `logistics/bol-shared.js` —
+  `layoutField(styleKey, text, fieldStyle, fonts, geom)` (the generic wrap/style-resolve/box-compute
+  primitive: mirrors `drawMultiline`'s exact geometry including its legacy quirks — deliveryTime and
+  zone-column runs never carry pdf-lib's `maxWidth` option, drawMultiline's does; zone-column blank
+  lines are skipped entirely rather than drawn as a no-op, drawMultiline's aren't) and
+  `layoutBol(bol, fonts)` (orchestrates every FIELD_MAP field + the PO-default composite run +
+  scrap + zone columns, returns `{ runs, boxes, displayDate }` — one box per editable field,
+  computed even when the field is currently empty, so an editor always has somewhere to click).
+  `generatePdf` now: embed fonts → `layoutBol` → draw each run (text + underline, interleaved in the
+  same order as before — content-stream operator order matters for byte-identity). Fixes the ship-to
+  box-width mismatch named in the prompt's own "Why" section (item 4): ship-to is never wrapped/
+  clipped in the real PDF (no `maxW` on its COORDS), so its box width is now the actual widest
+  line's measured width (floored at the old 210pt guess) instead of always 210pt regardless of
+  content. `measureStyledField` (editors' overflow-warning helper, unchanged export/return shape)
+  is now a thin wrapper over `layoutField`: falls back to the pre-existing 0.50/0.56em approximate
+  measurer until `getLayoutFonts()` (new — caches a scratch `PDFDocument`'s embedded Helvetica
+  family for measurement only, never drawn) resolves, then measures against real embedded font
+  metrics. **Behavior change, by design:** some fields' overflow-warning amber state will now flip
+  once real metrics are cached (verified live: a synthetic long `contactInfo` string the old
+  approximation measured as 3 wrapped lines measures as 2 with real Helvetica metrics) — this only
+  affects the editor's warning heuristic, never the render path, which never called
+  `measureStyledField`. **Byte-identity, verified by construction, not by inspection:** wrote a
+  disposable Node harness (`new Function` in-realm eval of the actual `bol-shared.js` source with
+  faked `window`/`fetch`/`PDFLib`(real npm `pdf-lib`)/`qrcode`, `Date` frozen to a fixed instant so
+  `pdf-lib`'s auto-stamped `ModificationDate` can't drift between the before/after calls) that runs
+  17 fixtures (no-`_style`, box-`_style`, per-line-`_style`, `_pos` set, zoned truck, zoned truck
+  with a column `_style` box, short/long commodity tiers, PO default AND override-array paths,
+  scrap yes/no, siplast substitution, ship-to override, multi-BOL batch, both alternate `copyType`
+  templates) through the pre-refactor and post-refactor file in the same process and diffs the raw
+  PDF bytes. Caught one real regression this way before it shipped: the zone-column `layoutField`
+  call was missing `setMaxWidth: false`, so pdf-lib's own text layout silently re-wrapped a
+  zone-column line the original code always drew as one unclipped line whenever it slightly
+  exceeded the column width (`"6\" - 27 pcs (2.0# density)"` at the picked tier) — fixed, then all
+  17 fixtures came back byte-identical (confirmed via decompressed content-stream diffing, not just
+  a length check). Mirrored `layoutField`/`layoutBol`/`getLayoutFonts` into
+  `cutting-pilot/src/lib/bolShared.ts` byte-for-byte the same way (types added: `BolLayoutRun`,
+  `BolLayoutFieldBox`, `BolLayoutFonts`, `BolFontKey`, `LayoutFieldGeom`, `LayoutBolResult`),
+  rewrote its `generatePdf`/`measureStyledField` the same way, and re-ran an equivalent Node
+  byte-identity comparison (5 non-zoned fixtures + 1 zoned) against the pre-refactor file — all
+  byte-identical. Added 5 new `bolShared.selfcheck.ts` cases per the prompt: short commodity picks
+  the size-26 tier; `layoutField`'s centered-x formula; `_pos` shifts a field's run AND its box by
+  the identical delta; every FIELD_MAP-editable field gets a box even on a completely empty BOL;
+  a zoned commodity's zone-column runs never carry `maxWidth` (the exact class of bug the harness
+  caught above). v2 has no zone-column EDITING UI yet (unchanged — see the existing "v2 zone-column
+  editing follow-up" backlog item), but `layoutBol`'s zone-column RENDER path is now ported and
+  covered. `cd cutting-pilot && npx tsc --noEmit` clean. **Deferred to bol-wysiwyg-02/03 (not
+  touched here):** `bol-editor.js`/`bolEditorEngine.ts` still read static `COORDS` for editor
+  positioning — see those prompts, next in `BACKLOG.md`. `node --check` clean on `bol-shared.js`;
+  `?v=` bumped 318→319 on every consumer (`jobs/index.html`,
+  `logistics/{bol-email,bol-test,index,load-builder,loading}.html`, `track/index.html`).
 - **lbz-pack-01 follow-up #3 — replaced post-hoc row reversal with reversed zone PACKING order;
   follow-up #2 (below) corrupted zone extents and silently dropped zone labels.** Steve tested
   follow-up #2 live and reported it was worse than the original bug: "It was perfect except that the

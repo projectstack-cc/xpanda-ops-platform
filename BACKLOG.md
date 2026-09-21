@@ -433,6 +433,14 @@
 
 ### BOL Issues
 
+- [ ] **bol-wysiwyg-02 — Legacy BolEditor: true WYSIWYG from `layoutBol`.** Depends on
+  bol-wysiwyg-01 (shipped). Rebuilds `logistics/bol-editor.js`'s canvas overlay to draw the actual
+  `layoutBol` runs (real tier sizing, centering, per-line style) instead of static `COORDS`, and
+  sizes/positions each field's edit handle from `layoutBol`'s `boxes` instead of `COORDS` math.
+- [ ] **bol-wysiwyg-03 — v2 parity: `BolEditorModal` WYSIWYG from `layoutBol`.** Depends on
+  bol-wysiwyg-01 (shipped). Same rebuild as bol-wysiwyg-02, applied to
+  `cutting-pilot/src/lib/bolEditorEngine.ts` + `BolEditorModal.tsx`. No zone-column editing UI in
+  scope (still tracked separately, see "v2 zone-column editing follow-up" above).
 - [ ] **P316 follow-up — editable Scrap Pickup toggle in the BOL compose form.** Currently derived
   from the job's `scrap_pickup` only (`'YES' → is_scrap_pickup: 1`); no manual override at compose
   time.
