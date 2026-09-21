@@ -1480,7 +1480,7 @@ function buildTopViewSVG(trailer, dims) {
     const cells = rects.map(r => ({ x: r.x, y: r.y, w: r.w, h: r.h, zoneLabel: r.col.zoneLabel, zoneColor: r.col.zoneColor }));
     groupZoneCells(cells).forEach(zc => {
       buildZoneOutlineSegments(zc.cells).forEach(e => {
-        svg += `<line x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}" stroke="${zc.color || '#0f172a'}" stroke-width="2.5" stroke-dasharray="3,2" stroke-linecap="square"/>`;
+        svg += `<line x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}" stroke="${zc.color || '#0f172a'}" stroke-width="2.5" stroke-dasharray="0.1,6" stroke-linecap="round"/>`;
       });
     });
   }
@@ -1561,7 +1561,7 @@ function buildPrintSvg(trailer, dims) {
   if (zoned) {
     groupZoneCells(rects).forEach(zc => {
       buildZoneOutlineSegments(zc.cells).forEach(e => {
-        svg += `<line x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}" stroke="${zc.color || '#0f172a'}" stroke-width="3" stroke-dasharray="4,3" stroke-linecap="square"/>`;
+        svg += `<line x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}" stroke="${zc.color || '#0f172a'}" stroke-width="3" stroke-dasharray="0.1,7" stroke-linecap="round"/>`;
       });
     });
   }
