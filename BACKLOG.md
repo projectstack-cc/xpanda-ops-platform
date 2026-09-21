@@ -394,17 +394,20 @@
 - [x] lbz-pack-01 — Zone/truck sequencing wrapper around the untouched auto-pack algorithm
 - [x] lbz-bol-01 — Zoned BOL commodity columns, legacy side (bol-shared.js/bol-editor.js/bol-compose.js)
 - [x] lbz-bol-02 — Zoned BOL commodity columns, v2 port (cutting-pilot/src/lib/bolShared.ts, rendering parity only)
+- [x] lbz-pack-02 — Boundary gap-fill (shared rows) + column-level zone identity + per-zone edge-cancellation outline + zone-band label clipping
 - [ ] Load builder: make initial calculated load view larger, include the stacks visually
 - [ ] Load builder DISSOLVE: optional per-piece (sub-line) granularity within a move-group — current P378 checkbox toggles a whole skuCode|height|dest group at once.
 - [ ] **P443 follow-up — consider removing the now-vestigial COMPACT LOAD button.** Compaction is
   automatic on move (P443) and on APPLY; the manual button is largely redundant now.
-- [ ] **lbz-pack-01 follow-up — side-by-side zone sharing (density optimization, needs the fence
-  lifted).** Per `Prompts/lbz-00-README.md`, zones "may share a width-wise row (side-by-side)" —
-  customer-allowed but explicitly NOT required by lbz-pack-01, which built each row/stack as
-  single-zone by construction. Letting two zones occupy the same row (rather than each zone always
-  starting its own row) would improve floor-area utilization on partial zones but requires editing
-  `buildRow`/`buildColumn` (currently fenced) to place columns from more than one zone-segment call
-  into a shared row — a deliberate, separate prompt with the fence lifted for that scope only.
+- [x] **lbz-pack-01 follow-up — side-by-side zone sharing (density optimization, needs the fence
+  lifted).** RESOLVED by lbz-pack-02's boundary gap-fill: a zone segment's partial last row is now
+  topped off with the next zone(s)' stacks (chained, delivery order) when there's enough leftover
+  width, so a row CAN hold stacks from more than one zone — without lifting the fence.
+  `buildRow`/`buildColumn` stayed untouched throughout (confirmed byte-identical); the sharing is
+  composed at the wrapper level (`calcZonedLoading`'s `fillBoundaryGap`, calling the untouched
+  `calcLoading` against a sub-dims scoped to the leftover gap) rather than by editing the packer
+  itself. A stack (column) is still always single-zone by construction — only the ROW can now be
+  mixed.
 - [ ] **lbz-pack-01 follow-up — Load tab SKU-quantity picker isn't zone-aware.** The Load tab's
   SKU picker (+/−/qty input, ~load-builder.html `buildSkuCard`) assumes one `state.cart` entry per
   SKU (`state.cart.find(c => c.skuId === s.id)` and the +/−/qty handlers all `.map` over every

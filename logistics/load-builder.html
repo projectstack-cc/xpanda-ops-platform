@@ -1082,14 +1082,89 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
   state.autoDownsize = false;
 
   const trucks = [];
-  let truck = { rows: [], usedLength: 0, usedWeight: 0, zoneSegments: [] };
+  let truck = { rows: [], usedLength: 0, usedWeight: 0 };
   function closeTruck() {
     if (truck.rows.length) trucks.push(truck);
-    truck = { rows: [], usedLength: 0, usedWeight: 0, zoneSegments: [] };
+    truck = { rows: [], usedLength: 0, usedWeight: 0 };
+  }
+
+  // lbz-pack-02 §1: smallest possible footprint dimension across a zone's still-outstanding
+  // cart, used only as a cheap "could this even fit" gate before spending a calcLoading call
+  // on a boundary gap — never a substitute for the real pack, which is the source of truth.
+  function zoneMinFootprint(zoneCart) {
+    let min = Infinity;
+    zoneCart.forEach(c => {
+      if (c.qty <= 0) return;
+      const sku = skus.find(s => s.id === c.skuId);
+      if (!sku) return;
+      const m = Math.min(sku.length, sku.width, sku.height);
+      if (m < min) min = m;
+    });
+    return min === Infinity ? null : min;
+  }
+
+  // lbz-pack-02 §1: fill a boundary gap left in the CURRENTLY OPEN truck's last row using
+  // stacks from zones that come after `fromIdx` in delivery order, chaining across zones
+  // until the gap closes or nothing more fits. Only ever touches `truck` (never a closed
+  // truck, so this never fills across trucks) and only ever the LAST row already placed
+  // there (never adds new rows/length — purely a width-wise top-off of unused row width).
+  // Mutates the target zone's own `cart` array in place so the outer per-zone loop later
+  // sees the reduced qty when its turn comes.
+  function fillBoundaryGap(fromIdx) {
+    if (!truck.rows.length) return;
+    for (let j = fromIdx; j < zones.length; j++) {
+      const nextZone = zones[j];
+      const gapCart = nextZone.cart.filter(c => c.qty > 0);
+      if (!gapCart.length) continue;
+      const lastRow = truck.rows[truck.rows.length - 1];
+      const gapWidth = dims.width - lastRow.rowWidthUsed;
+      if (gapWidth <= 0) return; // fully closed — nothing left to chain into
+      const minFootprint = zoneMinFootprint(gapCart);
+      if (minFootprint == null || gapWidth < minFootprint) continue; // can't possibly fit — try the next zone in the chain
+      const subDims = { ...dims, length: lastRow.rowLength, width: gapWidth, maxWeight: dims.maxWeight - truck.usedWeight };
+      let gapResult;
+      try {
+        gapResult = calcLoading(gapCart, skus, subDims, variant, { isFlatbed: options.isFlatbed === true, skipDownsize: true });
+      } catch (err) {
+        continue; // best-effort fill only — a failure here must never break the main pack
+      }
+      const gapTrailer = gapResult.trailers && gapResult.trailers[0];
+      if (!gapTrailer || !gapTrailer.rows.length) continue; // nothing usable — chain to the next zone
+      // Only columns whose footprint length matches the row's own length can physically sit
+      // in this row's slot — anything else calcLoading proposed doesn't correspond to real
+      // trailer space here and is discarded.
+      const matchingRows = gapTrailer.rows.filter(r => r.rowLength === lastRow.rowLength);
+      if (!matchingRows.length) continue;
+      const placedBySku = {};
+      let anyPlaced = false;
+      // Capture the base offset ONCE before mutating rowWidthUsed — the sub-pack's own
+      // col.posY values are already contiguous and relative to the gap's own origin (0, 24,
+      // 48...), so every column in this batch shifts by the SAME base; reading
+      // lastRow.rowWidthUsed fresh inside the loop would double-count for the 2nd+ column.
+      const baseOffset = lastRow.rowWidthUsed;
+      matchingRows.forEach(mr => {
+        mr.columns.forEach(col => {
+          const offsetCol = { ...col, posY: col.posY + baseOffset, offloadSeq: nextZone.offloadSeq, zoneLabel: nextZone.label, zoneColor: nextZone.color };
+          lastRow.columns.push(offsetCol);
+          lastRow.rowWidthUsed += col.colWidth;
+          lastRow.totalUnits += col.stackCount;
+          lastRow.totalWeight += col.totalWeight;
+          truck.usedWeight += col.totalWeight;
+          anyPlaced = true;
+          col.layers.forEach(l => { placedBySku[l.skuId] = (placedBySku[l.skuId] || 0) + l.count; });
+        });
+      });
+      if (!anyPlaced) continue;
+      // Subtract what we just placed from the zone's own remaining cart (mutated in place —
+      // the outer per-zone loop clones from this same array when it's that zone's turn).
+      nextZone.cart.forEach(c => { if (placedBySku[c.skuId]) c.qty -= placedBySku[c.skuId]; });
+      // Loop continues: if the gap still isn't closed, the zone after `nextZone` gets a shot.
+    }
   }
 
   try {
-    for (const zone of zones) {
+    for (let zi = 0; zi < zones.length; zi++) {
+      const zone = zones[zi];
       let remaining = zone.cart.map(c => ({ ...c }));
       let guard = 0;
       while (remaining.some(c => c.qty > 0) && guard++ < MAX_ZONED_TRUCKS_PER_ZONE) {
@@ -1109,24 +1184,32 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
           closeTruck();
           continue;
         }
-        // Stamp zone identity on every row and offset into this truck's running length.
+        // lbz-pack-02 §2: zone identity lives on every COLUMN now (a row may end up mixed
+        // after a boundary gap-fill); row-level fields are kept only as a back-compat alias
+        // for the row's first column, which at THIS point (before any gap-fill runs) is
+        // still this whole row, since it was built entirely from this zone's own cart.
         const startX = truck.usedLength;
         segTrailer.rows.forEach(row => {
+          row.columns.forEach(col => { col.offloadSeq = zone.offloadSeq; col.zoneLabel = zone.label; col.zoneColor = zone.color; });
           truck.rows.push({ ...row, posFromFront: row.posFromFront + startX, offloadSeq: zone.offloadSeq, zoneLabel: zone.label, zoneColor: zone.color });
         });
         truck.usedLength += segTrailer.usedLength;
         truck.usedWeight += segTrailer.usedWeight;
-        truck.zoneSegments.push({
-          offloadSeq: zone.offloadSeq, label: zone.label, color: zone.color,
-          startX, endX: truck.usedLength,
-          pieces: segTrailer.totalUnits, skuBreakdown: segTrailer.skuBreakdown,
-        });
 
         const packedBySku = {};
         Object.values(segTrailer.skuBreakdown || {}).forEach(entry => { packedBySku[entry.skuId] = entry.pieces; });
         const leftover = remaining.map(c => ({ skuId: c.skuId, qty: c.qty - (packedBySku[c.skuId] || 0) })).filter(c => c.qty > 0);
         if (leftover.length) closeTruck();
         remaining = leftover;
+      }
+      // lbz-pack-02 §1: only attempt a boundary-gap fill when this zone actually left a
+      // fresh boundary in the truck that's STILL open (its last row belongs to this zone —
+      // checked by label, not offloadSeq, since unzoned/null-seq groups can collide on
+      // Infinity). If the zone's own placement closed the truck on its last segment, or the
+      // zone had nothing left to place (already fully consumed by a prior zone's chained
+      // gap-fill), there's no new boundary here to fill.
+      if (truck.rows.length && truck.rows[truck.rows.length - 1].zoneLabel === zone.label) {
+        fillBoundaryGap(zi + 1);
       }
     }
     closeTruck();
@@ -1135,12 +1218,9 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
     state.autoDownsize = savedAutoDownsize;
   }
 
-  const trailers = trucks.map(tr => {
-    const stats = buildTrailerStats(tr.rows, dims);
-    stats.zoned = true;
-    stats.zoneSegments = tr.zoneSegments;
-    return stats;
-  });
+  // lbz-pack-02 §2: zoneSegments are rebuilt AFTER packing by grouping COLUMNS by zone
+  // (never rows, since a shared row can now carry more than one zone's stacks).
+  const trailers = trucks.map(tr => applyZoneStatsToTrailer(buildTrailerStats(tr.rows, dims), tr.rows));
 
   const totalWeight = cart.reduce((s, c) => { const sku = skus.find(x => x.id === c.skuId); return s + (sku ? c.qty * sku.weight : 0); }, 0);
   const totalUnits = cart.reduce((s, c) => s + c.qty, 0);
@@ -1153,15 +1233,88 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
   return { trailers, warnings, totalWeight, utilization, totalUnits, totalStacks, mixedStacks, zoneOrder: zones.map(z => ({ offloadSeq: z.offloadSeq, label: z.label, color: z.color })) };
 }
 
+// lbz-pack-02 §2: groups a trailer's COLUMNS by zone (a stack is always single-zone; a row
+// may hold stacks from more than one zone after a boundary gap-fill) to (re)build
+// zoneSegments — startX/endX from the zone's own column extents, pieces/skuBreakdown summed
+// from that zone's columns' layers only, never from a whole shared row. Falls back to the
+// row's zone fields for any column that predates column-level stamping (old saved loads),
+// so this also acts as a read-time migration for callers that don't explicitly migrate first.
+function buildZoneSegmentsFromRows(rows) {
+  const zoneMap = new Map();
+  (rows || []).forEach(row => {
+    const rowStartX = row.posFromFront;
+    const rowEndX = row.posFromFront + row.rowLength;
+    (row.columns || []).forEach(col => {
+      const label = col.zoneLabel != null ? col.zoneLabel : row.zoneLabel;
+      if (label == null) return; // not a zoned column — no segment
+      const seq = col.offloadSeq != null ? col.offloadSeq : row.offloadSeq;
+      const color = col.zoneColor != null ? col.zoneColor : row.zoneColor;
+      if (!zoneMap.has(label)) {
+        zoneMap.set(label, { offloadSeq: seq, label, color, startX: rowStartX, endX: rowEndX, pieces: 0, skuBreakdown: {} });
+      }
+      const seg = zoneMap.get(label);
+      if (rowStartX < seg.startX) seg.startX = rowStartX;
+      if (rowEndX > seg.endX) seg.endX = rowEndX;
+      if (seq != null && (seg.offloadSeq == null || seq < seg.offloadSeq)) seg.offloadSeq = seq;
+      (col.layers || []).forEach(l => {
+        seg.pieces += l.count;
+        if (!seg.skuBreakdown[l.skuId]) seg.skuBreakdown[l.skuId] = { skuId: l.skuId, name: l.skuName, sku: l.skuCode, color: l.color, pieces: 0 };
+        seg.skuBreakdown[l.skuId].pieces += l.count;
+      });
+    });
+  });
+  return [...zoneMap.values()].sort((a, b) => (a.offloadSeq ?? 0) - (b.offloadSeq ?? 0));
+}
+
+// Wraps the (fenced) buildTrailerStats output with zoned/zoneSegments derived from the same
+// rows — needed anywhere a trailer's stats come from buildTrailerStats directly (manual
+// customize edits, Refresh Load), since that function's own body can't be touched to add
+// these fields itself.
+function applyZoneStatsToTrailer(stats, rows) {
+  const segs = buildZoneSegmentsFromRows(rows);
+  if (segs.length) { stats.zoned = true; stats.zoneSegments = segs; }
+  return stats;
+}
+
+// lbz-pack-02 §2: migration for a saved load created before column-level zone stamping —
+// stamps every column of a row that has row-level zone fields but no column-level ones of
+// its own, so downstream code (editor round-trip, outline rendering, order-warning check)
+// can rely on columns always carrying their own zone identity once a load is restored.
+function migrateManualRowsZones(manualRowsByTrailer) {
+  const out = {};
+  Object.entries(manualRowsByTrailer || {}).forEach(([ti, rows]) => {
+    out[ti] = (rows || []).map(row => ({
+      ...row,
+      columns: (row.columns || []).map(col => ({
+        ...col,
+        zoneLabel: col.zoneLabel != null ? col.zoneLabel : (row.zoneLabel || null),
+        offloadSeq: col.offloadSeq != null ? col.offloadSeq : (row.offloadSeq != null ? row.offloadSeq : null),
+        zoneColor: col.zoneColor != null ? col.zoneColor : (row.zoneColor || null),
+      })),
+    }));
+  });
+  return out;
+}
+
 // Detects a manual-editor move that puts a later-delivery zone's stack door-side of an
-// earlier-delivery zone's stack (rows walked door→nose = array order; offloadSeq should
-// be non-decreasing in that direction). Warns only — never blocks (lbz-pack-01 §4).
+// earlier-delivery zone's stack. lbz-pack-02 §2: evaluated per COLUMN (not per row, since a
+// row can now hold stacks from more than one zone) walking door→nose — rows sorted by
+// posFromFront ascending, offloadSeq should be non-decreasing in that direction. Columns
+// within the SAME row share the same door distance, so differing offloadSeqs side-by-side
+// in one row are expected (not a violation); only a LOWER offloadSeq appearing in a row
+// further from the door than a HIGHER one already seen is flagged. Warns only — never
+// blocks (lbz-pack-01 §4).
 function checkZoneOrderWarning(rows) {
-  let maxSeq = -Infinity;
-  for (const row of rows) {
-    if (row.offloadSeq == null) continue;
-    if (row.offloadSeq < maxSeq) return true;
-    if (row.offloadSeq > maxSeq) maxSeq = row.offloadSeq;
+  const sortedRows = [...(rows || [])].sort((a, b) => (a.posFromFront || 0) - (b.posFromFront || 0));
+  let maxSeqSoFar = -Infinity;
+  for (const row of sortedRows) {
+    const rowSeqs = (row.columns || [])
+      .map(c => c.offloadSeq != null ? c.offloadSeq : (row.offloadSeq != null ? row.offloadSeq : null))
+      .filter(v => v != null);
+    if (!rowSeqs.length) continue;
+    if (rowSeqs.some(seq => seq < maxSeqSoFar)) return true;
+    const rowMax = Math.max(...rowSeqs);
+    if (rowMax > maxSeqSoFar) maxSeqSoFar = rowMax;
   }
   return false;
 }
@@ -1181,18 +1334,77 @@ function getStackPrintLines(col) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// lbz-pack-02 §3/§4: shared zone outline + band-label helpers, used by every zoned renderer
+// (on-screen top view, print/PDF loading diagram, and — since it's the same buildTopViewSVG
+// call — the customize editor's live preview above the editor panel).
+// ═══════════════════════════════════════════════════════════════
+// Edge-cancellation outline: collect all 4 edges of every cell (one per column) belonging to
+// a zone; an edge shared by two cells of the SAME zone cancels out, leaving only that zone's
+// true outer boundary. This is naturally stepped/L-shaped wherever a shared row's column
+// widths don't line up across rows, and naturally produces one outline per island if a
+// manual customize move makes a zone non-contiguous (islands never share edges with each
+// other, so nothing cancels between them). Where two zones touch, each keeps its own edge
+// there (cancellation only ever happens within one zone's own cell set), so both outlines
+// are drawn — adjacent dotted lines in each zone's own color.
+function buildZoneOutlineSegments(cells) {
+  const edges = new Map();
+  const r2 = v => Math.round(v * 100) / 100;
+  function addEdge(ax, ay, bx, by) {
+    const p1 = [r2(ax), r2(ay)], p2 = [r2(bx), r2(by)];
+    const swap = (p1[0] > p2[0]) || (p1[0] === p2[0] && p1[1] > p2[1]);
+    const lo = swap ? p2 : p1, hi = swap ? p1 : p2;
+    const key = `${lo[0]},${lo[1]}|${hi[0]},${hi[1]}`;
+    const existing = edges.get(key);
+    if (existing) existing.count++;
+    else edges.set(key, { count: 1, x1: lo[0], y1: lo[1], x2: hi[0], y2: hi[1] });
+  }
+  cells.forEach(c => {
+    addEdge(c.x, c.y, c.x + c.w, c.y);             // top
+    addEdge(c.x, c.y + c.h, c.x + c.w, c.y + c.h); // bottom
+    addEdge(c.x, c.y, c.x, c.y + c.h);             // left
+    addEdge(c.x + c.w, c.y, c.x + c.w, c.y + c.h); // right
+  });
+  return [...edges.values()].filter(e => e.count === 1);
+}
+
+// Groups {x,y,w,h,zoneLabel,zoneColor} cells by zoneLabel so each zone's outline can be
+// computed independently (a shared edge only cancels against another cell of the SAME zone).
+function groupZoneCells(cells) {
+  const byLabel = new Map();
+  cells.forEach(c => {
+    if (c.zoneLabel == null) return;
+    if (!byLabel.has(c.zoneLabel)) byLabel.set(c.zoneLabel, { label: c.zoneLabel, color: c.zoneColor, cells: [] });
+    byLabel.get(c.zoneLabel).cells.push(c);
+  });
+  return [...byLabel.values()];
+}
+
+// Clips a zone-band label to its drawn span (character-count based — no SVG clip-path
+// dependency) with an ellipsis when it doesn't fit, and always embeds the full label as a
+// native <title> tooltip so nothing is lost, just visually truncated. No more overflow into
+// a neighboring zone's band.
+function svgZoneLabel(cx, y, spanW, label, fontSize) {
+  const avgCharW = fontSize * 0.62;
+  const maxChars = Math.max(1, Math.floor((spanW - 6) / avgCharW));
+  let display = label;
+  if (label.length > maxChars) display = maxChars <= 1 ? '…' : label.slice(0, Math.max(1, maxChars - 1)) + '…';
+  return `<text x="${cx}" y="${y}" text-anchor="middle" fill="#fff" font-size="${fontSize}" font-weight="800">${esc(display)}<title>${esc(label)}</title></text>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // SVG BUILDERS
 // ═══════════════════════════════════════════════════════════════
 function buildTopViewSVG(trailer, dims) {
   const SC = SVG_TOPVIEW_SCALE, W = 10, PAD = 64;
   const pxL = dims.length * SC, pxW = dims.width * SC;
   const runnerH = state.runnerHeight;
-  // lbz-pack-01: zoned trailers get a color strip (zone + legend) above the diagram and
-  // a divider-marker row below it; non-zoned trailers are laid out exactly as before.
+  // lbz-pack-01: zoned trailers get a color strip (zone + legend) above the diagram;
+  // non-zoned trailers are laid out exactly as before. lbz-pack-02: the old divider-marker
+  // row below the diagram is gone (§4) — the outline + band + legend + load-order list carry
+  // that information now, so there's no more reserved zoneMarkH strip.
   const zoned = !!(trailer.zoned && Array.isArray(trailer.zoneSegments) && trailer.zoneSegments.length);
   const zoneStripH = zoned ? 22 : 0;
-  const zoneMarkH = zoned ? 14 : 0;
-  const svgW = pxL + W * 2 + PAD, svgH = pxW + W * 2 + 40 + (runnerH > 0 ? 16 : 0) + zoneStripH + zoneMarkH;
+  const svgW = pxL + W * 2 + PAD, svgH = pxW + W * 2 + 40 + (runnerH > 0 ? 16 : 0) + zoneStripH;
   const rects = [];
   (trailer.rows || []).forEach((row, ri) => row.columns.forEach((col, ci) => {
     rects.push({ key: `${ri}-${ci}`, x: W + row.posFromFront * SC, y: W + col.posY * SC, w: row.rowLength * SC, h: col.colWidth * SC, col });
@@ -1203,10 +1415,19 @@ function buildTopViewSVG(trailer, dims) {
   let svg = `<svg width="${svgW}" height="${svgH}" style="display:block;font-family:DM Sans,Arial,sans-serif">`;
   svg += `<defs><pattern id="ep" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#CBD5E1" stroke-width="2"/></pattern></defs>`;
   if (zoned) {
-    trailer.zoneSegments.forEach(seg => {
-      const segX = W + seg.startX * SC, segW = Math.max(0, (seg.endX - seg.startX) * SC);
+    // lbz-pack-02 §2/§4: span now comes from the zone's own column extents, which can
+    // overlap slightly across zones after a boundary gap-fill (a filled zone's startX can
+    // sit inside the previous zone's row); clamp the DRAWN band so it stays tiled left-to-
+    // right with no visual overlap, while the underlying seg.startX/endX (read by the BOL
+    // handoff) stays true to the real extent.
+    let prevEndX = 0;
+    [...trailer.zoneSegments].sort((a, b) => a.startX - b.startX).forEach(seg => {
+      const drawStartX = Math.max(seg.startX, prevEndX);
+      const drawEndX = Math.max(drawStartX, seg.endX);
+      prevEndX = drawEndX;
+      const segX = W + drawStartX * SC, segW = Math.max(0, (drawEndX - drawStartX) * SC);
       svg += `<rect x="${segX}" y="2" width="${segW}" height="14" fill="${seg.color}" opacity="0.88" rx="2"/>`;
-      if (segW > 26) svg += `<text x="${segX + segW / 2}" y="12" text-anchor="middle" fill="#fff" font-size="9" font-weight="800">${esc(seg.label)}</text>`;
+      if (segW > 26) svg += svgZoneLabel(segX + segW / 2, 12, segW, seg.label, 9);
     });
   }
   svg += `<g transform="translate(0, ${zoneStripH})">`;
@@ -1251,15 +1472,19 @@ function buildTopViewSVG(trailer, dims) {
   svg += `<text x="${W + 3}" y="${W + pxW + 22}" fill="#64748B" font-size="10" font-weight="700">REAR</text>`;
   svg += `<text x="${W + pxL / 2}" y="${W + pxW + 22}" text-anchor="middle" fill="#94A3B8" font-size="10">${dims.length}"L × ${dims.width}"W</text>`;
   if (runnerH > 0) svg += `<rect x="${W}" y="${W + pxW + 30}" width="16" height="4" fill="#92400E" opacity="0.7" rx="1"/><text x="${W + 20}" y="${W + pxW + 34}" fill="#92400E" font-size="10" font-weight="700">▬ ${runnerH}" runners</text>`;
-  svg += `</g>`;
+  // lbz-pack-02 §3: per-zone dotted outline, drawn IN this same translated <g> frame so it
+  // shares the cells' own coordinate space. Replaces the old single straight boundary line
+  // (and its per-boundary label, removed per §4 — the band + legend + load-order list below
+  // already carry that information).
   if (zoned) {
-    trailer.zoneSegments.forEach((seg, si) => {
-      if (si === 0) return;
-      const bx = W + seg.startX * SC;
-      svg += `<line x1="${bx}" y1="0" x2="${bx}" y2="${zoneStripH + W + pxW}" stroke="#0f172a" stroke-width="2.5" stroke-dasharray="3,2"/>`;
-      svg += `<text x="${bx + 3}" y="${zoneStripH + W + pxW + 12}" fill="#0f172a" font-size="9" font-weight="800">↦ ${esc(seg.label)}</text>`;
+    const cells = rects.map(r => ({ x: r.x, y: r.y, w: r.w, h: r.h, zoneLabel: r.col.zoneLabel, zoneColor: r.col.zoneColor }));
+    groupZoneCells(cells).forEach(zc => {
+      buildZoneOutlineSegments(zc.cells).forEach(e => {
+        svg += `<line x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}" stroke="${zc.color || '#0f172a'}" stroke-width="2.5" stroke-dasharray="3,2" stroke-linecap="square"/>`;
+      });
     });
   }
+  svg += `</g>`;
   svg += `</svg>`;
   return svg;
 }
@@ -1271,14 +1496,15 @@ function buildPrintSvg(trailer, dims) {
   const SC = BASE_SC * fitScale;
   const pxL = dims.length * SC, pxW = dims.width * SC;
   const printRunnerH = state.runnerHeight;
-  // lbz-pack-01: same zoned strip/divider treatment as buildTopViewSVG, mirrored for print.
+  // lbz-pack-01: same zoned strip treatment as buildTopViewSVG, mirrored for print.
+  // lbz-pack-02: the old divider-marker row below the diagram is gone (§4) — no more
+  // reserved zoneMarkH strip.
   const zoned = !!(trailer.zoned && Array.isArray(trailer.zoneSegments) && trailer.zoneSegments.length);
   const zoneStripH = zoned ? 26 : 0;
-  const zoneMarkH = zoned ? 16 : 0;
-  const svgW = pxL + M * 2 + 78, svgH = pxW + M * 2 + 64 + (printRunnerH > 0 ? 20 : 0) + zoneStripH + zoneMarkH;
+  const svgW = pxL + M * 2 + 78, svgH = pxW + M * 2 + 64 + (printRunnerH > 0 ? 20 : 0) + zoneStripH;
   const rects = [];
   (trailer.rows || []).forEach((row, ri) => row.columns.forEach((col, ci) => {
-    rects.push({ x: M + row.posFromFront * SC, y: M + col.posY * SC, w: row.rowLength * SC, h: col.colWidth * SC, lines: getStackPrintLines(col) });
+    rects.push({ x: M + row.posFromFront * SC, y: M + col.posY * SC, w: row.rowLength * SC, h: col.colWidth * SC, lines: getStackPrintLines(col), zoneLabel: col.zoneLabel, zoneColor: col.zoneColor });
   }));
   const renderLines = r => {
     const lines = r.lines.filter(Boolean);
@@ -1293,10 +1519,17 @@ function buildPrintSvg(trailer, dims) {
   let svg = `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="font-family:Arial,sans-serif;display:block;">`;
   svg += `<defs><pattern id="pep" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#CBD5E1" stroke-width="2"/></pattern></defs>`;
   if (zoned) {
-    trailer.zoneSegments.forEach(seg => {
-      const segX = M + seg.startX * SC, segW = Math.max(0, (seg.endX - seg.startX) * SC);
+    // lbz-pack-02 §2/§4: clamp the drawn band so overlapping column-extent spans (a
+    // gap-filled zone's startX can sit inside the previous zone's row) stay tiled with no
+    // visual overlap — same treatment as buildTopViewSVG.
+    let prevEndX = 0;
+    [...trailer.zoneSegments].sort((a, b) => a.startX - b.startX).forEach(seg => {
+      const drawStartX = Math.max(seg.startX, prevEndX);
+      const drawEndX = Math.max(drawStartX, seg.endX);
+      prevEndX = drawEndX;
+      const segX = M + drawStartX * SC, segW = Math.max(0, (drawEndX - drawStartX) * SC);
       svg += `<rect x="${segX}" y="2" width="${segW}" height="16" fill="${seg.color}" opacity="0.88" rx="2"/>`;
-      if (segW > 30) svg += `<text x="${segX + segW / 2}" y="14" text-anchor="middle" fill="#fff" font-size="11" font-weight="800">${esc(seg.label)}</text>`;
+      if (segW > 30) svg += svgZoneLabel(segX + segW / 2, 14, segW, seg.label, 11);
     });
   }
   svg += `<g transform="translate(0, ${zoneStripH})">`;
@@ -1322,15 +1555,17 @@ function buildPrintSvg(trailer, dims) {
   svg += `<text x="${M + pxL + 8}" y="${M + pxW / 2 + 5}" font-size="14" font-weight="700" fill="#D97706">FRONT</text>`;
   svg += `<text x="${M + pxL / 2}" y="${M + pxW + 26}" text-anchor="middle" font-size="14" fill="#64748B">${dims.length}"L × ${dims.width}"W</text>`;
   if (printRunnerH > 0) svg += `<rect x="${M}" y="${M + pxW + 40}" width="18" height="5" fill="#92400E" opacity="0.7" rx="1"/><text x="${M + 24}" y="${M + pxW + 45}" font-size="13" font-weight="700" fill="#92400E">▬ ${printRunnerH}" runners under all stacks</text>`;
-  svg += `</g>`;
+  // lbz-pack-02 §3: per-zone dotted outline (edge cancellation), drawn IN this same
+  // translated <g> frame. Replaces the old single straight boundary line and its
+  // per-boundary label (removed per §4).
   if (zoned) {
-    trailer.zoneSegments.forEach((seg, si) => {
-      if (si === 0) return;
-      const bx = M + seg.startX * SC;
-      svg += `<line x1="${bx}" y1="0" x2="${bx}" y2="${zoneStripH + M + pxW}" stroke="#0f172a" stroke-width="3" stroke-dasharray="4,3"/>`;
-      svg += `<text x="${bx + 4}" y="${zoneStripH + M + pxW + 14}" fill="#0f172a" font-size="11" font-weight="800">↦ ${esc(seg.label)}</text>`;
+    groupZoneCells(rects).forEach(zc => {
+      buildZoneOutlineSegments(zc.cells).forEach(e => {
+        svg += `<line x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}" stroke="${zc.color || '#0f172a'}" stroke-width="3" stroke-dasharray="4,3" stroke-linecap="square"/>`;
+      });
     });
   }
+  svg += `</g>`;
   svg += `</svg>`;
   return svg;
 }
@@ -1514,7 +1749,7 @@ function getResult() {
       const cDims = getDims();
       const cTrailers = state.committedTrailers.trailers.map((t, i) => {
         const manualRows = state.manualRowsByTrailer[i];
-        return manualRows ? buildTrailerStats(manualRows, cDims) : t;
+        return manualRows ? applyZoneStatsToTrailer(buildTrailerStats(manualRows, cDims), manualRows) : t;
       });
       return { ...state.committedTrailers, trailers: cTrailers };
     }
@@ -1531,7 +1766,7 @@ function getResult() {
   if (!Object.keys(state.manualRowsByTrailer).length) return autoResult;
   const trailers = autoResult.trailers.map((t, i) => {
     const manualRows = state.manualRowsByTrailer[i];
-    return manualRows ? buildTrailerStats(manualRows, dims) : t;
+    return manualRows ? applyZoneStatsToTrailer(buildTrailerStats(manualRows, dims), manualRows) : t;
   });
   return { ...autoResult, trailers };
 }
@@ -2548,10 +2783,16 @@ function renderTrailerEditor(trailer, ti, skuLib) {
     length: row.rowLength,
     // lbz-pack-01: carry zone identity through the editor round-trip so a manual move
     // can still be checked against delivery order in applyEditorRows.
+    // lbz-pack-02 §2: zone identity now lives per COLUMN (a row can be mixed after a
+    // boundary gap-fill); row-level fields here stay only as a fallback for columns that
+    // predate column-level stamping.
     zoneLabel: row.zoneLabel || null,
     offloadSeq: row.offloadSeq != null ? row.offloadSeq : null,
     columns: row.columns.map(col => ({
       width: col.colWidth,
+      zoneLabel: col.zoneLabel != null ? col.zoneLabel : (row.zoneLabel || null),
+      offloadSeq: col.offloadSeq != null ? col.offloadSeq : (row.offloadSeq != null ? row.offloadSeq : null),
+      zoneColor: col.zoneColor != null ? col.zoneColor : (row.zoneColor || null),
       layers: col.layers.map(l => ({ skuId: l.skuId, count: l.count })),
     })),
   }));
@@ -2776,12 +3017,26 @@ function applyEditorRows(ti, skuLib) {
       const totalHeight = layers.reduce((s, l) => s + l.unitHeight * l.count, 0);
       const totalWeight = layers.reduce((s, l) => { const sku = skuLib.find(x => x.id === l.skuId); return s + (sku ? sku.weight * l.count : 0); }, 0);
       const stackCount = layers.reduce((s, l) => s + l.count, 0);
-      const built = { posY, colWidth: col.width || baseSku.width, skuId: layers[0].skuId, skuName: layers[0].skuName, skuCode: layers[0].skuCode, color: layers[0].color, unitHeight: layers[0].unitHeight, totalHeight, totalWeight, stackCount, layers, mixed: layers.length > 1, label: layers.map(l => `${l.unitHeight}"`).join(" + ") };
+      // lbz-pack-02 §2: zone identity travels with the COLUMN (falling back to the editor
+      // row's own zone fields for a manually-added column that never had its own).
+      const built = {
+        posY, colWidth: col.width || baseSku.width, skuId: layers[0].skuId, skuName: layers[0].skuName, skuCode: layers[0].skuCode, color: layers[0].color, unitHeight: layers[0].unitHeight, totalHeight, totalWeight, stackCount, layers, mixed: layers.length > 1, label: layers.map(l => `${l.unitHeight}"`).join(" + "),
+        zoneLabel: col.zoneLabel != null ? col.zoneLabel : (row.zoneLabel || null),
+        offloadSeq: col.offloadSeq != null ? col.offloadSeq : (row.offloadSeq != null ? row.offloadSeq : null),
+        zoneColor: col.zoneColor != null ? col.zoneColor : (row.zoneColor || null),
+      };
       posY += built.colWidth;
       return built;
     }).filter(Boolean);
     if (!cols.length) return;
-    rebuiltRows.push({ posFromFront, rowLength: row.length || baseSku.length, rowWidthUsed: cols.reduce((s, c) => s + c.colWidth, 0), columns: cols, totalUnits: cols.reduce((s, c) => s + c.stackCount, 0), totalWeight: cols.reduce((s, c) => s + c.totalWeight, 0), zoneLabel: row.zoneLabel || null, offloadSeq: row.offloadSeq != null ? row.offloadSeq : null });
+    // Row-level zone fields are kept only as a back-compat alias for the row's first column.
+    const firstCol = cols[0];
+    rebuiltRows.push({
+      posFromFront, rowLength: row.length || baseSku.length, rowWidthUsed: cols.reduce((s, c) => s + c.colWidth, 0), columns: cols, totalUnits: cols.reduce((s, c) => s + c.stackCount, 0), totalWeight: cols.reduce((s, c) => s + c.totalWeight, 0),
+      zoneLabel: firstCol && firstCol.zoneLabel != null ? firstCol.zoneLabel : (row.zoneLabel || null),
+      offloadSeq: firstCol && firstCol.offloadSeq != null ? firstCol.offloadSeq : (row.offloadSeq != null ? row.offloadSeq : null),
+      zoneColor: firstCol && firstCol.zoneColor != null ? firstCol.zoneColor : (row.zoneColor || null),
+    });
     posFromFront += row.length || baseSku.length;
   });
   // lbz-pack-01 §4: warn (don't block) if this manual layout puts a later-delivery
@@ -3150,7 +3405,9 @@ async function openLoadModal() {
           if (s.forcedTrailers)       state.forcedTrailers       = s.forcedTrailers;
           if (s.forcedMode != null)   state.forcedMode           = s.forcedMode;
           if (s.variant != null)      state.variant              = s.variant;
-          if (s.manualRowsByTrailer)  state.manualRowsByTrailer  = s.manualRowsByTrailer;
+          // lbz-pack-02 §2: migrate any pre-lbz-pack-02 saved load whose rows only carry
+          // row-level zone fields, so every column has its own zone identity once restored.
+          if (s.manualRowsByTrailer)  state.manualRowsByTrailer  = migrateManualRowsZones(s.manualRowsByTrailer);
           state.committedTrailers = s.committedTrailers || null;
           state.committedSig      = s.committedSig || null;
           if (s.skus)                 state.skus                 = s.skus;

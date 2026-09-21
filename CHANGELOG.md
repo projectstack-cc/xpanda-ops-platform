@@ -4764,6 +4764,68 @@ current series).
   confirmed manual-BOL format exactly (header, `*unload 1st*` placement, two-key density sort,
   no footer, first-fit column packing).
 
+- **lbz-pack-02 — Shared boundary rows + zone outline that always wraps the zone
+  (logistics-agent).** Follow-up to lbz-pack-01, fixing a real problem found on a live 4404
+  build: whole-row-per-zone wasted trailer space at zone boundaries, spilling an order onto an
+  unnecessary extra truck. `logistics/load-builder.html` only (no new user-facing strings) — the
+  fence (`calcLoading`, `buildColumn`, `buildRow`, `buildDemand`, `buildTrailerStats`,
+  `getFullTrailerThreshold`, `repackTrailerDense`, `compactTrailerRows`, `STORAGE_KEY`) is
+  untouched, confirmed byte-identical via paren/brace-matched extraction (fixed to skip past a
+  parameter list's own `{}` defaults, e.g. `options = {}`, before brace-matching the body) and a
+  byte-for-byte HEAD-vs-working-tree comparison of all 8 bodies plus the `STORAGE_KEY` line. **1)
+  Boundary gap-fill** (`calcZonedLoading`, wrapper-only): after a zone's own segment finishes and
+  leaves the truck's last row partial, `fillBoundaryGap` calls the untouched `calcLoading` on the
+  NEXT zone(s)' remaining cart (chained, delivery order) against a sub-dims scoped to that row's
+  exact length and the leftover width, with the same forced/autoDownsize-off + `skipDownsize`
+  flags lbz-pack-01 pins; only columns whose footprint length matches the row's own length are
+  accepted, offset into the row's unused width, and subtracted from that zone's own remaining
+  cart (mutated in place so the outer per-zone loop sees the reduction on its turn). Gated by a
+  cheap `min(length,width,height)` footprint pre-check per spec, never crosses a truck boundary
+  (only ever touches the currently-open truck's own last row), and never forwards a failed
+  gap-fill attempt's warnings into the main warning list (a chain miss is the expected case, not
+  a real packing problem). **2) Zone identity moved from rows to columns**: every column is now
+  stamped with its own `offloadSeq`/`zoneLabel`/`zoneColor` (rows can be mixed-zone after a
+  gap-fill); row-level fields remain only as a back-compat alias for the row's first column.
+  `zoneSegments` are rebuilt AFTER packing (new `buildZoneSegmentsFromRows`, also doubles as a
+  read-time migration for old saved loads with only row-level zone data) by grouping columns by
+  zone — `startX`/`endX` from the zone's own column extents, `pieces`/`skuBreakdown` summed from
+  that zone's columns only, never a whole shared row. A new `applyZoneStatsToTrailer` wrapper
+  restores `.zoned`/`.zoneSegments` on the (fenced) `buildTrailerStats` output anywhere a
+  trailer's stats come from manual rows (customize apply, Refresh Load, committed-trailer
+  re-stat) — without it, customizing a zoned trailer silently dropped its zone rendering.
+  `renderTrailerEditor`/`applyEditorRows` now carry zone fields per column (falling back to the
+  row's for legacy data); a `migrateManualRowsZones` helper stamps column-level fields onto any
+  restored saved load that predates this change. `checkZoneOrderWarning` now walks columns
+  door→nose (rows sorted by `posFromFront`), warning only when a lower `offloadSeq` trails a
+  higher one already seen — same-row side-by-side zones (expected after gap-fill) no longer
+  false-positive. **3) Per-zone outline via edge cancellation** (`buildZoneOutlineSegments` +
+  `groupZoneCells`): collects all 4 edges of every column-cell in a zone, drops any edge shared
+  by two cells of the SAME zone, and draws what's left as the dotted outline — naturally
+  stepped/L-shaped at a shared row, naturally one outline per island for a non-contiguous zone,
+  and both zones' outlines draw independently (in their own color) where they touch. Applied in
+  `buildTopViewSVG` and `buildPrintSvg` (the customize editor reuses `buildTopViewSVG` directly,
+  so it inherits this for free); replaces the old single straight boundary-line block, drawn
+  inside the same translated `<g>` frame as the cells so the coordinates line up. The zone color
+  band's span now comes from the same column extents but is clamped when drawing so overlapping
+  extents (a gap-filled zone's `startX` can sit inside the previous zone's row) stay visually
+  tiled — the underlying `seg.startX`/`endX` stay true to the real extent for the BOL handoff.
+  **4) Label collisions**: new `svgZoneLabel` helper clips each zone-band label to its span
+  (character-count based) with an ellipsis plus a native `<title>` tooltip for the full text — no
+  more overflow into a neighboring zone's band. The old per-boundary "↦ ZONE LABEL" text under
+  the trailer (and its reserved `zoneMarkH` strip) is removed entirely; the outline + band +
+  legend + load-order list already carry that information. **Verify:** a Node harness
+  (brace-matched HEAD vs. working-tree slices) against a synthesized inv-4404-shaped cart (4
+  zones, same dims/qty on both sides) went from 2 trailers / 5 empty width-slots (3 on truck 1,
+  2 on truck 2) before this change to 1 trailer / 1 empty width-slot after — 0 pieces unplaced
+  either way, every column single-zone, `offloadSeq` non-decreasing door→nose. The lbz-pack-01
+  inv-3371-shaped non-regression case (Area B/C exact row multiples, no gap to fill) is
+  unchanged: still 2 trucks, Truck 1 = Area B + Area C + the start of Area A, Truck 2 = the Area
+  A remainder. A direct outline trace at the shared row (AMBULANCE CANOPY's last row topped off
+  with ED VESTIBULE SOUTH's first gap-filled stack) confirmed the edge-cancellation algorithm
+  steps around the shared slot — AMBULANCE's outline cancels its row-to-row boundary edge for
+  the 3 same-zone slots but keeps it (plus a short shelf edge) for the 1 slot now owned by
+  VESTIBULE — instead of a straight line cutting across the whole row.
+
 - **lbz-pack-01 — Zone/truck sequencing wrapper around the untouched auto-pack algorithm
   (logistics-agent).** Third prompt in the offload-zone series (depends on lbz-db-01/parse-01/
   parse-02); load-builder side of deck-systems loading zones. `logistics/load-builder.html`
