@@ -515,6 +515,145 @@ export interface BolPositionOverride {
   dy?: number;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// TEXT STYLING (bol-style-01, ported 1:1) — render_overrides._style contract.
+// PARITY RULE: mirrors logistics/bol-shared.js's "TEXT STYLING (bol-style-01)" block
+// byte-identical (same formulas/constants). Precedence per property: line → box → existing
+// COORD/tier default. Absent `_style` (every BOL before this) resolves to exactly the
+// pre-bol-style-01 defaults — see resolveFieldLineStyle.
+// ═══════════════════════════════════════════════════════════════════
+
+export interface BolTextStyle {
+  size?: number;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+}
+
+export interface BolFieldStyle extends BolTextStyle {
+  lines?: Record<string, BolTextStyle>;
+}
+
+// fieldKey -> approximate available box height in PDF points, for overflow warnings only (never
+// affects rendering). See logistics/bol-shared.js's FIELD_HEIGHT_BUDGET comment for derivation.
+const FIELD_HEIGHT_BUDGET: Record<string, number> = {
+  deliveryTime: 46, date: 20, bolNumber: 20, carrierName: 20, trailerNo: 20,
+  specialInstr: 60, contactInfo: 57, poNumber: 88, commodity: 216,
+};
+const SHIP_TO_LINE_GAP = 14;
+const SHIP_TO_MAX_LINES = 4;
+const AVG_CHAR_WIDTH_RATIO = { regular: 0.5, bold: 0.56 };
+function approxMeasurer(bold: boolean): WidthMeasurer {
+  const ratio = bold ? AVG_CHAR_WIDTH_RATIO.bold : AVG_CHAR_WIDTH_RATIO.regular;
+  return { widthOfTextAtSize: (t: string, s: number) => String(t).length * s * ratio };
+}
+
+export interface ResolvedFieldLineStyle {
+  size: number;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  lineH: number;
+}
+
+/**
+ * Resolves the effective style for one SOURCE line of one styleable field, given that field's
+ * `_style` entry (or undefined for "no style set"). Pure — no font/page dependency. `baseCoord`
+ * supplies the pre-style default (its `size`/`lineH`/`bold`).
+ */
+export function resolveFieldLineStyle(
+  fieldStyle: BolFieldStyle | undefined,
+  srcLineIdx: number | null | undefined,
+  baseCoord: BolCoord
+): ResolvedFieldLineStyle {
+  const baseSize = baseCoord.size || 10;
+  const lineStyle = fieldStyle?.lines && srcLineIdx != null ? fieldStyle.lines[String(srcLineIdx)] : undefined;
+  const pick = <K extends keyof BolTextStyle>(prop: K, fallback: BolTextStyle[K]): BolTextStyle[K] => {
+    if (lineStyle && lineStyle[prop] !== undefined) return lineStyle[prop];
+    if (fieldStyle && fieldStyle[prop] !== undefined) return fieldStyle[prop];
+    return fallback;
+  };
+  let size = (pick("size", baseSize) as number) ?? baseSize;
+  size = Math.max(6, Math.min(36, size));
+  const bold = !!pick("bold", !!baseCoord.bold);
+  const italic = !!pick("italic", false);
+  const underline = !!pick("underline", false);
+  const lineH = baseCoord.lineH ? Math.round(baseCoord.lineH * (size / baseSize)) : Math.round(size * 1.2);
+  return { size, bold, italic, underline, lineH };
+}
+
+export interface MeasuredStyledField {
+  lines: number;
+  height: number;
+  overflow: boolean;
+}
+
+/**
+ * Pure helper for the v2 editor (bol-style-03): measures a field's text under a candidate `_style`
+ * entry and reports whether it would overflow the field's available box. Never used by the render
+ * path itself (which never clips). `fieldKey` also accepts the dynamic `zoneCol0`, `zoneCol1`, …
+ * keys (item index in a zoned BOL's zoneColumns.items).
+ */
+export function measureStyledField(fieldKey: string, text: string, style: BolFieldStyle | undefined): MeasuredStyledField {
+  const sourceLines = String(text || "").split("\n");
+
+  if (fieldKey === "shipTo") {
+    return {
+      lines: sourceLines.length,
+      height: sourceLines.length * SHIP_TO_LINE_GAP,
+      overflow: sourceLines.length > SHIP_TO_MAX_LINES,
+    };
+  }
+
+  const zoneMatch = /^zoneCol(\d+)$/.exec(fieldKey || "");
+  let baseCoord: BolCoord;
+  let maxW: number | null;
+  let heightBudget: number;
+  if (zoneMatch) {
+    const idx = parseInt(zoneMatch[1], 10);
+    const colMaxH = (COORDS.zoneColumns.colMaxH as number[]) || [];
+    baseCoord = { x: 0, y: 0, size: 10, lineH: 12 };
+    maxW = (COORDS.zoneColumns.maxW as number) / (COORDS.zoneColumns.cols as number);
+    heightBudget = colMaxH[idx] != null ? colMaxH[idx] : 216;
+  } else if (COORDS[fieldKey]) {
+    baseCoord = COORDS[fieldKey];
+    maxW = baseCoord.maxW || null;
+    heightBudget = FIELD_HEIGHT_BUDGET[fieldKey] != null ? FIELD_HEIGHT_BUDGET[fieldKey] : 40;
+  } else {
+    return { lines: 0, height: 0, overflow: false };
+  }
+
+  let lineCount = 0;
+  let totalHeight = 0;
+  sourceLines.forEach((srcLine, srcIdx) => {
+    const r = resolveFieldLineStyle(style, srcIdx, baseCoord);
+    if (maxW) {
+      const wrapped = wrapText(srcLine, approxMeasurer(r.bold), r.size, maxW);
+      const n = wrapped.length || 1;
+      lineCount += n;
+      totalHeight += n * r.lineH;
+    } else {
+      lineCount += 1;
+      totalHeight += r.lineH;
+    }
+  });
+
+  let overflow = totalHeight > heightBudget;
+  if (!overflow && maxW) {
+    const minMeasurer = approxMeasurer(false);
+    outer: for (const srcLine of sourceLines) {
+      for (const w of srcLine.split(/\s+/).filter(Boolean)) {
+        if (minMeasurer.widthOfTextAtSize(w, 6) > maxW) {
+          overflow = true;
+          break outer;
+        }
+      }
+    }
+  }
+
+  return { lines: lineCount, height: totalHeight, overflow };
+}
+
 // render_overrides.zoneColumns shape (lbz-bol-01's judgment call, carried forward 1:1 in
 // lbz-bol-02 — do NOT simplify back to a bare `[{label,text,x,y}]+sourceHash` shorthand). Beyond
 // `items` (the clean per-box editable shape) and `sourceHash` (hashJobZoneData's output),
@@ -529,6 +668,7 @@ export interface ZoneColumnsOverride {
 
 export interface BolOverrides {
   _pos?: Record<string, BolPositionOverride | undefined>;
+  _style?: Record<string, BolFieldStyle | undefined>;
   deliveryTime?: string | string[];
   date?: string;
   bolNumber?: string;
@@ -630,6 +770,14 @@ export async function generatePdf(bolRecords: BolRecord[], opts: GeneratePdfOpti
     const page = templateDoc.getPages()[0];
     const font = await templateDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await templateDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontItalic = await templateDoc.embedFont(StandardFonts.HelveticaOblique);
+    const fontBoldItalic = await templateDoc.embedFont(StandardFonts.HelveticaBoldOblique);
+    const pickFont = ({ bold, italic }: { bold: boolean; italic: boolean }): PDFFont => {
+      if (bold && italic) return fontBoldItalic;
+      if (bold) return fontBold;
+      if (italic) return fontItalic;
+      return font;
+    };
     let cursive: PDFFont | null = null;
     if (opts.scriptFontBytes) {
       try {
@@ -641,12 +789,12 @@ export async function generatePdf(bolRecords: BolRecord[], opts: GeneratePdfOpti
     }
     const black = rgb(0, 0, 0);
 
-    const drawText = (
-      text: unknown,
-      coord: BolCoord,
-      overrides: { x?: number; y?: number; size?: number; bold?: boolean; color?: ReturnType<typeof rgb>; maxWidth?: number } = {}
-    ) => {
+    // `overrides.fieldKey` (+ `overrides.lineIdx` for shipTo) routes a field through the style
+    // resolver (bol-style-01); omitted for the two non-styleable drawText callers (scrap 'X',
+    // shipperDate) which fall back to exactly their pre-bol-style-01 behavior.
+    const drawText = (text: unknown, coord: BolCoord, overrides: { fieldKey?: string; lineIdx?: number } = {}) => {
       if (!text && text !== 0) return;
+      const style = resolveStyle(overrides.fieldKey, overrides.lineIdx, coord);
       const o: {
         x: number;
         y: number;
@@ -655,37 +803,46 @@ export async function generatePdf(bolRecords: BolRecord[], opts: GeneratePdfOpti
         color: ReturnType<typeof rgb>;
         maxWidth?: number;
       } = {
-        x: overrides.x || coord.x,
-        y: overrides.y || coord.y,
-        size: overrides.size || coord.size || 10,
-        font: coord.bold || overrides.bold ? fontBold : font,
-        color: overrides.color || black,
+        x: coord.x,
+        y: coord.y,
+        size: style.size,
+        font: style.font,
+        color: black,
       };
-      if (overrides.maxWidth || coord.maxW) o.maxWidth = overrides.maxWidth || coord.maxW;
+      if (coord.maxW) o.maxWidth = coord.maxW;
       page.drawText(String(text), o);
+      if (style.underline) drawUnderline(String(text), o.x, o.y, style.size, style.font, black);
     };
 
-    const drawMultiline = (text: unknown, coord: BolCoord) => {
+    // Wraps per SOURCE line (text split on \n, BEFORE wrapping) so each source line can carry its
+    // own resolved style; a wrapped continuation inherits its source line's style. y advances by
+    // each output line's own resolved lineH (constant when no `_style` — same result as before).
+    const drawMultiline = (text: unknown, coord: BolCoord, fieldKey?: string) => {
       if (!text) return;
-      const size = coord.size || 10;
-      const lineH = coord.lineH || 12;
       const maxW = coord.maxW || 250;
-      const wrappedLines = wrapText(String(text), font, size, maxW);
-      wrappedLines.forEach((line, i) => {
-        const lineOpts: { x: number; y: number; size: number; font: PDFFont; color: ReturnType<typeof rgb>; maxWidth?: number } = {
-          x: coord.x,
-          y: coord.y - i * lineH,
-          size,
-          font,
-          color: black,
-        };
-        if (coord.center && line) {
-          const lineWidth = font.widthOfTextAtSize(line, size);
-          lineOpts.x = coord.x + (maxW - lineWidth) / 2;
-        } else {
-          lineOpts.maxWidth = maxW;
-        }
-        page.drawText(line, lineOpts);
+      const sourceLines = String(text).split("\n");
+      let y = coord.y;
+      sourceLines.forEach((srcLine, srcIdx) => {
+        const style = resolveStyle(fieldKey, srcIdx, coord);
+        const wrapped = wrapText(srcLine, style.font, style.size, maxW);
+        wrapped.forEach((line) => {
+          const lineOpts: { x: number; y: number; size: number; font: PDFFont; color: ReturnType<typeof rgb>; maxWidth?: number } = {
+            x: coord.x,
+            y,
+            size: style.size,
+            font: style.font,
+            color: black,
+          };
+          if (coord.center && line) {
+            const lineWidth = style.font.widthOfTextAtSize(line, style.size);
+            lineOpts.x = coord.x + (maxW - lineWidth) / 2;
+          } else {
+            lineOpts.maxWidth = maxW;
+          }
+          page.drawText(line, lineOpts);
+          if (style.underline && line) drawUnderline(line, lineOpts.x, y, style.size, style.font, black);
+          y -= style.lineH;
+        });
       });
     };
 
@@ -699,19 +856,38 @@ export async function generatePdf(bolRecords: BolRecord[], opts: GeneratePdfOpti
       return { ...coord, x: coord.x + (p.dx || 0), y: coord.y + (p.dy || 0) };
     };
 
+    // ── Text style overrides (bol-style-01, ported 1:1): render_overrides._style, resolved against
+    // real embedded fonts. `fieldKey` undefined (or absent from `_style`) resolves to exactly the
+    // pre-bol-style-01 default — see resolveFieldLineStyle. ──
+    const _style: Record<string, BolFieldStyle | undefined> = _ov._style || {};
+    const resolveStyle = (fieldKey: string | undefined, srcLineIdx: number | null | undefined, baseCoord: BolCoord) => {
+      const fieldStyle = fieldKey ? _style[fieldKey] : undefined;
+      const r = resolveFieldLineStyle(fieldStyle, srcLineIdx, baseCoord);
+      return { size: r.size, font: pickFont({ bold: r.bold, italic: r.italic }), underline: r.underline, lineH: r.lineH };
+    };
+    const drawUnderline = (text: string, x: number, y: number, size: number, drawFont: PDFFont, color: ReturnType<typeof rgb>) => {
+      const w = drawFont.widthOfTextAtSize(String(text), size);
+      const uy = y - Math.max(1, size * 0.12);
+      const thickness = Math.max(0.5, size * 0.06);
+      page.drawLine({ start: { x, y: uy }, end: { x: x + w, y: uy }, thickness, color });
+    };
+
     // ── Delivery time (bold red, top right; multiline-capable via override — P122) ──
+    // COORDS.deliveryTime has no literal `bold: true`, but this field always rendered bold before
+    // bol-style-01 — synthesize it as the resolver's base default so `bold: false` can now opt out.
     const _deliveryTimeVal =
       "deliveryTime" in _ov ? (Array.isArray(_ov.deliveryTime) ? _ov.deliveryTime.join("\n") : _ov.deliveryTime) : bol.delivery_time;
     if (_deliveryTimeVal) {
-      const _dc = off("deliveryTime", COORDS.deliveryTime);
-      const _dLines = wrapText(String(_deliveryTimeVal), fontBold, _dc.size as number, _dc.maxW || 200);
-      _dLines.forEach((line, i) => {
-        page.drawText(line, {
-          x: _dc.x,
-          y: _dc.y - i * (_dc.lineH || 28),
-          size: _dc.size,
-          font: fontBold,
-          color: rgb(1, 0, 0),
+      const _dc = off("deliveryTime", { ...COORDS.deliveryTime, bold: true });
+      const _dSourceLines = String(_deliveryTimeVal).split("\n");
+      let _dy = _dc.y;
+      _dSourceLines.forEach((srcLine, srcIdx) => {
+        const _dStyle = resolveStyle("deliveryTime", srcIdx, _dc);
+        const _dWrapped = wrapText(srcLine, _dStyle.font, _dStyle.size, _dc.maxW || 200);
+        _dWrapped.forEach((line) => {
+          page.drawText(line, { x: _dc.x, y: _dy, size: _dStyle.size, font: _dStyle.font, color: rgb(1, 0, 0) });
+          if (_dStyle.underline && line) drawUnderline(line, _dc.x, _dy, _dStyle.size, _dStyle.font, rgb(1, 0, 0));
+          _dy -= _dStyle.lineH;
         });
       });
     }
@@ -719,22 +895,23 @@ export async function generatePdf(bolRecords: BolRecord[], opts: GeneratePdfOpti
     // ── Standard fields ──
     const _rawDate = "date" in _ov ? _ov.date : bol.date;
     const _displayDate = "date" in _ov ? String(_rawDate) : formatBolDate(_rawDate);
-    drawText(_displayDate, off("date", COORDS.date));
-    drawText("bolNumber" in _ov ? _ov.bolNumber : String(bol.bol_number || ""), off("bolNumber", COORDS.bolNumber));
-    drawText("carrierName" in _ov ? _ov.carrierName : bol.carrier_name, off("carrierName", COORDS.carrierName));
-    drawText("trailerNo" in _ov ? _ov.trailerNo : bol.trailer_no, off("trailerNo", COORDS.trailerNo));
+    drawText(_displayDate, off("date", COORDS.date), { fieldKey: "date" });
+    drawText("bolNumber" in _ov ? _ov.bolNumber : String(bol.bol_number || ""), off("bolNumber", COORDS.bolNumber), { fieldKey: "bolNumber" });
+    drawText("carrierName" in _ov ? _ov.carrierName : bol.carrier_name, off("carrierName", COORDS.carrierName), { fieldKey: "carrierName" });
+    drawText("trailerNo" in _ov ? _ov.trailerNo : bol.trailer_no, off("trailerNo", COORDS.trailerNo), { fieldKey: "trailerNo" });
 
     // ── Ship-to address (up to 4 lines) ──
     const shipLines = Array.isArray(_ov.shipTo) ? _ov.shipTo : buildShipToLines(bol);
     const shipCoords = [COORDS.shipLine1, COORDS.shipLine2, COORDS.shipLine3, COORDS.shipLine4];
     shipLines.forEach((line, i) => {
-      if (shipCoords[i]) drawText(line, off("shipTo", shipCoords[i]));
+      if (shipCoords[i]) drawText(line, off("shipTo", shipCoords[i]), { fieldKey: "shipTo", lineIdx: i });
     });
 
     // ── Special Instructions ──
     drawMultiline(
       Array.isArray(_ov.specialInstr) ? _ov.specialInstr.join("\n") : bol.special_instructions,
-      off("specialInstr", COORDS.specialInstr)
+      off("specialInstr", COORDS.specialInstr),
+      "specialInstr"
     );
 
     // ── Contact Info ──
@@ -744,23 +921,25 @@ export async function generatePdf(bolRecords: BolRecord[], opts: GeneratePdfOpti
       ? _ov.contactInfo.join("\n")
       : bol.contact_info ||
         [bol.contact_name ? "POC: " + bol.contact_name : "", bol.contact_phone || ""].filter(Boolean).join(" ");
-    if (_contactVal) drawMultiline(_contactVal, off("contactInfo", COORDS.contactInfo));
+    if (_contactVal) drawMultiline(_contactVal, off("contactInfo", COORDS.contactInfo), "contactInfo");
 
     // ── PO / Invoice Number ──
     // Override arrives as literal lines — draw verbatim (no 'PO: ' prefix added).
-    // Default path: bold "PO:" label, regular PO number offset by the label width.
+    // Default path: bold "PO:" label, regular PO number offset by the label width. The `_style`
+    // box applies to the NUMBER portion only; the label stays bold but follows the box size.
     if (Array.isArray(_ov.poNumber)) {
       const _poVal = _ov.poNumber.join("\n");
-      if (_poVal) drawMultiline(_poVal, off("poNumber", COORDS.poNumber));
+      if (_poVal) drawMultiline(_poVal, off("poNumber", COORDS.poNumber), "poNumber");
     } else {
       const _poNum = bol.po_number || bol.poNumber || "";
       if (_poNum) {
         const _pc = off("poNumber", COORDS.poNumber);
-        const _poSize = _pc.size || 12;
+        const _poStyle = resolveStyle("poNumber", 0, _pc);
         const _poLabel = "PO:";
-        page.drawText(_poLabel, { x: _pc.x, y: _pc.y, size: _poSize, font: fontBold, color: black });
-        const _poLabelW = fontBold.widthOfTextAtSize(_poLabel + " ", _poSize);
-        page.drawText(String(_poNum), { x: _pc.x + _poLabelW, y: _pc.y, size: _poSize, font, color: black });
+        page.drawText(_poLabel, { x: _pc.x, y: _pc.y, size: _poStyle.size, font: fontBold, color: black });
+        const _poLabelW = fontBold.widthOfTextAtSize(_poLabel + " ", _poStyle.size);
+        page.drawText(String(_poNum), { x: _pc.x + _poLabelW, y: _pc.y, size: _poStyle.size, font: _poStyle.font, color: black });
+        if (_poStyle.underline) drawUnderline(String(_poNum), _pc.x + _poLabelW, _pc.y, _poStyle.size, _poStyle.font, black);
       }
     }
 
@@ -779,12 +958,23 @@ export async function generatePdf(bolRecords: BolRecord[], opts: GeneratePdfOpti
     if (_zc && _zcHasData) {
       const _zcColW = (COORDS.zoneColumns.maxW as number) / (COORDS.zoneColumns.cols as number);
       const _zcItems = _zc.items && _zc.items.length ? _zc.items : buildZoneColumns(_zc.zoneData, font).items;
-      _zcItems.forEach((item) => {
+      _zcItems.forEach((item, itemIdx) => {
+        // Styleable as `zoneCol<itemIdx>` (item index in zoneColumns.items). A box `size` REPLACES
+        // pickZoneColumnTier for this column, same rule as commodity vs pickCommodityTier below.
+        const _zcFieldKey = "zoneCol" + itemIdx;
         const _zcLines = String(item.text || "").split("\n");
-        const _zcTier = pickZoneColumnTier(_zcLines, font, _zcColW);
+        const _zcFieldStyle = _style[_zcFieldKey];
+        const _zcHasBoxSize = !!_zcFieldStyle && _zcFieldStyle.size != null;
+        const _zcTier = _zcHasBoxSize ? { size: 10, lineH: 12 } : pickZoneColumnTier(_zcLines, font, _zcColW);
+        const _zcBaseCoord: BolCoord = { x: 0, y: 0, size: _zcTier.size, lineH: _zcTier.lineH };
+        let _zcY = item.y;
         _zcLines.forEach((line, li) => {
-          if (!line) return;
-          page.drawText(line, { x: item.x, y: item.y - li * _zcTier.lineH, size: _zcTier.size, font, color: black });
+          const _zcStyle = resolveStyle(_zcFieldKey, li, _zcBaseCoord);
+          if (line) {
+            page.drawText(line, { x: item.x, y: _zcY, size: _zcStyle.size, font: _zcStyle.font, color: black });
+            if (_zcStyle.underline) drawUnderline(line, item.x, _zcY, _zcStyle.size, _zcStyle.font, black);
+          }
+          _zcY -= _zcStyle.lineH;
         });
       });
     } else {
@@ -794,8 +984,18 @@ export async function generatePdf(bolRecords: BolRecord[], opts: GeneratePdfOpti
         _commodityText = String(_commodityText).replace(/\(([^)]+)\)/g, "(Siplast $1)");
       }
       if (_commodityText) {
-        const _tier = pickCommodityTier(String(_commodityText), font);
-        drawMultiline(_commodityText, off("commodity", { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH }));
+        // A `_style.commodity` box `size` REPLACES pickCommodityTier entirely for this BOL;
+        // per-line sizes without a box size ride on top of the auto-picked tier.
+        const _commodityFieldStyle = _style.commodity;
+        const _commodityHasBoxSize = !!_commodityFieldStyle && _commodityFieldStyle.size != null;
+        let _commodityCoord: BolCoord;
+        if (_commodityHasBoxSize) {
+          _commodityCoord = { ...COORDS.commodity };
+        } else {
+          const _tier = pickCommodityTier(String(_commodityText), font);
+          _commodityCoord = { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH };
+        }
+        drawMultiline(_commodityText, off("commodity", _commodityCoord), "commodity");
       }
     }
 

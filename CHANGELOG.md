@@ -4703,6 +4703,68 @@ current series).
 
 ## Logistics
 
+- **bol-style-01 — Paired renderer: per-field + per-line text styling (logistics-agent, lead;
+  next-platform-agent, v2 parity mirror).** New `render_overrides._style` contract lets any BOL
+  field carry a box style (`{size,bold,italic,underline}`, box default) plus a `lines` map keyed by
+  SOURCE line index (text split on `\n`, before wrapping) for per-line overrides — precedence is
+  line → box → the field's existing COORD/tier default. Styleable: `date, bolNumber, carrierName,
+  trailerNo, shipTo, deliveryTime, specialInstr, contactInfo, poNumber, commodity, zoneCol0…N`
+  (zone columns keyed by item index in `zoneColumns.items`). NOT styleable: `scrap` (the X),
+  `qrCode`, `shipperSignature`, `shipperDate`. No migration — `render_overrides` already round-trips
+  as an opaque JSON blob in `routes/bols.js` (confirmed no key whitelist), so `_style` needed zero
+  backend change. Absent `_style` (every BOL before this) renders byte-for-byte identical to before
+  — verified by re-rendering the same unstyled record twice (deterministic) through both renderers
+  via a throwaway Node harness (`pdf-lib` itself, no browser needed) and by tracing every touched
+  code path back to its unconditional pre-change form when `_style` is empty. **Both files
+  identically:** embed the 4 Helvetica variants once per template doc (`font`, `fontBold`,
+  `fontItalic`, `fontBoldItalic`) behind a `pickFont({bold,italic})` helper; a new
+  `resolveFieldLineStyle(fieldStyle, srcLineIdx, baseCoord)` (pure, no font/page dependency) resolves
+  `{size,bold,italic,underline,lineH}` per source line — `size` clamps to `[6,36]`; `lineH` scales
+  as `round(baseCoord.lineH * size/baseSize)` when `baseCoord.lineH` exists, else `round(size*1.2)`;
+  a render-time `resolveStyle` wraps it with the real embedded fonts. `drawText`/`drawMultiline` now
+  take an optional field key (+ line index for `shipTo`); `drawMultiline` wraps per SOURCE line
+  (each output line keeps its source line's style; y advances by that line's own resolved `lineH` —
+  provably equivalent to the old whole-text wrap when styles are constant, since `wrapText` already
+  wraps per-paragraph internally). Underline: pdf-lib has none, so each styled draw call now also
+  draws a `page.drawLine` under the text at `y - max(1, size*0.12)`, thickness
+  `max(0.5, size*0.06)`, same color as the text (red for `deliveryTime`, which — despite having no
+  literal `bold:true` in `COORDS` — synthesizes `bold:true` as its resolver base so it keeps
+  rendering bold by default while still accepting `bold:false`); centered commodity lines underline
+  at the already-centered x. A `_style.commodity` (or `_style.zoneColN`) box `size` REPLACES
+  `pickCommodityTier`/`pickZoneColumnTier` entirely for that field — per-line sizes with no box size
+  still ride on top of the auto-picked tier, unchanged. `poNumber`'s bold `"PO:"` label follows the
+  box `size` but stays bold regardless of the number portion's style (spec: style applies to the
+  number only). New pure `measureStyledField(fieldKey, text, style) -> {lines,height,overflow}` for
+  the editors (bol-style-02/03) to warn with — never used by the render path itself, which never
+  clips. Two judgment calls made explicit here since neither existed before: (1) an approximate
+  Helvetica advance-width measurer (`0.5em` regular, `0.56em` bold) so `measureStyledField` stays a
+  synchronous pure function instead of spinning up a real pdf-lib font — the render path always
+  measures with the real font; this is a warning-only heuristic, not used for anything that could
+  clip. (2) a `FIELD_HEIGHT_BUDGET` per field (in PDF points) derived from the vertical gap to the
+  next field below in `COORDS`, except `commodity` (reuses `pickCommodityTier`'s own proven 216pt
+  ceiling — real data, not a guess) and `zoneCol0..N` (uses `COORDS.zoneColumns.colMaxH` directly —
+  also real data). `shipTo` overflows past its 4 fixed line slots (14pt gap each) rather than using
+  a height budget, since extra lines are silently dropped by the existing per-line-coord draw loop
+  (unchanged pre-existing behavior, not something this prompt fixes). Verified: `grep -Fc` == 1 on
+  every anchor before editing (both files); `node --check` on `bol-shared.js` via a named temp copy;
+  `tsc --noEmit` + `opennextjs-cloudflare build` (full `cf-build` pipeline: OpenNext build,
+  `fix-asset-prefix.mjs`, `copy-pdf-worker.mjs`) all green; extended `bolShared.selfcheck.ts` with
+  resolver precedence (line wins per-property over box, box fills what line doesn't set), the
+  `[6,36]` clamp at both ends, a stale/out-of-range `lines` key being silently ignored, and absent
+  `_style` being an exact no-op — all also executed directly (not just type-checked) via a Node
+  harness against the real `pdf-lib` package, all passing. Cross-checked both renderers actually
+  execute end-to-end (a real `BLANK_BOL_Xpanda.pdf` template, no browser): a box+per-line commodity
+  style (bold/italic/underline/size) and a zone-column style both render without throwing and
+  produce different bytes than the unstyled render, in both `bol-shared.js` (via an in-realm
+  `Function`-constructor shim exposing `window`/`fetch`/`PDFLib`/`qrcode`, since pdf-lib's internal
+  type checks reject cross-realm arrays from a `vm` sandbox) and `bolShared.ts` directly. Cache-bust
+  `?v=` bumped 317→318 on every `<script src="/logistics/bol-shared.js?v=...">` tag (`track/`,
+  `logistics/bol-email.html`, `jobs/index.html`, `logistics/bol-test.html`, `logistics/index.html`,
+  `logistics/load-builder.html`, `logistics/loading.html`) — `logistics/_archived/bol-generator.html`
+  intentionally untouched (archived, unversioned). First of three (`bol-style-02` legacy editor UI,
+  `bol-style-03` v2 editor UI depend on this landing first) — no editor UI in this prompt, resolver +
+  renderer only.
+
 - **lbz-bol-01 — Zoned BOL commodity columns, legacy side (logistics-agent).** Fourth prompt in
   the offload-zone series (depends on lbz-pack-01). Files touched: `logistics/bol-shared.js`,
   `logistics/bol-editor.js`, `logistics/bol-compose.js`, `logistics/load-builder.html` (BOL

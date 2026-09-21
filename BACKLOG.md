@@ -215,6 +215,15 @@
 
 ## Logistics (v2)
 
+- [ ] **bol-style-02 — legacy editor UI: style controls in `BolEditor` (`logistics/bol-editor.js`).**
+  Depends on `bol-style-01` (renderer + `_style` contract) already in the tree. Box/per-line size
+  (6–36 + Auto) / B / I / U toolbar, live overlay preview, amber overflow warning via
+  `BolShared.measureStyledField`, line-index integrity on insert/delete, prune-on-apply.
+- [ ] **bol-style-03 — v2 parity: style controls in `BolEditorModal`
+  (`cutting-pilot/src/components/logistics/BolEditorModal.tsx`).** Depends on `bol-style-01`. Same
+  behavior as `bol-style-02`, via a new reusable `TextStyleToolbar.tsx`; pure key-shifting/pruning
+  logic lives in `bolEditorEngine.ts`. Cross-check: a BOL styled in legacy opens in v2 with
+  identical styles, and vice versa.
 - [ ] **Shipment Dashboard Distance/ETA — extract shared geocode-cache orchestration if a 4th
   consumer appears.** `resolveOrigin`/`resolveDestRoute`-style cache read/write logic is now
   duplicated three times (`invoice/route.ts`, `invoice/resolve-line/route.ts`,

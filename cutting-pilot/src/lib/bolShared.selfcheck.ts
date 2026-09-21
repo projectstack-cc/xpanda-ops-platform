@@ -23,11 +23,14 @@ import {
   buildZoneColumnLines,
   buildZoneColumns,
   hashJobZoneData,
+  resolveFieldLineStyle,
+  measureStyledField,
   generatePdf,
   type WidthMeasurer,
   type BolRecord,
   type ZoneSegment,
   type JobZoneLineItem,
+  type BolFieldStyle,
 } from "./bolShared";
 
 interface CheckResult {
@@ -377,6 +380,92 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
     overflowResult.needsAttention === true && overflowResult.items.length === 1 && overflowResult.items[0].x === COORDS.zoneColumns.x,
     JSON.stringify({ needsAttention: overflowResult.needsAttention, x: overflowResult.items[0]?.x })
   );
+
+  // --- resolveFieldLineStyle (bol-style-01) ---
+  const SPECIAL_INSTR_COORD = { x: 315, y: 585, size: 9, lineH: 12, maxW: 255 };
+  const BOLD_DEFAULT_COORD = { x: 408, y: 690, size: 22, bold: true };
+
+  {
+    const r = resolveFieldLineStyle(undefined, 0, SPECIAL_INSTR_COORD);
+    check(
+      "resolveFieldLineStyle: absent _style is a no-op (exact pre-bol-style-01 defaults)",
+      r.size === 9 && r.bold === false && r.italic === false && r.underline === false && r.lineH === 12,
+      JSON.stringify(r)
+    );
+  }
+  {
+    const r = resolveFieldLineStyle(undefined, 0, BOLD_DEFAULT_COORD);
+    check(
+      "resolveFieldLineStyle: absent _style still honors the coord's own bold default (bolNumber/trailerNo/deliveryTime)",
+      r.bold === true,
+      JSON.stringify(r)
+    );
+  }
+  {
+    // Box sets bold+underline; line 1 overrides bold=false and sets italic — line wins per-property,
+    // box fills the rest (underline), default fills what neither sets (size stays box's 18).
+    const fieldStyle: BolFieldStyle = { size: 18, bold: true, underline: true, lines: { "1": { bold: false, italic: true } } };
+    const line0 = resolveFieldLineStyle(fieldStyle, 0, SPECIAL_INSTR_COORD);
+    const line1 = resolveFieldLineStyle(fieldStyle, 1, SPECIAL_INSTR_COORD);
+    check(
+      "resolveFieldLineStyle: precedence line -> box -> default — line 0 (no line override) takes the box style",
+      line0.size === 18 && line0.bold === true && line0.italic === false && line0.underline === true,
+      JSON.stringify(line0)
+    );
+    check(
+      "resolveFieldLineStyle: precedence line -> box -> default — line 1's bold/italic win over the box, its underline still falls through to the box",
+      line1.size === 18 && line1.bold === false && line1.italic === true && line1.underline === true,
+      JSON.stringify(line1)
+    );
+  }
+  {
+    const over = resolveFieldLineStyle({ size: 200 }, 0, SPECIAL_INSTR_COORD);
+    const under = resolveFieldLineStyle({ size: 1 }, 0, SPECIAL_INSTR_COORD);
+    check("resolveFieldLineStyle: size clamps to the [6,36] ceiling", over.size === 36, `got=${over.size}`);
+    check("resolveFieldLineStyle: size clamps to the [6,36] floor", under.size === 6, `got=${under.size}`);
+  }
+  {
+    // A stale line-index key (no source line at that index is ever resolved against it) is simply
+    // never looked up — the box style still applies untouched.
+    const fieldStyle: BolFieldStyle = { size: 14, lines: { "99": { size: 30 } } };
+    const r = resolveFieldLineStyle(fieldStyle, 0, SPECIAL_INSTR_COORD);
+    check(
+      "resolveFieldLineStyle: a stale/out-of-range line-index entry is ignored silently, box style still applies",
+      r.size === 14,
+      JSON.stringify(r)
+    );
+  }
+  {
+    // lineH scales with size relative to the base coord's own size/lineH ratio.
+    const r = resolveFieldLineStyle({ size: 18 }, 0, SPECIAL_INSTR_COORD); // base size 9, lineH 12
+    check("resolveFieldLineStyle: lineH scales proportionally with a box size override", r.lineH === 24, `got=${r.lineH}`);
+  }
+
+  // --- measureStyledField (bol-style-01) ---
+  check(
+    "measureStyledField: shipTo overflows past 4 source lines",
+    measureStyledField("shipTo", "a\nb\nc\nd\ne", undefined).overflow === true
+  );
+  check(
+    "measureStyledField: shipTo does not overflow at exactly 4 source lines",
+    measureStyledField("shipTo", "a\nb\nc\nd", undefined).overflow === false
+  );
+  check(
+    "measureStyledField: absent style on a short commodity string does not overflow",
+    measureStyledField("commodity", "Short text", undefined).overflow === false
+  );
+  check(
+    "measureStyledField: an oversized box style on a long commodity string overflows",
+    measureStyledField("commodity", nOneLineWords(1).repeat(20), { size: 36 }).overflow === true
+  );
+  check(
+    "measureStyledField: unknown fieldKey returns a zeroed, non-overflowing result",
+    JSON.stringify(measureStyledField("notAField", "text", undefined)) === JSON.stringify({ lines: 0, height: 0, overflow: false })
+  );
+  {
+    const zc = measureStyledField("zoneCol0", "line1\nline2", undefined);
+    check("measureStyledField: zoneCol0 uses COORDS.zoneColumns.colMaxH[0] (95pt) as its budget", zc.overflow === false, JSON.stringify(zc));
+  }
 
   return { pass: results.every((r) => r.pass), results };
 }
