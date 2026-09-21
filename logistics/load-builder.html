@@ -1044,11 +1044,16 @@ function calcLoading(cart, skus, dims, variant = 0, options = {}) {
 // reuses STORAGE_KEY. Truck assignment walks zones in ASCENDING delivery order
 // (offloadSeq): each zone's pieces fill the current truck's remaining length/weight
 // budget via calcLoading (given a length- and weight-truncated `dims`), and whatever
-// doesn't fit spills to a fresh truck. Rows accumulate left-to-right (door → nose,
-// posFromFront 0 = door per buildTopViewSVG's REAR/FRONT convention) in that same
-// ascending-seq order, so within a truck the LAST zone placed sits at the nose and the
-// FIRST-to-deliver zone sits at the doors — i.e. nose→door reads in DESCENDING delivery
-// order, per lbz-00-README's locked decision. Each row/stack is single-zone by
+// doesn't fit spills to a fresh truck. This shop's FRONT/REAR convention is the
+// OPPOSITE of standard trucking terms (confirmed with Steve): FRONT = the doors
+// (buildTopViewSVG draws FRONT at the high-posFromFront end), REAR = the far wall.
+// Rows accumulate left-to-right nose-first (low posFromFront) in ascending-seq order
+// purely so earlier-delivery zones keep first claim on truck LENGTH/WEIGHT budget and
+// preferentially land on Truck 1 — that assignment loop is untouched. Once a truck is
+// fully packed, `closeTruck()` reverses that truck's row order (and reflows
+// posFromFront from it) so the physical arrangement flips: the FIRST-to-deliver zone
+// ends up flush against the high-posFromFront/FRONT/doors end, and the LAST zone
+// placed ends up at the low-posFromFront/REAR end. Each row/stack is single-zone by
 // construction (no side-by-side zone sharing here — see BACKLOG).
 const ZONE_COLORS = ["#D97706","#2563EB","#059669","#7C3AED","#DC2626","#0891B2","#CA8A04","#BE123C","#4F46E5","#16A34A"];
 const MAX_ZONED_TRUCKS_PER_ZONE = 40; // safety guard against runaway loops, mirrors calcLoading's own 20-trailer cap
@@ -1084,7 +1089,17 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
   const trucks = [];
   let truck = { rows: [], usedLength: 0, usedWeight: 0 };
   function closeTruck() {
-    if (truck.rows.length) trucks.push(truck);
+    if (truck.rows.length) {
+      // lbz-pack-01 follow-up: flip this truck's physical arrangement so the FIRST-to-deliver
+      // zone ends up flush against the doors (FRONT label, high posFromFront) instead of the
+      // nose — see the file header comment above. Reversing array order (not just rewriting
+      // posFromFront in place) means compactTrailerRows/reflowRowGeometry and any future
+      // reflow of a saved load stay correct for free, since those derive position purely from
+      // row array order.
+      truck.rows.reverse();
+      reflowRowGeometry(truck.rows);
+      trucks.push(truck);
+    }
     truck = { rows: [], usedLength: 0, usedWeight: 0 };
   }
 
@@ -1299,13 +1314,14 @@ function migrateManualRowsZones(manualRowsByTrailer) {
 // Detects a manual-editor move that puts a later-delivery zone's stack door-side of an
 // earlier-delivery zone's stack. lbz-pack-02 §2: evaluated per COLUMN (not per row, since a
 // row can now hold stacks from more than one zone) walking door→nose — rows sorted by
-// posFromFront ascending, offloadSeq should be non-decreasing in that direction. Columns
+// posFromFront DESCENDING (this shop's FRONT/doors is the high-posFromFront end, per the
+// lbz-pack-01 header comment), offloadSeq should be non-decreasing in that direction. Columns
 // within the SAME row share the same door distance, so differing offloadSeqs side-by-side
 // in one row are expected (not a violation); only a LOWER offloadSeq appearing in a row
 // further from the door than a HIGHER one already seen is flagged. Warns only — never
 // blocks (lbz-pack-01 §4).
 function checkZoneOrderWarning(rows) {
-  const sortedRows = [...(rows || [])].sort((a, b) => (a.posFromFront || 0) - (b.posFromFront || 0));
+  const sortedRows = [...(rows || [])].sort((a, b) => (b.posFromFront || 0) - (a.posFromFront || 0));
   let maxSeqSoFar = -Infinity;
   for (const row of sortedRows) {
     const rowSeqs = (row.columns || [])

@@ -4714,6 +4714,55 @@ current series).
 
 ## Logistics
 
+- **lbz-pack-01 follow-up — offload zones were loading nose-first, backwards from the doors-first
+  convention this shop actually uses.** Steve reported the Load Builder trailer diagram had zones
+  "backwards." Confirmed with him directly (via a rendered-diagram comparison, not guesswork) that
+  this shop's FRONT/REAR terminology is the opposite of standard trucking usage: they call the
+  DOORS end "FRONT" (`buildTopViewSVG` already draws the FRONT label there, at the high-
+  `posFromFront` end) and the far wall "REAR." lbz-pack-01's original implementation packed
+  first-to-deliver zones starting at `posFromFront: 0` (the low end, this shop's REAR/nose) under
+  the standard-terminology assumption that `REAR` meant the doors — so Zone 1 was landing at the
+  wrong end of the trailer. Fix, scoped to `calcZonedLoading` in `logistics/load-builder.html`
+  only (no v2 counterpart — offload zones are a legacy-only feature, confirmed no equivalent exists
+  in `cutting-pilot`): truck ASSIGNMENT priority is untouched (zones still walk ascending
+  `offloadSeq` so earlier-delivery zones keep first claim on Truck 1, per lbz-00-README's "deliver-
+  first zones on Truck 1" rule) — only `closeTruck()` changed, reversing each truck's `rows` array
+  (then reflowing `posFromFront` from that order via the existing `reflowRowGeometry`) once that
+  truck is finalized, so the first-to-deliver zone now lands nearest the high-`posFromFront`/FRONT/
+  doors end instead of the low end. Note this is "nearest," not literally flush: `reflowRowGeometry`
+  still lays rows out starting from `posFromFront: 0`, so on an underfilled truck the leftover
+  trailer length now sits at the high end too — Zone 1 is the last row placed and ends at
+  `usedLength`, short of the doors by however much space is unused, not welded against the door
+  wall. Reversing the array (not just rewriting `posFromFront` in place) means `compactTrailerRows`/
+  manual-customize reflows stay correct for free, since those derive position purely from row order
+  — with one caveat: a load that was manually customized (via `manualRowsByTrailer`) *before* this
+  fix shipped has its row order baked into saved state, and `migrateManualRowsZones` only backfills
+  `zoneLabel`/`offloadSeq`/`zoneColor` onto columns, not row order — so a pre-fix manually-edited
+  load will keep rendering in the old nose-first order (and will now spuriously trip the flipped
+  `checkZoneOrderWarning`) until it's re-customized or its manual overrides are cleared. Freshly
+  auto-packed loads are unaffected — `getResult()` always re-runs `calcZonedLoading` from the cart,
+  never replays stored auto-packed geometry. `checkZoneOrderWarning` (the customize-mode manual-move
+  warning) had its sort direction flipped to match (was ascending `posFromFront` = door→nose under
+  the old assumption; now descending = door→nose under the corrected one) — same algorithm,
+  one-line change. Verified with a live harness against the actual edited functions (not just
+  read): a 2-zone single-truck case now places Zone 1 nearest the high-`posFromFront`/doors end
+  exactly as Steve confirmed against a rendered-diagram comparison; a 3-zone multi-truck case with
+  an oversized Zone 1 confirmed truck-assignment priority is unchanged (Zone 1 still fills Trucks
+  1–2 before Zone 2/3 ever place); `checkZoneOrderWarning` correctly stays silent on a fresh
+  correctly-ordered load and correctly fires when a swap is simulated. Also specifically checked a
+  pre-existing ~48-unit `startX`/`endX` overlap in `buildZoneSegmentsFromRows`'s output on a
+  gap-filled shared row (band-clamp behavior in `buildTopViewSVG`, not new) — ran the same 3-zone
+  case through the pre-fix code for comparison and confirmed the overlap is the same magnitude both
+  before and after, just mirrored to the other boundary along with the row order, so this fix
+  doesn't change that pre-existing quirk. `node --check` on the extracted inline script is green.
+  BOL zone columns (`bol-shared.js`/`bolShared.ts`) and `buildZoneSegmentsFromRows`'s `zoneSegments`
+  output are code-untouched — both are driven purely by `offloadSeq` semantics, never by
+  `posFromFront` — but their *truth value* changes with this fix: the `*unload 1st*` stamp and the
+  "Load order (nose→door)" print legend were describing the wrong physical arrangement before today
+  (the zone marked unload-first was physically at the far end from the doors) and now describe the
+  corrected one. Same text, same code, but it was wrong on the printed BOL before this fix and is
+  right after it.
+
 - **bol-style-02/03 follow-up — style toolbar no longer covers the field it's editing.** Steve
   reported the toolbar sat directly over the box being styled, making it hard to click a specific
   line for a per-line ("This line") edit. Root cause: both `positionToolbar()` (legacy
