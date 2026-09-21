@@ -210,6 +210,331 @@ window.BolEditor = (function () {
       if (_savedPos[_k]) posOverrides[_k] = { dx: _savedPos[_k].dx || 0, dy: _savedPos[_k].dy || 0 };
     }
 
+    // ── Text style overrides (bol-style-02) — working copy seeded from bol._overrides._style,
+    // mirroring how _savedPos seeds posOverrides above. fieldKey -> {size?,bold?,italic?,underline?,
+    // lines?: {srcLineIdx: {...}}}. `zoneCol0`, `zoneCol1`, … key the zone-column boxes by item
+    // index (there's no FIELD_MAP entry for them individually — see the zone-columns section). ──
+    const _savedStyle = (bol._overrides && bol._overrides._style) || {};
+    const styleOverrides = {};
+    for (const _fk in _savedStyle) {
+      if (_savedStyle[_fk]) styleOverrides[_fk] = JSON.parse(JSON.stringify(_savedStyle[_fk]));
+    }
+    const prevLines = {}; // fieldKey -> source lines array as of the last input event (line-index integrity)
+    const previewEls = {}; // fieldKey -> the meta strip (warning + per-line preview) below the field
+    let activeFieldKey = null;
+    let activeScope = 'box'; // 'box' | 'line' — user-controlled per toolbar session
+
+    // Base coord used only for size clamping/defaults display — not render geometry.
+    function baseCoordForField(fieldKey) {
+      if (/^zoneCol\d+$/.test(fieldKey)) return { size: ZC_PREVIEW_SIZE, lineH: ZC_PREVIEW_LINEH };
+      const field = BolShared.FIELD_MAP.find(f => f.overrideKey === fieldKey);
+      if (!field) return { size: 10, lineH: 12 };
+      if (field.type === 'shipto') return field.coords[0];
+      return field.coord;
+    }
+    function fieldSupportsLines(fieldKey) {
+      if (/^zoneCol\d+$/.test(fieldKey)) return true;
+      const field = BolShared.FIELD_MAP.find(f => f.overrideKey === fieldKey);
+      return !!field && (field.type === 'multiline' || field.type === 'shipto');
+    }
+    function currentTextValue(fieldKey) {
+      if (/^zoneCol\d+$/.test(fieldKey)) {
+        const idx = parseInt(fieldKey.slice(7), 10);
+        return (zcInputEls[idx] && zcInputEls[idx].value) || '';
+      }
+      const el = inputEls[fieldKey];
+      return el ? String(el.value != null ? el.value : '') : '';
+    }
+    function fieldElFor(fieldKey) {
+      if (/^zoneCol\d+$/.test(fieldKey)) {
+        const idx = parseInt(fieldKey.slice(7), 10);
+        return zcInputEls[idx] || null;
+      }
+      return inputEls[fieldKey] || null;
+    }
+    function caretLineIndex(el) {
+      if (!el || typeof el.selectionStart !== 'number') return 0;
+      const before = el.value.slice(0, el.selectionStart);
+      return before.split('\n').length - 1;
+    }
+
+    // Line-index integrity (bol-style-02 §5): when lines are inserted/deleted in a field, shift
+    // that field's `lines` map keys so overrides stay on the same text line; drop entries whose
+    // line was removed. Assumes a single contiguous insert/delete region (true for normal typing).
+    function shiftLineKeys(fieldKey, oldLines, newLines) {
+      const fs = styleOverrides[fieldKey];
+      if (!fs || !fs.lines || !Object.keys(fs.lines).length) return;
+      const oldLen = oldLines.length, newLen = newLines.length;
+      if (oldLen === newLen) return;
+      let start = 0;
+      while (start < Math.min(oldLen, newLen) && oldLines[start] === newLines[start]) start++;
+      let oldEnd = oldLen - 1, newEnd = newLen - 1;
+      while (oldEnd >= start && newEnd >= start && oldLines[oldEnd] === newLines[newEnd]) { oldEnd--; newEnd--; }
+      const delta = newLen - oldLen;
+      const shifted = {};
+      for (const key in fs.lines) {
+        const idx = parseInt(key, 10);
+        if (idx < start) shifted[key] = fs.lines[key];
+        else if (idx > oldEnd) shifted[String(idx + delta)] = fs.lines[key];
+        // idx within [start, oldEnd] -> its line was replaced/removed; drop the override
+      }
+      fs.lines = shifted;
+    }
+
+    // ── Style toolbar (bol-style-02): one shared floating panel, shown near whichever styleable
+    // field is currently active. Box | This line scope switch (multiline-capable fields only),
+    // size stepper (6–36 + Auto), B/I/U toggles, Reset field. Touch targets ≥44px, tokens only. ──
+
+    const toolbar = document.createElement('div');
+    toolbar.style.cssText = 'position:absolute;display:none;align-items:center;gap:6px;padding:6px;'
+      + 'border-radius:10px;background:var(--card-bg,#fff);border:1px solid var(--border,#d1d5db);'
+      + 'box-shadow:0 4px 16px rgba(0,0,0,0.22);z-index:30;flex-wrap:wrap;max-width:320px;';
+    canvasWrap.appendChild(toolbar);
+
+    const scopeWrap = document.createElement('div');
+    scopeWrap.style.cssText = 'display:flex;gap:2px;';
+    const boxScopeBtn = document.createElement('button');
+    const lineScopeBtn = document.createElement('button');
+    [[boxScopeBtn, 'Box', 'box'], [lineScopeBtn, 'Line', 'line']].forEach(([btn, label, scope]) => {
+      btn.type = 'button';
+      btn.textContent = label;
+      btn.style.cssText = 'min-height:44px;padding:4px 10px;border-radius:6px;border:1px solid var(--border,#d1d5db);'
+        + 'cursor:pointer;font-size:12px;font-weight:600;background:var(--card-bg,#fff);color:var(--text,#111827);';
+      btn.addEventListener('mousedown', (e) => e.preventDefault()); // keep focus on the input
+      btn.addEventListener('click', () => { activeScope = scope; refreshToolbar(); });
+      scopeWrap.appendChild(btn);
+    });
+    toolbar.appendChild(scopeWrap);
+
+    const sizeWrap = document.createElement('div');
+    sizeWrap.style.cssText = 'display:flex;align-items:center;gap:2px;';
+    const sizeMinusBtn = document.createElement('button');
+    const sizeValueEl = document.createElement('span');
+    const sizePlusBtn = document.createElement('button');
+    const autoBtn = document.createElement('button');
+    [sizeMinusBtn, sizePlusBtn, autoBtn].forEach(btn => {
+      btn.type = 'button';
+      btn.style.cssText = 'min-width:44px;min-height:44px;border-radius:6px;border:1px solid var(--border,#d1d5db);'
+        + 'cursor:pointer;font-size:14px;font-weight:700;background:var(--card-bg,#fff);color:var(--text,#111827);';
+      btn.addEventListener('mousedown', (e) => e.preventDefault());
+    });
+    sizeMinusBtn.textContent = '−';
+    sizePlusBtn.textContent = '+';
+    autoBtn.textContent = 'Auto';
+    autoBtn.style.minWidth = '52px';
+    autoBtn.title = 'Reset size to the box default';
+    sizeValueEl.style.cssText = 'min-width:28px;text-align:center;font-size:13px;font-weight:600;color:var(--text,#111827);';
+    sizeMinusBtn.addEventListener('click', () => stepSize(-1));
+    sizePlusBtn.addEventListener('click', () => stepSize(1));
+    autoBtn.addEventListener('click', () => { setStyleProp('size', undefined); });
+    sizeWrap.appendChild(sizeMinusBtn); sizeWrap.appendChild(sizeValueEl); sizeWrap.appendChild(sizePlusBtn); sizeWrap.appendChild(autoBtn);
+    toolbar.appendChild(sizeWrap);
+
+    const bibuWrap = document.createElement('div');
+    bibuWrap.style.cssText = 'display:flex;gap:2px;';
+    const boldBtn = document.createElement('button');
+    const italicBtn = document.createElement('button');
+    const underlineBtn = document.createElement('button');
+    [[boldBtn, 'B', 'bold', 'font-weight:800;'], [italicBtn, 'I', 'italic', 'font-style:italic;'], [underlineBtn, 'U', 'underline', 'text-decoration:underline;']]
+      .forEach(([btn, label, prop, extraCss]) => {
+        btn.type = 'button';
+        btn.textContent = label;
+        btn.style.cssText = 'min-width:44px;min-height:44px;border-radius:6px;border:1px solid var(--border,#d1d5db);'
+          + 'cursor:pointer;font-size:14px;background:var(--card-bg,#fff);color:var(--text,#111827);' + extraCss;
+        btn.addEventListener('mousedown', (e) => e.preventDefault());
+        btn.addEventListener('click', () => {
+          const cur = getEffectiveStyleValue(prop);
+          setStyleProp(prop, !cur);
+        });
+        bibuWrap.appendChild(btn);
+      });
+    toolbar.appendChild(bibuWrap);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.textContent = 'Reset field';
+    resetBtn.style.cssText = 'min-height:44px;padding:4px 10px;border-radius:6px;border:1px solid var(--border,#d1d5db);'
+      + 'cursor:pointer;font-size:12px;font-weight:600;background:var(--card-bg,#fff);color:var(--text,#111827);';
+    resetBtn.addEventListener('mousedown', (e) => e.preventDefault());
+    resetBtn.addEventListener('click', () => {
+      if (!activeFieldKey) return;
+      delete styleOverrides[activeFieldKey];
+      refreshToolbar();
+      updateFieldVisual(activeFieldKey);
+    });
+    toolbar.appendChild(resetBtn);
+
+    // `undefined` clears the property (falls through to the next precedence level).
+    function setStyleProp(prop, value) {
+      if (!activeFieldKey) return;
+      const fk = activeFieldKey;
+      if (!styleOverrides[fk]) styleOverrides[fk] = {};
+      const fs = styleOverrides[fk];
+      let target = fs;
+      if (activeScope === 'line' && fieldSupportsLines(fk)) {
+        const li = caretLineIndex(fieldElFor(fk));
+        if (!fs.lines) fs.lines = {};
+        if (!fs.lines[String(li)]) fs.lines[String(li)] = {};
+        target = fs.lines[String(li)];
+      }
+      if (value === undefined) delete target[prop];
+      else target[prop] = value;
+      // Prune empty containers so an all-cleared field doesn't linger as {}.
+      if (activeScope === 'line' && fs.lines) {
+        const li = caretLineIndex(fieldElFor(fk));
+        if (fs.lines[String(li)] && Object.keys(fs.lines[String(li)]).length === 0) delete fs.lines[String(li)];
+        if (Object.keys(fs.lines).length === 0) delete fs.lines;
+      }
+      if (Object.keys(fs).length === 0) delete styleOverrides[fk];
+      refreshToolbar();
+      updateFieldVisual(fk);
+    }
+
+    function stepSize(delta) {
+      if (!activeFieldKey) return;
+      const baseCoord = baseCoordForField(activeFieldKey);
+      const cur = getEffectiveStyleValue('size');
+      const base = cur != null ? cur : (baseCoord.size || 10);
+      const next = Math.max(6, Math.min(36, Math.round(base) + delta));
+      setStyleProp('size', next);
+    }
+
+    // Reads the CURRENTLY EDITED scope's raw value for `prop` (box or the active caret line) —
+    // undefined means "not set at this scope", used to decide toggle state / Auto vs explicit size.
+    function getEffectiveStyleValue(prop) {
+      if (!activeFieldKey) return undefined;
+      const fs = styleOverrides[activeFieldKey];
+      if (!fs) return undefined;
+      if (activeScope === 'line' && fieldSupportsLines(activeFieldKey)) {
+        const li = caretLineIndex(fieldElFor(activeFieldKey));
+        const ls = fs.lines && fs.lines[String(li)];
+        return ls ? ls[prop] : undefined;
+      }
+      return fs[prop];
+    }
+
+    function refreshToolbar() {
+      if (!activeFieldKey) { toolbar.style.display = 'none'; return; }
+      const supportsLines = fieldSupportsLines(activeFieldKey);
+      scopeWrap.style.display = supportsLines ? 'flex' : 'none';
+      if (!supportsLines) activeScope = 'box';
+      [boxScopeBtn, lineScopeBtn].forEach((btn, i) => {
+        const on = (i === 0 ? 'box' : 'line') === activeScope;
+        btn.style.background = on ? '#1e293b' : 'var(--card-bg,#fff)';
+        btn.style.color = on ? '#fff' : 'var(--text,#111827)';
+      });
+      const baseCoord = baseCoordForField(activeFieldKey);
+      const sizeVal = getEffectiveStyleValue('size');
+      sizeValueEl.textContent = sizeVal != null ? String(sizeVal) : 'Auto(' + (baseCoord.size || 10) + ')';
+      [[boldBtn, 'bold'], [italicBtn, 'italic'], [underlineBtn, 'underline']].forEach(([btn, prop]) => {
+        const on = !!getEffectiveStyleValue(prop);
+        btn.style.background = on ? '#1e293b' : 'var(--card-bg,#fff)';
+        btn.style.color = on ? '#fff' : 'var(--text,#111827)';
+      });
+      positionToolbar();
+    }
+
+    function positionToolbar() {
+      const el = fieldElFor(activeFieldKey);
+      if (!el) { toolbar.style.display = 'none'; return; }
+      toolbar.style.display = 'flex';
+      const left = parseFloat(el.style.left) || 0;
+      const top = parseFloat(el.style.top) || 0;
+      toolbar.style.left = Math.max(0, left) + 'px';
+      toolbar.style.top = Math.max(0, top - 48) + 'px';
+    }
+
+    function activateField(fieldKey) {
+      activeFieldKey = fieldKey;
+      refreshToolbar();
+    }
+    function deactivateFieldIfMatches(fieldKey) {
+      // A short delay lets a toolbar button's click land before the input's blur would hide it —
+      // the buttons themselves call preventDefault() on mousedown, so focus never actually leaves.
+      setTimeout(() => { if (activeFieldKey === fieldKey && document.activeElement !== fieldElFor(fieldKey)) { activeFieldKey = null; toolbar.style.display = 'none'; } }, 0);
+    }
+
+    // ── Live style visuals: box CSS on the field itself, plus a thin per-line preview + overflow
+    // warning strip beneath multiline-capable fields (a <textarea> can't show mixed per-line
+    // styles inline — bol-style-02 §3). ──
+
+    function applyBoxCssToEl(el, fieldKey, s) {
+      const fs = styleOverrides[fieldKey];
+      const baseCoord = baseCoordForField(fieldKey);
+      const r = BolShared.resolveFieldLineStyle(fs, null, baseCoord);
+      el.style.fontSize = (r.size * s) + 'px';
+      el.style.fontWeight = r.bold ? '700' : '400';
+      el.style.fontStyle = r.italic ? 'italic' : 'normal';
+      el.style.textDecoration = r.underline ? 'underline' : 'none';
+    }
+
+    function ensurePreviewEl(fieldKey) {
+      if (previewEls[fieldKey]) return previewEls[fieldKey];
+      const el = document.createElement('div');
+      el.style.cssText = 'position:absolute;display:none;pointer-events:none;font-family:Helvetica,Arial,sans-serif;'
+        + 'line-height:1.3;z-index:4;';
+      canvasWrap.appendChild(el);
+      previewEls[fieldKey] = el;
+      return el;
+    }
+
+    function updateFieldVisual(fieldKey) {
+      const el = fieldElFor(fieldKey);
+      if (!el) return;
+      const s = _scale || 1;
+      applyBoxCssToEl(el, fieldKey, s);
+
+      if (!fieldSupportsLines(fieldKey)) return;
+      const fs = styleOverrides[fieldKey];
+      const baseCoord = baseCoordForField(fieldKey);
+      const text = currentTextValue(fieldKey);
+      const sourceLines = text.split('\n');
+      const hasLineOverrides = !!(fs && fs.lines && Object.keys(fs.lines).length);
+      const measured = BolShared.measureStyledField(fieldKey, text, fs);
+
+      const preview = ensurePreviewEl(fieldKey);
+      preview.innerHTML = '';
+      let showPreview = false;
+
+      if (measured.overflow) {
+        const warn = document.createElement('div');
+        warn.textContent = '⚠ May overflow the box';
+        warn.style.cssText = 'color:#92400e;background:#fef3c7;border:1px solid #f59e0b;border-radius:4px;'
+          + 'padding:1px 4px;font-size:11px;font-weight:700;margin-bottom:2px;display:inline-block;';
+        preview.appendChild(warn);
+        showPreview = true;
+        el.style.boxShadow = '0 0 0 2px #f59e0b';
+      } else {
+        el.style.boxShadow = 'none';
+      }
+
+      if (hasLineOverrides) {
+        showPreview = true;
+        const strip = document.createElement('div');
+        sourceLines.forEach((line, idx) => {
+          const row = document.createElement('div');
+          const hasOverride = !!(fs.lines && fs.lines[String(idx)]);
+          const dot = document.createElement('span');
+          dot.textContent = hasOverride ? '●' : ' ';
+          dot.style.cssText = 'display:inline-block;width:10px;color:var(--muted,#4b5563);font-size:9px;';
+          const r = BolShared.resolveFieldLineStyle(fs, idx, baseCoord);
+          const span = document.createElement('span');
+          span.textContent = line || ' ';
+          span.style.cssText = 'font-size:' + Math.max(8, r.size * s * 0.7) + 'px;'
+            + 'font-weight:' + (r.bold ? '700' : '400') + ';'
+            + 'font-style:' + (r.italic ? 'italic' : 'normal') + ';'
+            + 'text-decoration:' + (r.underline ? 'underline' : 'none') + ';'
+            + 'color:var(--muted,#4b5563);';
+          row.appendChild(dot);
+          row.appendChild(span);
+          strip.appendChild(row);
+        });
+        preview.appendChild(strip);
+      }
+
+      preview.style.display = showPreview ? 'block' : 'none';
+    }
+
     // lbz-bol-01: zone columns are N boxes (one per zone), not the FIELD_MAP's 1-per-field model,
     // so their data is read here (sync) and their DOM/positioning is built separately below — see
     // the two `continue`s in the loop right after this. `zcZoneData` also gates skipping the
@@ -253,6 +578,23 @@ window.BolEditor = (function () {
 
       inputEls[k] = el;
       canvasWrap.appendChild(el);
+
+      // bol-style-02: 'scrap' is NOT styleable (spec) — every other field gets the toolbar +
+      // live style visuals + line-index-integrity tracking on its input/textarea.
+      if (field.type !== 'scrap') {
+        prevLines[k] = currentTextValue(k).split('\n');
+        el.addEventListener('focus', () => activateField(k));
+        el.addEventListener('blur', () => deactivateFieldIfMatches(k));
+        el.addEventListener('click', () => { if (activeFieldKey === k) refreshToolbar(); });
+        el.addEventListener('keyup', () => { if (activeFieldKey === k) refreshToolbar(); });
+        el.addEventListener('input', () => {
+          const newLines = el.value.split('\n');
+          shiftLineKeys(k, prevLines[k], newLines);
+          prevLines[k] = newLines;
+          updateFieldVisual(k);
+          if (activeFieldKey === k) refreshToolbar();
+        });
+      }
 
       // P122: per-field drag handle (drag to move; double-click to reset position)
       const handle = document.createElement('div');
@@ -404,7 +746,24 @@ window.BolEditor = (function () {
           _handle.style.left = Math.max(0, _hx - 2) + 'px';
           _handle.style.top  = Math.max(0, _hy - 18) + 'px';
         }
+
+        // bol-style-02: box CSS (size/weight/style/underline) + the per-line preview/overflow strip.
+        if (field.type !== 'scrap') {
+          updateFieldVisual(k);
+          positionPreview(k, s);
+        }
       }
+      if (activeFieldKey) refreshToolbar();
+    }
+
+    function positionPreview(fieldKey, s) {
+      if (!fieldSupportsLines(fieldKey)) return;
+      const el = fieldElFor(fieldKey);
+      const preview = previewEls[fieldKey];
+      if (!el || !preview) return;
+      preview.style.left  = el.style.left;
+      preview.style.top   = (parseFloat(el.style.top) + parseFloat(el.style.height) + 2) + 'px';
+      preview.style.width = el.style.width;
     }
 
     // ── Zone columns (lbz-bol-01) ──────────────────────────────────────────
@@ -466,11 +825,22 @@ window.BolEditor = (function () {
         el.value = item.text;
         el.title = item.label || '';
         el.style.cssText = 'position:absolute;box-sizing:border-box;background:rgba(255,255,255,0.88);border:1.5px solid var(--border,#d1d5db);border-radius:4px;padding:2px 4px;font-family:Helvetica,Arial,sans-serif;color:var(--text,#111827);resize:none;overflow:hidden;';
+        const fieldKey = 'zoneCol' + idx;
+        prevLines[fieldKey] = item.text.split('\n');
         el.addEventListener('input', function () {
           zcItems[idx].text = this.value;
           this.style.height = 'auto';
           this.style.height = this.scrollHeight + 'px';
+          const newLines = this.value.split('\n');
+          shiftLineKeys(fieldKey, prevLines[fieldKey], newLines);
+          prevLines[fieldKey] = newLines;
+          updateFieldVisual(fieldKey);
+          if (activeFieldKey === fieldKey) refreshToolbar();
         });
+        el.addEventListener('focus', () => activateField(fieldKey));
+        el.addEventListener('blur', () => deactivateFieldIfMatches(fieldKey));
+        el.addEventListener('click', () => { if (activeFieldKey === fieldKey) refreshToolbar(); });
+        el.addEventListener('keyup', () => { if (activeFieldKey === fieldKey) refreshToolbar(); });
         canvasWrap.appendChild(el);
         zcInputEls.push(el);
 
@@ -502,7 +872,11 @@ window.BolEditor = (function () {
           handle.style.left = Math.max(0, parseFloat(el.style.left) - 2) + 'px';
           handle.style.top  = Math.max(0, parseFloat(el.style.top) - 18) + 'px';
         }
+        const fieldKey = 'zoneCol' + idx;
+        updateFieldVisual(fieldKey);
+        positionPreview(fieldKey, s);
       });
+      if (activeFieldKey && /^zoneCol\d+$/.test(activeFieldKey)) refreshToolbar();
     }
 
     // Stale guard (§4): compares the job's CURRENT zone assignment against sourceHash. Fails
@@ -606,6 +980,36 @@ window.BolEditor = (function () {
         if (pv && (pv.dx || pv.dy)) _posOut[pk] = { dx: pv.dx, dy: pv.dy };
       }
       if (Object.keys(_posOut).length > 0) overrides._pos = _posOut;
+
+      // bol-style-02: prune empty style objects and write overrides._style only if non-empty, next
+      // to _pos. Deliberately its OWN pass (not gated by any field's text-unchanged check above) —
+      // a style survives even when the field's text reverts to its base value.
+      const _styleOut = {};
+      for (const _fk in styleOverrides) {
+        const _fs = styleOverrides[_fk];
+        if (!_fs) continue;
+        const _out = {};
+        if (_fs.size != null) _out.size = _fs.size;
+        if (_fs.bold != null) _out.bold = _fs.bold;
+        if (_fs.italic != null) _out.italic = _fs.italic;
+        if (_fs.underline != null) _out.underline = _fs.underline;
+        if (_fs.lines) {
+          const _linesOut = {};
+          for (const _li in _fs.lines) {
+            const _l = _fs.lines[_li];
+            if (!_l) continue;
+            const _lo = {};
+            if (_l.size != null) _lo.size = _l.size;
+            if (_l.bold != null) _lo.bold = _l.bold;
+            if (_l.italic != null) _lo.italic = _l.italic;
+            if (_l.underline != null) _lo.underline = _l.underline;
+            if (Object.keys(_lo).length) _linesOut[_li] = _lo;
+          }
+          if (Object.keys(_linesOut).length) _out.lines = _linesOut;
+        }
+        if (Object.keys(_out).length) _styleOut[_fk] = _out;
+      }
+      if (Object.keys(_styleOut).length > 0) overrides._style = _styleOut;
 
       // lbz-bol-01: persist the WHOLE zoneColumns container (items + zoneData + sourceHash) —
       // Apply replaces `overrides` wholesale (see below), so omitting zoneData/sourceHash here

@@ -4703,6 +4703,59 @@ current series).
 
 ## Logistics
 
+- **bol-style-02 — Legacy editor UI: style controls in `BolEditor` (logistics-agent).** Depends on
+  `bol-style-01` (renderer + `_style` contract). Scope: `logistics/bol-editor.js` only — no changes
+  to `bol-compose.js`, `_archived/bol-generator.html`, or the renderer. A working copy
+  (`styleOverrides`, `fieldKey -> {size?,bold?,italic?,underline?,lines?}`) is seeded from
+  `bol._overrides._style` on open, mirroring exactly how `_savedPos` seeds `posOverrides`. **One
+  shared floating toolbar** (not per-field — avoids cluttering the canvas with N idle toolbars),
+  shown near whichever styleable input/textarea currently has focus (`activate­Field`/
+  `deactivateFieldIfMatches`, the blur-hide delayed via `setTimeout` + each toolbar button's
+  `mousedown` `preventDefault()` so a click never steals focus first): size stepper (−/value/+, step
+  1, clamp 6–36 via the same clamp `resolveFieldLineStyle` enforces, "Auto" clears the override
+  back to the field's default) / **B** / *I* / U toggles / "Reset field" (deletes the field's whole
+  `styleOverrides` entry). Touch targets are all ≥44px (`min-width`/`min-height` on every button),
+  tokens only (`var(--card-bg,#fff)` etc.), no hex outside the amber overflow accent. Multiline
+  fields (`multiline`/`shipto` types) and zone-column boxes (`zoneCol0…N`, keyed by item index —
+  `fieldSupportsLines()`) additionally show a **Box | Line** scope switch; "Line" targets the
+  source line under the caret (`caretLineIndex` = count of `\n` before `selectionStart`, tracked
+  live via `focus`/`click`/`keyup` on the field re-syncing the toolbar's displayed values —
+  `getEffectiveStyleValue` reads box vs. the active caret line depending on scope). **Live
+  preview**: `updateFieldVisual` applies the field's resolved BOX style directly as CSS
+  (`font-size`/`font-weight`/`font-style`/`text-decoration`, scaled by the same PDF-pt→px `_scale`
+  factor `positionAll`/`positionZc` already use) onto the actual input/textarea — single-value
+  fields (date/bolNumber/carrierName/trailerNo) are now fully represented this way, since they have
+  no concept of "lines." Multiline-capable fields ALSO get a small preview strip appended below the
+  field (`ensurePreviewEl`, absolutely positioned in `positionPreview` right under the field's
+  box) — a `<textarea>` can't show mixed per-line styles inline, so each source line renders as its
+  own resolved-style span (`BolShared.resolveFieldLineStyle(fs, idx, baseCoord)` per line) with a
+  small `●` left-gutter marker on lines carrying an override, `·` otherwise. **Overflow warning**:
+  `BolShared.measureStyledField(fieldKey, text, style)` on every input/style change; `overflow` →
+  amber `box-shadow` outline on the field plus a one-line `⚠ May overflow the box` message
+  prepended to its preview strip — warns, never blocks Apply (identical language/behavior to
+  `bol-shared.js`'s "never clip" render-side guarantee). **Line-index integrity**: `shiftLineKeys`
+  diffs the field's previous vs. new source-line arrays (common prefix from the top, common suffix
+  from the bottom — the region between is what changed) on every `input` event and shifts/drops
+  `styleOverrides[fieldKey].lines` keys so an override stays pinned to the same TEXT, not the same
+  numeric slot; assumes one contiguous insert/delete region per keystroke, which covers ordinary
+  typing (Enter/Backspace) — matches how the render side already defines "source line" (text split
+  on `\n`, before wrapping). **Save**: on Apply, a dedicated pass (anchored right after
+  `if (Object.keys(_posOut).length > 0) overrides._pos = _posOut;`, same pattern as that block)
+  prunes every empty `{}`/`lines` container out of `styleOverrides` and writes `overrides._style`
+  only if non-empty — deliberately its OWN pass, not gated by any field's "text changed from base"
+  check above it, so a style survives even when the field's text is reverted to its base value
+  (spec §7). Zone-column boxes reuse the same `zoneCol<idx>` fieldKey as the renderer; "Reset
+  columns"/"Regenerate" rebuild the boxes' text/position but deliberately leave `styleOverrides`
+  untouched (style is a separate, explicit "Reset field" action). Verified: `grep -Fc` == 1 on the
+  anchor before editing; `node --check` via a named temp copy; manual code-path trace against
+  `bolShared.selfcheck.ts`'s already-passing `resolveFieldLineStyle`/`measureStyledField` coverage
+  (the same pure functions this file calls through `BolShared`, so bol-style-01's cross-checked
+  numbers carry over directly). **Not live-browser-verified this session** (no local dev server for
+  the legacy Pages app in this environment) — flagging per this repo's standing browser-check policy
+  rather than skipping the note; the render-side half of this feature (bol-style-01) WAS executed
+  end-to-end via a Node harness against real `pdf-lib`, so the data this UI produces is proven to
+  render correctly once applied.
+
 - **bol-style-01 — Paired renderer: per-field + per-line text styling (logistics-agent, lead;
   next-platform-agent, v2 parity mirror).** New `render_overrides._style` contract lets any BOL
   field carry a box style (`{size,bold,italic,underline}`, box default) plus a `lines` map keyed by
