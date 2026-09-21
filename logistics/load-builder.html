@@ -1091,12 +1091,28 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
   function closeTruck() {
     if (truck.rows.length) {
       // lbz-pack-01 follow-up: flip this truck's physical arrangement so the FIRST-to-deliver
-      // zone ends up flush against the doors (FRONT label, high posFromFront) instead of the
-      // nose — see the file header comment above. Reversing array order (not just rewriting
-      // posFromFront in place) means compactTrailerRows/reflowRowGeometry and any future
-      // reflow of a saved load stay correct for free, since those derive position purely from
-      // row array order.
-      truck.rows.reverse();
+      // zone ends up nearest the doors (FRONT label, high posFromFront) instead of the nose —
+      // see the file header comment above. Reverse the ORDER OF EACH ZONE'S ROW GROUP, not
+      // every row individually: truck.rows is already contiguous per zone at this point (the
+      // per-zone loop above pushes one zone's rows before moving to the next), and within a
+      // zone's own group, calcLoading already packs dense/full rows first and any leftover
+      // partial row last (its pass 2). A flat reverse() would also flip THAT internal order,
+      // stranding a zone's partial row at the far/nose end of its own block instead of the
+      // near/doors end — which is exactly backwards from "compact to the nose, any gap at the
+      // doors" (reported directly by Steve against a live load). Reversing group order only
+      // (keeping each group's own row order intact) fixes zone placement while keeping every
+      // zone's own dense-first/partial-last packing oriented the same way as calcLoading's
+      // non-zoned output. Still array-order-based (not posFromFront rewritten in place), so
+      // compactTrailerRows/reflowRowGeometry and any future reflow of a saved load stay correct
+      // for free.
+      const rowGroups = [];
+      truck.rows.forEach(row => {
+        const lastGroup = rowGroups[rowGroups.length - 1];
+        if (lastGroup && lastGroup.offloadSeq === row.offloadSeq) lastGroup.rows.push(row);
+        else rowGroups.push({ offloadSeq: row.offloadSeq, rows: [row] });
+      });
+      rowGroups.reverse();
+      truck.rows = rowGroups.flatMap(g => g.rows);
       reflowRowGeometry(truck.rows);
       trucks.push(truck);
     }

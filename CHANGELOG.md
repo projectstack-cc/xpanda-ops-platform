@@ -4714,6 +4714,31 @@ current series).
 
 ## Logistics
 
+- **lbz-pack-01 follow-up #2 — a zone's own leftover/partial row was landing at the wrong end of
+  its block, leaving an unexplained blank stack near the REAR/nose.** Steve caught this from a live
+  screenshot: bottom-left cell of a trailer's grid was blank, and "the truck should always be
+  compact to the back, if there's empty spaces, it should always be at the front [doors]." Root
+  cause was a side effect of the immediately-preceding follow-up above: `closeTruck()` reversed
+  `truck.rows` as one flat array to get zone order right, but `truck.rows` isn't just zone-ordered —
+  within each zone's own contiguous block, `calcLoading`'s two-pass packer already puts dense/full
+  rows first and any leftover partial row last (its pass 2, consolidating remainders). A flat
+  `.reverse()` flips zone-group order (correct, needed) but ALSO flips that intra-zone dense-first/
+  partial-last order (not correct) — so a zone's partial row, instead of landing at the doors-side
+  edge of its own block, landed at the nose-side edge, and for whichever zone ended up occupying the
+  REAR-most block that meant a partial row sitting at the trailer's true REAR extremity. Fix, still
+  scoped to `closeTruck()`, no fenced function touched: group `truck.rows` into contiguous runs by
+  `offloadSeq` first, reverse the order of the RUNS only, keep each run's own internal row order
+  intact, then flatten and reflow as before. Verified with a live harness: the exact repro shape
+  (Zone A 47pcs / Zone B 300pcs, forcing Zone B — the REAR-most zone — to end with a partial row)
+  now places Zone B's three full rows at `posFromFront` 0/48/96 and its partial row at 144, i.e. the
+  doors-side edge of Zone B's own block, immediately adjacent to Zone A's block — dense compacted to
+  the REAR, gap oriented toward FRONT, exactly as reported. Re-ran the oversized-Zone-A multi-truck
+  case from the prior follow-up to confirm truck-assignment priority is still unaffected, and
+  `checkZoneOrderWarning` still correctly passes/fails on a good/corrupted load (that check only
+  cares about zone-to-zone posFromFront trend, not intra-zone row order, so it needed no change).
+  `node --check` on the extracted inline script is green; LF encoding confirmed. Not live-browser-
+  verified this session.
+
 - **lbz-pack-01 follow-up — offload zones were loading nose-first, backwards from the doors-first
   convention this shop actually uses.** Steve reported the Load Builder trailer diagram had zones
   "backwards." Confirmed with him directly (via a rendered-diagram comparison, not guesswork) that
