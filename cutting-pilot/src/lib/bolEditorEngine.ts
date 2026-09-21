@@ -108,6 +108,13 @@ export interface ActiveFieldInfo {
   /** Field's current on-canvas position, in px relative to the editor's canvas wrapper. */
   left: number;
   top: number;
+  /** bol-style-03 follow-up: bottom edge to anchor below when there's no headroom above (past the
+   *  per-line preview strip when it's visible, so the toolbar never lands on top of it either). */
+  fieldBottom: number;
+  /** Canvas wrapper's current rendered size — the toolbar's caller clamps to this so it never
+   *  renders partly off the visible editor surface. */
+  wrapWidth: number;
+  wrapHeight: number;
   scope: "box" | "line";
   /** The effective raw style AT the current scope (box, or the caret's current source line). */
   value: BolTextStyle;
@@ -412,11 +419,21 @@ export async function mountBolEditor(
       return;
     }
     const baseCoord = baseCoordForField(activeFieldKey);
+    const top = parseFloat(el.style.top) || 0;
+    const fieldH = parseFloat(el.style.height) || 0;
+    const preview = previewEls[activeFieldKey];
+    const previewVisible = !!preview && preview.style.display !== "none";
+    const fieldBottom = previewVisible
+      ? parseFloat(preview.style.top || "0") + preview.offsetHeight
+      : top + fieldH;
     onActiveFieldChange({
       fieldKey: activeFieldKey,
       supportsLines: fieldSupportsLines(activeFieldKey),
       left: parseFloat(el.style.left) || 0,
-      top: parseFloat(el.style.top) || 0,
+      top,
+      fieldBottom,
+      wrapWidth: canvasWrap.clientWidth,
+      wrapHeight: canvasWrap.clientHeight,
       scope: activeScope,
       value: currentEffectiveValue(activeFieldKey, activeScope),
       baseSize: baseCoord.size || 10,

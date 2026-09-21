@@ -4714,6 +4714,32 @@ current series).
 
 ## Logistics
 
+- **bol-style-02/03 follow-up — style toolbar no longer covers the field it's editing.** Steve
+  reported the toolbar sat directly over the box being styled, making it hard to click a specific
+  line for a per-line ("This line") edit. Root cause: both `positionToolbar()` (legacy
+  `bol-editor.js`) and `TextStyleToolbar.tsx` (v2) anchored a fixed distance above the field's top
+  (48px / 52px) with no measurement of the toolbar's own rendered height (~56-60px with its
+  buttons/padding) and no fallback — a field within that fixed offset of the canvas top (common;
+  several fields sit near the top of the BOL) clamped to `top: 0` and sat squarely on the field.
+  Fix (both editors, parity maintained): measure the toolbar's actual rendered size, prefer
+  anchoring above the field with an 8px gap, and only fall back to below the field (past its
+  per-line preview strip, when visible, so the toolbar doesn't cover that either) when there isn't
+  enough headroom above; clamp both axes to the canvas wrapper's bounds so the toolbar can't render
+  off-screen either. v2's `ActiveFieldInfo` gained `fieldBottom`/`wrapWidth`/`wrapHeight` so
+  `TextStyleToolbar.tsx` can do the same math a portaled React component that legacy does with
+  direct DOM reads; its position is now measured via a ref in a `useLayoutEffect` with no
+  dependency array (toolbar width/height vary with content — scope switch, "Auto (N)" text width —
+  that isn't fully captured by any fixed prop list), guarded to only call `setState` when the
+  computed left/top actually changed (a bare-effect `setState` with a fresh object literal every
+  render does not bail out on `Object.is` — caught and fixed by `advisor()` before this shipped,
+  since an unguarded version would have pinned the editor at 100% CPU the moment a field was
+  focused). **Not live-browser-verified this session** — same environment limitation as
+  bol-style-02/03 (no local dev server for `/v2/logistics`, and the legacy editor needs a real job
+  loaded); `npx tsc --noEmit` and the full `cf-build` pipeline are both green. Steve, please check
+  a field near the top of the BOL and one near the bottom on both editors after this deploys, and
+  confirm the toolbar no longer overlaps the box (and check it doesn't jitter/reposition
+  continuously — if it does, that's the render-loop risk above resurfacing and needs a follow-up).
+
 - **bol-style-03 — v2 parity: style controls in `BolEditorModal` (react-component-agent, with
   next-platform-agent on the engine).** Depends on `bol-style-01`. Matches `bol-style-02` exactly
   (box/line scope, size stepper 6–36 + Auto, B/I/U, reset, gutter markers, styled preview under

@@ -434,14 +434,35 @@ window.BolEditor = (function () {
       positionToolbar();
     }
 
+    // Anchors above the field when there's room; otherwise falls back to below it (and below the
+    // per-line preview strip when that's visible), so the toolbar never sits on top of the box the
+    // operator is trying to click into — that made per-line clicking impossible for fields near the
+    // top of the canvas. Also clamps inside canvasWrap on both axes.
     function positionToolbar() {
       const el = fieldElFor(activeFieldKey);
       if (!el) { toolbar.style.display = 'none'; return; }
       toolbar.style.display = 'flex';
       const left = parseFloat(el.style.left) || 0;
       const top = parseFloat(el.style.top) || 0;
-      toolbar.style.left = Math.max(0, left) + 'px';
-      toolbar.style.top = Math.max(0, top - 48) + 'px';
+      const fieldH = parseFloat(el.style.height) || 0;
+      const gap = 8;
+      const tbH = toolbar.offsetHeight || 56;
+      const tbW = toolbar.offsetWidth || 0;
+      const wrapW = canvasWrap.clientWidth || 0;
+      const wrapH = canvasWrap.clientHeight || 0;
+
+      const preview = previewEls[activeFieldKey];
+      const previewVisible = preview && preview.style.display !== 'none';
+      const fieldBottom = previewVisible
+        ? parseFloat(preview.style.top || '0') + preview.offsetHeight
+        : top + fieldH;
+
+      let toolbarTop = (top - gap - tbH >= 0) ? (top - gap - tbH) : (fieldBottom + gap);
+      toolbarTop = Math.max(0, Math.min(toolbarTop, Math.max(0, wrapH - tbH)));
+      const toolbarLeft = Math.max(0, Math.min(left, Math.max(0, wrapW - tbW)));
+
+      toolbar.style.top = toolbarTop + 'px';
+      toolbar.style.left = toolbarLeft + 'px';
     }
 
     function activateField(fieldKey) {

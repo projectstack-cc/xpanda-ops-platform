@@ -7,6 +7,7 @@
 // `supportsLines`), and Reset field. Tailwind from tokens only, every control >=44px (floor-use
 // touch target), positioned by the caller (absolute, `left`/`top` come from bolEditorEngine's
 // ActiveFieldInfo).
+import { useLayoutEffect, useRef, useState } from "react";
 import type { BolTextStyle } from "@/lib/bolShared";
 
 export interface TextStyleToolbarProps {
@@ -19,6 +20,12 @@ export interface TextStyleToolbarProps {
   baseSize: number;
   left: number;
   top: number;
+  /** bol-style-03 follow-up: bottom edge to fall back to when there's no headroom above (past the
+   *  per-line preview strip when it's visible), plus the canvas wrapper's rendered size so the
+   *  toolbar clamps inside it instead of covering the field or running off the edge. */
+  fieldBottom: number;
+  wrapWidth: number;
+  wrapHeight: number;
 }
 
 const btnBase =
@@ -35,8 +42,32 @@ export default function TextStyleToolbar({
   baseSize,
   left,
   top,
+  fieldBottom,
+  wrapWidth,
+  wrapHeight,
 }: TextStyleToolbarProps) {
   const size = value.size;
+  const elRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: Math.max(0, left), top: Math.max(0, top - 56) });
+
+  // Measures the toolbar's own rendered size (its width/height change with content — the scope
+  // switch, "Auto (N)" text width, etc.) and re-anchors every render: above the field when there's
+  // room, else below it (and below the preview strip, via fieldBottom) — never on top of the box
+  // the operator is trying to click into, which made per-line clicking impossible for fields near
+  // the top of the canvas. Also clamps inside the canvas wrapper on both axes.
+  useLayoutEffect(() => {
+    const el = elRef.current;
+    const tbH = el?.offsetHeight || 56;
+    const tbW = el?.offsetWidth || 0;
+    const gap = 8;
+    let nextTop = top - gap - tbH >= 0 ? top - gap - tbH : fieldBottom + gap;
+    nextTop = Math.max(0, Math.min(nextTop, Math.max(0, wrapHeight - tbH)));
+    const nextLeft = Math.max(0, Math.min(left, Math.max(0, wrapWidth - tbW)));
+    // Must bail out on an unchanged value (not just an unchanged object) -- a fresh object literal
+    // every render defeats React's Object.is same-state bailout and spins this effect forever,
+    // since it has no dependency array and runs after every render by design.
+    setPos((prev) => (prev.left === nextLeft && prev.top === nextTop ? prev : { left: nextLeft, top: nextTop }));
+  });
 
   function stepSize(delta: number) {
     const base = size != null ? size : baseSize;
@@ -46,8 +77,9 @@ export default function TextStyleToolbar({
 
   return (
     <div
+      ref={elRef}
       className="absolute z-30 flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg border border-[var(--border)] bg-[var(--card-bg)] shadow-lg max-w-[320px]"
-      style={{ left: Math.max(0, left), top: Math.max(0, top - 52) }}
+      style={{ left: pos.left, top: pos.top }}
       // Never let a toolbar click steal focus from the field before its own click handler runs.
       onMouseDown={(e) => e.preventDefault()}
     >

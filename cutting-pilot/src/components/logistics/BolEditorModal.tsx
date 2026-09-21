@@ -237,6 +237,9 @@ export default function BolEditorModal({ target, onCancel, onSaved }: BolEditorM
               baseSize={activeField.baseSize}
               left={activeField.left}
               top={activeField.top}
+              fieldBottom={activeField.fieldBottom}
+              wrapWidth={activeField.wrapWidth}
+              wrapHeight={activeField.wrapHeight}
             />,
             styleMountNode
           )}
