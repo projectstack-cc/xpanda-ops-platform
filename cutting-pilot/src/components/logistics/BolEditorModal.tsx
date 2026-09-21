@@ -11,8 +11,10 @@
 // button in place with a clear banner above it — never an infinite spinner, never silent data
 // loss.
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Modal from "@/components/Modal";
-import { mountBolEditor, type BolEditorHandle } from "@/lib/bolEditorEngine";
+import { mountBolEditor, type BolEditorHandle, type ActiveFieldInfo } from "@/lib/bolEditorEngine";
+import TextStyleToolbar from "@/components/logistics/TextStyleToolbar";
 import type { BolRecord } from "@/lib/bolShared";
 
 export interface EditorTarget {
@@ -34,6 +36,12 @@ export default function BolEditorModal({ target, onCancel, onSaved }: BolEditorM
   const [savedIndices, setSavedIndices] = useState<Set<number>>(new Set());
   const mountRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<BolEditorHandle | null>(null);
+  // bol-style-03: the currently-focused styleable field (drives TextStyleToolbar) and the DOM node
+  // (bolEditorEngine's own canvasWrap) its coordinates are relative to — the toolbar is portaled
+  // into that node rather than rendered in this component's own tree, so its `left`/`top` line up
+  // with the engine's canvas-overlay coordinate space without any offset math here.
+  const [activeField, setActiveField] = useState<ActiveFieldInfo | null>(null);
+  const [styleMountNode, setStyleMountNode] = useState<HTMLElement | null>(null);
   const localBolsRef = useRef<BolRecord[]>([]);
   const savedIndicesRef = useRef<Set<number>>(new Set());
   // True once the currently-mounted load has been Applied successfully (or hasn't been mounted
@@ -146,6 +154,8 @@ export default function BolEditorModal({ target, onCancel, onSaved }: BolEditorM
 
     (async () => {
       setNotice(null);
+      setActiveField(null);
+      setStyleMountNode(null);
       const handle = await mountBolEditor(container, bol, {
         onApply: (updated) => {
           if (!cancelled) void handleApply(updated);
@@ -153,18 +163,24 @@ export default function BolEditorModal({ target, onCancel, onSaved }: BolEditorM
         onCancel: () => {
           if (!cancelled) onCancel();
         },
+        onActiveFieldChange: (info) => {
+          if (!cancelled) setActiveField(info);
+        },
       });
       if (cancelled) {
         handle.cleanup();
         return;
       }
       handleRef.current = handle;
+      setStyleMountNode(handle.getStyleMountNode());
     })();
 
     return () => {
       cancelled = true;
       handleRef.current?.cleanup();
       handleRef.current = null;
+      setActiveField(null);
+      setStyleMountNode(null);
     };
     // Re-mount only when the target BOL or the picker selection changes — not on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,6 +223,23 @@ export default function BolEditorModal({ target, onCancel, onSaved }: BolEditorM
           ref={mountRef}
           className="flex-1 min-h-0 rounded-lg border border-[var(--card-border)] overflow-hidden"
         />
+
+        {activeField &&
+          styleMountNode &&
+          createPortal(
+            <TextStyleToolbar
+              value={activeField.value}
+              onChange={(patch) => handleRef.current?.setFieldStyleValue(activeField.fieldKey, patch)}
+              scope={activeField.scope}
+              onScopeChange={(scope) => handleRef.current?.setScope(scope)}
+              onReset={() => handleRef.current?.resetFieldStyle(activeField.fieldKey)}
+              supportsLines={activeField.supportsLines}
+              baseSize={activeField.baseSize}
+              left={activeField.left}
+              top={activeField.top}
+            />,
+            styleMountNode
+          )}
       </div>
     </Modal>
   );

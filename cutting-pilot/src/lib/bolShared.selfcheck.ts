@@ -32,6 +32,9 @@ import {
   type JobZoneLineItem,
   type BolFieldStyle,
 } from "./bolShared";
+// bol-style-03: bolEditorEngine.ts's pure style logic has no dedicated selfcheck file of its own
+// (none existed before this prompt) — asserted here per that prompt's instruction.
+import { shiftLineKeys, pruneStyleOverrides } from "./bolEditorEngine";
 
 interface CheckResult {
   name: string;
@@ -466,6 +469,58 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
     const zc = measureStyledField("zoneCol0", "line1\nline2", undefined);
     check("measureStyledField: zoneCol0 uses COORDS.zoneColumns.colMaxH[0] (95pt) as its budget", zc.overflow === false, JSON.stringify(zc));
   }
+
+  // --- shiftLineKeys / pruneStyleOverrides (bol-style-03, bolEditorEngine.ts) ---
+  {
+    // Insert one line at index 1 ("b" -> "b1", "b2"): keys at/after 1 shift by the insert delta.
+    const fieldStyle: BolFieldStyle = { size: 14, lines: { "0": { bold: true }, "1": { italic: true }, "2": { underline: true } } };
+    const oldLines = ["a", "b", "c"];
+    const newLines = ["a", "b1", "b2", "c"];
+    const shifted = shiftLineKeys(fieldStyle, oldLines, newLines);
+    check(
+      "shiftLineKeys: inserting a line shifts later line-keys by the insert delta, earlier ones untouched",
+      JSON.stringify(shifted?.lines) === JSON.stringify({ "0": { bold: true }, "3": { underline: true } }),
+      JSON.stringify(shifted?.lines)
+    );
+  }
+  {
+    // Delete line index 1 ("a","b","c" -> "a","c"): key 1's override is dropped, key 2 shifts to 1.
+    const fieldStyle: BolFieldStyle = { lines: { "0": { bold: true }, "1": { italic: true }, "2": { underline: true } } };
+    const shifted = shiftLineKeys(fieldStyle, ["a", "b", "c"], ["a", "c"]);
+    check(
+      "shiftLineKeys: deleting a line drops that line's override and shifts trailing keys down",
+      JSON.stringify(shifted?.lines) === JSON.stringify({ "0": { bold: true }, "1": { underline: true } }),
+      JSON.stringify(shifted?.lines)
+    );
+  }
+  {
+    const fieldStyle: BolFieldStyle = { size: 14 };
+    const shifted = shiftLineKeys(fieldStyle, ["a"], ["a", "b"]);
+    check("shiftLineKeys: a field with no `lines` map is returned unchanged", shifted === fieldStyle, JSON.stringify(shifted));
+  }
+  {
+    const fieldStyle: BolFieldStyle = { size: 14, lines: { "0": { bold: true } } };
+    const shifted = shiftLineKeys(fieldStyle, ["a", "b"], ["a", "b"]);
+    check("shiftLineKeys: identical line count (in-place edit, no insert/delete) is a no-op", shifted === fieldStyle);
+  }
+  check(
+    "pruneStyleOverrides: drops an empty {} field entirely",
+    JSON.stringify(pruneStyleOverrides({ commodity: {} })) === JSON.stringify({})
+  );
+  check(
+    "pruneStyleOverrides: drops an empty `lines: {}` container but keeps box props",
+    JSON.stringify(pruneStyleOverrides({ commodity: { size: 20, lines: {} } })) === JSON.stringify({ commodity: { size: 20 } })
+  );
+  check(
+    "pruneStyleOverrides: drops a line entry left empty after its only prop was cleared",
+    JSON.stringify(pruneStyleOverrides({ commodity: { lines: { "0": { bold: true }, "1": {} } } })) ===
+      JSON.stringify({ commodity: { lines: { "0": { bold: true } } } })
+  );
+  check(
+    "pruneStyleOverrides: a field with a real box style + real line overrides survives fully",
+    JSON.stringify(pruneStyleOverrides({ commodity: { size: 18, bold: true, lines: { "1": { underline: true } } } })) ===
+      JSON.stringify({ commodity: { size: 18, bold: true, lines: { "1": { underline: true } } } })
+  );
 
   return { pass: results.every((r) => r.pass), results };
 }

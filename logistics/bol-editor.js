@@ -498,7 +498,9 @@ window.BolEditor = (function () {
 
       if (measured.overflow) {
         const warn = document.createElement('div');
-        warn.textContent = '⚠ May overflow the box';
+        warn.textContent = fieldKey === 'shipTo'
+          ? '⚠ Only the first 4 non-blank lines will be saved'
+          : '⚠ May overflow the box';
         warn.style.cssText = 'color:#92400e;background:#fef3c7;border:1px solid #f59e0b;border-radius:4px;'
           + 'padding:1px 4px;font-size:11px;font-weight:700;margin-bottom:2px;display:inline-block;';
         preview.appendChild(warn);

@@ -4703,6 +4703,75 @@ current series).
 
 ## Logistics
 
+- **bol-style-03 — v2 parity: style controls in `BolEditorModal` (react-component-agent, with
+  next-platform-agent on the engine).** Depends on `bol-style-01`. Matches `bol-style-02` exactly
+  (box/line scope, size stepper 6–36 + Auto, B/I/U, reset, gutter markers, styled preview under
+  multiline fields, amber overflow warning, line-index key shifting, prune-on-apply) with one
+  deliberate scope narrowing: v2's editor (`bolEditorEngine.ts`) has no zone-column boxes at all
+  yet (BACKLOG's "v2 zone-column editing follow-up" is still open) — so unlike legacy's `zoneCol0…
+  N`, v2 styling covers every FIELD_MAP field except `scrap` (not styleable) and `zoneColumns`
+  (doesn't render an editor box in v2 today; nothing to style). **Pure logic lives in
+  `bolEditorEngine.ts`, not the component**: `shiftLineKeys(fieldStyle, oldLines, newLines)` and
+  `pruneStyleOverrides(styleOverrides)` are new exported, side-effect-free ports of
+  `bol-editor.js`'s equivalent inline logic (line→box precedence, common-prefix/common-suffix diff
+  to isolate the single changed region, empty-container pruning) — no dedicated
+  `bolEditorEngine.selfcheck.ts` existed, so both are asserted directly in `bolShared.selfcheck.ts`
+  per the prompt's fallback instruction. **`TextStyleToolbar.tsx` is ONE typed component**
+  (`value: BolTextStyle`, `onChange`, `scope`, `onScopeChange`, `onReset`, `supportsLines`,
+  `baseSize`, `left`, `top`) — no duplicated button markup; Tailwind from tokens only
+  (`bg-[var(--card-bg)]`, `border-[var(--border)]`, `bg-[var(--brand)]` for active state), every
+  button `min-h-[44px] min-w-[44px]`. **Coordinate-space bridge**: the toolbar's `left`/`top` are
+  relative to the engine's own `canvasWrap` (an absolutely-positioned node inside the imperative
+  pdf.js canvas overlay bolEditorEngine.ts owns), not to `BolEditorModal`'s own React tree — so
+  rather than reverse-engineering an offset, the engine exposes `getStyleMountNode()` (returns
+  `canvasWrap`) and the modal `createPortal`s `TextStyleToolbar` directly into it, keeping both
+  coordinate systems identical by construction. New `ActiveFieldInfo` (`fieldKey`, `supportsLines`,
+  `left`, `top`, `scope`, `value`, `baseSize`) fires via a new optional
+  `BolEditorCallbacks.onActiveFieldChange` on every focus/blur/caret-move/style-edit/resize — the
+  engine has no knowledge of React; it just reports state changes. `BolEditorHandle` gains
+  `setScope`/`setFieldStyleValue`/`resetFieldStyle`/`getStyleMountNode` (mirroring
+  `bol-editor.js`'s toolbar-button handlers as callable methods instead of DOM click listeners) —
+  the failure-path early return (`{ cleanup, finishApply }` when the BOL template fails to load)
+  updates to include all four as no-ops so the return type still matches. Live style visuals
+  (box CSS on the field, the per-line preview strip, the amber overflow outline) stay imperative
+  DOM inside `bolEditorEngine.ts`, matching the file's own stated philosophy ("dragging
+  absolutely-positioned inputs... is not a case React state meaningfully improves on") — only the
+  toolbar controls became the reusable React component the prompt specifically asked for.
+  `BolEditorModal.tsx` itself only gained the `activeField`/`styleMountNode` state, the
+  `onActiveFieldChange` wire-up, and the portal render — no changes to its save/multi-load-picker
+  logic. Verified: `grep -Fc` == 1 on the anchor before editing; `npx tsc --noEmit` and the full
+  `cf-build` pipeline (`opennextjs-cloudflare`, `fix-asset-prefix.mjs`, `copy-pdf-worker.mjs`) both
+  green; `shiftLineKeys`/`pruneStyleOverrides` executed directly (not just type-checked) via a Node
+  harness — insert-shift, delete-shift, no-`lines`-map no-op, and same-length no-op all pass,
+  matching the hand-traced expectations in `bolShared.selfcheck.ts`'s new assertions exactly.
+  **Not live-browser-verified this session** (no local dev server for `/v2/logistics` in this
+  environment, same caveat as `bol-style-02`) — the pure logic and the render-side contract it
+  depends on (`resolveFieldLineStyle`/`measureStyledField`) were both proven correct by direct
+  execution, but the portal/positioning/toolbar-interaction wiring itself was not clicked through.
+  Cross-check (a BOL styled in legacy opens in v2 with identical styles, and vice versa) follows
+  directly from both editors writing/reading the identical `render_overrides._style` shape defined
+  in `bol-style-01` and resolved by the identical `resolveFieldLineStyle` — not independently
+  re-verified in a browser this session.
+
+  **Post-review corrections to the `_style` contract (found during this session's own pre-push
+  review, applied to both renderers/editors, no restructuring):** (1) `poNumber`'s editor value is
+  `"PO: " + number` (`deriveValue`). On the default/unedited render path, `_style.poNumber` styles
+  only the number (the `"PO:"` label is drawn separately, always bold). But if the operator edits
+  the text, `overrides.poNumber` becomes a literal array rendered verbatim via `drawMultiline`, and
+  `_style.poNumber` then applies to the whole string including the `"PO: "` prefix — the two paths
+  genuinely disagree about what the style targets, this isn't the pre-existing "label loses its
+  bold on verbatim redraw" quirk. No fix applied (would require restructuring the verbatim-draw
+  path); documenting the actual contract instead of the unconditional one implied above.
+  (2) `measureStyledField`'s `shipTo` overflow warning already fires before Apply clamps to 4
+  non-blank lines — as of this correction both editors' warning text says "Only the first 4
+  non-blank lines will be saved" for `shipTo` specifically (was the generic "May overflow the box"),
+  since the 5th+ line is silently dropped, not clipped/shrunk. (3) The `zoneCol*` box-size path uses
+  a fixed `{size:10, lineH:12}` base (the smallest zone tier) regardless of which tier the column
+  actually renders at, so `lineH` scales at a different ratio-per-point-size than e.g. `commodity`
+  (base `13/28`) for the same numeric `size` override. Not a bug, but a silent asymmetry — left
+  as-is (changing the base now would itself be a behavior change to an already-committed contract)
+  and noted here for whoever next touches zone-column tiering.
+
 - **bol-style-02 — Legacy editor UI: style controls in `BolEditor` (logistics-agent).** Depends on
   `bol-style-01` (renderer + `_style` contract). Scope: `logistics/bol-editor.js` only — no changes
   to `bol-compose.js`, `_archived/bol-generator.html`, or the renderer. A working copy

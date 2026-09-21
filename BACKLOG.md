@@ -215,11 +215,9 @@
 
 ## Logistics (v2)
 
-- [ ] **bol-style-03 — v2 parity: style controls in `BolEditorModal`
-  (`cutting-pilot/src/components/logistics/BolEditorModal.tsx`).** Depends on `bol-style-01`. Same
-  behavior as `bol-style-02`, via a new reusable `TextStyleToolbar.tsx`; pure key-shifting/pruning
-  logic lives in `bolEditorEngine.ts`. Cross-check: a BOL styled in legacy opens in v2 with
-  identical styles, and vice versa.
+- [ ] **v2 zone-column editing follow-up.** `bolEditorEngine.ts`'s editor has no zone-column boxes
+  at all yet (legacy's `zoneCol0…N` per-column editing has no v2 equivalent) — noted again while
+  scoping `bol-style-03`, which deliberately did not add zone-column styling to v2 for this reason.
 - [ ] **Shipment Dashboard Distance/ETA — extract shared geocode-cache orchestration if a 4th
   consumer appears.** `resolveOrigin`/`resolveDestRoute`-style cache read/write logic is now
   duplicated three times (`invoice/route.ts`, `invoice/resolve-line/route.ts`,
