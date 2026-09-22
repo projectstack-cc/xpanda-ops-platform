@@ -1912,6 +1912,23 @@ current series).
 
 ## Logistics (v2)
 
+- **bol-wysiwyg-03 follow-up — ported the same invisible-caret-sizing and date-format fix into v2's
+  `bolEditorEngine.ts`.** Same two bugs and same fix as the legacy `bol-editor.js` follow-up below
+  (reported by Steve): `positionAll` never set `font-size`/`line-height` on each field's edit
+  surface, so the caret rendered at the browser default instead of the field's real box size
+  (worst on `deliveryTime`/`date`, top right); and `deriveValue`/`deriveBaseValue` seeded the
+  `date` field from the raw ISO `bol.date` column instead of `formatBolDate(bol.date)`, so editing
+  it flipped the displayed format to ISO order the moment an override existed. Fix ported 1:1:
+  `positionAll` now sets `el.style.fontSize`/`lineHeight` from
+  `resolveFieldLineStyle(styleOverrides[k], srcLineIdx, baseCoordForField(k))`, and the `date`
+  branch of both derive functions seeds/diffs through the newly-imported `formatBolDate`. Same
+  out-of-scope notes apply: already-saved ISO `render_overrides.date` rows aren't repaired
+  retroactively, and v2 has no zone-column edit surfaces at all (already tracked separately).
+  **Verified:** `tsc --noEmit` + `npm run cf-build` clean; the caret/date fix itself was verified
+  in-browser against legacy's identical code path (same `bolShared.ts`-derived logic, same
+  `resolveFieldLineStyle`/`formatBolDate` functions this file imports), not independently re-run
+  against `BolEditorModal` (still no local dev path to an auth'd, data-populated v2 session — see
+  bol-wysiwyg-03's own entry below).
 - **bol-wysiwyg-03 — v2 parity: `BolEditorModal`/`bolEditorEngine.ts` rewritten as a true WYSIWYG
   editor from `layoutBol` (react-component-agent + next-platform-agent, depends on bol-wysiwyg-01
   and applies bol-wysiwyg-02's design identically to the v2 engine).** Root cause (same as
@@ -4770,6 +4787,34 @@ current series).
 
 ## Logistics
 
+- **bol-wysiwyg-02 follow-up — fixed invisible-caret sizing and date-field format regression on
+  edit, reported by Steve against the legacy editor.** Two bugs, same root cause (`positionAll`
+  sizes/positions each field's edit-surface `<input>`/`<textarea>` from `layoutBol`'s boxes but
+  never set the element's own `font-size`/`line-height`, so the real — invisible, `color:
+  transparent` — text and caret rendered at the browser's default size regardless of the field's
+  actual box): (1) **Caret small and offset above where typing lands**, worst on `deliveryTime`
+  ("Time" slot, top right) and `date`, whose boxes are small/short relative to the browser default
+  caret. Fix: `positionAll` now also sets `el.style.fontSize`/`lineHeight` from
+  `BolShared.resolveFieldLineStyle(styleOverrides[k], srcLineIdx, baseCoordForField(k))` — the same
+  per-field size/lineH the canvas overlay is drawn at — so the caret tracks the visible glyph size
+  scaled by the current zoom. (2) **Editing the date field flipped its displayed format to
+  YYYY-MM-DD.** `deriveValue`/`deriveBaseValue` seeded the `date` field's editable input from the
+  raw `bol.date` column (ISO `YYYY-MM-DD`) while the overlay canvas showed `formatBolDate(bol.date)`
+  (`MM/DD/YYYY`) — the moment any override was created (even an untouched-but-focused field, since
+  `computeOverrides()` diffs the input's live value), `layoutBol` stops reformatting an overridden
+  date and displays the raw override verbatim, so the visible date silently flipped to ISO order.
+  Fix: both functions now seed/diff the `date` field through `BolShared.formatBolDate(bol.date)`,
+  so the editable value starts in the same format it's displayed in and stays there once saved as
+  an override. Bumped `bol-editor.js?v=2` → `?v=3` in `index.html`/`load-builder.html` (cache-bust).
+  **Not fixed, out of scope:** BOLs whose `render_overrides.date` was already saved in ISO by the
+  pre-fix bug keep printing ISO until that field is re-edited and re-saved — the fix stops new bad
+  saves, it doesn't repair existing rows. Legacy's zone-column edit surfaces (`zcInputEls`, drawn
+  outside the `FIELD_MAP` loop `positionAll` iterates) still have the same unset-font-size caret
+  bug on a zoned BOL — not part of what was reported here; tracked as a follow-up, not fixed in this
+  entry. **Verified in-browser**: a throwaway harness (`BolEditor.open()` against a fixture BOL,
+  deleted after use) confirmed the date input's seeded `.value` is `MM/DD/YYYY`-formatted and that
+  `positionAll` now sets a real, box-proportional `fontSize`/`lineHeight` on every field's edit
+  surface (e.g. the Time field: 33.8px font / 39px box, previously unset/default).
 - **bol-wysiwyg-02 — legacy `bol-editor.js` rewritten as a true WYSIWYG editor driven by
   `layoutBol`, not static `COORDS`.** Root cause (named in bol-wysiwyg-01's deferred note above):
   the editor's `positionAll` positioned inputs from a hand-maintained `COORDS` table while

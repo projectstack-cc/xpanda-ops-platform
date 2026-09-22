@@ -28,6 +28,7 @@ import {
   isLikelyFontBytes,
   SCRIPT_FONT_ASSET_PATH,
   pickCommodityTier,
+  formatBolDate,
   type BolFieldMapEntry,
   type BolOverrides,
   type BolRecord,
@@ -155,6 +156,7 @@ function deriveValue(bol: BolRecord, field: BolFieldMapEntry): string | boolean 
       carrierName: "carrier_name",
       trailerNo: "trailer_no",
     };
+    if (k === "date") return k in ov ? String((ov as any)[k]) : formatBolDate(bol.date);
     return k in ov ? String((ov as any)[k]) : String((bol[colMap[k]] as any) || "");
   }
 
@@ -203,6 +205,7 @@ function deriveBaseValue(bol: BolRecord, field: BolFieldMapEntry): string | bool
       carrierName: "carrier_name",
       trailerNo: "trailer_no",
     };
+    if (k === "date") return formatBolDate(bol.date);
     return String((bol[colMap[k]] as any) || "");
   }
 
@@ -917,6 +920,15 @@ export async function mountBolEditor(
         el.querySelectorAll("button").forEach((b) => {
           (b as HTMLElement).style.fontSize = Math.max(10, Math.round(box.h * s * 0.55)) + "px";
         });
+      } else {
+        // The overlay canvas draws the visible glyphs; this element only hosts the (invisible)
+        // caret/selection. Without an explicit font-size/line-height it renders at the browser's
+        // default, so the caret shows up small and offset from where the visible text actually
+        // sits — most noticeable on small fields like date/deliveryTime (bol-wysiwyg-03 follow-up).
+        const srcLineIdx = field.type === "single" ? undefined : 0;
+        const { size, lineH } = resolveFieldLineStyle(styleOverrides[k], srcLineIdx, baseCoordForField(k));
+        el.style.fontSize = Math.max(1, size * s) + "px";
+        el.style.lineHeight = Math.max(1, lineH * s) + "px";
       }
 
       const hx = parseFloat(el.style.left);

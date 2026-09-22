@@ -27,6 +27,7 @@ window.BolEditor = (function () {
         carrierName:  'carrier_name',
         trailerNo:    'trailer_no',
       };
+      if (k === 'date') return k in ov ? String(ov[k]) : BolShared.formatBolDate(bol.date);
       return k in ov ? String(ov[k]) : String(bol[colMap[k]] || '');
     }
 
@@ -71,6 +72,7 @@ window.BolEditor = (function () {
         carrierName:  'carrier_name',
         trailerNo:    'trailer_no',
       };
+      if (k === 'date') return BolShared.formatBolDate(bol.date);
       return String(bol[colMap[k]] || '');
     }
 
@@ -894,6 +896,15 @@ window.BolEditor = (function () {
           el.querySelectorAll('button').forEach((b) => {
             b.style.fontSize = Math.max(10, Math.round(box.h * s * 0.55)) + 'px';
           });
+        } else {
+          // The overlay canvas draws the visible glyphs; this element only hosts the (invisible)
+          // caret/selection. Without an explicit font-size/line-height it renders at the browser's
+          // default, so the caret shows up small and offset from where the visible text actually
+          // sits — most noticeable on small fields like date/deliveryTime.
+          const srcLineIdx = field.type === 'single' ? undefined : 0;
+          const _resolved = BolShared.resolveFieldLineStyle(styleOverrides[k], srcLineIdx, baseCoordForField(k));
+          el.style.fontSize   = Math.max(1, _resolved.size * s) + 'px';
+          el.style.lineHeight = Math.max(1, _resolved.lineH * s) + 'px';
         }
 
         const hx = parseFloat(el.style.left);
