@@ -4714,6 +4714,54 @@ current series).
 
 ## Logistics
 
+- **bol-wysiwyg-02 — legacy `bol-editor.js` rewritten as a true WYSIWYG editor driven by
+  `layoutBol`, not static `COORDS`.** Root cause (named in bol-wysiwyg-01's deferred note above):
+  the editor's `positionAll` positioned inputs from a hand-maintained `COORDS` table while
+  `generatePdf` computed real layout via `layoutBol` — the two could drift, and the editor's
+  "Auto(N)" size readout for commodity/zone-column fields was always wrong (a static guess, not the
+  real auto-picked tier). Fix: `open()` now loads `BolShared.getLayoutFonts()` alongside the
+  template/pdf.js fetch, and adds a transparent `overlayCanvas` stacked on top of the template
+  canvas. Every field's edit-surface `<textarea>`/`<input>` is sized and positioned directly from
+  `layoutBol`'s returned `boxes` (`positionAll`/`positionZc`), and the overlay canvas draws the
+  actual `layoutBol` runs with `ctx.font`/`fillText`/manual underline strokes matching each run's
+  real `fontKey`/`size`/color — so what the operator sees is the same geometry `generatePdf` will
+  draw, not an approximation of it. `baseCoordForField` now calls `pickCommodityTier`/
+  `pickZoneColumnTier` live instead of returning a fixed `COORDS` size, fixing the toolbar's
+  "Auto(N)" display as a side effect. Added `computeOverrides()`: the single function both the live
+  preview and the Apply button call to compute "what would be saved right now" — guarantees the
+  WYSIWYG preview is never a different representation of state than what actually gets persisted
+  (e.g. an untouched PO field still renders through the real bold-"PO:"-label default path, not a
+  hardcoded stand-in). Typing/dragging schedules `relayoutNow()` through a 120ms **throttle**
+  (deliberately not a debounce, to keep continuous drag feedback responsive): rebuilds `{ ...bol,
+  _overrides: computeOverrides() }`, re-runs `layoutBol`, repositions every box, and redraws the
+  overlay. Drag handles now snap to 0.5pt (`Math.round(dx*2)/2`) instead of whole points. Added an
+  optional "Exact preview" checkbox (off by default) per the prompt's §5: when on, a 400ms-throttled
+  `scheduleExactPreview()` calls the real `BolShared.generatePdf(..., { previewOnly: true })` and
+  renders the actual PDF bytes onto the overlay via pdf.js — the ground-truth check against the
+  fillText approximation, never touching the renderer itself. **Bug caught during verification, not
+  guessed:** toggling "Exact preview" on before the editor's first `reflow()` had sized the canvases
+  (a real, if narrow, window — `reflow()` runs off a `ResizeObserver` callback, not synchronously in
+  `open()`) rendered the ground-truth PDF into a still-default-sized 300×150 canvas, i.e. a
+  silently blank preview with no console signal. Fixed two ways: the checkbox is now `disabled`
+  until the first `reflow()` completes, and `scheduleExactPreview`'s catch block now falls back to
+  the fillText approximation (`drawOverlay(lastRuns, _scale)`) and `console.warn`s instead of
+  swallowing the error, so any future render hiccup degrades visibly instead of going blank.
+  **Verified:** `node --check logistics/bol-editor.js` clean; live-browser test against both plain
+  and zoned fixtures — box positions/sizes/colors match the rendered template in both, the
+  zone-column boxes (`positionZc`, the `baseCoordForField` `zoneCol\d+` branch) position and
+  re-tier correctly on retype with no console errors, live retyping elsewhere re-tiers and recenters
+  text instantly (e.g. commodity text shortened to "Short" re-picked the size-26 tier and the
+  toolbar correctly showed "Auto(26)"), and — after the fix above — a single clean toggle of "Exact
+  preview" swapped the overlay for the real generatePdf render (visibly showing the QR code and
+  cursive shipper signature, which only the real renderer draws, never the fillText approximation).
+  Drag-to-move and the Apply→override round-trip were exercised through the style toolbar and
+  `computeOverrides()` code path but not independently screenshot-verified this session. **Not
+  independently verified here:** the prompt's literal "5 real production BOLs, pixel-diff within
+  1px" floor check — no production data/environment available in this session; the Exact-preview
+  toggle above is the equivalent ground-truth instrument going forward. `?v=2` added to the
+  previously-unversioned `bol-editor.js` script tag in `logistics/index.html` and
+  `logistics/load-builder.html` (bumped once more, past the debugging-session `?v=1`, to invalidate
+  any cached copy of the pre-rewrite or pre-fix file).
 - **bol-wysiwyg-01 — paired renderer: extracted a shared `layoutBol`/`layoutField` layout engine
   from `generatePdf` (logistics-agent, lead; next-platform-agent for the `bolShared.ts` mirror,
   same commit — bilateral parity).** Root cause: the BOL editors (`bol-editor.js`

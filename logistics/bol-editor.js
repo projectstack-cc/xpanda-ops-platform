@@ -3,7 +3,6 @@ window.BolEditor = (function () {
 
   const PDF_JS_URL  = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
   const WORKER_URL  = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
-  const BASELINE_FUDGE = 0; // px added to every input's top — nudge all fields uniformly after visual check
 
   let _pdfjs = null;
 
@@ -59,7 +58,7 @@ window.BolEditor = (function () {
   }
 
   // ── Derive a field's pristine base value, ignoring bol._overrides entirely.
-  //    Used by the Apply handler to diff against the true original, not against
+  //    Used by computeOverrides() to diff against the true original, not against
   //    whatever override happened to be in effect when the editor opened. ──
 
   function deriveBaseValue(bol, field) {
@@ -129,6 +128,14 @@ window.BolEditor = (function () {
     return wrap;
   }
 
+  // ── Canvas overlay glyph rendering (bol-wysiwyg-02) ──
+
+  function fontCss(fontKey, sizePx) {
+    const bold = fontKey === 'bold' || fontKey === 'boldItalic';
+    const italic = fontKey === 'italic' || fontKey === 'boldItalic';
+    return (italic ? 'italic ' : '') + (bold ? '700 ' : '400 ') + sizePx + 'px Helvetica, Arial, sans-serif';
+  }
+
   // ── Entry point ──
 
   async function open(bol, mountEl, { onApply, onCancel }) {
@@ -156,6 +163,7 @@ window.BolEditor = (function () {
     mountEl.appendChild(loadingEl);
 
     let pdfPage;
+    let fonts;
     try {
       const pdfjs = await loadPdfJs();
       const resp  = await fetch('/logistics/assets/BLANK_BOL_Xpanda.pdf');
@@ -163,6 +171,9 @@ window.BolEditor = (function () {
       const bytes = await resp.arrayBuffer();
       const doc   = await pdfjs.getDocument({ data: bytes }).promise;
       pdfPage     = await doc.getPage(1);
+      // bol-wysiwyg-01/02: real embedded Helvetica metrics — the SAME metrics generatePdf uses —
+      // so layoutBol's placement here matches the PDF exactly, not an approximation.
+      fonts = await BolShared.getLayoutFonts();
     } catch (e) {
       loadingEl.textContent = 'Editor failed to load: ' + (e.message || String(e));
       return;
@@ -180,10 +191,31 @@ window.BolEditor = (function () {
     scrollArea.appendChild(canvasWrap);
 
     const canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:absolute;top:0;left:0;';
     canvasWrap.appendChild(canvas);
 
+    // bol-wysiwyg-02: transparent overlay canvas — the actual WYSIWYG text layer, drawn from
+    // BolShared.layoutBol runs (or the real generatePdf output when "Exact preview" is on). Sits
+    // above the template render, below the (now-invisible) edit inputs/handles/toolbar.
+    const overlayCanvas = document.createElement('canvas');
+    overlayCanvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;';
+    canvasWrap.appendChild(overlayCanvas);
+
     const actionBar = document.createElement('div');
-    actionBar.style.cssText = 'flex-shrink:0;display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border,#d1d5db);background:var(--card-bg,#fff);';
+    actionBar.style.cssText = 'flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border,#d1d5db);background:var(--card-bg,#fff);';
+
+    const exactPreviewLabel = document.createElement('label');
+    exactPreviewLabel.style.cssText = 'display:flex;align-items:center;gap:6px;margin-right:auto;font-size:13px;font-weight:600;color:var(--text,#111827);cursor:pointer;user-select:none;';
+    const exactPreviewCheckbox = document.createElement('input');
+    exactPreviewCheckbox.type = 'checkbox';
+    exactPreviewCheckbox.style.cssText = 'width:18px;height:18px;cursor:pointer;';
+    // Disabled until the first reflow() sizes the canvases/sets _scale — clicking before that would
+    // render the exact preview into a still-default-sized (300x150) canvas. See reflow() below.
+    exactPreviewCheckbox.disabled = true;
+    exactPreviewLabel.appendChild(exactPreviewCheckbox);
+    exactPreviewLabel.appendChild(document.createTextNode('Exact preview'));
+    exactPreviewLabel.title = 'Renders the actual PDF output (ground truth) instead of the fast approximation';
+    actionBar.appendChild(exactPreviewLabel);
 
     const cancelBtn = document.createElement('button');
     cancelBtn.textContent = 'Cancel';
@@ -220,16 +252,29 @@ window.BolEditor = (function () {
       if (_savedStyle[_fk]) styleOverrides[_fk] = JSON.parse(JSON.stringify(_savedStyle[_fk]));
     }
     const prevLines = {}; // fieldKey -> source lines array as of the last input event (line-index integrity)
-    const previewEls = {}; // fieldKey -> the meta strip (warning + per-line preview) below the field
     let activeFieldKey = null;
     let activeScope = 'box'; // 'box' | 'line' — user-controlled per toolbar session
+    let lastBoxes = {}; // fieldKey -> box, from the most recent layoutBol call
+    let lastRuns = []; // runs from the most recent layoutBol call, for exact-preview's failure fallback
 
-    // Base coord used only for size clamping/defaults display — not render geometry.
+    // Base/"Auto" size used only by the style toolbar's stepper and "Auto(N)" label — reflects the
+    // REAL tier/coord default (dynamically recomputed for commodity/zone-columns, unlike the old
+    // static COORDS-only approximation this replaces).
     function baseCoordForField(fieldKey) {
-      if (/^zoneCol\d+$/.test(fieldKey)) return { size: ZC_PREVIEW_SIZE, lineH: ZC_PREVIEW_LINEH };
+      if (/^zoneCol\d+$/.test(fieldKey)) {
+        const idx = parseInt(fieldKey.slice(7), 10);
+        const el = zcInputEls[idx];
+        const lines = ((el && el.value) || '').split('\n');
+        const tier = BolShared.pickZoneColumnTier(lines, fonts.regular, ZC_COL_W);
+        return { size: tier.size, lineH: tier.lineH };
+      }
       const field = BolShared.FIELD_MAP.find(f => f.overrideKey === fieldKey);
       if (!field) return { size: 10, lineH: 12 };
       if (field.type === 'shipto') return field.coords[0];
+      if (fieldKey === 'commodity' && !zcZoneData) {
+        const tier = BolShared.pickCommodityTier(currentTextValue('commodity') || '', fonts.regular);
+        return { size: tier.size, lineH: tier.lineH };
+      }
       return field.coord;
     }
     function fieldSupportsLines(fieldKey) {
@@ -279,6 +324,93 @@ window.BolEditor = (function () {
         // idx within [start, oldEnd] -> its line was replaced/removed; drop the override
       }
       fs.lines = shifted;
+    }
+
+    // ── computeOverrides(): the single source of truth for "what would be saved right now" —
+    // used both by the live WYSIWYG preview (relayoutNow, called on every edit/drag/style change)
+    // and by Apply. This guarantees the preview always shows EXACTLY what re-rendering the
+    // about-to-be-saved BOL would produce — an untouched field still falls through to its real
+    // default render path (e.g. PO's bold "PO:" label) instead of always taking the override path.
+    function computeOverrides() {
+      const overrides = {};
+
+      for (const field of BolShared.FIELD_MAP) {
+        const k  = field.overrideKey;
+        const el = inputEls[k];
+        if (!el) continue;
+
+        if (field.type === 'single') {
+          const val = el.value; // no trim — keep parity with deriveValue's String(col || '')
+          if (val !== deriveBaseValue(bol, field)) overrides[k] = val;
+
+        } else if (field.type === 'shipto') {
+          const lines = el.value.split('\n').map(l => l.trimEnd()).filter(l => l.trim()).slice(0, 4);
+          const base  = deriveBaseValue(bol, field).split('\n').map(l => l.trimEnd()).filter(l => l.trim()).slice(0, 4);
+          if (lines.join('\n') !== base.join('\n')) overrides[k] = lines;
+
+        } else if (field.type === 'multiline') {
+          const lines = el.value.split('\n').map(l => l.trimEnd());
+          while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+          const base = deriveBaseValue(bol, field).split('\n').map(l => l.trimEnd());
+          while (base.length && !base[base.length - 1].trim()) base.pop();
+          if (lines.join('\n') !== base.join('\n')) overrides[k] = lines;
+
+        } else if (field.type === 'scrap') {
+          const val = el.dataset.scrapValue === 'true';
+          if (val !== deriveBaseValue(bol, field)) overrides[k] = val;
+        }
+      }
+
+      // P122: attach position deltas (skip zero entries)
+      const _posOut = {};
+      for (const pk in posOverrides) {
+        const pv = posOverrides[pk];
+        if (pv && (pv.dx || pv.dy)) _posOut[pk] = { dx: pv.dx, dy: pv.dy };
+      }
+      if (Object.keys(_posOut).length > 0) overrides._pos = _posOut;
+
+      // bol-style-02: prune empty style objects and write overrides._style only if non-empty, next
+      // to _pos. Deliberately its OWN pass (not gated by any field's text-unchanged check above) —
+      // a style survives even when the field's text reverts to its base value.
+      const _styleOut = {};
+      for (const _fk in styleOverrides) {
+        const _fs = styleOverrides[_fk];
+        if (!_fs) continue;
+        const _out = {};
+        if (_fs.size != null) _out.size = _fs.size;
+        if (_fs.bold != null) _out.bold = _fs.bold;
+        if (_fs.italic != null) _out.italic = _fs.italic;
+        if (_fs.underline != null) _out.underline = _fs.underline;
+        if (_fs.lines) {
+          const _linesOut = {};
+          for (const _li in _fs.lines) {
+            const _l = _fs.lines[_li];
+            if (!_l) continue;
+            const _lo = {};
+            if (_l.size != null) _lo.size = _l.size;
+            if (_l.bold != null) _lo.bold = _l.bold;
+            if (_l.italic != null) _lo.italic = _l.italic;
+            if (_l.underline != null) _lo.underline = _l.underline;
+            if (Object.keys(_lo).length) _linesOut[_li] = _lo;
+          }
+          if (Object.keys(_linesOut).length) _out.lines = _linesOut;
+        }
+        if (Object.keys(_out).length) _styleOut[_fk] = _out;
+      }
+      if (Object.keys(_styleOut).length > 0) overrides._style = _styleOut;
+
+      // lbz-bol-01: persist the WHOLE zoneColumns container (items + zoneData + sourceHash) —
+      // Apply replaces `overrides` wholesale (see below), so omitting zoneData/sourceHash here
+      // would silently break "Reset columns" and the stale guard on every subsequently-edited BOL.
+      if (zcZoneData) {
+        overrides.zoneColumns = {
+          items: (zcItems || []).map(it => ({ ...it })),
+          zoneData: zcZoneData,
+          sourceHash: zcSourceHash,
+        };
+      }
+
+      return overrides;
     }
 
     // ── Style toolbar (bol-style-02): one shared floating panel, shown near whichever styleable
@@ -360,7 +492,7 @@ window.BolEditor = (function () {
       if (!activeFieldKey) return;
       delete styleOverrides[activeFieldKey];
       refreshToolbar();
-      updateFieldVisual(activeFieldKey);
+      scheduleRelayout();
     });
     toolbar.appendChild(resetBtn);
 
@@ -387,7 +519,7 @@ window.BolEditor = (function () {
       }
       if (Object.keys(fs).length === 0) delete styleOverrides[fk];
       refreshToolbar();
-      updateFieldVisual(fk);
+      scheduleRelayout();
     }
 
     function stepSize(delta) {
@@ -434,10 +566,9 @@ window.BolEditor = (function () {
       positionToolbar();
     }
 
-    // Anchors above the field when there's room; otherwise falls back to below it (and below the
-    // per-line preview strip when that's visible), so the toolbar never sits on top of the box the
-    // operator is trying to click into — that made per-line clicking impossible for fields near the
-    // top of the canvas. Also clamps inside canvasWrap on both axes.
+    // Anchors above the field when there's room; otherwise falls back to below it, so the toolbar
+    // never sits on top of the box the operator is trying to click into. Also clamps inside
+    // canvasWrap on both axes.
     function positionToolbar() {
       const el = fieldElFor(activeFieldKey);
       if (!el) { toolbar.style.display = 'none'; return; }
@@ -450,12 +581,7 @@ window.BolEditor = (function () {
       const tbW = toolbar.offsetWidth || 0;
       const wrapW = canvasWrap.clientWidth || 0;
       const wrapH = canvasWrap.clientHeight || 0;
-
-      const preview = previewEls[activeFieldKey];
-      const previewVisible = preview && preview.style.display !== 'none';
-      const fieldBottom = previewVisible
-        ? parseFloat(preview.style.top || '0') + preview.offsetHeight
-        : top + fieldH;
+      const fieldBottom = top + fieldH;
 
       let toolbarTop = (top - gap - tbH >= 0) ? (top - gap - tbH) : (fieldBottom + gap);
       toolbarTop = Math.max(0, Math.min(toolbarTop, Math.max(0, wrapH - tbH)));
@@ -475,87 +601,22 @@ window.BolEditor = (function () {
       setTimeout(() => { if (activeFieldKey === fieldKey && document.activeElement !== fieldElFor(fieldKey)) { activeFieldKey = null; toolbar.style.display = 'none'; } }, 0);
     }
 
-    // ── Live style visuals: box CSS on the field itself, plus a thin per-line preview + overflow
-    // warning strip beneath multiline-capable fields (a <textarea> can't show mixed per-line
-    // styles inline — bol-style-02 §3). ──
+    // ── Overflow warning: amber outline only (bol-wysiwyg-02 removes the separate per-line preview
+    // strip — the WYSIWYG canvas layer now shows per-line styles in place). Driven by
+    // BolShared.measureStyledField, which is itself now a layoutField-backed real-metric check. ──
 
-    function applyBoxCssToEl(el, fieldKey, s) {
-      const fs = styleOverrides[fieldKey];
-      const baseCoord = baseCoordForField(fieldKey);
-      const r = BolShared.resolveFieldLineStyle(fs, null, baseCoord);
-      el.style.fontSize = (r.size * s) + 'px';
-      el.style.fontWeight = r.bold ? '700' : '400';
-      el.style.fontStyle = r.italic ? 'italic' : 'normal';
-      el.style.textDecoration = r.underline ? 'underline' : 'none';
-    }
-
-    function ensurePreviewEl(fieldKey) {
-      if (previewEls[fieldKey]) return previewEls[fieldKey];
-      const el = document.createElement('div');
-      el.style.cssText = 'position:absolute;display:none;pointer-events:none;font-family:Helvetica,Arial,sans-serif;'
-        + 'line-height:1.3;z-index:4;';
-      canvasWrap.appendChild(el);
-      previewEls[fieldKey] = el;
-      return el;
-    }
-
-    function updateFieldVisual(fieldKey) {
+    function updateFieldOverflow(fieldKey) {
       const el = fieldElFor(fieldKey);
-      if (!el) return;
-      const s = _scale || 1;
-      applyBoxCssToEl(el, fieldKey, s);
-
-      if (!fieldSupportsLines(fieldKey)) return;
-      const fs = styleOverrides[fieldKey];
-      const baseCoord = baseCoordForField(fieldKey);
+      if (!el || !fieldSupportsLines(fieldKey)) return;
       const text = currentTextValue(fieldKey);
-      const sourceLines = text.split('\n');
-      const hasLineOverrides = !!(fs && fs.lines && Object.keys(fs.lines).length);
-      const measured = BolShared.measureStyledField(fieldKey, text, fs);
-
-      const preview = ensurePreviewEl(fieldKey);
-      preview.innerHTML = '';
-      let showPreview = false;
-
+      const measured = BolShared.measureStyledField(fieldKey, text, styleOverrides[fieldKey]);
       if (measured.overflow) {
-        const warn = document.createElement('div');
-        warn.textContent = fieldKey === 'shipTo'
-          ? '⚠ Only the first 4 non-blank lines will be saved'
-          : '⚠ May overflow the box';
-        warn.style.cssText = 'color:#92400e;background:#fef3c7;border:1px solid #f59e0b;border-radius:4px;'
-          + 'padding:1px 4px;font-size:11px;font-weight:700;margin-bottom:2px;display:inline-block;';
-        preview.appendChild(warn);
-        showPreview = true;
         el.style.boxShadow = '0 0 0 2px #f59e0b';
+        el.title = fieldKey === 'shipTo' ? 'Only the first 4 non-blank lines will be saved' : 'May overflow the box';
       } else {
         el.style.boxShadow = 'none';
+        el.title = '';
       }
-
-      if (hasLineOverrides) {
-        showPreview = true;
-        const strip = document.createElement('div');
-        sourceLines.forEach((line, idx) => {
-          const row = document.createElement('div');
-          const hasOverride = !!(fs.lines && fs.lines[String(idx)]);
-          const dot = document.createElement('span');
-          dot.textContent = hasOverride ? '●' : ' ';
-          dot.style.cssText = 'display:inline-block;width:10px;color:var(--muted,#4b5563);font-size:9px;';
-          const r = BolShared.resolveFieldLineStyle(fs, idx, baseCoord);
-          const span = document.createElement('span');
-          span.textContent = line || ' ';
-          span.style.cssText = 'font-size:' + Math.max(8, r.size * s * 0.7) + 'px;'
-            + 'font-weight:' + (r.bold ? '700' : '400') + ';'
-            + 'font-style:' + (r.italic ? 'italic' : 'normal') + ';'
-            + 'text-decoration:' + (r.underline ? 'underline' : 'none') + ';'
-            + 'color:var(--muted,#4b5563);';
-          row.appendChild(dot);
-          row.appendChild(span);
-          strip.appendChild(row);
-        });
-        preview.appendChild(strip);
-      }
-
-      preview.style.display = showPreview ? 'block' : 'none';
     }
 
     // lbz-bol-01: zone columns are N boxes (one per zone), not the FIELD_MAP's 1-per-field model,
@@ -574,6 +635,13 @@ window.BolEditor = (function () {
       }
     }
 
+    // Transparent, borderless edit surface (bol-wysiwyg-02 §2): the canvas overlay is the visual
+    // source of truth; inputs/textareas exist only to host the caret/selection/typing, positioned
+    // and sized entirely from layoutBol's boxes (no COORDS geometry, no padding/border offset).
+    const EDIT_SURFACE_CSS = 'position:absolute;box-sizing:border-box;background:transparent;'
+      + 'border:none;outline:1px dashed rgba(30,41,59,0.35);padding:0;margin:0;'
+      + 'font-family:Helvetica,Arial,sans-serif;color:transparent;caret-color:var(--text,#111827);resize:none;overflow:hidden;';
+
     for (const field of BolShared.FIELD_MAP) {
       if (field.type === 'zonecolumns') continue; // handled separately below (N boxes, not 1)
       if (field.overrideKey === 'commodity' && zcZoneData) continue; // zone columns replace this field entirely on a zoned bol
@@ -588,15 +656,12 @@ window.BolEditor = (function () {
         el = document.createElement('input');
         el.type  = 'text';
         el.value = initVal;
-        el.style.cssText = 'position:absolute;box-sizing:border-box;background:rgba(255,255,255,0.88);border:1.5px solid var(--border,#d1d5db);border-radius:4px;padding:1px 4px;font-family:Helvetica,Arial,sans-serif;color:var(--text,#111827);';
+        el.style.cssText = EDIT_SURFACE_CSS;
       } else {
         el = document.createElement('textarea');
         el.value = initVal;
-        el.style.cssText = 'position:absolute;box-sizing:border-box;background:rgba(255,255,255,0.88);border:1.5px solid var(--border,#d1d5db);border-radius:4px;padding:2px 4px;font-family:Helvetica,Arial,sans-serif;color:var(--text,#111827);resize:none;overflow:hidden;';
-        el.addEventListener('input', function () {
-          this.style.height = 'auto';
-          this.style.height = this.scrollHeight + 'px';
-        });
+        el.style.cssText = EDIT_SURFACE_CSS;
+        if (k === 'commodity') el.style.textAlign = 'center';
       }
 
       inputEls[k] = el;
@@ -614,9 +679,11 @@ window.BolEditor = (function () {
           const newLines = el.value.split('\n');
           shiftLineKeys(k, prevLines[k], newLines);
           prevLines[k] = newLines;
-          updateFieldVisual(k);
           if (activeFieldKey === k) refreshToolbar();
+          scheduleRelayout();
         });
+      } else {
+        el.addEventListener('click', () => scheduleRelayout());
       }
 
       // P122: per-field drag handle (drag to move; double-click to reset position)
@@ -635,8 +702,10 @@ window.BolEditor = (function () {
 
     let _renderTask = null;
     let _scale = 1; // px-per-PDF-point, updated each reflow; used to convert drag deltas
+    let _relayoutTimer = null; // ~120ms throttle shared by edits/drag/style changes
 
-    // P122: pointer-drag a field's box; commits a {dx,dy} point-delta into posOverrides
+    // P122/bol-wysiwyg-02: pointer-drag a field's box; commits a {dx,dy} point-delta into
+    // posOverrides, snapped to 0.5pt (was whole-point).
     function attachDragHandle(handle, k) {
       let startX = 0, startY = 0, baseDx = 0, baseDy = 0, dragging = false;
 
@@ -658,8 +727,8 @@ window.BolEditor = (function () {
         // screen px → PDF points; PDF y grows upward, screen y grows downward
         const dx = baseDx + (e.clientX - startX) / s;
         const dy = baseDy - (e.clientY - startY) / s;
-        posOverrides[k] = { dx: Math.round(dx), dy: Math.round(dy) };
-        positionAll(_scale);
+        posOverrides[k] = { dx: Math.round(dx * 2) / 2, dy: Math.round(dy * 2) / 2 };
+        scheduleRelayout();
       });
 
       const endDrag = (e) => {
@@ -677,7 +746,7 @@ window.BolEditor = (function () {
         e.preventDefault();
         e.stopPropagation();
         delete posOverrides[k];
-        positionAll(_scale);
+        scheduleRelayout();
       });
     }
 
@@ -690,10 +759,12 @@ window.BolEditor = (function () {
       _scale = s;
       const dpr      = window.devicePixelRatio || 1;
 
-      canvas.width        = Math.round(logicalW * dpr);
-      canvas.height       = Math.round(logicalH * dpr);
-      canvas.style.width  = logicalW + 'px';
-      canvas.style.height = logicalH + 'px';
+      [canvas, overlayCanvas].forEach((c) => {
+        c.width        = Math.round(logicalW * dpr);
+        c.height       = Math.round(logicalH * dpr);
+        c.style.width  = logicalW + 'px';
+        c.style.height = logicalH + 'px';
+      });
       canvasWrap.style.width  = logicalW + 'px';
       canvasWrap.style.height = logicalH + 'px';
 
@@ -702,99 +773,146 @@ window.BolEditor = (function () {
       _renderTask = pdfPage.render({ canvasContext: ctx, viewport: vp });
       _renderTask.promise.then(() => { _renderTask = null; }).catch(() => {});
 
-      positionAll(s);
-      positionZc(s); // lbz-bol-01
+      relayoutNow();
+      exactPreviewCheckbox.disabled = false;
     }
 
-    function positionAll(s) {
-      const H = BolShared.PAGE.height;
-      for (const field of BolShared.FIELD_MAP) {
-        const k  = field.overrideKey;
-        const el = inputEls[k];
-        if (!el) continue;
+    // ── The WYSIWYG core (bol-wysiwyg-02): one function computes the live layout from the CURRENT
+    // editing state (via computeOverrides()) and drives both the edit-surface boxes and the canvas
+    // overlay text from the exact same BolShared.layoutBol call generatePdf itself would make. ──
 
-        if (field.type === 'single') {
-          const c = field.coord;
-          el.style.left       = Math.round(c.x * s) + 'px';
-          el.style.top        = Math.round((H - c.y) * s - c.size * s + BASELINE_FUDGE) + 'px';
-          el.style.fontSize   = (c.size * s) + 'px';
-          el.style.height     = Math.round((c.size + 6) * s) + 'px';
-          el.style.lineHeight = Math.round((c.size + 4) * s) + 'px';
-          el.style.width      = Math.round((BolShared.PAGE.width - c.x - 10) * s) + 'px';
-
-        } else if (field.type === 'multiline') {
-          const c     = field.coord;
-          const lineH = c.lineH || 14;
-          const lc    = Math.max(2, (el.value || '').split('\n').length);
-          el.style.left       = Math.round(c.x * s) + 'px';
-          el.style.top        = Math.round((H - c.y) * s - c.size * s + BASELINE_FUDGE) + 'px';
-          el.style.fontSize   = (c.size * s) + 'px';
-          el.style.width      = Math.round(c.maxW * s) + 'px';
-          el.style.height     = Math.round(lc * lineH * s + 8 * s) + 'px';
-          el.style.lineHeight = Math.round(lineH * s) + 'px';
-
-        } else if (field.type === 'shipto') {
-          // shipLine1 y=615, shipLine2 y=601, shipLine3 y=587, shipLine4 y=573 — 14pt spacing
-          const c1 = field.coords[0];
-          const c4 = field.coords[3];
-          const topPx    = Math.round((H - c1.y) * s - c1.size * s + BASELINE_FUDGE);
-          const bottomPx = Math.round((H - c4.y) * s + c4.size * s);
-          el.style.left       = Math.round(c1.x * s) + 'px';
-          el.style.top        = topPx + 'px';
-          el.style.fontSize   = (c1.size * s) + 'px';
-          el.style.width      = Math.round(210 * s) + 'px'; // ship-to block is ~210pt wide
-          el.style.height     = (bottomPx - topPx) + 'px';
-          el.style.lineHeight = Math.round(14 * s) + 'px'; // 14pt line spacing
-
-        } else if (field.type === 'scrap') {
-          const c = field.coords.yes;
-          el.style.left     = Math.round((c.x - 35) * s) + 'px';
-          el.style.top      = Math.round((H - c.y) * s - c.size * s + BASELINE_FUDGE) + 'px';
-          el.style.fontSize = (c.size * s) + 'px';
-          el.querySelectorAll('button').forEach(b => {
-            b.style.fontSize = Math.round(c.size * s * 0.75) + 'px';
-          });
-        }
-
-        // P122: apply drag offset (PDF points → px; y inverted) then pin the handle
-        const _p = posOverrides[k];
-        if (_p) {
-          el.style.left = (parseFloat(el.style.left) + _p.dx * s) + 'px';
-          el.style.top  = (parseFloat(el.style.top)  - _p.dy * s) + 'px';
-        }
-        const _hx = parseFloat(el.style.left);
-        const _hy = parseFloat(el.style.top);
-        const _handle = handleEls[k];
-        if (_handle) {
-          _handle.style.left = Math.max(0, _hx - 2) + 'px';
-          _handle.style.top  = Math.max(0, _hy - 18) + 'px';
-        }
-
-        // bol-style-02: box CSS (size/weight/style/underline) + the per-line preview/overflow strip.
-        if (field.type !== 'scrap') {
-          updateFieldVisual(k);
-          positionPreview(k, s);
-        }
+    function relayoutNow() {
+      const liveBol = { ...bol, _overrides: computeOverrides() };
+      const { runs, boxes } = BolShared.layoutBol(liveBol, fonts);
+      lastBoxes = boxes;
+      lastRuns = runs;
+      positionAll(_scale, boxes);
+      positionZc(_scale, boxes);
+      if (exactPreviewOn) {
+        scheduleExactPreview();
+      } else {
+        drawOverlay(runs, _scale);
       }
       if (activeFieldKey) refreshToolbar();
     }
 
-    function positionPreview(fieldKey, s) {
-      if (!fieldSupportsLines(fieldKey)) return;
-      const el = fieldElFor(fieldKey);
-      const preview = previewEls[fieldKey];
-      if (!el || !preview) return;
-      preview.style.left  = el.style.left;
-      preview.style.top   = (parseFloat(el.style.top) + parseFloat(el.style.height) + 2) + 'px';
-      preview.style.width = el.style.width;
+    function scheduleRelayout() {
+      if (_relayoutTimer) return; // already scheduled — fires at a steady ~120ms cadence during
+      // continuous activity (typing, dragging) rather than only once activity stops.
+      _relayoutTimer = setTimeout(() => { _relayoutTimer = null; relayoutNow(); }, 120);
+    }
+
+    function drawOverlay(runs, s) {
+      const octx = overlayCanvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      octx.setTransform(1, 0, 0, 1, 0, 0);
+      octx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+      octx.scale(dpr, dpr);
+      octx.textBaseline = 'alphabetic';
+      const H = BolShared.PAGE.height;
+      runs.forEach((run) => {
+        if (!run.text) return;
+        const x = run.x * s;
+        const y = (H - run.y) * s;
+        octx.font = fontCss(run.fontKey, run.size * s);
+        octx.fillStyle = run.color === 'red' ? '#ff0000' : '#000000';
+        octx.fillText(run.text, x, y);
+        if (run.underline) {
+          const uy = y + Math.max(1, run.size * 0.12) * s;
+          octx.strokeStyle = octx.fillStyle;
+          octx.lineWidth = Math.max(0.5, run.size * 0.06) * s;
+          octx.beginPath();
+          octx.moveTo(x, uy);
+          octx.lineTo(x + run.width * s, uy);
+          octx.stroke();
+        }
+      });
+    }
+
+    // ── "Exact preview" (bol-wysiwyg-02 §5, recommended): renders the ACTUAL generatePdf output
+    // via pdf.js into the overlay canvas — the ground-truth check, debounced 400ms since it's a
+    // real PDF render (fonts + template fetch) rather than a cheap canvas fillText pass. ──
+    let exactPreviewOn = false;
+    let _exactTimer = null;
+    let _exactRenderTask = null;
+
+    function scheduleExactPreview() {
+      if (_exactTimer) return;
+      _exactTimer = setTimeout(async () => {
+        _exactTimer = null;
+        if (!exactPreviewOn) return;
+        try {
+          const liveBol = { ...bol, _overrides: computeOverrides() };
+          const { pdfBytes } = await BolShared.generatePdf([liveBol], { previewOnly: true });
+          const pdfjs = await loadPdfJs();
+          const doc = await pdfjs.getDocument({ data: pdfBytes }).promise;
+          const p = await doc.getPage(1);
+          const dpr = window.devicePixelRatio || 1;
+          const vp = p.getViewport({ scale: _scale * dpr });
+          const octx = overlayCanvas.getContext('2d');
+          octx.setTransform(1, 0, 0, 1, 0, 0);
+          octx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+          if (_exactRenderTask) { try { _exactRenderTask.cancel(); } catch (_) {} }
+          _exactRenderTask = p.render({ canvasContext: octx, viewport: vp });
+          await _exactRenderTask.promise;
+          _exactRenderTask = null;
+        } catch (_e) {
+          // Best-effort ground-truth preview; never blocks editing on a render hiccup — but never
+          // leave the operator staring at a blank form either, so fall back to the approximation.
+          console.warn('[bol-editor] exact preview render failed, falling back to approximation:', _e);
+          drawOverlay(lastRuns, _scale);
+        }
+      }, 400);
+    }
+
+    exactPreviewCheckbox.addEventListener('change', () => {
+      exactPreviewOn = exactPreviewCheckbox.checked;
+      if (exactPreviewOn) {
+        scheduleExactPreview();
+      } else {
+        if (_exactRenderTask) { try { _exactRenderTask.cancel(); } catch (_) {} _exactRenderTask = null; }
+        relayoutNow();
+      }
+    });
+
+    function positionAll(s, boxes) {
+      const H = BolShared.PAGE.height;
+      for (const field of BolShared.FIELD_MAP) {
+        if (field.type === 'zonecolumns') continue;
+        const k = field.overrideKey;
+        if (k === 'commodity' && zcZoneData) continue;
+        const el = inputEls[k];
+        const box = boxes[k];
+        if (!el || !box) continue;
+
+        el.style.left   = Math.round(box.x * s) + 'px';
+        el.style.top    = Math.round((H - box.y) * s) + 'px';
+        el.style.width  = Math.round(box.w * s) + 'px';
+        el.style.height = Math.round(box.h * s) + 'px';
+
+        if (field.type === 'scrap') {
+          el.querySelectorAll('button').forEach((b) => {
+            b.style.fontSize = Math.max(10, Math.round(box.h * s * 0.55)) + 'px';
+          });
+        }
+
+        const hx = parseFloat(el.style.left);
+        const hy = parseFloat(el.style.top);
+        const handle = handleEls[k];
+        if (handle) {
+          handle.style.left = Math.max(0, hx - 2) + 'px';
+          handle.style.top  = Math.max(0, hy - 18) + 'px';
+        }
+
+        if (field.type !== 'scrap') updateFieldOverflow(k);
+      }
+      if (activeFieldKey) refreshToolbar();
     }
 
     // ── Zone columns (lbz-bol-01) ──────────────────────────────────────────
 
-    const ZC_COORD         = BolShared.COORDS.zoneColumns;
-    const ZC_COL_W         = ZC_COORD.maxW / ZC_COORD.cols;
-    const ZC_PREVIEW_SIZE  = 11; // editor-only preview size; the real PDF tier is recomputed from
-    const ZC_PREVIEW_LINEH = 13; // final text at generatePdf time, so this never needs to match it
+    const ZC_COORD = BolShared.COORDS.zoneColumns;
+    const ZC_COL_W = ZC_COORD.maxW / ZC_COORD.cols;
 
     const zcInputEls  = [];
     const zcHandleEls = [];
@@ -825,9 +943,9 @@ window.BolEditor = (function () {
       handle.addEventListener('pointermove', (e) => {
         if (!dragging) return;
         const s = _scale || 1;
-        zcItems[idx].x = Math.round(baseX + (e.clientX - startX) / s);
-        zcItems[idx].y = Math.round(baseY - (e.clientY - startY) / s);
-        positionZc(_scale);
+        zcItems[idx].x = Math.round((baseX + (e.clientX - startX) / s) * 2) / 2;
+        zcItems[idx].y = Math.round((baseY - (e.clientY - startY) / s) * 2) / 2;
+        scheduleRelayout();
       });
       const endDrag = (e) => {
         if (!dragging) return;
@@ -847,18 +965,16 @@ window.BolEditor = (function () {
         const el = document.createElement('textarea');
         el.value = item.text;
         el.title = item.label || '';
-        el.style.cssText = 'position:absolute;box-sizing:border-box;background:rgba(255,255,255,0.88);border:1.5px solid var(--border,#d1d5db);border-radius:4px;padding:2px 4px;font-family:Helvetica,Arial,sans-serif;color:var(--text,#111827);resize:none;overflow:hidden;';
+        el.style.cssText = EDIT_SURFACE_CSS;
         const fieldKey = 'zoneCol' + idx;
         prevLines[fieldKey] = item.text.split('\n');
         el.addEventListener('input', function () {
           zcItems[idx].text = this.value;
-          this.style.height = 'auto';
-          this.style.height = this.scrollHeight + 'px';
           const newLines = this.value.split('\n');
           shiftLineKeys(fieldKey, prevLines[fieldKey], newLines);
           prevLines[fieldKey] = newLines;
-          updateFieldVisual(fieldKey);
           if (activeFieldKey === fieldKey) refreshToolbar();
+          scheduleRelayout();
         });
         el.addEventListener('focus', () => activateField(fieldKey));
         el.addEventListener('blur', () => deactivateFieldIfMatches(fieldKey));
@@ -879,25 +995,23 @@ window.BolEditor = (function () {
       });
     }
 
-    function positionZc(s) {
+    function positionZc(s, boxes) {
       const H = BolShared.PAGE.height;
       (zcItems || []).forEach((item, idx) => {
         const el = zcInputEls[idx]; if (!el) return;
-        const lc = Math.max(2, (el.value || '').split('\n').length);
-        el.style.left       = Math.round(item.x * s) + 'px';
-        el.style.top        = Math.round((H - item.y) * s - ZC_PREVIEW_SIZE * s + BASELINE_FUDGE) + 'px';
-        el.style.fontSize   = (ZC_PREVIEW_SIZE * s) + 'px';
-        el.style.width      = Math.round(ZC_COL_W * s) + 'px';
-        el.style.height     = Math.round(lc * ZC_PREVIEW_LINEH * s + 8 * s) + 'px';
-        el.style.lineHeight = Math.round(ZC_PREVIEW_LINEH * s) + 'px';
+        const fieldKey = 'zoneCol' + idx;
+        const box = boxes[fieldKey];
+        if (!box) return;
+        el.style.left   = Math.round(box.x * s) + 'px';
+        el.style.top    = Math.round((H - box.y) * s) + 'px';
+        el.style.width  = Math.round(box.w * s) + 'px';
+        el.style.height = Math.round(box.h * s) + 'px';
         const handle = zcHandleEls[idx];
         if (handle) {
           handle.style.left = Math.max(0, parseFloat(el.style.left) - 2) + 'px';
           handle.style.top  = Math.max(0, parseFloat(el.style.top) - 18) + 'px';
         }
-        const fieldKey = 'zoneCol' + idx;
-        updateFieldVisual(fieldKey);
-        positionPreview(fieldKey, s);
+        updateFieldOverflow(fieldKey);
       });
       if (activeFieldKey && /^zoneCol\d+$/.test(activeFieldKey)) refreshToolbar();
     }
@@ -923,7 +1037,7 @@ window.BolEditor = (function () {
       regenBtn.addEventListener('click', async () => {
         zcItems = await buildDefaultZcItems();
         buildZcBoxes();
-        positionZc(_scale);
+        relayoutNow();
         hideStaleBanner();
       });
       const keepBtn = document.createElement('button');
@@ -945,7 +1059,7 @@ window.BolEditor = (function () {
       resetZcBtn.addEventListener('click', async () => {
         zcItems = await buildDefaultZcItems();
         buildZcBoxes();
-        positionZc(_scale);
+        relayoutNow();
         hideStaleBanner();
       });
       actionBar.insertBefore(resetZcBtn, applyBtn);
@@ -967,83 +1081,7 @@ window.BolEditor = (function () {
     // ── Apply ──
 
     applyBtn.addEventListener('click', () => {
-      const overrides = {};
-
-      for (const field of BolShared.FIELD_MAP) {
-        const k  = field.overrideKey;
-        const el = inputEls[k];
-        if (!el) continue;
-
-        if (field.type === 'single') {
-          const val = el.value; // no trim — keep parity with deriveValue's String(col || '')
-          if (val !== deriveBaseValue(bol, field)) overrides[k] = val;
-
-        } else if (field.type === 'shipto') {
-          const lines = el.value.split('\n').map(l => l.trimEnd()).filter(l => l.trim()).slice(0, 4);
-          const base  = deriveBaseValue(bol, field).split('\n').map(l => l.trimEnd()).filter(l => l.trim()).slice(0, 4);
-          if (lines.join('\n') !== base.join('\n')) overrides[k] = lines;
-
-        } else if (field.type === 'multiline') {
-          const lines = el.value.split('\n').map(l => l.trimEnd());
-          while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-          const base = deriveBaseValue(bol, field).split('\n').map(l => l.trimEnd());
-          while (base.length && !base[base.length - 1].trim()) base.pop();
-          if (lines.join('\n') !== base.join('\n')) overrides[k] = lines;
-
-        } else if (field.type === 'scrap') {
-          const val = el.dataset.scrapValue === 'true';
-          if (val !== deriveBaseValue(bol, field)) overrides[k] = val;
-        }
-      }
-
-      // P122: attach position deltas (skip zero entries)
-      const _posOut = {};
-      for (const pk in posOverrides) {
-        const pv = posOverrides[pk];
-        if (pv && (pv.dx || pv.dy)) _posOut[pk] = { dx: pv.dx, dy: pv.dy };
-      }
-      if (Object.keys(_posOut).length > 0) overrides._pos = _posOut;
-
-      // bol-style-02: prune empty style objects and write overrides._style only if non-empty, next
-      // to _pos. Deliberately its OWN pass (not gated by any field's text-unchanged check above) —
-      // a style survives even when the field's text reverts to its base value.
-      const _styleOut = {};
-      for (const _fk in styleOverrides) {
-        const _fs = styleOverrides[_fk];
-        if (!_fs) continue;
-        const _out = {};
-        if (_fs.size != null) _out.size = _fs.size;
-        if (_fs.bold != null) _out.bold = _fs.bold;
-        if (_fs.italic != null) _out.italic = _fs.italic;
-        if (_fs.underline != null) _out.underline = _fs.underline;
-        if (_fs.lines) {
-          const _linesOut = {};
-          for (const _li in _fs.lines) {
-            const _l = _fs.lines[_li];
-            if (!_l) continue;
-            const _lo = {};
-            if (_l.size != null) _lo.size = _l.size;
-            if (_l.bold != null) _lo.bold = _l.bold;
-            if (_l.italic != null) _lo.italic = _l.italic;
-            if (_l.underline != null) _lo.underline = _l.underline;
-            if (Object.keys(_lo).length) _linesOut[_li] = _lo;
-          }
-          if (Object.keys(_linesOut).length) _out.lines = _linesOut;
-        }
-        if (Object.keys(_out).length) _styleOut[_fk] = _out;
-      }
-      if (Object.keys(_styleOut).length > 0) overrides._style = _styleOut;
-
-      // lbz-bol-01: persist the WHOLE zoneColumns container (items + zoneData + sourceHash) —
-      // Apply replaces `overrides` wholesale (see below), so omitting zoneData/sourceHash here
-      // would silently break "Reset columns" and the stale guard on every subsequently-edited BOL.
-      if (zcZoneData) {
-        overrides.zoneColumns = {
-          items: (zcItems || []).map(it => ({ ...it })),
-          zoneData: zcZoneData,
-          sourceHash: zcSourceHash,
-        };
-      }
+      const overrides = computeOverrides();
 
       if (Object.keys(overrides).length > 0) {
         bol._overrides = overrides;
@@ -1063,6 +1101,8 @@ window.BolEditor = (function () {
 
     function cleanup() {
       if (_renderTask) { try { _renderTask.cancel(); } catch (_) {} _renderTask = null; }
+      if (_relayoutTimer) { clearTimeout(_relayoutTimer); _relayoutTimer = null; }
+      if (_exactTimer) { clearTimeout(_exactTimer); _exactTimer = null; }
       if (mountEl._ro) { mountEl._ro.disconnect(); delete mountEl._ro; }
       mountEl.innerHTML = '';
       mountEl.style.cssText = '';
