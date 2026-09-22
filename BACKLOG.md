@@ -433,10 +433,6 @@
 
 ### BOL Issues
 
-- [ ] **bol-wysiwyg-03 — v2 parity: `BolEditorModal` WYSIWYG from `layoutBol`.** Depends on
-  bol-wysiwyg-01 (shipped). Same rebuild as bol-wysiwyg-02, applied to
-  `cutting-pilot/src/lib/bolEditorEngine.ts` + `BolEditorModal.tsx`. No zone-column editing UI in
-  scope (still tracked separately, see "v2 zone-column editing follow-up" above).
 - [ ] **P316 follow-up — editable Scrap Pickup toggle in the BOL compose form.** Currently derived
   from the job's `scrap_pickup` only (`'YES' → is_scrap_pickup: 1`); no manual override at compose
   time.

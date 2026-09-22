@@ -1912,6 +1912,62 @@ current series).
 
 ## Logistics (v2)
 
+- **bol-wysiwyg-03 — v2 parity: `BolEditorModal`/`bolEditorEngine.ts` rewritten as a true WYSIWYG
+  editor from `layoutBol` (react-component-agent + next-platform-agent, depends on bol-wysiwyg-01
+  and applies bol-wysiwyg-02's design identically to the v2 engine).** Root cause (same as
+  bol-wysiwyg-02): `bolEditorEngine.ts`'s `positionAll`/`reflow` re-derived field placement from
+  static `COORDS` — the same four mismatches bol-wysiwyg-02 fixed in legacy. Fix, ported 1:1 into
+  `cutting-pilot/src/lib/bolEditorEngine.ts`: `mountBolEditor` now loads `getLayoutFonts()`
+  alongside the pdf.js template fetch, and adds a transparent `overlayCanvas` stacked on the
+  template canvas. Every field's edit-surface `<input>`/`<textarea>` is sized/positioned directly
+  from `layoutBol`'s returned `boxes` via a rewritten `positionAll(s, boxes)`, and the overlay
+  canvas draws the actual `layoutBol` runs (`drawOverlay`, `fontCss`) — matching legacy's approach
+  exactly, including the transparent `EDIT_SURFACE_CSS` edit surfaces (dashed outline, transparent
+  text, visible caret only) in place of the old opaque bordered inputs. Extracted the Apply
+  button's inline override-building into a standalone `computeOverrides()` — now the single
+  function both the live overlay preview (`relayoutNow`) and Apply call, so the WYSIWYG preview is
+  never a different representation of state than what actually gets persisted. Typing/dragging/
+  style edits schedule `relayoutNow()` through a 120ms throttle (`scheduleRelayout`, not a
+  debounce, for responsive drag feedback) via a rebuilt `{ ...bol, _overrides: computeOverrides() }`
+  → `layoutBol` → reposition every box → redraw the overlay. `baseCoordForField` now calls
+  `pickCommodityTier` live for the commodity field instead of returning a fixed `COORDS` size,
+  fixing the `TextStyleToolbar`'s "Auto(N)" display as a side effect (same latent bug bol-wysiwyg-02
+  fixed in legacy). Drag handles now snap to 0.5pt (`Math.round(dx*2)/2`) instead of whole points.
+  Added the same optional "Exact preview" checkbox (off by default, disabled until the first
+  `reflow()` completes — bol-wysiwyg-02's caught race, ported as a guard here rather than
+  rediscovered: `reflow()` is still reached asynchronously via `requestAnimationFrame` and a
+  `scrollArea` resize observer, so the same gap between checkbox creation and first layout exists
+  in v2 too): when on, a 400ms-throttled `scheduleExactPreview()` calls the real
+  `generatePdf(...)` (lazily fetching and caching its own `templateBytes`/`scriptFontBytes` copies,
+  separate from the pdf.js template fetch's `ArrayBuffer` in case pdf.js transfers/detaches it) and
+  renders the actual PDF bytes onto the overlay via pdf.js; a render failure falls back to the
+  approximation (`drawOverlay(lastRuns, scale)`) and `console.warn`s instead of leaving the operator
+  looking at a blank form. **Existing bol-style-03 UI integrated, not rebuilt** per the prompt: kept
+  the React `TextStyleToolbar` (portaled via `getStyleMountNode`/`onActiveFieldChange`), the
+  `shiftLineKeys`/`pruneStyleOverrides` line-index-integrity helpers, and the `setScope`/
+  `setFieldStyleValue`/`resetFieldStyle` handle API unchanged — every style change now triggers the
+  same relayout+redraw as a text edit (`applyStylePatch`/`resetFieldStyle` call `scheduleRelayout()`
+  instead of the old direct CSS tweak). **Removed** the styled preview strip that used to render
+  beneath multiline fields (`ensurePreviewEl`/the per-line dot+text strip) — the WYSIWYG canvas
+  layer now shows per-line styles in place; `updateFieldOverflow` replaces it with the amber-outline
+  overflow warning only (unchanged from `measureStyledField`), and `ActiveFieldInfo.fieldBottom`
+  simplifies to the field's own bottom edge (no more preview-visibility branch). **No zone-column
+  editing UI in scope** (unchanged — see the existing "v2 zone-column editing follow-up" backlog
+  item): the `zonecolumns` `FIELD_MAP` entry is skipped entirely in both the field-creation loop and
+  `positionAll` (mirrors legacy's own `if (field.type === 'zonecolumns') continue;`), same as before
+  this prompt — Apply still does not preserve a pre-existing `_overrides.zoneColumns` on a zoned
+  BOL, a pre-existing gap out of scope here. **Verified:** `cd cutting-pilot && npx tsc --noEmit`
+  and `npm run cf-build` (opennextjs-cloudflare) both clean. **Not independently verified here:**
+  no interactive browser test this session (v2 requires a running dev server + auth'd session with
+  real BOL data this environment doesn't have — reaching `BolEditorModal` needs a D1-backed job to
+  open it against, unlike legacy's static-asset test harness). Three spots that aren't a purely
+  mechanical port were re-read by hand instead of just diffed against legacy: `reflow()` assigns
+  `scale = s` before calling `relayoutNow()` (so the first paint isn't laid out at the placeholder
+  `scale`), `exactPreviewCheckbox.disabled = false` runs after `relayoutNow()` (so `lastRuns` has
+  data before the fallback can use it), and the scrap field's `click`-driven `scheduleRelayout()`
+  is on the toggle's wrapper `div`, which `buildScrapToggle`'s Yes/No buttons bubble into (no
+  `stopPropagation`) — confirmed by reading both functions. The prompt's "5 real BOLs, cross-check
+  legacy vs v2" floor check still needs a real v2 session to run.
 - **lbz-bol-02 — zoned BOL commodity columns, v2 port (next-platform-agent §9a +
   react-component-agent §9b, bilateral parity with lbz-bol-01).** Sixth and last prompt in the
   offload-zone series; ports lbz-bol-01's `zonecolumns` field type, default first-fit
