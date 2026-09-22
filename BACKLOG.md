@@ -218,6 +218,10 @@
 - [ ] **v2 zone-column editing follow-up.** `bolEditorEngine.ts`'s editor has no zone-column boxes
   at all yet (legacy's `zoneCol0…N` per-column editing has no v2 equivalent) — noted again while
   scoping `bol-style-03`, which deliberately did not add zone-column styling to v2 for this reason.
+  Also noted while scoping bol-wysiwyg-03: v2 has no `zcZoneData` concept at all, so unlike legacy
+  (which skips the `commodity` box when a BOL is zoned), v2's `positionAll` always draws an
+  editable commodity box — on a zoned BOL that box sits over columns the operator can't coherently
+  edit through it. Same root cause, same fix (this follow-up), not a separate bug.
 - [ ] **Shipment Dashboard Distance/ETA — extract shared geocode-cache orchestration if a 4th
   consumer appears.** `resolveOrigin`/`resolveDestRoute`-style cache read/write logic is now
   duplicated three times (`invoice/route.ts`, `invoice/resolve-line/route.ts`,
