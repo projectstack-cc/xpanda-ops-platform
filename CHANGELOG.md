@@ -7099,6 +7099,22 @@ current series).
 
 ## Admin / Platform
 
+- **prod-a-04 — Login `?next=` return + `production.manage` permission label
+  (admin-auth-agent §8).** `login.html`'s new `safeNext()` reads `?next=` from the URL and
+  validates it's a same-origin path (must start with a single `/`, no `//`, no backslashes, no
+  `://` scheme) before `landingForUser()` uses it as the post-login destination — completes
+  prod-a-03's v2 Production "Switch user" button, which logs out then redirects to
+  `/login.html?next=%2Fv2%2Fproduction`. Carrier-only users still land on `/v2/carrier`
+  regardless (checked first); both `checkAuth()`'s first-login path and `goToLanding()` already
+  route through `landingForUser()`, so no second code path was needed. New `production.manage`
+  permission key added to `admin/roles.html`'s `PERMISSION_LABELS`/`PERM_ITEM_LABEL_KEY` and
+  `admin/admin-i18n.js` (en/es/ht) — the manager-only gate prod-a-02's API and prod-a-03's UI
+  ("+ Add new…", delete sheet) already check via `X-User-Can-Manage-Production`; hard
+  delete/purge stays admin-only by design and needs no separate key. `node --check` on the
+  extracted `login.html` script and on `admin/admin-i18n.js` both green. **STOPPED at
+  ready-to-push** — ships together with prod-a-02/03 once Steve confirms the prod-a-01 migration
+  ran in the D1 console.
+
 - **Hotfix (unprompted) — backfilled historical `activity_log`/`parts` timestamps to the
   SQLite-native space format (db-api-agent).** QC Cleanup-5 (2026-08-31) made new writes use
   `nowSqlite()`'s `"YYYY-MM-DD HH:MM:SS"` format but was forward-only, leaving ~5,835 existing

@@ -134,13 +134,24 @@
   </div>
 
 <script>
+// prod-a-04 — return to the page that sent the user here (e.g. v2 Production "Switch user").
+// Same-origin paths only: must start with a single "/", no "//", no backslashes, no scheme.
+function safeNext() {
+  try {
+    const n = new URLSearchParams(window.location.search).get('next');
+    if (!n || n[0] !== '/' || n.startsWith('//') || n.includes('\\') || n.includes('://')) return null;
+    return n;
+  } catch { return null; }
+}
+
 function landingForUser(u) {
   const perms = (u && u.permissions) || {};
   const viewKeys = Object.keys(perms).filter(k => perms[k] && perms[k].view === true);
   const carrierOnly = u && !u.isAdministrator
     && viewKeys.length === 1
     && viewKeys[0] === 'logistics.carrier_view';
-  return carrierOnly ? '/v2/carrier' : '/';
+  if (carrierOnly) return '/v2/carrier';
+  return safeNext() || '/';
 }
 
 async function goToLanding() {
