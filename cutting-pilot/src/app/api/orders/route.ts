@@ -158,8 +158,14 @@ export async function POST(request: NextRequest) {
     // P438: compute + persist Holey Board chunk requirement so cutList.ts's P386 CHUNK
     // BREAKDOWN page renders and the v2 cutting queue's guillotine seed is correct on create.
     // Best-effort — log + swallow so a nester bug never blocks an order save.
+    // hb-onhand-02: read the breakdown back so the response can carry it — OrderEntryForm's
+    // "Print cut list" builds its PDF from this POST response, not a follow-up fetch, so without
+    // this the CHUNK BREAKDOWN page (net or not) never renders on a just-created order.
+    let hbChunkBreakdown: string | null = null;
     try {
       await computeAndPersistHoleyChunks(DB, id);
+      const hbRow = await DB.prepare(`SELECT hb_chunk_breakdown FROM jobs WHERE id = ?`).bind(id).first<any>();
+      hbChunkBreakdown = hbRow?.hb_chunk_breakdown ?? null;
     } catch (e: any) {
       console.error("computeAndPersistHoleyChunks failed:", String(e?.message || e));
     }
@@ -179,7 +185,7 @@ export async function POST(request: NextRequest) {
       ).run();
     } catch (e: any) { console.error("activity_log failed:", String(e?.message || e)); }
 
-    return NextResponse.json({ ok: true, id }, { status: 201 });
+    return NextResponse.json({ ok: true, id, hb_chunk_breakdown: hbChunkBreakdown }, { status: 201 });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, { status: 500 });
   }

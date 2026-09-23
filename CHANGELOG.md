@@ -617,15 +617,19 @@ current series).
   now mirrors `jobs/index.html`'s `buildCutListPdf` line-for-line (netted-plan FLOOR STOCK
   sub-block + table, byte-identical no-`net` fallback — see `## Job Board`). **Deviation from the
   prompt's assumption**: it claimed `OrderEditModal`/`OrderDetailModal`/`OrderEntryForm` "already
-  pass `hb_chunk_breakdown` through" and need no changes — grepping showed that was only true for
-  `OrderEntryForm.tsx`. `GET /v2/api/board/:id`'s explicit column list never selected
-  `hb_chunk_breakdown`, so `OrderDetailModal`'s cut list (which spreads that response) and
-  `OrderEditModal`'s hand-built `clJob` object (which never referenced the field at all) could
-  never have rendered a CHUNK BREAKDOWN page — a pre-existing P386-era gap, not something this
-  prompt introduced, but one that would have made this prompt's own v2 rendering work invisible
-  on two of its three intended surfaces. Fixed by adding `hb_chunk_breakdown` to that route's
-  `SELECT` and to both components' job type/object (`DetailJob`, `EditJob`, and `OrderEditModal`'s
-  `clJob` construction).
+  pass `hb_chunk_breakdown` through" and need no changes — grepping (and tracing each further
+  than a surface grep, per feedback-style precedent) showed none of the three actually worked
+  pre-existingly, a P386-era gap this prompt's rendering work would otherwise have shipped
+  invisibly on: (1) `GET /v2/api/board/:id`'s explicit column list never selected
+  `hb_chunk_breakdown`, so `OrderDetailModal` (spreads that response) and `OrderEditModal`
+  (hand-built `clJob`, never referenced the field) could never render the page — fixed by adding
+  the column to that route's `SELECT` and to both components' job type/object (`DetailJob`,
+  `EditJob`, `OrderEditModal`'s `clJob`); (2) `OrderEntryForm.tsx`'s own code already read
+  `savedOrder.hb_chunk_breakdown` correctly, but `savedOrder` was built purely from the client's
+  submitted form payload (which never has a server-computed field) — the actual bug was one level
+  up, in `POST /v2/api/orders`, which returned only `{ ok, id }`. Fixed by having that route read
+  `hb_chunk_breakdown` back after `computeAndPersistHoleyChunks` and include it in the response,
+  which `OrderEntryForm`'s existing `data?.hb_chunk_breakdown` fallback already expected.
 
 - **P442 — v2/TypeScript i18n spine (`cutting-pilot/`), mirroring the existing `theme.tsx` /
   `ThemeProvider` / `useTheme` pattern.** New `src/lib/i18n.ts` exports `LANGS` (`en`/`es`/`ht`),
