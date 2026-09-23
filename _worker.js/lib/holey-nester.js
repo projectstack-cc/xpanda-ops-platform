@@ -61,3 +61,66 @@ export function nestHoleyChunks(items, opts = {}) {
     oversize,
   };
 }
+
+// hb-onhand-01: net an order's HB lines against floor stock and re-nest what's left.
+// lines: [{part_id, part_number, thickness, qty}]; onHand: parsed jobs.hb_on_hand or null.
+// Returns the `net` object (see contract) or null when there is no positive floor stock.
+export function netHoleyChunks(lines, onHand, orderChunksRequired, opts = {}) {
+  const safeLines = Array.isArray(lines) ? lines : [];
+
+  let pcsStored = {};
+  let chunksStored = 0;
+  if (onHand && typeof onHand === 'object') {
+    if (onHand.pcs && typeof onHand.pcs === 'object') pcsStored = onHand.pcs;
+    const c = parseInt(onHand.chunks, 10);
+    if (Number.isFinite(c) && c > 0) chunksStored = c;
+  }
+
+  const pcs = [];
+  const toCutItems = [];
+  let anyPcsOnHand = false;
+
+  for (const line of safeLines) {
+    const orderQty = parseInt(line && line.qty, 10);
+    if (!(orderQty >= 1)) continue;
+    const thickness = Number(line && line.thickness);
+
+    const stored = parseInt(pcsStored[line.part_id], 10);
+    const onHandQty = Number.isFinite(stored) && stored > 0 ? Math.min(stored, orderQty) : 0;
+    const toCut = orderQty - onHandQty;
+
+    if (onHandQty > 0) {
+      anyPcsOnHand = true;
+      pcs.push({
+        part_id: line.part_id,
+        part_number: line.part_number,
+        thickness,
+        order_qty: orderQty,
+        on_hand: onHandQty,
+        to_cut: toCut,
+      });
+    }
+    if (toCut > 0 && thickness > 0) toCutItems.push({ thickness, qty: toCut });
+  }
+
+  if (!anyPcsOnHand && chunksStored <= 0) return null;
+
+  let net;
+  try {
+    net = nestHoleyChunks(toCutItems, opts);
+  } catch {
+    return null;
+  }
+
+  const chunksOnHand = Math.min(chunksStored, net.chunks_required);
+  const chunksToCut = net.chunks_required - chunksOnHand;
+
+  return {
+    ...net,
+    order_chunks_required: Number.isFinite(orderChunksRequired) ? orderChunksRequired : net.chunks_required,
+    pcs,
+    chunks_on_hand_entered: chunksStored,
+    chunks_on_hand: chunksOnHand,
+    chunks_to_cut: chunksToCut,
+  };
+}

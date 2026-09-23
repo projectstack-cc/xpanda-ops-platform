@@ -4515,6 +4515,34 @@ current series).
 
 ## Database / API
 
+- **hb-onhand-01 — Holey Board floor stock: `hb_on_hand` column, net re-nest, `PUT
+  /api/jobs/:id/hb-on-hand` (+ v2 mirror) (db-api-agent + next-platform-agent §9a).**
+  Data-layer only (UI/PDF rendering is hb-onhand-02). New nullable
+  `jobs.hb_on_hand TEXT` (`DB_Migrations/hb-on-hand.sql`, gitignored) stores
+  `{ "pcs": { "<part_id>": <int> }, "chunks": <int> }` — only positive integers, `NULL` when
+  empty. New pure `netHoleyChunks(lines, onHand, orderChunksRequired, opts)` in
+  `_worker.js/lib/holey-nester.js` (typed port in `cutting-pilot/src/lib/holeyNester.ts` —
+  `HbLine`/`HbOnHand`/`HbNet` types): for each line, `on_hand = min(stored, order_qty)`,
+  `to_cut = order_qty − on_hand`; the remaining `to_cut` pieces are re-nested (not scaled) since
+  floor pieces change which chunk recipes are needed; uncut floor chunks reduce `chunks_to_cut`
+  only (`net.breakdown` still lists all netted chunks). Returns `null` when there's no positive
+  floor stock at all. `computeAndPersistHoleyChunks` (`_worker.js/routes/jobs.js`, mirrored in
+  `cutting-pilot/src/lib/holeyChunks.ts`) now also builds `lines` (HB line items aggregated by
+  `part_id`, quantities summed across duplicates, first-seen `sort_order`) and adds `lines`
+  always + `net` (when non-null) to `hb_chunk_breakdown` JSON, additively — every existing
+  top-level field (`chunks_required`, `total_boards`, `breakdown`, etc.) and the cut-list line
+  quantities are byte-for-byte unchanged; verified via a self-check diffing the pre-change
+  `nestHoleyChunks` output against the new file. New `PUT /api/jobs/:id/hb-on-hand` (mirrors the
+  `zones` endpoint's style): 404 if the job doesn't exist, 400 if it has no HB line items, drops
+  non-finite/negative/zero values and any `part_id` not an HB line on that job, saves then calls
+  `computeAndPersistHoleyChunks` to rebuild `net`, logs activity, returns
+  `{ id, hb_on_hand, hb_chunks_required, hb_chunk_breakdown }`. `hb_on_hand` confirmed absent
+  from the main `PUT /api/jobs` `textFields` whitelist — a normal job save cannot touch it.
+  `jobs.js`'s `JOB_LIST_COLS` now includes `hb_on_hand` for board pre-fill. v2 mirror required so
+  a `/v2/api/orders` save doesn't silently drop `net`. No v2 edit endpoint/UI yet (BACKLOG.md).
+  `node --check` on both legacy files, `tsc --noEmit` + `opennextjs-cloudflare build` green.
+  **MIGRATION-GATED — STOPPED at ready-to-push** until Steve confirms `hb-on-hand.sql` ran.
+
 - **lbz-db-01 — Offload zone schema + API passthrough (db-api-agent).** First prompt in the
   offload-zone series (zoning support for deck systems). Migration already run remotely by Steve
   before this session: `jobs.offload_zones_enabled INTEGER NOT NULL DEFAULT 0`,

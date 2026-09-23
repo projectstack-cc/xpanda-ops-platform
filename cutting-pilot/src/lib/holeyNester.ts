@@ -86,3 +86,99 @@ export function nestHoleyChunks(
     oversize,
   };
 }
+
+// hb-onhand-01: typed port of _worker.js/lib/holey-nester.js's netHoleyChunks. Nets an order's
+// HB lines against floor stock and re-nests what's left. Pure: no D1, no DOM.
+export interface HbLine {
+  part_id: string;
+  part_number: string | null;
+  thickness: number;
+  qty: number;
+}
+
+export interface HbOnHand {
+  pcs?: Record<string, number>;
+  chunks?: number;
+}
+
+export interface HbNetPc {
+  part_id: string;
+  part_number: string | null;
+  thickness: number;
+  order_qty: number;
+  on_hand: number;
+  to_cut: number;
+}
+
+export interface HbNet extends NestResult {
+  order_chunks_required: number;
+  pcs: HbNetPc[];
+  chunks_on_hand_entered: number;
+  chunks_on_hand: number;
+  chunks_to_cut: number;
+}
+
+export function netHoleyChunks(
+  lines: HbLine[] | null | undefined,
+  onHand: HbOnHand | null | undefined,
+  orderChunksRequired: number,
+  opts: { height?: number; kerf?: number } = {}
+): HbNet | null {
+  const safeLines = Array.isArray(lines) ? lines : [];
+
+  let pcsStored: Record<string, unknown> = {};
+  let chunksStored = 0;
+  if (onHand && typeof onHand === "object") {
+    if (onHand.pcs && typeof onHand.pcs === "object") pcsStored = onHand.pcs;
+    const c = parseInt(String(onHand.chunks ?? ""), 10);
+    if (Number.isFinite(c) && c > 0) chunksStored = c;
+  }
+
+  const pcs: HbNetPc[] = [];
+  const toCutItems: NestInputItem[] = [];
+  let anyPcsOnHand = false;
+
+  for (const line of safeLines) {
+    const orderQty = parseInt(String(line?.qty ?? ""), 10);
+    if (!(orderQty >= 1)) continue;
+    const thickness = Number(line?.thickness);
+
+    const stored = parseInt(String(pcsStored[line.part_id] ?? ""), 10);
+    const onHandQty = Number.isFinite(stored) && stored > 0 ? Math.min(stored, orderQty) : 0;
+    const toCut = orderQty - onHandQty;
+
+    if (onHandQty > 0) {
+      anyPcsOnHand = true;
+      pcs.push({
+        part_id: line.part_id,
+        part_number: line.part_number,
+        thickness,
+        order_qty: orderQty,
+        on_hand: onHandQty,
+        to_cut: toCut,
+      });
+    }
+    if (toCut > 0 && thickness > 0) toCutItems.push({ thickness, qty: toCut });
+  }
+
+  if (!anyPcsOnHand && chunksStored <= 0) return null;
+
+  let net: NestResult;
+  try {
+    net = nestHoleyChunks(toCutItems, opts);
+  } catch {
+    return null;
+  }
+
+  const chunksOnHand = Math.min(chunksStored, net.chunks_required);
+  const chunksToCut = net.chunks_required - chunksOnHand;
+
+  return {
+    ...net,
+    order_chunks_required: Number.isFinite(orderChunksRequired) ? orderChunksRequired : net.chunks_required,
+    pcs,
+    chunks_on_hand_entered: chunksStored,
+    chunks_on_hand: chunksOnHand,
+    chunks_to_cut: chunksToCut,
+  };
+}

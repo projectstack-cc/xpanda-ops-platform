@@ -1,6 +1,6 @@
 import { json, logActivity, safeJsonParse } from '../lib/core.js';
 import { completeCuttingLinesForJob } from '../lib/cutting-lines.js';
-import { nestHoleyChunks } from '../lib/holey-nester.js';
+import { nestHoleyChunks, netHoleyChunks } from '../lib/holey-nester.js';
 
 // P379: compute + persist the Holey Board chunk requirement for a job (server-authoritative).
 // Reads the just-saved line items, resolves HB thickness from the parts catalog, runs the FFD
@@ -8,19 +8,44 @@ import { nestHoleyChunks } from '../lib/holey-nester.js';
 // so the response carries fresh values. Non-HB jobs (no HB line items) get NULL / NULL.
 async function computeAndPersistHoleyChunks(db, jobId, job) {
   const rows = await db.prepare(
-    `SELECT jli.quantity AS qty, p.height_in AS thickness
+    `SELECT jli.quantity AS qty, p.height_in AS thickness,
+            jli.part_id AS part_id, jli.part_number AS part_number
        FROM job_line_items jli
        JOIN parts p ON p.id = jli.part_id
-      WHERE jli.job_id = ? AND p.category = 'Holey Board' AND p.height_in > 0`
+      WHERE jli.job_id = ? AND p.category = 'Holey Board' AND p.height_in > 0
+      ORDER BY jli.sort_order ASC`
   ).bind(jobId).all();
 
-  const items = (rows.results || []).map(r => ({ thickness: Number(r.thickness), qty: Number(r.qty) }));
+  const resultRows = rows.results || [];
+  const items = resultRows.map(r => ({ thickness: Number(r.thickness), qty: Number(r.qty) }));
+
+  // hb-onhand-01: `lines` for netHoleyChunks — quantities summed across duplicate part_ids,
+  // in first-seen sort_order (resultRows is already ORDER BY jli.sort_order ASC above).
+  const lineMap = new Map();
+  for (const r of resultRows) {
+    const existing = lineMap.get(r.part_id);
+    if (existing) existing.qty += Number(r.qty);
+    else lineMap.set(r.part_id, {
+      part_id: r.part_id,
+      part_number: r.part_number,
+      thickness: Number(r.thickness),
+      qty: Number(r.qty),
+    });
+  }
+  const lines = Array.from(lineMap.values());
 
   let chunksRequired = null;
   let breakdownJson = null;
   if (items.length) {
     const res = nestHoleyChunks(items);   // defaults: height 50, kerf 0.079
     chunksRequired = res.chunks_required;
+
+    res.lines = lines;
+    const onHandRow = await db.prepare(`SELECT hb_on_hand FROM jobs WHERE id = ?`).bind(jobId).first();
+    const parsedOnHand = safeJsonParse(onHandRow?.hb_on_hand, null);
+    const net = netHoleyChunks(lines, parsedOnHand, res.chunks_required);
+    if (net) res.net = net;
+
     breakdownJson = JSON.stringify(res);
   }
 
@@ -59,7 +84,7 @@ export async function handleApiJobs(request, env) {
     j.scrap_pickup, j.sales_lead, j.bol_info, j.payment_info, j.notes,
     j.cutting_instructions, j.packing_instructions, j.contact_name, j.contact_phone, j.combo_id,
     j.priority, j.priority_level, j.confirmed_to_ship, j.processes, j.created_at, j.updated_at,
-    j.hb_chunks_required, j.hb_chunk_breakdown, j.offload_zones_enabled,
+    j.hb_chunks_required, j.hb_chunk_breakdown, j.offload_zones_enabled, j.hb_on_hand,
     j.packing_slip_filename, j.packing_slip_invoice, j.source, j.ship_to_verified,
     j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_street2,
     j.ship_to_city, j.ship_to_state, j.ship_to_zip,
@@ -206,6 +231,71 @@ export async function handleApiJobs(request, env) {
       await db.prepare(`DELETE FROM job_shifts WHERE job_id = ? AND shift = ?`).bind(jobId, targetShift).run();
       await logActivity(db, "unassign_shift", "job", jobId, `Unassigned ${targetShift} shift`, { shift: targetShift }, actorId);
       return json({ ok: true });
+    }
+  }
+
+  // hb-onhand-01: HB floor stock editor. PUT /api/jobs/:id/hb-on-hand body
+  // { pcs: { [part_id]: number }, chunks: number } — only positive integers are stored; an
+  // all-empty payload clears the column to NULL. No dedicated permission check here: same
+  // /api/jobs -> 'jobs' mapping as every other job edit (session gate enforces PUT -> edit).
+  if (jobId && subRoute === "hb-on-hand" && request.method === "PUT") {
+    let body;
+    try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
+
+    const jobRow = await db.prepare("SELECT id FROM jobs WHERE id = ?").bind(jobId).first();
+    if (!jobRow) return json({ ok: false, error: "Job not found." }, 404);
+
+    const hbLineRows = await db.prepare(
+      `SELECT jli.part_id AS part_id
+         FROM job_line_items jli
+         JOIN parts p ON p.id = jli.part_id
+        WHERE jli.job_id = ? AND p.category = 'Holey Board' AND p.height_in > 0`
+    ).bind(jobId).all();
+    const hbPartIds = new Set((hbLineRows.results || []).map(r => r.part_id));
+    if (!hbPartIds.size) return json({ ok: false, error: "Job has no Holey Board line items." }, 400);
+
+    const cleanedPcs = {};
+    const rawPcs = (body?.pcs && typeof body.pcs === "object") ? body.pcs : {};
+    for (const [partId, rawVal] of Object.entries(rawPcs)) {
+      if (!hbPartIds.has(partId)) continue;
+      const n = parseInt(rawVal, 10);
+      if (Number.isFinite(n) && n > 0) cleanedPcs[partId] = n;
+    }
+    const rawChunks = parseInt(body?.chunks, 10);
+    const cleanedChunks = (Number.isFinite(rawChunks) && rawChunks > 0) ? rawChunks : 0;
+
+    const hasPcs = Object.keys(cleanedPcs).length > 0;
+    const onHandJson = (hasPcs || cleanedChunks > 0)
+      ? JSON.stringify({ pcs: cleanedPcs, chunks: cleanedChunks })
+      : null;
+
+    const actorIdHb = request.headers.get("X-User-Id");
+    const nowHb = new Date().toISOString();
+
+    try {
+      await db.prepare("UPDATE jobs SET hb_on_hand = ?, updated_at = ? WHERE id = ?")
+        .bind(onHandJson, nowHb, jobId).run();
+
+      const job = { id: jobId };
+      await computeAndPersistHoleyChunks(db, jobId, job);
+      job.hb_on_hand = onHandJson;
+
+      await logActivity(db, 'update', 'job', jobId,
+        `Updated HB floor stock — ${Object.keys(cleanedPcs).length} part(s), ${cleanedChunks} chunk(s)`,
+        { pcs: cleanedPcs, chunks: cleanedChunks }, actorIdHb
+      );
+
+      return json({
+        ok: true,
+        job: {
+          id: job.id,
+          hb_on_hand: job.hb_on_hand,
+          hb_chunks_required: job.hb_chunks_required,
+          hb_chunk_breakdown: job.hb_chunk_breakdown,
+        },
+      });
+    } catch (e) {
+      return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
     }
   }
 
