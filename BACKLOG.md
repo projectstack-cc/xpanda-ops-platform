@@ -35,6 +35,10 @@
 
 ## Production Log (v2)
 
+- [ ] Restore UI for soft-deleted production sheets (currently DB-only — `deleted_at` set via
+  prod-a-02's manage/sheets delete, no admin view to browse/undelete them).
+- [ ] Options admin: rename/reorder dropdown values (retire/restore exists via prod-a-02's
+  manage/options PATCH; renaming and manual sort-order changes do not).
 - [ ] **P402 follow-up — Density readout (expansion).** Display-only pcf per batch =
   `bucket_weight_g / (V_liters × 16.0185)` once the bucket's rated volume constant is supplied;
   ship as a toggle.

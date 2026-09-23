@@ -43,6 +43,7 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/api/logistics", keys: ["logistics.v2"] },
   { prefix: "/v2/api/carrier", keys: ["logistics.carrier_view"] },
   { prefix: "/v2/carrier", keys: ["logistics.carrier_view"] },
+  { prefix: "/v2/api/production/manage", keys: ["production.manage"] },
   { prefix: "/v2/api/production", keys: ["production.log"] },
   { prefix: "/v2/production", keys: ["production.log"] },
   // Logistics v2 unit 2 (shipment dashboard). Keys mirror the legacy PATH/API_PERMISSION_MAP
@@ -160,6 +161,11 @@ export async function middleware(request: NextRequest) {
   headers.set(
     "X-User-Can-Manage-Loading",
     hasPermission(user, "logistics.loading.manage", "edit") ? "1" : "0"
+  );
+  // prod-a-02 — manager-only Production Log actions (add dropdown options, soft-delete a sheet).
+  headers.set(
+    "X-User-Can-Manage-Production",
+    hasPermission(user, "production.manage", "edit") ? "1" : "0"
   );
   // P439 — JSON blob of the user's merged role permissions, so legacy endpoints (e.g.
   // /api/jobs/:id/assignments, /api/jobs/:id/shifts) and the new v2 /v2/api/orders/:id/shifts

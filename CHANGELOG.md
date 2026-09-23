@@ -1809,6 +1809,39 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-a-02 — Schema rework: lot # replaces control #, silo/lot/operator per row, block type per
+  sheet (next-platform-agent §9a).** Reworks all Production Log API routes against the new
+  `prod-a-01` schema (`DB_Migrations/prod-a-01-production-sheet-rework.sql`, held from push until
+  Steve confirms the migration ran — see prod-a-04). Molding sheets now carry a single `block_type`
+  (session-level, required, validated against an active `production_options` row) instead of
+  silo/control #/operators; silo, lot #, RC/virgin settings, and operator identity all moved onto
+  each block row. Expansion sheets keep supplier/bead type/density/target weight at the session
+  level (both required, `bead_type` validated against the supplier's `grp`) and moved lot #
+  (serving as the batch #) and silo onto each batch row. New shared `src/lib/productionNumbering.ts`
+  (+ `.selfcheck.ts`) is the single source for block numbering (`nextBlockNo` — `MM/DD-XX` off the
+  block's own ET date, counter never resets within a sheet, gaps use max not count) and server time
+  stamping (`etClockLabel`), imported by both the API (here) and the UI (prod-a-03). `molding/blocks`
+  POST auto-fills a blank `block_no`/`mold_time` server-side and now 400s without `block_weight_lbs`
+  (`weight_required`) and 409s `sheet_closed` on a closed sheet (previously unchecked). Every
+  session/row route now excludes soft-deleted sheets (`deleted_at IS NULL`) and 404s
+  `sheet_not_found` on a soft-deleted sheet's rows. `today/route.ts` now groups molding AND
+  expansion per-silo totals off the **row**'s silo (previously the session's) and adds an expansion
+  `total_kg`. New `production_options` table (managed dropdown values, snapshotted onto
+  sheets/rows as text so retiring/renaming never rewrites history) backs a new `GET
+  /v2/api/production/options` (active values, grouped) and manager-only `POST|PATCH
+  /v2/api/production/manage/options` (add a value, 409 `option_exists` with the existing value on a
+  case-insensitive duplicate; retire/restore, no hard delete). New manager-only `DELETE
+  /v2/api/production/manage/sheets/{molding|expansion}/:id` soft-deletes a sheet (`deleted_at` +
+  detail snapshot in `activity_log`); `?hard=1` (admin-only, `admin_only` otherwise) snapshots the
+  session + all its rows into the activity log, then purges both in a single `DB.batch()`. New
+  `production.manage` permission gate (`/v2/api/production/manage` prefix, above the general
+  `production.log` prefix) and `X-User-Can-Manage-Production` middleware header, checked again
+  in-route as defense-in-depth (mirrors `X-User-Can-Manage-Loading`). `tsc --noEmit` +
+  `opennextjs-cloudflare build` green; numbering selfcheck green. UI is prod-a-03; login
+  `?next=` return + the `production.manage` permission label are prod-a-04. **STOPPED at
+  ready-to-push per the migration-before-push HOLD** — do not push until the prod-a-01 migration is
+  confirmed run.
+
 - **P419 — Sheet picker (history) + row edit/delete UI (react-component-agent §9b).**
   `ProductionBoard.tsx` no longer pins each board to `moldingSessions.find(s => s.status ===
   "open")` — a per-board `selectedMoldingId`/`selectedExpansionId` now drives which sheet is shown,

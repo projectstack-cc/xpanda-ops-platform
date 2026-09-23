@@ -1,7 +1,9 @@
 // src/app/api/production/expansion/sessions/route.ts  →  /v2/api/production/expansion/sessions
 // Standalone v2 Expansion log sessions. No job_id, no jobs.status writes, no inventory side-effects.
+// Control #, header lot, and operators removed — lot + silo now live per batch row (prod-a-02).
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
+import { logActivity } from "@/lib/activityLog";
 
 function etToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
@@ -27,9 +29,10 @@ export async function GET(request: NextRequest) {
   try {
     const rows = await DB.prepare(
       `SELECT s.*,
-         (SELECT COUNT(*) FROM production_expansion_batches b WHERE b.session_id = s.id) AS batch_count
+         (SELECT COUNT(*) FROM production_expansion_batches b WHERE b.session_id = s.id) AS batch_count,
+         (SELECT COALESCE(SUM(b.weight_kg), 0) FROM production_expansion_batches b WHERE b.session_id = s.id) AS total_kg
        FROM production_expansion_sessions s
-       WHERE s.log_date >= ?
+       WHERE s.log_date >= ? AND s.deleted_at IS NULL
        ORDER BY s.log_date DESC, s.created_at DESC`
     ).bind(etDaysAgo(days)).all();
 
@@ -56,54 +59,53 @@ export async function POST(request: NextRequest) {
   }
 
   const {
-    silo, control_no, start_time, finish_time, density, target_weight_g,
-    bead_type, lot, operator_1, operator_2, log_date,
+    bead_supplier, bead_type, density, target_weight_g, start_time, finish_time, log_date,
   } = body ?? {};
 
-  const siloNum = silo === "" || silo === undefined || silo === null ? null : Number(silo);
+  if (!bead_supplier || !bead_type) {
+    return NextResponse.json({ ok: false, error: "unknown_bead_type" }, { status: 400 });
+  }
+
   const id = crypto.randomUUID();
   const ts = now();
 
   try {
+    const supplierOption = await DB.prepare(
+      `SELECT id FROM production_options WHERE kind = 'bead_supplier' AND value = ? AND active = 1`
+    ).bind(bead_supplier).first<{ id: string }>();
+    if (!supplierOption) {
+      return NextResponse.json({ ok: false, error: "unknown_bead_type" }, { status: 400 });
+    }
+    const typeOption = await DB.prepare(
+      `SELECT id FROM production_options WHERE kind = 'bead_type' AND grp = ? AND value = ? AND active = 1`
+    ).bind(bead_supplier, bead_type).first<{ id: string }>();
+    if (!typeOption) {
+      return NextResponse.json({ ok: false, error: "unknown_bead_type" }, { status: 400 });
+    }
+
     await DB.prepare(
       `INSERT INTO production_expansion_sessions
-         (id, silo, log_date, control_no, start_time, finish_time, density, target_weight_g,
-          bead_type, lot, operator_1, operator_2, status, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`
+         (id, log_date, start_time, finish_time, bead_supplier, bead_type, density, target_weight_g,
+          status, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`
     ).bind(
       id,
-      Number.isFinite(siloNum) ? siloNum : null,
       log_date || etToday(),
-      control_no ?? null,
       start_time ?? null,
       finish_time ?? null,
+      bead_supplier,
+      bead_type,
       numOrNull(density),
       numOrNull(target_weight_g),
-      bead_type ?? null,
-      lot ?? null,
-      operator_1 ?? null,
-      operator_2 ?? null,
       operatorId,
       ts
     ).run();
 
-    try {
-      await DB.prepare(
-        `INSERT INTO activity_log
-           (id, timestamp, action, entity_type, entity_id, summary, detail, user_id, created_at)
-         VALUES (?, ?, 'create', 'production_expansion_session', ?, ?, ?, ?, ?)`
-      ).bind(
-        crypto.randomUUID(),
-        ts,
-        id,
-        `${operatorName || operatorId} opened an Expansion sheet`,
-        JSON.stringify({ session_id: id, silo: siloNum, control_no: control_no ?? null }),
-        operatorId,
-        ts
-      ).run();
-    } catch (e: any) {
-      console.error("activity_log failed:", String(e?.message || e));
-    }
+    await logActivity(
+      DB, "create", "production_expansion_session", id,
+      `${operatorName || operatorId} opened an Expansion sheet (${bead_supplier} ${bead_type})`,
+      { session_id: id, bead_supplier, bead_type }, operatorId
+    );
 
     return NextResponse.json({ ok: true, session_id: id }, { status: 201 });
   } catch (e: any) {
