@@ -613,6 +613,20 @@ current series).
 
 ## Orders (v2)
 
+- **hb-onhand-02 parity note.** `cutting-pilot/src/lib/cutList.ts`'s CHUNK BREAKDOWN rendering
+  now mirrors `jobs/index.html`'s `buildCutListPdf` line-for-line (netted-plan FLOOR STOCK
+  sub-block + table, byte-identical no-`net` fallback — see `## Job Board`). **Deviation from the
+  prompt's assumption**: it claimed `OrderEditModal`/`OrderDetailModal`/`OrderEntryForm` "already
+  pass `hb_chunk_breakdown` through" and need no changes — grepping showed that was only true for
+  `OrderEntryForm.tsx`. `GET /v2/api/board/:id`'s explicit column list never selected
+  `hb_chunk_breakdown`, so `OrderDetailModal`'s cut list (which spreads that response) and
+  `OrderEditModal`'s hand-built `clJob` object (which never referenced the field at all) could
+  never have rendered a CHUNK BREAKDOWN page — a pre-existing P386-era gap, not something this
+  prompt introduced, but one that would have made this prompt's own v2 rendering work invisible
+  on two of its three intended surfaces. Fixed by adding `hb_chunk_breakdown` to that route's
+  `SELECT` and to both components' job type/object (`DetailJob`, `EditJob`, and `OrderEditModal`'s
+  `clJob` construction).
+
 - **P442 — v2/TypeScript i18n spine (`cutting-pilot/`), mirroring the existing `theme.tsx` /
   `ThemeProvider` / `useTheme` pattern.** New `src/lib/i18n.ts` exports `LANGS` (`en`/`es`/`ht`),
   `DEFAULT_LANG` (`en`), `LANG_STORAGE_KEY` (`xpanda_lang` — the same key the legacy `window.I18n`
@@ -6167,6 +6181,32 @@ current series).
 ---
 
 ## Job Board
+
+- **hb-onhand-02 — HB floor stock editor in job modal + netted CHUNK BREAKDOWN page (job-board-agent
+  + react-component-agent §9b).** Builds on hb-onhand-01's data layer. `jobs/index.html`: new
+  collapsible "Floor stock (chunk breakdown only)" section (`#hb-onhand-section`, mirrors the
+  cut-list viewer's chevron/toggle pattern), shown only for a saved job whose
+  `hb_chunk_breakdown.lines` has at least one entry, pre-filled from `job.hb_on_hand` — one
+  number input per HB line item (finished pcs, clamped `max` to order qty) plus one "Uncut
+  chunks on hand" input, a status line read from the saved `net` (`Order N chunks → M after
+  floor pcs · X on hand · cut Y new`, or "No floor stock applied." when there's no `net`), and
+  Save/Clear buttons. Save calls `PUT /api/jobs/:id/hb-on-hand`, merges the returned
+  `hb_on_hand`/`hb_chunks_required`/`hb_chunk_breakdown` into the cached job, invalidates and
+  (if open) rebuilds the inline cut-list viewer, and toasts; errors always toast, never fail
+  silently. Full en/es/ht via new `jobs-i18n.js` keys next to `chunksRequired`/`chunksHint`.
+  **`buildCutListPdf`'s CHUNK BREAKDOWN page** (legacy, ported line-for-line to v2 `cutList.ts`):
+  when the saved breakdown has no `net`, output is byte-identical to before this prompt (verified
+  via a PDF-text-extraction diff against the pre-change function); when `net` is present, the
+  page title becomes "CHUNK BREAKDOWN — FLOOR STOCK APPLIED", the summary line uses the netted
+  totals, a new "FLOOR STOCK" sub-block lists each part's order/on-hand/to-cut plus any uncut
+  chunks on hand, and the CHUNKS/CUT EACH INTO table is rebuilt from `net.breakdown` (still
+  producing the page, with a "covered by floor stock" message, even when that's empty). Cut-list
+  line-item rows and "Total pieces" are unchanged in both files (confirmed by grep). Along the
+  way, found and fixed a real encoding bug: the spec's "→" arrow in the netted-chunks line isn't
+  in pdf-lib's WinAnsi/StandardFonts encoding and crashed `drawText` — replaced with "->" in both
+  files (caught by the PDF smoke test, not by `tsc`/the OpenNext build, since neither executes
+  the PDF-generation code). `node --check` on both legacy files, `tsc --noEmit` +
+  `opennextjs-cloudflare build` green.
 
 - **lbz-parse-02 — Offload-zones toggle + manual zone editor, existing-job side
   (job-board-agent).** Third prompt in the offload-zone series — the job-detail companion to

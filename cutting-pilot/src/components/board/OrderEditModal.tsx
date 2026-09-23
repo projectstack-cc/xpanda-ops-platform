@@ -47,6 +47,7 @@ interface EditJob {
   source: string | null;
   processes: any;
   has_packing_slip: boolean;
+  hb_chunk_breakdown: string | null;
 }
 
 interface StoredLineItem {
@@ -371,6 +372,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
           dimensions: li.dimensions,
           density: li.density,
         })),
+        hb_chunk_breakdown: job.hb_chunk_breakdown,
       };
       const pdfBytes = await buildCutListPdf(clJob);
       const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });

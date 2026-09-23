@@ -391,6 +391,31 @@
         </div>
       </div>
 
+      <!-- hb-onhand-02: floor stock editor — changes only the CHUNK BREAKDOWN page, never the
+           cut list line items or Total pieces. Uses the saved order (hb_chunk_breakdown.lines),
+           so line-item edits must be saved first. -->
+      <div id="hb-onhand-section" hidden style="margin:8px 0 12px;">
+        <div id="hb-onhand-toggle" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;margin-bottom:6px;">
+          <span id="hb-onhand-chevron" style="font-size:12px;transition:transform 0.2s;">&#9658;</span>
+          <span style="font-size:13px;font-weight:600;color:var(--link);" data-i18n="jobs.hbOnHandLabel">Floor stock (chunk breakdown only)</span>
+        </div>
+        <div id="hb-onhand-content" hidden>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;" data-i18n="jobs.hbOnHandHint">
+            Pieces and uncut chunks already on the floor. Only changes the Chunk Breakdown page — cut list quantities stay at order qty. Uses the saved order; save line-item edits first.
+          </div>
+          <div id="hb-onhand-rows"></div>
+          <div class="jobs-field" style="margin-top:8px;">
+            <label data-i18n="jobs.hbOnHandChunksLabel">Uncut chunks on hand</label>
+            <input type="number" id="hb-onhand-chunks" min="0" step="1" inputmode="numeric" style="min-height:44px;">
+          </div>
+          <div id="hb-onhand-status" style="font-size:12px;color:var(--muted);margin:8px 0;"></div>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn small" id="btn-hb-onhand-save" style="min-height:44px;" data-i18n="jobs.hbOnHandSave">Save floor stock</button>
+            <button type="button" class="btn ghost small" id="btn-hb-onhand-clear" style="min-height:44px;" data-i18n="jobs.hbOnHandClear">Clear</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Inline cut list viewer (P366: own dropdown link + own iframe/blob, independent of the
            packing-slip viewer above — do not share state between the two) -->
       <div id="cutlist-inline-viewer" hidden style="margin:8px 0 12px;">
@@ -1636,6 +1661,16 @@ function setupModal() {
     chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
   });
 
+  document.getElementById('hb-onhand-toggle').addEventListener('click', () => {
+    const content = document.getElementById('hb-onhand-content');
+    const chevron = document.getElementById('hb-onhand-chevron');
+    const isHidden = content.hidden;
+    content.hidden = !isHidden;
+    chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
+  });
+  document.getElementById('btn-hb-onhand-save').addEventListener('click', saveHbOnHand);
+  document.getElementById('btn-hb-onhand-clear').addEventListener('click', clearHbOnHand);
+
   const dropzone = document.getElementById('slip-dropzone');
   dropzone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -1808,6 +1843,7 @@ function openModal(jobId) {
   document.getElementById('modal-print-diversitech').hidden = !(curJob && curJob.customer && curJob.customer.startsWith('DiversiTech'));
   document.getElementById('cutlist-inline-viewer').hidden = isNew;
   updateHoleyChunkPreview();
+  renderHbOnHandSection(isNew ? null : allJobs.find(j => j.id === jobId));
   if (!isNew) {
     document.getElementById('cutlist-viewer-toggle').addEventListener('click', function loadCutList() {
       loadCutListIntoViewer();
@@ -2386,6 +2422,13 @@ function clearForm() {
   document.getElementById('cutlist-viewer-iframe').src = 'about:blank';
   if (_cutListBlobUrl) { try { URL.revokeObjectURL(_cutListBlobUrl); } catch {} _cutListBlobUrl = null; }
 
+  document.getElementById('hb-onhand-section').hidden = true;
+  document.getElementById('hb-onhand-content').hidden = true;
+  document.getElementById('hb-onhand-chevron').style.transform = '';
+  document.getElementById('hb-onhand-rows').innerHTML = '';
+  document.getElementById('hb-onhand-chunks').value = '';
+  document.getElementById('hb-onhand-status').textContent = '';
+
   clearCombo();
   clearTrailerGroup();
   hideSlipBadge();
@@ -2591,6 +2634,135 @@ async function updateHoleyChunkPreview() {
   } catch {
     if (seq !== _holeyPreviewSeq) return;
     box.hidden = false; countEl.textContent = '—'; metaEl.textContent = t('jobs.previewUnavailable');
+  }
+}
+
+// hb-onhand-02: floor stock editor (changes only the CHUNK BREAKDOWN page — cut list qty is
+// untouched). Reads the saved `hb_chunk_breakdown.lines`/`.net` and `hb_on_hand`, both written
+// server-side by computeAndPersistHoleyChunks (hb-onhand-01). Uses the saved order, so line-item
+// edits must be saved first — there is no live re-nest against unsaved form state here.
+function renderHbOnHandSection(job) {
+  const section  = document.getElementById('hb-onhand-section');
+  const rowsEl   = document.getElementById('hb-onhand-rows');
+  const chunksEl = document.getElementById('hb-onhand-chunks');
+  const statusEl = document.getElementById('hb-onhand-status');
+
+  let parsed = null;
+  if (job && job.hb_chunk_breakdown) {
+    try { parsed = JSON.parse(job.hb_chunk_breakdown); } catch {}
+  }
+  const lines = (parsed && Array.isArray(parsed.lines)) ? parsed.lines : [];
+
+  if (!job || !lines.length) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+
+  let onHand = null;
+  if (job.hb_on_hand) {
+    try { onHand = JSON.parse(job.hb_on_hand); } catch {}
+  }
+  const pcsStored = (onHand && onHand.pcs && typeof onHand.pcs === 'object') ? onHand.pcs : {};
+
+  rowsEl.innerHTML = lines.map(line => {
+    const orderQty = Number(line.qty) || 0;
+    const stored = pcsStored[line.part_id];
+    const val = (stored !== undefined && stored !== null) ? esc(String(stored)) : '';
+    return `<div class="hb-onhand-row" data-part-id="${esc(line.part_id)}" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="flex:1;font-size:13px;color:var(--text);">${esc(line.part_number || '')} (${esc(String(line.thickness))}")</span>
+      <span style="font-size:12px;color:var(--muted);white-space:nowrap;">${esc(t('jobs.hbOnHandOrderQty', { qty: orderQty }))}</span>
+      <input type="number" class="hb-onhand-pcs-input" min="0" max="${orderQty}" step="1" inputmode="numeric" value="${val}" style="width:80px;min-height:44px;">
+    </div>`;
+  }).join('');
+
+  chunksEl.value = (onHand && onHand.chunks !== undefined && onHand.chunks !== null) ? onHand.chunks : '';
+
+  if (parsed && parsed.net) {
+    statusEl.textContent = t('jobs.hbOnHandStatus', {
+      order: parsed.net.order_chunks_required,
+      net: parsed.net.chunks_required,
+      onHand: parsed.net.chunks_on_hand,
+      toCut: parsed.net.chunks_to_cut,
+    });
+  } else {
+    statusEl.textContent = t('jobs.hbOnHandNoFloorStock');
+  }
+}
+
+function collectHbOnHandPayload() {
+  const pcs = {};
+  document.querySelectorAll('#hb-onhand-rows .hb-onhand-row').forEach(row => {
+    const partId = row.dataset.partId;
+    const input = row.querySelector('.hb-onhand-pcs-input');
+    const n = parseInt(input.value, 10);
+    if (partId && Number.isFinite(n) && n > 0) pcs[partId] = n;
+  });
+  const chunksRaw = parseInt(document.getElementById('hb-onhand-chunks').value, 10);
+  const chunks = Number.isFinite(chunksRaw) && chunksRaw > 0 ? chunksRaw : 0;
+  return { pcs, chunks };
+}
+
+async function saveHbOnHand() {
+  if (!editingJobId) return;
+  const btn = document.getElementById('btn-hb-onhand-save');
+  btn.disabled = true;
+  try {
+    const payload = collectHbOnHandPayload();
+    const r = await api.put(`/api/jobs/${encodeURIComponent(editingJobId)}/hb-on-hand`, payload);
+    if (!r.ok) {
+      showToast(r.error || t('jobs.saveFailed'));
+      return;
+    }
+    const job = allJobs.find(j => j.id === editingJobId);
+    if (job && r.data?.job) {
+      job.hb_on_hand = r.data.job.hb_on_hand;
+      job.hb_chunks_required = r.data.job.hb_chunks_required;
+      job.hb_chunk_breakdown = r.data.job.hb_chunk_breakdown;
+    }
+    renderHbOnHandSection(job);
+    // Invalidate the cut-list viewer so the PDF rebuilds with the new breakdown.
+    document.getElementById('cutlist-viewer-iframe').src = 'about:blank';
+    if (_cutListBlobUrl) { try { URL.revokeObjectURL(_cutListBlobUrl); } catch {} _cutListBlobUrl = null; }
+    if (!document.getElementById('cutlist-viewer-content').hidden) {
+      loadCutListIntoViewer();
+    }
+    showToast(t('jobs.hbOnHandSaved'));
+  } catch {
+    showToast(t('jobs.saveFailed'));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function clearHbOnHand() {
+  if (!editingJobId) return;
+  if (!confirm(t('jobs.hbOnHandClearConfirm'))) return;
+  const btn = document.getElementById('btn-hb-onhand-clear');
+  btn.disabled = true;
+  try {
+    const r = await api.put(`/api/jobs/${encodeURIComponent(editingJobId)}/hb-on-hand`, { pcs: {}, chunks: 0 });
+    if (!r.ok) {
+      showToast(r.error || t('jobs.saveFailed'));
+      return;
+    }
+    const job = allJobs.find(j => j.id === editingJobId);
+    if (job && r.data?.job) {
+      job.hb_on_hand = r.data.job.hb_on_hand;
+      job.hb_chunks_required = r.data.job.hb_chunks_required;
+      job.hb_chunk_breakdown = r.data.job.hb_chunk_breakdown;
+    }
+    renderHbOnHandSection(job);
+    document.getElementById('cutlist-viewer-iframe').src = 'about:blank';
+    if (_cutListBlobUrl) { try { URL.revokeObjectURL(_cutListBlobUrl); } catch {} _cutListBlobUrl = null; }
+    if (!document.getElementById('cutlist-viewer-content').hidden) {
+      loadCutListIntoViewer();
+    }
+    showToast(t('jobs.hbOnHandCleared'));
+  } catch {
+    showToast(t('jobs.saveFailed'));
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -3169,14 +3341,21 @@ async function buildCutListPdf(job) {
     drawTotal(page, y, totalQty);
   }
 
-  // P386: Holey Board chunk breakdown — GROUPED by identical chunk composition (recipe → count),
-  // replacing the per-chunk listing that produced one row per chunk (e.g. 339 rows for Inv 4272).
+  // P386 / hb-onhand-02: Holey Board chunk breakdown — GROUPED by identical chunk composition
+  // (recipe → count), replacing the per-chunk listing that produced one row per chunk (e.g. 339
+  // rows for Inv 4272). When `parsed.net` is present (floor stock recorded on the job), the page
+  // prints the NETTED plan instead — only the pieces/chunks still needing cutting, with a FLOOR
+  // STOCK sub-block showing what's already on hand. Absent `net`, this is byte-identical to the
+  // pre-hb-onhand-02 output (same guard, same text, same coordinates).
   if (job.hb_chunk_breakdown) {
     let parsed = null;
     try { parsed = JSON.parse(job.hb_chunk_breakdown); } catch (e) {}
-    if (parsed && Array.isArray(parsed.breakdown) && parsed.breakdown.length) {
+
+    // Groups a per-chunk `boards[]` breakdown array by identical composition (recipe → count),
+    // in first-seen order. Shared by the order-plan render (below) and the netted-plan render.
+    const groupChunkBreakdown = (breakdown) => {
       const groups = new Map();
-      parsed.breakdown.forEach((ch, i) => {
+      breakdown.forEach((ch, i) => {
         const tally = {};
         for (const t of ch.boards) { const k = String(t); tally[k] = (tally[k] || 0) + 1; }
         const sig = Object.keys(tally).map(Number).sort((a, b) => b - a)
@@ -3184,15 +3363,14 @@ async function buildCutListPdf(job) {
         const g = groups.get(sig);
         if (g) g.count++; else groups.set(sig, { count: 1, sig, order: i });
       });
-      const rows = Array.from(groups.values()).sort((a, b) => a.order - b.order);
+      return Array.from(groups.values()).sort((a, b) => a.order - b.order);
+    };
 
-      let p = doc.addPage([pageW, pageH]);
-      let y = pageH - margin;
-      p.drawText('CHUNK BREAKDOWN', { x: margin, y, size: 12, font: fontBold, color: black });
-      y -= 6; hr(p, y); y -= 18;
-      p.drawText(`${parsed.chunks_required} chunk${parsed.chunks_required === 1 ? '' : 's'} · 48×24×${parsed.height}" · ${parsed.kerf}" kerf · ${parsed.avg_util}% avg fill`,
-        { x: margin, y, size: 10, font, color: gray });
-      y -= 8; hr(p, y); y -= 18;
+    // Draws the CHUNKS / CUT EACH INTO table for `rows` (grouped chunks) starting at (page, y).
+    // Returns the page/y it ended on, so a caller can keep drawing below it.
+    const drawChunkTable = (page, yStart, rows) => {
+      let p = page;
+      let y = yStart;
       p.drawText('CHUNKS', { x: margin, y, size: 9, font: fontBold, color: gray });
       p.drawText('CUT EACH INTO', { x: margin + 70, y, size: 9, font: fontBold, color: gray });
       y -= 16;
@@ -3206,6 +3384,63 @@ async function buildCutListPdf(job) {
         let sy = y;
         for (const line of sl) { p.drawText(line, { x: margin + 70, y: sy, size: 10, font, color: black }); sy -= 14; }
         y -= need;
+      }
+      return { page: p, y };
+    };
+
+    if (parsed && !parsed.net && Array.isArray(parsed.breakdown) && parsed.breakdown.length) {
+      const rows = groupChunkBreakdown(parsed.breakdown);
+
+      let p = doc.addPage([pageW, pageH]);
+      let y = pageH - margin;
+      p.drawText('CHUNK BREAKDOWN', { x: margin, y, size: 12, font: fontBold, color: black });
+      y -= 6; hr(p, y); y -= 18;
+      p.drawText(`${parsed.chunks_required} chunk${parsed.chunks_required === 1 ? '' : 's'} · 48×24×${parsed.height}" · ${parsed.kerf}" kerf · ${parsed.avg_util}% avg fill`,
+        { x: margin, y, size: 10, font, color: gray });
+      y -= 8; hr(p, y); y -= 18;
+      drawChunkTable(p, y, rows);
+    } else if (parsed && parsed.net) {
+      const net = parsed.net;
+
+      let p = doc.addPage([pageW, pageH]);
+      let y = pageH - margin;
+      p.drawText('CHUNK BREAKDOWN — FLOOR STOCK APPLIED', { x: margin, y, size: 12, font: fontBold, color: black });
+      y -= 6; hr(p, y); y -= 18;
+      p.drawText(`${net.chunks_required} chunk${net.chunks_required === 1 ? '' : 's'} · 48×24×${net.height}" · ${net.kerf}" kerf · ${net.avg_util}% avg fill`,
+        { x: margin, y, size: 10, font, color: gray });
+      y -= 8; hr(p, y); y -= 18;
+
+      p.drawText('FLOOR STOCK', { x: margin, y, size: 9, font: fontBold, color: gray });
+      y -= 16;
+      for (const pc of (net.pcs || [])) {
+        const line = `${pc.part_number || ''}  (${pc.thickness}")   order ${pc.order_qty} · on hand ${pc.on_hand} · cut ${pc.to_cut}`;
+        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText(line, { x: margin, y, size: 10, font, color: black });
+        y -= 14;
+      }
+      if (net.chunks_on_hand > 0) {
+        const line = `Uncut chunks on hand: ${net.chunks_on_hand}  ->  new chunks to cut: ${net.chunks_to_cut}`;
+        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText(line, { x: margin, y, size: 10, font, color: black });
+        y -= 14;
+      }
+      {
+        const line = `Order without floor stock: ${net.order_chunks_required} chunks`;
+        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText(line, { x: margin, y, size: 10, font, color: gray });
+        y -= 14;
+      }
+
+      if (y - 8 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+      hr(p, y); y -= 18;
+
+      if (Array.isArray(net.breakdown) && net.breakdown.length) {
+        const rows = groupChunkBreakdown(net.breakdown);
+        drawChunkTable(p, y, rows);
+      } else {
+        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText('All holey board pieces are covered by floor stock — no chunks to cut.',
+          { x: margin, y, size: 10, font, color: black });
       }
     }
   }

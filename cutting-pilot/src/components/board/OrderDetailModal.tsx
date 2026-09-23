@@ -26,6 +26,7 @@ interface DetailJob {
   ship_to_state: string | null;
   ship_to_zip: string | null;
   has_packing_slip: boolean;
+  hb_chunk_breakdown: string | null;
 }
 
 interface DetailResponse {

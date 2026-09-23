@@ -250,14 +250,20 @@ export async function buildCutListPdf(job: CutListJob): Promise<Uint8Array> {
     drawTotal(page, y, totalQty);
   }
 
-  // P386: Holey Board chunk breakdown — GROUPED by identical chunk composition (recipe → count),
-  // replacing the per-chunk listing that produced one row per chunk (e.g. 339 rows for Inv 4272).
+  // P386 / hb-onhand-02: Holey Board chunk breakdown — GROUPED by identical chunk composition
+  // (recipe → count), replacing the per-chunk listing that produced one row per chunk (e.g. 339
+  // rows for Inv 4272). When `parsed.net` is present (floor stock recorded on the job), the page
+  // prints the NETTED plan instead — only the pieces/chunks still needing cutting, with a FLOOR
+  // STOCK sub-block showing what's already on hand. Absent `net`, this is byte-identical to the
+  // pre-hb-onhand-02 output (same guard, same text, same coordinates). Mirrors jobs/index.html's
+  // buildCutListPdf line-for-line.
   if (job.hb_chunk_breakdown) {
     let parsed: any = null;
     try { parsed = JSON.parse(job.hb_chunk_breakdown); } catch (e) {}
-    if (parsed && Array.isArray(parsed.breakdown) && parsed.breakdown.length) {
-      const groups = new Map();
-      parsed.breakdown.forEach((ch: any, i: number) => {
+
+    const groupChunkBreakdown = (breakdown: any[]) => {
+      const groups = new Map<string, { count: number; sig: string; order: number }>();
+      breakdown.forEach((ch: any, i: number) => {
         const tally: any = {};
         for (const t of ch.boards) { const k = String(t); tally[k] = (tally[k] || 0) + 1; }
         const sig = Object.keys(tally).map(Number).sort((a, b) => b - a)
@@ -265,20 +271,17 @@ export async function buildCutListPdf(job: CutListJob): Promise<Uint8Array> {
         const g = groups.get(sig);
         if (g) g.count++; else groups.set(sig, { count: 1, sig, order: i });
       });
-      const rows = Array.from(groups.values()).sort((a: any, b: any) => a.order - b.order);
+      return Array.from(groups.values()).sort((a, b) => a.order - b.order);
+    };
 
-      let p = doc.addPage([pageW, pageH]);
-      let y = pageH - margin;
-      p.drawText('CHUNK BREAKDOWN', { x: margin, y, size: 12, font: fontBold, color: black });
-      y -= 6; hr(p, y); y -= 18;
-      p.drawText(`${parsed.chunks_required} chunk${parsed.chunks_required === 1 ? '' : 's'} · 48×24×${parsed.height}" · ${parsed.kerf}" kerf · ${parsed.avg_util}% avg fill`,
-        { x: margin, y, size: 10, font, color: gray });
-      y -= 8; hr(p, y); y -= 18;
+    const drawChunkTable = (page: PDFPage, yStart: number, rows: Array<{ count: number; sig: string }>) => {
+      let p = page;
+      let y = yStart;
       p.drawText('CHUNKS', { x: margin, y, size: 9, font: fontBold, color: gray });
       p.drawText('CUT EACH INTO', { x: margin + 70, y, size: 9, font: fontBold, color: gray });
       y -= 16;
       const sigMaxW = right - (margin + 70);
-      for (const r of rows as any[]) {
+      for (const r of rows) {
         const sigLines = wrapText(r.sig, font, 10, sigMaxW);
         const sl = sigLines.length ? sigLines : [''];
         const need = sl.length * 14;
@@ -287,6 +290,63 @@ export async function buildCutListPdf(job: CutListJob): Promise<Uint8Array> {
         let sy = y;
         for (const line of sl) { p.drawText(line, { x: margin + 70, y: sy, size: 10, font, color: black }); sy -= 14; }
         y -= need;
+      }
+      return { page: p, y };
+    };
+
+    if (parsed && !parsed.net && Array.isArray(parsed.breakdown) && parsed.breakdown.length) {
+      const rows = groupChunkBreakdown(parsed.breakdown);
+
+      let p = doc.addPage([pageW, pageH]);
+      let y = pageH - margin;
+      p.drawText('CHUNK BREAKDOWN', { x: margin, y, size: 12, font: fontBold, color: black });
+      y -= 6; hr(p, y); y -= 18;
+      p.drawText(`${parsed.chunks_required} chunk${parsed.chunks_required === 1 ? '' : 's'} · 48×24×${parsed.height}" · ${parsed.kerf}" kerf · ${parsed.avg_util}% avg fill`,
+        { x: margin, y, size: 10, font, color: gray });
+      y -= 8; hr(p, y); y -= 18;
+      drawChunkTable(p, y, rows);
+    } else if (parsed && parsed.net) {
+      const net = parsed.net;
+
+      let p = doc.addPage([pageW, pageH]);
+      let y = pageH - margin;
+      p.drawText('CHUNK BREAKDOWN — FLOOR STOCK APPLIED', { x: margin, y, size: 12, font: fontBold, color: black });
+      y -= 6; hr(p, y); y -= 18;
+      p.drawText(`${net.chunks_required} chunk${net.chunks_required === 1 ? '' : 's'} · 48×24×${net.height}" · ${net.kerf}" kerf · ${net.avg_util}% avg fill`,
+        { x: margin, y, size: 10, font, color: gray });
+      y -= 8; hr(p, y); y -= 18;
+
+      p.drawText('FLOOR STOCK', { x: margin, y, size: 9, font: fontBold, color: gray });
+      y -= 16;
+      for (const pc of (net.pcs || []) as any[]) {
+        const line = `${pc.part_number || ''}  (${pc.thickness}")   order ${pc.order_qty} · on hand ${pc.on_hand} · cut ${pc.to_cut}`;
+        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText(line, { x: margin, y, size: 10, font, color: black });
+        y -= 14;
+      }
+      if (net.chunks_on_hand > 0) {
+        const line = `Uncut chunks on hand: ${net.chunks_on_hand}  ->  new chunks to cut: ${net.chunks_to_cut}`;
+        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText(line, { x: margin, y, size: 10, font, color: black });
+        y -= 14;
+      }
+      {
+        const line = `Order without floor stock: ${net.order_chunks_required} chunks`;
+        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText(line, { x: margin, y, size: 10, font, color: gray });
+        y -= 14;
+      }
+
+      if (y - 8 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+      hr(p, y); y -= 18;
+
+      if (Array.isArray(net.breakdown) && net.breakdown.length) {
+        const rows = groupChunkBreakdown(net.breakdown);
+        drawChunkTable(p, y, rows);
+      } else {
+        if (y - 14 < margin + 6) { p = doc.addPage([pageW, pageH]); y = pageH - margin; }
+        p.drawText('All holey board pieces are covered by floor stock — no chunks to cut.',
+          { x: margin, y, size: 10, font, color: black });
       }
     }
   }
