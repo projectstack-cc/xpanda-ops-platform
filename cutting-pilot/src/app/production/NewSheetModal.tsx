@@ -1,10 +1,17 @@
 "use client";
 // Create-session form for both boards. One component, variant prop — composes the shared
-// Modal primitive rather than a hand-rolled overlay.
-import { useState } from "react";
+// Modal primitive rather than a hand-rolled overlay. Molding: single required Block type.
+// Expansion: Supplier -> Bead type (filtered to that supplier), density, target weight, times.
+// No silo, control #, or operators here — those moved onto the row (prod-a-02).
+import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
+import { useLang } from "@/components/lang";
+import type { OptionsData } from "./fields";
+import type { OptionKind } from "./AddOptionModal";
 
 export type SheetVariant = "molding" | "expansion";
+
+const ADD_NEW = "__add_new__";
 
 interface Props {
   isOpen: boolean;
@@ -12,6 +19,11 @@ interface Props {
   variant: SheetVariant;
   onSubmit: (fields: Record<string, string>) => void;
   acting: boolean;
+  options: OptionsData;
+  canManage: boolean;
+  onRequestAddOption: (kind: OptionKind, supplier?: string) => void;
+  injectedValue: { field: "block_type" | "bead_type"; value: string } | null;
+  onInjectedApplied: () => void;
 }
 
 const FIELD_CLASS =
@@ -27,8 +39,27 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export default function NewSheetModal({ isOpen, onClose, variant, onSubmit, acting }: Props) {
+export default function NewSheetModal({
+  isOpen,
+  onClose,
+  variant,
+  onSubmit,
+  acting,
+  options,
+  canManage,
+  onRequestAddOption,
+  injectedValue,
+  onInjectedApplied,
+}: Props) {
+  const { t } = useLang();
   const [fields, setFields] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!injectedValue) return;
+    setFields((f) => ({ ...f, [injectedValue.field]: injectedValue.value }));
+    onInjectedApplied();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [injectedValue]);
 
   function set(key: string, value: string) {
     setFields((f) => ({ ...f, [key]: value }));
@@ -44,36 +75,92 @@ export default function NewSheetModal({ isOpen, onClose, variant, onSubmit, acti
     onSubmit(fields);
   }
 
+  const beadTypeOptions = fields.bead_supplier ? options.bead_types[fields.bead_supplier] ?? [] : [];
+  const canSubmit =
+    variant === "molding" ? !!fields.block_type : !!fields.bead_supplier && !!fields.bead_type;
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={variant === "molding" ? "New Molding sheet" : "New Expansion sheet"}
+      title={variant === "molding" ? t("production.newSheet.titleMolding") : t("production.newSheet.titleExpansion")}
     >
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Silo">
-            <input
-              type="number"
-              className={FIELD_CLASS}
-              value={fields.silo ?? ""}
-              onChange={(e) => set("silo", e.target.value)}
-            />
+        {variant === "molding" ? (
+          <Field label={t("production.newSheet.blockType")}>
+            <select
+              required
+              className={FIELD_CLASS + " cursor-pointer"}
+              value={fields.block_type ?? ""}
+              onChange={(e) => {
+                if (e.target.value === ADD_NEW) {
+                  onRequestAddOption("block_type");
+                  return;
+                }
+                set("block_type", e.target.value);
+              }}
+            >
+              <option value="">{t("production.newSheet.selectPlaceholder")}</option>
+              {options.block_types.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+              {canManage && <option value={ADD_NEW}>{t("production.options.addNew")}</option>}
+            </select>
+            {options.block_types.length === 0 && !canManage && (
+              <p className="mt-1 text-xs text-muted">{t("production.options.emptyHint")}</p>
+            )}
           </Field>
-          <Field label="Control #">
-            <input
-              type="text"
-              className={FIELD_CLASS}
-              value={fields.control_no ?? ""}
-              onChange={(e) => set("control_no", e.target.value)}
-            />
-          </Field>
-        </div>
-
-        {variant === "expansion" && (
+        ) : (
           <>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Start time">
+              <Field label={t("production.newSheet.supplier")}>
+                <select
+                  required
+                  className={FIELD_CLASS + " cursor-pointer"}
+                  value={fields.bead_supplier ?? ""}
+                  onChange={(e) => setFields((f) => ({ ...f, bead_supplier: e.target.value, bead_type: "" }))}
+                >
+                  <option value="">{t("production.newSheet.selectPlaceholder")}</option>
+                  {options.suppliers.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t("production.newSheet.beadType")}>
+                <select
+                  required
+                  disabled={!fields.bead_supplier}
+                  className={FIELD_CLASS + " cursor-pointer disabled:opacity-50"}
+                  value={fields.bead_type ?? ""}
+                  onChange={(e) => {
+                    if (e.target.value === ADD_NEW) {
+                      onRequestAddOption("bead_type", fields.bead_supplier);
+                      return;
+                    }
+                    set("bead_type", e.target.value);
+                  }}
+                >
+                  <option value="">{t("production.newSheet.selectPlaceholder")}</option>
+                  {beadTypeOptions.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                  {canManage && fields.bead_supplier && (
+                    <option value={ADD_NEW}>{t("production.options.addNew")}</option>
+                  )}
+                </select>
+                {beadTypeOptions.length === 0 && !canManage && fields.bead_supplier && (
+                  <p className="mt-1 text-xs text-muted">{t("production.options.emptyHint")}</p>
+                )}
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={t("production.newSheet.startTime")}>
                 <input
                   type="text"
                   placeholder="9:30 AM"
@@ -82,7 +169,7 @@ export default function NewSheetModal({ isOpen, onClose, variant, onSubmit, acti
                   onChange={(e) => set("start_time", e.target.value)}
                 />
               </Field>
-              <Field label="Finish time">
+              <Field label={t("production.newSheet.finishTime")}>
                 <input
                   type="text"
                   placeholder="11:00 AM"
@@ -93,7 +180,7 @@ export default function NewSheetModal({ isOpen, onClose, variant, onSubmit, acti
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Density">
+              <Field label={t("production.newSheet.density")}>
                 <input
                   type="number"
                   step="any"
@@ -102,7 +189,7 @@ export default function NewSheetModal({ isOpen, onClose, variant, onSubmit, acti
                   onChange={(e) => set("density", e.target.value)}
                 />
               </Field>
-              <Field label="Weight (g)">
+              <Field label={t("production.newSheet.targetWeightG")}>
                 <input
                   type="number"
                   step="any"
@@ -112,45 +199,8 @@ export default function NewSheetModal({ isOpen, onClose, variant, onSubmit, acti
                 />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Bead type">
-                <input
-                  type="text"
-                  className={FIELD_CLASS}
-                  value={fields.bead_type ?? ""}
-                  onChange={(e) => set("bead_type", e.target.value)}
-                />
-              </Field>
-              <Field label="Lot">
-                <input
-                  type="text"
-                  className={FIELD_CLASS}
-                  value={fields.lot ?? ""}
-                  onChange={(e) => set("lot", e.target.value)}
-                />
-              </Field>
-            </div>
           </>
         )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Operator 1">
-            <input
-              type="text"
-              className={FIELD_CLASS}
-              value={fields.operator_1 ?? ""}
-              onChange={(e) => set("operator_1", e.target.value)}
-            />
-          </Field>
-          <Field label="Operator 2">
-            <input
-              type="text"
-              className={FIELD_CLASS}
-              value={fields.operator_2 ?? ""}
-              onChange={(e) => set("operator_2", e.target.value)}
-            />
-          </Field>
-        </div>
 
         <div className="flex gap-2 justify-end pt-1">
           <button
@@ -158,14 +208,14 @@ export default function NewSheetModal({ isOpen, onClose, variant, onSubmit, acti
             onClick={handleClose}
             className="min-h-[44px] px-4 py-2 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
           >
-            Cancel
+            {t("production.common.cancel")}
           </button>
           <button
             type="submit"
-            disabled={acting}
+            disabled={acting || !canSubmit}
             className="min-h-[44px] px-4 py-2 bg-[var(--brand)] text-white rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
           >
-            {acting ? "Starting…" : "Start sheet"}
+            {acting ? t("production.newSheet.starting") : t("production.newSheet.start")}
           </button>
         </div>
       </form>

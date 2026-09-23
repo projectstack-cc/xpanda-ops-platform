@@ -11,12 +11,13 @@ import { getEnv } from "@/lib/db";
 export default async function ProductionPage() {
   const h = await headers();
   const userName = h.get("X-User-Name") ?? "";
+  const isAdmin = h.get("X-User-Is-Admin") === "1";
+  const canManage = h.get("X-User-Can-Manage-Production") === "1";
   const cookieHeader = h.get("cookie");
 
   const { DB } = await getEnv();
   const session = await validateSession(DB, cookieHeader);
 
-  const isAdmin = session?.isAdministrator ?? false;
   const permissions = session?.permissions ?? {};
 
   return (
@@ -28,7 +29,7 @@ export default async function ProductionPage() {
         currentPath="/v2/production"
         title="Production Log · v2"
       />
-      <ProductionBoard />
+      <ProductionBoard canManage={canManage} isAdmin={isAdmin} userName={userName} />
     </div>
   );
 }

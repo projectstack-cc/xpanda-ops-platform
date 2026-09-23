@@ -1809,6 +1809,44 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-a-03 — UI for the Group A schema rework: carry-down, auto #/time/operator, Switch
+  user, managed dropdowns, delete sheet, full en/es/ht (react-component-agent §9b).** Codes
+  against prod-a-02's contract. `fields.ts` grows `kind` flags (`carry`, `auto`, `input`,
+  `optionsKey`, `editable`, `labelKey`) so append-row/edit-modal behavior is data-driven rather
+  than special-cased per field; `block_type`/`init_oper`/`batch_no`/`control_no` are gone.
+  **Carry-down**: after a successful append, `carryRow()` rebuilds the input row from what was
+  just submitted (carry:true fields keep their value, everything else clears); selecting a sheet
+  seeds carry fields from that sheet's last row via `fetchRows(..., seedCarry)`. **Block #** is a
+  real, editable input pre-filled with `productionNumbering.nextBlockNo()` off the current sheet's
+  rows, recomputed via an effect on every `blocks` change (append/delete/sheet-switch — no
+  timers); clearing it sends blank so the server computes. **Time** renders as a read-only "Auto"
+  chip in the append row (editable in the row edit modal); **Operator** never appears as an
+  append-row input, only as a grid column and the new prominent "Logging as {userName}" bar with
+  a **Switch user** button (`POST /api/auth/logout` then `/login.html?next=/v2/production`,
+  completed by prod-a-04's `?next=` support). **New sheet**: Molding asks for a single required
+  Block type; Expansion asks Supplier → Bead type (filtered to that supplier), density, target
+  weight, start/finish time — no silo/control #/operators. Sheet picker labels drop
+  control #/silo. **Managed dropdowns**: Block size (row), Block type and Bead type (new-sheet
+  modal) are `<select>`s that show a manager-only "+ Add new…" opening the new
+  `AddOptionModal.tsx` (one component parameterized by `kind` + optional supplier context) →
+  `POST manage/options` → a 409 `option_exists` is treated as success (selects the existing
+  value) → refetches options and selects the result. **Delete sheet**: manager/admin-gated action
+  in the session bar opens the new `DeleteSheetModal.tsx` (mirrors `DeleteRowModal`'s
+  confirm-then-mutate pattern) — default soft delete ("Hide sheet — recoverable by admin"), a
+  second, visually separated danger button for admin-only purge (`?hard=1`). **Today strip**
+  adds expansion total kg + per-silo chips (molding's per-silo chips now read off the new
+  row-level `today.molding.silos`, unaffected by the UI). **i18n**: new reusable
+  `components/LangSelect.tsx` (fires the same `xpanda:langchange` event legacy `shared/i18n.js`
+  uses, so `LangProvider` picks it up), rendered in the board's top bar. Every visible string
+  across `ProductionBoard.tsx`, `NewSheetModal.tsx`, `EditRowModal.tsx`, `DeleteRowModal.tsx`,
+  `AddOptionModal.tsx`, `DeleteSheetModal.tsx`, `LangSelect.tsx` now routes through `t()` — ~80
+  new `production.*` keys added to `src/lib/i18n.ts` (en/es/ht, machine-translated fast pass per
+  the 2026-09-04 sweep direction); option values, lot/block #s, operator names, and silo numbers
+  are left untranslated (data, not copy), and language names in `LangSelect` show in their own
+  language rather than being translated. `tsc --noEmit` + `opennextjs-cloudflare build` green; no
+  stale-column or hardcoded-English-literal grep hits. **STOPPED at ready-to-push** — runs after
+  prod-a-02, before prod-a-04, same migration-before-push HOLD.
+
 - **prod-a-02 — Schema rework: lot # replaces control #, silo/lot/operator per row, block type per
   sheet (next-platform-agent §9a).** Reworks all Production Log API routes against the new
   `prod-a-01` schema (`DB_Migrations/prod-a-01-production-sheet-rework.sql`, held from push until
