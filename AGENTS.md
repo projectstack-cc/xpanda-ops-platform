@@ -54,11 +54,6 @@ All APIs live inside `_worker.js`. No exceptions.
 /api/load-builder-skus — load builder SKU interface (maps to parts table)
 /api/combos           — saved block calculator combinations
 /api/saved-loads      — saved load builder states (D1, 90-day TTL)
-/api/bead-types       — bead inventory types
-/api/bead-stock       — bead stock levels
-/api/block-inventory  — finished block inventory
-/api/molding-log      — molding production log
-/api/block-consumption — block consumption tracking
 /api/completions      — QC final inspections
 /api/scrap-log        — QC scrap entries
 /api/reports/*        — read-only analytics
@@ -107,7 +102,7 @@ All APIs live inside `_worker.js`. No exceptions.
 | **Jobs** | `/jobs/` | Kanban workflow — packing slip upload, job lifecycle, line items | `jobs/index.html`, `jobs/packing-slip-parser.js` |
 | **Logistics** | `/logistics/` | BOL generation, load building, shipment tracking | `logistics/bol-compose.js` (shared BOL engine, consumed by `index.html` + `load-builder.html`), `logistics/load-builder.html`, `logistics/bol-shared.js`, `logistics/index.html` |
 | **Manufacturing** | `/manufacturing/` | Block calculator, holey board calculator, Cutting Dashboard | `manufacturing/block-calculator.html`, `manufacturing/holey-board-calculator.html`, `manufacturing/cutting-dashboard.html` |
-| **Production** | `/production/` | Bead/block inventory, molding log (inventory-only) | `production/inventory.html`, `production/bead-inventory.html` |
+| **Production** | `/v2/production` | Production Log v2 — Molding/Expansion sheets, silo tracking (one lot per silo), bead lots + bag ledger. Legacy `/production/` only redirects here (v1 pages archived in prod-b-04) | `cutting-pilot/src/app/production/`, `cutting-pilot/src/lib/productionSilos.ts` |
 | **QC** | `/qc/` | Scrap log, final inspection, density calculator | `qc/` |
 | **Safety** | `/safety/` | SDS browser, i18n safety content, training | `safety/` |
 | **Reports** | `/reports/` | Read-only analytics dashboards (incidents, scrap) | `reports/` |
@@ -148,7 +143,7 @@ Agents working on any part of this workflow must understand the upstream and dow
 - BOL Generator — PDF generation via bol-shared.js, customer/carrier management, prefill from jobs
 - Load Builder — trailer load planning, auto-pack algorithm, saved loads, BOL generation
 - Logistics Dashboard — shipment tracking
-- Inventory — three-layer model (bead bags → blocks → molding log)
+- Production Log (v2) — Molding/Expansion sheets, silos (one lot per silo, operator-reported fill state), bead lot receiving + bag ledger
 - Block Calculator — multi-part nesting, 2D diagrams, parts library, saved combos, XLSX export
 - Holey Board Calculator — bin-packing optimization
 - Auth & Permissions — session-based login, configurable roles, per-module access control

@@ -1827,6 +1827,22 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-b-04 follow-up — agent doc sync (docs only).** `AGENTS.md`: dropped the five dead legacy
+  production API groups (`/api/bead-types`, `/api/bead-stock`, `/api/block-inventory`,
+  `/api/molding-log`, `/api/block-consumption` — none has an `API_ROUTES` entry), repointed the
+  Production module row to `/v2/production` (`cutting-pilot/src/app/production/`,
+  `productionSilos.ts`; legacy `/production/` only redirects), and replaced the stable-list
+  "three-layer inventory" line with the Production Log v2 (sheets, silos, bead lots).
+  `xpanda-ops-agents.md`: `production/` file tree now shows the redirect + `_archived/`; the
+  production-agent roster row marks the legacy module retired and routes work to §9a/§9b; §4
+  Production Agent rewritten to match reality (legacy retired, v2 domain model — one lot per silo,
+  bag ledger — v2 files/endpoints, live `production_*` tables, v1 `silos`/`bead_types`/
+  `bead_transactions` pending their held drop; the old `bead_stock`/`block_inventory`/
+  `molding_log`/`block_consumption` tables listed there were confirmed absent from D1); permission
+  example key → `production.log`; removed the same five dead routes from the §9 API list.
+  `AGENTS.md` had drifted to CRLF on disk (content identical to HEAD) — written back as LF.
+  Closes the prod-b-04 doc-sync BACKLOG item.
+
 - **prod-b-04 — Retire legacy bead inventory + `production.inventory` (production-agent §4 /
   admin-auth-agent §8 / db-api-agent §9 / job-board-agent §2).** `git mv` into
   `production/_archived/` (QC Cleanup-6 precedent): `bead-inventory.html`, `index.html`,

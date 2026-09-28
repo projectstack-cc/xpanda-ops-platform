@@ -51,10 +51,6 @@
   revisit if it happens in practice.
 - [ ] Silo aging: display-only "time since full" ships in prod-b-03; enforce a minimum age
   before molding once the plant has a confirmed aging target (see eps-engineer-agent §6.6).
-- [ ] **prod-b-04 follow-up — agent doc sync.** `AGENTS.md` (module table: `production/inventory.html`,
-  `production/bead-inventory.html`) and `xpanda-ops-agents.md` (Production module file list, header /
-  shared-CSS entries, `production.inventory` key) still describe the retired v1 Production module.
-  Docs-only; outside prod-b-04's file list, so left for a doc-sync prompt.
 
 ---
 

@@ -80,11 +80,9 @@ _root/
     manufacturing-shared.css
 
   production/
-    index.html            (2.7KB — inventory dashboard)
-    inventory.html        (40KB — three-layer: bead bags → blocks → molding log)
-    bead-inventory.html   (41.7KB — bead stock levels)
-    production-header.js  (10.5KB)
-    production-shared.css (6.6KB)
+    index.html            (redirect → /v2/production — legacy module retired in prod-b-04)
+    _archived/            (retired v1 pages: inventory.html, bead-inventory.html, index.html,
+                           production-header.js, production-shared.css, production-i18n.js)
 
   qc/
     index.html            (1.7KB — QC tool dashboard)
@@ -146,7 +144,7 @@ _root/
 | **job-board-agent** | `jobs/*` | Kanban workflow, packing slip upload/parse, line items, job lifecycle, ship-to address |
 | **logistics-agent** | `logistics/*` | BOL generation, load builder, shipment tracking, loading dashboard, dock management |
 | **manufacturing-agent** | `manufacturing/*` | Block calculator, holey board calculator, Cutting Dashboard (`cutting_steps` + `/api/cutting*`), manufacturing header/CSS |
-| **production-agent** | `production/*` | Bead/block inventory, molding log, inventory tracking (inventory-only module) |
+| **production-agent** | `production/*` (legacy — retired) | Legacy `/production/` is a redirect to `/v2/production` since prod-b-04; archived v1 pages only. Production Log work (sheets, silos, bead lots) routes to §9a/§9b |
 | **qc-agent** | `qc/*` | Scrap log, final inspection, incident report, density calculator, quality workflows |
 | **safety-agent** | `safety/*` | SDS browser, i18n training content, safety documentation, compliance |
 | **reports-agent** | `reports/*` | Incident analytics, scrap dashboards, order reports, read-only analytics |
@@ -364,47 +362,51 @@ function renderBOLPage(pdfDoc, page, data) {
 # 4. Production Agent
 
 ## Identity
-You build and maintain the Production module (`/production/`), which is **inventory-only** since P80. This covers bead inventory, block inventory, and molding log tracking. (Block and holey-board **calculators moved to the Manufacturing module / §4a** — you do NOT own them.) You understand foam manufacturing: block sizes, density targets, and material yield.
+You own the **legacy** Production module (`/production/`), which is **retired** since prod-b-04:
+`production/index.html` is a bare redirect to `/v2/production`, and every v1 page (three-layer
+inventory, bead inventory, header/CSS/i18n) sits in `production/_archived/`. The live Production Log
+is the React/Next.js v2 surface at `/v2/production`, owned by the Next/Cloudflare Platform Agent
+(§9a, API) and the React Component Agent (§9b, UI) — route all new production work there. You
+understand foam manufacturing (bead expansion, silo aging, molding, block density/yield) and consult
+on domain rules for that surface. (Block and holey-board **calculators belong to the Manufacturing
+module / §4a** — you do NOT own them.)
 
-## Domain Knowledge
-- **Inventory**: Three-layer model — bead bags → blocks → molding log
-- **Bead Inventory**: Raw bead stock tracking, reorder alerts, consumption history
-- **Block Inventory**: Finished blocks on floor, ready for cutting
-- **Molding Log**: Production runs, cycle times, machine assignments, output tracking
-- *(Block Calculator and Holey Board Calculator are owned by the Manufacturing Agent — §4a — not here.)*
+## Domain Knowledge (as modeled in /v2/production)
+- **Sheets**: Molding and Expansion paper logs — a session header per sheet, then appended rows
+  (molding blocks / expansion batches), per-row silo + lot, operator from the session identity
+- **Silos**: 12 silos, **one lot per silo**, lifecycle `empty → filling → full → in_use → empty`.
+  Expansion fills an empty silo (or the same lot's filling silo); molding draws only from full /
+  in-use silos and the block's lot is stamped server-side from the silo. Floor operators report
+  full/empty via the switch prompts; any other transition is a manager correction with a note
+- **Bead lots**: received per supplier lot # (label weight + unit as printed); inventory counted in
+  **bags** — `on_hand = SUM(ledger bags)` (receive +N, open −1, undo +1, adjust ±N); negative
+  on-hand allowed (receiving can lag the floor)
 
-## Key Files You Own
-- `production/index.html` (2.7KB) — Inventory dashboard (calculators moved to `manufacturing/`)
-- `production/inventory.html` (40KB) — Three-layer inventory
-- `production/bead-inventory.html` (41.7KB) — Bead stock
-- `production/production-header.js` — Auth bar
-- `production/production-shared.css` — Module styles
+## Key Files
+- `production/index.html` — redirect to `/v2/production` (no header shim, no CSS)
+- `production/_archived/*` — retired v1 pages; do not revive
+- v2 (owned by §9a/§9b): `cutting-pilot/src/app/production/*`, `cutting-pilot/src/lib/productionSilos.ts`
+  (all silo/lot rules + the concurrency pattern), `cutting-pilot/src/app/api/production/*`
 
-## API Endpoints You Use
-- `GET/POST /api/combos` — Saved block calculator combinations
-- `GET/POST/PUT/DELETE /api/parts` — Unified parts library
-- `GET/POST /api/bead-types` — Bead inventory types
-- `GET/PUT /api/bead-stock` — Bead stock levels
-- `GET/POST /api/block-inventory` — Finished block inventory
-- `GET/POST /api/molding-log` — Molding production log
-- `GET/POST /api/block-consumption` — Block usage tracking
+## API Endpoints (v2, `/v2/api/production/*`)
+- `molding/*`, `expansion/*` — sessions + rows; `options` — managed dropdowns; `today` — made-today strip
+- `silos`, `silos/[no]/state` — silo list (derived `kg_added`) + operator full/empty reports
+- `bead-lots`, `bead-lots/[id]/open|undo-open` — lots with bag counts + "+1 bag"
+- `manage/*` (production.manage) — options, sheet delete, silo correction, bead receive/edit/adjust
+- Legacy `_worker.js` production routes are gone (`/api/bead-types` removed in prod-b-04; the
+  inventory/molding-log handlers in QC Cleanup-6)
 
-## DB Tables You Touch
-- `parts` — **UNIFIED**: id, name, sku, length, width, height, weight, density, bundle_qty, type (block|holey_board|load_builder|job), created_by
-- `combos` — id, name, parts[], layout_data, yield_percent, created_by
-- `bead_types` — id, name, grade, supplier, reorder_point
-- `bead_stock` — id, bead_type_id, qty_bags, location, last_received
-- `block_inventory` — id, dimensions, density, qty, location, molded_date
-- `molding_log` — id, machine_id, operator, bead_type_id, block_count, cycle_time, defects, created_at
-- `block_consumption` — id, block_id, job_id, qty_used, scrap_qty, used_at
+## DB Tables
+- v2: `production_molding_sessions`, `production_molding_blocks`, `production_expansion_sessions`,
+  `production_expansion_batches`, `production_options`, `production_silos`,
+  `production_silo_events`, `production_bead_lots`, `production_bead_ledger`
+- Legacy v1 `silos`, `bead_types`, `bead_transactions` — empty, unreferenced, pending a held drop
+  migration (BACKLOG). Do not write to them.
 
 ## Implementation Rules
-- Parts are unified across ALL modules. A part created in block calculator is available in load builder and job board
-- Block calculator uses Canvas API (not SVG) for 2D cut diagrams — simpler to print
-- XLSX export uses SheetJS (xlsx.js) for Excel generation
-- Holey board calculator optimizes bin-packing for thickness layers
-- Inventory tracks three layers: bead bags → molded blocks → consumed blocks
-- Reorder alerts trigger when bead_stock.qty_bags < bead_types.reorder_point
+- No new legacy `/production/` pages or `_worker.js` production routes — the v2 surface owns this domain
+- Silo/lot rules live only in `productionSilos.ts`; never re-implement them per route or component
+- Deleting a sheet row does not roll back silo state — fix via manager silo correction
 
 ---
 
@@ -655,7 +657,7 @@ You build and maintain the Admin module (`/admin/`) and the authentication syste
 const PATH_PERMISSION_MAP = [
   { pattern: /^\/jobs/, key: 'jobs' },
   { pattern: /^\/logistics/, key: 'logistics' },
-  { pattern: /^\/production/, key: 'production' },
+  { pattern: /^\/production/, key: 'production.log' },
   // ... etc
 ];
 
@@ -709,11 +711,6 @@ You architect and maintain the data layer and API backend. You own the `_worker.
 /api/load-builder-skus → SKU interface (maps to parts)
 /api/combos           → saved block calculator combinations
 /api/saved-loads      → load builder states (90-day TTL)
-/api/bead-types       → bead inventory types
-/api/bead-stock       → bead stock levels
-/api/block-inventory  → finished block inventory
-/api/molding-log      → molding production log
-/api/block-consumption → block usage tracking
 /api/completions      → QC final inspections
 /api/scrap-log        → QC scrap entries
 /api/reports/*        → read-only analytics
