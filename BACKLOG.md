@@ -62,6 +62,11 @@
 - [ ] **prod-b follow-up — drop legacy v1 tables** (`silos`, `bead_types`,
   `bead_transactions`) via a separate, held migration once prod-b-04 has shipped and nothing
   references them. Irreversible — own prompt.
+- [ ] Deleting an expansion/molding row does not roll back silo state (e.g. deleting the batch
+  that started a fill leaves the silo `filling`). Currently fixed via manager silo correction;
+  revisit if it happens in practice.
+- [ ] Silo aging: display-only "time since full" ships in prod-b-03; enforce a minimum age
+  before molding once the plant has a confirmed aging target (see eps-engineer-agent §6.6).
 
 ---
 

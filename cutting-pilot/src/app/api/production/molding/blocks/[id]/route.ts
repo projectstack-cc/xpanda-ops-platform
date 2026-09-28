@@ -4,6 +4,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";
+import { canManageProduction, siloNoOrNull } from "@/lib/productionSilos";
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 
@@ -27,6 +28,12 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
+  // Silo / lot on an existing row are manager-only corrections (prod-b-02).
+  const touchesSiloLot = p && typeof p === "object" && ("silo" in p || "lot_no" in p);
+  if (touchesSiloLot && !canManageProduction(request.headers)) {
+    return NextResponse.json({ ok: false, error: "manage_required" }, { status: 403 });
+  }
+
   try {
     const lock = await DB.prepare(
       `SELECT s.status, s.deleted_at FROM production_molding_blocks b
@@ -46,8 +53,22 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
 
     if ("block_no" in p) { sets.push("block_no = ?"); binds.push(p.block_no ?? null); changed.push("block_no"); }
     if ("block_size" in p) { sets.push("block_size = ?"); binds.push(p.block_size ?? null); changed.push("block_size"); }
-    if ("silo" in p) { sets.push("silo = ?"); binds.push(numOrNull(p.silo)); changed.push("silo"); }
-    if ("lot_no" in p) { sets.push("lot_no = ?"); binds.push(p.lot_no ?? null); changed.push("lot_no"); }
+    // No silo state transitions on PATCH — state corrections go through manage/silos/[no].
+    if ("silo" in p) {
+      const siloNo = siloNoOrNull(p.silo);
+      if (siloNo === null) return NextResponse.json({ ok: false, error: "silo_invalid" }, { status: 400 });
+      sets.push("silo = ?"); binds.push(siloNo); changed.push("silo");
+    }
+    if ("lot_no" in p) {
+      const lotInput = typeof p.lot_no === "string" ? p.lot_no.trim() : "";
+      const lot = lotInput
+        ? await DB.prepare(
+            `SELECT lot_no FROM production_bead_lots WHERE lot_no = ? LIMIT 1`
+          ).bind(lotInput).first<{ lot_no: string }>()
+        : null;
+      if (!lot) return NextResponse.json({ ok: false, error: "lot_unknown" }, { status: 400 });
+      sets.push("lot_no = ?"); binds.push(lot.lot_no); changed.push("lot_no");
+    }
     if ("rc_pct_open" in p) { sets.push("rc_pct_open = ?"); binds.push(numOrNull(p.rc_pct_open)); changed.push("rc_pct_open"); }
     if ("rc_speed" in p) { sets.push("rc_speed = ?"); binds.push(numOrNull(p.rc_speed)); changed.push("rc_speed"); }
     if ("virgin_pct_open" in p) { sets.push("virgin_pct_open = ?"); binds.push(numOrNull(p.virgin_pct_open)); changed.push("virgin_pct_open"); }

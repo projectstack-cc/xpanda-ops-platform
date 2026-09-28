@@ -1827,6 +1827,49 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-b-02 — API: silos, bead lots, bag ledger + row guards (next-platform-agent §9a).** New
+  `src/lib/productionSilos.ts` holds every rule in one place: `SILO_SELECT_SQL` (all silo columns +
+  derived `kg_added` = expanded kg of the current lot since `fill_started_at`, non-deleted sheets
+  only, 0 when empty — derived on every read, never cached), `LOT_SELECT_SQL` /
+  `LOT_SELECT_WITH_SESSION_SQL` (`bags_received`, `bags_opened`, `on_hand` = SUM(bags), optional
+  `opened_in_session`), pure `canExpandInto` / `canMoldFrom` predicates, and the guarded
+  `transitionUpdate` / gated `eventInsert` builders. Header comment documents the concurrency
+  pattern: read + validate, then one `DB.batch` of guarded silo UPDATE → row `INSERT … SELECT …
+  WHERE EXISTS(silo in expected post-transition state + lot)` → event gated on the row existing and
+  on this request's own `updated_at`/`updated_by` stamp; row insert `changes === 0` → 409
+  `silo_state_changed`. A row or event is never written against a silo whose state disagrees.
+  **Endpoints:** `GET /v2/api/production/silos`; `POST …/silos/[no]/state` (`filling→full`,
+  `in_use→empty` only, else 409 `bad_transition` with detail = current state);
+  `PATCH …/manage/silos/[no]` (label / active / any-state correction with required `note`,
+  non-empty target needs an existing `lot_id` and snapshots lot/supplier/type, event source
+  `manual`); `GET …/bead-lots` (`supplier`, `bead_type`, `include_inactive=1`, `session_id`);
+  `POST …/bead-lots/[id]/open` / `undo-open` (open sheet only, lot must match the sheet's
+  supplier + type; undo is gated inside the INSERT on net opened > 0 so double-taps can't go past
+  zero; never blocked on stock — negative on-hand allowed); `POST …/manage/bead-lots` (receive:
+  new lot + `receive` entry in one batch, or append `receive` to an existing `(supplier, lot_no)`
+  and re-activate it; bead-type mismatch → 409 `lot_conflict` and **nothing is received**);
+  `PATCH …/manage/bead-lots/[id]` (supplier/type/lot immutable → 400 `lot_immutable_field`);
+  `POST …/manage/bead-lots/[id]/adjust` (signed non-zero bags + note). **Row guards:** expansion
+  batch POST now requires `silo` + `lot_no`, resolves the lot against the sheet's supplier/type,
+  stores the lot's canonical `lot_no`, and either starts a fill (`empty→filling`, snapshots
+  supplier/type/density, `fill_started_at`) or appends to the same lot's `filling` silo; molding
+  block POST requires `silo`, allows only `full`/`in_use`, **ignores any client `lot_no` and stamps
+  it from the silo**, and moves `full→in_use` on the first block. Both responses add a fresh
+  `silo`; molding also returns `lot_no`. Row PATCH `silo`/`lot_no` are manager-only (403
+  `manage_required`, whole request rejected), validated (`silo_invalid` / `lot_unknown`), and never
+  transition silo state. Every new mutation calls `logActivity()` (`production_silo`,
+  `production_bead_lot`). Error codes: `silo_required, lot_required, lot_unknown,
+  lot_sheet_mismatch, silo_lot_mismatch, silo_not_fillable, silo_not_moldable, silo_inactive,
+  silo_state_changed, bad_transition, note_required, nothing_to_undo, manage_required,
+  silo_invalid, unknown_supplier, unknown_bead_type, bags_invalid, label_invalid, lot_no_required,
+  lot_conflict, lot_immutable_field`. New `productionSilos.selfcheck.ts` **11/11** (esbuild
+  harness); the gated SQL was also exercised against an in-memory SQLite loaded with the prod-b-01
+  migration (run twice: idempotent). `tsc --noEmit` clean; `npm run cf-build` green (this
+  OpenNext version rejects the `build` positional, so `npx opennextjs-cloudflare build` from the
+  prompt errors; `cf-build` is the equivalent). **Go-live note:** all 12 silos start `empty`, so
+  molding is blocked (`silo_not_moldable`) until a manager receives current lots and corrects
+  each physically loaded silo to `full`/`in_use`. **HOLD: depends on prod-b-01's migration.**
+
 - **prod-b-01 — Migration: silos + bead lot ledger (db-api-agent §9).** Adds
   `production_silos` (12 seeded rows, state `empty`; one lot per silo; lifecycle
   empty→filling→full→in_use→empty), append-only `production_silo_events`,
