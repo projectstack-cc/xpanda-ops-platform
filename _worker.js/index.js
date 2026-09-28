@@ -5,7 +5,7 @@ import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers,
          handleApiPartsSeed, handleApiLoadBuilderSkusDeleteAll, handleApiLoadBuilderSkus,
          handleApiSavedLoads } from './routes/bols.js';
 import { handleApiJobs, handleApiShipments, handleApiAddressValidate, handleApiAssignableUsers, handleHoleyChunksPreview, handleHoleyChunksBackfill } from './routes/jobs.js';
-import { handleApiParts, handleApiCombos, handleApiBeadTypes } from './routes/production.js';
+import { handleApiParts, handleApiCombos } from './routes/production.js';
 import { handleApiCompletions, handleApiScrapLog } from './routes/qc.js';
 import { handleApiReportsScrapSummary, handleApiReportsScrapTrend, handleApiReportsScrapReasons,
          handleIncidentTrend, handleIncidentSummary, handleIncidentList, handleIncidentDetail,
@@ -57,7 +57,6 @@ const API_ROUTES = [
   // Parts / production
   { path: '/api/parts',             handler: (req, env) => handleApiParts(req, env) },
   { path: '/api/combos',            handler: (req, env) => handleApiCombos(req, env) },
-  { path: '/api/bead-types',        handler: (req, env) => handleApiBeadTypes(req, env) },
 
   // Jobs / shipments / manufacturing
   { path: '/api/address/validate', method: 'POST', handler: (req, env) => handleApiAddressValidate(req, env) },

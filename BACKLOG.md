@@ -43,22 +43,6 @@
   `bucket_weight_g / (V_liters × 16.0185)` once the bucket's rated volume constant is supplied;
   ship as a toggle.
 
-- [ ] Retire `production/bead-inventory.html` + the `production.inventory` permission key once
-  `/v2/production` (or a successor) covers bead stock / silo tracking, not before. (Narrowed from
-  the old P403 item, which incorrectly assumed the v2 Production Log's Molding/Expansion-only
-  scope already covered bead-stock/silo tracking — it doesn't. QC Cleanup-6 archived the actually-
-  dead `production/inventory.html` v1 page and its four dead handlers; `bead-inventory.html` is
-  the live tool and was deliberately left in place.)
-- [ ] `production/index.html` (the legacy Production dashboard tile page) now has zero tiles after
-  QC Cleanup-6 archived its only tile (`inventory.html`). It's already unreachable from primary
-  nav (home page's Production card points to `/v2/production`), but the module nav bar's
-  "Production" link still points at `/production/` generically. Add a tile pointing to
-  `bead-inventory.html`, or retire `production/index.html` itself if it's not meant to be a live
-  entry point.
-- [ ] Pre-existing gap (found during QC Cleanup-6, not introduced by it): `bead-inventory.html`
-  calls `/api/silos` and `/api/bead-transactions`, but neither has an `API_ROUTES` entry anywhere
-  in `_worker.js` — confirmed absent even before this session's changes. Worth checking whether
-  the Silos/Transactions tabs on the live page actually work in production.
 - [ ] **prod-b follow-up — drop legacy v1 tables** (`silos`, `bead_types`,
   `bead_transactions`) via a separate, held migration once prod-b-04 has shipped and nothing
   references them. Irreversible — own prompt.
@@ -67,6 +51,10 @@
   revisit if it happens in practice.
 - [ ] Silo aging: display-only "time since full" ships in prod-b-03; enforce a minimum age
   before molding once the plant has a confirmed aging target (see eps-engineer-agent §6.6).
+- [ ] **prod-b-04 follow-up — agent doc sync.** `AGENTS.md` (module table: `production/inventory.html`,
+  `production/bead-inventory.html`) and `xpanda-ops-agents.md` (Production module file list, header /
+  shared-CSS entries, `production.inventory` key) still describe the retired v1 Production module.
+  Docs-only; outside prod-b-04's file list, so left for a doc-sync prompt.
 
 ---
 

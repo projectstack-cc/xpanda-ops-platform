@@ -299,9 +299,6 @@
       shipToUnverified: "Unverified",
 
       // Bead prompt banner
-      jobMovedToDone: "Job moved to Done",
-      logBeadFor: "Log bead consumption for {customer}?",
-      logConsumption: "Log Consumption",
       dismiss: "Dismiss",
 
       // Packing-slip line-item matching badges
@@ -645,9 +642,6 @@
       shipToUnverified: "No Verificado",
 
       // Bead prompt banner
-      jobMovedToDone: "Trabajo movido a Terminado",
-      logBeadFor: "¿Registrar consumo de perlas para {customer}?",
-      logConsumption: "Registrar Consumo",
       dismiss: "Descartar",
 
       // Packing-slip line-item matching badges
@@ -991,9 +985,6 @@
       shipToUnverified: "Pa Verifye",
 
       // Bead prompt banner
-      jobMovedToDone: "Travay deplase a Fini",
-      logBeadFor: "Anrejistre konsomasyon grenn pou {customer}?",
-      logConsumption: "Anrejistre Konsomasyon",
       dismiss: "Kite Tonbe",
 
       // Packing-slip line-item matching badges

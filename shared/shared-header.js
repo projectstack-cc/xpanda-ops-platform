@@ -178,7 +178,7 @@ if (!window.__xpandaPwaInstallLoaded) {
         { label: t('common.jobBoard', null, 'Job board'),         href: '/jobs/',         perm: 'jobs' },
         { label: t('common.logistics', null, 'Logistics'),        href: '/logistics/',     perm: 'logistics.dashboard' },
         { label: t('common.manufacturing', null, 'Manufacturing'), href: '/manufacturing/', perm: 'manufacturing.calculators' },
-        { label: t('common.production', null, 'Production'),      href: '/production/',    perm: 'production.inventory' },
+        { label: t('common.production', null, 'Production'),      href: '/v2/production',  perm: 'production.log' },
         { label: 'QC',            href: '/qc/',            perm: 'qc' },
         { label: t('common.reports', null, 'Reports'),      href: '/reports/',       perm: 'reports' },
         { label: t('common.safety', null, 'Safety'),        href: '/safety/',        perm: 'safety' },

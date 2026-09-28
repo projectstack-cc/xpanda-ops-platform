@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>xPanda Production Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.json">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link rel="icon" href="/assets/img/favicon.png" sizes="any">
+<link rel="apple-touch-icon" href="/assets/img/favicon.png">
+
+<link rel="stylesheet" href="/production/production-shared.css">
+</head>
+
+<body>
+
+<script src="/production/production-header.js"></script>
+
+<div class="prod-wrap">
+
+    <div class="prod-section-intro">
+        <h1 class="prod-section-title" data-i18n="production.sectionTitle">Production Tools</h1>
+        <p class="prod-section-subtitle" data-i18n="production.sectionSubtitle">Select a tool to begin</p>
+    </div>
+
+</div>
+
+<script>
+function getUser() {
+  return new Promise(resolve => {
+    if (window.__xpandaUser !== undefined) return resolve(window.__xpandaUser);
+    let attempts = 0;
+    const check = setInterval(() => {
+      if (window.__xpandaUser !== undefined || ++attempts > 20) {
+        clearInterval(check);
+        resolve(window.__xpandaUser || null);
+      }
+    }, 50);
+  });
+}
+
+async function gateProductionNav() {
+  try {
+    const user = await getUser();
+    if (!user || user.isAdministrator) return;
+
+    const perms = user.permissions || {};
+
+    if (!perms['production.inventory']?.view) {
+      document.querySelectorAll('a[href*="inventory"], a[href*="bead-inventory"]').forEach(el => el.style.display = 'none');
+    }
+  } catch {}
+}
+gateProductionNav();
+</script>
+
+</body>
+</html>

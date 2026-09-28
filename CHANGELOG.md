@@ -1827,6 +1827,38 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-b-04 — Retire legacy bead inventory + `production.inventory` (production-agent §4 /
+  admin-auth-agent §8 / db-api-agent §9 / job-board-agent §2).** `git mv` into
+  `production/_archived/` (QC Cleanup-6 precedent): `bead-inventory.html`, `index.html`,
+  `production-header.js`, `production-shared.css`, `production-i18n.js` — pre-checked that nothing
+  outside `production/` loads the three shared assets (only doc mentions in `xpanda-ops-agents.md`
+  and stale `.kilo/` worktrees). New minimal `production/index.html` redirects to `/v2/production`
+  (meta refresh + `location.replace` + plain link; no header shim, no CSS). **Permission maps
+  (`_worker.js/lib/core.js`):** `PATH_PERMISSION_MAP` `/production/` → `production.log`; deleted
+  the `/api/bead`, `/api/block`, `/api/molding-log` `API_PERMISSION_MAP` rows after confirming no
+  `API_ROUTES` row matches `/api/block` or `/api/molding-log`. **Gate behavior verified:** an
+  `/api/*` path with no map entry still requires a session; GET/HEAD pass the gate, mutations get
+  403 `Unmapped route` (QC Cleanup-11 RT-03 allowlist), and with no `API_ROUTES` handler the
+  request falls through to `ASSETS.fetch` → 404 — nothing becomes reachable ungated. **Dead route:**
+  removed `/api/bead-types` from `API_ROUTES` + its import, and deleted `handleApiBeadTypes` from
+  `routes/production.js` (`grep -rn handleApiBeadTypes` → none). **Permission UI:** dropped
+  `production.inventory` from `admin/roles.html` (`PERMISSION_LABELS` + label-key map) and the
+  three `permLabelInventoryLegacy` entries in `admin/admin-i18n.js` (no other reference). Existing
+  roles in D1 still carry `production.inventory` in their permissions JSON — inert now that nothing
+  checks it; no data migration written. **Nav:** `shared/shared-header.js` Production link →
+  `/v2/production`, `perm: 'production.log'`. **Job Board:** removed the "log bead consumption"
+  banner (`showBeadPrompt` + its `done` branch in `moveCard`) and the `jobMovedToDone` /
+  `logBeadFor` / `logConsumption` keys (en/es/ht) from `jobs/jobs-i18n.js`; `dismiss` left alone.
+  Verification: no `production.inventory` / `bead-inventory.html` in code (remaining hits are
+  docs — `AGENTS.md`, `xpanda-ops-agents.md`, `Audits/`, `Prompts/` — BACKLOG doc-sync item
+  added); `node --check` green on `_worker.js/index.js`, `lib/core.js`, `routes/production.js`,
+  `shared/shared-header.js`, `jobs/jobs-i18n.js`, `admin/admin-i18n.js` (named temp copies) and the
+  extracted `jobs/index.html` script block. `core.js` / `shared-header.js` had drifted to CRLF on
+  disk (content identical to HEAD, hidden by git's stat cache) — written back as LF. No
+  `cutting-pilot/` files touched. The v1 D1 tables (`silos`, `bead_types`, `bead_transactions`)
+  remain, pending their own held drop migration (BACKLOG). **Push only after prod-b-03 is live on
+  the floor** (Pages deploys on push).
+
 - **prod-b-03 — UI: silo grid, switch prompts, lot picker, +1 bag, Bead receiving
   (react-component-agent §9b).** Codes against prod-b-02's contract exactly (no route changes).
   **Components** (`src/app/production/`): `SiloGrid` (the one tile grid — label, translated state,
