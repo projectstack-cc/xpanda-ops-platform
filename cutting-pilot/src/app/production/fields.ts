@@ -5,6 +5,10 @@
 // `carry` drives carry-down after append; `auto` marks a field the server computes (block_no,
 // time) or that comes from the session identity (operator) rather than being a normal input;
 // `editable` gates whether the row edit modal offers the field at all.
+//
+// prod-b-03: `input: "silo"` = silo picker (append row) / 1–12 select (edit modal); `input: "lot"` =
+// received-lot select (expansion); `auto: "lot"` = read-only lot shown live from the carried silo
+// (molding — the server stamps it). `manageOnly` silo/lot edits are manager corrections.
 
 export interface OptionsData {
   block_types: string[];
@@ -16,19 +20,21 @@ export interface OptionsData {
 export interface RowFieldDef {
   key: string;
   labelKey: string;
-  input: "text" | "number" | "select";
+  input: "text" | "number" | "select" | "silo" | "lot";
   optionsKey?: "block_sizes";
   carry: boolean;
-  auto?: "block_no" | "time" | "operator";
+  auto?: "block_no" | "time" | "operator" | "lot";
   editable: boolean;
+  // Only offered in the edit modal to managers (the append row still uses the field).
+  manageOnly?: boolean;
   placeholder?: string;
 }
 
 export const MOLDING_FIELDS: RowFieldDef[] = [
   { key: "block_no", labelKey: "production.field.blockNo", input: "text", carry: false, auto: "block_no", editable: true },
   { key: "block_size", labelKey: "production.field.blockSize", input: "select", optionsKey: "block_sizes", carry: true, editable: true },
-  { key: "silo", labelKey: "production.field.silo", input: "number", carry: true, editable: true },
-  { key: "lot_no", labelKey: "production.field.lotNo", input: "text", carry: true, editable: true },
+  { key: "silo", labelKey: "production.field.silo", input: "silo", carry: true, editable: true, manageOnly: true },
+  { key: "lot_no", labelKey: "production.field.lotNo", input: "text", carry: true, auto: "lot", editable: true, manageOnly: true },
   { key: "rc_pct_open", labelKey: "production.field.rcPctOpen", input: "number", carry: true, editable: true },
   { key: "rc_speed", labelKey: "production.field.rcSpeed", input: "number", carry: true, editable: true },
   { key: "virgin_pct_open", labelKey: "production.field.virginPctOpen", input: "number", carry: true, editable: true },
@@ -39,8 +45,8 @@ export const MOLDING_FIELDS: RowFieldDef[] = [
 ];
 
 export const EXPANSION_FIELDS: RowFieldDef[] = [
-  { key: "lot_no", labelKey: "production.field.lotNo", input: "text", carry: true, editable: true },
-  { key: "silo", labelKey: "production.field.silo", input: "number", carry: true, editable: true },
+  { key: "lot_no", labelKey: "production.field.lotNo", input: "lot", carry: true, editable: true, manageOnly: true },
+  { key: "silo", labelKey: "production.field.silo", input: "silo", carry: true, editable: true, manageOnly: true },
   { key: "weight_kg", labelKey: "production.field.weightKg", input: "number", carry: false, editable: true },
   { key: "heating_time_s", labelKey: "production.field.heatingTimeS", input: "number", carry: false, editable: true },
   { key: "bucket_weight_g", labelKey: "production.field.bucketWeightG", input: "number", carry: false, editable: true },

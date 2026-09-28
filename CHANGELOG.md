@@ -1827,6 +1827,45 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-b-03 — UI: silo grid, switch prompts, lot picker, +1 bag, Bead receiving
+  (react-component-agent §9b).** Codes against prod-b-02's contract exactly (no route changes).
+  **Components** (`src/app/production/`): `SiloGrid` (the one tile grid — label, translated state,
+  lot, bead type, `kg_added`, time since full via `formatDuration`; status tokens only
+  info/success/warn/ghost, state always text + color; 2/3/4/6 columns phone→desktop; pick modes
+  disable tiles with a one-line reason), `SiloPickerModal` (Modal + SiloGrid, mode
+  expansion|molding), `SiloSwitchModal` (one component, variant prop, ≥56px Yes/No),
+  `SilosView` (view-mode grid; managers/admins tap → `SiloCorrectModal` → `PATCH
+  manage/silos/{no}`, note required on a state/lot change), `BeadView` (lot table with
+  received/opened/on-hand, supplier + type filters, show-inactive; managers get `ReceiveLotModal`,
+  per-row `AdjustLotModal` and `EditLotModal` with supplier/type/lot read-only), `BagCounter`
+  (+1 bag / Undo, disabled in flight), and `ui.tsx` (shared form classes + Cancel/Submit footer so
+  the new modals don't each copy them). **Board:** `BoardKind` gains `silos` | `bead`; sheet logic
+  runs off a `SheetKind` so the made-today strip, sheet list, rows and carry only apply to the two
+  sheet boards. **Switch prompts:** picking a different silo than the carried one asks "Is silo N
+  full?" (Expansion, carried silo `filling`) / "Is silo N empty?" (Molding, carried silo `in_use`);
+  Yes → `POST silos/{n}/state`, No → no call, closing the modal aborts the switch; a state-call
+  error is toasted, silos refetch, and the pick still applies. **Lots:** Expansion `lot_no` is a
+  select of the sheet's supplier + type lots (`lot · on_hand bags`, negative in danger) with a
+  manager "+ Receive new lot…" that prefills the sheet's supplier/type and selects the new lot;
+  Molding `lot_no` is read-only, shown live from the carried silo, never sent, and the saved row
+  takes the POST response's `lot_no`. **Edit modal:** `fields.ts` gains `input: "silo" | "lot"`,
+  `auto: "lot"`, `manageOnly`; silo/lot render only for managers (1–12 select / lot select —
+  Expansion: sheet supplier, Molding: all lots) with a "does not change silo state" note;
+  non-managers never send them (the PATCH body is already a diff of changed fields). **Errors:**
+  `ERROR_KEY` covers every prod-b-02 code; `silo_state_changed` / `silo_lot_mismatch` /
+  `silo_not_moldable` refetch silos. Silos fetch on mount, board switch, after every row
+  append/edit/delete and state call, and every 30 s (tab visible) outside the Bead view; lots on
+  Expansion sheet select and after bag/receive actions. **i18n:** 100 new en/es/ht keys under
+  `production.board.*`, `production.silo.*`, `production.bead.*`, `production.error.*`.
+  **Deviation from the prompt (flagged):** the prompt said to treat a 409 `lot_conflict` like
+  `created:false` ("bags were added"). Per prod-b-02's contract, `lot_conflict` means **nothing was
+  received** (the lot # exists under another bead type), so the UI shows a distinct error for it;
+  only `created:false` shows "already existed — bags added". `tsc --noEmit` clean; `npm run
+  cf-build` green. Code walkthrough: empty silo → first Expansion row starts the fill; switching
+  away from a filling silo prompts "full?"; Molding greys empty/filling tiles; picking a full silo
+  shows its lot; switching away from an in-use silo prompts "empty?"; +1 bag/Undo; receive a new
+  lot from the lot select. **HOLD: depends on prod-b-01's migration.**
+
 - **prod-b-02 — API: silos, bead lots, bag ledger + row guards (next-platform-agent §9a).** New
   `src/lib/productionSilos.ts` holds every rule in one place: `SILO_SELECT_SQL` (all silo columns +
   derived `kg_added` = expanded kg of the current lot since `fill_started_at`, non-deleted sheets

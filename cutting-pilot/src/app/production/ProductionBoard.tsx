@@ -6,6 +6,10 @@
 // prod-a-03 (Group A): lot # replaces control #, silo/lot/operator now live per row, molding
 // sheets carry one block type, block #/time/operator auto-fill, managed dropdowns with manager
 // "+ Add new…", sheet delete (soft/purge), and full en/es/ht via the new LangSelect.
+//
+// prod-b-03 (Group B): Silos + Bead views, silo picker + switch prompts on the append row, received
+// lot select + "+1 bag" on Expansion, read-only server-stamped lot on Molding, manager-only
+// silo/lot row edits. Codes against prod-b-02's API contract.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useLang } from "@/components/lang";
@@ -16,6 +20,14 @@ import EditRowModal from "./EditRowModal";
 import DeleteRowModal from "./DeleteRowModal";
 import DeleteSheetModal from "./DeleteSheetModal";
 import AddOptionModal, { type OptionKind } from "./AddOptionModal";
+import SiloPickerModal from "./SiloPickerModal";
+import SiloSwitchModal from "./SiloSwitchModal";
+import SilosView from "./SilosView";
+import BeadView from "./BeadView";
+import BagCounter from "./BagCounter";
+import ReceiveLotModal from "./ReceiveLotModal";
+import type { DescribeError } from "./ui";
+import type { BeadLotRow, SiloRow } from "@/lib/productionSilos";
 import {
   MOLDING_FIELDS,
   EXPANSION_FIELDS,
@@ -27,7 +39,15 @@ import {
   type OptionsData,
 } from "./fields";
 
-type BoardKind = "molding" | "expansion";
+type BoardKind = "molding" | "expansion" | "silos" | "bead";
+type SheetKind = "molding" | "expansion";
+
+const BOARD_LABEL_KEY: Record<BoardKind, string> = {
+  molding: "production.board.molding",
+  expansion: "production.board.expansion",
+  silos: "production.board.silos",
+  bead: "production.board.bead",
+};
 
 interface MoldingSession {
   id: string;
@@ -129,7 +149,32 @@ const ERROR_KEY: Record<string, string> = {
   admin_only: "production.error.adminOnly",
   Unauthorized: "production.error.unauthorized",
   "Access denied.": "production.error.forbidden",
+  silo_required: "production.error.siloRequired",
+  lot_required: "production.error.lotRequired",
+  lot_unknown: "production.error.lotUnknown",
+  lot_sheet_mismatch: "production.error.lotSheetMismatch",
+  silo_lot_mismatch: "production.error.siloLotMismatch",
+  silo_not_fillable: "production.error.siloNotFillable",
+  silo_not_moldable: "production.error.siloNotMoldable",
+  silo_inactive: "production.error.siloInactive",
+  silo_state_changed: "production.error.siloStateChanged",
+  bad_transition: "production.error.badTransition",
+  note_required: "production.error.noteRequired",
+  nothing_to_undo: "production.error.nothingToUndo",
+  manage_required: "production.error.manageRequired",
+  silo_invalid: "production.error.siloInvalid",
+  unknown_supplier: "production.error.unknownSupplier",
+  bags_invalid: "production.error.bagsInvalid",
+  label_invalid: "production.error.labelInvalid",
+  lot_no_required: "production.error.lotNoRequired",
+  lot_conflict: "production.error.lotConflict",
+  lot_immutable_field: "production.error.lotImmutableField",
 };
+
+// Errors that mean our silos list is stale — refetch it automatically.
+const SILO_REFETCH_ERRORS = new Set(["silo_state_changed", "silo_lot_mismatch", "silo_not_moldable"]);
+
+const RECEIVE_NEW = "__receive_new__";
 
 export default function ProductionBoard({ canManage, isAdmin, userName }: Props) {
   const { t } = useLang();
@@ -157,14 +202,24 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     null
   );
   const inputRefs = useRef<Record<string, HTMLInputElement | HTMLSelectElement | null>>({});
+  const [silos, setSilos] = useState<SiloRow[] | null>(null);
+  const [silosError, setSilosError] = useState<string | null>(null);
+  const [lots, setLots] = useState<BeadLotRow[]>([]);
+  const [editLots, setEditLots] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pendingSwitch, setPendingSwitch] = useState<{ prev: SiloRow; next: SiloRow } | null>(null);
+  const [switchActing, setSwitchActing] = useState(false);
+  const [receiveFromRowOpen, setReceiveFromRowOpen] = useState(false);
 
+  const isSheetBoard = board === "molding" || board === "expansion";
+  const sheetKind: SheetKind = board === "molding" ? "molding" : "expansion";
   const sessionsForBoard = board === "molding" ? moldingSessions : expansionSessions;
   const selectedId = board === "molding" ? selectedMoldingId : selectedExpansionId;
   const selectedMoldingSession = moldingSessions.find((s) => s.id === selectedMoldingId) ?? null;
   const selectedExpansionSession = expansionSessions.find((s) => s.id === selectedExpansionId) ?? null;
   const selectedSession = board === "molding" ? selectedMoldingSession : selectedExpansionSession;
   const isEditable = selectedSession?.status === "open";
-  const fields = fieldsFor(board);
+  const fields = fieldsFor(sheetKind);
   const appendFields = fields.filter((f) => f.auto !== "operator");
   const rowPath = board === "molding" ? "blocks" : "batches";
   const optionValues: Record<string, string[]> = { block_sizes: options.block_sizes };
@@ -177,6 +232,52 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
   function errorMessage(err: string | undefined, fallbackKey: string): string {
     if (err && ERROR_KEY[err]) return t(ERROR_KEY[err]);
     return t(fallbackKey);
+  }
+  const describeError: DescribeError = errorMessage;
+
+  const fetchSilos = useCallback(async () => {
+    try {
+      const res = await fetch("/v2/api/production/silos");
+      const data = await res.json();
+      if (data.ok) {
+        setSilos(data.silos);
+        setSilosError(null);
+      } else {
+        setSilosError(errorMessage(data.error, "production.silo.loadFailed"));
+      }
+    } catch {
+      setSilosError(t("production.error.networkError"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function replaceSilo(s: SiloRow | undefined | null) {
+    if (!s) return;
+    setSilos((cur) => (cur ? cur.map((x) => (x.silo_no === s.silo_no ? s : x)) : cur));
+  }
+
+  const fetchLots = useCallback(
+    async (session: { id: string; bead_supplier: string | null; bead_type: string | null }) => {
+      const q = new URLSearchParams({
+        supplier: session.bead_supplier ?? "",
+        bead_type: session.bead_type ?? "",
+        session_id: session.id,
+      });
+      try {
+        const res = await fetch(`/v2/api/production/bead-lots?${q.toString()}`);
+        const data = await res.json();
+        if (data.ok) setLots(data.lots);
+        else showToast(errorMessage(data.error, "production.bead.loadFailed"), false);
+      } catch {
+        showToast(t("production.toast.networkError"), false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  function replaceLot(l: BeadLotRow) {
+    setLots((cur) => cur.map((x) => (x.id === l.id ? { ...x, ...l } : x)));
   }
 
   const fetchToday = useCallback(async () => {
@@ -227,7 +328,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchRows = useCallback(async (kind: BoardKind, sessionId: string, seedCarry = false) => {
+  const fetchRows = useCallback(async (kind: SheetKind, sessionId: string, seedCarry = false) => {
     try {
       const res = await fetch(`/v2/api/production/${kind}/sessions/${sessionId}`);
       const data = await res.json();
@@ -250,6 +351,29 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     fetchToday();
     fetchOptions();
   }, [fetchSessions, fetchToday, fetchOptions]);
+
+  // Silos: on mount / board switch, then every 30 s while a sheet board or the Silos view is up.
+  useEffect(() => {
+    if (board === "bead") return;
+    fetchSilos();
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") fetchSilos();
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [board, fetchSilos]);
+
+  // Lots for the selected Expansion sheet (its supplier + bead type, with this sheet's bag count).
+  const expSessionKey = selectedExpansionSession
+    ? `${selectedExpansionSession.id}|${selectedExpansionSession.bead_supplier}|${selectedExpansionSession.bead_type}`
+    : "";
+  useEffect(() => {
+    if (board !== "expansion" || !selectedExpansionSession) {
+      setLots([]);
+      return;
+    }
+    fetchLots(selectedExpansionSession);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board, expSessionKey, fetchLots]);
 
   // Default the selected sheet to the open session (or the newest sheet if none open); keep the
   // current selection if it's still in the refreshed list.
@@ -275,7 +399,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     if (board === "molding") {
       if (selectedMoldingId) fetchRows("molding", selectedMoldingId, true);
       else setBlocks([]);
-    } else {
+    } else if (board === "expansion") {
       if (selectedExpansionId) fetchRows("expansion", selectedExpansionId, true);
       else setBatches([]);
     }
@@ -379,18 +503,22 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     if (!selectedMoldingId) return;
     setActing(true);
     try {
+      // lot_no is stamped server-side from the silo — never sent.
+      const { lot_no: _ignoredLot, ...rowBody } = blockRow;
       const res = await fetch("/v2/api/production/molding/blocks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: selectedMoldingId, ...blockRow }),
+        body: JSON.stringify({ session_id: selectedMoldingId, ...rowBody }),
       });
       const data = await res.json();
       if (data.ok) {
-        setBlockRow((r) => carryRow(MOLDING_FIELDS, r));
-        await Promise.all([fetchRows("molding", selectedMoldingId), fetchToday()]);
+        setBlockRow((r) => ({ ...carryRow(MOLDING_FIELDS, r), lot_no: data.lot_no ?? "" }));
+        replaceSilo(data.silo);
+        await Promise.all([fetchRows("molding", selectedMoldingId), fetchToday(), fetchSilos()]);
         inputRefs.current["block_weight_lbs"]?.focus();
       } else {
         showToast(errorMessage(data.error, "production.toast.saveBlockFailed"), false);
+        if (SILO_REFETCH_ERRORS.has(data.error)) fetchSilos();
       }
     } catch {
       showToast(t("production.toast.networkError"), false);
@@ -411,10 +539,12 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
       const data = await res.json();
       if (data.ok) {
         setBatchRow((r) => carryRow(EXPANSION_FIELDS, r));
-        await Promise.all([fetchRows("expansion", selectedExpansionId), fetchToday()]);
+        replaceSilo(data.silo);
+        await Promise.all([fetchRows("expansion", selectedExpansionId), fetchToday(), fetchSilos()]);
         inputRefs.current["weight_kg"]?.focus();
       } else {
         showToast(errorMessage(data.error, "production.toast.saveBatchFailed"), false);
+        if (SILO_REFETCH_ERRORS.has(data.error)) fetchSilos();
       }
     } catch {
       showToast(t("production.toast.networkError"), false);
@@ -429,6 +559,20 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
         ? `${t("production.field.blockNo")} ${(row as MoldingBlock).block_no || row.id.slice(0, 8)}`
         : `${t("production.field.lotNo")} ${(row as ExpansionBatch).lot_no || row.id.slice(0, 8)}`;
     setEditingRow({ id: row.id, label, values: rowToValues(fields, row) });
+    setEditLots([]);
+    if (canManage || isAdmin) {
+      // Managers may correct lot_no: Expansion = lots of the sheet's supplier; Molding = all lots.
+      const q = new URLSearchParams({ include_inactive: "1" });
+      if (board === "expansion" && selectedExpansionSession?.bead_supplier) {
+        q.set("supplier", selectedExpansionSession.bead_supplier);
+      }
+      fetch(`/v2/api/production/bead-lots?${q.toString()}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.ok) setEditLots(Array.from(new Set((d.lots as BeadLotRow[]).map((l) => l.lot_no))));
+        })
+        .catch(() => setEditLots([]));
+    }
   }
 
   function openDelete(row: MoldingBlock | ExpansionBatch) {
@@ -459,7 +603,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
       if (data.ok) {
         showToast(t("production.toast.rowUpdated"));
         setEditingRow(null);
-        if (selectedId) await Promise.all([fetchRows(board, selectedId), fetchToday()]);
+        if (selectedId) await Promise.all([fetchRows(sheetKind, selectedId), fetchToday(), fetchSilos()]);
       } else {
         showToast(errorMessage(data.error, "production.toast.updateRowFailed"), false);
       }
@@ -481,7 +625,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
       if (data.ok) {
         showToast(t("production.toast.rowDeleted"));
         setDeletingRow(null);
-        if (selectedId) await Promise.all([fetchRows(board, selectedId), fetchToday()]);
+        if (selectedId) await Promise.all([fetchRows(sheetKind, selectedId), fetchToday(), fetchSilos()]);
       } else {
         showToast(errorMessage(data.error, "production.toast.deleteRowFailed"), false);
         setDeletingRow(null);
@@ -515,6 +659,9 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     }
   }
 
+  const appendRow = board === "molding" ? blockRow : batchRow;
+  const setAppendRow = board === "molding" ? setBlockRow : setBatchRow;
+
   function handleAddOptionRequest(kind: OptionKind, supplier?: string) {
     setAddOptionRequest({ kind, supplier });
   }
@@ -533,15 +680,61 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     setAddOptionRequest(null);
   }
 
+  // Picking a different silo than the one carried in the append row first asks whether the
+  // carried silo is full (Expansion, silo filling) / empty (Molding, silo in use). Cancel aborts.
+  function handlePickSilo(next: SiloRow) {
+    setPickerOpen(false);
+    const prevNo = Number(appendRow.silo) || null;
+    if (prevNo && prevNo !== next.silo_no) {
+      const prev = silos?.find((x) => x.silo_no === prevNo);
+      const ask = prev && (sheetKind === "expansion" ? prev.state === "filling" : prev.state === "in_use");
+      if (prev && ask) {
+        setPendingSwitch({ prev, next });
+        return;
+      }
+    }
+    setAppendRow((r) => ({ ...r, silo: String(next.silo_no) }));
+  }
+
+  async function answerSwitch(yes: boolean) {
+    if (!pendingSwitch) return;
+    const { prev, next } = pendingSwitch;
+    if (yes) {
+      setSwitchActing(true);
+      try {
+        const res = await fetch(`/v2/api/production/silos/${prev.silo_no}/state`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: sheetKind === "expansion" ? "full" : "empty" }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          replaceSilo(data.silo);
+        } else {
+          // Someone else may already have reported it — tell the operator, refresh, carry on.
+          showToast(errorMessage(data.error, "production.silo.stateFailed"), false);
+          fetchSilos();
+        }
+      } catch {
+        showToast(t("production.toast.networkError"), false);
+        fetchSilos();
+      } finally {
+        setSwitchActing(false);
+      }
+    }
+    setPendingSwitch(null);
+    setAppendRow((r) => ({ ...r, silo: String(next.silo_no) }));
+  }
+
   function displayValue(f: RowFieldDef, row: Record<string, any>): string {
     const v = row[f.key];
     return v === null || v === undefined || v === "" ? "—" : String(v);
   }
 
   const rows: (MoldingBlock | ExpansionBatch)[] = board === "molding" ? blocks : batches;
-  const appendRow = board === "molding" ? blockRow : batchRow;
-  const setAppendRow = board === "molding" ? setBlockRow : setBatchRow;
   const submitAppendRow = board === "molding" ? submitBlockRow : submitBatchRow;
+  const carriedSilo = silos?.find((x) => x.silo_no === Number(appendRow.silo)) ?? null;
+  const selectedLot = board === "expansion" ? lots.find((l) => l.lot_no === batchRow.lot_no) ?? null : null;
 
   return (
     <div className="flex flex-col h-full">
@@ -562,8 +755,8 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
 
       {/* Segmented switch + language */}
       <div className="shrink-0 flex items-center justify-between gap-2 p-2 border-b border-border bg-surface">
-        <div className="flex gap-1">
-          {(["molding", "expansion"] as BoardKind[]).map((k) => (
+        <div className="flex flex-wrap gap-1">
+          {(["molding", "expansion", "silos", "bead"] as BoardKind[]).map((k) => (
             <button
               key={k}
               type="button"
@@ -577,7 +770,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
                   : "bg-[var(--ghost-bg)] text-muted hover:text-text",
               ].join(" ")}
             >
-              {t(k === "molding" ? "production.board.molding" : "production.board.expansion")}
+              {t(BOARD_LABEL_KEY[k])}
             </button>
           ))}
         </div>
@@ -585,7 +778,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
       </div>
 
       {/* Made-today strip */}
-      {today && (
+      {today && isSheetBoard && (
         <div className="shrink-0 flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2 border-b border-border bg-[var(--surface-2)] text-xs">
           <span className="font-semibold text-text">
             {t("production.today.heading")} ({today.date})
@@ -623,7 +816,26 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
         </div>
       )}
 
-      {loading ? (
+      {board === "silos" ? (
+        <div className="flex-1 overflow-y-auto">
+          <SilosView
+            silos={silos}
+            error={silosError}
+            canCorrect={canManage || isAdmin}
+            onRetry={fetchSilos}
+            onCorrected={(x) => {
+              replaceSilo(x);
+              showToast(t("production.silo.corrected"));
+              fetchSilos();
+            }}
+            describeError={describeError}
+          />
+        </div>
+      ) : board === "bead" ? (
+        <div className="flex-1 overflow-y-auto">
+          <BeadView canManage={canManage || isAdmin} options={options} onToast={showToast} describeError={describeError} />
+        </div>
+      ) : loading ? (
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {[0, 1, 2].map((i) => (
             <div key={i} className="border border-border rounded px-4 py-3 animate-pulse motion-reduce:animate-none">
@@ -764,6 +976,17 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
                 </div>
               </div>
 
+              {/* +1 bag (Expansion, open sheet, lot picked) */}
+              {board === "expansion" && isEditable && selectedExpansionSession && selectedLot && (
+                <BagCounter
+                  lot={selectedLot}
+                  sessionId={selectedExpansionSession.id}
+                  onLotUpdated={replaceLot}
+                  onError={(msg) => showToast(msg, false)}
+                  describeError={describeError}
+                />
+              )}
+
               {/* Row grid */}
               {selectedSession && (
                 <div className="overflow-x-auto border border-border rounded">
@@ -825,6 +1048,65 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
                                 <span className="inline-flex min-h-[40px] items-center px-2 text-sm text-muted">
                                   {t("production.field.autoChip")}
                                 </span>
+                              );
+                            } else if (f.auto === "lot") {
+                              // Molding: the server stamps the lot from the silo — show it, never send it.
+                              control = (
+                                <span
+                                  className="inline-flex min-h-[40px] items-center px-2 text-sm font-mono tabular-nums text-text"
+                                  title={t("production.silo.lotFromSilo")}
+                                >
+                                  {carriedSilo?.lot_no ?? "—"}
+                                </span>
+                              );
+                            } else if (f.input === "silo") {
+                              control = (
+                                <button
+                                  type="button"
+                                  onClick={() => setPickerOpen(true)}
+                                  className={INPUT + " cursor-pointer text-left font-semibold whitespace-nowrap hover:bg-[var(--ghost-bg)]"}
+                                >
+                                  {appendRow.silo
+                                    ? `${t("production.field.silo")} ${appendRow.silo}`
+                                    : t("production.silo.pick")}
+                                </button>
+                              );
+                            } else if (f.input === "lot") {
+                              const known = lots.some((l) => l.lot_no === appendRow.lot_no);
+                              control = (
+                                <select
+                                  ref={(el) => {
+                                    inputRefs.current[f.key] = el;
+                                  }}
+                                  className={INPUT + " cursor-pointer min-w-[10rem]"}
+                                  value={appendRow.lot_no}
+                                  onChange={(e) => {
+                                    if (e.target.value === RECEIVE_NEW) {
+                                      setReceiveFromRowOpen(true);
+                                      return;
+                                    }
+                                    setAppendRow((r) => ({ ...r, lot_no: e.target.value }));
+                                  }}
+                                >
+                                  <option value="">{t("production.newSheet.selectPlaceholder")}</option>
+                                  {lots.map((l) => (
+                                    <option
+                                      key={l.id}
+                                      value={l.lot_no}
+                                      className={l.on_hand < 0 ? "text-[var(--danger-bg)]" : undefined}
+                                    >
+                                      {l.lot_no} · {l.on_hand} {t("production.bead.bagsUnit")}
+                                    </option>
+                                  ))}
+                                  {appendRow.lot_no && !known && (
+                                    <option value={appendRow.lot_no}>
+                                      {appendRow.lot_no} · {t("production.bead.notReceived")}
+                                    </option>
+                                  )}
+                                  {(canManage || isAdmin) && (
+                                    <option value={RECEIVE_NEW}>{t("production.bead.receiveNewOption")}</option>
+                                  )}
+                                </select>
                               );
                             } else if (f.input === "select") {
                               const opts = optionValues[f.optionsKey ?? ""] ?? [];
@@ -931,6 +1213,8 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
         initialValues={editingRow?.values ?? {}}
         onSubmit={submitEditRow}
         acting={acting}
+        canManage={canManage || isAdmin}
+        lots={editLots}
       />
 
       <DeleteRowModal
@@ -957,6 +1241,43 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
         onHide={() => deleteSheet(false)}
         onPurge={() => deleteSheet(true)}
         onCancel={() => setDeleteSheetOpen(false)}
+      />
+
+      <SiloPickerModal
+        isOpen={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        mode={sheetKind}
+        silos={silos}
+        rowLotId={selectedLot?.id ?? null}
+        selectedNo={Number(appendRow.silo) || null}
+        onPick={handlePickSilo}
+      />
+
+      <SiloSwitchModal
+        isOpen={pendingSwitch !== null}
+        variant={sheetKind}
+        siloLabel={pendingSwitch?.prev.label ?? ""}
+        acting={switchActing}
+        onYes={() => answerSwitch(true)}
+        onNo={() => answerSwitch(false)}
+        onCancel={() => setPendingSwitch(null)}
+      />
+
+      <ReceiveLotModal
+        isOpen={receiveFromRowOpen}
+        onClose={() => setReceiveFromRowOpen(false)}
+        options={options}
+        prefill={{
+          supplier: selectedExpansionSession?.bead_supplier,
+          beadType: selectedExpansionSession?.bead_type,
+        }}
+        onReceived={(lot, created) => {
+          setReceiveFromRowOpen(false);
+          showToast(t(created ? "production.bead.receivedCreated" : "production.bead.receivedExisting"));
+          if (selectedExpansionSession) fetchLots(selectedExpansionSession);
+          setBatchRow((r) => ({ ...r, lot_no: lot.lot_no }));
+        }}
+        describeError={describeError}
       />
 
       <AddOptionModal

@@ -2,10 +2,14 @@
 // Edit form for one Molding block / Expansion batch row. One component, variant prop — same
 // field definitions (fields.ts) the append row uses, composing the shared Modal primitive.
 // Only `editable` fields render (operator is display-only, never editable here).
+// prod-b-03: `manageOnly` fields (silo / lot) render only for managers — silo as a 1–12 select,
+// lot as a select of received lots. They never change silo state.
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
 import { useLang } from "@/components/lang";
 import { type RowFieldDef } from "./fields";
+
+const SILO_NOS = Array.from({ length: 12 }, (_, i) => String(i + 1));
 
 interface Props {
   isOpen: boolean;
@@ -17,6 +21,9 @@ interface Props {
   initialValues: Record<string, string>;
   onSubmit: (values: Record<string, string>) => void;
   acting: boolean;
+  canManage: boolean;
+  // Lot numbers a manager may pick for lot_no (already filtered by the caller).
+  lots: string[];
 }
 
 const FIELD_CLASS =
@@ -33,10 +40,13 @@ export default function EditRowModal({
   initialValues,
   onSubmit,
   acting,
+  canManage,
+  lots,
 }: Props) {
   const { t } = useLang();
   const [values, setValues] = useState<Record<string, string>>(initialValues);
-  const editableFields = fields.filter((f) => f.editable);
+  const editableFields = fields.filter((f) => f.editable && (!f.manageOnly || canManage));
+  const hasManageOnly = editableFields.some((f) => f.manageOnly);
 
   useEffect(() => {
     if (isOpen) setValues(initialValues);
@@ -59,7 +69,23 @@ export default function EditRowModal({
           {editableFields.map((f) => (
             <label key={f.key} className="block">
               <span className={LABEL_CLASS}>{t(f.labelKey)}</span>
-              {f.input === "select" ? (
+              {f.key === "silo" || f.key === "lot_no" ? (
+                <select
+                  className={FIELD_CLASS + " cursor-pointer"}
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => set(f.key, e.target.value)}
+                >
+                  <option value="">{t("production.newSheet.selectPlaceholder")}</option>
+                  {(f.key === "silo" ? SILO_NOS : lots).map((v) => (
+                    <option key={v} value={v}>
+                      {f.key === "silo" ? `${t("production.field.silo")} ${v}` : v}
+                    </option>
+                  ))}
+                  {f.key === "lot_no" && initialValues.lot_no && !lots.includes(initialValues.lot_no) && (
+                    <option value={initialValues.lot_no}>{initialValues.lot_no}</option>
+                  )}
+                </select>
+              ) : f.input === "select" ? (
                 <select
                   className={FIELD_CLASS + " cursor-pointer"}
                   value={values[f.key] ?? ""}
@@ -85,6 +111,7 @@ export default function EditRowModal({
             </label>
           ))}
         </div>
+        {hasManageOnly && <p className="text-xs text-muted">{t("production.silo.editNote")}</p>}
 
         <div className="flex gap-2 justify-end pt-1">
           <button
