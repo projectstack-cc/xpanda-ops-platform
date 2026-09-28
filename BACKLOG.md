@@ -59,6 +59,9 @@
   calls `/api/silos` and `/api/bead-transactions`, but neither has an `API_ROUTES` entry anywhere
   in `_worker.js` — confirmed absent even before this session's changes. Worth checking whether
   the Silos/Transactions tabs on the live page actually work in production.
+- [ ] **prod-b follow-up — drop legacy v1 tables** (`silos`, `bead_types`,
+  `bead_transactions`) via a separate, held migration once prod-b-04 has shipped and nothing
+  references them. Irreversible — own prompt.
 
 ---
 

@@ -1827,6 +1827,17 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-b-01 — Migration: silos + bead lot ledger (db-api-agent §9).** Adds
+  `production_silos` (12 seeded rows, state `empty`; one lot per silo; lifecycle
+  empty→filling→full→in_use→empty), append-only `production_silo_events`,
+  `production_bead_lots` (supplier/type/lot immutable, label weight + unit as printed,
+  `UNIQUE(bead_supplier, lot_no)`), and the signed bag ledger `production_bead_ledger`
+  (receive / open / undo_open / adjust; on-hand = SUM(bags)), plus
+  `idx_prod_exp_batches_silo`. No existing columns change — Group A's `silo INTEGER` /
+  `lot_no TEXT` already fit. Legacy v1 `silos`/`bead_types`/`bead_transactions` untouched.
+  File is gitignored; **HOLD: prod-b-02 and prod-b-03 must not be pushed until Steve confirms
+  this migration ran in the D1 console.**
+
 - **prod-a-03 — UI for the Group A schema rework: carry-down, auto #/time/operator, Switch
   user, managed dropdowns, delete sheet, full en/es/ht (react-component-agent §9b).** Codes
   against prod-a-02's contract. `fields.ts` grows `kind` flags (`carry`, `auto`, `input`,
