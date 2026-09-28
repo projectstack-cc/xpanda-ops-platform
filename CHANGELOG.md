@@ -1827,6 +1827,24 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-c-01 — Production recipes (backend) + block bead snapshot. MIGRATION-GATED.** New
+  `production_recipes` table (`DB_Migrations/prod-c-01-recipes.sql`, gitignored, run manually in
+  the D1 console before push): expansion recipes keyed on supplier + bead type + density (pcf,
+  2 dp) carrying heating time; molding recipes keyed on block type carrying RC / Virgin % open +
+  speed. Versioned and immutable — `PUT /v2/api/production/manage/recipes/[key]` retires vN and
+  inserts vN+1 in one gated `DB.batch` (409 `recipe_changed` on a race); key fields are immutable
+  (400 `key_immutable`); `DELETE` retires (no hard delete); `POST manage/recipes` creates v1
+  (409 `recipe_exists`, also caught from the partial unique index); `GET /v2/api/production/recipes`
+  (`?include_retired=1`, `?kind=`). All mutations log `production_recipe` activity. Recipes are
+  resolved **server-side** from the sheet header key at create and on header key edit, and
+  snapshotted onto the header (`recipe_id`, `recipe_version`, recipe values); no match → NULL
+  (recipes prefill, never block). Expansion headers also snapshot `bucket_volume_l` (1 L code
+  constant `BUCKET_VOLUME_L`), store density normalized, and derive `target_weight_g` from density
+  when the client omits it. Molding blocks now stamp `bead_supplier`, `bead_type`, `density`,
+  `silo_full_at` from the silo row already loaded at insert; manager silo/lot corrections
+  re-derive them from expansion/silo-event history (`deriveBlockBeadSnapshot`), never keeping
+  stale values. New `lib/productionRecipes.ts` (+ selfcheck, 14/14 pass).
+
 - **prod-b-04 follow-up — agent doc sync (docs only).** `AGENTS.md`: dropped the five dead legacy
   production API groups (`/api/bead-types`, `/api/bead-stock`, `/api/block-inventory`,
   `/api/molding-log`, `/api/block-consumption` — none has an `API_ROUTES` entry), repointed the

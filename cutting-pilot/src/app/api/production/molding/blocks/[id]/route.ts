@@ -5,6 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";
 import { canManageProduction, siloNoOrNull } from "@/lib/productionSilos";
+import { deriveBlockBeadSnapshot } from "@/lib/productionRecipes";
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 
@@ -36,10 +37,12 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
 
   try {
     const lock = await DB.prepare(
-      `SELECT s.status, s.deleted_at FROM production_molding_blocks b
+      `SELECT s.status, s.deleted_at, b.silo, b.lot_no, b.created_at FROM production_molding_blocks b
          JOIN production_molding_sessions s ON s.id = b.session_id
         WHERE b.id = ?`
-    ).bind(id).first<{ status: string; deleted_at: string | null }>();
+    ).bind(id).first<{
+      status: string; deleted_at: string | null; silo: number | null; lot_no: string | null; created_at: string;
+    }>();
     if (!lock || lock.deleted_at !== null) {
       return NextResponse.json({ ok: false, error: "sheet_not_found" }, { status: 404 });
     }
@@ -75,6 +78,16 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     if ("virgin_speed" in p) { sets.push("virgin_speed = ?"); binds.push(numOrNull(p.virgin_speed)); changed.push("virgin_speed"); }
     if ("block_weight_lbs" in p) { sets.push("block_weight_lbs = ?"); binds.push(numOrNull(p.block_weight_lbs)); changed.push("block_weight_lbs"); }
     if ("mold_time" in p) { sets.push("mold_time = ?"); binds.push(p.mold_time ?? null); changed.push("mold_time"); }
+
+    // Manager silo/lot correction: re-derive the bead snapshot from history, never keep stale values.
+    if (changed.includes("silo") || changed.includes("lot_no")) {
+      const effSilo = "silo" in p ? siloNoOrNull(p.silo) : lock.silo;
+      const effLot = "lot_no" in p ? String(p.lot_no).trim() : lock.lot_no; // validated exact match above
+      const snap = await deriveBlockBeadSnapshot(DB, effSilo, effLot, lock.created_at);
+      sets.push("bead_supplier = ?", "bead_type = ?", "density = ?", "silo_full_at = ?");
+      binds.push(snap.bead_supplier, snap.bead_type, snap.density, snap.silo_full_at);
+      changed.push("bead_snapshot");
+    }
 
     if (!sets.length) return NextResponse.json({ ok: false, error: "Nothing to update." }, { status: 400 });
 

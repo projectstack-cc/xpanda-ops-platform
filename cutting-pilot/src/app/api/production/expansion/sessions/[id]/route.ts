@@ -2,6 +2,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";
+import { normDensity, resolveExpansionRecipe } from "@/lib/productionRecipes";
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 
@@ -49,8 +50,8 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
 
   try {
     const existing = await DB.prepare(
-      `SELECT bead_supplier, bead_type FROM production_expansion_sessions WHERE id = ? AND deleted_at IS NULL`
-    ).bind(id).first<{ bead_supplier: string | null; bead_type: string | null }>();
+      `SELECT bead_supplier, bead_type, density FROM production_expansion_sessions WHERE id = ? AND deleted_at IS NULL`
+    ).bind(id).first<{ bead_supplier: string | null; bead_type: string | null; density: number | null }>();
     if (!existing) return NextResponse.json({ ok: false, error: "sheet_not_found" }, { status: 404 });
 
     const sets: string[] = [];
@@ -86,8 +87,19 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     }
     if ("start_time" in p) { sets.push("start_time = ?"); binds.push(p.start_time ?? null); changed.push("start_time"); }
     if ("finish_time" in p) { sets.push("finish_time = ?"); binds.push(p.finish_time ?? null); changed.push("finish_time"); }
-    if ("density" in p) { sets.push("density = ?"); binds.push(numOrNull(p.density)); changed.push("density"); }
+    if ("density" in p) { sets.push("density = ?"); binds.push(normDensity(p.density)); changed.push("density"); }
     if ("target_weight_g" in p) { sets.push("target_weight_g = ?"); binds.push(numOrNull(p.target_weight_g)); changed.push("target_weight_g"); }
+
+    // Re-resolve the recipe snapshot whenever a key field is touched (NULLs if no match).
+    if ("bead_supplier" in p || "bead_type" in p || "density" in p) {
+      const effSupplier = "bead_supplier" in p ? p.bead_supplier : existing.bead_supplier;
+      const effType = "bead_type" in p ? p.bead_type : existing.bead_type;
+      const effDensity = "density" in p ? normDensity(p.density) : existing.density;
+      const recipe = await resolveExpansionRecipe(DB, effSupplier, effType, effDensity);
+      sets.push("recipe_id = ?", "recipe_version = ?", "recipe_density = ?", "recipe_heating_time_s = ?");
+      binds.push(recipe?.id ?? null, recipe?.version ?? null, recipe?.density ?? null, recipe?.heating_time_s ?? null);
+      changed.push("recipe");
+    }
 
     if (!sets.length) return NextResponse.json({ ok: false, error: "Nothing to update." }, { status: 400 });
     sets.push("updated_at = ?");

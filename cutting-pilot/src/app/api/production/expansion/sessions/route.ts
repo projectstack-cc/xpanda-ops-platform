@@ -4,6 +4,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";
+import { BUCKET_VOLUME_L, normDensity, resolveExpansionRecipe, targetGramsFromPcf } from "@/lib/productionRecipes";
 
 function etToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
@@ -83,11 +84,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "unknown_bead_type" }, { status: 400 });
     }
 
+    const dens = normDensity(density);
+    const recipe = dens !== null ? await resolveExpansionRecipe(DB, bead_supplier, bead_type, dens) : null;
+    const targetG = numOrNull(target_weight_g) ?? targetGramsFromPcf(dens, BUCKET_VOLUME_L);
+
     await DB.prepare(
       `INSERT INTO production_expansion_sessions
          (id, log_date, start_time, finish_time, bead_supplier, bead_type, density, target_weight_g,
-          status, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`
+          status, created_by, created_at, recipe_id, recipe_version, recipe_density,
+          recipe_heating_time_s, bucket_volume_l)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       id,
       log_date || etToday(),
@@ -95,10 +101,15 @@ export async function POST(request: NextRequest) {
       finish_time ?? null,
       bead_supplier,
       bead_type,
-      numOrNull(density),
-      numOrNull(target_weight_g),
+      dens,
+      targetG,
       operatorId,
-      ts
+      ts,
+      recipe?.id ?? null,
+      recipe?.version ?? null,
+      recipe?.density ?? null,
+      recipe?.heating_time_s ?? null,
+      BUCKET_VOLUME_L
     ).run();
 
     await logActivity(
@@ -107,7 +118,7 @@ export async function POST(request: NextRequest) {
       { session_id: id, bead_supplier, bead_type }, operatorId
     );
 
-    return NextResponse.json({ ok: true, session_id: id }, { status: 201 });
+    return NextResponse.json({ ok: true, session_id: id, recipe_id: recipe?.id ?? null }, { status: 201 });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "Server error.", detail: String(e?.message || e) },

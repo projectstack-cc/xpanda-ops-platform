@@ -2,6 +2,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";
+import { resolveMoldingRecipe } from "@/lib/productionRecipes";
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 
@@ -67,6 +68,16 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
       sets.push("block_type = ?");
       binds.push(p.block_type);
       changed.push("block_type");
+      const recipe = await resolveMoldingRecipe(DB, p.block_type);
+      sets.push(
+        "recipe_id = ?", "recipe_version = ?", "recipe_rc_pct_open = ?", "recipe_rc_speed = ?",
+        "recipe_virgin_pct_open = ?", "recipe_virgin_speed = ?"
+      );
+      binds.push(
+        recipe?.id ?? null, recipe?.version ?? null, recipe?.rc_pct_open ?? null, recipe?.rc_speed ?? null,
+        recipe?.virgin_pct_open ?? null, recipe?.virgin_speed ?? null
+      );
+      changed.push("recipe");
     }
 
     if (!sets.length) return NextResponse.json({ ok: false, error: "Nothing to update." }, { status: 400 });

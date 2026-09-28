@@ -4,6 +4,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";
+import { resolveMoldingRecipe } from "@/lib/productionRecipes";
 
 function etToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
@@ -67,12 +68,19 @@ export async function POST(request: NextRequest) {
     if (!option) {
       return NextResponse.json({ ok: false, error: "unknown_block_type" }, { status: 400 });
     }
+    const recipe = await resolveMoldingRecipe(DB, block_type);
 
     await DB.prepare(
       `INSERT INTO production_molding_sessions
-         (id, log_date, block_type, status, created_by, created_at)
-       VALUES (?, ?, ?, 'open', ?, ?)`
-    ).bind(id, log_date || etToday(), block_type, operatorId, ts).run();
+         (id, log_date, block_type, status, created_by, created_at, recipe_id, recipe_version,
+          recipe_rc_pct_open, recipe_rc_speed, recipe_virgin_pct_open, recipe_virgin_speed)
+       VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id, log_date || etToday(), block_type, operatorId, ts,
+      recipe?.id ?? null, recipe?.version ?? null,
+      recipe?.rc_pct_open ?? null, recipe?.rc_speed ?? null,
+      recipe?.virgin_pct_open ?? null, recipe?.virgin_speed ?? null
+    ).run();
 
     await logActivity(
       DB, "create", "production_molding_session", id,
@@ -80,7 +88,7 @@ export async function POST(request: NextRequest) {
       { session_id: id, block_type }, operatorId
     );
 
-    return NextResponse.json({ ok: true, session_id: id }, { status: 201 });
+    return NextResponse.json({ ok: true, session_id: id, recipe_id: recipe?.id ?? null }, { status: 201 });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "Server error.", detail: String(e?.message || e) },

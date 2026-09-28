@@ -88,8 +88,9 @@ export async function POST(request: NextRequest) {
     stmts.push(DB.prepare(
       `INSERT INTO production_molding_blocks
          (id, session_id, block_no, block_size, silo, lot_no, rc_pct_open, rc_speed,
-          virgin_pct_open, virgin_speed, mold_time, block_weight_lbs, operator_id, operator_name, created_at)
-       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${gate.sql}`
+          virgin_pct_open, virgin_speed, mold_time, block_weight_lbs, operator_id, operator_name, created_at,
+          bead_supplier, bead_type, density, silo_full_at)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${gate.sql}`
     ).bind(
       id, session_id,
       finalBlockNo, block_size ?? null, siloNum, current.lot_no,
@@ -98,6 +99,8 @@ export async function POST(request: NextRequest) {
       finalMoldTime, numOrNull(block_weight_lbs),
       operatorId, operatorName || operatorId,
       ts,
+      // Bead snapshot from the silo row already loaded (full_at survives full -> in_use).
+      current.bead_supplier, current.bead_type, current.density, current.full_at,
       ...gate.binds
     ));
     if (startsUse) {
