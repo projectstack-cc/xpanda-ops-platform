@@ -45,6 +45,8 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/carrier", keys: ["logistics.carrier_view"] },
   { prefix: "/v2/api/production/manage", keys: ["production.manage"] },
   { prefix: "/v2/api/production", keys: ["production.log"] },
+  // prod-d-03 — schedule editor is manager-only; must precede the general /v2/production line.
+  { prefix: "/v2/production/schedule", keys: ["production.manage"] },
   { prefix: "/v2/production", keys: ["production.log"] },
   // Logistics v2 unit 2 (shipment dashboard). Keys mirror the legacy PATH/API_PERMISSION_MAP
   // in _worker.js/lib/core.js exactly (logistics.dashboard, logistics.bol, logistics.loading,

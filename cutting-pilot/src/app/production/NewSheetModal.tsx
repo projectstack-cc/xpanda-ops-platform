@@ -12,6 +12,9 @@ import { BUCKET_VOLUME_L, normDensity, targetGramsFromPcf, type RecipeRow } from
 
 export type SheetVariant = "molding" | "expansion";
 
+// prod-d-03: a schedule line's key, used to prefill a new sheet (prefill only, never blocking).
+export type SheetPrefill = { block_type?: string; bead_supplier?: string; bead_type?: string; density?: string };
+
 const ADD_NEW = "__add_new__";
 
 interface Props {
@@ -26,6 +29,7 @@ interface Props {
   injectedValue: { field: "block_type" | "bead_type"; value: string } | null;
   recipes: RecipeRow[];
   onInjectedApplied: () => void;
+  prefill?: SheetPrefill | null;
 }
 
 const FIELD_CLASS =
@@ -53,6 +57,7 @@ export default function NewSheetModal({
   injectedValue,
   onInjectedApplied,
   recipes,
+  prefill,
 }: Props) {
   const { t } = useLang();
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -69,6 +74,21 @@ export default function NewSheetModal({
   function set(key: string, value: string) {
     setFields((f) => ({ ...f, [key]: value }));
   }
+
+  // prod-d-03: opening with a schedule-line prefill seeds the key fields. A prefilled density also
+  // derives target g exactly as typing it would; targetTouched stays false so the operator can
+  // still type over it.
+  useEffect(() => {
+    if (!isOpen || !prefill) return;
+    setFields((cur) => {
+      const next = { ...cur };
+      for (const [k, v] of Object.entries(prefill)) if (v) next[k] = v;
+      if (prefill.density) next.target_weight_g = derivedTarget(prefill.density);
+      return next;
+    });
+    setTargetTouched(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, prefill]);
 
   function handleClose() {
     setFields({});

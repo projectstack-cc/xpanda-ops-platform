@@ -15,7 +15,8 @@ import { Pencil, Trash2 } from "lucide-react";
 import { useLang } from "@/components/lang";
 import LangSelect from "@/components/LangSelect";
 import { nextBlockNo } from "@/lib/productionNumbering";
-import NewSheetModal, { type SheetVariant } from "./NewSheetModal";
+import NewSheetModal, { type SheetPrefill, type SheetVariant } from "./NewSheetModal";
+import TodaySchedule from "./TodaySchedule";
 import EditRowModal from "./EditRowModal";
 import DeleteRowModal from "./DeleteRowModal";
 import DeleteSheetModal from "./DeleteSheetModal";
@@ -196,6 +197,14 @@ const ERROR_KEY: Record<string, string> = {
   heating_time_required: "production.error.heatingTimeRequired",
   invalid_param: "production.error.invalidParam",
   range_too_large: "production.error.rangeTooLarge",
+  // prod-d-03: schedule codes + the expansion header density lock (prod-d-02).
+  schedule_exists: "production.error.scheduleExists",
+  schedule_not_found: "production.error.scheduleNotFound",
+  schedule_changed: "production.error.scheduleChanged",
+  invalid_plan_date: "production.error.invalidPlanDate",
+  date_out_of_range: "production.error.dateOutOfRange",
+  qty_invalid: "production.error.qtyInvalid",
+  density_locked: "production.error.densityLocked",
 };
 
 // Errors that mean our silos list is stale — refetch it automatically.
@@ -225,6 +234,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
   const [deleteSheetOpen, setDeleteSheetOpen] = useState(false);
   const [options, setOptions] = useState<OptionsData>(EMPTY_OPTIONS);
   const [recipes, setRecipes] = useState<RecipeRow[]>([]);
+  const [sheetPrefill, setSheetPrefill] = useState<SheetPrefill | null>(null);
   const [addOptionRequest, setAddOptionRequest] = useState<{ kind: OptionKind; supplier?: string } | null>(null);
   const [injectedOption, setInjectedOption] = useState<{ field: "block_type" | "bead_type"; value: string } | null>(
     null
@@ -501,6 +511,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
       if (data.ok) {
         showToast(t("production.toast.sheetStarted"));
         setNewSheetOpen(false);
+        setSheetPrefill(null);
         if (board === "molding") setSelectedMoldingId(data.session_id);
         else setSelectedExpansionId(data.session_id);
         await fetchSessions(true);
@@ -877,8 +888,30 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
             </button>
           ))}
         </div>
-        <LangSelect />
+        <div className="flex items-center gap-2">
+          {(canManage || isAdmin) && (
+            <a
+              href="/v2/production/schedule"
+              className="inline-flex items-center min-h-[44px] px-5 rounded text-sm font-semibold cursor-pointer bg-[var(--ghost-bg)] text-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            >
+              {t("production.schedule.link")}
+            </a>
+          )}
+          <LangSelect />
+        </div>
       </div>
+
+      {/* prod-d-03: today's schedule for this board, Start = prefilled New sheet */}
+      {isSheetBoard && (
+        <TodaySchedule
+          kind={sheetKind}
+          refreshKey={today}
+          onStart={(p) => {
+            setSheetPrefill(p);
+            setNewSheetOpen(true);
+          }}
+        />
+      )}
 
       {/* Made-today strip */}
       {today && isSheetBoard && (
@@ -1343,7 +1376,10 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
 
       <NewSheetModal
         isOpen={newSheetOpen}
-        onClose={() => setNewSheetOpen(false)}
+        onClose={() => {
+          setNewSheetOpen(false);
+          setSheetPrefill(null);
+        }}
         variant={board as SheetVariant}
         onSubmit={createSheet}
         acting={acting}
@@ -1353,6 +1389,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
         injectedValue={injectedOption}
         onInjectedApplied={() => setInjectedOption(null)}
         recipes={recipes}
+        prefill={sheetPrefill}
       />
 
       <EditRowModal

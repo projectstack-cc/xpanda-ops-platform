@@ -1827,6 +1827,23 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-d-03 — Production schedule editor (/v2/production/schedule) + Today's-schedule strip
+  with Start-from-line prefill.** New manager-only page (middleware: `/v2/production/schedule` →
+  `production.manage`, placed above the general `/v2/production` line). `ScheduleEditor`: 7-day
+  view (stacked on phones, grid on wide screens), prev / this / next week, past days read-only,
+  today…+14 editable; per day Molding + Expansion lists with derived progress (`done / qty`,
+  "+N filling" today — no check-off), up/down reorder (the TV's order), edit (qty + note, key
+  read-only), delete via a `Modal` confirm, "Copy previous day" ("Copied N, skipped M" toast);
+  refetches after every mutation and every 60 s while visible. `ScheduleLineModal` composes the
+  shared `Modal` (block-type select; supplier → bead type → density with recipe-density chips).
+  `TodaySchedule` strip on the Production Log for the current board (hidden when empty or on fetch
+  failure): key, `done / qty`, "+N filling", running dot, success check when met, and a Start
+  button that opens New sheet prefilled via the new `SheetPrefill` prop (density also derives
+  target g; prefill only, never blocking). Board gets a manager "Schedule" link and error mappings
+  for `schedule_exists`, `schedule_not_found`, `schedule_changed`, `invalid_plan_date`,
+  `date_out_of_range`, `qty_invalid`, `density_locked`. Full en/es/ht `production.schedule.*` +
+  error strings.
+
 - **prod-d-02 — Schedule API + derived progress, TV dashboard endpoint, silo-event bead snapshot,
   expansion density lock. MIGRATION-GATED (prod-d-01).** `eventInsert` now snapshots the
   post-transition silo's `bead_supplier` / `bead_type` / `density` onto every silo event (all four
