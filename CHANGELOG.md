@@ -1827,6 +1827,11 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-d-04 follow-up — TV layout fix (found in live browser verification).** With more cards
+  than fit on screen, the columns grid (`flex-1 min-h-0`) shrank and its cards overflowed under
+  the SILOS strip. The grid is now `flex-none` so the inset container scrolls, and the silo strip
+  is pinned to the bottom (`mt-auto`) when content is short.
+
 - **prod-d-04 — Production TV board (/v2/production/tv) + production.tv permission. Closes Group
   D.** New read-only wall display polling `GET /v2/api/production/dashboard` every 30 s (paused
   while hidden, immediate refetch on return). Layout: top bar (ET date, live clock, freshness,

@@ -323,7 +323,9 @@ export default function ProductionTvBoard({ userName, isAdmin, permissions }: Pr
             </div>
           )}
 
-          <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[55fr_45fr] gap-3 px-3">
+          {/* flex-none (not flex-1 min-h-0): with more cards than fit, the columns keep their content
+              height and the inset container scrolls, instead of overflowing under the silo strip. */}
+          <div className="flex-none grid grid-cols-1 lg:grid-cols-[55fr_45fr] gap-3 px-3">
             {/* MOLDING — the headline */}
             <section className="space-y-3 min-w-0">
               <Bi k="production.tv.molding" className="text-[clamp(1.25rem,2vw,2rem)] font-bold text-text uppercase tracking-wide" />
@@ -417,7 +419,7 @@ export default function ProductionTvBoard({ userName, isAdmin, permissions }: Pr
           </div>
 
           {/* SILOS 1–12 */}
-          <div className="shrink-0 px-3 pb-2 space-y-1">
+          <div className="shrink-0 mt-auto px-3 pb-2 space-y-1">
             <Bi k="production.tv.silos" className="text-[clamp(0.9rem,1.3vw,1.2rem)] font-bold text-text uppercase tracking-wide" />
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-12 gap-2">
               {data.silos.map((s) => {
