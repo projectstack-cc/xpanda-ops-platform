@@ -43,6 +43,8 @@ interface PlatformHeaderProps {
    * Schedule board ONLY — every other caller omits this and keeps the normal in-flow nav.
    */
   autoHide?: boolean;
+  /** Where the logo links. Defaults to "/" (platform home). Carrier view passes "/v2/carrier". */
+  homeHref?: string;
 }
 
 export default function PlatformHeader({
@@ -52,6 +54,7 @@ export default function PlatformHeader({
   permissions,
   currentPath = "/v2/cutting",
   autoHide = false,
+  homeHref = "/",
 }: PlatformHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [revealed, setRevealed] = useState(!autoHide);
@@ -181,7 +184,7 @@ export default function PlatformHeader({
       <div className="flex items-center px-3 min-h-[48px] gap-1">
         {/* Logo — plain <a> + <img>: basePath does NOT prefix these, which is correct for /logo/xpanda.png served by the legacy app on the same host */}
         <a
-          href="/"
+          href={homeHref}
           aria-label="xPanda Operations Platform"
           className="inline-flex items-center shrink-0 pr-2"
         >

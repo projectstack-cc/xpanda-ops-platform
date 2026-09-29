@@ -1787,6 +1787,22 @@ current series).
 
 ## Carrier View (v2)
 
+- **carrier-01 — Carrier View chrome: PlatformHeader, Seal logo strip, day headings, scroll box,
+  no footer (next-platform-agent §9a + react-component-agent §9b).** `PlatformHeader.tsx` gains an
+  optional `homeHref` prop (default `"/"`, so all existing callers are unchanged) — the carrier view
+  passes `/v2/carrier` so a carrier-only user clicking the logo doesn't land on an empty legacy home.
+  `carrier/page.tsx` is now an async server shell mirroring `logistics/page.tsx` (`X-User-Name` +
+  `validateSession` → `isAdmin`/`permissions`) with `metadata.title = "XPanda - Carrier View"`.
+  `CarrierBoard.tsx`: hand-rolled header + `handleSignOut` replaced by
+  `<PlatformHeader title="Carrier View" … homeHref="/v2/carrier" />` (it owns sign-out; the
+  carrier role holds no `NAV_MODULES` perms so the nav collapses to logo + user + sign-out); new
+  brand strip under the header with `/logo/seal-express-logo.webp` (new file at repo-root `logo/`,
+  ungated via the legacy `STATIC_PREFIX`) + "Seal Express — Outgoing loads"; the Lisma rebrand
+  footer is removed; `DaySection` takes a `heading` ("Today's Loads" / "Tomorrow's Loads") with the
+  existing `dayLabel()` date muted beside it; at 4+ rows the list scrolls inside
+  `max-h-[calc(3.5*var(--carrier-row-h,176px))]` with the heading outside the scroll box and an
+  "N loads" chip beside it. No migration, schema, or API change.
+
 - **P399 — Carrier View UI: side-by-side days, pill/font swap, suffix, BOL action pills + upload
   modal (react-component-agent §9b).** Five changes to `CarrierBoard.tsx`: (1) Today/Tomorrow render
   as a `grid grid-cols-1 md:grid-cols-2` (was `space-y-6` stacked), `main` widened to `max-w-6xl`.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import PlatformHeader from "@/components/PlatformHeader";
 import CarrierStatusPill from "./CarrierStatusPill";
 import CarrierUploadModal from "./CarrierUploadModal";
 
@@ -42,15 +43,6 @@ function dayLabel(dateStr: string): string {
   })
     .format(date)
     .replace(",", " ·");
-}
-
-async function handleSignOut() {
-  try {
-    await fetch("/api/auth/logout", { method: "POST" });
-  } catch {
-    // ignore — redirect regardless so sign-out always completes
-  }
-  window.location.href = "/login.html";
 }
 
 function LoadRow({ row, onUpload }: { row: CarrierRow; onUpload: (row: CarrierRow) => void }) {
@@ -127,26 +119,44 @@ function LoadRow({ row, onUpload }: { row: CarrierRow; onUpload: (row: CarrierRo
   );
 }
 
+// 4+ rows → the list scrolls inside a box sized to ~3.5 tiles, so the cut-off tile signals "scroll".
+const SCROLL_THRESHOLD = 4;
+
 function DaySection({
+  heading,
   label,
   rows,
   onUpload,
 }: {
+  heading: string;
   label: string;
   rows: CarrierRow[];
   onUpload: (row: CarrierRow) => void;
 }) {
+  const scrolling = rows.length >= SCROLL_THRESHOLD;
   return (
     <section>
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2 px-1">
-        {label}
-      </h2>
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-2 px-1">
+        <h2 className="text-base font-bold text-[var(--text)]">{heading}</h2>
+        <span className="text-sm text-[var(--text-muted)]">{label}</span>
+        {scrolling && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold tabular-nums bg-[var(--ghost-bg)] text-[var(--text-muted)]">
+            {rows.length} loads
+          </span>
+        )}
+      </div>
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[var(--border)] px-4 py-6 text-center text-sm text-[var(--text-hint)]">
           No loads scheduled
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div
+          className={
+            scrolling
+              ? "flex flex-col gap-2 max-h-[calc(3.5*var(--carrier-row-h,176px))] overflow-y-auto overscroll-contain pr-1"
+              : "flex flex-col gap-2"
+          }
+        >
           {rows.map((row, i) => (
             <LoadRow key={`${row.invoice_number}-${row.load_number}-${i}`} row={row} onUpload={onUpload} />
           ))}
@@ -156,7 +166,13 @@ function DaySection({
   );
 }
 
-export default function CarrierBoard() {
+interface CarrierBoardProps {
+  userName: string;
+  isAdmin: boolean;
+  permissions: Record<string, { view?: boolean; edit?: boolean }>;
+}
+
+export default function CarrierBoard({ userName, isAdmin, permissions }: CarrierBoardProps) {
   const [data, setData] = useState<CarrierResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -221,18 +237,23 @@ export default function CarrierBoard() {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] flex flex-col">
-      <header className="sticky top-0 z-10 bg-[var(--surface)] border-b border-[var(--border)] px-4 py-3 flex items-center justify-between">
-        <span className="font-bold text-base">Seal Express — Outgoing loads</span>
-        <button
-          type="button"
-          onClick={handleSignOut}
-          className="min-h-[44px] px-4 rounded-md border border-[var(--border)] text-sm font-semibold text-[var(--text-muted)] active:bg-[var(--ghost-bg)]"
-        >
-          Sign out
-        </button>
-      </header>
+      <PlatformHeader
+        title="Carrier View"
+        userName={userName}
+        isAdmin={isAdmin}
+        permissions={permissions}
+        currentPath="/v2/carrier"
+        homeHref="/v2/carrier"
+      />
 
       <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-4">
+        {/* Carrier brand strip — logo is transparent, so no background box. Plain <img>: basePath
+            doesn't prefix it, which is correct for /logo/* served ungated by the legacy app. */}
+        <div className="flex items-center gap-3 mb-4">
+          <img src="/logo/seal-express-logo.webp" alt="Seal Express" className="h-12 w-auto" />
+          <span className="font-bold text-base">Seal Express — Outgoing loads</span>
+        </div>
+
         {loading && !data && !error && (
           <div className="text-center text-sm text-[var(--text-hint)] py-10">Loading…</div>
         )}
@@ -252,15 +273,11 @@ export default function CarrierBoard() {
 
         {data && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <DaySection label={dayLabel(data.today)} rows={todayRows} onUpload={setUploadRow} />
-            <DaySection label={dayLabel(data.tomorrow)} rows={tomorrowRows} onUpload={setUploadRow} />
+            <DaySection heading="Today's Loads" label={dayLabel(data.today)} rows={todayRows} onUpload={setUploadRow} />
+            <DaySection heading="Tomorrow's Loads" label={dayLabel(data.tomorrow)} rows={tomorrowRows} onUpload={setUploadRow} />
           </div>
         )}
       </main>
-
-      <footer className="px-4 py-4 text-center text-xs text-[var(--text-hint)]">
-        Showing loads for Lisma and Seal Express during rebrand.
-      </footer>
 
       {uploadRow && (
         <CarrierUploadModal
