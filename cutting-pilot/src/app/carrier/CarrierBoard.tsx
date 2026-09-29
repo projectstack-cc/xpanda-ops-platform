@@ -11,6 +11,8 @@ import CarrierUploadModal from "./CarrierUploadModal";
 import CarrierBolModal from "./CarrierBolModal";
 import CarrierChargeModal from "./CarrierChargeModal";
 import { useCarrierFetch } from "./useCarrierFetch";
+import CarrierErrorBox from "./CarrierErrorBox";
+import CarrierSchedule from "./CarrierSchedule";
 
 // Leaflet touches `window` at import — client-only.
 const CarrierMiniMap = dynamic(() => import("./CarrierMiniMap"), { ssr: false });
@@ -300,27 +302,13 @@ interface CarrierBoardProps {
   permissions: Record<string, { view?: boolean; edit?: boolean }>;
 }
 
-type CarrierTab = "upcoming" | "history";
+type CarrierTab = "upcoming" | "schedule" | "history";
 
 const TABS: Array<{ key: CarrierTab; label: string }> = [
   { key: "upcoming", label: "Upcoming" },
+  { key: "schedule", label: "Schedule" },
   { key: "history", label: "History (7 days)" },
 ];
-
-function ErrorBox({ error, onRetry }: { error: string; onRetry: () => void }) {
-  return (
-    <div className="rounded-lg border border-[var(--danger-bg)] bg-[var(--surface)] px-4 py-4 text-center">
-      <p className="text-sm font-semibold text-[var(--danger-bg)] mb-3">{error}</p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="min-h-[44px] px-5 rounded-md bg-[var(--accent)] text-[var(--surface)] text-sm font-semibold"
-      >
-        Retry
-      </button>
-    </div>
-  );
-}
 
 export default function CarrierBoard({ userName, isAdmin, permissions }: CarrierBoardProps) {
   const [tab, setTab] = useState<CarrierTab>("upcoming");
@@ -342,7 +330,8 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
   const todayRows = data ? data.rows.filter((r) => r.ship_day === data.today) : [];
   const tomorrowRows = data ? data.rows.filter((r) => r.ship_day === data.tomorrow) : [];
   const actions: RowActions = { onUpload: setUploadRow, onViewBol: setBolRow, onCharge: setChargeRow };
-  const active = tab === "history" ? history : upcoming;
+  // Schedule owns its own fetch (CarrierSchedule, mounted only while that tab is open).
+  const active = tab === "history" ? history : tab === "upcoming" ? upcoming : null;
 
   return (
     <div className="min-h-screen bg-[var(--bg)] flex flex-col">
@@ -383,11 +372,13 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
           ))}
         </div>
 
-        {active.loading && !active.data && !active.error && (
+        {active && active.loading && !active.data && !active.error && (
           <div className="text-center text-sm text-[var(--text-hint)] py-10">Loading…</div>
         )}
 
-        {active.error && <ErrorBox error={active.error} onRetry={active.load} />}
+        {active?.error && <CarrierErrorBox error={active.error} onRetry={active.load} />}
+
+        {tab === "schedule" && <CarrierSchedule />}
 
         {tab === "upcoming" && data && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">

@@ -1,5 +1,5 @@
 // src/app/carrier/CarrierStatusPill.tsx
-// 4-state carrier load status pill. Doesn't reuse components/StatusPill.tsx — that component's
+// 4-state carrier load status pill (+ the 3 Schedule-tab labels, carrier-05). Doesn't reuse components/StatusPill.tsx — that component's
 // variants are job/line-cutting states (not_started/in_progress/complete), a different domain
 // than loading_status (awaiting/loading/loaded/in_transit/delivered).
 
@@ -14,6 +14,16 @@ const CARRIER_STATUS_VARIANTS: Record<string, { label: string; cls: string }> = 
   },
   delivered: {
     label: "Delivered",
+    cls: "bg-[var(--ghost-bg)] text-[var(--text-muted)] border border-[var(--border)]",
+  },
+  // carrier-05: Schedule-tab labels (from /v2/api/carrier/schedule's carrier-facing status map).
+  "In production": {
+    label: "In production",
+    cls: "bg-[var(--info-bg)] text-[var(--info-text)] border border-[var(--info-border)]",
+  },
+  Ready: { label: "Ready", cls: "bg-[var(--success-bg)] text-[var(--success-text)]" },
+  Shipped: {
+    label: "Shipped",
     cls: "bg-[var(--ghost-bg)] text-[var(--text-muted)] border border-[var(--border)]",
   },
 };

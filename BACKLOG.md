@@ -70,6 +70,9 @@
 
 ## Carrier View (v2)
 
+- [ ] **carrier-05 follow-up — Schedule tab: add a Next-week view if Seal asks.** The data is
+  already available (the second tab from `currentAndNextShipWeekTabs`).
+
 - [ ] **carrier-04 follow-up — refactor the `loading-assignments` v2 route to use
   `src/lib/push.ts`.** It currently skips notifications (deliberately not ported before the push
   port existed).

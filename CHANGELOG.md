@@ -1787,6 +1787,34 @@ current series).
 
 ## Carrier View (v2)
 
+- **carrier-05 — Carrier View "Schedule" tab: Seal orders, this week only (next-platform-agent
+  §9a + react-component-agent §9b).** Read-only, no migration. New `GET /v2/api/carrier/schedule`
+  reads the same source as the internal schedule board (`schedule_rows`, Google Sheet ingest),
+  filtered to `carrier LIKE 'SEAL%' OR 'LISMA%'` for ONE week. The ET date becomes a UTC-midnight
+  `Date` passed to the exported `currentAndNextShipWeekTabs()`; on Saturday/Sunday the NEXT tab is
+  used. Matched rows get one batched `deriveStatuses()` + one chunked (90) `jobs` city/state
+  lookup. The carrier-facing status map `Not Started|Cutting|In Production → "In production"`,
+  `Ready|Loading|Loaded → "Ready"`, `Shipped → "Shipped"` is typed
+  `satisfies Record<ScheduleStatus, …>`, so a new internal status fails tsc. Unmatched rows carry
+  sheet data only, with `status: null`. Rows send only `invoice_number`, `customer`, `load_label`
+  (`formatLoadLabel`), `delivery_time_label` (`parseDeliveryTime`; the raw sheet cell with internal
+  driver notes is never sent), `city_state`, `status`, `scrap_pickup`, `unmatched`. The response
+  always carries all five MONDAY..FRIDAY days with dates derived from the week's Monday, plus
+  `source_updated_at`. **UI:** third tab, order Upcoming | Schedule | History (7 days). New
+  `CarrierSchedule.tsx`:
+  - Heading "Week of Mon 9/28" + "Schedule updated 2:14 PM" (ET).
+  - `lg:` shows five day columns; phone/portrait tablet stacks the days, with today's day scrolled
+    into view on mount and marked "Today".
+  - Day headers show day + date + order count; empty days read "No Seal loads".
+  - Order cards show customer, INV#, `TL x2 @ 7a`, 📍 city/state, a status pill (three new
+    variants in `CarrierStatusPill.tsx`, no second pill component) or a muted "Scheduled" when
+    unmatched, and a "Scrap pickup" chip.
+  - Days with 4+ orders scroll inside the carrier-01 treatment.
+  - Fetches through the shared `useCarrierFetch` hook (fetches on tab open, 60s poll while open).
+  - The error box is now shared across tabs as `CarrierErrorBox.tsx`.
+
+  Internal schedule board files are untouched.
+
 - **carrier-04 — Carrier fees + notes, logistics push notification, v2 board display, 7-day
   history. ⚠️ MIGRATION-GATED (`DB_Migrations/carrier-charges.sql`, gitignored).** (db-api-agent §9
   + next-platform-agent §9a + react-component-agent §9b + admin-auth-agent §8.) **Migration:** new
