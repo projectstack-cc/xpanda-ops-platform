@@ -15,7 +15,8 @@ export function useTokenColors<K extends string>(
   const [colors, setColors] = useState<Record<K, string>>(fallbacks);
 
   useEffect(() => {
-    // setTheme() sets data-theme before its state update, so the new values are already live here.
+    // setTheme() queues the state update and sets data-theme in the same handler; this effect runs
+    // after the re-render commits, so the new token values are already live here.
     const style = getComputedStyle(document.documentElement);
     setColors(
       Object.fromEntries(
