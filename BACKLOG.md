@@ -227,6 +227,9 @@
 
 ## Logistics (v2)
 
+- [ ] **logi-rollout-02: give Invoice Analytics (and Load Builder) their own middleware lines
+  before removing the `/v2/logistics` dark-launch rule.** Otherwise the pages fall through to
+  `logistics.dashboard` while their APIs stay on `logistics.v2`.
 - [ ] **v2 zone-column editing follow-up.** `bolEditorEngine.ts`'s editor has no zone-column boxes
   at all yet (legacy's `zoneCol0…N` per-column editing has no v2 equivalent) — noted again while
   scoping `bol-style-03`, which deliberately did not add zone-column styling to v2 for this reason.

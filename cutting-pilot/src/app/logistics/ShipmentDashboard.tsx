@@ -22,6 +22,7 @@ import {
   Navigation,
   RefreshCw,
   Mail,
+  Receipt,
 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import ShipmentRow from "@/components/logistics/ShipmentRow";
@@ -127,6 +128,9 @@ export default function ShipmentDashboard({
   // Shipment Edit Modal gates Trailer # editability on it, matching the server's
   // X-User-Can-Manage-Loading check in shipments/[id]/route.ts.
   const canManageLoading = isAdmin || permissions?.["logistics.loading.manage"]?.edit === true;
+  // Invoice Analytics link: mirror the middleware gate on both the page and /v2/api/logistics.
+  // If that gate is repointed to a dedicated key later, change it here in the same commit.
+  const canSeeInvoiceAnalytics = isAdmin || permissions?.["logistics.v2"]?.view === true;
 
   const activeWeekInfo = useMemo(() => {
     if (weekOffset === null) return null;
@@ -368,6 +372,15 @@ export default function ShipmentDashboard({
               <Mail size={14} className="text-muted" />
               BOL Email Queue
             </a>
+            {canSeeInvoiceAnalytics && (
+              <a
+                href="/v2/logistics/invoice-analytics"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] no-underline transition-colors"
+              >
+                <Receipt size={14} className="text-muted" />
+                Invoice Analytics
+              </a>
+            )}
             <button
               type="button"
               onClick={load}

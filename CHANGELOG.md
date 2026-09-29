@@ -2284,6 +2284,13 @@ current series).
 
 ## Logistics (v2)
 
+- **logi-rollout-01 — Invoice Analytics quick link on `/v2/logistics` title bar; shown only to
+  admin / `logistics.v2` holders, matching the page + API gate.** `ShipmentDashboard.tsx` adds a
+  fourth title-bar link (after BOL Email Queue, `Receipt` icon, same token-only className as the
+  siblings) gated on `isAdmin || permissions["logistics.v2"]?.view`, mirroring the middleware gate
+  on both `/v2/logistics` (dark-launch rule) and `/v2/api/logistics`. No migration, no new
+  permission key. **Verified:** `tsc --noEmit` + `npm run cf-build` clean.
+
 - **bol-wysiwyg-03 follow-up — ported the same invisible-caret-sizing and date-format fix into v2's
   `bolEditorEngine.ts`.** Same two bugs and same fix as the legacy `bol-editor.js` follow-up below
   (reported by Steve): `positionAll` never set `font-size`/`line-height` on each field's edit
