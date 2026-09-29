@@ -97,9 +97,9 @@
 - [ ] **carrier-02 follow-up — Logistics v2 board: surface carrier-uploaded physical BOL copies**
   (`bol_documents.doc_type='carrier_upload'`) in the shipment detail.
 
-- [ ] **P368 follow-up — appointment/ETA time column + per-bay dock instructions (deferred).**
-  `/v2/carrier` ships invoice/customer/city-state/bay/trailer/status only. Revisit if the carrier
-  needs scheduling detail beyond the day-level view.
+- [ ] **P368 follow-up — per-bay dock instructions (deferred).** The appointment/ETA half shipped
+  in carrier-03 (appointment, drive time, suggested pickup on each tile). Revisit dock
+  instructions if the carrier asks.
 
 - [ ] **P399 follow-up — client-side image downscale in `CarrierUploadModal`.** Currently only a
   hard ~3MB base64 size cap with an inline "please retake" error; a canvas-based downscale before
@@ -617,11 +617,11 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [ ] Wire scrap capture into `<CompleteLineModal>` once the native scrap DB lands (reason + cubic-in + shift + density; derive operator/inv/line/date from session+job; no Laminate scrap)
 - [ ] Material-consumption capture at line-complete — needs a job→block_inventory link + on-hand block picker (block_consumption_log decrements real stock)
 - [ ] Cut-list photo polish if asked: multi-photo per session, lightbox zoom, delete/replace, retention cleanup
-- [ ] Wire notifications into v2 cutting (depends on a v2 notification backend; triggers: job-done, andon/flag-for-help)
+- [ ] Wire notifications into v2 cutting (v2 dispatch now exists: `src/lib/push.ts`, carrier-04; triggers: job-done, andon/flag-for-help)
 - [ ] Wire "Blocks / chunks required" in the Parts slide-over once block-calculator BOM feeds cutting_lines.qty_target
 - [ ] Units/hour throughput once qty entry is routine (qty_done_delta + qty_target) — pair with first-pass yield
 - [ ] Throughput/time-tracking report surface (per-line bottleneck rollups across jobs/date range) if a separate analytics view is wanted beyond the on-board badges
-- [ ] Cutting v2: port notifications bell + settings gear into `PlatformHeader` once v2 notification backend exists (deferred from P212)
+- [ ] Cutting v2: port notifications bell + settings gear into `PlatformHeader` (deferred from P212; v2 dispatch exists since carrier-04 via `src/lib/push.ts`, inbox read/mark endpoints still legacy-only)
 - [ ] Block-calc engine landed as a pure module in P228 (`blockEngine.ts`) + save route + `blocks_needed`. Remaining: the planner screen (P229), non-taper chunk model, per-job block-dimension defaults, regenerate-on-change.
 - [ ] Taper blocks-needed (materials pull): compute `ceil(chunks ÷ chunks-per-block)` once a chunks-per-block datum exists.
 - [ ] Verify the live `job_line_items.dimensions` taper format matches the P227 regex; widen if needed.
