@@ -1827,6 +1827,22 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-c-03 — Production history view, filters, lot trace.** New **History** tab (everyone with
+  `production.log`, before Recipes). `GET /v2/api/production/history`: sheet `log_date` range
+  (default last 30 days ET, swapped if reversed, > 366 days → 400 `range_too_large`), supplier,
+  bead type, density (normalized; bad → 400 `invalid_param`), block type (blocks only), lot #.
+  Blocks filter on their own prod-c-01 bead snapshot, batches on their expansion sheet header —
+  never a time-window join to silo events. 5,000-row cap per list with `truncated` flags; facets
+  (densities, block types) are date-range only. `GET /v2/api/production/lot-trace?lot=`: received
+  lot(s) with signed-ledger bag sums (on hand / received / opened / adjusted, same convention as
+  `LOT_COLUMNS`), expansion batches, silo events, blocks (2,000 cap). Every filter value is bound;
+  every sheet join excludes soft-deleted sheets. UI: `HistoryView` (filter bar, debounced lot,
+  Blocks | Batches switch, recipe `≠` badges, "Demold weight (lbs)", display-only "Bead aging (h)",
+  pcf per batch, totals footer), `LotTraceModal`, and `RecipeDeviationBadge` extracted from
+  `ProductionBoard.renderCell` (one definition, two call sites). New `lib/productionHistory.ts`
+  (`HistoryData` contract for prod-c-04) + selfcheck 8/8. `lot_required` reuses the existing
+  `production.error.lotRequired` mapping. No write routes, no migration.
+
 - **prod-c-02 — Recipes UI, recipe prefill, deviation markers, pcf readout.** New managers-only
   **Recipes** tab (`RecipesView`, `RecipeModal`, `RetireRecipeModal`, all composing the shared
   `Modal`): expansion + molding sections, create, edit-as-new-version (key read-only), retire, and a

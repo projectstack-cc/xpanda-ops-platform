@@ -42,8 +42,9 @@
 - [ ] Expansion header density edited after a silo's first batch leaves
   production_silos.density (and blocks molded after) on the old value. Decide: lock density once
   the sheet has batches, or propagate to the filling silo. (found in prod-c-01)
-- [ ] prod-c-03 (history view + lot trace), prod-c-04 (report: Recharts, ±3σ control limits,
-  print/CSV) — queued.
+- [ ] prod-c-04 (report: Recharts, ±3σ control limits, print/CSV) — queued.
+- [ ] History date filter is on sheet log_date; a sheet spanning midnight files all its
+  rows under its start date. Revisit only if it matters in practice.
 - [ ] Consider a tolerance band on recipes once the report's control limits have been
   reviewed (prod-c-04) — Steve declined spec bands for v1.
 

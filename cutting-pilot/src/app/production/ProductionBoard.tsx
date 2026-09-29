@@ -25,6 +25,8 @@ import SiloSwitchModal from "./SiloSwitchModal";
 import SilosView from "./SilosView";
 import BeadView from "./BeadView";
 import RecipesView from "./RecipesView";
+import HistoryView from "./HistoryView";
+import RecipeDeviationBadge from "./RecipeDeviationBadge";
 import { BUCKET_VOLUME_L, EXPANSION_RECIPE_FIELDS, MOLDING_RECIPE_FIELDS, isRecipeDeviation, pcfFromBucket, type RecipeRow } from "@/lib/productionRecipes";
 import BagCounter from "./BagCounter";
 import ReceiveLotModal from "./ReceiveLotModal";
@@ -41,7 +43,7 @@ import {
   type OptionsData,
 } from "./fields";
 
-type BoardKind = "molding" | "expansion" | "silos" | "bead" | "recipes";
+type BoardKind = "molding" | "expansion" | "silos" | "bead" | "history" | "recipes";
 type SheetKind = "molding" | "expansion";
 
 const BOARD_LABEL_KEY: Record<BoardKind, string> = {
@@ -50,6 +52,7 @@ const BOARD_LABEL_KEY: Record<BoardKind, string> = {
   silos: "production.board.silos",
   bead: "production.board.bead",
   recipes: "production.board.recipes",
+  history: "production.board.history",
 };
 
 interface MoldingSession {
@@ -192,6 +195,7 @@ const ERROR_KEY: Record<string, string> = {
   density_required: "production.error.densityRequired",
   heating_time_required: "production.error.heatingTimeRequired",
   invalid_param: "production.error.invalidParam",
+  range_too_large: "production.error.rangeTooLarge",
 };
 
 // Errors that mean our silos list is stale — refetch it automatically.
@@ -394,7 +398,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
 
   // Silos: on mount / board switch, then every 30 s while a sheet board or the Silos view is up.
   useEffect(() => {
-    if (board === "bead" || board === "recipes") return;
+    if (board === "bead" || board === "recipes" || board === "history") return;
     fetchSilos();
     const id = setInterval(() => {
       if (document.visibilityState === "visible") fetchSilos();
@@ -810,17 +814,10 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     const recipeCol = map[f.key];
     const recipeValue = recipeCol ? (selectedSession as Record<string, any> | null)?.[recipeCol] : undefined;
     if (recipeCol && isRecipeDeviation(row[f.key], recipeValue)) {
-      const label = `${t("production.recipe.deviationLabel")} ${recipeValue}`;
       return (
         <span className="inline-flex items-center gap-1">
           {text}
-          <span
-            title={label}
-            aria-label={label}
-            className="px-1 rounded border text-xs font-semibold bg-[var(--warn-bg)] text-[var(--warn-text)] border-[var(--warn-border)]"
-          >
-            ≠
-          </span>
+          <RecipeDeviationBadge recipeValue={recipeValue} />
         </span>
       );
     }
@@ -838,6 +835,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     "expansion",
     "silos",
     "bead",
+    "history",
     ...(canManage || isAdmin ? (["recipes"] as BoardKind[]) : []),
   ];
 
@@ -935,6 +933,10 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
             }}
             describeError={describeError}
           />
+        </div>
+      ) : board === "history" ? (
+        <div className="flex-1 overflow-y-auto">
+          <HistoryView options={options} describeError={describeError} />
         </div>
       ) : board === "recipes" ? (
         <div className="flex-1 overflow-y-auto">
