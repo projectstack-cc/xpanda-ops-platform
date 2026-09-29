@@ -235,8 +235,29 @@ export async function handleApiPublicBolDelivery(request, env) {
   const alreadyDelivered = matched ? matched.loading_status === 'delivered' : shipment.status === 'delivered';
   const notInTransit = matched ? matched.loading_status !== 'in_transit' : shipment.status !== 'in_transit';
 
-  if (alreadyDelivered) {
+  if (alreadyDelivered && source !== 'carrier_upload') {
     return json({ ok: true, stage: 'delivered', already: true });
+  }
+  // carrier-02: after delivery the carrier can still upload their physical BOL copy (with hand
+  // edits). Store-only — never touches loading_assignments/shipments/jobs/signed_bol_photo_key or
+  // cutting lines, and dispatches nothing. The QR-signed copy is never overwritten.
+  if (alreadyDelivered && source === 'carrier_upload') {
+    const carrierBytes = Uint8Array.from(atob(photoBase64), c => c.charCodeAt(0));
+    const carrierKey = `signed-bols/${bol.id}/carrier-${Date.now()}.jpg`;
+    try {
+      await env.BOL_PHOTOS.put(carrierKey, carrierBytes, {
+        httpMetadata: { contentType: 'image/jpeg' },
+      });
+    } catch (e) {
+      return json({ ok: false, error: 'photo_upload_failed', detail: String(e?.message || e) }, 500);
+    }
+    await db.prepare(
+      "INSERT INTO bol_documents (id, bol_id, doc_type, r2_key, created_at) VALUES (?, ?, 'carrier_upload', ?, ?)"
+    ).bind(crypto.randomUUID(), bol.id, carrierKey, new Date().toISOString()).run();
+    await logActivity(db, 'carrier_bol_uploaded', 'shipment', shipment.id,
+      `Carrier uploaded physical BOL copy — BOL #${bol.bol_number}`,
+      { bol_number: bol.bol_number, photo_key: carrierKey }, null);
+    return json({ ok: true, stage: 'delivered', stored: 'carrier_upload' });
   }
   // Must be in_transit before a delivery POST is valid — EXCEPT the carrier upload
   // fail-safe, which exists precisely because the driver skipped the QR pickup scan
@@ -254,6 +275,14 @@ export async function handleApiPublicBolDelivery(request, env) {
     });
   } catch (e) {
     return json({ ok: false, error: 'photo_upload_failed', detail: String(e?.message || e) }, 500);
+  }
+
+  // carrier-02: record every carrier upload in bol_documents so "latest carrier copy" is always
+  // the newest doc_type='carrier_upload' row, whether it arrived before or after delivery.
+  if (source === 'carrier_upload') {
+    await db.prepare(
+      "INSERT INTO bol_documents (id, bol_id, doc_type, r2_key, created_at) VALUES (?, ?, 'carrier_upload', ?, ?)"
+    ).bind(crypto.randomUUID(), bol.id, r2Key, new Date().toISOString()).run();
   }
 
   const now = new Date().toISOString();

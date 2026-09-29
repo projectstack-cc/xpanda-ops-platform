@@ -70,6 +70,9 @@
 
 ## Carrier View (v2)
 
+- [ ] **carrier-02 follow-up — Logistics v2 board: surface carrier-uploaded physical BOL copies**
+  (`bol_documents.doc_type='carrier_upload'`) in the shipment detail.
+
 - [ ] **P368 follow-up — appointment/ETA time column + per-bay dock instructions (deferred).**
   `/v2/carrier` ships invoice/customer/city-state/bay/trailer/status only. Revisit if the carrier
   needs scheduling detail beyond the day-level view.

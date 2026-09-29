@@ -24,6 +24,7 @@ export default function CarrierUploadModal({ isOpen, onClose, row, onDone }: Pro
   const [base64, setBase64] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const delivered = row.loading_status === "delivered";
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -56,7 +57,10 @@ export default function CarrierUploadModal({ isOpen, onClose, row, onDone }: Pro
         body: JSON.stringify({ source: "carrier_upload", signed_photo_base64: base64 }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
+      // Success = a fresh delivery ({stage:'delivered'}) or a post-delivery physical-copy store
+      // ({stored:'carrier_upload'}).
+      const succeeded = res.ok && data.ok && (data.stored === "carrier_upload" || data.stage === "delivered");
+      if (!succeeded) {
         setError(data.error || `Upload failed (${res.status}).`);
         setSubmitting(false);
         return;
@@ -73,7 +77,7 @@ export default function CarrierUploadModal({ isOpen, onClose, row, onDone }: Pro
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Upload BOL — INV# ${row.invoice_number || "—"}${row.suffix}`}
+      title={`${delivered ? "Upload physical BOL" : "Upload BOL"} — INV# ${row.invoice_number || "—"}${row.suffix}`}
     >
       <div className="space-y-3">
         <label
@@ -109,7 +113,9 @@ export default function CarrierUploadModal({ isOpen, onClose, row, onDone }: Pro
         </button>
 
         <p className="text-xs text-[var(--text-hint)]">
-          Use this only if the driver didn&apos;t scan the QR. This marks the load delivered.
+          {delivered
+            ? "Upload your physical copy with any edits. The driver-signed copy is kept."
+            : "Use this only if the driver didn’t scan the QR. This marks the load delivered."}
         </p>
       </div>
     </Modal>

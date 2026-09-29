@@ -1787,6 +1787,30 @@ current series).
 
 ## Carrier View (v2)
 
+- **carrier-02 — Carrier View: upload physical BOL after delivery + in-app View BOL (db-api-agent
+  §9 + next-platform-agent §9a + react-component-agent §9b).** **Legacy change (instant Pages
+  deploy):** `_worker.js/routes/public.js` `handleApiPublicBolDelivery` — the `alreadyDelivered`
+  early return now applies only to non-carrier sources (driver QR idempotency unchanged); a
+  `carrier_upload` on an already-delivered load takes a new **store-only** path: R2 put at
+  `signed-bols/<bol_id>/carrier-<ts>.jpg`, a `bol_documents` row `doc_type='carrier_upload'`,
+  `logActivity('carrier_bol_uploaded')`, returns `{ ok, stage:'delivered', stored:'carrier_upload' }`
+  — never touches `loading_assignments`/`shipments`/`jobs`/`signed_bol_photo_key`/cutting lines and
+  dispatches nothing (the QR-signed copy is never overwritten). The pre-delivery carrier fail-safe
+  path now also inserts a `carrier_upload` `bol_documents` row, so "latest carrier copy" is
+  consistently the newest such row. **v2:** new `src/lib/carrier/scope.ts` (`resolveCarrierBol` —
+  token → BOL only when the job's carrier matches `LISMA%`/`SEAL%`, else 404, so the carrier account
+  can't read another carrier's BOL); `GET /v2/api/carrier/bol?token=` (BOL row with `trailer_no`
+  live-enriched from the dock assignment by BolViewerModal's rule, `access_token` omitted);
+  `GET /v2/api/carrier/carrier-copy?token=` (streams the newest carrier upload from R2,
+  `private, max-age=300`); `GET /v2/api/carrier` rows gain `has_carrier_copy` + `delivered_at`.
+  **UI:** View BOL now opens `CarrierBolModal.tsx` (Modal + PdfViewer, renders the unsigned BOL live
+  via `buildCombinedBolPdf`, blob URL revoked on close; the client re-attaches the token it already
+  holds so the QR matches the printed BOL) instead of the driver `/track/` page; Upload BOL stays
+  enabled after delivery ("Upload physical BOL", status-aware helper text in
+  `CarrierUploadModal.tsx`, which accepts both `{stored:'carrier_upload'}` and `{stage:'delivered'}`
+  as success); new "View carrier copy" pill when `has_carrier_copy`. No migration
+  (`bol_documents.doc_type` is free TEXT).
+
 - **carrier-01 — Carrier View chrome: PlatformHeader, Seal logo strip, day headings, scroll box,
   no footer (next-platform-agent §9a + react-component-agent §9b).** `PlatformHeader.tsx` gains an
   optional `homeHref` prop (default `"/"`, so all existing callers are unchanged) — the carrier view

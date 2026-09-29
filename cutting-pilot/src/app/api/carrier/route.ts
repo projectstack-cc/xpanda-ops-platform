@@ -26,6 +26,8 @@ export async function GET() {
          la.trailer_number,
          la.loading_status,
          la.load_number,
+         la.delivered_at,
+         EXISTS (SELECT 1 FROM bol_documents d WHERE d.bol_id = b.id AND d.doc_type = 'carrier_upload') AS has_carrier_copy,
          b.access_token,
          b.load_count,
          (b.signed_bol_photo_key IS NOT NULL) AS has_signed,
@@ -76,6 +78,8 @@ export async function GET() {
         has_signed: !!r.has_signed,
         additional_info: r.additional_info ?? null,
         ship_day: r.ship_day,
+        has_carrier_copy: !!r.has_carrier_copy,
+        delivered_at: r.delivered_at ?? null,
       };
     });
 

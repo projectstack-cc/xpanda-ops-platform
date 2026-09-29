@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import PlatformHeader from "@/components/PlatformHeader";
 import CarrierStatusPill from "./CarrierStatusPill";
 import CarrierUploadModal from "./CarrierUploadModal";
+import CarrierBolModal from "./CarrierBolModal";
 
 const REFRESH_MS = 60_000;
 
@@ -22,6 +23,8 @@ interface CarrierRow {
   has_signed: boolean;
   additional_info: string | null;
   ship_day: string;
+  has_carrier_copy: boolean;
+  delivered_at: string | null;
 }
 
 interface CarrierResponse {
@@ -45,9 +48,18 @@ function dayLabel(dateStr: string): string {
     .replace(",", " ·");
 }
 
-function LoadRow({ row, onUpload }: { row: CarrierRow; onUpload: (row: CarrierRow) => void }) {
+interface RowActions {
+  onUpload: (row: CarrierRow) => void;
+  onViewBol: (row: CarrierRow) => void;
+}
+
+const PILL_CLS =
+  "inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold";
+
+function LoadRow({ row, onUpload, onViewBol }: { row: CarrierRow } & RowActions) {
   const cityState = [row.ship_to_city, row.ship_to_state].filter(Boolean).join(", ");
-  const uploadDisabled = !row.access_token || row.loading_status === "delivered";
+  const uploadDisabled = !row.access_token;
+  const delivered = row.loading_status === "delivered";
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
       <div className="flex items-start justify-between gap-3">
@@ -78,14 +90,9 @@ function LoadRow({ row, onUpload }: { row: CarrierRow; onUpload: (row: CarrierRo
       </div>
       <div className="flex flex-wrap items-center gap-2 mt-3">
         {row.access_token ? (
-          <a
-            href={`/track/${row.access_token}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold"
-          >
+          <button type="button" onClick={() => onViewBol(row)} className={PILL_CLS}>
             View BOL
-          </a>
+          </button>
         ) : (
           <span className="inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold opacity-40 cursor-not-allowed">
             View BOL
@@ -101,13 +108,23 @@ function LoadRow({ row, onUpload }: { row: CarrierRow; onUpload: (row: CarrierRo
             View Signed BOL
           </a>
         )}
+        {row.has_carrier_copy && row.access_token && (
+          <a
+            href={`/v2/api/carrier/carrier-copy?token=${encodeURIComponent(row.access_token)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={PILL_CLS}
+          >
+            View carrier copy
+          </a>
+        )}
         <button
           type="button"
           disabled={uploadDisabled}
           onClick={() => onUpload(row)}
           className="inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Upload BOL
+          {delivered ? "Upload physical BOL" : "Upload BOL"}
         </button>
       </div>
       {row.additional_info && (
@@ -127,12 +144,12 @@ function DaySection({
   label,
   rows,
   onUpload,
+  onViewBol,
 }: {
   heading: string;
   label: string;
   rows: CarrierRow[];
-  onUpload: (row: CarrierRow) => void;
-}) {
+} & RowActions) {
   const scrolling = rows.length >= SCROLL_THRESHOLD;
   return (
     <section>
@@ -158,7 +175,12 @@ function DaySection({
           }
         >
           {rows.map((row, i) => (
-            <LoadRow key={`${row.invoice_number}-${row.load_number}-${i}`} row={row} onUpload={onUpload} />
+            <LoadRow
+              key={`${row.invoice_number}-${row.load_number}-${i}`}
+              row={row}
+              onUpload={onUpload}
+              onViewBol={onViewBol}
+            />
           ))}
         </div>
       )}
@@ -177,6 +199,7 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploadRow, setUploadRow] = useState<CarrierRow | null>(null);
+  const [bolRow, setBolRow] = useState<CarrierRow | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasGoodDataRef = useRef(false);
 
@@ -273,8 +296,8 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
 
         {data && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <DaySection heading="Today's Loads" label={dayLabel(data.today)} rows={todayRows} onUpload={setUploadRow} />
-            <DaySection heading="Tomorrow's Loads" label={dayLabel(data.tomorrow)} rows={tomorrowRows} onUpload={setUploadRow} />
+            <DaySection heading="Today's Loads" label={dayLabel(data.today)} rows={todayRows} onUpload={setUploadRow} onViewBol={setBolRow} />
+            <DaySection heading="Tomorrow's Loads" label={dayLabel(data.tomorrow)} rows={tomorrowRows} onUpload={setUploadRow} onViewBol={setBolRow} />
           </div>
         )}
       </main>
@@ -285,6 +308,14 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
           onClose={() => setUploadRow(null)}
           row={uploadRow}
           onDone={load}
+        />
+      )}
+
+      {bolRow && (
+        <CarrierBolModal
+          token={bolRow.access_token}
+          title={`BOL — INV# ${bolRow.invoice_number || "—"}${bolRow.suffix}`}
+          onClose={() => setBolRow(null)}
         />
       )}
     </div>
