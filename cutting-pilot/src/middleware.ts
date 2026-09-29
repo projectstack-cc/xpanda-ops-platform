@@ -43,6 +43,10 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/api/logistics", keys: ["logistics.v2"] },
   { prefix: "/v2/api/carrier", keys: ["logistics.carrier_view"] },
   { prefix: "/v2/carrier", keys: ["logistics.carrier_view"] },
+  // prod-d-04 — Production TV: a wall display holding only production.tv reaches exactly the
+  // dashboard endpoint + TV page. production.log users can open the TV too.
+  { prefix: "/v2/api/production/dashboard", keys: ["production.tv", "production.log"] },
+  { prefix: "/v2/production/tv", keys: ["production.tv", "production.log"] },
   { prefix: "/v2/api/production/manage", keys: ["production.manage"] },
   { prefix: "/v2/api/production", keys: ["production.log"] },
   // prod-d-03 — schedule editor is manager-only; must precede the general /v2/production line.

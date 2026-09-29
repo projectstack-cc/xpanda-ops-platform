@@ -39,6 +39,7 @@
   prod-a-02's manage/sheets delete, no admin view to browse/undelete them).
 - [ ] Options admin: rename/reorder dropdown values (retire/restore exists via prod-a-02's
   manage/options PATCH; renaming and manual sort-order changes do not).
+- [ ] Extract `SiloGrid`'s silo state → token mapping (`STATE_CLS` / `STATE_KEY`) into a shared module; `/v2/production/tv` mirrors it locally. (found in prod-d-04)
 - [ ] Manual silo correction to a new lot sets `density` NULL, so that fill's `full` event doesn't
   count toward expansion schedule progress. Revisit if managers correct fills in practice.
   (found in prod-d-02)
@@ -217,7 +218,7 @@
 
 ## Loading Board (v2)
 
-- [ ] Extract a shared `components/tv/` (freshness-clock) used by both `/v2/schedule` and `/v2/loading` — currently each board is self-contained. (The pixel-shift half of this item was moot as of P304; the logo-sweep half is moot as of P306 — both removed from both boards entirely. Only the freshness clock remains a duplication candidate.)
+- [ ] Extract a shared `components/tv/` (freshness-clock) used by `/v2/schedule`, `/v2/loading` and (prod-d-04) `/v2/production/tv` — a third board with its own LoadingBoard-style freshness logic (2-min stale) plus a copy of ScheduleBoard's cursor hide — currently each board is self-contained. (The pixel-shift half of this item was moot as of P304; the logo-sweep half is moot as of P306 — both removed from both boards entirely. Only the freshness clock remains a duplication candidate.)
 - [ ] **P261 follow-up — no `UNIQUE(invoice_number, ship_week, day_of_week)` on `schedule_rows`.** The 1/5 migration didn't add one, so the poller's upsert is done in application code (select-then-insert/update) rather than SQL `ON CONFLICT`. Works fine at 15-min-cron scale, but if `schedule_rows` ever gets a second writer, add the unique index and switch to a real upsert.
 - [ ] **P263 follow-up — late/at-risk highlighting on the schedule board.** Explicitly out of scope for the first UI pass; would need a definition of "late"/"at-risk" (vs. `ship_date`? vs. status stalling?) before scoping.
 - [ ] **P263 follow-up — per-day totals on the schedule board** (load count / bdft sum per `DayColumn`) if useful once the board is in daily use.

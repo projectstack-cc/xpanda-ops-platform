@@ -1827,6 +1827,26 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-d-04 — Production TV board (/v2/production/tv) + production.tv permission. Closes Group
+  D.** New read-only wall display polling `GET /v2/api/production/dashboard` every 30 s (paused
+  while hidden, immediate refetch on return). Layout: top bar (ET date, live clock, freshness,
+  Signed out / Reconnecting banners); MOLDING column (~55%, the headline) with one card per open
+  sheet — block type largest, silo / lot / last block # from the last block, recipe setpoints or
+  "No recipe", blocks on the sheet, "last block N min ago", schedule progress bar when a line
+  matches — turning amber with "Idle N min" at ≥ 15 min; EXPANSION column (~45%) with supplier ·
+  type · density, recipe heating time, silo being filled, batches + kg, "last batch N min ago",
+  amber at ≥ 30 min, progress `done / qty` + "+N filling"; unmatched schedule lines listed under
+  each column ("Not started" when not running and done = 0, success check when met); bottom SILOS
+  1–12 strip (SiloGrid's state tokens, lot, density, hours since full, inactive dimmed); bilingual
+  "Nothing running" empty state. All timing from `server_now` + local elapsed, never the TV clock;
+  densities matched at 2 dp. Freshness follows `LoadingBoard` (2-min stale, 503 transient, 401
+  confirmed via `/api/auth/me`); header auto-hide + cursor hide copied from `ScheduleBoard`. Labels
+  English with Spanish beneath via `translate()` (static; data values shown once). New view-only
+  key `production.tv`: middleware maps `/v2/api/production/dashboard` and `/v2/production/tv` to
+  `production.tv` OR `production.log` ahead of the other production lines, so a TV-only user gets
+  403 everywhere else; `admin/roles.html` label + `admin/admin-i18n.js` en/es/ht labels (legacy
+  `_worker.js/lib/core.js` unchanged — v2-only key, like `logistics.loading.tv`).
+
 - **prod-d-03 — Production schedule editor (/v2/production/schedule) + Today's-schedule strip
   with Start-from-line prefill.** New manager-only page (middleware: `/v2/production/schedule` →
   `production.manage`, placed above the general `/v2/production` line). `ScheduleEditor`: 7-day
