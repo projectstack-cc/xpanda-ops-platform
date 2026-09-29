@@ -87,6 +87,14 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     }
     if ("start_time" in p) { sets.push("start_time = ?"); binds.push(p.start_time ?? null); changed.push("start_time"); }
     if ("finish_time" in p) { sets.push("finish_time = ?"); binds.push(p.finish_time ?? null); changed.push("finish_time"); }
+    // prod-d-02: density is locked once the sheet has batches (the silo + blocks snapshot it at
+    // fill). Re-sending the same (normalized) density is a no-op for this check.
+    if ("density" in p && normDensity(p.density) !== normDensity(existing.density)) {
+      const cnt = await DB.prepare(
+        `SELECT COUNT(*) AS n FROM production_expansion_batches WHERE session_id = ?`
+      ).bind(id).first<{ n: number }>();
+      if ((cnt?.n ?? 0) > 0) return NextResponse.json({ ok: false, error: "density_locked" }, { status: 409 });
+    }
     if ("density" in p) { sets.push("density = ?"); binds.push(normDensity(p.density)); changed.push("density"); }
     if ("target_weight_g" in p) { sets.push("target_weight_g = ?"); binds.push(numOrNull(p.target_weight_g)); changed.push("target_weight_g"); }
 

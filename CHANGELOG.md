@@ -1827,6 +1827,28 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-d-02 — Schedule API + derived progress, TV dashboard endpoint, silo-event bead snapshot,
+  expansion density lock. MIGRATION-GATED (prod-d-01).** `eventInsert` now snapshots the
+  post-transition silo's `bead_supplier` / `bead_type` / `density` onto every silo event (all four
+  call sites batch `transitionUpdate` first; `empty` events snapshot NULLs by design). Expansion
+  header PATCH returns 409 `density_locked` when density changes on a sheet that has batches
+  (re-sending the same normalized density is a no-op). New `lib/productionSchedule.ts`: DST-correct
+  `etDayBoundsUtc` (offset from Intl, 23 h / 25 h days), `validatePlanDate` (`invalid_plan_date`,
+  `date_out_of_range` outside today…today+14), `validateLineInput` (`invalid_kind`, `qty_invalid`
+  1–999, `density_required`), `loadScheduleWithProgress` (six fixed statements in one `DB.batch`),
+  and the `DashboardData` contract. Progress is derived, never checked off: molding `done` = blocks
+  on non-deleted sheets with that `log_date` + block type; expansion `done` = `full` silo events in
+  the plan date's ET day matching supplier / type / `ROUND(density,2)`; `in_progress` = today's
+  matching filling silos; `running` = an open sheet with the key today. Routes:
+  `GET /v2/api/production/schedule` (default today…+6, ≤ 31 days else `range_too_large`, bad date
+  `invalid_param`); manage `POST schedule` (409 `schedule_exists`), `PATCH / DELETE schedule/[id]`
+  (qty + note only, `key_immutable`, `schedule_not_found`, past → `date_out_of_range`; delete is
+  hard, activity log keeps the trail), `POST schedule/reorder` (exact set or 409
+  `schedule_changed`), `POST schedule/copy` (`{ copied, skipped }`); `GET /v2/api/production/dashboard`
+  (open sheets any log_date sorted by last activity, last row via correlated subquery, silos, today
+  totals, today's schedule). All mutations log `production_schedule` activity. Selfchecks: schedule
+  20/20, recipes 21/21, silos 11/11. Closes the expansion density-edit BACKLOG item.
+
 - **prod-d-01 — Migration: production schedule + silo-event bead snapshot. MIGRATION-GATED.**
   New `production_schedule` table (per-day molding lines keyed by block type, expansion lines keyed
   by supplier + bead type + density, qty > 0), with unique-per-day partial indexes per kind so a

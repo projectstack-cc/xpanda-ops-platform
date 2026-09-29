@@ -190,7 +190,11 @@ export function siloStampGate(siloNo: number, operatorId: string, ts: string): {
 }
 
 // Append-only silo event insert (not executed — returned for DB.batch), gated on every `gates`
-// fragment holding at write time.
+// fragment holding at write time. prod-d-02: snapshots the silo's bead key (supplier / type /
+// density). Every call site batches transitionUpdate BEFORE this insert, so the subselects read the
+// POST-transition silo row: `empty` events snapshot NULLs by design (the lot fields were cleared),
+// and a manual correction to a new lot (density NULL) yields a `full` event that doesn't count
+// toward expansion schedule progress.
 export function eventInsert(
   DB: D1Database,
   args: {
@@ -210,11 +214,14 @@ export function eventInsert(
   const where = args.gates.length ? `WHERE ${args.gates.map((g) => g.sql).join(" AND ")}` : "";
   return DB.prepare(
     `INSERT INTO production_silo_events
-       (id, silo_no, from_state, to_state, lot_no, source, ref_id, note, operator_id, operator_name, created_at)
-     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? ${where}`
+       (id, silo_no, from_state, to_state, lot_no, source, ref_id, note, operator_id, operator_name, created_at, bead_supplier, bead_type, density)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        (SELECT bead_supplier FROM production_silos WHERE silo_no = ?),
+        (SELECT bead_type FROM production_silos WHERE silo_no = ?),
+        (SELECT density FROM production_silos WHERE silo_no = ?) ${where}`
   ).bind(
     crypto.randomUUID(), args.siloNo, args.from, args.to, args.lotNo ?? null, args.source,
-    args.refId ?? null, args.note ?? null, args.operatorId, args.operatorName || args.operatorId, args.ts,
+    args.refId ?? null, args.note ?? null, args.operatorId, args.operatorName || args.operatorId, args.ts, args.siloNo, args.siloNo, args.siloNo,
     ...args.gates.flatMap((g) => g.binds)
   );
 }
