@@ -41,6 +41,9 @@ export interface ShipmentListItem {
   distance_status: "ok" | "pending" | "unavailable";
   // carrier-03: always on the wire via `shipments.*`, now typed for the delivered timestamp.
   delivered_at: string | null;
+  // carrier-04: carrier-entered fees across all of the job's loads (list route subqueries).
+  carrier_charges_total_cents: number;
+  carrier_charges_count: number;
 }
 
 // Response shape of GET /v2/api/shipments/:id -- backs ShipmentDetailPanel's inline row
@@ -72,6 +75,16 @@ export interface ShipmentLoad {
   delivered_at: string | null;
   /** signed_bol_additional_info of the newest BOL for this load (driver QR sign flow). */
   qr_additional_info: string | null;
+  // carrier-04
+  carrier_charges: CarrierChargeEntry[];
+  carrier_charges_total_cents: number;
+}
+
+export interface CarrierChargeEntry {
+  fee_amount_cents: number;
+  notes: string;
+  created_by_name: string | null;
+  created_at: string;
 }
 
 export interface JobLineItem {

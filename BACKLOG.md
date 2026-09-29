@@ -70,6 +70,13 @@
 
 ## Carrier View (v2)
 
+- [ ] **carrier-04 follow-up — refactor the `loading-assignments` v2 route to use
+  `src/lib/push.ts`.** It currently skips notifications (deliberately not ported before the push
+  port existed).
+
+- [ ] **carrier-04 follow-up — carrier charges: logistics approve/dispute workflow.** Currently
+  informational only (append-only rows, read-only on the v2 board).
+
 - [ ] **carrier-03 follow-up — ORS driving time is car-profile.** Revisit an HGV profile or tune the
   1-hr buffer after a few weeks of real pickups.
 

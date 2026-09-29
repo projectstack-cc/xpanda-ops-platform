@@ -180,6 +180,7 @@
       notifTypeLoaded: 'Trailer loaded',
       notifTypeInTransit: 'Trailer in transit',
       notifTypeDelivered: 'Delivery confirmed',
+      notifTypeCarrierFees: 'Carrier fees added',
 
       // ---- activity-log.html ----
       entityFilterAll: 'All Entity Types',
@@ -365,6 +366,7 @@
       notifTypeLoaded: 'Tráiler cargado',
       notifTypeInTransit: 'Tráiler en tránsito',
       notifTypeDelivered: 'Entrega confirmada',
+      notifTypeCarrierFees: 'Cargos de transportista agregados',
 
       entityFilterAll: 'Todos los Tipos de Entidad',
       entityJobs: 'Trabajos',
@@ -549,6 +551,7 @@
       notifTypeLoaded: 'Remòk chaje',
       notifTypeInTransit: 'Remòk nan wout',
       notifTypeDelivered: 'Livrezon konfime',
+      notifTypeCarrierFees: 'Frè transpòtè ajoute',
 
       entityFilterAll: 'Tout Tip Antite',
       entityJobs: 'Travay',

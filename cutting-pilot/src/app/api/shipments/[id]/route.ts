@@ -160,6 +160,30 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
           ORDER BY la.load_number ASC`
       ).bind(shipment.job_id).all();
       loads = lr.results ?? [];
+
+      // carrier-04: carrier-entered fees/notes (append-only carrier_charges), newest first, matched
+      // to a load by integer load_number; a null-load_number charge (legacy single-load BOL) goes
+      // to the job's sole load.
+      const cr = await DB.prepare(
+        `SELECT load_number, fee_amount_cents, notes, created_by_name, created_at
+           FROM carrier_charges WHERE job_id = ? ORDER BY created_at DESC`
+      ).bind(shipment.job_id).all<any>();
+      const charges = (cr.results ?? []) as any[];
+      loads = loads.map((ld) => {
+        const mine = charges.filter((c) =>
+          c.load_number != null ? Number(c.load_number) === Number(ld.load_number) : loads.length === 1
+        );
+        return {
+          ...ld,
+          carrier_charges: mine.map((c) => ({
+            fee_amount_cents: Number(c.fee_amount_cents) || 0,
+            notes: c.notes ?? "",
+            created_by_name: c.created_by_name ?? null,
+            created_at: c.created_at,
+          })),
+          carrier_charges_total_cents: mine.reduce((sum, c) => sum + (Number(c.fee_amount_cents) || 0), 0),
+        };
+      });
     }
 
     return NextResponse.json({ ok: true, data: { ...shipment, line_items: lineItems, loads } });

@@ -1787,6 +1787,37 @@ current series).
 
 ## Carrier View (v2)
 
+- **carrier-04 — Carrier fees + notes, logistics push notification, v2 board display, 7-day
+  history. ⚠️ MIGRATION-GATED (`DB_Migrations/carrier-charges.sql`, gitignored).** (db-api-agent §9
+  + next-platform-agent §9a + react-component-agent §9b + admin-auth-agent §8.) **Migration:** new
+  append-only `carrier_charges` table (`bol_id`, `job_id`, `load_number`, `fee_amount_cents`,
+  `notes`, `created_by`/`_name`, `created_at`) + two indexes. **Push port:** new
+  `src/lib/push.ts`, ported 1:1 from `_worker.js/lib/push.js` (`dispatchNotification` + VAPID/RFC
+  8291 WebCrypto helpers): same role-subscription query, same `notifications` insert, same 410/404
+  cleanup, same swallow-and-log. VAPID keys are read from the env the caller gets inside its
+  handler. No VAPID secrets means inbox rows only, as in legacy. `loading-assignments` was **not**
+  refactored to use it (BACKLOG). **Shared row builder:** the `/v2/api/carrier` SELECT, geocode
+  enrichment and charges now live in `src/lib/carrier/rows.ts` (`fetchCarrierRows(DB, view)`), so
+  Upcoming and History can't drift. `scope.ts` owns the single `CARRIER_JOB_FILTER`, and gains
+  `historyCutoffUtc()` plus `isWithinCarrierWindow()` (ship day today/tomorrow ET, or delivered
+  within the last 7 ET days). The window's load resolves by the bol-delivery rule. **Routes:**
+  `POST /v2/api/carrier/charges` (edit on `logistics.carrier_view`): `fee_amount` dollars → cents,
+  rejected when negative, non-numeric, or over $10,000. `notes` are required (≤2000); a fee > 0 with
+  no note returns 400 `notes_required`. Actor comes from `X-User-*` only. Outside the window returns
+  403 `outside_window`. The route inserts the row and `activity_log` `carrier_charge_added`, then
+  `dispatchNotification('carrier.fees_added', 'Carrier fee added — {customer} (INV# {inv}{suffix})',
+  '{$fee} — {notes≤120}')`, with the suffix taken from the integer `load_number`. `GET
+  /v2/api/carrier` rows gain `charges[]` (one IN-query by `bol_id`, newest first) and
+  `charges_total_cents`. New `GET /v2/api/carrier/history` returns the same row shape: delivered in
+  the last 7 days ET, newest first, cache-only distance. **Carrier UI:** tabs **Upcoming | History
+  (7 days)**. The fetch/poll + 503/401 handling moved into a shared `useCarrierFetch` hook that polls
+  only the active tab. Each tile gets **Add fees / notes** → new `CarrierChargeModal.tsx` (Modal;
+  `$` input `inputMode="decimal"` with "Explain this fee in Additional Notes below."; required-note
+  inline errors; 400/403 messages surfaced; refetch + toast "Sent to XPanda logistics"). Tiles list
+  existing charges (`Fees: $X` + amount · note · time). The QR "Additional info" callout is
+  unchanged. New `src/lib/money.ts` (`formatUsdCents`). **Logistics board + Admin:** see the
+  carrier-04 lines under Logistics (v2) and Admin / Platform.
+
 - **carrier-03 — Carrier View: address, appointment, distance, suggested pickup, minimap,
   delivered timestamp (+ v2 Logistics board) (next-platform-agent §9a + react-component-agent
   §9b).** **Route-cache extraction (no behavior change):** `resolveOrigin`/`resolveDestRoute` (+
@@ -2371,6 +2402,14 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **carrier-04 (cross-ref) — carrier fees on the v2 board (read-only).** `GET
+  /v2/api/shipments/[id]`: each `loads[]` item gains `carrier_charges[]` +
+  `carrier_charges_total_cents` (matched by integer `load_number`; a null-load_number charge goes
+  to the job's sole load). `ShipmentDetailPanel.tsx` shows **"Carrier fees"** per load (total + each
+  entry with note, who, when ET) under the delivered time and "Driver note (QR)". The list route
+  adds `carrier_charges_total_cents` + `carrier_charges_count` subqueries. `ShipmentRow.tsx` shows a
+  `Fees $X` badge when a job has any charge. Full entry under Carrier View (v2).
 
 - **carrier-03 (cross-ref) — delivered timestamp + per-load Loads section on the v2 board.**
   `ShipmentListItem` gains `delivered_at` (already on the wire via `shipments.*`). `ShipmentRow.tsx`
@@ -7564,6 +7603,11 @@ current series).
 ---
 
 ## Admin / Platform
+
+- **carrier-04 (cross-ref) — `carrier.fees_added` notification type.** `admin/roles.html` registers
+  `'carrier.fees_added': 'Carrier fees added'` (+ the `admin.notifTypeCarrierFees` i18n key).
+  `admin/admin-i18n.js` adds `notifTypeCarrierFees` in en/es/ht. Logistics roles can subscribe from
+  Admin → Roles. Full entry under Carrier View (v2).
 
 - **prod-a-04 — Login `?next=` return + `production.manage` permission label
   (admin-auth-agent §8).** `login.html`'s new `safeNext()` reads `?next=` from the URL and

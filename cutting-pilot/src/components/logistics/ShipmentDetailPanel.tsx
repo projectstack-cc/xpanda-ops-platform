@@ -10,6 +10,7 @@
 // /v2/api/board/:id (both gated on the separate "jobs" key).
 import { useEffect, useState } from "react";
 import { formatEtDateTime } from "@/lib/etDateTime";
+import { formatUsdCents } from "@/lib/money";
 import { StatusBadge } from "./ShipmentRow";
 import type { ShipmentDetail } from "./types";
 
@@ -124,6 +125,25 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
                     <div className="text-xs">
                       <span className="font-semibold text-muted">Driver note (QR): </span>
                       <span className="text-text">{ld.qr_additional_info}</span>
+                    </div>
+                  )}
+                  {(ld.carrier_charges ?? []).length > 0 && (
+                    <div className="text-xs">
+                      <span className="font-semibold text-muted">Carrier fees: </span>
+                      <span className="font-semibold text-text tabular-nums">{formatUsdCents(ld.carrier_charges_total_cents)}</span>
+                      <ul className="mt-0.5 space-y-0.5">
+                        {ld.carrier_charges.map((c, ci) => (
+                          <li key={`${c.created_at}-${ci}`} className="text-muted">
+                            <span className="font-semibold text-text tabular-nums">{formatUsdCents(c.fee_amount_cents)}</span>
+                            {" · "}
+                            <span className="text-text whitespace-pre-wrap">{c.notes}</span>
+                            {" · "}
+                            {c.created_by_name || "Carrier"}
+                            {" · "}
+                            <span className="tabular-nums">{formatEtDateTime(c.created_at)}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </div>

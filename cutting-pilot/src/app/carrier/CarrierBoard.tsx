@@ -1,18 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import PlatformHeader from "@/components/PlatformHeader";
 import { parseAppointment, suggestedPickup } from "@/lib/deliveryTime";
 import { formatClockMinutes, formatEtDateTime, weekdayShort } from "@/lib/etDateTime";
+import { formatUsdCents } from "@/lib/money";
 import CarrierStatusPill from "./CarrierStatusPill";
 import CarrierUploadModal from "./CarrierUploadModal";
 import CarrierBolModal from "./CarrierBolModal";
+import CarrierChargeModal from "./CarrierChargeModal";
+import { useCarrierFetch } from "./useCarrierFetch";
 
 // Leaflet touches `window` at import — client-only.
 const CarrierMiniMap = dynamic(() => import("./CarrierMiniMap"), { ssr: false });
-
-const REFRESH_MS = 60_000;
 
 interface CarrierRow {
   invoice_number: string | null;
@@ -38,12 +39,27 @@ interface CarrierRow {
   lat: number | null;
   lng: number | null;
   distance_status: "ok" | "pending" | "unavailable";
+  charges: CarrierCharge[];
+  charges_total_cents: number;
+}
+
+interface CarrierCharge {
+  fee_amount_cents: number;
+  notes: string;
+  created_by_name: string | null;
+  created_at: string;
 }
 
 interface CarrierResponse {
   ok: boolean;
   today: string;
   tomorrow: string;
+  rows: CarrierRow[];
+  error?: string;
+}
+
+interface CarrierHistoryResponse {
+  ok: boolean;
   rows: CarrierRow[];
   error?: string;
 }
@@ -82,12 +98,13 @@ function InfoLine({ label, children }: { label: string; children: React.ReactNod
 interface RowActions {
   onUpload: (row: CarrierRow) => void;
   onViewBol: (row: CarrierRow) => void;
+  onCharge: (row: CarrierRow) => void;
 }
 
 const PILL_CLS =
   "inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold";
 
-function LoadRow({ row, onUpload, onViewBol }: { row: CarrierRow } & RowActions) {
+function LoadRow({ row, onUpload, onViewBol, onCharge }: { row: CarrierRow } & RowActions) {
   const uploadDisabled = !row.access_token;
   const delivered = row.loading_status === "delivered";
   const appt = parseAppointment(row.delivery_time, row.ship_day);
@@ -186,7 +203,31 @@ function LoadRow({ row, onUpload, onViewBol }: { row: CarrierRow } & RowActions)
         >
           {delivered ? "Upload physical BOL" : "Upload BOL"}
         </button>
+        <button
+          type="button"
+          disabled={!row.access_token}
+          onClick={() => onCharge(row)}
+          className={`${PILL_CLS} disabled:opacity-40 disabled:cursor-not-allowed`}
+        >
+          Add fees / notes
+        </button>
       </div>
+      {row.charges.length > 0 && (
+        <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--ghost-bg)] px-3 py-2">
+          <div className="text-sm font-semibold tabular-nums">Fees: {formatUsdCents(row.charges_total_cents)}</div>
+          <ul className="mt-1 flex flex-col gap-1">
+            {row.charges.map((c, i) => (
+              <li key={`${c.created_at}-${i}`} className="text-xs text-[var(--text-muted)]">
+                <span className="font-semibold tabular-nums text-[var(--text)]">{formatUsdCents(c.fee_amount_cents)}</span>
+                {" · "}
+                <span className="whitespace-pre-wrap">{c.notes}</span>
+                {" · "}
+                <span className="tabular-nums">{formatEtDateTime(c.created_at, { weekday: true })}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {row.additional_info && (
         <div className="mt-2 inline-block rounded px-2 py-1 text-xs bg-[var(--info-bg)] text-[var(--info-text)]">
           Additional info: {row.additional_info}
@@ -204,12 +245,15 @@ function DaySection({
   heading,
   label,
   rows,
+  emptyText = "No loads scheduled",
   onUpload,
   onViewBol,
+  onCharge,
 }: {
   heading: string;
   label: string;
   rows: CarrierRow[];
+  emptyText?: string;
 } & RowActions) {
   const scrolling = rows.length >= SCROLL_THRESHOLD;
   return (
@@ -225,7 +269,7 @@ function DaySection({
       </div>
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[var(--border)] px-4 py-6 text-center text-sm text-[var(--text-hint)]">
-          No loads scheduled
+          {emptyText}
         </div>
       ) : (
         <div
@@ -241,6 +285,7 @@ function DaySection({
               row={row}
               onUpload={onUpload}
               onViewBol={onViewBol}
+              onCharge={onCharge}
             />
           ))}
         </div>
@@ -255,69 +300,49 @@ interface CarrierBoardProps {
   permissions: Record<string, { view?: boolean; edit?: boolean }>;
 }
 
+type CarrierTab = "upcoming" | "history";
+
+const TABS: Array<{ key: CarrierTab; label: string }> = [
+  { key: "upcoming", label: "Upcoming" },
+  { key: "history", label: "History (7 days)" },
+];
+
+function ErrorBox({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <div className="rounded-lg border border-[var(--danger-bg)] bg-[var(--surface)] px-4 py-4 text-center">
+      <p className="text-sm font-semibold text-[var(--danger-bg)] mb-3">{error}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="min-h-[44px] px-5 rounded-md bg-[var(--accent)] text-[var(--surface)] text-sm font-semibold"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
 export default function CarrierBoard({ userName, isAdmin, permissions }: CarrierBoardProps) {
-  const [data, setData] = useState<CarrierResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<CarrierTab>("upcoming");
+  const upcoming = useCarrierFetch<CarrierResponse>("/v2/api/carrier", tab === "upcoming");
+  const history = useCarrierFetch<CarrierHistoryResponse>("/v2/api/carrier/history", tab === "history");
   const [uploadRow, setUploadRow] = useState<CarrierRow | null>(null);
   const [bolRow, setBolRow] = useState<CarrierRow | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const hasGoodDataRef = useRef(false);
+  const [chargeRow, setChargeRow] = useState<CarrierRow | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch("/v2/api/carrier");
+  const reloadActive = () => (tab === "history" ? history.load() : upcoming.load());
 
-      // 503 = the auth layer's D1 lookup blipped — transient, not a session verdict.
-      // Never treat it as logged-out; keep whatever's already on screen and retry next tick.
-      if (res.status === 503) {
-        if (!hasGoodDataRef.current) setError("Reconnecting…");
-        return;
-      }
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  }
 
-      // 401 from a background poll could be a genuinely dead session, or a stray one-off.
-      // Confirm against the auth endpoint before showing anything scarier than "reconnecting."
-      if (res.status === 401) {
-        let confirmedGone = true;
-        try {
-          const confirmRes = await fetch("/api/auth/me");
-          confirmedGone = !confirmRes.ok;
-        } catch {
-          confirmedGone = false;
-        }
-        if (!confirmedGone) {
-          if (!hasGoodDataRef.current) setError("Reconnecting…");
-          return;
-        }
-        setError("Signed out — sign back in to resume.");
-        return;
-      }
-
-      const json: CarrierResponse = await res.json();
-      if (!res.ok || !json.ok) {
-        setError(json.error || "Failed to load.");
-        return;
-      }
-      hasGoodDataRef.current = true;
-      setData(json);
-      setError(null);
-    } catch {
-      if (!hasGoodDataRef.current) setError("Network error — could not reach the server.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-    intervalRef.current = setInterval(load, REFRESH_MS);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [load]);
-
+  const data = upcoming.data;
   const todayRows = data ? data.rows.filter((r) => r.ship_day === data.today) : [];
   const tomorrowRows = data ? data.rows.filter((r) => r.ship_day === data.tomorrow) : [];
+  const actions: RowActions = { onUpload: setUploadRow, onViewBol: setBolRow, onCharge: setChargeRow };
+  const active = tab === "history" ? history : upcoming;
 
   return (
     <div className="min-h-screen bg-[var(--bg)] flex flex-col">
@@ -338,28 +363,47 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
           <span className="font-bold text-base">Seal Express — Outgoing loads</span>
         </div>
 
-        {loading && !data && !error && (
+        <div role="tablist" aria-label="Carrier views" className="flex flex-wrap gap-2 mb-4">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.key}
+              onClick={() => setTab(t.key)}
+              className={[
+                "min-h-[44px] px-4 rounded-md border text-sm font-semibold",
+                tab === t.key
+                  ? "border-[var(--brand)] text-[var(--brand)] bg-[var(--surface)]"
+                  : "border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]",
+              ].join(" ")}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {active.loading && !active.data && !active.error && (
           <div className="text-center text-sm text-[var(--text-hint)] py-10">Loading…</div>
         )}
 
-        {error && (
-          <div className="rounded-lg border border-[var(--danger-bg)] bg-[var(--surface)] px-4 py-4 text-center">
-            <p className="text-sm font-semibold text-[var(--danger-bg)] mb-3">{error}</p>
-            <button
-              type="button"
-              onClick={load}
-              className="min-h-[44px] px-5 rounded-md bg-[var(--accent)] text-[var(--surface)] text-sm font-semibold"
-            >
-              Retry
-            </button>
+        {active.error && <ErrorBox error={active.error} onRetry={active.load} />}
+
+        {tab === "upcoming" && data && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <DaySection heading="Today's Loads" label={dayLabel(data.today)} rows={todayRows} {...actions} />
+            <DaySection heading="Tomorrow's Loads" label={dayLabel(data.tomorrow)} rows={tomorrowRows} {...actions} />
           </div>
         )}
 
-        {data && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <DaySection heading="Today's Loads" label={dayLabel(data.today)} rows={todayRows} onUpload={setUploadRow} onViewBol={setBolRow} />
-            <DaySection heading="Tomorrow's Loads" label={dayLabel(data.tomorrow)} rows={tomorrowRows} onUpload={setUploadRow} onViewBol={setBolRow} />
-          </div>
+        {tab === "history" && history.data && (
+          <DaySection
+            heading="Delivered"
+            label="last 7 days · newest first"
+            rows={history.data.rows}
+            emptyText="No delivered loads in the last 7 days"
+            {...actions}
+          />
         )}
       </main>
 
@@ -368,7 +412,7 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
           isOpen={!!uploadRow}
           onClose={() => setUploadRow(null)}
           row={uploadRow}
-          onDone={load}
+          onDone={reloadActive}
         />
       )}
 
@@ -378,6 +422,29 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
           title={`BOL — INV# ${bolRow.invoice_number || "—"}${bolRow.suffix}`}
           onClose={() => setBolRow(null)}
         />
+      )}
+
+      {chargeRow && chargeRow.access_token && (
+        <CarrierChargeModal
+          isOpen={!!chargeRow}
+          onClose={() => setChargeRow(null)}
+          token={chargeRow.access_token}
+          title={`Add fees / notes — INV# ${chargeRow.invoice_number || "—"}${chargeRow.suffix}`}
+          onSaved={() => {
+            reloadActive();
+            showToast("Sent to XPanda logistics");
+          }}
+        />
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded text-sm font-medium pointer-events-none bg-[var(--success-bg)] text-[var(--success-text)]"
+        >
+          {toast}
+        </div>
       )}
     </div>
   );

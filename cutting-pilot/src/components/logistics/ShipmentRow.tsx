@@ -8,6 +8,7 @@ import BolActions from "./BolActions";
 import ShipmentDetailPanel from "./ShipmentDetailPanel";
 import { formatDuration } from "@/lib/time";
 import { formatEtDateTime } from "@/lib/etDateTime";
+import { formatUsdCents } from "@/lib/money";
 import type { ShipmentDetail, ShipmentListItem } from "./types";
 
 const badgeBase = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap";
@@ -139,6 +140,16 @@ export default function ShipmentRow({
           {s.status === "delivered" && s.delivered_at && (
             <div className="mt-1 text-xs text-muted tabular-nums whitespace-nowrap">
               Delivered {formatEtDateTime(s.delivered_at)}
+            </div>
+          )}
+          {(s.carrier_charges_count ?? 0) > 0 && (
+            <div className="mt-1">
+              <span
+                className={`${badgeBase} bg-[var(--warn-bg)] text-[var(--warn-text)] border border-[var(--warn-border)] tabular-nums`}
+                title="Carrier-entered fees / notes — see View details"
+              >
+                Fees {formatUsdCents(s.carrier_charges_total_cents ?? 0)}
+              </span>
             </div>
           )}
         </td>
