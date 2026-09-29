@@ -1827,6 +1827,14 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-d-01 — Migration: production schedule + silo-event bead snapshot. MIGRATION-GATED.**
+  New `production_schedule` table (per-day molding lines keyed by block type, expansion lines keyed
+  by supplier + bead type + density, qty > 0), with unique-per-day partial indexes per kind so a
+  progress count can never split across two lines, plus `idx_prod_silo_events_to_state`.
+  `production_silo_events` gains `bead_supplier`, `bead_type`, `density` (snapshot written by
+  prod-d-02). `DB_Migrations/prod-d-01-schedule.sql` is gitignored and run manually — ran on remote
+  D1 2026-09-28.
+
 - **prod-c-04 — Production report: output, I-MR control charts, pcf, aging, print/CSV. Closes
   Group C.** New **Report** mode in the History tab (`ReportView`), computed client-side from
   prod-c-03's `HistoryData` so every History filter drives it; no API changes. Four Recharts
