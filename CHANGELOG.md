@@ -1827,6 +1827,23 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-c-02 — Recipes UI, recipe prefill, deviation markers, pcf readout.** New managers-only
+  **Recipes** tab (`RecipesView`, `RecipeModal`, `RetireRecipeModal`, all composing the shared
+  `Modal`): expansion + molding sections, create, edit-as-new-version (key read-only), retire, and a
+  "Show history" toggle listing retired versions under each card. Session bar now shows the sheet's
+  recipe snapshot ("Recipe vN: RC …" / "Density … pcf · target … g · Recipe vN, heating … s", or
+  "No recipe"). Molding: a sheet with a recipe and no rows prefills the append row's four setpoints
+  (never overwriting, carry-down after); expansion heating time is deliberately NOT prefilled.
+  Saved rows whose setpoint / heating time differ from the sheet snapshot get a warn-token `≠`
+  badge ("Recipe: {value}"; exact inequality, no tolerance band). Expansion bucket-weight cells show
+  pcf as a muted second line (`pcfFromBucket`, sheet `bucket_volume_l` ?? 1 L). New Expansion sheet:
+  recipe density chips for the chosen supplier + type (set density + derived target g), typed
+  density auto-fills target g until target is edited by hand, "No recipe for this density" hint;
+  New Molding sheet shows the matching recipe one-liner. `lib/productionRecipes.ts` gains
+  `MOLDING_RECIPE_FIELDS` / `EXPANSION_RECIPE_FIELDS` / `isRecipeDeviation` (selfcheck 21/21).
+  Full en/es/ht strings; 8 new recipe error mappings (`unknown_bead_type` / `unknown_block_type`
+  already mapped). No API / migration changes.
+
 - **prod-c-01 — Production recipes (backend) + block bead snapshot. MIGRATION-GATED.** New
   `production_recipes` table (`DB_Migrations/prod-c-01-recipes.sql`, gitignored, run manually in
   the D1 console before push): expansion recipes keyed on supplier + bead type + density (pcf,

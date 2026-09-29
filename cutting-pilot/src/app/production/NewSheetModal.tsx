@@ -8,6 +8,7 @@ import Modal from "@/components/Modal";
 import { useLang } from "@/components/lang";
 import type { OptionsData } from "./fields";
 import type { OptionKind } from "./AddOptionModal";
+import { BUCKET_VOLUME_L, normDensity, targetGramsFromPcf, type RecipeRow } from "@/lib/productionRecipes";
 
 export type SheetVariant = "molding" | "expansion";
 
@@ -23,6 +24,7 @@ interface Props {
   canManage: boolean;
   onRequestAddOption: (kind: OptionKind, supplier?: string) => void;
   injectedValue: { field: "block_type" | "bead_type"; value: string } | null;
+  recipes: RecipeRow[];
   onInjectedApplied: () => void;
 }
 
@@ -50,9 +52,12 @@ export default function NewSheetModal({
   onRequestAddOption,
   injectedValue,
   onInjectedApplied,
+  recipes,
 }: Props) {
   const { t } = useLang();
   const [fields, setFields] = useState<Record<string, string>>({});
+  // prod-c-02: typing a density auto-fills target g until the user edits target g by hand.
+  const [targetTouched, setTargetTouched] = useState(false);
 
   useEffect(() => {
     if (!injectedValue) return;
@@ -67,6 +72,7 @@ export default function NewSheetModal({
 
   function handleClose() {
     setFields({});
+    setTargetTouched(false);
     onClose();
   }
 
@@ -76,6 +82,35 @@ export default function NewSheetModal({
   }
 
   const beadTypeOptions = fields.bead_supplier ? options.bead_types[fields.bead_supplier] ?? [] : [];
+
+  // prod-c-02: recipes prefill, never block.
+  const derivedTarget = (d: string) => {
+    const g = targetGramsFromPcf(normDensity(d), BUCKET_VOLUME_L);
+    return g === null ? "" : g.toFixed(1);
+  };
+  const moldingRecipe =
+    variant === "molding" && fields.block_type
+      ? recipes.find((r) => r.kind === "molding" && r.active && r.block_type === fields.block_type) ?? null
+      : null;
+  const expansionRecipes =
+    variant === "expansion" && fields.bead_supplier && fields.bead_type
+      ? recipes
+          .filter(
+            (r) =>
+              r.kind === "expansion" &&
+              r.active &&
+              r.bead_supplier === fields.bead_supplier &&
+              r.bead_type === fields.bead_type &&
+              r.density !== null
+          )
+          .sort((a, b) => (a.density ?? 0) - (b.density ?? 0))
+      : [];
+  const typedDensity = normDensity(fields.density);
+  const noDensityMatch =
+    !!fields.bead_supplier &&
+    !!fields.bead_type &&
+    typedDensity !== null &&
+    !expansionRecipes.some((r) => r.density === typedDensity);
   const canSubmit =
     variant === "molding" ? !!fields.block_type : !!fields.bead_supplier && !!fields.bead_type;
 
@@ -110,6 +145,25 @@ export default function NewSheetModal({
             </select>
             {options.block_types.length === 0 && !canManage && (
               <p className="mt-1 text-xs text-muted">{t("production.options.emptyHint")}</p>
+            )}
+            {fields.block_type && (
+              <p className="mt-1 text-xs text-muted">
+                {moldingRecipe ? (
+                  <>
+                    {t("production.recipe.recipeV")}
+                    <span className="font-mono tabular-nums">{moldingRecipe.version}</span>: RC{" "}
+                    <span className="font-mono tabular-nums">
+                      {moldingRecipe.rc_pct_open}% / {moldingRecipe.rc_speed}
+                    </span>{" "}
+                    · Virgin{" "}
+                    <span className="font-mono tabular-nums">
+                      {moldingRecipe.virgin_pct_open}% / {moldingRecipe.virgin_speed}
+                    </span>
+                  </>
+                ) : (
+                  t("production.recipe.noRecipeBlockType")
+                )}
+              </p>
             )}
           </Field>
         ) : (
@@ -179,6 +233,38 @@ export default function NewSheetModal({
                 />
               </Field>
             </div>
+            {expansionRecipes.length > 0 && (
+              <div>
+                <span className={LABEL_CLASS}>{t("production.recipe.chipsLabel")}</span>
+                <div className="flex flex-wrap gap-2">
+                  {expansionRecipes.map((r) => {
+                    const d = (r.density ?? 0).toFixed(2);
+                    const g = targetGramsFromPcf(r.density, BUCKET_VOLUME_L);
+                    const selected = typedDensity === r.density;
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => {
+                          setFields((f) => ({ ...f, density: d, target_weight_g: g === null ? "" : g.toFixed(1) }));
+                          setTargetTouched(false);
+                        }}
+                        className={[
+                          "min-h-[44px] px-3 rounded border text-sm font-mono tabular-nums cursor-pointer",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                          selected
+                            ? "border-[var(--brand)] bg-[var(--ghost-bg)] text-text font-semibold"
+                            : "border-border bg-bg text-text hover:bg-[var(--ghost-bg)]",
+                        ].join(" ")}
+                      >
+                        {d} {t("production.unit.pcf")} · {g === null ? "—" : g.toFixed(1)} g
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("production.newSheet.density")}>
                 <input
@@ -186,8 +272,14 @@ export default function NewSheetModal({
                   step="any"
                   className={FIELD_CLASS}
                   value={fields.density ?? ""}
-                  onChange={(e) => set("density", e.target.value)}
+                  onChange={(e) => {
+                    const d = e.target.value;
+                    setFields((f) => ({ ...f, density: d, ...(targetTouched ? {} : { target_weight_g: derivedTarget(d) }) }));
+                  }}
                 />
+                {noDensityMatch && (
+                  <p className="mt-1 text-xs text-muted">{t("production.recipe.noRecipeDensity")}</p>
+                )}
               </Field>
               <Field label={t("production.newSheet.targetWeightG")}>
                 <input
@@ -195,7 +287,10 @@ export default function NewSheetModal({
                   step="any"
                   className={FIELD_CLASS}
                   value={fields.target_weight_g ?? ""}
-                  onChange={(e) => set("target_weight_g", e.target.value)}
+                  onChange={(e) => {
+                    set("target_weight_g", e.target.value);
+                    setTargetTouched(true);
+                  }}
                 />
               </Field>
             </div>

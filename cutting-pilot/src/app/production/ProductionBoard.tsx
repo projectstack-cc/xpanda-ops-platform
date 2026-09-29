@@ -24,6 +24,8 @@ import SiloPickerModal from "./SiloPickerModal";
 import SiloSwitchModal from "./SiloSwitchModal";
 import SilosView from "./SilosView";
 import BeadView from "./BeadView";
+import RecipesView from "./RecipesView";
+import { BUCKET_VOLUME_L, EXPANSION_RECIPE_FIELDS, MOLDING_RECIPE_FIELDS, isRecipeDeviation, pcfFromBucket, type RecipeRow } from "@/lib/productionRecipes";
 import BagCounter from "./BagCounter";
 import ReceiveLotModal from "./ReceiveLotModal";
 import type { DescribeError } from "./ui";
@@ -39,7 +41,7 @@ import {
   type OptionsData,
 } from "./fields";
 
-type BoardKind = "molding" | "expansion" | "silos" | "bead";
+type BoardKind = "molding" | "expansion" | "silos" | "bead" | "recipes";
 type SheetKind = "molding" | "expansion";
 
 const BOARD_LABEL_KEY: Record<BoardKind, string> = {
@@ -47,12 +49,19 @@ const BOARD_LABEL_KEY: Record<BoardKind, string> = {
   expansion: "production.board.expansion",
   silos: "production.board.silos",
   bead: "production.board.bead",
+  recipes: "production.board.recipes",
 };
 
 interface MoldingSession {
   id: string;
   log_date: string;
   block_type: string | null;
+  recipe_id?: string | null;
+  recipe_version?: number | null;
+  recipe_rc_pct_open?: number | null;
+  recipe_rc_speed?: number | null;
+  recipe_virgin_pct_open?: number | null;
+  recipe_virgin_speed?: number | null;
   status: "open" | "closed";
   block_count: number;
   total_lbs: number;
@@ -82,6 +91,11 @@ interface ExpansionSession {
   bead_type: string | null;
   density: number | null;
   target_weight_g: number | null;
+  recipe_id?: string | null;
+  recipe_version?: number | null;
+  recipe_density?: number | null;
+  recipe_heating_time_s?: number | null;
+  bucket_volume_l?: number | null;
   status: "open" | "closed";
   batch_count: number;
   total_kg: number;
@@ -169,6 +183,15 @@ const ERROR_KEY: Record<string, string> = {
   lot_no_required: "production.error.lotNoRequired",
   lot_conflict: "production.error.lotConflict",
   lot_immutable_field: "production.error.lotImmutableField",
+  // prod-c-02 recipe codes (unknown_bead_type / unknown_block_type are mapped above).
+  recipe_exists: "production.error.recipeExists",
+  recipe_changed: "production.error.recipeChanged",
+  recipe_not_found: "production.error.recipeNotFound",
+  key_immutable: "production.error.keyImmutable",
+  invalid_kind: "production.error.invalidKind",
+  density_required: "production.error.densityRequired",
+  heating_time_required: "production.error.heatingTimeRequired",
+  invalid_param: "production.error.invalidParam",
 };
 
 // Errors that mean our silos list is stale — refetch it automatically.
@@ -197,6 +220,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
   const [deletingRow, setDeletingRow] = useState<DeletingRow | null>(null);
   const [deleteSheetOpen, setDeleteSheetOpen] = useState(false);
   const [options, setOptions] = useState<OptionsData>(EMPTY_OPTIONS);
+  const [recipes, setRecipes] = useState<RecipeRow[]>([]);
   const [addOptionRequest, setAddOptionRequest] = useState<{ kind: OptionKind; supplier?: string } | null>(null);
   const [injectedOption, setInjectedOption] = useState<{ field: "block_type" | "bead_type"; value: string } | null>(
     null
@@ -352,9 +376,25 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     fetchOptions();
   }, [fetchSessions, fetchToday, fetchOptions]);
 
+  // Recipes are optional (prefill + session-bar summary + Recipes tab); a failed fetch keeps the
+  // prior list silently.
+  const fetchRecipes = useCallback(async () => {
+    try {
+      const res = await fetch("/v2/api/production/recipes");
+      const data = await res.json();
+      if (data.ok) setRecipes(data.recipes ?? []);
+    } catch {
+      // keep the prior list
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRecipes();
+  }, [fetchRecipes]);
+
   // Silos: on mount / board switch, then every 30 s while a sheet board or the Silos view is up.
   useEffect(() => {
-    if (board === "bead") return;
+    if (board === "bead" || board === "recipes") return;
     fetchSilos();
     const id = setInterval(() => {
       if (document.visibilityState === "visible") fetchSilos();
@@ -412,6 +452,24 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     const next = nextBlockNo(blocks.map((b) => b.block_no));
     setBlockRow((r) => (r.block_no === next ? r : { ...r, block_no: next }));
   }, [blocks, board]);
+
+  // prod-c-02: a molding sheet with a recipe and no rows yet starts its append row from the recipe
+  // setpoints; after the first block, carry-down takes over. Never overwrites a non-blank value.
+  useEffect(() => {
+    const s = selectedMoldingSession;
+    if (board !== "molding" || !s?.recipe_id || blocks.length !== 0) return;
+    const keys = Object.keys(MOLDING_RECIPE_FIELDS) as (keyof typeof MOLDING_RECIPE_FIELDS)[];
+    setBlockRow((r) => {
+      if (keys.some((k) => (r[k] ?? "") !== "")) return r;
+      const next = { ...r };
+      for (const k of keys) {
+        const v = s[MOLDING_RECIPE_FIELDS[k]];
+        if (v !== null && v !== undefined) next[k] = String(v);
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board, blocks, selectedMoldingSession?.id, selectedMoldingSession?.recipe_id]);
 
   function selectSheet(id: string) {
     if (board === "molding") setSelectedMoldingId(id);
@@ -731,10 +789,57 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
     return v === null || v === undefined || v === "" ? "—" : String(v);
   }
 
+  // prod-c-02: saved-row cell = displayValue + a "≠" badge when the value differs from the sheet's
+  // recipe snapshot (exact, both non-null), and a muted pcf line under the expansion bucket weight.
+  function renderCell(f: RowFieldDef, row: Record<string, any>): React.ReactNode {
+    const text = displayValue(f, row);
+    if (board === "expansion" && f.key === "bucket_weight_g") {
+      const pcf = pcfFromBucket(row.bucket_weight_g, selectedExpansionSession?.bucket_volume_l ?? BUCKET_VOLUME_L);
+      return (
+        <span className="inline-flex flex-col leading-tight font-mono tabular-nums">
+          <span>{text === "—" ? text : `${text} g`}</span>
+          {pcf !== null && (
+            <span className="text-xs text-muted">
+              {pcf.toFixed(2)} {t("production.unit.pcf")}
+            </span>
+          )}
+        </span>
+      );
+    }
+    const map: Record<string, string> = board === "molding" ? MOLDING_RECIPE_FIELDS : EXPANSION_RECIPE_FIELDS;
+    const recipeCol = map[f.key];
+    const recipeValue = recipeCol ? (selectedSession as Record<string, any> | null)?.[recipeCol] : undefined;
+    if (recipeCol && isRecipeDeviation(row[f.key], recipeValue)) {
+      const label = `${t("production.recipe.deviationLabel")} ${recipeValue}`;
+      return (
+        <span className="inline-flex items-center gap-1">
+          {text}
+          <span
+            title={label}
+            aria-label={label}
+            className="px-1 rounded border text-xs font-semibold bg-[var(--warn-bg)] text-[var(--warn-text)] border-[var(--warn-border)]"
+          >
+            ≠
+          </span>
+        </span>
+      );
+    }
+    return text;
+  }
+
   const rows: (MoldingBlock | ExpansionBatch)[] = board === "molding" ? blocks : batches;
   const submitAppendRow = board === "molding" ? submitBlockRow : submitBatchRow;
   const carriedSilo = silos?.find((x) => x.silo_no === Number(appendRow.silo)) ?? null;
   const selectedLot = board === "expansion" ? lots.find((l) => l.lot_no === batchRow.lot_no) ?? null : null;
+
+  // Board tabs. prod-c-02: Recipes (managers only). prod-c-03 adds History.
+  const boardKinds: BoardKind[] = [
+    "molding",
+    "expansion",
+    "silos",
+    "bead",
+    ...(canManage || isAdmin ? (["recipes"] as BoardKind[]) : []),
+  ];
 
   return (
     <div className="flex flex-col h-full">
@@ -756,7 +861,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
       {/* Segmented switch + language */}
       <div className="shrink-0 flex items-center justify-between gap-2 p-2 border-b border-border bg-surface">
         <div className="flex flex-wrap gap-1">
-          {(["molding", "expansion", "silos", "bead"] as BoardKind[]).map((k) => (
+          {boardKinds.map((k) => (
             <button
               key={k}
               type="button"
@@ -830,6 +935,10 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
             }}
             describeError={describeError}
           />
+        </div>
+      ) : board === "recipes" ? (
+        <div className="flex-1 overflow-y-auto">
+          <RecipesView recipes={recipes} options={options} onChanged={fetchRecipes} onToast={showToast} describeError={describeError} />
         </div>
       ) : board === "bead" ? (
         <div className="flex-1 overflow-y-auto">
@@ -908,6 +1017,46 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
                     </div>
                     {board === "molding" && (
                       <p className="text-xs text-muted">{t("production.session.blockTypeHint")}</p>
+                    )}
+                    {/* prod-c-02: recipe snapshot summary. Expansion heating time is shown, never prefilled. */}
+                    {board === "molding" ? (
+                      <p className="text-xs text-muted">
+                        {selectedMoldingSession?.recipe_id ? (
+                          <>
+                            {t("production.recipe.recipeV")}
+                            <span className="font-mono tabular-nums">{selectedMoldingSession.recipe_version}</span>: RC{" "}
+                            <span className="font-mono tabular-nums">
+                              {selectedMoldingSession.recipe_rc_pct_open ?? "—"}% / {selectedMoldingSession.recipe_rc_speed ?? "—"}
+                            </span>{" "}
+                            · Virgin{" "}
+                            <span className="font-mono tabular-nums">
+                              {selectedMoldingSession.recipe_virgin_pct_open ?? "—"}% /{" "}
+                              {selectedMoldingSession.recipe_virgin_speed ?? "—"}
+                            </span>
+                          </>
+                        ) : (
+                          t("production.recipe.noRecipe")
+                        )}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted">
+                        {t("production.recipe.density")}{" "}
+                        <span className="font-mono tabular-nums">
+                          {selectedExpansionSession?.density ?? "—"} {t("production.unit.pcf")}
+                        </span>{" "}
+                        · {t("production.recipe.target")}{" "}
+                        <span className="font-mono tabular-nums">{selectedExpansionSession?.target_weight_g ?? "—"} g</span> ·{" "}
+                        {selectedExpansionSession?.recipe_id ? (
+                          <>
+                            {t("production.recipe.recipeV")}
+                            <span className="font-mono tabular-nums">{selectedExpansionSession.recipe_version}</span>,{" "}
+                            {t("production.recipe.heating")}{" "}
+                            <span className="font-mono tabular-nums">{selectedExpansionSession.recipe_heating_time_s ?? "—"} s</span>
+                          </>
+                        ) : (
+                          t("production.recipe.noRecipe")
+                        )}
+                      </p>
                     )}
                   </div>
                 ) : (
@@ -1008,7 +1157,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
                           {board === "expansion" && <td className={CELL}>{idx + 1}</td>}
                           {fields.map((f) => (
                             <td key={f.key} className={CELL}>
-                              {displayValue(f, row)}
+                              {renderCell(f, row)}
                             </td>
                           ))}
                           {isEditable && (
@@ -1201,6 +1350,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
         onRequestAddOption={handleAddOptionRequest}
         injectedValue={injectedOption}
         onInjectedApplied={() => setInjectedOption(null)}
+        recipes={recipes}
       />
 
       <EditRowModal

@@ -2,7 +2,7 @@
 // Guarded dev self-check for productionRecipes.ts pure helpers. Mirrors
 // productionNumbering.selfcheck.ts's shape: a check()/results table, one exported
 // run*SelfCheck() function. Not part of the production build path.
-import { normDensity, pcfFromBucket, targetGramsFromPcf } from "./productionRecipes";
+import { isRecipeDeviation, normDensity, pcfFromBucket, targetGramsFromPcf } from "./productionRecipes";
 
 interface CheckResult {
   name: string;
@@ -33,6 +33,13 @@ export function runProductionRecipesSelfCheck(): { pass: boolean; results: Check
   check("targetGramsFromPcf(null, 1) === null", targetGramsFromPcf(null, 1) === null);
   check("targetGramsFromPcf(1, null) === null", targetGramsFromPcf(1, null) === null);
   check("targetGramsFromPcf(-1, 1) === null", targetGramsFromPcf(-1, 1) === null);
+
+  // prod-c-02: deviation markers.
+  check("isRecipeDeviation(45, 45) === false", isRecipeDeviation(45, 45) === false);
+  check("isRecipeDeviation(45, 50) === true", isRecipeDeviation(45, 50) === true);
+  check("isRecipeDeviation(null, 50) === false", isRecipeDeviation(null, 50) === false);
+  check("isRecipeDeviation(45, null) === false", isRecipeDeviation(45, null) === false);
+  check('isRecipeDeviation("45", 45) === false', isRecipeDeviation("45", 45) === false);
 
   return { pass: results.every((r) => r.pass), results };
 }

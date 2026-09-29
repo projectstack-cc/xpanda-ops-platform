@@ -39,13 +39,13 @@
   prod-a-02's manage/sheets delete, no admin view to browse/undelete them).
 - [ ] Options admin: rename/reorder dropdown values (retire/restore exists via prod-a-02's
   manage/options PATCH; renaming and manual sort-order changes do not).
-- [ ] **P402 follow-up — Density readout (expansion).** Bucket volume confirmed 1 L; constant +
-  per-sheet snapshot landed in prod-c-01. Display ships in prod-c-02.
 - [ ] Expansion header density edited after a silo's first batch leaves
   production_silos.density (and blocks molded after) on the old value. Decide: lock density once
   the sheet has batches, or propagate to the filling silo. (found in prod-c-01)
-- [ ] prod-c-02 (recipes UI + deviation markers + pcf readout), prod-c-03 (history view + lot
-  trace), prod-c-04 (report: Recharts, ±3σ control limits, print/CSV) — queued.
+- [ ] prod-c-03 (history view + lot trace), prod-c-04 (report: Recharts, ±3σ control limits,
+  print/CSV) — queued.
+- [ ] Consider a tolerance band on recipes once the report's control limits have been
+  reviewed (prod-c-04) — Steve declined spec bands for v1.
 
 - [ ] **prod-b follow-up — drop legacy v1 tables** (`silos`, `bead_types`,
   `bead_transactions`) via a separate, held migration once prod-b-04 has shipped and nothing

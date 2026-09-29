@@ -166,3 +166,24 @@ export function validateRecipeValues(
     },
   };
 }
+
+// prod-c-02: row field -> session recipe-snapshot column, per board (deviation markers).
+export const MOLDING_RECIPE_FIELDS = {
+  rc_pct_open: "recipe_rc_pct_open",
+  rc_speed: "recipe_rc_speed",
+  virgin_pct_open: "recipe_virgin_pct_open",
+  virgin_speed: "recipe_virgin_speed",
+} as const;
+export const EXPANSION_RECIPE_FIELDS = { heating_time_s: "recipe_heating_time_s" } as const;
+
+/**
+ * True only when both are finite numbers and differ. Null/undefined on either side → false.
+ * Numeric strings are coerced with Number() first ("45" vs 45 → no deviation); blank strings
+ * count as missing. Exact inequality — no tolerance band (Steve's call).
+ */
+export function isRecipeDeviation(value: unknown, recipeValue: unknown): boolean {
+  const n = (v: unknown) => (v === null || v === undefined || v === "" ? NaN : Number(v));
+  const a = n(value);
+  const b = n(recipeValue);
+  return Number.isFinite(a) && Number.isFinite(b) && a !== b;
+}
