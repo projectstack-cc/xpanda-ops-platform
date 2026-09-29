@@ -423,6 +423,10 @@
           <span id="cutlist-viewer-chevron" style="font-size:12px;transition:transform 0.2s;">&#9658;</span>
           <span id="cutlist-viewer-label" style="font-size:13px;font-weight:600;color:var(--link);" data-i18n="jobs.viewCutList">View Cut List</span>
         </div>
+        <label id="cutlist-include-chunks-wrap" style="display:none;align-items:center;gap:8px;min-height:44px;cursor:pointer;font-size:13px;color:var(--text);">
+          <input type="checkbox" id="cutlist-include-chunks" style="width:20px;height:20px;">
+          <span data-i18n="jobs.includeChunkBreakdown">Include chunk breakdown</span>
+        </label>
         <div id="cutlist-viewer-content" hidden>
           <iframe id="cutlist-viewer-iframe" style="width:100%;height:500px;border:1px solid var(--input-border);border-radius:8px;" src="about:blank"></iframe>
         </div>
@@ -1622,6 +1626,21 @@ function setupModal() {
     chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
   });
 
+  // cutlist-01: toggling the chunk-breakdown opt-in invalidates the cached cut list (same pattern
+  // as the HB floor-stock save) and rebuilds immediately if the viewer is open. If it's collapsed,
+  // re-arm the lazy-load listener so the next expand rebuilds (openModal's {once:true} listener
+  // may already have been consumed).
+  document.getElementById('cutlist-include-chunks').addEventListener('change', () => {
+    document.getElementById('cutlist-viewer-iframe').src = 'about:blank';
+    if (_cutListBlobUrl) { try { URL.revokeObjectURL(_cutListBlobUrl); } catch {} _cutListBlobUrl = null; }
+    if (!document.getElementById('cutlist-viewer-content').hidden) {
+      loadCutListIntoViewer();
+    } else {
+      // Stable function reference, so repeated toggles while collapsed register only one listener.
+      document.getElementById('cutlist-viewer-toggle').addEventListener('click', loadCutListIntoViewer, { once: true });
+    }
+  });
+
   document.getElementById('cutlist-viewer-toggle').addEventListener('click', () => {
     const content = document.getElementById('cutlist-viewer-content');
     const chevron = document.getElementById('cutlist-viewer-chevron');
@@ -1811,6 +1830,9 @@ function openModal(jobId) {
   document.getElementById('modal-view-bol').hidden = true;
   document.getElementById('modal-print-diversitech').hidden = !(curJob && curJob.customer && curJob.customer.startsWith('DiversiTech'));
   document.getElementById('cutlist-inline-viewer').hidden = isNew;
+  // cutlist-01: opt-in checkbox starts unchecked; shown only when this job has a chunk breakdown.
+  document.getElementById('cutlist-include-chunks').checked = false;
+  document.getElementById('cutlist-include-chunks-wrap').style.display = (curJob && curJob.hb_chunk_breakdown) ? 'flex' : 'none';
   updateHoleyChunkPreview();
   renderHbOnHandSection(isNew ? null : allJobs.find(j => j.id === jobId));
   if (!isNew) {
@@ -2387,6 +2409,9 @@ function clearForm() {
   document.getElementById('holey-chunks-summary').hidden = true;
   document.getElementById('cutlist-inline-viewer').hidden = true;
   document.getElementById('cutlist-viewer-content').hidden = true;
+  // cutlist-01: chunk-breakdown opt-in resets to unchecked + hidden with the rest of the viewer.
+  document.getElementById('cutlist-include-chunks').checked = false;
+  document.getElementById('cutlist-include-chunks-wrap').style.display = 'none';
   document.getElementById('cutlist-viewer-chevron').style.transform = '';
   document.getElementById('cutlist-viewer-iframe').src = 'about:blank';
   if (_cutListBlobUrl) { try { URL.revokeObjectURL(_cutListBlobUrl); } catch {} _cutListBlobUrl = null; }
@@ -2696,6 +2721,7 @@ async function saveHbOnHand() {
     if (!document.getElementById('cutlist-viewer-content').hidden) {
       loadCutListIntoViewer();
     }
+    document.getElementById('cutlist-include-chunks-wrap').style.display = (job && job.hb_chunk_breakdown) ? 'flex' : 'none';
     showToast(t('jobs.hbOnHandSaved'));
   } catch {
     showToast(t('jobs.saveFailed'));
@@ -2727,6 +2753,7 @@ async function clearHbOnHand() {
     if (!document.getElementById('cutlist-viewer-content').hidden) {
       loadCutListIntoViewer();
     }
+    document.getElementById('cutlist-include-chunks-wrap').style.display = (job && job.hb_chunk_breakdown) ? 'flex' : 'none';
     showToast(t('jobs.hbOnHandCleared'));
   } catch {
     showToast(t('jobs.saveFailed'));
@@ -3121,7 +3148,7 @@ function formatCutListAddress(job) {
   ].filter(v => v && String(v).trim());
 }
 
-async function buildCutListPdf(job) {
+async function buildCutListPdf(job, opts = {}) {
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
   const doc  = await PDFDocument.create();
   const font     = await doc.embedFont(StandardFonts.Helvetica);
@@ -3225,6 +3252,22 @@ async function buildCutListPdf(job) {
     y -= 6;
     hr(page, y);
     y -= 18;
+    // cutlist-01: operator sign-off block (page 1 only). English-only, like the rest of this printed
+    // document (the Cut List PDF is excluded from i18n by design — see BACKLOG i18n sweep notes).
+    page.drawText('Have all quantities been cut and verified?', { x: margin, y, size: 11, font: fontBold, color: black });
+    y -= 26;
+    const soInitLabel = 'Operator initials:';
+    page.drawText(soInitLabel, { x: margin, y, size: 10, font, color: black });
+    const soInitX = margin + font.widthOfTextAtSize(soInitLabel, 10) + 6;
+    page.drawLine({ start: { x: soInitX, y: y - 2 }, end: { x: soInitX + 90, y: y - 2 }, thickness: 0.75, color: black });
+    const soDateLabel = 'Date:';
+    const soDateLabelX = soInitX + 90 + 30;
+    page.drawText(soDateLabel, { x: soDateLabelX, y, size: 10, font, color: black });
+    const soDateX = soDateLabelX + font.widthOfTextAtSize(soDateLabel, 10) + 6;
+    page.drawLine({ start: { x: soDateX, y: y - 2 }, end: { x: soDateX + 110, y: y - 2 }, thickness: 0.75, color: black });
+    y -= 14;
+    hr(page, y);
+    y -= 18;
     return drawColumnHeader(page, y);
   };
 
@@ -3316,7 +3359,8 @@ async function buildCutListPdf(job) {
   // prints the NETTED plan instead — only the pieces/chunks still needing cutting, with a FLOOR
   // STOCK sub-block showing what's already on hand. Absent `net`, this is byte-identical to the
   // pre-hb-onhand-02 output (same guard, same text, same coordinates).
-  if (job.hb_chunk_breakdown) {
+  // cutlist-01: chunk breakdown is opt-in — printed only when the caller passes includeChunkBreakdown: true.
+  if (job.hb_chunk_breakdown && opts.includeChunkBreakdown === true) {
     let parsed = null;
     try { parsed = JSON.parse(job.hb_chunk_breakdown); } catch (e) {}
 
@@ -3433,7 +3477,7 @@ async function loadCutListIntoViewer() {
   const label = document.getElementById('cutlist-viewer-label');
   label.textContent = t('jobs.generatingCutList');
   try {
-    const pdfBytes = await buildCutListPdf(job);
+    const pdfBytes = await buildCutListPdf(job, { includeChunkBreakdown: document.getElementById('cutlist-include-chunks').checked });
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     if (_cutListBlobUrl) { try { URL.revokeObjectURL(_cutListBlobUrl); } catch {} }
     _cutListBlobUrl = URL.createObjectURL(blob);

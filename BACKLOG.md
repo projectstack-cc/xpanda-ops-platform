@@ -209,6 +209,8 @@
   language selector" question (P442 deliberately shipped none): a `PlatformHeader`-level selector
   would cover every v2 page, including ones reached by a direct deep link that skips the legacy
   home page's language selector.
+- [ ] Cut list sign-off block is English-only (PDF excluded from i18n by design) — add
+  Español/Kreyòl labels if floor feedback asks for it. (Follow-on from cutlist-01.)
 
 ---
 

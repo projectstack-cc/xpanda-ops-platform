@@ -55,7 +55,12 @@ export function formatCutListAddress(job: CutListJob): string[] {
   ].filter((v): v is string => !!v && String(v).trim() !== "");
 }
 
-export async function buildCutListPdf(job: CutListJob): Promise<Uint8Array> {
+export interface CutListOptions {
+  /** Print the CHUNK BREAKDOWN page(s). Opt-in: omitted/false = not printed (cutlist-01). */
+  includeChunkBreakdown?: boolean;
+}
+
+export async function buildCutListPdf(job: CutListJob, opts: CutListOptions = {}): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -159,6 +164,22 @@ export async function buildCutListPdf(job: CutListJob): Promise<Uint8Array> {
     y -= 6;
     hr(page, y);
     y -= 18;
+    // cutlist-01: operator sign-off block (page 1 only). English-only, like the rest of this printed
+    // document (the Cut List PDF is excluded from i18n by design — see BACKLOG i18n sweep notes).
+    page.drawText("Have all quantities been cut and verified?", { x: margin, y, size: 11, font: fontBold, color: black });
+    y -= 26;
+    const soInitLabel = "Operator initials:";
+    page.drawText(soInitLabel, { x: margin, y, size: 10, font, color: black });
+    const soInitX = margin + font.widthOfTextAtSize(soInitLabel, 10) + 6;
+    page.drawLine({ start: { x: soInitX, y: y - 2 }, end: { x: soInitX + 90, y: y - 2 }, thickness: 0.75, color: black });
+    const soDateLabel = "Date:";
+    const soDateLabelX = soInitX + 90 + 30;
+    page.drawText(soDateLabel, { x: soDateLabelX, y, size: 10, font, color: black });
+    const soDateX = soDateLabelX + font.widthOfTextAtSize(soDateLabel, 10) + 6;
+    page.drawLine({ start: { x: soDateX, y: y - 2 }, end: { x: soDateX + 110, y: y - 2 }, thickness: 0.75, color: black });
+    y -= 14;
+    hr(page, y);
+    y -= 18;
     return drawColumnHeader(page, y);
   };
 
@@ -257,7 +278,8 @@ export async function buildCutListPdf(job: CutListJob): Promise<Uint8Array> {
   // STOCK sub-block showing what's already on hand. Absent `net`, this is byte-identical to the
   // pre-hb-onhand-02 output (same guard, same text, same coordinates). Mirrors jobs/index.html's
   // buildCutListPdf line-for-line.
-  if (job.hb_chunk_breakdown) {
+  // cutlist-01: chunk breakdown is opt-in — printed only when the caller passes includeChunkBreakdown: true.
+  if (job.hb_chunk_breakdown && opts.includeChunkBreakdown === true) {
     let parsed: any = null;
     try { parsed = JSON.parse(job.hb_chunk_breakdown); } catch (e) {}
 

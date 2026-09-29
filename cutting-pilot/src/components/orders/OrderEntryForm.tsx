@@ -11,6 +11,7 @@ import { parsePackingSlip } from "@/lib/packingSlip";
 import { matchLineItemToPart, loadPartsLibrary } from "@/lib/partMatch";
 import { buildCutListPdf, type CutListJob } from "@/lib/cutList";
 import PartsPicker from "@/components/orders/PartsPicker";
+import CutListChunkToggle from "@/components/CutListChunkToggle";
 import AddressCorrectionModal, { type AddressParts } from "@/components/orders/AddressCorrectionModal";
 
 export interface OrderLineItem {
@@ -200,6 +201,8 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
     hb_chunk_breakdown: string | null;
   } | null>(null);
   const [printing, setPrinting] = useState(false);
+  // cutlist-01: opt-in chunk breakdown on the post-save cut list — unchecked per saved order.
+  const [includeChunks, setIncludeChunks] = useState(false);
   const [printError, setPrintError] = useState<string | null>(null);
   const printBlobUrlRef = useRef<string | null>(null);
   const printIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -376,6 +379,7 @@ function setQtyAsBdftConvert(on: boolean) {
     setError(null);
     setSavedId(null);
     setSavedOrder(null);
+    setIncludeChunks(false);
     setPrintError(null);
     if (printBlobUrlRef.current) {
       try { URL.revokeObjectURL(printBlobUrlRef.current); } catch {}
@@ -478,7 +482,7 @@ function setQtyAsBdftConvert(on: boolean) {
         })),
         hb_chunk_breakdown: savedOrder.hb_chunk_breakdown || null,
       };
-      const pdfBytes = await buildCutListPdf(job);
+      const pdfBytes = await buildCutListPdf(job, { includeChunkBreakdown: includeChunks });
       const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
       if (printBlobUrlRef.current) {
         try { URL.revokeObjectURL(printBlobUrlRef.current); } catch {}
@@ -626,6 +630,7 @@ function setQtyAsBdftConvert(on: boolean) {
         return;
       }
       setSavedId(data.id);
+      setIncludeChunks(false);
       setSavedOrder({
         id: data.id,
         invoice_number: payload.invoice_number,
@@ -685,6 +690,9 @@ function setQtyAsBdftConvert(on: boolean) {
                 <Printer size={16} aria-hidden="true" />
                 {printing ? "Generating…" : "Print cut list"}
               </button>
+              {savedOrder?.hb_chunk_breakdown && (
+                <CutListChunkToggle checked={includeChunks} onChange={setIncludeChunks} disabled={printing} />
+              )}
               <a
                 href="/jobs/"
                 className="min-h-[44px] inline-flex items-center px-5 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold no-underline hover:bg-[var(--ghost-bg)]"

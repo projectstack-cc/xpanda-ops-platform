@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import Modal from "@/components/Modal";
 import PdfViewer from "@/components/PdfViewer";
+import CutListChunkToggle from "@/components/CutListChunkToggle";
 import { buildCutListPdf, type CutListLineItem } from "@/lib/cutList";
 
 interface DetailJob {
@@ -52,6 +53,8 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
   const [cutListDoc, setCutListDoc] = useState<CutListDoc>(null);
   const [cutListError, setCutListError] = useState<string | null>(null);
   const cutListBlobUrlRef = useRef<string | null>(null);
+  // cutlist-01: opt-in chunk breakdown — unchecked at the start of every modal session.
+  const [includeChunks, setIncludeChunks] = useState(false);
 
   // Reset per job-context change (opening a different order, or closing) — mirrors legacy
   // clearForm()-on-openModal(): revoke any previous cut-list blob and collapse both viewers so
@@ -66,6 +69,7 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
     setCutListError(null);
     setCutListDoc(null);
     setCutListOpen(false);
+    setIncludeChunks(false);
     setSlipOpen(false);
 
     if (!jobId) {
@@ -99,10 +103,20 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
     const opening = !cutListOpen;
     setCutListOpen(opening);
     if (!opening || cutListDoc || !data?.job) return;
+    await buildCutListDoc(includeChunks);
+  }
+
+  // Builds the cut-list PDF into a blob URL. `include` is passed explicitly (not read from state)
+  // so the checkbox handler can rebuild with the value it just set (cutlist-01).
+  async function buildCutListDoc(include: boolean) {
+    if (!data?.job) return;
     setCutListLoading(true);
     setCutListError(null);
     try {
-      const pdfBytes = await buildCutListPdf({ ...data.job, line_items: data.line_items ?? [] });
+      const pdfBytes = await buildCutListPdf(
+        { ...data.job, line_items: data.line_items ?? [] },
+        { includeChunkBreakdown: include },
+      );
       const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
       if (cutListBlobUrlRef.current) {
         try { URL.revokeObjectURL(cutListBlobUrlRef.current); } catch {}
@@ -116,6 +130,18 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
     } finally {
       setCutListLoading(false);
     }
+  }
+
+  // cutlist-01: toggling the checkbox drops the cached PDF so the viewer always matches it; if
+  // the viewer is open, rebuild right away with the new value.
+  function handleIncludeChunksChange(next: boolean) {
+    setIncludeChunks(next);
+    if (cutListBlobUrlRef.current) {
+      try { URL.revokeObjectURL(cutListBlobUrlRef.current); } catch {}
+      cutListBlobUrlRef.current = null;
+    }
+    setCutListDoc(null);
+    if (cutListOpen) void buildCutListDoc(next);
   }
 
   const job = data?.job;
@@ -239,6 +265,9 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
               )}
               {cutListLoading ? "Generating Cut List…" : "Cut List"}
             </button>
+            {job.hb_chunk_breakdown && (
+              <CutListChunkToggle checked={includeChunks} onChange={handleIncludeChunksChange} disabled={cutListLoading} />
+            )}
             {cutListOpen && cutListDoc && (
               <PdfViewer src={cutListDoc.src} filename={cutListDoc.filename} title="Cut list" />
             )}

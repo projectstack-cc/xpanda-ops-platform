@@ -114,6 +114,7 @@
 
       // Cut list viewer / Holey Board preview
       viewCutList: "View Cut List",
+      includeChunkBreakdown: "Include chunk breakdown",
       generatingCutList: "Generating Cut List…",
       chunksRequired: "Chunks required",
       chunksHint: "48×24×50 chunk · 0.079\" kerf · live estimate; the value saved on the order is authoritative.",
@@ -457,6 +458,7 @@
 
       // Cut list viewer / Holey Board preview
       viewCutList: "Ver Lista de Corte",
+      includeChunkBreakdown: "Incluir desglose de trozos",
       generatingCutList: "Generando Lista de Corte…",
       chunksRequired: "Bloques requeridos",
       chunksHint: "bloque 48×24×50 · corte 0.079\" · estimación en vivo; el valor guardado en el pedido es el definitivo.",
@@ -800,6 +802,7 @@
 
       // Cut list viewer / Holey Board preview
       viewCutList: "Gade Lis Koupe",
+      includeChunkBreakdown: "Enkli detay moso yo",
       generatingCutList: "N ap Jenere Lis Koupe…",
       chunksRequired: "Blòk ki nesesè",
       chunksHint: "blòk 48×24×50 · kout lam 0.079\" · estimasyon an dirèk; valè ki sove sou kòmand lan se referans ofisyèl la.",

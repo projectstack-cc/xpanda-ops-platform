@@ -613,6 +613,25 @@ current series).
 
 ## Orders (v2)
 
+- **cutlist-01 — cut list: opt-in chunk breakdown + page-1 operator sign-off block (React
+  Component Agent §9b lead, Job Board Agent §2 parity).** (1) The CHUNK BREAKDOWN page(s) are
+  now **opt-in**: `buildCutListPdf(job, opts)` in `cutting-pilot/src/lib/cutList.ts` takes a new
+  `CutListOptions` second argument (`{ includeChunkBreakdown?: boolean }`, default `{}`) and only
+  prints the breakdown when `hb_chunk_breakdown` is populated **and** `includeChunkBreakdown ===
+  true` — omitted/false = not printed. (2) Page 1 gets an **operator sign-off block** between the
+  customer/address block and the ITEM/DENSITY/DIMENSIONS column header: "Have all quantities been
+  cut and verified?" + "Operator initials: ____" + "Date: ____" lines, then a rule. English-only
+  like the rest of the printed PDF; continuation-page headers untouched (row pagination already
+  measures from the returned `y`). New shared `components/CutListChunkToggle.tsx` (controlled
+  "Include chunk breakdown" checkbox, ≥44px label, tokens only) used by all three call sites,
+  rendered only when the job has a non-empty `hb_chunk_breakdown` and **unchecked by default**:
+  `OrderDetailModal` / `OrderEditModal` (state resets on every modal open/close; cut-list build
+  body extracted into `buildCutListDoc(include)`; toggling revokes the cached blob and rebuilds
+  immediately with the new value if the viewer is open) and `OrderEntryForm`'s post-save "Print
+  cut list" (disabled while printing, reset whenever `savedOrder` is cleared or replaced). The
+  two builders remain line-for-line twins (same gate + same sign-off block; quote style aside) —
+  see `## Job Board` for the legacy half. No migration / API / permission change.
+
 - **hb-onhand-02 parity note.** `cutting-pilot/src/lib/cutList.ts`'s CHUNK BREAKDOWN rendering
   now mirrors `jobs/index.html`'s `buildCutListPdf` line-for-line (netted-plan FLOOR STOCK
   sub-block + table, byte-identical no-`net` fallback — see `## Job Board`). **Deviation from the
@@ -6475,6 +6494,14 @@ current series).
 ---
 
 ## Job Board
+
+- **cutlist-01 — legacy parity** for the v2 cut-list change (see `## Orders (v2)`):
+  `jobs/index.html`'s `buildCutListPdf(job, opts = {})` gets the same opt-in chunk-breakdown gate
+  and page-1 operator sign-off block; new `#cutlist-include-chunks` checkbox (outside the viewer
+  toggle, shown only for jobs with `hb_chunk_breakdown`, reset unchecked on modal open/close,
+  re-synced after HB floor-stock save/clear, invalidates + rebuilds the cached PDF on change —
+  and re-arms the lazy-load listener if the viewer is collapsed); `jobs.includeChunkBreakdown`
+  i18n key (en/es/ht).
 
 - **hb-onhand-02 — HB floor stock editor in job modal + netted CHUNK BREAKDOWN page (job-board-agent
   + react-component-agent §9b).** Builds on hb-onhand-01's data layer. `jobs/index.html`: new
