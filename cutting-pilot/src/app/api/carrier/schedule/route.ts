@@ -7,7 +7,7 @@
 //
 // Week: ET calendar date → UTC-midnight Date → currentAndNextShipWeekTabs(). On Saturday/Sunday the
 // NEXT tab is used (the week just ended is useless to a carrier on the weekend).
-// Deliberately NOT sent: total_bdft, chunks, shifts, trailer groups, sheet_status, carrier, method,
+// Deliberately NOT sent: total_bdft, chunks, shifts, sheet_status, carrier, method,
 // raw delivery_time (the sheet cell carries internal driver notes), match_job_id, progress.
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
@@ -62,16 +62,20 @@ function addUtcDaysStr(date: Date, days: number): string {
 }
 
 async function fetchJobPlaces(DB: any, jobIds: string[]) {
-  const out = new Map<string, { ship_to_city: string | null; ship_to_state: string | null }>();
+  const out = new Map<string, { ship_to_city: string | null; ship_to_state: string | null; trailer_group_id: string | null }>();
   for (let i = 0; i < jobIds.length; i += JOB_CHUNK) {
     const chunk = jobIds.slice(i, i + JOB_CHUNK);
     const { results } = await DB.prepare(
-      `SELECT id, ship_to_city, ship_to_state FROM jobs WHERE id IN (${chunk.map(() => "?").join(",")})`
+      `SELECT id, ship_to_city, ship_to_state, trailer_group_id FROM jobs WHERE id IN (${chunk.map(() => "?").join(",")})`
     )
       .bind(...chunk)
       .all();
     for (const r of (results ?? []) as any[]) {
-      out.set(r.id, { ship_to_city: r.ship_to_city ?? null, ship_to_state: r.ship_to_state ?? null });
+      out.set(r.id, {
+        ship_to_city: r.ship_to_city ?? null,
+        ship_to_state: r.ship_to_state ?? null,
+        trailer_group_id: r.trailer_group_id ?? null,
+      });
     }
   }
   return out;
@@ -126,6 +130,7 @@ export async function GET() {
         status: CarrierScheduleStatus | null;
         scrap_pickup: boolean;
         unmatched: boolean;
+        trailer_group_id: string | null;
       }>,
     }));
 
@@ -147,6 +152,7 @@ export async function GET() {
         status: jobId && derived ? CARRIER_STATUS[derived.status] : null,
         scrap_pickup: (r.scrap_pickup ?? "").trim().toUpperCase().startsWith("Y"),
         unmatched: !jobId,
+        trailer_group_id: place?.trailer_group_id ?? null,
       });
     }
 

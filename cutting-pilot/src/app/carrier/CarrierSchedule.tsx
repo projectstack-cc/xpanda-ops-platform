@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import CarrierStatusPill from "./CarrierStatusPill";
 import { useCarrierFetch } from "./useCarrierFetch";
 import CarrierErrorBox from "./CarrierErrorBox";
+import LinkedGroupList, { LinkedOrphanChip } from "./LinkedGroup";
 import { parseStoredUtc } from "@/lib/etDateTime";
 
 interface ScheduleOrder {
@@ -19,6 +20,7 @@ interface ScheduleOrder {
   status: "In production" | "Ready" | "Shipped" | null;
   scrap_pickup: boolean;
   unmatched: boolean;
+  trailer_group_id: string | null;
 }
 
 interface ScheduleDay {
@@ -55,16 +57,25 @@ function etClock(ts: string | null): string | null {
   return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(ms);
 }
 
-function OrderCard({ order }: { order: ScheduleOrder }) {
+function OrderCard({ order, inGroup = false, orphan = false }: { order: ScheduleOrder; inGroup?: boolean; orphan?: boolean }) {
   const loadTime = [order.load_label || null, order.delivery_time_label ? `@ ${order.delivery_time_label}` : null]
     .filter(Boolean)
     .join(" ");
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+    <div
+      className={
+        inGroup
+          ? "bg-[var(--surface)] px-3 py-2.5" // inside a LinkedGroup rail — the rail is the border
+          : "rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"
+      }
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-[var(--text)] break-words">{order.customer || "—"}</div>
-          <div className="text-xs font-semibold tabular-nums text-[var(--text-muted)] mt-0.5">INV# {order.invoice_number}</div>
+          <div className="flex flex-wrap items-center gap-2 mt-0.5">
+            <span className="text-xs font-semibold tabular-nums text-[var(--text-muted)]">INV# {order.invoice_number}</span>
+            {orphan && <LinkedOrphanChip />}
+          </div>
         </div>
         {order.status ? (
           <CarrierStatusPill status={order.status} />
@@ -116,9 +127,11 @@ function DayColumn({ day, isToday, todayRef }: { day: ScheduleDay; isToday: bool
               : "flex flex-col gap-2"
           }
         >
-          {day.rows.map((o, i) => (
-            <OrderCard key={`${o.invoice_number}-${i}`} order={o} />
-          ))}
+          <LinkedGroupList
+            rows={day.rows}
+            keyOf={(o, i) => `${o.invoice_number}-${i}`}
+            renderRow={(o, ctx) => <OrderCard order={o} inGroup={ctx.inGroup} orphan={ctx.orphan} />}
+          />
         </div>
       )}
     </section>

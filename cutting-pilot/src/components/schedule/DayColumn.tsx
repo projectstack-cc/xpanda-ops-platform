@@ -6,10 +6,12 @@
 // Linked-jobs rail (trailer_group_id): a group's members render inside a shared left-rail block
 // instead of as plain rows. The rail is derived from trailer_group_id, never from sheet sort_order
 // adjacency. Sheet stacking just means `withGroupsAdjacent` is normally a no-op.
+// The grouping helpers live in src/lib/linkedGroups.ts (carrier-06), shared with the Carrier View.
 import type { ScheduleBoardRow, Birthday } from "@/types/schedule";
 import OrderRow from "./OrderRow";
 import AutoScrollColumn from "./AutoScrollColumn";
 import InteractiveScrollColumn from "./InteractiveScrollColumn";
+import { buildBlocks, countLocalGroups, withGroupsAdjacent } from "@/lib/linkedGroups";
 
 function formatDayHeader(dayOfWeek: string, shipDate: string | null): string {
   const short = dayOfWeek.slice(0, 3);
@@ -29,71 +31,6 @@ interface DayColumnProps {
   // board → AutoScrollColumn + non-clickable rows, unchanged.
   interactive?: boolean;
   onSelectOrder?: (jobId: string) => void;
-}
-
-// Only a trailer_group_id with >=2 rows PRESENT IN THIS COLUMN counts as a local group. A count of
-// exactly 1 means the rest of the group is in another day column — rendered as a link chip on the
-// lone row (OrderRow's `orphanedGroup`), never a rail spanning nothing.
-function countLocalGroups(rows: ScheduleBoardRow[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const r of rows) {
-    if (!r.trailer_group_id) continue;
-    counts.set(r.trailer_group_id, (counts.get(r.trailer_group_id) ?? 0) + 1);
-  }
-  return counts;
-}
-
-// Pulls each local group's rows adjacent, anchored at its first member. No-op when the sheet
-// already stacks them (the common case).
-function withGroupsAdjacent(rows: ScheduleBoardRow[], localCount: Map<string, number>): ScheduleBoardRow[] {
-  const out: ScheduleBoardRow[] = [];
-  const consumed = new Set<number>();
-  const started = new Set<string>();
-
-  for (let i = 0; i < rows.length; i++) {
-    if (consumed.has(i)) continue;
-    const gid = rows[i].trailer_group_id;
-    if (gid && (localCount.get(gid) ?? 0) >= 2 && !started.has(gid)) {
-      started.add(gid);
-      for (let j = i; j < rows.length; j++) {
-        if (!consumed.has(j) && rows[j].trailer_group_id === gid) {
-          out.push(rows[j]);
-          consumed.add(j);
-        }
-      }
-    } else {
-      out.push(rows[i]);
-      consumed.add(i);
-    }
-  }
-  return out;
-}
-
-interface RowBlock {
-  grouped: boolean;
-  rows: ScheduleBoardRow[];
-}
-
-// Contiguous runs sharing a locally-multi-member trailer_group_id become one grouped block;
-// everything else is its own single-row block. Run AFTER withGroupsAdjacent.
-function buildBlocks(rows: ScheduleBoardRow[], localCount: Map<string, number>): RowBlock[] {
-  const blocks: RowBlock[] = [];
-  let i = 0;
-  while (i < rows.length) {
-    const gid = rows[i].trailer_group_id;
-    if (gid && (localCount.get(gid) ?? 0) >= 2) {
-      const block: ScheduleBoardRow[] = [];
-      while (i < rows.length && rows[i].trailer_group_id === gid) {
-        block.push(rows[i]);
-        i++;
-      }
-      blocks.push({ grouped: true, rows: block });
-    } else {
-      blocks.push({ grouped: false, rows: [rows[i]] });
-      i++;
-    }
-  }
-  return blocks;
 }
 
 export default function DayColumn({ dayOfWeek, shipDate, rows, birthdays, interactive, onSelectOrder }: DayColumnProps) {

@@ -1071,6 +1071,12 @@ current series).
 
 ## Schedule Board (v2)
 
+- **carrier-06 (cross-ref) — linked-group helpers extracted from `DayColumn.tsx`.**
+  `countLocalGroups` / `withGroupsAdjacent` / `buildBlocks` / `RowBlock` now live in
+  `src/lib/linkedGroups.ts` (moved verbatim, generic types only), shared with the Carrier View.
+  DayColumn's rendering is unchanged. Regression guard: `linkedGroups.selfcheck.ts`. Full entry
+  under Carrier View (v2).
+
 - **sched-shifts-01 — Hide shift chips once a job is Ready (next-platform-agent §9a).**
   `GET /v2/api/schedule-board` (`schedule-board/route.ts`) now returns `shifts: []` for a row once
   its derived status is exactly `"Ready"`, in addition to the existing unmatched-row case — both
@@ -1786,6 +1792,37 @@ current series).
 ---
 
 ## Carrier View (v2)
+
+- **carrier-06 — Carrier View: linked orders (trailer groups), same treatment as the schedule
+  board (react-component-agent §9b + next-platform-agent §9a).** No migration
+  (`jobs.trailer_group_id` exists).
+
+  **Extraction (schedule component touched; behavior-preserving, supersedes carrier-05's
+  don't-touch rule for this one refactor):** `countLocalGroups` / `withGroupsAdjacent` /
+  `RowBlock` / `buildBlocks` moved verbatim out of `components/schedule/DayColumn.tsx` into new
+  `src/lib/linkedGroups.ts`. They are now generic over `T extends { trailer_group_id }`, and a
+  diff of the moved text shows only type/`export` changes. A convenience `groupRows()` runs
+  count → adjacent → blocks, DayColumn's exact sequence. DayColumn imports the helpers back; its
+  render JSX is untouched. New `linkedGroups.selfcheck.ts` covers: pair adjacent, pair split
+  (pulled adjacent, anchored at the first member), lone member stays ungrouped with its id kept,
+  no ids, two interleaved groups, triple + lone, empty, `groupRows` equal to the manual sequence,
+  and row conservation. **11/11 pass** (`npx tsx`).
+
+  **Routes:** the shared carrier row builder (`src/lib/carrier/rows.ts`, used by
+  `/v2/api/carrier` and `/history`) selects `j.trailer_group_id`. `/v2/api/carrier/schedule`
+  folds `trailer_group_id` into its existing chunked jobs lookup (no second query); unmatched rows
+  get `null`.
+
+  **UI:** new `src/app/carrier/LinkedGroup.tsx` is one wrapper for all three tabs:
+  - Group block: the board's rail tokens plus a `Link2` "Linked · same trailer" header. Tiles and
+    cards render borderless inside it (new `inGroup` prop on `LoadRow` / `OrderCard`).
+  - Orphan: `LinkedOrphanChip` (`Link2` + "Linked", with the full "Linked to an order on another
+    day" as sr-only text + `title`).
+
+  It applies per day: Upcoming `DaySection`, History (now bucketed by ET delivered day, so a pair
+  never merges across days; new `etDateKey` in `etDateTime.ts`), and Schedule day columns. The
+  scroll-box threshold still counts orders, not blocks. The `/v2/schedule` visual eyeball is owed
+  to Steve; the selfcheck is the automated guard.
 
 - **carrier-05 — Carrier View "Schedule" tab: Seal orders, this week only (next-platform-agent
   §9a + react-component-agent §9b).** Read-only, no migration. New `GET /v2/api/carrier/schedule`

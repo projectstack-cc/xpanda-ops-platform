@@ -70,6 +70,14 @@
 
 ## Carrier View (v2)
 
+- [ ] **carrier-06 follow-up — linked groups on load-level views assume single-load linked jobs
+  (true today).** If a linked job with `load_count > 1` appears, refine the key: group only its
+  rows whose trailer matches a groupmate's.
+
+- [ ] **carrier-06 follow-up — Steve eyeball `/v2/schedule` + `/v2/schedule/desk` linked rails**
+  after the `linkedGroups.ts` extraction. They should render identically; the selfcheck passes,
+  but no browser check was run.
+
 - [ ] **carrier-05 follow-up — Schedule tab: add a Next-week view if Seal asks.** The data is
   already available (the second tab from `currentAndNextShipWeekTabs`).
 

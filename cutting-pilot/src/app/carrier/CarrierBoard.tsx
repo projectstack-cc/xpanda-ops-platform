@@ -4,7 +4,7 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import PlatformHeader from "@/components/PlatformHeader";
 import { parseAppointment, suggestedPickup } from "@/lib/deliveryTime";
-import { formatClockMinutes, formatEtDateTime, weekdayShort } from "@/lib/etDateTime";
+import { etDateKey, formatClockMinutes, formatEtDateTime, weekdayShort } from "@/lib/etDateTime";
 import { formatUsdCents } from "@/lib/money";
 import CarrierStatusPill from "./CarrierStatusPill";
 import CarrierUploadModal from "./CarrierUploadModal";
@@ -13,6 +13,7 @@ import CarrierChargeModal from "./CarrierChargeModal";
 import { useCarrierFetch } from "./useCarrierFetch";
 import CarrierErrorBox from "./CarrierErrorBox";
 import CarrierSchedule from "./CarrierSchedule";
+import LinkedGroupList, { LinkedOrphanChip } from "./LinkedGroup";
 
 // Leaflet touches `window` at import — client-only.
 const CarrierMiniMap = dynamic(() => import("./CarrierMiniMap"), { ssr: false });
@@ -35,6 +36,7 @@ interface CarrierRow {
   has_carrier_copy: boolean;
   delivered_at: string | null;
   delivery_time: string | null;
+  trailer_group_id: string | null;
   address: string | null;
   miles: number | null;
   duration_sec: number | null;
@@ -106,19 +108,35 @@ interface RowActions {
 const PILL_CLS =
   "inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold";
 
-function LoadRow({ row, onUpload, onViewBol, onCharge }: { row: CarrierRow } & RowActions) {
+function LoadRow({
+  row,
+  onUpload,
+  onViewBol,
+  onCharge,
+  inGroup = false,
+  orphan = false,
+}: { row: CarrierRow; inGroup?: boolean; orphan?: boolean } & RowActions) {
   const uploadDisabled = !row.access_token;
   const delivered = row.loading_status === "delivered";
   const appt = parseAppointment(row.delivery_time, row.ship_day);
   const pickup = row.distance_status === "ok" ? suggestedPickup(appt, row.duration_sec) : null;
   const deliveredLabel = row.delivered_at ? formatEtDateTime(row.delivered_at, { weekday: true }) : null;
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+    <div
+      className={
+        inGroup
+          ? "bg-[var(--surface)] px-4 py-3" // inside a LinkedGroup rail — the rail is the border
+          : "rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3"
+      }
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-xs font-semibold tabular-nums truncate">
-            INV# {row.invoice_number || "—"}
-            {row.suffix}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold tabular-nums truncate">
+              INV# {row.invoice_number || "—"}
+              {row.suffix}
+            </span>
+            {orphan && <LinkedOrphanChip />}
           </div>
           <div className="text-sm text-[var(--text-muted)] truncate mt-0.5">
             {row.customer || "—"}
@@ -248,6 +266,7 @@ function DaySection({
   label,
   rows,
   emptyText = "No loads scheduled",
+  bucketOf,
   onUpload,
   onViewBol,
   onCharge,
@@ -256,8 +275,18 @@ function DaySection({
   label: string;
   rows: CarrierRow[];
   emptyText?: string;
+  /** Split the list into labeled sub-days (History: ET delivered day). Linked groups never cross a bucket. */
+  bucketOf?: (row: CarrierRow) => { key: string; label: string };
 } & RowActions) {
+  // Threshold counts ORDERS (rows), not linked-group blocks.
   const scrolling = rows.length >= SCROLL_THRESHOLD;
+  const buckets: Array<{ key: string; label: string | null; rows: CarrierRow[] }> = [];
+  for (const row of rows) {
+    const b = bucketOf ? bucketOf(row) : { key: "", label: null };
+    const last = buckets[buckets.length - 1];
+    if (last && last.key === b.key) last.rows.push(row);
+    else buckets.push({ key: b.key, label: b.label, rows: [row] });
+  }
   return (
     <section>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-2 px-1">
@@ -281,14 +310,28 @@ function DaySection({
               : "flex flex-col gap-2"
           }
         >
-          {rows.map((row, i) => (
-            <LoadRow
-              key={`${row.invoice_number}-${row.load_number}-${i}`}
-              row={row}
-              onUpload={onUpload}
-              onViewBol={onViewBol}
-              onCharge={onCharge}
-            />
+          {buckets.map((bucket) => (
+            <div key={bucket.key || "all"} className="flex flex-col gap-2">
+              {bucket.label && (
+                <h3 className="px-1 pt-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  {bucket.label}
+                </h3>
+              )}
+              <LinkedGroupList
+                rows={bucket.rows}
+                keyOf={(row, i) => `${row.invoice_number}-${row.load_number}-${i}`}
+                renderRow={(row, ctx) => (
+                  <LoadRow
+                    row={row}
+                    inGroup={ctx.inGroup}
+                    orphan={ctx.orphan}
+                    onUpload={onUpload}
+                    onViewBol={onViewBol}
+                    onCharge={onCharge}
+                  />
+                )}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -300,6 +343,12 @@ interface CarrierBoardProps {
   userName: string;
   isAdmin: boolean;
   permissions: Record<string, { view?: boolean; edit?: boolean }>;
+}
+
+// History rows arrive newest-delivered first, so buckets come out newest day first.
+function historyBucket(row: CarrierRow): { key: string; label: string } {
+  const key = etDateKey(row.delivered_at) ?? "unknown";
+  return { key, label: key === "unknown" ? "Delivered" : `Delivered ${dayLabel(key)}` };
 }
 
 type CarrierTab = "upcoming" | "schedule" | "history";
@@ -393,6 +442,7 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
             label="last 7 days · newest first"
             rows={history.data.rows}
             emptyText="No delivered loads in the last 7 days"
+            bucketOf={historyBucket}
             {...actions}
           />
         )}
