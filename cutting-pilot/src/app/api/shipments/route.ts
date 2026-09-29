@@ -184,6 +184,7 @@ export async function GET(request: NextRequest) {
   try {
     const [listResult, statsResult] = await Promise.all([
       DB.prepare(
+        // shipments.* already carries delivered_at (typed on ShipmentListItem since carrier-03).
         `SELECT shipments.*, j.invoice_number,
                 j.ship_to_street, j.ship_to_city, j.ship_to_state, j.ship_to_zip,
                 (SELECT COUNT(*) FROM bols b WHERE b.job_id = shipments.job_id) AS bol_count

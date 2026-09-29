@@ -9,6 +9,8 @@
 // that route's header comment for why it doesn't delegate to /v2/api/jobs/:id or
 // /v2/api/board/:id (both gated on the separate "jobs" key).
 import { useEffect, useState } from "react";
+import { formatEtDateTime } from "@/lib/etDateTime";
+import { StatusBadge } from "./ShipmentRow";
 import type { ShipmentDetail } from "./types";
 
 interface ShipmentDetailPanelProps {
@@ -97,10 +99,39 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
           <div className="text-sm text-text">{detail.delivery_time || "—"}</div>
         </div>
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">Loads</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">Load count</div>
           <div className="text-sm text-text">{detail.load_count ?? 1}</div>
         </div>
       </div>
+
+      {(detail.loads ?? []).length > 0 && (
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Loads</div>
+          <div className="rounded-lg border border-[var(--card-border)] bg-surface divide-y divide-[var(--line)]">
+            {detail.loads.map((ld, i) => {
+              const n = Number(ld.load_number) || 0;
+              // Suffix from the integer load_number (never the bol_number string), multi-load only.
+              const suffix = (detail.load_count ?? 1) > 1 && n > 0 ? `-${String(n).padStart(2, "0")}` : "";
+              const deliveredAt = formatEtDateTime(ld.delivered_at);
+              return (
+                <div key={`${ld.load_number ?? "x"}-${i}`} className="px-3 py-2 text-sm space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono tabular-nums font-semibold text-text">{suffix || "Load"}</span>
+                    <StatusBadge status={ld.loading_status} />
+                    {deliveredAt && <span className="text-xs text-muted tabular-nums">Delivered {deliveredAt}</span>}
+                  </div>
+                  {ld.qr_additional_info && (
+                    <div className="text-xs">
+                      <span className="font-semibold text-muted">Driver note (QR): </span>
+                      <span className="text-text">{ld.qr_additional_info}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div>
         <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Parts</div>

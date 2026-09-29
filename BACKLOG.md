@@ -70,6 +70,12 @@
 
 ## Carrier View (v2)
 
+- [ ] **carrier-03 follow-up — ORS driving time is car-profile.** Revisit an HGV profile or tune the
+  1-hr buffer after a few weeks of real pickups.
+
+- [ ] **carrier-03 follow-up — normalize `jobs.delivery_time` to a structured field at entry**
+  (v2 orders form) so appointment parsing stops being best-effort.
+
 - [ ] **carrier-02 follow-up — Logistics v2 board: surface carrier-uploaded physical BOL copies**
   (`bol_documents.doc_type='carrier_upload'`) in the shipment detail.
 

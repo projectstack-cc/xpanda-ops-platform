@@ -1787,6 +1787,35 @@ current series).
 
 ## Carrier View (v2)
 
+- **carrier-03 — Carrier View: address, appointment, distance, suggested pickup, minimap,
+  delivered timestamp (+ v2 Logistics board) (next-platform-agent §9a + react-component-agent
+  §9b).** **Route-cache extraction (no behavior change):** `resolveOrigin`/`resolveDestRoute` (+
+  `CacheRow`, `NEGATIVE_CACHE_HOURS`) moved verbatim from `api/shipments/distances/route.ts` into
+  new `src/lib/logistics/routeCache.ts` and imported back; the distances header comment now says
+  they're shared with the carrier route only. The invoice routes are untouched and keep their own
+  copies. **`GET /v2/api/carrier`:** selects `j.delivery_time`, `ship_to_street`/`street2`/`zip`;
+  one batched `geocode_cache` IN-read (90-bind chunks) keyed by `normalizeAddressKey`; a
+  **bounded warm** runs at most 3 distinct uncached addresses per request through `resolveDestRoute`
+  (ORS key read inside the handler; no key → skip). The rest return `distance_status:"pending"` and
+  fill in on the next 60s poll. Rows gain `delivery_time`, a single-line `address` (incl. street2),
+  `miles`, `duration_sec`, `lat`, `lng`, `distance_status`. **`src/lib/deliveryTime.ts`:** new
+  sibling exports `parseAppointment(text, shipDay)` (optional leading weekday → next occurrence on
+  or after ship day; first `TIME_RE` match → minutes; trailing text ignored; unparseable → null)
+  and `suggestedPickup(appt, durationSec)` (appt − drive − 60 min, floored to 15, rolls back across
+  midnight). `parseDeliveryTime` itself is unchanged. New `deliveryTime.selfcheck.ts` covers every
+  real `jobs.delivery_time` value plus the `parseDeliveryTime` header examples as a schedule-board
+  regression guard: 26/26 pass (`npx tsx`). New `src/lib/etDateTime.ts`: ET display helpers
+  (handles both ISO and SQLite `datetime()` UTC stamps). **Carrier tile:** full address line (📍)
+  replaces city/state; Appointment (raw text) / Distance (`142 mi · ~2h 45m drive`, "Calculating…",
+  "—") / Suggested pickup (weekday shown when it differs from ship day, "includes 1 hr traffic
+  buffer" hint; hidden unless both appointment and duration parse) / `Delivered · Tue 9/29 2:14 PM`
+  (ET, success tokens). New `CarrierMiniMap.tsx` (Leaflet via `next/dynamic` `ssr:false`, OSM tiles
+  with attribution, `circleMarker` in the resolved `--brand` color, fully non-interactive, 120px,
+  zoom 11, lazy-mounted by IntersectionObserver, tap → Google Maps search in a new tab). Adds
+  `leaflet` + `@types/leaflet`. Scroll box resized for the taller tile:
+  `min(calc(3.5*var(--carrier-row-h,400px)),85vh)`. **Logistics board:** see the carrier-03 line
+  under Logistics (v2). No migration.
+
 - **carrier-02 — Carrier View: upload physical BOL after delivery + in-app View BOL (db-api-agent
   §9 + next-platform-agent §9a + react-component-agent §9b).** **Legacy change (instant Pages
   deploy):** `_worker.js/routes/public.js` `handleApiPublicBolDelivery` — the `alreadyDelivered`
@@ -2342,6 +2371,14 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **carrier-03 (cross-ref) — delivered timestamp + per-load Loads section on the v2 board.**
+  `ShipmentListItem` gains `delivered_at` (already on the wire via `shipments.*`). `ShipmentRow.tsx`
+  shows `Delivered 9/29 2:14 PM` (ET) under the Delivered badge. `GET /v2/api/shipments/[id]` adds
+  `loads[]` (`load_number`, `loading_status`, `delivered_at`, `qr_additional_info` from the newest
+  BOL per load). `ShipmentDetailPanel.tsx` gets a new "Loads" section (suffix from the integer
+  `load_number`, status, delivered time, **"Driver note (QR)"**). The old load-count cell is
+  relabeled "Load count". Full entry under Carrier View (v2).
 
 - **logi-rollout-01 — Invoice Analytics quick link on `/v2/logistics` title bar; shown only to
   admin / `logistics.v2` holders, matching the page + API gate.** `ShipmentDashboard.tsx` adds a

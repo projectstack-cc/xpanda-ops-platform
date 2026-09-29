@@ -142,7 +142,27 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
       lineItems = li.results ?? [];
     }
 
-    return NextResponse.json({ ok: true, data: { ...shipment, line_items: lineItems } });
+    // carrier-03: per-load delivery state + the driver's QR "Additional info" from the newest BOL
+    // for that load (same newest-per-load / null-load_number fallback rule as /v2/api/carrier).
+    let loads: any[] = [];
+    if (shipment.job_id) {
+      const lr = await DB.prepare(
+        `SELECT la.load_number, la.loading_status, la.delivered_at,
+                (SELECT b.signed_bol_additional_info FROM bols b
+                  WHERE b.job_id = la.job_id
+                    AND (
+                          b.load_number = la.load_number
+                       OR (b.load_number IS NULL AND (SELECT COUNT(*) FROM bols b2 WHERE b2.job_id = la.job_id) = 1)
+                        )
+                  ORDER BY b.created_at DESC LIMIT 1) AS qr_additional_info
+           FROM loading_assignments la
+          WHERE la.job_id = ? AND la.loading_status <> 'archived'
+          ORDER BY la.load_number ASC`
+      ).bind(shipment.job_id).all();
+      loads = lr.results ?? [];
+    }
+
+    return NextResponse.json({ ok: true, data: { ...shipment, line_items: lineItems, loads } });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "Server error.", detail: String(e?.message || e) },

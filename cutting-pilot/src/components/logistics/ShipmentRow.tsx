@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import BolActions from "./BolActions";
 import ShipmentDetailPanel from "./ShipmentDetailPanel";
 import { formatDuration } from "@/lib/time";
+import { formatEtDateTime } from "@/lib/etDateTime";
 import type { ShipmentDetail, ShipmentListItem } from "./types";
 
 const badgeBase = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap";
@@ -135,6 +136,11 @@ export default function ShipmentRow({
         <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{s.bol_number || "—"}</td>
         <td className="px-3 py-[8.8px] align-top">
           <StatusBadge status={s.status} />
+          {s.status === "delivered" && s.delivered_at && (
+            <div className="mt-1 text-xs text-muted tabular-nums whitespace-nowrap">
+              Delivered {formatEtDateTime(s.delivered_at)}
+            </div>
+          )}
         </td>
         <td className="px-3 py-[8.8px] align-top text-right" onClick={(e) => e.stopPropagation()}>
           <BolActions shipment={s} onViewBol={onViewBol} onGenerateBol={onGenerateBol} />

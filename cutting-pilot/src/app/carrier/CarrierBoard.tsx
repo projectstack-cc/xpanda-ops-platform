@@ -1,10 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import PlatformHeader from "@/components/PlatformHeader";
+import { parseAppointment, suggestedPickup } from "@/lib/deliveryTime";
+import { formatClockMinutes, formatEtDateTime, weekdayShort } from "@/lib/etDateTime";
 import CarrierStatusPill from "./CarrierStatusPill";
 import CarrierUploadModal from "./CarrierUploadModal";
 import CarrierBolModal from "./CarrierBolModal";
+
+// Leaflet touches `window` at import — client-only.
+const CarrierMiniMap = dynamic(() => import("./CarrierMiniMap"), { ssr: false });
 
 const REFRESH_MS = 60_000;
 
@@ -25,6 +31,13 @@ interface CarrierRow {
   ship_day: string;
   has_carrier_copy: boolean;
   delivered_at: string | null;
+  delivery_time: string | null;
+  address: string | null;
+  miles: number | null;
+  duration_sec: number | null;
+  lat: number | null;
+  lng: number | null;
+  distance_status: "ok" | "pending" | "unavailable";
 }
 
 interface CarrierResponse {
@@ -48,6 +61,24 @@ function dayLabel(dateStr: string): string {
     .replace(",", " ·");
 }
 
+function formatDrive(sec: number): string {
+  const totalMin = Math.round(sec / 60);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `~${h}h ${m}m` : `~${m}m`;
+}
+
+function InfoLine({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-2 text-sm">
+      <span className="w-[7.5rem] shrink-0 text-xs font-semibold uppercase tracking-wide text-[var(--text-hint)]">
+        {label}
+      </span>
+      <span className="min-w-0 text-[var(--text)]">{children}</span>
+    </div>
+  );
+}
+
 interface RowActions {
   onUpload: (row: CarrierRow) => void;
   onViewBol: (row: CarrierRow) => void;
@@ -57,9 +88,11 @@ const PILL_CLS =
   "inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold";
 
 function LoadRow({ row, onUpload, onViewBol }: { row: CarrierRow } & RowActions) {
-  const cityState = [row.ship_to_city, row.ship_to_state].filter(Boolean).join(", ");
   const uploadDisabled = !row.access_token;
   const delivered = row.loading_status === "delivered";
+  const appt = parseAppointment(row.delivery_time, row.ship_day);
+  const pickup = row.distance_status === "ok" ? suggestedPickup(appt, row.duration_sec) : null;
+  const deliveredLabel = row.delivered_at ? formatEtDateTime(row.delivered_at, { weekday: true }) : null;
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
       <div className="flex items-start justify-between gap-3">
@@ -71,10 +104,10 @@ function LoadRow({ row, onUpload, onViewBol }: { row: CarrierRow } & RowActions)
           <div className="text-sm text-[var(--text-muted)] truncate mt-0.5">
             {row.customer || "—"}
           </div>
-          {cityState && (
-            <div className="text-sm text-[var(--text-hint)] mt-0.5 flex items-center gap-1">
+          {row.address && (
+            <div className="text-sm text-[var(--text-hint)] mt-0.5 flex items-start gap-1">
               <span aria-hidden="true">📍</span>
-              <span className="truncate">{cityState}</span>
+              <span>{row.address}</span>
             </div>
           )}
         </div>
@@ -88,6 +121,33 @@ function LoadRow({ row, onUpload, onViewBol }: { row: CarrierRow } & RowActions)
           Trailer {row.trailer_number || "—"}
         </span>
       </div>
+      <div className="mt-3 flex flex-col gap-1">
+        <InfoLine label="Appointment">{row.delivery_time?.trim() || "—"}</InfoLine>
+        <InfoLine label="Distance">
+          {row.distance_status === "ok" && row.miles != null && row.duration_sec != null
+            ? `${Math.round(row.miles)} mi · ${formatDrive(row.duration_sec)} drive`
+            : row.distance_status === "pending"
+              ? "Calculating…"
+              : "—"}
+        </InfoLine>
+        {pickup && (
+          <InfoLine label="Suggested pickup">
+            <span className="font-semibold tabular-nums">
+              {pickup.date !== row.ship_day ? `${weekdayShort(pickup.date)} ` : ""}
+              {formatClockMinutes(pickup.minutes)}
+            </span>
+            <span className="ml-2 text-xs text-[var(--text-hint)]">includes 1 hr traffic buffer</span>
+          </InfoLine>
+        )}
+        {deliveredLabel && (
+          <div className="mt-1 inline-flex self-start items-center px-2 py-1 rounded text-xs font-semibold bg-[var(--success-bg)] text-[var(--success-text)]">
+            Delivered · {deliveredLabel}
+          </div>
+        )}
+      </div>
+      {row.lat != null && row.lng != null && row.address && (
+        <CarrierMiniMap lat={row.lat} lng={row.lng} address={row.address} />
+      )}
       <div className="flex flex-wrap items-center gap-2 mt-3">
         {row.access_token ? (
           <button type="button" onClick={() => onViewBol(row)} className={PILL_CLS}>
@@ -137,6 +197,7 @@ function LoadRow({ row, onUpload, onViewBol }: { row: CarrierRow } & RowActions)
 }
 
 // 4+ rows → the list scrolls inside a box sized to ~3.5 tiles, so the cut-off tile signals "scroll".
+// Tile height ~400px since carrier-03's info block + minimap; capped at 85vh on short screens.
 const SCROLL_THRESHOLD = 4;
 
 function DaySection({
@@ -170,7 +231,7 @@ function DaySection({
         <div
           className={
             scrolling
-              ? "flex flex-col gap-2 max-h-[calc(3.5*var(--carrier-row-h,176px))] overflow-y-auto overscroll-contain pr-1"
+              ? "flex flex-col gap-2 max-h-[min(calc(3.5*var(--carrier-row-h,400px)),85vh)] overflow-y-auto overscroll-contain pr-1"
               : "flex flex-col gap-2"
           }
         >

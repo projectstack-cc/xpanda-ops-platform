@@ -39,6 +39,8 @@ export interface ShipmentListItem {
   miles_from_origin: number | null;
   duration_sec: number | null;
   distance_status: "ok" | "pending" | "unavailable";
+  // carrier-03: always on the wire via `shipments.*`, now typed for the delivered timestamp.
+  delivered_at: string | null;
 }
 
 // Response shape of GET /v2/api/shipments/:id -- backs ShipmentDetailPanel's inline row
@@ -60,6 +62,16 @@ export interface ShipmentDetail {
   ship_to_state: string | null;
   ship_to_zip: string | null;
   line_items: JobLineItem[];
+  // carrier-03: one per non-archived loading_assignments row for the job.
+  loads: ShipmentLoad[];
+}
+
+export interface ShipmentLoad {
+  load_number: number | null;
+  loading_status: string;
+  delivered_at: string | null;
+  /** signed_bol_additional_info of the newest BOL for this load (driver QR sign flow). */
+  qr_additional_info: string | null;
 }
 
 export interface JobLineItem {
