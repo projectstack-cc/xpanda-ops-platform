@@ -17,10 +17,11 @@ import { agingHours, filtersToQuery, type HistoryData, type HistoryFilters } fro
 import type { OptionsData } from "./fields";
 import RecipeDeviationBadge from "./RecipeDeviationBadge";
 import LotTraceModal from "./LotTraceModal";
+import ReportView from "./ReportView";
 import { BTN_GHOST, type DescribeError } from "./ui";
 
-type HistoryMode = "blocks" | "batches";
-const HISTORY_MODES: HistoryMode[] = ["blocks", "batches"];
+type HistoryMode = "blocks" | "batches" | "report";
+const HISTORY_MODES: HistoryMode[] = ["blocks", "batches", "report"];
 
 interface Props {
   options: OptionsData;
@@ -121,13 +122,24 @@ export default function HistoryView({ options, describeError }: Props) {
       "—"
     );
 
+  // Human-readable active filters for the report's print header (range is printed separately).
+  const filterSummary = [
+    filters.supplier && `${t("production.newSheet.supplier")}: ${filters.supplier}`,
+    filters.bead_type && `${t("production.newSheet.beadType")}: ${filters.bead_type}`,
+    filters.density && `${t("production.recipe.density")}: ${filters.density} ${t("production.unit.pcf")}`,
+    filters.block_type && `${t("production.newSheet.blockType")}: ${filters.block_type}`,
+    filters.lot && `${t("production.field.lotNo")}: ${filters.lot}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   const blockTotalLbs = data ? data.blocks.reduce((s, b) => s + (b.block_weight_lbs ?? 0), 0) : 0;
   const batchTotalKg = data ? data.batches.reduce((s, b) => s + (b.weight_kg ?? 0), 0) : 0;
 
   return (
     <div className="p-4 space-y-3">
       {/* Filter bar: stacked on a phone, one row on md+ */}
-      <div className="grid grid-cols-2 md:grid-cols-[repeat(7,minmax(0,1fr))_auto] gap-2 items-end border border-border rounded p-3 bg-[var(--surface-2)]">
+      <div className="no-print grid grid-cols-2 md:grid-cols-[repeat(7,minmax(0,1fr))_auto] gap-2 items-end border border-border rounded p-3 bg-[var(--surface-2)]">
         <label className="block">
           <span className={LABEL}>{t("production.history.from")}</span>
           <input type="date" className={CONTROL + " font-mono tabular-nums"} value={filters.from} onChange={(e) => set("from", e.target.value)} />
@@ -201,7 +213,7 @@ export default function HistoryView({ options, describeError }: Props) {
       </div>
 
       {/* Mode switch */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="no-print flex flex-wrap items-center gap-2">
         <div className="flex gap-1" role="group" aria-label={t("production.history.modeAria")}>
           {HISTORY_MODES.map((m) => (
             <button
@@ -252,6 +264,14 @@ export default function HistoryView({ options, describeError }: Props) {
       ) : (
         <div className={loading ? "opacity-70 transition-opacity motion-reduce:transition-none" : undefined}>
           {/* prod-c-04: report mount */}
+          {mode === "report" && (
+            <>
+              {(data.truncated.blocks || data.truncated.batches) && (
+                <p className="mb-2 text-xs text-[var(--warn-text)]">{t("production.history.truncated")}</p>
+              )}
+              <ReportView data={data} filterSummary={filterSummary} />
+            </>
+          )}
           {mode === "blocks" && (
             <>
               {data.truncated.blocks && (

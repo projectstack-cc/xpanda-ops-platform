@@ -21,14 +21,16 @@ export default async function ProductionPage() {
   const permissions = session?.permissions ?? {};
 
   return (
-    <div className="h-screen flex flex-col bg-bg overflow-hidden">
-      <PlatformHeader
-        userName={userName}
-        isAdmin={isAdmin}
-        permissions={permissions}
-        currentPath="/v2/production"
-        title="Production Log · v2"
-      />
+    <div className="production-page h-screen flex flex-col bg-bg overflow-hidden">
+      <div className="no-print">
+        <PlatformHeader
+          userName={userName}
+          isAdmin={isAdmin}
+          permissions={permissions}
+          currentPath="/v2/production"
+          title="Production Log · v2"
+        />
+      </div>
       <ProductionBoard canManage={canManage} isAdmin={isAdmin} userName={userName} />
     </div>
   );

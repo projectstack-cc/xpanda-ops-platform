@@ -1827,6 +1827,25 @@ current series).
 
 ## Production Log (v2)
 
+- **prod-c-04 — Production report: output, I-MR control charts, pcf, aging, print/CSV. Closes
+  Group C.** New **Report** mode in the History tab (`ReportView`), computed client-side from
+  prod-c-03's `HistoryData` so every History filter drives it; no API changes. Four Recharts
+  sections, each with a data table: (1) output — blocks / demold lbs / batches / kg grouped by bead
+  type, density or block type (blocks only), dual-axis bar chart; (2) block demold-weight control
+  chart per block type — Shewhart individuals: σ̂ = MR̄ / 1.128, UCL/LCL = mean ± 3σ̂, out-of-limit
+  points drawn larger in the danger token, limits dashed + muted with a "Fewer than 20 points" note
+  when 2 ≤ n < 20, none below 2, warn note when a group mixes bead densities; (3) expansion pcf
+  per supplier · type · header density against the sheet's density target, same I-MR rules,
+  batches without a bucket weight excluded and counted; (4) bead aging vs demold weight scatter
+  with n / excluded, Pearson r only at n ≥ 20 ("Correlation only, not cause"), no trend line.
+  Statistical control limits only — no spec / tolerance bands; block weight is always labelled
+  "Demold weight (lbs, wet)" and no density is derived from it anywhere. Print button + landscape
+  print CSS (`.production-page` shell prints in full, chrome `no-print`), RFC 4180 CSV exports with
+  UTF-8 BOM (`aging_h`, `pcf` derived columns; English snake_case headers). New pure
+  `lib/productionStats.ts` (13/13) and `lib/productionCsv.ts` (5/5) with selfchecks, and the shared
+  `components/charts/useTokenColors` hook (re-resolves on theme toggle via `useTheme`). The danger
+  color uses `--danger-bg` (`--danger-text` is white text-on-danger, invisible as a dot).
+
 - **prod-c-03 — Production history view, filters, lot trace.** New **History** tab (everyone with
   `production.log`, before Recipes). `GET /v2/api/production/history`: sheet `log_date` range
   (default last 30 days ET, swapped if reversed, > 366 days → 400 `range_too_large`), supplier,

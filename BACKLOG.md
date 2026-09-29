@@ -42,7 +42,12 @@
 - [ ] Expansion header density edited after a silo's first batch leaves
   production_silos.density (and blocks molded after) on the old value. Decide: lock density once
   the sheet has batches, or propagate to the filling silo. (found in prod-c-01)
-- [ ] prod-c-04 (report: Recharts, ±3σ control limits, print/CSV) — queued.
+- [ ] Refactor components/logistics/FinancialsPanel.tsx to the shared
+  components/charts/useTokenColors hook (added in prod-c-04).
+- [ ] Revisit block-weight spec bands after Steve reviews prod-c-04 control limits across
+  a real run; consider a per-recipe target + tolerance as recipe v2.
+- [ ] Report: consider moving stats server-side if filtered ranges regularly hit the
+  5,000-row cap.
 - [ ] History date filter is on sheet log_date; a sheet spanning midnight files all its
   rows under its start date. Revisit only if it matters in practice.
 - [ ] Consider a tolerance band on recipes once the report's control limits have been

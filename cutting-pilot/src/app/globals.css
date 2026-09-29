@@ -189,4 +189,11 @@ html.wall-cursor-hidden * {
   .invoice-print-region .truncate { max-width: none !important; overflow: visible !important; white-space: normal !important; }
   .invoice-print-region table { width: 100% !important; min-width: 0 !important; font-size: 11px; border-collapse: collapse; }
   .invoice-print-region th, .invoice-print-region td { border: 1px solid #ccc; padding: 4px 6px; }
+  /* prod-c-04: Production report — let the fixed-height app shell and its scroll areas print in full. */
+  .production-page, .production-page .overflow-y-auto, .production-page .overflow-hidden,
+  .production-page .overflow-x-auto { height: auto !important; max-height: none !important; overflow: visible !important; }
+  .production-page, .production-page .flex-1 { flex: none !important; }
+  .production-print-region .production-report-card { break-inside: avoid; page-break-inside: avoid; }
+  .production-print-region table { width: 100% !important; font-size: 11px; border-collapse: collapse; }
+  .production-print-region th, .production-print-region td { border: 1px solid #ccc; padding: 4px 6px; }
 }

@@ -857,7 +857,7 @@ export default function ProductionBoard({ canManage, isAdmin, userName }: Props)
       )}
 
       {/* Segmented switch + language */}
-      <div className="shrink-0 flex items-center justify-between gap-2 p-2 border-b border-border bg-surface">
+      <div className="shrink-0 flex items-center justify-between gap-2 p-2 border-b border-border bg-surface no-print">
         <div className="flex flex-wrap gap-1">
           {boardKinds.map((k) => (
             <button
