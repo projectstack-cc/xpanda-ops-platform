@@ -613,6 +613,10 @@ current series).
 
 ## Orders (v2)
 
+- **lgx-editmodal-01 (cross-ref) — orders PUT mirrors to the shipment.** `PUT /v2/api/orders/:id` now
+  syncs job-owned fields onto the job's outbound shipment (legacy parity) and uses the shared
+  `reconcileLoadingAssignments` from `lib/logistics/jobSync.ts`. See `## Logistics (v2)`.
+
 - **cutlist-02 — cut list sign-off wording (v2 + legacy parity).** Page-1 operator sign-off
   question now reads "Have all quantities been cut and dimensions verified?" (was "...cut and
   verified?"). Text-only change in `cutting-pilot/src/lib/cutList.ts` and `jobs/index.html`
@@ -2472,6 +2476,48 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **lgx-editmodal-01 — shipment edit modal writes through to the job; Method retired; orders PUT mirrors
+  to shipment (§9a / §9b). No migration.**
+  - **Root cause of the read-only fields:** on a job-linked shipment, customer / carrier / ship date /
+    total BDFT / load count (and the ship-to address) are owned by the job. Legacy's job PUT copies them
+    job → shipment (`SYNC_FIELDS_JOB_TO_SHIPMENT`, `_worker.js/routes/jobs.js` ~L1146), so an edit on the
+    shipment row alone would be silently overwritten by the next job edit. v2's PUT therefore 400'd those
+    fields and the modal rendered them read-only.
+  - **Write-through design:** `PUT /v2/api/shipments/:id` now writes those fields to the **job** (source of
+    truth) and mirrors them onto the edited shipment row in one atomic `DB.batch` (job UPDATE + a single
+    shipment UPDATE carrying the row's own fields plus the mirror, column map from the new shared
+    `lib/logistics/jobSync.ts` `JOB_TO_SHIPMENT_SYNC`). Everything is validated before anything is written.
+    Ship-to (`JOB_ADDRESS_FIELDS`, 7 columns) is accepted only when job-linked (else 400) and flips
+    `jobs.ship_to_verified` to `'unverified'`. An archived linked job → 409. A `load_count` change
+    reconciles `loading_assignments` via the shared `reconcileLoadingAssignments` (best-effort). A
+    `job` activity-log row ("Edited from logistics dashboard: …") is written alongside the existing
+    shipment row. Unlinked shipments keep writing owned fields to the shipment row directly. `ship_date`
+    now validates blank-or-`YYYY-MM-DD` (same rule as the orders PUT), since it now moves the job on the
+    production schedule. Locked shipments are still 409; the status cascade and `canEditDashboard()`
+    gate are unchanged (dashboard edit permission now covers these job fields, deliberately).
+  - **Modal (`ShipmentEditModal.tsx`):** Customer / Carrier / Ship Date / Total BDFT / Load Count are
+    always inputs; job-linked saves send only fields that changed versus the seed (an untouched field
+    never writes to the job). Ship To is now 7 inputs (seeded from `GET /v2/api/jobs/:id`; "Address
+    unavailable." with no inputs if that fetch fails), changed fields only. Orders with a BOL show an
+    informational notice when customer / carrier / ship date / ship-to change ("Existing BOLs keep the
+    old details — regenerate the BOL to update it."); a changed ship date on a job-linked shipment notes
+    it also moves the order on the production schedule. Trailer # stays gated on
+    `logistics.loading.manage`. Kill-switch banner copy updated.
+  - **Method retired from the logistics UI only:** removed from the modal, the row ("Method / Carrier" →
+    "Carrier"), the calendar detail, and the dashboard search. The shipments PUT no longer accepts
+    `method` (ignored like any unknown key). The `jobs.method` / `shipments.method` columns and their
+    behavior are untouched: `'customer pickup'` still drives loading-dashboard filtering and the pickup
+    flow and is still set by the Orders form's customer-pickup checkbox (P428). `ShipmentListItem.method`
+    stays on the type.
+  - **Orders PUT drift fix:** `PUT /v2/api/orders/:id` now mirrors customer / carrier / ship date /
+    location→destination / total BDFT / load count onto the job's outbound shipment (legacy always did;
+    v2 never did, so an OrderEditModal edit left `/v2/logistics` stale). Best-effort, same as legacy. Its
+    inline `loading_assignments` reconcile is hoisted verbatim into `jobSync.ts` (behavior identical).
+  - `method` sweep of `components/logistics` + `app/logistics`: only `ShipmentListItem.method` (kept by
+    design) and an HTTP `method: "PUT"` fetch option remain.
+  - Housekeeping: `api/orders/[id]/route.ts` had drifted to CRLF in the working copy (HEAD is LF);
+    normalized back so the diff is only the real change.
 
 - **lgx-roll-01 — Logistics v2 go-live (§9a / §9b / §8). No migration; no new permission keys.** Nav
   cutover per Steve's explicit go-ahead (v2 visibility gate), conditional on the post-deploy admin smoke test.

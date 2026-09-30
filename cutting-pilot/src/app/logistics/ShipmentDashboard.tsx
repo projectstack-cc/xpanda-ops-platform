@@ -302,14 +302,12 @@ export default function ShipmentDashboard({
       const trailer = (s.trailer_number || "").toLowerCase();
       const bol = (s.bol_number || "").toLowerCase();
       const carrier = (s.carrier || "").toLowerCase();
-      const method = (s.method || "").toLowerCase();
       return (
         cust.includes(q) ||
         inv.includes(q) ||
         trailer.includes(q) ||
         bol.includes(q) ||
-        carrier.includes(q) ||
-        method.includes(q)
+        carrier.includes(q)
       );
     });
   }, [rows, searchQuery]);
@@ -685,7 +683,7 @@ export default function ShipmentDashboard({
                           <tr className="border-b border-[var(--line)] bg-[var(--ghost-bg)] text-left text-xs font-semibold text-muted">
                             <th className="px-3.5 py-2.5 w-[20%]">Customer</th>
                             <th className="px-3.5 py-2.5 w-[10%]">Ship date</th>
-                            <th className="px-3.5 py-2.5 w-[14%]">Method / Carrier</th>
+                            <th className="px-3.5 py-2.5 w-[14%]">Carrier</th>
                             <th className="px-3.5 py-2.5 w-[10%]">Distance / ETA</th>
                             <th className="px-3.5 py-2.5 w-[9%]">Trailer</th>
                             <th className="px-3.5 py-2.5 w-[7%]">BDFT</th>

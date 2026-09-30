@@ -6,19 +6,23 @@
 // Field rules mirror the PUT /v2/api/shipments/:id contract in
 // src/app/api/shipments/[id]/route.ts EXACTLY -- these are hard server-side rejects, not soft
 // defaults:
-//   - customer, carrier, method, ship_date, total_bdft, load_count are one-way synced from the
-//     linked job in legacy -- editable ONLY when shipment.job_id is null. When job-linked they
-//     render as plain read-only text and are OMITTED from the PUT payload entirely (their mere
-//     presence on a job-linked shipment 400s the whole request).
+//   - customer, carrier, ship_date, total_bdft, load_count are owned by the linked job
+//     (lgx-editmodal-01). They're always editable: on a job-linked shipment the PUT WRITES THROUGH
+//     to the job (source of truth) and mirrors onto the shipment in one atomic batch, exactly like a
+//     Job Board edit, so the change sticks on every surface. Job-linked saves send ONLY the fields
+//     that changed versus the seeded values, so an untouched field never writes to the job;
+//     unlinked shipments send all of them (written to the shipment row directly).
+//   - Ship To (company, attention, street, street 2, city, state, zip) lives on the job and is
+//     editable only when job-linked -- seeded from GET /v2/api/jobs/:id, changed fields only.
+//   - An order that already has a BOL gets an informational notice when customer / carrier / ship
+//     date / ship-to change: existing BOLs are stored documents and keep the old details.
 //   - trailer_number is gated behind X-User-Can-Manage-Loading. The `canManageLoading` prop is
 //     computed by the caller (ShipmentDashboard.tsx) the same way DockBoard.tsx already does
 //     (`isAdmin || permissions["logistics.loading.manage"]?.edit`) -- reusing that existing
 //     client-side pattern rather than inventing a new one. When false, trailer # renders
 //     read-only and is omitted from the payload.
-//   - method is a behavior-bearing enum ("" | "customer pickup") -- rendered as a <select>,
-//     never free text.
 //   - scrap_pickup is a TEXT "YES"/"NO" enum -- rendered as a <select>, never a checkbox.
-//   - load_count / total_bdft are validated client-side before Save is enabled -- never sent as
+//   - load_count / total_bdft are validated client-side whenever they're sent -- never sent as
 //     "" or whitespace.
 //   - notes, delivery_time, scrap_pickup, delivery_incident, delivery_incident_notes are never
 //     job-synced and stay editable regardless of job_id.
@@ -35,12 +39,12 @@
 // window.confirm(), same constraint as every other destructive action in this codebase. Gated by
 // the same canEditDashboard() as Save server-side; no client-side permission gate on the button.
 //
-// Ship-to address display for job-linked shipments comes from a dedicated GET /v2/api/jobs/:id
+// Ship-to seed values for job-linked shipments come from a dedicated GET /v2/api/jobs/:id
 // fetch, NOT the already-loaded list row -- attachDistanceEta() in shipments/route.ts deletes
-// ship_to_street from every list row before it goes out, so the street would always show blank
-// otherwise.
+// ship_to_street from every list row before it goes out, so the street would always seed blank
+// otherwise (and a blank seed would look like a change).
 //
-// Save is FENCED (PUT returns 501 while V2_LOGISTICS_WRITES_ENABLED is false) -- same
+// Kill switch: if V2_LOGISTICS_WRITES_ENABLED is flipped back off, the PUT returns 501 -- same
 // fenced-banner UX as BolGenerateModal.tsx: banner shown, modal stays open, no typed data lost.
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
@@ -77,7 +81,6 @@ interface EditForm {
   status: string;
   customer: string;
   carrier: string;
-  method: string;
   shipDate: string;
   totalBdft: string;
   loadCount: string;
@@ -94,7 +97,6 @@ function emptyForm(): EditForm {
     status: "not_started",
     customer: "",
     carrier: "",
-    method: "",
     shipDate: "",
     totalBdft: "",
     loadCount: "",
@@ -107,15 +109,32 @@ function emptyForm(): EditForm {
   };
 }
 
-function fmtNum(n: number | string | null): string {
-  const v = typeof n === "string" ? parseFloat(n) : n;
-  if (!v && v !== 0) return "—";
-  return v.toLocaleString("en-US", { maximumFractionDigits: 1 });
+// lgx-editmodal-01: job-owned ship-to (job-linked shipments only). Keys are the jobs columns.
+const SHIP_TO_FIELDS = [
+  { key: "ship_to_company", label: "Company" },
+  { key: "ship_to_attention", label: "Attention" },
+  { key: "ship_to_street", label: "Street" },
+  { key: "ship_to_street2", label: "Street 2" },
+  { key: "ship_to_city", label: "City" },
+  { key: "ship_to_state", label: "State" },
+  { key: "ship_to_zip", label: "Zip" },
+] as const;
+type ShipToKey = (typeof SHIP_TO_FIELDS)[number]["key"];
+type ShipToForm = Record<ShipToKey, string>;
+
+function shipToFromJob(job: JobForBol): ShipToForm {
+  const out = {} as ShipToForm;
+  for (const { key } of SHIP_TO_FIELDS) out[key] = job[key] || "";
+  return out;
 }
 
 export default function ShipmentEditModal({ shipment, canManageLoading, onClose }: ShipmentEditModalProps) {
   const [form, setForm] = useState<EditForm>(emptyForm());
+  // Seeded values -- job-linked saves send only fields that differ from these.
+  const [seed, setSeed] = useState<EditForm>(emptyForm());
   const [job, setJob] = useState<JobForBol | null>(null);
+  const [shipTo, setShipTo] = useState<ShipToForm | null>(null);
+  const [shipToSeed, setShipToSeed] = useState<ShipToForm | null>(null);
   const [jobLoading, setJobLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -137,10 +156,11 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     setDeleteError(null);
     if (!shipment) {
       setForm(emptyForm());
+      setSeed(emptyForm());
       setJob(null);
       return;
     }
-    setForm({
+    const seeded: EditForm = {
       // Seeded with the REAL current value even when it's outside EDITABLE_STATUS_VALUES
       // (board-driven "awaiting"/"scheduled") -- handleSave only sends `status` when it actually
       // differs from shipment.status, so leaving an out-of-set value untouched never round-trips
@@ -148,7 +168,6 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
       status: shipment.status || "not_started",
       customer: shipment.customer || "",
       carrier: shipment.carrier || "",
-      method: shipment.method === "customer pickup" ? "customer pickup" : "",
       shipDate: shipment.ship_date || "",
       totalBdft: shipment.total_bdft != null && shipment.total_bdft !== "" ? String(shipment.total_bdft) : "",
       loadCount: shipment.load_count != null ? String(shipment.load_count) : "",
@@ -158,23 +177,32 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
       scrapPickup: shipment.scrap_pickup === "YES" ? "YES" : "NO",
       deliveryIncident: !!shipment.delivery_incident,
       deliveryIncidentNotes: shipment.delivery_incident_notes || "",
-    });
+    };
+    setForm(seeded);
+    setSeed(seeded);
   }, [shipment]);
 
   // Job-linked ship-to display -- dedicated fetch, see file header for why the list row can't
   // be trusted for ship_to_street.
   useEffect(() => {
     setJob(null);
+    setShipTo(null);
+    setShipToSeed(null);
     if (!shipment?.job_id) return;
     let cancelled = false;
     setJobLoading(true);
     fetch(`/v2/api/jobs/${encodeURIComponent(shipment.job_id)}`)
       .then((r) => r.json())
       .then((json) => {
-        if (!cancelled && json.ok && json.job) setJob(json.job);
+        if (!cancelled && json.ok && json.job) {
+          setJob(json.job);
+          const seededShipTo = shipToFromJob(json.job);
+          setShipTo(seededShipTo);
+          setShipToSeed(seededShipTo);
+        }
       })
       .catch(() => {
-        // Best-effort -- the address block just stays blank if this fails.
+        // Best-effort -- the Ship To panel shows "Address unavailable." (no inputs) if this fails.
       })
       .finally(() => {
         if (!cancelled) setJobLoading(false);
@@ -188,10 +216,21 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  const bdftValid = jobLinked || (form.totalBdft.trim() !== "" && Number.isFinite(Number(form.totalBdft)));
+  // Job-linked: a job-owned field is sent only when it changed. Unlinked: always sent (as before).
+  const sendOwned = (k: "customer" | "carrier" | "shipDate" | "totalBdft" | "loadCount") =>
+    !jobLinked || form[k] !== seed[k];
+  const bdftValid =
+    !sendOwned("totalBdft") || (form.totalBdft.trim() !== "" && Number.isFinite(Number(form.totalBdft)));
   const loadCountValid =
-    jobLinked || (form.loadCount.trim() !== "" && Number.isFinite(parseInt(form.loadCount, 10)));
+    !sendOwned("loadCount") || (form.loadCount.trim() !== "" && Number.isFinite(parseInt(form.loadCount, 10)));
   const canSave = bdftValid && loadCountValid && !saving;
+
+  const changedShipTo: ShipToKey[] =
+    jobLinked && shipTo && shipToSeed ? SHIP_TO_FIELDS.map((f) => f.key).filter((k) => shipTo[k] !== shipToSeed[k]) : [];
+  const shipDateChanged = form.shipDate !== seed.shipDate;
+  const bolDetailsChanged =
+    form.customer !== seed.customer || form.carrier !== seed.carrier || shipDateChanged || changedShipTo.length > 0;
+  const showBolNotice = Number(shipment?.bol_count || 0) > 0 && bolDetailsChanged;
 
   async function handleSave() {
     if (!shipment) return;
@@ -227,15 +266,15 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
       payload.trailer_number = form.trailerNumber;
     }
 
-    // Job-gated fields omitted entirely when job-linked -- their mere presence 400s the whole
-    // request server-side.
-    if (!jobLinked) {
-      payload.customer = form.customer;
-      payload.carrier = form.carrier;
-      payload.method = form.method;
-      payload.ship_date = form.shipDate;
-      payload.total_bdft = Number(form.totalBdft);
-      payload.load_count = parseInt(form.loadCount, 10);
+    // Job-owned fields: job-linked -> only what changed (writes through to the job server-side);
+    // unlinked -> all of them, written to the shipment row.
+    if (sendOwned("customer")) payload.customer = form.customer;
+    if (sendOwned("carrier")) payload.carrier = form.carrier;
+    if (sendOwned("shipDate")) payload.ship_date = form.shipDate;
+    if (sendOwned("totalBdft")) payload.total_bdft = Number(form.totalBdft);
+    if (sendOwned("loadCount")) payload.load_count = parseInt(form.loadCount, 10);
+    if (shipTo) {
+      for (const k of changedShipTo) payload[k] = shipTo[k];
     }
 
     setSaving(true);
@@ -314,7 +353,7 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
 
           {fenced && (
             <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
-              Editing and deleting are disabled in the v2 preview phase. Use the legacy Logistics dashboard for this shipment for now.
+              Editing is temporarily disabled. Use the legacy Logistics dashboard for now.
             </div>
           )}
 
@@ -326,78 +365,47 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Customer">
-              {jobLinked ? (
-                <div className={readOnlyClass}>{form.customer || "—"}</div>
-              ) : (
-                <input
-                  type="text"
-                  className={inputClass}
-                  value={form.customer}
-                  onChange={(e) => set("customer", e.target.value)}
-                />
-              )}
+              <input
+                type="text"
+                className={inputClass}
+                value={form.customer}
+                onChange={(e) => set("customer", e.target.value)}
+              />
             </Field>
             <Field label="Carrier">
-              {jobLinked ? (
-                <div className={readOnlyClass}>{form.carrier || "—"}</div>
-              ) : (
-                <input
-                  type="text"
-                  className={inputClass}
-                  value={form.carrier}
-                  onChange={(e) => set("carrier", e.target.value)}
-                />
-              )}
-            </Field>
-            <Field label="Method">
-              {jobLinked ? (
-                <div className={readOnlyClass}>{shipment.method || "—"}</div>
-              ) : (
-                <select
-                  className={inputClass}
-                  value={form.method}
-                  onChange={(e) => set("method", e.target.value)}
-                >
-                  <option value="">—</option>
-                  <option value="customer pickup">Customer pickup</option>
-                </select>
-              )}
+              <input
+                type="text"
+                className={inputClass}
+                value={form.carrier}
+                onChange={(e) => set("carrier", e.target.value)}
+              />
             </Field>
             <Field label="Ship Date">
-              {jobLinked ? (
-                <div className={readOnlyClass}>{form.shipDate || "—"}</div>
-              ) : (
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={form.shipDate}
-                  onChange={(e) => set("shipDate", e.target.value)}
-                />
+              <input
+                type="date"
+                className={inputClass}
+                value={form.shipDate}
+                onChange={(e) => set("shipDate", e.target.value)}
+              />
+              {jobLinked && shipDateChanged && (
+                <p className="text-xs text-muted">Also moves the order on the production schedule.</p>
               )}
             </Field>
             <Field label="Total BDFT">
-              {jobLinked ? (
-                <div className={readOnlyClass}>{fmtNum(shipment.total_bdft)}</div>
-              ) : (
-                <input
-                  type="number"
-                  className={inputClass}
-                  value={form.totalBdft}
-                  onChange={(e) => set("totalBdft", e.target.value)}
-                />
-              )}
+              <input
+                type="number"
+                className={inputClass}
+                value={form.totalBdft}
+                onChange={(e) => set("totalBdft", e.target.value)}
+              />
             </Field>
             <Field label="Load Count">
-              {jobLinked ? (
-                <div className={readOnlyClass}>{shipment.load_count ?? "—"}</div>
-              ) : (
-                <input
-                  type="number"
-                  className={inputClass}
-                  value={form.loadCount}
-                  onChange={(e) => set("loadCount", e.target.value)}
-                />
-              )}
+              <input
+                type="number"
+                className={inputClass}
+                value={form.loadCount}
+                onChange={(e) => set("loadCount", e.target.value)}
+              />
             </Field>
             <Field label="Trailer #">
               {canManageLoading ? (
@@ -416,18 +424,25 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
           </div>
 
           {jobLinked && (
-            <div className="rounded-md border border-[var(--border)] bg-[var(--ghost-bg)] p-3 space-y-0.5">
-              <div className="text-xs font-semibold text-muted uppercase tracking-wider mb-1">Ship To</div>
+            <div className="rounded-md border border-[var(--border)] bg-[var(--ghost-bg)] p-3 space-y-2">
+              <div className="text-xs font-semibold text-muted uppercase tracking-wider">Ship To</div>
               {jobLoading && <div className="text-xs text-muted">Loading address…</div>}
-              {!jobLoading && job && (
-                <div className="text-sm text-text space-y-0.5">
-                  {job.ship_to_company && <div>{job.ship_to_company}</div>}
-                  {job.ship_to_attention && <div>{job.ship_to_attention}</div>}
-                  {job.ship_to_street && <div>{job.ship_to_street}</div>}
-                  {job.ship_to_street2 && <div>{job.ship_to_street2}</div>}
-                  {(job.ship_to_city || job.ship_to_state || job.ship_to_zip) && (
-                    <div>{[job.ship_to_city, job.ship_to_state, job.ship_to_zip].filter(Boolean).join(", ")}</div>
-                  )}
+              {!jobLoading && job && shipTo && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {SHIP_TO_FIELDS.map(({ key, label }) => (
+                    <Field key={key} label={label}>
+                      <input
+                        type="text"
+                        className={inputClass}
+                        value={shipTo[key]}
+                        disabled={jobLoading}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setShipTo((prev) => (prev ? { ...prev, [key]: v } : prev));
+                        }}
+                      />
+                    </Field>
+                  ))}
                 </div>
               )}
               {!jobLoading && !job && <div className="text-xs text-muted">Address unavailable.</div>}
@@ -481,6 +496,12 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
                 onChange={(e) => set("deliveryIncidentNotes", e.target.value)}
               />
             </Field>
+          )}
+
+          {showBolNotice && (
+            <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
+              This order already has a BOL. Existing BOLs keep the old details — regenerate the BOL to update it.
+            </div>
           )}
 
           {deleteError && (

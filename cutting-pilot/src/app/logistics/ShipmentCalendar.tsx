@@ -278,8 +278,8 @@ export default function ShipmentCalendar({
                 <span className="font-medium text-text capitalize">{selectedShipment.status.replace(/_/g, " ")}</span>
               </div>
               <div>
-                <span className="text-muted block">Carrier / Method</span>
-                <span className="font-medium text-text">{[selectedShipment.method, selectedShipment.carrier].filter(Boolean).join(" · ") || "—"}</span>
+                <span className="text-muted block">Carrier</span>
+                <span className="font-medium text-text">{selectedShipment.carrier || "—"}</span>
               </div>
               <div>
                 <span className="text-muted block">Trailer #</span>

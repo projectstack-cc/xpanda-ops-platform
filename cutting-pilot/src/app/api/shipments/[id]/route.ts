@@ -15,19 +15,23 @@
 // of editable fields) rather than a full-row replace -- there's no client that ever sends the
 // whole shipment row here, only the fields the modal actually renders as inputs.
 //
-// Field rules (Opus review amendments, "Resolved with Steve" + B1-B6/H1-H6):
-//   - customer, carrier, method, ship_date, total_bdft, load_count are one-way synced from the
-//     linked job in legacy (_worker.js/routes/jobs.js), so they're editable here ONLY when the
-//     shipment has no job_id -- otherwise a v2 edit could be silently clobbered by a later legacy
-//     job edit. Editing a job-linked shipment's job-synced fields is rejected outright (400), not
-//     silently dropped, so the UI gets a clear signal.
+// Field rules (Opus review amendments, "Resolved with Steve" + B1-B6/H1-H6; lgx-editmodal-01):
+//   - customer, carrier, ship_date, total_bdft, load_count (JOB_OWNED_FIELDS) are owned by the linked
+//     job -- legacy copies them job -> shipment on every job PUT (jobs.js SYNC_FIELDS_JOB_TO_SHIPMENT).
+//     lgx-editmodal-01: on a job-linked shipment they WRITE THROUGH to the job (source of truth) and
+//     are mirrored onto this shipment row in the same atomic DB.batch -- exactly what a Job Board edit
+//     does -- so the edit sticks everywhere. The ship-to address (JOB_ADDRESS_FIELDS) writes through
+//     the same way (job-linked only; flips jobs.ship_to_verified to 'unverified'). On an unlinked
+//     shipment the owned fields are written to the shipment row directly.
+//   - method is no longer accepted (lgx-editmodal-01): retired from the logistics UI; 'customer
+//     pickup' is set on the Orders form only. A `method` key in the payload is ignored like any
+//     unknown key.
 //   - trailer_number is gated behind X-User-Can-Manage-Loading specifically (not the general
 //     logistics.dashboard edit permission) -- mirrors legacy's original intent and the existing
 //     convention in loading-assignments/route.ts:313-319 (reject the whole request, don't drop
 //     just the field).
-//   - method / scrap_pickup are behavior-bearing TEXT enums elsewhere in the codebase (branched on
-//     as the literal strings 'customer pickup' and 'YES' -- see _worker.js/routes/jobs.js:1448,
-//     orders/route.ts:143, BolGenerateModal.tsx:255, OrderRow.tsx's isScrapYes()) -- validated
+//   - scrap_pickup is a behavior-bearing TEXT enum elsewhere in the codebase (branched on as the
+//     literal 'YES' -- see BolGenerateModal.tsx:255, OrderRow.tsx's isScrapYes()) -- validated
 //     strictly here, never accepted as free text.
 //   - load_count / total_bdft get explicit empty/NaN guards -- legacy's own coercion
 //     (Math.max(1, parseInt(raw ?? 1, 10)) / Number(raw ?? 0), jobs.js:1354-1357) silently
@@ -44,14 +48,16 @@
 // LOCKED_STATUSES check (a locked shipment can still be deleted, deliberately not a dead end),
 // no cascade, gated by the same canEditDashboard() as PUT/GET.
 import { NextResponse, type NextRequest } from "next/server";
+import type { D1PreparedStatement } from "@cloudflare/workers-types";
 import { getEnv } from "@/lib/db";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 import { canEditDashboard } from "@/lib/logistics/dashboardPerms";
 import { logActivity } from "@/lib/activityLog";
 import { completeCuttingLinesForJob } from "@/lib/cuttingLines";
+import { JOB_TO_SHIPMENT_SYNC, coerceJobSyncValue, reconcileLoadingAssignments, type JobSyncField } from "@/lib/logistics/jobSync";
 
 // Never job-synced in legacy -- always editable regardless of job-link status. `status` flows the
-// OPPOSITE direction of JOB_GATED_FIELDS below (shipment -> job, not job -> shipment), so it's
+// OPPOSITE direction of JOB_OWNED_FIELDS below (shipment -> job, not job -> shipment), so it's
 // always editable here too, cascading onto jobs/loading_assignments/cutting_lines below instead of
 // ever being blocked by a job link.
 const ALWAYS_EDITABLE = [
@@ -63,16 +69,26 @@ const ALWAYS_EDITABLE = [
   "delivery_incident_notes",
 ] as const;
 
-// One-way synced from the linked job in legacy (_worker.js/routes/jobs.js) -- editable here only
-// when shipments.job_id IS NULL, to avoid a v2 edit being silently overwritten by a later legacy
-// job edit (or vice versa: this route silently diverging from the job of record).
-const JOB_GATED_FIELDS = [
+// Owned by the linked job (legacy copies them job -> shipment, jobs.js SYNC_FIELDS_JOB_TO_SHIPMENT).
+// lgx-editmodal-01: job-linked -> write through to the job + mirror here atomically; unlinked ->
+// written to the shipment row directly.
+const JOB_OWNED_FIELDS = [
   "customer",
   "carrier",
-  "method",
   "ship_date",
   "total_bdft",
   "load_count",
+] as const;
+
+// Ship-to lives only on the job (shipments has no address columns) -- accepted only when job-linked.
+const JOB_ADDRESS_FIELDS = [
+  "ship_to_company",
+  "ship_to_attention",
+  "ship_to_street",
+  "ship_to_street2",
+  "ship_to_city",
+  "ship_to_state",
+  "ship_to_zip",
 ] as const;
 
 const TRAILER_FIELD = "trailer_number";
@@ -207,10 +223,12 @@ function validateField(key: string, raw: unknown): FieldResult {
       }
       return { column: key, value: v };
     }
-    case "method": {
+    case "ship_date": {
+      // lgx-editmodal-01: now writes through to jobs.ship_date (drives the production schedule) --
+      // same blank-or-YYYY-MM-DD rule as PUT /v2/api/orders/:id.
       const v = String(raw ?? "").trim();
-      if (v !== "" && v !== "customer pickup") {
-        return { error: "method must be blank or \"customer pickup\"." };
+      if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+        return { error: "ship_date must be YYYY-MM-DD." };
       }
       return { column: key, value: v };
     }
@@ -244,7 +262,7 @@ function validateField(key: string, raw: unknown): FieldResult {
       }
       return { column: key, value: n };
     }
-    // customer, carrier, ship_date, notes, delivery_time, delivery_incident_notes, trailer_number
+    // customer, carrier, notes, delivery_time, delivery_incident_notes, trailer_number
     default:
       return { column: key, value: String(raw ?? "").trim() };
   }
@@ -301,18 +319,12 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const payloadKeys = Object.keys(payload ?? {});
 
-  if (existing.job_id) {
-    const blocked = JOB_GATED_FIELDS.filter((f) => payloadKeys.includes(f));
-    if (blocked.length) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Job-linked fields cannot be edited here.",
-          detail: `${blocked.join(", ")} ${blocked.length > 1 ? "are" : "is"} synced from the linked job -- edit on the job in Job Board instead.`,
-        },
-        { status: 400 }
-      );
-    }
+  const addressKeys = JOB_ADDRESS_FIELDS.filter((f) => payloadKeys.includes(f));
+  if (addressKeys.length && !existing.job_id) {
+    return NextResponse.json(
+      { ok: false, error: "Ship-to can only be edited on a job-linked shipment." },
+      { status: 400 }
+    );
   }
 
   if (payloadKeys.includes(TRAILER_FIELD) && request.headers.get("X-User-Can-Manage-Loading") !== "1") {
@@ -324,8 +336,9 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const ALLOWED_FIELDS: readonly string[] = existing.job_id
     ? [...ALWAYS_EDITABLE, TRAILER_FIELD]
-    : [...ALWAYS_EDITABLE, TRAILER_FIELD, ...JOB_GATED_FIELDS];
+    : [...ALWAYS_EDITABLE, TRAILER_FIELD, ...JOB_OWNED_FIELDS];
 
+  // Validate EVERYTHING before writing anything.
   const sets: string[] = [];
   const vals: unknown[] = [];
   let newStatus: string | undefined;
@@ -341,15 +354,80 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
     if (key === "status") newStatus = result.value as string;
   }
 
-  if (sets.length === 0) {
+  // lgx-editmodal-01: job write-through values (job-linked only).
+  const jobVals: Record<string, unknown> = {};
+  if (existing.job_id) {
+    for (const key of JOB_OWNED_FIELDS) {
+      if (!payloadKeys.includes(key)) continue;
+      const result = validateField(key, payload[key]);
+      if ("error" in result) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      }
+      jobVals[key] = result.value;
+    }
+    for (const key of addressKeys) jobVals[key] = String(payload[key] ?? "").trim();
+  }
+  const jobKeys = Object.keys(jobVals);
+
+  if (sets.length === 0 && jobKeys.length === 0) {
     return NextResponse.json({ ok: false, error: "No editable fields to update." }, { status: 400 });
   }
 
-  sets.push("updated_at = datetime('now')");
-  vals.push(shipmentId);
+  let job: { id: string; method: string | null; archived_at: string | null } | null = null;
+  if (jobKeys.length) {
+    job = await DB.prepare("SELECT id, method, archived_at FROM jobs WHERE id = ?")
+      .bind(existing.job_id).first<any>();
+    if (!job) {
+      return NextResponse.json({ ok: false, error: "The linked job was not found." }, { status: 404 });
+    }
+    if (job.archived_at) {
+      return NextResponse.json({ ok: false, error: "The linked job is archived." }, { status: 409 });
+    }
+  }
 
   try {
-    await DB.prepare(`UPDATE shipments SET ${sets.join(", ")} WHERE id = ?`).bind(...vals).run();
+    // One atomic batch: job UPDATE (write-through) + a single shipment UPDATE carrying both this
+    // row's own fields and the job -> shipment mirror (JOB_TO_SHIPMENT_SYNC). If only job fields
+    // changed, the mirror alone touches the shipment row.
+    const statements: D1PreparedStatement[] = [];
+    if (job) {
+      const jobSets = jobKeys.map((k) => `${k} = ?`);
+      const jobBinds = jobKeys.map((k) => jobVals[k]);
+      if (addressKeys.length) jobSets.push("ship_to_verified = 'unverified'");
+      jobSets.push("updated_at = datetime('now')");
+      statements.push(DB.prepare(`UPDATE jobs SET ${jobSets.join(", ")} WHERE id = ?`).bind(...jobBinds, job.id));
+
+      for (const [jobField, shipField] of Object.entries(JOB_TO_SHIPMENT_SYNC) as [JobSyncField, string][]) {
+        if (!(jobField in jobVals)) continue;
+        sets.push(`${shipField} = ?`);
+        vals.push(coerceJobSyncValue(jobField, jobVals[jobField]));
+      }
+    }
+    if (sets.length) {
+      sets.push("updated_at = datetime('now')");
+      statements.push(DB.prepare(`UPDATE shipments SET ${sets.join(", ")} WHERE id = ?`).bind(...vals, shipmentId));
+    }
+    await DB.batch(statements);
+
+    if (job) {
+      if ("load_count" in jobVals) {
+        try {
+          await reconcileLoadingAssignments(DB, job.id, Number(jobVals.load_count), job.method);
+        } catch (e: any) {
+          console.error("Load count reconcile failed:", String(e?.message || e));
+        }
+      }
+      await logActivity(
+        DB,
+        "update",
+        "job",
+        job.id,
+        `Edited from logistics dashboard: ${jobKeys.join(", ")}`,
+        { fields: jobKeys },
+        actorId
+      );
+    }
+
     const row = await DB.prepare("SELECT * FROM shipments WHERE id = ?").bind(shipmentId).first<any>();
 
     // Reverse write-through: logistics dashboard status change -> job + loading_assignments +

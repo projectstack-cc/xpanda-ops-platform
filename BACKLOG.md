@@ -325,6 +325,7 @@
 - [ ] **Loading sheet per-trailer split:** only possible once line items carry a load assignment (load builder plan persisted per job). Revisit with v2 load builder rollout. (Follow-on from lgx-loadsheet-01.)
 - [x] **Unit 2 follow-up — post-deploy admin smoke on www** — confirmed by Steve before the lgx-roll-01 push.
 - [ ] **Load builder v2 (`/v2/logistics/load-builder`) still dark after lgx-roll-01.** Un-dark by deleting its `logistics.v2` middleware line, then repoint Build Load / Load Builder links.
+- [ ] **Legacy `logistics/index.html` edit form still shows Method and still can't edit job-owned fields.** Retire with the legacy dashboard rather than patching. (Follow-on from lgx-editmodal-01.)
 - [ ] **Retire legacy `logistics/index.html`** once v2 has run a few weeks without fallback use. At retirement also remove the home Logistics card's "Classic Dashboard" button (`index.html`) and its `common.classicDashboard` i18n key, and repoint `logistics/logistics-header.js` `dashboardPath`.
 - [ ] **Unit 3 — load builder port + packing-logic rework.** Ports `logistics/load-builder.html` (trailer load planning, auto-pack algorithm, saved loads, BOL generation via the unit-1/2 engine). Broken into task-grouped `lb-engine-NN`/`lb-ui-NN` prompts (see below) rather than sequential `PNNN`s.
 - [ ] **Unit 3 follow-up (lbz-bol-02) — v2 zone-column editing UI.** `bolShared.ts`'s

@@ -13,6 +13,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { computeAndPersistHoleyChunks } from "@/lib/holeyChunks";
+import { JOB_TO_SHIPMENT_SYNC, reconcileLoadingAssignments, syncJobFieldsToShipment, type JobSyncField } from "@/lib/logistics/jobSync";
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const STATUSES = ["not_started", "in_production", "done", "loading", "shipped"];
@@ -142,6 +143,22 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
     // Persist main jobs row.
     await DB.prepare(`UPDATE jobs SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
 
+    // lgx-editmodal-01: mirror job-owned fields onto the job's outbound shipment (legacy jobs.js ~L1146
+    // does this on every job PUT; v2 never did, so an order edit left /v2/logistics stale). Same coerced
+    // values the job UPDATE bound above. Best-effort, exactly like legacy.
+    const syncFields: Partial<Record<JobSyncField, string | number>> = {};
+    for (const f of Object.keys(JOB_TO_SHIPMENT_SYNC) as JobSyncField[]) {
+      if (!(f in p)) continue;
+      if (f === "load_count") syncFields[f] = Number.isFinite(Number(p.load_count)) ? Number(p.load_count) : 1;
+      else if (f === "total_bdft") syncFields[f] = Number.isFinite(Number(p.total_bdft)) ? Number(p.total_bdft) : 0;
+      else syncFields[f] = s(p[f]);
+    }
+    try {
+      await syncJobFieldsToShipment(DB, id, syncFields);
+    } catch (e: any) {
+      console.error("Job→Shipment field sync failed:", String(e?.message || e));
+    }
+
     // Replace line items wholesale (mirrors legacy jobs.js:800–818).
     let replacedLineItems = false;
     if (Array.isArray(p.line_items)) {
@@ -164,40 +181,10 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
 
     // Reconcile loading_assignments to the new load_count (skip customer pickup — mirrors
     // legacy jobs.js:820–861). Best-effort; a reconcile failure never fails the PUT.
+    // lgx-editmodal-01: hoisted verbatim into lib/logistics/jobSync.ts (shared with the shipments PUT).
     if ("load_count" in p) {
       try {
-        const isPickup = (existing.method || "").toLowerCase() === "customer pickup";
-        if (!isPickup) {
-          const target = Math.max(Number(p.load_count) || 1, 1);
-          const curRow = await DB.prepare(
-            "SELECT COUNT(*) AS cnt FROM loading_assignments WHERE job_id = ?"
-          ).bind(id).first<any>();
-          const current = Number(curRow?.cnt || 0);
-          if (target > current) {
-            const nowR = now();
-            for (let n = current + 1; n <= target; n++) {
-              await DB.prepare(`
-                INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, load_number, created_at, updated_at)
-                VALUES (?, ?, NULL, '', 'awaiting', NULL, '', ?, ?, ?)
-              `).bind(crypto.randomUUID(), id, n, nowR, nowR).run();
-            }
-          } else if (target < current) {
-            const surplus = current - target;
-            const safe = await DB.prepare(`
-              SELECT la.id FROM loading_assignments la
-               WHERE la.job_id = ?
-                 AND la.loading_status = 'awaiting'
-                 AND la.bay_id IS NULL
-                 AND COALESCE(la.trailer_number, '') = ''
-                 AND NOT EXISTS (SELECT 1 FROM loading_photos lp WHERE lp.assignment_id = la.id)
-               ORDER BY la.load_number DESC, la.created_at DESC
-               LIMIT ?
-            `).bind(id, surplus).all<any>();
-            for (const r of (safe?.results || [])) {
-              await DB.prepare("DELETE FROM loading_assignments WHERE id = ?").bind(r.id).run();
-            }
-          }
-        }
+        await reconcileLoadingAssignments(DB, id, Math.max(Number(p.load_count) || 1, 1), existing.method);
       } catch (e: any) {
         console.error("Load count reconcile failed:", String(e?.message || e));
       }

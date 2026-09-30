@@ -88,7 +88,7 @@ export default function ShipmentRow({
   onToggleExpand,
   detailCache,
 }: ShipmentRowProps) {
-  const methodCarrier = [s.method, s.carrier].filter(Boolean).join(" · ") || "—";
+  const carrier = s.carrier || "—";
 
   return (
     <Fragment>
@@ -128,7 +128,7 @@ export default function ShipmentRow({
           )}
         </td>
         <td className="px-3 py-[8.8px] align-top text-sm text-text">{fmtDate(s.ship_date)}</td>
-        <td className="px-3 py-[8.8px] align-top text-sm text-text">{methodCarrier}</td>
+        <td className="px-3 py-[8.8px] align-top text-sm text-text">{carrier}</td>
         <td className="px-3 py-[8.8px] align-top">
           <DistanceEta shipment={s} />
         </td>
