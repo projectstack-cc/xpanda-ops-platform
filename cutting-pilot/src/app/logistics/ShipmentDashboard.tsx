@@ -303,7 +303,7 @@ export default function ShipmentDashboard({
     return rows.filter((s) => {
       const cust = (s.customer || "").toLowerCase();
       const inv = (s.invoice_number || "").toLowerCase();
-      const trailer = (s.trailer_number || "").toLowerCase();
+      const trailer = (s.trailer_numbers || s.trailer_number || "").toLowerCase();
       const bol = (s.bol_number || "").toLowerCase();
       const carrier = (s.carrier || "").toLowerCase();
       return (
@@ -685,15 +685,16 @@ export default function ShipmentDashboard({
                       <table className="w-full min-w-[900px] table-fixed text-sm">
                         <thead>
                           <tr className="border-b border-[var(--line)] bg-[var(--ghost-bg)] text-left text-xs font-semibold text-muted">
-                            <th className="px-3.5 py-2.5 w-[20%]">Customer</th>
-                            <th className="px-3.5 py-2.5 w-[10%]">Ship date</th>
-                            <th className="px-3.5 py-2.5 w-[14%]">Carrier</th>
-                            <th className="px-3.5 py-2.5 w-[10%]">Distance / ETA</th>
+                            <th className="px-3.5 py-2.5 w-[18%]">Customer</th>
+                            <th className="px-3.5 py-2.5 w-[10%]">Ship date / time</th>
+                            <th className="px-3.5 py-2.5 w-[12%]">Carrier</th>
+                            <th className="px-3.5 py-2.5 w-[9%]">Distance / ETA</th>
                             <th className="px-3.5 py-2.5 w-[9%]">Trailer</th>
-                            <th className="px-3.5 py-2.5 w-[7%]">BDFT</th>
-                            <th className="px-3.5 py-2.5 w-[10%]">BOL #</th>
-                            <th className="px-3.5 py-2.5 w-[10%]">Status</th>
-                            <th className="px-3.5 py-2.5 w-[10%] text-right">Actions</th>
+                            <th className="px-3.5 py-2.5 w-[6%]">BDFT</th>
+                            <th className="px-3.5 py-2.5 w-[9%]">BOL #</th>
+                            <th className="px-3.5 py-2.5 w-[9%]">Status</th>
+                            {/* lgx-rows-01: fixed width = four 38px icons + 3 gaps + cell padding, never wraps. */}
+                            <th className="px-3.5 py-2.5 w-[200px] text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody>

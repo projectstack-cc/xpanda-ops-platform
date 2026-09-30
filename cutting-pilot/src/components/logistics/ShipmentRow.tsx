@@ -35,6 +35,13 @@ export function StatusBadge({ status }: { status: string }) {
   return <span className={`${badgeBase} ${v.cls}`}>{v.label}</span>;
 }
 
+// lgx-rows-01: jobs.method = 'customer pickup' marker, shown under Carrier (row + calendar detail).
+export function CustomerPickupBadge() {
+  return (
+    <span className={`${badgeBase} bg-[var(--ghost-bg)] text-text border border-[var(--border)]`}>Customer pickup</span>
+  );
+}
+
 function fmtDate(dateStr: string | null): string {
   if (!dateStr) return "—";
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -89,6 +96,7 @@ export default function ShipmentRow({
   detailCache,
 }: ShipmentRowProps) {
   const carrier = s.carrier || "—";
+  const isPickup = Boolean(s.is_customer_pickup);
 
   return (
     <Fragment>
@@ -127,12 +135,22 @@ export default function ShipmentRow({
             </button>
           )}
         </td>
-        <td className="px-3 py-[8.8px] align-top text-sm text-text">{fmtDate(s.ship_date)}</td>
-        <td className="px-3 py-[8.8px] align-top text-sm text-text">{carrier}</td>
+        <td className="px-3 py-[8.8px] align-top text-sm text-text">
+          <div>{fmtDate(s.ship_date)}</div>
+          {s.delivery_time && <div className="text-xs text-muted whitespace-nowrap">{s.delivery_time}</div>}
+        </td>
+        <td className="px-3 py-[8.8px] align-top text-sm text-text">
+          {isPickup && !s.carrier ? null : <div>{carrier}</div>}
+          {isPickup && (
+            <div className={s.carrier ? "mt-1" : undefined}>
+              <CustomerPickupBadge />
+            </div>
+          )}
+        </td>
         <td className="px-3 py-[8.8px] align-top">
           <DistanceEta shipment={s} />
         </td>
-        <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{s.trailer_number || "—"}</td>
+        <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{s.trailer_numbers || s.trailer_number || "—"}</td>
         <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{fmtNum(s.total_bdft)}</td>
         <td className="px-3 py-[8.8px] align-top text-sm font-mono tabular-nums text-text">{s.bol_number || "—"}</td>
         <td className="px-3 py-[8.8px] align-top">

@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (q) {
-      where.push("(LOWER(shipments.customer) LIKE ? OR LOWER(j.invoice_number) LIKE ? OR LOWER(shipments.trailer_number) LIKE ? OR LOWER(shipments.carrier) LIKE ? OR LOWER(shipments.bol_number) LIKE ?)");
+      where.push("(LOWER(shipments.customer) LIKE ? OR LOWER(j.invoice_number) LIKE ? OR EXISTS (SELECT 1 FROM loading_assignments la2 WHERE la2.job_id = shipments.job_id AND la2.loading_status <> 'archived' AND LOWER(la2.trailer_number) LIKE ?) OR LOWER(shipments.carrier) LIKE ? OR LOWER(shipments.bol_number) LIKE ?)");
       const qPattern = `%${q}%`;
       binds.push(qPattern, qPattern, qPattern, qPattern, qPattern);
     }
@@ -213,6 +213,12 @@ export async function GET(request: NextRequest) {
                          WHERE b.job_id = shipments.job_id
                            AND (b.signed_bol_photo_key IS NOT NULL
                                 OR EXISTS (SELECT 1 FROM bol_documents d WHERE d.bol_id = b.id))) AS has_signed_bol,
+                (SELECT group_concat(t, ', ') FROM (
+                   SELECT la.trailer_number AS t FROM loading_assignments la
+                    WHERE la.job_id = shipments.job_id AND la.loading_status <> 'archived'
+                      AND TRIM(COALESCE(la.trailer_number, '')) <> ''
+                    ORDER BY la.load_number ASC)) AS trailer_numbers,
+                (LOWER(TRIM(COALESCE(j.method, ''))) = 'customer pickup') AS is_customer_pickup,
                 (SELECT COALESCE(SUM(cc.fee_amount_cents), 0) FROM carrier_charges cc WHERE cc.job_id = shipments.job_id) AS carrier_charges_total_cents,
                 (SELECT COUNT(*) FROM carrier_charges cc WHERE cc.job_id = shipments.job_id) AS carrier_charges_count
            FROM shipments

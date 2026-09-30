@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileCheck } from "lucide-react";
+import IconAction from "./IconAction";
 import Modal from "@/components/Modal";
 import PdfViewer from "@/components/PdfViewer";
 import { formatEtDateTime } from "@/lib/etDateTime";
@@ -73,7 +74,8 @@ const segmentClass = (active: boolean) =>
       : "text-muted hover:text-text border border-transparent"
   }`;
 
-export default function SignedBolButton({ jobId }: { jobId: string }) {
+// lgx-rows-01: always rendered in the row; `available` = has_signed_bol. Unavailable -> grayed IconAction, modal never opens.
+export default function SignedBolButton({ jobId, available }: { jobId: string; available: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -237,15 +239,12 @@ export default function SignedBolButton({ jobId }: { jobId: string }) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={handleOpen}
-        className="inline-flex items-center gap-1.5 min-h-[38px] px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] transition-colors cursor-pointer whitespace-nowrap"
-        title="View the signed Bill of Lading"
-      >
-        <FileCheck size={14} aria-hidden="true" className="text-muted" />
-        Signed BOL
-      </button>
+      <IconAction
+        icon={FileCheck}
+        label="View signed BOL"
+        disabledReason={available ? null : "No signed BOL on file yet"}
+        onClick={() => { if (available) handleOpen(); }}
+      />
       {isOpen && typeof document !== "undefined" ? createPortal(modal, document.body) : null}
     </>
   );

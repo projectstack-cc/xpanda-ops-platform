@@ -2482,6 +2482,34 @@ current series).
 
 ## Logistics (v2)
 
+- **lgx-rows-01 — trailer # from `loading_assignments`; icon-only row actions; delivery time + customer pickup on
+  rows (§9a / §9b). No migration.** **Trailer # root cause:** the v2 dashboard row read `shipments.trailer_number`,
+  but both loading dashboards (legacy `loading.js` PUT and v2 `/v2/api/loading-assignments` PUT) write trailer #
+  per load to `loading_assignments.trailer_number` (propagated to `bols.trailer_no`) — nothing ever writes
+  `shipments.trailer_number`. Since 2026-09-01: 138 outbound orders, **0** with `shipments.trailer_number`, **98**
+  with a trailer on `loading_assignments`. **Decision: `loading_assignments` is the single source of truth** — no
+  sync into `shipments`. `GET /v2/api/shipments` adds `trailer_numbers` (non-archived loads, load order,
+  comma-joined) and `is_customer_pickup` (`jobs.method = 'customer pickup'`); search matches trailer # via
+  `EXISTS` on `loading_assignments` (bind count unchanged). `GET /v2/api/shipments/:id` loads carry
+  `assignment_id` + `trailer_number` (shown as `Trailer <n>` per load in the drill-down). `PUT
+  /v2/api/shipments/:id` writes `trailer_number` for **unlinked** shipments only; on a job-linked shipment the key
+  is ignored. The Edit Shipment modal renders one trailer # input per load (read-only without
+  `canManageLoading`, and locked with "Locked — trailer has left the dock." for in-transit/delivered/archived
+  loads) and, after the shipment PUT succeeds, sends each **changed** load sequentially to `PUT
+  /v2/api/loading-assignments { id, trailer_number }` (manager gate, in-transit lock, BOL propagation all live
+  there); a failure names the load and keeps the modal open. Row, client search, and calendar detail read
+  `trailer_numbers || trailer_number` (the second is the legacy unlinked fallback). **Row actions:** new
+  `IconAction` primitive (38×38, icon 16, tooltip + aria-label, `disabledReason` grays it out with the reason as
+  tooltip, disabled `href` renders a `<span>`). `BolActions` always renders four icon actions in fixed order —
+  Build Load (Truck), Loading sheet (Printer), Signed BOL (FileCheck), View BOL (Eye) / Generate BOL (FilePlus,
+  primary) — the cancelled-without-BOL early return is gone. `LoadingSheetButton` order mode and
+  `SignedBolButton` (new `available` prop) render through `IconAction`; day-mode loading sheets unchanged.
+  Actions column is a fixed `w-[200px]` (four icons + gaps + padding); other columns nudged to fit (Customer
+  20→18%, Carrier 14→12%, Distance 10→9%, BDFT 7→6%, BOL # 10→9%, Status 10→9%). **Delivery time:**
+  `delivery_time` shows under the ship date (header `Ship date / time`). **Customer pickup:** a neutral
+  `CustomerPickupBadge` (exported from `ShipmentRow.tsx`) renders under Carrier on the row and in the calendar
+  detail; with a blank carrier the badge shows alone.
+
 - **lgx-minimap-01 — destination minimap in the shipment row drill-down (§9b / §9a). No migration, no new
   dependency.** The Carrier View's non-interactive ~120px Leaflet minimap (lazy-mounted, tap opens Google Maps)
   now also renders under the "Shipping address" column of `/v2/logistics`'s `ShipmentDetailPanel`, wrapped in a

@@ -16,11 +16,19 @@
 //     editable only when job-linked -- seeded from GET /v2/api/jobs/:id, changed fields only.
 //   - An order that already has a BOL gets an informational notice when customer / carrier / ship
 //     date / ship-to change: existing BOLs are stored documents and keep the old details.
-//   - trailer_number is gated behind X-User-Can-Manage-Loading. The `canManageLoading` prop is
+//   - Trailer # (lgx-rows-01): the single source of truth is loading_assignments.trailer_number, per
+//     load. Job-linked shipments fetch GET /v2/api/shipments/:id (loads carry assignment_id +
+//     trailer_number) and render one input per load; on Save, after the shipment PUT succeeds, each
+//     CHANGED load is sent sequentially to PUT /v2/api/loading-assignments { id, trailer_number } (that
+//     route owns the manager gate, the in-transit lock, and BOL propagation). trailer_number is never
+//     sent in the shipments PUT for a job-linked shipment. Loads that have left the dock
+//     (in_transit/delivered/archived) render read-only, mirroring the server lock. Unlinked shipments
+//     keep the single field, which still writes shipments.trailer_number.
+//     Editing is gated behind X-User-Can-Manage-Loading. The `canManageLoading` prop is
 //     computed by the caller (ShipmentDashboard.tsx) the same way DockBoard.tsx already does
 //     (`isAdmin || permissions["logistics.loading.manage"]?.edit`) -- reusing that existing
 //     client-side pattern rather than inventing a new one. When false, trailer # renders
-//     read-only and is omitted from the payload.
+//     read-only and is never sent.
 //   - scrap_pickup is a TEXT "YES"/"NO" enum -- rendered as a <select>, never a checkbox.
 //   - load_count / total_bdft are validated client-side whenever they're sent -- never sent as
 //     "" or whitespace.
@@ -50,7 +58,12 @@ import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
 import { STATUS_VARIANTS } from "./ShipmentRow";
-import type { ShipmentListItem, JobForBol } from "./types";
+import type { ShipmentListItem, JobForBol, ShipmentLoad } from "./types";
+
+// Mirrors loading-assignments/route.ts's trailer lock -- the server remains the authority.
+const TRAILER_LOCKED_STATUSES = ["in_transit", "delivered", "archived"];
+const MANAGER_TOOLTIP = "Manager access required to edit the trailer #.";
+const LOCKED_TOOLTIP = "Locked — trailer has left the dock.";
 
 // The exact 8-option set the server (shipments/[id]/route.ts) accepts -- deliberately excludes
 // "awaiting"/"scheduled" (board-driven-only in legacy, never hand-set from this form).
@@ -142,6 +155,14 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // lgx-rows-01: per-load trailer # (job-linked only), keyed by loading_assignments.id.
+  const [loads, setLoads] = useState<ShipmentLoad[] | null>(null);
+  const [loadsLoading, setLoadsLoading] = useState(false);
+  const [loadTrailers, setLoadTrailers] = useState<Record<string, string>>({});
+  const [loadTrailerSeed, setLoadTrailerSeed] = useState<Record<string, string>>({});
+  // True once any write has landed (e.g. shipment PUT ok but a load trailer PUT failed) so a later
+  // Cancel still tells the dashboard to refetch.
+  const [partialSaved, setPartialSaved] = useState(false);
 
   const isOpen = !!shipment;
   const jobLinked = !!shipment?.job_id;
@@ -154,6 +175,7 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     setDeleteArmed(false);
     setDeleting(false);
     setDeleteError(null);
+    setPartialSaved(false);
     if (!shipment) {
       setForm(emptyForm());
       setSeed(emptyForm());
@@ -212,6 +234,37 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     };
   }, [shipment?.job_id]);
 
+  // lgx-rows-01: loads (assignment_id + trailer_number) for per-load trailer # -- fetched in parallel
+  // with the job fetch above.
+  useEffect(() => {
+    setLoads(null);
+    setLoadTrailers({});
+    setLoadTrailerSeed({});
+    if (!shipment?.job_id) return;
+    let cancelled = false;
+    setLoadsLoading(true);
+    fetch(`/v2/api/shipments/${encodeURIComponent(shipment.id)}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (cancelled || !json.ok) return;
+        const list: ShipmentLoad[] = Array.isArray(json.data?.loads) ? json.data.loads : [];
+        const seeded: Record<string, string> = {};
+        for (const ld of list) seeded[ld.assignment_id] = ld.trailer_number || "";
+        setLoads(list);
+        setLoadTrailers(seeded);
+        setLoadTrailerSeed(seeded);
+      })
+      .catch(() => {
+        // Best-effort -- the Trailer # field shows "Trailer # unavailable." if this fails.
+      })
+      .finally(() => {
+        if (!cancelled) setLoadsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shipment?.id, shipment?.job_id]);
+
   function set<K extends keyof EditForm>(field: K, value: EditForm[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
@@ -262,7 +315,8 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
 
     // trailer_number omitted entirely unless the user can manage loading -- its mere presence
     // in the payload is checked server-side too, but never send it if the control was read-only.
-    if (canManageLoading) {
+    // lgx-rows-01: unlinked only -- job-linked trailer # goes to loading_assignments below.
+    if (canManageLoading && !jobLinked) {
       payload.trailer_number = form.trailerNumber;
     }
 
@@ -293,6 +347,38 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
       if (!res.ok || !data.ok) {
         setSaveError(data.detail || data.error || `HTTP ${res.status}`);
         return;
+      }
+      setPartialSaved(true);
+
+      // lgx-rows-01: per-load trailer # -> PUT /v2/api/loading-assignments, changed loads only,
+      // sequentially. A failure names the load and keeps the modal open; loads that saved are
+      // re-seeded so a retry only resends what's still outstanding.
+      if (jobLinked && canManageLoading && loads) {
+        const errors: string[] = [];
+        for (const ld of loads) {
+          const next = loadTrailers[ld.assignment_id] ?? "";
+          if (next === (loadTrailerSeed[ld.assignment_id] ?? "")) continue;
+          const name = loads.length > 1 ? `Load ${ld.load_number ?? "?"}` : "Trailer #";
+          try {
+            const r = await fetch("/v2/api/loading-assignments", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: ld.assignment_id, trailer_number: next }),
+            });
+            const d = await r.json().catch(() => null);
+            if (!r.ok || !d?.ok) {
+              errors.push(`${name}: ${d?.detail || d?.error || `HTTP ${r.status}`}`);
+              continue;
+            }
+            setLoadTrailerSeed((prev) => ({ ...prev, [ld.assignment_id]: next }));
+          } catch {
+            errors.push(`${name}: network error`);
+          }
+        }
+        if (errors.length) {
+          setSaveError(`Shipment saved, but the trailer # didn't save — ${errors.join("; ")}`);
+          return;
+        }
       }
 
       onClose(true);
@@ -331,7 +417,7 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={() => onClose(false)} title="Edit Shipment" size="lg">
+    <Modal isOpen={isOpen} onClose={() => onClose(partialSaved)} title="Edit Shipment" size="lg">
       {shipment && (
         <div className="space-y-4">
           <Field label="Status">
@@ -407,20 +493,55 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
                 onChange={(e) => set("loadCount", e.target.value)}
               />
             </Field>
-            <Field label="Trailer #">
-              {canManageLoading ? (
-                <input
-                  type="text"
-                  className={inputClass}
-                  value={form.trailerNumber}
-                  onChange={(e) => set("trailerNumber", e.target.value)}
-                />
-              ) : (
-                <div className={readOnlyClass} title="Manager access required to edit the trailer #.">
-                  {form.trailerNumber || "—"}
+            {!jobLinked && (
+              <Field label="Trailer #">
+                {canManageLoading ? (
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={form.trailerNumber}
+                    onChange={(e) => set("trailerNumber", e.target.value)}
+                  />
+                ) : (
+                  <div className={readOnlyClass} title={MANAGER_TOOLTIP}>
+                    {form.trailerNumber || "—"}
+                  </div>
+                )}
+              </Field>
+            )}
+            {jobLinked && (loadsLoading || !loads || loads.length === 0) && (
+              <Field label="Trailer #">
+                <div className={readOnlyClass}>
+                  {loadsLoading ? "Loading…" : loads ? "No loads yet." : "Trailer # unavailable."}
                 </div>
-              )}
-            </Field>
+              </Field>
+            )}
+            {jobLinked &&
+              !loadsLoading &&
+              loads?.map((ld) => {
+                const locked = TRAILER_LOCKED_STATUSES.includes(ld.loading_status);
+                const value = loadTrailers[ld.assignment_id] ?? "";
+                const label = loads.length > 1 ? `Load ${ld.load_number ?? "?"} trailer #` : "Trailer #";
+                return (
+                  <Field key={ld.assignment_id} label={label}>
+                    {canManageLoading && !locked ? (
+                      <input
+                        type="text"
+                        className={inputClass}
+                        value={value}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setLoadTrailers((prev) => ({ ...prev, [ld.assignment_id]: v }));
+                        }}
+                      />
+                    ) : (
+                      <div className={readOnlyClass} title={locked ? LOCKED_TOOLTIP : MANAGER_TOOLTIP}>
+                        {value || "—"}
+                      </div>
+                    )}
+                  </Field>
+                );
+              })}
           </div>
 
           {jobLinked && (
@@ -547,7 +668,7 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => onClose(false)}
+                onClick={() => onClose(partialSaved)}
                 className="min-h-[44px] px-4 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold text-text cursor-pointer"
               >
                 Cancel

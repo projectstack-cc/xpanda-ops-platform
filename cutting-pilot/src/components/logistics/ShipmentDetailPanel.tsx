@@ -128,6 +128,12 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono tabular-nums font-semibold text-text">{suffix || "Load"}</span>
                     <StatusBadge status={ld.loading_status} />
+                    {ld.trailer_number && (
+                      <span className="text-xs">
+                        <span className="text-muted">Trailer </span>
+                        <span className="font-mono tabular-nums text-text">{ld.trailer_number}</span>
+                      </span>
+                    )}
                     {deliveredAt && <span className="text-xs text-muted tabular-nums">Delivered {deliveredAt}</span>}
                   </div>
                   {ld.qr_additional_info && (

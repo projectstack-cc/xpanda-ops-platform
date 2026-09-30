@@ -51,6 +51,10 @@ export interface ShipmentListItem {
   // carrier-04: carrier-entered fees across all of the job's loads (list route subqueries).
   carrier_charges_total_cents: number;
   carrier_charges_count: number;
+  /** lgx-rows-01: trailer #s from loading_assignments (non-archived, load order), comma-joined; null when none. */
+  trailer_numbers?: string | null;
+  /** lgx-rows-01: the linked job's method is 'customer pickup' (set on the Orders form). */
+  is_customer_pickup?: number | boolean;
 }
 
 // Response shape of GET /v2/api/shipments/:id -- backs ShipmentDetailPanel's inline row
@@ -79,6 +83,10 @@ export interface ShipmentDetail {
 }
 
 export interface ShipmentLoad {
+  /** lgx-rows-01: loading_assignments.id -- the PUT /v2/api/loading-assignments key for trailer # edits. */
+  assignment_id: string;
+  /** lgx-rows-01: trailer # (single source of truth: loading_assignments). */
+  trailer_number: string | null;
   load_number: number | null;
   loading_status: string;
   delivered_at: string | null;

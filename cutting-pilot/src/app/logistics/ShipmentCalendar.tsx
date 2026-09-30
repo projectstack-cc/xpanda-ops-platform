@@ -8,6 +8,7 @@ import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, FileText, Eye } from "lucide-react";
 import { formatDuration } from "@/lib/time";
 import type { ShipmentListItem } from "@/components/logistics/types";
+import { CustomerPickupBadge } from "@/components/logistics/ShipmentRow";
 
 interface ShipmentCalendarProps {
   shipments: ShipmentListItem[];
@@ -280,10 +281,15 @@ export default function ShipmentCalendar({
               <div>
                 <span className="text-muted block">Carrier</span>
                 <span className="font-medium text-text">{selectedShipment.carrier || "—"}</span>
+                {Boolean(selectedShipment.is_customer_pickup) && (
+                  <span className="block mt-1">
+                    <CustomerPickupBadge />
+                  </span>
+                )}
               </div>
               <div>
                 <span className="text-muted block">Trailer #</span>
-                <span className="font-medium text-text font-mono">{selectedShipment.trailer_number || "—"}</span>
+                <span className="font-medium text-text font-mono">{selectedShipment.trailer_numbers || selectedShipment.trailer_number || "—"}</span>
               </div>
               <div>
                 <span className="text-muted block">BOL #</span>

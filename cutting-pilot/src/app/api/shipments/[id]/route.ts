@@ -26,7 +26,8 @@
 //   - method is no longer accepted (lgx-editmodal-01): retired from the logistics UI; 'customer
 //     pickup' is set on the Orders form only. A `method` key in the payload is ignored like any
 //     unknown key.
-//   - trailer_number is gated behind X-User-Can-Manage-Loading specifically (not the general
+//   - trailer_number (UNLINKED shipments only since lgx-rows-01 -- job-linked trailer # lives on
+//     loading_assignments and is ignored here) is gated behind X-User-Can-Manage-Loading specifically (not the general
 //     logistics.dashboard edit permission) -- mirrors legacy's original intent and the existing
 //     convention in loading-assignments/route.ts:313-319 (reject the whole request, don't drop
 //     just the field).
@@ -168,7 +169,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
     let loads: any[] = [];
     if (shipment.job_id) {
       const lr = await DB.prepare(
-        `SELECT la.load_number, la.loading_status, la.delivered_at,
+        `SELECT la.id AS assignment_id, la.trailer_number, la.load_number, la.loading_status, la.delivered_at,
                 (SELECT b.signed_bol_additional_info FROM bols b
                   WHERE b.job_id = la.job_id
                     AND (
@@ -368,7 +369,10 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
     );
   }
 
-  if (payloadKeys.includes(TRAILER_FIELD) && request.headers.get("X-User-Can-Manage-Loading") !== "1") {
+  // lgx-rows-01: trailer # lives on loading_assignments (per load) -- the single source of truth, edited via
+  // PUT /v2/api/loading-assignments. shipments.trailer_number is only written for UNLINKED shipments; on a
+  // job-linked shipment a trailer_number key is ignored (never written, never gated).
+  if (!existing.job_id && payloadKeys.includes(TRAILER_FIELD) && request.headers.get("X-User-Can-Manage-Loading") !== "1") {
     return NextResponse.json(
       { ok: false, error: "Manager access required to edit the trailer #." },
       { status: 403 }
@@ -376,7 +380,7 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   }
 
   const ALLOWED_FIELDS: readonly string[] = existing.job_id
-    ? [...ALWAYS_EDITABLE, TRAILER_FIELD]
+    ? [...ALWAYS_EDITABLE]
     : [...ALWAYS_EDITABLE, TRAILER_FIELD, ...JOB_OWNED_FIELDS];
 
   // Validate EVERYTHING before writing anything.

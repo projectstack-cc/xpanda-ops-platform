@@ -9,11 +9,13 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Printer } from "lucide-react";
+import IconAction from "./IconAction";
 import Modal from "@/components/Modal";
 import PdfViewer from "@/components/PdfViewer";
 import { buildLoadingSheetPdf, type LoadingSheetOrder } from "@/lib/logistics/loadingSheet";
 
-type Props = { mode: "order"; jobId: string } | { mode: "day" };
+// lgx-rows-01: the order variant renders as an IconAction (row actions); disabledReason grays it out.
+type Props = { mode: "order"; jobId: string; disabledReason?: string | null } | { mode: "day" };
 
 function todayET(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
@@ -106,6 +108,14 @@ export default function LoadingSheetButton(props: Props) {
           className="h-9 px-2 text-xs rounded-lg border border-[var(--border)] bg-surface text-text focus:outline-hidden focus:border-[var(--brand)] cursor-pointer"
         />
       )}
+      {props.mode === "order" ? (
+        <IconAction
+          icon={Printer}
+          label="Print loading sheet"
+          disabledReason={props.disabledReason}
+          onClick={handleOpen}
+        />
+      ) : (
       <button
         type="button"
         onClick={handleOpen}
@@ -116,6 +126,7 @@ export default function LoadingSheetButton(props: Props) {
         <Printer size={14} aria-hidden="true" className="text-muted" />
         {props.mode === "day" ? "Loading sheets" : "Loading sheet"}
       </button>
+      )}
       {isOpen && typeof document !== "undefined" ? createPortal(modal, document.body) : null}
     </>
   );

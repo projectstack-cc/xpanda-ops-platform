@@ -256,6 +256,8 @@
 
 ## Logistics (v2)
 
+- [ ] **`shipments.trailer_number` is dead for job-linked shipments** (trailer # lives on
+  `loading_assignments` since lgx-rows-01). Drop the column once legacy `logistics/index.html` is retired.
 - [ ] **logi-rollout-02: give Invoice Analytics (and Load Builder) their own middleware lines
   before removing the `/v2/logistics` dark-launch rule.** Otherwise the pages fall through to
   `logistics.dashboard` while their APIs stay on `logistics.v2`.
