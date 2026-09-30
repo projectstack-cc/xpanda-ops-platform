@@ -31,6 +31,7 @@ import BolViewerModal from "@/components/logistics/BolViewerModal";
 import BolGenerateModal from "@/components/logistics/BolGenerateModal";
 import BolEditorModal, { type EditorTarget } from "@/components/logistics/BolEditorModal";
 import ShipmentEditModal from "@/components/logistics/ShipmentEditModal";
+import LoadingSheetButton from "@/components/logistics/LoadingSheetButton";
 import StatBreakdownModal from "@/components/logistics/StatBreakdownModal";
 import type { ShipmentDetail, ShipmentListItem, LogisticsStats } from "@/components/logistics/types";
 import type { BolRecord } from "@/lib/bolShared";
@@ -381,6 +382,7 @@ export default function ShipmentDashboard({
                 Invoice Analytics
               </a>
             )}
+            <LoadingSheetButton mode="day" />
             <button
               type="button"
               onClick={load}

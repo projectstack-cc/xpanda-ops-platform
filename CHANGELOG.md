@@ -2473,6 +2473,30 @@ current series).
 
 ## Logistics (v2)
 
+- **lgx-loadsheet-01 — printable loading sheets, per order + whole day (§9a route, §9b PDF/UI).**
+  The loading-dock equivalent of the cut list: pdf-lib, US Letter portrait, cut-list page-1 chrome
+  (margin 40, Helvetica, same colors, `/logo/xpanda.png` embedded once per document, non-fatal).
+  New read-only `GET /v2/api/shipments/loading-sheet?job_id=` | `?date=YYYY-MM-DD` (exactly one,
+  else 400; inherits the `logistics.dashboard` gate): one entry per job (outbound, non-cancelled,
+  deduped by `job_id`), sorted by invoice # ascending, with line items and non-archived loads (bay,
+  trailer, BOL-per-load via the same newest-per-load / null-load_number fallback as
+  `shipments/[id]` carrier-03); carrier/delivery prefer the shipment's value, then the job's. New
+  `lib/logistics/loadingSheet.ts` `buildLoadingSheetPdf(orders)` — ONE document, each order on a
+  fresh page. Locked scope: one sheet per order (multi-load orders list every trailer in the header
+  block; line items not split per trailer); columns `ITEM | DIMENSIONS | QTY | LOADED` (empty
+  checkbox), no density/bundles; page-1 sign-off "All quantities loaded and counted?" + `Loaded by:` /
+  `Date:` (cut-list geometry); bordered NOTES box (shipment notes, always drawn, ≥48pt, grows with
+  text); `Total pieces`; measured-height rows + page breaks (P395 approach); total + notes move to a
+  trailing page when they don't fit. English-only. `lib/cutList.ts` untouched (its exported
+  `formatCutListAddress`/`formatCutListDims` imported; `wrapText` + `formatShipDate` copied verbatim).
+  New shared `components/logistics/LoadingSheetButton.tsx` (`mode: "order" | "day"`): per-order
+  "Loading sheet" in `BolActions.tsx` (any non-cancelled order with a job, incl. delivered for
+  reprints) and a "Loading sheets" toolbar button + date picker (default today, ET) in
+  `ShipmentDashboard.tsx`; opens the shared Modal (portaled to `body`, since the per-order instance
+  lives in a table cell) + PdfViewer; blob URL revoked on close/unmount; empty day and fetch/build
+  errors are shown in the modal. Self-checked with a throwaway 2-order build (40 rows + long notes;
+  zero loads) → 4 pages, no throw. No migration.
+
 - **lgx-write-01 — write-fence parity audit + flip (§9a, consulting §9).** Phase A: line-by-line
   behavioral diff of every fenced v2 write handler against its legacy counterpart; no defects found.
   Phase B: `V2_LOGISTICS_WRITES_ENABLED` flipped to `true` in

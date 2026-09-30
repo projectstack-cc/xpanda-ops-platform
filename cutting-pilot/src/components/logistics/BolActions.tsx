@@ -5,6 +5,7 @@
 // Once generated, alternates to "View BOL" (secondary/view action, also visible on delivered).
 import { FileText, Eye, Truck } from "lucide-react";
 import type { ShipmentListItem } from "./types";
+import LoadingSheetButton from "./LoadingSheetButton";
 
 interface BolActionsProps {
   shipment: ShipmentListItem;
@@ -33,6 +34,8 @@ export default function BolActions({ shipment, onViewBol, onGenerateBol }: BolAc
           Build Load
         </a>
       )}
+
+      {jobId && !isCancelled && <LoadingSheetButton mode="order" jobId={jobId} />}
 
       {hasBol ? (
         <button
