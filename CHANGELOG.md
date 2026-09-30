@@ -2473,6 +2473,19 @@ current series).
 
 ## Logistics (v2)
 
+- **lgx-eta-01 — dashboard ETA requires cached duration, not just miles (§9a).** Root cause:
+  `geocode_cache` rows written by Invoice Analytics (`api/logistics/invoice/*`) carry
+  `miles_from_origin` but never `duration_sec_from_origin` (by design — Invoice Analytics only needs
+  miles). `resolveDestRoute()` (`lib/logistics/routeCache.ts`) already heals miles-without-duration
+  as a tier-2 partial hit (one ORS matrix call, no re-geocode), but `attachDistanceEta()` in
+  `cutting-pilot/src/app/api/shipments/route.ts` marked such rows `distance_status: "ok"` on miles
+  alone, so the dashboard warm-up (which only requests `"pending"` rows) never sent them to
+  `/v2/api/shipments/distances` → mileage shown with no ETA, permanently. Fix: the `"ok"` branch now
+  requires both miles and duration (matching `lib/carrier/rows.ts` and routeCache's full-hit rule);
+  miles-only rows fall through to `"pending"` and get backfilled by the existing warm-up (≤16 rows
+  per load). 23 cache rows were in this state at audit time. Invoice Analytics writers untouched. No
+  migration.
+
 - **carrier-04 (cross-ref) — carrier fees on the v2 board (read-only).** `GET
   /v2/api/shipments/[id]`: each `loads[]` item gains `carrier_charges[]` +
   `carrier_charges_total_cents` (matched by integer `load_number`; a null-load_number charge goes

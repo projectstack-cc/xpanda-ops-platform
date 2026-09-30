@@ -67,7 +67,16 @@ async function attachDistanceEta(DB: D1Database, rows: any[]): Promise<void> {
       row.miles_from_origin = null;
       row.duration_sec = null;
       row.distance_status = "unavailable";
-    } else if (cached && cached.status === "ok" && cached.miles_from_origin != null) {
+    } else if (
+      cached &&
+      cached.status === "ok" &&
+      cached.miles_from_origin != null &&
+      cached.duration_sec_from_origin != null
+    ) {
+      // lgx-eta-01: require BOTH values, matching lib/carrier/rows.ts and routeCache.ts's full-hit
+      // rule. Miles-only rows (written by Invoice Analytics) fall through to "pending" so the
+      // dashboard warm-up sends them to /distances, where resolveDestRoute's tier-2 partial hit
+      // backfills duration with one matrix call (no re-geocode).
       row.miles_from_origin = cached.miles_from_origin;
       row.duration_sec = cached.duration_sec_from_origin;
       row.distance_status = "ok";
