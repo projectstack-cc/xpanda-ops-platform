@@ -62,6 +62,8 @@ const LEGACY_COORDS = {
   poNumber: { x: 315, y: 468, size: 12, lineH: 13, maxW: 255 },
   scrapYes: { x: 109, y: 512, size: 13 },
   scrapNo: { x: 109, y: 496, size: 13 },
+  // Fuel surcharge (lgx-fuel-01) — under Scrap Pick Up, not in FIELD_MAP (not editable).
+  fuelSurcharge: { x: 40, y: 470, size: 12 },
   commodity: { x: 55, y: 380, size: 13, lineH: 28, maxW: 510, center: true },
   qrCode: { x: 40, y: 222, size: 60 },
   shipperSignature: { x: 37, y: 48, size: 22 },

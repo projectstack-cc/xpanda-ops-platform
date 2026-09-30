@@ -46,6 +46,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
+import { canEditDashboard } from "@/lib/logistics/dashboardPerms";
 import { logActivity } from "@/lib/activityLog";
 import { completeCuttingLinesForJob } from "@/lib/cuttingLines";
 
@@ -193,17 +194,6 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
       { status: 500 }
     );
   }
-}
-
-function canEditDashboard(request: NextRequest): boolean {
-  if (request.headers.get("X-User-Is-Admin") === "1") return true;
-  let perms: any = {};
-  try {
-    perms = JSON.parse(request.headers.get("X-User-Permissions") || "{}");
-  } catch {
-    // fall through to false
-  }
-  return !!perms["logistics.dashboard"]?.edit;
 }
 
 type FieldResult = { column: string; value: unknown } | { error: string };

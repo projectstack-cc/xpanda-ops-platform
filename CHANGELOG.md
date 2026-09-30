@@ -2473,6 +2473,28 @@ current series).
 
 ## Logistics (v2)
 
+- **lgx-fuel-01 (MIGRATION-GATED: fuel-surcharge.sql) — daily fuel surcharge on BOLs (§9 / §3 / §9a /
+  §9b).** One flat dollar rate per calendar date in the new `fuel_surcharge_rates` table
+  (`rate_date` PK, `amount_cents` ≥ 0, `entered_by`/`entered_by_name`, `created_at`/`updated_at`),
+  entered on the v2 shipment dashboard via new `components/logistics/FuelSurchargeControl.tsx`
+  (date defaults to today ET; `$` amount; Save / Clear when emptied; "Set by <name> · <ET time>" or
+  "No rate for this date…"; read-only without `logistics.dashboard` edit; 400/403/501 shown inline).
+  New `/v2/api/bols/fuel-surcharge`: `GET ?dates=` (≤31, deduped) → `{ rates }`, `GET ?date=` →
+  single rate, `PUT { date, amount }` (write-fenced; actor from `X-User-*` headers only;
+  `logistics.dashboard` edit via the hoisted `lib/logistics/dashboardPerms.ts` `canEditDashboard`,
+  moved verbatim out of `shipments/[id]/route.ts`; amount regex shared with `carrier/charges`;
+  empty = clear/DELETE; upsert on `rate_date`; activity logged as `fuel_surcharge`). The BOL prints
+  **`Fuel surcharge: $45.00`** (HelveticaBold 12, `COORDS.fuelSurcharge` x40 y470) under the Scrap
+  Pick Up Yes/No boxes on all three copies; no rate for the BOL's `date` → no line. **Never frozen:**
+  looked up live at render time by `bols.date`, not copied onto the row or `render_overrides`; not
+  in `FIELD_MAP` (draws outside `layoutBol`, like the shipper signature). v2 render: `bolShared.ts`
+  takes `GeneratePdfOptions.fuelSurchargeCentsByDate` (stays fetch-free); `bolDomGlue.ts` fetches
+  once, fail-soft, for all three copy passes; `bolShared.selfcheck.ts` COORDS parity updated (69/69
+  pass). Paired legacy change: see `## Logistics`. Render-checked on driver/customer/original
+  templates (rasterized): line at y≈466–483, clear of the Scrap "No" box and the commodity rule;
+  no-rate render draws nothing. `bolEditorEngine.ts` untouched (editor preview omits the line —
+  BACKLOG). Migration applied to prod D1 via `wrangler d1 execute --remote` before push.
+
 - **lgx-loadsheet-01 — printable loading sheets, per order + whole day (§9a route, §9b PDF/UI).**
   The loading-dock equivalent of the cut list: pdf-lib, US Letter portrait, cut-list page-1 chrome
   (margin 40, Helvetica, same colors, `/logo/xpanda.png` embedded once per document, non-fatal).
@@ -5465,6 +5487,12 @@ current series).
   `node --check` clean.
 
 ## Logistics
+
+- **lgx-fuel-01 (cross-ref, MIGRATION-GATED: fuel-surcharge.sql)** — paired legacy half of the v2
+  fuel surcharge (see `## Logistics (v2)`): `logistics/bol-shared.js` adds `COORDS.fuelSurcharge`,
+  a once-per-`generatePdf` fail-soft lookup, and the `Fuel surcharge: $X.XX` draw (same text/coords/
+  font as v2); new read-only `GET /api/bols/fuel-surcharge?dates=` (`handleApiBolFuelSurcharge`,
+  exact-path row ahead of the `/api/bols` prefix row in `index.js`; gated `logistics.bol`).
 
 - **bol-wysiwyg-02 follow-up — fixed invisible-caret sizing and date-field format regression on
   edit, reported by Steve against the legacy editor.** Two bugs, same root cause (`positionAll`

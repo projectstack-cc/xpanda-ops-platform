@@ -32,6 +32,7 @@ import BolGenerateModal from "@/components/logistics/BolGenerateModal";
 import BolEditorModal, { type EditorTarget } from "@/components/logistics/BolEditorModal";
 import ShipmentEditModal from "@/components/logistics/ShipmentEditModal";
 import LoadingSheetButton from "@/components/logistics/LoadingSheetButton";
+import FuelSurchargeControl from "@/components/logistics/FuelSurchargeControl";
 import StatBreakdownModal from "@/components/logistics/StatBreakdownModal";
 import type { ShipmentDetail, ShipmentListItem, LogisticsStats } from "@/components/logistics/types";
 import type { BolRecord } from "@/lib/bolShared";
@@ -129,6 +130,7 @@ export default function ShipmentDashboard({
   // Shipment Edit Modal gates Trailer # editability on it, matching the server's
   // X-User-Can-Manage-Loading check in shipments/[id]/route.ts.
   const canManageLoading = isAdmin || permissions?.["logistics.loading.manage"]?.edit === true;
+  const canEditDashboard = isAdmin || permissions?.["logistics.dashboard"]?.edit === true;
   // Invoice Analytics link: mirror the middleware gate on both the page and /v2/api/logistics.
   // If that gate is repointed to a dedicated key later, change it here in the same commit.
   const canSeeInvoiceAnalytics = isAdmin || permissions?.["logistics.v2"]?.view === true;
@@ -394,6 +396,8 @@ export default function ShipmentDashboard({
             </button>
           </div>
         </div>
+
+        <FuelSurchargeControl canEdit={canEditDashboard} />
 
         {/* Top KPI Stats Widgets */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">

@@ -66,6 +66,21 @@ export async function buildCombinedBolPdf(
 ): Promise<Uint8Array> {
   const scriptFontBytes = await fetchScriptFontBytes();
   const trackingBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  // lgx-fuel-01: live daily fuel surcharge lookup (never frozen onto the BOL). Fetched once for all
+  // three copy passes. Fail-soft: any error -> {} -> no line.
+  let fuelSurchargeCentsByDate: Record<string, number> = {};
+  try {
+    const dates = Array.from(new Set(bolRecords.map((b) => String(b?.date ?? "").slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))));
+    if (dates.length) {
+      const res = await fetch(`/v2/api/bols/fuel-surcharge?dates=${encodeURIComponent(dates.join(","))}`, { credentials: "same-origin" });
+      if (res.ok) {
+        const body = await res.json();
+        fuelSurchargeCentsByDate = (body && body.rates) || {};
+      }
+    }
+  } catch {
+    fuelSurchargeCentsByDate = {};
+  }
   const out = await PDFDocument.create();
 
   for (const copyType of ["driver", "customer", undefined] as const) {
@@ -76,6 +91,7 @@ export async function buildCombinedBolPdf(
       scriptFontBytes,
       hideQr: opts.hideQr,
       trackingBaseUrl,
+      fuelSurchargeCentsByDate,
     });
     const src = await PDFDocument.load(bytes);
     const pages = await out.copyPages(src, src.getPageIndices());

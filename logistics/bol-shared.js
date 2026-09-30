@@ -35,6 +35,8 @@ window.BolShared = (function() {
     // Scrap Pick Up checkboxes
     scrapYes:      { x: 109, y: 512, size: 13 },
     scrapNo:       { x: 109, y: 496, size: 13 },
+    // Fuel surcharge (lgx-fuel-01) — under Scrap Pick Up, not in FIELD_MAP (not editable).
+    fuelSurcharge: { x: 40, y: 470, size: 12 },
 
     // Commodity description (size/lineH set dynamically — see commodity render block)
     commodity:     { x: 55,  y: 380, size: 13, lineH: 28, maxW: 510, center: true },
@@ -729,6 +731,16 @@ window.BolShared = (function() {
       }
     } catch (_e) { scriptFontBytes = null; }
 
+    // lgx-fuel-01: live daily fuel surcharge lookup (never frozen onto the BOL). Fail-soft: any error -> no line.
+    let fuelSurchargeByDate = {};
+    try {
+      const _dates = [...new Set(bolRecords.map((b) => String((b && b.date) || '').slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)))];
+      if (_dates.length) {
+        const _fr = await fetch('/api/bols/fuel-surcharge?dates=' + encodeURIComponent(_dates.join(',')));
+        if (_fr.ok) { const _fj = await _fr.json(); fuelSurchargeByDate = (_fj && _fj.data && _fj.data.rates) || {}; }
+      }
+    } catch (_e) { fuelSurchargeByDate = {}; }
+
     const combinedPdf = await PDFDocument.create();
 
     for (const _bolRaw of bolRecords) {
@@ -788,6 +800,17 @@ window.BolShared = (function() {
         page.drawText(run.text, o);
         if (run.underline) drawUnderline(run.text, o.x, o.y, run.size, runFont, color);
       });
+
+      // ── Fuel surcharge (lgx-fuel-01; not in FIELD_MAP, draws outside layoutBol like the signature) ──
+      {
+        const _fsCents = fuelSurchargeByDate[String(bol.date || '').slice(0, 10)];
+        if (typeof _fsCents === 'number' && _fsCents >= 0) {
+          page.drawText('Fuel surcharge: $' + (_fsCents / 100).toFixed(2), {
+            x: COORDS.fuelSurcharge.x, y: COORDS.fuelSurcharge.y, size: COORDS.fuelSurcharge.size,
+            font: fontBold, color: black,
+          });
+        }
+      }
 
       // ── Shipper signature (cursive, all copies) — not in FIELD_MAP (not editable), so this stays
       // outside layoutBol and draws directly, unchanged. ──
