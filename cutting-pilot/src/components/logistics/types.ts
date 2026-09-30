@@ -26,6 +26,8 @@ export interface ShipmentListItem {
   total_bdft: number | string | null;
   bol_number: string | null;
   bol_count: number;
+  /** lgx-signed-01: any signed artifact (QR-signed PDF, carrier upload, or delivery photo) on any of the job's BOLs. */
+  has_signed_bol?: number | boolean;
   status: string;
   ship_date: string | null;
   ship_to_city: string | null;

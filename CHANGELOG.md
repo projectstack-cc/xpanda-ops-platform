@@ -2473,6 +2473,32 @@ current series).
 
 ## Logistics (v2)
 
+- **lgx-signed-01 — signed BOL viewer on shipment rows (§9a / §9b). No migration; read-only against D1
+  + R2.** v2 now surfaces the signed artifacts legacy flows already capture:
+
+  | Artifact | Where | Written by | Content |
+  |---|---|---|---|
+  | QR-signed copy | `bol_documents` `doc_type='original_signed'` (legacy rows: `driver_signed`/`customer_signed`) | `/track` delivery flow → `POST /api/public/bol-document/<token>` | PDF (signatures stamped) |
+  | Carrier's physical copy | `bol_documents` `doc_type='carrier_upload'` | Carrier View upload (carrier-02) | image or PDF |
+  | Delivery photo | `bols.signed_bol_photo_key` | `/track` delivery flow | image |
+
+  Shipment rows get a **Signed BOL** button (order: Loading sheet · Signed BOL · View/Generate BOL) whenever
+  any artifact exists — the signal is the new `has_signed_bol` flag on `GET /v2/api/shipments` list rows,
+  not shipment status (a cancelled order with a signed copy still shows it). New
+  `GET /v2/api/shipments/signed-bol?job_id` groups BOL rows per load like legacy's `loadBolDocuments`
+  (`load_number`, NULL → 0), collects docs from **every** BOL row in the load (a regenerate can leave the
+  signature on an older row), and picks per load: **Signed BOL** = newest `original_signed`, else newest
+  `driver_signed`/`customer_signed` (labeled "Driver/Customer copy (signed)") · **Carrier copy** = newest
+  `carrier_upload` · **Delivery photo** = newest BOL row with `signed_bol_photo_key`. Loads with none are
+  dropped; `r2_key` is never returned. New `GET /v2/api/shipments/signed-bol/file?doc_id|photo_bol_id`
+  streams from `BOL_PHOTOS` (keys resolved server-side only; same pattern as `api/carrier/carrier-copy`).
+  New `components/logistics/SignedBolButton.tsx` owns its modal: load tabs (`Load N of M`) when >1 load, a
+  segmented control of only the artifacts that exist (ET timestamps), PDF → `PdfViewer`, image → `<img>`,
+  chosen by the fetched blob's MIME type; blob URLs revoked on switch/close/unmount; 44px touch targets.
+  Both routes inherit the `/v2/api/shipments` → `logistics.dashboard` gate. Prod check (read-only): 125 of
+  259 delivered, 7 of 33 ready-to-ship, and 1 of 5 in-transit outbound orders flag as signed; no
+  `carrier_upload` rows exist in prod yet, so the Carrier copy segment will only appear once carriers upload.
+
 - **lgx-widgets-01 — KPI tiles show orders AND loads (§9a / §9b). No migration.** Each of the four
   Shipment Dashboard tiles (Outbound This Week, Pending Outbound, In Transit, Delivered (30d)) now shows
   two numbers: **orders** (shipment rows matching the tile's `STAT_PREDICATES` entry — today's number,

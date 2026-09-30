@@ -209,6 +209,10 @@ export async function GET(request: NextRequest) {
         `SELECT shipments.*, j.invoice_number,
                 j.ship_to_street, j.ship_to_city, j.ship_to_state, j.ship_to_zip,
                 (SELECT COUNT(*) FROM bols b WHERE b.job_id = shipments.job_id) AS bol_count,
+                EXISTS (SELECT 1 FROM bols b
+                         WHERE b.job_id = shipments.job_id
+                           AND (b.signed_bol_photo_key IS NOT NULL
+                                OR EXISTS (SELECT 1 FROM bol_documents d WHERE d.bol_id = b.id))) AS has_signed_bol,
                 (SELECT COALESCE(SUM(cc.fee_amount_cents), 0) FROM carrier_charges cc WHERE cc.job_id = shipments.job_id) AS carrier_charges_total_cents,
                 (SELECT COUNT(*) FROM carrier_charges cc WHERE cc.job_id = shipments.job_id) AS carrier_charges_count
            FROM shipments

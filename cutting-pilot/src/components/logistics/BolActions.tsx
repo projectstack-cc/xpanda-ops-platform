@@ -6,6 +6,7 @@
 import { FileText, Eye, Truck } from "lucide-react";
 import type { ShipmentListItem } from "./types";
 import LoadingSheetButton from "./LoadingSheetButton";
+import SignedBolButton from "./SignedBolButton";
 
 interface BolActionsProps {
   shipment: ShipmentListItem;
@@ -36,6 +37,8 @@ export default function BolActions({ shipment, onViewBol, onGenerateBol }: BolAc
       )}
 
       {jobId && !isCancelled && <LoadingSheetButton mode="order" jobId={jobId} />}
+
+      {jobId && Boolean(shipment.has_signed_bol) && <SignedBolButton jobId={jobId} />}
 
       {hasBol ? (
         <button
