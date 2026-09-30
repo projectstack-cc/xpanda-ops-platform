@@ -9,10 +9,14 @@
 // that route's header comment for why it doesn't delegate to /v2/api/jobs/:id or
 // /v2/api/board/:id (both gated on the separate "jobs" key).
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { formatEtDateTime } from "@/lib/etDateTime";
 import { formatUsdCents } from "@/lib/money";
 import { StatusBadge } from "./ShipmentRow";
 import type { ShipmentDetail } from "./types";
+
+// lgx-minimap-01: shared with the Carrier View. Leaflet touches `window` at import -> client-only.
+const DestinationMiniMap = dynamic(() => import("@/components/DestinationMiniMap"), { ssr: false });
 
 interface ShipmentDetailPanelProps {
   shipmentId: string;
@@ -91,6 +95,11 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
             </div>
           ) : (
             <div className="text-sm text-muted">No address on file.</div>
+          )}
+          {detail.dest && (
+            <div onClick={(e) => e.stopPropagation()}>
+              <DestinationMiniMap lat={detail.dest.lat} lng={detail.dest.lng} address={detail.dest.address} />
+            </div>
           )}
         </div>
         <div>

@@ -7,6 +7,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import type { D1Database } from "@cloudflare/workers-types";
 import { normalizeAddressKey } from "@/lib/logistics/freightInvoice";
+import { singleLineAddress } from "@/lib/logistics/address";
 import { resolveOrigin, resolveDestRoute } from "@/lib/logistics/routeCache";
 import type { GeoPoint } from "@/lib/logistics/ors";
 import { CARRIER_JOB_FILTER } from "./scope";
@@ -22,14 +23,6 @@ interface GeoInfo {
   miles: number | null;
   duration_sec: number | null;
   ok: boolean;
-}
-
-// Single-line ship-to incl. street2 (composeAddress-style, but tolerant of missing parts).
-function singleLineAddress(r: any): string | null {
-  const streetLine = [r.ship_to_street, r.ship_to_street2].map((v) => String(v ?? "").trim()).filter(Boolean).join(" ");
-  const stateZip = [r.ship_to_state, r.ship_to_zip].map((v) => String(v ?? "").trim()).filter(Boolean).join(" ");
-  const cityLine = [String(r.ship_to_city ?? "").trim(), stateZip].filter(Boolean).join(", ");
-  return [streetLine, cityLine].filter(Boolean).join(", ") || null;
 }
 
 function addressKeyOf(r: any): string | null {

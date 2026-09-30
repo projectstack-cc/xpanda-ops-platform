@@ -74,6 +74,8 @@ export interface ShipmentDetail {
   line_items: JobLineItem[];
   // carrier-03: one per non-archived loading_assignments row for the job.
   loads: ShipmentLoad[];
+  /** lgx-minimap-01: destination pin for the drill-down minimap (geocode_cache); null when the address can't be geocoded. */
+  dest?: { lat: number; lng: number; address: string } | null;
 }
 
 export interface ShipmentLoad {

@@ -1,7 +1,9 @@
 "use client";
-// src/app/carrier/CarrierMiniMap.tsx
-// Non-interactive ~120px destination minimap for a carrier load tile (carrier-03). Leaflet touches
-// `window` at import, so CarrierBoard loads this ONLY via next/dynamic with ssr:false. The map
+// src/components/DestinationMiniMap.tsx
+// Non-interactive ~120px destination minimap. First added for the Carrier View's load tiles
+// (carrier-03, originally under app/carrier/); shared with the /v2/logistics row drill-down
+// (ShipmentDetailPanel) since lgx-minimap-01. Leaflet touches `window` at import, so every caller
+// loads this ONLY via next/dynamic with ssr:false. The map
 // itself is lazy-mounted (IntersectionObserver) so a 10-load day doesn't init 10 maps up front.
 // circleMarker (SVG) instead of L.marker avoids the bundler default-icon-image bug. Tapping the
 // map opens Google Maps for the address in a new tab.
@@ -22,7 +24,7 @@ function tokenColor(name: string, fallback: string): string {
   return v || fallback;
 }
 
-export default function CarrierMiniMap({ lat, lng, address }: Props) {
+export default function DestinationMiniMap({ lat, lng, address }: Props) {
   const boxRef = useRef<HTMLDivElement>(null);
   const mapElRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);

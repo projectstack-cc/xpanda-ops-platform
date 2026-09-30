@@ -16,7 +16,7 @@ import CarrierSchedule from "./CarrierSchedule";
 import LinkedGroupList, { LinkedOrphanChip } from "./LinkedGroup";
 
 // Leaflet touches `window` at import — client-only.
-const CarrierMiniMap = dynamic(() => import("./CarrierMiniMap"), { ssr: false });
+const DestinationMiniMap = dynamic(() => import("@/components/DestinationMiniMap"), { ssr: false });
 
 interface CarrierRow {
   invoice_number: string | null;
@@ -183,7 +183,7 @@ function LoadRow({
         )}
       </div>
       {row.lat != null && row.lng != null && row.address && (
-        <CarrierMiniMap lat={row.lat} lng={row.lng} address={row.address} />
+        <DestinationMiniMap lat={row.lat} lng={row.lng} address={row.address} />
       )}
       <div className="flex flex-wrap items-center gap-2 mt-3">
         {row.access_token ? (

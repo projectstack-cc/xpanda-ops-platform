@@ -1802,6 +1802,11 @@ current series).
 
 ## Carrier View (v2)
 
+- **lgx-minimap-01 (cross-ref) — minimap component moved, no behavior change.** `CarrierMiniMap` is now the
+  shared `components/DestinationMiniMap.tsx` (also used by the `/v2/logistics` drill-down); `CarrierBoard.tsx`
+  imports it from there, and `singleLineAddress` now lives in `lib/logistics/address.ts`. See
+  `## Logistics (v2)`.
+
 - **carrier-06 — Carrier View: linked orders (trailer groups), same treatment as the schedule
   board (react-component-agent §9b + next-platform-agent §9a).** No migration
   (`jobs.trailer_group_id` exists).
@@ -2476,6 +2481,21 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **lgx-minimap-01 — destination minimap in the shipment row drill-down (§9b / §9a). No migration, no new
+  dependency.** The Carrier View's non-interactive ~120px Leaflet minimap (lazy-mounted, tap opens Google Maps)
+  now also renders under the "Shipping address" column of `/v2/logistics`'s `ShipmentDetailPanel`, wrapped in a
+  `stopPropagation` div so a tap never reaches a row click handler. **One component, two call sites:**
+  `app/carrier/CarrierMiniMap.tsx` → `components/DestinationMiniMap.tsx` (`git mv`, export renamed, no
+  behavior/markup change), loaded client-only via `next/dynamic` in both places. `singleLineAddress` moved
+  verbatim from `lib/carrier/rows.ts` to new `lib/logistics/address.ts` (the map's Google Maps link string).
+  `GET /v2/api/shipments/:id` now returns `dest: { lat, lng, address } | null` — job-linked + non-empty zip
+  only (same rule as `attachDistanceEta` / `addressKeyOf`), read from `geocode_cache`; on a miss it tries one
+  bounded `resolveDestRoute` (negative-cache backoff respected) and re-reads; any failure → `null`, never a
+  failed GET. `ShipmentDetail.dest` added to `types.ts`. **Stale drill-down fix:** `ShipmentDashboard`'s
+  `detailCacheRef` is now cleared after a saved shipment edit and after a generated BOL, so re-expanding a row
+  shows the new address / carrier / loads / pin instead of the pre-edit copy (surfaced by lgx-editmodal-01
+  making ship-to editable).
 
 - **lgx-fuel-02 (MIGRATION-GATED: fuel-rates-per-mile.sql — APPLIED to prod D1 via wrangler before push,
   per Steve) — fuel surcharge becomes per-mile × round trip (§9 / §3 / §9a / §9b).**

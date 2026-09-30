@@ -263,6 +263,8 @@ export default function ShipmentDashboard({
   function handleGenerateDone(generated: boolean) {
     setGenerateJobId(null);
     if (generated) {
+      // lgx-minimap-01: edits can change address/carrier/loads — drop cached drill-downs so they refetch.
+      detailCacheRef.current.clear();
       load(); // Refreshes bol_count so the row flips to "View BOL"
     }
   }
@@ -270,6 +272,8 @@ export default function ShipmentDashboard({
   function handleShipmentEditClose(saved: boolean) {
     setEditingShipment(null);
     if (saved) {
+      // lgx-minimap-01: edits can change address/carrier/loads — drop cached drill-downs so they refetch.
+      detailCacheRef.current.clear();
       load();
     }
   }

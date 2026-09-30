@@ -50,6 +50,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { D1PreparedStatement } from "@cloudflare/workers-types";
 import { getEnv } from "@/lib/db";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { normalizeAddressKey } from "@/lib/logistics/freightInvoice";
+import { resolveOrigin, resolveDestRoute } from "@/lib/logistics/routeCache";
+import { singleLineAddress } from "@/lib/logistics/address";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 import { canEditDashboard } from "@/lib/logistics/dashboardPerms";
 import { logActivity } from "@/lib/activityLog";
@@ -203,7 +207,44 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
       });
     }
 
-    return NextResponse.json({ ok: true, data: { ...shipment, line_items: lineItems, loads } });
+    // lgx-minimap-01: destination pin for the drill-down minimap. Same "job-linked + zip" rule as
+    // attachDistanceEta (shipments/route.ts) and addressKeyOf (lib/carrier/rows.ts). geocode_cache first;
+    // on a miss, one bounded resolveDestRoute (respects the negative-cache backoff), then re-read. Any
+    // failure leaves dest null and never fails the GET.
+    let dest: { lat: number; lng: number; address: string } | null = null;
+    const zip = String(shipment.ship_to_zip ?? "").trim();
+    if (shipment.job_id && zip) {
+      try {
+        const street = shipment.ship_to_street || "";
+        const city = shipment.ship_to_city || "";
+        const state = shipment.ship_to_state || "";
+        const key = normalizeAddressKey(street, city, state, zip);
+        const readGeo = () =>
+          DB.prepare("SELECT lat, lng FROM geocode_cache WHERE address_key = ?")
+            .bind(key)
+            .first<{ lat: number | null; lng: number | null }>();
+        let geo = await readGeo();
+        if (!geo || geo.lat == null || geo.lng == null) {
+          const { env } = await getCloudflareContext();
+          const apiKey = (env as any).ORS_API_KEY ?? "";
+          if (apiKey) {
+            await resolveDestRoute(DB, await resolveOrigin(DB, apiKey), apiKey, street, city, state, zip);
+            geo = await readGeo();
+          }
+        }
+        const lat = Number(geo?.lat);
+        const lng = Number(geo?.lng);
+        const address = singleLineAddress(shipment) ?? "";
+        if (geo && geo.lat != null && geo.lng != null && Number.isFinite(lat) && Number.isFinite(lng) && address) {
+          dest = { lat, lng, address };
+        }
+      } catch (e) {
+        console.error("Drill-down destination lookup failed:", e);
+        dest = null;
+      }
+    }
+
+    return NextResponse.json({ ok: true, data: { ...shipment, line_items: lineItems, loads, dest } });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "Server error.", detail: String(e?.message || e) },
