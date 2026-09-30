@@ -3254,7 +3254,7 @@ async function buildCutListPdf(job, opts = {}) {
     y -= 18;
     // cutlist-01: operator sign-off block (page 1 only). English-only, like the rest of this printed
     // document (the Cut List PDF is excluded from i18n by design — see BACKLOG i18n sweep notes).
-    page.drawText('Have all quantities been cut and verified?', { x: margin, y, size: 11, font: fontBold, color: black });
+    page.drawText('Have all quantities been cut and dimensions verified?', { x: margin, y, size: 11, font: fontBold, color: black });
     y -= 26;
     const soInitLabel = 'Operator initials:';
     page.drawText(soInitLabel, { x: margin, y, size: 10, font, color: black });

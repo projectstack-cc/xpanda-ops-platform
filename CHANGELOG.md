@@ -613,6 +613,11 @@ current series).
 
 ## Orders (v2)
 
+- **cutlist-02 — cut list sign-off wording (v2 + legacy parity).** Page-1 operator sign-off
+  question now reads "Have all quantities been cut and dimensions verified?" (was "...cut and
+  verified?"). Text-only change in `cutting-pilot/src/lib/cutList.ts` and `jobs/index.html`
+  `buildCutListPdf`; line sits alone on its row, no layout change.
+
 - **cutlist-01 — cut list: opt-in chunk breakdown + page-1 operator sign-off block (React
   Component Agent §9b lead, Job Board Agent §2 parity).** (1) The CHUNK BREAKDOWN page(s) are
   now **opt-in**: `buildCutListPdf(job, opts)` in `cutting-pilot/src/lib/cutList.ts` takes a new
