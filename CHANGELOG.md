@@ -2477,6 +2477,45 @@ current series).
 
 ## Logistics (v2)
 
+- **lgx-fuel-02 (MIGRATION-GATED: fuel-rates-per-mile.sql — APPLIED to prod D1 via wrangler before push,
+  per Steve) — fuel surcharge becomes per-mile × round trip (§9 / §3 / §9a / §9b).**
+  - **Model:** one rate per calendar date in dollars per mile (up to 3 decimals), stored as integer mills
+    in the new `fuel_rates_per_mile` table ($0.10 = 100). Charge = rate × round-trip miles, round trip =
+    `Math.round(2 × one-way ORS driving miles)` from the plant; `cents = Math.round(mills × rt / 10)`.
+    Mileage is the BOL's own ship-to (`bols.ship_to_*`), keyed with `normalizeAddressKey()` and resolved by
+    the existing `resolveDestRoute()` (same `geocode_cache` as the dashboard's Distance / ETA column; ORS
+    only on a cache miss, with the existing negative-cache backoff). Still computed live at every render,
+    never frozen onto the BOL.
+  - **Worked example:** $0.10/mi, 20 mi one-way → 40 mi round trip → 100 × 40 / 10 = 400¢ → **$4.00**.
+  - **BOL wording (changed from the prompt per Steve):** the BOL prints only the total, bold 11pt at the
+    same spot under Scrap Pick Up on all three copies: **`Fuel Surcharge - $4.00`**. If a rate is set but
+    mileage can't be resolved (no zip / unroutable), it prints the rate instead — **`Fuel Surcharge -
+    $0.10/mi`** — so the carrier still gets it, never a guessed number. No rate for the date → no line.
+    Rates display with 2 decimals unless the 3rd is nonzero (`$0.10`, `$0.125`).
+  - **Layout check:** the prompt's longest string (`Fuel surcharge: $123.45 (1,234 mi round trip ×
+    $0.125/mi)`) measured end x 298.0 (limit 300), but its mileage-unavailable wording measured 334.1 and
+    would have run into the PO # field (x 315) — reported to Steve, who chose the total-only wording above.
+    Final strings end well inside the column (`Fuel Surcharge - $123.45` / `- $0.125/mi`, bold 11). Rendered
+    both on all three templates via a scratch copy of `scripts/bol-parity.mjs` and rasterized: no overlap
+    with the Scrap Pick Up boxes or the commodity rule.
+  - **One formula / wording source:** new pure `lib/logistics/fuelSurcharge.ts` (`RATE_RE`,
+    `dollarsToMills`, `formatRate`, `roundTripMiles`, `surchargeCents`, `buildFuelLine`) +
+    `fuelSurcharge.selfcheck.ts` (19/19). The server builds each BOL's line; both renderers only draw it
+    (`FuelLine { main, detail }` — `detail` drawn in regular 9pt after `main` when present; always null today).
+  - **API (`/v2/api/bols/fuel-surcharge`, rewritten):** `GET ?date=` → `{ rate_mills, rate_display, … }`;
+    new `GET ?quote=<JSON array ≤ 20 of { date, ship_to_* }>` → `{ lines }` in input order (rates batched
+    per distinct date, each distinct address resolved once, invalid items → null, never a whole-call 400);
+    `PUT { date, rate }` (`invalid_rate`; empty clears; activity log `Set fuel surcharge for <date> to
+    $0.10/mi` / `Cleared …`). Old `?dates=` mode removed. Same gate + write fence.
+  - **Renderers (paired):** COORDS `fuelSurcharge: { x: 40, y: 470, size: 11, detailSize: 9 }` in
+    `bol-shared.js`, `bolShared.ts` (new optional `BolCoord.detailSize`), and `bolShared.selfcheck.ts`
+    (69/69). `GeneratePdfOptions.fuelSurchargeCentsByDate` → `fuelLines?: (FuelLine | null)[]` read by
+    record index (loop now indexed); `bolDomGlue.ts` and legacy `generatePdf` each make one fail-soft
+    `?quote=` fetch built from `bolRecords` in order.
+  - **Dashboard control:** "Fuel surcharge ($/mile)", rate input (`0.10`, client-side `RATE_RE`), shows
+    `$0.10/mi · set by …`, helper text "Charged on the BOL as rate × round-trip miles from the plant."
+  - The empty lgx-fuel-01 `fuel_surcharge_rates` table is left in place (cleanup item in BACKLOG).
+
 - **lgx-editmodal-01 — shipment edit modal writes through to the job; Method retired; orders PUT mirrors
   to shipment (§9a / §9b). No migration.**
   - **Root cause of the read-only fields:** on a job-linked shipment, customer / carrier / ship date /
@@ -5620,6 +5659,13 @@ current series).
   `node --check` clean.
 
 ## Logistics
+
+- **lgx-fuel-02 (cross-ref) — legacy BOLs read the v2 fuel quote; legacy route removed.**
+  `logistics/bol-shared.js` `generatePdf` now fetches `GET /v2/api/bols/fuel-surcharge?quote=` (same host +
+  session cookie, `logistics.bol` gate) because mileage resolution lives in v2, and draws the server-built
+  line by record index (COORDS `fuelSurcharge` now `size: 11, detailSize: 9`). The lgx-fuel-01 legacy
+  `GET /api/bols/fuel-surcharge` (`handleApiBolFuelSurcharge` in `_worker.js/routes/bols.js` + its
+  `_worker.js/index.js` row) is deleted — its flat-cents semantics are obsolete. See `## Logistics (v2)`.
 
 - **lgx-fuel-01 (cross-ref, MIGRATION-GATED: fuel-surcharge.sql)** — paired legacy half of the v2
   fuel surcharge (see `## Logistics (v2)`): `logistics/bol-shared.js` adds `COORDS.fuelSurcharge`,

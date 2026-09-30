@@ -959,33 +959,3 @@ export async function handleApiPartsSeed(request, env) {
   return json({ seeded: true, message: `Inserted ${DEFAULT_PARTS.length} default parts.` });
 }
 
-
-// lgx-fuel-01: read-only daily fuel surcharge lookup for BOL rendering (bol-shared.js generatePdf).
-// GET /api/bols/fuel-surcharge?dates=YYYY-MM-DD[,YYYY-MM-DD...]  ->  { ok:true, data:{ rates:{ [date]: cents } } }
-// Writes live ONLY in v2 (/v2/api/bols/fuel-surcharge PUT). Gated logistics.bol by the existing /^\/api\/bols/ map row.
-export async function handleApiBolFuelSurcharge(request, env) {
-  const db = env.DB;
-  if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
-  if (request.method !== "GET") return json({ ok: false, error: "Method Not Allowed" }, 405);
-
-  const url = new URL(request.url);
-  const dates = [...new Set(
-    (url.searchParams.get("dates") || "")
-      .split(",")
-      .map((d) => d.trim())
-      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-  )].slice(0, 31);
-  if (!dates.length) return json({ ok: true, data: { rates: {} } });
-
-  try {
-    const ph = dates.map(() => "?").join(",");
-    const res = await db.prepare(
-      `SELECT rate_date, amount_cents FROM fuel_surcharge_rates WHERE rate_date IN (${ph})`
-    ).bind(...dates).all();
-    const rates = {};
-    for (const r of (res.results || [])) rates[r.rate_date] = Number(r.amount_cents);
-    return json({ ok: true, data: { rates } });
-  } catch (e) {
-    return json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, 500);
-  }
-}

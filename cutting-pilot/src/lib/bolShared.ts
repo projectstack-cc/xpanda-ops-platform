@@ -62,6 +62,7 @@ import {
   type PDFPage,
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
+import type { FuelLine } from "@/lib/logistics/fuelSurcharge";
 import qrcode from "qrcode-generator";
 
 // ═══════════════════════════════════════════════════════════════════
@@ -84,6 +85,8 @@ export interface BolCoord {
   // parallel coord type.
   cols?: number;
   colMaxH?: number[];
+  // Fuel surcharge only (lgx-fuel-02): font size of the regular-weight detail run after the bold main run.
+  detailSize?: number;
 }
 
 export const COORDS: Record<string, BolCoord> = {
@@ -114,8 +117,8 @@ export const COORDS: Record<string, BolCoord> = {
   // Scrap Pick Up checkboxes
   scrapYes: { x: 109, y: 512, size: 13 },
   scrapNo: { x: 109, y: 496, size: 13 },
-  // Fuel surcharge (lgx-fuel-01) — under Scrap Pick Up, not in FIELD_MAP (not editable).
-  fuelSurcharge: { x: 40, y: 470, size: 12 },
+  // Fuel surcharge (lgx-fuel-01; per-mile lgx-fuel-02) — under Scrap Pick Up, not in FIELD_MAP (not editable).
+  fuelSurcharge: { x: 40, y: 470, size: 11, detailSize: 9 },
 
   // Commodity description (size/lineH set dynamically — see commodity render block)
   commodity: { x: 55, y: 380, size: 13, lineH: 28, maxW: 510, center: true },
@@ -1118,8 +1121,8 @@ export interface GeneratePdfOptions {
   hideQr?: boolean;
   /** Replaces `window.location.origin` for the QR tracking URL (`${trackingBaseUrl}/track/<token>`). */
   trackingBaseUrl?: string;
-  /** lgx-fuel-01: { 'YYYY-MM-DD': cents } — daily fuel surcharge, looked up live by the caller. Omitted/{} → no line. */
-  fuelSurchargeCentsByDate?: Record<string, number>;
+  /** lgx-fuel-02: one entry per bolRecords index, built server-side (GET /v2/api/bols/fuel-surcharge?quote=). */
+  fuelLines?: (FuelLine | null)[];
 }
 
 /**
@@ -1131,7 +1134,8 @@ export async function generatePdf(bolRecords: BolRecord[], opts: GeneratePdfOpti
 
   const combinedPdf = await PDFDocument.create();
 
-  for (const _bolRaw of bolRecords) {
+  for (let recordIndex = 0; recordIndex < bolRecords.length; recordIndex++) {
+    const _bolRaw = bolRecords[recordIndex];
     // Hydrate persisted overrides. The approve path passes `_overrides` already as an object; the
     // stored-view path passes a DB row whose `render_overrides` is a JSON STRING and has no
     // `_overrides`. Every render funnels through here, so this one step fixes all view callers
@@ -1197,14 +1201,18 @@ export async function generatePdf(bolRecords: BolRecord[], opts: GeneratePdfOpti
       if (run.underline) drawUnderline(run.text, o.x, o.y, run.size, runFont, color);
     });
 
-    // ── Fuel surcharge (lgx-fuel-01; not in FIELD_MAP, draws outside layoutBol like the signature) ──
+    // ── Fuel surcharge (lgx-fuel-02; not in FIELD_MAP, draws outside layoutBol like the signature).
+    // The server builds the text (lib/logistics/fuelSurcharge.ts); this only draws it. ──
     {
-      const fsCents = opts.fuelSurchargeCentsByDate?.[String(bol.date ?? "").slice(0, 10)];
-      if (typeof fsCents === "number" && fsCents >= 0) {
-        page.drawText("Fuel surcharge: $" + (fsCents / 100).toFixed(2), {
-          x: COORDS.fuelSurcharge.x, y: COORDS.fuelSurcharge.y, size: COORDS.fuelSurcharge.size,
-          font: fontBold, color: black,
-        });
+      const fuel = opts.fuelLines?.[recordIndex];
+      if (fuel) {
+        const fc = COORDS.fuelSurcharge;
+        page.drawText(fuel.main, { x: fc.x, y: fc.y, size: fc.size, font: fontBold, color: black });
+        if (fuel.detail) {
+          page.drawText(fuel.detail, {
+            x: fc.x + fontBold.widthOfTextAtSize(fuel.main, fc.size!), y: fc.y, size: fc.detailSize, font, color: black,
+          });
+        }
       }
     }
 

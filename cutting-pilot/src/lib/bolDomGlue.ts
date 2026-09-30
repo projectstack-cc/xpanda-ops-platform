@@ -7,6 +7,7 @@
 // same packet legacy's generateCombinedCopies/viewBolForJob produce), and the two small DOM
 // helpers (openPdf, confirmNoBolNumber) ported near-verbatim from bol-shared.js.
 import { PDFDocument } from "pdf-lib";
+import type { FuelLine } from "@/lib/logistics/fuelSurcharge";
 import {
   generatePdf,
   isLikelyFontBytes,
@@ -66,20 +67,26 @@ export async function buildCombinedBolPdf(
 ): Promise<Uint8Array> {
   const scriptFontBytes = await fetchScriptFontBytes();
   const trackingBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
-  // lgx-fuel-01: live daily fuel surcharge lookup (never frozen onto the BOL). Fetched once for all
-  // three copy passes. Fail-soft: any error -> {} -> no line.
-  let fuelSurchargeCentsByDate: Record<string, number> = {};
+  // lgx-fuel-02: live per-mile fuel surcharge (never frozen onto the BOL) — one server-built line per
+  // bolRecords index. Fetched once for all three copy passes. Fail-soft: any error -> [] -> no line.
+  let fuelLines: (FuelLine | null)[] = [];
   try {
-    const dates = Array.from(new Set(bolRecords.map((b) => String(b?.date ?? "").slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))));
-    if (dates.length) {
-      const res = await fetch(`/v2/api/bols/fuel-surcharge?dates=${encodeURIComponent(dates.join(","))}`, { credentials: "same-origin" });
+    const quote = bolRecords.map((b) => ({
+      date: String(b?.date ?? "").slice(0, 10),
+      ship_to_street: b?.ship_to_street ?? "",
+      ship_to_city: b?.ship_to_city ?? "",
+      ship_to_state: b?.ship_to_state ?? "",
+      ship_to_zip: b?.ship_to_zip ?? "",
+    }));
+    if (quote.length) {
+      const res = await fetch(`/v2/api/bols/fuel-surcharge?quote=${encodeURIComponent(JSON.stringify(quote))}`, { credentials: "same-origin" });
       if (res.ok) {
         const body = await res.json();
-        fuelSurchargeCentsByDate = (body && body.rates) || {};
+        fuelLines = body && Array.isArray(body.lines) ? body.lines : [];
       }
     }
   } catch {
-    fuelSurchargeCentsByDate = {};
+    fuelLines = [];
   }
   const out = await PDFDocument.create();
 
@@ -91,7 +98,7 @@ export async function buildCombinedBolPdf(
       scriptFontBytes,
       hideQr: opts.hideQr,
       trackingBaseUrl,
-      fuelSurchargeCentsByDate,
+      fuelLines,
     });
     const src = await PDFDocument.load(bytes);
     const pages = await out.copyPages(src, src.getPageIndices());

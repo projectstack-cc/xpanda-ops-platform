@@ -35,8 +35,8 @@ window.BolShared = (function() {
     // Scrap Pick Up checkboxes
     scrapYes:      { x: 109, y: 512, size: 13 },
     scrapNo:       { x: 109, y: 496, size: 13 },
-    // Fuel surcharge (lgx-fuel-01) — under Scrap Pick Up, not in FIELD_MAP (not editable).
-    fuelSurcharge: { x: 40, y: 470, size: 12 },
+    // Fuel surcharge (lgx-fuel-01; per-mile lgx-fuel-02) — under Scrap Pick Up, not in FIELD_MAP (not editable).
+    fuelSurcharge: { x: 40, y: 470, size: 11, detailSize: 9 },
 
     // Commodity description (size/lineH set dynamically — see commodity render block)
     commodity:     { x: 55,  y: 380, size: 13, lineH: 28, maxW: 510, center: true },
@@ -731,19 +731,27 @@ window.BolShared = (function() {
       }
     } catch (_e) { scriptFontBytes = null; }
 
-    // lgx-fuel-01: live daily fuel surcharge lookup (never frozen onto the BOL). Fail-soft: any error -> no line.
-    let fuelSurchargeByDate = {};
+    // lgx-fuel-02: live per-mile fuel surcharge (never frozen onto the BOL), one line per record, built
+    // server-side. Legacy reads the v2 endpoint because mileage resolution lives in v2. Fail-soft: any error -> no line.
+    let fuelLines = [];
     try {
-      const _dates = [...new Set(bolRecords.map((b) => String((b && b.date) || '').slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)))];
-      if (_dates.length) {
-        const _fr = await fetch('/api/bols/fuel-surcharge?dates=' + encodeURIComponent(_dates.join(',')));
-        if (_fr.ok) { const _fj = await _fr.json(); fuelSurchargeByDate = (_fj && _fj.data && _fj.data.rates) || {}; }
+      const _quote = bolRecords.map((b) => ({
+        date: String((b && b.date) || '').slice(0, 10),
+        ship_to_street: (b && b.ship_to_street) || '',
+        ship_to_city: (b && b.ship_to_city) || '',
+        ship_to_state: (b && b.ship_to_state) || '',
+        ship_to_zip: (b && b.ship_to_zip) || '',
+      }));
+      if (_quote.length) {
+        const _fr = await fetch('/v2/api/bols/fuel-surcharge?quote=' + encodeURIComponent(JSON.stringify(_quote)), { credentials: 'same-origin' });
+        if (_fr.ok) { const _fj = await _fr.json(); fuelLines = (_fj && Array.isArray(_fj.lines)) ? _fj.lines : []; }
       }
-    } catch (_e) { fuelSurchargeByDate = {}; }
+    } catch (_e) { fuelLines = []; }
 
     const combinedPdf = await PDFDocument.create();
 
-    for (const _bolRaw of bolRecords) {
+    for (let _recordIndex = 0; _recordIndex < bolRecords.length; _recordIndex++) {
+      const _bolRaw = bolRecords[_recordIndex];
       // Hydrate persisted overrides. The approve path passes `_overrides` already as an object;
       // the stored-view path passes a DB row whose `render_overrides` is a JSON STRING and has no
       // `_overrides`. Every render funnels through here, so this one step fixes all view callers
@@ -801,14 +809,18 @@ window.BolShared = (function() {
         if (run.underline) drawUnderline(run.text, o.x, o.y, run.size, runFont, color);
       });
 
-      // ── Fuel surcharge (lgx-fuel-01; not in FIELD_MAP, draws outside layoutBol like the signature) ──
+      // ── Fuel surcharge (lgx-fuel-02; not in FIELD_MAP, draws outside layoutBol like the signature).
+      // The server builds the text (v2 lib/logistics/fuelSurcharge.ts); this only draws it. ──
       {
-        const _fsCents = fuelSurchargeByDate[String(bol.date || '').slice(0, 10)];
-        if (typeof _fsCents === 'number' && _fsCents >= 0) {
-          page.drawText('Fuel surcharge: $' + (_fsCents / 100).toFixed(2), {
-            x: COORDS.fuelSurcharge.x, y: COORDS.fuelSurcharge.y, size: COORDS.fuelSurcharge.size,
-            font: fontBold, color: black,
-          });
+        const _fuel = fuelLines[_recordIndex];
+        if (_fuel && _fuel.main) {
+          const _fc = COORDS.fuelSurcharge;
+          page.drawText(String(_fuel.main), { x: _fc.x, y: _fc.y, size: _fc.size, font: fontBold, color: black });
+          if (_fuel.detail) {
+            page.drawText(String(_fuel.detail), {
+              x: _fc.x + fontBold.widthOfTextAtSize(String(_fuel.main), _fc.size), y: _fc.y, size: _fc.detailSize, font, color: black,
+            });
+          }
         }
       }
 

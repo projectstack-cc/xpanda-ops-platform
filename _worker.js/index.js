@@ -1,7 +1,7 @@
 import { json, logActivity, generateAccessToken, normalizeName, validateSession, SessionLookupError, sessionUnavailableResponse, PATH_PERMISSION_MAP, API_PERMISSION_MAP, getPermissionKey, hasPermission, isAllowedUnmappedMutation, safeJsonParse } from './lib/core.js';
 import { dispatchNotification } from './lib/push.js';
 import { handleApiLoadingBays, handleApiLoadingAssignments, handleApiLoadingPhotos } from './routes/loading.js';
-import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers, handleApiBols, handleApiBolFuelSurcharge,
+import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers, handleApiBols,
          handleApiPartsSeed, handleApiLoadBuilderSkusDeleteAll, handleApiLoadBuilderSkus,
          handleApiSavedLoads } from './routes/bols.js';
 import { handleApiJobs, handleApiShipments, handleApiAddressValidate, handleApiAssignableUsers, handleHoleyChunksPreview, handleHoleyChunksBackfill } from './routes/jobs.js';
@@ -72,7 +72,6 @@ const API_ROUTES = [
   { path:   '/api/bol-customers/seed',     handler: (req, env) => handleApiBolCustomersSeed(req, env) },
   { path:   '/api/bol-customers',          handler: (req, env) => handleApiBolCustomers(req, env) },
   { path:   '/api/bol-carriers',           handler: (req, env) => handleApiBolCarriers(req, env) },
-  { path:   '/api/bols/fuel-surcharge',    handler: (req, env) => handleApiBolFuelSurcharge(req, env) },
   { prefix: '/api/bols',                   handler: (req, env) => handleApiBols(req, env) },
   { path:   '/api/load-builder-skus/seed', handler: (req, env) => handleApiPartsSeed(req, env) },
   { path:   '/api/load-builder-skus/all',  handler: (req, env) => handleApiLoadBuilderSkusDeleteAll(req, env) },
