@@ -33,6 +33,7 @@ import BolEditorModal, { type EditorTarget } from "@/components/logistics/BolEdi
 import ShipmentEditModal from "@/components/logistics/ShipmentEditModal";
 import LoadingSheetButton from "@/components/logistics/LoadingSheetButton";
 import FuelSurchargeControl from "@/components/logistics/FuelSurchargeControl";
+import StatTile from "@/components/logistics/StatTile";
 import StatBreakdownModal from "@/components/logistics/StatBreakdownModal";
 import type { ShipmentDetail, ShipmentListItem, LogisticsStats } from "@/components/logistics/types";
 import type { BolRecord } from "@/lib/bolShared";
@@ -401,69 +402,42 @@ export default function ShipmentDashboard({
 
         {/* Top KPI Stats Widgets */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-          <div
-            {...statTileProps("outbound_this_week")}
-            className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between cursor-pointer hover:border-[var(--brand)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-          >
-            <div>
-              <div className="text-xs font-semibold text-muted uppercase tracking-wider">Outbound This Week</div>
-              <div className="text-2xl font-bold tabular-nums text-text mt-1">
-                {stats?.outboundThisWeek ?? "—"}
-              </div>
-              <div className="text-[11px] text-muted mt-0.5">scheduled Mon–Sun</div>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-[var(--info-bg)]/20 border border-[var(--info-border)] flex items-center justify-center text-[var(--brand)]">
-              <Truck size={20} />
-            </div>
-          </div>
-
-          <div
-            {...statTileProps("pending_outbound")}
-            className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between cursor-pointer hover:border-[var(--brand)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-          >
-            <div>
-              <div className="text-xs font-semibold text-muted uppercase tracking-wider">Pending Outbound</div>
-              <div className="text-2xl font-bold tabular-nums text-text mt-1">
-                {stats?.pendingOutbound ?? "—"}
-              </div>
-              <div className="text-[11px] text-muted mt-0.5">production / ready to ship</div>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-[var(--warn-bg)]/30 border border-[var(--warn-border)] flex items-center justify-center text-[var(--warn-text)]">
-              <Clock size={20} />
-            </div>
-          </div>
-
-          <div
-            {...statTileProps("in_transit")}
-            className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between cursor-pointer hover:border-[var(--brand)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-          >
-            <div>
-              <div className="text-xs font-semibold text-muted uppercase tracking-wider">In Transit</div>
-              <div className="text-2xl font-bold tabular-nums text-text mt-1">
-                {stats?.inTransit ?? "—"}
-              </div>
-              <div className="text-[11px] text-muted mt-0.5">en route to customer</div>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-[var(--success-bg)]/20 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-              <Navigation size={20} />
-            </div>
-          </div>
-
-          <div
-            {...statTileProps("delivered_30d")}
-            className="bg-surface border border-[var(--card-border)] rounded-xl p-4 shadow-sm flex items-center justify-between cursor-pointer hover:border-[var(--brand)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-          >
-            <div>
-              <div className="text-xs font-semibold text-muted uppercase tracking-wider">Delivered (30d)</div>
-              <div className="text-2xl font-bold tabular-nums text-text mt-1">
-                {stats?.delivered30d ?? "—"}
-              </div>
-              <div className="text-[11px] text-muted mt-0.5">completed past 30 days</div>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-[var(--ghost-bg)] border border-[var(--border)] flex items-center justify-center text-muted">
-              <CheckCircle2 size={20} />
-            </div>
-          </div>
+          <StatTile
+            tileProps={statTileProps("outbound_this_week")}
+            label="Outbound This Week"
+            orders={stats?.outboundThisWeek}
+            loads={stats?.outboundThisWeekLoads}
+            caption="scheduled Mon–Sun"
+            iconWrapClassName="w-10 h-10 rounded-lg bg-[var(--info-bg)]/20 border border-[var(--info-border)] flex items-center justify-center text-[var(--brand)]"
+            icon={<Truck size={20} />}
+          />
+          <StatTile
+            tileProps={statTileProps("pending_outbound")}
+            label="Pending Outbound"
+            orders={stats?.pendingOutbound}
+            loads={stats?.pendingOutboundLoads}
+            caption="production / ready to ship"
+            iconWrapClassName="w-10 h-10 rounded-lg bg-[var(--warn-bg)]/30 border border-[var(--warn-border)] flex items-center justify-center text-[var(--warn-text)]"
+            icon={<Clock size={20} />}
+          />
+          <StatTile
+            tileProps={statTileProps("in_transit")}
+            label="In Transit"
+            orders={stats?.inTransit}
+            loads={stats?.inTransitLoads}
+            caption="en route to customer"
+            iconWrapClassName="w-10 h-10 rounded-lg bg-[var(--success-bg)]/20 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400"
+            icon={<Navigation size={20} />}
+          />
+          <StatTile
+            tileProps={statTileProps("delivered_30d")}
+            label="Delivered (30d)"
+            orders={stats?.delivered30d}
+            loads={stats?.delivered30dLoads}
+            caption="completed past 30 days"
+            iconWrapClassName="w-10 h-10 rounded-lg bg-[var(--ghost-bg)] border border-[var(--border)] flex items-center justify-center text-muted"
+            icon={<CheckCircle2 size={20} />}
+          />
         </div>
 
         {/* Toolbar: View Switcher, Week Controls, Search & Filter */}

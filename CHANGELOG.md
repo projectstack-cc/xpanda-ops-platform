@@ -2473,6 +2473,20 @@ current series).
 
 ## Logistics (v2)
 
+- **lgx-widgets-01 — KPI tiles show orders AND loads (§9a / §9b). No migration.** Each of the four
+  Shipment Dashboard tiles (Outbound This Week, Pending Outbound, In Transit, Delivered (30d)) now shows
+  two numbers: **orders** (shipment rows matching the tile's `STAT_PREDICATES` entry — today's number,
+  unchanged) and **loads** (trailers). Loads: each order counts `COALESCE(NULLIF(shipments.load_count, 0), 1)`;
+  orders linked on one trailer (`jobs.trailer_group_id`, same grouping as the schedule board / Carrier
+  View) collapse to one group counted at `MAX` of its members' load counts. Implemented as a
+  `loadsSubquery(predicateSql, alias)` helper in `api/shipments/route.ts` that reuses each predicate's SQL
+  text verbatim, so the two numbers can't drift apart; the loads binds are appended after the existing four
+  (positional, 4 `?` / 4 binds today). New `stats.*Loads` fields on the response and on `LogisticsStats`
+  (`types.ts`). The four copy-pasted tile blocks are now one `components/logistics/StatTile.tsx` (same outer
+  classes, label, caption, icon box). Drilldowns unchanged — `?stat=` and the breakdown modal still list
+  orders. Prod check (read-only, week of 2026-09-28): 33 orders / 39 loads this week; 52 / 61 pending;
+  5 / 4 in transit; 107 / 125 delivered (30d).
+
 - **lgx-fuel-01 (MIGRATION-GATED: fuel-surcharge.sql) — daily fuel surcharge on BOLs (§9 / §3 / §9a /
   §9b).** One flat dollar rate per calendar date in the new `fuel_surcharge_rates` table
   (`rate_date` PK, `amount_cents` ≥ 0, `entered_by`/`entered_by_name`, `created_at`/`updated_at`),

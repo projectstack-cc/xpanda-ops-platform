@@ -117,6 +117,18 @@ const STAT_PREDICATES: Record<string, { sql: string; binds: (curMonStr: string) 
   },
 };
 
+// lgx-widgets-01: loads (trailers) for a stat predicate. Each order = its load_count (min 1); orders linked on
+// one trailer (jobs.trailer_group_id) collapse to one group counted at MAX(load_count). The inner FROM shadows
+// the outer stats query's `shipments`, so the predicate text (already `shipments.`-qualified) binds here.
+function loadsSubquery(predicateSql: string, alias: string): string {
+  return `(SELECT COALESCE(SUM(l), 0) FROM (
+            SELECT MAX(COALESCE(NULLIF(shipments.load_count, 0), 1)) AS l
+              FROM shipments LEFT JOIN jobs j ON j.id = shipments.job_id
+             WHERE ${predicateSql}
+             GROUP BY COALESCE(j.trailer_group_id, shipments.id)
+          )) AS ${alias}`;
+}
+
 export async function GET(request: NextRequest) {
   const { DB } = await getEnv();
   const url = new URL(request.url);
@@ -210,9 +222,17 @@ export async function GET(request: NextRequest) {
            COUNT(CASE WHEN ${STAT_PREDICATES.outbound_this_week.sql} THEN 1 END) AS outbound_this_week,
            COUNT(CASE WHEN ${STAT_PREDICATES.pending_outbound.sql} THEN 1 END) AS pending_outbound,
            COUNT(CASE WHEN ${STAT_PREDICATES.in_transit.sql} THEN 1 END) AS in_transit,
-           COUNT(CASE WHEN ${STAT_PREDICATES.delivered_30d.sql} THEN 1 END) AS delivered_30d
+           COUNT(CASE WHEN ${STAT_PREDICATES.delivered_30d.sql} THEN 1 END) AS delivered_30d,
+           ${loadsSubquery(STAT_PREDICATES.outbound_this_week.sql, "outbound_this_week_loads")},
+           ${loadsSubquery(STAT_PREDICATES.pending_outbound.sql, "pending_outbound_loads")},
+           ${loadsSubquery(STAT_PREDICATES.in_transit.sql, "in_transit_loads")},
+           ${loadsSubquery(STAT_PREDICATES.delivered_30d.sql, "delivered_30d_loads")}
          FROM shipments`
       ).bind(
+        ...STAT_PREDICATES.outbound_this_week.binds(curMonStr),
+        ...STAT_PREDICATES.pending_outbound.binds(curMonStr),
+        ...STAT_PREDICATES.in_transit.binds(curMonStr),
+        ...STAT_PREDICATES.delivered_30d.binds(curMonStr),
         ...STAT_PREDICATES.outbound_this_week.binds(curMonStr),
         ...STAT_PREDICATES.pending_outbound.binds(curMonStr),
         ...STAT_PREDICATES.in_transit.binds(curMonStr),
@@ -231,6 +251,10 @@ export async function GET(request: NextRequest) {
         pendingOutbound: (statsResult as any)?.pending_outbound ?? 0,
         inTransit: (statsResult as any)?.in_transit ?? 0,
         delivered30d: (statsResult as any)?.delivered_30d ?? 0,
+        outboundThisWeekLoads: (statsResult as any)?.outbound_this_week_loads ?? 0,
+        pendingOutboundLoads: (statsResult as any)?.pending_outbound_loads ?? 0,
+        inTransitLoads: (statsResult as any)?.in_transit_loads ?? 0,
+        delivered30dLoads: (statsResult as any)?.delivered_30d_loads ?? 0,
       },
     });
   } catch (e: any) {

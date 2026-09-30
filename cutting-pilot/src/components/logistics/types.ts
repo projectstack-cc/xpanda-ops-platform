@@ -7,6 +7,11 @@ export interface LogisticsStats {
   pendingOutbound: number;
   inTransit: number;
   delivered30d: number;
+  /** lgx-widgets-01: trailers — load_count per order, linked (trailer_group_id) orders collapsed. */
+  outboundThisWeekLoads: number;
+  pendingOutboundLoads: number;
+  inTransitLoads: number;
+  delivered30dLoads: number;
 }
 
 export interface ShipmentListItem {
