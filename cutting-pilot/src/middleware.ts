@@ -40,7 +40,8 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/notes", keys: ["notes"] },
   { prefix: "/v2/api/blocks", keys: ["manufacturing.blocks"] },
   { prefix: "/v2/blocks", keys: ["manufacturing.blocks"] },
-  { prefix: "/v2/api/logistics", keys: ["logistics.v2"] },
+  // lgx-roll-01: Invoice Analytics API (the only thing under /v2/api/logistics) opens with the dashboard.
+  { prefix: "/v2/api/logistics", keys: ["logistics.dashboard"] },
   { prefix: "/v2/api/carrier", keys: ["logistics.carrier_view"] },
   { prefix: "/v2/carrier", keys: ["logistics.carrier_view"] },
   // prod-d-04 — Production TV: a wall display holding only production.tv reaches exactly the
@@ -63,11 +64,12 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/api/loading-assignments", keys: ["logistics.loading"] },
   { prefix: "/v2/api/loading-bays", keys: ["logistics.loading"] },
   { prefix: "/v2/api/loading-photos", keys: ["logistics.loading"] },
-  // --- DARK LAUNCH (PXXX): v2 logistics pages are admin-only until rollout. ---
-  // No role holds "logistics.v2", so hasPermission() => admin-only. Ordered specific-before-general.
-  // ROLLOUT: delete these two lines; the granular logistics.* rules below take over automatically.
+  // --- lgx-roll-01: /v2/logistics (dashboard) + /v2/logistics/invoice-analytics are LIVE and fall
+  // through to the logistics.dashboard rule below. These two children stay DARK (admin-only: no role
+  // holds "logistics.v2") until Steve finishes them. They must precede the general /v2/logistics rule.
+  // To un-dark one later, delete its line here (loading then falls to the logistics.loading rule below).
   { prefix: "/v2/logistics/loading", keys: ["logistics.v2"] },
-  { prefix: "/v2/logistics", keys: ["logistics.v2"] },
+  { prefix: "/v2/logistics/load-builder", keys: ["logistics.v2"] },
   { prefix: "/v2/logistics/loading", keys: ["logistics.loading"] },
   // PXXX-c: PullJobModal's GET /v2/api/jobs?search= (and ShippingInfoModal's GET
   // /v2/api/jobs/:id from PXXX-b) both live under this same prefix as the pre-existing

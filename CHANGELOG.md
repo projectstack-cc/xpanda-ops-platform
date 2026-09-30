@@ -2473,6 +2473,53 @@ current series).
 
 ## Logistics (v2)
 
+- **lgx-roll-01 — Logistics v2 go-live (§9a / §9b / §8). No migration; no new permission keys.** Nav
+  cutover per Steve's explicit go-ahead (v2 visibility gate), conditional on the post-deploy admin smoke test.
+
+  | Surface | After this prompt |
+  |---|---|
+  | `/v2/logistics` (shipment dashboard) | **Live** — anyone with `logistics.dashboard` |
+  | `/v2/logistics/invoice-analytics` + `/v2/api/logistics/*` | **Live** — anyone with `logistics.dashboard` |
+  | `/v2/logistics/loading` (v2 dock dashboard) | **Stays admin-only** (`logistics.v2`) |
+  | `/v2/logistics/load-builder` + `/v2/api/saved-loads` | **Stays admin-only** (`logistics.v2`) |
+  | Dashboard "Dock Loading" button | → legacy `/logistics/loading.html` |
+  | Load Builder / Build Load / BOL Email Queue links | Unchanged (already legacy) |
+  | Home "Logistics → Dashboard" card, legacy nav, v2 nav | → `/v2/logistics` |
+  | Home Logistics card "Classic Dashboard" button (new) | → legacy `/logistics/` (fallback during the daily-use trial) |
+  | Legacy `/logistics/` page | Untouched, still reachable by URL (rollback/fallback) |
+
+  `middleware.ts`: `/v2/api/logistics` → `logistics.dashboard`; the dark-launch block now darkens only
+  `/v2/logistics/loading` and `/v2/logistics/load-builder` (`logistics.v2`, held by no role → admin-only),
+  so `/v2/logistics` itself falls through to the existing `logistics.dashboard` rule. The later
+  `/v2/logistics/loading` → `logistics.loading` rule is intentionally shadowed until loading un-darks.
+  `ShipmentDashboard.tsx`: Invoice Analytics link now gated on `logistics.dashboard` (mirrors middleware);
+  Dock Loading → legacy. `PlatformHeader.tsx` (CRLF preserved), `shared/shared-header.js` and home
+  `index.html` point Logistics at `/v2/logistics`; legacy nav keeps the Logistics tab highlighted on legacy
+  `/logistics/*` child pages. `logistics/logistics-header.js` untouched (its `dashboardPath` drives the
+  legacy page's own `isDashboard` detection).
+
+  **Route → key trace** (`permissionKeysFor`, first match wins; verified by script against the file):
+  `/v2/logistics` → `logistics.dashboard` · `/v2/logistics/invoice-analytics` → `logistics.dashboard` ·
+  `/v2/logistics/loading` → `logistics.v2` · `/v2/logistics/load-builder` → `logistics.v2` ·
+  `/v2/api/logistics/invoice` → `logistics.dashboard` · `/v2/api/saved-loads` → `logistics.v2` ·
+  `/v2/api/shipments/signed-bol` → `logistics.dashboard` · `/v2/api/bols/fuel-surcharge` → `logistics.bol`.
+
+  **Both dashboards reachable during the trial (Steve):** the home Logistics card gets a secondary outline
+  **Classic Dashboard** button (`/logistics/`, same `logistics.dashboard` perm; new `common.classicDashboard`
+  i18n key in en/es/ht in `shared/i18n-common.js`) next to the v2 **Dashboard** button, so floor users can fall
+  back without typing a URL. Remove it when legacy is retired after daily use confirms no issues.
+
+  **Rollback:** revert this commit; legacy `/logistics/` was never touched.
+
+  **Leftover sweep** (links to the legacy dashboard, left as-is): only
+  `logistics/logistics-header.js:11` `dashboardPath: '/logistics/'` — the in-module back-link on legacy
+  logistics child pages (loading, load builder, BOL email) still returns to the legacy dashboard. Expected;
+  no other `"/logistics/"` links remain in `.html`/`.js`/`.ts`/`.tsx` apart from the deliberate home-card
+  Classic Dashboard button above.
+
+  Housekeeping: the working copy of `index.html` had drifted to CRLF (HEAD is LF); normalized back to LF so
+  the commit is the one-line href change.
+
 - **lgx-signed-01 — signed BOL viewer on shipment rows (§9a / §9b). No migration; read-only against D1
   + R2.** v2 now surfaces the signed artifacts legacy flows already capture:
 
@@ -7808,6 +7855,10 @@ current series).
 ---
 
 ## Admin / Platform
+
+- **lgx-roll-01 (cross-ref) — Logistics nav cutover.** Home `index.html` Logistics → Dashboard card and the
+  legacy nav in `shared/shared-header.js` now point to `/v2/logistics` (legacy nav still highlights Logistics on
+  `/logistics/*` child pages). See `## Logistics (v2)`.
 
 - **carrier-04 (cross-ref) — `carrier.fees_added` notification type.** `admin/roles.html` registers
   `'carrier.fees_added': 'Carrier fees added'` (+ the `admin.notifTypeCarrierFees` i18n key).

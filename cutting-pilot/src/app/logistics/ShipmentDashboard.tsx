@@ -132,9 +132,8 @@ export default function ShipmentDashboard({
   // X-User-Can-Manage-Loading check in shipments/[id]/route.ts.
   const canManageLoading = isAdmin || permissions?.["logistics.loading.manage"]?.edit === true;
   const canEditDashboard = isAdmin || permissions?.["logistics.dashboard"]?.edit === true;
-  // Invoice Analytics link: mirror the middleware gate on both the page and /v2/api/logistics.
-  // If that gate is repointed to a dedicated key later, change it here in the same commit.
-  const canSeeInvoiceAnalytics = isAdmin || permissions?.["logistics.v2"]?.view === true;
+  // Invoice Analytics link mirrors middleware (lgx-roll-01): page + /v2/api/logistics are logistics.dashboard.
+  const canSeeInvoiceAnalytics = isAdmin || permissions?.["logistics.dashboard"]?.view === true;
 
   const activeWeekInfo = useMemo(() => {
     if (weekOffset === null) return null;
@@ -364,7 +363,7 @@ export default function ShipmentDashboard({
               Load Builder
             </a>
             <a
-              href="/v2/logistics/loading"
+              href="/logistics/loading.html"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] no-underline transition-colors"
             >
               Dock Loading
