@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import Modal from "@/components/Modal";
 import PdfViewer from "@/components/PdfViewer";
+import PackingSlipViewer from "@/components/PackingSlipViewer";
 import CutListChunkToggle from "@/components/CutListChunkToggle";
 import { buildCutListPdf, type CutListLineItem } from "@/lib/cutList";
 
@@ -47,7 +48,6 @@ type CutListDoc = { src: string; filename: string } | null;
 export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalProps) {
   const [data, setData] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [slipOpen, setSlipOpen] = useState(false);
   const [cutListOpen, setCutListOpen] = useState(false);
   const [cutListLoading, setCutListLoading] = useState(false);
   const [cutListDoc, setCutListDoc] = useState<CutListDoc>(null);
@@ -70,7 +70,6 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
     setCutListDoc(null);
     setCutListOpen(false);
     setIncludeChunks(false);
-    setSlipOpen(false);
 
     if (!jobId) {
       setData(null);
@@ -226,27 +225,13 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
             </table>
           </div>
 
-          {/* Packing Slip — independent dropdown-link viewer, own PdfViewer instance/state */}
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => setSlipOpen((v) => !v)}
-              disabled={!slipDoc}
-              className="flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-[var(--link)] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-expanded={slipOpen}
-            >
-              {slipOpen ? (
-                <ChevronDown size={16} className="shrink-0" aria-hidden="true" />
-              ) : (
-                <ChevronRight size={16} className="shrink-0" aria-hidden="true" />
-              )}
-              Packing Slip
-            </button>
-            {!slipDoc && <p className="text-sm text-muted">No packing slip attached.</p>}
-            {slipOpen && slipDoc && (
-              <PdfViewer src={slipDoc.src} filename={slipDoc.filename} title="Packing slip" />
-            )}
-          </div>
+          {/* Packing Slip — independent dropdown-link viewer, own PdfViewer instance/state (shared
+              PackingSlipViewer, lgx-slip-01). key={jobId} collapses it per order, as the old reset did. */}
+          <PackingSlipViewer
+            key={jobId ?? ""}
+            src={slipDoc?.src ?? null}
+            filename={slipDoc?.filename ?? "packing-slip.pdf"}
+          />
 
           {/* Cut List — independent dropdown-link viewer, own PdfViewer instance/state; builds
               lazily on first open and never touches the packing-slip viewer above. */}

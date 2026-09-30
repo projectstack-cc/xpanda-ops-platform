@@ -1080,6 +1080,12 @@ current series).
 
 ## Schedule Board (v2)
 
+- **lgx-slip-01 (cross-ref) — Packing Slip viewer extracted from `board/OrderDetailModal.tsx`.** The collapsible
+  block now lives in the shared `components/PackingSlipViewer.tsx` (markup/classes verbatim), shared with the
+  logistics Edit Shipment modal. No behavior change: the Board keeps its legacy `/api/jobs/:id/packing-slip` source,
+  and `key={jobId}` preserves the old collapse-on-order-change reset (the removed `slipOpen` state). Full entry
+  under Logistics (v2).
+
 - **carrier-06 (cross-ref) — linked-group helpers extracted from `DayColumn.tsx`.**
   `countLocalGroups` / `withGroupsAdjacent` / `buildBlocks` / `RowBlock` now live in
   `src/lib/linkedGroups.ts` (moved verbatim, generic types only), shared with the Carrier View.
@@ -2481,6 +2487,23 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **lgx-slip-01 — packing slip viewer in the Edit Shipment modal; modal reads ship-to from the shipment detail
+  (§9a / §9b). No migration, read-only.** Legacy's edit form could show the packing slip; v2 had dropped it. The
+  Board's collapsible "Packing Slip" viewer is extracted verbatim into the shared
+  `components/PackingSlipViewer.tsx` (`src` null → disabled toggle + "No packing slip attached."; `PdfViewer`
+  mounts only while open, so nothing is fetched until expanded) and now renders in `ShipmentEditModal` for
+  job-linked shipments. **New `GET /v2/api/shipments/:id/packing-slip`**, which inherits the `logistics.dashboard`
+  gate (legacy `/api/jobs/:id/packing-slip` is gated on `jobs`, which would 403 a logistics-only user): shipment →
+  `job_id` (unlinked/missing → 404), then mirrors legacy exactly (R2 `packing_slip_key` via `BOL_PHOTOS` first,
+  base64 `packing_slip_pdf` fallback, `inline` disposition with quotes stripped, `private, max-age=3600`; missing
+  R2 object → 404 "Packing slip not found in storage."). Keys come from the DB row only. `GET
+  /v2/api/shipments/:id` adds `packing_slip_filename` + `has_packing_slip` (the base64 blob is only tested, never
+  selected); `ShipmentDetail` typed accordingly. **Latent bug fixed:** the modal loaded Ship To from `GET
+  /v2/api/jobs/:id` (gated `jobs` / `logistics.loading`), so a dashboard-only user saw "Address unavailable." and
+  couldn't edit the ship-to lgx-editmodal-01 opened up. The modal now makes **one** `GET /v2/api/shipments/:id`
+  fetch (same gate as the dashboard) that seeds Ship To, the per-load trailer # inputs (lgx-rows-01), and the slip
+  flag. It makes no `/v2/api/jobs` request at all.
 
 - **lgx-rows-01 — trailer # from `loading_assignments`; icon-only row actions; delivery time + customer pickup on
   rows (§9a / §9b). No migration.** **Trailer # root cause:** the v2 dashboard row read `shipments.trailer_number`,

@@ -13,7 +13,8 @@
 //     that changed versus the seeded values, so an untouched field never writes to the job;
 //     unlinked shipments send all of them (written to the shipment row directly).
 //   - Ship To (company, attention, street, street 2, city, state, zip) lives on the job and is
-//     editable only when job-linked -- seeded from GET /v2/api/jobs/:id, changed fields only.
+//     editable only when job-linked -- seeded from GET /v2/api/shipments/:id (lgx-slip-01), changed
+//     fields only.
 //   - An order that already has a BOL gets an informational notice when customer / carrier / ship
 //     date / ship-to change: existing BOLs are stored documents and keep the old details.
 //   - Trailer # (lgx-rows-01): the single source of truth is loading_assignments.trailer_number, per
@@ -47,18 +48,22 @@
 // window.confirm(), same constraint as every other destructive action in this codebase. Gated by
 // the same canEditDashboard() as Save server-side; no client-side permission gate on the button.
 //
-// Ship-to seed values for job-linked shipments come from a dedicated GET /v2/api/jobs/:id
-// fetch, NOT the already-loaded list row -- attachDistanceEta() in shipments/route.ts deletes
-// ship_to_street from every list row before it goes out, so the street would always seed blank
-// otherwise (and a blank seed would look like a change).
+// Ship-to seed values, per-load trailers, and the packing-slip flag for job-linked shipments all
+// come from ONE GET /v2/api/shipments/:id fetch (lgx-slip-01) -- same `logistics.dashboard` gate as
+// the dashboard itself. The modal makes no request to the v2 jobs API (gated on jobs /
+// logistics.loading, which a dashboard-only user may lack -> "Address unavailable."). NOT the
+// already-loaded list row -- attachDistanceEta() in shipments/route.ts deletes ship_to_street from
+// every list row before it goes out, so the street would always seed blank otherwise (and a blank
+// seed would look like a change).
 //
 // Kill switch: if V2_LOGISTICS_WRITES_ENABLED is flipped back off, the PUT returns 501 -- same
 // fenced-banner UX as BolGenerateModal.tsx: banner shown, modal stays open, no typed data lost.
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
+import PackingSlipViewer from "@/components/PackingSlipViewer";
 import { STATUS_VARIANTS } from "./ShipmentRow";
-import type { ShipmentListItem, JobForBol, ShipmentLoad } from "./types";
+import type { ShipmentListItem, ShipmentDetail, ShipmentLoad } from "./types";
 
 // Mirrors loading-assignments/route.ts's trailer lock -- the server remains the authority.
 const TRAILER_LOCKED_STATUSES = ["in_transit", "delivered", "archived"];
@@ -135,9 +140,9 @@ const SHIP_TO_FIELDS = [
 type ShipToKey = (typeof SHIP_TO_FIELDS)[number]["key"];
 type ShipToForm = Record<ShipToKey, string>;
 
-function shipToFromJob(job: JobForBol): ShipToForm {
+function shipToFromDetail(detail: Pick<ShipmentDetail, ShipToKey>): ShipToForm {
   const out = {} as ShipToForm;
-  for (const { key } of SHIP_TO_FIELDS) out[key] = job[key] || "";
+  for (const { key } of SHIP_TO_FIELDS) out[key] = detail[key] || "";
   return out;
 }
 
@@ -145,10 +150,11 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
   const [form, setForm] = useState<EditForm>(emptyForm());
   // Seeded values -- job-linked saves send only fields that differ from these.
   const [seed, setSeed] = useState<EditForm>(emptyForm());
-  const [job, setJob] = useState<JobForBol | null>(null);
+  // lgx-slip-01: the single GET /v2/api/shipments/:id response (ship-to, loads, packing-slip flag).
+  const [detail, setDetail] = useState<ShipmentDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [shipTo, setShipTo] = useState<ShipToForm | null>(null);
   const [shipToSeed, setShipToSeed] = useState<ShipToForm | null>(null);
-  const [jobLoading, setJobLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [fenced, setFenced] = useState(false);
@@ -157,7 +163,6 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // lgx-rows-01: per-load trailer # (job-linked only), keyed by loading_assignments.id.
   const [loads, setLoads] = useState<ShipmentLoad[] | null>(null);
-  const [loadsLoading, setLoadsLoading] = useState(false);
   const [loadTrailers, setLoadTrailers] = useState<Record<string, string>>({});
   const [loadTrailerSeed, setLoadTrailerSeed] = useState<Record<string, string>>({});
   // True once any write has landed (e.g. shipment PUT ok but a load trailer PUT failed) so a later
@@ -179,7 +184,6 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     if (!shipment) {
       setForm(emptyForm());
       setSeed(emptyForm());
-      setJob(null);
       return;
     }
     const seeded: EditForm = {
@@ -204,50 +208,29 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     setSeed(seeded);
   }, [shipment]);
 
-  // Job-linked ship-to display -- dedicated fetch, see file header for why the list row can't
-  // be trusted for ship_to_street.
+  // lgx-slip-01: ONE detail fetch (job-linked only) seeds the Ship To panel, the per-load trailer #
+  // inputs (lgx-rows-01), and the packing-slip viewer. See the file header for why the list row
+  // can't be trusted for ship_to_street, and why this never calls the v2 jobs API.
   useEffect(() => {
-    setJob(null);
+    setDetail(null);
     setShipTo(null);
     setShipToSeed(null);
-    if (!shipment?.job_id) return;
-    let cancelled = false;
-    setJobLoading(true);
-    fetch(`/v2/api/jobs/${encodeURIComponent(shipment.job_id)}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (!cancelled && json.ok && json.job) {
-          setJob(json.job);
-          const seededShipTo = shipToFromJob(json.job);
-          setShipTo(seededShipTo);
-          setShipToSeed(seededShipTo);
-        }
-      })
-      .catch(() => {
-        // Best-effort -- the Ship To panel shows "Address unavailable." (no inputs) if this fails.
-      })
-      .finally(() => {
-        if (!cancelled) setJobLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [shipment?.job_id]);
-
-  // lgx-rows-01: loads (assignment_id + trailer_number) for per-load trailer # -- fetched in parallel
-  // with the job fetch above.
-  useEffect(() => {
     setLoads(null);
     setLoadTrailers({});
     setLoadTrailerSeed({});
     if (!shipment?.job_id) return;
     let cancelled = false;
-    setLoadsLoading(true);
+    setDetailLoading(true);
     fetch(`/v2/api/shipments/${encodeURIComponent(shipment.id)}`)
       .then((r) => r.json())
       .then((json) => {
-        if (cancelled || !json.ok) return;
-        const list: ShipmentLoad[] = Array.isArray(json.data?.loads) ? json.data.loads : [];
+        if (cancelled || !json.ok || !json.data) return;
+        const d: ShipmentDetail = json.data;
+        setDetail(d);
+        const seededShipTo = shipToFromDetail(d);
+        setShipTo(seededShipTo);
+        setShipToSeed(seededShipTo);
+        const list: ShipmentLoad[] = Array.isArray(d.loads) ? d.loads : [];
         const seeded: Record<string, string> = {};
         for (const ld of list) seeded[ld.assignment_id] = ld.trailer_number || "";
         setLoads(list);
@@ -255,10 +238,11 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
         setLoadTrailerSeed(seeded);
       })
       .catch(() => {
-        // Best-effort -- the Trailer # field shows "Trailer # unavailable." if this fails.
+        // Best-effort -- Ship To shows "Address unavailable." and Trailer # shows "Trailer #
+        // unavailable." if this fails.
       })
       .finally(() => {
-        if (!cancelled) setLoadsLoading(false);
+        if (!cancelled) setDetailLoading(false);
       });
     return () => {
       cancelled = true;
@@ -509,15 +493,15 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
                 )}
               </Field>
             )}
-            {jobLinked && (loadsLoading || !loads || loads.length === 0) && (
+            {jobLinked && (detailLoading || !loads || loads.length === 0) && (
               <Field label="Trailer #">
                 <div className={readOnlyClass}>
-                  {loadsLoading ? "Loading…" : loads ? "No loads yet." : "Trailer # unavailable."}
+                  {detailLoading ? "Loading…" : loads ? "No loads yet." : "Trailer # unavailable."}
                 </div>
               </Field>
             )}
             {jobLinked &&
-              !loadsLoading &&
+              !detailLoading &&
               loads?.map((ld) => {
                 const locked = TRAILER_LOCKED_STATUSES.includes(ld.loading_status);
                 const value = loadTrailers[ld.assignment_id] ?? "";
@@ -547,8 +531,8 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
           {jobLinked && (
             <div className="rounded-md border border-[var(--border)] bg-[var(--ghost-bg)] p-3 space-y-2">
               <div className="text-xs font-semibold text-muted uppercase tracking-wider">Ship To</div>
-              {jobLoading && <div className="text-xs text-muted">Loading address…</div>}
-              {!jobLoading && job && shipTo && (
+              {detailLoading && <div className="text-xs text-muted">Loading address…</div>}
+              {!detailLoading && detail && shipTo && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {SHIP_TO_FIELDS.map(({ key, label }) => (
                     <Field key={key} label={label}>
@@ -556,7 +540,7 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
                         type="text"
                         className={inputClass}
                         value={shipTo[key]}
-                        disabled={jobLoading}
+                        disabled={detailLoading}
                         onChange={(e) => {
                           const v = e.target.value;
                           setShipTo((prev) => (prev ? { ...prev, [key]: v } : prev));
@@ -566,7 +550,7 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
                   ))}
                 </div>
               )}
-              {!jobLoading && !job && <div className="text-xs text-muted">Address unavailable.</div>}
+              {!detailLoading && !detail && <div className="text-xs text-muted">Address unavailable.</div>}
             </div>
           )}
 
@@ -617,6 +601,14 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
                 onChange={(e) => set("deliveryIncidentNotes", e.target.value)}
               />
             </Field>
+          )}
+
+          {shipment?.job_id && (
+            <PackingSlipViewer
+              key={shipment.id}
+              src={detail?.has_packing_slip ? `/v2/api/shipments/${encodeURIComponent(shipment.id)}/packing-slip` : null}
+              filename={detail?.packing_slip_filename || `packing-slip-${shipment.job_id}.pdf`}
+            />
           )}
 
           {showBolNotice && (

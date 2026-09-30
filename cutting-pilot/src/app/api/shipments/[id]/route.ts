@@ -146,7 +146,8 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
     const shipment = await DB.prepare(
       `SELECT shipments.*,
               j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_street2,
-              j.ship_to_city, j.ship_to_state, j.ship_to_zip
+              j.ship_to_city, j.ship_to_state, j.ship_to_zip, j.packing_slip_filename,
+              (j.packing_slip_key IS NOT NULL OR j.packing_slip_pdf IS NOT NULL) AS has_packing_slip
          FROM shipments
          LEFT JOIN jobs j ON j.id = shipments.job_id
         WHERE shipments.id = ?`

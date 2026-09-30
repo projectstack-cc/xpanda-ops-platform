@@ -80,6 +80,9 @@ export interface ShipmentDetail {
   loads: ShipmentLoad[];
   /** lgx-minimap-01: destination pin for the drill-down minimap (geocode_cache); null when the address can't be geocoded. */
   dest?: { lat: number; lng: number; address: string } | null;
+  /** lgx-slip-01: the linked job has a packing slip (R2 key or legacy base64); served by GET /v2/api/shipments/:id/packing-slip. */
+  has_packing_slip?: number | boolean;
+  packing_slip_filename?: string | null;
 }
 
 export interface ShipmentLoad {
