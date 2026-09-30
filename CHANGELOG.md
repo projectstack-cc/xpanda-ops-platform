@@ -2473,6 +2473,36 @@ current series).
 
 ## Logistics (v2)
 
+- **lgx-write-01 — write-fence parity audit + flip (§9a, consulting §9).** Phase A: line-by-line
+  behavioral diff of every fenced v2 write handler against its legacy counterpart; no defects found.
+  Phase B: `V2_LOGISTICS_WRITES_ENABLED` flipped to `true` in
+  `cutting-pilot/src/lib/logistics/writeFence.ts` (kept as a named flag = one-line kill switch; the
+  UI's 501-banner branches left in place). Fence references confirmed to be exactly `bols/route.ts`,
+  `bols/[id]/route.ts`, `shipments/[id]/route.ts`, `saved-loads/route.ts`,
+  `saved-loads/[id]/route.ts` (+ comments in `components/logistics/*`). No migration.
+
+  | v2 handler | Legacy counterpart | Verdict |
+  |---|---|---|
+  | `bols` POST (incl. regenerate-replace) | `bols.js` `handleApiBols` POST | **match** — same 42 columns/coercions, P241 `bol_group_id` job inheritance, identical job+load_number replace WHERE, `bol_documents` + R2 cascade, access_token carryover, shipper_name from `X-User-Id` |
+  | `bols/[id]` PUT | `handleApiBols` PUT | **match** — same UPDATE set incl. legacy's omissions (bol_number, load_*, bol_group_id, siplast, shipper_name), same shipped-lock 409, render_overrides preserve-if-absent, token never overwritten |
+  | `bols/[id]` DELETE | `handleApiBols` DELETE by-id | **match** — same `logistics.loading.manage`/admin gate (`X-User-Can-Manage-Loading`), 404, single-row delete, no doc cascade (same as legacy; BACKLOG item open). Legacy's bulk by-job branch deliberately not ported → no wider delete |
+  | `shipments/[id]` PUT | `jobs.js` `handleApiShipments` PUT | **accepted divergence (stricter)** — narrower allowlist, locked-status 409, job-synced fields rejected on job-linked rows, trailer # manager-gated, enum/NaN validation. Reverse cascade (job status forward-only, loading_assignments mirror, cutting-lines backstop, ready_to_ship re-queue) ported 1:1 |
+  | `shipments/[id]` DELETE | `handleApiShipments` DELETE | **match** — same single-row delete, no lock check, no cascade, same `logistics.dashboard` edit gate |
+  | `saved-loads` POST + GET sweep | `handleApiSavedLoads` POST/GET | **match** / **accepted** — same columns + 90-day `expires_at`; v2 additionally requires string `state_json`. Expiry sweep was fence-gated (documented in file header); now runs, same as legacy |
+  | `saved-loads/[id]` PUT/DELETE | `handleApiSavedLoads` PUT/DELETE | **match** — PUT additionally logs activity (legacy doesn't) |
+
+  Other accepted divergences (benign, pre-existing): v2 `activity_log` rows use ISO timestamps
+  (platform-wide v2 convention, already live via orders/cutting/board) and record the actor
+  `user_id` (legacy's calls pass none); v2's shipment cascade writes `loading_assignments.updated_at`
+  via `datetime('now')` where this legacy branch binds ISO — no reader orders/compares on it.
+  Actor identity in every handler comes from the `X-User-Id` header only.
+
+  **Exposure note:** `/v2/api/bols` (`logistics.bol`) and `/v2/api/shipments`
+  (`logistics.dashboard`) are NOT behind the dark-launch `logistics.v2` line. After this flip they
+  are writable by the same roles that can already write via legacy `/api/bols` and
+  `/api/shipments` — equivalent exposure, not new exposure. `/v2/api/saved-loads` stays
+  `logistics.v2` (admin-only). Pages remain dark-launched; rollout is `lgx-roll-01`.
+
 - **lgx-eta-01 — dashboard ETA requires cached duration, not just miles (§9a).** Root cause:
   `geocode_cache` rows written by Invoice Analytics (`api/logistics/invoice/*`) carry
   `miles_from_origin` but never `duration_sec_from_origin` (by design — Invoice Analytics only needs
