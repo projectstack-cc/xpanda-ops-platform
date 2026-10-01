@@ -191,6 +191,25 @@
 
 ---
 
+## QuickBooks Intake (v2)
+
+> qb-01 shipped (shared `createJob`, QBO client/mapper, admin sandbox import). Remaining milestones:
+
+- [ ] **qb-02 — webhook + pending-changes queue.** `qb_pending_changes` migration. CloudEvents webhook
+  at `/v2/api/qb/webhook`, built against a **captured real sandbox payload** (the old parser read the
+  retired `eventNotifications` format). Constant-time HMAC compare, fail closed; rejected signatures
+  logged to `activity_log` inside `waitUntil` (RT-07). Iterate events, filter on realm. `SyncToken`
+  idempotency + `relevantHash` no-op detection. Every create/update → queue. Status-gate guard on
+  apply: never rewrite `job_line_items` once floor records exist. Existing invoice # without a link →
+  link + baseline, and queue the diff if it differs.
+- [ ] **qb-03 — review queue on legacy `jobs/index.html`** (diff, apply, dismiss). Notifications via
+  push + bell: create/update queued, resolved, dismissed, webhook failure.
+- [ ] **qb-04 — OAuth connect + callback.** Callback must HTML-escape all reflected values (the old
+  one had reflected XSS). State cookie. Production cutover config: redirect URI
+  `https://www.xpandaops.com/v2/api/qb/callback`, launch/disconnect URLs, Invoice entity subscription.
+
+---
+
 ## Orders (v2)
 
 > **Status:** Orders/Production-board rework built — Phase 1 (P337–P340, order entry) and

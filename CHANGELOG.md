@@ -611,6 +611,35 @@ current series).
 
 ---
 
+## QuickBooks Intake (v2)
+
+- **qb-01 — shared `createJob()` + QBO sandbox import (v2).** Milestone 1 of the QB intake revival
+  (legacy QB code deleted in `ae47aa3` was reference only, not restored).
+  - **Shared `createJob()`** (`cutting-pilot/src/lib/jobCreate.ts`): v2 order entry and QB import now
+    create jobs through one function. Moved verbatim from `orders/route.ts` POST — identical 44-column
+    `jobs` INSERT, line items, auto outbound shipment, loading assignments (customer-pickup skip), holey
+    chunks + read-back. `source` and the activity-log `via` come from the caller; activity log now uses
+    the shared `logActivity`.
+  - **Behavior change — v2 order entry duplicate invoice → 409.** `createJob` ports legacy P446: a
+    non-empty trimmed `invoice_number` matching ANY job (archived included) returns
+    `409 { code: "duplicate_invoice", job_id }` and writes nothing.
+  - **bdft extraction:** `bdftPerPiece` / `computeTotalBdft` moved verbatim to `src/lib/bdft.ts`
+    (structural param, numeric quantities accepted); `OrderEntryForm.tsx` imports them.
+  - **QBO client** (`src/lib/qb/client.ts`, `crypto.ts`): tokens AES-GCM encrypted at rest
+    (`QB_TOKEN_KEY`), single-flight refresh (conditional UPDATE on the old refresh ciphertext; rotated
+    refresh token always persisted), fail-closed `QB_ENV` (`sandbox`|`production`, no default),
+    validated invoiceId/DocNumber, no token values in errors/responses/logs.
+  - **Mapper** (`src/lib/qb/mapper.ts`, pure): invoice → `JobCreateInput` with `partMatch` part
+    matching (parts loaded in legacy `/api/parts` order), no BillAddr fallback, best-effort
+    `PURCHASE ORDER` custom field, unmatched lines kept, `load_count` 1, `total_bdft` from matched dims,
+    `relevantHash` for qb-02 no-op detection. Self-check `mapper.selfcheck.ts` (17/17 pass).
+  - **Admin-only routes** `/v2/api/qb/{connection,connect,preview,import}`; middleware gates
+    `/v2/api/qb` on `jobs`, admin enforced in handlers, no public bypass. Import writes a
+    `qb_invoice_links` row + a QB activity entry.
+  - **Migration:** `DB_Migrations/qb-01-connections-links.sql` (`qb_connections`, `qb_invoice_links`).
+
+---
+
 ## Orders (v2)
 
 - **lgx-editmodal-01 (cross-ref) — orders PUT mirrors to the shipment.** `PUT /v2/api/orders/:id` now

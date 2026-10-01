@@ -1,14 +1,12 @@
 // src/app/api/orders/route.ts  →  /v2/api/orders
-// Order-entry API. POST creates a job + line items and mirrors the legacy job-creation
-// side-effects (auto outbound shipment, auto loading assignments). Ported from
-// _worker.js/routes/jobs.js POST — EXCEPT legacy cutting_steps creation, which is
-// intentionally dropped (v2 cutting_lines reconcile lazily on the cutting queue read).
+// Order-entry API. POST normalizes the payload and calls the shared createJob()
+// (src/lib/jobCreate.ts, qb-01) — the same path QuickBooks import uses. createJob mirrors the
+// legacy job-creation side-effects (auto outbound shipment, auto loading assignments).
+// qb-01: a duplicate invoice # now returns 409 (legacy P446 parity).
 // Gated on `orders` by middleware (GET view, POST edit).
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
-import { computeAndPersistHoleyChunks } from "@/lib/holeyChunks";
-
-const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
+import { createJob, type JobCreateInput } from "@/lib/jobCreate";
 
 export async function GET() {
   const { DB } = await getEnv();
@@ -39,153 +37,84 @@ export async function POST(request: NextRequest) {
   const customer = s(p.customer);
   if (!customer) return NextResponse.json({ ok: false, error: "Customer is required." }, { status: 400 });
 
-  const id = crypto.randomUUID();
-
-  // Packing slip — upload to R2 (BOL_PHOTOS) under `packing-slips/<id>.pdf`; on R2 failure
-  // fall back to keeping the base64 in D1 so the slip isn't lost. Mirrors legacy
-  // _worker.js/routes/jobs.js POST behavior so the legacy job board can read the
-  // attachment via GET /api/jobs/:id/packing-slip (R2 key first, D1 base64 fallback).
-  let packing_slip_pdf: string | null = p.packing_slip_pdf ? String(p.packing_slip_pdf) : null;
-  let packing_slip_key: string | null = null;
-  if (packing_slip_pdf) {
-    try {
-      const slipBytes = Uint8Array.from(atob(packing_slip_pdf), (c) => c.charCodeAt(0));
-      const slipKey = `packing-slips/${id}.pdf`;
-      await BOL_PHOTOS.put(slipKey, slipBytes, { httpMetadata: { contentType: "application/pdf" } });
-      packing_slip_key = slipKey;
-      packing_slip_pdf = null;
-    } catch (e: any) {
-      console.error("Packing slip R2 upload failed — keeping in D1:", String(e?.message || e));
-      // packing_slip_pdf stays set, packing_slip_key stays null
-    }
-  }
-
-  const ts = now();
-  const status = "not_started";
   const customer_pickup = p.customer_pickup === true || s(p.customer_pickup) === "true";
   // Method dropdown was removed from /v2/orders (P428). "customer pickup" is the only value
-  // that carried behavior (skips loading-assignment creation below), so derive it from the
-  // checkbox and leave method blank otherwise. The existing skip check is unchanged.
+  // that carried behavior (skips loading-assignment creation in createJob), so derive it from the
+  // checkbox and leave method blank otherwise.
   const method = customer_pickup ? "customer pickup" : "";
-  const carrier = s(p.carrier);
-  const location = s(p.location);
-  const ship_date = s(p.ship_date);
-  const ship_day = s(p.ship_day);
-  const delivery_time = s(p.delivery_time);
-  const scrap_pickup = s(p.scrap_pickup);
-  const load_count = Number.isFinite(Number(p.load_count)) ? Number(p.load_count) : 1;
-  const total_bdft = Number.isFinite(Number(p.total_bdft)) ? Number(p.total_bdft) : 0;
-  const source = "manual";
   const lineItems = Array.isArray(p.line_items) ? p.line_items : [];
   const ALLOWED_PROCS = ["Cross Cutter", "Hole Cutter", "Main Line", "Blue Line", "Laminate"];
   const procsJson = (Array.isArray(p.processes) ? p.processes : [])
     .filter((x: any) => x && ALLOWED_PROCS.includes(String(x.name)))
     .map((x: any) => ({ name: String(x.name), completed: !!x.completed }));
 
+  // qb-01: normalize into JobCreateInput (same expressions the inline INSERT used to bind).
+  const input: JobCreateInput = {
+    customer,
+    po_number: s(p.po_number),
+    invoice_number: s(p.invoice_number),
+    ship_date: s(p.ship_date),
+    ship_day: s(p.ship_day),
+    location: s(p.location),
+    delivery_time: s(p.delivery_time),
+    method,
+    carrier: s(p.carrier),
+    load_count: Number.isFinite(Number(p.load_count)) ? Number(p.load_count) : 1,
+    total_bdft: Number.isFinite(Number(p.total_bdft)) ? Number(p.total_bdft) : 0,
+    scrap_pickup: s(p.scrap_pickup),
+    sales_lead: s(p.sales_lead),
+    bol_info: s(p.bol_info),
+    payment_info: s(p.payment_info),
+    notes: s(p.notes),
+    cutting_instructions: s(p.cutting_instructions),
+    packing_instructions: s(p.packing_instructions),
+    contact_name: s(p.contact_name),
+    contact_phone: s(p.contact_phone),
+    combo_id: p.combo_id ? s(p.combo_id) : null,
+    priority: s(p.priority),
+    confirmed_to_ship: !!p.confirmed_to_ship,
+    processes: procsJson,
+    packing_slip_pdf: p.packing_slip_pdf ? String(p.packing_slip_pdf) : null,
+    packing_slip_filename: s(p.packing_slip_filename),
+    packing_slip_invoice: s(p.packing_slip_invoice),
+    ship_to_company: s(p.ship_to_company),
+    ship_to_attention: s(p.ship_to_attention),
+    ship_to_street: s(p.ship_to_street),
+    ship_to_street2: s(p.ship_to_street2),
+    ship_to_city: s(p.ship_to_city),
+    ship_to_state: s(p.ship_to_state),
+    ship_to_zip: s(p.ship_to_zip),
+    ship_to_verified: s(p.ship_to_verified) || "unverified",
+    ship_to_standardized: p.ship_to_standardized ? JSON.stringify(p.ship_to_standardized) : null,
+    ship_to_verified_at: s(p.ship_to_verified_at) || null,
+    line_items: lineItems.map((raw: any) => {
+      const li = raw ?? {};
+      return {
+        part_id: li.part_id ? s(li.part_id) : null,
+        part_number: s(li.part_number),
+        description: s(li.description),
+        quantity: Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
+        dimensions: s(li.dimensions),
+        density: li.density ? s(li.density) : null,
+      };
+    }),
+  };
+
   try {
-    // Port the exact jobs INSERT column list from _worker.js/routes/jobs.js.
-    // Fields the entry form doesn't collect are inserted as '' / null / defaults, matching legacy.
-    await DB.prepare(`
-      INSERT INTO jobs (
-        id, status, customer, po_number, invoice_number, ship_date, ship_day,
-        location, delivery_time, method, carrier, load_count, total_bdft,
-        scrap_pickup, sales_lead, bol_info, payment_info, notes,
-        cutting_instructions, packing_instructions, contact_name, contact_phone, combo_id,
-        priority, confirmed_to_ship, processes, created_at, updated_at,
-        packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
-        ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
-        ship_to_city, ship_to_state, ship_to_zip,
-        ship_to_verified, ship_to_standardized, ship_to_verified_at, trailer_group_id
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `).bind(
-      id, status, customer, s(p.po_number), s(p.invoice_number), ship_date, ship_day,
-      location, delivery_time, method, carrier, load_count, total_bdft,
-      scrap_pickup, s(p.sales_lead), s(p.bol_info), s(p.payment_info), s(p.notes),
-      s(p.cutting_instructions), s(p.packing_instructions), s(p.contact_name), s(p.contact_phone),
-      p.combo_id ? s(p.combo_id) : null,
-      s(p.priority), p.confirmed_to_ship ? 1 : 0, JSON.stringify(procsJson), ts, ts,
-      packing_slip_key, packing_slip_pdf, s(p.packing_slip_filename), s(p.packing_slip_invoice), source,
-      s(p.ship_to_company), s(p.ship_to_attention), s(p.ship_to_street), s(p.ship_to_street2),
-      s(p.ship_to_city), s(p.ship_to_state), s(p.ship_to_zip),
-      s(p.ship_to_verified) || "unverified", p.ship_to_standardized ? JSON.stringify(p.ship_to_standardized) : null,
-      s(p.ship_to_verified_at) || null, null,
-    ).run();
-
-    for (let i = 0; i < lineItems.length; i++) {
-      const li = lineItems[i] ?? {};
-      await DB.prepare(`
-        INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order)
-        VALUES (?,?,?,?,?,?,?,?,?)
-      `).bind(
-        crypto.randomUUID(), id,
-        li.part_id ? s(li.part_id) : null,
-        s(li.part_number), s(li.description),
-        Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
-        s(li.dimensions), li.density ? s(li.density) : null, i,
-      ).run();
+    const result = await createJob(
+      { DB, BOL_PHOTOS }, input, { id: actorId, name: actorName },
+      { source: "manual", via: "order-entry" },
+    );
+    if (result.ok) {
+      return NextResponse.json({ ok: true, id: result.id, hb_chunk_breakdown: result.hb_chunk_breakdown }, { status: 201 });
     }
-
-    // Auto outbound shipment (non-blocking) — ported from legacy.
-    try {
-      await DB.prepare(`
-        INSERT INTO shipments
-          (id, direction, job_id, customer, carrier, method, bol_number, origin,
-           destination, ship_date, status, total_bdft, load_count,
-           weight_lbs, bead_type, notes, trailer_number, delivery_time, scrap_pickup)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-      `).bind(
-        crypto.randomUUID(), "outbound", id, customer, carrier, method, "", "XPanda Foam",
-        location, ship_date, "not_started", total_bdft, load_count, 0, "", "", "", delivery_time, scrap_pickup,
-      ).run();
-    } catch (e: any) { console.error("Auto-shipment failed:", String(e?.message || e)); }
-
-    // Auto loading assignments (skip customer pickup) — ported from legacy.
-    if (method.toLowerCase() !== "customer pickup") {
-      try {
-        const n2 = new Date().toISOString();
-        for (let n = 1; n <= Math.max(load_count, 1); n++) {
-          await DB.prepare(`
-            INSERT INTO loading_assignments (id, job_id, bay_id, trailer_number, loading_status, assigned_by, notes, load_number, created_at, updated_at)
-            VALUES (?, ?, NULL, '', 'awaiting', NULL, '', ?, ?, ?)
-          `).bind(crypto.randomUUID(), id, n, n2, n2).run();
-        }
-      } catch (e: any) { console.error("Auto loading assignment failed:", String(e?.message || e)); }
+    if (result.code === "duplicate_invoice") {
+      return NextResponse.json(
+        { ok: false, code: "duplicate_invoice", error: `A job with invoice # ${input.invoice_number} already exists.`, job_id: result.job_id },
+        { status: 409 },
+      );
     }
-
-    // NOTE: legacy reconcileCuttingSteps() is intentionally NOT called. v2 cutting_lines
-    // reconcile lazily on the cutting queue read — do not create cutting_steps here.
-
-    // P438: compute + persist Holey Board chunk requirement so cutList.ts's P386 CHUNK
-    // BREAKDOWN page renders and the v2 cutting queue's guillotine seed is correct on create.
-    // Best-effort — log + swallow so a nester bug never blocks an order save.
-    // hb-onhand-02: read the breakdown back so the response can carry it — OrderEntryForm's
-    // "Print cut list" builds its PDF from this POST response, not a follow-up fetch, so without
-    // this the CHUNK BREAKDOWN page (net or not) never renders on a just-created order.
-    let hbChunkBreakdown: string | null = null;
-    try {
-      await computeAndPersistHoleyChunks(DB, id);
-      const hbRow = await DB.prepare(`SELECT hb_chunk_breakdown FROM jobs WHERE id = ?`).bind(id).first<any>();
-      hbChunkBreakdown = hbRow?.hb_chunk_breakdown ?? null;
-    } catch (e: any) {
-      console.error("computeAndPersistHoleyChunks failed:", String(e?.message || e));
-    }
-
-    // Activity log — shared D1 table, same schema as legacy `logActivity()`
-    // (id, timestamp, action, entity_type, entity_id, summary, detail, user_id, created_at).
-    try {
-      await DB.prepare(
-        `INSERT INTO activity_log
-           (id, timestamp, action, entity_type, entity_id, summary, detail, user_id, created_at)
-         VALUES (?, ?, 'create', 'job', ?, ?, ?, ?, ?)`
-      ).bind(
-        crypto.randomUUID(), ts, id,
-        `${actorName || "Someone"} created job "${customer}" via order entry — ${lineItems.length} line items`,
-        JSON.stringify({ customer, po_number: s(p.po_number), line_items_count: lineItems.length, via: "order-entry" }),
-        actorId, ts,
-      ).run();
-    } catch (e: any) { console.error("activity_log failed:", String(e?.message || e)); }
-
-    return NextResponse.json({ ok: true, id, hb_chunk_breakdown: hbChunkBreakdown }, { status: 201 });
+    return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, { status: 500 });
   }

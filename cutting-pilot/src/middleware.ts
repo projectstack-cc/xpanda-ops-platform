@@ -78,6 +78,7 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   // "logistics.loading" rather than repointing the key entirely: `keys` grants on ANY match
   // (see permissionKeysFor below), so this is additive and non-breaking for the existing "jobs"-
   // gated caller.
+  { prefix: "/v2/api/qb", keys: ["jobs"] },
   { prefix: "/v2/api/jobs", keys: ["jobs", "logistics.loading"] },
   { prefix: "/v2/api/shipments", keys: ["logistics.dashboard"] },
   { prefix: "/v2/logistics", keys: ["logistics.dashboard"] },

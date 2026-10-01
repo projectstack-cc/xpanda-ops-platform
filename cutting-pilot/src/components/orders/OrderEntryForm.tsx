@@ -9,6 +9,7 @@ import PlatformHeader from "@/components/PlatformHeader";
 import { useLang } from "@/components/lang";
 import { parsePackingSlip } from "@/lib/packingSlip";
 import { matchLineItemToPart, loadPartsLibrary } from "@/lib/partMatch";
+import { bdftPerPiece, computeTotalBdft } from "@/lib/bdft";
 import { buildCutListPdf, type CutListJob } from "@/lib/cutList";
 import PartsPicker from "@/components/orders/PartsPicker";
 import CutListChunkToggle from "@/components/CutListChunkToggle";
@@ -65,37 +66,6 @@ export interface OrderPayload {
 }
 
 const EMPTY_LINE: OrderLineItem = { part_number: "", description: "", quantity: "", dimensions: "", density: "" };
-
-// Board-foot per piece = (L × W × H) / 144 (inches). Ported from jobs/index.html's
-// liBdftPerPiece — same "L x W x H" free-text convention, fractions included. Returns null
-// (contributes 0 to the total) when the dimensions string doesn't parse to three positive numbers.
-function bdftPerPiece(dimStr: string): number | null {
-  if (!dimStr) return null;
-  const parts = dimStr.replace(/[“”„‟""]/g, '"').split(/\s*[x×X]\s*/i);
-  if (parts.length < 3) return null;
-  const num = (s: string): number | null => {
-    const t = s.replace(/["'\s]/g, "").trim();
-    let m = t.match(/^(\d+)-(\d+)\/(\d+)$/);
-    if (m) return Number(m[1]) + Number(m[2]) / Number(m[3]);
-    m = t.match(/^(\d+)\/(\d+)$/);
-    if (m) return Number(m[1]) / Number(m[2]);
-    const n = parseFloat(t);
-    return isNaN(n) ? null : n;
-  };
-  const L = num(parts[0]), W = num(parts[1]), H = num(parts[2]);
-  if ([L, W, H].some((v) => v == null || v <= 0)) return null;
-  return ((L as number) * (W as number) * (H as number)) / 144;
-}
-
-function computeTotalBdft(items: OrderLineItem[]): number {
-  let total = 0;
-  for (const li of items) {
-    const bpp = bdftPerPiece(li.dimensions);
-    const qty = parseFloat(li.quantity);
-    if (bpp != null && Number.isFinite(qty) && qty > 0) total += bpp * qty;
-  }
-  return Math.round(total * 100) / 100;
-}
 
 const inputClass =
   "w-full min-h-[44px] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
