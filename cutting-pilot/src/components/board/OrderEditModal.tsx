@@ -16,6 +16,8 @@ import CutListChunkToggle from "@/components/CutListChunkToggle";
 import { buildCutListPdf, type CutListJob, type CutListLineItem } from "@/lib/cutList";
 import PartsPicker from "@/components/orders/PartsPicker";
 import type { OrderLineItem } from "@/components/orders/OrderEntryForm";
+import ProcessPicker from "./ProcessPicker";
+import { mergeProcesses, parseProcesses, type JobProcess } from "@/lib/processes";
 
 interface EditJob {
   id: string;
@@ -46,7 +48,7 @@ interface EditJob {
   ship_to_state: string | null;
   ship_to_zip: string | null;
   source: string | null;
-  processes: any;
+  processes: JobProcess[];
   has_packing_slip: boolean;
   hb_chunk_breakdown: string | null;
 }
@@ -193,7 +195,8 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
           setLoadError(boardJson.error || "Couldn't load this order.");
           return;
         }
-        const j = boardJson.job;
+        // board-lines-01: normalize processes so the dirty snapshot and the picker agree.
+        const j = { ...boardJson.job, processes: parseProcesses(boardJson.job.processes) };
         setJob(j);
         const lis: OrderLineItem[] = (boardJson.line_items ?? []).map((li) => ({
           part_id: li.part_id ?? undefined,
@@ -316,6 +319,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
         priority: job.priority ?? "normal",
         priority_level: Number.isFinite(Number(job.priority_level)) ? Number(job.priority_level) : 0,
         source: job.source ?? "manual",
+        processes: job.processes.map((p) => p.name),
         line_items: lineItems.map((li) => ({
           part_id: li.part_id || undefined,
           part_number: (li.part_number || "").trim(),
@@ -756,6 +760,15 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
               onChange={(e) => setJob({ ...job, notes: e.target.value })}
               rows={2}
               className={inputClass}
+            />
+          </section>
+
+          {/* Cutting lines (board-lines-01) */}
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold text-text">Cutting lines</h2>
+            <ProcessPicker
+              value={job.processes.map((p) => p.name)}
+              onChange={(names) => setJob({ ...job, processes: mergeProcesses(names, job.processes) })}
             />
           </section>
 

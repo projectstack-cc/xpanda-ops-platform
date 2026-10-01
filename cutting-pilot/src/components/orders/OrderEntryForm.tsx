@@ -14,6 +14,7 @@ import { buildCutListPdf, type CutListJob } from "@/lib/cutList";
 import PartsPicker from "@/components/orders/PartsPicker";
 import CutListChunkToggle from "@/components/CutListChunkToggle";
 import AddressCorrectionModal, { type AddressParts } from "@/components/orders/AddressCorrectionModal";
+import ProcessPicker from "@/components/board/ProcessPicker";
 
 export interface OrderLineItem {
   category?: string;
@@ -809,29 +810,23 @@ function setQtyAsBdftConvert(on: boolean) {
         {/* Production processes */}
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-text">Production processes</h2>
-          <p className="text-xs text-muted">Select which processes this job requires.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {[
-              { label: "Cross Cutter", checked: procCrossCutter, set: setProcCrossCutter },
-              { label: "Hole Cutter", checked: procHoleCutter, set: setProcHoleCutter },
-              { label: "Main Line", checked: procMainLine, set: setProcMainLine },
-              { label: "Blue Line", checked: procBlueLine, set: setProcBlueLine },
-              { label: "Laminate", checked: procLaminate, set: setProcLaminate },
-            ].map((proc) => (
-              <label
-                key={proc.label}
-                className="inline-flex items-center gap-2 min-h-[44px] px-3 rounded-md border border-[var(--input-border)] cursor-pointer select-none hover:bg-[var(--ghost-bg)]"
-              >
-                <input
-                  type="checkbox"
-                  checked={proc.checked}
-                  onChange={(e) => proc.set(e.target.checked)}
-                  className="h-5 w-5 accent-[var(--brand)]"
-                />
-                <span className="text-sm font-medium text-text">{proc.label}</span>
-              </label>
-            ))}
-          </div>
+          <ProcessPicker
+            hint="Select which processes this job requires."
+            value={[
+              procCrossCutter && "Cross Cutter",
+              procHoleCutter && "Hole Cutter",
+              procMainLine && "Main Line",
+              procBlueLine && "Blue Line",
+              procLaminate && "Laminate",
+            ].filter((n): n is string => !!n)}
+            onChange={(names) => {
+              setProcCrossCutter(names.includes("Cross Cutter"));
+              setProcHoleCutter(names.includes("Hole Cutter"));
+              setProcMainLine(names.includes("Main Line"));
+              setProcBlueLine(names.includes("Blue Line"));
+              setProcLaminate(names.includes("Laminate"));
+            }}
+          />
         </section>
 
         {/* Line items */}

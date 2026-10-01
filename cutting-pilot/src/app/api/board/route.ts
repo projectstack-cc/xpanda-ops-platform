@@ -7,6 +7,7 @@
 // board table itself (P342) still only renders the original field set.
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
+import { parseProcesses } from "@/lib/processes";
 
 export async function GET() {
   const { DB } = await getEnv();
@@ -20,7 +21,7 @@ export async function GET() {
       SELECT j.id, j.customer, j.po_number, j.invoice_number, j.status, j.priority, j.priority_level,
              j.ship_date, j.notes, j.cutting_instructions, j.packing_instructions,
              j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_city,
-             j.ship_to_state, j.ship_to_zip,
+             j.ship_to_state, j.ship_to_zip, j.processes,
              EXISTS (SELECT 1 FROM cutting_lines cl
                        WHERE cl.job_id = j.id AND cl.line_status = 'in_progress') AS in_cutting,
              EXISTS (SELECT 1 FROM loading_assignments la
@@ -59,6 +60,7 @@ export async function GET() {
       in_cutting: !!j.in_cutting,
       is_loading: !!j.is_loading,
       assignees: assigneeMap[j.id] ?? [],
+      processes: parseProcesses(j.processes),
     }));
 
     const counts = {

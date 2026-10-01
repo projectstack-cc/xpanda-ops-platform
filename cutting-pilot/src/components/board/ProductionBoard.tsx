@@ -32,6 +32,8 @@ import OrderEditModal from "./OrderEditModal";
 import CalendarView from "./CalendarView";
 import BoardRowEdit from "./BoardRowEdit";
 import { JobStatusBadge, PriorityBadge, STATUS_VARIANTS } from "./badges";
+import LinePills from "./LinePills";
+import { PROCESSES, type JobProcess } from "@/lib/processes";
 
 export interface BoardJob {
   id: string;
@@ -54,6 +56,7 @@ export interface BoardJob {
   in_cutting: boolean;
   is_loading: boolean;
   assignees: string[];
+  processes: JobProcess[];
 }
 
 interface AssignableUser {
@@ -211,6 +214,8 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
           j.ship_to_city,
           j.ship_to_state,
           j.assignees.join(" "),
+          // board-lines-01: match line names + abbreviations ("BL", "Blue").
+          j.processes.map((p) => `${p.name} ${PROCESSES.find((d) => d.name === p.name)?.abbr ?? ""}`).join(" "),
         ].some((v) => (v || "").toLowerCase().includes(q))
       );
     }
@@ -353,12 +358,13 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                     <table className="w-full min-w-[900px] table-fixed text-sm">
                       <thead>
                         <tr className="border-b border-[var(--line)] bg-[var(--ghost-bg)] text-left text-xs font-semibold text-muted">
-                          <th className="px-3.5 py-2.5 w-[22%]">Customer</th>
-                          <th className="px-3.5 py-2.5 w-[15%]">Ship-to</th>
-                          <th className="px-3.5 py-2.5 w-[11%]">Ship date</th>
-                          <th className="px-3.5 py-2.5 w-[9%]">Priority</th>
-                          <th className="px-3.5 py-2.5 w-[16%]">Assigned</th>
-                          <th className="px-3.5 py-2.5 w-[11%]">Status</th>
+                          <th className="px-3.5 py-2.5 w-[19%]">Customer</th>
+                          <th className="px-3.5 py-2.5 w-[13%]">Ship-to</th>
+                          <th className="px-3.5 py-2.5 w-[10%]">Ship date</th>
+                          <th className="px-3.5 py-2.5 w-[8%]">Priority</th>
+                          <th className="px-3.5 py-2.5 w-[13%]">Assigned</th>
+                          <th className="px-3.5 py-2.5 w-[12%]">Lines</th>
+                          <th className="px-3.5 py-2.5 w-[10%]">Status</th>
                           {/* Fixed width = two buttons + gap + cell padding, never wraps. */}
                           <th className="px-3.5 py-2.5 w-[160px] text-right">Actions</th>
                         </tr>
@@ -393,6 +399,9 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                                 {job.assignees.length ? job.assignees.join(", ") : "Unassigned"}
                               </td>
                               <td className="px-3 py-[8.8px] align-top">
+                                <LinePills processes={job.processes} />
+                              </td>
+                              <td className="px-3 py-[8.8px] align-top">
                                 <JobStatusBadge status={job.status} />
                               </td>
                               <td className="px-3 py-[8.8px] align-top text-right" onClick={(e) => e.stopPropagation()}>
@@ -408,7 +417,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                             </tr>
                             {expandedId === job.id && (
                               <tr>
-                                <td colSpan={7} className="p-0">
+                                <td colSpan={8} className="p-0">
                                   <BoardRowEdit
                                     job={job}
                                     assignableUsers={assignableUsers}

@@ -1,9 +1,11 @@
 // src/app/api/orders/[id]/route.ts  →  PUT /v2/api/orders/:id
 // P439 — in-place edit of an existing job from /v2/board's new OrderEditModal (Edit button).
 // Mirrors the legacy /api/jobs PUT (`_worker.js/routes/jobs.js` lines 575–860) but deliberately
-// scoped down: NO trailer_group_id, archived_at, packing_slip_pdf/key, or processes writes
-// (out of scope for the v2 modal — trailer linking + packing-slip upload + cutting pills
-// stay in their existing surfaces). Replaces line_items wholesale (DELETE + reinsert, same
+// scoped down: NO trailer_group_id, archived_at, or packing_slip_pdf/key writes
+// (out of scope for the v2 modal — trailer linking + packing-slip upload stay in their
+// existing surfaces). board-lines-01: `processes` (which cutting lines the job needs) IS now
+// written — names in, merged server-side so existing `completed` flags survive; removing a line
+// that is in_progress on /v2/cutting is a 409. Pills/completion stay on v2 cutting. Replaces line_items wholesale (DELETE + reinsert, same
 // as legacy), recomputes HB chunks, reconciles loading_assignments to load_count (skipped for
 // customer pickup), and sets ship_to_verified = "unverified" whenever any ship-to field is
 // in the payload. Activity log mirrors the v2 board PUT (entity_type=job, action=update).
@@ -12,6 +14,7 @@
 // no new permission key.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
+import { PROCESS_NAMES, mergeProcesses, parseProcesses } from "@/lib/processes";
 import { computeAndPersistHoleyChunks } from "@/lib/holeyChunks";
 import { JOB_TO_SHIPMENT_SYNC, reconcileLoadingAssignments, syncJobFieldsToShipment, type JobSyncField } from "@/lib/logistics/jobSync";
 
@@ -49,7 +52,7 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
 
   // Verify the job exists (and not archived). Same 404/400 contract as /v2/api/board/:id.
   const existing = await DB.prepare(
-    "SELECT id, status, archived_at, method FROM jobs WHERE id = ?"
+    "SELECT id, status, archived_at, method, processes FROM jobs WHERE id = ?"
   ).bind(id).first<any>();
   if (!existing) return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 });
   if (existing.archived_at) {
@@ -113,6 +116,35 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   if ("confirmed_to_ship" in p) {
     sets.push("confirmed_to_ship = ?"); binds.push(p.confirmed_to_ship ? 1 : 0);
   }
+  // board-lines-01: line assignment. Payload is a list of process names; completion flags are
+  // preserved from the stored value. Never touches jobs.status or cutting_lines (the cutting
+  // queue reconciles lazily from jobs.processes).
+  if ("processes" in p) {
+    if (!Array.isArray(p.processes) || !p.processes.every((x: any) => typeof x === "string")) {
+      return NextResponse.json({ ok: false, error: "Invalid processes." }, { status: 400 });
+    }
+    const unknown = p.processes.filter((x: string) => !PROCESS_NAMES.includes(x));
+    if (unknown.length) {
+      return NextResponse.json(
+        { ok: false, error: "Invalid processes.", detail: `Unknown line(s): ${unknown.join(", ")}` },
+        { status: 400 }
+      );
+    }
+    const prev = parseProcesses(existing.processes);
+    const next = mergeProcesses(p.processes, prev);
+    for (const removed of prev.filter((e) => !next.some((n) => n.name === e.name))) {
+      const busy = await DB.prepare(
+        "SELECT 1 FROM cutting_lines WHERE job_id = ? AND line = ? AND line_status = 'in_progress' LIMIT 1"
+      ).bind(id, removed.name).first();
+      if (busy) {
+        return NextResponse.json(
+          { ok: false, error: `Can't remove ${removed.name} — it's being cut right now.`, code: "line_in_progress" },
+          { status: 409 }
+        );
+      }
+    }
+    sets.push("processes = ?"); binds.push(JSON.stringify(next));
+  }
   if ("source" in p) {
     const v = s(p.source);
     if (!SOURCES.includes(v)) return NextResponse.json({ ok: false, error: "Invalid source." }, { status: 400 });
@@ -129,6 +161,7 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   if (
     sets.length === 0
     && !Array.isArray(p.line_items)
+    && !("processes" in p)
     && !("load_count" in p)
   ) {
     return NextResponse.json({ ok: false, error: "Nothing to update." }, { status: 400 });

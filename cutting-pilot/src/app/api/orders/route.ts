@@ -7,6 +7,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { createJob, type JobCreateInput } from "@/lib/jobCreate";
+import { PROCESS_NAMES } from "@/lib/processes";
 
 export async function GET() {
   const { DB } = await getEnv();
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
   // checkbox and leave method blank otherwise.
   const method = customer_pickup ? "customer pickup" : "";
   const lineItems = Array.isArray(p.line_items) ? p.line_items : [];
-  const ALLOWED_PROCS = ["Cross Cutter", "Hole Cutter", "Main Line", "Blue Line", "Laminate"];
+  const ALLOWED_PROCS: readonly string[] = PROCESS_NAMES;
   const procsJson = (Array.isArray(p.processes) ? p.processes : [])
     .filter((x: any) => x && ALLOWED_PROCS.includes(String(x.name)))
     .map((x: any) => ({ name: String(x.name), completed: !!x.completed }));

@@ -687,6 +687,26 @@ current series).
 
 ## Orders (v2)
 
+- **board-lines-01 — restore cutting-line assignment (`jobs.processes`) on `/v2/board` (React Component
+  Agent §9b; Next/Cloudflare Platform Agent §9a for the routes). No migration / schema change.** New
+  `src/lib/processes.ts` (`PROCESSES` with abbreviations, `PROCESS_NAMES`, `JobProcess`, defensive
+  `parseProcesses`, `mergeProcesses` — PROCESSES order, keeps existing `completed`, new lines `false`);
+  `POST /v2/api/orders` now takes its `ALLOWED_PROCS` from it (create behavior unchanged).
+  **`PUT /v2/api/orders/:id` accepts `processes`** as a list of names (non-array / non-string / unknown
+  name → 400 "Invalid processes."), merges against the stored value so `completed` flags survive, and
+  returns **409 `line_in_progress`** ("Can't remove <Line> — it's being cut right now.") before writing
+  anything if a removed line has an `in_progress` `cutting_lines` row. Never touches `jobs.status` or
+  writes `cutting_lines` (the queue reconciles lazily). The existing activity-log row already lists
+  field names, so `processes` shows up there — no second row. **`GET /v2/api/board`** now returns parsed
+  `processes` per job. New shared `components/board/ProcessPicker.tsx` (checkbox grid lifted verbatim from
+  `OrderEntryForm`'s "Production processes" section; `OrderEntryForm` now renders it with its five boolean
+  states + submit payload untouched) and `LinePills.tsx` (read-only CC/HC/ML/BL/LAM pills, Main/Blue
+  info-tinted, completed = ✓ + strike, empty → warn "No lines" badge). `OrderEditModal` gets a "Cutting
+  lines" section (before Instructions), normalizes `processes` on load, sends names in the save payload;
+  a 409 surfaces verbatim via `saveError`. Job Board rows get a **Lines** column after Assigned
+  (`colSpan` 7 → 8, widths rebalanced, Actions fixed-width) and the board search matches line names +
+  abbreviations ("BL", "Blue"). Pills are not tappable; no P422 pill→status side effect.
+
 - **board-ui-01 — `/v2/board` renamed Job Board + logistics-parity UI on a shared dashboard kit (React
   Component Agent §9b; §9a for the metadata title). No API / DB / migration change.** New
   `cutting-pilot/src/components/dashboard/`: `ViewModeToggle`, `WeekSelector`, `SearchInput`,
