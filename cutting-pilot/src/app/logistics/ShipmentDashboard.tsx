@@ -10,12 +10,6 @@
 // - Alternating Generate BOL ↔ View BOL actions with live refresh on generation
 import { useCallback, useEffect, useState, useMemo, useRef, type KeyboardEvent } from "react";
 import {
-  Search,
-  X,
-  Calendar as CalendarIcon,
-  List as ListIcon,
-  ChevronLeft,
-  ChevronRight,
   Truck,
   CheckCircle2,
   Clock,
@@ -33,7 +27,14 @@ import BolEditorModal, { type EditorTarget } from "@/components/logistics/BolEdi
 import ShipmentEditModal from "@/components/logistics/ShipmentEditModal";
 import LoadingSheetButton from "@/components/logistics/LoadingSheetButton";
 import FuelSurchargeControl from "@/components/logistics/FuelSurchargeControl";
-import StatTile from "@/components/logistics/StatTile";
+import StatTile from "@/components/dashboard/StatTile";
+import DashboardToolbar from "@/components/dashboard/DashboardToolbar";
+import ViewModeToggle from "@/components/dashboard/ViewModeToggle";
+import WeekSelector from "@/components/dashboard/WeekSelector";
+import SearchInput from "@/components/dashboard/SearchInput";
+import FilterSelect from "@/components/dashboard/FilterSelect";
+import DayGroupHeader from "@/components/dashboard/DayGroupHeader";
+import { getMondayForOffset } from "@/lib/week";
 import StatBreakdownModal from "@/components/logistics/StatBreakdownModal";
 import type { ShipmentDetail, ShipmentListItem, LogisticsStats } from "@/components/logistics/types";
 import type { BolRecord } from "@/lib/bolShared";
@@ -44,42 +45,6 @@ interface ShipmentDashboardProps {
   permissions: Record<string, { view?: boolean; edit?: boolean }>;
 }
 
-function getMondayForOffset(offset: number): { mondayStr: string; label: string } {
-  const now = new Date();
-  const day = now.getDay();
-  const diffToMon = day === 0 ? -6 : 1 - day;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diffToMon + offset * 7);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-
-  const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
-  const startLabel = monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const endLabel = sunday.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  return { mondayStr, label: `${startLabel} – ${endLabel}` };
-}
-
-function formatDayHeader(dateStr: string): { title: string; isToday: boolean } {
-  if (!dateStr || dateStr === "No Date") {
-    return { title: "Unscheduled / No Date", isToday: false };
-  }
-  const [y, m, d] = dateStr.split("-").map(Number);
-  if (!y || !m || !d) return { title: dateStr, isToday: false };
-
-  const date = new Date(y, m - 1, d);
-  const now = new Date();
-  const isToday =
-    now.getFullYear() === y && now.getMonth() === m - 1 && now.getDate() === d;
-
-  const weekday = date.toLocaleDateString("en-US", { weekday: "long" });
-  const formatted = date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  return { title: `${weekday} — ${formatted}`, isToday };
-}
-
 // Matches shipments/route.ts's STAT_PREDICATES keys exactly -- the KPI tile drilldown
 // (StatBreakdownModal) fetches GET /v2/api/shipments?stat=<key> with these.
 const STAT_LABELS: Record<string, string> = {
@@ -88,6 +53,18 @@ const STAT_LABELS: Record<string, string> = {
   in_transit: "In Transit",
   delivered_30d: "Delivered (30d)",
 };
+
+// Status filter options (same 8, same order as before board-ui-01's toolbar extraction).
+const SHIPMENT_STATUS_OPTIONS = [
+  { value: "not_started", label: "Not Started" },
+  { value: "in_production", label: "In Production" },
+  { value: "ready_to_ship", label: "Ready to Ship" },
+  { value: "loading", label: "Loading" },
+  { value: "loaded", label: "Loaded" },
+  { value: "in_transit", label: "In Transit" },
+  { value: "delivered", label: "Delivered" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 export default function ShipmentDashboard({
   userName,
@@ -442,147 +419,32 @@ export default function ShipmentDashboard({
         </div>
 
         {/* Toolbar: View Switcher, Week Controls, Search & Filter */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-surface border border-[var(--card-border)] rounded-xl p-3 shadow-sm">
-          {/* Left: View Mode Toggle + Week Controls */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* View Mode Buttons */}
-            <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 bg-[var(--ghost-bg)]">
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                  viewMode === "list"
-                    ? "bg-surface text-text shadow-xs"
-                    : "text-muted hover:text-text"
-                }`}
-              >
-                <ListIcon size={14} />
-                List
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("calendar")}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                  viewMode === "calendar"
-                    ? "bg-surface text-text shadow-xs"
-                    : "text-muted hover:text-text"
-                }`}
-              >
-                <CalendarIcon size={14} />
-                Calendar
-              </button>
-            </div>
-
-            {/* Week Toggles (Visible in List View) */}
-            {viewMode === "list" && (
-              <div className="flex items-center gap-1 ml-1">
-                <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5 bg-[var(--ghost-bg)]">
-                  <button
-                    type="button"
-                    onClick={() => setWeekOffset(0)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                      weekOffset === 0
-                        ? "bg-[var(--brand)] text-white shadow-xs"
-                        : "text-muted hover:text-text"
-                    }`}
-                  >
-                    This Week
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setWeekOffset(1)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                      weekOffset === 1
-                        ? "bg-[var(--brand)] text-white shadow-xs"
-                        : "text-muted hover:text-text"
-                    }`}
-                  >
-                    Next Week
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setWeekOffset(null)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                      weekOffset === null
-                        ? "bg-surface text-text shadow-xs"
-                        : "text-muted hover:text-text"
-                    }`}
-                  >
-                    Show All
-                  </button>
-                </div>
-
-                {weekOffset !== null && (
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setWeekOffset((prev) => (prev ?? 0) - 1)}
-                      className="w-8 h-8 rounded-lg border border-[var(--border)] flex items-center justify-center text-muted hover:text-text hover:bg-[var(--ghost-bg)] cursor-pointer"
-                      title="Previous week"
-                    >
-                      <ChevronLeft size={16} />
-                    </button>
-                    <span className="text-xs font-medium text-text px-1">
-                      {activeWeekInfo?.label}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setWeekOffset((prev) => (prev ?? 0) + 1)}
-                      className="w-8 h-8 rounded-lg border border-[var(--border)] flex items-center justify-center text-muted hover:text-text hover:bg-[var(--ghost-bg)] cursor-pointer"
-                      title="Next week"
-                    >
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Right: Search Box & Status Filter */}
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            {/* Search Input */}
-            <div className="relative flex-1 md:w-64">
-              <Search
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
-              />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search customer, invoice, trailer, BOL…"
-                className="w-full h-9 pl-9 pr-8 text-xs rounded-lg border border-[var(--border)] bg-surface text-text placeholder:text-muted focus:outline-hidden focus:border-[var(--brand)] transition-colors"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-text text-sm cursor-pointer"
-                >
-                  <X size={14} />
-                </button>
+        <DashboardToolbar
+          left={
+            <>
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
+              {/* Week Toggles (Visible in List View) */}
+              {viewMode === "list" && (
+                <WeekSelector weekOffset={weekOffset} onChange={setWeekOffset} label={activeWeekInfo?.label} />
               )}
-            </div>
-
-            {/* Status Select */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-9 px-3 text-xs rounded-lg border border-[var(--border)] bg-surface text-text focus:outline-hidden focus:border-[var(--brand)] cursor-pointer"
-            >
-              <option value="">All Statuses</option>
-              <option value="not_started">Not Started</option>
-              <option value="in_production">In Production</option>
-              <option value="ready_to_ship">Ready to Ship</option>
-              <option value="loading">Loading</option>
-              <option value="loaded">Loaded</option>
-              <option value="in_transit">In Transit</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-        </div>
+            </>
+          }
+          right={
+            <>
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search customer, invoice, trailer, BOL…"
+              />
+              <FilterSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                allLabel="All Statuses"
+                options={SHIPMENT_STATUS_OPTIONS}
+              />
+            </>
+          }
+        />
 
         {/* Error Alert */}
         {error && (
@@ -644,7 +506,6 @@ export default function ShipmentDashboard({
               </div>
             ) : (
               dayGroups.map(({ dateKey, shipments }) => {
-                const { title, isToday } = formatDayHeader(dateKey);
                 const totalBdft = shipments.reduce((sum, s) => {
                   const val = typeof s.total_bdft === "string" ? parseFloat(s.total_bdft) : s.total_bdft;
                   return sum + (val || 0);
@@ -653,32 +514,21 @@ export default function ShipmentDashboard({
                 return (
                   <div key={dateKey} className="space-y-2">
                     {/* Day Section Header */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-sm font-bold text-text flex items-center gap-2">
-                          {title}
-                          {isToday && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--brand)] text-white">
-                              Today
-                            </span>
-                          )}
-                        </h2>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted">
-                        <span>
-                          <strong className="text-text tabular-nums">{shipments.length}</strong>{" "}
-                          {shipments.length === 1 ? "shipment" : "shipments"}
-                        </span>
-                        {totalBdft > 0 && (
+                    <DayGroupHeader
+                      dateKey={dateKey}
+                      count={shipments.length}
+                      noun={["shipment", "shipments"]}
+                      extra={
+                        totalBdft > 0 && (
                           <span>
                             <strong className="text-text tabular-nums font-mono">
                               {totalBdft.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                             </strong>{" "}
                             BDFT
                           </span>
-                        )}
-                      </div>
-                    </div>
+                        )
+                      }
+                    />
 
                     {/* Day Table */}
                     <div className="overflow-x-auto rounded-xl border border-[var(--card-border)] bg-surface shadow-xs">

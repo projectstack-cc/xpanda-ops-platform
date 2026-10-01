@@ -62,18 +62,21 @@ export default function CalendarView({
   const dayJobs = dayModal ? jobsByDate[dayModal] ?? [] : [];
 
   return (
-    <div className="rounded-xl border border-[var(--card-border)] bg-surface p-3">
+    <div className="space-y-3">
       <div className="flex items-center justify-center gap-3 py-2">
-        <button type="button" onClick={() => setMonth(new Date(year, m - 1, 1))} className="min-h-[44px] px-3 rounded-lg border border-[var(--input-border)] text-text cursor-pointer hover:bg-[var(--ghost-bg)]">←</button>
+        <button type="button" onClick={() => setMonth(new Date(year, m - 1, 1))} className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-[var(--border)] bg-surface text-text hover:bg-[var(--ghost-bg)] transition-colors cursor-pointer">←</button>
         <h3 className="m-0 text-lg font-bold text-text min-w-[180px] text-center">{MONTHS[m]} {year}</h3>
-        <button type="button" onClick={() => setMonth(new Date(year, m + 1, 1))} className="min-h-[44px] px-3 rounded-lg border border-[var(--input-border)] text-text cursor-pointer hover:bg-[var(--ghost-bg)]">→</button>
-        <button type="button" onClick={() => { const n = new Date(); setMonth(new Date(n.getFullYear(), n.getMonth(), 1)); }} className="min-h-[44px] px-3 rounded-lg border border-[var(--input-border)] text-sm text-text cursor-pointer hover:bg-[var(--ghost-bg)]">Today</button>
+        <button type="button" onClick={() => setMonth(new Date(year, m + 1, 1))} className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-[var(--border)] bg-surface text-text hover:bg-[var(--ghost-bg)] transition-colors cursor-pointer">→</button>
+        <button type="button" onClick={() => { const n = new Date(); setMonth(new Date(n.getFullYear(), n.getMonth(), 1)); }} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] transition-colors cursor-pointer">Today</button>
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
+      <div className="overflow-hidden rounded-xl border border-[var(--card-border)] bg-surface shadow-sm">
+      <div className="grid grid-cols-7 border-b border-[var(--line)] bg-[var(--ghost-bg)] text-center text-xs font-semibold text-muted py-2">
         {DOW.map((d) => (
-          <div key={d} className="px-2 py-1 text-center text-xs font-semibold text-muted">{d}</div>
+          <div key={d}>{d}</div>
         ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1 p-1">
         {cells.map((cell, i) => {
           if (!cell) return <div key={i} className="min-h-[96px] rounded-md bg-[var(--ghost-bg)]" />;
           const isToday = cell.dateStr === todayStr;
@@ -99,6 +102,7 @@ export default function CalendarView({
             </div>
           );
         })}
+      </div>
       </div>
 
       <Modal isOpen={!!dayModal} onClose={() => setDayModal(null)} title={dayModal ? `Jobs — ${dayModal}` : "Jobs"}>

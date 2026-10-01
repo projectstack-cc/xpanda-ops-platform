@@ -8,7 +8,7 @@ import { getEnv } from "@/lib/db";
 import ProductionBoard from "@/components/board/ProductionBoard";
 
 export const metadata = {
-  title: "xPanda Production Board — v2",
+  title: "xPanda Job Board — v2",
 };
 
 export default async function BoardPage() {

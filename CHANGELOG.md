@@ -687,6 +687,29 @@ current series).
 
 ## Orders (v2)
 
+- **board-ui-01 — `/v2/board` renamed Job Board + logistics-parity UI on a shared dashboard kit (React
+  Component Agent §9b; §9a for the metadata title). No API / DB / migration change.** New
+  `cutting-pilot/src/components/dashboard/`: `ViewModeToggle`, `WeekSelector`, `SearchInput`,
+  `FilterSelect`, `DashboardToolbar`, `DayGroupHeader` (JSX + classNames moved verbatim out of
+  `ShipmentDashboard.tsx`, typed props), and `StatTile` (`git mv` from `components/logistics/`, new
+  optional `hideLoads` + `unit` props — defaults keep logistics rendering unchanged). New `src/lib/week.ts`
+  holds `getMondayForOffset` / `formatDayHeader` (moved verbatim) plus `toIsoDate` (M/D/YYYY → ISO, same
+  logic as CalendarView's `normalizeDate`), `weekRange(offset)` (Mon..Sun ISO), and `fmtShortDate`
+  ("Mon D, YYYY", same output as ShipmentRow's `fmtDate`). Board: title "xPanda Job Board — v2" / header
+  "Job board · v2", h1 "Job Board" + subtitle + Refresh; `StatusCards` now three `StatTile`s
+  (Open/Cutting/Loading, global counts, keyboard-accessible, same `counts`/`onSelect` contract); toolbar
+  with List/Calendar, week selector (list only, default This Week; past-dated jobs only under Show All or
+  ‹ stepping — logistics parity), search (customer, INV#, PO#, ship-to company/city/state, assignees) and
+  status filter (not started / in production / done / loading) — client-side, list only; calendar still
+  gets every job. List is grouped by ship date (`DayGroupHeader`, "No Date" last, API priority order kept
+  within a day) with logistics table chrome/density, a presentational expand chevron, "Mon D, YYYY" ship
+  dates, and restyled View/Edit buttons; row click → `BoardRowEdit`, View → `OrderDetailModal`, Edit →
+  `OrderEditModal` unchanged. Logistics-markup loading / error / empty states ("Reset to This Week").
+  **Off-week fix:** picking a job in `StatusModal` whose row isn't rendered (filtered, other week, or
+  calendar view) now clears search + status, switches to Show All + List, and scrolls/highlights after
+  the next frame; unchanged when the row is visible. `CalendarView` className-only chrome refresh (36px
+  nav/Today buttons, framed grid with a ghost-bg day-of-week header row) — no logic or prop changes.
+
 - **lgx-editmodal-01 (cross-ref) — orders PUT mirrors to the shipment.** `PUT /v2/api/orders/:id` now
   syncs job-owned fields onto the job's outbound shipment (legacy parity) and uses the shared
   `reconcileLoadingAssignments` from `lib/logistics/jobSync.ts`. See `## Logistics (v2)`.
@@ -2566,6 +2589,12 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **board-ui-01 (cross-ref) — toolbar + day header extracted into `components/dashboard/`, no behavior
+  change.** `ShipmentDashboard.tsx` now renders `DashboardToolbar` / `ViewModeToggle` / `WeekSelector` /
+  `SearchInput` / `FilterSelect` / `DayGroupHeader`, imports `StatTile` from `components/dashboard/` and
+  the week helpers from `lib/week.ts`. className parity diff of the toolbar and day-header blocks: identical
+  (20 + 7 classNames). See `## Orders (v2)`.
 
 - **lgx-photos-01 — loading-dock photos per load in the shipment row drill-down (§9a / §9b). No migration,
   read-only.** `GET /v2/api/shipments/:id` now attaches `photos` (`id, filename, uploaded_by, created_at`, oldest

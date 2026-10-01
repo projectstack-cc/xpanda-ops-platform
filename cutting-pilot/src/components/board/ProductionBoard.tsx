@@ -1,6 +1,6 @@
 "use client";
 // src/components/board/ProductionBoard.tsx
-// P439 — Production board consuming GET /v2/api/board. Three affordances per row, matching
+// P439 — Job Board (/v2/board) consuming GET /v2/api/board. Three affordances per row, matching
 // the legacy job-board UX:
 //   1. Clicking a row (or the row's Edit button) — expands the inline BoardRowEdit panel
 //      (P343) for the locked editable subset (ship_date / priority(+level) / notes / status
@@ -12,15 +12,26 @@
 //      /v2/api/orders/:id.
 //   3. View button — opens OrderDetailModal, the read-only viewer (shipping + line items +
 //      cut-list + packing-slip dropdowns). Mirrors the previous behavior.
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+// board-ui-01: renamed "Job Board" (legacy parity) and rebuilt on the shared dashboard kit to
+// mirror /v2/logistics — title block, StatTile status cards, toolbar (List/Calendar, week
+// selector, search, status filter), and day-grouped tables. Filtering is client-side, list only.
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
+import DashboardToolbar from "@/components/dashboard/DashboardToolbar";
+import ViewModeToggle from "@/components/dashboard/ViewModeToggle";
+import WeekSelector from "@/components/dashboard/WeekSelector";
+import SearchInput from "@/components/dashboard/SearchInput";
+import FilterSelect from "@/components/dashboard/FilterSelect";
+import DayGroupHeader from "@/components/dashboard/DayGroupHeader";
+import { fmtShortDate, getMondayForOffset, toIsoDate, weekRange } from "@/lib/week";
 import StatusCards, { type StatusBucket } from "./StatusCards";
 import StatusModal from "./StatusModal";
 import OrderDetailModal from "./OrderDetailModal";
 import OrderEditModal from "./OrderEditModal";
 import CalendarView from "./CalendarView";
 import BoardRowEdit from "./BoardRowEdit";
-import { JobStatusBadge, PriorityBadge } from "./badges";
+import { JobStatusBadge, PriorityBadge, STATUS_VARIANTS } from "./badges";
 
 export interface BoardJob {
   id: string;
@@ -62,6 +73,15 @@ interface ProductionBoardProps {
   permissions: Record<string, { view?: boolean; edit?: boolean }>;
 }
 
+// The only statuses GET /v2/api/board returns.
+const BOARD_STATUS_OPTIONS = ["not_started", "in_production", "done", "loading"].map((value) => ({
+  value,
+  label: STATUS_VARIANTS[value].label,
+}));
+
+const actionBtnClass =
+  "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] cursor-pointer";
+
 function isOpenStatus(status: string) {
   return status === "not_started" || status === "in_production";
 }
@@ -78,6 +98,18 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   const [view, setView] = useState<"list" | "calendar">("list");
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+
+  // Week offset: 0 = This Week (default), 1 = Next Week, null = Show All — logistics parity.
+  const [weekOffset, setWeekOffset] = useState<number | null>(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  // Set when a status-modal pick targets a row that wasn't rendered; scrolled to after re-render.
+  const [pendingScrollId, setPendingScrollId] = useState<string | null>(null);
+
+  const activeWeekInfo = useMemo(() => {
+    if (weekOffset === null) return null;
+    return getMondayForOffset(weekOffset);
+  }, [weekOffset]);
 
   const load = useCallback(async () => {
     try {
@@ -125,13 +157,37 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
     return data.jobs.filter((j) => j.is_loading);
   }
 
-  function handleSelectFromModal(jobId: string) {
-    setActiveBucket(null);
+  function scrollToAndHighlight(jobId: string) {
     const row = rowRefs.current[jobId];
     if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
     setHighlightedId(jobId);
     window.setTimeout(() => setHighlightedId((cur) => (cur === jobId ? null : cur)), 2000);
   }
+
+  function handleSelectFromModal(jobId: string) {
+    setActiveBucket(null);
+    if (rowRefs.current[jobId]) {
+      scrollToAndHighlight(jobId);
+      return;
+    }
+    // board-ui-01: the row is filtered out, in another week, or the calendar is showing — widen
+    // the list to everything, then scroll once it has rendered.
+    setSearchQuery("");
+    setStatusFilter("");
+    setWeekOffset(null);
+    setView("list");
+    setPendingScrollId(jobId);
+  }
+
+  useEffect(() => {
+    if (!pendingScrollId) return;
+    const jobId = pendingScrollId;
+    const raf = window.requestAnimationFrame(() => {
+      setPendingScrollId(null);
+      scrollToAndHighlight(jobId);
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [pendingScrollId]);
 
   const bucketTitles: Record<StatusBucket, string> = {
     open: "Open jobs",
@@ -139,140 +195,241 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
     loading: "Loading",
   };
 
+  // Client-side list filtering: status → search → week. Show All keeps null ship dates.
+  const filteredJobs = useMemo(() => {
+    if (!data) return [];
+    let jobs = data.jobs;
+    if (statusFilter) jobs = jobs.filter((j) => j.status === statusFilter);
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      jobs = jobs.filter((j) =>
+        [
+          j.customer,
+          j.invoice_number,
+          j.po_number,
+          j.ship_to_company,
+          j.ship_to_city,
+          j.ship_to_state,
+          j.assignees.join(" "),
+        ].some((v) => (v || "").toLowerCase().includes(q))
+      );
+    }
+    if (weekOffset !== null) {
+      const { start, end } = weekRange(weekOffset);
+      jobs = jobs.filter((j) => {
+        const iso = toIsoDate(j.ship_date);
+        return !!iso && iso >= start && iso <= end;
+      });
+    }
+    return jobs;
+  }, [data, statusFilter, searchQuery, weekOffset]);
+
+  // Grouped by ship date; "No Date" last. Within a day, the API's order (priority_level DESC).
+  const dayGroups = useMemo(() => {
+    const map = new Map<string, BoardJob[]>();
+    for (const j of filteredJobs) {
+      const key = toIsoDate(j.ship_date) ?? "No Date";
+      const list = map.get(key) ?? [];
+      list.push(j);
+      map.set(key, list);
+    }
+    const sortedKeys = Array.from(map.keys()).sort((a, b) => {
+      if (a === "No Date") return 1;
+      if (b === "No Date") return -1;
+      return a.localeCompare(b);
+    });
+    return sortedKeys.map((dateKey) => ({ dateKey, jobs: map.get(dateKey) ?? [] }));
+  }, [filteredJobs]);
+
   return (
-    <div className="min-h-screen flex flex-col bg-bg">
-      <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Production board · v2" currentPath="/v2/board" />
+    <div className="min-h-screen flex flex-col bg-bg text-text">
+      <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Job board · v2" currentPath="/v2/board" />
 
-      <div className="flex-1 w-full max-w-screen-2xl mx-auto px-4 py-6 space-y-6">
-        <h1 className="text-xl font-semibold text-text">Production board</h1>
+      <div className="flex-1 w-full max-w-screen-2xl mx-auto px-4 py-6 space-y-5">
+        {/* Title */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-text">Job Board</h1>
+            <p className="text-xs text-muted">Track orders from intake through production to loading</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={load}
+              className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-[var(--border)] bg-surface text-muted hover:text-text hover:bg-[var(--ghost-bg)] transition-colors cursor-pointer"
+              title="Refresh"
+              aria-label="Refresh board"
+            >
+              <RefreshCw size={14} />
+            </button>
+          </div>
+        </div>
 
+        {data && <StatusCards counts={data.counts} onSelect={setActiveBucket} />}
+
+        {/* Toolbar: View Switcher, Week Controls, Search & Filter */}
+        <DashboardToolbar
+          left={
+            <>
+              <ViewModeToggle value={view} onChange={setView} />
+              {view === "list" && (
+                <WeekSelector weekOffset={weekOffset} onChange={setWeekOffset} label={activeWeekInfo?.label} />
+              )}
+            </>
+          }
+          right={
+            <>
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search customer, INV#, PO#, ship-to, assignee…"
+              />
+              <FilterSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                allLabel="All Statuses"
+                options={BOARD_STATUS_OPTIONS}
+              />
+            </>
+          }
+        />
+
+        {/* Error Alert */}
         {error && (
-          <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
-            {error}
-            <button type="button" onClick={load} className="ml-3 underline cursor-pointer">
+          <div className="rounded-xl border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3 flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={load}
+              className="underline cursor-pointer font-semibold text-xs ml-3"
+            >
               Retry
             </button>
           </div>
         )}
 
-        {loading && !data && <p className="text-sm text-muted">Loading board…</p>}
+        {/* Main Content Area */}
+        {loading && !data ? (
+          <div className="rounded-xl border border-[var(--card-border)] bg-surface p-12 text-center text-sm text-muted">
+            <RefreshCw size={20} className="animate-spin mx-auto mb-2 text-muted" />
+            Loading jobs…
+          </div>
+        ) : view === "calendar" ? (
+          <CalendarView jobs={data?.jobs ?? []} onSelectJob={setViewId} />
+        ) : (
+          /* Daily Breakdown List View */
+          <div className="space-y-6">
+            {dayGroups.length === 0 ? (
+              <div className="rounded-xl border border-[var(--card-border)] bg-surface p-12 text-center">
+                <p className="text-sm font-medium text-text">No jobs found.</p>
+                <p className="text-xs text-muted mt-1">
+                  {searchQuery
+                    ? "Try adjusting your search keywords or clearing filters."
+                    : weekOffset === 0
+                    ? "No jobs are scheduled for this week. Switch to Next Week or Show All."
+                    : "No jobs scheduled for this period."}
+                </p>
+                {(searchQuery || statusFilter || weekOffset !== 0) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setStatusFilter("");
+                      setWeekOffset(0);
+                    }}
+                    className="mt-4 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[var(--border)] text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] cursor-pointer"
+                  >
+                    Reset to This Week
+                  </button>
+                )}
+              </div>
+            ) : (
+              dayGroups.map(({ dateKey, jobs }) => (
+                <div key={dateKey} className="space-y-2">
+                  <DayGroupHeader dateKey={dateKey} count={jobs.length} noun={["job", "jobs"]} />
 
-        {data && (
-          <>
-            <StatusCards counts={data.counts} onSelect={setActiveBucket} />
-
-            <div className="inline-flex rounded-lg border border-[var(--input-border)] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setView("list")}
-                className={`min-h-[40px] px-4 text-sm font-semibold cursor-pointer ${view === "list" ? "bg-[var(--info-bg)] text-[var(--info-text)]" : "text-text hover:bg-[var(--ghost-bg)]"}`}
-              >
-                List
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("calendar")}
-                className={`min-h-[40px] px-4 text-sm font-semibold cursor-pointer border-l border-[var(--input-border)] ${view === "calendar" ? "bg-[var(--info-bg)] text-[var(--info-text)]" : "text-text hover:bg-[var(--ghost-bg)]"}`}
-              >
-                Calendar
-              </button>
-            </div>
-
-            {view === "list" && (
-            <div className="overflow-x-auto rounded-xl border border-[var(--card-border)] bg-surface">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--line)] text-left text-xs font-semibold text-muted">
-                    <th className="px-3 py-2">Customer</th>
-                    <th className="px-3 py-2">Ship-to</th>
-                    <th className="px-3 py-2">Ship date</th>
-                    <th className="px-3 py-2">Priority</th>
-                    <th className="px-3 py-2">Assigned</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.jobs.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="px-3 py-6 text-center text-sm text-muted">
-                        No active jobs.
-                      </td>
-                    </tr>
-                  )}
-                  {data.jobs.map((job) => (
-                    <Fragment key={job.id}>
-                      <tr
-                        ref={(el) => {
-                          rowRefs.current[job.id] = el;
-                        }}
-                        className={`border-b border-[var(--line)] last:border-0 transition-colors cursor-pointer hover:bg-[var(--ghost-bg)] ${
-                          highlightedId === job.id ? "bg-[var(--info-bg)]" : ""
-                        }`}
-                        onClick={() => toggleExpand(job.id)}
-                      >
-                        <td className="px-3 py-3">
-                          <div className="font-medium text-text">{job.customer || "—"}</div>
-                          <div className="text-xs text-muted">{job.invoice_number ? `INV# ${job.invoice_number}` : "No INV#"}</div>
-                        </td>
-                        <td className="px-3 py-3 text-muted">
-                          {job.ship_to_city ? `${job.ship_to_city}${job.ship_to_state ? `, ${job.ship_to_state}` : ""}` : "—"}
-                        </td>
-                        <td className="px-3 py-3 text-muted font-mono tabular-nums">{job.ship_date || "—"}</td>
-                        <td className="px-3 py-3">
-                          <PriorityBadge priority={job.priority} priorityLevel={job.priority_level} />
-                        </td>
-                        <td className="px-3 py-3 text-muted">
-                          {job.assignees.length ? job.assignees.join(", ") : "Unassigned"}
-                        </td>
-                        <td className="px-3 py-3">
-                          <JobStatusBadge status={job.status} />
-                        </td>
-                        <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="inline-flex items-center gap-2 justify-end">
-                            <button
-                              type="button"
-                              onClick={() => setViewId(job.id)}
-                              className="min-h-[36px] px-3 rounded-md border border-[var(--input-border)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
-                            >
-                              View
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditId(job.id)}
-                              className="min-h-[36px] px-3 rounded-md border border-[var(--input-border)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
-                            >
-                              Edit
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                      {expandedId === job.id && (
-                        <tr>
-                          <td colSpan={7} className="p-0">
-                            <BoardRowEdit
-                              job={job}
-                              assignableUsers={assignableUsers}
-                              onCancel={() => setExpandedId(null)}
-                              onSaved={() => {
-                                setExpandedId(null);
-                                load();
-                              }}
-                            />
-                          </td>
+                  {/* Day Table */}
+                  <div className="overflow-x-auto rounded-xl border border-[var(--card-border)] bg-surface shadow-xs">
+                    <table className="w-full min-w-[900px] table-fixed text-sm">
+                      <thead>
+                        <tr className="border-b border-[var(--line)] bg-[var(--ghost-bg)] text-left text-xs font-semibold text-muted">
+                          <th className="px-3.5 py-2.5 w-[22%]">Customer</th>
+                          <th className="px-3.5 py-2.5 w-[15%]">Ship-to</th>
+                          <th className="px-3.5 py-2.5 w-[11%]">Ship date</th>
+                          <th className="px-3.5 py-2.5 w-[9%]">Priority</th>
+                          <th className="px-3.5 py-2.5 w-[16%]">Assigned</th>
+                          <th className="px-3.5 py-2.5 w-[11%]">Status</th>
+                          {/* Fixed width = two buttons + gap + cell padding, never wraps. */}
+                          <th className="px-3.5 py-2.5 w-[160px] text-right">Actions</th>
                         </tr>
-                      )}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </thead>
+                      <tbody>
+                        {jobs.map((job) => (
+                          <Fragment key={job.id}>
+                            <tr
+                              ref={(el) => {
+                                rowRefs.current[job.id] = el;
+                              }}
+                              className={`border-b border-[var(--line)] last:border-0 transition-colors cursor-pointer hover:bg-[var(--ghost-bg)] ${
+                                highlightedId === job.id ? "bg-[var(--info-bg)]" : ""
+                              }`}
+                              onClick={() => toggleExpand(job.id)}
+                            >
+                              <td className="px-3 py-[8.8px] align-top">
+                                <div className="font-medium text-text truncate">{job.customer || "—"}</div>
+                                <div className="flex items-center gap-1 text-xs text-muted">
+                                  {expandedId === job.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                  {job.invoice_number ? `INV# ${job.invoice_number}` : "No INV#"}
+                                </div>
+                              </td>
+                              <td className="px-3 py-[8.8px] align-top text-muted">
+                                {job.ship_to_city ? `${job.ship_to_city}${job.ship_to_state ? `, ${job.ship_to_state}` : ""}` : "—"}
+                              </td>
+                              <td className="px-3 py-[8.8px] align-top text-muted tabular-nums">{fmtShortDate(job.ship_date)}</td>
+                              <td className="px-3 py-[8.8px] align-top">
+                                <PriorityBadge priority={job.priority} priorityLevel={job.priority_level} />
+                              </td>
+                              <td className="px-3 py-[8.8px] align-top text-muted">
+                                {job.assignees.length ? job.assignees.join(", ") : "Unassigned"}
+                              </td>
+                              <td className="px-3 py-[8.8px] align-top">
+                                <JobStatusBadge status={job.status} />
+                              </td>
+                              <td className="px-3 py-[8.8px] align-top text-right" onClick={(e) => e.stopPropagation()}>
+                                <div className="inline-flex items-center gap-2 justify-end">
+                                  <button type="button" onClick={() => setViewId(job.id)} className={actionBtnClass}>
+                                    View
+                                  </button>
+                                  <button type="button" onClick={() => setEditId(job.id)} className={actionBtnClass}>
+                                    Edit
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            {expandedId === job.id && (
+                              <tr>
+                                <td colSpan={7} className="p-0">
+                                  <BoardRowEdit
+                                    job={job}
+                                    assignableUsers={assignableUsers}
+                                    onCancel={() => setExpandedId(null)}
+                                    onSaved={() => {
+                                      setExpandedId(null);
+                                      load();
+                                    }}
+                                  />
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))
             )}
-
-            {view === "calendar" && (
-              <CalendarView jobs={data.jobs} onSelectJob={setViewId} />
-            )}
-          </>
+          </div>
         )}
       </div>
 

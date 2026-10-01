@@ -1,8 +1,10 @@
-// src/components/logistics/StatTile.tsx
+// src/components/dashboard/StatTile.tsx
 // lgx-widgets-01: one KPI tile on the v2 Shipment Dashboard (was 4 copy-pasted blocks). Shows orders
 // (shipment rows matching the tile's STAT_PREDICATES entry) and loads (trailers: load_count per order,
 // orders linked on one trailer via jobs.trailer_group_id collapsed). `tileProps` is the dashboard's
 // statTileProps(key) — role/tabIndex/click/Enter/Space that open the StatBreakdownModal drilldown.
+// board-ui-01: moved from components/logistics/ into the shared dashboard kit; optional `hideLoads`
+// (drops the loads line) and `unit` (singular/plural noun for the main count) for the Job Board.
 import type { HTMLAttributes, ReactNode } from "react";
 
 interface StatTileProps {
@@ -13,9 +15,21 @@ interface StatTileProps {
   caption: string;
   iconWrapClassName: string;
   icon: ReactNode;
+  hideLoads?: boolean;
+  unit?: [string, string];
 }
 
-export default function StatTile({ tileProps, label, orders, loads, caption, iconWrapClassName, icon }: StatTileProps) {
+export default function StatTile({
+  tileProps,
+  label,
+  orders,
+  loads,
+  caption,
+  iconWrapClassName,
+  icon,
+  hideLoads = false,
+  unit = ["order", "orders"],
+}: StatTileProps) {
   return (
     <div
       {...tileProps}
@@ -26,13 +40,15 @@ export default function StatTile({ tileProps, label, orders, loads, caption, ico
         <div className="text-2xl font-bold tabular-nums text-text mt-1">
           {orders ?? "—"}
           <span className="ml-1.5 text-xs font-semibold text-muted normal-case tracking-normal">
-            {orders === 1 ? "order" : "orders"}
+            {orders === 1 ? unit[0] : unit[1]}
           </span>
         </div>
-        <div className="text-sm font-semibold tabular-nums text-text">
-          {loads ?? "—"}
-          <span className="ml-1 text-xs font-semibold text-muted">{loads === 1 ? "load" : "loads"}</span>
-        </div>
+        {!hideLoads && (
+          <div className="text-sm font-semibold tabular-nums text-text">
+            {loads ?? "—"}
+            <span className="ml-1 text-xs font-semibold text-muted">{loads === 1 ? "load" : "loads"}</span>
+          </div>
+        )}
         <div className="text-[11px] text-muted mt-0.5">{caption}</div>
       </div>
       <div className={iconWrapClassName}>

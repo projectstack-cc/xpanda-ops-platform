@@ -268,6 +268,13 @@
   home page's language selector.
 - [ ] Cut list sign-off block is English-only (PDF excluded from i18n by design) — add
   Español/Kreyòl labels if floor feedback asks for it. (Follow-on from cutlist-01.)
+- [ ] Extract the shared dashboard title block and the empty / error / loading state cards into
+  `components/dashboard/` — board-ui-01 copied the logistics markup into `ProductionBoard.tsx` rather
+  than extracting them (only the toolbar, day header and StatTile were shared).
+- [ ] Promote the Job Board's `StatusModal` to `StatBreakdownModal`-style breakdown parity with the
+  logistics KPI tiles, if wanted (board-ui-01 kept `StatusModal` as-is).
+- [ ] Note: `/v2/board` remains unlinked after board-ui-01 — the existing "Re-link `/v2/board`" item
+  above is unchanged.
 
 ---
 
