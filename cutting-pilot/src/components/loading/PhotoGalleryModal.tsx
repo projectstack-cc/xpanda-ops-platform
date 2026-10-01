@@ -15,11 +15,25 @@ interface Photo {
 }
 
 interface PhotoGalleryModalProps {
-  jobId: string | null;
+  jobId: string | null; // still controls open/closed
   onClose: () => void;
+  /** lgx-photos-01: when provided, use these instead of fetching /v2/api/loading-photos?job_id=. */
+  photos?: Photo[];
+  /** lgx-photos-01: image URL builder; default = `/v2/api/loading-photos/${id}/image` (unchanged). */
+  imageSrc?: (photoId: string) => string;
+  /** lgx-photos-01: initial index when opening with provided photos (default 0). */
+  startIndex?: number;
 }
 
-export default function PhotoGalleryModal({ jobId, onClose }: PhotoGalleryModalProps) {
+const defaultImageSrc = (photoId: string) => `/v2/api/loading-photos/${encodeURIComponent(photoId)}/image`;
+
+export default function PhotoGalleryModal({
+  jobId,
+  onClose,
+  photos: providedPhotos,
+  imageSrc = defaultImageSrc,
+  startIndex,
+}: PhotoGalleryModalProps) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -28,6 +42,13 @@ export default function PhotoGalleryModal({ jobId, onClose }: PhotoGalleryModalP
 
   useEffect(() => {
     if (!jobId) return;
+    if (providedPhotos) {
+      setLoading(false);
+      setError(null);
+      setPhotos(providedPhotos);
+      setIndex(Math.min(Math.max(startIndex ?? 0, 0), Math.max(providedPhotos.length - 1, 0)));
+      return;
+    }
     setLoading(true);
     setError(null);
     setIndex(0);
@@ -42,7 +63,7 @@ export default function PhotoGalleryModal({ jobId, onClose }: PhotoGalleryModalP
       })
       .catch(() => setError("Couldn't load photos."))
       .finally(() => setLoading(false));
-  }, [jobId]);
+  }, [jobId, providedPhotos, startIndex]);
 
   useEffect(() => {
     if (!jobId || photos.length < 2) return;
@@ -92,7 +113,7 @@ export default function PhotoGalleryModal({ jobId, onClose }: PhotoGalleryModalP
             )}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`/v2/api/loading-photos/${encodeURIComponent(current.id)}/image`}
+              src={imageSrc(current.id)}
               alt={current.filename || `Photo ${index + 1}`}
               className="max-h-[60vh] max-w-full object-contain"
             />
@@ -129,7 +150,7 @@ export default function PhotoGalleryModal({ jobId, onClose }: PhotoGalleryModalP
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/v2/api/loading-photos/${encodeURIComponent(p.id)}/image`}
+                    src={imageSrc(p.id)}
                     alt={p.filename || `Photo ${i + 1}`}
                     className="w-full h-full object-cover"
                   />

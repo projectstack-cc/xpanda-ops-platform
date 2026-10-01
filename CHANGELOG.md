@@ -1762,6 +1762,11 @@ current series).
 
 ## Loading Board (v2)
 
+- **lgx-photos-01 (cross-ref) — `PhotoGalleryModal` accepts provided photos.** New optional props `photos`
+  (skip the `/v2/api/loading-photos?job_id=` fetch), `imageSrc` (URL builder for both the main image and the
+  filmstrip; defaults to `/v2/api/loading-photos/:id/image`), and `startIndex`. `DockBoard.tsx`'s call (`jobId` +
+  `onClose` only) is untouched and behaves identically. Full entry under Logistics (v2).
+
 - **P306** — Removed the P301 logo sweep from `/v2/loading` and applied the same `--tv-safe-inset` (12px) hardware-overscan accommodation as the paired Schedule Board entry above (same root cause, same fix, same "not a CSS bug" caveat — see that entry for the full writeup). Removed the inline `LogoSweep` function, its render call, `LOGO_SWEEP_*` constants, and the `xp-loading-sweep`/`@keyframes xp-loading-sweep-kf` rules from `LoadingBoard.tsx`'s `TV_HARDENING_STYLE` (the `<style>` tag and its 3 render sites were removed entirely — `FreshnessClock` needed no injected CSS). `absolute inset-0` → `style={{ inset: "var(--tv-safe-inset)" }}` on the content wrapper. `tsc --noEmit` + `cf-build` green.
 - **P305** — Fixed ~10px edge clipping on both TV boards, a regression from P304's pixel-shift removal. The removed shift layer was `position: absolute; inset: -12px`, which gave the inner content column a definite full-parent height; P304's unwrap replaced it with a static `<div className="flex flex-col">` (auto-height), so `flex-1 min-h-0` no longer resolved against the full parent height and the layout sat slightly off. Fixed by making the inner column `absolute inset-0` (fills the still-`relative overflow-hidden` parent exactly, no overscan, no motion) in both `LoadingBoard.tsx` and `ScheduleBoard.tsx` — identical one-line change in each. `tsc --noEmit` + `cf-build` green.
 - **P304** — Board-wide notes, reversed bay order, and pixel-shift removal on `/v2/loading` (delta against P303 — modified in place, not rebuilt). **Notes**: new `DB_Migrations/loading-board-notes.sql` (single-row `loading_board_notes` singleton — no existing settings/kv table to reuse). `GET /v2/api/loading-board` now also returns `board_note` (from the singleton row); new `PUT` handler upserts it (`{ notes }`, ≤2000 chars, `updated_by` stamped from the `X-User-Name`/`X-User-Id` middleware header) — no middleware change needed since the existing `logistics.loading.tv` mapping already resolves GET→view / PUT→edit. `LoadingBoard.tsx` renders a slim full-width bar below the bay grid (moved there same-day per Steve's feedback — originally shipped between the header and the grid): view-only accounts see plain text (nothing rendered if the note is empty — no empty box on the wall); edit accounts (`isAdmin || permissions["logistics.loading.tv"].edit`) get a textarea + explicit Save button, saving on blur too. Local dirty/focused state means an in-progress edit is never clobbered by the 30s poll — the field only re-syncs from `board_note` when neither focused nor dirty. **Reversed bay order**: `ORDER BY lb.bay_number ASC` → `DESC` (bays 20–30 now render 30→20, matching the physical dock; `la.load_number ASC` unchanged so stacked loads stay in order). **Pixel-shift removed** (Steve reported motion discomfort) — see the Schedule Board section above for the parallel `/v2/schedule` removal; the loading board's own `.xp-loading-shift`/`@keyframes xp-loading-shift-kf` rules and wrapper class are deleted from `LoadingBoard.tsx`'s inline `TV_HARDENING_STYLE`, keeping the logo sweep and freshness clock untouched. No legacy files touched (roles.html/index.html already shipped in P303). `tsc --noEmit` + `cf-build` green.
@@ -2516,6 +2521,20 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **lgx-photos-01 — loading-dock photos per load in the shipment row drill-down (§9a / §9b). No migration,
+  read-only.** `GET /v2/api/shipments/:id` now attaches `photos` (`id, filename, uploaded_by, created_at`, oldest
+  first) to each `loads[]` entry, matched on `loading_photos.assignment_id` → `loads[].assignment_id` (a failed photo
+  query degrades to `photos: []`, never fails the GET; carrier-04's charges re-map spreads, so `photos` survives it).
+  **New `GET /v2/api/shipments/:id/loading-photo/:photoId`**, which inherits the `logistics.dashboard` gate (the
+  existing `/v2/api/loading-photos/*` routes are gated on `logistics.loading` and would 403 a dashboard-only user):
+  ownership-checked by `JOIN shipments s ON s.job_id = lp.job_id WHERE s.id = ? AND lp.id = ?` (no row → 404), then
+  serves bytes exactly like `loading-photos/[id]/image/route.ts` (R2 `photo_key` via `BOL_PHOTOS` first, base64
+  `photo_data` fallback with PNG sniff, `private, max-age=300`). `ShipmentDetailPanel` renders a strip of 56px
+  lazy-loaded thumbnails under each load's status/trailer line (loads with no photos show nothing extra); tapping
+  one opens the **existing** `PhotoGalleryModal` at that photo, cycling through all of the order's photos (flattened
+  across loads in display order). Photos taken on legacy `loading.html` show up too (same table). `ShipmentLoad`
+  type gains optional `photos`. `tsc --noEmit` + `cf-build` green.
 
 - **lgx-slip-01 — packing slip viewer in the Edit Shipment modal; modal reads ship-to from the shipment detail
   (§9a / §9b). No migration, read-only.** Legacy's edit form could show the packing slip; v2 had dropped it. The

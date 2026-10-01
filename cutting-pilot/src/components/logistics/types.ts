@@ -98,6 +98,8 @@ export interface ShipmentLoad {
   // carrier-04
   carrier_charges: CarrierChargeEntry[];
   carrier_charges_total_cents: number;
+  /** lgx-photos-01: loading-dock photos for this load (loading_photos.assignment_id), oldest first. */
+  photos?: { id: string; filename: string | null; uploaded_by: string | null; created_at: string | null }[];
 }
 
 export interface CarrierChargeEntry {

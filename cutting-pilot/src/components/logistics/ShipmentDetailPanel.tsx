@@ -8,12 +8,13 @@
 // stays under the logistics.dashboard permission the dashboard itself already requires -- see
 // that route's header comment for why it doesn't delegate to /v2/api/jobs/:id or
 // /v2/api/board/:id (both gated on the separate "jobs" key).
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import PhotoGalleryModal from "@/components/loading/PhotoGalleryModal";
 import { formatEtDateTime } from "@/lib/etDateTime";
 import { formatUsdCents } from "@/lib/money";
 import { StatusBadge } from "./ShipmentRow";
-import type { ShipmentDetail } from "./types";
+import type { ShipmentDetail, ShipmentLoad } from "./types";
 
 // lgx-minimap-01: shared with the Carrier View. Leaflet touches `window` at import -> client-only.
 const DestinationMiniMap = dynamic(() => import("@/components/DestinationMiniMap"), { ssr: false });
@@ -38,6 +39,25 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
   const [detail, setDetail] = useState<ShipmentDetail | null>(cache.get(shipmentId) ?? null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!cache.has(shipmentId));
+  // lgx-photos-01: index into allPhotos of the open gallery photo (null = closed).
+  const [gallery, setGallery] = useState<number | null>(null);
+
+  // lgx-photos-01: every load's photos flattened in display order, so the gallery cycles through the
+  // whole order; flatIndex lets each thumbnail open the gallery at itself. Memoized so the gallery's
+  // reset-on-photos-change effect doesn't fire on unrelated re-renders.
+  const { allPhotos, flatIndex } = useMemo(() => {
+    const all: NonNullable<ShipmentLoad["photos"]> = [];
+    const idx = new Map<string, number>();
+    for (const ld of detail?.loads ?? []) {
+      for (const p of ld.photos ?? []) {
+        idx.set(p.id, all.length);
+        all.push(p);
+      }
+    }
+    return { allPhotos: all, flatIndex: idx };
+  }, [detail]);
+  const photoSrc = (pid: string) =>
+    `/v2/api/shipments/${encodeURIComponent(shipmentId)}/loading-photo/${encodeURIComponent(pid)}`;
 
   useEffect(() => {
     const cached = cache.get(shipmentId);
@@ -136,6 +156,34 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
                     )}
                     {deliveredAt && <span className="text-xs text-muted tabular-nums">Delivered {deliveredAt}</span>}
                   </div>
+                  {(ld.photos ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {(ld.photos ?? []).map((p) => {
+                        const label = `Loading photo — ${p.uploaded_by || "Unknown"} · ${formatEtDateTime(p.created_at) || "—"}`;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            aria-label={label}
+                            title={label}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setGallery(flatIndex.get(p.id) ?? 0);
+                            }}
+                            className="w-14 h-14 rounded-md border border-[var(--border)] overflow-hidden cursor-pointer"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={photoSrc(p.id)}
+                              alt={p.filename || "Loading photo"}
+                              loading="lazy"
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                   {ld.qr_additional_info && (
                     <div className="text-xs">
                       <span className="font-semibold text-muted">Driver note (QR): </span>
@@ -200,6 +248,14 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
           </table>
         </div>
       </div>
+
+      <PhotoGalleryModal
+        jobId={gallery !== null ? (detail.job_id ?? "x") : null}
+        onClose={() => setGallery(null)}
+        photos={allPhotos}
+        imageSrc={photoSrc}
+        startIndex={gallery ?? 0}
+      />
     </div>
   );
 }

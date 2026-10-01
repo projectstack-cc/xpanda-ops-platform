@@ -183,6 +183,21 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
           ORDER BY la.load_number ASC`
       ).bind(shipment.job_id).all();
       loads = lr.results ?? [];
+      // lgx-photos-01: loading-dock photos per load (loading_photos.assignment_id -> loads[].assignment_id).
+      try {
+        const pr = await DB.prepare(
+          "SELECT id, assignment_id, filename, uploaded_by, created_at FROM loading_photos WHERE job_id = ? ORDER BY created_at ASC"
+        ).bind(shipment.job_id).all<any>();
+        const byAssignment = new Map<string, any[]>();
+        for (const p of pr.results ?? []) {
+          const list = byAssignment.get(p.assignment_id) ?? [];
+          list.push({ id: p.id, filename: p.filename, uploaded_by: p.uploaded_by, created_at: p.created_at });
+          byAssignment.set(p.assignment_id, list);
+        }
+        loads = loads.map((ld: any) => ({ ...ld, photos: byAssignment.get(ld.assignment_id) ?? [] }));
+      } catch {
+        loads = loads.map((ld: any) => ({ ...ld, photos: [] }));
+      }
 
       // carrier-04: carrier-entered fees/notes (append-only carrier_charges), newest first, matched
       // to a load by integer load_number; a null-load_number charge (legacy single-load BOL) goes
