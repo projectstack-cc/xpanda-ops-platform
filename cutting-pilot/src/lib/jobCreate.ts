@@ -7,7 +7,7 @@
 //
 // Callers normalize their payload into JobCreateInput (trimmed strings, numbers, nulls) before
 // calling; this function binds those values as-is.
-import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
+import type { D1Database, D1PreparedStatement, R2Bucket } from "@cloudflare/workers-types";
 import { computeAndPersistHoleyChunks } from "@/lib/holeyChunks";
 import { logActivity } from "@/lib/activityLog";
 
@@ -67,6 +67,27 @@ export type JobCreateResult =
   | { ok: false; code: "invalid"; error: string };
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
+
+// qb-02: shared job_line_items INSERT — createJob runs these sequentially; QB review apply puts
+// them in a db.batch after deleting the old rows. Same column set, sort_order = array index.
+export function lineItemInsertStatements(
+  DB: D1Database,
+  jobId: string,
+  lineItems: JobCreateLineItem[],
+): D1PreparedStatement[] {
+  return lineItems.map((li, i) =>
+    DB.prepare(`
+      INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order)
+      VALUES (?,?,?,?,?,?,?,?,?)
+    `).bind(
+      crypto.randomUUID(), jobId,
+      li.part_id,
+      li.part_number, li.description,
+      li.quantity,
+      li.dimensions, li.density, i,
+    )
+  );
+}
 
 export async function createJob(
   env: { DB: D1Database; BOL_PHOTOS: R2Bucket },
@@ -149,19 +170,7 @@ export async function createJob(
     input.ship_to_verified_at, null,
   ).run();
 
-  for (let i = 0; i < lineItems.length; i++) {
-    const li = lineItems[i];
-    await DB.prepare(`
-      INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order)
-      VALUES (?,?,?,?,?,?,?,?,?)
-    `).bind(
-      crypto.randomUUID(), id,
-      li.part_id,
-      li.part_number, li.description,
-      li.quantity,
-      li.dimensions, li.density, i,
-    ).run();
-  }
+  for (const stmt of lineItemInsertStatements(DB, id, lineItems)) await stmt.run();
 
   // Auto outbound shipment (non-blocking) — ported from legacy.
   try {

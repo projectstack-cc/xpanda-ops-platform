@@ -23,6 +23,7 @@ export interface QbEnv {
   QB_CLIENT_SECRET?: string;
   QB_REALM_ID?: string;
   QB_TOKEN_KEY?: string;
+  QB_WEBHOOK_VERIFIER?: string;
 }
 
 interface QbConnectionRow {
@@ -45,6 +46,7 @@ export async function getQbEnv(): Promise<QbEnv> {
     QB_CLIENT_SECRET: e.QB_CLIENT_SECRET,
     QB_REALM_ID: e.QB_REALM_ID,
     QB_TOKEN_KEY: e.QB_TOKEN_KEY,
+    QB_WEBHOOK_VERIFIER: e.QB_WEBHOOK_VERIFIER,
   };
 }
 

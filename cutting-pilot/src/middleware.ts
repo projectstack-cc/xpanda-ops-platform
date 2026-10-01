@@ -109,6 +109,12 @@ export async function middleware(request: NextRequest) {
   const url = new URL(request.url);
   const isApi = url.pathname.startsWith("/v2/api/");
 
+  // qb-02: Intuit webhook — unauthenticated by necessity; HMAC-verified (fail closed) in the handler.
+  // EXACT path + POST only. Do not widen to a prefix.
+  if (url.pathname === "/v2/api/qb/webhook" && request.method === "POST") {
+    return NextResponse.next();
+  }
+
   if (!db) {
     return isApi
       ? NextResponse.json({ ok: false, error: "Missing D1 binding" }, { status: 500 })

@@ -195,18 +195,29 @@
 
 > qb-01 shipped (shared `createJob`, QBO client/mapper, admin sandbox import). Remaining milestones:
 
-- [ ] **qb-02 — webhook + pending-changes queue.** `qb_pending_changes` migration. CloudEvents webhook
-  at `/v2/api/qb/webhook`, built against a **captured real sandbox payload** (the old parser read the
-  retired `eventNotifications` format). Constant-time HMAC compare, fail closed; rejected signatures
-  logged to `activity_log` inside `waitUntil` (RT-07). Iterate events, filter on realm. `SyncToken`
-  idempotency + `relevantHash` no-op detection. Every create/update → queue. Status-gate guard on
-  apply: never rewrite `job_line_items` once floor records exist. Existing invoice # without a link →
-  link + baseline, and queue the diff if it differs.
-- [ ] **qb-03 — review queue on legacy `jobs/index.html`** (diff, apply, dismiss). Notifications via
-  push + bell: create/update queued, resolved, dismissed, webhook failure.
+- [ ] **qb-03 — review queue UI on legacy `jobs/index.html`.** Build against `/v2/api/qb/pending*`:
+  - a diff view (header fields + added, removed and changed lines)
+  - apply, including the `confirm_overwrite` flow for 409 `platform_edits`, plus clear messaging for
+    409 `floor_records` (list the reasons) and 409 `stale` (re-open to refresh)
+  - dismiss, and resolve-manual (note required)
+  - Notifications are already sent by the qb-02 backend (`qb.review` / `qb.error`).
 - [ ] **qb-04 — OAuth connect + callback.** Callback must HTML-escape all reflected values (the old
   one had reflected XSS). State cookie. Production cutover config: redirect URI
   `https://www.xpandaops.com/v2/api/qb/callback`, launch/disconnect URLs, Invoice entity subscription.
+  - **Webhook cutover checklist** (Steve + Orchestrator, in Chrome), on the Intuit Webhooks page:
+    - [ ] Set the endpoint to `https://www.xpandaops.com/v2/api/qb/webhook`.
+    - [ ] Enable the CloudEvents toggle.
+    - [ ] Subscribe Invoice Create, Update, Void and Delete.
+- [ ] **qb-05 — CDC reconciliation sweep.** The webhook returns 200 before processing, so Intuit never
+  retries a processing failure. Add a periodic sweep using QBO `ChangeDataCapture` for Invoice since the
+  last sweep, feeding the same `processEvents` path. Needs a cron trigger on the v2 Worker. This is
+  the safety net against silent drift.
+- [ ] **QB follow-up — archived jobs still show on the loading board and shipment lists.** Found in
+  qb-02. Both the legacy and v2 loading-assignment lists filter only on
+  `loading_assignments.loading_status != 'archived'`, not `jobs.archived_at`. The v2 shipments list
+  doesn't filter on archive either. A job archived by a QB void/delete apply (or any archive) with an
+  `awaiting` loading assignment or a pending outbound shipment stays visible. Decide whether those
+  views should hide archived jobs.
 
 ---
 

@@ -613,6 +613,51 @@ current series).
 
 ## QuickBooks Intake (v2)
 
+- **qb-02 — CloudEvents webhook + QB review-queue backend (v2).** Backend + API only (queue UI is qb-03).
+  - **Webhook** `POST /v2/api/qb/webhook` — the first and only unauthenticated v2 route. Middleware
+    bypasses the session gate for that EXACT path + POST only (a GET still hits the gate → 401).
+    The handler reads the raw body first and verifies `intuit-signature` (HMAC-SHA256 with
+    `QB_WEBHOOK_VERIFIER`, constant-time compare, fail closed). A bad signature returns 401 and logs a
+    `reject` row inside `waitUntil` (RT-07), writing nothing else. A valid one returns 200 at once and
+    processes in `ctx.waitUntil`. The route never reads `X-User-*` headers.
+  - **Processing** (`src/lib/qb/process.ts`): CloudEvents 1.0 parse, realm filter, invoice
+    created/updated/voided/deleted (case-insensitive). The first payload of each event type is
+    captured raw in `activity_log`, and unknown invoice types are logged once. Every QB create,
+    update, void and delete is **queued** in `qb_pending_changes` (one open row per invoice, newer
+    events coalesce, kind only escalates create < update < void < delete). Nothing auto-applies.
+    - A pre-existing packing-slip job gets a baseline link immediately and an `update` is queued
+      only if its hash differs.
+    - `SyncToken` idempotency; billing-only edits are a no-op that just tracks the SyncToken.
+    - A void or delete of an invoice with no job is a no-op, unless an open create row exists, in
+      which case it escalates.
+    - Void detection is best-effort (`TxnStatus`/`PrivateNote`) until a real payload is captured.
+  - **Notifications:** `qb.review` on a new item or kind escalation, apply, dismiss and
+    resolve-manual. `qb.error` on processing failures, throttled to once per hour per class, with a
+    special "connection lost" message for `invalid_grant`. Both go through the existing
+    `dispatchNotification`.
+  - **Review API** (session-gated, `jobs` view/edit, not admin-only): `GET /v2/api/qb/pending`,
+    `GET /v2/api/qb/pending/:id` (opening an item refreshes its diff/base hash), and
+    `POST …/apply | dismiss | resolve-manual`.
+    - Apply: `create` goes through the shared `createJob` (`via: "qb-review"`).
+    - `update` is refused with 409 `floor_records`, 409 `stale`, or 409 `platform_edits` (unless
+      `confirm_overwrite`). Otherwise one `db.batch` updates the header and ship-to fields and
+      `total_bdft`, replaces the line items, and mirrors the outbound shipment `customer` and
+      `total_bdft`, then holey chunks are recomputed. An address change resets `ship_to_verified`.
+    - `void`/`delete` archives the job (`archived_at` only) if the floor is untouched.
+    - Line-item INSERTs extracted from `createJob` into the shared `lineItemInsertStatements()`
+      (column parity verified).
+  - **Floor guard** (`jobState.ts` `floorState`): non-`not_started` status, archived, cutting
+    sessions/progress (incl. `cutting_line_progress`), saved cut plans, BOLs, carrier charges, saved
+    loads, touched loading assignments, loading photos, offload-zone planning on line items, and bead
+    transactions tagged to the job.
+  - **`relevantHash` normalization change:** strings are now trimmed and empty-coalesced, and
+    quantity goes through `Number()`, so a job read back from D1 hashes identically to its input.
+    This affects only qb-01 test-import `last_applied_hash` values.
+  - Self-checks: `webhook.selfcheck.ts` 16/16, `mapper.selfcheck.ts` 17/17.
+  - Legacy labels: `qb.review` / `qb.error` in `admin/roles.html` + `admin/admin-i18n.js` (en/es/ht).
+  - **Migration:** `DB_Migrations/qb-02-pending-changes.sql` (`qb_pending_changes` + 3 indexes,
+    role subscriptions for `qb.review` / `qb.error`).
+
 - **qb-01 — shared `createJob()` + QBO sandbox import (v2).** Milestone 1 of the QB intake revival
   (legacy QB code deleted in `ae47aa3` was reference only, not restored).
   - **Shared `createJob()`** (`cutting-pilot/src/lib/jobCreate.ts`): v2 order entry and QB import now

@@ -181,6 +181,8 @@
       notifTypeInTransit: 'Trailer in transit',
       notifTypeDelivered: 'Delivery confirmed',
       notifTypeCarrierFees: 'Carrier fees added',
+      notifTypeQbReview: 'QuickBooks change to review',
+      notifTypeQbError: 'QuickBooks sync error',
 
       // ---- activity-log.html ----
       entityFilterAll: 'All Entity Types',
@@ -367,6 +369,8 @@
       notifTypeInTransit: 'Tráiler en tránsito',
       notifTypeDelivered: 'Entrega confirmada',
       notifTypeCarrierFees: 'Cargos de transportista agregados',
+      notifTypeQbReview: 'Cambio de QuickBooks por revisar',
+      notifTypeQbError: 'Error de sincronización de QuickBooks',
 
       entityFilterAll: 'Todos los Tipos de Entidad',
       entityJobs: 'Trabajos',
@@ -552,6 +556,8 @@
       notifTypeInTransit: 'Remòk nan wout',
       notifTypeDelivered: 'Livrezon konfime',
       notifTypeCarrierFees: 'Frè transpòtè ajoute',
+      notifTypeQbReview: 'Chanjman QuickBooks pou revize',
+      notifTypeQbError: 'Erè senkronizasyon QuickBooks',
 
       entityFilterAll: 'Tout Tip Antite',
       entityJobs: 'Travay',

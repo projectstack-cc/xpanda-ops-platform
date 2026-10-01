@@ -115,17 +115,21 @@ export function mapInvoiceToJobInput(invoice: any, parts: Part[]): MapResult {
 
 // SHA-256 hex of the job-relevant fields — stored in qb_invoice_links.last_applied_hash now,
 // used for no-op detection on webhook updates in qb-02.
+// qb-02: normalized (strings trimmed + empty-coalesced, quantity via Number()) so a job read back
+// from D1 hashes identically to the JobCreateInput that created it.
 export async function relevantHash(input: JobCreateInput): Promise<string> {
+  const t = (v: unknown) => String(v ?? "").trim();
+  const q = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
   const canonical = JSON.stringify([
-    input.customer,
-    input.invoice_number,
-    input.ship_to_street,
-    input.ship_to_street2,
-    input.ship_to_city,
-    input.ship_to_state,
-    input.ship_to_zip,
-    input.po_number,
-    input.line_items.map((li) => [li.part_number, li.description, li.quantity]),
+    t(input.customer),
+    t(input.invoice_number),
+    t(input.ship_to_street),
+    t(input.ship_to_street2),
+    t(input.ship_to_city),
+    t(input.ship_to_state),
+    t(input.ship_to_zip),
+    t(input.po_number),
+    (input.line_items || []).map((li) => [t(li.part_number), t(li.description), q(li.quantity)]),
   ]);
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");

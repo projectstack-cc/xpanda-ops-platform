@@ -406,6 +406,8 @@ const NOTIFICATION_TYPE_LABELS = {
   'loading.in_transit': 'Trailer in transit',
   'loading.delivered':  'Delivery confirmed',
   'carrier.fees_added': 'Carrier fees added',
+  'qb.review': 'QuickBooks change to review',
+  'qb.error':  'QuickBooks sync error',
 };
 const NOTIF_TYPE_LABEL_KEY = {
   'loading.assigned':   'admin.notifTypeAssigned',
@@ -414,6 +416,8 @@ const NOTIF_TYPE_LABEL_KEY = {
   'loading.in_transit': 'admin.notifTypeInTransit',
   'loading.delivered':  'admin.notifTypeDelivered',
   'carrier.fees_added': 'admin.notifTypeCarrierFees',
+  'qb.review': 'admin.notifTypeQbReview',
+  'qb.error':  'admin.notifTypeQbError',
 };
 function notifTypeLabel(type) {
   const key = NOTIF_TYPE_LABEL_KEY[type];
