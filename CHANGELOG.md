@@ -2673,6 +2673,19 @@ current series).
 
 ## Logistics (v2)
 
+- **bol-lock-01 — BOL edit lock is per load, not per job (legacy + v2; §3 / §9 / §9a / §9b). No migration.**
+  Bug: Cellucrete INV# 4434 (8 loads) had loads 1–4 shipped, so its outbound shipment was `in_transit` and every
+  BOL on the job locked, including loads 5–8 (`not_started`, leaving the next day). New rule in
+  `src/lib/logistics/bolLock.ts` `isBolLocked`, mirrored inline in legacy `routes/bols.js` PUT and
+  `logistics/index.html`: shipment `archived`/`cancelled` locks everything; otherwise a BOL whose `load_number`
+  has a non-archived `loading_assignments` row is locked iff that load is `in_transit`/`delivered` (`loaded` stays
+  editable); no `load_number` / no matching row falls back to the old job-level shipment rule. Server (both PUTs)
+  is authoritative and still returns 409 `locked: true` ("This load has shipped; its BOL can no longer be
+  edited."). `BolViewerModal` computes a per-BOL lock, shows Edit when any load is editable, hands only the
+  editable BOLs to the editor, and notes "Loads X, Y have shipped…" when some are locked; the PDF preview still
+  renders all loads. `GET /v2/api/loading-assignments?job_id=` now also returns `loading_status` (additive;
+  `LoadingAssignmentForJob.loading_status?` added) — the viewer needs it and the prompt assumed it was there.
+
 - **tls-01 — 1st / 2nd shift To-Load sheets on `/v2/logistics` (§9a / §9b). No migration, read-only.** New
   **"To-load sheet"** toolbar button (beside the day "Loading sheets" button) opens a modal with a 1st / 2nd shift
   toggle + a **Printed on** date (default today ET) and builds a printable PDF client-side. Separate from the
@@ -5959,6 +5972,10 @@ current series).
   `node --check` clean.
 
 ## Logistics
+
+- **bol-lock-01 (cross-ref) — per-load BOL edit lock.** Legacy `PUT /api/bols/:id` and `logistics/index.html`
+  `viewBolForJob` now lock per load (via `/api/loading-assignments?job_id=`); the editor and its picker index
+  into `bolViewState.editableBols`, while the viewer still renders all loads. See **Logistics (v2)**.
 
 - **bolc-03 — BOL Email manual-add now shows trailer + bay (legacy; §3 / §9). No migration.** "Add a BOL
   manually" on `/logistics/bol-email` searched `GET /api/bols?search=`, which returns bare `bols` rows, so

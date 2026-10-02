@@ -529,6 +529,13 @@
 
 ### BOL Issues
 
+- [ ] **bol-lock-01 follow-ups — viewer/server lock divergence edges.** (a) Both viewers read loading
+  assignments behind `logistics.loading` view; a user with BOL access but not loading access falls back to the
+  job-level lock in the viewer (stricter than the server, so never unsafe, but in-transit jobs hide Edit for
+  them). (b) Legacy `/api/loading-assignments` hides customer-pickup jobs, while the server lock and v2
+  `?job_id=` don't filter by method; a stale assignment row on a customer-pickup job could make legacy show the
+  fallback lock where the server applies the per-load rule. Consider a dedicated per-BOL `locked` flag on the
+  `/api/bols?job_id=` response so viewers use the server's answer directly.
 - [ ] **Trailer override shadowing (bolc-01 follow-up).** A `render_overrides.trailerNo` set in the BOL editor shadows trailer back-writes (see `_worker.js/routes/loading.js` comment near the trailer back-write). Same class as bolc-01/02; evaluate promoting it the same way.
 - [ ] **P316 follow-up — editable Scrap Pickup toggle in the BOL compose form.** Currently derived
   from the job's `scrap_pickup` only (`'YES' → is_scrap_pickup: 1`); no manual override at compose

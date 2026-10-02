@@ -1,7 +1,8 @@
 // src/app/api/loading-assignments/route.ts  ->  /v2/api/loading-assignments
 //
-// GET  ?job_id=    -> UNCHANGED from unit 2: minimal per-job shape for BOL viewer/generate
-//                     enrichment. Deliberately skips the backfill side effect below (unit 2's
+// GET  ?job_id=    -> minimal per-job shape for BOL viewer/generate enrichment (unit 2;
+//                     bol-lock-01 adds loading_status for the per-load BOL edit lock).
+//                     Deliberately skips the backfill side effect below (unit 2's
 //                     original note: a read-only utility shouldn't gain a new write path).
 // GET  (no job_id) -> board-level list for the dock dashboard (unit 3b). Mirrors legacy's
 //                     handleApiLoadingAssignments GET branch (_worker.js/routes/loading.js)
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
   if (jobId) {
     try {
       const rows = await DB.prepare(
-        `SELECT id, job_id, load_number, trailer_number, ship_date AS load_ship_date
+        `SELECT id, job_id, load_number, trailer_number, ship_date AS load_ship_date, loading_status
            FROM loading_assignments
           WHERE job_id = ?
           ORDER BY load_number ASC`

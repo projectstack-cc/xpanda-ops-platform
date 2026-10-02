@@ -148,4 +148,5 @@ export interface LoadingAssignmentForJob {
   load_number: number | null;
   trailer_number: string | null;
   load_ship_date: string | null;
+  loading_status?: string | null; // bol-lock-01: per-load BOL edit lock
 }

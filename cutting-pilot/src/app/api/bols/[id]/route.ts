@@ -22,6 +22,7 @@ import { getEnv } from "@/lib/db";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 import { promoteCarrierOverride } from "@/lib/logistics/bolCarrier";
 import { logActivity } from "@/lib/activityLog";
+import { isBolLocked } from "@/lib/logistics/bolLock";
 
 function generateAccessToken(): string {
   const bytes = new Uint8Array(16);
@@ -51,7 +52,7 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   }
 
   const existing = await DB.prepare(
-    "SELECT id, job_id, render_overrides, access_token FROM bols WHERE id = ?"
+    "SELECT id, job_id, load_number, render_overrides, access_token FROM bols WHERE id = ?"
   ).bind(bolId).first<any>();
   if (!existing) return NextResponse.json({ ok: false, error: "BOL not found." }, { status: 404 });
 
@@ -59,10 +60,17 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
     const ship = await DB.prepare(
       "SELECT status FROM shipments WHERE job_id = ? AND direction = 'outbound' ORDER BY updated_at DESC LIMIT 1"
     ).bind(existing.job_id).first<any>();
-    const LOCKED = ["in_transit", "delivered", "archived", "cancelled"];
-    if (ship && LOCKED.includes(String(ship.status))) {
+    // bol-lock-01: per-load lock (see src/lib/logistics/bolLock.ts).
+    let assignmentStatus: string | null = null;
+    if (existing.load_number != null && existing.load_number !== "") {
+      const la = await DB.prepare(
+        "SELECT loading_status FROM loading_assignments WHERE job_id = ? AND load_number = ? AND loading_status != 'archived' ORDER BY updated_at DESC LIMIT 1"
+      ).bind(existing.job_id, existing.load_number).first<any>();
+      if (la) assignmentStatus = la.loading_status ?? null;
+    }
+    if (isBolLocked({ loadNumber: existing.load_number, assignmentStatus, shipmentStatus: ship?.status ?? null })) {
       return NextResponse.json(
-        { ok: false, error: "BOL locked", detail: "This load has shipped; the BOL can no longer be edited.", locked: true },
+        { ok: false, error: "BOL locked", detail: "This load has shipped; its BOL can no longer be edited.", locked: true },
         { status: 409 }
       );
     }

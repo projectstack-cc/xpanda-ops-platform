@@ -972,8 +972,21 @@ async function loadBolDocuments(s) {
 
 let currentBolBlobUrl = null;
 let currentBolFilename = 'BOL.pdf';
-let bolViewState = { jobId: null, bols: [], activeIndex: 0, locked: false };
-const BOL_LOCKED_STATUSES = ['in_transit', 'delivered', 'archived', 'cancelled'];
+let bolViewState = { jobId: null, bols: [], editableBols: [], activeIndex: 0, locked: false };
+
+// bol-lock-01: per-load BOL edit lock. Mirrors isBolLocked in
+// cutting-pilot/src/lib/logistics/bolLock.ts and the PUT in _worker.js/routes/bols.js — keep in
+// lockstep (the server is authoritative). Whole-job archived/cancelled locks everything; a BOL with
+// a matching non-archived load uses that load's status (in_transit/delivered lock, loaded stays
+// editable); no load_number / no matching load → the old job-level shipment rule.
+function isBolLocked(loadNumber, assignmentStatus, shipmentStatus) {
+  const ship = String(shipmentStatus ?? '');
+  if (['archived', 'cancelled'].includes(ship)) return true;
+  if (loadNumber != null && loadNumber !== '' && assignmentStatus != null) {
+    return ['in_transit', 'delivered'].includes(String(assignmentStatus));
+  }
+  return ['in_transit', 'delivered', 'archived', 'cancelled'].includes(ship);
+}
 
 async function viewBolForJob(jobId) {
   if (!jobId) return;
@@ -995,14 +1008,29 @@ async function viewBolForJob(jobId) {
       .map(k => byLoad[k]);
 
     const _ship = (outboundData || []).find(s => String(s.job_id) === String(jobId));
+    // bol-lock-01: per-load lock from the job's loading assignments (endpoint excludes archived rows).
+    const _statusByLoad = {};
+    try {
+      const la = await api.get('/api/loading-assignments?job_id=' + encodeURIComponent(jobId));
+      for (const a of ((la.ok && la.data && la.data.assignments) || [])) {
+        if (a.load_number == null || a.loading_status === 'archived') continue;
+        _statusByLoad[Number(a.load_number)] = a.loading_status ?? null;
+      }
+    } catch (e) { /* no assignments → fallback rule */ }
+    const _editableBols = bolsToRender.filter(b => {
+      const ln = (b.load_number != null && b.load_number !== '') ? Number(b.load_number) : null;
+      const st = (ln != null && Object.prototype.hasOwnProperty.call(_statusByLoad, ln)) ? _statusByLoad[ln] : null;
+      return !isBolLocked(ln, st, _ship ? _ship.status : null);
+    });
     bolViewState = {
       jobId,
       bols: bolsToRender,
+      editableBols: _editableBols,
       activeIndex: 0,
-      locked: !!(_ship && BOL_LOCKED_STATUSES.includes(String(_ship.status)))
+      locked: _editableBols.length === 0
     };
     const _editBtn = document.getElementById('log-bol-edit-btn');
-    if (_editBtn) _editBtn.style.display = bolViewState.locked ? 'none' : '';
+    if (_editBtn) _editBtn.style.display = bolViewState.editableBols.length > 0 ? '' : 'none';
     // Ensure viewer is showing (not the editor) on every (re)open:
     document.getElementById('log-bol-edit-host').style.display = 'none';
     document.getElementById('log-bol-edit-mount').innerHTML = '';
@@ -1034,7 +1062,7 @@ async function viewBolForJob(jobId) {
 function openBolEditor() {
   if (bolViewState.locked) { alert(t('logistics.loadShippedReadOnly')); return; }
   if (typeof BolEditor === 'undefined' || !BolEditor.open) { alert(t('logistics.editorFailedToLoad')); return; }
-  const bols = bolViewState.bols || [];
+  const bols = bolViewState.editableBols || [];
   if (!bols.length) return;
 
   const picker = document.getElementById('log-bol-edit-picker');
@@ -1069,7 +1097,7 @@ function openBolEditor() {
 }
 
 function mountBolEditor() {
-  const bol = bolViewState.bols[bolViewState.activeIndex];
+  const bol = (bolViewState.editableBols || [])[bolViewState.activeIndex];
   if (!bol) return;
   // Hydrate _overrides from the stored render_overrides string so the editor derives current values.
   if (!bol._overrides && bol.render_overrides) {
@@ -1117,7 +1145,7 @@ function closeBolEditor() {
   document.getElementById('log-bol-edit-host').style.display = 'none';
   document.getElementById('log-bol-edit-mount').innerHTML = '';
   document.getElementById('log-bol-view-iframe').style.display = '';
-  if (!bolViewState.locked) {
+  if ((bolViewState.editableBols || []).length > 0) {
     const btn = document.getElementById('log-bol-edit-btn');
     if (btn) btn.style.display = '';
   }
@@ -1130,7 +1158,7 @@ function closeBolViewModal() {
   document.getElementById('log-bol-edit-mount').innerHTML = '';
   document.getElementById('log-bol-view-iframe').style.display = '';
   if (currentBolBlobUrl) { try { URL.revokeObjectURL(currentBolBlobUrl); } catch (e) {} currentBolBlobUrl = null; }
-  bolViewState = { jobId: null, bols: [], activeIndex: 0, locked: false };
+  bolViewState = { jobId: null, bols: [], editableBols: [], activeIndex: 0, locked: false };
 }
 
 function downloadBolFromViewer() {

@@ -35,8 +35,8 @@ import PdfViewer from "@/components/PdfViewer";
 import { buildCombinedBolPdf } from "@/lib/bolDomGlue";
 import type { BolRecord } from "@/lib/bolShared";
 import type { LoadingAssignmentForJob } from "./types";
+import { isBolLocked } from "@/lib/logistics/bolLock";
 
-const BOL_LOCKED_STATUSES = ["in_transit", "delivered", "archived", "cancelled"];
 
 interface BolViewerModalProps {
   jobId: string | null;
@@ -73,6 +73,9 @@ export default function BolViewerModal({
   const [bols, setBols] = useState<BolRecord[]>([]);
   const [historyBols, setHistoryBols] = useState<BolRecord[]>([]);
   const [locked, setLocked] = useState(false);
+  // bol-lock-01: displayed BOLs whose load has not shipped (per-load lock, see bolLock.ts).
+  const [editableBols, setEditableBols] = useState<BolRecord[]>([]);
+  const [lockedLoads, setLockedLoads] = useState<string[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [confirmDeleteBolId, setConfirmDeleteBolId] = useState<string | null>(null);
   const [deletingBolId, setDeletingBolId] = useState<string | null>(null);
@@ -94,6 +97,8 @@ export default function BolViewerModal({
     setBols([]);
     setHistoryBols([]);
     setLocked(false);
+    setEditableBols([]);
+    setLockedLoads([]);
     setConfirmDeleteBolId(null);
     setDeletingBolId(null);
     setDeleteFenced(false);
@@ -161,7 +166,25 @@ export default function BolViewerModal({
         setHistoryBols(enrichedAll);
 
         const shipRow = shipJson.ok && Array.isArray(shipJson.data) ? shipJson.data[0] : null;
-        setLocked(!!(shipRow && BOL_LOCKED_STATUSES.includes(String(shipRow.status))));
+        // bol-lock-01: lock per load, not per job. Same rule as the PUT (bolLock.ts).
+        const statusByLoad = new Map<number, string | null>();
+        for (const a of assignments) {
+          if (a.load_number == null || a.loading_status === "archived") continue;
+          statusByLoad.set(Number(a.load_number), a.loading_status ?? null);
+        }
+        const shipStatus = shipRow ? String(shipRow.status) : null;
+        const bolIsLocked = (b: BolRecord) => {
+          const ln = b.load_number != null && String(b.load_number) !== "" ? Number(b.load_number) : null;
+          return isBolLocked({
+            loadNumber: ln,
+            assignmentStatus: ln != null ? statusByLoad.get(ln) : null,
+            shipmentStatus: shipStatus,
+          });
+        };
+        const editable = enriched.filter((b) => !bolIsLocked(b));
+        setEditableBols(editable);
+        setLockedLoads(enriched.filter(bolIsLocked).map((b, i) => String(b.load_number ?? i + 1)));
+        setLocked(editable.length === 0);
 
         const bytes = await buildCombinedBolPdf(enriched);
         if (cancelled) return;
@@ -289,11 +312,11 @@ export default function BolViewerModal({
               </div>
             </div>
           )}
-          {!locked && !viewOnly && (
+          {editableBols.length > 0 && !viewOnly && (
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => jobId && onEdit(bols, jobId, 0)}
+                onClick={() => jobId && onEdit(editableBols, jobId, 0)}
                 className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-text cursor-pointer hover:bg-[var(--ghost-bg)]"
               >
                 <Pencil size={14} aria-hidden="true" />
@@ -303,6 +326,11 @@ export default function BolViewerModal({
           )}
           {locked && (
             <p className="text-xs text-muted">This load has shipped — the BOL is read-only.</p>
+          )}
+          {!locked && lockedLoads.length > 0 && (
+            <p className="text-xs text-muted">
+              Loads {lockedLoads.join(", ")} have shipped — their BOLs are read-only. Edit applies to the remaining loads.
+            </p>
           )}
           <PdfViewer src={src} filename={`BOL_${bols[0]?.bol_number || jobId}.pdf`} title="Bill of Lading" height={560} />
         </div>

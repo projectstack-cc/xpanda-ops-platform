@@ -491,7 +491,7 @@ export async function handleApiBols(request, env) {
     try { payload = await request.json(); }
     catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
 
-    const existing = await db.prepare("SELECT id, job_id, render_overrides, access_token FROM bols WHERE id = ?").bind(bolId).first();
+    const existing = await db.prepare("SELECT id, job_id, load_number, render_overrides, access_token FROM bols WHERE id = ?").bind(bolId).first();
     if (!existing) return json({ ok: false, error: "BOL not found." }, 404);
 
     if (existing.job_id) {
@@ -499,10 +499,26 @@ export async function handleApiBols(request, env) {
         .prepare("SELECT status FROM shipments WHERE job_id = ? AND direction = 'outbound' ORDER BY updated_at DESC LIMIT 1")
         .bind(existing.job_id)
         .first();
-      const LOCKED = ['in_transit', 'delivered', 'archived', 'cancelled'];
-      if (_ship && LOCKED.includes(String(_ship.status))) {
+      // bol-lock-01: per-load lock. Mirrors isBolLocked in cutting-pilot/src/lib/logistics/bolLock.ts
+      // exactly — keep in lockstep. Whole-job archived/cancelled locks everything; otherwise a BOL
+      // with a matching non-archived load uses that load's status (in_transit/delivered lock,
+      // loaded stays editable); no load_number / no matching load → the old job-level rule.
+      const shipStatus = String(_ship?.status ?? '');
+      let assignmentStatus = null;
+      if (existing.load_number != null && existing.load_number !== '') {
+        const _la = await db
+          .prepare("SELECT loading_status FROM loading_assignments WHERE job_id = ? AND load_number = ? AND loading_status != 'archived' ORDER BY updated_at DESC LIMIT 1")
+          .bind(existing.job_id, existing.load_number)
+          .first();
+        if (_la) assignmentStatus = _la.loading_status ?? null;
+      }
+      let bolLocked;
+      if (['archived', 'cancelled'].includes(shipStatus)) bolLocked = true;
+      else if (existing.load_number != null && existing.load_number !== '' && assignmentStatus != null) bolLocked = ['in_transit', 'delivered'].includes(String(assignmentStatus));
+      else bolLocked = ['in_transit', 'delivered', 'archived', 'cancelled'].includes(shipStatus);
+      if (bolLocked) {
         return json(
-          { ok: false, error: 'BOL locked', detail: 'This load has shipped; the BOL can no longer be edited.', locked: true },
+          { ok: false, error: 'BOL locked', detail: 'This load has shipped; its BOL can no longer be edited.', locked: true },
           409
         );
       }
