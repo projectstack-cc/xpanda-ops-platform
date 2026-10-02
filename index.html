@@ -8,6 +8,7 @@
     <script src="/shared/i18n-common.js"></script>
   <meta charset="UTF-8" />
   <script src="/shared/auth-interceptor.js"></script>
+  <script src="/shared/notif-bell.js" defer></script>
   <title>xPanda Operations Platform</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -233,13 +234,6 @@
   [data-theme="dark"] .hp-icon-admin      { background: rgba(71,85,105,.30);  color: #cbd5e1; }
 
   /* ── Notification bell ─────────────────────────── */
-  .hp-notif-bell { position: relative; cursor: pointer; line-height: 1; display: inline-flex; align-items: center; color: var(--muted); }
-  .hp-notif-bell:hover { color: var(--text); }
-  .hp-notif-badge {
-    display: none; position: absolute; top: -4px; right: -6px;
-    background: var(--danger-bg); color: #fff; font-size: 9px; font-weight: 700;
-    border-radius: 50%; width: 16px; height: 16px; text-align: center; line-height: 16px;
-  }
   /* ── Theme toggle ──────────────────────────────── */
   .hp-theme-toggle {
     background: none; border: 1px solid var(--line); border-radius: 6px;
@@ -255,12 +249,6 @@
   }
   .hp-lang-select:hover { color: var(--text); border-color: var(--input-border); }
   .hp-lang-select:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-  .hp-notif-dropdown {
-    display: none; position: absolute; top: 36px; right: 0; width: 340px; max-height: 420px;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.12); overflow: hidden; z-index: 9999;
-  }
-
   /* ── Access denied banner ────────────────────── */
   .hp-denied-banner {
     background: rgba(220,38,38,0.10); border: 1px solid rgba(220,38,38,0.30); border-radius: var(--radius);
@@ -295,18 +283,7 @@
     </div>
   </div>
   <div class="hp-header-right">
-    <span id="hdr-notif-bell" class="hp-notif-bell" onclick="toggleNotifDropdown()" aria-label="Notifications"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span id="hdr-notif-badge" class="hp-notif-badge"></span></span>
-    <div id="hdr-notif-dropdown" class="hp-notif-dropdown">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);">
-        <span style="font-weight:700;font-size:14px;" data-i18n="home.notifications">Notifications</span>
-        <button onclick="markAllRead()" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;" data-i18n="home.markAllRead">Mark all read</button>
-      </div>
-      <div id="hdr-push-banner" style="display:none;padding:10px 14px;background:var(--accent-soft);border-bottom:1px solid var(--line);cursor:pointer;" onclick="enablePushFromBanner()">
-        <div style="font-size:13px;font-weight:600;color:var(--accent);" data-i18n="home.enablePush">Enable push notifications</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;" data-i18n="home.enablePushSub">Tap to get alerts on this device</div>
-      </div>
-      <div id="hdr-notif-list" style="overflow-y:auto;max-height:360px;"></div>
-    </div>
+    <span data-xp-notif-bell></span>
     <button type="button" class="hp-theme-toggle" onclick="window.ThemeManager && window.ThemeManager.toggle()" aria-label="Toggle dark mode"><svg class="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="theme-icon-moon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
     <select id="hdr-lang-select" class="hp-lang-select" data-i18n-attr="aria-label:common.langLabel" aria-label="Language" onchange="window.I18n && window.I18n.set(this.value)">
       <option value="en">English</option>
@@ -545,7 +522,6 @@ if (new URLSearchParams(window.location.search).get('access_denied')) {
 }
 
 initHomepage();
-setTimeout(loadNotifications, 500);
 
 (function () {
   var langSelect = document.getElementById('hdr-lang-select');
@@ -583,135 +559,7 @@ async function refreshShiftNotesIndicator() {
 setTimeout(refreshShiftNotesIndicator, 700);
 setInterval(refreshShiftNotesIndicator, 60000);
 
-// ── Notification system (unchanged) ──────────────────────
-let notifDropdownOpen = false;
-
-function toggleNotifDropdown() {
-  notifDropdownOpen = !notifDropdownOpen;
-  document.getElementById('hdr-notif-dropdown').style.display = notifDropdownOpen ? '' : 'none';
-  if (notifDropdownOpen) loadNotifications();
-}
-
-document.addEventListener('click', (e) => {
-  const bell = document.getElementById('hdr-notif-bell');
-  const dd = document.getElementById('hdr-notif-dropdown');
-  if (bell && dd && !bell.contains(e.target) && !dd.contains(e.target)) {
-    notifDropdownOpen = false;
-    dd.style.display = 'none';
-  }
-});
-
-async function markAllRead() {
-  await fetch('/api/notifications/read', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ all: true }) });
-  loadNotifications();
-}
-
-const NOTIF_DEEPLINK_ROUTES = {
-  loading_assignment: (id) => `/logistics/loading.html?assignment=${encodeURIComponent(id)}`,
-  shipment:           (id) => `/logistics/loading.html?shipment=${encodeURIComponent(id)}`,
-};
-function handleNotifClick(notifId, entityType, entityId) {
-  fetch('/api/notifications/read', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [notifId] }) });
-  const build = NOTIF_DEEPLINK_ROUTES[entityType];
-  if (build && entityId && entityId !== 'null' && entityId !== 'undefined') {
-    window.location.href = build(entityId);
-  }
-  notifDropdownOpen = false;
-  const dd = document.getElementById('hdr-notif-dropdown');
-  if (dd) dd.style.display = 'none';
-}
-
-async function loadNotifications() {
-  try {
-    const res = await fetch('/api/notifications');
-    const data = await res.json();
-    if (!data.ok) return;
-    const badge = document.getElementById('hdr-notif-badge');
-    if (badge) {
-      if (data.unreadCount > 0) { badge.textContent = data.unreadCount > 99 ? '99+' : data.unreadCount; badge.style.display = ''; }
-      else badge.style.display = 'none';
-    }
-    const list = document.getElementById('hdr-notif-list');
-    if (!list) return;
-    if (!data.notifications.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-hint);font-size:13px;">${window.I18n ? window.I18n.t('home.noNotifications') : 'No notifications'}</div>`; return; }
-    list.innerHTML = data.notifications.map(n => `
-      <div style="padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;${n.is_read ? 'opacity:0.6;' : 'background:var(--accent-soft);'}" onclick="handleNotifClick('${n.id}','${n.entity_type}','${n.entity_id}')">
-        <div style="font-size:13px;font-weight:${n.is_read ? '400' : '600'};color:var(--text);margin-bottom:2px;">${escN(n.title)}</div>
-        <div style="font-size:12px;color:var(--muted);">${escN(n.message)}</div>
-        <div style="font-size:10px;color:var(--text-hint);margin-top:4px;">${fmtAgo(n.created_at)}</div>
-      </div>`).join('');
-  } catch {}
-}
-
-function escN(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
-function fmtAgo(iso) {
-  const m = Math.floor((Date.now() - new Date(iso)) / 60000);
-  if (m < 1) return 'Just now'; if (m < 60) return m + 'm ago';
-  const h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
-  return Math.floor(h / 24) + 'd ago';
-}
-
-setInterval(() => { if (!notifDropdownOpen) loadNotifications(); }, 60000);
-
-// ── Push notifications (unchanged) ───────────────────────
-async function initPushNotifications() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-  try {
-    const reg = await navigator.serviceWorker.register('/sw.js');
-    if (reg.installing || reg.waiting) {
-      await new Promise(resolve => {
-        const sw = reg.installing || reg.waiting;
-        sw.addEventListener('statechange', () => {
-          if (sw.state === 'activated') resolve();
-        });
-        if (reg.active) resolve();
-      });
-    }
-    const existingSub = await reg.pushManager.getSubscription();
-    if (existingSub) return;
-    const banner = document.getElementById('hdr-push-banner');
-    if (banner) banner.style.display = 'block';
-  } catch (e) {
-    console.error('Push init check failed:', e);
-  }
-}
-
-async function enablePushFromBanner() {
-  try {
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      document.getElementById('hdr-push-banner').style.display = 'none';
-      return;
-    }
-    const reg = await navigator.serviceWorker.ready;
-    const vapidRes = await fetch('/api/push/vapid-public-key');
-    const vapidData = await vapidRes.json();
-    if (!vapidData.ok || !vapidData.key) return;
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidData.key),
-    });
-    await fetch('/api/push/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sub.toJSON()),
-    });
-    document.getElementById('hdr-push-banner').style.display = 'none';
-  } catch (e) {
-    console.error('Push subscribe failed:', e);
-  }
-}
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
-  return outputArray;
-}
-
-setTimeout(initPushNotifications, 2000);
+// Notification bell + push: /shared/notif-bell.js (notif-bell-01).
 </script>
 </body>
 </html>

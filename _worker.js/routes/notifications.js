@@ -63,10 +63,23 @@ export async function handleApiPushSubscribe(request, env) {
   if (!endpoint) return json({ ok: false, error: 'endpoint is required.' }, 400);
 
   try {
+    const p256dh = keys?.p256dh || '';
+    const authKey = keys?.auth || '';
+    // notif-bell-01: one row per endpoint. The shared bell re-sends a still-valid subscription
+    // (self-heal), so an exact match is a no-op; anything else replaces every row for this
+    // endpoint — no duplicate pushes, and a shared device belongs to whoever is signed in on it.
+    const same = await db.prepare(
+      "SELECT id FROM push_subscriptions WHERE endpoint = ? AND user_id = ? AND p256dh = ? AND auth_key = ?"
+    ).bind(endpoint, userId, p256dh, authKey).first();
+    if (same) {
+      await db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND id <> ?").bind(endpoint, same.id).run();
+      return json({ ok: true });
+    }
+    await db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").bind(endpoint).run();
     const id = crypto.randomUUID();
     await db.prepare(
       "INSERT OR REPLACE INTO push_subscriptions (id, user_id, endpoint, p256dh, auth_key) VALUES (?, ?, ?, ?, ?)"
-    ).bind(id, userId, endpoint, keys?.p256dh || '', keys?.auth || '').run();
+    ).bind(id, userId, endpoint, p256dh, authKey).run();
     return json({ ok: true });
   } catch (e) {
     return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);

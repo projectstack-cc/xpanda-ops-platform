@@ -16,7 +16,7 @@ window.__xpandaHeaderConfig = {
   pageSubtitleId:    'reports-page-subtitle',
   footerClass:       'reports-platform-footer',
   userBarLocation:   'topbar',
-  showNotifications: false,
+  showNotifications: true,
 };
 // i18n engine + catalogs — written as their own preceding <script> tags so they finish loading
 // (and register window.I18n) before shared-header.js's own script tag runs and builds the nav

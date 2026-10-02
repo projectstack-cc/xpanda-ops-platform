@@ -8224,6 +8224,33 @@ current series).
 
 ## Admin / Platform
 
+- **notif-bell-01 — One notification bell on every page (home page look), push self-heal.** New
+  `shared/notif-bell.js`: the single bell implementation (home page's outline SVG + red badge + dropdown,
+  mark-all-read, deep links, en/es/ht via `localStorage['xpanda_lang']`, 60s poll, hides itself on 401). Mounts
+  into any `<span data-xp-notif-bell>`. Visibility uses the `hidden` attribute — fixes the **home page bell doing
+  nothing**: its `.hp-notif-dropdown`/`.hp-notif-badge` CSS set `display:none` and the JS "showed" them with
+  `style.display = ''`, which fell straight back to the class rule (dropdown never opened, badge never showed).
+  CSS `var()`s carry light-theme fallbacks so pages without `tokens.css` (admin/*, safety/*) render correctly.
+  **Wired everywhere:** `index.html` (old markup/CSS/JS removed), `shared/shared-header.js` (emoji bell + inline
+  notif/push code replaced; `qc-header.js` + `reports-header.js` `showNotifications` → `true`, so QC/Reports get it),
+  the 4 admin pages (inline copies removed), both `safety/` pages (beside the language picker), and **every /v2
+  page** via new `cutting-pilot/src/components/NotificationBell.tsx` in `PlatformHeader` (renders an empty slot and
+  loads the same `/shared/notif-bell.js`, so v2 and legacy are literally one bell — v2 never had one, which is why
+  it "disappeared" as modules moved to v2). **Push self-heal** (a user couldn't re-enable after the VAPID reset —
+  their browser still held an old-key subscription, so the "Enable push" banner stayed hidden while the server had
+  no row): a subscription whose `applicationServerKey` doesn't match the current VAPID key is unsubscribed and the
+  banner re-offered; a valid one is re-sent to `/api/push/subscribe` at most every 10 min per tab; a blocked
+  permission now shows an explanatory "Push notifications are blocked" note instead of nothing. **Backend**
+  (`_worker.js/routes/notifications.js`, `handleApiPushSubscribe`): one row per endpoint — an exact match is a no-op,
+  anything else replaces all rows for that endpoint (the table has no unique constraint and inserts used random ids,
+  so re-sending would have duplicated pushes); a shared device belongs to whoever is signed in on it. Response shape
+  unchanged. Working copies of `admin/users.html`, `activity-log.html`, `parts.html` were CRLF on disk vs LF in git —
+  normalized to LF. Verified: `node --check` on `notif-bell.js`, `shared-header.js`, `notifications.js` and all 9
+  inline `<script>` blocks of the edited pages; bell exercised in Chrome against a mocked API (mount, badge, open,
+  escaping, item click → mark read, mark-all-read, outside-click/Escape close, Spanish labels, hide on 401);
+  `tsc --noEmit`, `npm run cf-build`, `tsc -p tsconfig.worker.json` green. Push itself is verified on-device after
+  deploy. No migration.
+
 - **lgx-roll-01 (cross-ref) — Logistics nav cutover.** Home `index.html` Logistics → Dashboard card and the
   legacy nav in `shared/shared-header.js` now point to `/v2/logistics` (legacy nav still highlights Logistics on
   `/logistics/*` child pages). See `## Logistics (v2)`.

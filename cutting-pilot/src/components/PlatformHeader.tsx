@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
+import NotificationBell from "@/components/NotificationBell";
 import SignOutSessionModal, { type OpenSession } from "@/components/SignOutSessionModal";
 
 // Schedule board only (`autoHide` prop) — idle delay before the overlay nav auto-hides.
@@ -216,6 +217,9 @@ export default function PlatformHeader({
 
         {/* Mobile flex spacer */}
         <div className="flex-1 md:hidden" />
+
+        {/* Notification bell — the shared legacy bell (notif-bell-01), one instance at every width */}
+        <NotificationBell className="shrink-0 mx-1" />
 
         {/* Mobile hamburger (hidden on md+) */}
         <button

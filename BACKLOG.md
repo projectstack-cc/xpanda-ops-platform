@@ -664,7 +664,7 @@ All Foundation Roadmap phases (F1–F5) have shipped. See `CHANGELOG.md` (Founda
 - [ ] Wire "Blocks / chunks required" in the Parts slide-over once block-calculator BOM feeds cutting_lines.qty_target
 - [ ] Units/hour throughput once qty entry is routine (qty_done_delta + qty_target) — pair with first-pass yield
 - [ ] Throughput/time-tracking report surface (per-line bottleneck rollups across jobs/date range) if a separate analytics view is wanted beyond the on-board badges
-- [ ] Cutting v2: port notifications bell + settings gear into `PlatformHeader` (deferred from P212; v2 dispatch exists since carrier-04 via `src/lib/push.ts`, inbox read/mark endpoints still legacy-only)
+- [ ] Cutting v2: port the settings gear into `PlatformHeader` (deferred from P212). The notifications-bell half shipped in notif-bell-01 (`NotificationBell.tsx` mounts the shared `/shared/notif-bell.js`).
 - [ ] Block-calc engine landed as a pure module in P228 (`blockEngine.ts`) + save route + `blocks_needed`. Remaining: the planner screen (P229), non-taper chunk model, per-job block-dimension defaults, regenerate-on-change.
 - [ ] Taper blocks-needed (materials pull): compute `ceil(chunks ÷ chunks-per-block)` once a chunks-per-block datum exists.
 - [ ] Verify the live `job_line_items.dimensions` taper format matches the P227 regex; widen if needed.
