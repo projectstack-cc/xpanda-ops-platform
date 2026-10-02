@@ -54,7 +54,7 @@ export async function readGeoCache(DB: D1Database, keys: string[]): Promise<Map<
 }
 
 /** Cache read + (optionally) bounded ORS warm. Returns per-address-key geo info + status. */
-async function resolveGeo(
+export async function resolveGeo(
   DB: D1Database,
   rows: any[],
   warm: boolean

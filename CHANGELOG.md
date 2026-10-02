@@ -2673,6 +2673,30 @@ current series).
 
 ## Logistics (v2)
 
+- **tls-01 — 1st / 2nd shift To-Load sheets on `/v2/logistics` (§9a / §9b). No migration, read-only.** New
+  **"To-load sheet"** toolbar button (beside the day "Loading sheets" button) opens a modal with a 1st / 2nd shift
+  toggle + a **Printed on** date (default today ET) and builds a printable PDF client-side. Separate from the
+  per-order loading sheets (lgx-loadsheet-01), which are untouched. Date rules (D = printed on; ship days are
+  Mon–Fri, `nextShipDay` skips weekends; S1 = next ship day after D, S2 = next after S1): **1st shift** (printed
+  the evening of D, used on S1) = "Pickups {S1}" (every S1 load, loaded or not, with a Loaded column: YES /
+  LOADING / blank) + "To load" starting at S2; **2nd shift** (printed and used on D) = "To load" starting at S1.
+  "Loaded" = `loaded | in_transit | delivered`; anything else (incl. `loading`, `awaiting`, no assignment) is not
+  loaded. To-load sections append the next ship day while they have < 2 rows, capped at 5 ship days; empty days
+  never print a header; at the cap they print "Nothing else scheduled to load through {day}." One row per LOAD
+  (each non-archived `loading_assignments` row; a job with none gets `max(1, load_count)` Unassigned placeholders),
+  ordered bays 30→20, then Yard, then Unassigned, ties by invoice # (numeric) then load #; multi-load INV prints
+  `4321 (2/3)`. Columns: Bay | INV # | Customer | Suggested Pickup | Delivery | City. **Suggested pickup reuses
+  `deliveryTime.ts`** (`parseAppointment` + `suggestedPickup`, same as Carrier View / late-pickup) with the Carrier
+  View warm path: `resolveGeo` in `lib/carrier/rows.ts` is now **exported** (one-word change) and called with
+  `warm = true` (bounded ORS warm, `MAX_WARM_PER_REQUEST`). No drive time or unparseable appointment → `—`. A pickup
+  that falls before the ship date prints bold `{Wkd} {h:mm AM}*` with a page footnote; the load stays filed under
+  its ship date. New files: `lib/logistics/toLoadSheet.ts` (pure selection/ordering) + `toLoadSheet.selfcheck.ts`
+  (**26/26**, `npx tsx`), `app/api/shipments/to-load-sheet/route.ts` (`GET /v2/api/shipments/to-load-sheet?shift=1|2&date=`,
+  inherits the `logistics.dashboard` gate, one batched assignments query), `lib/logistics/toLoadSheetPdf.ts`
+  (pdf-lib, chrome mirrors `loadingSheet.ts`, column header repeats per page, `Page n of N`, single-line cells
+  truncated with `...`), `components/logistics/ToLoadSheetButton.tsx`. To-load sections always print a day
+  subheader so the floor can see which ship day each block is. `tsc --noEmit` + `npm run cf-build` green.
+
 - **board-ui-01 (cross-ref) — toolbar + day header extracted into `components/dashboard/`, no behavior
   change.** `ShipmentDashboard.tsx` now renders `DashboardToolbar` / `ViewModeToggle` / `WeekSelector` /
   `SearchInput` / `FilterSelect` / `DayGroupHeader`, imports `StatTile` from `components/dashboard/` and

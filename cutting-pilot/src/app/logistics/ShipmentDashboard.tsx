@@ -26,6 +26,7 @@ import BolGenerateModal from "@/components/logistics/BolGenerateModal";
 import BolEditorModal, { type EditorTarget } from "@/components/logistics/BolEditorModal";
 import ShipmentEditModal from "@/components/logistics/ShipmentEditModal";
 import LoadingSheetButton from "@/components/logistics/LoadingSheetButton";
+import ToLoadSheetButton from "@/components/logistics/ToLoadSheetButton";
 import FuelSurchargeControl from "@/components/logistics/FuelSurchargeControl";
 import StatTile from "@/components/dashboard/StatTile";
 import DashboardToolbar from "@/components/dashboard/DashboardToolbar";
@@ -364,6 +365,7 @@ export default function ShipmentDashboard({
               </a>
             )}
             <LoadingSheetButton mode="day" />
+            <ToLoadSheetButton />
             <button
               type="button"
               onClick={load}

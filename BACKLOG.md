@@ -299,6 +299,11 @@
 
 ## Logistics (v2)
 
+- [ ] **tls-01: `nextShipDay` is Mon–Fri only.** Plant holidays aren't modeled, and an occasional Saturday ship
+  date never appears on the To-Load sheets.
+- [ ] **tls-01: To-Load sheet pickup can print `—` on a cold cache** when an address is beyond the per-request ORS
+  warm cap (3). A reprint fills it in.
+- [ ] **tls-01 follow-up (if the floor wants sign-off):** a signature / verification line per row on the To-Load sheets.
 - [ ] **`shipments.trailer_number` is dead for job-linked shipments** (trailer # lives on
   `loading_assignments` since lgx-rows-01). Drop the column once legacy `logistics/index.html` is retired.
 - [ ] **logi-rollout-02: give Invoice Analytics (and Load Builder) their own middleware lines
