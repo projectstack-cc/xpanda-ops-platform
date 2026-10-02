@@ -25,11 +25,13 @@ cpu_ms = 60_000
 # distribution across both ship weeks). Interval tightened 15 → 10 min (P274) for fresher
 # floor data; the ~5s parse sits far inside the Paid CPU budget above, so this is an
 # interval change only — no capacity implication.
-# ── Late Pickup cron (late-pickup-02) ───────────────────────────────────────────────
-# The 5-minute late-pickup check is a separate trigger from the 10-minute schedule ingest so the
-# XLSX parse doesn't run more often. Branched on controller.cron in custom-worker.ts.
+# ── Late Pickup cron (late-pickup-02, fixed late-pickup-03) ─────────────────────────
+# ONE 5-minute trigger. custom-worker.ts runs the late-pickup check every run and the schedule
+# ingest only when the scheduled UTC minute is a multiple of 10, so the XLSX parse stays at
+# 10 min. Two separate crons ("*/10" + "*/5") was tried first: Cloudflare delivered both events
+# labeled "*/10 * * * *" and never "*/5", so branching on controller.cron didn't work.
 [triggers]
-crons = ["*/10 * * * *", "*/5 * * * *"]
+crons = ["*/5 * * * *"]
 
 [vars]
 SCHEDULE_SHEET_ID = "1X57jb_FWPlYTwi3fMJ9I_Yc_meS8AAe4"

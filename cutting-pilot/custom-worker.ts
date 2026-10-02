@@ -3,8 +3,11 @@
 // @opennextjs/cloudflare regenerates .open-next/worker.js on every build and its default
 // export only has `fetch` — there's nowhere in the generated file to hang a cron handler.
 // This re-exports that generated fetch handler unchanged and adds `scheduled()` alongside it.
-// Two crons, branched on controller.cron: "*/5 * * * *" = late-pickup check (late-pickup-02),
-// anything else ("*/10 * * * *") = schedule ingest.
+// ONE cron, "*/5 * * * *": every run = late-pickup check (late-pickup-02); runs whose scheduled
+// UTC minute is a multiple of 10 also run the schedule ingest (keeps its 10-min cadence).
+// late-pickup-03: do NOT go back to two crons branched on controller.cron — with "*/10" + "*/5"
+// on one Worker, Cloudflare delivered two events every 10 min, BOTH labeled "*/10 * * * *", and
+// none at :05/:15, so the "*/5" branch never ran.
 // A cron handler has no path — do not add any public route here.
 import type { ExecutionContext, ExportedHandler, ScheduledController } from "@cloudflare/workers-types";
 import openNextHandler from "./.open-next/worker.js";
@@ -16,12 +19,10 @@ export default {
 
   async scheduled(controller: ScheduledController, env: ScheduleEnv & LatePickupEnv, ctx: ExecutionContext) {
     // Scheduled context has no user session — the poller never injects X-User-*, never sets cookies.
-    if (controller.cron === "*/5 * * * *") {
-      ctx.waitUntil(
-        runLatePickupCheck(env).catch((err) => console.error("late-pickup: scheduled run failed", err))
-      );
-      return;
-    }
+    ctx.waitUntil(
+      runLatePickupCheck(env).catch((err) => console.error("late-pickup: scheduled run failed", err))
+    );
+    if (new Date(controller.scheduledTime).getUTCMinutes() % 10 !== 0) return;
     ctx.waitUntil(
       runSchedulePoll(env).catch((err) => {
         console.error("schedule-ingest: scheduled run failed", err);

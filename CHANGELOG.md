@@ -1850,6 +1850,15 @@ current series).
 
 ## Loading Board (v2)
 
+- **late-pickup-03 — Fix: the late-pickup cron never ran (single 5-min trigger).** late-pickup-02's two triggers
+  (`*/10` + `*/5`) branched on `controller.cron`, but live `wrangler tail` showed Cloudflare delivering **two events
+  every 10 min, both labeled `*/10 * * * *`**, and nothing at :05/:15 — so the `*/5` branch never fired (a Bay 20 test
+  load sat late and unclaimed), and the schedule ingest ran twice per 10 min (harmless; its upsert is idempotent).
+  Now `wrangler.toml` has ONE cron, `*/5 * * * *`; `custom-worker.ts` `scheduled()` runs `runLatePickupCheck` every
+  run and `runSchedulePoll` only when `new Date(controller.scheduledTime).getUTCMinutes() % 10 === 0` (same 10-min
+  ingest cadence, no dependence on the cron label). No migration, no behavior change to either job. `tsc --noEmit`,
+  `npm run cf-build`, `tsc -p tsconfig.worker.json`, `wrangler deploy --dry-run` green.
+
 - **late-pickup-02 — Late Pickup notifications (5-min cron, once per assignment).** New
   `cutting-pilot/src/lib/logistics/latePickupCron.ts` → `runLatePickupCheck(env)`: takes every load
   `fetchDockLoads()` (late-pickup-01's shared helper) reports with `pickup.late === true` — bay **and** yard loads;
