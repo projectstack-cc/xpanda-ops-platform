@@ -5960,6 +5960,15 @@ current series).
 
 ## Logistics
 
+- **bolc-03 — BOL Email manual-add now shows trailer + bay (legacy; §3 / §9). No migration.** "Add a BOL
+  manually" on `/logistics/bol-email` searched `GET /api/bols?search=`, which returns bare `bols` rows, so
+  `labelFor()` showed "—" for trailer and bay and the attached row lacked the queue rows' fields. New read-only
+  `GET /api/bol-email/search?q=` (`_worker.js/routes/bol-email.js` `handleSearch`, min 2 chars, 20 rows, newest
+  BOL first) uses the same join shape as the candidates query (loading_assignments + loading_bays), with a
+  `LEFT JOIN jobs` so unlinked BOLs are still found; matches ship-to company, BOL #, customer or invoice #.
+  `runSearch` now calls it — trailer, bay, customer and invoice populate. `/api/bols` unchanged; existing
+  `logistics.bol` gate covers the new path.
+
 - **bolc-02 — BOL editor carrier edits now save to `bols.carrier_name` (legacy + v2; §9 / §9a). No migration.**
   Both BOL editors store any changed field as a `render_overrides` visual override, so a carrier edit printed the
   new carrier while `carrier_name` (what the BOL Email queue filters on) kept the old one — how BOL #4443 printed

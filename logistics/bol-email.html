@@ -535,13 +535,13 @@
   });
 
   async function runSearch(term) {
-    const { ok, data } = await window.api.get('/api/bols?search=' + encodeURIComponent(term));
-    if (!ok || !data || !Array.isArray(data.bols)) {
+    const { ok, data } = await window.api.get('/api/bol-email/search?q=' + encodeURIComponent(term));
+    if (!ok || !data || !Array.isArray(data.results)) {
       searchResults.innerHTML = '';
       searchResults.classList.remove('open');
       return;
     }
-    const results = data.bols.slice(0, 20);
+    const results = data.results.slice(0, 20);
     if (results.length === 0) {
       searchResults.innerHTML = `<div class="bol-email-search-row">${esc(t('logistics.bolEmailNoMatches'))}</div>`;
       searchResults.classList.add('open');

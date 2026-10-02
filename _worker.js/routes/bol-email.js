@@ -36,6 +36,42 @@ async function handleCandidates(request, env) {
   }
 }
 
+// bolc-03: manual-add search. Same join shape as handleCandidates so manual rows carry the same
+// trailer / bay / customer / invoice fields as queue rows, but LEFT JOIN jobs so BOLs without a
+// job link are still findable.
+async function handleSearch(request, env) {
+  const db = env.DB;
+  if (!db) return json({ ok: false, error: 'Missing D1 binding' }, 500);
+
+  const url = new URL(request.url);
+  const q = (url.searchParams.get('q') || '').trim();
+  if (q.length < 2) return json({ ok: true, results: [] });
+
+  try {
+    const rows = await db.prepare(`
+      SELECT b.*,
+             COALESCE(j.customer, b.ship_to_company) AS customer,
+             j.invoice_number,
+             la.trailer_number, la.load_number AS la_load_number,
+             lb.bay_number, lb.label AS bay_label,
+             COALESCE(la.ship_date, j.ship_date) AS effective_ship_date
+      FROM bols b
+      LEFT JOIN jobs j ON b.job_id = j.id
+      LEFT JOIN loading_assignments la
+             ON la.job_id = b.job_id AND la.load_number = b.load_number
+      LEFT JOIN loading_bays lb ON la.bay_id = lb.id
+      WHERE b.ship_to_company LIKE ?1 OR CAST(b.bol_number AS TEXT) LIKE ?1
+         OR j.customer LIKE ?1 OR j.invoice_number LIKE ?1
+      ORDER BY b.bol_number DESC
+      LIMIT 20
+    `).bind(`%${q}%`).all();
+
+    return json({ ok: true, results: rows.results || [] });
+  } catch (e) {
+    return json({ ok: false, error: 'Server error.', detail: String(e?.message || e) }, 500);
+  }
+}
+
 async function handleSend(request, env) {
   if (!env.RESEND_API_KEY) {
     return json({ ok: false, error: 'Email not configured. Set the RESEND_API_KEY Worker secret.' }, 500);
@@ -215,6 +251,7 @@ export async function handleApiBolEmail(request, env) {
 
   if (sub === 'candidates' && request.method === 'GET') return handleCandidates(request, env);
   if (sub === 'send' && request.method === 'POST') return handleSend(request, env);
+  if (sub === 'search' && request.method === 'GET') return handleSearch(request, env);
   if (sub === 'recipients') return handleRecipients(request, env, id);
   if (sub === 'holidays') return handleHolidays(request, env, id);
 
