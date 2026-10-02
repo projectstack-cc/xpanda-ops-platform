@@ -45,6 +45,20 @@ export function formatClockMinutes(minutes: number): string {
   return `${h12}:${String(m).padStart(2, "0")} ${h24 < 12 ? "AM" : "PM"}`;
 }
 
+/** Current ET wall clock as { date: "YYYY-MM-DD", minutes: 0..1439 } (late-pickup-01). */
+export function etNowWallClock(nowMs: number = Date.now()): { date: string; minutes: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(nowMs);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    minutes: Number(get("hour")) * 60 + Number(get("minute")),
+  };
+}
+
 /** "Wed" for a YYYY-MM-DD date string (calendar date, no TZ shift). */
 export function weekdayShort(date: string): string {
   const [y, mo, d] = date.split("-").map(Number);

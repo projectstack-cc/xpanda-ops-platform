@@ -24,7 +24,7 @@ export default function BayTile({ bay }: BayTileProps) {
 
   return (
     <div
-      className="min-h-0 flex flex-col rounded-lg border overflow-hidden"
+      className={`min-h-0 flex flex-col rounded-lg border overflow-hidden${bay.late ? " late-pulse" : ""}`}
       style={{
         background: variant ? `${variant.bg}` : "var(--surface)",
         borderColor: variant ? variant.border : "var(--line)",
@@ -34,11 +34,21 @@ export default function BayTile({ bay }: BayTileProps) {
         className="shrink-0 flex items-center justify-between gap-1 px-2 py-1 border-b"
         style={{ borderColor: variant ? variant.border : "var(--line)" }}
       >
-        <span
-          className="font-bold text-[clamp(0.95rem,2vh,1.3rem)]"
-          style={{ color: variant ? variant.text : "var(--text)" }}
-        >
-          {defaultLabel}
+        <span className="flex items-baseline gap-1.5 min-w-0">
+          <span
+            className="shrink-0 font-bold text-[clamp(0.95rem,2vh,1.3rem)]"
+            style={{ color: variant ? variant.text : "var(--text)" }}
+          >
+            {defaultLabel}
+          </span>
+          {bay.earliest_pickup && (
+            <span
+              className="font-semibold tabular-nums whitespace-nowrap truncate text-[clamp(0.75rem,1.6vh,1.05rem)]"
+              style={{ color: variant ? variant.text : "var(--text)" }}
+            >
+              · Pickup {bay.earliest_pickup}
+            </span>
+          )}
         </span>
         {bay.label && bay.label !== defaultLabel && (
           <span
@@ -61,6 +71,13 @@ export default function BayTile({ bay }: BayTileProps) {
           ))
         )}
       </div>
+
+      {/* Static footer — only the tile ring pulses (late-pickup-01). */}
+      {bay.late && (
+        <div className="shrink-0 px-2 py-1 text-center font-bold text-[clamp(0.95rem,2vh,1.3rem)] bg-[var(--danger-bg)] text-[var(--danger-text)]">
+          Late Pickup
+        </div>
+      )}
     </div>
   );
 }

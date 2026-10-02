@@ -22,11 +22,18 @@ export default function LoadCard({ load }: LoadCardProps) {
         <span className="font-semibold text-[clamp(0.8rem,1.4vh,1.05rem)] truncate" style={{ color: variant.text }}>
           {load.customer || "—"}
         </span>
-        <span
-          className="shrink-0 font-mono tabular-nums text-[clamp(0.6rem,1vh,0.75rem)] font-semibold px-1.5 py-[1px] rounded"
-          style={{ background: variant.border, color: "var(--primary-text)" }}
-        >
-          {variant.label}
+        <span className="shrink-0 flex items-center gap-1">
+          {load.late && (
+            <span className="font-mono tabular-nums text-[clamp(0.6rem,1vh,0.75rem)] font-bold px-1.5 py-[1px] rounded bg-[var(--danger-bg)] text-[var(--danger-text)]">
+              LATE
+            </span>
+          )}
+          <span
+            className="font-mono tabular-nums text-[clamp(0.6rem,1vh,0.75rem)] font-semibold px-1.5 py-[1px] rounded"
+            style={{ background: variant.border, color: "var(--primary-text)" }}
+          >
+            {variant.label}
+          </span>
         </span>
       </div>
       <div className="flex items-center justify-between gap-2 mt-0.5">

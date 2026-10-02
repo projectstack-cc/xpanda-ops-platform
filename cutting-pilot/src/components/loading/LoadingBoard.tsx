@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Clock } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import BayTile from "./BayTile";
+import YardBanner from "./YardBanner";
 
 const POLL_MS = 30_000;
 // Independent of POLL_MS — only recomputes the relative age shown in FreshnessClock.
@@ -28,19 +29,35 @@ export interface LoadingBoardLoad {
   loading_status: string;
   load_number: number;
   load_count: number | null;
+  assignment_id: string;
+  suggested_pickup: string | null;
+  late: boolean;
 }
 
 export interface LoadingBoardBay {
   bay_id: string;
   bay_number: number;
   label: string;
+  earliest_pickup: string | null;
+  late: boolean;
   loads: LoadingBoardLoad[];
+}
+
+export interface LoadingBoardYardLoad {
+  assignment_id: string;
+  invoice_number: string | null;
+  trailer_number: string | null;
+  load_number: number;
+  load_count: number | null;
+  late: boolean;
 }
 
 interface LoadingBoardResponse {
   generated_at: string;
   board_note?: string;
   bays: LoadingBoardBay[];
+  // Optional so a pre-deploy cached response (no `yard`) can't crash the board.
+  yard?: LoadingBoardYardLoad[];
 }
 
 // Mirrors the server-side cap in src/app/api/loading-board/route.ts.
@@ -306,6 +323,8 @@ export default function LoadingBoard({ userName, isAdmin, permissions }: Loading
               data.bays.map((bay) => <BayTile key={bay.bay_id} bay={bay} />)
             )}
           </div>
+
+          <YardBanner loads={data.yard ?? []} />
 
           {(canEditNotes || !!data.board_note?.trim()) && (
             <div className="shrink-0 px-3 py-1 border-t border-[var(--line)] bg-[var(--surface-2)]">

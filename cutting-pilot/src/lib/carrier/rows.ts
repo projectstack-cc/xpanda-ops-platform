@@ -17,7 +17,7 @@ const IN_CHUNK = 90;
 
 export type DistanceStatus = "ok" | "pending" | "unavailable";
 
-interface GeoInfo {
+export interface GeoInfo {
   lat: number | null;
   lng: number | null;
   miles: number | null;
@@ -25,12 +25,12 @@ interface GeoInfo {
   ok: boolean;
 }
 
-function addressKeyOf(r: any): string | null {
+export function addressKeyOf(r: any): string | null {
   if (!String(r.ship_to_zip ?? "").trim()) return null; // same rule as the distances route
   return normalizeAddressKey(r.ship_to_street || "", r.ship_to_city || "", r.ship_to_state || "", r.ship_to_zip || "");
 }
 
-async function readGeoCache(DB: D1Database, keys: string[]): Promise<Map<string, GeoInfo>> {
+export async function readGeoCache(DB: D1Database, keys: string[]): Promise<Map<string, GeoInfo>> {
   const out = new Map<string, GeoInfo>();
   for (let i = 0; i < keys.length; i += IN_CHUNK) {
     const chunk = keys.slice(i, i + IN_CHUNK);

@@ -1850,6 +1850,31 @@ current series).
 
 ## Loading Board (v2)
 
+- **late-pickup-01 — Suggested pickup + Late Pickup state on the `/v2/loading` TV board, Yard banner.** New
+  shared helper `cutting-pilot/src/lib/logistics/latePickup.ts` (also the import target for the late-pickup-02
+  cron, so the TV and the notification can never disagree): `evaluatePickup()` reuses the Carrier View math
+  unchanged (`parseAppointment` + `suggestedPickup` from `deliveryTime.ts`, which is untouched) and marks a load
+  late when ET now is **more than 30 min** past the suggested pickup (strict — exactly +30 is not late; the pickup
+  already includes the 60-min traffic buffer); label is `9:15 AM`, weekday-prefixed when the pickup falls on a
+  different ET day. `fetchDockLoads()` runs two SELECTs — bay loads (same population the board shows:
+  active bays, `not_started`/`loading`/`loaded`) and yard loads (legacy Yard rule: `location = 'yard'` and not
+  `in_transit`/`delivered`/`archived` — live yard rows sit in `awaiting`) — and computes ET now **once** per call.
+  **Drive time is `geocode_cache`-only — this path never calls ORS**; an uncached address yields no pickup and is
+  never late (no guessed times). `lib/carrier/rows.ts` changed only by exporting `GeoInfo`, `addressKeyOf`,
+  `readGeoCache` (Carrier View behavior identical). New `etNowWallClock()` in `etDateTime.ts`. **API**
+  (`GET /v2/api/loading-board`, additive only — `PUT` byte-identical): lateness is decided server-side at request
+  time; bays gain `earliest_pickup` (min across the bay's loads incl. pre-queued) + `late`; loads gain
+  `assignment_id`, `suggested_pickup`, `late`; new top-level `yard[]` (`ship_day`, invoice, load # order). **UI**:
+  `BayTile` shows `Bay 22 · Pickup 9:15 AM` beside the bay number; a late bay gets a slow 1.5s red ring pulse
+  (`.late-pulse`) and a static red **Late Pickup** footer; `LoadCard` gets a static red `LATE` tag on the specific
+  late load. New `YardBanner.tsx` between the bay grid and the board note — renders only when the yard has orders,
+  one chip per order (`INV# · 🚛 trailer · Load X of Y`); only a late chip turns red/pulses and reads
+  "Late Pickup" (never the whole banner). No yard tile; bay grid unchanged. `globals.css` `.late-pulse` /
+  `.late-pulse-text` are decorative, so `prefers-reduced-motion` gets a static red state instead. `yard` is
+  optional on the client so a pre-deploy cached response can't crash the board. New
+  `latePickup.selfcheck.ts` **18/18**; `deliveryTime.selfcheck.ts` re-run **26/26** (`npx tsx`). `tsc --noEmit` +
+  `npm run cf-build` green. No migration.
+
 - **lgx-photos-01 (cross-ref) — `PhotoGalleryModal` accepts provided photos.** New optional props `photos`
   (skip the `/v2/api/loading-photos?job_id=` fetch), `imageSrc` (URL builder for both the main image and the
   filmstrip; defaults to `/v2/api/loading-photos/:id/image`), and `startIndex`. `DockBoard.tsx`'s call (`jobId` +
