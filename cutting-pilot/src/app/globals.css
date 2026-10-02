@@ -174,13 +174,25 @@ html.wall-cursor-hidden * {
   to   { transform: translateY(calc(-1 * var(--sched-scroll-h, 0px))); }
 }
 
-/* Late Pickup (late-pickup-01): slow 1.5s red pulse on the TV loading board. Deliberately slow —
-   /v2/loading had motion-discomfort complaints (P304/P306). Decorative, so reduced-motion gets a
-   static red state instead (unlike the load-bearing sched-scroll above). */
-.late-pulse { animation: late-pulse-ring 1.5s ease-in-out infinite; }
+/* Late Pickup (late-pickup-01; late-pickup-04 floor feedback: whole tile flashes, 1.5s → 1.0s so it
+   reads from across the dock). Still an ease-in-out fade, not a strobe — /v2/loading had
+   motion-discomfort complaints (P304/P306). The ::after overlay covers the WHOLE tile, load cards
+   included (their own backgrounds hid a tile-background flash); peak 0.45 keeps text readable;
+   pointer-events: none. Decorative, so reduced-motion gets a static red state instead (unlike the
+   load-bearing sched-scroll above). */
+.late-pulse { position: relative; animation: late-pulse-ring 1s ease-in-out infinite; }
+.late-pulse::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: var(--red); opacity: 0;
+  animation: late-pulse-fill 1s ease-in-out infinite;
+}
 @keyframes late-pulse-ring {
   0%, 100% { box-shadow: inset 0 0 0 2px var(--red); }
   50%      { box-shadow: inset 0 0 0 6px var(--red), 0 0 12px var(--red); }
+}
+@keyframes late-pulse-fill {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 0.45; }
 }
 .late-pulse-text { color: var(--red); font-weight: 700; animation: late-pulse-text 1.5s ease-in-out infinite; }
 @keyframes late-pulse-text {
@@ -189,6 +201,7 @@ html.wall-cursor-hidden * {
 }
 @media (prefers-reduced-motion: reduce) {
   .late-pulse { animation: none; box-shadow: inset 0 0 0 4px var(--red); }
+  .late-pulse::after { animation: none; opacity: 0.2; }
   .late-pulse-text { animation: none; }
 }
 

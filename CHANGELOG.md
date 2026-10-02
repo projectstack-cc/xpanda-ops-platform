@@ -1850,6 +1850,13 @@ current series).
 
 ## Loading Board (v2)
 
+- **late-pickup-04 — Floor feedback: whole late tile flashes, slightly faster.** `globals.css` only. `.late-pulse`
+  now also draws a `::after` red overlay (`inset: 0`, `pointer-events: none`) that fades 0 → 0.45 opacity, covering
+  the WHOLE tile including the load cards (their own backgrounds hid a tile-background-only flash), and both the ring
+  and the fill cycle at **1.0s** (was 1.5s). Still an ease-in-out fade, not a strobe (P304/P306 motion-discomfort
+  history). Reduced-motion: static ring + static 0.2 red tint. Yard chip pulse (`.late-pulse-text`) unchanged.
+  `tsc --noEmit` + `npm run cf-build` green.
+
 - **late-pickup-03 — Fix: the late-pickup cron never ran (single 5-min trigger).** late-pickup-02's two triggers
   (`*/10` + `*/5`) branched on `controller.cron`, but live `wrangler tail` showed Cloudflare delivering **two events
   every 10 min, both labeled `*/10 * * * *`**, and nothing at :05/:15 — so the `*/5` branch never fired (a Bay 20 test
