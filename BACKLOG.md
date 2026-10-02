@@ -529,6 +529,7 @@
 
 ### BOL Issues
 
+- [ ] **Trailer override shadowing (bolc-01 follow-up).** A `render_overrides.trailerNo` set in the BOL editor shadows trailer back-writes (see `_worker.js/routes/loading.js` comment near the trailer back-write). Same class as bolc-01/02; evaluate promoting it the same way.
 - [ ] **P316 follow-up — editable Scrap Pickup toggle in the BOL compose form.** Currently derived
   from the job's `scrap_pickup` only (`'YES' → is_scrap_pickup: 1`); no manual override at compose
   time.

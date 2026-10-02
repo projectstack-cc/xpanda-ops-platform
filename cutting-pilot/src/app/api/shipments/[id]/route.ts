@@ -60,6 +60,7 @@ import { canEditDashboard } from "@/lib/logistics/dashboardPerms";
 import { logActivity } from "@/lib/activityLog";
 import { completeCuttingLinesForJob } from "@/lib/cuttingLines";
 import { JOB_TO_SHIPMENT_SYNC, coerceJobSyncValue, reconcileLoadingAssignments, type JobSyncField } from "@/lib/logistics/jobSync";
+import { propagateJobCarrierToBols } from "@/lib/logistics/bolCarrier";
 
 // Never job-synced in legacy -- always editable regardless of job-link status. `status` flows the
 // OPPOSITE direction of JOB_OWNED_FIELDS below (shipment -> job, not job -> shipment), so it's
@@ -434,9 +435,9 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
     return NextResponse.json({ ok: false, error: "No editable fields to update." }, { status: 400 });
   }
 
-  let job: { id: string; method: string | null; archived_at: string | null } | null = null;
+  let job: { id: string; method: string | null; archived_at: string | null; carrier: string | null } | null = null;
   if (jobKeys.length) {
-    job = await DB.prepare("SELECT id, method, archived_at FROM jobs WHERE id = ?")
+    job = await DB.prepare("SELECT id, method, archived_at, carrier FROM jobs WHERE id = ?")
       .bind(existing.job_id).first<any>();
     if (!job) {
       return NextResponse.json({ ok: false, error: "The linked job was not found." }, { status: 404 });
@@ -471,6 +472,10 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
     await DB.batch(statements);
 
     if (job) {
+      // bolc-01: carry a job carrier change onto unsigned BOLs still showing the old carrier.
+      if ("carrier" in jobVals) {
+        await propagateJobCarrierToBols(DB, job.id, job.carrier, String(jobVals.carrier), actorId);
+      }
       if ("load_count" in jobVals) {
         try {
           await reconcileLoadingAssignments(DB, job.id, Number(jobVals.load_count), job.method);

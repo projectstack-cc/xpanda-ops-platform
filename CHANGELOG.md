@@ -5960,6 +5960,19 @@ current series).
 
 ## Logistics
 
+- **bolc-01 — Job carrier changes propagate to existing BOLs (legacy + v2; §9 / §9a). No migration.**
+  Root cause: INV 4443 (BOL #4443) vanished from the BOL Email queue after its carrier was changed on the job
+  (v2 shipment edit → `Seal Express - Dry Van`); nothing copied the job carrier to the already-created BOL, so
+  `bols.carrier_name` stayed `XPanda truck` and the queue's `LISMA%`/`SEAL%` filter missed it. New shared rule
+  `propagateJobCarrierToBols` (`_worker.js/lib/bol-carrier.js`, mirrored in `cutting-pilot/src/lib/logistics/bolCarrier.ts`)
+  now runs after the job save in all three `jobs.carrier` writers: legacy Job Board PUT (`routes/jobs.js`),
+  v2 Orders PUT (`/v2/api/orders/:id`), and v2 shipment edit write-through (`/v2/api/shipments/:id`). It
+  rewrites only **unsigned** BOLs (`signed_bol_photo_key IS NULL`) whose effective carrier (non-empty
+  `render_overrides.carrierName`, else `carrier_name`) still equals the old job carrier (case/whitespace-insensitive);
+  BOLs deliberately set to another carrier are left alone. Stale non-empty `carrierName` overrides are cleared;
+  `""` blank-carrier overrides, `_pos` and all other keys are preserved (empty object → `NULL`). One batch + one
+  activity-log row per job save; best-effort (never fails the job save). Self-check: `bolCarrier.selfcheck.ts`.
+
 - **lgx-fuel-02 (cross-ref) — legacy BOLs read the v2 fuel quote; legacy route removed.**
   `logistics/bol-shared.js` `generatePdf` now fetches `GET /v2/api/bols/fuel-surcharge?quote=` (same host +
   session cookie, `logistics.bol` gate) because mileage resolution lives in v2, and draws the server-built

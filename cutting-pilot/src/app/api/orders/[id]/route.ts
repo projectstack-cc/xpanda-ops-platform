@@ -17,6 +17,7 @@ import { getEnv } from "@/lib/db";
 import { PROCESS_NAMES, mergeProcesses, parseProcesses } from "@/lib/processes";
 import { computeAndPersistHoleyChunks } from "@/lib/holeyChunks";
 import { JOB_TO_SHIPMENT_SYNC, reconcileLoadingAssignments, syncJobFieldsToShipment, type JobSyncField } from "@/lib/logistics/jobSync";
+import { propagateJobCarrierToBols } from "@/lib/logistics/bolCarrier";
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const STATUSES = ["not_started", "in_production", "done", "loading", "shipped"];
@@ -52,7 +53,7 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
 
   // Verify the job exists (and not archived). Same 404/400 contract as /v2/api/board/:id.
   const existing = await DB.prepare(
-    "SELECT id, status, archived_at, method, processes FROM jobs WHERE id = ?"
+    "SELECT id, status, archived_at, method, processes, carrier FROM jobs WHERE id = ?"
   ).bind(id).first<any>();
   if (!existing) return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 });
   if (existing.archived_at) {
@@ -190,6 +191,11 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
       await syncJobFieldsToShipment(DB, id, syncFields);
     } catch (e: any) {
       console.error("Job→Shipment field sync failed:", String(e?.message || e));
+    }
+
+    // bolc-01: carry a job carrier change onto unsigned BOLs still showing the old carrier.
+    if ("carrier" in p) {
+      await propagateJobCarrierToBols(DB, id, existing.carrier, s(p.carrier), actorId);
     }
 
     // Replace line items wholesale (mirrors legacy jobs.js:800–818).

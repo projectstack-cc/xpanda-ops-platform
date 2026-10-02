@@ -1,4 +1,5 @@
 import { json, logActivity, safeJsonParse } from '../lib/core.js';
+import { propagateJobCarrierToBols } from '../lib/bol-carrier.js';
 import { completeCuttingLinesForJob } from '../lib/cutting-lines.js';
 import { nestHoleyChunks, netHoleyChunks } from '../lib/holey-nester.js';
 
@@ -743,7 +744,7 @@ export async function handleApiJobs(request, env) {
     if (!id) return json({ ok: false, error: "id is required." }, 400);
 
     const existing = await db.prepare(
-      "SELECT id, status, ship_date, archived_at, trailer_group_id FROM jobs WHERE id = ?"
+      "SELECT id, status, ship_date, archived_at, trailer_group_id, carrier FROM jobs WHERE id = ?"
     ).bind(id).first();
     if (!existing) return json({ ok: false, error: "Job not found." }, 404);
 
@@ -1140,6 +1141,11 @@ export async function handleApiJobs(request, env) {
             console.error('Job→Shipment status sync failed:', e);
           }
         }
+      }
+
+      // bolc-01: carry a job carrier change onto unsigned BOLs still showing the old carrier.
+      if ("carrier" in payload) {
+        await propagateJobCarrierToBols(db, id, existing.carrier, String(payload.carrier || '').trim(), request.headers.get('X-User-Id') || null);
       }
 
       // Sync editable fields to linked shipment
