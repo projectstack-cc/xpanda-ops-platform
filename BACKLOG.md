@@ -288,7 +288,7 @@
 
 ## Loading Board (v2)
 
-- [ ] **late-pickup-02 — Late Pickup notifications** (migration-gated: `loading_assignments.late_pickup_notified_at`).
+- [ ] **late-pickup-02 follow-up — edited `delivery_time` doesn't re-alert.** `late_pickup_notified_at` is never reset, so if an order's `delivery_time` is edited after it already alerted, a re-slipped pickup won't notify again. Revisit only if needed.
 - [ ] **late-pickup-01 follow-up — no pickup when drive time isn't cached.** The TV board reads `geocode_cache` only (never ORS); a bay load whose address the Carrier View never warmed shows no pickup and can't go late. Revisit only if that turns out to happen on the floor.
 - [ ] Extract a shared `components/tv/` (freshness-clock) used by `/v2/schedule`, `/v2/loading` and (prod-d-04) `/v2/production/tv` — a third board with its own LoadingBoard-style freshness logic (2-min stale) plus a copy of ScheduleBoard's cursor hide — currently each board is self-contained. (The pixel-shift half of this item was moot as of P304; the logo-sweep half is moot as of P306 — both removed from both boards entirely. Only the freshness clock remains a duplication candidate.)
 - [ ] **P261 follow-up — no `UNIQUE(invoice_number, ship_week, day_of_week)` on `schedule_rows`.** The 1/5 migration didn't add one, so the poller's upsert is done in application code (select-then-insert/update) rather than SQL `ON CONFLICT`. Works fine at 15-min-cron scale, but if `schedule_rows` ever gets a second writer, add the unique index and switch to a real upsert.

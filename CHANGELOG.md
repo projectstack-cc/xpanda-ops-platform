@@ -1850,6 +1850,28 @@ current series).
 
 ## Loading Board (v2)
 
+- **late-pickup-02 — Late Pickup notifications (5-min cron, once per assignment).** New
+  `cutting-pilot/src/lib/logistics/latePickupCron.ts` → `runLatePickupCheck(env)`: takes every load
+  `fetchDockLoads()` (late-pickup-01's shared helper) reports with `pickup.late === true` — bay **and** yard loads;
+  unassigned queued orders are never in that set — and sends exactly one `loading.late_pickup` notification per
+  assignment lifetime. Dedupe is an atomic claim (`UPDATE loading_assignments SET late_pickup_notified_at = ? WHERE
+  id = ? AND late_pickup_notified_at IS NULL`), dispatching only when `meta.changes === 1` — race-safe if runs
+  overlap, and a bay→yard move (same assignment id) never re-alerts. Each statement is its own `prepare`; each load
+  is wrapped in try/catch; one summary `console.log` per run that claims anything. Message:
+  `{Bay N | Yard} · {customer} · INV# {invoice}{ (Load n of m)} · suggested {pickup label}`, title `Late pickup`,
+  entity `loading_assignment`/`assignment_id` (legacy bell already deeplinks it). `custom-worker.ts` `scheduled()`
+  now branches on `controller.cron`: `*/5 * * * *` → late-pickup check, anything else (`*/10`) → schedule ingest,
+  unchanged; env typed `ScheduleEnv & LatePickupEnv`. `wrangler.toml` crons → `["*/10 * * * *", "*/5 * * * *"]`
+  (separate trigger so the XLSX parse doesn't run more often; `cpu_ms` unchanged). Type registered in
+  `admin/roles.html` (`NOTIFICATION_TYPE_LABELS` + `NOTIF_TYPE_LABEL_KEY`) and `admin/admin-i18n.js` (`notifTypeLatePickup`: EN
+  "Late pickup" / ES "Recogida tardía" / HT "Ranmasaj an reta"). **Migration** `DB_Migrations/late-pickup-notified.sql`
+  (gitignored, not committed) — `ALTER TABLE loading_assignments ADD COLUMN late_pickup_notified_at TEXT` — **run on
+  prod D1 2026-10-02 before push** (CHECK returned 0 rows → ALTER → column verified). **Manual:** Admin → Roles, tick
+  **Late pickup** on every role that should be alerted (no subscribed role = nobody notified). The first cron run
+  after deploy alerts once for every load already late at that moment. `node --check` on `admin-i18n.js` + the
+  edited `roles.html` inline script; `tsc --noEmit`, `npm run cf-build`, `tsc -p tsconfig.worker.json`,
+  `wrangler deploy --dry-run` bundle all green; `latePickup.selfcheck.ts` still **18/18**.
+
 - **late-pickup-01 — Suggested pickup + Late Pickup state on the `/v2/loading` TV board, Yard banner.** New
   shared helper `cutting-pilot/src/lib/logistics/latePickup.ts` (also the import target for the late-pickup-02
   cron, so the TV and the notification can never disagree): `evaluatePickup()` reuses the Carrier View math

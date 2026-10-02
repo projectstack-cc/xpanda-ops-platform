@@ -183,6 +183,7 @@
       notifTypeCarrierFees: 'Carrier fees added',
       notifTypeQbReview: 'QuickBooks change to review',
       notifTypeQbError: 'QuickBooks sync error',
+      notifTypeLatePickup: 'Late pickup',
 
       // ---- activity-log.html ----
       entityFilterAll: 'All Entity Types',
@@ -371,6 +372,7 @@
       notifTypeCarrierFees: 'Cargos de transportista agregados',
       notifTypeQbReview: 'Cambio de QuickBooks por revisar',
       notifTypeQbError: 'Error de sincronización de QuickBooks',
+      notifTypeLatePickup: 'Recogida tardía',
 
       entityFilterAll: 'Todos los Tipos de Entidad',
       entityJobs: 'Trabajos',
@@ -558,6 +560,7 @@
       notifTypeCarrierFees: 'Frè transpòtè ajoute',
       notifTypeQbReview: 'Chanjman QuickBooks pou revize',
       notifTypeQbError: 'Erè senkronizasyon QuickBooks',
+      notifTypeLatePickup: 'Ranmasaj an reta',
 
       entityFilterAll: 'Tout Tip Antite',
       entityJobs: 'Travay',

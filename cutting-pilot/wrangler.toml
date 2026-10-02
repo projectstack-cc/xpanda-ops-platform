@@ -25,8 +25,11 @@ cpu_ms = 60_000
 # distribution across both ship weeks). Interval tightened 15 → 10 min (P274) for fresher
 # floor data; the ~5s parse sits far inside the Paid CPU budget above, so this is an
 # interval change only — no capacity implication.
+# ── Late Pickup cron (late-pickup-02) ───────────────────────────────────────────────
+# The 5-minute late-pickup check is a separate trigger from the 10-minute schedule ingest so the
+# XLSX parse doesn't run more often. Branched on controller.cron in custom-worker.ts.
 [triggers]
-crons = ["*/10 * * * *"]
+crons = ["*/10 * * * *", "*/5 * * * *"]
 
 [vars]
 SCHEDULE_SHEET_ID = "1X57jb_FWPlYTwi3fMJ9I_Yc_meS8AAe4"
