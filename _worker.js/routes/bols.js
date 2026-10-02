@@ -1,4 +1,5 @@
 import { json, logActivity, generateAccessToken, nowSqlite } from '../lib/core.js';
+import { promoteCarrierOverride } from '../lib/bol-carrier.js';
 
 export async function handleApiBolCustomers(request, env) {
   const db = env.DB;
@@ -388,6 +389,13 @@ export async function handleApiBols(request, env) {
 
     let access_token = generateAccessToken();
 
+    // bolc-02: a non-empty carrierName override the client just sent becomes the real carrier_name,
+    // so carrier filters (BOL Email queue) see what the PDF prints. Blank "" overrides stay.
+    let carrier_name = s("carrier_name");
+    if (payload.render_overrides != null) {
+      ({ carrier_name, render_overrides } = promoteCarrierOverride(render_overrides, carrier_name));
+    }
+
     // P241 guard: a BOL arriving with no job_id but a known bol_group_id inherits the group's
     // job link from a already-linked sibling. Belt-and-braces against any client path that
     // fails to send job_id — and it re-arms the token-preserving dedupe below, which is gated
@@ -451,7 +459,7 @@ export async function handleApiBols(request, env) {
         s("ship_to_company"), s("ship_to_attention"), s("ship_to_street"), s("ship_to_street2"),
         s("ship_to_city"), s("ship_to_state"), s("ship_to_zip"), s("location_no"),
         payload.carrier_id ? String(payload.carrier_id).trim() : null,
-        s("carrier_name"), s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
+        carrier_name, s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
         freight_terms, is_scrap_pickup, s("third_party_bill_to"), s("special_instructions"), s("contact_info"),
         payload.is_master_bol ? 1 : 0,
         payload.siplast ? 1 : 0,
@@ -468,7 +476,7 @@ export async function handleApiBols(request, env) {
       const row = await db.prepare("SELECT * FROM bols WHERE id = ?").bind(id).first();
       await logActivity(db, 'create', 'bol', id,
         `Created ${bol_number ? `BOL #${bol_number}` : 'BOL'} for ${s('ship_to_company')}`,
-        { bol_number, ship_to_company: s('ship_to_company'), carrier_name: s('carrier_name'), date }
+        { bol_number, ship_to_company: s('ship_to_company'), carrier_name, date }
       );
       return json({ ok: true, message: "BOL created.", bol: row }, 201);
     } catch (e) {
@@ -519,6 +527,13 @@ export async function handleApiBols(request, env) {
       render_overrides = existing.render_overrides ?? null;
     }
 
+    // bolc-02: a non-empty carrierName override the client just sent becomes the real carrier_name,
+    // so carrier filters (BOL Email queue) see what the PDF prints. Blank "" overrides stay.
+    let carrier_name = s("carrier_name");
+    if (hasOverridesField) {
+      ({ carrier_name, render_overrides } = promoteCarrierOverride(render_overrides, carrier_name));
+    }
+
     // Legacy BOLs without a token get one on next edit. Token is permanent —
     // never overwritten once set, so printed QR codes remain valid.
     let access_token = existing.access_token;
@@ -542,7 +557,7 @@ export async function handleApiBols(request, env) {
         s("ship_to_company"), s("ship_to_attention"), s("ship_to_street"), s("ship_to_street2"),
         s("ship_to_city"), s("ship_to_state"), s("ship_to_zip"), s("location_no"),
         payload.carrier_id ? String(payload.carrier_id).trim() : null,
-        s("carrier_name"), s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
+        carrier_name, s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
         freight_terms, is_scrap_pickup, s("third_party_bill_to"), s("special_instructions"), s("contact_info"),
         payload.is_master_bol ? 1 : 0,
         s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),

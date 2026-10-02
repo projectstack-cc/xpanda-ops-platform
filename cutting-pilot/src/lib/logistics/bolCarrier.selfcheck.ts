@@ -1,8 +1,8 @@
 // src/lib/logistics/bolCarrier.selfcheck.ts
-// Guarded dev self-check for bolCarrier.ts (bolc-01). Mirrors latePickup.selfcheck.ts's shape:
+// Guarded dev self-check for bolCarrier.ts (bolc-01, bolc-02). Mirrors latePickup.selfcheck.ts's shape:
 // a check()/results table, one exported run*SelfCheck() function. Not part of the production
 // build path.
-import { normCarrier, effectiveCarrier, stripCarrierOverride, propagateJobCarrierToBols } from "./bolCarrier";
+import { normCarrier, effectiveCarrier, stripCarrierOverride, promoteCarrierOverride, propagateJobCarrierToBols } from "./bolCarrier";
 import type { D1Database } from "@cloudflare/workers-types";
 
 interface CheckResult {
@@ -54,6 +54,19 @@ export async function runBolCarrierSelfCheck(): Promise<{ pass: boolean; results
   eq("strip keeps blank", stripCarrierOverride('{"carrierName":""}'), '{"carrierName":""}');
   eq("strip only key → null", stripCarrierOverride('{"carrierName":"X"}'), null);
   eq("strip null → null", stripCarrierOverride(null), null);
+
+  // bolc-02: promoteCarrierOverride.
+  eq("promote non-empty, key removed, _pos kept",
+    promoteCarrierOverride('{"carrierName":" Seal Express ","_pos":{"a":1}}', "XPanda truck"),
+    { carrier_name: "Seal Express", render_overrides: '{"_pos":{"a":1}}' });
+  eq("promote blank untouched", promoteCarrierOverride('{"carrierName":""}', "Lisma"),
+    { carrier_name: "Lisma", render_overrides: '{"carrierName":""}' });
+  eq("promote only key → null", promoteCarrierOverride('{"carrierName":"Lisma"}', "XPanda truck"),
+    { carrier_name: "Lisma", render_overrides: null });
+  eq("promote invalid JSON unchanged", promoteCarrierOverride("{nope", "XPanda truck"),
+    { carrier_name: "XPanda truck", render_overrides: "{nope" });
+  eq("promote null unchanged", promoteCarrierOverride(null, "XPanda truck"),
+    { carrier_name: "XPanda truck", render_overrides: null });
 
   // Equal carriers (case/whitespace-insensitive) → no-op.
   {

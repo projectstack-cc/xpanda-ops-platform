@@ -20,6 +20,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
+import { promoteCarrierOverride } from "@/lib/logistics/bolCarrier";
 import { logActivity } from "@/lib/activityLog";
 
 function generateAccessToken(): string {
@@ -91,6 +92,13 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
     render_overrides = existing.render_overrides ?? null;
   }
 
+  // bolc-02: a non-empty carrierName override the client just sent becomes the real carrier_name,
+  // so carrier filters (BOL Email queue) see what the PDF prints. Blank "" overrides stay.
+  let carrier_name = s("carrier_name");
+  if (hasOverridesField) {
+    ({ carrier_name, render_overrides } = promoteCarrierOverride(render_overrides, carrier_name));
+  }
+
   // Legacy BOLs without a token get one on next edit. Token is permanent -- never overwritten
   // once set, so printed QR codes remain valid.
   let access_token = existing.access_token;
@@ -114,7 +122,7 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
       s("ship_to_company"), s("ship_to_attention"), s("ship_to_street"), s("ship_to_street2"),
       s("ship_to_city"), s("ship_to_state"), s("ship_to_zip"), s("location_no"),
       payload.carrier_id ? String(payload.carrier_id).trim() : null,
-      s("carrier_name"), s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
+      carrier_name, s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
       freight_terms, is_scrap_pickup, s("third_party_bill_to"), s("special_instructions"), s("contact_info"),
       payload.is_master_bol ? 1 : 0,
       s("commodity_description"), s("handling_unit_qty"), s("handling_unit_type"),

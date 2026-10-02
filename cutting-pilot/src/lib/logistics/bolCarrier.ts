@@ -42,6 +42,22 @@ export function stripCarrierOverride(renderOverrides: string | null): string | n
   return Object.keys(o).length ? JSON.stringify(o) : null;
 }
 
+// bolc-02: a non-empty carrierName override is promoted into bols.carrier_name (blank ""
+// overrides are deliberate and stay put). Unparseable / null overrides → inputs unchanged.
+export function promoteCarrierOverride(
+  renderOverridesString: string | null,
+  carrierName: string
+): { carrier_name: string; render_overrides: string | null } {
+  const o = parseOverrides(renderOverridesString);
+  if (!hasNonEmptyCarrierOverride(o)) {
+    return { carrier_name: carrierName, render_overrides: renderOverridesString };
+  }
+  return {
+    carrier_name: o.carrierName.trim(),
+    render_overrides: stripCarrierOverride(renderOverridesString),
+  };
+}
+
 // Best-effort: never throws. Rewrites unsigned BOLs on the job whose effective carrier is
 // still the old job carrier. Returns the number of BOLs updated.
 export async function propagateJobCarrierToBols(

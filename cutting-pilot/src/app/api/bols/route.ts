@@ -7,6 +7,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
+import { promoteCarrierOverride } from "@/lib/logistics/bolCarrier";
 
 function generateAccessToken(): string {
   const bytes = new Uint8Array(16);
@@ -92,6 +93,13 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // bolc-02: a non-empty carrierName override the client just sent becomes the real carrier_name,
+  // so carrier filters (BOL Email queue) see what the PDF prints. Blank "" overrides stay.
+  let carrier_name = s("carrier_name");
+  if (payload.render_overrides != null) {
+    ({ carrier_name, render_overrides } = promoteCarrierOverride(render_overrides, carrier_name));
+  }
+
   let access_token = generateAccessToken();
   let job_id = payload.job_id ? String(payload.job_id).trim() : null;
 
@@ -161,7 +169,7 @@ export async function POST(request: NextRequest) {
       s("ship_to_company"), s("ship_to_attention"), s("ship_to_street"), s("ship_to_street2"),
       s("ship_to_city"), s("ship_to_state"), s("ship_to_zip"), s("location_no"),
       payload.carrier_id ? String(payload.carrier_id).trim() : null,
-      s("carrier_name"), s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
+      carrier_name, s("trailer_no"), s("seal_number"), s("scac"), s("pro_no"),
       freight_terms, is_scrap_pickup, s("third_party_bill_to"), s("special_instructions"), s("contact_info"),
       payload.is_master_bol ? 1 : 0,
       payload.siplast ? 1 : 0,
@@ -185,7 +193,7 @@ export async function POST(request: NextRequest) {
       ).bind(
         crypto.randomUUID(), now, id,
         `Created ${bol_number ? `BOL #${bol_number}` : "BOL"} for ${s("ship_to_company")}`,
-        JSON.stringify({ bol_number, ship_to_company: s("ship_to_company"), carrier_name: s("carrier_name"), date }),
+        JSON.stringify({ bol_number, ship_to_company: s("ship_to_company"), carrier_name, date }),
         actorId, now
       ).run();
     } catch (e) {

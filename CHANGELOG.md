@@ -5960,6 +5960,19 @@ current series).
 
 ## Logistics
 
+- **bolc-02 — BOL editor carrier edits now save to `bols.carrier_name` (legacy + v2; §9 / §9a). No migration.**
+  Both BOL editors store any changed field as a `render_overrides` visual override, so a carrier edit printed the
+  new carrier while `carrier_name` (what the BOL Email queue filters on) kept the old one — how BOL #4443 printed
+  "Seal Express" while the queue saw "XPanda truck". The BOL save routes (legacy `POST`/`PUT /api/bols`, v2
+  `POST /v2/api/bols` + `PUT /v2/api/bols/:id`) now run `promoteCarrierOverride` (in `bol-carrier.js` /
+  `bolCarrier.ts`) when the client actually sent `render_overrides`: a non-empty `carrierName` override is moved
+  into `carrier_name` and dropped from the overrides (`_pos` and other keys kept; empty → `NULL`). Blank `""`
+  overrides (deliberate blanked-carrier BOLs, e.g. 4307-01..03, 4309–4311) are never promoted, and overrides a
+  PUT inherits from the stored row are not promoted. No rendering change (`override ?? carrier_name` resolves
+  identically); no editor UI change. Client state checked: legacy `bolEditorApply` re-fetches via
+  `viewBolForJob` and v2 `BolEditorModal` `handleApply` adopts the server's returned `bol` row, so neither
+  replays a stale local copy — no client change needed.
+
 - **bolc-01 — Job carrier changes propagate to existing BOLs (legacy + v2; §9 / §9a). No migration.**
   Root cause: INV 4443 (BOL #4443) vanished from the BOL Email queue after its carrier was changed on the job
   (v2 shipment edit → `Seal Express - Dry Van`); nothing copied the job carrier to the already-created BOL, so
