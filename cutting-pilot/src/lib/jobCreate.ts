@@ -99,7 +99,7 @@ export async function createJob(
   env: { DB: D1Database; BOL_PHOTOS: R2Bucket },
   input: JobCreateInput,
   actor: { id: string | null; name: string },
-  opts: { source: "manual" | "quickbooks"; via: string },
+  opts: { source: "manual" | "packing_slip" | "quickbooks"; via: string },
 ): Promise<JobCreateResult> {
   const { DB, BOL_PHOTOS } = env;
   const customer = input.customer;

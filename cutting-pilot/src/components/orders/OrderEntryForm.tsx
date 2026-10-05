@@ -65,6 +65,7 @@ export interface OrderPayload {
   packing_slip_filename?: string;
   packing_slip_invoice?: string;
   offload_zones_enabled?: boolean; // slip-parse-05
+  source?: "manual" | "packing_slip"; // quickwin-03: slip PDF attached → packing_slip
   line_items: Array<{
     part_number: string;
     description: string;
@@ -578,6 +579,7 @@ function setQtyAsBdftConvert(on: boolean) {
       ...(packingSlipFilename ? { packing_slip_filename: packingSlipFilename } : {}),
       ...(packingSlipFilename && invoiceNumber.trim() ? { packing_slip_invoice: invoiceNumber.trim() } : {}),
       ...(packingSlipBase64 ? { packing_slip_pdf: packingSlipBase64 } : {}),
+      source: packingSlipBase64 ? "packing_slip" : "manual",
       offload_zones_enabled: offloadZonesEnabled,
       line_items: lineItems
         .filter((li) => li.part_number.trim() || li.description.trim())

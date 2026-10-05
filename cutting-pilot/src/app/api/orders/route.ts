@@ -111,10 +111,14 @@ export async function POST(request: NextRequest) {
     }),
   };
 
+  // quickwin-03: legacy parity — a slip PDF attached to this submission → packing_slip, else
+  // manual. Whitelisted: the client can never claim the QB source (reserved for the QB pipeline).
+  const source = p.source === "packing_slip" ? "packing_slip" : "manual";
+
   try {
     const result = await createJob(
       { DB, BOL_PHOTOS }, input, { id: actorId, name: actorName },
-      { source: "manual", via: "order-entry" },
+      { source, via: "order-entry" },
     );
     if (result.ok) {
       return NextResponse.json({ ok: true, id: result.id, hb_chunk_breakdown: result.hb_chunk_breakdown }, { status: 201 });

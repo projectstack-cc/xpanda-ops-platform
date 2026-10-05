@@ -264,9 +264,6 @@
 - [ ] Packing-slip parser rewrite (anchor-relative extraction + per-vendor template registry) —
   P340 ported the existing y-coordinate/x-gap heuristic parser as-is into v2; the more robust
   rewrite is still a separate, future effort (applies to both legacy and v2 copies).
-- [ ] Tag orders created via packing-slip prefill with `source='packing_slip'` in
-  `/v2/api/orders` — deferred out of P338/P340 to keep those prompts single-purpose; currently
-  every v2-created order is hardcoded `source: "manual"` regardless of how it was filled in.
 - [ ] Dedup the parts-library fetch cache — PartsPicker (P429) and partMatch.ts (P432) each hold
   their own /api/parts cache; centralize into one loader.
 - [ ] **v2 per-surface i18n extraction** (P442 shipped the `src/lib/i18n.ts` + `LangProvider`/
