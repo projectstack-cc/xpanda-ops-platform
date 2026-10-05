@@ -65,7 +65,18 @@ interface ParsedLineItem {
   _descLines?: string[];
   _descOpen?: boolean;
   facer_missing?: boolean;
+  // slip-parse-05: offload-zone + density-conflict parity with legacy (lbz-parse-01).
+  _rawText?: string;
+  _zoneKey?: string;
+  offload_seq?: number | null;
+  zone_label?: string;
+  zone_bdft?: number | null;
+  density_conflict?: { category_density: number; description_density: number };
 }
+
+export type OffloadWarning =
+  | { type: "checksum_mismatch"; zone_label: string | null; expected_bdft: number; computed_bdft: number }
+  | { type: "missing_ordinal"; zone_label: string };
 
 interface ParsedDoc {
   invoice_number: string;
@@ -78,6 +89,8 @@ interface ParsedDoc {
   contact_phone: string;
   po_number: string;
   line_items: ParsedLineItem[];
+  offload_zones_enabled: 0 | 1;
+  offload_warnings: OffloadWarning[];
 }
 
 export interface PackingSlipPrefill {
@@ -94,6 +107,8 @@ export interface PackingSlipPrefill {
   contact_name?: string;
   contact_phone?: string;
   line_items?: OrderLineItem[];
+  offload_zones_enabled?: boolean;
+  offload_warnings?: OffloadWarning[];
 }
 
 export type ParsePackingSlipResult =
@@ -374,6 +389,9 @@ function parseLineItems(groups: LineGroup[], descriptionY: number): ParsedLineIt
         const thk = extractThickness(thkSrc);
         if (thk != null) item.thickness = thk;
       }
+      // slip-parse-05 (lbz-parse-01 parity): full row text for offload-zone / density-conflict
+      // detection — consumed and deleted by tagOffloadZones()/parseDoc(), never reaches the caller.
+      item._rawText = thkSrc;
       // slip-parse-01: laminate lines must carry a facer spec. Strip the base
       // "Laminate/laminate N# density" boilerplate; if nothing is left, flag it.
       if (/laminate/i.test((item.category || "") + " " + (item.description || ""))) {
@@ -418,6 +436,215 @@ function dropHbBdftSummaries(items: ParsedLineItem[]): ParsedLineItem[] {
   return out;
 }
 
+// ─── Offload zone detection ───────────────────────────────────────────────
+// slip-parse-05: verbatim behavioral port of legacy lbz-parse-01 (jobs/packing-slip-parser.js) —
+// same regexes, constants and order of operations. Some customer packing slips break a job into
+// delivery "zones" — pieces must be offloaded/labeled in a specific sequence per drop area. Two
+// real wordings are known; add a new one as a single entry in each list below (in BOTH parsers).
+const ZONE_ORDINAL_WORDS: Record<string, number> = { FIRST: 1, SECOND: 2, THIRD: 3, FOURTH: 4, FIFTH: 5, SIXTH: 6 };
+
+const ZONE_ORDINAL_PATTERNS = [
+  /OFFLOAD\s+(FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH)\b/i,
+  /(FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH)\s+TO\s+DELIVER/i,
+];
+
+const ZONE_LABEL_PATTERNS = [
+  /Label\s*&\s*segregate\s+as:\s*(.+)/i,
+  /LABEL\s+as\s+(.+)/i,
+];
+
+// A zone-density group's piece count can be embedded as "{27 pieces}" — real slips have also been
+// seen with a stray ")" closing the brace instead of "}".
+const ZONE_BRACE_PIECES_RE = /\{\s*(\d+)\s*pieces?\s*[\}\)]/i;
+
+function extractZoneOrdinal(text: string | undefined): number | null {
+  if (!text) return null;
+  for (const re of ZONE_ORDINAL_PATTERNS) {
+    const m = text.match(re);
+    if (m) {
+      const n = ZONE_ORDINAL_WORDS[m[1].toUpperCase()];
+      if (n) return n;
+    }
+  }
+  return null;
+}
+
+// Trim, strip a trailing run of "-"/">"/whitespace, collapse internal whitespace. Key = uppercase
+// of the same normalized string, so "Ambulance Canopy" / "AMBULANCE CANOPY -" map to one zone.
+function normalizeZoneLabel(raw: string | null | undefined): string {
+  return String(raw || "")
+    .replace(/[\s\-–—>]+$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractZoneLabel(text: string | undefined): { display: string; key: string } | null {
+  if (!text) return null;
+  for (const re of ZONE_LABEL_PATTERNS) {
+    const m = text.match(re);
+    if (m) {
+      const display = normalizeZoneLabel(m[1]);
+      if (display) return { display, key: display.toUpperCase() };
+    }
+  }
+  return null;
+}
+
+function extractBracePieceCount(text: string | undefined): number | null {
+  if (!text) return null;
+  const m = text.match(ZONE_BRACE_PIECES_RE);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function extractDensityValue(text: string | undefined): number | null {
+  if (!text) return null;
+  const m = String(text).match(/(\d+(?:\.\d+)?)\s*#/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+type ZoneGroup = { baseline: number; sum: number };
+
+// Walk the parsed line items in document order, detecting zone marker rows, the BDFT-total row
+// that (usually) follows, and the per-thickness piece rows after that. Tags each piece row with
+// offload_seq / zone_label / zone_bdft, drops marker and BDFT-total rows, and returns per-group
+// checksum warnings plus a warning for any zone whose ordinal was never stated. Items outside any
+// zone context pass through unchanged.
+function tagOffloadZones(items: ParsedLineItem[]): {
+  items: ParsedLineItem[];
+  zonesFound: number;
+  warnings: OffloadWarning[];
+} {
+  const zoneInfo = new Map<string, { display: string; seq: number | null }>();
+  const warnings: OffloadWarning[] = [];
+  const tagged: ParsedLineItem[] = [];
+
+  let pending: { key: string; display: string } | null = null; // zone currently open
+  let awaitingSummary = false; // next no-thickness row may declare this group's BDFT total
+  let group: ZoneGroup | null = null; // open BDFT-total group awaiting checksum
+
+  function closeGroup() {
+    const g = group as ZoneGroup | null;
+    if (g && g.baseline != null && Math.round(g.sum) !== Math.round(g.baseline)) {
+      const open = pending as { key: string; display: string } | null;
+      warnings.push({
+        type: "checksum_mismatch",
+        zone_label: open ? open.display : null,
+        expected_bdft: g.baseline,
+        computed_bdft: g.sum,
+      });
+    }
+    group = null;
+  }
+
+  for (const item of items) {
+    const headerText = item.category || "";
+    const ord = extractZoneOrdinal(headerText);
+    const lbl = extractZoneLabel(headerText);
+
+    if (ord != null || lbl != null) {
+      closeGroup();
+      const prev = pending as { key: string; display: string } | null;
+      const key = lbl ? lbl.key : prev ? prev.key : null;
+      if (key) {
+        const display = lbl ? lbl.display : prev!.display;
+        pending = { key, display };
+        const info = zoneInfo.get(key) || { display, seq: null };
+        if (!info.display) info.display = display;
+        if (ord != null && info.seq == null) info.seq = ord;
+        zoneInfo.set(key, info);
+      }
+      awaitingSummary = true;
+      continue; // marker rows aren't real line items
+    }
+
+    if (!pending) {
+      tagged.push(item); // not inside any zone context
+      continue;
+    }
+    const zone = pending as { key: string; display: string };
+
+    const wasAwaitingSummary = awaitingSummary;
+    awaitingSummary = false;
+
+    const thk = extractThickness(item._rawText ?? "");
+    const brace = extractBracePieceCount(item._rawText);
+    const g = group as ZoneGroup | null;
+
+    if (thk != null) {
+      // Piece row.
+      if (brace != null) {
+        // Self-contained: the row's own QTY column is the BDFT for this single row; the real
+        // piece count is the {N pieces} brace.
+        const bdft = item.quantity;
+        const expected = thk * brace * BDFT_PER_INCH_2X4;
+        if (Math.round(expected) !== Math.round(bdft)) {
+          warnings.push({
+            type: "checksum_mismatch", zone_label: zone.display,
+            expected_bdft: bdft, computed_bdft: expected,
+          });
+        }
+        item.quantity = brace;
+        item.zone_bdft = bdft;
+      } else if (g) {
+        g.sum += thk * item.quantity * BDFT_PER_INCH_2X4;
+        item.zone_bdft = g.baseline;
+      } else {
+        // Single-line density group with no separate BDFT-total row — QTY is already the real
+        // piece count; nothing to check.
+        item.zone_bdft = null;
+      }
+      item.thickness = thk;
+      item.offload_seq = zoneInfo.get(zone.key)!.seq;
+      item.zone_label = zone.display;
+      item._zoneKey = zone.key;
+      tagged.push(item);
+      continue;
+    }
+
+    // No thickness: a BDFT-total declaration row if we just saw a marker, else an unrelated
+    // description line (passes through untouched).
+    if (wasAwaitingSummary) {
+      group = { baseline: item.quantity, sum: 0 };
+      continue; // BDFT-total rows aren't real line items
+    }
+
+    tagged.push(item);
+  }
+
+  closeGroup();
+
+  for (const info of Array.from(zoneInfo.values())) {
+    if (info.seq == null) warnings.push({ type: "missing_ordinal", zone_label: info.display });
+  }
+
+  // Final pass: resolve every tagged piece row's seq/label from zoneInfo. A zone's ordinal can be
+  // stated on any of its density groups (format B states it only on the first).
+  for (const item of tagged) {
+    if (item._zoneKey) {
+      const info = zoneInfo.get(item._zoneKey)!;
+      item.offload_seq = info.seq;
+      item.zone_label = info.display;
+      delete item._zoneKey;
+    }
+  }
+
+  return { items: tagged, zonesFound: zoneInfo.size, warnings };
+}
+
+// Flags a line whose category density ("Holey Board:2.0#") disagrees with the density stated in
+// its own description text ("Holey Board 1.0#") — the correct density needs a human call before
+// job create.
+function tagDensityConflicts(items: ParsedLineItem[]): ParsedLineItem[] {
+  for (const item of items) {
+    const catDensity = extractDensityValue(item.category);
+    const descDensity = extractDensityValue(item.description);
+    if (catDensity != null && descDensity != null && Math.abs(catDensity - descDensity) > 1e-9) {
+      item.density_conflict = { category_density: catDensity, description_density: descDensity };
+    }
+  }
+  return items;
+}
+
 // ─── Main document parser ─────────────────────────────────────────────────
 
 function parseDoc(rawItems: RawItem[]): ParsedDoc {
@@ -432,6 +659,8 @@ function parseDoc(rawItems: RawItem[]): ParsedDoc {
     contact_phone: "",
     po_number: "",
     line_items: [],
+    offload_zones_enabled: 0,
+    offload_warnings: [],
   };
 
   const groups = groupByY(rawItems, 3);
@@ -614,8 +843,19 @@ function parseDoc(rawItems: RawItem[]): ParsedDoc {
 
   if (descriptionIdx >= 0) {
     data.line_items = parseLineItems(groups, lines[descriptionIdx].y);
-    data.line_items = dropHbBdftSummaries(data.line_items);
   }
+
+  // slip-parse-05: legacy parseDoc tail order, verbatim — tagOffloadZones → zone flags on the doc →
+  // dropHbBdftSummaries → tagDensityConflicts → delete _rawText → qty filter (below).
+  const zoneResult = tagOffloadZones(data.line_items || []);
+  data.line_items = zoneResult.items;
+  data.offload_zones_enabled = zoneResult.zonesFound > 0 ? 1 : 0;
+  data.offload_warnings = zoneResult.warnings;
+  data.line_items = dropHbBdftSummaries(data.line_items);
+  tagDensityConflicts(data.line_items);
+  data.line_items.forEach((li) => {
+    delete li._rawText;
+  });
 
   data.line_items = (data.line_items || []).filter((li) => {
     const qty = Number(li.quantity);
@@ -660,6 +900,9 @@ function mapToPrefill(data: ParsedDoc): PackingSlipPrefill {
     if (iso) prefill.ship_date = iso;
   }
 
+  prefill.offload_zones_enabled = !!data.offload_zones_enabled;
+  prefill.offload_warnings = data.offload_warnings;
+
   if (data.line_items.length) {
     prefill.line_items = data.line_items.map((li) => {
       const descParts = [li.description];
@@ -672,6 +915,10 @@ function mapToPrefill(data: ParsedDoc): PackingSlipPrefill {
         category: li.category,
         thickness: li.thickness,
         facer_missing: li.facer_missing,
+        offload_seq: li.offload_seq ?? null,
+        zone_label: li.zone_label ?? null,
+        zone_bdft: li.zone_bdft ?? null,
+        ...(li.density_conflict ? { density_conflict: li.density_conflict } : {}),
         density: deriveDensity(
           [li.category, li.description, li.label, ...(li._descLines ?? [])].filter(Boolean).join(" ")
         ),

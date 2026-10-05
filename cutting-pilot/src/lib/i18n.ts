@@ -15,6 +15,45 @@ export const catalog: Record<string, Record<Lang, string>> = {
   "orders.invoiceNumber": { en: "Invoice number", es: "Número de factura", ht: "Nimewo fakti" },
   "orders.orderSaved": { en: "Order saved", es: "Pedido guardado", ht: "Kòmand anrejistre" },
 
+  // slip-parse-05 — packing-slip parse review (offload zones, density conflicts, laminate facer).
+  // Copied verbatim from jobs/jobs-i18n.js (jobs.*). v2 t() has no interpolation — placeholders
+  // ({n}, {label}, {expected}, {computed}, {cat}, {desc}, {density}) are filled with .replace().
+  "orders.offloadZoneGroup": {
+    en: "Zone {n} — {label}",
+    es: "Zona {n} — {label}",
+    ht: "Zòn {n} — {label}",
+  },
+  "orders.offloadChecksumWarning": {
+    en: "⚠ {label}: BDFT mismatch — slip states {expected}, pieces total {computed}",
+    es: "⚠ {label}: discrepancia de BDFT — la hoja indica {expected}, las piezas suman {computed}",
+    ht: "⚠ {label}: BDFT pa matche — bòdwo a montre {expected}, moso yo total {computed}",
+  },
+  "orders.offloadMissingOrdinalWarning": {
+    en: "⚠ \"{label}\" has no stated delivery order — confirm sequence manually",
+    es: "⚠ \"{label}\" no tiene un orden de entrega indicado — confirme la secuencia manualmente",
+    ht: "⚠ \"{label}\" pa gen lòd livrezon ki endike — konfime sekans lan manyèlman",
+  },
+  "orders.densityConflictWarning": {
+    en: "⚠ Density conflict — slip shows {cat}# in one place and {desc}# in another",
+    es: "⚠ Conflicto de densidad — la hoja muestra {cat}# en un lugar y {desc}# en otro",
+    ht: "⚠ Konfli densite — bòdwo a montre {cat}# yon kote ak {desc}# yon lòt kote",
+  },
+  "orders.densityConflictChoose": {
+    en: "Use {density}#",
+    es: "Usar {density}#",
+    ht: "Itilize {density}#",
+  },
+  "orders.densityConflictBlockedCreate": {
+    en: "Resolve the density conflict(s) above before creating this job.",
+    es: "Resuelva el/los conflicto(s) de densidad arriba antes de crear este trabajo.",
+    ht: "Rezoud konfli densite yo anwo anvan ou kreye travay sa a.",
+  },
+  "orders.facerMissingWarning": {
+    en: "⚠ Laminate facer not found on slip — confirm facer (e.g. Kraft / Foil one side) and add it to the description",
+    es: "⚠ No se encontró el tipo de laminado en la hoja — confirme el laminado (p. ej. Kraft / Foil un lado) y agréguelo a la descripción",
+    ht: "⚠ Pa jwenn kalite laminasyon an sou bòdwo a — konfime laminasyon an (egz. Kraft / Foil yon bò) epi ajoute l nan deskripsyon an",
+  },
+
   // prod-a-03 — Production Log (v2): Molding / Expansion board, full en/es/ht.
   "production.board.molding": { en: "Molding", es: "Moldeo", ht: "Moulaj" },
   "production.board.expansion": { en: "Expansion", es: "Expansión", ht: "Ekspansyon" },

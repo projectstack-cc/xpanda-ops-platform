@@ -4,8 +4,9 @@
 //   - legacy  jobs/packing-slip-parser.js  (loaded in node:vm, window.PackingSlipParser._internal.parseDoc)
 //   - v2      src/lib/packingSlip.ts       (_internal.parseDoc)
 // For each fixture it checks the fixture's `expect` against EACH parser, then a legacy↔v2 parity
-// check on the normalized line items. Plus a v2-only Holey Board dims check on INV 4466
-// (hbSlipDims → 48" x 24" x <thk>", Σ bdftPerPiece × qty == 5612). Exit code 1 on any failure.
+// check on the normalized line items + doc-level offload-zone output (slip-parse-05). Plus a
+// v2-only Holey Board dims check on INV 4466 (hbSlipDims → 48" x 24" x <thk>", Σ bdftPerPiece × qty
+// == 5612). Exit code 1 on any failure.
 //
 // Any change to either packing-slip parser must pass this harness.
 //
@@ -49,11 +50,21 @@ function normItem(li) {
     qty_unit: li.qty_unit,
     thickness: li.thickness ?? null,
     facer_missing: li.facer_missing ?? false,
+    // slip-parse-05: offload zones + density conflicts.
+    offload_seq: li.offload_seq ?? null,
+    zone_label: li.zone_label ?? null,
+    zone_bdft: li.zone_bdft ?? null,
+    density_conflict: li.density_conflict ?? null,
   };
 }
 
 function normDoc(doc) {
-  return { invoice_number: doc.invoice_number, line_items: (doc.line_items || []).map(normItem) };
+  return {
+    invoice_number: doc.invoice_number,
+    offload_zones_enabled: doc.offload_zones_enabled ?? 0,
+    offload_warnings: doc.offload_warnings ?? [],
+    line_items: (doc.line_items || []).map(normItem),
+  };
 }
 
 const fmt = (v) => JSON.stringify(v);

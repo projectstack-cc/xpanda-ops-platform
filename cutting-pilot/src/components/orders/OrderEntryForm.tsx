@@ -3,11 +3,11 @@
 // Manual order-entry form for /v2/orders. Single-column, section by section, posts to the
 // P338 contract at POST /v2/api/orders. A packing-slip dropzone (P340) parses a PDF client-side
 // and prefills form state — parsing failures never block manual entry.
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { FileUp, Plus, Printer, Trash2 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import { useLang } from "@/components/lang";
-import { parsePackingSlip } from "@/lib/packingSlip";
+import { parsePackingSlip, type OffloadWarning } from "@/lib/packingSlip";
 import { matchLineItemToPart, loadPartsLibrary, partDimsString, hbSlipDims } from "@/lib/partMatch";
 import { bdftPerPiece, computeTotalBdft } from "@/lib/bdft";
 import { buildCutListPdf, type CutListJob } from "@/lib/cutList";
@@ -31,6 +31,8 @@ export interface OrderLineItem {
   zone_label?: string | null;
   zone_bdft?: number | null;
   facer_missing?: boolean;
+  // slip-parse-05: category vs description density disagree — must be resolved before create.
+  density_conflict?: { category_density: number; description_density: number };
 }
 
 export interface OrderPayload {
@@ -62,13 +64,29 @@ export interface OrderPayload {
   notes: string;
   packing_slip_filename?: string;
   packing_slip_invoice?: string;
+  offload_zones_enabled?: boolean; // slip-parse-05
   line_items: Array<{
     part_number: string;
     description: string;
     quantity: number;
     dimensions: string;
     density: string;
+    offload_seq?: number;
+    zone_label?: string;
+    zone_bdft?: number;
   }>;
+}
+
+// slip-parse-05: v2 t() has no interpolation — fill {placeholders} (function replacer so a label
+// containing "$" is inserted literally).
+function fill(s: string, vars: Record<string, string | number>): string {
+  return s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
+}
+
+// slip-parse-05: density-conflict resolution keeps the line's derived suffix (V / RC), default RC.
+function densitySuffix(density: string): string {
+  const m = (density || "").trim().match(/\b(V|RC)$/i);
+  return m ? m[1].toUpperCase() : "RC";
 }
 
 const EMPTY_LINE: OrderLineItem = { part_number: "", description: "", quantity: "", dimensions: "", density: "" };
@@ -139,6 +157,9 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
   const [procLaminate, setProcLaminate] = useState(false);
 
   const [lineItems, setLineItems] = useState<OrderLineItem[]>([{ ...EMPTY_LINE }]);
+  // slip-parse-05: offload zones from a parsed packing slip (legacy parsedOffloadZonesEnabled).
+  const [offloadZonesEnabled, setOffloadZonesEnabled] = useState(false);
+  const [offloadWarnings, setOffloadWarnings] = useState<OffloadWarning[]>([]);
   const [qtyAsBdft, setQtyAsBdft] = useState(false);
 
   const [cuttingInstructions, setCuttingInstructions] = useState("");
@@ -265,6 +286,14 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
           /* parts unavailable — leave rows for manual entry */
         }
         items = items.map((li) => (li.dimensions ? li : { ...li, dimensions: hbSlipDims(li) }));
+        // slip-parse-05: delivery order, same as legacy prefillForm — zoned lines by offload_seq
+        // ascending (no seq → 999), unzoned lines after in their original parse order.
+        const zoned = items.filter((li) => li.zone_label);
+        const unzoned = items.filter((li) => !li.zone_label);
+        zoned.sort((a, b) => (a.offload_seq ?? 999) - (b.offload_seq ?? 999));
+        items = [...zoned, ...unzoned];
+        setOffloadZonesEnabled(!!data.offload_zones_enabled);
+        setOffloadWarnings(data.offload_warnings ?? []);
         setLineItems(items);
       }
     } catch {
@@ -348,6 +377,8 @@ function setQtyAsBdftConvert(on: boolean) {
     setProcBlueLine(false);
     setProcLaminate(false);
     setLineItems([{ ...EMPTY_LINE }]);
+    setOffloadZonesEnabled(false);
+    setOffloadWarnings([]);
     setQtyAsBdft(false);
     setCuttingInstructions("");
     setPackingInstructions("");
@@ -502,6 +533,12 @@ function setQtyAsBdftConvert(on: boolean) {
     e.preventDefault();
     setError(null);
 
+    // slip-parse-05: legacy saveJob() parity — unresolved density conflicts block create.
+    if (lineItems.some((li) => li.density_conflict)) {
+      setError(t("orders.densityConflictBlockedCreate"));
+      return;
+    }
+
     if (!customer.trim()) {
       setError("Customer is required.");
       return;
@@ -541,6 +578,7 @@ function setQtyAsBdftConvert(on: boolean) {
       ...(packingSlipFilename ? { packing_slip_filename: packingSlipFilename } : {}),
       ...(packingSlipFilename && invoiceNumber.trim() ? { packing_slip_invoice: invoiceNumber.trim() } : {}),
       ...(packingSlipBase64 ? { packing_slip_pdf: packingSlipBase64 } : {}),
+      offload_zones_enabled: offloadZonesEnabled,
       line_items: lineItems
         .filter((li) => li.part_number.trim() || li.description.trim())
         .map((li) => ({
@@ -550,6 +588,9 @@ function setQtyAsBdftConvert(on: boolean) {
           dimensions: li.dimensions.trim(),
           density: li.density.trim(),
           ...(li.part_id ? { part_id: li.part_id } : {}),
+          ...(li.offload_seq != null ? { offload_seq: li.offload_seq } : {}),
+          ...(li.zone_label ? { zone_label: li.zone_label } : {}),
+          ...(li.zone_bdft != null ? { zone_bdft: li.zone_bdft } : {}),
         })),
     };
 
@@ -862,16 +903,39 @@ function setQtyAsBdftConvert(on: boolean) {
               </div>
             </div>
           )}
+          {/* slip-parse-05: offload-zone checksum / missing-ordinal warnings (legacy renderOffloadZoneWarnings) */}
+          {offloadWarnings.length > 0 && (
+            <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] px-3 py-2 text-xs font-semibold space-y-1">
+              {offloadWarnings.map((w, i) => (
+                <div key={i}>
+                  {w.type === "checksum_mismatch"
+                    ? fill(t("orders.offloadChecksumWarning"), {
+                        label: w.zone_label || "",
+                        expected: w.expected_bdft,
+                        computed: w.computed_bdft,
+                      })
+                    : fill(t("orders.offloadMissingOrdinalWarning"), { label: w.zone_label || "" })}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="space-y-3">
             {lineItems.map((li, idx) => (
-              <div key={idx} className="rounded-lg border border-[var(--card-border)] p-3 space-y-2">
+              <Fragment key={idx}>
+              {/* slip-parse-05: zone divider before the first line of each zone (display only) */}
+              {li.zone_label && li.zone_label !== lineItems[idx - 1]?.zone_label && (
+                <div className="pt-2 pb-1 border-b border-[var(--card-border)] text-xs font-bold uppercase tracking-wide text-muted">
+                  {fill(t("orders.offloadZoneGroup"), { n: li.offload_seq ?? "—", label: li.zone_label })}
+                </div>
+              )}
+              <div className="rounded-lg border border-[var(--card-border)] p-3 space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <TextField label="Part number" value={li.part_number} onChange={(v) => updateLine(idx, { part_number: v })} />
                   <TextField label="Description" value={li.description} onChange={(v) => updateLine(idx, { description: v, facer_missing: false })} />
                 </div>
                 {li.facer_missing && (
                   <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] px-3 py-2 text-xs font-semibold">
-                    ⚠ Laminate facer not found on slip — confirm facer (e.g. Kraft / Foil one side) and add it to the description
+                    {t("orders.facerMissingWarning")}
                   </div>
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
@@ -897,7 +961,34 @@ function setQtyAsBdftConvert(on: boolean) {
                     <Trash2 size={16} aria-hidden="true" />
                   </button>
                 </div>
+                {/* slip-parse-05: density-conflict resolver (legacy addDensityConflictResolver) */}
+                {li.density_conflict && (
+                  <div className="rounded-md bg-[var(--danger-bg)] text-[var(--danger-text)] px-3 py-2 text-xs font-semibold flex flex-wrap items-center gap-2">
+                    <span>
+                      {fill(t("orders.densityConflictWarning"), {
+                        cat: li.density_conflict.category_density.toFixed(1),
+                        desc: li.density_conflict.description_density.toFixed(1),
+                      })}
+                    </span>
+                    {[li.density_conflict.category_density, li.density_conflict.description_density].map((d, di) => (
+                      <button
+                        key={di}
+                        type="button"
+                        onClick={() =>
+                          updateLine(idx, {
+                            density: `${d.toFixed(1)} ${densitySuffix(li.density)}`,
+                            density_conflict: undefined,
+                          })
+                        }
+                        className="min-h-[44px] px-3 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm font-semibold hover:bg-[var(--ghost-bg)] cursor-pointer"
+                      >
+                        {fill(t("orders.densityConflictChoose"), { density: d.toFixed(1) })}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
+              </Fragment>
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-3">

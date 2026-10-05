@@ -9,6 +9,14 @@ import { getEnv } from "@/lib/db";
 import { createJob, type JobCreateInput } from "@/lib/jobCreate";
 import { PROCESS_NAMES } from "@/lib/processes";
 
+// slip-parse-05: identical to slip-parse-03's copy in orders/[id]/route.ts (ported verbatim from
+// _worker.js/routes/jobs.js) — offload-zone line fields from a parsed packing slip.
+function nullableInt(v: any): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function GET() {
   const { DB } = await getEnv();
   try {
@@ -88,6 +96,7 @@ export async function POST(request: NextRequest) {
     ship_to_verified: s(p.ship_to_verified) || "unverified",
     ship_to_standardized: p.ship_to_standardized ? JSON.stringify(p.ship_to_standardized) : null,
     ship_to_verified_at: s(p.ship_to_verified_at) || null,
+    offload_zones_enabled: !!p.offload_zones_enabled,
     line_items: lineItems.map((raw: any) => {
       const li = raw ?? {};
       return {
@@ -97,6 +106,7 @@ export async function POST(request: NextRequest) {
         quantity: Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
         dimensions: s(li.dimensions),
         density: li.density ? s(li.density) : null,
+        offload_seq: nullableInt(li.offload_seq), zone_label: li.zone_label ? s(li.zone_label) : null, zone_bdft: nullableInt(li.zone_bdft),
       };
     }),
   };

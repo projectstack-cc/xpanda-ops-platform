@@ -714,6 +714,41 @@ current series).
 
 ## Orders (v2)
 
+- **slip-parse-05 — v2 packing-slip parity: offload zones, checksum/ordinal warnings, density-conflict resolver,
+  zone data persisted on create (React Component Agent §9b + Next/Cloudflare Platform Agent §9a; legacy owned by
+  Job Board Agent §2, not edited). No migration** — `jobs.offload_zones_enabled` and `job_line_items.offload_seq /
+  zone_label / zone_bdft` already exist (the same columns legacy `_worker.js/routes/jobs.js` POST writes; not
+  re-checked with `pragma_table_info` this session — no D1 access used). **Parser** (`src/lib/packingSlip.ts`):
+  verbatim behavioral port of legacy `ZONE_ORDINAL_WORDS` / `ZONE_ORDINAL_PATTERNS` / `ZONE_LABEL_PATTERNS` /
+  `ZONE_BRACE_PIECES_RE`, `extractZoneOrdinal`, `normalizeZoneLabel`, `extractZoneLabel`, `extractBracePieceCount`,
+  `extractDensityValue`, `tagOffloadZones`, `tagDensityConflicts` (reusing slip-parse-02's `BDFT_PER_INCH_2X4`);
+  `parseLineItems` sets `_rawText` like legacy; `parseDoc` tail now runs legacy's exact order (tagOffloadZones →
+  `offload_zones_enabled`/`offload_warnings` → dropHbBdftSummaries → tagDensityConflicts → delete `_rawText` → qty
+  filter). New exported `OffloadWarning` union; `PackingSlipPrefill` carries `offload_zones_enabled` +
+  `offload_warnings`, each line `offload_seq` / `zone_label` / `zone_bdft` / `density_conflict`. **Order entry**
+  (`OrderEntryForm.tsx`): zone state from the prefill (reset with the form); parsed lines ordered zoned-first by
+  `offload_seq` (null → 999), unzoned after in parse order; muted uppercase `Zone {n} — {label}` divider before each
+  zone's first line; amber `--warn-*` banner for checksum / missing-ordinal warnings; red `--danger-*` resolver under
+  each density-conflict line with two ≥44px `Use {d}#` buttons (sets `"{d.toFixed(1)} {V|RC}"` keeping the line's
+  suffix, clears the conflict); submit blocked with the legacy message while any conflict remains; create payload
+  sends per-line zone fields (only when non-null) + `offload_zones_enabled`. slip-parse-01's English-only facer note
+  now uses `orders.facerMissingWarning`. **i18n**: 7 new `orders.*` keys (en/es/ht) copied verbatim from
+  `jobs/jobs-i18n.js`, placeholders filled via a local `fill()` (function replacer). **Create path**:
+  `orders/route.ts` POST maps the zone fields through a local `nullableInt` (identical to slip-parse-03's) and
+  `offload_zones_enabled: !!p.offload_zones_enabled`; `jobCreate.ts` `JobCreateLineItem` / `JobCreateInput` gain
+  optional zone fields, `lineItemInsertStatements` binds them `?? null` (QB review apply keeps writing NULL), and the
+  `jobs` INSERT appends `offload_zones_enabled` (45 columns / 45 placeholders / 45 binds) bound `? 1 : 0` (QB → 0).
+  QB mapper (17) + webhook (16) selfchecks still pass. **Harness**: three synthetic fixtures built from the two real
+  wordings in `Prompts/archived_prompts/lbz-parse-01.md` (the prompt cited `Prompts/lbz-parse-01.md`, which has been
+  archived): SYN 9101 format A (unzoned row, two ordinal zones, a 2.0# single-line group, a 999-vs-910 checksum
+  mismatch, a no-ordinal zone), SYN 9102 format B (summary row with no BDFT suffix, `{27 pieces)` brace row, an
+  ordinal stated only on a zone's later group), SYN 9103 (category 2.0# vs description 1.0#). Expectations taken from
+  legacy's output. The parity normalizer now also compares `offload_seq` / `zone_label` / `zone_bdft` /
+  `density_conflict` and doc-level `offload_zones_enabled` / `offload_warnings`. All 7 fixtures pass both parsers and
+  parity. Verified the harness catches regressions: dropping v2's `tagDensityConflicts` fails 9103, and dropping the
+  zoneInfo final pass fails 9102. No real zoned slip in `Prompts/fixtures/` yet (folder absent), so that step was
+  skipped. Follow-ups in `BACKLOG.md`: a v2 zone editor for existing jobs, and the unported `reassemblePageBreaks`.
+
 - **slip-parse-04 — committed packing-slip fixtures + legacy↔v2 parity harness (React Component Agent §9b,
   Job Board Agent §2 consulted). No migration, no runtime behavior change.** New `src/lib/packingSlipFixtures.ts`:
   `SLIP_FIXTURES` — real INV 4417 (wrapped laminate facer) and INV 4466 (HB BDFT-total row + card fee + notes) as

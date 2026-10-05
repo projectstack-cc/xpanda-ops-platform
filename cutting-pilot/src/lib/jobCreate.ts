@@ -18,6 +18,10 @@ export interface JobCreateLineItem {
   quantity: number;
   dimensions: string;
   density: string | null;
+  // slip-parse-05: offload-zone line data (packing-slip parse). QB paths leave these unset → NULL.
+  offload_seq?: number | null;
+  zone_label?: string | null;
+  zone_bdft?: number | null;
 }
 
 export interface JobCreateInput {
@@ -58,6 +62,7 @@ export interface JobCreateInput {
   ship_to_verified: string;
   ship_to_standardized: string | null; // already JSON-stringified
   ship_to_verified_at: string | null;
+  offload_zones_enabled?: boolean; // slip-parse-05: zoned packing slip; QB mapper/jobState don't set it → 0
   line_items: JobCreateLineItem[];
 }
 
@@ -77,14 +82,15 @@ export function lineItemInsertStatements(
 ): D1PreparedStatement[] {
   return lineItems.map((li, i) =>
     DB.prepare(`
-      INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order)
-      VALUES (?,?,?,?,?,?,?,?,?)
+      INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order, offload_seq, zone_label, zone_bdft)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
     `).bind(
       crypto.randomUUID(), jobId,
       li.part_id,
       li.part_number, li.description,
       li.quantity,
       li.dimensions, li.density, i,
+      li.offload_seq ?? null, li.zone_label ?? null, li.zone_bdft ?? null,
     )
   );
 }
@@ -154,8 +160,9 @@ export async function createJob(
       packing_slip_key, packing_slip_pdf, packing_slip_filename, packing_slip_invoice, source,
       ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
       ship_to_city, ship_to_state, ship_to_zip,
-      ship_to_verified, ship_to_standardized, ship_to_verified_at, trailer_group_id
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ship_to_verified, ship_to_standardized, ship_to_verified_at, trailer_group_id,
+      offload_zones_enabled
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).bind(
     id, status, customer, input.po_number, input.invoice_number, ship_date, input.ship_day,
     location, delivery_time, method, carrier, load_count, total_bdft,
@@ -168,6 +175,7 @@ export async function createJob(
     input.ship_to_city, input.ship_to_state, input.ship_to_zip,
     input.ship_to_verified, input.ship_to_standardized,
     input.ship_to_verified_at, null,
+    input.offload_zones_enabled ? 1 : 0,
   ).run();
 
   for (const stmt of lineItemInsertStatements(DB, id, lineItems)) await stmt.run();
