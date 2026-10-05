@@ -714,6 +714,18 @@ current series).
 
 ## Orders (v2)
 
+- **slip-parse-03 — v2 edit modal / `PUT /v2/api/orders/:id` preserve offload-zone line data (data-loss fix;
+  Next/Cloudflare Platform Agent §9a + React Component Agent §9b). No migration.** The PUT deletes and re-inserts
+  `job_line_items` wholesale, but only wrote `part_id … density, sort_order`, and `GET /v2/api/board/:id` never returned the
+  zone columns — so ANY save from the v2 board edit modal on a zoned job (even a notes edit) permanently erased
+  `offload_seq` / `zone_label` / `zone_bdft`, which feed the BOL zone columns and the legacy zone editor. Now:
+  `board/[id]` GET selects the three columns; `OrderLineItem` (`OrderEntryForm.tsx`) and `StoredLineItem`
+  (`OrderEditModal.tsx`) carry them; the modal's load mapping, dirty snapshot (`buildCurrentSnapshot`, so an untouched
+  order isn't falsely dirty) and save payload round-trip them (rows added in the modal send null — unzoned); the PUT
+  re-inserts them with a local `nullableInt()` ported verbatim from `_worker.js/routes/jobs.js`. `jobs.offload_zones_enabled`
+  untouched (PUT never sent it). Audit of other `INSERT INTO job_line_items` in `src/`: only `lib/jobCreate.ts` (create
+  path — slip-parse-05; QB review apply already holds zoned jobs via `qb/jobState.ts`).
+
 - **slip-parse-02 — v2 Holey Board dimensions from matched part (+ slip fallback); BDFT-total summary-row drop
   parity (React Component Agent §9b). No migration.** HB slips never print a 3-part dimension, so v2 HB lines had
   blank `dimensions` → `bdftPerPiece()` null, Total BDFT 0, nothing for the load builder to pack. `partMatch.ts`:

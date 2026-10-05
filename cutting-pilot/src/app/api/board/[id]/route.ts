@@ -26,7 +26,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
     `).bind(id).first<any>();
     if (!job) return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 });
     const li = await DB.prepare(`
-      SELECT id, part_id, part_number, description, quantity, dimensions, density
+      SELECT id, part_id, part_number, description, quantity, dimensions, density, offload_seq, zone_label, zone_bdft
         FROM job_line_items WHERE job_id = ? ORDER BY sort_order ASC
     `).bind(id).all();
     // shifts[] — mirrors /api/jobs/:id/shifts GET for the modal's chip section. Lazily fetched

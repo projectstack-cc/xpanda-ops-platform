@@ -61,6 +61,10 @@ interface StoredLineItem {
   quantity: number | string | null;
   dimensions: string | null;
   density: string | null;
+  // slip-parse-03: offload-zone columns — round-tripped so a save doesn't wipe them.
+  offload_seq?: number | null;
+  zone_label?: string | null;
+  zone_bdft?: number | null;
 }
 
 interface BoardResponse {
@@ -205,6 +209,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
           quantity: li.quantity == null ? "" : String(li.quantity),
           dimensions: li.dimensions ?? "",
           density: li.density ?? "",
+          offload_seq: li.offload_seq ?? null, zone_label: li.zone_label ?? null, zone_bdft: li.zone_bdft ?? null,
         }));
         setLineItems(lis.length ? lis : [{ ...EMPTY_LINE }]);
         setShifts(Array.isArray(shiftsJson.shifts) ? shiftsJson.shifts : []);
@@ -278,6 +283,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
         quantity: li.quantity,
         dimensions: li.dimensions,
         density: li.density,
+        offload_seq: li.offload_seq ?? null, zone_label: li.zone_label ?? null, zone_bdft: li.zone_bdft ?? null,
       })),
     };
     return JSON.stringify(cur);
@@ -327,6 +333,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
           quantity: Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
           dimensions: (li.dimensions || "").trim(),
           density: li.density || "",
+          offload_seq: li.offload_seq ?? null, zone_label: li.zone_label ?? null, zone_bdft: li.zone_bdft ?? null,
         })),
       };
       const res = await fetch(`/v2/api/orders/${job.id}`, {

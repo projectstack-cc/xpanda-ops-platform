@@ -23,6 +23,12 @@ const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const STATUSES = ["not_started", "in_production", "done", "loading", "shipped"];
 const PRIORITIES = ["normal", "rush"];
 const SOURCES = ["manual", "packing_slip"];
+// slip-parse-03: ported verbatim from _worker.js/routes/jobs.js — zone columns round-trip on line-item replace.
+function nullableInt(v: any): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
 // Fields the legacy PUT allows as free-text columns. `packing_slip_filename` +
 // `packing_slip_invoice` are intentionally excluded here — the modal does not upload a
 // packing slip, and packing_slip_pdf/key are out of scope per the prompt.
@@ -206,14 +212,15 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
       for (let i = 0; i < p.line_items.length; i++) {
         const li = p.line_items[i] ?? {};
         await DB.prepare(`
-          INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order)
-          VALUES (?,?,?,?,?,?,?,?,?)
+          INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order, offload_seq, zone_label, zone_bdft)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         `).bind(
           crypto.randomUUID(), id,
           li.part_id ? s(li.part_id) : null,
           s(li.part_number), s(li.description),
           Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
           s(li.dimensions), li.density ? s(li.density) : null, i,
+          nullableInt(li.offload_seq), li.zone_label ? s(li.zone_label) : null, nullableInt(li.zone_bdft),
         ).run();
       }
     }

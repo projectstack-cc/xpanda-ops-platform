@@ -26,6 +26,10 @@ export interface OrderLineItem {
   dimensions: string;
   density: string;
   bdftOrig?: string;
+  // slip-parse-03: offload-zone line data, carried through edit round-trips (client only).
+  offload_seq?: number | null;
+  zone_label?: string | null;
+  zone_bdft?: number | null;
   facer_missing?: boolean;
 }
 
