@@ -2,7 +2,7 @@
 // Shared hook (prod-c-04): resolve design tokens to real color strings for recharts. Recharts
 // writes fill/stroke as raw SVG presentation attributes, so var(--token) can't be passed through
 // reliably — resolve on mount and again whenever the theme toggles. SSR-safe: returns the
-// fallbacks until mounted. (FinancialsPanel still has its own inline copy — BACKLOG.)
+// fallbacks until mounted.
 import { useEffect, useState } from "react";
 import { useTheme } from "@/components/theme";
 

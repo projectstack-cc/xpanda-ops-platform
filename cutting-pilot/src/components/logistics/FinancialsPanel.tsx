@@ -17,6 +17,7 @@ import {
   Legend,
 } from "recharts";
 import InfoTip from "@/components/InfoTip";
+import { useTokenColors } from "@/components/charts/useTokenColors";
 import ZipLinesModal from "@/components/logistics/ZipLinesModal";
 
 interface Totals {
@@ -94,21 +95,20 @@ const CHART_TOOLTIP_STYLE = {
   fontSize: 12,
 };
 
+// recharts renders fill/stroke as raw SVG presentation attributes, not CSS — tokens resolved to real
+// color strings via useTokenColors (quickwin-08).
+const FIN_TOKENS = {
+  brand: { var: "--brand", fallback: "#e31837" },
+  accent: { var: "--accent", fallback: "#0f172a" },
+} as const;
+
 export default function FinancialsPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AnalyticsResponse | null>(null);
   const [drillZip, setDrillZip] = useState<string | null>(null);
-  // recharts renders fill/stroke as raw SVG presentation attributes, not CSS — resolve the
-  // design tokens to real color strings once mounted rather than trusting var() there.
-  const [colors, setColors] = useState({ brand: "#e31837", accent: "#0f172a" });
-
-  useEffect(() => {
-    const style = getComputedStyle(document.documentElement);
-    const brand = style.getPropertyValue("--brand").trim();
-    const accent = style.getPropertyValue("--accent").trim();
-    setColors({ brand: brand || "#e31837", accent: accent || "#0f172a" });
-  }, []);
+  // quickwin-08: shared hook — resolves the tokens on mount AND on theme toggle.
+  const colors = useTokenColors(FIN_TOKENS);
 
   useEffect(() => {
     let cancelled = false;

@@ -2362,6 +2362,8 @@ current series).
 
 ## Production Log (v2)
 
+- **quickwin-08 — two DRY refactors: FinancialsPanel → `useTokenColors`; shared silo-state styles (react-component-agent §9b). No migration, no data-logic change.** (A) `components/logistics/FinancialsPanel.tsx` resolved `--brand` / `--accent` once on mount with its own inline `getComputedStyle` copy predating the shared `components/charts/useTokenColors.ts` hook (prod-c-04), so its charts didn't recolor on a theme toggle. Now a module-level `FIN_TOKENS` + `const colors = useTokenColors(FIN_TOKENS)`; call sites unchanged; the hook's header no longer mentions the inline copy. Small dark-mode fix: Financials charts recolor immediately on light/dark toggle. (B) New `app/production/siloStateStyle.ts` exports `SILO_STATE_KEY` / `SILO_STATE_CLS` (`Record<SiloState, string>`, token classes only), moved verbatim from `SiloGrid.tsx` after an entry-by-entry diff against `tv/ProductionTvBoard.tsx`'s copies (identical). Both files import the shared maps; the TV board keeps its fallbacks and casts at the two call sites (`s.state as SiloState`) rather than loosening the map type. `AMBER_CLS` untouched. Verified: `tsc --noEmit` clean, `cf-build` green (batch build), LF-only; no `getComputedStyle` left in FinancialsPanel; the state maps are defined only in `siloStateStyle.ts`.
+
 - **prod-d-04 follow-up — TV layout fix (found in live browser verification).** With more cards
   than fit on screen, the columns grid (`flex-1 min-h-0`) shrank and its cards overflowed under
   the SILOS strip. The grid is now `flex-none` so the inset container scrolls, and the silo strip

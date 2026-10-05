@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useLang } from "@/components/lang";
 import { formatDuration } from "@/lib/time";
 import type { SiloRow, SiloState } from "@/lib/productionSilos";
+import { SILO_STATE_CLS, SILO_STATE_KEY } from "./siloStateStyle";
 
 export type SiloGridMode = "expansion" | "molding" | "view";
 
@@ -20,20 +21,6 @@ interface Props {
   onPick?: (silo: SiloRow) => void;
   selectedNo?: number | null;
 }
-
-const STATE_KEY: Record<SiloState, string> = {
-  empty: "production.silo.state.empty",
-  filling: "production.silo.state.filling",
-  full: "production.silo.state.full",
-  in_use: "production.silo.state.inUse",
-};
-
-const STATE_CLS: Record<SiloState, string> = {
-  empty: "bg-[var(--ghost-bg)] text-muted border-border",
-  filling: "bg-[var(--info-bg)] text-[var(--info-text)] border-[var(--info-border)]",
-  full: "bg-[var(--success-bg)] text-[var(--success-text)] border-[var(--success-text)]",
-  in_use: "bg-[var(--warn-bg)] text-[var(--warn-text)] border-[var(--warn-border)]",
-};
 
 function parseUtcMs(ts: string | null): number | null {
   if (!ts) return null;
@@ -76,7 +63,7 @@ export default function SiloGrid({ silos, mode, rowLotId, onPick, selectedNo }: 
             type="button"
             disabled={!clickable}
             onClick={clickable ? () => onPick!(s) : undefined}
-            aria-label={`${s.label} — ${t(STATE_KEY[s.state])}${s.lot_no ? ` — ${t("production.field.lotNo")} ${s.lot_no}` : ""}`}
+            aria-label={`${s.label} — ${t(SILO_STATE_KEY[s.state])}${s.lot_no ? ` — ${t("production.field.lotNo")} ${s.lot_no}` : ""}`}
             className={[
               "min-h-[44px] text-left rounded border px-3 py-2 flex flex-col gap-1",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
@@ -90,8 +77,8 @@ export default function SiloGrid({ silos, mode, rowLotId, onPick, selectedNo }: 
               <span className={["text-sm font-semibold text-text", !s.active ? "line-through" : ""].join(" ")}>
                 {s.label}
               </span>
-              <span className={`px-2 py-0.5 rounded border text-xs font-semibold whitespace-nowrap ${STATE_CLS[s.state]}`}>
-                {t(STATE_KEY[s.state])}
+              <span className={`px-2 py-0.5 rounded border text-xs font-semibold whitespace-nowrap ${SILO_STATE_CLS[s.state]}`}>
+                {t(SILO_STATE_KEY[s.state])}
               </span>
             </span>
             {s.state !== "empty" ? (

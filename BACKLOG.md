@@ -39,15 +39,12 @@
   prod-a-02's manage/sheets delete, no admin view to browse/undelete them).
 - [ ] Options admin: rename/reorder dropdown values (retire/restore exists via prod-a-02's
   manage/options PATCH; renaming and manual sort-order changes do not).
-- [ ] Extract `SiloGrid`'s silo state → token mapping (`STATE_CLS` / `STATE_KEY`) into a shared module; `/v2/production/tv` mirrors it locally. (found in prod-d-04)
 - [ ] Manual silo correction to a new lot sets `density` NULL, so that fill's `full` event doesn't
   count toward expansion schedule progress. Revisit if managers correct fills in practice.
   (found in prod-d-02)
 - [ ] Expansion sheet supplier/bead type can still be edited after batches (only density is
   locked). The silo's supplier/type come from the lot, so progress is unaffected, but the header
   can disagree with its batches. (found in prod-d-02)
-- [ ] Refactor components/logistics/FinancialsPanel.tsx to the shared
-  components/charts/useTokenColors hook (added in prod-c-04).
 - [ ] Revisit block-weight spec bands after Steve reviews prod-c-04 control limits across
   a real run; consider a per-recipe target + tolerance as recipe v2.
 - [ ] Report: consider moving stats server-side if filtered ranges regularly hit the

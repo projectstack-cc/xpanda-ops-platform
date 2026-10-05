@@ -14,6 +14,8 @@ import { AlertTriangle, Check, Clock } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import { translate } from "@/lib/i18n";
 import { parseUtcTs } from "@/lib/productionHistory";
+import { SILO_STATE_CLS, SILO_STATE_KEY } from "../siloStateStyle";
+import type { SiloState } from "@/lib/productionSilos";
 import { expansionKey, type DashboardData, type ScheduleLineWithProgress } from "@/lib/productionSchedule";
 
 const POLL_MS = 30_000;
@@ -23,20 +25,6 @@ const MOLDING_IDLE_MIN = 15;
 const EXPANSION_IDLE_MIN = 30;
 // Copied from components/schedule/ScheduleBoard.tsx (P415 wall-display cursor hide).
 const CURSOR_IDLE_MS = 15_000;
-
-// Mirrors SiloGrid's STATE_CLS (not exported there) — BACKLOG: extract one shared mapping.
-const SILO_STATE_CLS: Record<string, string> = {
-  empty: "bg-[var(--ghost-bg)] text-muted border-border",
-  filling: "bg-[var(--info-bg)] text-[var(--info-text)] border-[var(--info-border)]",
-  full: "bg-[var(--success-bg)] text-[var(--success-text)] border-[var(--success-text)]",
-  in_use: "bg-[var(--warn-bg)] text-[var(--warn-text)] border-[var(--warn-border)]",
-};
-const SILO_STATE_KEY: Record<string, string> = {
-  empty: "production.silo.state.empty",
-  filling: "production.silo.state.filling",
-  full: "production.silo.state.full",
-  in_use: "production.silo.state.inUse",
-};
 
 const AMBER_CLS = "bg-[var(--warn-bg)] text-[var(--warn-text)] border-[var(--warn-border)]";
 
@@ -424,11 +412,11 @@ export default function ProductionTvBoard({ userName, isAdmin, permissions }: Pr
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-12 gap-2">
               {data.silos.map((s) => {
                 const fullMs = s.state === "full" || s.state === "in_use" ? parseUtcTs(s.full_at) : null;
-                const st = bi(SILO_STATE_KEY[s.state] ?? "production.silo.state.empty");
+                const st = bi(SILO_STATE_KEY[s.state as SiloState] ?? "production.silo.state.empty");
                 return (
                   <div
                     key={s.silo_no}
-                    className={["rounded border px-2 py-1.5 flex flex-col gap-0.5", SILO_STATE_CLS[s.state] ?? SILO_STATE_CLS.empty, s.active ? "" : "opacity-40"].join(" ")}
+                    className={["rounded border px-2 py-1.5 flex flex-col gap-0.5", SILO_STATE_CLS[s.state as SiloState] ?? SILO_STATE_CLS.empty, s.active ? "" : "opacity-40"].join(" ")}
                   >
                     <span className="flex items-baseline justify-between gap-1">
                       <span className="font-bold text-[clamp(0.9rem,1.2vw,1.2rem)]">{s.label}</span>
