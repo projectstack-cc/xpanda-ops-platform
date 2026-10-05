@@ -82,6 +82,12 @@ const BOARD_STATUS_OPTIONS = ["not_started", "in_production", "done", "loading"]
   label: STATUS_VARIANTS[value].label,
 }));
 
+// quickwin-02: cutting-line filter. Process names are data values — never translate/rename them.
+const BOARD_LINE_OPTIONS = [
+  { value: "__none__", label: "No lines assigned" },
+  ...PROCESSES.map((p) => ({ value: p.name, label: p.name })),
+];
+
 const actionBtnClass =
   "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] cursor-pointer";
 
@@ -106,6 +112,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   const [weekOffset, setWeekOffset] = useState<number | null>(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [lineFilter, setLineFilter] = useState("");
   // Set when a status-modal pick targets a row that wasn't rendered; scrolled to after re-render.
   const [pendingScrollId, setPendingScrollId] = useState<string | null>(null);
 
@@ -177,6 +184,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
     // the list to everything, then scroll once it has rendered.
     setSearchQuery("");
     setStatusFilter("");
+    setLineFilter("");
     setWeekOffset(null);
     setView("list");
     setPendingScrollId(jobId);
@@ -203,6 +211,8 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
     if (!data) return [];
     let jobs = data.jobs;
     if (statusFilter) jobs = jobs.filter((j) => j.status === statusFilter);
+    if (lineFilter === "__none__") jobs = jobs.filter((j) => j.processes.length === 0);
+    else if (lineFilter) jobs = jobs.filter((j) => j.processes.some((p) => p.name === lineFilter));
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       jobs = jobs.filter((j) =>
@@ -227,7 +237,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
       });
     }
     return jobs;
-  }, [data, statusFilter, searchQuery, weekOffset]);
+  }, [data, statusFilter, lineFilter, searchQuery, weekOffset]);
 
   // Grouped by ship date; "No Date" last. Within a day, the API's order (priority_level DESC).
   const dayGroups = useMemo(() => {
@@ -295,6 +305,12 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                 allLabel="All Statuses"
                 options={BOARD_STATUS_OPTIONS}
               />
+              <FilterSelect
+                value={lineFilter}
+                onChange={setLineFilter}
+                allLabel="All Lines"
+                options={BOARD_LINE_OPTIONS}
+              />
             </>
           }
         />
@@ -334,12 +350,13 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                     ? "No jobs are scheduled for this week. Switch to Next Week or Show All."
                     : "No jobs scheduled for this period."}
                 </p>
-                {(searchQuery || statusFilter || weekOffset !== 0) && (
+                {(searchQuery || statusFilter || lineFilter || weekOffset !== 0) && (
                   <button
                     type="button"
                     onClick={() => {
                       setSearchQuery("");
                       setStatusFilter("");
+                      setLineFilter("");
                       setWeekOffset(0);
                     }}
                     className="mt-4 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[var(--border)] text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] cursor-pointer"

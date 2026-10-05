@@ -290,8 +290,6 @@
   logistics KPI tiles, if wanted (board-ui-01 kept `StatusModal` as-is).
 - [ ] Note: `/v2/board` remains unlinked after board-ui-01 — the existing "Re-link `/v2/board`" item
   above is unchanged.
-- [ ] Board filter: "Unassigned lines" quick filter (jobs with no `processes` — the "No lines" pill from
-  board-lines-01), so QB-intake jobs needing line assignment are one click away.
 - [ ] **sched-shifts-02 follow-up — `/v2/board` Job Board redesign: if shift chips are added to the list/cards, hide them via `isCuttingComplete()` (lib/schedule-status.ts) for parity with schedule + legacy board.**
 - [ ] Decide whether v2 should ever set `processes[].completed` (currently only legacy pills do; unused
   in live data). board-lines-01 preserves the flag server-side but never sets it.

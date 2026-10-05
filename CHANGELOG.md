@@ -714,6 +714,8 @@ current series).
 
 ## Orders (v2)
 
+- **quickwin-02 — `/v2/board` cutting-line filter incl. "No lines assigned" (react-component-agent §9b). Client-side only; no API change, no migration.** QB-intake jobs arrive with no cutting lines (the "No lines" pill) but couldn't be pulled up together. `ProductionBoard.tsx` gains a second `FilterSelect` ("All Lines") next to the status filter: "No lines assigned" (`processes.length === 0`) then one option per `PROCESSES` name (data values, untranslated). Applied right after the status filter in the list memo (composes with status → search → week; Calendar view unaffected); cleared by the empty-state "Reset" button and by the modal-pick widen path (`handleSelectFromModal`). `/v2/board` stays unlinked. Verified: `tsc --noEmit` clean, `cf-build` green (batch build), LF-only; walkthrough — `__none__` keeps only empty-`processes` jobs, a line name keeps jobs whose `processes` include it, Reset clears it.
+
 - **slip-parse-05 — v2 packing-slip parity: offload zones, checksum/ordinal warnings, density-conflict resolver,
   zone data persisted on create (React Component Agent §9b + Next/Cloudflare Platform Agent §9a; legacy owned by
   Job Board Agent §2, not edited). No migration** — `jobs.offload_zones_enabled` and `job_line_items.offload_seq /
