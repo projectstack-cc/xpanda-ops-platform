@@ -118,6 +118,7 @@ if (!window.__xpandaPwaInstallLoaded) {
         <div class="xpanda-gear-popover" id="hdr-gear-popover" role="menu" hidden>
           <div class="xpanda-gear-row"><span class="xpanda-gear-label">${t('common.display', null, 'Display')}</span>${modeToggleHtml}</div>
           <div class="xpanda-gear-row"><span class="xpanda-gear-label">${t('common.theme', null, 'Theme')}</span>${themeToggleHtml}</div>
+          <a href="/account/password" class="xpanda-gear-link" role="menuitem">${t('common.changePassword', null, 'Change password')}</a>
         </div>
       </div>`;
 
@@ -183,6 +184,9 @@ if (!window.__xpandaPwaInstallLoaded) {
         '.xpanda-gear-popover[hidden]{display:none;}' +
         '.xpanda-gear-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}' +
         '.xpanda-gear-label{font-size:12px;font-weight:600;color:var(--muted);}' +
+        '.xpanda-gear-link{display:flex;align-items:center;min-height:44px;padding:0 4px;border-top:1px solid var(--line);font-size:13px;font-weight:600;color:var(--text);text-decoration:none;}' +
+        '.xpanda-gear-link:hover{color:var(--brand);}' +
+        '.xpanda-gear-link:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}' +
         '.xpanda-page-desc{text-align:center;padding:16px;background:var(--surface);border-bottom:1px solid var(--line);}' +
         '.xpanda-page-desc h1{margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text);}' +
         '.xpanda-page-desc p{margin:0;font-size:11px;color:var(--text-hint);}' +

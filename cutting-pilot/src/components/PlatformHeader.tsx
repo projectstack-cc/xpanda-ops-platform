@@ -236,6 +236,13 @@ export default function PlatformHeader({
         {/* Desktop right actions (hidden below md) */}
         <div className="hidden md:flex items-center gap-2 shrink-0">
           <span className="text-xs font-mono tabular-nums text-muted">{userName}</span>
+          {/* account-pw-01: legacy-hosted self-service page — plain <a> so basePath /v2 isn't applied */}
+          <a
+            href="/account/password"
+            className="text-xs font-semibold text-muted no-underline hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+          >
+            Change password
+          </a>
           <a
             href="/login.html"
             onClick={handleSignOut}
@@ -278,6 +285,12 @@ export default function PlatformHeader({
           })}
           <div className="flex items-center gap-3 px-4 py-3 border-t border-[var(--line)]">
             <span className="text-xs font-mono tabular-nums text-muted">{userName}</span>
+            <a
+              href="/account/password"
+              className="text-xs font-semibold text-muted no-underline hover:opacity-80"
+            >
+              Change password
+            </a>
             <a
               href="/login.html"
               onClick={handleSignOut}

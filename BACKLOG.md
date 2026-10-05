@@ -10,11 +10,6 @@
 
 ## Auth / Session
 
-- [ ] **(Optional) Consider a self-service "change my password" settings page.** Discovered
-  during QC Cleanup-10: `login.html`'s first-login forced form is currently the *only* caller
-  of `/api/auth/change-password` anywhere in the platform — no way for a user to voluntarily
-  change their own password later without an admin reset via `/api/users`. Not a bug (admin
-  recovery is the documented design), just an absence worth a deliberate yes/no.
 - [ ] **P408 follow-up — audit other unbatched hot-path writes against the shared D1.**
   `schedule-ingest.ts`'s cron writes were the one identified structural contention hazard against
   the same D1 `validateSession` reads on every request (P404 investigation, batched in P408). If
