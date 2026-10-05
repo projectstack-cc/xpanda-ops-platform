@@ -2817,6 +2817,8 @@ current series).
 
 ## Logistics (v2)
 
+- **quickwin-05 — v2 dock board resolves the `?shipment=` notification deep link (next-platform-agent §9a + react-component-agent §9b). No migration.** Shipment-status notifications (in_transit / delivered) deep-link with `?shipment=<id>`; legacy `loading.html` resolves shipment → `job_id` (+ `load_number`) → loading assignment via `GET /api/shipments?id=`, but `/v2/api/shipments` only supported `?job_id=`, so `DockBoard.tsx` gave up on it. `GET /v2/api/shipments` now takes `?id=` as the first branch of the non-stat filter chain (`shipments.id = ?`, bypasses the date window like `job_id`, still outbound-scoped; response shape unchanged — `data` is a 0/1-element array). `DockBoard.tsx` extracts the existing highlight sequence into a `focusAssignment(id)` closure (the `?assignment=` path is byte-identical in behavior) and, when there's no `?assignment=`, fetches the shipment and focuses the exact `job_id` + `load_number` match, else the first assignment for that job; unresolved → lands silently (legacy parity). URL cleanup unchanged; the header and inline comments that called this a deliberate cut are updated. The v2 dock board stays dark. Not addressed: the separate "`?assignment=` deep link can't reach an `archived` row" item. Verified: `tsc --noEmit` clean, `cf-build` green (batch build), LF-only; `can't look up` / `NOT ported` no longer in `DockBoard.tsx`.
+
 - **tls-02 — Load Verification Sheet: rename, checkbox per load, Marina Foam filter, 1st-shift sign-off (§9a / §9b).
   No migration.**
   - **Rename (labels only):** toolbar button, modal title, tooltip, loading/error text, PDF title

@@ -458,13 +458,6 @@
   touched per AGENTS.md's "don't redesign around a bug you found" rule — flag to Steve next
   contact; a fix (job-level `POST`'s bay-presence-gated status logic already handles the null-bay
   case correctly) would need his sign-off since it changes legacy behavior too.
-- [ ] **PXXX-b follow-up — `?shipment=` notification deep link can't resolve.** Legacy's
-  `openFromNotificationDeepLink` resolves a shipment id to its job/load via
-  `GET /api/shipments?id=<shipmentId>` (single-record lookup). v2's `/v2/api/shipments` route
-  only supports `?job_id=` (a list filter), not a single-shipment-by-id mode, so `?assignment=`
-  deep-linking was ported but `?shipment=` was not (adding the lookup mode would be an API
-  change PXXX-b's own scope excluded). Add an `id=` branch to `GET /v2/api/shipments` (mirroring
-  legacy's shape) to close this.
 - [ ] **PXXX-c finding — `?assignment=` deep link can't reach an `archived` row.** The
   `include_archived=1`/`showAll=true` fetch-and-filter widening the deep-link resolver applies
   covers every Overview/Team View grouping except `loading_status === "archived"`, which matches

@@ -14,12 +14,10 @@
 //   Team View, search/sort/collapse, the Shipping Info modal, touch drag-and-drop, the
 //   "+ Pull Job" flow, and the photo gallery lightbox are all shipped -- ported from
 //   logistics/loading.html across PXXX-a/-b/-c.
-//   The one deliberate remaining cut: legacy's `?shipment=` notification deep link is NOT
-//   ported -- it needs a single-shipment-by-id lookup (`GET /api/shipments?id=`) that v2's
-//   `/v2/api/shipments` route doesn't support (only `?job_id=`), and adding it is an API change
-//   out of scope so far -- logged to BACKLOG.md. `?assignment=` deep-linking (scroll + highlight,
-//   no modal auto-open -- a deliberate deviation from legacy's auto-opened Shipping Info modal)
-//   IS ported.
+//   Legacy's `?shipment=` notification deep link IS ported (quickwin-05): resolved via
+//   `GET /v2/api/shipments?id=` -> job_id (+ load_number when present) -> loading assignment,
+//   same chain as legacy. `?assignment=` deep-linking (scroll + highlight, no modal auto-open --
+//   a deliberate deviation from legacy's auto-opened Shipping Info modal) IS ported too.
 // The This Week / Show All toggle IS kept (not decorative -- without it Delivered/Awaiting grow
 // unbounded at any real data volume).
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -134,8 +132,8 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
 
   // Notification deep link (?assignment=/?shipment=): resolve once the first load has settled.
   // Legacy opens the Shipping Info modal directly; this ports scroll-into-view + a timed
-  // highlight instead (documented -b deviation). ?shipment= can't be resolved here -- see the
-  // header comment -- so only ?assignment= is handled.
+  // highlight instead (documented -b deviation). ?shipment= is resolved via
+  // GET /v2/api/shipments?id= (quickwin-05) and then focused the same way.
   const deepLinkHandledRef = useRef(false);
   useEffect(() => {
     if (loading || deepLinkHandledRef.current) return;
@@ -145,23 +143,45 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
     const shipmentParam = searchParams.get("shipment");
     if (!assignmentParam && !shipmentParam) return;
 
-    if (assignmentParam && assignments.some((a) => a.id === assignmentParam)) {
-      const target = assignments.find((a) => a.id === assignmentParam);
+    const focusAssignment = (id: string) => {
+      const target = assignments.find((a) => a.id === id);
       if (target?.bay_id && view === "team") setSelectedBayId(target.bay_id);
       // The target row is very often outside the This Week filter (a notification deep link
       // typically points at an aged-off delivered load) -- without this, the highlight/scroll
       // below silently no-ops because the card never renders. Same intent as the
       // include_archived=1 fetch flag above.
       setShowAll(true);
-      setHighlightedId(assignmentParam);
+      setHighlightedId(id);
       setTimeout(() => {
         document
-          .querySelector(`[data-assignment-id="${assignmentParam}"]`)
+          .querySelector(`[data-assignment-id="${id}"]`)
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 50);
       setTimeout(() => setHighlightedId(null), 2500);
+    };
+
+    if (assignmentParam && assignments.some((a) => a.id === assignmentParam)) {
+      focusAssignment(assignmentParam);
     }
-    // If unresolved (record truly gone, or a ?shipment= we can't look up), land on the
+    if (!assignmentParam && shipmentParam) {
+      (async () => {
+        try {
+          const res = await fetch(`/v2/api/shipments?id=${encodeURIComponent(shipmentParam)}`);
+          const body = await res.json();
+          const ship: any = res.ok && body?.ok && Array.isArray(body.data) ? body.data[0] : null;
+          if (!ship?.job_id) return;
+          // Prefer an exact load match when the shipment carries load_number (legacy parity).
+          const match =
+            (ship.load_number != null &&
+              assignments.find((a) => a.job_id === ship.job_id && String(a.load_number) === String(ship.load_number))) ||
+            assignments.find((a) => a.job_id === ship.job_id);
+          if (match) focusAssignment(match.id);
+        } catch {
+          // unresolved -> land on the dashboard silently (legacy parity)
+        }
+      })();
+    }
+    // If unresolved (record truly gone, or a shipment with no matching load), land on the
     // dashboard with no error toast -- matches legacy.
 
     try {

@@ -133,6 +133,9 @@ export async function GET(request: NextRequest) {
   const { DB } = await getEnv();
   const url = new URL(request.url);
   const jobId = url.searchParams.get("job_id");
+  // quickwin-05: single-shipment lookup for the dock board's ?shipment= notification deep link
+  // (legacy GET /api/shipments?id= parity). Bypasses the date window like job_id.
+  const shipmentId = url.searchParams.get("id");
   const week = url.searchParams.get("week"); // YYYY-MM-DD Monday start
   const status = url.searchParams.get("status");
   const daysParam = url.searchParams.get("days");
@@ -170,7 +173,10 @@ export async function GET(request: NextRequest) {
     where = ["shipments.direction = 'outbound'"];
     binds = [];
 
-    if (jobId) {
+    if (shipmentId) {
+      where.push("shipments.id = ?");
+      binds.push(shipmentId);
+    } else if (jobId) {
       // A specific job's shipment is wanted regardless of date window (e.g. an older shipment
       // whose ship_date/created_at has aged out of the default range) -- mirrors legacy's
       // job_id-bypasses-the-date-filter behavior on GET /api/bols.
