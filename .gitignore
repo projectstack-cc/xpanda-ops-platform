@@ -44,3 +44,6 @@ H1840.aml
 # Customer invoice and freight files — kept local only (contains pricing)
 26.03 Lisma Invoice Details 4611.pdf
 LISMA Frieght Breakdown.xlsx
+
+# Per-machine Claude Code permissions — local only.
+.claude/settings.local.json
