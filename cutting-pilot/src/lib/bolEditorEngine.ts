@@ -16,6 +16,8 @@
 //     source of truth) instead of window.BolShared.
 //   - `open()` returns a cleanup function instead of relying on the caller to call a separate
 //     teardown; BolEditorModal calls it on unmount/target change.
+import type { FuelLine } from "@/lib/logistics/fuelSurcharge";
+import { fetchFuelLines } from "./bolDomGlue";
 import {
   FIELD_MAP,
   PAGE,
@@ -846,6 +848,22 @@ export async function mountBolEditor(
     return exactPreviewScriptFontBytes;
   }
 
+  // quickwin-07: Exact preview draws the live fuel surcharge line like View BOL does. Memoized per
+  // editor on the five quote fields so debounced re-renders don't refetch.
+  let fuelKey = "";
+  let fuelCache: (FuelLine | null)[] = [];
+  async function exactPreviewFuelLines(b: BolRecord): Promise<(FuelLine | null)[]> {
+    const key = JSON.stringify([
+      String(b?.date ?? "").slice(0, 10), b?.ship_to_street ?? "", b?.ship_to_city ?? "",
+      b?.ship_to_state ?? "", b?.ship_to_zip ?? "",
+    ]);
+    if (key !== fuelKey) {
+      fuelCache = await fetchFuelLines([b]);
+      fuelKey = key;
+    }
+    return fuelCache;
+  }
+
   function scheduleExactPreview() {
     if (exactTimer) return;
     exactTimer = setTimeout(async () => {
@@ -856,7 +874,8 @@ export async function mountBolEditor(
         const templateBytes = await fetchExactPreviewTemplateBytes();
         const scriptFontBytes = await fetchExactPreviewScriptFontBytes();
         const trackingBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
-        const pdfBytes = await generatePdf([liveBol], { templateBytes, scriptFontBytes, trackingBaseUrl });
+        const fuelLines = await exactPreviewFuelLines(liveBol);
+        const pdfBytes = await generatePdf([liveBol], { templateBytes, scriptFontBytes, trackingBaseUrl, fuelLines });
         const pdfjs = await loadPdfJs();
         const doc = await pdfjs.getDocument({ data: pdfBytes }).promise;
         const p = await doc.getPage(1);

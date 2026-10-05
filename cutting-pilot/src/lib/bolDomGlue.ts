@@ -57,18 +57,9 @@ export interface CombinedBolPdfOptions {
   packingSlipPdfBytes?: ArrayBuffer;
 }
 
-// Renders the same combined packet Generate/View produce in legacy: driver -> customer ->
-// original passes (each a full bolShared.generatePdf call, one page per bolRecord), merged into
-// a single PDF. trackingBaseUrl is always the real page origin — required for the QR's drawn
-// geometry to match legacy's window.location.origin-derived output (see bolShared.ts header).
-export async function buildCombinedBolPdf(
-  bolRecords: BolRecord[],
-  opts: CombinedBolPdfOptions = {}
-): Promise<Uint8Array> {
-  const scriptFontBytes = await fetchScriptFontBytes();
-  const trackingBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
-  // lgx-fuel-02: live per-mile fuel surcharge (never frozen onto the BOL) — one server-built line per
-  // bolRecords index. Fetched once for all three copy passes. Fail-soft: any error -> [] -> no line.
+// lgx-fuel-02 / quickwin-07: live per-mile fuel surcharge lines, one per bolRecords index.
+// Fail-soft: any error -> [] -> no line drawn. Shared by the combined packet and the editor preview.
+export async function fetchFuelLines(bolRecords: BolRecord[]): Promise<(FuelLine | null)[]> {
   let fuelLines: (FuelLine | null)[] = [];
   try {
     const quote = bolRecords.map((b) => ({
@@ -88,6 +79,22 @@ export async function buildCombinedBolPdf(
   } catch {
     fuelLines = [];
   }
+  return fuelLines;
+}
+
+// Renders the same combined packet Generate/View produce in legacy: driver -> customer ->
+// original passes (each a full bolShared.generatePdf call, one page per bolRecord), merged into
+// a single PDF. trackingBaseUrl is always the real page origin — required for the QR's drawn
+// geometry to match legacy's window.location.origin-derived output (see bolShared.ts header).
+export async function buildCombinedBolPdf(
+  bolRecords: BolRecord[],
+  opts: CombinedBolPdfOptions = {}
+): Promise<Uint8Array> {
+  const scriptFontBytes = await fetchScriptFontBytes();
+  const trackingBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  // lgx-fuel-02: live per-mile fuel surcharge (never frozen onto the BOL) — one server-built line per
+  // bolRecords index. Fetched once for all three copy passes. Fail-soft: any error -> [] -> no line.
+  const fuelLines = await fetchFuelLines(bolRecords);
   const out = await PDFDocument.create();
 
   for (const copyType of ["driver", "customer", undefined] as const) {
