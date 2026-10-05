@@ -1,5 +1,6 @@
 // src/lib/logistics/toLoadSheetPdf.ts
-// tls-01: printable 1st / 2nd shift To-Load sheet. One pdf-lib document, rows already selected and
+// tls-01: printable 1st / 2nd shift To-Load sheet (tls-02: retitled Load Verification Sheet, per-load
+// checkbox column, Marina Foam exclusion line, 1st-shift sign-off block). One pdf-lib document, rows already selected and
 // ordered by lib/logistics/toLoadSheet.ts. Page chrome mirrors lib/logistics/loadingSheet.ts (margin 40,
 // US Letter portrait, Helvetica/HelveticaBold, same colors, same non-fatal logo embed); its file-local
 // drawRight/hr helpers are copied below — loadingSheet.ts and cutList.ts are NOT modified.
@@ -7,7 +8,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import { isLoaded, nextShipDay, rowGroup, shipDayLabel, type ToLoadRow, type ToLoadSheet } from "@/lib/logistics/toLoadSheet";
 
-type ColKey = "bay" | "inv" | "customer" | "pickup" | "delivery" | "city" | "loaded";
+type ColKey = "check" | "bay" | "inv" | "customer" | "pickup" | "delivery" | "city" | "loaded";
 interface Col {
   key: ColKey;
   label: string;
@@ -15,7 +16,11 @@ interface Col {
   w: number;
 }
 
-export async function buildToLoadSheetPdf(sheet: ToLoadSheet, printedAtEt: string): Promise<Uint8Array> {
+export async function buildToLoadSheetPdf(
+  sheet: ToLoadSheet,
+  printedAtEt: string,
+  excludedSister = 0
+): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -59,11 +64,12 @@ export async function buildToLoadSheetPdf(sheet: ToLoadSheet, printedAtEt: strin
     const logoBytes = await fetch("/logo/xpanda.png").then((r) => r.arrayBuffer());
     logoImg = await doc.embedPng(logoBytes);
   } catch (e) {
-    console.error("To-load sheet: logo embed failed", e);
+    console.error("Load verification sheet: logo embed failed", e);
   }
 
   const buildCols = (withLoaded: boolean): Col[] => {
     const fixed: Array<[ColKey, string, number]> = [
+      ["check", "", 20],
       ["bay", "BAY", 34],
       ["inv", "INV #", 66],
       ["customer", "CUSTOMER", 0],
@@ -98,10 +104,15 @@ export async function buildToLoadSheetPdf(sheet: ToLoadSheet, printedAtEt: strin
       const logoW = logoImg.width * (logoH / logoImg.height);
       page.drawImage(logoImg, { x: margin, y: top - logoH, width: logoW, height: logoH });
     }
-    drawRight(page, `TO-LOAD SHEET — ${shiftLabel}`, 16, fontBold, black, top - 14);
+    drawRight(page, `LOAD VERIFICATION SHEET — ${shiftLabel}`, 16, fontBold, black, top - 14);
     drawRight(page, `For ${shipDayLabel(forDay)}`, 11, font, black, top - 31);
     const snap = `Printed ${printedAtEt} ET — status as of print time. Live status: TV loading board.`;
     drawRight(page, fit(snap, font, 9, right - margin), 9, font, gray, top - 45);
+    if (excludedSister > 0) {
+      const ex = `Excludes ${excludedSister} Marina Foam order(s) — sister-company delivery, not truck-loaded.`;
+      drawRight(page, fit(ex, font, 9, right - margin), 9, font, gray, top - 57);
+      top -= 12;
+    }
     top -= 56;
     hr(page, top);
     y = top - 20;
@@ -122,7 +133,7 @@ export async function buildToLoadSheetPdf(sheet: ToLoadSheet, printedAtEt: strin
   const newPage = () => {
     page = doc.addPage([pageW, pageH]);
     const top = pageH - margin;
-    page.drawText(`To-load sheet — ${sheet.shift === 1 ? "1st" : "2nd"} shift (cont.)`, {
+    page.drawText(`Load verification sheet — ${sheet.shift === 1 ? "1st" : "2nd"} shift (cont.)`, {
       x: margin, y: top - 13, size: 13, font: fontBold, color: black,
     });
     hr(page, top - 22);
@@ -155,6 +166,9 @@ export async function buildToLoadSheetPdf(sheet: ToLoadSheet, printedAtEt: strin
       let text = "";
       let f = font;
       switch (c.key) {
+        case "check":
+          page.drawRectangle({ x: c.x + 2, y: y - 1, width: 10, height: 10, borderColor: black, borderWidth: 1 });
+          continue;
         case "bay":
           text = r.location === "yard" ? "Yard" : r.bay_number != null ? String(r.bay_number) : "—";
           f = fontBold;
@@ -216,6 +230,24 @@ export async function buildToLoadSheetPdf(sheet: ToLoadSheet, printedAtEt: strin
       y -= hasRows ? 4 : 0;
       page.drawText(fit(msg, font, ROW_SIZE, right - margin), { x: margin, y, size: ROW_SIZE, font, color: gray });
       y -= ROW_H;
+    }
+
+    // tls-02: 1st-shift sign-off between Load Verification and To load; ensure() keeps it on one page.
+    if (idx === 0 && sheet.shift === 1) {
+      ensure(54);
+      y -= 4;
+      hr(page, y);
+      y -= 18;
+      page.drawText("Load verification sign-off", { x: margin, y, size: 11, font: fontBold, color: black });
+      y -= 22;
+      let x = margin;
+      for (const [label, lineW] of [["Verified by:", 150], ["Date:", 80], ["Time:", 80]] as const) {
+        page.drawText(label, { x, y, size: 10, font, color: black });
+        x += font.widthOfTextAtSize(label, 10) + 4;
+        page.drawLine({ start: { x, y: y - 2 }, end: { x: x + lineW, y: y - 2 }, thickness: 0.75, color: black });
+        x += lineW + 18;
+      }
+      y -= 12;
     }
   });
 

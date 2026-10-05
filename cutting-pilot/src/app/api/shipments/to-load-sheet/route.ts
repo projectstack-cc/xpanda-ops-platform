@@ -1,5 +1,6 @@
 // src/app/api/shipments/to-load-sheet/route.ts  ->  GET /v2/api/shipments/to-load-sheet?shift=1|2&date=YYYY-MM-DD
-// tls-01. Read-only data feed for the 1st / 2nd shift To-Load sheets (lib/logistics/toLoadSheetPdf.ts,
+// tls-01 (+ tls-02: Marina Foam exclusion, `excluded_sister` count). Read-only data feed for the 1st / 2nd
+// shift Load Verification sheets (lib/logistics/toLoadSheetPdf.ts,
 // built client-side by components/logistics/ToLoadSheetButton.tsx). One row per LOAD: each non-archived
 // loading_assignment, or max(1, load_count) unassigned placeholders for a job with none. Selection +
 // ordering live in lib/logistics/toLoadSheet.ts; this route only fetches and computes labels. Suggested
@@ -11,7 +12,9 @@ import { getEnv } from "@/lib/db";
 import { addressKeyOf, resolveGeo } from "@/lib/carrier/rows";
 import { parseAppointment, suggestedPickup } from "@/lib/deliveryTime";
 import { etNowWallClock, formatClockMinutes, weekdayShort } from "@/lib/etDateTime";
-import { buildToLoadSheet, shipDayLabel, toLoadWindow, type Shift, type ToLoadRow } from "@/lib/logistics/toLoadSheet";
+import {
+  buildToLoadSheet, isSisterCompanyDelivery, nextShipDay, shipDayLabel, toLoadWindow, type Shift, type ToLoadRow,
+} from "@/lib/logistics/toLoadSheet";
 
 const IN_CHUNK = 90;
 const DELIVERY_MAX_CHARS = 40;
@@ -41,7 +44,7 @@ export async function GET(request: NextRequest) {
     const shipDays = toLoadWindow(date);
     const res = await DB.prepare(
       `SELECT s.job_id, substr(s.ship_date, 1, 10) AS ship_day, s.delivery_time AS s_delivery_time,
-              j.invoice_number, j.customer, j.load_count, j.delivery_time AS j_delivery_time,
+              j.invoice_number, j.customer, j.ship_to_company, j.load_count, j.delivery_time AS j_delivery_time,
               j.ship_to_street, j.ship_to_street2, j.ship_to_city, j.ship_to_state, j.ship_to_zip
          FROM shipments s JOIN jobs j ON j.id = s.job_id
         WHERE s.direction = 'outbound' AND s.status <> 'cancelled'
@@ -53,10 +56,22 @@ export async function GET(request: NextRequest) {
 
     // Keep the first row per job_id (same dedupe as loading-sheet).
     const seen = new Set<string>();
-    const jobs = (res.results ?? []).filter((r: any) => {
+    const deduped = (res.results ?? []).filter((r: any) => {
       if (!r.job_id || seen.has(r.job_id)) return false;
       seen.add(r.job_id);
       return true;
+    });
+
+    // tls-02: drop sister-company (Marina Foam) deliveries before the assignments query + ORS warm, so they
+    // never print and never count toward the to-load "2+ loads" fallback. Only S1/S2 exclusions are counted
+    // (the days the sheet always covers).
+    const s1 = nextShipDay(date);
+    const printedDays = new Set([s1, nextShipDay(s1)]);
+    let excludedSister = 0;
+    const jobs = deduped.filter((r: any) => {
+      if (!isSisterCompanyDelivery(r.customer ?? null, r.ship_to_company ?? null)) return true;
+      if (printedDays.has(r.ship_day)) excludedSister += 1;
+      return false;
     });
 
     // One batched assignments query (chunked IN), never N+1.
@@ -149,7 +164,7 @@ export async function GET(request: NextRequest) {
     const now = etNowWallClock();
     const printedAtEt = `${shipDayLabel(now.date)} ${formatClockMinutes(now.minutes)}`;
 
-    return NextResponse.json({ ok: true, sheet: buildToLoadSheet(rows, shift, date), printed_at_et: printedAtEt });
+    return NextResponse.json({ ok: true, sheet: buildToLoadSheet(rows, shift, date), printed_at_et: printedAtEt, excluded_sister: excludedSister });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "Server error.", detail: String(e?.message || e) },

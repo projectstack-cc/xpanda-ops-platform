@@ -64,6 +64,14 @@ export function nextShipDay(date: string): string {
   return d;
 }
 
+/** Sister-company deliveries (tls-02): never loaded on a truck, so never on the Load Verification sheet. */
+export const SISTER_COMPANY_PATTERNS = ["marina foam"];
+export function isSisterCompanyDelivery(customer: string | null, shipToCompany: string | null): boolean {
+  const norm = (s: string | null) => (s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  const hay = [norm(customer), norm(shipToCompany)];
+  return SISTER_COMPANY_PATTERNS.some((p) => hay.some((h) => h.includes(p)));
+}
+
 /** "Mon 10/5" for a YYYY-MM-DD date. */
 export function shipDayLabel(date: string): string {
   const [, m, d] = date.split("-").map(Number);
@@ -144,7 +152,7 @@ export function buildToLoadSheet(rows: ToLoadRow[], shift: Shift, printedOn: str
     const pickups = rowsForDay(rows, s1, false);
     sections.push({
       kind: "pickups",
-      title: `Pickups ${shipDayLabel(s1)}`,
+      title: `Load Verification — ${shipDayLabel(s1)}`,
       days: pickups.length ? [{ shipDay: s1, rows: pickups }] : [],
       note: null,
     });

@@ -2,7 +2,9 @@
 // Guarded dev self-check for toLoadSheet.ts (tls-01). Mirrors deliveryTime.selfcheck.ts's shape: a
 // check()/results table, one exported run*SelfCheck() function. Not part of the production build path.
 // Fixture dates: 2026-10-02 is a Friday; 10/5..10/9 are Mon..Fri.
-import { buildToLoadSheet, compareRows, isLoaded, nextShipDay, toLoadWindow, type ToLoadRow } from "./toLoadSheet";
+import {
+  buildToLoadSheet, compareRows, isLoaded, isSisterCompanyDelivery, nextShipDay, toLoadWindow, type ToLoadRow,
+} from "./toLoadSheet";
 
 interface CheckResult {
   name: string;
@@ -58,7 +60,7 @@ export function runToLoadSheetSelfCheck(): { pass: boolean; results: CheckResult
   const tueLoaded = row({ ship_day: "2026-10-06", loading_status: "delivered" });
   const s1 = buildToLoadSheet([mon1, mon2, tue1, tue2, tueLoaded], 1, D);
   eq("shift1 two sections", s1.sections.map((s) => s.kind), ["pickups", "to_load"]);
-  eq("shift1 pickups title", s1.sections[0].title, "Pickups Mon 10/5");
+  eq("shift1 pickups title", s1.sections[0].title, "Load Verification — Mon 10/5");
   eq("shift1 pickups includes loaded", s1.sections[0].days[0]?.rows.map((r) => r.job_id), [mon2.job_id, mon1.job_id]);
   eq("shift1 to_load starts 10/6", s1.sections[1].days.map((d) => d.shipDay), ["2026-10-06"]);
   eq("shift1 to_load excludes loaded", s1.sections[1].days[0]?.rows.length, 2);
@@ -109,6 +111,12 @@ export function runToLoadSheetSelfCheck(): { pass: boolean; results: CheckResult
   const l2 = row({ invoice_number: "4321", load_number: 2 });
   const l1 = row({ invoice_number: "4321", load_number: 1 });
   eq("ordering load_number tiebreak", [l2, l1].sort(compareRows).map((r) => r.load_number), [1, 2]);
+
+  // Sister-company filter (tls-02).
+  eq("sister: Marina Foam customer", isSisterCompanyDelivery("Marina Foam", null), true);
+  eq("sister: ship-to normalized", isSisterCompanyDelivery("Acme Boats", "MARINA  FOAM, LLC"), true);
+  eq("sister: Marina Bay Docks no match", isSisterCompanyDelivery("Marina Bay Docks", "Marina Bay Docks"), false);
+  eq("sister: null/null no match", isSisterCompanyDelivery(null, null), false);
 
   return { pass: results.every((r) => r.pass), results };
 }

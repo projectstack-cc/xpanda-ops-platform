@@ -2685,6 +2685,28 @@ current series).
 
 ## Logistics (v2)
 
+- **tls-02 — Load Verification Sheet: rename, checkbox per load, Marina Foam filter, 1st-shift sign-off (§9a / §9b).
+  No migration.**
+  - **Rename (labels only):** toolbar button, modal title, tooltip, loading/error text, PDF title
+    (`LOAD VERIFICATION SHEET — 1ST/2ND SHIFT`, still fits beside the logo at size 16), continuation header, and
+    filename (`load-verification-{1st|2nd}-shift-{date}.pdf`). The 1st-shift first section is now
+    `Load Verification — Mon 10/5` (was `Pickups …`); "To load" is unchanged. Route (`to-load-sheet`), file names,
+    and identifiers are unchanged.
+  - **Checkbox per load:** new leading unfilled 10×10 box column on every row, both sections, both shifts (the
+    verifier's pen mark). The LOADED (`YES`/`LOADING`) column stays as the print-time system status.
+  - **Marina Foam exclusion:** `toLoadSheet.ts` adds `SISTER_COMPANY_PATTERNS = ["marina foam"]` +
+    `isSisterCompanyDelivery(customer, ship_to_company)` (case/whitespace-normalized substring). The route now
+    selects `j.ship_to_company` and drops matching jobs right after the per-job dedupe, before the assignments
+    query and the ORS warm, so they never print and never count toward the to-load "2+ loads" fallback. The
+    response gains `excluded_sister` (jobs excluded on S1/S2); when > 0 the PDF prints a gray
+    `Excludes {n} Marina Foam order(s) — sister-company delivery, not truck-loaded.` line under the snapshot note.
+    `buildToLoadSheetPdf(sheet, printedAtEt, excludedSister = 0)`.
+  - **1st-shift sign-off:** between Load Verification and To load, a `Load verification sign-off` block with
+    `Verified by / Date / Time` drawn-line blanks; `ensure(54)` keeps it whole (moves to the next page with
+    "To load" when it won't fit). 2nd shift has none.
+  - `toLoadSheet.selfcheck.ts` **30/30** (title expectation + 4 sister-company cases). Removed the tls-01
+    "sign-off line" BACKLOG follow-up (delivered here). `tsc --noEmit` + `npm run cf-build` green.
+
 - **bol-lock-01 — BOL edit lock is per load, not per job (legacy + v2; §3 / §9 / §9a / §9b). No migration.**
   Bug: Cellucrete INV# 4434 (8 loads) had loads 1–4 shipped, so its outbound shipment was `in_transit` and every
   BOL on the job locked, including loads 5–8 (`not_started`, leaving the next day). New rule in

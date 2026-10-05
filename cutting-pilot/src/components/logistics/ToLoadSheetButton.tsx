@@ -5,6 +5,8 @@
 // PDF client-side (lib/logistics/toLoadSheetPdf.ts) and shows it in the shared Modal + PdfViewer. Same
 // state / blob-revoke / portal pattern as LoadingSheetButton.tsx. Fetch is aborted after 30s so the modal
 // never spins forever.
+// tls-02: user-facing labels renamed to "Load Verification Sheet" (identifiers + API path unchanged); passes
+// the route's `excluded_sister` count through to the PDF.
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ClipboardList } from "lucide-react";
@@ -44,7 +46,7 @@ export default function ToLoadSheetButton() {
 
   useEffect(() => revoke, []);
 
-  const title = "To-load sheet";
+  const title = "Load Verification Sheet";
 
   function handleOpen() {
     revoke();
@@ -74,16 +76,16 @@ export default function ToLoadSheetButton() {
         throw new Error(body?.detail && body.detail !== msg ? `${msg} (${body.detail})` : msg);
       }
       const sheet = body.sheet as ToLoadSheet;
-      const bytes = await buildToLoadSheetPdf(sheet, String(body.printed_at_et || ""));
+      const bytes = await buildToLoadSheetPdf(sheet, String(body.printed_at_et || ""), Number(body.excluded_sister) || 0);
       const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
       blobUrlRef.current = url;
-      setPdfDoc({ src: url, filename: `to-load-${reqShift === 1 ? "1st" : "2nd"}-shift-${reqDate}.pdf` });
+      setPdfDoc({ src: url, filename: `load-verification-${reqShift === 1 ? "1st" : "2nd"}-shift-${reqDate}.pdf` });
     } catch (e: any) {
-      console.error("To-load sheet failed:", e);
+      console.error("Load verification sheet failed:", e);
       setError(
         e?.name === "AbortError"
           ? "The server took too long to respond. Try again."
-          : `Couldn't build the to-load sheet: ${e?.message || e}`
+          : `Couldn't build the load verification sheet: ${e?.message || e}`
       );
     } finally {
       clearTimeout(timer);
@@ -132,7 +134,7 @@ export default function ToLoadSheetButton() {
           {loading ? "Building…" : "Build"}
         </button>
       </div>
-      {loading && <p className="text-sm text-muted">Building to-load sheet…</p>}
+      {loading && <p className="text-sm text-muted">Building load verification sheet…</p>}
       {!loading && error && <p className="text-sm text-[var(--danger-text)]">{error}</p>}
       {!loading && !error && pdfDoc && (
         <PdfViewer src={pdfDoc.src} filename={pdfDoc.filename} title={title} />
@@ -146,10 +148,10 @@ export default function ToLoadSheetButton() {
         type="button"
         onClick={handleOpen}
         className="inline-flex items-center gap-1.5 min-h-[38px] px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-        title="Print the 1st / 2nd shift to-load sheet"
+        title="Print the 1st / 2nd shift load verification sheet"
       >
         <ClipboardList size={14} aria-hidden="true" className="text-muted" />
-        To-load sheet
+        Load Verification Sheet
       </button>
       {isOpen && typeof document !== "undefined" ? createPortal(modal, document.body) : null}
     </>
