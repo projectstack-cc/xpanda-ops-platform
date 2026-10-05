@@ -203,12 +203,12 @@ export async function GET() {
         job_id: row.match_job_id,
         trailer_group_id: unmatched ? null : groupIdByJobId.get(row.match_job_id!) ?? null,
         chunks_required: unmatched ? null : chunksByJobId.get(row.match_job_id!) ?? null,
-        // sched-shifts-01: cutting is finished at Ready, so hide shift chips to reduce floor
-        // confusion. Display-only; job_shifts rows are untouched and reappear if the job
-        // regresses. Ready ONLY: Loading/Loaded/Shipped keep shifts because a job can be
-        // loading while still cutting.
+        // sched-shifts-02: hide shift chips once cutting is complete (see isCuttingComplete in
+        // lib/schedule-status.ts). Keys on completion, not the status label, so a job that is
+        // Loading after cutting finished clears, while one loading-but-still-cutting keeps its
+        // chips. Display-only; job_shifts rows are untouched.
         shifts:
-          unmatched || derived?.status === "Ready"
+          unmatched || derived?.cuttingComplete
             ? []
             : shiftsByJobId.get(row.match_job_id!) ?? [],
       });

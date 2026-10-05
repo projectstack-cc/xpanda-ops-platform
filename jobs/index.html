@@ -1041,7 +1041,7 @@ function renderList(jobs) {
     tr.onmouseout  = () => { tr.style.background = ''; };
     tr.onclick     = () => openModal(job.id);
     tr.innerHTML = `
-      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}${priorityBadge(job)}${shipToVerifiedBadge(job.ship_to_verified)}${assigneeChips(job.assignees)}${shiftChips(job.shifts)}${buildSplitBadgeHtml(job)}</td>
+      <td style="padding:9px 12px;font-size:13px;font-weight:600;">${job.invoice_number ? esc(job.invoice_number) : '—'}${loadStr}${priorityBadge(job)}${shipToVerifiedBadge(job.ship_to_verified)}${assigneeChips(job.assignees)}${job.cutting_complete ? '' : shiftChips(job.shifts)}${buildSplitBadgeHtml(job)}</td>
       <td style="padding:9px 12px;font-size:13px;">${esc(job.customer || '')}</td>
       <td style="padding:9px 12px;font-size:13px;color:var(--text-muted);">${esc(formatShipDate(job.ship_date)) || '—'}</td>
       <td style="padding:9px 12px;font-size:13px;text-align:right;">${job.total_bdft ? Number(job.total_bdft).toLocaleString() : '—'}</td>

@@ -1224,6 +1224,16 @@ current series).
 
 ## Schedule Board (v2)
 
+- **sched-shifts-02 — Hide shift chips on cutting completion, not the `Ready` label (next-platform-agent §9a).**
+  sched-shifts-01 cleared chips only when the derived status was exactly `Ready`, but Loading/Loaded/Shipped
+  outrank Ready in `deriveOne()`, so a job that finished cutting and then had any dock activity kept its chips.
+  New `isCuttingComplete()` in `lib/schedule-status.ts` (exposed as `cuttingComplete` on each derived status):
+  true when `jobs.status` is done/shipped/archived, when every `cutting_lines` row is `complete` (≥1 row), or when
+  the job is `loading` with no cutting lines (matches `shiftRiskCron.ts`). A job loading with incomplete cutting
+  lines keeps its chips. `schedule-board/route.ts` now keys `shifts: []` on `derived?.cuttingComplete`.
+  Supersedes the sched-shifts-01 condition. **Display-only** — `job_shifts` unchanged; no migration. Rule mirrored
+  in the legacy `GET /api/jobs` list (see Job Board).
+
 - **sched-mobile-01 — Desk schedule phone-portrait layout (react-component-agent §9b).** `/v2/schedule/desk`
   was unusable on a phone: the `h-screen overflow-hidden` shell plus two `flex-1` week bands squeezed all 10
   single-column days into one screen height (~60px slivers, each with its own crawling scrollbar). Fixed with
@@ -7379,6 +7389,13 @@ current series).
 ---
 
 ## Job Board
+
+- **sched-shifts-02 — Hide list-row shift chips once cutting is complete (database-api-agent §9 + job-board-agent
+  §2).** `GET /api/jobs` list (`_worker.js/routes/jobs.js`) adds a per-job `cutting_complete` boolean, computed from
+  chunked `cutting_lines` counts with the same rule as v2 `isCuttingComplete()` (status done/shipped/archived, all
+  cutting lines complete, or loading with no cutting lines). `shifts` is still returned in full. `jobs/index.html`
+  list rows skip `shiftChips()` when `cutting_complete` is true; the edit modal's shift manager is unchanged.
+  Display-only, no migration.
 
 - **cutlist-01 — legacy parity** for the v2 cut-list change (see `## Orders (v2)`):
   `jobs/index.html`'s `buildCutListPdf(job, opts = {})` gets the same opt-in chunk-breakdown gate

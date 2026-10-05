@@ -13,6 +13,9 @@ export interface DerivedStatus {
   // the order's full load count; loadsDone (X) is loads at loaded-or-beyond. Null otherwise.
   loadsDone: number | null;
   loadsTotal: number | null;
+  // sched-shifts-02: true once cutting is finished, independent of dock status. Drives shift-chip
+  // hiding. Rule mirrored in _worker.js/routes/jobs.js (legacy list) — keep the two in sync.
+  cuttingComplete: boolean;
 }
 
 const CHUNK = 90; // D1 100-bound-param ceiling
@@ -155,10 +158,24 @@ export async function deriveStatuses(db: D1Database, jobIds: string[]): Promise<
       const done = doneByJob.get(jobId) ?? 0;
       progressPct = denom > 0 ? Math.min(100, Math.floor((done / denom) * 100)) : null;
     }
-    statuses.set(jobId, { status, progressPct, loadsDone: one.loadsDone, loadsTotal: one.loadsTotal });
+    statuses.set(jobId, {
+      status,
+      progressPct,
+      loadsDone: one.loadsDone,
+      loadsTotal: one.loadsTotal,
+      cuttingComplete: isCuttingComplete(jobStatusById.get(jobId) ?? null, linesByJob.get(jobId) ?? []),
+    });
   }
 
   return statuses;
+}
+
+// sched-shifts-02: cutting completion, independent of the status label (dock statuses outrank
+// Ready in deriveOne, so the label can't answer this). Mirrored in _worker.js/routes/jobs.js.
+export function isCuttingComplete(jobStatus: string | null, lineStatuses: string[]): boolean {
+  if (jobStatus === "done" || jobStatus === "shipped" || jobStatus === "archived") return true;
+  if (lineStatuses.length > 0) return lineStatuses.every((s) => s === "complete");
+  return jobStatus === "loading"; // no cutting work (matches shiftRiskCron.ts)
 }
 
 type OneResult = { status: ScheduleStatus; loadsDone: number | null; loadsTotal: number | null };

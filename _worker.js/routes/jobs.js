@@ -494,6 +494,31 @@ export async function handleApiJobs(request, env) {
         }
       }
 
+      // sched-shifts-02: per-job cutting_lines counts → cutting_complete flag (chunked).
+      // Rule mirrors isCuttingComplete() in cutting-pilot/src/lib/schedule-status.ts — keep in sync.
+      const cutCounts = {};
+      if (jobs.length > 0) {
+        const ids = jobs.map(j => j.id);
+        const CHUNK = 90;
+        for (let i = 0; i < ids.length; i += CHUNK) {
+          const slice = ids.slice(i, i + CHUNK);
+          const ph    = slice.map(() => "?").join(",");
+          const cr = await db.prepare(
+            `SELECT job_id, COUNT(*) AS n, SUM(line_status = 'complete') AS complete
+               FROM cutting_lines WHERE job_id IN (${ph}) GROUP BY job_id`
+          ).bind(...slice).all();
+          for (const c of (cr.results || [])) {
+            cutCounts[c.job_id] = { n: Number(c.n) || 0, complete: Number(c.complete) || 0 };
+          }
+        }
+      }
+      const isCuttingComplete = (job) => {
+        if (job.status === "done" || job.status === "shipped" || job.status === "archived") return true;
+        const c = cutCounts[job.id];
+        if (c && c.n > 0) return c.complete === c.n;
+        return job.status === "loading"; // no cutting work
+      };
+
       // P356: attach assigned shifts to each job (chunked for D1 param ceiling)
       const shiftsMap = {};
       if (jobs.length > 0) {
@@ -518,6 +543,7 @@ export async function handleApiJobs(request, env) {
         line_items: lineItemsMap[job.id] || [],
         assignees:  assigneesMap[job.id] || [],
         shifts:     shiftsMap[job.id] || [],
+        cutting_complete: isCuttingComplete(job),
       }));
 
       return json({ ok: true, jobs: enriched });
