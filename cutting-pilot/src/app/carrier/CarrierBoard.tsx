@@ -3,7 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import PlatformHeader from "@/components/PlatformHeader";
-import { parseAppointment, suggestedPickup } from "@/lib/deliveryTime";
+import { PICKUP_TRAFFIC_BUFFER_MIN, parseAppointment, suggestedPickup } from "@/lib/deliveryTime";
 import { etDateKey, formatClockMinutes, formatEtDateTime, weekdayShort } from "@/lib/etDateTime";
 import { formatUsdCents } from "@/lib/money";
 import CarrierStatusPill from "./CarrierStatusPill";
@@ -173,7 +173,7 @@ function LoadRow({
               {pickup.date !== row.ship_day ? `${weekdayShort(pickup.date)} ` : ""}
               {formatClockMinutes(pickup.minutes)}
             </span>
-            <span className="ml-2 text-xs text-[var(--text-hint)]">includes 1 hr traffic buffer</span>
+            <span className="ml-2 text-xs text-[var(--text-hint)]">includes {PICKUP_TRAFFIC_BUFFER_MIN} min traffic buffer</span>
           </InfoLine>
         )}
         {deliveredLabel && (

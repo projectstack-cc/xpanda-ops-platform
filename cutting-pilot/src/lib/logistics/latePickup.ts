@@ -10,8 +10,8 @@ import { parseAppointment, suggestedPickup, type WallClock } from "@/lib/deliver
 import { etNowWallClock, formatClockMinutes, weekdayShort } from "@/lib/etDateTime";
 import { addressKeyOf, readGeoCache } from "@/lib/carrier/rows";
 
-/** Minutes past the suggested pickup before a load counts as late (pickup already has a 60-min buffer). */
-export const LATE_GRACE_MIN = 30;
+/** Minutes past the suggested pickup before a load counts as late (pickup already has a 30-min buffer). */
+export const LATE_GRACE_MIN = 15;
 
 /** Absolute minute index of an ET wall-clock value (calendar math via Date.UTC — no TZ shift). */
 export function wallClockOrdinal(w: WallClock): number {

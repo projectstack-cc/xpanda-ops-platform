@@ -42,11 +42,11 @@ export function runDeliveryTimeSelfCheck(): { pass: boolean; results: CheckResul
   eq("appt no time", parseAppointment("Thurs", ship), null);
   eq("appt invoice guard", parseAppointment("INV 4307", ship), null);
 
-  // suggestedPickup — appt − drive − 60 min, floored to 15.
-  eq("pickup 2h45m drive", suggestedPickup({ date: "2026-10-01", minutes: 420 }, 9900), { date: "2026-10-01", minutes: 195 });
-  eq("pickup floors to 15", suggestedPickup({ date: ship, minutes: 600 }, 3000), { date: ship, minutes: 480 });
-  eq("pickup lands on midnight", suggestedPickup({ date: "2026-09-30", minutes: 360 }, 5 * 3600), { date: "2026-09-30", minutes: 0 });
-  eq("pickup rolls to prev day", suggestedPickup({ date: "2026-09-30", minutes: 360 }, 6 * 3600), { date: ship, minutes: 1380 });
+  // suggestedPickup — appt − drive − 30 min, floored to 15.
+  eq("pickup 2h45m drive", suggestedPickup({ date: "2026-10-01", minutes: 420 }, 9900), { date: "2026-10-01", minutes: 225 });
+  eq("pickup floors to 15", suggestedPickup({ date: ship, minutes: 600 }, 3000), { date: ship, minutes: 510 });
+  eq("pickup lands on midnight", suggestedPickup({ date: "2026-09-30", minutes: 360 }, 5.5 * 3600), { date: "2026-09-30", minutes: 0 });
+  eq("pickup rolls to prev day", suggestedPickup({ date: "2026-09-30", minutes: 360 }, 6 * 3600), { date: ship, minutes: 1410 });
   eq("pickup no duration", suggestedPickup({ date: ship, minutes: 420 }, null), null);
   eq("pickup no appt", suggestedPickup(null, 3600), null);
 

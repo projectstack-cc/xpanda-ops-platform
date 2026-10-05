@@ -1850,6 +1850,15 @@ current series).
 
 ## Loading Board (v2)
 
+- **pickup-buffer-01 — Suggested pickup buffer 60 → 30 min; Late Pickup grace 30 → 15 min.** `deliveryTime.ts`
+  gains `PICKUP_TRAFFIC_BUFFER_MIN = 30` (was a hard-coded `− 60` in `suggestedPickup()`); `latePickup.ts`
+  `LATE_GRACE_MIN` 30 → 15. Every suggested-pickup consumer goes through `suggestedPickup()`, so this moves the TV
+  loading board's pickup times + late flash, the late-pickup notification cron, Carrier View (copy now reads
+  "includes {PICKUP_TRAFFIC_BUFFER_MIN} min traffic buffer"), and the Load Verification / to-load sheet together.
+  Stale-copy sweep of `cutting-pilot/src`: nothing else stated the old numbers. Self-checks updated (buffer/grace-derived
+  values only): `deliveryTime.selfcheck.ts` **26/26**, `latePickup.selfcheck.ts` **18/18**, `toLoadSheet.selfcheck.ts`
+  **26/26** (regression). No migration.
+
 - **late-pickup-04 — Floor feedback: whole late tile flashes, slightly faster.** `globals.css` only. `.late-pulse`
   now also draws a `::after` red overlay (`inset: 0`, `pointer-events: none`) that fades 0 → 0.45 opacity, covering
   the WHOLE tile including the load cards (their own backgrounds hid a tile-background-only flash), and both the ring
@@ -1992,6 +2001,9 @@ current series).
 ---
 
 ## Carrier View (v2)
+
+- **pickup-buffer-01 (cross-ref) — suggested pickup now uses a 30-min traffic buffer** (was 60), via
+  `PICKUP_TRAFFIC_BUFFER_MIN`; the header copy reads from the constant. See `## Loading Board (v2)`.
 
 - **lgx-minimap-01 (cross-ref) — minimap component moved, no behavior change.** `CarrierMiniMap` is now the
   shared `components/DestinationMiniMap.tsx` (also used by the `/v2/logistics` drill-down); `CarrierBoard.tsx`

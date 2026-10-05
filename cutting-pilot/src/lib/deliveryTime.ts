@@ -79,8 +79,11 @@ export function parseAppointment(text: string | null | undefined, shipDay: strin
   return { date, minutes };
 }
 
+/** Traffic buffer subtracted from appointment − drive time for the suggested pickup (pickup-buffer-01). */
+export const PICKUP_TRAFFIC_BUFFER_MIN = 30;
+
 /**
- * Suggested pickup = appointment − drive time − 60 min traffic buffer, floored to 15 min
+ * Suggested pickup = appointment − drive time − PICKUP_TRAFFIC_BUFFER_MIN (30 min) traffic buffer, floored to 15 min
  * (rolls back across midnight). Null when either input is missing — never a guessed time.
  */
 export function suggestedPickup(
@@ -88,7 +91,7 @@ export function suggestedPickup(
   durationSec: number | null | undefined
 ): WallClock | null {
   if (!appt || durationSec == null || !Number.isFinite(durationSec) || durationSec < 0) return null;
-  let total = appt.minutes - Math.ceil(durationSec / 60) - 60;
+  let total = appt.minutes - Math.ceil(durationSec / 60) - PICKUP_TRAFFIC_BUFFER_MIN;
   total = Math.floor(total / 15) * 15;
   let date = appt.date;
   while (total < 0) {

@@ -17,15 +17,15 @@ export function runLatePickupSelfCheck(): { pass: boolean; results: CheckResult[
   const eq = (name: string, got: unknown, want: unknown) =>
     check(name, JSON.stringify(got) === JSON.stringify(want), JSON.stringify(got));
 
-  // 2026-09-29 is a Tuesday. "10:00 AM" with a 50-min drive → 10:00 − 50 − 60 = 8:10 → floored 8:00 (480).
+  // 2026-09-29 is a Tuesday. "10:00 AM" with a 50-min drive → 10:00 − 50 − 30 = 8:40 → floored 8:30 (510).
   const ship = "2026-09-29";
   const at = (minutes: number, date = ship) => ({ date, minutes });
 
   eq("on time (before pickup)", evaluatePickup("10:00 AM", ship, 3000, at(450)), {
-    date: ship, minutes: 480, label: "8:00 AM", late: false,
+    date: ship, minutes: 510, label: "8:30 AM", late: false,
   });
-  eq("exactly +30 not late", evaluatePickup("10:00 AM", ship, 3000, at(510))?.late, false);
-  eq("+31 late", evaluatePickup("10:00 AM", ship, 3000, at(511))?.late, true);
+  eq("exactly +15 not late", evaluatePickup("10:00 AM", ship, 3000, at(525))?.late, false);
+  eq("+16 late", evaluatePickup("10:00 AM", ship, 3000, at(526))?.late, true);
   eq("durationSec null → null", evaluatePickup("10:00 AM", ship, null, at(450)), null);
   eq("unparseable delivery_time → null", evaluatePickup("Tyler pull", ship, 3000, at(450)), null);
   eq("null delivery_time → null", evaluatePickup(null, ship, 3000, at(450)), null);
@@ -33,17 +33,17 @@ export function runLatePickupSelfCheck(): { pass: boolean; results: CheckResult[
 
   // "Thurs 7:00 AM" from a Tuesday ship day → appt Thu 10/01; viewed on Tue → weekday prefix.
   eq("different day → weekday prefix", evaluatePickup("Thurs 7:00 AM", ship, 9900, at(600)), {
-    date: "2026-10-01", minutes: 195, label: "Thu 3:15 AM", late: false,
+    date: "2026-10-01", minutes: 225, label: "Thu 3:45 AM", late: false,
   });
 
-  // "Wed 6:00AM" with a 6h drive → pickup Tue 23:00 (rolls back across midnight).
-  const rolled = evaluatePickup("Wed 6:00AM", ship, 6 * 3600, at(1380));
-  eq("midnight rollback date/minutes", rolled && [rolled.date, rolled.minutes], [ship, 1380]);
-  eq("midnight rollback same-day label", rolled?.label, "11:00 PM");
-  eq("midnight rollback exactly +30 not late", evaluatePickup("Wed 6:00AM", ship, 6 * 3600, at(1410))?.late, false);
+  // "Wed 6:00AM" with a 6h drive → pickup Tue 23:30 (rolls back across midnight).
+  const rolled = evaluatePickup("Wed 6:00AM", ship, 6 * 3600, at(1410));
+  eq("midnight rollback date/minutes", rolled && [rolled.date, rolled.minutes], [ship, 1410]);
+  eq("midnight rollback same-day label", rolled?.label, "11:30 PM");
+  eq("midnight rollback exactly +15 not late", evaluatePickup("Wed 6:00AM", ship, 6 * 3600, at(1425))?.late, false);
   const nextDay = evaluatePickup("Wed 6:00AM", ship, 6 * 3600, at(0, "2026-09-30"));
   eq("midnight rollback late across day", nextDay?.late, true);
-  eq("midnight rollback viewed next day → prefix", nextDay?.label, "Tue 11:00 PM");
+  eq("midnight rollback viewed next day → prefix", nextDay?.label, "Tue 11:30 PM");
   eq("ordinal spans days", wallClockOrdinal(at(0, "2026-09-30")) - wallClockOrdinal(at(1380)), 60);
 
   // etNowWallClock — EDT (UTC−4) and EST (UTC−5).
