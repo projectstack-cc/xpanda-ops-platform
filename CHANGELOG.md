@@ -5762,6 +5762,8 @@ current series).
 
 ## Database / API
 
+- **quickwin-01 — `PUT /api/parts` persists every editable field, only when sent (db-api-agent §9, admin-auth-agent §8 consulted). Legacy Pages; no migration.** The PUT only wrote the 7 core fields (+ `bundle_qty`), silently dropping `name`, `weight`, `color`, `allow_rotation`, `sort_order`, `category`, `parent_group` — so Admin → Parts edits (which send name/category/weight/color/parent_group) returned `ok: true` and discarded the change. New pure `buildPartUpdate()` in `_worker.js/routes/production.js`: core 7 always written (validation unchanged); each optional column written only when its key is present (`!== undefined`) from a fixed whitelist, normalized exactly like POST — so the block calculator's core-7-only payload never blanks name/color. `logActivity` details gain `fields` (optional columns written). 404 / duplicate-number 409 handling unchanged. Verified: `node --check` on a named temp copy; a throwaway harness running the copied builder on admin / block-calculator / v2 payload shapes — admin SQL has name/weight/color/category/parent_group/bundle_qty and no allow_rotation/sort_order, block-calc has no optional columns, v2 adds only bundle_qty; placeholders == binds in all three (15/9/10).
+
 - **hb-onhand-01 — Holey Board floor stock: `hb_on_hand` column, net re-nest, `PUT
   /api/jobs/:id/hb-on-hand` (+ v2 mirror) (db-api-agent + next-platform-agent §9a).**
   Data-layer only (UI/PDF rendering is hb-onhand-02). New nullable

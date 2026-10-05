@@ -1,5 +1,37 @@
 import { json, logActivity, safeJsonParse, nowSqlite } from '../lib/core.js';
 
+// quickwin-01: PUT /api/parts SET builder. The 7 core fields are always written (validated by the
+// caller); each optional field is written ONLY when its key is present in the payload, so callers
+// that send a subset (block calculator: core 7 only) never blank out name/color/etc. Column names
+// come from this fixed whitelist — payload keys are never interpolated into SQL. Normalization
+// matches the POST branch.
+const PART_OPTIONAL_FIELDS = [
+  ["name",           (v) => String(v || "").trim()],
+  ["weight",         (v) => Number.isFinite(Number(v)) ? Number(v) : 1],
+  ["color",          (v) => String(v || "#D97706").trim()],
+  ["allow_rotation", (v) => v ? 1 : 0],
+  ["sort_order",     (v) => Number.isFinite(Number(v)) ? Number(v) : 0],
+  ["category",       (v) => String(v || "").trim()],
+  ["parent_group",   (v) => String(v || "").trim()],
+  ["bundle_qty",     (v) => parseInt(v, 10) || 0],
+];
+
+function buildPartUpdate(payload, core, now, id) {
+  const sets  = ["part_number=?", "customer=?", "density_material=?", "length_in=?", "width_in=?", "height_in=?", "notes=?"];
+  const binds = [core.part_number, core.customer, core.density_material, core.length_in, core.width_in, core.height_in, core.notes];
+  const fields = [];
+  for (const [col, norm] of PART_OPTIONAL_FIELDS) {
+    if (payload[col] !== undefined) {
+      sets.push(`${col}=?`);
+      binds.push(norm(payload[col]));
+      fields.push(col);
+    }
+  }
+  sets.push("updated_at=?");
+  binds.push(now, id);
+  return { sql: `UPDATE parts SET ${sets.join(", ")} WHERE id=?`, binds, fields };
+}
+
 export async function handleApiParts(request, env) {
   const db = env.DB;
   if (!db) return json({ ok: false, error: "Missing D1 binding: DB" }, 500);
@@ -90,19 +122,14 @@ export async function handleApiParts(request, env) {
 
     const now = nowSqlite();
     try {
-      const bundle_qty_upd = payload.bundle_qty !== undefined ? (parseInt(payload.bundle_qty, 10) || 0) : undefined;
-      const updateSql = bundle_qty_upd !== undefined
-        ? `UPDATE parts SET part_number=?, customer=?, density_material=?, length_in=?, width_in=?, height_in=?, notes=?, bundle_qty=?, updated_at=? WHERE id=?`
-        : `UPDATE parts SET part_number=?, customer=?, density_material=?, length_in=?, width_in=?, height_in=?, notes=?, updated_at=? WHERE id=?`;
-      const updateBinds = bundle_qty_upd !== undefined
-        ? [part_number, customer, density_material, length_in, width_in, height_in, notes, bundle_qty_upd, now, id]
-        : [part_number, customer, density_material, length_in, width_in, height_in, notes, now, id];
-      await db.prepare(updateSql).bind(...updateBinds).run();
+      const upd = buildPartUpdate(payload,
+        { part_number, customer, density_material, length_in, width_in, height_in, notes }, now, id);
+      await db.prepare(upd.sql).bind(...upd.binds).run();
 
       const part = await db.prepare("SELECT * FROM parts WHERE id = ?").bind(id).first();
       await logActivity(db, 'update', 'part', id,
         `Updated part ${part_number}`,
-        { part_number, customer, length_in, width_in, height_in }
+        { part_number, customer, length_in, width_in, height_in, fields: upd.fields }
       );
       return json({ ok: true, message: "Part updated.", part });
     } catch (e) {
