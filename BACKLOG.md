@@ -170,13 +170,6 @@
 - [ ] **Block-nesting width step-down end-cap view** (deferred unless testing requires) — P411's
   `ChunkElevation.tsx` surfaces width step-downs only in the table's `Part W×L` column; a true
   end-cap (front-face) diagram is a follow-on, not built here either.
-- [ ] **P282 follow-up — elapsed-time readout on `ClockedInBar`.** Deferred: `formatDuration` lives
-  in `src/lib/time.ts` (shared, in scope), but the UTC-timestamp parser it depends on
-  (`parseUtc`) is a module-private function in that same file, and `src/lib/time.ts` was out of
-  scope for P282. Export `parseUtc` (or an elapsed-seconds wrapper) from `src/lib/time.ts`, then
-  wire each session's `started_at` through it per stacked bar in `ClockedInBar.tsx` (P309 made
-  `CuttingBoard.tsx`'s state an array, `mySessions`, one bar per open session) — no new duration
-  logic needed.
 - [ ] **P309 follow-up — "clock out all" convenience (partially addressed by cutting-signout-01).**
   With multiple concurrent open sessions now possible, an operator wrapping up for the day has to
   stop each stacked `ClockedInBar` one at a time *while still on the board*. `cutting-signout-01`

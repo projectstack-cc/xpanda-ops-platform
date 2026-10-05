@@ -655,6 +655,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
               customer={session.customer}
               line={session.line}
               startedAt={session.started_at}
+              nowMs={now}
               orphaned={session.orphaned}
               onClockOut={() =>
                 openClockOut(session.session_id, session.line, session.job_id)

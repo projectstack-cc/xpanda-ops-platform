@@ -1,19 +1,18 @@
 "use client";
+import { formatDuration, secondsSince } from "@/lib/time";
 
 type Props = {
   invoice: string | null;
   customer: string | null;
   line: string;
   startedAt: string;
+  nowMs: number; // quickwin-06: parent's 30 s tick — drives the elapsed readout
   orphaned: boolean;
   onClockOut: () => void;
   onOpen?: () => void;
   disabled?: boolean;
 };
 
-// Elapsed-time readout deferred: the UTC-parsing helper backing formatDuration() is a
-// module-private fn in @/lib/time.ts, and that file is out of scope for this prompt — see
-// BACKLOG.md rather than duplicating the parser here.
 // P309: layout-neutral by design — an operator may hold several open sessions at once, so the
 // parent (CuttingBoard.tsx) owns the fixed/bottom-anchored stacking container and this component
 // just renders one row's content.
@@ -21,11 +20,15 @@ export default function ClockedInBar({
   invoice,
   customer,
   line,
+  startedAt,
+  nowMs,
   orphaned,
   onClockOut,
   onOpen,
   disabled,
 }: Props) {
+  // quickwin-06: elapsed since the session started, at the board's 30 s tick resolution.
+  const elapsed = formatDuration(secondsSince(startedAt, nowMs));
   return (
     <div className="bg-[var(--card-bg)] border-t border-border">
       {orphaned && (
@@ -41,7 +44,8 @@ export default function ClockedInBar({
             className="touch-manipulation min-w-0 text-left min-h-[44px] rounded hover:bg-[var(--border-light)] -mx-1 px-1"
           >
             <p className="text-sm font-semibold text-text truncate">
-              Running — {invoice ? `#${invoice}` : "Job"}
+              Running — {invoice ? `#${invoice}` : "Job"} ·{" "}
+              <span className="tabular-nums">{elapsed}</span>
             </p>
             <p className="text-xs text-muted truncate">
               {customer ? `${customer} · ` : ""}
@@ -51,7 +55,8 @@ export default function ClockedInBar({
         ) : (
           <div className="min-w-0">
             <p className="text-sm font-semibold text-text truncate">
-              Running — {invoice ? `#${invoice}` : "Job"}
+              Running — {invoice ? `#${invoice}` : "Job"} ·{" "}
+              <span className="tabular-nums">{elapsed}</span>
             </p>
             <p className="text-xs text-muted truncate">
               {customer ? `${customer} · ` : ""}

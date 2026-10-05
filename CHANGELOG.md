@@ -13,6 +13,8 @@ current series).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **quickwin-06 — elapsed-time readout on the `/v2/cutting` running-session bar (react-component-agent §9b). No migration, no API change.** P282 deferred it because `parseUtc` was module-private in `lib/time.ts`. New exported `secondsSince(ts, nowMs)` in `lib/time.ts` (`parseUtc` stays private; null/unparseable → 0). `ClockedInBar` takes `nowMs`, destructures the already-passed `startedAt`, and renders `Running — #INV · 1h 12m` (`formatDuration`, `tabular-nums`) in both the button and plain variants; the deferral comment is gone. `CuttingBoard.tsx` passes its existing 30 s `now` tick (no new interval). Floor-visible: operators see a running timer on their Stop bar(s). Verified: `tsc --noEmit` clean, `cf-build` green (batch build), LF-only; reasoned cases — started 75 min ago → `1h 15m`, 20 s ago → `20s`, null/garbage `started_at` → `parseUtc` NaN → `0s` (no crash, no `NaN`).
+
 - **shift-alert-01 — Cutting shift-risk notifications (T-2h + end-of-shift) (§9a / §9 / §8). Manual migration:
   `DB_Migrations/shift-risk-alerts.sql`.** New notification type **`cutting.shift_risk`** ("Cutting at risk (shift
   end)"), delivered via the existing role-subscription `dispatchNotification()`. Two checkpoints per shift (ET):

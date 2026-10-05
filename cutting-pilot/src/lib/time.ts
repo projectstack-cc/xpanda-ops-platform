@@ -5,6 +5,13 @@ function parseUtc(ts: string): number {
   return Date.parse(ts.replace(" ", "T") + "Z");
 }
 
+// Elapsed seconds since a D1 UTC timestamp, measured against nowMs. 0 for null/unparseable.
+export function secondsSince(ts: string | null, nowMs: number): number {
+  if (!ts) return 0;
+  const startMs = parseUtc(ts);
+  return Number.isNaN(startMs) ? 0 : Math.max(0, (nowMs - startMs) / 1000);
+}
+
 // Total tracked seconds for a line = accumulated closed-session time (from the server)
 // plus the currently-running session's elapsed (if any), measured against `nowMs`.
 export function lineLiveSeconds(
