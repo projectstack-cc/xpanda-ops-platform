@@ -94,8 +94,6 @@
 - [ ] **shift-alert follow-up — notification deep-link for `entity_type='job'`.** `shared/notif-bell.js`
   `DEEPLINKS` has no `job` entry, so these alerts don't click through. Add one to the v2 Job Board order once
   `/v2/board` supports opening a job by id.
-- [ ] **shift-alert follow-up — confirm 3rd-shift work nights.** `WORK_DAYS` assumes Mon–Fri on the shift's start
-  date (Fri night counts, Sun night doesn't). Flip the constant if 3rd shift runs Sun–Thu.
 - [ ] **P413 follow-up — PO→job creation from the block-calculator spreadsheet.** The Block
   Calculator's loaded PO spreadsheet carries only parts (no customer/job info), so bag labels are
   generated straight from `skuLines` with no job created. Wiring PO→job creation is a separate,
@@ -147,7 +145,15 @@
   every open session in one action when the operator chooses to stop before signing out) — this
   item stays open for the separate case of stopping all sessions without signing out, e.g. a
   dedicated "Stop All" action directly on the board/`ClockedInBar` stack.
-- [ ] Enable OpenNext skew protection on the v2 Worker (durable fix for hashed-asset 404s across deploys) — see https://opennext.js.org/cloudflare/howtos/skew
+- [ ] **OpenNext 1.x upgrade (unlocks skew protection).** Steve wants skew protection (2026-10-05),
+  but `cutting-pilot` is on `@opennextjs/cloudflare` ^0.3.0 (Next 14.2.5, wrangler 3) and skew
+  protection (experimental) only exists in the 1.x line. Scope as its own project: (1) upgrade
+  OpenNext 0.3 → 1.x and re-validate the `@opennextjs/aws` patch-package fix and
+  `scripts/fix-asset-prefix.mjs`; (2) skew protection needs `run_worker_first = true` (every asset
+  request then counts as a Worker invocation — weigh against invocation quota), Workers preview URLs
+  enabled, env `CF_WORKER_NAME`/`CF_PREVIEW_DOMAIN`/`CF_WORKERS_SCRIPTS_API_TOKEN`/`CF_ACCOUNT_ID`,
+  and a unique `deploymentId` per deploy (`getDeploymentId()`); (3) CI currently runs plain
+  `wrangler deploy` — confirm it's compatible. See https://opennext.js.org/cloudflare/howtos/skew
 - [ ] Surface completed_qty in the checklist/reports (progress bars per part, first-pass yield) once qty data accrues
 - [ ] Cross Cutter / Hole Cutter chunk checklists (replace the shared parts list) once block-calc BOM feeds chunk counts
 - [ ] **Cleanup: remove remaining dormant chunk logic** (`cut-plan/save`'s Cross Cutter chunk
@@ -411,9 +417,6 @@
   keys, block variants, laminate) — separate prompt, not touched by P387/P389.
 - [ ] **P387 follow-up — HB base lines with no stated thickness (21 in corpus).** Left unmatched
   by design in P387; decide handling (default thickness? flag for manual review?).
-- [ ] **P387 follow-up — "remainder of block" / "pallet foam" note lines.** Ambiguous whether
-  these should ship as line items or be filtered like the credit-card/processing-fee lines P387
-  excluded; Steve's call.
 - [ ] Re-run Lob ship-to address verification (P249) at BOL generation time, in case the ship-to was edited after job save without re-triggering verification, or verification wasn't yet available for older jobs.
 - [ ] Surface ZIP+4 (`ship_to_standardized.zip4`, captured by P249's Lob verification) onto the printed BOL.
 - [ ] **Lob verification: act on diagnostic outcome from P255.** P255 added `key_mode`/`error_detail` observability but changed no verification behavior. After deploy, Steve must save a job with a known-good address and read the browser console: `key_mode: 'test'` → swap the Worker secret to a `live_` key (hypothesis confirmed, no code change needed); `key_mode: 'live'` + `reason: 'lob_error'` → read `error_detail`'s Lob HTTP status (401 bad key / 429 rate limit / 5xx outage) and scope a follow-up fix from there; `key_mode: 'live'` + `no_match` on a verified-correct address → escalate to Lob (data/account issue, not a code bug).
@@ -441,6 +444,8 @@ schedule badge):**
 ## Admin / Platform
 
 - [ ] Remove temporary `pages.dev` → `xpandaops.com` redirect from `_worker.js/index.js` once all internal links/bookmarks confirmed updated.
+  Decision 2026-10-05: hold until access logs confirm no traffic on the pages.dev
+  host (Pages analytics filtered to that host, or a temporary log line + wrangler tail).
 - [ ] Breakdown job board permissions into more granular sub-modules *(easier after F3 audit + F1a shared header — both now done)*
 - [ ] Dashboard KPIs / metrics panel — homepage widget showing jobs by status, BOLs generated this week, shipments pending/in-transit/delivered, most-used parts *(adds new endpoints)*
 - [ ] Scrap batch entry tool *(density calc now centralized in shared-utils.js — safe to add)*
