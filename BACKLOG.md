@@ -254,6 +254,9 @@
 - [ ] Order entry: load-existing-order-for-edit deep link — `/v2/orders` only creates new orders
   (P339 scope). The board's "Open in order entry" link (P343) goes to the module, not a specific
   order; once order entry supports loading an existing job for edit, deep-link to it directly.
+- [ ] OrderEditModal opens falsely dirty when any line has no part: the load mapping uses `part_id ?? undefined`
+  (dropped by JSON.stringify) but `buildCurrentSnapshot` uses `part_id || null` (`"part_id":null`). Pre-existing;
+  noticed while verifying slip-parse-03 — make both sides `?? null`.
 - [ ] v2 offload-zone editor for existing jobs (legacy PUT /api/jobs/:id/zones + zone editor) — v2 can create/preserve zones but not edit them.
 - [ ] packingSlip.ts parity gap: v2 has no `reassemblePageBreaks` (legacy lbz-parse-01) — a row whose
   QTY re-flows onto the next PDF page parses differently in v2. Real zoned slips (4404) hit this. Port
