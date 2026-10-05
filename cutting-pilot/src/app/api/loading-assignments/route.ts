@@ -346,6 +346,13 @@ export async function PUT(request: NextRequest) {
     );
   }
 
+  // loading-awaiting-01: a load with no bay can't be 'not_started' (it would render in no section).
+  // No bay means the awaiting queue — same rule as the job-level POST.
+  {
+    const finalBayId = Object.prototype.hasOwnProperty.call(payload, "bay_id") ? payload.bay_id : existing.bay_id;
+    if (payload.loading_status === "not_started" && !finalBayId) payload.loading_status = "awaiting";
+  }
+
   if (payload.loading_status) {
     if (
       (existing.loading_status === "awaiting" && payload.loading_status === "not_started") ||

@@ -325,16 +325,6 @@
 - [ ] Dissolve doesn't recompute `packEngine.ts`'s tall/narrow `"[stability: ...]"` rationale note for a receiver column it newly makes tall/narrow — that logic lives inside closed `packEngine.ts` (`applyStabilityWarnings`) and dissolve only preserves an existing note, it doesn't add a new one.
 - [ ] **Floor-test `/v2/logistics/loading` before retiring legacy `logistics/loading.html`.** Unit 3b's dock dashboard is writes-LIVE but unlinked (v2 visibility gate) and its `wrangler dev` smoke against scratch bindings is still owed (unit 3a's `preview_database_id` was a placeholder when 3b was built — see its `CHANGELOG.md` entry). Run the scratch smoke pass, then floor-test against real data before wiring it into nav or retiring the legacy page. Still dark after lgx-roll-01 (`logistics.v2`); dashboard's Dock Loading button points to legacy.
 - [ ] **Unit 3b follow-up — i18n for the new dock dashboard labels.** `DockAssignmentCard.tsx`/`AssignBayModal.tsx`/`LoadedChecklistModal.tsx`/`DockBoard.tsx`/`TeamView.tsx`/`BayListItem.tsx`/`ShippingInfoModal.tsx`/`PullJobModal.tsx`/`PhotoGalleryModal.tsx` ship English-only strings (v2 has no i18n spine wired yet, matching every other v2 UI unit so far) — needs a pass once v2 gains one.
-- [ ] **PXXX-c finding — confirm the "always not_started" Pull-Job bay behavior with Steve.**
-  Ported byte-for-byte from legacy's `confirmPullJob`: pulling a specific load onto a bay always
-  sets `loading_status: 'not_started'`, even when "Awaiting Queue (no bay)" is chosen (`bay_id:
-  null`). A `not_started` row with no `bay_id` doesn't render in any Overview section (Awaiting
-  filters on `loading_status === 'awaiting'`, bay columns filter on `bay_id === bay.id`) or in
-  Team View's bay list/drill-in — it becomes invisible until someone assigns it a bay or edits
-  its status directly. This looks like a pre-existing legacy quirk (not introduced here), not
-  touched per AGENTS.md's "don't redesign around a bug you found" rule — flag to Steve next
-  contact; a fix (job-level `POST`'s bay-presence-gated status logic already handles the null-bay
-  case correctly) would need his sign-off since it changes legacy behavior too.
 - [ ] **PXXX-c finding — `?assignment=` deep link can't reach an `archived` row.** The
   `include_archived=1`/`showAll=true` fetch-and-filter widening the deep-link resolver applies
   covers every Overview/Team View grouping except `loading_status === "archived"`, which matches

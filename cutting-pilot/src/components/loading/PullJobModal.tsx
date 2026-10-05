@@ -121,10 +121,10 @@ export default function PullJobModal({ bays, assignments, defaultBayId, onClose,
     setError(null);
     try {
       // Per-load pull (P311): place THAT load's existing assignment on the chosen bay.
-      // loading_status is always forced to 'not_started' here regardless of which bay is chosen
-      // -- ported byte-for-byte from legacy's confirmPullJob, including selecting "Awaiting Queue
-      // (no bay)" here (bay_id null + not_started, not 'awaiting'). Worth a floor check, not a
-      // fix -- see CHANGELOG.md.
+      // loading_status is sent as 'not_started' regardless of which bay is chosen (ported from
+      // legacy's confirmPullJob). For "Awaiting Queue (no bay)" (bay_id null) the PUT handler
+      // normalizes no-bay -> 'awaiting' server-side (loading-awaiting-01), so the load lands in the
+      // Awaiting queue instead of vanishing. The server owns the rule; this payload stays as-is.
       const res =
         selected.kind === "load" && selected.assignmentId
           ? await fetch("/v2/api/loading-assignments", {
