@@ -454,6 +454,28 @@ window.PackingSlipParser = (function () {
     return { items: tagged, zonesFound: zoneInfo.size, warnings };
   }
 
+  // slip-parse-02: a Holey Board / Insulperm row with no thickness whose QTY exactly equals the
+  // board-feet of the consecutive thickness rows directly below it is the slip's BDFT-total
+  // declaration, not a product (INV 4466: 5,612 = 15x5.25x8 + 31x6.25x8 + 33x7.25x8 + 23x8.25x8).
+  // Drop it ONLY on an exact checksum; anything else passes through untouched for human review.
+  function dropHbBdftSummaries(items) {
+    const isHB = (it) => /holey board|insulperm/i.test((it.category || '') + ' ' + (it.description || ''));
+    const out = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (isHB(it) && it.thickness == null) {
+        let sum = 0, n = 0;
+        for (let j = i + 1; j < items.length && isHB(items[j]) && items[j].thickness != null; j++) {
+          sum += items[j].thickness * items[j].quantity * BDFT_PER_INCH_2X4;
+          n++;
+        }
+        if (n > 0 && Math.round(sum) === Math.round(it.quantity)) continue;
+      }
+      out.push(it);
+    }
+    return out;
+  }
+
   // Flags a line whose category density ("Holey Board:2.0#") disagrees with the density
   // stated in its own description text ("Holey Board 1.0#") — both wordings appear on real
   // slips and, when they disagree, the correct density needs a human call before job create.
@@ -809,6 +831,7 @@ window.PackingSlipParser = (function () {
     data.line_items = zoneResult.items;
     data.offload_zones_enabled = zoneResult.zonesFound > 0 ? 1 : 0;
     data.offload_warnings = zoneResult.warnings;
+    data.line_items = dropHbBdftSummaries(data.line_items);
     tagDensityConflicts(data.line_items);
     data.line_items.forEach(li => { delete li._rawText; });
 
@@ -867,7 +890,7 @@ window.PackingSlipParser = (function () {
     // pdf.js/file loading) plus the offload-zone helpers for the node test harness — there are
     // no reference PDF fixtures in the repo yet. Not used by any page at runtime.
     _internal: {
-      parseDoc, tagOffloadZones, tagDensityConflicts, reassemblePageBreaks,
+      parseDoc, tagOffloadZones, tagDensityConflicts, dropHbBdftSummaries, reassemblePageBreaks,
       extractZoneOrdinal, extractZoneLabel, normalizeZoneLabel, extractBracePieceCount,
       extractDensityValue, extractThickness, isItemHeader, reconstructLine,
     },

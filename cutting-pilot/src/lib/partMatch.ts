@@ -39,6 +39,34 @@ function num(v: number | string | undefined | null): number {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// slip-parse-02: "L" x W" x H"" from a matched part's dimensions — same format as legacy
+// _partDims in jobs/index.html. Empty string if any dimension is missing/invalid.
+export function partDimsString(p: Part): string {
+  const dims = [p.length_in, p.width_in, p.height_in].map((v) => parseFloat(String(v ?? "")));
+  if (dims.some((d) => !Number.isFinite(d) || d <= 0)) return "";
+  return `${String(dims[0])}" x ${String(dims[1])}" x ${String(dims[2])}"`;
+}
+
+// slip-parse-02: fallback dimensions for a Holey Board / Insulperm slip line (HB slips never print a
+// 3-part dimension). Footprint from the first "(24" x 48")" parenthetical, larger side first
+// (catalog orientation 48 x 24); defaults to 48 x 24. Empty string for non-HB or no thickness.
+export function hbSlipDims(line: { category?: string; description?: string; thickness?: number }): string {
+  const text = (line.category || "") + " " + (line.description || "");
+  if (!/holey board|insulperm/i.test(text)) return "";
+  const t = line.thickness;
+  if (typeof t !== "number" || !Number.isFinite(t) || t <= 0) return "";
+  let L = 48;
+  let W = 24;
+  const m = (line.description || "").match(/\(\s*(\d+(?:\.\d+)?)\s*["”]\s*[xX×]\s*(\d+(?:\.\d+)?)\s*["”]\s*\)/);
+  if (m) {
+    const a = parseFloat(m[1]);
+    const b = parseFloat(m[2]);
+    L = Math.max(a, b);
+    W = Math.min(a, b);
+  }
+  return `${L}" x ${W}" x ${t}"`;
+}
+
 export function parseDimensionValues(
   dimStr: string | undefined | null
 ): { length: number; width: number; height: number } | null {

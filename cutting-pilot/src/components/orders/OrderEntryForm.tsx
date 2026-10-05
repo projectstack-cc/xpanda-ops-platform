@@ -8,7 +8,7 @@ import { FileUp, Plus, Printer, Trash2 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import { useLang } from "@/components/lang";
 import { parsePackingSlip } from "@/lib/packingSlip";
-import { matchLineItemToPart, loadPartsLibrary } from "@/lib/partMatch";
+import { matchLineItemToPart, loadPartsLibrary, partDimsString, hbSlipDims } from "@/lib/partMatch";
 import { bdftPerPiece, computeTotalBdft } from "@/lib/bdft";
 import { buildCutListPdf, type CutListJob } from "@/lib/cutList";
 import PartsPicker from "@/components/orders/PartsPicker";
@@ -252,11 +252,15 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
           const parts = await loadPartsLibrary();
           items = items.map((li) => {
             const m = matchLineItemToPart(li, parts);
-            return m ? { ...li, part_id: m.part.id, part_number: m.part.part_number } : li;
+            return m
+              ? { ...li, part_id: m.part.id, part_number: m.part.part_number,
+                  dimensions: li.dimensions || partDimsString(m.part) }
+              : li;
           });
         } catch {
           /* parts unavailable — leave rows for manual entry */
         }
+        items = items.map((li) => (li.dimensions ? li : { ...li, dimensions: hbSlipDims(li) }));
         setLineItems(items);
       }
     } catch {

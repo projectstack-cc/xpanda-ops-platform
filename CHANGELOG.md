@@ -714,6 +714,16 @@ current series).
 
 ## Orders (v2)
 
+- **slip-parse-02 — v2 Holey Board dimensions from matched part (+ slip fallback); BDFT-total summary-row drop
+  parity (React Component Agent §9b). No migration.** HB slips never print a 3-part dimension, so v2 HB lines had
+  blank `dimensions` → `bdftPerPiece()` null, Total BDFT 0, nothing for the load builder to pack. `partMatch.ts`:
+  new `partDimsString(part)` (`L" x W" x H"`, same format as legacy `_partDims`) and `hbSlipDims(line)` (HB/Insulperm
+  with a positive thickness only; footprint from the first `(24" x 48")` parenthetical, larger side first, default
+  48 x 24). `OrderEntryForm.handleSlipFile()`: matched rows take `li.dimensions || partDimsString(m.part)` (slip dims
+  still win, legacy precedence); rows still blank (unmatched / parts library unavailable) fall back to
+  `hbSlipDims()`. `packingSlip.ts`: `dropHbBdftSummaries()` mirrors the legacy fix. INV 4466 now parses to 4 lines
+  (15/31/33/23 @ 5.25/6.25/7.25/8.25") with v2 Total BDFT 5,612. See Job Board → slip-parse-02.
+
 - **slip-parse-01 — v2 packing-slip parity (React Component Agent §9b). No migration.** `src/lib/packingSlip.ts`
   mirrors the legacy fix exactly (multi-line description continuation via `_descOpen`, `facer_missing` laminate
   check); `mapToPrefill()` passes `facer_missing` through. `OrderEntryForm.tsx`: `OrderLineItem.facer_missing`
@@ -7395,6 +7405,15 @@ current series).
 ---
 
 ## Job Board
+
+- **slip-parse-02 — Packing-slip parser drops Holey Board BDFT-total summary rows (Job Board Agent §2). No
+  migration / schema / worker change.** New `dropHbBdftSummaries()` in `jobs/packing-slip-parser.js` (exposed on
+  `_internal`), run in `parseDoc()` after `tagOffloadZones()` and before `tagDensityConflicts()`: a Holey Board /
+  Insulperm row with no thickness whose QTY exactly equals the board-feet (`thickness × qty × 8`) of the consecutive
+  thickness rows directly below it is the slip's BDFT-total declaration, not a product, and is dropped. On INV 4466
+  the first row (`Holey Board 1.0# - RC 2' x 4' (24" x 48")`, QTY 5,612) previously became a "5,612 holey boards"
+  line item. Exact-checksum only — a mismatched total (e.g. 5,611) is kept for human review. Zoned slips are
+  unaffected (their summary rows are already consumed by `tagOffloadZones()`). See Orders (v2) → slip-parse-02.
 
 - **slip-parse-01 — Packing-slip parser captures full multi-line descriptions + laminate facer-missing warning
   (Job Board Agent §2). No migration / schema / worker change.** `parseLineItems()` in `jobs/packing-slip-parser.js`

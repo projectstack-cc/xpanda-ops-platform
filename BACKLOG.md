@@ -254,6 +254,8 @@
 - [ ] Order entry: load-existing-order-for-edit deep link — `/v2/orders` only creates new orders
   (P339 scope). The board's "Open in order entry" link (P343) goes to the module, not a specific
   order; once order entry supports loading an existing job for edit, deep-link to it directly.
+- [ ] packingSlip.ts parity gap: v2 has no tagOffloadZones / tagDensityConflicts — zoned HB
+  slips and density conflicts aren't handled in v2 order entry.
 - [ ] Packing-slip parser rewrite (anchor-relative extraction + per-vendor template registry) —
   P340 ported the existing y-coordinate/x-gap heuristic parser as-is into v2; the more robust
   rewrite is still a separate, future effort (applies to both legacy and v2 copies).

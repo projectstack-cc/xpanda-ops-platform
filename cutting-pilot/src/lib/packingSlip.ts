@@ -392,6 +392,32 @@ function parseLineItems(groups: LineGroup[], descriptionY: number): ParsedLineIt
     });
 }
 
+// slip-parse-02: parity with legacy dropHbBdftSummaries() in jobs/packing-slip-parser.js. A Holey
+// Board / Insulperm row with no thickness whose QTY exactly equals the board-feet of the consecutive
+// thickness rows directly below it is the slip's BDFT-total declaration, not a product (INV 4466:
+// 5,612 = 15x5.25x8 + 31x6.25x8 + 33x7.25x8 + 23x8.25x8). Drop it ONLY on an exact checksum.
+const BDFT_PER_INCH_2X4 = 8;
+
+function dropHbBdftSummaries(items: ParsedLineItem[]): ParsedLineItem[] {
+  const isHB = (it: ParsedLineItem) =>
+    /holey board|insulperm/i.test((it.category || "") + " " + (it.description || ""));
+  const out: ParsedLineItem[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (isHB(it) && it.thickness == null) {
+      let sum = 0;
+      let n = 0;
+      for (let j = i + 1; j < items.length && isHB(items[j]) && items[j].thickness != null; j++) {
+        sum += (items[j].thickness as number) * items[j].quantity * BDFT_PER_INCH_2X4;
+        n++;
+      }
+      if (n > 0 && Math.round(sum) === Math.round(it.quantity)) continue;
+    }
+    out.push(it);
+  }
+  return out;
+}
+
 // ─── Main document parser ─────────────────────────────────────────────────
 
 function parseDoc(rawItems: RawItem[]): ParsedDoc {
@@ -588,6 +614,7 @@ function parseDoc(rawItems: RawItem[]): ParsedDoc {
 
   if (descriptionIdx >= 0) {
     data.line_items = parseLineItems(groups, lines[descriptionIdx].y);
+    data.line_items = dropHbBdftSummaries(data.line_items);
   }
 
   data.line_items = (data.line_items || []).filter((li) => {
