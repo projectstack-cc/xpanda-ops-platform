@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Modal from "@/components/Modal";
+import { compressPhoto } from "@/lib/compressPhoto";
 
 interface CarrierRow {
   invoice_number: string | null;
@@ -24,26 +25,35 @@ export default function CarrierUploadModal({ isOpen, onClose, row, onDone }: Pro
   const [base64, setBase64] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const delivered = row.loading_status === "delivered";
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  // quickwin-09: downscale before upload instead of bouncing full-res phone photos. 2000 px / 0.8
+  // (larger than the dock checklist's 1200 / 0.6) — this is a signed legal document, so signatures
+  // and handwriting must stay legible. The server stores carrier uploads as image/jpeg regardless.
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result || "");
+    setPreparing(true);
+    try {
+      const dataUrl = await compressPhoto(file, 2000, 0.8);
       const b64 = dataUrl.split(",")[1] || "";
       if (b64.length > MAX_BASE64_LEN) {
-        setError("Photo is too large — please retake at a lower resolution.");
+        setError("Couldn't shrink this photo enough — please try again.");
         setPreview(null);
         setBase64(null);
         return;
       }
       setPreview(dataUrl);
       setBase64(b64);
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      setError("Couldn't read this photo — please try another.");
+      setPreview(null);
+      setBase64(null);
+    } finally {
+      setPreparing(false);
+    }
   }
 
   async function handleSubmit() {
@@ -105,11 +115,11 @@ export default function CarrierUploadModal({ isOpen, onClose, row, onDone }: Pro
 
         <button
           type="button"
-          disabled={!base64 || submitting}
+          disabled={!base64 || submitting || preparing}
           onClick={handleSubmit}
           className="w-full min-h-[44px] px-4 rounded-md bg-[var(--accent)] text-[var(--surface)] text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {submitting ? "Uploading…" : "Submit"}
+          {preparing ? "Preparing photo…" : submitting ? "Uploading…" : "Submit"}
         </button>
 
         <p className="text-xs text-[var(--text-hint)]">

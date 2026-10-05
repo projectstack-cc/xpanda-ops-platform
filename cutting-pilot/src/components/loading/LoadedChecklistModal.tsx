@@ -8,6 +8,7 @@
 import { useRef, useState } from "react";
 import { Camera, Upload, X } from "lucide-react";
 import Modal from "@/components/Modal";
+import { compressPhoto } from "@/lib/compressPhoto";
 import type { DockAssignment } from "./dockTypes";
 
 interface PendingPhoto {
@@ -19,38 +20,6 @@ interface LoadedChecklistModalProps {
   assignment: DockAssignment | null;
   onClose: () => void;
   onDone: () => void;
-}
-
-function compressPhoto(file: File, maxDim: number, quality: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let w = img.width;
-        let h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) {
-            h = Math.round(h * (maxDim / w));
-            w = maxDim;
-          } else {
-            w = Math.round(w * (maxDim / h));
-            h = maxDim;
-          }
-        }
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        ctx?.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.onerror = reject;
-      img.src = String(e.target?.result || "");
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 export default function LoadedChecklistModal({ assignment, onClose, onDone }: LoadedChecklistModalProps) {

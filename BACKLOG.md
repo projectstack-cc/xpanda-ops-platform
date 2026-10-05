@@ -98,9 +98,6 @@
   in carrier-03 (appointment, drive time, suggested pickup on each tile). Revisit dock
   instructions if the carrier asks.
 
-- [ ] **P399 follow-up — client-side image downscale in `CarrierUploadModal`.** Currently only a
-  hard ~3MB base64 size cap with an inline "please retake" error; a canvas-based downscale before
-  encoding would avoid the retake step entirely for oversized phone photos.
 
 ## Shift Notes (v2)
 

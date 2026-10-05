@@ -2136,6 +2136,8 @@ current series).
 
 ## Carrier View (v2)
 
+- **quickwin-09 — Carrier View downscales signed-BOL photos before upload (react-component-agent §9b). No migration, no API change.** `CarrierUploadModal.tsx` read the phone photo raw and rejected anything over `MAX_BASE64_LEN` (3 MB base64) with "please retake at a lower resolution", which modern phone photos routinely hit. The existing private canvas downscale in `LoadedChecklistModal.tsx` is moved verbatim to new `src/lib/compressPhoto.ts` (same signature and JPEG output; the dock checklist's `compressPhoto(file, 1200, 0.6)` call is unchanged — zero behavior change there). The carrier upload now runs `compressPhoto(file, 2000, 0.8)` (deliberately larger than the checklist's: a signed legal document whose signatures must stay legible; the server already stores carrier uploads as `image/jpeg`), keeps `MAX_BASE64_LEN` as a final guard ("Couldn't shrink this photo enough — please try again."), shows "Couldn't read this photo — please try another." on decode failure, and shows "Preparing photo…" with Submit disabled while compressing. Note: `LoadedChecklistModal.tsx` was silently CRLF on disk vs an LF `HEAD` (stale stat cache); normalized to LF and confirmed byte-identical to `HEAD` before editing. Verified: `tsc --noEmit` clean, `cf-build` green (batch build), LF-only; `function compressPhoto` exists only in `lib/compressPhoto.ts`. Worth one real phone test (full-res photo of a BOL → upload succeeds → signature legible) before telling Seal.
+
 - **pickup-buffer-01 (cross-ref) — suggested pickup now uses a 30-min traffic buffer** (was 60), via
   `PICKUP_TRAFFIC_BUFFER_MIN`; the header copy reads from the constant. See `## Loading Board (v2)`.
 
