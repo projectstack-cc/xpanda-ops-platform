@@ -732,3 +732,6 @@ export async function parsePackingSlip(file: File): Promise<ParsePackingSlipResu
     return { success: false, error: err?.message || "Could not extract text from PDF" };
   }
 }
+
+// slip-parse-04: pure internals for scripts/packing-slip-parity.mjs. Not used at runtime.
+export const _internal = { parseDoc, mapToPrefill };

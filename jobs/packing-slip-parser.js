@@ -887,8 +887,9 @@ window.PackingSlipParser = (function () {
     },
 
     // lbz-parse-01: exposes parseDoc() (takes raw {text,x,y,width} items directly, skipping
-    // pdf.js/file loading) plus the offload-zone helpers for the node test harness — there are
-    // no reference PDF fixtures in the repo yet. Not used by any page at runtime.
+    // pdf.js/file loading) plus the offload-zone helpers for the node test harness. Fixtures:
+    // cutting-pilot/src/lib/packingSlipFixtures.ts; harness (expectations + legacy↔v2 parity):
+    // node cutting-pilot/scripts/packing-slip-parity.mjs (slip-parse-04). Not used at runtime.
     _internal: {
       parseDoc, tagOffloadZones, tagDensityConflicts, dropHbBdftSummaries, reassemblePageBreaks,
       extractZoneOrdinal, extractZoneLabel, normalizeZoneLabel, extractBracePieceCount,

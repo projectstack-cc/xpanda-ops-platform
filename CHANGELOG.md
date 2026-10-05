@@ -714,6 +714,20 @@ current series).
 
 ## Orders (v2)
 
+- **slip-parse-04 — committed packing-slip fixtures + legacy↔v2 parity harness (React Component Agent §9b,
+  Job Board Agent §2 consulted). No migration, no runtime behavior change.** New `src/lib/packingSlipFixtures.ts`:
+  `SLIP_FIXTURES` — real INV 4417 (wrapped laminate facer) and INV 4466 (HB BDFT-total row + card fee + notes) as
+  PII-scrubbed raw pdf.js items (bill-to/ship-to/contact/PO/notes replaced with placeholders, x/y/width preserved),
+  plus two variants derived in-file (4417-nofacer → `facer_missing`; 4466-badchecksum `5,611` → total row kept, 5
+  items). New `scripts/packing-slip-parity.mjs` (`node scripts/packing-slip-parity.mjs` from `cutting-pilot/`): loads
+  the legacy parser in `node:vm`, runs both `parseDoc`s on every fixture, checks each fixture's `expect` against EACH
+  parser, deep-compares normalized line items legacy vs v2, and on INV 4466 checks v2 `hbSlipDims` →
+  `48" x 24" x <thk>"` with Σ `bdftPerPiece × qty` = 5612; exit 1 on any failure. Verified it bites: dropping v2's
+  slip-parse-01 continuation branch fails 4417 on both expectations and parity. `packingSlip.ts` gains a
+  runtime-unused `_internal = { parseDoc, mapToPrefill }` export; the legacy parser's `_internal` comment now points
+  at the fixtures + harness (comment only). `AGENTS.md` has no verification/testing section, so no line added there.
+  Any change to either packing-slip parser should pass this harness.
+
 - **slip-parse-03 — v2 edit modal / `PUT /v2/api/orders/:id` preserve offload-zone line data (data-loss fix;
   Next/Cloudflare Platform Agent §9a + React Component Agent §9b). No migration.** The PUT deletes and re-inserts
   `job_line_items` wholesale, but only wrote `part_id … density, sort_order`, and `GET /v2/api/board/:id` never returned the
@@ -7417,6 +7431,9 @@ current series).
 ---
 
 ## Job Board
+
+- **slip-parse-04** — packing-slip fixtures + parity harness landed in `cutting-pilot/` (see `## Orders (v2)`);
+  `jobs/packing-slip-parser.js` `_internal` comment updated to point at them (no code change).
 
 - **slip-parse-02 — Packing-slip parser drops Holey Board BDFT-total summary rows (Job Board Agent §2). No
   migration / schema / worker change.** New `dropHbBdftSummaries()` in `jobs/packing-slip-parser.js` (exposed on
