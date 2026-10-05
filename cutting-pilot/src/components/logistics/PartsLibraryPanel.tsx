@@ -16,14 +16,15 @@
 // render read-only in edit mode instead (BACKLOG follow-up: broader PUT support).
 //
 // Cache note: this panel owns its own fetch/list state, refetched after every write, so its own
-// view is always correct. It does NOT invalidate PartsPicker.tsx's or partMatch.ts's separate
-// module-level /api/parts caches (Orders flow) -- both are outside this prompt's file fence. Load
+// view is always correct. quickwin-04: refetch() also drops the shared client cache
+// (lib/partsCache.ts — used by the Orders flow's PartsPicker + slip part-matching), so after any
+// create/update/delete here the next Orders read refetches instead of showing stale parts. Load
 // Builder's own job-pull matching (JobPullModal.tsx's fetchLoadBuilderSkus) has no cache of its own
-// and always re-fetches, so it is unaffected. See CHANGELOG for the exact stale-read sequence this
-// leaves on the Orders side.
+// and always re-fetches, so it is unaffected.
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, X, Check, ChevronDown, ChevronRight } from "lucide-react";
 import Modal from "@/components/Modal";
+import { invalidatePartsLibrary } from "@/lib/partsCache";
 import {
   validatePartCreate,
   validatePartUpdate,
@@ -90,6 +91,7 @@ export default function PartsLibraryPanel({ isOpen, onClose }: Props) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   async function refetch() {
+    invalidatePartsLibrary();
     setLoading(true);
     setLoadError(null);
     try {

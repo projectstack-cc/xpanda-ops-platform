@@ -183,13 +183,11 @@ export function matchLineItemToPart(
   return null;
 }
 
-// Cached parts-library fetch (legacy /api/parts, same host + shared session cookie).
-let partsCache: Part[] | null = null;
+// quickwin-04: the parts-library cache lives in partsCache.ts (single, invalidatable). Thin
+// delegate so existing imports of loadPartsLibrary from here keep working. Lazy import (not a static
+// re-export) on purpose: plain Node can't resolve "@/" and scripts/packing-slip-parity.mjs loads
+// this file for hbSlipDims — a dynamic import is only evaluated when actually called.
 export async function loadPartsLibrary(): Promise<Part[]> {
-  if (partsCache) return partsCache;
-  const res = await fetch("/api/parts");
-  const body = await res.json();
-  if (!res.ok || !body?.ok) throw new Error("parts load failed");
-  partsCache = (body.parts as Part[]) || [];
-  return partsCache;
+  const { loadPartsLibrary: load } = await import("@/lib/partsCache");
+  return load();
 }

@@ -7,25 +7,14 @@
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
 import type { OrderLineItem } from "@/components/orders/OrderEntryForm";
-
-interface Part {
-  id: string;
-  part_number: string;
-  customer: string;
-  density_material: string;
-  length_in: number | string;
-  width_in: number | string;
-  height_in: number | string;
-}
+import type { Part } from "@/lib/partMatch";
+import { loadPartsLibrary } from "@/lib/partsCache";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onPick: (line: OrderLineItem) => void;
 }
-
-// Module-level cache so re-opening the picker doesn't refetch within a session.
-let partsCache: Part[] | null = null;
 
 export default function PartsPicker({ isOpen, onClose, onPick }: Props) {
   const [parts, setParts] = useState<Part[]>([]);
@@ -36,20 +25,15 @@ export default function PartsPicker({ isOpen, onClose, onPick }: Props) {
   useEffect(() => {
     if (!isOpen) return;
     setQuery("");
-    if (partsCache) {
-      setParts(partsCache);
-      return;
-    }
     let cancelled = false;
     setLoading(true);
     setError(null);
     (async () => {
       try {
-        const res = await fetch("/api/parts");
-        const body = await res.json();
-        if (!res.ok || !body?.ok) throw new Error("load failed");
-        partsCache = (body.parts as Part[]) || [];
-        if (!cancelled) setParts(partsCache);
+        // quickwin-04: shared, invalidatable cache (lib/partsCache.ts) — no refetch within a
+        // session unless a parts write (Load Builder Parts Library) invalidated it.
+        const list = await loadPartsLibrary();
+        if (!cancelled) setParts(list);
       } catch {
         if (!cancelled) setError("Failed to load parts.");
       } finally {
@@ -73,7 +57,7 @@ export default function PartsPicker({ isOpen, onClose, onPick }: Props) {
     onPick({
       part_id: p.id,
       part_number: p.part_number || "",
-      description: `${p.density_material} ${dims(p)}`.trim(),
+      description: `${p.density_material ?? ""} ${dims(p)}`.trim(),
       quantity: "1",
       dimensions: dims(p),
       density: p.density_material || "",
