@@ -151,12 +151,15 @@ Agents working on any part of this workflow must understand the upstream and dow
 
 **Intentionally not yet built (do not add unless explicitly requested):**
 - Multi-tenant or multi-location support
-- External integrations beyond Google Sheets gviz
-- Email or SMS notifications
-- File storage via Cloudflare R2 (D1 base64 is used for small files)
+- SMS notifications (email via Resend and web-push notifications already exist)
 - Customer master record (planned but not yet scoped)
 
 Agents must NOT speculatively add features. If it's not in the prompt, don't build it.
+
+**Standing rule — bilateral BOL parity:** while legacy and v2 coexist, any change to BOL rendering
+must be mirrored across BOTH `logistics/bol-shared.js` and `cutting-pilot/src/lib/bolShared.ts`
+until legacy is archived. A render defect found on one side is STOPPED and flagged as its own
+paired change — never fixed on one side only.
 
 ---
 
@@ -227,7 +230,7 @@ When implementing new features:
 
 Never build frontend pages that rely on APIs that do not exist yet.
 
-9. **Update BACKLOG.md and CHANGELOG.md** as part of the same change: add a `CHANGELOG.md` entry keyed to the prompt number (newest-first within the module section) and remove the completed item from `BACKLOG.md`. New follow-on work goes into `BACKLOG.md`. Docs-only and report-only prompts note themselves in `CHANGELOG.md` too.
+9. **Update BACKLOG.md and CHANGELOG.md** as part of the same change: add a `CHANGELOG.md` entry keyed to the prompt/task ID (`<task>-NN`, e.g. `lb-ui-02`; legacy prompts used `PNNN`) (newest-first within the module section) and remove the completed item from `BACKLOG.md`. New follow-on work goes into `BACKLOG.md`. Docs-only and report-only prompts note themselves in `CHANGELOG.md` too.
 
 ---
 
@@ -235,7 +238,7 @@ Never build frontend pages that rely on APIs that do not exist yet.
 
 Complex features are scoped in conversation with Claude, then implemented via structured `.md` prompt files fed to Claude Code in separate sessions.
 
-- Prompts are numbered sequentially (Prompt 14, 15, 16...)
+- Prompts use task-grouped IDs `<task>-NN` (e.g. `lb-engine-01`, `lb-ui-02`), with sequence numbers only within a task group and no ordering implied between groups. Older prompts used sequential `PNNN`.
 - Complex features are broken into 2–3 sequential prompts with discrete responsibilities
 - Each prompt ends with a completion checklist and a "Notify Steve" section listing any manual steps (migrations, file replacements, etc.)
 - Prompts must explicitly state "What NOT to touch" to prevent scope creep
@@ -247,7 +250,6 @@ Complex features are scoped in conversation with Claude, then implemented via st
 Tracked here so agents don't "fix" these without being asked:
 
 - `document.write()` in module header JS files — works but is a legacy pattern. Future refactor to `DOMContentLoaded` + `insertAdjacentHTML`.
-- Flat `if/else` routing in `_worker.js` — functional but verbose at 37+ routes. A router abstraction is not planned.
 - Google Sheets gviz endpoint for incident data — uncached. Caching would help but is low priority.
 - `location_no` column exists in `bols` table but is no longer used in the UI. Column kept for backward compatibility.
 - Legacy `role` TEXT column on `users` table — kept alongside `role_id` FK for backward compatibility during transition.
