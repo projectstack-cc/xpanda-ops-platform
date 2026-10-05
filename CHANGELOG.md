@@ -13,6 +13,33 @@ current series).
 
 ## Manufacturing / Cutting (React pilot)
 
+- **shift-alert-01 — Cutting shift-risk notifications (T-2h + end-of-shift) (§9a / §9 / §8). Manual migration:
+  `DB_Migrations/shift-risk-alerts.sql`.** New notification type **`cutting.shift_risk`** ("Cutting at risk (shift
+  end)"), delivered via the existing role-subscription `dispatchNotification()`. Two checkpoints per shift (ET):
+  1st 06:00–14:30 → 12:30 / 14:30; 2nd 14:00–22:30 → 20:30 / 22:30; 3rd 22:00–06:00 → 04:00 / 06:00 next day.
+  T-2h ("Cutting at risk — Nth shift") fires while `checkpoint ≤ now < shift end`; end-of-shift ("Cutting not
+  finished — Nth shift") while `shift end ≤ now < shift end + 60 min`, so a missed 5-min tick still fires but an
+  outage never produces a stale alert hours later.
+  - `lib/cutting/shiftRisk.ts` (pure): `SHIFTS`, `lastShift()`, `etParts()` (Intl, no hand-rolled offsets),
+    `dueCheckpoints()`. `shift_date` = ET date the shift started. **`WORK_DAYS` = Mon–Fri on `shift_date`** (Fri
+    night counts, Sun night doesn't) — the one line to change if 3rd shift runs Sun–Thu.
+  - `lib/cutting/shiftRiskCron.ts`: runs on every `*/5` tick from `custom-worker.ts` (no new cron, `wrangler.toml`
+    unchanged); exits with zero queries outside a checkpoint window. Candidates: `archived_at IS NULL` and status
+    `not_started` / `in_production` / `loading` with `job_shifts` chips. **Multi-shift jobs alert only on their LAST
+    shift** (1st < 2nd < 3rd). **Finished** = `cutting_lines` n > 0 and all `complete` → no alert; n = 0 + `loading`
+    → skip (no cutting work); n = 0 otherwise → alert as "Not started". Message: customer · INV# · status/progress
+    (`deriveStatuses()`, context only — never the finished test) · being cut now (Cutting or an open session) ·
+    shift ends/ended time. No pace/ETA predictor (`qty_target` still NULL — BACKLOG).
+  - Dedupe: new `shift_risk_alerts` table, `UNIQUE (job_id, shift, shift_date, kind)`; `INSERT OR IGNORE` is the
+    atomic claim (late-pickup pattern). `job_shifts` is undated, so an unfinished job re-alerts each work day until
+    cutting finishes or the chip is removed.
+  - `admin/roles.html` + `admin/admin-i18n.js` (en/es/ht): notification-type label.
+  - `shiftRisk.selfcheck.ts` **17/17** (EDT + EST instants, Fri/Sun nights, `lastShift`). `tsc` (app + worker) +
+    `npm run cf-build` green.
+  - **Manual steps:** run `DB_Migrations/shift-risk-alerts.sql` in the D1 console **before** deploying (the cron
+    writes to the table at every checkpoint), then enable **Cutting at risk (shift end)** on the production
+    manager's role in Admin → Roles.
+
 - **cutting-signout-01 — sign-out session guard + cut-list dock height
   (react-component-agent §9b).** Fixes the reported issue of operators signing out of the
   platform while still clocked in on a cutting line, leaving it "in progress" for someone else

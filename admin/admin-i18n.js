@@ -184,6 +184,7 @@
       notifTypeQbReview: 'QuickBooks change to review',
       notifTypeQbError: 'QuickBooks sync error',
       notifTypeLatePickup: 'Late pickup',
+      notifTypeShiftRisk: 'Cutting at risk (shift end)',
 
       // ---- activity-log.html ----
       entityFilterAll: 'All Entity Types',
@@ -373,6 +374,7 @@
       notifTypeQbReview: 'Cambio de QuickBooks por revisar',
       notifTypeQbError: 'Error de sincronización de QuickBooks',
       notifTypeLatePickup: 'Recogida tardía',
+      notifTypeShiftRisk: 'Corte en riesgo (fin de turno)',
 
       entityFilterAll: 'Todos los Tipos de Entidad',
       entityJobs: 'Trabajos',
@@ -561,6 +563,7 @@
       notifTypeQbReview: 'Chanjman QuickBooks pou revize',
       notifTypeQbError: 'Erè senkronizasyon QuickBooks',
       notifTypeLatePickup: 'Ranmasaj an reta',
+      notifTypeShiftRisk: 'Koupaj an risk (fen ekip travay)',
 
       entityFilterAll: 'Tout Tip Antite',
       entityJobs: 'Travay',

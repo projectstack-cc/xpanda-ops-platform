@@ -115,6 +115,14 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **shift-alert follow-up — pace-based "may not finish".** Once the block-calc BOM populates
+  `cutting_lines.qty_target`, gate or annotate the T-2h alert on projected completion (rate from
+  `cutting_sessions.qty_done_delta`) instead of "not finished yet".
+- [ ] **shift-alert follow-up — notification deep-link for `entity_type='job'`.** `shared/notif-bell.js`
+  `DEEPLINKS` has no `job` entry, so these alerts don't click through. Add one to the v2 Job Board order once
+  `/v2/board` supports opening a job by id.
+- [ ] **shift-alert follow-up — confirm 3rd-shift work nights.** `WORK_DAYS` assumes Mon–Fri on the shift's start
+  date (Fri night counts, Sun night doesn't). Flip the constant if 3rd shift runs Sun–Thu.
 - [ ] **P413 follow-up — PO→job creation from the block-calculator spreadsheet.** The Block
   Calculator's loaded PO spreadsheet carries only parts (no customer/job info), so bag labels are
   generated straight from `skuLines` with no job created. Wiring PO→job creation is a separate,
