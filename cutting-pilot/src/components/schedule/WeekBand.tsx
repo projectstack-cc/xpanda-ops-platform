@@ -63,15 +63,27 @@ export default function WeekBand({ weekLabel, weekTab, days, birthdays, interact
   const { bdft, chunks } = weekTotals(days);
 
   return (
-    <section className="flex-1 min-h-0 flex flex-col">
-      <h2 className="shrink-0 flex items-center justify-between gap-2 px-2 py-0.5 border-b border-[var(--line)] bg-[var(--surface-2)] text-[clamp(0.625rem,0.85vh,0.75rem)] font-semibold uppercase tracking-wide text-muted">
+    <section className={interactive ? "flex flex-col sm:flex-1 sm:min-h-0" : "flex-1 min-h-0 flex flex-col"}>
+      <h2
+        className={
+          interactive
+            ? "shrink-0 flex items-center justify-between gap-2 px-3 py-1.5 sm:px-2 sm:py-0.5 border-b border-[var(--line)] bg-[var(--surface-2)] text-xs sm:text-[clamp(0.625rem,0.85vh,0.75rem)] font-semibold uppercase tracking-wide text-muted"
+            : "shrink-0 flex items-center justify-between gap-2 px-2 py-0.5 border-b border-[var(--line)] bg-[var(--surface-2)] text-[clamp(0.625rem,0.85vh,0.75rem)] font-semibold uppercase tracking-wide text-muted"
+        }
+      >
         <span>{weekLabel}</span>
         <span className="flex items-center gap-2 font-mono tabular-nums normal-case">
           <span title="Total board feet this week">{Math.round(bdft).toLocaleString()} bdft</span>
           <span title="Total holey-board chunks required this week">{chunks.toLocaleString()} chunks</span>
         </span>
       </h2>
-      <div className="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-5 gap-px bg-[var(--line)]">
+      <div
+        className={
+          interactive
+            ? "grid grid-cols-1 sm:grid-cols-5 gap-px bg-[var(--line)] sm:flex-1 sm:min-h-0"
+            : "flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-5 gap-px bg-[var(--line)]"
+        }
+      >
         {DAY_ORDER.map((day, dayIndex) => {
           const group = byDay.get(day);
           return (

@@ -1224,6 +1224,18 @@ current series).
 
 ## Schedule Board (v2)
 
+- **sched-mobile-01 — Desk schedule phone-portrait layout (react-component-agent §9b).** `/v2/schedule/desk`
+  was unusable on a phone: the `h-screen overflow-hidden` shell plus two `flex-1` week bands squeezed all 10
+  single-column days into one screen height (~60px slivers, each with its own crawling scrollbar). Fixed with
+  Tailwind breakpoints only (`sm`, <640px) — no user-agent sniffing, no `matchMedia`, no separate view. Below `sm`
+  the shell flows and the page scrolls naturally; `InteractiveScrollColumn`'s viewport is unconstrained, so every
+  order renders in full and the crawl/`ScrollWrapMarker` self-idle (content fits → `canScroll`/`overflowing` false).
+  Both weeks stack (this week, then next), day headers are `sticky top-0`, empty days keep "No loads", and rows are
+  roomier (larger text, 44px minimum tap height). `sm:` classes restore the desk layout exactly. TV board
+  `/v2/schedule` unaffected: every shared-component change (`WeekBand`, `DayColumn`, new optional `OrderRow`
+  `interactive` prop) is gated on `interactive`, with TV class strings verbatim. Files: `InteractiveScheduleBoard.tsx`,
+  `WeekBand.tsx`, `InteractiveScrollColumn.tsx`, `DayColumn.tsx`, `OrderRow.tsx`. UI-only, no migration.
+
 - **lgx-slip-01 (cross-ref) — Packing Slip viewer extracted from `board/OrderDetailModal.tsx`.** The collapsible
   block now lives in the shared `components/PackingSlipViewer.tsx` (markup/classes verbatim), shared with the
   logistics Edit Shipment modal. No behavior change: the Board keeps its legacy `/api/jobs/:id/packing-slip` source,

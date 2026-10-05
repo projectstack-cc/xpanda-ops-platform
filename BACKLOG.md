@@ -294,6 +294,9 @@
 
 *(All shipped items moved to `CHANGELOG.md` — 2026-09-04 backlog cleanup.)*
 
+- [ ] **sched-mobile-01 follow-up — StatusBadge + detail modal on phones.** `StatusBadge` was left at TV sizing on mobile (out of scope); bump it if it reads small on a real phone. Eyeball `OrderDetailModal` at 390px.
+- [ ] **sched-mobile-01 follow-up — Steve phone eyeball of /v2/schedule/desk.**
+
 ## Loading Board (v2)
 
 - [ ] **late-pickup-02 follow-up — edited `delivery_time` doesn't re-alert.** `late_pickup_notified_at` is never reset, so if an order's `delivery_time` is edited after it already alerted, a re-slipped pickup won't notify again. Revisit only if needed.

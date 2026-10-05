@@ -25,10 +25,16 @@ interface OrderRowProps {
   // this with the job_id (opens the read-only detail modal). Omitted on the TV board → not clickable,
   // behavior unchanged.
   onSelect?: (jobId: string) => void;
+  // Desk board only (sched-mobile-01): roomier row below `sm` (phone portrait), with a 44px minimum tap
+  // height and larger text. `sm:` restores the dense desk sizing. Omitted on the TV board, so classes
+  // are unchanged.
+  interactive?: boolean;
 }
 
 // Shared by customer name + INV# so they read as one visual tier.
 const PRIMARY_LABEL_CLS = "text-[clamp(0.6875rem,1vh,0.8rem)] font-medium text-text";
+// Desk variant (sched-mobile-01): readable on a phone, identical to PRIMARY_LABEL_CLS at `sm` and up.
+const PRIMARY_LABEL_CLS_DESK = "text-[0.9375rem] sm:text-[clamp(0.6875rem,1vh,0.8rem)] font-medium text-text";
 
 const SHIFT_LABELS: Record<string, string> = { "1st": "1st", "2nd": "2nd", "3rd": "3rd" };
 
@@ -36,7 +42,9 @@ function isScrapYes(scrapPickup: string | null): boolean {
   return (scrapPickup ?? "").trim().toUpperCase().startsWith("Y");
 }
 
-export default function OrderRow({ row, orphanedGroup, inGroup, onSelect }: OrderRowProps) {
+export default function OrderRow({ row, orphanedGroup, inGroup, onSelect, interactive }: OrderRowProps) {
+  const primaryCls = interactive ? PRIMARY_LABEL_CLS_DESK : PRIMARY_LABEL_CLS;
+  const smallText = interactive ? "text-xs sm:text-[10px]" : "text-[10px]";
   const clickable = !!onSelect && !!row.job_id;
   const scrapYes = isScrapYes(row.scrap_pickup);
   const loadLabel = formatLoadLabel(row.method, row.load_count);
@@ -52,7 +60,7 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect }: Orde
   return (
     <div
       className={[
-        "px-1.5 py-1",
+        interactive ? "px-3 py-2.5 min-h-[44px] sm:px-1.5 sm:py-1 sm:min-h-0" : "px-1.5 py-1",
         inGroup ? "" : "border-b border-[var(--border-light)]",
         row.unmatched ? "opacity-60 grayscale-[30%]" : "",
         clickable ? "cursor-pointer hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]" : "",
@@ -72,20 +80,20 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect }: Orde
         : {})}
     >
       <div className="flex items-center justify-between gap-1 min-w-0">
-        <span className={`truncate ${PRIMARY_LABEL_CLS}`}>{row.customer || "—"}</span>
+        <span className={`truncate ${primaryCls}`}>{row.customer || "—"}</span>
         <span className="shrink-0 flex items-center gap-0.5">
           {orphanedGroup && (
             <Link2 size={10} className="shrink-0 text-[var(--brand)]" aria-label="Linked to a job on another day" />
           )}
           {row.chunks_required != null && (
             <span
-              className="shrink-0 rounded px-1 text-[10px] leading-tight font-semibold tabular-nums bg-[var(--ghost-bg)] text-[var(--text-hint)] border border-[var(--border)]"
+              className={`shrink-0 rounded px-1 ${smallText} leading-tight font-semibold tabular-nums bg-[var(--ghost-bg)] text-[var(--text-hint)] border border-[var(--border)]`}
               title="Chunks required"
             >
               {row.chunks_required}c
             </span>
           )}
-          <span className={`font-mono tabular-nums ${PRIMARY_LABEL_CLS}`}>#{row.invoice_number}</span>
+          <span className={`font-mono tabular-nums ${primaryCls}`}>#{row.invoice_number}</span>
         </span>
       </div>
 
@@ -105,7 +113,7 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect }: Orde
             {row.shifts.length > 0 && row.shifts.map((s) => (
               <span
                 key={s}
-                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-200 text-slate-700 shrink-0"
+                className={`inline-flex items-center px-1.5 py-0.5 rounded ${smallText} font-medium bg-slate-200 text-slate-700 shrink-0`}
               >
                 {SHIFT_LABELS[s] ?? s}
               </span>
@@ -116,7 +124,7 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect }: Orde
           </div>
           {loadTimeLabel && (
             <span
-              className="shrink-0 font-mono tabular-nums text-[10px] text-text-hint"
+              className={`shrink-0 font-mono tabular-nums ${smallText} text-text-hint`}
               title={row.delivery_time ?? undefined}
             >
               {loadTimeLabel}

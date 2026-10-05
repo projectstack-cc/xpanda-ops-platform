@@ -6,6 +6,7 @@
 //    or click a row without it moving.
 // Single content copy (no seamless duplicate) so the scrollbar thumb reflects the real position; on
 // reaching the bottom it dwells briefly, then resets to the top.
+// sched-mobile-01: below `sm` the viewport is unconstrained (content-height, overflow visible), so the crawl idles (canScroll=false) and ScrollWrapMarker never renders — the whole day shows and the page scrolls.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SCHEDULE_SCROLL_PX_PER_SEC } from "./AutoScrollColumn";
 import ScrollWrapMarker from "./ScrollWrapMarker";
@@ -67,7 +68,7 @@ export default function InteractiveScrollColumn({ children }: { children: React.
   return (
     <div
       ref={viewportRef}
-      className="flex-1 min-h-0 overflow-y-auto"
+      className="sm:flex-1 sm:min-h-0 sm:overflow-y-auto"
       onMouseEnter={() => { pausedRef.current = true; }}
       onMouseLeave={() => { pausedRef.current = false; }}
     >

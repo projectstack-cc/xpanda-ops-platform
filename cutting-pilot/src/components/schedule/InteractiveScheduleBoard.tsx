@@ -107,11 +107,13 @@ export default function InteractiveScheduleBoard({ userName, isAdmin, permission
   const currentDays = data.days.filter((d) => d.ship_week === currentTab);
   const nextDays = data.days.filter((d) => d.ship_week === nextTab);
 
+  // sched-mobile-01: below `sm` (phone portrait) the shell flows and the page scrolls naturally;
+  // `sm:` restores the fixed-height, no-page-scroll desk layout unchanged.
   return (
-    <div className="h-screen flex flex-col bg-bg overflow-hidden">
+    <div className="min-h-screen flex flex-col bg-bg sm:h-screen sm:overflow-hidden">
       <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Schedule · Desk" currentPath="/v2/schedule/desk" />
 
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex flex-col sm:flex-1 sm:min-h-0">
         <div className="shrink-0 flex items-center justify-between px-3 py-0.5 border-b border-[var(--line)] bg-bg">
           <h1 className="text-[11px] font-semibold uppercase tracking-wide text-muted">Shipping Schedule — Desk</h1>
           <div className="flex items-center gap-2">
@@ -120,7 +122,7 @@ export default function InteractiveScheduleBoard({ userName, isAdmin, permission
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 flex flex-col gap-px bg-[var(--line)]">
+        <div className="flex flex-col gap-px bg-[var(--line)] sm:flex-1 sm:min-h-0">
           <WeekBand
             weekLabel={formatWeekLabel(currentTab, "THIS WEEK")}
             weekTab={currentTab}
