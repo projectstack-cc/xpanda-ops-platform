@@ -118,6 +118,9 @@ export async function handleApiLoadingAssignments(request, env) {
       // rather than deleting any existing loading_assignments rows.)
       conditions.push("COALESCE(j.method, '') != 'customer pickup'");
       if (!includeArchived) conditions.push("la.loading_status != 'archived'");
+      // archived-hide-01: a job archived before departure (QB void, cancelled order) drops off the
+      // board; shipped-then-archived loads stay so delivered history is intact.
+      if (!includeArchived) conditions.push("(j.archived_at IS NULL OR la.loading_status IN ('in_transit','delivered'))");
       if (bayId) { conditions.push("la.bay_id = ?"); binds.push(bayId); }
       if (filterJobId) { conditions.push("la.job_id = ?"); binds.push(filterJobId); }
       if (conditions.length) query += " WHERE " + conditions.join(" AND ");

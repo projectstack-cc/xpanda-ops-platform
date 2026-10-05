@@ -123,6 +123,9 @@ export async function GET(request: NextRequest) {
     const conditions = ["COALESCE(j.method, '') != 'customer pickup'"];
     const binds: unknown[] = [];
     if (!includeArchived) conditions.push("la.loading_status != 'archived'");
+    // archived-hide-01: a job archived before departure (QB void, cancelled order) drops off the
+    // board; shipped-then-archived loads stay so delivered history is intact.
+    if (!includeArchived) conditions.push("(j.archived_at IS NULL OR la.loading_status IN ('in_transit','delivered'))");
     if (bayId) {
       conditions.push("la.bay_id = ?");
       binds.push(bayId);

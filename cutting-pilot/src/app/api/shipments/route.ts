@@ -98,21 +98,27 @@ async function attachDistanceEta(DB: D1Database, rows: any[]): Promise<void> {
 // "ambiguous column name". Each predicate already includes its own
 // `shipments.direction = 'outbound'` clause, so the base outbound scope travels with it into the
 // ?stat= path with no separate concatenation needed.
+// archived-hide-01: a job archived before departure (QB void, cancelled order) drops off the board;
+// shipped-then-archived jobs stay visible so delivered history is intact. NOT EXISTS (not j.archived_at)
+// so it works in the list query (joins jobs j), the stats query and loadsSubquery (which don't).
+const NOT_ARCHIVED_PREDEPARTURE =
+  "(shipments.status IN ('in_transit','delivered') OR NOT EXISTS (SELECT 1 FROM jobs ja WHERE ja.id = shipments.job_id AND ja.archived_at IS NOT NULL))";
+
 const STAT_PREDICATES: Record<string, { sql: string; binds: (curMonStr: string) => unknown[] }> = {
   outbound_this_week: {
-    sql: "shipments.direction = 'outbound' AND shipments.ship_date >= ? AND shipments.ship_date <= date(?, '+6 days')",
+    sql: "shipments.direction = 'outbound' AND shipments.ship_date >= ? AND shipments.ship_date <= date(?, '+6 days') AND " + NOT_ARCHIVED_PREDEPARTURE,
     binds: (curMonStr) => [curMonStr, curMonStr],
   },
   pending_outbound: {
-    sql: "shipments.direction = 'outbound' AND shipments.status IN ('not_started', 'in_production', 'ready_to_ship')",
+    sql: "shipments.direction = 'outbound' AND shipments.status IN ('not_started', 'in_production', 'ready_to_ship') AND " + NOT_ARCHIVED_PREDEPARTURE,
     binds: () => [],
   },
   in_transit: {
-    sql: "shipments.direction = 'outbound' AND shipments.status = 'in_transit'",
+    sql: "shipments.direction = 'outbound' AND shipments.status = 'in_transit' AND " + NOT_ARCHIVED_PREDEPARTURE,
     binds: () => [],
   },
   delivered_30d: {
-    sql: "shipments.direction = 'outbound' AND shipments.status = 'delivered' AND (shipments.ship_date >= date('now', '-30 days') OR shipments.created_at >= datetime('now', '-30 days'))",
+    sql: "shipments.direction = 'outbound' AND shipments.status = 'delivered' AND (shipments.ship_date >= date('now', '-30 days') OR shipments.created_at >= datetime('now', '-30 days')) AND " + NOT_ARCHIVED_PREDEPARTURE,
     binds: () => [],
   },
 };
@@ -172,6 +178,8 @@ export async function GET(request: NextRequest) {
   } else {
     where = ["shipments.direction = 'outbound'"];
     binds = [];
+    // archived-hide-01: explicit job/shipment lookups are never filtered.
+    if (!jobId && !shipmentId) where.push(NOT_ARCHIVED_PREDEPARTURE);
 
     if (shipmentId) {
       where.push("shipments.id = ?");

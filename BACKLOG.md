@@ -180,12 +180,6 @@
   retries a processing failure. Add a periodic sweep using QBO `ChangeDataCapture` for Invoice since the
   last sweep, feeding the same `processEvents` path. Needs a cron trigger on the v2 Worker. This is
   the safety net against silent drift.
-- [ ] **QB follow-up — archived jobs still show on the loading board and shipment lists.** Found in
-  qb-02. Both the legacy and v2 loading-assignment lists filter only on
-  `loading_assignments.loading_status != 'archived'`, not `jobs.archived_at`. The v2 shipments list
-  doesn't filter on archive either. A job archived by a QB void/delete apply (or any archive) with an
-  `awaiting` loading assignment or a pending outbound shipment stays visible. Decide whether those
-  views should hide archived jobs.
 
 ---
 
@@ -261,6 +255,7 @@
 
 ## Logistics (v2)
 
+- [ ] **archived-hide-01 follow-up — legacy Classic shipment dashboard still shows archived pre-departure shipments.** Left as-is per the v2-only logistics rule; goes away when legacy `logistics/index.html` retires.
 - [ ] **quickwin-01 follow-up — v2 Parts Library edit form can now expose name/weight/color/category/parent_group.** `PartsLibraryPanel.tsx` still renders these read-only (its header comment cites the old PUT limitation); `PUT /api/parts` now persists them when sent. Widen `buildUpdatePayload` + the edit form, and update that comment.
 - [ ] **tls-01: `nextShipDay` is Mon–Fri only.** Plant holidays aren't modeled, and an occasional Saturday ship
   date never appears on the Load Verification sheets.
