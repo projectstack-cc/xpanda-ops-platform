@@ -714,6 +714,12 @@ current series).
 
 ## Orders (v2)
 
+- **slip-parse-01 — v2 packing-slip parity (React Component Agent §9b). No migration.** `src/lib/packingSlip.ts`
+  mirrors the legacy fix exactly (multi-line description continuation via `_descOpen`, `facer_missing` laminate
+  check); `mapToPrefill()` passes `facer_missing` through. `OrderEntryForm.tsx`: `OrderLineItem.facer_missing`
+  (client-only — the save payload builds explicit fields, so it is never sent), amber warn-token note under the line
+  when set, cleared on the first Description edit. See Job Board → slip-parse-01.
+
 - **board-lines-01 — restore cutting-line assignment (`jobs.processes`) on `/v2/board` (React Component
   Agent §9b; Next/Cloudflare Platform Agent §9a for the routes). No migration / schema change.** New
   `src/lib/processes.ts` (`PROCESSES` with abbreviations, `PROCESS_NAMES`, `JobProcess`, defensive
@@ -7389,6 +7395,23 @@ current series).
 ---
 
 ## Job Board
+
+- **slip-parse-01 — Packing-slip parser captures full multi-line descriptions + laminate facer-missing warning
+  (Job Board Agent §2). No migration / schema / worker change.** `parseLineItems()` in `jobs/packing-slip-parser.js`
+  now keeps appending continuation lines to a keyword-started description (`Foam Block` / `Laminate` / `Holey Board`
+  / `Insulperm`) until the dimension line, via a temp `_descOpen` flag (deleted before return). QuickBooks wraps long
+  descriptions onto a second line, which was previously dropped — on INV 4417 the laminate line parsed as
+  `Laminate/laminate 1.0# density -`, losing the facer spec `Kraft Back >> Foil one-side` (customer rejection). A
+  keyword line that itself contains dimensions never opens continuation; bundle / label lines are still skipped, and
+  lines after the dimension line (e.g. `*package in 10-count*`) stay excluded. New `facer_missing` flag on laminate
+  items whose description has nothing left after stripping the `Laminate/laminate N# density` boilerplate
+  (keyword-free — any other text counts as a facer). `jobs/index.html` adds `addFacerMissingWarning(row)` — a
+  non-blocking amber note (warn tokens) under the line, cleared on row removal or first edit of the description; does
+  not touch `pendingDensityConflicts` / `saveJob()`. `jobs-i18n.js`: `facerMissingWarning` (en/es/ht). Verified with
+  the INV 4417 pdf.js fixture (temp, not committed): laminate description complete, plain-block line unchanged,
+  zero-qty lines still filtered, synthetic slip without the facer line → `facer_missing: true`. Holey Board thickness
+  and offload-zone detection read `_rawText`, which already included `_descLines` — unaffected. v2 parity: see
+  Orders (v2).
 
 - **sched-shifts-02 — Hide list-row shift chips once cutting is complete (database-api-agent §9 + job-board-agent
   §2).** `GET /api/jobs` list (`_worker.js/routes/jobs.js`) adds a per-job `cutting_complete` boolean, computed from

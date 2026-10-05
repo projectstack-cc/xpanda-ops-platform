@@ -311,6 +311,7 @@
       offloadChecksumWarning: "⚠ {label}: BDFT mismatch — slip states {expected}, pieces total {computed}",
       offloadMissingOrdinalWarning: "⚠ \"{label}\" has no stated delivery order — confirm sequence manually",
       densityConflictWarning: "⚠ Density conflict — slip shows {cat}# in one place and {desc}# in another",
+      facerMissingWarning: "⚠ Laminate facer not found on slip — confirm facer (e.g. Kraft / Foil one side) and add it to the description",
       densityConflictChoose: "Use {density}#",
       densityConflictBlockedCreate: "Resolve the density conflict(s) above before creating this job.",
 
@@ -655,6 +656,7 @@
       offloadChecksumWarning: "⚠ {label}: discrepancia de BDFT — la hoja indica {expected}, las piezas suman {computed}",
       offloadMissingOrdinalWarning: "⚠ \"{label}\" no tiene un orden de entrega indicado — confirme la secuencia manualmente",
       densityConflictWarning: "⚠ Conflicto de densidad — la hoja muestra {cat}# en un lugar y {desc}# en otro",
+      facerMissingWarning: "⚠ No se encontró el tipo de laminado en la hoja — confirme el laminado (p. ej. Kraft / Foil un lado) y agréguelo a la descripción",
       densityConflictChoose: "Usar {density}#",
       densityConflictBlockedCreate: "Resuelva el/los conflicto(s) de densidad arriba antes de crear este trabajo.",
 
@@ -999,6 +1001,7 @@
       offloadChecksumWarning: "⚠ {label}: BDFT pa matche — bòdwo a montre {expected}, moso yo total {computed}",
       offloadMissingOrdinalWarning: "⚠ \"{label}\" pa gen lòd livrezon ki endike — konfime sekans lan manyèlman",
       densityConflictWarning: "⚠ Konfli densite — bòdwo a montre {cat}# yon kote ak {desc}# yon lòt kote",
+      facerMissingWarning: "⚠ Pa jwenn kalite laminasyon an sou bòdwo a — konfime laminasyon an (egz. Kraft / Foil yon bò) epi ajoute l nan deskripsyon an",
       densityConflictChoose: "Itilize {density}#",
       densityConflictBlockedCreate: "Rezoud konfli densite yo anwo anvan ou kreye travay sa a.",
 

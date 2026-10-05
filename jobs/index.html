@@ -2304,6 +2304,7 @@ async function prefillForm(data) {
       row.querySelector('.jobs-li-remove').addEventListener('click', () => badge.remove());
 
       if (li.density_conflict) addDensityConflictResolver(row, li.density_conflict);
+      if (li.facer_missing) addFacerMissingWarning(row);
     }
   }
 }
@@ -3083,6 +3084,18 @@ async function saveZoneEditor() {
 
 // Renders the category-density-vs-description-density choice for a parsed line and blocks
 // saveJob() (via the pendingDensityConflicts counter) until the user picks one.
+// slip-parse-01: non-blocking amber note when a laminate line has no facer spec on the slip.
+// Cleared on row removal or once the user starts typing in the description.
+function addFacerMissingWarning(row) {
+  const box = document.createElement('div');
+  box.style.cssText = 'font-size:11px;font-weight:600;margin:-4px 0 10px;padding:6px 10px;padding-left:96px;border-radius:6px;background:var(--warn-bg);color:var(--warn-text);border:1px solid var(--warn-border);';
+  box.textContent = t('jobs.facerMissingWarning');
+  row.insertAdjacentElement('afterend', box);
+  row.querySelector('.jobs-li-remove').addEventListener('click', () => box.remove());
+  const desc = row.querySelector('.li-desc');
+  if (desc) desc.addEventListener('input', () => box.remove(), { once: true });
+}
+
 function addDensityConflictResolver(row, conflict) {
   pendingDensityConflicts++;
 

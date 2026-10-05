@@ -526,8 +526,18 @@ window.PackingSlipParser = (function () {
           current._descLines.push(lineText);
         }
 
-        // Detect specific product description patterns
-        if (!current.description) {
+        // Detect specific product description patterns. Once a description starts, keep
+        // appending continuation lines until the dimension line — QuickBooks wraps long
+        // descriptions (e.g. "Laminate/laminate 1.0# density -" / "Kraft Back >> Foil one-side").
+        // slip-parse-01.
+        if (current._descOpen) {
+          if (dimMatch) current._descOpen = false;
+          else if (!/^\d+\s*pieces?\s*per\s*bundle/i.test(lineText) &&
+                   !/^LABEL\s+AS\s+INDICATED/i.test(lineText) &&
+                   !/^NO\s+LABEL/i.test(lineText)) {
+            current.description = (current.description + ' ' + lineText).replace(/\s+/g, ' ').trim();
+          }
+        } else if (!current.description) {
           if (/Foam Block/i.test(lineText)) {
             current.description = lineText;
           } else if (/Laminate/i.test(lineText) && !/specify Laminate type/i.test(lineText)) {
@@ -537,6 +547,7 @@ window.PackingSlipParser = (function () {
           } else if (/Insulperm/i.test(lineText)) {
             current.description = lineText;
           }
+          if (current.description && !dimMatch) current._descOpen = true;
         }
       }
     }
@@ -567,6 +578,17 @@ window.PackingSlipParser = (function () {
         // lbz-parse-01: full row text for offload-zone / density-conflict detection — consumed
         // and deleted by tagOffloadZones()/parseDoc() below, never reaches the caller.
         item._rawText = _thkSrc;
+        // slip-parse-01: laminate lines must carry a facer spec. Strip the base
+        // "Laminate/laminate N# density" boilerplate; if nothing is left, flag it.
+        if (/laminate/i.test((item.category || '') + ' ' + (item.description || ''))) {
+          const facer = (item.description || '')
+            .replace(/laminate\s*\/?\s*laminate/ig, ' ')
+            .replace(/\d+(?:\.\d+)?\s*#/g, ' ')
+            .replace(/\b(density|laminate)\b/ig, ' ')
+            .replace(/[\s\-–—>.,:;]+/g, ' ').trim();
+          if (!facer) item.facer_missing = true;
+        }
+        delete item._descOpen;
         delete item._isNotes;
         delete item._descLines;
         return item;

@@ -26,6 +26,7 @@ export interface OrderLineItem {
   dimensions: string;
   density: string;
   bdftOrig?: string;
+  facer_missing?: boolean;
 }
 
 export interface OrderPayload {
@@ -858,8 +859,13 @@ function setQtyAsBdftConvert(on: boolean) {
               <div key={idx} className="rounded-lg border border-[var(--card-border)] p-3 space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <TextField label="Part number" value={li.part_number} onChange={(v) => updateLine(idx, { part_number: v })} />
-                  <TextField label="Description" value={li.description} onChange={(v) => updateLine(idx, { description: v })} />
+                  <TextField label="Description" value={li.description} onChange={(v) => updateLine(idx, { description: v, facer_missing: false })} />
                 </div>
+                {li.facer_missing && (
+                  <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] px-3 py-2 text-xs font-semibold">
+                    ⚠ Laminate facer not found on slip — confirm facer (e.g. Kraft / Foil one side) and add it to the description
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
                   <label className="block">
                     <span className={labelClass}>Quantity</span>

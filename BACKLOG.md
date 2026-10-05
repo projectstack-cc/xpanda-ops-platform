@@ -562,6 +562,8 @@
 
 ## Job Board
 
+- [ ] Commit real packing-slip fixtures (raw pdf.js items, PII-scrubbed) + a node test
+  harness for packing-slip-parser.js so parser changes run against known slips.
 - [ ] v2 edit surface for HB floor stock (hb_on_hand) — OrderEditModal/OrderDetailModal have no
   way to set it; needs a `/v2/api/orders/:id/hb-on-hand` route mirroring legacy
   `PUT /api/jobs/:id/hb-on-hand`.

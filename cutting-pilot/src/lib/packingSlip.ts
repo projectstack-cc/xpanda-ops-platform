@@ -63,6 +63,8 @@ interface ParsedLineItem {
   thickness?: number;
   _isNotes?: boolean;
   _descLines?: string[];
+  _descOpen?: boolean;
+  facer_missing?: boolean;
 }
 
 interface ParsedDoc {
@@ -324,7 +326,18 @@ function parseLineItems(groups: LineGroup[], descriptionY: number): ParsedLineIt
         current._descLines!.push(lineText);
       }
 
-      if (!current.description) {
+      // slip-parse-01: once a description starts, keep appending continuation lines until the
+      // dimension line — QuickBooks wraps long descriptions (laminate facer spec on line 2).
+      if (current._descOpen) {
+        if (dimMatch) current._descOpen = false;
+        else if (
+          !/^\d+\s*pieces?\s*per\s*bundle/i.test(lineText) &&
+          !/^LABEL\s+AS\s+INDICATED/i.test(lineText) &&
+          !/^NO\s+LABEL/i.test(lineText)
+        ) {
+          current.description = (current.description + " " + lineText).replace(/\s+/g, " ").trim();
+        }
+      } else if (!current.description) {
         if (/Foam Block/i.test(lineText)) {
           current.description = lineText;
         } else if (/Laminate/i.test(lineText) && !/specify Laminate type/i.test(lineText)) {
@@ -334,6 +347,7 @@ function parseLineItems(groups: LineGroup[], descriptionY: number): ParsedLineIt
         } else if (/Insulperm/i.test(lineText)) {
           current.description = lineText;
         }
+        if (current.description && !dimMatch) current._descOpen = true;
       }
     }
   }
@@ -360,6 +374,18 @@ function parseLineItems(groups: LineGroup[], descriptionY: number): ParsedLineIt
         const thk = extractThickness(thkSrc);
         if (thk != null) item.thickness = thk;
       }
+      // slip-parse-01: laminate lines must carry a facer spec. Strip the base
+      // "Laminate/laminate N# density" boilerplate; if nothing is left, flag it.
+      if (/laminate/i.test((item.category || "") + " " + (item.description || ""))) {
+        const facer = (item.description || "")
+          .replace(/laminate\s*\/?\s*laminate/gi, " ")
+          .replace(/\d+(?:\.\d+)?\s*#/g, " ")
+          .replace(/\b(density|laminate)\b/gi, " ")
+          .replace(/[\s\-–—>.,:;]+/g, " ")
+          .trim();
+        if (!facer) item.facer_missing = true;
+      }
+      delete item._descOpen;
       delete item._isNotes;
       delete item._descLines;
       return item;
@@ -618,6 +644,7 @@ function mapToPrefill(data: ParsedDoc): PackingSlipPrefill {
         dimensions: li.dimensions || "",
         category: li.category,
         thickness: li.thickness,
+        facer_missing: li.facer_missing,
         density: deriveDensity(
           [li.category, li.description, li.label, ...(li._descLines ?? [])].filter(Boolean).join(" ")
         ),
