@@ -1,6 +1,6 @@
 // src/lib/logistics/toLoadSheetPdf.ts
 // tls-01: printable 1st / 2nd shift To-Load sheet (tls-02: retitled Load Verification Sheet, per-load
-// checkbox column, Marina Foam exclusion line, 1st-shift sign-off block). One pdf-lib document, rows already selected and
+// checkbox column, Marina Foam exclusion line, sign-off block; tls-03: on both shifts). One pdf-lib document, rows already selected and
 // ordered by lib/logistics/toLoadSheet.ts. Page chrome mirrors lib/logistics/loadingSheet.ts (margin 40,
 // US Letter portrait, Helvetica/HelveticaBold, same colors, same non-fatal logo embed); its file-local
 // drawRight/hr helpers are copied below — loadingSheet.ts and cutList.ts are NOT modified.
@@ -232,8 +232,9 @@ export async function buildToLoadSheetPdf(
       y -= ROW_H;
     }
 
-    // tls-02: 1st-shift sign-off between Load Verification and To load; ensure() keeps it on one page.
-    if (idx === 0 && sheet.shift === 1) {
+    // tls-02/tls-03: sign-off block. 1st shift: between Load Verification and To load. 2nd shift: after its
+    // only section (end of sheet). ensure() keeps it on one page.
+    if ((sheet.shift === 1 && idx === 0) || (sheet.shift === 2 && idx === sheet.sections.length - 1)) {
       ensure(54);
       y -= 4;
       hr(page, y);
