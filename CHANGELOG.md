@@ -1311,6 +1311,20 @@ current series).
 
 ## Schedule Board (v2)
 
+- **sched-dual-01 — Separate Cutting / Loading pills on schedule boards; `Cutting – x%` (next-platform-agent §9a + react-component-agent §9b).**
+  Root cause: in `deriveOne()` (`lib/schedule-status.ts`) the dock rungs (Shipped → Loaded → Loading) return before
+  the cutting rungs, so a job being cut and loaded at once showed only "Loading". The ladder and `deriveOne()` are
+  unchanged; instead `deriveStatuses()` now emits an additive side channel `cuttingStatus` / `cuttingPct`, which
+  `/api/schedule-board` passes through as `cutting_status` / `cutting_pct` (mirrored in `types/schedule.ts`). It is
+  non-null only when status is `Loading` and cutting is unfinished: an open session gives `Cutting`, otherwise any
+  `in_progress` line gives `In Production`. `progressPct` is now also computed for `Cutting` (same formula: completed
+  `cutting_line_progress` ÷ items×lines, floored, capped at 100), so the badge reads `Cutting – x%`. When the
+  denominator is 0 the badge shows the plain label. `OrderRow` renders the cutting pill first, then the unchanged
+  loading pill (including `Loading X of Y`). Loaded and Shipped never get a second pill. The badge row is now
+  `flex-wrap` so the pills and shift chips wrap instead of clipping in a narrow TV column. The carrier view
+  (`/api/carrier/schedule`) reads only `status` and is untouched. Known ripple (accepted): the shift-risk cron
+  message now reads e.g. "Cutting 40%" for actively cut jobs. No migration.
+
 - **sched-shifts-02 — Hide shift chips on cutting completion, not the `Ready` label (next-platform-agent §9a).**
   sched-shifts-01 cleared chips only when the derived status was exactly `Ready`, but Loading/Loaded/Shipped
   outrank Ready in `deriveOne()`, so a job that finished cutting and then had any dock activity kept its chips.

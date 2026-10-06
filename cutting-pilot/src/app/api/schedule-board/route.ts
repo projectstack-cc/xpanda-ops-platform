@@ -119,6 +119,8 @@ interface ScheduleBoardRow {
   progress_pct: number | null;
   loads_done: number | null;
   loads_total: number | null;
+  cutting_status: "Cutting" | "In Production" | null;
+  cutting_pct: number | null;
   unmatched: boolean;
   sheet_status: string | null;
   job_id: string | null;
@@ -198,6 +200,8 @@ export async function GET() {
         progress_pct: derived?.progressPct ?? null,
         loads_done: derived?.loadsDone ?? null,
         loads_total: derived?.loadsTotal ?? null,
+        cutting_status: derived?.cuttingStatus ?? null,
+        cutting_pct: derived?.cuttingPct ?? null,
         unmatched,
         sheet_status: row.sheet_status,
         job_id: row.match_job_id,

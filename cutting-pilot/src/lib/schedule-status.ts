@@ -16,6 +16,11 @@ export interface DerivedStatus {
   // sched-shifts-02: true once cutting is finished, independent of dock status. Drives shift-chip
   // hiding. Rule mirrored in _worker.js/routes/jobs.js (legacy list) — keep the two in sync.
   cuttingComplete: boolean;
+  // sched-dual-01: secondary cutting pill shown beside a dock status. Non-null ONLY when
+  // status === "Loading" and cutting is unfinished: open session → "Cutting", else any
+  // in_progress line → "In Production". cuttingPct uses the same formula as progressPct.
+  cuttingStatus: "Cutting" | "In Production" | null;
+  cuttingPct: number | null;
 }
 
 const CHUNK = 90; // D1 100-bound-param ceiling
@@ -48,7 +53,13 @@ async function allByJobIds<T>(
  *   5. any loading_assignments.loading_status = 'loading'                → Loading
  *   6. all of the job's cutting_lines are 'complete' (or jobs.status = 'done') → Ready
  *   7. open session → Cutting; else in_progress → In Production (X% = checked items ÷
- *      items×lines); else Not Started
+ *      items×lines — reported for BOTH Cutting and In Production since sched-dual-01); else
+ *      Not Started
+ *
+ * sched-dual-01: rungs 1-5 short-circuit the cutting rungs, so a job cut and loaded at once
+ * reads only "Loading". The ladder is unchanged; instead `cuttingStatus`/`cuttingPct` are a
+ * side channel, set only when status === "Loading" and cutting is unfinished, so the boards
+ * can render a second (cutting) pill beside the dock pill.
  *
  * Rung 0 is a legacy compatibility shim, not a general design rule. The archive refactor
  * (DB_Migrations/jobs-archived-at.sql, 1/3) made archiving orthogonal to lifecycle status via a
@@ -150,20 +161,34 @@ export async function deriveStatuses(db: D1Database, jobIds: string[]): Promise<
       openSessionJobIds.has(jobId)
     );
     const status = one.status;
-    let progressPct: number | null = null;
-    if (status === "In Production") {
-      const itemCount = itemCountByJob.get(jobId) ?? 0;
-      const lineCount = (linesByJob.get(jobId) ?? []).length;
+    const jobStatus = jobStatusById.get(jobId) ?? null;
+    const lines = linesByJob.get(jobId) ?? [];
+    const pctFor = (id: string): number | null => {
+      const itemCount = itemCountByJob.get(id) ?? 0;
+      const lineCount = (linesByJob.get(id) ?? []).length;
       const denom = itemCount * lineCount;
-      const done = doneByJob.get(jobId) ?? 0;
-      progressPct = denom > 0 ? Math.min(100, Math.floor((done / denom) * 100)) : null;
+      const done = doneByJob.get(id) ?? 0;
+      return denom > 0 ? Math.min(100, Math.floor((done / denom) * 100)) : null;
+    };
+    let progressPct: number | null = null;
+    // sched-dual-01: progressPct is now also set for Cutting (badge reads "Cutting – x%").
+    if (status === "In Production" || status === "Cutting") {
+      progressPct = pctFor(jobId);
     }
+    let cuttingStatus: DerivedStatus["cuttingStatus"] = null;
+    if (status === "Loading" && !isCuttingComplete(jobStatus, lines)) {
+      if (openSessionJobIds.has(jobId)) cuttingStatus = "Cutting";
+      else if (lines.some((s) => s === "in_progress")) cuttingStatus = "In Production";
+    }
+    const cuttingPct = cuttingStatus ? pctFor(jobId) : null;
     statuses.set(jobId, {
       status,
       progressPct,
       loadsDone: one.loadsDone,
       loadsTotal: one.loadsTotal,
       cuttingComplete: isCuttingComplete(jobStatusById.get(jobId) ?? null, linesByJob.get(jobId) ?? []),
+      cuttingStatus,
+      cuttingPct,
     });
   }
 

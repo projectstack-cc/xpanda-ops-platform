@@ -1,6 +1,7 @@
 // src/components/schedule/OrderRow.tsx
 // One reusable order row for each day column on the TV board. Every field is always shown —
 // customer, INV#, chunks, status badge (+ progress / loads), shifts, scrap, and the load label.
+// sched-dual-01: a job cut and loaded at once shows two pills — cutting first, then loading.
 // Rows are a single roomy size (no density tiering): the board no longer sheds fields to fit, it
 // scrolls (AutoScrollColumn). Delivery time/location and method/carrier remain pulled for
 // matching/sorting (P313); the delivery time rides after the load label on line 2, e.g. "TL x1 @ 7a" (P424/P426).
@@ -99,16 +100,22 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect, intera
 
       {showSecondLine && (
         <div className="flex items-center justify-between gap-1 mt-0.5 min-w-0">
-          <div className="flex items-center gap-1 min-w-0">
+          {/* sched-dual-01: flex-wrap so dual pills + shift chips wrap, not clip, in a narrow TV column. */}
+          <div className="flex flex-wrap items-center gap-1 min-w-0">
             {showBadge && (
-              <StatusBadge
-                status={row.status}
-                unmatched={row.unmatched}
-                sheetStatus={row.sheet_status}
-                progressPct={row.progress_pct}
-                loadsDone={row.loads_done}
-                loadsTotal={row.loads_total}
-              />
+              <>
+                {!row.unmatched && row.cutting_status && (
+                  <StatusBadge status={row.cutting_status} unmatched={false} sheetStatus={null} progressPct={row.cutting_pct} />
+                )}
+                <StatusBadge
+                  status={row.status}
+                  unmatched={row.unmatched}
+                  sheetStatus={row.sheet_status}
+                  progressPct={row.progress_pct}
+                  loadsDone={row.loads_done}
+                  loadsTotal={row.loads_total}
+                />
+              </>
             )}
             {row.shifts.length > 0 && row.shifts.map((s) => (
               <span

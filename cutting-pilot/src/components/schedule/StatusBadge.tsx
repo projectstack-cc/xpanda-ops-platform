@@ -63,6 +63,9 @@ export default function StatusBadge({ status, unmatched, sheetStatus, progressPc
   let label = variant.label;
   if (status === "In Production" && progressPct != null) {
     label = `In Production – ${progressPct}%`;
+  } else if (status === "Cutting" && progressPct != null) {
+    // sched-dual-01: same items×lines formula as In Production.
+    label = `Cutting – ${progressPct}%`;
   } else if (status === "Loading" && loadsTotal != null && loadsTotal > 1) {
     // Multi-load progress (P377). loadsDone falls back to 0 so a just-started multi-load order
     // reads "Loading 0 of Y" rather than dropping the suffix. Single-load orders (loadsTotal <= 1)

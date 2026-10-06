@@ -237,6 +237,8 @@
 
 *(All shipped items moved to `CHANGELOG.md` — 2026-09-04 backlog cleanup.)*
 
+- [ ] **sched-dual-01 follow-up — Steve/production supervisor eyeball: dual pills on TV + desk (narrow column, multi-load "Loading X of Y" + Cutting).**
+- [ ] **Pre-existing ladder gap (not changed by sched-dual-01):** a job with some lines complete and the rest not_started (none in_progress, no session) reads "Not Started". Decide whether that should be "In Production – x%".
 - [ ] **sched-mobile-01 follow-up — StatusBadge + detail modal on phones.** `StatusBadge` was left at TV sizing on mobile (out of scope); bump it if it reads small on a real phone. Eyeball `OrderDetailModal` at 390px.
 - [ ] **sched-mobile-01 follow-up — Steve phone eyeball of /v2/schedule/desk.**
 

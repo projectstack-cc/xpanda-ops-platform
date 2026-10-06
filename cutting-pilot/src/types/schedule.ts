@@ -19,6 +19,9 @@ export interface ScheduleBoardRow {
   progress_pct: number | null;
   loads_done: number | null;
   loads_total: number | null;
+  // sched-dual-01: secondary cutting pill, non-null only beside a "Loading" status.
+  cutting_status: "Cutting" | "In Production" | null;
+  cutting_pct: number | null;
   unmatched: boolean;
   sheet_status: string | null;
   job_id: string | null;
