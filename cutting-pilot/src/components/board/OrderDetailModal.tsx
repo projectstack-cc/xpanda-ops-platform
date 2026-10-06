@@ -6,12 +6,14 @@
 // packing-slip viewer. Opens from the "View" button in /v2/board and from a click on the
 // schedule desk's order cell.
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Tag } from "lucide-react";
 import Modal from "@/components/Modal";
 import PdfViewer from "@/components/PdfViewer";
 import PackingSlipViewer from "@/components/PackingSlipViewer";
 import CutListChunkToggle from "@/components/CutListChunkToggle";
+import DiversiTechLabelsModal from "@/components/board/DiversiTechLabelsModal";
 import { buildCutListPdf, type CutListLineItem } from "@/lib/cutList";
+import { isDiversiTechCustomer } from "@/lib/diversitechLabels";
 
 interface DetailJob {
   id: string;
@@ -59,6 +61,8 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDet
   const cutListBlobUrlRef = useRef<string | null>(null);
   // cutlist-01: opt-in chunk breakdown — unchecked at the start of every modal session.
   const [includeChunks, setIncludeChunks] = useState(false);
+  // jb-04: DiversiTech label checklist/viewer (closed on every job-context change).
+  const [labelsOpen, setLabelsOpen] = useState(false);
 
   // Reset per job-context change (opening a different order, or closing) — mirrors legacy
   // clearForm()-on-openModal(): revoke any previous cut-list blob and collapse both viewers so
@@ -74,6 +78,7 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDet
     setCutListDoc(null);
     setCutListOpen(false);
     setIncludeChunks(false);
+    setLabelsOpen(false);
 
     if (!jobId) {
       setData(null);
@@ -153,6 +158,7 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDet
     : null;
 
   return (
+    <>
     <Modal isOpen={!!jobId} onClose={onClose} title={job ? job.customer || "Order detail" : "Order detail"} size="xl">
       {loading && <p className="text-sm text-muted py-4">Loading order…</p>}
 
@@ -252,6 +258,20 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDet
             </div>
           )}
 
+          {/* jb-04: DiversiTech bag/bundle labels — same case-sensitive prefix rule as legacy. */}
+          {isDiversiTechCustomer(job.customer) && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setLabelsOpen(true)}
+                className="flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-[var(--link)] cursor-pointer"
+              >
+                <Tag size={16} className="shrink-0" aria-hidden="true" />
+                Print DiversiTech labels
+              </button>
+            </div>
+          )}
+
           {/* Cut List — independent dropdown-link viewer, own PdfViewer instance/state; builds
               lazily on first open and never touches the packing-slip viewer above. */}
           <div className="space-y-2">
@@ -290,5 +310,18 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDet
         </div>
       )}
     </Modal>
+
+    {/* jb-04: mounted as a sibling of the detail modal (not nested in its scroll container) so it
+        stacks cleanly above it — same z-50 primitive, later in the DOM. */}
+    {job && (
+      <DiversiTechLabelsModal
+        isOpen={labelsOpen}
+        onClose={() => setLabelsOpen(false)}
+        job={job}
+        lineItems={data?.line_items ?? []}
+        fileKey={job.invoice_number || job.id}
+      />
+    )}
+    </>
   );
 }
