@@ -382,6 +382,7 @@
 - [ ] **bol-print-01 follow-up — BOL PDF size.** Template fonts are still duplicated per page (one `copyPages` per record), and v2 `buildCombinedBolPdf` copies three `generatePdf` outputs into one packet, so Liberation Sans lands 3× (3-copy, 2-record packet ≈ 2.76 MB). If size matters (email attachments), render all three copy passes into one document, or load each template once.
 - [ ] **bol-print-01 follow-up — BOL Email size cap.** A single embedded-font driver BOL is ~1.2 MB (was ~292 KB), ~1.6 MB base64 in `logistics/bol-email.html`'s attachments, so one Resend send (40 MB cap) now fits ~25 BOLs (was ~100). If a day exceeds that, chunk the send or share one font-embedded document across attachments.
 - [ ] **bol-print-01 follow-up — layout-font cache pins the fallback.** `getLayoutFonts()` (both sides) caches its result, so one failed body-font fetch keeps editor measurement on Helvetica for the session even though the byte loader retries. Low impact (metrics differ only by kerning).
+- [ ] **Template editing rule** — any future BOL template edit must be re-exported with text outlined (`gs -sDEVICE=pdfwrite -dNoOutputFonts`); Google Docs exports reintroduce name-colliding subset fonts. (bol-print-03)
 
 ---
 
