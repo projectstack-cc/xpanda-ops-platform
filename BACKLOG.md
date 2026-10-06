@@ -388,9 +388,6 @@
 
 ## Job Board
 
-- [ ] v2 edit surface for HB floor stock (hb_on_hand) — OrderEditModal/OrderDetailModal have no
-  way to set it; needs a `/v2/api/orders/:id/hb-on-hand` route mirroring legacy
-  `PUT /api/jobs/:id/hb-on-hand`.
 - [ ] HB nester is hole-pattern-agnostic and floor-stock uncut chunks are job-level (not per
   8/10-hole) — confirm with the floor whether chunks are holed before slicing; if so, nest + net
   per hole pattern.

@@ -18,6 +18,7 @@ import PartsPicker from "@/components/orders/PartsPicker";
 import type { OrderLineItem } from "@/components/orders/OrderEntryForm";
 import ProcessPicker from "./ProcessPicker";
 import ShipDaysModal from "./ShipDaysModal";
+import HbFloorStockSection from "./HbFloorStockSection";
 import { mergeProcesses, parseProcesses, type JobProcess } from "@/lib/processes";
 
 interface EditJob {
@@ -52,6 +53,7 @@ interface EditJob {
   processes: JobProcess[];
   has_packing_slip: boolean;
   hb_chunk_breakdown: string | null;
+  hb_on_hand: string | null;
 }
 
 interface StoredLineItem {
@@ -167,6 +169,8 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
   const canManageAssignees = isAdmin || !!permissions["jobs.manage"]?.edit;
   // jb-02: same rule as legacy gateJobsWrite — jobs edit (or admin); no status restriction.
   const canDeleteOrder = isAdmin || !!permissions["jobs"]?.edit;
+  // jb-05: HB floor stock writes go through the same `jobs`-edit rule.
+  const canEditJob = canDeleteOrder;
 
   useEffect(() => {
     if (cutListBlobUrlRef.current) {
@@ -465,6 +469,25 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
     }
     setCutListDoc(null);
     if (cutListOpen) void buildCutListDoc(next);
+  }
+
+  // jb-05: floor stock saved/cleared (an immediate write, independent of the main Save). Patch the
+  // two server-owned fields into BOTH the job and the dirty snapshot so this never marks the form
+  // dirty, then invalidate the cut list exactly like the job-change reset so the next open
+  // rebuilds with the new chunk breakdown.
+  function handleFloorStockChanged(next: { hb_on_hand: string | null; hb_chunk_breakdown: string | null }) {
+    setJob((prev) => (prev ? { ...prev, ...next } : prev));
+    setOriginalSnapshot((prev) => {
+      if (!prev) return prev;
+      try { return JSON.stringify({ ...JSON.parse(prev), ...next }); } catch { return prev; }
+    });
+    if (cutListBlobUrlRef.current) {
+      try { URL.revokeObjectURL(cutListBlobUrlRef.current); } catch {}
+      cutListBlobUrlRef.current = null;
+    }
+    setCutListDoc(null);
+    setCutListOpen(false);
+    onSaved();
   }
 
   async function handleAddShift(shift: string) {
@@ -1049,6 +1072,15 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
               )}
             </div>
           </section>
+
+          {/* jb-05: HB floor stock (renders nothing for non-HB orders) */}
+          <HbFloorStockSection
+            jobId={job.id}
+            hbChunkBreakdown={job.hb_chunk_breakdown}
+            hbOnHand={job.hb_on_hand}
+            canEdit={canEditJob}
+            onChanged={handleFloorStockChanged}
+          />
 
           {/* Cut List dropdown viewer (lifted from OrderDetailModal) */}
           <div className="space-y-2">
