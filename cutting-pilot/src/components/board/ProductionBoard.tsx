@@ -58,6 +58,8 @@ export interface BoardJob {
   is_loading: boolean;
   assignees: string[];
   processes: JobProcess[];
+  // jb-06: trailer-group candidates in the edit modal (legacy filter needs it).
+  trailer_group_id: string | null;
 }
 
 interface AssignableUser {
@@ -491,6 +493,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
         jobId={editId}
         onClose={() => setEditId(null)}
         onSaved={load}
+        boardJobs={data?.jobs ?? []}
         isAdmin={isAdmin}
         permissions={permissions}
       />

@@ -194,6 +194,14 @@
 - [ ] **Retire legacy `jobs/index.html` board** (+ `jobs-header.js`, `jobs-shared.css` if unused)
   once `/v2/board` is re-linked and confirmed at parity on the floor — post-cutover cleanup.
   Pairs with the already-noted `_worker.js/routes/quickbooks.js` removal for the same cleanup pass.
+- [ ] **jb-06 follow-up — move `PartsPicker` onto the shared `SearchPickerModal`** (one picker primitive).
+- [ ] **jb-06 follow-up — v2 `PUT /v2/api/orders/:id` doesn't enforce `linked_ship_date_locked`.** Legacy
+  `PUT /api/jobs` 409s a ship-date change on a trailer-linked job; the v2 route has no `trailer_group_id`
+  check, so only jb-06's client-side guard in `OrderEditModal.handleSave` keeps a group's ship dates from
+  splitting. Port the server rule (same message/code) and keep the client guard as UX.
+- [ ] jb-06 note — trailer-group candidates come from the `/v2/api/board` payload, which excludes `shipped`
+  jobs; legacy's `allJobs` also offered same-day shipped (non-archived) jobs. Confirm with Steve whether
+  linking to an already-shipped order matters; if so, widen the candidate source.
 - [ ] Density no-keyword default is blanket RC (Holey Board/Insulperm, Laminate). Physically Holey Board/Insulperm is usually virgin — revisit if a product proves virgin (one-line flip in deriveDensity).
 - [ ] Board: manager-flag header for assign gating (avoid the 403 round-trip) — `BoardRowEdit.tsx`
   currently discovers manager status by attempting the legacy assign/unassign call and reading a

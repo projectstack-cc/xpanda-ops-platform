@@ -19,6 +19,8 @@ import type { OrderLineItem } from "@/components/orders/OrderEntryForm";
 import ProcessPicker from "./ProcessPicker";
 import ShipDaysModal from "./ShipDaysModal";
 import HbFloorStockSection from "./HbFloorStockSection";
+import OrderLinksSection from "./OrderLinksSection";
+import type { BoardJob } from "./ProductionBoard";
 import { mergeProcesses, parseProcesses, type JobProcess } from "@/lib/processes";
 
 interface EditJob {
@@ -54,6 +56,8 @@ interface EditJob {
   has_packing_slip: boolean;
   hb_chunk_breakdown: string | null;
   hb_on_hand: string | null;
+  combo_id: string | null;
+  trailer_group_id: string | null;
 }
 
 interface StoredLineItem {
@@ -90,6 +94,8 @@ interface AssignableUser {
 
 interface OrderEditModalProps {
   jobId: string | null;
+  // jb-06: board payload — trailer-group link candidates are filtered from it (legacy rule).
+  boardJobs?: BoardJob[];
   onClose: () => void;
   onSaved: () => void;
   // Read-only user context for manager gating of the Shifts + Assignees chip sections. The
@@ -124,7 +130,7 @@ const EMPTY_LINE: OrderLineItem = { part_number: "", description: "", quantity: 
 // ProductionBoard.tsx:100 uses for BoardRowEdit).
 let assignableUsersCache: AssignableUser[] | null = null;
 
-export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = false, permissions = {} }: OrderEditModalProps) {
+export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = [], isAdmin = false, permissions = {} }: OrderEditModalProps) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -163,6 +169,10 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
   const [savedLoadCount, setSavedLoadCount] = useState(1);
   const [shipDaysOpen, setShipDaysOpen] = useState(false);
 
+  // jb-06: the SAVED ship date (not the live field) — trailer-group candidates match on it, and the
+  // linked-job ship-date guard in handleSave compares against it.
+  const [savedShipDate, setSavedShipDate] = useState<string | null>(null);
+
   const statusLocked = job?.status === "loading" || job?.status === "shipped";
   const canManageShifts = isAdmin || !!permissions["jobs.manage"]?.edit;
   const canAssignShipDays = isAdmin || !!permissions["logistics.loading.manage"]?.edit;
@@ -187,6 +197,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
     setDeleteError(null);
     setShipDaysOpen(false);
     setSavedLoadCount(1);
+    setSavedShipDate(null);
 
     if (!jobId) {
       setJob(null);
@@ -225,6 +236,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
         const j = { ...boardJson.job, processes: parseProcesses(boardJson.job.processes) };
         setJob(j);
         setSavedLoadCount(Math.max(Number(j.load_count) || 1, 1));
+        setSavedShipDate(j.ship_date ?? null);
         const lis: OrderLineItem[] = (boardJson.line_items ?? []).map((li) => ({
           part_id: li.part_id ?? undefined,
           part_number: li.part_number ?? "",
@@ -318,6 +330,13 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
 
   async function handleSave() {
     if (!job) return;
+    // jb-06: legacy PUT /api/jobs rejects a ship-date change on a linked job (409
+    // linked_ship_date_locked) but v2 PUT /v2/api/orders/:id does not enforce it yet (BACKLOG) —
+    // stopgap client guard with legacy's exact message so the group's dates can't split.
+    if (job.trailer_group_id && (job.ship_date || "") !== (savedShipDate || "")) {
+      setSaveError("This job is linked to a trailer group — unlink it before changing the ship date.");
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     try {
@@ -487,6 +506,26 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
     }
     setCutListDoc(null);
     setCutListOpen(false);
+    onSaved();
+  }
+
+  // jb-06: trailer group / combo changed (immediate writes via legacy PUT /api/jobs). Re-read the
+  // saved job and patch ONLY those two fields into the job and the dirty snapshot — re-running the
+  // full load would wipe unsaved form edits — then refresh the board.
+  async function handleLinksChanged() {
+    if (!jobId) return;
+    try {
+      const res = await fetch(`/v2/api/board/${jobId}`);
+      const data: BoardResponse = await res.json();
+      if (res.ok && data.ok && data.job) {
+        const next = { combo_id: data.job.combo_id ?? null, trailer_group_id: data.job.trailer_group_id ?? null };
+        setJob((prev) => (prev ? { ...prev, ...next } : prev));
+        setOriginalSnapshot((prev) => {
+          if (!prev) return prev;
+          try { return JSON.stringify({ ...JSON.parse(prev), ...next }); } catch { return prev; }
+        });
+      }
+    } catch { /* non-fatal — the board refetch below still runs */ }
     onSaved();
   }
 
@@ -842,6 +881,17 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
               </label>
             </div>
           </section>
+
+          {/* jb-06: Trailer group + combo — immediate-save links, after the schedule/shipping area */}
+          <OrderLinksSection
+            jobId={job.id}
+            shipDate={savedShipDate}
+            trailerGroupId={job.trailer_group_id}
+            comboId={job.combo_id}
+            boardJobs={boardJobs}
+            canEdit={canEditJob}
+            onChanged={handleLinksChanged}
+          />
 
           {/* Notes */}
           <section className="space-y-2">

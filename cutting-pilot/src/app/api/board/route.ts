@@ -43,7 +43,7 @@ export async function GET() {
       SELECT j.id, j.customer, j.po_number, j.invoice_number, j.status, j.priority, j.priority_level,
              j.ship_date, j.notes, j.cutting_instructions, j.packing_instructions,
              j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_city,
-             j.ship_to_state, j.ship_to_zip, j.processes,
+             j.ship_to_state, j.ship_to_zip, j.processes, j.trailer_group_id,
              EXISTS (SELECT 1 FROM cutting_lines cl
                        WHERE cl.job_id = j.id AND cl.line_status = 'in_progress') AS in_cutting,
              EXISTS (SELECT 1 FROM loading_assignments la
