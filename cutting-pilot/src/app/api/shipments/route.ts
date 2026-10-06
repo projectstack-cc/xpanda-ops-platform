@@ -20,6 +20,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { D1Database } from "@cloudflare/workers-types";
 import { getEnv } from "@/lib/db";
 import { normalizeAddressKey } from "@/lib/logistics/freightInvoice";
+import { expandShipmentDays, inWeek, sortEntries, weekTileCounts, type LoadDayRow } from "@/lib/logistics/splitDays";
 
 interface CacheRow {
   address_key: string;
@@ -104,10 +105,17 @@ async function attachDistanceEta(DB: D1Database, rows: any[]): Promise<void> {
 const NOT_ARCHIVED_PREDEPARTURE =
   "(shipments.status IN ('in_transit','delivered') OR NOT EXISTS (SELECT 1 FROM jobs ja WHERE ja.id = shipments.job_id AND ja.archived_at IS NOT NULL))";
 
+// split-days-01: order date in [?, ?+6] OR any non-archived load with its own ship_date in [?, ?+6]. 4 binds.
+const WEEK_SUPERSET =
+  "(shipments.ship_date >= ? AND shipments.ship_date <= date(?, '+6 days') OR EXISTS (SELECT 1 FROM loading_assignments lw WHERE lw.job_id = shipments.job_id AND lw.loading_status <> 'archived' AND TRIM(COALESCE(lw.ship_date, '')) <> '' AND substr(lw.ship_date, 1, 10) >= ? AND substr(lw.ship_date, 1, 10) <= date(?, '+6 days')))";
+
 const STAT_PREDICATES: Record<string, { sql: string; binds: (curMonStr: string) => unknown[] }> = {
   outbound_this_week: {
-    sql: "shipments.direction = 'outbound' AND shipments.ship_date >= ? AND shipments.ship_date <= date(?, '+6 days') AND " + NOT_ARCHIVED_PREDEPARTURE,
-    binds: (curMonStr) => [curMonStr, curMonStr],
+    // split-days-01: SUPERSET (order date in week OR any load's own ship_date in week), used only for the
+    // ?stat=outbound_this_week drilldown + the tile's current-week query. Exact membership comes from
+    // expandShipmentDays + inWeek in GET -- never counted directly in SQL.
+    sql: "shipments.direction = 'outbound' AND " + WEEK_SUPERSET + " AND " + NOT_ARCHIVED_PREDEPARTURE,
+    binds: (curMonStr) => [curMonStr, curMonStr, curMonStr, curMonStr],
   },
   pending_outbound: {
     sql: "shipments.direction = 'outbound' AND shipments.status IN ('not_started', 'in_production', 'ready_to_ship') AND " + NOT_ARCHIVED_PREDEPARTURE,
@@ -133,6 +141,55 @@ function loadsSubquery(predicateSql: string, alias: string): string {
              WHERE ${predicateSql}
              GROUP BY COALESCE(j.trailer_group_id, shipments.id)
           )) AS ${alias}`;
+}
+
+// split-days-01: non-archived per-load ship days for a set of jobs, grouped by job_id. Chunked to stay under
+// D1's bind-parameter limit.
+async function loadDaysByJob(DB: D1Database, jobIds: string[]): Promise<Map<string, LoadDayRow[]>> {
+  const out = new Map<string, LoadDayRow[]>();
+  const CHUNK = 90;
+  for (let i = 0; i < jobIds.length; i += CHUNK) {
+    const chunk = jobIds.slice(i, i + CHUNK);
+    if (!chunk.length) continue;
+    const res = await DB.prepare(
+      `SELECT job_id, load_number, ship_date FROM loading_assignments
+        WHERE loading_status <> 'archived' AND job_id IN (${chunk.map(() => "?").join(",")})`
+    )
+      .bind(...chunk)
+      .all<LoadDayRow>();
+    for (const r of res.results ?? []) {
+      const list = out.get(r.job_id) ?? [];
+      list.push(r);
+      out.set(r.job_id, list);
+    }
+  }
+  return out;
+}
+
+// split-days-01: list SELECT shared by the main list query and the tile's current-week query.
+function listSelect(whereSql: string): string {
+  // shipments.* already carries delivered_at (typed on ShipmentListItem since carrier-03).
+  return `SELECT shipments.*, j.invoice_number,
+                j.ship_to_street, j.ship_to_city, j.ship_to_state, j.ship_to_zip,
+                j.trailer_group_id,
+                (SELECT COUNT(*) FROM bols b WHERE b.job_id = shipments.job_id) AS bol_count,
+                EXISTS (SELECT 1 FROM bols b
+                         WHERE b.job_id = shipments.job_id
+                           AND (b.signed_bol_photo_key IS NOT NULL
+                                OR EXISTS (SELECT 1 FROM bol_documents d WHERE d.bol_id = b.id))) AS has_signed_bol,
+                (SELECT group_concat(t, ', ') FROM (
+                   SELECT la.trailer_number AS t FROM loading_assignments la
+                    WHERE la.job_id = shipments.job_id AND la.loading_status <> 'archived'
+                      AND TRIM(COALESCE(la.trailer_number, '')) <> ''
+                    ORDER BY la.load_number ASC)) AS trailer_numbers,
+                (LOWER(TRIM(COALESCE(j.method, ''))) = 'customer pickup') AS is_customer_pickup,
+                (SELECT COALESCE(SUM(cc.fee_amount_cents), 0) FROM carrier_charges cc WHERE cc.job_id = shipments.job_id) AS carrier_charges_total_cents,
+                (SELECT COUNT(*) FROM carrier_charges cc WHERE cc.job_id = shipments.job_id) AS carrier_charges_count
+           FROM shipments
+           LEFT JOIN jobs j ON j.id = shipments.job_id
+          WHERE ${whereSql}
+          ORDER BY (shipments.ship_date IS NULL OR shipments.ship_date = ''),
+                   shipments.ship_date ASC, shipments.created_at ASC`;
 }
 
 export async function GET(request: NextRequest) {
@@ -191,7 +248,10 @@ export async function GET(request: NextRequest) {
       where.push("shipments.job_id = ?");
       binds.push(jobId);
     } else if (week) {
-      where.push("shipments.ship_date >= ? AND shipments.ship_date <= date(?, '+6 days')");
+      // split-days-01: superset -- order date in week OR any load's own ship_date in week. Exact per-day
+      // windowing happens after expansion (expandShipmentDays + inWeek) below.
+      where.push(WEEK_SUPERSET);
+      binds.push(week, week);
       binds.push(week, week);
     } else if (days > 0) {
       where.push("(shipments.created_at >= datetime('now', ? || ' days') OR (shipments.ship_date IS NOT NULL AND shipments.ship_date >= date('now', '-7 days')))");
@@ -218,46 +278,20 @@ export async function GET(request: NextRequest) {
 
   try {
     const [listResult, statsResult] = await Promise.all([
-      DB.prepare(
-        // shipments.* already carries delivered_at (typed on ShipmentListItem since carrier-03).
-        `SELECT shipments.*, j.invoice_number,
-                j.ship_to_street, j.ship_to_city, j.ship_to_state, j.ship_to_zip,
-                (SELECT COUNT(*) FROM bols b WHERE b.job_id = shipments.job_id) AS bol_count,
-                EXISTS (SELECT 1 FROM bols b
-                         WHERE b.job_id = shipments.job_id
-                           AND (b.signed_bol_photo_key IS NOT NULL
-                                OR EXISTS (SELECT 1 FROM bol_documents d WHERE d.bol_id = b.id))) AS has_signed_bol,
-                (SELECT group_concat(t, ', ') FROM (
-                   SELECT la.trailer_number AS t FROM loading_assignments la
-                    WHERE la.job_id = shipments.job_id AND la.loading_status <> 'archived'
-                      AND TRIM(COALESCE(la.trailer_number, '')) <> ''
-                    ORDER BY la.load_number ASC)) AS trailer_numbers,
-                (LOWER(TRIM(COALESCE(j.method, ''))) = 'customer pickup') AS is_customer_pickup,
-                (SELECT COALESCE(SUM(cc.fee_amount_cents), 0) FROM carrier_charges cc WHERE cc.job_id = shipments.job_id) AS carrier_charges_total_cents,
-                (SELECT COUNT(*) FROM carrier_charges cc WHERE cc.job_id = shipments.job_id) AS carrier_charges_count
-           FROM shipments
-           LEFT JOIN jobs j ON j.id = shipments.job_id
-          WHERE ${where.join(" AND ")}
-          ORDER BY (shipments.ship_date IS NULL OR shipments.ship_date = ''),
-                   shipments.ship_date ASC, shipments.created_at ASC`
-      ).bind(...binds).all(),
+      DB.prepare(listSelect(where.join(" AND "))).bind(...binds).all(),
       DB.prepare(
         `SELECT
-           COUNT(CASE WHEN ${STAT_PREDICATES.outbound_this_week.sql} THEN 1 END) AS outbound_this_week,
            COUNT(CASE WHEN ${STAT_PREDICATES.pending_outbound.sql} THEN 1 END) AS pending_outbound,
            COUNT(CASE WHEN ${STAT_PREDICATES.in_transit.sql} THEN 1 END) AS in_transit,
            COUNT(CASE WHEN ${STAT_PREDICATES.delivered_30d.sql} THEN 1 END) AS delivered_30d,
-           ${loadsSubquery(STAT_PREDICATES.outbound_this_week.sql, "outbound_this_week_loads")},
            ${loadsSubquery(STAT_PREDICATES.pending_outbound.sql, "pending_outbound_loads")},
            ${loadsSubquery(STAT_PREDICATES.in_transit.sql, "in_transit_loads")},
            ${loadsSubquery(STAT_PREDICATES.delivered_30d.sql, "delivered_30d_loads")}
          FROM shipments`
       ).bind(
-        ...STAT_PREDICATES.outbound_this_week.binds(curMonStr),
         ...STAT_PREDICATES.pending_outbound.binds(curMonStr),
         ...STAT_PREDICATES.in_transit.binds(curMonStr),
         ...STAT_PREDICATES.delivered_30d.binds(curMonStr),
-        ...STAT_PREDICATES.outbound_this_week.binds(curMonStr),
         ...STAT_PREDICATES.pending_outbound.binds(curMonStr),
         ...STAT_PREDICATES.in_transit.binds(curMonStr),
         ...STAT_PREDICATES.delivered_30d.binds(curMonStr)
@@ -267,15 +301,44 @@ export async function GET(request: NextRequest) {
     const rows = (listResult.results ?? []) as any[];
     await attachDistanceEta(DB, rows);
 
+    // split-days-01: one entry per (order, effective ship day). Explicit job/shipment lookups keep the
+    // 1-row-per-shipment shape (BolViewerModal / DockBoard depend on it) and are never expanded.
+    const expand = async (base: any[]): Promise<any[]> => {
+      const jobIds = Array.from(new Set(base.map((r) => r.job_id).filter((v): v is string => !!v)));
+      const byJob = await loadDaysByJob(DB, jobIds);
+      return base.flatMap((r) => expandShipmentDays(r, r.job_id ? byJob.get(r.job_id) ?? [] : []));
+    };
+
+    let data: any[] = rows;
+    if (!jobId && !shipmentId) {
+      let entries = await expand(rows);
+      if (statKey === "outbound_this_week") entries = entries.filter((e) => inWeek(e.day_date, curMonStr));
+      else if (!statKey && week) entries = entries.filter((e) => inWeek(e.day_date, week));
+      data = sortEntries(entries);
+    }
+
+    // "Outbound this week" tile: computed from a current-week expansion so the tile and its drilldown can
+    // never drift. Reuse this request's entries when they ARE that set (the drilldown itself, or an
+    // unfiltered current-week list); otherwise run the drilldown query once more and expand it.
+    let weekEntries: any[];
+    if (statKey === "outbound_this_week" || (!statKey && !jobId && !shipmentId && week === curMonStr && !status && !q)) {
+      weekEntries = data;
+    } else {
+      const wk = STAT_PREDICATES.outbound_this_week;
+      const wr = await DB.prepare(listSelect(wk.sql)).bind(...wk.binds(curMonStr)).all();
+      weekEntries = (await expand((wr.results ?? []) as any[])).filter((e) => inWeek(e.day_date, curMonStr));
+    }
+    const weekTile = weekTileCounts(weekEntries);
+
     return NextResponse.json({
       ok: true,
-      data: rows,
+      data,
       stats: {
-        outboundThisWeek: (statsResult as any)?.outbound_this_week ?? 0,
+        outboundThisWeek: weekTile.orders,
         pendingOutbound: (statsResult as any)?.pending_outbound ?? 0,
         inTransit: (statsResult as any)?.in_transit ?? 0,
         delivered30d: (statsResult as any)?.delivered_30d ?? 0,
-        outboundThisWeekLoads: (statsResult as any)?.outbound_this_week_loads ?? 0,
+        outboundThisWeekLoads: weekTile.loads,
         pendingOutboundLoads: (statsResult as any)?.pending_outbound_loads ?? 0,
         inTransitLoads: (statsResult as any)?.in_transit_loads ?? 0,
         delivered30dLoads: (statsResult as any)?.delivered_30d_loads ?? 0,

@@ -249,6 +249,9 @@
 
 ## Logistics (v2)
 
+- [ ] **split-days-01 follow-up — legacy `/api/loading-assignments/load-days` still returns success on 0 matched rows** (left per v2-only rule; legacy Job Board split modal is the remaining caller).
+- [ ] **split-days-01 follow-up — per-load ship days don't move when the order's ship date changes.** Moving an order's date leaves any `loading_assignments.ship_date` overrides behind. Today this is harmless for unsplit orders (ignored), but a split order would keep its old days. Decide: clear overrides on order-date change, or shift them by the same delta.
+- [ ] **INV 4386 — shipment status stuck `ready_to_ship` while its only load is `delivered`** (after the 9/29 delivered→not_started revert and the 9/30 re-delivery). Investigate the revert/redeliver path's shipment status sync.
 - [ ] **archived-hide-01 follow-up — legacy Classic shipment dashboard still shows archived pre-departure shipments.** Left as-is per the v2-only logistics rule; goes away when legacy `logistics/index.html` retires.
 - [ ] **quickwin-01 follow-up — v2 Parts Library edit form can now expose name/weight/color/category/parent_group.** `PartsLibraryPanel.tsx` still renders these read-only (its header comment cites the old PUT limitation); `PUT /api/parts` now persists them when sent. Widen `buildUpdatePayload` + the edit form, and update that comment.
 - [ ] **tls-01: `nextShipDay` is Mon–Fri only.** Plant holidays aren't modeled, and an occasional Saturday ship

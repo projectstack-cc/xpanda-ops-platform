@@ -171,7 +171,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
     let loads: any[] = [];
     if (shipment.job_id) {
       const lr = await DB.prepare(
-        `SELECT la.id AS assignment_id, la.trailer_number, la.load_number, la.loading_status, la.delivered_at,
+        `SELECT la.id AS assignment_id, la.trailer_number, la.load_number, la.loading_status, la.delivered_at, la.ship_date AS load_ship_date,
                 (SELECT b.signed_bol_additional_info FROM bols b
                   WHERE b.job_id = la.job_id
                     AND (

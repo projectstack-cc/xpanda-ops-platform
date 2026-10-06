@@ -55,6 +55,14 @@ export interface ShipmentListItem {
   trailer_numbers?: string | null;
   /** lgx-rows-01: the linked job's method is 'customer pickup' (set on the Orders form). */
   is_customer_pickup?: number | boolean;
+  /** split-days-01: effective ship day of this entry (per-load day for split orders, else the order's ship_date). */
+  day_date?: string | null;
+  /** split-days-01: load numbers shipping on day_date when the order is split across days; null when unsplit. */
+  day_loads?: number[] | null;
+  /** split-days-01: unique per list entry — `id` when unsplit, `${id}@${day}` when split. Use for React keys / expand state. */
+  entry_key?: string;
+  /** split-days-01: jobs.trailer_group_id (linked orders on one trailer). */
+  trailer_group_id?: string | null;
 }
 
 // Response shape of GET /v2/api/shipments/:id -- backs ShipmentDetailPanel's inline row
@@ -92,6 +100,8 @@ export interface ShipmentLoad {
   trailer_number: string | null;
   load_number: number | null;
   loading_status: string;
+  /** split-days-01: per-load ship day (loading_assignments.ship_date); null = uses the order's ship date. */
+  load_ship_date?: string | null;
   delivered_at: string | null;
   /** signed_bol_additional_info of the newest BOL for this load (driver QR sign flow). */
   qr_additional_info: string | null;
