@@ -22,27 +22,49 @@ export async function POST(request: NextRequest) {
 
     const now = new Date().toISOString().replace("T", " ").slice(0, 19);
 
-    const stmts = items
-      .filter((it: any) => it && it.line_item_id != null && it.completed_qty != null)
-      .map((it: any) =>
-        DB.prepare(
-          `INSERT INTO cutting_line_progress
-             (id, job_id, line, line_item_id, completed, completed_qty, updated_by, updated_at)
-           VALUES (?, ?, ?, ?, 0, ?, ?, ?)
-           ON CONFLICT (job_id, line, line_item_id)
-           DO UPDATE SET completed_qty = excluded.completed_qty,
-                         updated_by = excluded.updated_by,
-                         updated_at = excluded.updated_at`
-        ).bind(
-          crypto.randomUUID(),
-          job_id,
-          line,
-          String(it.line_item_id),
-          Math.max(0, parseInt(String(it.completed_qty), 10) || 0),
-          operatorId,
-          now
-        )
+    const valid = items.filter((it: any) => it && it.line_item_id != null && it.completed_qty != null);
+
+    // cutting-ids-01: every line item must still exist on this job (one stale id → 409, nothing
+    // written), and each row snapshots its part identity for the cutting activity report.
+    type LiSnap = { id: string; part_number: string | null; description: string | null; dimensions: string | null };
+    const liRes = await DB.prepare(
+      "SELECT id, part_number, description, dimensions FROM job_line_items WHERE job_id = ?"
+    ).bind(job_id).all<LiSnap>();
+    const liById = new Map((liRes.results ?? []).map((r) => [r.id, r]));
+    if (valid.some((it: any) => !liById.has(String(it.line_item_id)))) {
+      return NextResponse.json(
+        { ok: false, code: "stale_line_item", error: "This order was edited — refresh the board." },
+        { status: 409 }
       );
+    }
+
+    const stmts = valid.map((it: any) => {
+      const li = liById.get(String(it.line_item_id))!;
+      return DB.prepare(
+        `INSERT INTO cutting_line_progress
+           (id, job_id, line, line_item_id, completed, completed_qty, updated_by, updated_at,
+            part_number, description, dimensions)
+         VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (job_id, line, line_item_id)
+         DO UPDATE SET completed_qty = excluded.completed_qty,
+                       updated_by = excluded.updated_by,
+                       updated_at = excluded.updated_at,
+                       part_number = excluded.part_number,
+                       description = excluded.description,
+                       dimensions = excluded.dimensions`
+      ).bind(
+        crypto.randomUUID(),
+        job_id,
+        line,
+        String(it.line_item_id),
+        Math.max(0, parseInt(String(it.completed_qty), 10) || 0),
+        operatorId,
+        now,
+        li.part_number,
+        li.description,
+        li.dimensions
+      );
+    });
 
     if (stmts.length) await DB.batch(stmts);
 

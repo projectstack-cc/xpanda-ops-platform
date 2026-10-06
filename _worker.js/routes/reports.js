@@ -671,7 +671,9 @@ export async function handleCuttingActivityReport(request, env) {
       .prepare(
         `
       SELECT j.invoice_number, j.customer, j.id AS job_id, clp.line,
-             li.description, li.dimensions, li.part_number,
+             COALESCE(clp.description, li.description) AS description,
+             COALESCE(clp.dimensions,  li.dimensions)  AS dimensions,
+             COALESCE(clp.part_number, li.part_number) AS part_number,
              COALESCE(u.display_name, clp.updated_by) AS cut_by,
              u.shift AS cut_by_shift,
              clp.updated_at AS cut_at

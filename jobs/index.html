@@ -2566,6 +2566,9 @@ function addLineItemRow(data) {
   row.className = 'jobs-li-row';
   row.style.gridTemplateColumns = '90px 1fr 58px 88px 70px 30px';
   row.dataset.partId = data?.part_id ?? '';
+  // cutting-ids-01: carry the saved job_line_items.id so a save keeps ids (and cutting progress)
+  // stable. Manually-added and parsed rows have none and fall through to server-side matching.
+  row.dataset.liId = data?.id ?? '';
   // lbz-parse-01: carry offload-zone fields through on the row so collectLineItems() can put
   // them back on the save payload — round-trips both a fresh parse and an existing zoned job
   // loaded via populateForm() (job_line_items already has these columns from lbz-db-01).
@@ -2767,6 +2770,7 @@ function collectLineItems() {
   return Array.from(document.querySelectorAll('#li-container .jobs-li-row'))
     .map((row, i) => {
       const li = {
+        id:          row.dataset.liId || undefined,
         part_id:     row.dataset.partId || null,
         part_number: row.querySelector('.li-part').value.trim(),
         description: row.querySelector('.li-desc').value.trim(),

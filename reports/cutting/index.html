@@ -577,8 +577,11 @@ function cutItemsTable(items) {
         <tbody>
           ${sorted.map((c) => `
             <tr>
-              <td>${muted(c.description)}</td>
-              <td>${muted(c.dimensions)}</td>
+              ${(c.part_number == null && c.description == null && c.dimensions == null)
+                // cutting-ids-01: check whose line item was deleted by a pre-fix job save — no snapshot.
+                ? `<td colspan="2"><span class="cutting-muted">Part unavailable (order edited before Oct 2026)</span></td>`
+                : `<td>${muted(c.description)}</td>
+              <td>${muted(c.dimensions)}</td>`}
               <td>${muted(boardLabel(c.line))}</td>
               <td>${muted(c.cut_by)}</td>
               <td>${etTimeLabel(c.cut_at)}</td>

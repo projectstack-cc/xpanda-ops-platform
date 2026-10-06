@@ -283,7 +283,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       // Reconcile unchecked-part quantities — best-effort, never blocks clock-out.
       if (itemQtys && itemQtys.length) {
         try {
-          await fetch("/v2/api/cutting/line-progress", {
+          const lpRes = await fetch("/v2/api/cutting/line-progress", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -292,6 +292,11 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
               items: itemQtys,
             }),
           });
+          // cutting-ids-01: surface a 409 stale_line_item (order edited) instead of swallowing it.
+          if (!lpRes.ok) {
+            const lpData = await lpRes.json().catch(() => null);
+            showToast(`${lpData?.error || "Saving part quantities failed."} Clocking out anyway.`, false);
+          }
         } catch {
           showToast("Saving part quantities failed — clocking out anyway.", false);
         }
@@ -682,7 +687,17 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       )}
 
       {/* Mark-complete modal */}
+      {(() => {
+        // cutting-ids-01: soft guard — checked vs total parts for the line being completed.
+        const completeJob = completeTarget ? queue.find((j) => j.id === completeTarget.jobId) ?? null : null;
+        const completeItems = completeJob?.line_items ?? [];
+        const completeChecked = completeTarget && completeJob
+          ? completeItems.filter((it) => !!completeJob.progress?.[completeTarget.line]?.[it.id]?.completed).length
+          : 0;
+        return (
       <CompleteLineModal
+        checkedCount={completeChecked}
+        totalCount={completeItems.length}
         lineLabel={completeTarget?.line ?? ""}
         customer={selectedJob?.customer ?? ""}
         invoice={selectedJob?.invoice_number ?? ""}
@@ -692,6 +707,8 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
         onSubmit={submitComplete}
         acting={acting}
       />
+        );
+      })()}
 
       {/* Cut-list photo viewer (opened from a job card) */}
       <PhotoViewer

@@ -17,6 +17,9 @@ import AddressCorrectionModal, { type AddressParts } from "@/components/orders/A
 import ProcessPicker from "@/components/board/ProcessPicker";
 
 export interface OrderLineItem {
+  // cutting-ids-01: existing job_line_items.id, round-tripped by the edit modal so saves keep
+  // ids (and cutting progress) stable. Client-only/optional — order entry never sets it.
+  id?: string;
   category?: string;
   thickness?: number;
   part_id?: string;

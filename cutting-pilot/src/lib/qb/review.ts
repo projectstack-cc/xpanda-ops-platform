@@ -6,7 +6,8 @@ import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { logActivity } from "@/lib/activityLog";
 import { dispatchNotification, type PushEnv } from "@/lib/push";
 import { computeAndPersistHoleyChunks } from "@/lib/holeyChunks";
-import { createJob, lineItemInsertStatements, type JobCreateInput } from "@/lib/jobCreate";
+import { createJob, type JobCreateInput } from "@/lib/jobCreate";
+import { replaceLineItemsPreservingIds } from "@/lib/lineItems";
 import { relevantHash } from "./mapper";
 import { buildDiff, diffCounts, type JobDiff } from "./webhook";
 import { floorState, getLink, loadJobAsInput, upsertLink } from "./jobState";
@@ -146,6 +147,9 @@ export async function applyPending(
       const diff = buildDiff(cur, proposed);
       const addressChanged = diff.header.some((h) => h.field.startsWith("ship_to_"));
       const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
+      // cutting-ids-01: QB items carry no ids — matched by part_number + dimensions, so an
+      // unchanged item list produces zero id churn. Built before the batch (it reads existing rows).
+      const liStmts = await replaceLineItemsPreservingIds(DB, jobId, proposed.line_items);
       await DB.batch([
         DB.prepare(`
           UPDATE jobs SET customer = ?, po_number = ?, ship_to_street = ?, ship_to_street2 = ?, ship_to_city = ?,
@@ -157,8 +161,7 @@ export async function applyPending(
         ...(addressChanged
           ? [DB.prepare(`UPDATE jobs SET ship_to_verified = 'unverified', ship_to_standardized = NULL, ship_to_verified_at = NULL WHERE id = ?`).bind(jobId)]
           : []),
-        DB.prepare(`DELETE FROM job_line_items WHERE job_id = ?`).bind(jobId),
-        ...lineItemInsertStatements(DB, jobId, proposed.line_items),
+        ...liStmts,
         // createJob-derived mirror: outbound shipment customer + total_bdft. (destination mirrors
         // jobs.location, which QB never sets, so it is left alone.)
         DB.prepare(`UPDATE shipments SET customer = ?, total_bdft = ?, updated_at = datetime('now') WHERE job_id = ? AND direction = 'outbound'`)

@@ -18,6 +18,7 @@ import { PROCESS_NAMES, mergeProcesses, parseProcesses } from "@/lib/processes";
 import { computeAndPersistHoleyChunks } from "@/lib/holeyChunks";
 import { JOB_TO_SHIPMENT_SYNC, reconcileLoadingAssignments, syncJobFieldsToShipment, type JobSyncField } from "@/lib/logistics/jobSync";
 import { propagateJobCarrierToBols } from "@/lib/logistics/bolCarrier";
+import { replaceLineItemsPreservingIds, type LineItemRow } from "@/lib/lineItems";
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const STATUSES = ["not_started", "in_production", "done", "loading", "shipped"];
@@ -204,25 +205,24 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
       await propagateJobCarrierToBols(DB, id, existing.carrier, s(p.carrier), actorId);
     }
 
-    // Replace line items wholesale (mirrors legacy jobs.js:800–818).
+    // Replace line items (mirrors legacy jobs.js) — cutting-ids-01: diffed against existing rows so
+    // ids (and the cutting_line_progress keyed to them) survive the save. Same normalization as before.
     let replacedLineItems = false;
     if (Array.isArray(p.line_items)) {
       replacedLineItems = true;
-      await DB.prepare("DELETE FROM job_line_items WHERE job_id = ?").bind(id).run();
-      for (let i = 0; i < p.line_items.length; i++) {
-        const li = p.line_items[i] ?? {};
-        await DB.prepare(`
-          INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order, offload_seq, zone_label, zone_bdft)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-        `).bind(
-          crypto.randomUUID(), id,
-          li.part_id ? s(li.part_id) : null,
-          s(li.part_number), s(li.description),
-          Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
-          s(li.dimensions), li.density ? s(li.density) : null, i,
-          nullableInt(li.offload_seq), li.zone_label ? s(li.zone_label) : null, nullableInt(li.zone_bdft),
-        ).run();
-      }
+      const rows: LineItemRow[] = p.line_items.map((raw: any) => {
+        const li = raw ?? {};
+        return {
+          id: li.id ? String(li.id) : null,
+          part_id: li.part_id ? s(li.part_id) : null,
+          part_number: s(li.part_number), description: s(li.description),
+          quantity: Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
+          dimensions: s(li.dimensions), density: li.density ? s(li.density) : null,
+          offload_seq: nullableInt(li.offload_seq), zone_label: li.zone_label ? s(li.zone_label) : null, zone_bdft: nullableInt(li.zone_bdft),
+        };
+      });
+      const liStmts = await replaceLineItemsPreservingIds(DB, id, rows);
+      if (liStmts.length) await DB.batch(liStmts);
     }
 
     // Reconcile loading_assignments to the new load_count (skip customer pickup — mirrors

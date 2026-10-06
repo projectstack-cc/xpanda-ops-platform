@@ -238,6 +238,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
         setSavedLoadCount(Math.max(Number(j.load_count) || 1, 1));
         setSavedShipDate(j.ship_date ?? null);
         const lis: OrderLineItem[] = (boardJson.line_items ?? []).map((li) => ({
+          id: li.id ?? undefined,
           part_id: li.part_id ?? undefined,
           part_number: li.part_number ?? "",
           description: li.description ?? "",
@@ -312,6 +313,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
     const cur: any = {
       ...job,
       line_items: lineItems.map((li) => ({
+        id: li.id ?? undefined,
         part_id: li.part_id || null,
         part_number: li.part_number,
         description: li.description,
@@ -369,6 +371,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
         source: job.source ?? "manual",
         processes: job.processes.map((p) => p.name),
         line_items: lineItems.map((li) => ({
+          id: li.id || undefined,
           part_id: li.part_id || undefined,
           part_number: (li.part_number || "").trim(),
           description: (li.description || "").trim(),

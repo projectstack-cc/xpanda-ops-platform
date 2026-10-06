@@ -20,17 +20,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // cutting-ids-01: the line item must still exist on this job — never write progress for a
+    // dead id — and its part identity is snapshotted onto the progress row for the report.
+    const li = await DB.prepare(
+      "SELECT part_number, description, dimensions FROM job_line_items WHERE id = ? AND job_id = ?"
+    ).bind(String(line_item_id), job_id).first<{ part_number: string | null; description: string | null; dimensions: string | null }>();
+    if (!li) {
+      return NextResponse.json(
+        { ok: false, code: "stale_line_item", error: "This order was edited — refresh the board." },
+        { status: 409 }
+      );
+    }
+
     const now = new Date().toISOString().replace("T", " ").slice(0, 19);
 
     await DB.prepare(
       `INSERT INTO cutting_line_progress
-         (id, job_id, line, line_item_id, completed, completed_qty, updated_by, updated_at)
-       VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
+         (id, job_id, line, line_item_id, completed, completed_qty, updated_by, updated_at,
+          part_number, description, dimensions)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
        ON CONFLICT (job_id, line, line_item_id)
        DO UPDATE SET completed = excluded.completed,
                      updated_by = excluded.updated_by,
-                     updated_at = excluded.updated_at`
-    ).bind(crypto.randomUUID(), job_id, line, line_item_id, completed ? 1 : 0, operatorId, now).run();
+                     updated_at = excluded.updated_at,
+                     part_number = excluded.part_number,
+                     description = excluded.description,
+                     dimensions = excluded.dimensions`
+    ).bind(
+      crypto.randomUUID(), job_id, line, line_item_id, completed ? 1 : 0, operatorId, now,
+      li.part_number, li.description, li.dimensions
+    ).run();
 
     await DB.prepare(
       `INSERT INTO activity_log

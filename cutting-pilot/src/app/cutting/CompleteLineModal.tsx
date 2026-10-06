@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Lock } from "lucide-react";
+import { AlertTriangle, Lock } from "lucide-react";
 import Modal from "@/components/Modal";
 
 interface Props {
@@ -10,6 +10,9 @@ interface Props {
   isLaminate: boolean;
   isOpen: boolean;
   onClose: () => void;
+  // cutting-ids-01: parts checklist state for this line — soft guard only, never blocks.
+  checkedCount: number;
+  totalCount: number;
   onSubmit: (note: string) => void;
   acting: boolean;
 }
@@ -21,10 +24,13 @@ export default function CompleteLineModal({
   isLaminate,
   isOpen,
   onClose,
+  checkedCount,
+  totalCount,
   onSubmit,
   acting,
 }: Props) {
   const [note, setNote] = useState("");
+  const unchecked = totalCount > 0 && checkedCount < totalCount ? totalCount - checkedCount : 0;
 
   useEffect(() => {
     if (isOpen) setNote("");
@@ -40,6 +46,20 @@ export default function CompleteLineModal({
           <span className="font-mono tabular-nums"> · {invoice}</span>. This marks the line done; when
           every required line is complete the job is marked done. This cannot be undone.
         </p>
+
+        {/* cutting-ids-01: soft guard — unchecked parts warn, but Complete is never blocked. */}
+        {unchecked > 0 && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] px-3 py-2 text-sm"
+          >
+            <AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+            <span>
+              <span className="font-mono tabular-nums">{unchecked}</span> of{" "}
+              <span className="font-mono tabular-nums">{totalCount}</span> parts unchecked — complete anyway?
+            </span>
+          </div>
+        )}
 
         {/* Optional completion note (stored as the closing session's handoff note) */}
         <div>
@@ -112,7 +132,7 @@ export default function CompleteLineModal({
             onClick={() => onSubmit(note)}
             className="flex-1 min-h-[44px] bg-[var(--success-bg)] text-[var(--success-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
           >
-            {acting ? "Saving…" : "Mark Complete"}
+            {acting ? "Saving…" : unchecked > 0 ? "Complete anyway" : "Mark Complete"}
           </button>
           <button
             type="button"

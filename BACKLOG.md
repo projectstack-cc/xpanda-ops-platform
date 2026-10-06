@@ -83,6 +83,10 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **cutting-ids-01 follow-up — after deploy, re-run the orphan count; new orphans should be 0**
+  (`SELECT COUNT(*) FROM cutting_line_progress clp WHERE NOT EXISTS (SELECT 1 FROM job_line_items li WHERE li.id = clp.line_item_id)` — baseline 311 on 2026-10-06).
+- [ ] **Checklist adoption:** 15 of 27 Main Line completions (9/29–10/6) had zero parts checked — the activity
+  report can only show what operators check.
 - [ ] **cutting-decouple-01 follow-up — orphaned open sessions after ship.** With the backstop gone, watch for sessions left open on shipped jobs. If it happens in practice, add a manager-facing "close stale sessions" action on the v2 cutting board rather than restoring the backstop.
 - [ ] **shift-alert follow-up — pace-based "may not finish".** Once the block-calc BOM populates
   `cutting_lines.qty_target`, gate or annotate the T-2h alert on projected completion (rate from

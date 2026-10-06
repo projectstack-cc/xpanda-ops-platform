@@ -1,6 +1,7 @@
 import { json, logActivity, safeJsonParse } from '../lib/core.js';
 import { propagateJobCarrierToBols } from '../lib/bol-carrier.js';
 import { nestHoleyChunks, netHoleyChunks } from '../lib/holey-nester.js';
+import { replaceLineItemsPreservingIds } from '../lib/lineItems.js';
 
 // P379: compute + persist the Holey Board chunk requirement for a job (server-authoritative).
 // Reads the just-saved line items, resolves HB thickness from the parts catalog, runs the FFD
@@ -984,28 +985,23 @@ export async function handleApiJobs(request, env) {
         await mainUpdate.run();
       }
 
-      // Replace line items if provided
+      // Replace line items if provided — cutting-ids-01: diff against existing rows so ids (and
+      // the cutting_line_progress keyed to them) survive the save. Same value normalization as before.
       if (Array.isArray(payload.line_items)) {
-        await db.prepare("DELETE FROM job_line_items WHERE job_id = ?").bind(id).run();
-        for (let i = 0; i < payload.line_items.length; i++) {
-          const li = payload.line_items[i];
-          await db.prepare(`
-            INSERT INTO job_line_items (id, job_id, part_id, part_number, description, quantity, dimensions, density, sort_order, offload_seq, zone_label, zone_bdft)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-          `).bind(
-            crypto.randomUUID(), id,
-            li.part_id ? String(li.part_id).trim() : null,
-            String(li.part_number || "").trim(),
-            String(li.description || "").trim(),
-            Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
-            String(li.dimensions  || "").trim(),
-            li.density ? String(li.density).trim() : null,
-            i,
-            nullableInt(li.offload_seq),
-            li.zone_label ? String(li.zone_label).trim() : null,
-            nullableInt(li.zone_bdft),
-          ).run();
-        }
+        const rows = payload.line_items.map((li) => ({
+          id:          li?.id ? String(li.id) : null,
+          part_id:     li.part_id ? String(li.part_id).trim() : null,
+          part_number: String(li.part_number || "").trim(),
+          description: String(li.description || "").trim(),
+          quantity:    Number.isFinite(Number(li.quantity)) ? Number(li.quantity) : 0,
+          dimensions:  String(li.dimensions  || "").trim(),
+          density:     li.density ? String(li.density).trim() : null,
+          offload_seq: nullableInt(li.offload_seq),
+          zone_label:  li.zone_label ? String(li.zone_label).trim() : null,
+          zone_bdft:   nullableInt(li.zone_bdft),
+        }));
+        const liStmts = await replaceLineItemsPreservingIds(db, id, rows);
+        if (liStmts.length) await db.batch(liStmts);
       }
 
       // Reconcile loading_assignments to the new load_count (only when load_count changed).
