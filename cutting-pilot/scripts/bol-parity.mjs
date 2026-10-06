@@ -2,7 +2,8 @@
 // Visual parity harness for bolShared.ts (P435, unit 1 of the logistics v2 migration).
 //
 // Renders ONE BOL from the same fixture data logistics/bol-test.html uses (its `DUMMY` object),
-// through the same BLANK_BOL_Xpanda.pdf template + FRSCRIPT.TTF cursive font legacy uses, and
+// through the same BLANK_BOL_Xpanda.pdf template + FRSCRIPT.TTF cursive font + Liberation Sans
+// body fonts (bol-print-01) legacy uses, and
 // writes the result to cutting-pilot/bol-v2-sample.pdf. Open that file next to a legacy-generated
 // sample (render the same DUMMY fixture through logistics/bol-test.html) to confirm pixel parity.
 //
@@ -12,7 +13,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generatePdf, isLikelyFontBytes } from "../src/lib/bolShared.ts";
+import { generatePdf, isLikelyFontBytes, BODY_FONT_ASSET_PATHS } from "../src/lib/bolShared.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", ".."); // cutting-pilot/scripts -> cutting-pilot -> repo root
@@ -65,9 +66,24 @@ async function main() {
     console.warn("bol-parity: FRSCRIPT.TTF not found at", fontPath, "- rendering without a signature");
   }
 
+  // bol-print-01: the embedded Liberation Sans body faces, read from the same paths the browser
+  // callers fetch (BODY_FONT_ASSET_PATHS are site-root paths under logistics/assets/fonts/).
+  let bodyFontBytes = {};
+  for (const [key, sitePath] of Object.entries(BODY_FONT_ASSET_PATHS)) {
+    const diskPath = join(repoRoot, ...sitePath.split("/").filter(Boolean));
+    const bytes = existsSync(diskPath) ? new Uint8Array(await readFile(diskPath)) : null;
+    if (!bytes || !isLikelyFontBytes(bytes)) {
+      console.warn("bol-parity: body font missing or invalid at", diskPath, "- rendering with unembedded Helvetica");
+      bodyFontBytes = null;
+      break;
+    }
+    bodyFontBytes[key] = bytes;
+  }
+
   const pdfBytes = await generatePdf([DUMMY], {
     templateBytes,
     scriptFontBytes,
+    bodyFontBytes,
     trackingBaseUrl: "https://www.xpandaops.com",
   });
 

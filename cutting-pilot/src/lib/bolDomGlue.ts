@@ -13,6 +13,8 @@ import {
   isLikelyFontBytes,
   TEMPLATE_ASSET_PATH_BY_COPY_TYPE,
   SCRIPT_FONT_ASSET_PATH,
+  BODY_FONT_ASSET_PATHS,
+  type BolBodyFontBytes,
   type BolRecord,
 } from "./bolShared";
 
@@ -50,6 +52,42 @@ async function fetchScriptFontBytes(): Promise<ArrayBuffer | null> {
     _scriptFontBytes = null;
   }
   return _scriptFontBytes;
+}
+
+// bol-print-01: the four Liberation Sans body faces, fetched once per page session with the same
+// content-type + magic-byte sniff as the script font. Resolves null if any face is unavailable
+// (generatePdf/getLayoutFonts then fall back to StandardFonts); a miss is not cached, so the next
+// call retries. Shared by the combined packet and the editor (layout fonts + Exact preview).
+let _bodyFontBytesPromise: Promise<BolBodyFontBytes | null> | null = null;
+
+async function fetchFontBytes(path: string): Promise<ArrayBuffer | null> {
+  try {
+    const res = await fetch(path);
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    if (!res.ok || ct.includes("text/html")) return null;
+    const buf = await res.arrayBuffer();
+    return isLikelyFontBytes(buf) ? buf : null;
+  } catch {
+    return null;
+  }
+}
+
+export function fetchBodyFontBytes(): Promise<BolBodyFontBytes | null> {
+  if (!_bodyFontBytesPromise) {
+    _bodyFontBytesPromise = Promise.all([
+      fetchFontBytes(BODY_FONT_ASSET_PATHS.regular),
+      fetchFontBytes(BODY_FONT_ASSET_PATHS.bold),
+      fetchFontBytes(BODY_FONT_ASSET_PATHS.italic),
+      fetchFontBytes(BODY_FONT_ASSET_PATHS.boldItalic),
+    ]).then(([regular, bold, italic, boldItalic]) => {
+      if (!regular || !bold || !italic || !boldItalic) {
+        _bodyFontBytesPromise = null;
+        return null;
+      }
+      return { regular, bold, italic, boldItalic };
+    });
+  }
+  return _bodyFontBytesPromise;
 }
 
 export interface CombinedBolPdfOptions {
@@ -91,6 +129,7 @@ export async function buildCombinedBolPdf(
   opts: CombinedBolPdfOptions = {}
 ): Promise<Uint8Array> {
   const scriptFontBytes = await fetchScriptFontBytes();
+  const bodyFontBytes = await fetchBodyFontBytes();
   const trackingBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
   // lgx-fuel-02: live per-mile fuel surcharge (never frozen onto the BOL) — one server-built line per
   // bolRecords index. Fetched once for all three copy passes. Fail-soft: any error -> [] -> no line.
@@ -103,6 +142,7 @@ export async function buildCombinedBolPdf(
       copyType,
       templateBytes,
       scriptFontBytes,
+      bodyFontBytes,
       hideQr: opts.hideQr,
       trackingBaseUrl,
       fuelLines,

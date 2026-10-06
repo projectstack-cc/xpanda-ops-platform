@@ -17,7 +17,7 @@
 //   - `open()` returns a cleanup function instead of relying on the caller to call a separate
 //     teardown; BolEditorModal calls it on unmount/target change.
 import type { FuelLine } from "@/lib/logistics/fuelSurcharge";
-import { fetchFuelLines } from "./bolDomGlue";
+import { fetchBodyFontBytes, fetchFuelLines } from "./bolDomGlue";
 import {
   FIELD_MAP,
   PAGE,
@@ -336,9 +336,9 @@ export async function mountBolEditor(
     const bytes = await resp.arrayBuffer();
     const doc = await pdfjs.getDocument({ data: bytes }).promise;
     pdfPage = await doc.getPage(1);
-    // bol-wysiwyg-01/03: real embedded Helvetica metrics — the SAME metrics generatePdf uses — so
-    // layoutBol's placement here matches the PDF exactly, not an approximation.
-    fonts = await getLayoutFonts();
+    // bol-wysiwyg-01/03 + bol-print-01: real embedded Liberation Sans metrics — the SAME fonts
+    // generatePdf embeds — so layoutBol's placement here matches the PDF exactly, not an approximation.
+    fonts = await getLayoutFonts(await fetchBodyFontBytes());
   } catch (e: any) {
     loadingEl.textContent = "Editor failed to load: " + (e?.message || String(e));
     return {
@@ -873,9 +873,10 @@ export async function mountBolEditor(
         const liveBol: BolRecord = { ...bol, _overrides: computeOverrides() };
         const templateBytes = await fetchExactPreviewTemplateBytes();
         const scriptFontBytes = await fetchExactPreviewScriptFontBytes();
+        const bodyFontBytes = await fetchBodyFontBytes();
         const trackingBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
         const fuelLines = await exactPreviewFuelLines(liveBol);
-        const pdfBytes = await generatePdf([liveBol], { templateBytes, scriptFontBytes, trackingBaseUrl, fuelLines });
+        const pdfBytes = await generatePdf([liveBol], { templateBytes, scriptFontBytes, bodyFontBytes, trackingBaseUrl, fuelLines });
         const pdfjs = await loadPdfJs();
         const doc = await pdfjs.getDocument({ data: pdfBytes }).promise;
         const p = await doc.getPage(1);

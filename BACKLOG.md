@@ -376,7 +376,10 @@
   from the job's `scrap_pickup` only (`'YES' → is_scrap_pickup: 1`); no manual override at compose
   time.
 - [ ] **P241 follow-up — manual relink of unrecoverable orphaned BOL job links.** After running `backfill-bol-job-id.sql`, the verification query reported 84 rows still with `job_id IS NULL`: 52 are pre-P170 rows with no `bol_group_id` (can never be auto-relinked — no recovery key exists); the other 32 (13 distinct `bol_group_id` groups) have a group key but *every* row in the group is orphaned — no sibling had a `job_id` to inherit, so the backfill's sibling-inheritance logic couldn't apply. Needs manual investigation per group/job to relink (or accept as permanently orphaned if the source job can't be identified).
-- [ ] **BOL print rendering bug** — when printing the BOL directly (without downloading), the "N" from "Bill of Lading No" and the "S" in "Customer Signature" are clipped/hidden. Parked: root cause is the blank-template artwork + browser print scaling (not our drawn text); needs print-preview testing on a real printer.
+- [ ] **BOL print rendering bug** — when printing the BOL directly (without downloading), the "N" from "Bill of Lading No" and the "S" in "Customer Signature" are clipped/hidden. Likely the same unembedded-template-font substitution bol-print-01 fixed (templates re-saved with fonts embedded) — re-check during the bol-print-01 normal-print acceptance test and close if gone.
+- [ ] **bol-print-02 — draw BOL QR as a single path (merged runs) instead of per-module rectangles; latent print-seam risk.** Both `bol-shared.js` and `bolShared.ts` (bilateral parity).
+- [ ] **bol-print-01 follow-up — fontkit missing on two legacy BOL pages.** `jobs/index.html` and `logistics/loading.html` call `BolShared.generatePdf` but don't load `@pdf-lib/fontkit`, so their BOLs take the unembedded-Helvetica fallback (and have never drawn the cursive signature). Add the same fontkit `<script>` the other logistics pages use.
+- [ ] **bol-print-01 follow-up — BOL PDF size.** Template fonts are still duplicated per page (one `copyPages` per record), and v2 `buildCombinedBolPdf` copies three `generatePdf` outputs into one packet, so Liberation Sans lands 3× (3-copy, 2-record packet ≈ 2.76 MB). If size matters (email attachments), render all three copy passes into one document, or load each template once.
 
 ---
 

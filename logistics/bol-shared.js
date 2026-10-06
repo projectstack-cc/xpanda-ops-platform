@@ -395,19 +395,84 @@ window.BolShared = (function() {
     };
   }
 
-  // Cached once per page load: a scratch PDFDocument's embedded Helvetica family, used purely for
-  // width/wrap measurement by editors (never drawn — the editor's own canvas overlay draws glyphs
-  // with `ctx.font`; only the metrics need to match generatePdf's real embedded fonts, which they do
-  // exactly since Helvetica metrics are identical across any PDFDocument that embeds them).
+  // bol-print-01: the four Liberation Sans faces (metric-compatible with Helvetica) that replace the
+  // unembedded base-14 Helvetica family in BOTH generatePdf and getLayoutFonts. Fetched once per page
+  // load and sniffed the same way FRSCRIPT is (a wrong path 200s with the HTML app-shell). Resolves
+  // to { regular, bold, italic, boldItalic } ArrayBuffers, or null if any face is unavailable.
+  const BODY_FONT_ASSET_PATHS = {
+    regular:    '/logistics/assets/fonts/LiberationSans-Regular.ttf',
+    bold:       '/logistics/assets/fonts/LiberationSans-Bold.ttf',
+    italic:     '/logistics/assets/fonts/LiberationSans-Italic.ttf',
+    boldItalic: '/logistics/assets/fonts/LiberationSans-BoldItalic.ttf',
+  };
+  async function _fetchFontBytes(url) {
+    try {
+      const resp = await fetch(url);
+      const ct = (resp.headers.get('content-type') || '').toLowerCase();
+      if (!resp.ok || ct.indexOf('text/html') !== -1) return null;
+      const buf = await resp.arrayBuffer();
+      const b = new Uint8Array(buf.slice(0, 4));
+      const tag = String.fromCharCode(b[0], b[1], b[2], b[3]);
+      const isFont = (b[0] === 0x00 && b[1] === 0x01 && b[2] === 0x00 && b[3] === 0x00) // TrueType
+        || tag === 'OTTO' || tag === 'true' || tag === 'ttcf' || tag === 'wOFF' || tag === 'wOF2';
+      return isFont ? buf : null;
+    } catch (_e) { return null; }
+  }
+  let _bodyFontBytesPromise = null;
+  function loadBodyFontBytes() {
+    if (!_bodyFontBytesPromise) {
+      _bodyFontBytesPromise = Promise.all([
+        _fetchFontBytes(BODY_FONT_ASSET_PATHS.regular),
+        _fetchFontBytes(BODY_FONT_ASSET_PATHS.bold),
+        _fetchFontBytes(BODY_FONT_ASSET_PATHS.italic),
+        _fetchFontBytes(BODY_FONT_ASSET_PATHS.boldItalic),
+      ]).then(([regular, bold, italic, boldItalic]) => {
+        if (!regular || !bold || !italic || !boldItalic) {
+          _bodyFontBytesPromise = null; // retry on the next call rather than caching a miss
+          return null;
+        }
+        return { regular, bold, italic, boldItalic };
+      });
+    }
+    return _bodyFontBytesPromise;
+  }
+
+  // Embeds the BOL body font family into `doc`: Liberation Sans (unsubset — pdf-lib 1.17's subsetter
+  // drops glyphs) when the bytes + fontkit are available, else the unembedded StandardFonts Helvetica
+  // family (a BOL must never fail to generate over a missing font asset).
+  async function _embedBodyFonts(doc, bodyFontBytes) {
+    const { StandardFonts } = PDFLib;
+    if (bodyFontBytes && window.fontkit) {
+      try {
+        doc.registerFontkit(window.fontkit);
+        return {
+          regular: await doc.embedFont(bodyFontBytes.regular, { subset: false }),
+          bold: await doc.embedFont(bodyFontBytes.bold, { subset: false }),
+          italic: await doc.embedFont(bodyFontBytes.italic, { subset: false }),
+          boldItalic: await doc.embedFont(bodyFontBytes.boldItalic, { subset: false }),
+        };
+      } catch (_e) { /* fall through to the fallback */ }
+    }
+    console.error('BOL body fonts unavailable — falling back to unembedded Helvetica; printing may degrade');
+    return {
+      regular: await doc.embedFont(StandardFonts.Helvetica),
+      bold: await doc.embedFont(StandardFonts.HelveticaBold),
+      italic: await doc.embedFont(StandardFonts.HelveticaOblique),
+      boldItalic: await doc.embedFont(StandardFonts.HelveticaBoldOblique),
+    };
+  }
+
+  // Cached once per page load: a scratch PDFDocument's embedded Liberation Sans family (bol-print-01),
+  // used purely for width/wrap measurement by editors (never drawn — the editor's own canvas overlay
+  // draws glyphs with `ctx.font`). The metrics come from the same embedded Liberation Sans faces
+  // generatePdf draws with, so measurement matches the rendered PDF exactly.
   let _layoutFontsCache = null;
   async function getLayoutFonts() {
     if (_layoutFontsCache) return _layoutFontsCache;
-    const { PDFDocument, StandardFonts } = PDFLib;
+    const { PDFDocument } = PDFLib;
     const scratch = await PDFDocument.create();
-    const regular = await scratch.embedFont(StandardFonts.Helvetica);
-    const bold = await scratch.embedFont(StandardFonts.HelveticaBold);
-    const italic = await scratch.embedFont(StandardFonts.HelveticaOblique);
-    const boldItalic = await scratch.embedFont(StandardFonts.HelveticaBoldOblique);
+    const bodyFontBytes = await loadBodyFontBytes();
+    const { regular, bold, italic, boldItalic } = await _embedBodyFonts(scratch, bodyFontBytes);
     _layoutFontsCache = { regular, bold, italic, boldItalic };
     return _layoutFontsCache;
   }
@@ -702,7 +767,7 @@ window.BolShared = (function() {
    * @param {Object} opts — { packingSlipPdfBytes?: ArrayBuffer }
    */
   async function generatePdf(bolRecords, opts = {}) {
-    const { PDFDocument, StandardFonts, rgb } = PDFLib;
+    const { PDFDocument, rgb } = PDFLib;
 
     const TEMPLATE_BY_COPY = {
       driver:   '/logistics/assets/BLANK_BOL_Xpanda_driver.pdf',
@@ -750,6 +815,21 @@ window.BolShared = (function() {
 
     const combinedPdf = await PDFDocument.create();
 
+    // bol-print-01: embed every font ONCE into combinedPdf (not per record — that would duplicate
+    // ~1.6 MB of Liberation Sans per page). Each record's template page is copied into combinedPdf
+    // first and drawn on there, so all pages share these font objects.
+    const bodyFontBytes = await loadBodyFontBytes();
+    const { regular: font, bold: fontBold, italic: fontItalic, boldItalic: fontBoldItalic } =
+      await _embedBodyFonts(combinedPdf, bodyFontBytes);
+    let cursive = null;
+    if (scriptFontBytes && window.fontkit) {
+      try {
+        combinedPdf.registerFontkit(window.fontkit);
+        cursive = await combinedPdf.embedFont(scriptFontBytes);
+      } catch (_fe) { cursive = null; }
+    }
+    const fontsByKey = { regular: font, bold: fontBold, italic: fontItalic, boldItalic: fontBoldItalic };
+
     for (let _recordIndex = 0; _recordIndex < bolRecords.length; _recordIndex++) {
       const _bolRaw = bolRecords[_recordIndex];
       // Hydrate persisted overrides. The approve path passes `_overrides` already as an object;
@@ -771,22 +851,11 @@ window.BolShared = (function() {
         }
       }
       const templateDoc = await PDFDocument.load(templateBytes);
-      const page = templateDoc.getPages()[0];
-      const font = await templateDoc.embedFont(StandardFonts.Helvetica);
-      const fontBold = await templateDoc.embedFont(StandardFonts.HelveticaBold);
-      const fontItalic = await templateDoc.embedFont(StandardFonts.HelveticaOblique);
-      const fontBoldItalic = await templateDoc.embedFont(StandardFonts.HelveticaBoldOblique);
-      let cursive = null;
-      if (scriptFontBytes && window.fontkit) {
-        try {
-          templateDoc.registerFontkit(window.fontkit);
-          cursive = await templateDoc.embedFont(scriptFontBytes);
-        } catch (_fe) { cursive = null; }
-      }
+      const [page] = await combinedPdf.copyPages(templateDoc, [0]);
+      combinedPdf.addPage(page);
       const black = rgb(0, 0, 0);
       const red = rgb(1, 0, 0);
       const colorFor = (tag) => (tag === 'red' ? red : black);
-      const fontsByKey = { regular: font, bold: fontBold, italic: fontItalic, boldItalic: fontBoldItalic };
 
       const drawUnderline = (text, x, y, size, drawFont, color) => {
         const w = drawFont.widthOfTextAtSize(String(text), size);
@@ -862,10 +931,6 @@ window.BolShared = (function() {
           }
         }
       }
-
-      // ── Copy page into combined PDF ──
-      const [copiedPage] = await combinedPdf.copyPages(templateDoc, [0]);
-      combinedPdf.addPage(copiedPage);
     }
 
     // Append packing slip PDF if provided
