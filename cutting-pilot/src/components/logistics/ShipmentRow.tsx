@@ -84,6 +84,8 @@ interface ShipmentRowProps {
   expanded: boolean;
   onToggleExpand: (id: string) => void;
   detailCache: Map<string, ShipmentDetail>;
+  canManageLoading: boolean;
+  onShipDaysSaved: () => void;
 }
 
 export default function ShipmentRow({
@@ -94,6 +96,8 @@ export default function ShipmentRow({
   expanded,
   onToggleExpand,
   detailCache,
+  canManageLoading,
+  onShipDaysSaved,
 }: ShipmentRowProps) {
   const carrier = s.carrier || "—";
   const isPickup = Boolean(s.is_customer_pickup);
@@ -107,7 +111,12 @@ export default function ShipmentRow({
         <td className="px-3 py-[8.8px] align-top">
           <div className="font-mono tabular-nums text-sm font-semibold text-text">
             {s.invoice_number ? `INV# ${s.invoice_number}` : "—"}
-            {(s.load_count ?? 1) > 1 && (
+            {s.day_loads ? (
+              // split-days-02: split day-row -- which of the order's loads ship on this day.
+              <span className="ml-2 font-sans text-[11px] font-bold text-[var(--brand)]">
+                Loads {s.day_loads.map((n) => String(n).padStart(2, "0")).join(", ")} of {s.load_count}
+              </span>
+            ) : (s.load_count ?? 1) > 1 && (
               <span className="ml-2 font-sans text-[11px] font-bold text-[var(--brand)]">
                 {s.load_count} loads
               </span>
@@ -121,7 +130,7 @@ export default function ShipmentRow({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onToggleExpand(s.id);
+                onToggleExpand(s.entry_key ?? s.id);
               }}
               className="inline-flex items-center gap-0.5 text-xs text-[var(--brand)] hover:underline cursor-pointer"
               aria-expanded={expanded}
@@ -136,7 +145,10 @@ export default function ShipmentRow({
           )}
         </td>
         <td className="px-3 py-[8.8px] align-top text-sm text-text">
-          <div>{fmtDate(s.ship_date)}</div>
+          <div>{fmtDate(s.day_date ?? s.ship_date)}</div>
+          {s.day_loads && s.ship_date !== s.day_date && (
+            <div className="text-xs text-muted whitespace-nowrap">Order date {fmtDate(s.ship_date)}</div>
+          )}
           {s.delivery_time && <div className="text-xs text-muted whitespace-nowrap">{s.delivery_time}</div>}
         </td>
         <td className="px-3 py-[8.8px] align-top text-sm text-text">
@@ -178,7 +190,14 @@ export default function ShipmentRow({
       {expanded && s.job_id && (
         <tr className="border-b border-[var(--line)] last:border-0">
           <td colSpan={9} className="p-0">
-            <ShipmentDetailPanel shipmentId={s.id} cache={detailCache} />
+            <ShipmentDetailPanel
+              shipmentId={s.id}
+              cache={detailCache}
+              canManageLoading={canManageLoading}
+              isCustomerPickup={Boolean(s.is_customer_pickup)}
+              orderShipDate={s.ship_date}
+              onShipDaysSaved={onShipDaysSaved}
+            />
           </td>
         </tr>
       )}

@@ -64,10 +64,13 @@ export default function StatBreakdownModal({ statKey, label, onClose }: StatBrea
       {!loading && !error && rows && rows.length > 0 && (
         <ul className="divide-y divide-[var(--line)] list-none p-0 m-0 max-h-[60vh] overflow-y-auto">
           {rows.map((s) => (
-            <li key={s.id} className="py-2 flex items-center justify-between gap-3">
+            <li key={s.entry_key ?? s.id} className="py-2 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-sm font-medium text-text truncate">{s.customer || "Unknown"}</div>
-                <div className="text-xs text-muted font-mono tabular-nums">{fmtDate(s.ship_date)}</div>
+                <div className="text-xs text-muted font-mono tabular-nums">
+                  {fmtDate(s.day_date ?? s.ship_date)}
+                  {s.day_loads ? ` · ${s.day_loads.map((n) => `L${String(n).padStart(2, "0")}`).join(", ")}` : ""}
+                </div>
               </div>
               <StatusBadge status={s.status} />
             </li>

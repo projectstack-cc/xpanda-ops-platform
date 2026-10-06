@@ -184,9 +184,10 @@ export default function ShipmentDashboard({
   useEffect(() => {
     if (viewMode !== "list" || !rows || !rows.length) return;
 
-    const pendingIds = rows
+    // split-days-02: a split order appears once per day -- dedupe its id.
+    const pendingIds = Array.from(new Set(rows
       .filter((r) => r.distance_status === "pending" && !warmAttemptedRef.current.has(r.id))
-      .map((r) => r.id);
+      .map((r) => r.id)));
     if (!pendingIds.length) return;
 
     const idsToWarm = pendingIds.slice(0, 16); // 2 server batches of MAX_IDS_PER_CALL (8)
@@ -247,6 +248,12 @@ export default function ShipmentDashboard({
     }
   }
 
+  // split-days-02: per-load ship days changed -- drop cached drill-downs and refetch so split rows regroup.
+  function handleShipDaysSaved() {
+    detailCacheRef.current.clear();
+    load();
+  }
+
   function handleShipmentEditClose(saved: boolean) {
     setEditingShipment(null);
     if (saved) {
@@ -299,7 +306,7 @@ export default function ShipmentDashboard({
     const map = new Map<string, ShipmentListItem[]>();
 
     for (const s of filteredRows) {
-      const key = s.ship_date || "No Date";
+      const key = (s.day_date ?? s.ship_date) || "No Date";
       const list = map.get(key) ?? [];
       list.push(s);
       map.set(key, list);
@@ -508,9 +515,13 @@ export default function ShipmentDashboard({
               </div>
             ) : (
               dayGroups.map(({ dateKey, shipments }) => {
+                // split-days-02: a split entry contributes its share of the order total (prorated evenly by
+                // load -- no per-load BDFT exists yet), so a split order isn't counted in full on every day.
+                const hasSplit = shipments.some((s) => s.day_loads);
                 const totalBdft = shipments.reduce((sum, s) => {
                   const val = typeof s.total_bdft === "string" ? parseFloat(s.total_bdft) : s.total_bdft;
-                  return sum + (val || 0);
+                  const share = s.day_loads ? s.day_loads.length / Math.max(s.load_count ?? 1, 1) : 1;
+                  return sum + (val || 0) * share;
                 }, 0);
 
                 return (
@@ -522,8 +533,9 @@ export default function ShipmentDashboard({
                       noun={["shipment", "shipments"]}
                       extra={
                         totalBdft > 0 && (
-                          <span>
+                          <span title={hasSplit ? "Split orders prorated evenly by load" : undefined}>
                             <strong className="text-text tabular-nums font-mono">
+                              {hasSplit ? "≈" : ""}
                               {totalBdft.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                             </strong>{" "}
                             BDFT
@@ -552,14 +564,16 @@ export default function ShipmentDashboard({
                         <tbody>
                           {shipments.map((s) => (
                             <ShipmentRow
-                              key={s.id}
+                              key={s.entry_key ?? s.id}
                               shipment={s}
                               onViewBol={setViewerJobId}
                               onGenerateBol={setGenerateJobId}
                               onEdit={setEditingShipment}
-                              expanded={expandedId === s.id}
+                              expanded={expandedId === (s.entry_key ?? s.id)}
                               onToggleExpand={handleToggleExpand}
                               detailCache={detailCacheRef.current}
+                              canManageLoading={canManageLoading}
+                              onShipDaysSaved={handleShipDaysSaved}
                             />
                           ))}
                         </tbody>

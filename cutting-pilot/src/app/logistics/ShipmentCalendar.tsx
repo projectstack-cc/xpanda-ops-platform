@@ -62,10 +62,12 @@ export default function ShipmentCalendar({
   const shipmentsByDate = useMemo(() => {
     const map = new Map<string, ShipmentListItem[]>();
     for (const s of shipments) {
-      if (!s.ship_date) continue;
-      const list = map.get(s.ship_date) ?? [];
+      // split-days-02: a split order's entries land on each load's own day.
+      const day = s.day_date ?? s.ship_date;
+      if (!day) continue;
+      const list = map.get(day) ?? [];
       list.push(s);
-      map.set(s.ship_date, list);
+      map.set(day, list);
     }
     return map;
   }, [shipments]);
@@ -204,11 +206,13 @@ export default function ShipmentCalendar({
                   {dayShipments.slice(0, maxVisible).map((s) => {
                     const st = STATUS_PILL_STYLES[s.status] ?? STATUS_PILL_STYLES.awaiting;
                     const hasBol = Number(s.bol_count || 0) > 0 || Boolean(s.bol_number);
-                    const titleText = `${s.customer || "Unknown"} · INV# ${s.invoice_number || "—"} · ${s.status}`;
+                    const titleText =
+                      `${s.customer || "Unknown"} · INV# ${s.invoice_number || "—"} · ${s.status}` +
+                      (s.day_loads ? ` · L${s.day_loads.map((n) => String(n).padStart(2, "0")).join(", L")}` : "");
 
                     return (
                       <div
-                        key={s.id}
+                        key={s.entry_key ?? s.id}
                         onClick={() => setSelectedShipment(s)}
                         title={titleText}
                         className={`text-[11px] leading-tight px-1.5 py-1 rounded border ${st.bg} ${st.text} ${st.border} flex items-center justify-between gap-1 cursor-pointer hover:shadow-xs hover:brightness-95 transition-all`}
@@ -272,7 +276,7 @@ export default function ShipmentCalendar({
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
                 <span className="text-muted block">Ship Date</span>
-                <span className="font-medium text-text">{selectedShipment.ship_date || "—"}</span>
+                <span className="font-medium text-text">{(selectedShipment.day_date ?? selectedShipment.ship_date) || "—"}</span>
               </div>
               <div>
                 <span className="text-muted block">Status</span>

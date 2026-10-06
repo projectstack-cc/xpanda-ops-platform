@@ -14,6 +14,7 @@ import PhotoGalleryModal from "@/components/loading/PhotoGalleryModal";
 import { formatEtDateTime } from "@/lib/etDateTime";
 import { formatUsdCents } from "@/lib/money";
 import { StatusBadge } from "./ShipmentRow";
+import AssignShipDaysModal, { fmtDay } from "./AssignShipDaysModal";
 import type { ShipmentDetail, ShipmentLoad } from "./types";
 
 // lgx-minimap-01: shared with the Carrier View. Leaflet touches `window` at import -> client-only.
@@ -22,6 +23,10 @@ const DestinationMiniMap = dynamic(() => import("@/components/DestinationMiniMap
 interface ShipmentDetailPanelProps {
   shipmentId: string;
   cache: Map<string, ShipmentDetail>;
+  canManageLoading?: boolean;
+  isCustomerPickup?: boolean;
+  orderShipDate?: string | null;
+  onShipDaysSaved?: () => void;
 }
 
 function addressLines(d: ShipmentDetail): string[] {
@@ -35,12 +40,23 @@ function addressLines(d: ShipmentDetail): string[] {
   return lines;
 }
 
-export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetailPanelProps) {
+export default function ShipmentDetailPanel({
+  shipmentId,
+  cache,
+  canManageLoading = false,
+  isCustomerPickup = false,
+  orderShipDate = null,
+  onShipDaysSaved,
+}: ShipmentDetailPanelProps) {
   const [detail, setDetail] = useState<ShipmentDetail | null>(cache.get(shipmentId) ?? null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!cache.has(shipmentId));
   // lgx-photos-01: index into allPhotos of the open gallery photo (null = closed).
   const [gallery, setGallery] = useState<number | null>(null);
+  // split-days-02: Assign Ship Days modal.
+  const [daysOpen, setDaysOpen] = useState(false);
+  // Bumped after a ship-days save: the panel stays mounted across the list refetch, so force a fresh detail.
+  const [reloadKey, setReloadKey] = useState(0);
 
   // lgx-photos-01: every load's photos flattened in display order, so the gallery cycles through the
   // whole order; flatIndex lets each thumbnail open the gallery at itself. Memoized so the gallery's
@@ -90,7 +106,7 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
     return () => {
       cancelled = true;
     };
-  }, [shipmentId, cache]);
+  }, [shipmentId, cache, reloadKey]);
 
   if (loading) {
     return <div className="px-4 py-4 text-sm text-muted">Loading details…</div>;
@@ -101,6 +117,12 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
   if (!detail) return null;
 
   const lines = addressLines(detail);
+  // split-days-02: per-load "Ships" line shows when a load's own day differs from the order date, or the
+  // order's loads land on more than one distinct day.
+  const orderDay = String(orderShipDate ?? "").slice(0, 10);
+  const effDays = new Set((detail.loads ?? []).map((ld) => String(ld.load_ship_date ?? "").trim().slice(0, 10) || orderDay));
+  const multiDay = effDays.size > 1;
+  const canAssignDays = canManageLoading && !isCustomerPickup && (detail.load_count ?? 1) > 1;
 
   return (
     <div className="px-4 py-4 bg-[var(--ghost-bg)] space-y-3">
@@ -136,7 +158,21 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
 
       {(detail.loads ?? []).length > 0 && (
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Loads</div>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted">Loads</div>
+            {canAssignDays && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDaysOpen(true);
+                }}
+                className="min-h-[44px] md:min-h-[32px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-[var(--brand)] cursor-pointer hover:bg-[var(--ghost-bg)]"
+              >
+                Assign Ship Days
+              </button>
+            )}
+          </div>
           <div className="rounded-lg border border-[var(--card-border)] bg-surface divide-y divide-[var(--line)]">
             {detail.loads.map((ld, i) => {
               const n = Number(ld.load_number) || 0;
@@ -155,6 +191,9 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
                       </span>
                     )}
                     {deliveredAt && <span className="text-xs text-muted tabular-nums">Delivered {deliveredAt}</span>}
+                    {ld.load_ship_date && (multiDay || String(ld.load_ship_date).slice(0, 10) !== orderDay) && (
+                      <span className="text-xs text-muted tabular-nums">Ships {fmtDay(ld.load_ship_date)}</span>
+                    )}
                   </div>
                   {(ld.photos ?? []).length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
@@ -248,6 +287,22 @@ export default function ShipmentDetailPanel({ shipmentId, cache }: ShipmentDetai
           </table>
         </div>
       </div>
+
+      {canAssignDays && (
+        <AssignShipDaysModal
+          isOpen={daysOpen}
+          shipmentId={shipmentId}
+          loadCount={detail.load_count ?? 1}
+          loads={detail.loads ?? []}
+          orderShipDate={orderShipDate}
+          onClose={() => setDaysOpen(false)}
+          onSaved={() => {
+            cache.delete(shipmentId);
+            setReloadKey((k) => k + 1);
+            onShipDaysSaved?.();
+          }}
+        />
+      )}
 
       <PhotoGalleryModal
         jobId={gallery !== null ? (detail.job_id ?? "x") : null}
