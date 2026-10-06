@@ -142,6 +142,18 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
     load();
   }, [load]);
 
+  // jb-01: deep link — /v2/board?job=<id> opens that job's read-only detail modal. Uses
+  // OrderDetailModal's own GET /v2/api/board/:id fetch, so it works even when the job is outside
+  // the current week, filtered out, or archived. The param is stripped so a refresh/back doesn't reopen.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const jobParam = url.searchParams.get("job");
+    if (!jobParam) return;
+    setViewId(jobParam);
+    url.searchParams.delete("job");
+    window.history.replaceState(null, "", url.pathname + (url.search ? url.search : "") + url.hash);
+  }, []);
+
   async function toggleExpand(jobId: string) {
     if (expandedId === jobId) {
       setExpandedId(null);

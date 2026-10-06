@@ -11,6 +11,28 @@ import { parseProcesses } from "@/lib/processes";
 
 export async function GET() {
   const { DB } = await getEnv();
+  // jb-01: 14-day auto-archive sweep, ported verbatim from legacy GET /api/jobs (routes/jobs.js).
+  // Legacy keeps its copy until the legacy board retires (jb-09); running both is harmless —
+  // the UPDATE is idempotent via archived_at IS NULL. Sets archived_at only, never status.
+  // Archives FINISHED jobs only: ship_date > 14 days ago AND (status done/shipped OR a delivered
+  // outbound shipment). Best-effort — a sweep failure must never break the board.
+  try {
+    await DB.prepare(
+      `UPDATE jobs SET archived_at = ?
+       WHERE archived_at IS NULL
+         AND ship_date IS NOT NULL AND ship_date <> ''
+         AND ship_date < date('now','-14 days')
+         AND (
+           status IN ('done', 'shipped')
+           OR EXISTS (
+             SELECT 1 FROM shipments s
+             WHERE s.job_id = jobs.id AND s.direction = 'outbound' AND s.status = 'delivered'
+           )
+         )`
+    ).bind(new Date().toISOString()).run();
+  } catch (e) {
+    console.error("stale-job auto-archive sweep failed:", e);
+  }
   try {
     // loading_assignments.loading_status vocabulary (confirmed against the live tree):
     // awaiting | not_started | loading | loaded | in_transit | delivered | archived.
