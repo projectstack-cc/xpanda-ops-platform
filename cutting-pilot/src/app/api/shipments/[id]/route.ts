@@ -42,8 +42,9 @@
 //     (logistics/index.html:212), never "awaiting"/"scheduled" (board-driven-only). A validated
 //     status change fires the same reverse write-through cascade legacy's PUT branch runs
 //     (jobs.js:1372-1458): job status sync (forward-only, 'shipped'/'archived' protected),
-//     loading_assignments mirror, completeCuttingLinesForJob backstop, and a ready_to_ship
-//     re-queue -- see the PUT handler body for the full port.
+//     loading_assignments mirror, and a ready_to_ship re-queue -- see the PUT handler body for
+//     the full port. (cutting-decouple-01: the force-complete-cutting-lines backstop was removed
+//     from both apps -- cutting completes only via the v2 cutting board's own signal.)
 //
 // DELETE mirrors jobs.js's handleApiShipments DELETE branch (~1470-1488) exactly: no
 // LOCKED_STATUSES check (a locked shipment can still be deleted, deliberately not a dead end),
@@ -58,7 +59,6 @@ import { singleLineAddress } from "@/lib/logistics/address";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 import { canEditDashboard } from "@/lib/logistics/dashboardPerms";
 import { logActivity } from "@/lib/activityLog";
-import { completeCuttingLinesForJob } from "@/lib/cuttingLines";
 import { JOB_TO_SHIPMENT_SYNC, coerceJobSyncValue, reconcileLoadingAssignments, type JobSyncField } from "@/lib/logistics/jobSync";
 import { propagateJobCarrierToBols } from "@/lib/logistics/bolCarrier";
 
@@ -525,8 +525,7 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
         }
       }
 
-      // 2. Mirror active loading-stage + transit statuses onto loading_assignments. MUST run
-      // before block 3 -- completeCuttingLinesForJob's own gate query depends on this write.
+      // 2. Mirror active loading-stage + transit statuses onto loading_assignments.
       if (["loading", "loaded", "in_transit", "delivered"].includes(newStatus)) {
         try {
           await DB.prepare(
@@ -537,17 +536,7 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
         }
       }
 
-      // 3. Data-integrity backstop: once the shipment is provably past cutting, force any missed
-      // cutting lines complete.
-      if (["loaded", "in_transit", "delivered"].includes(newStatus)) {
-        try {
-          await completeCuttingLinesForJob(DB, row.job_id, newStatus);
-        } catch (e) {
-          console.error("Cutting-lines backfill failed (shipment flow):", e);
-        }
-      }
-
-      // 4. Re-queue: pulling back to ready_to_ship returns a non-pickup job's cards to awaiting.
+      // 3. Re-queue: pulling back to ready_to_ship returns a non-pickup job's cards to awaiting.
       if (newStatus === "ready_to_ship" && jobRow && (jobRow.method || "").toLowerCase() !== "customer pickup") {
         try {
           await DB.prepare(

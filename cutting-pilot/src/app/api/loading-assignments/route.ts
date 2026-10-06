@@ -30,7 +30,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { D1Database } from "@cloudflare/workers-types";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";
-import { completeCuttingLinesForJob } from "@/lib/cuttingLines";
 
 const LOADING_FLOW = ["awaiting", "not_started", "loading", "loaded", "in_transit", "delivered"];
 
@@ -442,14 +441,6 @@ export async function PUT(request: NextRequest) {
     await DB.prepare(`UPDATE loading_assignments SET ${updates.join(", ")} WHERE id = ?`)
       .bind(...binds)
       .run();
-
-    if (payload.loading_status && ["loaded", "in_transit", "delivered"].includes(payload.loading_status)) {
-      try {
-        await completeCuttingLinesForJob(DB, existing.job_id, payload.loading_status);
-      } catch (e) {
-        console.error("Cutting-lines backfill failed (loading flow):", e);
-      }
-    }
 
     if (pendingShipmentStatus) {
       await syncShipmentStatus(DB, existing.job_id, pendingShipmentStatus);

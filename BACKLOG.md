@@ -83,6 +83,7 @@
 
 ## Manufacturing / Cutting (React pilot)
 
+- [ ] **cutting-decouple-01 follow-up — orphaned open sessions after ship.** With the backstop gone, watch for sessions left open on shipped jobs. If it happens in practice, add a manager-facing "close stale sessions" action on the v2 cutting board rather than restoring the backstop.
 - [ ] **shift-alert follow-up — pace-based "may not finish".** Once the block-calc BOM populates
   `cutting_lines.qty_target`, gate or annotate the T-2h alert on projected completion (rate from
   `cutting_sessions.qty_done_delta`) instead of "not finished yet".
@@ -100,13 +101,6 @@
   `OrderDetailModal`.** Currently the grouped recipe breakdown only exists in the cut-list PDF
   (both surfaces, per P386). Surfacing it inline on the board would need `hb_chunk_breakdown` on
   the `/v2/cutting` queue payload (`queue/route.ts`), which doesn't select it today.
-- [ ] **P385 follow-up — fully decouple loading/delivery from cutting completion (option B).**
-  P385 fixed `completeCuttingLinesForJob`'s backstop to only fire when truly no
-  `loading_assignment` is pre-loaded, but the backstop itself (loading/delivery → completing
-  dangling cutting lines) is still in place. Option B: loading and driver-QR events should not
-  force cutting-line completion at all; cutting completes solely via the v2 cutting board's own
-  one-directional signal. Removes the loading→cutting backstop entirely once v2 clock-out
-  coverage is trusted on the floor.
 - [ ] **P370 follow-up — bottom cut-list dock: optional per-line tabs for multi-line jobs.**
   Currently shows the operator's clocked-in line, else the job's first required line
   (`dockLine` in `CuttingBoard.tsx`) — no way to view/check a different line's parts without
