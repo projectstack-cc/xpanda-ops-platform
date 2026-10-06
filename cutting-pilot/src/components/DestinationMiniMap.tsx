@@ -82,9 +82,10 @@ export default function DestinationMiniMap({ lat, lng, address }: Props) {
   const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
   return (
+    // minimap-zindex-01: `isolate` contains Leaflet's 400–1000 z-indexes so modals (z-50) render above the map.
     <div
       ref={boxRef}
-      className="relative mt-3 h-[120px] rounded-md overflow-hidden border border-[var(--border)] bg-[var(--ghost-bg)]"
+      className="relative isolate mt-3 h-[120px] rounded-md overflow-hidden border border-[var(--border)] bg-[var(--ghost-bg)]"
     >
       <div ref={mapElRef} className="absolute inset-0" aria-hidden="true" />
       {/* Full-size tap target above Leaflet's panes (z-index 400+). */}
