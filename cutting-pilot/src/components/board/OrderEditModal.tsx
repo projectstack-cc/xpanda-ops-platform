@@ -151,9 +151,16 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
 
   const [originalSnapshot, setOriginalSnapshot] = useState<string>("");
 
+  // jb-02: in-UI delete confirmation (no window.confirm) — reuses legacy DELETE /api/jobs.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const statusLocked = job?.status === "loading" || job?.status === "shipped";
   const canManageShifts = isAdmin || !!permissions["jobs.manage"]?.edit;
   const canManageAssignees = isAdmin || !!permissions["jobs.manage"]?.edit;
+  // jb-02: same rule as legacy gateJobsWrite — jobs edit (or admin); no status restriction.
+  const canDeleteOrder = isAdmin || !!permissions["jobs"]?.edit;
 
   useEffect(() => {
     if (cutListBlobUrlRef.current) {
@@ -165,6 +172,9 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
     setCutListOpen(false);
     setIncludeChunks(false);
     setSlipOpen(false);
+    setConfirmingDelete(false);
+    setDeleting(false);
+    setDeleteError(null);
 
     if (!jobId) {
       setJob(null);
@@ -357,6 +367,31 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
 
   function handleClose() {
     onClose();
+  }
+
+  // jb-02: hard delete via the legacy endpoint (one source of server truth — no v2 delete route).
+  async function handleDelete() {
+    if (!jobId) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch("/api/jobs", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: jobId }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setDeleteError(data?.error || "Couldn't delete this order.");
+        return;
+      }
+      onSaved();
+      onClose();
+    } catch {
+      setDeleteError("Couldn't delete this order.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function handleToggleCutList() {
@@ -1029,23 +1064,64 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="min-h-[44px] px-4 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
-            >
-              Close
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="min-h-[44px] px-5 rounded-md bg-[var(--brand)] text-white text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
+          {confirmingDelete ? (
+            <div role="alert" className="rounded-md border border-[var(--danger-bg)] p-3 space-y-3">
+              <p className="text-sm text-text">
+                Delete this order and everything attached to it — loading cards, BOLs, shipments, cutting
+                records? This can&apos;t be undone.
+              </p>
+              {deleteError && <p className="text-sm text-[var(--warn-text)]">{deleteError}</p>}
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setConfirmingDelete(false); setDeleteError(null); }}
+                  disabled={deleting}
+                  className="min-h-[44px] px-4 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="min-h-[44px] px-5 rounded-md bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
+                >
+                  {deleting ? "Deleting…" : "Delete permanently"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <div>
+                {canDeleteOrder && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(true)}
+                    className="min-h-[44px] px-4 rounded-md border border-[var(--danger-bg)] text-[var(--danger-bg)] text-sm font-semibold cursor-pointer hover:bg-[var(--danger-bg)] hover:text-[var(--danger-text)]"
+                  >
+                    Delete order
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="min-h-[44px] px-4 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)]"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="min-h-[44px] px-5 rounded-md bg-[var(--brand)] text-white text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
+                >
+                  {saving ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

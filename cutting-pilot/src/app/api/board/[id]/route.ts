@@ -21,7 +21,8 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
              contact_name, contact_phone,
              ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
              ship_to_city, ship_to_state, ship_to_zip, source, processes, hb_chunk_breakdown,
-             (packing_slip_key IS NOT NULL OR packing_slip_pdf IS NOT NULL) AS has_packing_slip
+             (packing_slip_key IS NOT NULL OR packing_slip_pdf IS NOT NULL) AS has_packing_slip,
+             (SELECT COUNT(*) FROM bols b WHERE b.job_id = jobs.id) AS bol_count
         FROM jobs WHERE id = ?
     `).bind(id).first<any>();
     if (!job) return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 });
@@ -40,6 +41,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
       job: {
         ...job,
         has_packing_slip: !!job.has_packing_slip,
+        bol_count: Number(job.bol_count) || 0,
         // Parse processes JSON defensively so a malformed cell doesn't crash the modal.
         processes: (() => {
           try { return job.processes ? JSON.parse(job.processes) : []; }

@@ -28,6 +28,7 @@ interface DetailJob {
   ship_to_state: string | null;
   ship_to_zip: string | null;
   has_packing_slip: boolean;
+  bol_count: number;
   hb_chunk_breakdown: string | null;
 }
 
@@ -41,11 +42,14 @@ interface DetailResponse {
 interface OrderDetailModalProps {
   jobId: string | null;
   onClose: () => void;
+  // jb-02: opens the board-level BolViewerModal. Optional — the schedule desk mounts this modal
+  // without it, and the View BOL row only renders when a handler is supplied.
+  onViewBol?: (jobId: string) => void;
 }
 
 type CutListDoc = { src: string; filename: string } | null;
 
-export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalProps) {
+export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDetailModalProps) {
   const [data, setData] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [cutListOpen, setCutListOpen] = useState(false);
@@ -232,6 +236,21 @@ export default function OrderDetailModal({ jobId, onClose }: OrderDetailModalPro
             src={slipDoc?.src ?? null}
             filename={slipDoc?.filename ?? "packing-slip.pdf"}
           />
+
+          {/* jb-02: View BOL — only for jobs with ≥1 BOL. The viewer is mounted at the board level
+              (never nested in this modal), read-only; BOL editing lives on the logistics board. */}
+          {job.bol_count > 0 && onViewBol && (
+            <div>
+              <button
+                type="button"
+                onClick={() => onViewBol(job.id)}
+                className="flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-[var(--link)] cursor-pointer"
+              >
+                <ChevronRight size={16} className="shrink-0" aria-hidden="true" />
+                View BOL
+              </button>
+            </div>
+          )}
 
           {/* Cut List — independent dropdown-link viewer, own PdfViewer instance/state; builds
               lazily on first open and never touches the packing-slip viewer above. */}

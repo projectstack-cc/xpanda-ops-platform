@@ -29,6 +29,7 @@ import StatusCards, { type StatusBucket } from "./StatusCards";
 import StatusModal from "./StatusModal";
 import OrderDetailModal from "./OrderDetailModal";
 import OrderEditModal from "./OrderEditModal";
+import BolViewerModal from "@/components/logistics/BolViewerModal";
 import CalendarView from "./CalendarView";
 import BoardRowEdit from "./BoardRowEdit";
 import { JobStatusBadge, PriorityBadge, STATUS_VARIANTS } from "./badges";
@@ -104,6 +105,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
+  const [bolJobId, setBolJobId] = useState<string | null>(null);
   const [view, setView] = useState<"list" | "calendar">("list");
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
@@ -481,7 +483,9 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
         />
       )}
 
-      <OrderDetailModal jobId={viewId} onClose={() => setViewId(null)} />
+      <OrderDetailModal jobId={viewId} onClose={() => setViewId(null)} onViewBol={setBolJobId} />
+      {/* jb-02: mounted after OrderDetailModal so it stacks above it (same z-50, later DOM wins). */}
+      <BolViewerModal jobId={bolJobId} onClose={() => setBolJobId(null)} viewOnly onEdit={() => {}} />
 
       <OrderEditModal
         jobId={editId}
