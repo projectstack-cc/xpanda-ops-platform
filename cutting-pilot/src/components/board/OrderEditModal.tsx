@@ -17,6 +17,7 @@ import { buildCutListPdf, type CutListJob, type CutListLineItem } from "@/lib/cu
 import PartsPicker from "@/components/orders/PartsPicker";
 import type { OrderLineItem } from "@/components/orders/OrderEntryForm";
 import ProcessPicker from "./ProcessPicker";
+import ShipDaysModal from "./ShipDaysModal";
 import { mergeProcesses, parseProcesses, type JobProcess } from "@/lib/processes";
 
 interface EditJob {
@@ -156,8 +157,13 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // jb-03: Assign Ship Days — keyed on the SAVED load_count from the fetched job, not the edit field.
+  const [savedLoadCount, setSavedLoadCount] = useState(1);
+  const [shipDaysOpen, setShipDaysOpen] = useState(false);
+
   const statusLocked = job?.status === "loading" || job?.status === "shipped";
   const canManageShifts = isAdmin || !!permissions["jobs.manage"]?.edit;
+  const canAssignShipDays = isAdmin || !!permissions["logistics.loading.manage"]?.edit;
   const canManageAssignees = isAdmin || !!permissions["jobs.manage"]?.edit;
   // jb-02: same rule as legacy gateJobsWrite — jobs edit (or admin); no status restriction.
   const canDeleteOrder = isAdmin || !!permissions["jobs"]?.edit;
@@ -175,6 +181,8 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
     setConfirmingDelete(false);
     setDeleting(false);
     setDeleteError(null);
+    setShipDaysOpen(false);
+    setSavedLoadCount(1);
 
     if (!jobId) {
       setJob(null);
@@ -212,6 +220,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
         // board-lines-01: normalize processes so the dirty snapshot and the picker agree.
         const j = { ...boardJson.job, processes: parseProcesses(boardJson.job.processes) };
         setJob(j);
+        setSavedLoadCount(Math.max(Number(j.load_count) || 1, 1));
         const lis: OrderLineItem[] = (boardJson.line_items ?? []).map((li) => ({
           part_id: li.part_id ?? undefined,
           part_number: li.part_number ?? "",
@@ -771,16 +780,33 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
                   className={inputClass}
                 />
               </label>
-              <label className="block">
-                <span className={labelClass}>Load count</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={job.load_count ?? 1}
-                  onChange={(e) => setJob({ ...job, load_count: Number(e.target.value) })}
-                  className={inputClass}
-                />
-              </label>
+              <div>
+                <label className="block">
+                  <span className={labelClass}>Load count</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={job.load_count ?? 1}
+                    onChange={(e) => setJob({ ...job, load_count: Number(e.target.value) })}
+                    className={inputClass}
+                  />
+                </label>
+                {/* jb-03: legacy parity — admin / logistics.loading.manage edit, saved load_count > 1. */}
+                {canAssignShipDays && savedLoadCount > 1 && (() => {
+                  const loadCountDirty = Number(job.load_count ?? 1) !== savedLoadCount;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setShipDaysOpen(true)}
+                      disabled={loadCountDirty}
+                      title={loadCountDirty ? "Save the load count first" : undefined}
+                      className="mt-2 w-full min-h-[44px] px-3 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Assign Ship Days
+                    </button>
+                  );
+                })()}
+              </div>
               <label className="block">
                 <span className={labelClass}>Total BDFT</span>
                 <input
@@ -1124,6 +1150,13 @@ export default function OrderEditModal({ jobId, onClose, onSaved, isAdmin = fals
           )}
         </div>
       )}
+
+      <ShipDaysModal
+        jobId={shipDaysOpen ? jobId : null}
+        loadCount={savedLoadCount}
+        onClose={() => setShipDaysOpen(false)}
+        onSaved={onSaved}
+      />
 
       <PartsPicker
         isOpen={partsPickerOpen}
