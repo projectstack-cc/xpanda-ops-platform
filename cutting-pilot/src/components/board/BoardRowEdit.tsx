@@ -8,6 +8,7 @@
 // because the modal now covers everything /v2/orders would.
 import { useEffect, useState } from "react";
 import type { BoardJob } from "./ProductionBoard";
+import JobShiftChips from "./JobShiftChips";
 
 interface Assignee {
   user_id: string;
@@ -23,6 +24,7 @@ interface AssignableUser {
 interface BoardRowEditProps {
   job: BoardJob;
   assignableUsers: AssignableUser[];
+  canManageShifts: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }
@@ -46,7 +48,7 @@ const PRIORITY_LEVEL_OPTIONS = [
   { value: 3, label: "Critical" },
 ];
 
-export default function BoardRowEdit({ job, assignableUsers, onSaved, onCancel }: BoardRowEditProps) {
+export default function BoardRowEdit({ job, assignableUsers, canManageShifts, onSaved, onCancel }: BoardRowEditProps) {
   const [shipDate, setShipDate] = useState(job.ship_date || "");
   const [priority, setPriority] = useState(job.priority || "normal");
   const [priorityLevel, setPriorityLevel] = useState(job.priority_level ?? 0);
@@ -268,6 +270,9 @@ export default function BoardRowEdit({ job, assignableUsers, onSaved, onCancel }
           )}
         </div>
       </div>
+
+      {/* jb-10: Shifts moved here from OrderEditModal — writes immediately, no board refetch. */}
+      <JobShiftChips jobId={job.id} canManage={canManageShifts} />
 
       {/* Read-only order spec — no more "Open in order entry →" link (the OrderEditModal
           covers the same surface inline). */}

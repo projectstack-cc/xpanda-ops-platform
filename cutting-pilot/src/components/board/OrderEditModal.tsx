@@ -2,12 +2,11 @@
 // src/components/board/OrderEditModal.tsx
 // P439 — full in-place edit modal opened from the Edit button on each /v2/board row. Mirrors
 // what the legacy jobs/index.html "Edit Job" modal edits (customer, PO, INV, ship-to, ship_date,
-// status, priority, notes, cutting/packing instructions, line items), adds the Job Shifts
-// chip section (manager-only add/remove), the assignment chip section (manager-only writes via
-// the legacy /api/jobs/:id/assignments endpoints), and reuses the cut-list + packing-slip
-// dropdown viewers from OrderDetailModal. Save posts to PUT /v2/api/orders/:id; shifts use
-// the new /v2/api/orders/:id/shifts endpoints (manager-gated server-side from
-// X-User-Is-Admin + X-User-Permissions, the new header injected by middleware).
+// status, priority, notes, cutting/packing instructions, line items), adds the assignment chip
+// section (manager-only writes via the legacy /api/jobs/:id/assignments endpoints), and reuses
+// the cut-list + packing-slip dropdown viewers from OrderDetailModal. Save posts to
+// PUT /v2/api/orders/:id. jb-10: Job Shifts moved out of this modal into the board row
+// dropdown (BoardRowEdit → JobShiftChips).
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
@@ -81,7 +80,6 @@ interface BoardResponse {
   error?: string;
   job?: EditJob;
   line_items?: StoredLineItem[];
-  shifts?: string[];
 }
 
 interface Assignee {
@@ -100,7 +98,7 @@ interface OrderEditModalProps {
   boardJobs?: BoardJob[];
   onClose: () => void;
   onSaved: () => void;
-  // Read-only user context for manager gating of the Shifts + Assignees chip sections. The
+  // Read-only user context for manager gating of the Assignees chip section. The
   // server enforces these too, but mirroring them client-side avoids showing controls that
   // will 403 on click.
   isAdmin?: boolean;
@@ -120,7 +118,6 @@ const PRIORITY_LEVEL_OPTIONS = [
   { value: 2, label: "High" },
   { value: 3, label: "Critical" },
 ];
-const SHIFT_LABELS: Record<string, string> = { "1st": "1st Shift", "2nd": "2nd Shift", "3rd": "3rd Shift" };
 
 const inputClass =
   "w-full min-h-[44px] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
@@ -155,8 +152,6 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
 
   const [job, setJob] = useState<EditJob | null>(null);
   const [lineItems, setLineItems] = useState<OrderLineItem[]>([{ ...EMPTY_LINE }]);
-  const [shifts, setShifts] = useState<string[]>([]);
-  const [addingShift, setAddingShift] = useState("");
 
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
@@ -191,7 +186,6 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
   const [savedShipDate, setSavedShipDate] = useState<string | null>(null);
 
   const statusLocked = job?.status === "loading" || job?.status === "shipped";
-  const canManageShifts = isAdmin || !!permissions["jobs.manage"]?.edit;
   const canAssignShipDays = isAdmin || !!permissions["logistics.loading.manage"]?.edit;
   const canManageAssignees = isAdmin || !!permissions["jobs.manage"]?.edit;
   // jb-02: same rule as legacy gateJobsWrite — jobs edit (or admin); no status restriction.
@@ -219,10 +213,8 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
     if (!jobId) {
       setJob(null);
       setLineItems([{ ...EMPTY_LINE }]);
-      setShifts([]);
       setAssignees([]);
       setAddingUserId("");
-      setAddingShift("");
       return;
     }
 
@@ -231,19 +223,14 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
     setLoadError(null);
     setJob(null);
     setLineItems([{ ...EMPTY_LINE }]);
-    setShifts([]);
     setAssignees([]);
     setSaveError(null);
     setAssignError(null);
 
     (async () => {
       try {
-        const [boardRes, shiftsRes] = await Promise.all([
-          fetch(`/v2/api/board/${jobId}`),
-          fetch(`/v2/api/orders/${jobId}/shifts`),
-        ]);
+        const boardRes = await fetch(`/v2/api/board/${jobId}`);
         const boardJson: BoardResponse = await boardRes.json();
-        const shiftsJson = await shiftsRes.json();
         if (cancelled) return;
         if (!boardRes.ok || !boardJson.ok || !boardJson.job) {
           setLoadError(boardJson.error || "Couldn't load this order.");
@@ -256,7 +243,6 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
         setSavedShipDate(j.ship_date ?? null);
         const lis = toOrderLineItems(boardJson.line_items);
         setLineItems(lis.length ? lis : [{ ...EMPTY_LINE }]);
-        setShifts(Array.isArray(shiftsJson.shifts) ? shiftsJson.shifts : []);
         const snapshot = JSON.stringify({ ...j, line_items: lis });
         setOriginalSnapshot(snapshot);
       } catch {
@@ -558,49 +544,6 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
       }
     } catch { /* non-fatal — the board refetch below still runs */ }
     onSaved();
-  }
-
-  async function handleAddShift(shift: string) {
-    if (!jobId || !shift) return;
-    try {
-      const res = await fetch(`/v2/api/orders/${jobId}/shifts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shift }),
-      });
-      const data = await res.json();
-      if (res.status === 403) {
-        setSaveError(data.error || "Manager access required to assign shifts.");
-        return;
-      }
-      if (!res.ok || !data.ok) {
-        setSaveError(data.error || "Couldn't add shift. Try again.");
-        return;
-      }
-      const r = await fetch(`/v2/api/orders/${jobId}/shifts`);
-      const j = await r.json();
-      if (r.ok && j?.ok) setShifts(Array.isArray(j.shifts) ? j.shifts : []);
-    } catch {
-      setSaveError("Network error — couldn't reach the server.");
-    }
-  }
-  async function handleRemoveShift(shift: string) {
-    if (!jobId) return;
-    try {
-      const res = await fetch(`/v2/api/orders/${jobId}/shifts/${encodeURIComponent(shift)}`, { method: "DELETE" });
-      const data = await res.json();
-      if (res.status === 403) {
-        setSaveError(data.error || "Manager access required to assign shifts.");
-        return;
-      }
-      if (!res.ok || !data.ok) {
-        setSaveError(data.error || "Couldn't remove shift. Try again.");
-        return;
-      }
-      setShifts((prev) => prev.filter((s) => s !== shift));
-    } catch {
-      setSaveError("Network error — couldn't reach the server.");
-    }
   }
 
   async function handleAddAssignee() {
@@ -1066,53 +1009,6 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
                 From parts library
               </button>
             </div>
-          </section>
-
-          {/* Job Shifts (manager-gated) */}
-          <section className="space-y-2">
-            <h2 className="text-sm font-semibold text-text">Job shifts</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              {shifts.length === 0 && <span className="text-xs text-muted">No shifts assigned</span>}
-              {shifts.map((s) => (
-                <span
-                  key={s}
-                  className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-[var(--info-bg)] text-xs font-medium text-[var(--info-text)] border border-[var(--info-border)]"
-                >
-                  {SHIFT_LABELS[s] || s}
-                  {canManageShifts && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveShift(s)}
-                      aria-label={`Remove ${s} shift`}
-                      className="min-w-[20px] min-h-[20px] inline-flex items-center justify-center rounded-full hover:bg-[var(--card-border)] cursor-pointer text-[var(--info-text)] hover:text-text"
-                    >
-                      ×
-                    </button>
-                  )}
-                </span>
-              ))}
-              {canManageShifts && (
-                <span className="inline-flex items-center gap-1">
-                  <select
-                    value={addingShift}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setAddingShift("");
-                      if (v) handleAddShift(v);
-                    }}
-                    className="min-h-[32px] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-xs px-2"
-                  >
-                    <option value="">Add shift…</option>
-                    {["1st", "2nd", "3rd"].filter((s) => !shifts.includes(s)).map((s) => (
-                      <option key={s} value={s}>{SHIFT_LABELS[s]}</option>
-                    ))}
-                  </select>
-                </span>
-              )}
-            </div>
-            {!canManageShifts && (
-              <p className="text-xs text-muted">Only managers can assign shifts.</p>
-            )}
           </section>
 
           {/* Assignees */}
