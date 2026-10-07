@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { ChevronDown } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
-import { PICKUP_TRAFFIC_BUFFER_MIN, parseAppointment, suggestedPickup } from "@/lib/deliveryTime";
-import { etDateKey, formatClockMinutes, formatEtDateTime, weekdayShort } from "@/lib/etDateTime";
+import { PICKUP_TRAFFIC_BUFFER_MIN } from "@/lib/deliveryTime";
+import { etDateKey, formatEtDateTime } from "@/lib/etDateTime";
 import { formatUsdCents } from "@/lib/money";
 import CarrierStatusPill from "./CarrierStatusPill";
 import CarrierUploadModal from "./CarrierUploadModal";
@@ -14,6 +15,7 @@ import { useCarrierFetch } from "./useCarrierFetch";
 import CarrierErrorBox from "./CarrierErrorBox";
 import CarrierSchedule from "./CarrierSchedule";
 import LinkedGroupList, { LinkedOrphanChip } from "./LinkedGroup";
+import CarrierCompactRow, { suggestedPickupLabel } from "./CarrierCompactRow";
 
 // Leaflet touches `window` at import — client-only.
 const DestinationMiniMap = dynamic(() => import("@/components/DestinationMiniMap"), { ssr: false });
@@ -30,7 +32,8 @@ interface CarrierRow {
   load_count: number | null;
   suffix: string;
   access_token: string | null;
-  has_signed: boolean;
+  has_signed_digital: boolean;
+  has_signed_photo: boolean;
   additional_info: string | null;
   ship_day: string;
   has_carrier_copy: boolean;
@@ -108,18 +111,42 @@ interface RowActions {
 const PILL_CLS =
   "inline-flex items-center justify-center min-h-[44px] px-3 rounded border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold";
 
+type LoadRowVariant = "upcoming" | "history";
+
+// carrier-09: the minimap sits behind a collapsed "View Map" disclosure; DestinationMiniMap (Leaflet)
+// is only mounted while open.
+function MapDisclosure({ lat, lng, address }: { lat: number; lng: number; address: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 min-h-[44px] px-1 text-sm font-semibold text-[var(--text)]"
+      >
+        <ChevronDown size={16} aria-hidden="true" className={`transition-transform ${open ? "rotate-180" : ""}`} />
+        View Map
+      </button>
+      {open && <DestinationMiniMap lat={lat} lng={lng} address={address} />}
+    </div>
+  );
+}
+
 function LoadRow({
   row,
+  variant,
   onUpload,
   onViewBol,
   onCharge,
   inGroup = false,
   orphan = false,
-}: { row: CarrierRow; inGroup?: boolean; orphan?: boolean } & RowActions) {
+}: { row: CarrierRow; variant: LoadRowVariant; inGroup?: boolean; orphan?: boolean } & RowActions) {
   const uploadDisabled = !row.access_token;
   const delivered = row.loading_status === "delivered";
-  const appt = parseAppointment(row.delivery_time, row.ship_day);
-  const pickup = row.distance_status === "ok" ? suggestedPickup(appt, row.duration_sec) : null;
+  const upcoming = variant === "upcoming"; // History is informational: no map, distance or pickup
+  const pickup = upcoming ? suggestedPickupLabel(row) : null;
+  const tokenQs = row.access_token ? encodeURIComponent(row.access_token) : "";
   const deliveredLabel = row.delivered_at ? formatEtDateTime(row.delivered_at, { weekday: true }) : null;
   return (
     <div
@@ -160,19 +187,18 @@ function LoadRow({
       </div>
       <div className="mt-3 flex flex-col gap-1">
         <InfoLine label="Appointment">{row.delivery_time?.trim() || "—"}</InfoLine>
-        <InfoLine label="Distance">
-          {row.distance_status === "ok" && row.miles != null && row.duration_sec != null
-            ? `${Math.round(row.miles)} mi · ${formatDrive(row.duration_sec)} drive`
-            : row.distance_status === "pending"
-              ? "Calculating…"
-              : "—"}
-        </InfoLine>
+        {upcoming && (
+          <InfoLine label="Distance">
+            {row.distance_status === "ok" && row.miles != null && row.duration_sec != null
+              ? `${Math.round(row.miles)} mi · ${formatDrive(row.duration_sec)} drive`
+              : row.distance_status === "pending"
+                ? "Calculating…"
+                : "—"}
+          </InfoLine>
+        )}
         {pickup && (
           <InfoLine label="Suggested pickup">
-            <span className="font-semibold tabular-nums">
-              {pickup.date !== row.ship_day ? `${weekdayShort(pickup.date)} ` : ""}
-              {formatClockMinutes(pickup.minutes)}
-            </span>
+            <span className="font-semibold tabular-nums">{pickup}</span>
             <span className="ml-2 text-xs text-[var(--text-hint)]">includes {PICKUP_TRAFFIC_BUFFER_MIN} min traffic buffer</span>
           </InfoLine>
         )}
@@ -182,8 +208,8 @@ function LoadRow({
           </div>
         )}
       </div>
-      {row.lat != null && row.lng != null && row.address && (
-        <DestinationMiniMap lat={row.lat} lng={row.lng} address={row.address} />
+      {upcoming && row.lat != null && row.lng != null && row.address && (
+        <MapDisclosure lat={row.lat} lng={row.lng} address={row.address} />
       )}
       <div className="flex flex-wrap items-center gap-2 mt-3">
         {row.access_token ? (
@@ -195,24 +221,29 @@ function LoadRow({
             View BOL
           </span>
         )}
-        {row.has_signed && row.access_token && (
+        {row.has_signed_digital && row.access_token && (
           <a
-            href={`/api/public/bol-signed/${row.access_token}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center min-h-[44px] px-3 rounded border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold"
-          >
-            View Signed BOL
-          </a>
-        )}
-        {row.has_carrier_copy && row.access_token && (
-          <a
-            href={`/v2/api/carrier/carrier-copy?token=${encodeURIComponent(row.access_token)}`}
+            href={`/v2/api/carrier/signed-bol?token=${tokenQs}&kind=digital`}
             target="_blank"
             rel="noopener noreferrer"
             className={PILL_CLS}
           >
-            View carrier copy
+            Signed BOL (digital)
+          </a>
+        )}
+        {row.has_signed_photo && row.access_token && (
+          <a
+            href={`/v2/api/carrier/signed-bol?token=${tokenQs}&kind=photo`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={PILL_CLS}
+          >
+            Signed BOL (photo)
+          </a>
+        )}
+        {row.has_carrier_copy && row.access_token && (
+          <a href={`/v2/api/carrier/carrier-copy?token=${tokenQs}`} target="_blank" rel="noopener noreferrer" className={PILL_CLS}>
+            Carrier copy
           </a>
         )}
         <button
@@ -257,16 +288,32 @@ function LoadRow({
   );
 }
 
-// 4+ rows → the list scrolls inside a box sized to ~3.5 tiles, so the cut-off tile signals "scroll".
-// Tile height ~400px since carrier-03's info block + minimap; capped at 85vh on short screens.
-const SCROLL_THRESHOLD = 4;
+type UpcomingView = "compact" | "expanded";
+const UPCOMING_VIEW_KEY = "carrier_upcoming_view_v1";
 
+function readUpcomingView(): UpcomingView {
+  try {
+    return window.localStorage.getItem(UPCOMING_VIEW_KEY) === "expanded" ? "expanded" : "compact";
+  } catch {
+    return "compact";
+  }
+}
+
+function LoadsCount({ n }: { n: number }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold tabular-nums bg-[var(--ghost-bg)] text-[var(--text-muted)]">
+      {n} {n === 1 ? "load" : "loads"}
+    </span>
+  );
+}
+
+// Upcoming day (Today / Tomorrow). carrier-09: no inner scroll box — the column grows and the page
+// scrolls, like the Schedule tab.
 function DaySection({
   heading,
   label,
   rows,
-  emptyText = "No loads scheduled",
-  bucketOf,
+  view,
   onUpload,
   onViewBol,
   onCharge,
@@ -274,68 +321,112 @@ function DaySection({
   heading: string;
   label: string;
   rows: CarrierRow[];
-  emptyText?: string;
-  /** Split the list into labeled sub-days (History: ET delivered day). Linked groups never cross a bucket. */
-  bucketOf?: (row: CarrierRow) => { key: string; label: string };
+  view: UpcomingView;
 } & RowActions) {
-  // Threshold counts ORDERS (rows), not linked-group blocks.
-  const scrolling = rows.length >= SCROLL_THRESHOLD;
-  const buckets: Array<{ key: string; label: string | null; rows: CarrierRow[] }> = [];
-  for (const row of rows) {
-    const b = bucketOf ? bucketOf(row) : { key: "", label: null };
-    const last = buckets[buckets.length - 1];
-    if (last && last.key === b.key) last.rows.push(row);
-    else buckets.push({ key: b.key, label: b.label, rows: [row] });
-  }
+  const actions: RowActions = { onUpload, onViewBol, onCharge };
   return (
     <section>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-2 px-1">
         <h2 className="text-base font-bold text-[var(--text)]">{heading}</h2>
         <span className="text-sm text-[var(--text-muted)]">{label}</span>
-        {scrolling && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold tabular-nums bg-[var(--ghost-bg)] text-[var(--text-muted)]">
-            {rows.length} loads
-          </span>
-        )}
+        <LoadsCount n={rows.length} />
       </div>
       {rows.length === 0 ? (
         <div className="rounded border border-dashed border-[var(--border)] px-4 py-6 text-center text-sm text-[var(--text-hint)]">
-          {emptyText}
+          No loads scheduled
         </div>
       ) : (
-        <div
-          className={
-            scrolling
-              ? "flex flex-col gap-2 max-h-[min(calc(3.5*var(--carrier-row-h,400px)),85vh)] overflow-y-auto overscroll-contain pr-1"
-              : "flex flex-col gap-2"
-          }
-        >
-          {buckets.map((bucket) => (
-            <div key={bucket.key || "all"} className="flex flex-col gap-2">
-              {bucket.label && (
-                <h3 className="px-1 pt-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                  {bucket.label}
-                </h3>
-              )}
-              <LinkedGroupList
-                rows={bucket.rows}
-                keyOf={(row, i) => `${row.invoice_number}-${row.load_number}-${i}`}
-                renderRow={(row, ctx) => (
-                  <LoadRow
-                    row={row}
-                    inGroup={ctx.inGroup}
-                    orphan={ctx.orphan}
-                    onUpload={onUpload}
-                    onViewBol={onViewBol}
-                    onCharge={onCharge}
-                  />
-                )}
-              />
-            </div>
-          ))}
+        <div className="flex flex-col gap-2">
+          <LinkedGroupList
+            rows={rows}
+            keyOf={(row, i) => `${row.invoice_number}-${row.load_number}-${i}`}
+            renderRow={(row, ctx) =>
+              view === "compact" ? (
+                <CarrierCompactRow
+                  row={row}
+                  inGroup={ctx.inGroup}
+                  orphan={ctx.orphan}
+                  renderFull={() => <LoadRow row={row} variant="upcoming" inGroup {...actions} />}
+                />
+              ) : (
+                <LoadRow row={row} variant="upcoming" inGroup={ctx.inGroup} orphan={ctx.orphan} {...actions} />
+              )
+            }
+          />
         </div>
       )}
     </section>
+  );
+}
+
+// History (carrier-09): one section per delivered ET day, newest first, tiles in a responsive grid.
+// Informational — LoadRow's "history" variant drops map / distance / pickup but keeps every button.
+// Linked groups never cross a day.
+function HistoryDays({ rows, onUpload, onViewBol, onCharge }: { rows: CarrierRow[] } & RowActions) {
+  const actions: RowActions = { onUpload, onViewBol, onCharge };
+  if (rows.length === 0) {
+    return (
+      <div className="rounded border border-dashed border-[var(--border)] px-4 py-6 text-center text-sm text-[var(--text-hint)]">
+        No delivered loads in the last 7 days
+      </div>
+    );
+  }
+  const days: Array<{ key: string; label: string; rows: CarrierRow[] }> = [];
+  for (const row of rows) {
+    const b = historyBucket(row);
+    const last = days[days.length - 1];
+    if (last && last.key === b.key) last.rows.push(row);
+    else days.push({ key: b.key, label: b.label, rows: [row] });
+  }
+  return (
+    <div className="flex flex-col gap-6">
+      {days.map((day) => (
+        <section key={day.key}>
+          <div className="flex items-center gap-2 mb-3 px-1">
+            <h2 className="text-base font-bold text-[var(--text)] whitespace-nowrap">{day.label}</h2>
+            <LoadsCount n={day.rows.length} />
+            <div className="flex-1 h-px bg-[var(--border)]" aria-hidden="true" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3 items-start">
+            <LinkedGroupList
+              rows={day.rows}
+              keyOf={(row, i) => `${row.invoice_number}-${row.load_number}-${i}`}
+              renderRow={(row, ctx) => (
+                <LoadRow row={row} variant="history" inGroup={ctx.inGroup} orphan={ctx.orphan} {...actions} />
+              )}
+            />
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+// Upcoming Compact | Expanded toggle — flat underline segments like the carrier-07 tabs.
+function ViewToggle({ view, onChange }: { view: UpcomingView; onChange: (v: UpcomingView) => void }) {
+  const opts: Array<{ key: UpcomingView; label: string }> = [
+    { key: "compact", label: "Compact" },
+    { key: "expanded", label: "Expanded" },
+  ];
+  return (
+    <div role="group" aria-label="Upcoming view" className="flex border-b border-[var(--border)]">
+      {opts.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          aria-pressed={view === o.key}
+          onClick={() => onChange(o.key)}
+          className={[
+            "min-h-[44px] px-4 text-sm font-semibold -mb-px border-b-2",
+            view === o.key
+              ? "border-[var(--brand)] text-[var(--text)]"
+              : "border-transparent text-[var(--text-muted)] hover:text-[var(--text)]",
+          ].join(" ")}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -367,6 +458,19 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
   const [bolRow, setBolRow] = useState<CarrierRow | null>(null);
   const [chargeRow, setChargeRow] = useState<CarrierRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Compact by default; the stored choice is read after mount (no SSR mismatch).
+  const [upcomingView, setUpcomingView] = useState<UpcomingView>("compact");
+
+  useEffect(() => setUpcomingView(readUpcomingView()), []);
+
+  function changeUpcomingView(v: UpcomingView) {
+    setUpcomingView(v);
+    try {
+      window.localStorage.setItem(UPCOMING_VIEW_KEY, v);
+    } catch {
+      /* storage blocked — the choice just isn't remembered */
+    }
+  }
 
   const reloadActive = () => (tab === "history" ? history.load() : upcoming.load());
 
@@ -433,21 +537,26 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
         {tab === "schedule" && <CarrierSchedule />}
 
         {tab === "upcoming" && data && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <DaySection heading="Today's Loads" label={dayLabel(data.today)} rows={todayRows} {...actions} />
-            <DaySection heading="Tomorrow's Loads" label={dayLabel(data.tomorrow)} rows={tomorrowRows} {...actions} />
-          </div>
+          <>
+            <div className="flex justify-end mb-3">
+              <ViewToggle view={upcomingView} onChange={changeUpcomingView} />
+            </div>
+            {/* Compact rows need the full width for their columns, so the two days stack. */}
+            <div className={`grid grid-cols-1 ${upcomingView === "expanded" ? "md:grid-cols-2" : ""} gap-6 items-start`}>
+              <DaySection heading="Today's Loads" label={dayLabel(data.today)} rows={todayRows} view={upcomingView} {...actions} />
+              <DaySection
+                heading="Tomorrow's Loads"
+                label={dayLabel(data.tomorrow)}
+                rows={tomorrowRows}
+                view={upcomingView}
+                {...actions}
+              />
+            </div>
+          </>
         )}
 
         {tab === "history" && history.data && (
-          <DaySection
-            heading="Delivered"
-            label="last 7 days · newest first"
-            rows={history.data.rows}
-            emptyText="No delivered loads in the last 7 days"
-            bucketOf={historyBucket}
-            {...actions}
-          />
+          <HistoryDays rows={history.data.rows} {...actions} />
         )}
       </main>
 

@@ -6,6 +6,8 @@
 // below lg: days stacked, today's day scrolled into view on mount and marked "Today".
 // carrier-07: flat column panels, week summary strip, pickup time as the hero line, Shipped rows
 // collapsed to one faded line and sunk to the bottom of their day; no inner scroll box.
+// carrier-09: INV# top-center of the card; "Loading" (multi-load: "Loading 1 of 2") between Not ready
+// and Ready — Ready now means every load is fully loaded.
 import { useEffect, useRef } from "react";
 import CarrierStatusPill from "./CarrierStatusPill";
 import { useCarrierFetch } from "./useCarrierFetch";
@@ -20,7 +22,9 @@ interface ScheduleOrder {
   load_label: string;
   delivery_time_label: string | null;
   city_state: string | null;
-  status: "Not ready" | "Ready" | "Shipped" | null;
+  status: "Not ready" | "Loading" | "Ready" | "Shipped" | null;
+  loads_done: number | null;
+  loads_total: number | null;
   scrap_pickup: boolean;
   unmatched: boolean;
   trailer_group_id: string | null;
@@ -62,6 +66,7 @@ type OrderStatus = ScheduleOrder["status"];
 // Left status stripe on open cards (carrier-07). Shipped rows render as ShippedRow — no stripe.
 function stripeCls(status: OrderStatus): string {
   if (status === "Ready") return "border-l-[var(--success-bg)]";
+  if (status === "Loading") return "border-l-[var(--warn-border)]";
   return "border-l-[var(--border)]";
 }
 
@@ -83,17 +88,23 @@ function OrderCard({ order, inGroup = false, orphan = false }: OrderRowProps) {
     : "rounded border border-[var(--border)] bg-[var(--surface)] border-l-4";
   return (
     <div className={`${frame} ${stripeCls(order.status)} px-3 py-2`}>
-      <div className="flex items-center justify-between gap-2">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
         {order.delivery_time_label ? (
           <span className="text-base font-bold tabular-nums text-[var(--text)]">{order.delivery_time_label}</span>
         ) : (
           <span className="text-sm font-semibold text-[var(--text-muted)]">Time TBD</span>
         )}
-        {order.status ? (
-          <CarrierStatusPill status={order.status} />
-        ) : (
-          <span className="text-xs font-semibold text-[var(--text-muted)] whitespace-nowrap">Scheduled</span>
-        )}
+        <span className="text-sm font-bold tabular-nums text-[var(--text)]">INV# {order.invoice_number}</span>
+        <span className="justify-self-end">
+          {order.status ? (
+            <CarrierStatusPill
+              status={order.status}
+              detail={order.loads_done != null && order.loads_total != null ? `${order.loads_done} of ${order.loads_total}` : undefined}
+            />
+          ) : (
+            <span className="text-xs font-semibold text-[var(--text-muted)] whitespace-nowrap">Scheduled</span>
+          )}
+        </span>
       </div>
       <div className="mt-0.5 text-sm font-semibold text-[var(--text)] line-clamp-2" title={order.customer || undefined}>
         {order.customer || "—"}
@@ -110,7 +121,6 @@ function OrderCard({ order, inGroup = false, orphan = false }: OrderRowProps) {
             {order.load_label}
           </span>
         )}
-        <span className="font-semibold tabular-nums">INV# {order.invoice_number}</span>
         {orphan && <LinkedOrphanChip />}
       </div>
       {order.scrap_pickup && (
@@ -130,9 +140,9 @@ function ShippedRow({ order, inGroup = false, orphan = false }: OrderRowProps) {
       <Check size={14} aria-hidden="true" className="shrink-0" />
       <span className="sr-only">Shipped:</span>
       <span className="shrink-0 tabular-nums font-semibold">{order.delivery_time_label || "—"}</span>
+      <span className="shrink-0 text-xs tabular-nums text-[var(--text-muted)]">INV# {order.invoice_number}</span>
       <span className="min-w-0 flex-1 truncate">{order.customer || "—"}</span>
       {orphan && <LinkedOrphanChip />}
-      <span className="shrink-0 text-xs tabular-nums text-[var(--text-muted)]">INV# {order.invoice_number}</span>
     </div>
   );
 }
@@ -225,6 +235,7 @@ export default function CarrierSchedule() {
   const allRows = data ? data.days.flatMap((d) => d.rows) : [];
   const counts = {
     ready: allRows.filter((r) => r.status === "Ready").length,
+    loading: allRows.filter((r) => r.status === "Loading").length,
     notReady: allRows.filter((r) => r.status === "Not ready").length,
     shipped: allRows.filter((r) => r.status === "Shipped").length,
   };
@@ -240,6 +251,7 @@ export default function CarrierSchedule() {
           </div>
           <div className="inline-flex flex-wrap divide-x divide-[var(--border)] rounded border border-[var(--border)] bg-[var(--surface)] mb-3">
             <StatCell value={counts.ready} label="Ready" valueCls="text-[var(--success-bg)]" />
+            <StatCell value={counts.loading} label="Loading" valueCls="text-[var(--warn-text)]" />
             <StatCell value={counts.notReady} label="Not ready" valueCls="text-[var(--text)]" />
             <StatCell value={counts.shipped} label="Shipped" valueCls="text-[var(--text-muted)]" />
           </div>

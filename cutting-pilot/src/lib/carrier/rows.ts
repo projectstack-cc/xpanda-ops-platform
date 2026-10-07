@@ -10,6 +10,7 @@ import { normalizeAddressKey } from "@/lib/logistics/freightInvoice";
 import { singleLineAddress } from "@/lib/logistics/address";
 import { resolveOrigin, resolveDestRoute } from "@/lib/logistics/routeCache";
 import type { GeoPoint } from "@/lib/logistics/ors";
+import { fetchBolDocs, fetchBolRowsForJobs, loadKey, pickLoadDocs } from "@/lib/logistics/signedBolDocs";
 import { CARRIER_JOB_FILTER } from "./scope";
 
 const MAX_WARM_PER_REQUEST = 3;
@@ -145,6 +146,36 @@ async function chargesByBol(DB: D1Database, bolIds: string[]): Promise<Map<strin
   return out;
 }
 
+/**
+ * carrier-09: load-level signed-BOL flags (digital / photo / carrier copy) for every job in the
+ * result — one bols pass + one bol_documents pass (chunked under the bind ceiling), selected with the
+ * same rules as the logistics board (lib/logistics/signedBolDocs.ts), so a regenerated BOL row can't
+ * hide an artifact captured on an older row of the same load. Keyed `${job_id}|${loadKey}`.
+ */
+async function loadArtifactsByJob(
+  DB: D1Database,
+  raw: any[]
+): Promise<Map<string, { digital: boolean; photo: boolean; carrier: boolean }>> {
+  const out = new Map<string, { digital: boolean; photo: boolean; carrier: boolean }>();
+  const jobIds = Array.from(new Set(raw.map((r) => r.job_id).filter(Boolean))) as string[];
+  if (!jobIds.length) return out;
+  const bols = await fetchBolRowsForJobs(DB, jobIds);
+  const docs = bols.length ? await fetchBolDocs(DB, bols.map((b) => b.id)) : [];
+  const bolsByJob = new Map<string, typeof bols>();
+  for (const b of bols) {
+    const list = bolsByJob.get(b.job_id as string) ?? [];
+    list.push(b);
+    bolsByJob.set(b.job_id as string, list);
+  }
+  bolsByJob.forEach((jobBols, jobId) => {
+    const ids = new Set(jobBols.map((b) => b.id));
+    for (const l of pickLoadDocs(jobBols, docs.filter((d) => ids.has(d.bol_id)))) {
+      out.set(`${jobId}|${l.load_number}`, { digital: !!l.signed, photo: !!l.photo, carrier: !!l.carrier });
+    }
+  });
+  return out;
+}
+
 const SELECT_SQL = `SELECT
          j.invoice_number,
          j.customer,
@@ -160,11 +191,11 @@ const SELECT_SQL = `SELECT
          la.loading_status,
          la.load_number,
          la.delivered_at,
-         EXISTS (SELECT 1 FROM bol_documents d WHERE d.bol_id = b.id AND d.doc_type = 'carrier_upload') AS has_carrier_copy,
+         la.job_id,
          b.id AS bol_id,
          b.access_token,
          b.load_count,
-         (b.signed_bol_photo_key IS NOT NULL) AS has_signed,
+         b.load_number AS bol_load_number,
          b.signed_bol_additional_info AS additional_info,
          substr(COALESCE(la.ship_date, j.ship_date), 1, 10) AS ship_day
        FROM loading_assignments la
@@ -217,10 +248,12 @@ export async function fetchCarrierRows(DB: D1Database, view: CarrierView) {
   const geo = await resolveGeo(DB, raw, view.kind === "upcoming");
   const bolIds = Array.from(new Set(raw.map((r) => r.bol_id).filter(Boolean))) as string[];
   const charges = bolIds.length ? await chargesByBol(DB, bolIds) : new Map<string, CarrierCharge[]>();
+  const artifacts = await loadArtifactsByJob(DB, raw);
   const shaped = raw.map((r) => {
     const key = addressKeyOf(r);
     const g = key ? geo.get(key) : undefined;
     const ok = g?.status === "ok";
+    const art = r.bol_id ? artifacts.get(`${r.job_id}|${loadKey(r.bol_load_number)}`) : undefined;
     const rowCharges: CarrierCharge[] = (r.bol_id && charges.get(r.bol_id)) || [];
     const count = Number(r.load_count) || 0;
     const n = Number(r.load_number) || 0;
@@ -237,10 +270,11 @@ export async function fetchCarrierRows(DB: D1Database, view: CarrierView) {
       load_count: r.load_count ?? null,
       suffix,
       access_token: r.access_token ?? null,
-      has_signed: !!r.has_signed,
+      has_signed_digital: !!art?.digital,
+      has_signed_photo: !!art?.photo,
       additional_info: r.additional_info ?? null,
       ship_day: r.ship_day,
-      has_carrier_copy: !!r.has_carrier_copy,
+      has_carrier_copy: !!art?.carrier,
       delivered_at: r.delivered_at ?? null,
       delivery_time: r.delivery_time ?? null,
       trailer_group_id: (r.trailer_group_id ?? null) as string | null,

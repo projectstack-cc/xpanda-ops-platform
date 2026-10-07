@@ -6,21 +6,11 @@
 // driver_signed/customer_signed; carrier = newest carrier_upload; photo = newest BOL row with
 // signed_bol_photo_key. Never returns r2_key — bytes go through signed-bol/file, which resolves keys
 // server-side. Static segment beats the sibling [id]; gate inherited from middleware's
-// /v2/api/shipments -> logistics.dashboard rule.
+// /v2/api/shipments -> logistics.dashboard rule. carrier-09: the per-load selection lives in
+// lib/logistics/signedBolDocs.ts (shared with the Carrier View); output shape unchanged.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
-
-type BolRow = {
-  id: string;
-  bol_number: string | null;
-  load_number: number | null;
-  load_count: number | null;
-  signed_bol_photo_key: string | null;
-  created_at: string | null;
-};
-type DocRow = { id: string; bol_id: string; doc_type: string; created_at: string };
-
-const CHUNK = 50;
+import { loadBolDocsForJob, pickLoadDocs } from "@/lib/logistics/signedBolDocs";
 
 export async function GET(request: NextRequest) {
   const jobId = (new URL(request.url).searchParams.get("job_id") || "").trim();
@@ -31,43 +21,10 @@ export async function GET(request: NextRequest) {
   const { DB } = await getEnv();
 
   try {
-    const bolsRes = await DB.prepare(
-      "SELECT id, bol_number, load_number, load_count, signed_bol_photo_key, created_at FROM bols WHERE job_id = ?"
-    ).bind(jobId).all<BolRow>();
-    const bols = bolsRes.results ?? [];
-
-    const docs: DocRow[] = [];
-    const ids = bols.map((b) => b.id);
-    for (let i = 0; i < ids.length; i += CHUNK) {
-      const chunk = ids.slice(i, i + CHUNK);
-      const r = await DB.prepare(
-        `SELECT id, bol_id, doc_type, created_at FROM bol_documents WHERE bol_id IN (${chunk.map(() => "?").join(",")}) ORDER BY created_at DESC`
-      ).bind(...chunk).all<DocRow>();
-      docs.push(...(r.results ?? []));
-    }
-    // Newest-first across chunks too.
-    docs.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
-
-    const byLoad = new Map<number, BolRow[]>();
-    for (const b of bols) {
-      const n = Number(b.load_number ?? 0) || 0;
-      if (!byLoad.has(n)) byLoad.set(n, []);
-      byLoad.get(n)!.push(b);
-    }
+    const { bols, docs } = await loadBolDocsForJob(DB, jobId);
 
     const loads = [];
-    for (const [loadNumber, rows] of Array.from(byLoad.entries()).sort((a, b) => a[0] - b[0])) {
-      rows.sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
-      const bolIds = new Set(rows.map((r) => r.id));
-      const loadDocs = docs.filter((d) => bolIds.has(d.bol_id));
-
-      const signedDoc =
-        loadDocs.find((d) => d.doc_type === "original_signed") ||
-        loadDocs.find((d) => d.doc_type === "driver_signed" || d.doc_type === "customer_signed") ||
-        null;
-      const carrierDoc = loadDocs.find((d) => d.doc_type === "carrier_upload") || null;
-      const photoRow = rows.find((r) => r.signed_bol_photo_key) || null;
-
+    for (const { load_number: loadNumber, rows, signed: signedDoc, carrier: carrierDoc, photo: photoRow } of pickLoadDocs(bols, docs)) {
       if (!signedDoc && !carrierDoc && !photoRow) continue;
 
       loads.push({

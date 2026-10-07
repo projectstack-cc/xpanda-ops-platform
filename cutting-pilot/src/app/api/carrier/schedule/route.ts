@@ -19,16 +19,19 @@ import { parseDeliveryTime } from "@/lib/deliveryTime";
 const JOB_CHUNK = 90; // D1 100-bound-param ceiling — same as the internal route
 const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"] as const;
 
-export type CarrierScheduleStatus = "Not ready" | "Ready" | "Shipped";
+export type CarrierScheduleStatus = "Not ready" | "Loading" | "Ready" | "Shipped";
 
 // Carrier-facing status, derived server-side from the internal board status. Production progress is
-// internal (carrier-08): every pre-Ready state goes out as "Not ready", so it never reaches the payload.
+// internal (carrier-08): every pre-dock state goes out as "Not ready", so it never reaches the payload.
+// carrier-09 rule: Ready = ALL loads loaded-or-beyond (internal "Loaded"). Dock activity that hasn't
+// finished every load is "Loading"; cutting-complete (internal "Ready") is still "Not ready" — a
+// finished cut sitting off the dock is not pickup-ready.
 const CARRIER_STATUS = {
   "Not Started": "Not ready",
   Cutting: "Not ready",
   "In Production": "Not ready",
-  Ready: "Ready",
-  Loading: "Ready",
+  Ready: "Not ready",
+  Loading: "Loading",
   Loaded: "Ready",
   Shipped: "Shipped",
 } satisfies Record<ScheduleStatus, CarrierScheduleStatus>;
@@ -129,6 +132,8 @@ export async function GET() {
         delivery_time_label: string | null;
         city_state: string | null;
         status: CarrierScheduleStatus | null;
+        loads_done: number | null;
+        loads_total: number | null;
         scrap_pickup: boolean;
         unmatched: boolean;
         trailer_group_id: string | null;
@@ -144,13 +149,18 @@ export async function GET() {
       const cityState = place
         ? [place.ship_to_city, place.ship_to_state].filter(Boolean).join(", ") || null
         : (r.location || "").trim() || null;
+      const carrierStatus = jobId && derived ? CARRIER_STATUS[derived.status] : null;
+      // "Loading X of Y" only for a multi-load order mid-dock.
+      const multiLoading = carrierStatus === "Loading" && derived?.loadsTotal != null && derived.loadsTotal > 1;
       day.rows.push({
         invoice_number: r.invoice_number,
         customer: r.customer,
         load_label: formatLoadLabel(r.method, r.load_count),
         delivery_time_label: parseDeliveryTime(r.delivery_time),
         city_state: cityState,
-        status: jobId && derived ? CARRIER_STATUS[derived.status] : null,
+        status: carrierStatus,
+        loads_done: multiLoading ? derived!.loadsDone : null,
+        loads_total: multiLoading ? derived!.loadsTotal : null,
         scrap_pickup: (r.scrap_pickup ?? "").trim().toUpperCase().startsWith("Y"),
         unmatched: !jobId,
         trailer_group_id: place?.trailer_group_id ?? null,

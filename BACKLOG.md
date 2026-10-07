@@ -54,6 +54,16 @@
 
 ## Carrier View (v2)
 
+- [ ] **carrier-09 follow-up — Steve: submit one real fee on a Seal load and confirm a carrier_charges row + logistics notification.**
+
+- [ ] **carrier-09 follow-up — Steve eyeball Loading / Ready transitions on a live multi-load order (Loading 1 of 2 → Ready).**
+
+- [ ] **carrier-09 follow-up — same white-on-white error text elsewhere.** `text-[var(--danger-text)]` (white) is used
+  for plain error lines on white surfaces in `CarrierBolModal.tsx`, `cutting/BlockPlanner.tsx`,
+  `components/loading/{LoadedChecklistModal,PhotoGalleryModal,PullJobModal,ShippingInfoModal}.tsx` and
+  `components/logistics/{BolGenerateModal,BolViewerModal}.tsx` (also the load-builder `CustomizeEditor` delete
+  buttons). Those errors are invisible in light mode. Swap to `var(--danger-bg)`, as carrier-09 did in the charge modal.
+
 - [ ] **carrier-07 follow-up — Steve eyeball `/v2/carrier` on a wide monitor + phone (light & dark)
   before carrier launch.**
 
