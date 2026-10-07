@@ -2861,6 +2861,8 @@ current series).
 
 ## Logistics (v2)
 
+- **tls-04 — Notes section at the bottom of both Load Verification Sheets (react-component-agent §9b). No migration.** Both shifts now end with a **Notes** block — 1st shift after the To load section, 2nd shift after its sign-off block: a bold "Notes" label under a rule, then blank ruled handwriting lines (20 pt apart) that fill the rest of the last page down to `BOTTOM`, so they never collide with the page number or the early-pickup `*` footnote. Minimum 4 lines: if fewer fit, `ensure()` moves the whole block to a new page (no column header), where it fills that page instead. `toLoadSheetPdf.ts` only.
+
 - **tls-03 — sign-off block on the 2nd shift Load Verification Sheet (react-component-agent §9b). No migration.** The 2nd shift sheet now ends with the same "Load verification sign-off" block (`Verified by / Date / Time` lines, `ensure(54)` so it never splits across pages), drawn after its only section (To load). The 1st shift placement is unchanged (between Load Verification and To load). `toLoadSheetPdf.ts` only: the sign-off condition now also matches the last section on shift 2; block body and spacing untouched.
 
 - **bol-print-01 (cross-ref) — v2 BOL fonts embedded.** `bolShared.ts` mirrors legacy: Liberation Sans body fonts (`BODY_FONT_ASSET_PATHS`, `bodyFontBytes` option, `getLayoutFonts(bodyFontBytes?)`) embedded once into `combinedPdf`; `bolDomGlue.ts` `fetchBodyFontBytes()` feeds `buildCombinedBolPdf` and the editor (`bolEditorEngine.ts`). Full entry under `## Logistics`.

@@ -1,6 +1,6 @@
 // src/lib/logistics/toLoadSheetPdf.ts
 // tls-01: printable 1st / 2nd shift To-Load sheet (tls-02: retitled Load Verification Sheet, per-load
-// checkbox column, Marina Foam exclusion line, sign-off block; tls-03: on both shifts). One pdf-lib document, rows already selected and
+// checkbox column, Marina Foam exclusion line, sign-off block; tls-03: on both shifts; tls-04: Notes block on both shifts). One pdf-lib document, rows already selected and
 // ordered by lib/logistics/toLoadSheet.ts. Page chrome mirrors lib/logistics/loadingSheet.ts (margin 40,
 // US Letter portrait, Helvetica/HelveticaBold, same colors, same non-fatal logo embed); its file-local
 // drawRight/hr helpers are copied below — loadingSheet.ts and cutList.ts are NOT modified.
@@ -251,6 +251,24 @@ export async function buildToLoadSheetPdf(
       y -= 12;
     }
   });
+
+  // tls-04: Notes block — last thing on the sheet (both shifts). Bold label, then ruled handwriting lines
+  // filling the rest of the last page down to BOTTOM; min NOTES_MIN_LINES, else the block starts a new page.
+  {
+    const NOTES_LINE_GAP = 20;
+    const NOTES_MIN_LINES = 4;
+    activeCols = null; // no column header on a notes-only page
+    y -= 8;
+    ensure(18 + NOTES_MIN_LINES * NOTES_LINE_GAP);
+    hr(page, y);
+    y -= 18;
+    page.drawText("Notes", { x: margin, y, size: 11, font: fontBold, color: black });
+    y -= NOTES_LINE_GAP;
+    while (y >= BOTTOM) {
+      page.drawLine({ start: { x: margin, y }, end: { x: right, y }, thickness: 0.5, color: gray });
+      y -= NOTES_LINE_GAP;
+    }
+  }
 
   const pages = doc.getPages();
   pages.forEach((p, i) => {
