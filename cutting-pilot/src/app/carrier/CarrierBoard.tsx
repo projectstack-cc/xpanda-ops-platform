@@ -288,15 +288,31 @@ function LoadRow({
   );
 }
 
-type UpcomingView = "compact" | "expanded";
-const UPCOMING_VIEW_KEY = "carrier_upcoming_view_v1";
+type CarrierListView = "compact" | "expanded";
 
-function readUpcomingView(): UpcomingView {
-  try {
-    return window.localStorage.getItem(UPCOMING_VIEW_KEY) === "expanded" ? "expanded" : "compact";
-  } catch {
-    return "compact";
-  }
+/**
+ * Per-browser Compact | Expanded choice (carrier-09 Upcoming, carrier-10 History — each tab has its
+ * own key). Starts "compact" and reads storage after mount (no SSR mismatch); blocked storage just
+ * means the choice isn't remembered.
+ */
+function useStoredView(key: string): [CarrierListView, (v: CarrierListView) => void] {
+  const [view, setView] = useState<CarrierListView>("compact");
+  useEffect(() => {
+    try {
+      setView(window.localStorage.getItem(key) === "expanded" ? "expanded" : "compact");
+    } catch {
+      /* storage blocked — stay compact */
+    }
+  }, [key]);
+  const change = (v: CarrierListView) => {
+    setView(v);
+    try {
+      window.localStorage.setItem(key, v);
+    } catch {
+      /* storage blocked — the choice just isn't remembered */
+    }
+  };
+  return [view, change];
 }
 
 function LoadsCount({ n }: { n: number }) {
@@ -321,7 +337,7 @@ function DaySection({
   heading: string;
   label: string;
   rows: CarrierRow[];
-  view: UpcomingView;
+  view: CarrierListView;
 } & RowActions) {
   const actions: RowActions = { onUpload, onViewBol, onCharge };
   return (
@@ -342,7 +358,7 @@ function DaySection({
             keyOf={(row, i) => `${row.invoice_number}-${row.load_number}-${i}`}
             renderRow={(row, ctx) =>
               view === "compact" ? (
-                <CarrierCompactRow
+                <CarrierCompactRow variant="upcoming"
                   row={row}
                   inGroup={ctx.inGroup}
                   orphan={ctx.orphan}
@@ -359,10 +375,11 @@ function DaySection({
   );
 }
 
-// History (carrier-09): one section per delivered ET day, newest first, tiles in a responsive grid.
-// Informational — LoadRow's "history" variant drops map / distance / pickup but keeps every button.
+// History (carrier-09): one section per delivered ET day, newest first. carrier-10: Compact = full-
+// width compact rows (history variant), Expanded = the carrier-09 responsive tile grid. Informational —
+// LoadRow's "history" variant drops map / distance / pickup but keeps every button.
 // Linked groups never cross a day.
-function HistoryDays({ rows, onUpload, onViewBol, onCharge }: { rows: CarrierRow[] } & RowActions) {
+function HistoryDays({ rows, view, onUpload, onViewBol, onCharge }: { rows: CarrierRow[]; view: CarrierListView } & RowActions) {
   const actions: RowActions = { onUpload, onViewBol, onCharge };
   if (rows.length === 0) {
     return (
@@ -387,29 +404,55 @@ function HistoryDays({ rows, onUpload, onViewBol, onCharge }: { rows: CarrierRow
             <LoadsCount n={day.rows.length} />
             <div className="flex-1 h-px bg-[var(--border)]" aria-hidden="true" />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3 items-start">
-            <LinkedGroupList
-              rows={day.rows}
-              keyOf={(row, i) => `${row.invoice_number}-${row.load_number}-${i}`}
-              renderRow={(row, ctx) => (
-                <LoadRow row={row} variant="history" inGroup={ctx.inGroup} orphan={ctx.orphan} {...actions} />
-              )}
-            />
-          </div>
+          {view === "compact" ? (
+            <div className="flex flex-col gap-2">
+              <LinkedGroupList
+                rows={day.rows}
+                keyOf={(row, i) => `${row.invoice_number}-${row.load_number}-${i}`}
+                renderRow={(row, ctx) => (
+                  <CarrierCompactRow variant="history"
+                    row={row}
+                    inGroup={ctx.inGroup}
+                    orphan={ctx.orphan}
+                    renderFull={() => <LoadRow row={row} variant="history" inGroup {...actions} />}
+                  />
+                )}
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3 items-start">
+              <LinkedGroupList
+                rows={day.rows}
+                keyOf={(row, i) => `${row.invoice_number}-${row.load_number}-${i}`}
+                renderRow={(row, ctx) => (
+                  <LoadRow row={row} variant="history" inGroup={ctx.inGroup} orphan={ctx.orphan} {...actions} />
+                )}
+              />
+            </div>
+          )}
         </section>
       ))}
     </div>
   );
 }
 
-// Upcoming Compact | Expanded toggle — flat underline segments like the carrier-07 tabs.
-function ViewToggle({ view, onChange }: { view: UpcomingView; onChange: (v: UpcomingView) => void }) {
-  const opts: Array<{ key: UpcomingView; label: string }> = [
+// Compact | Expanded toggle (Upcoming + History) — flat underline segments like the carrier-07 tabs.
+function ViewToggle({
+  view,
+  onChange,
+  label,
+}: {
+  view: CarrierListView;
+  onChange: (v: CarrierListView) => void;
+  /** aria-label of the group, e.g. "Upcoming view". */
+  label: string;
+}) {
+  const opts: Array<{ key: CarrierListView; label: string }> = [
     { key: "compact", label: "Compact" },
     { key: "expanded", label: "Expanded" },
   ];
   return (
-    <div role="group" aria-label="Upcoming view" className="flex border-b border-[var(--border)]">
+    <div role="group" aria-label={label} className="flex border-b border-[var(--border)]">
       {opts.map((o) => (
         <button
           key={o.key}
@@ -458,19 +501,9 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
   const [bolRow, setBolRow] = useState<CarrierRow | null>(null);
   const [chargeRow, setChargeRow] = useState<CarrierRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  // Compact by default; the stored choice is read after mount (no SSR mismatch).
-  const [upcomingView, setUpcomingView] = useState<UpcomingView>("compact");
-
-  useEffect(() => setUpcomingView(readUpcomingView()), []);
-
-  function changeUpcomingView(v: UpcomingView) {
-    setUpcomingView(v);
-    try {
-      window.localStorage.setItem(UPCOMING_VIEW_KEY, v);
-    } catch {
-      /* storage blocked — the choice just isn't remembered */
-    }
-  }
+  // Compact by default; each tab remembers its own choice (key kept from carrier-09 for Upcoming).
+  const [upcomingListView, setUpcomingListView] = useStoredView("carrier_upcoming_view_v1");
+  const [historyListView, setHistoryListView] = useStoredView("carrier_history_view_v1");
 
   const reloadActive = () => (tab === "history" ? history.load() : upcoming.load());
 
@@ -539,16 +572,16 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
         {tab === "upcoming" && data && (
           <>
             <div className="flex justify-end mb-3">
-              <ViewToggle view={upcomingView} onChange={changeUpcomingView} />
+              <ViewToggle view={upcomingListView} onChange={setUpcomingListView} label="Upcoming view" />
             </div>
             {/* Compact rows need the full width for their columns, so the two days stack. */}
-            <div className={`grid grid-cols-1 ${upcomingView === "expanded" ? "md:grid-cols-2" : ""} gap-6 items-start`}>
-              <DaySection heading="Today's Loads" label={dayLabel(data.today)} rows={todayRows} view={upcomingView} {...actions} />
+            <div className={`grid grid-cols-1 ${upcomingListView === "expanded" ? "md:grid-cols-2" : ""} gap-6 items-start`}>
+              <DaySection heading="Today's Loads" label={dayLabel(data.today)} rows={todayRows} view={upcomingListView} {...actions} />
               <DaySection
                 heading="Tomorrow's Loads"
                 label={dayLabel(data.tomorrow)}
                 rows={tomorrowRows}
-                view={upcomingView}
+                view={upcomingListView}
                 {...actions}
               />
             </div>
@@ -556,7 +589,12 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
         )}
 
         {tab === "history" && history.data && (
-          <HistoryDays rows={history.data.rows} {...actions} />
+          <>
+            <div className="flex justify-end mb-3">
+              <ViewToggle view={historyListView} onChange={setHistoryListView} label="History view" />
+            </div>
+            <HistoryDays rows={history.data.rows} view={historyListView} {...actions} />
+          </>
         )}
       </main>
 

@@ -30,6 +30,13 @@ export function formatEtDateTime(ts: string | null | undefined, opts: { weekday?
   return [opts.weekday ? get("weekday") : "", date, time].filter(Boolean).join(" ");
 }
 
+/** "2:14 PM" — clock time only, in America/New_York (carrier-10; was CarrierSchedule's local etClock). */
+export function formatEtClock(ts: string | null | undefined): string | null {
+  const ms = parseStoredUtc(ts);
+  if (ms == null) return null;
+  return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(ms);
+}
+
 /** ET calendar date "YYYY-MM-DD" of a stored UTC timestamp (carrier-06 History day buckets). */
 export function etDateKey(ts: string | null | undefined): string | null {
   const ms = parseStoredUtc(ts);

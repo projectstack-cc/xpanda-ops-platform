@@ -54,6 +54,8 @@
 
 ## Carrier View (v2)
 
+- [ ] **carrier-10 follow-up — Steve eyeball History compact + expanded (light & dark, phone + wide monitor).**
+
 - [ ] **carrier-09 follow-up — Steve: submit one real fee on a Seal load and confirm a carrier_charges row + logistics notification.**
 
 - [ ] **carrier-09 follow-up — Steve eyeball Loading / Ready transitions on a live multi-load order (Loading 1 of 2 → Ready).**

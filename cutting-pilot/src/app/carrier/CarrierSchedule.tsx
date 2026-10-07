@@ -13,7 +13,7 @@ import CarrierStatusPill from "./CarrierStatusPill";
 import { useCarrierFetch } from "./useCarrierFetch";
 import CarrierErrorBox from "./CarrierErrorBox";
 import LinkedGroupList, { LinkedOrphanChip } from "./LinkedGroup";
-import { parseStoredUtc } from "@/lib/etDateTime";
+import { formatEtClock } from "@/lib/etDateTime";
 import { Check, MapPin } from "lucide-react";
 
 interface ScheduleOrder {
@@ -53,12 +53,6 @@ function shortDate(ymd: string, weekday = true): string {
   const date = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
   const wd = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(date);
   return weekday ? `${wd} ${m}/${d}` : `${m}/${d}`;
-}
-
-function etClock(ts: string | null): string | null {
-  const ms = parseStoredUtc(ts);
-  if (ms == null) return null;
-  return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(ms);
 }
 
 type OrderStatus = ScheduleOrder["status"];
@@ -231,7 +225,7 @@ export default function CarrierSchedule() {
     return <div className="text-center text-sm text-[var(--text-hint)] py-10">Loading…</div>;
   }
 
-  const updated = data ? etClock(data.source_updated_at) : null;
+  const updated = data ? formatEtClock(data.source_updated_at) : null;
   const allRows = data ? data.days.flatMap((d) => d.rows) : [];
   const counts = {
     ready: allRows.filter((r) => r.status === "Ready").length,
