@@ -208,7 +208,7 @@ function renderTable(jobs) {
         </thead>
         <tbody>
           ${sorted.map(j => `
-            <tr onclick="window.open('/jobs/#${j.id}','_blank')" style="cursor:pointer;" title="Open in Job Board">
+            <tr onclick="window.open('/v2/board?job=${encodeURIComponent(j.id)}','_blank')" style="cursor:pointer;" title="Open in Job Board">
               <td style="font-weight:600;">${esc(j.customer || '—')}</td>
               <td>${esc(j.invoice_number || '—')}</td>
               <td>${esc(j.po_number || '—')}</td>

@@ -144,7 +144,7 @@ if (!window.__xpandaPwaInstallLoaded) {
     (function () {
       var _p = window.location.pathname;
       var _mods = [
-        { label: t('common.jobBoard', null, 'Job board'),         href: '/jobs/',         perm: 'jobs' },
+        { label: t('common.jobBoard', null, 'Job board'),         href: '/v2/board',      perm: 'jobs' },
         { label: t('common.logistics', null, 'Logistics'),        href: '/v2/logistics',     perm: 'logistics.dashboard' },
         { label: t('common.manufacturing', null, 'Manufacturing'), href: '/manufacturing/', perm: 'manufacturing.calculators' },
         { label: t('common.production', null, 'Production'),      href: '/v2/production',  perm: 'production.log' },
@@ -154,7 +154,7 @@ if (!window.__xpandaPwaInstallLoaded) {
         { label: t('common.admin', null, 'Admin'),          href: '/admin/',         perm: 'admin' },
       ];
       var _links = _mods.map(function (m) {
-        var active = _p.startsWith(m.href) || (m.href === '/v2/logistics' && _p.startsWith('/logistics/'));
+        var active = _p.startsWith(m.href) || (m.href === '/v2/logistics' && _p.startsWith('/logistics/')) || (m.href === '/v2/board' && _p.startsWith('/jobs/'));
         return '<a href="' + m.href + '" class="nav-link' + (active ? ' active' : '') + '" data-nav-perm="' + m.perm + '">' + m.label + '</a>';
       }).join('');
       var _ham = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>';

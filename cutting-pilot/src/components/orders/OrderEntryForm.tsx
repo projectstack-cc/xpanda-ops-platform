@@ -720,10 +720,10 @@ function setQtyAsBdftConvert(on: boolean) {
                 <CutListChunkToggle checked={includeChunks} onChange={setIncludeChunks} disabled={printing} />
               )}
               <a
-                href="/jobs/"
+                href={savedOrder ? `/v2/board?job=${savedOrder.id}` : "/v2/board"}
                 className="min-h-[44px] inline-flex items-center px-5 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold no-underline hover:bg-[var(--ghost-bg)]"
               >
-                Go to job board
+                View on job board
               </a>
             </div>
             {/* Hidden iframe — printCutList points it at the blob URL and invokes print() on load. */}

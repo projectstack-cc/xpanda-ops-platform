@@ -73,6 +73,7 @@
   var DEEPLINKS = {
     loading_assignment: function (id) { return '/logistics/loading.html?assignment=' + encodeURIComponent(id); },
     shipment: function (id) { return '/logistics/loading.html?shipment=' + encodeURIComponent(id); },
+    job: function (id) { return '/v2/board?job=' + encodeURIComponent(id); },
   };
 
   // var() fallbacks = light-theme tokens.css values, for pages that don't load tokens.css

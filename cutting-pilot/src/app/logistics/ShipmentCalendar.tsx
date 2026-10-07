@@ -321,7 +321,7 @@ export default function ShipmentCalendar({
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--line)]">
               {selectedShipment.job_id && (
                 <a
-                  href={`/jobs/?job_id=${selectedShipment.job_id}`}
+                  href={`/v2/board?job=${selectedShipment.job_id}`}
                   className="inline-flex items-center min-h-[38px] px-3 rounded-lg border border-[var(--border)] text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] no-underline"
                 >
                   View Job

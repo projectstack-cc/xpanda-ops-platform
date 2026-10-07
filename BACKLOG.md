@@ -91,9 +91,6 @@
 - [ ] **shift-alert follow-up — pace-based "may not finish".** Once the block-calc BOM populates
   `cutting_lines.qty_target`, gate or annotate the T-2h alert on projected completion (rate from
   `cutting_sessions.qty_done_delta`) instead of "not finished yet".
-- [ ] **shift-alert follow-up — notification deep-link for `entity_type='job'`.** `shared/notif-bell.js`
-  `DEEPLINKS` has no `job` entry, so these alerts don't click through. Add one to the v2 Job Board order once
-  `/v2/board` supports opening a job by id.
 - [ ] **P413 follow-up — PO→job creation from the block-calculator spreadsheet.** The Block
   Calculator's loaded PO spreadsheet carries only parts (no customer/job info), so bag labels are
   generated straight from `skuLines` with no job created. Wiring PO→job creation is a separate,
@@ -185,19 +182,17 @@
 
 > **Status:** Orders/Production-board rework built — Phase 1 (P337–P340, order entry) and
 > Phase 2 (P341–P344, production board) are all coded, deployed, and reachable by direct URL.
-> **The P344 cutover was reverted same-day** — home page and both nav bars (legacy
-> `shared-header.js` and v2 `PlatformHeader.tsx`) point at `/jobs/` again; `/v2/board` is
-> unlinked pending Steve's testing. Reuses the existing `jobs` + `job_line_items` tables
+> The P344 cutover was reverted same-day; **jb-08 re-links `/v2/board`** (home card + both
+> nav bars + inbound links, Classic Board fallback on the home card) — committed, held from push
+> until Steve signs off on floor testing. Reuses the existing `jobs` + `job_line_items` tables
 > throughout — no new schema.
 
-- [ ] **Re-link `/v2/board` (re-run the P344 cutover)** — home-page Job Board card, v2
-  `PlatformHeader.tsx` nav, `shared/shared-header.js` legacy nav, and `OrderEntryForm.tsx`'s
-  post-save link all need to be repointed from `/jobs/` back to `/v2/board` once Steve has
-  tested it on the floor and confirms it's ready. Do not do this speculatively — see the new v2
-  visibility-gate HARD RULE in `xpanda-ops-agents.md`.
-- [ ] **Retire legacy `jobs/index.html` board** (+ `jobs-header.js`, `jobs-shared.css` if unused)
-  once `/v2/board` is re-linked and confirmed at parity on the floor — post-cutover cleanup.
-  Pairs with the already-noted `_worker.js/routes/quickbooks.js` removal for the same cleanup pass.
+- [ ] **jb-09 — retire the legacy job board** once the floor has run on `/v2/board` without needing
+  Classic Board: remove `jobs/index.html`, `jobs-header.js`, `jobs-i18n.js`, `jobs-shared.css`,
+  `diversitech-labels.js`, `packing-slip-parser.js` + test page (confirm each is unreferenced first), the
+  home card's Classic Board button, the `shared-header.js` `/jobs/` active-state clause, the legacy
+  `GET /api/jobs` auto-archive sweep (v2 runs it since jb-01), and `routes/quickbooks.js`. Keep every
+  `/api/jobs*` worker route — v2 calls them.
 - [ ] **jb-06 follow-up — move `PartsPicker` onto the shared `SearchPickerModal`** (one picker primitive).
 - [ ] **jb-06 follow-up — v2 `PUT /v2/api/orders/:id` doesn't enforce `linked_ship_date_locked`.** Legacy
   `PUT /api/jobs` 409s a ship-date change on a trailer-linked job; the v2 route has no `trailer_group_id`

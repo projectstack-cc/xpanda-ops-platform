@@ -824,8 +824,8 @@ function renderOutbound() {
 function buildOutboundRow(s) {
   const linkedJob = allOpenJobs.find(j => j.id === s.job_id);
   const jobLink   = linkedJob
-    ? `<a class="logistics-job-link" href="/jobs/?job_id=${linkedJob.id}" onclick="event.stopPropagation()">${esc(t('logistics.jobPrefix'))}${esc(linkedJob.customer)}${linkedJob.invoice_number ? ' · ' + esc(linkedJob.invoice_number) : ''}</a>`
-    : (s.job_id ? `<a class="logistics-job-link" href="/jobs/" onclick="event.stopPropagation()">${esc(t('logistics.jobLinked'))}</a>` : '');
+    ? `<a class="logistics-job-link" href="/v2/board?job=${linkedJob.id}" onclick="event.stopPropagation()">${esc(t('logistics.jobPrefix'))}${esc(linkedJob.customer)}${linkedJob.invoice_number ? ' · ' + esc(linkedJob.invoice_number) : ''}</a>`
+    : (s.job_id ? `<a class="logistics-job-link" href="/v2/board?job=${s.job_id}" onclick="event.stopPropagation()">${esc(t('logistics.jobLinked'))}</a>` : '');
 
   const methodCarrier = [s.method, s.carrier].filter(Boolean).join(' · ');
   const bdft = s.total_bdft ? fmtNum(s.total_bdft) : '—';
