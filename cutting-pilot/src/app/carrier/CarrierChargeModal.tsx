@@ -103,7 +103,7 @@ export default function CarrierChargeModal({ isOpen, onClose, token, title, onSa
                 placeholder="0.00"
                 aria-invalid={!!feeError}
                 aria-describedby="carrier-fee-help"
-                className="w-36 min-h-[44px] pl-7 pr-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm tabular-nums"
+                className="w-36 min-h-[44px] pl-7 pr-3 rounded border border-[var(--border)] bg-[var(--surface)] text-sm tabular-nums"
               />
             </div>
             <span id="carrier-fee-help" className="text-xs text-[var(--text-hint)]">
@@ -124,7 +124,7 @@ export default function CarrierChargeModal({ isOpen, onClose, token, title, onSa
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             aria-invalid={!!notesError}
-            className="w-full min-h-[44px] px-3 py-2 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm"
+            className="w-full min-h-[44px] px-3 py-2 rounded border border-[var(--border)] bg-[var(--surface)] text-sm"
           />
           {notesError && <p className="mt-1 text-xs font-semibold text-[var(--danger-text)]">{notesError}</p>}
         </div>
@@ -135,7 +135,7 @@ export default function CarrierChargeModal({ isOpen, onClose, token, title, onSa
           type="button"
           disabled={submitting}
           onClick={handleSubmit}
-          className="w-full min-h-[44px] px-4 rounded-md bg-[var(--accent)] text-[var(--surface)] text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full min-h-[44px] px-4 rounded bg-[var(--accent)] text-[var(--surface)] text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {submitting ? "Sending…" : "Send to XPanda logistics"}
         </button>

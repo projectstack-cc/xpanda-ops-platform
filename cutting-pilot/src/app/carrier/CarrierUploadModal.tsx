@@ -92,7 +92,7 @@ export default function CarrierUploadModal({ isOpen, onClose, row, onDone }: Pro
       <div className="space-y-3">
         <label
           htmlFor="carrier-upload-photo"
-          className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold cursor-pointer"
+          className="inline-flex items-center justify-center min-h-[44px] px-4 rounded border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold cursor-pointer"
         >
           📷 Take / choose photo
         </label>
@@ -106,7 +106,7 @@ export default function CarrierUploadModal({ isOpen, onClose, row, onDone }: Pro
         />
 
         {preview && (
-          <img src={preview} alt="Signed BOL preview" className="w-full rounded-md border border-[var(--border)]" />
+          <img src={preview} alt="Signed BOL preview" className="w-full rounded border border-[var(--border)]" />
         )}
 
         {error && (
@@ -117,7 +117,7 @@ export default function CarrierUploadModal({ isOpen, onClose, row, onDone }: Pro
           type="button"
           disabled={!base64 || submitting || preparing}
           onClick={handleSubmit}
-          className="w-full min-h-[44px] px-4 rounded-md bg-[var(--accent)] text-[var(--surface)] text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full min-h-[44px] px-4 rounded bg-[var(--accent)] text-[var(--surface)] text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {preparing ? "Preparing photo…" : submitting ? "Uploading…" : "Submit"}
         </button>

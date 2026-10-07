@@ -106,7 +106,7 @@ interface RowActions {
 }
 
 const PILL_CLS =
-  "inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold";
+  "inline-flex items-center justify-center min-h-[44px] px-3 rounded border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold";
 
 function LoadRow({
   row,
@@ -126,7 +126,7 @@ function LoadRow({
       className={
         inGroup
           ? "bg-[var(--surface)] px-4 py-3" // inside a LinkedGroup rail — the rail is the border
-          : "rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3"
+          : "rounded border border-[var(--border)] bg-[var(--surface)] px-4 py-3"
       }
     >
       <div className="flex items-start justify-between gap-3">
@@ -191,7 +191,7 @@ function LoadRow({
             View BOL
           </button>
         ) : (
-          <span className="inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold opacity-40 cursor-not-allowed">
+          <span className="inline-flex items-center justify-center min-h-[44px] px-3 rounded border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold opacity-40 cursor-not-allowed">
             View BOL
           </span>
         )}
@@ -200,7 +200,7 @@ function LoadRow({
             href={`/api/public/bol-signed/${row.access_token}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold"
+            className="inline-flex items-center justify-center min-h-[44px] px-3 rounded border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold"
           >
             View Signed BOL
           </a>
@@ -219,7 +219,7 @@ function LoadRow({
           type="button"
           disabled={uploadDisabled}
           onClick={() => onUpload(row)}
-          className="inline-flex items-center justify-center min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center min-h-[44px] px-3 rounded border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {delivered ? "Upload physical BOL" : "Upload BOL"}
         </button>
@@ -233,7 +233,7 @@ function LoadRow({
         </button>
       </div>
       {row.charges.length > 0 && (
-        <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--ghost-bg)] px-3 py-2">
+        <div className="mt-3 rounded border border-[var(--border)] bg-[var(--ghost-bg)] px-3 py-2">
           <div className="text-sm font-semibold tabular-nums">Fees: {formatUsdCents(row.charges_total_cents)}</div>
           <ul className="mt-1 flex flex-col gap-1">
             {row.charges.map((c, i) => (
@@ -293,13 +293,13 @@ function DaySection({
         <h2 className="text-base font-bold text-[var(--text)]">{heading}</h2>
         <span className="text-sm text-[var(--text-muted)]">{label}</span>
         {scrolling && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold tabular-nums bg-[var(--ghost-bg)] text-[var(--text-muted)]">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold tabular-nums bg-[var(--ghost-bg)] text-[var(--text-muted)]">
             {rows.length} loads
           </span>
         )}
       </div>
       {rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[var(--border)] px-4 py-6 text-center text-sm text-[var(--text-hint)]">
+        <div className="rounded border border-dashed border-[var(--border)] px-4 py-6 text-center text-sm text-[var(--text-hint)]">
           {emptyText}
         </div>
       ) : (
@@ -393,15 +393,18 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
         homeHref="/v2/carrier"
       />
 
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-4">
+      <main className="flex-1 w-full max-w-[1920px] mx-auto px-4 lg:px-6 py-4">
         {/* Carrier brand strip — logo is transparent, so no background box. Plain <img>: basePath
             doesn't prefix it, which is correct for /logo/* served ungated by the legacy app. */}
-        <div className="flex items-center gap-3 mb-4">
-          <img src="/logo/seal-express-logo.webp" alt="Seal Express" className="h-12 w-auto" />
-          <span className="font-bold text-base">Seal Express — Outgoing loads</span>
+        <div className="flex items-center gap-3 pb-3 mb-3 border-b border-[var(--border)]">
+          <img src="/logo/seal-express-logo.webp" alt="Seal Express" className="h-9 w-auto" />
+          <div className="min-w-0">
+            <div className="text-lg font-bold leading-tight text-[var(--text)]">Seal Express — Outgoing loads</div>
+            <div className="text-xs text-[var(--text-muted)]">XPanda Foam · Orlando, FL</div>
+          </div>
         </div>
 
-        <div role="tablist" aria-label="Carrier views" className="flex flex-wrap gap-2 mb-4">
+        <div role="tablist" aria-label="Carrier views" className="flex border-b border-[var(--border)] mb-4">
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -410,10 +413,10 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
               aria-selected={tab === t.key}
               onClick={() => setTab(t.key)}
               className={[
-                "min-h-[44px] px-4 rounded-md border text-sm font-semibold",
+                "min-h-[44px] px-4 text-sm font-semibold -mb-px border-b-2",
                 tab === t.key
-                  ? "border-[var(--brand)] text-[var(--brand)] bg-[var(--surface)]"
-                  : "border-[var(--border)] text-[var(--text-muted)] bg-[var(--surface)]",
+                  ? "border-[var(--brand)] text-[var(--text)]"
+                  : "border-transparent text-[var(--text-muted)] hover:text-[var(--text)]",
               ].join(" ")}
             >
               {t.label}

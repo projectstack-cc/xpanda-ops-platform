@@ -47,7 +47,7 @@ export default function LinkedGroupList<T extends GroupKeyed>({
         block.grouped ? (
           <div
             key={`group-${block.rows[0].trailer_group_id}-${bi}`}
-            className="rounded-r-lg bg-[var(--surface-2)] border-l-2 border-t-2 border-b-2 border-[var(--brand)] overflow-hidden"
+            className="shrink-0 rounded-r bg-[var(--surface-2)] border-l-2 border-t-2 border-b-2 border-[var(--brand)] overflow-hidden"
           >
             <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 text-xs font-semibold text-[var(--brand)]">
               <Link2 size={14} aria-hidden="true" />

@@ -4,12 +4,15 @@
 // (the internal schedule board's sheet data, carrier-safe fields only). Mounted only while the tab
 // is open, so the shared useCarrierFetch polls (60s) only then. lg+: five day columns side by side;
 // below lg: days stacked, today's day scrolled into view on mount and marked "Today".
+// carrier-07: flat column panels, week summary strip, pickup time as the hero line, Shipped rows
+// collapsed to one faded line and sunk to the bottom of their day; no inner scroll box.
 import { useEffect, useRef } from "react";
 import CarrierStatusPill from "./CarrierStatusPill";
 import { useCarrierFetch } from "./useCarrierFetch";
 import CarrierErrorBox from "./CarrierErrorBox";
 import LinkedGroupList, { LinkedOrphanChip } from "./LinkedGroup";
 import { parseStoredUtc } from "@/lib/etDateTime";
+import { Check, MapPin } from "lucide-react";
 
 interface ScheduleOrder {
   invoice_number: string;
@@ -37,9 +40,6 @@ interface ScheduleResponse {
   error?: string;
 }
 
-// Same threshold as the load tiles; order cards are ~120px, so ~3.5 fit in the box.
-const SCROLL_THRESHOLD = 4;
-
 function etTodayStr(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 }
@@ -57,39 +57,63 @@ function etClock(ts: string | null): string | null {
   return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }).format(ms);
 }
 
-function OrderCard({ order, inGroup = false, orphan = false }: { order: ScheduleOrder; inGroup?: boolean; orphan?: boolean }) {
-  const loadTime = [order.load_label || null, order.delivery_time_label ? `@ ${order.delivery_time_label}` : null]
-    .filter(Boolean)
-    .join(" ");
+type OrderStatus = ScheduleOrder["status"];
+
+// Left status stripe on open cards (carrier-07). Shipped rows render as ShippedRow — no stripe.
+function stripeCls(status: OrderStatus): string {
+  if (status === "Ready") return "border-l-[var(--success-bg)]";
+  if (status === "In production") return "border-l-[var(--info-border)]";
+  return "border-l-[var(--border)]";
+}
+
+// Stable: Shipped rows sink below everything else, sheet order kept otherwise. groupRows (applied
+// after this by LinkedGroupList) anchors each linked group at its first member, so groups stay intact.
+function sinkShipped(rows: ScheduleOrder[]): ScheduleOrder[] {
+  return [...rows.filter((r) => r.status !== "Shipped"), ...rows.filter((r) => r.status === "Shipped")];
+}
+
+interface OrderRowProps {
+  order: ScheduleOrder;
+  inGroup?: boolean;
+  orphan?: boolean;
+}
+
+function OrderCard({ order, inGroup = false, orphan = false }: OrderRowProps) {
+  const frame = inGroup
+    ? "bg-[var(--surface)] border-l-4" // inside a LinkedGroup rail — the rail is the border; keep the stripe
+    : "rounded border border-[var(--border)] bg-[var(--surface)] border-l-4";
   return (
-    <div
-      className={
-        inGroup
-          ? "bg-[var(--surface)] px-3 py-2.5" // inside a LinkedGroup rail — the rail is the border
-          : "rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"
-      }
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-[var(--text)] break-words">{order.customer || "—"}</div>
-          <div className="flex flex-wrap items-center gap-2 mt-0.5">
-            <span className="text-xs font-semibold tabular-nums text-[var(--text-muted)]">INV# {order.invoice_number}</span>
-            {orphan && <LinkedOrphanChip />}
-          </div>
-        </div>
+    <div className={`${frame} ${stripeCls(order.status)} px-3 py-2`}>
+      <div className="flex items-center justify-between gap-2">
+        {order.delivery_time_label ? (
+          <span className="text-base font-bold tabular-nums text-[var(--text)]">{order.delivery_time_label}</span>
+        ) : (
+          <span className="text-sm font-semibold text-[var(--text-muted)]">Time TBD</span>
+        )}
         {order.status ? (
           <CarrierStatusPill status={order.status} />
         ) : (
-          <span className="text-xs font-semibold text-[var(--text-hint)] whitespace-nowrap">Scheduled</span>
+          <span className="text-xs font-semibold text-[var(--text-muted)] whitespace-nowrap">Scheduled</span>
         )}
       </div>
-      {loadTime && <div className="mt-1 text-sm font-mono tabular-nums text-[var(--text)]">{loadTime}</div>}
+      <div className="mt-0.5 text-sm font-semibold text-[var(--text)] line-clamp-2" title={order.customer || undefined}>
+        {order.customer || "—"}
+      </div>
       {order.city_state && (
-        <div className="mt-0.5 text-sm text-[var(--text-hint)] flex items-start gap-1">
-          <span aria-hidden="true">📍</span>
+        <div className="mt-0.5 text-sm text-[var(--text)] flex items-start gap-1">
+          <MapPin size={14} aria-hidden="true" className="mt-0.5 shrink-0 text-[var(--text-muted)]" />
           <span>{order.city_state}</span>
         </div>
       )}
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+        {order.load_label && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-[var(--border)] font-mono tabular-nums text-[var(--text)]">
+            {order.load_label}
+          </span>
+        )}
+        <span className="font-semibold tabular-nums">INV# {order.invoice_number}</span>
+        {orphan && <LinkedOrphanChip />}
+      </div>
       {order.scrap_pickup && (
         <span className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-[var(--warn-bg)] text-[var(--warn-text)] border border-[var(--warn-border)]">
           Scrap pickup
@@ -99,42 +123,83 @@ function OrderCard({ order, inGroup = false, orphan = false }: { order: Schedule
   );
 }
 
-function DayColumn({ day, isToday, todayRef }: { day: ScheduleDay; isToday: boolean; todayRef?: React.Ref<HTMLElement> }) {
-  const scrolling = day.rows.length >= SCROLL_THRESHOLD;
-  const n = day.rows.length;
+function ShippedRow({ order, inGroup = false, orphan = false }: OrderRowProps) {
+  const title = [order.customer || "—", order.city_state, order.load_label || null].filter(Boolean).join(" · ");
+  const frame = inGroup ? "bg-[var(--surface)]" : "rounded border border-[var(--border)] bg-[var(--surface)]";
   return (
-    <section ref={todayRef} className="min-w-0 scroll-mt-4">
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-2 px-1">
-        <h3 className="text-sm font-bold text-[var(--text)]">{shortDate(day.ship_date)}</h3>
+    <div title={title} className={`${frame} opacity-60 px-3 py-1.5 flex items-center gap-2 text-sm text-[var(--text)]`}>
+      <Check size={14} aria-hidden="true" className="shrink-0" />
+      <span className="sr-only">Shipped:</span>
+      <span className="shrink-0 tabular-nums font-semibold">{order.delivery_time_label || "—"}</span>
+      <span className="min-w-0 flex-1 truncate">{order.customer || "—"}</span>
+      {orphan && <LinkedOrphanChip />}
+      <span className="shrink-0 text-xs tabular-nums text-[var(--text-muted)]">INV# {order.invoice_number}</span>
+    </div>
+  );
+}
+
+function DayColumn({
+  day,
+  isToday,
+  isPast,
+  todayRef,
+}: {
+  day: ScheduleDay;
+  isToday: boolean;
+  isPast: boolean;
+  todayRef?: React.Ref<HTMLElement>;
+}) {
+  const n = day.rows.length;
+  const ready = day.rows.filter((r) => r.status === "Ready").length;
+  const rows = sinkShipped(day.rows);
+  return (
+    <section
+      ref={todayRef}
+      className={`min-w-0 scroll-mt-4 rounded border border-[var(--border)] bg-[var(--surface-2)]${isToday ? " border-t-2 border-t-[var(--brand)]" : ""}`}
+    >
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 px-3 py-2 border-b border-[var(--border)]">
+        <h3 className={`text-sm font-bold ${isPast ? "text-[var(--text-muted)]" : "text-[var(--text)]"}`}>
+          {shortDate(day.ship_date)}
+        </h3>
         <span className="text-xs text-[var(--text-muted)] tabular-nums">
           {n} {n === 1 ? "order" : "orders"}
         </span>
+        {ready > 0 && <span className="text-xs font-semibold tabular-nums text-[var(--success-bg)]">{ready} ready</span>}
         {isToday && (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--brand)] text-[var(--surface)]">
+          <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-[var(--brand)] text-[var(--surface)]">
             Today
           </span>
         )}
       </div>
-      {n === 0 ? (
-        <div className="rounded-lg border border-dashed border-[var(--border)] px-3 py-5 text-center text-sm text-[var(--text-hint)]">
-          No Seal loads
-        </div>
-      ) : (
-        <div
-          className={
-            scrolling
-              ? "flex flex-col gap-2 max-h-[min(calc(3.5*var(--carrier-order-h,128px)),85vh)] overflow-y-auto overscroll-contain pr-1"
-              : "flex flex-col gap-2"
-          }
-        >
+      <div className="p-2 flex flex-col gap-2">
+        {n === 0 ? (
+          <div className="rounded border border-dashed border-[var(--border)] px-3 py-5 text-center text-sm text-[var(--text-hint)]">
+            No Seal loads
+          </div>
+        ) : (
           <LinkedGroupList
-            rows={day.rows}
+            rows={rows}
             keyOf={(o, i) => `${o.invoice_number}-${i}`}
-            renderRow={(o, ctx) => <OrderCard order={o} inGroup={ctx.inGroup} orphan={ctx.orphan} />}
+            renderRow={(o, ctx) =>
+              o.status === "Shipped" ? (
+                <ShippedRow order={o} inGroup={ctx.inGroup} orphan={ctx.orphan} />
+              ) : (
+                <OrderCard order={o} inGroup={ctx.inGroup} orphan={ctx.orphan} />
+              )
+            }
           />
-        </div>
-      )}
+        )}
+      </div>
     </section>
+  );
+}
+
+function StatCell({ value, label, valueCls }: { value: number; label: string; valueCls: string }) {
+  return (
+    <div className="px-4 py-2 min-w-[7rem]">
+      <div className={`text-2xl font-bold tabular-nums leading-tight ${valueCls}`}>{value}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{label}</div>
+    </div>
   );
 }
 
@@ -158,22 +223,34 @@ export default function CarrierSchedule() {
   }
 
   const updated = data ? etClock(data.source_updated_at) : null;
+  const allRows = data ? data.days.flatMap((d) => d.rows) : [];
+  const counts = {
+    ready: allRows.filter((r) => r.status === "Ready").length,
+    inProduction: allRows.filter((r) => r.status === "In production").length,
+    shipped: allRows.filter((r) => r.status === "Shipped").length,
+  };
 
   return (
     <div>
       {error && <CarrierErrorBox error={error} onRetry={load} />}
       {data && (
         <>
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3 px-1">
-            <h2 className="text-base font-bold text-[var(--text)]">Week of {shortDate(data.week.monday)}</h2>
-            {updated && <span className="text-xs text-[var(--text-hint)]">Schedule updated {updated}</span>}
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-2">
+            <h2 className="text-lg font-bold text-[var(--text)]">Week of {shortDate(data.week.monday)}</h2>
+            {updated && <span className="text-xs text-[var(--text-muted)]">Updated {updated}</span>}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+          <div className="inline-flex flex-wrap divide-x divide-[var(--border)] rounded border border-[var(--border)] bg-[var(--surface)] mb-3">
+            <StatCell value={counts.ready} label="Ready" valueCls="text-[var(--success-bg)]" />
+            <StatCell value={counts.inProduction} label="In production" valueCls="text-[var(--info-text)]" />
+            <StatCell value={counts.shipped} label="Shipped" valueCls="text-[var(--text-muted)]" />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-start">
             {data.days.map((day) => (
               <DayColumn
                 key={day.ship_date}
                 day={day}
                 isToday={day.ship_date === today}
+                isPast={day.ship_date < today}
                 todayRef={day.ship_date === today ? todayRef : undefined}
               />
             ))}

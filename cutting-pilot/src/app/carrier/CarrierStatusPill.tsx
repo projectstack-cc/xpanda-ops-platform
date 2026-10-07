@@ -12,27 +12,21 @@ const CARRIER_STATUS_VARIANTS: Record<string, { label: string; cls: string }> = 
     label: "In transit",
     cls: "bg-[var(--info-bg)] text-[var(--info-text)] border border-[var(--info-border)]",
   },
-  delivered: {
-    label: "Delivered",
-    cls: "bg-[var(--ghost-bg)] text-[var(--text-muted)] border border-[var(--border)]",
-  },
+  delivered: { label: "Delivered", cls: "text-[var(--text-muted)]" },
   // carrier-05: Schedule-tab labels (from /v2/api/carrier/schedule's carrier-facing status map).
   "In production": {
     label: "In production",
     cls: "bg-[var(--info-bg)] text-[var(--info-text)] border border-[var(--info-border)]",
   },
   Ready: { label: "Ready", cls: "bg-[var(--success-bg)] text-[var(--success-text)]" },
-  Shipped: {
-    label: "Shipped",
-    cls: "bg-[var(--ghost-bg)] text-[var(--text-muted)] border border-[var(--border)]",
-  },
+  Shipped: { label: "Shipped", cls: "text-[var(--text-muted)]" },
 };
 
 export default function CarrierStatusPill({ status }: { status: string }) {
   const variant = CARRIER_STATUS_VARIANTS[status] ?? CARRIER_STATUS_VARIANTS.awaiting;
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${variant.cls}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap ${variant.cls}`}
     >
       {variant.label}
     </span>

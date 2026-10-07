@@ -54,6 +54,9 @@
 
 ## Carrier View (v2)
 
+- [ ] **carrier-07 follow-up — Steve eyeball `/v2/carrier` on a wide monitor + phone (light & dark)
+  before carrier launch.**
+
 - [ ] **carrier-06 follow-up — linked groups on load-level views assume single-load linked jobs
   (true today).** If a linked job with `load_count > 1` appears, refine the key: group only its
   rows whose trailer matches a groupmate's.
