@@ -20,7 +20,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
              load_count, total_bdft, notes, cutting_instructions, packing_instructions,
              contact_name, contact_phone,
              ship_to_company, ship_to_attention, ship_to_street, ship_to_street2,
-             ship_to_city, ship_to_state, ship_to_zip, source, processes, hb_chunk_breakdown, hb_on_hand, combo_id, trailer_group_id,
+             ship_to_city, ship_to_state, ship_to_zip, source, processes, hb_chunk_breakdown, hb_on_hand, combo_id, trailer_group_id, offload_zones_enabled,
              (packing_slip_key IS NOT NULL OR packing_slip_pdf IS NOT NULL) AS has_packing_slip,
              (SELECT COUNT(*) FROM bols b WHERE b.job_id = jobs.id) AS bol_count
         FROM jobs WHERE id = ?
@@ -41,6 +41,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
       job: {
         ...job,
         has_packing_slip: !!job.has_packing_slip,
+        offload_zones_enabled: !!job.offload_zones_enabled,
         bol_count: Number(job.bol_count) || 0,
         // Parse processes JSON defensively so a malformed cell doesn't crash the modal.
         processes: (() => {

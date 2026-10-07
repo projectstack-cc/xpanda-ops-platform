@@ -20,6 +20,7 @@ import ProcessPicker from "./ProcessPicker";
 import ShipDaysModal from "./ShipDaysModal";
 import HbFloorStockSection from "./HbFloorStockSection";
 import OrderLinksSection from "./OrderLinksSection";
+import OffloadZonesSection from "./OffloadZonesSection";
 import type { BoardJob } from "./ProductionBoard";
 import { mergeProcesses, parseProcesses, type JobProcess } from "@/lib/processes";
 
@@ -56,6 +57,7 @@ interface EditJob {
   has_packing_slip: boolean;
   hb_chunk_breakdown: string | null;
   hb_on_hand: string | null;
+  offload_zones_enabled: boolean;
   combo_id: string | null;
   trailer_group_id: string | null;
 }
@@ -129,6 +131,21 @@ const EMPTY_LINE: OrderLineItem = { part_number: "", description: "", quantity: 
 // Module-level cache for /api/assignable-users (lazy, once per session — same trick
 // ProductionBoard.tsx:100 uses for BoardRowEdit).
 let assignableUsersCache: AssignableUser[] | null = null;
+
+// Maps the GET /v2/api/board/:id line items to the editor's local shape. Shared by the initial load
+// and jb-07's handleZonesChanged so both build the dirty snapshot identically.
+function toOrderLineItems(items: StoredLineItem[] | undefined): OrderLineItem[] {
+  return (items ?? []).map((li) => ({
+    id: li.id ?? undefined,
+    part_id: li.part_id ?? undefined,
+    part_number: li.part_number ?? "",
+    description: li.description ?? "",
+    quantity: li.quantity == null ? "" : String(li.quantity),
+    dimensions: li.dimensions ?? "",
+    density: li.density ?? "",
+    offload_seq: li.offload_seq ?? null, zone_label: li.zone_label ?? null, zone_bdft: li.zone_bdft ?? null,
+  }));
+}
 
 export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = [], isAdmin = false, permissions = {} }: OrderEditModalProps) {
   const [loading, setLoading] = useState(false);
@@ -237,16 +254,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
         setJob(j);
         setSavedLoadCount(Math.max(Number(j.load_count) || 1, 1));
         setSavedShipDate(j.ship_date ?? null);
-        const lis: OrderLineItem[] = (boardJson.line_items ?? []).map((li) => ({
-          id: li.id ?? undefined,
-          part_id: li.part_id ?? undefined,
-          part_number: li.part_number ?? "",
-          description: li.description ?? "",
-          quantity: li.quantity == null ? "" : String(li.quantity),
-          dimensions: li.dimensions ?? "",
-          density: li.density ?? "",
-          offload_seq: li.offload_seq ?? null, zone_label: li.zone_label ?? null, zone_bdft: li.zone_bdft ?? null,
-        }));
+        const lis = toOrderLineItems(boardJson.line_items);
         setLineItems(lis.length ? lis : [{ ...EMPTY_LINE }]);
         setShifts(Array.isArray(shiftsJson.shifts) ? shiftsJson.shifts : []);
         const snapshot = JSON.stringify({ ...j, line_items: lis });
@@ -314,7 +322,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
       ...job,
       line_items: lineItems.map((li) => ({
         id: li.id ?? undefined,
-        part_id: li.part_id || null,
+        part_id: li.part_id ?? undefined,
         part_number: li.part_number,
         description: li.description,
         quantity: li.quantity,
@@ -527,6 +535,26 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
           if (!prev) return prev;
           try { return JSON.stringify({ ...JSON.parse(prev), ...next }); } catch { return prev; }
         });
+      }
+    } catch { /* non-fatal — the board refetch below still runs */ }
+    onSaved();
+  }
+
+  // jb-07: offload zones written (immediate PUT /api/jobs/:id/zones). The edit modal's Save replaces
+  // line items wholesale from local state, zone fields included — so refresh lineItems AND the dirty
+  // snapshot from a fresh read, or the next Save would silently revert the zones. Safe to replace
+  // lineItems outright: the zone controls are disabled while the form is dirty.
+  async function handleZonesChanged() {
+    if (!jobId) return;
+    try {
+      const res = await fetch(`/v2/api/board/${jobId}`);
+      const data: BoardResponse = await res.json();
+      if (res.ok && data.ok && data.job && job) {
+        const nextJob = { ...job, offload_zones_enabled: !!data.job.offload_zones_enabled };
+        const lis = toOrderLineItems(data.line_items);
+        setJob(nextJob);
+        setLineItems(lis.length ? lis : [{ ...EMPTY_LINE }]);
+        setOriginalSnapshot(JSON.stringify({ ...nextJob, line_items: lis }));
       }
     } catch { /* non-fatal — the board refetch below still runs */ }
     onSaved();
@@ -940,6 +968,16 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
               />
             </label>
           </section>
+
+          {/* jb-07: offload zones — immediate-save toggle + editor, locked while the form is dirty */}
+          <OffloadZonesSection
+            jobId={job.id}
+            enabled={job.offload_zones_enabled}
+            lineItems={lineItems}
+            canEdit={canDeleteOrder}
+            disabled={isDirty()}
+            onChanged={handleZonesChanged}
+          />
 
           {/* Line items — full editor (reuse EMPTY_LINE / addLine / removeLine / updateLine from OrderEntryForm) */}
           <section className="space-y-2">
