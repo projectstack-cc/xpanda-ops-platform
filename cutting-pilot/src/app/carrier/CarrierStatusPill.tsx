@@ -14,10 +14,7 @@ const CARRIER_STATUS_VARIANTS: Record<string, { label: string; cls: string }> = 
   },
   delivered: { label: "Delivered", cls: "text-[var(--text-muted)]" },
   // carrier-05: Schedule-tab labels (from /v2/api/carrier/schedule's carrier-facing status map).
-  "In production": {
-    label: "In production",
-    cls: "bg-[var(--info-bg)] text-[var(--info-text)] border border-[var(--info-border)]",
-  },
+  "Not ready": { label: "Not ready", cls: "border border-[var(--border)] text-[var(--text-hint)]" },
   Ready: { label: "Ready", cls: "bg-[var(--success-bg)] text-[var(--success-text)]" },
   Shipped: { label: "Shipped", cls: "text-[var(--text-muted)]" },
 };

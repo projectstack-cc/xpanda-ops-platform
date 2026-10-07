@@ -19,13 +19,14 @@ import { parseDeliveryTime } from "@/lib/deliveryTime";
 const JOB_CHUNK = 90; // D1 100-bound-param ceiling — same as the internal route
 const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"] as const;
 
-export type CarrierScheduleStatus = "In production" | "Ready" | "Shipped";
+export type CarrierScheduleStatus = "Not ready" | "Ready" | "Shipped";
 
-// Carrier-facing status, derived server-side from the internal board status.
+// Carrier-facing status, derived server-side from the internal board status. Production progress is
+// internal (carrier-08): every pre-Ready state goes out as "Not ready", so it never reaches the payload.
 const CARRIER_STATUS = {
-  "Not Started": "In production",
-  Cutting: "In production",
-  "In Production": "In production",
+  "Not Started": "Not ready",
+  Cutting: "Not ready",
+  "In Production": "Not ready",
   Ready: "Ready",
   Loading: "Ready",
   Loaded: "Ready",

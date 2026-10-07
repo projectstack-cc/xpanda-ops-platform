@@ -20,7 +20,7 @@ interface ScheduleOrder {
   load_label: string;
   delivery_time_label: string | null;
   city_state: string | null;
-  status: "In production" | "Ready" | "Shipped" | null;
+  status: "Not ready" | "Ready" | "Shipped" | null;
   scrap_pickup: boolean;
   unmatched: boolean;
   trailer_group_id: string | null;
@@ -62,7 +62,6 @@ type OrderStatus = ScheduleOrder["status"];
 // Left status stripe on open cards (carrier-07). Shipped rows render as ShippedRow — no stripe.
 function stripeCls(status: OrderStatus): string {
   if (status === "Ready") return "border-l-[var(--success-bg)]";
-  if (status === "In production") return "border-l-[var(--info-border)]";
   return "border-l-[var(--border)]";
 }
 
@@ -226,7 +225,7 @@ export default function CarrierSchedule() {
   const allRows = data ? data.days.flatMap((d) => d.rows) : [];
   const counts = {
     ready: allRows.filter((r) => r.status === "Ready").length,
-    inProduction: allRows.filter((r) => r.status === "In production").length,
+    notReady: allRows.filter((r) => r.status === "Not ready").length,
     shipped: allRows.filter((r) => r.status === "Shipped").length,
   };
 
@@ -241,7 +240,7 @@ export default function CarrierSchedule() {
           </div>
           <div className="inline-flex flex-wrap divide-x divide-[var(--border)] rounded border border-[var(--border)] bg-[var(--surface)] mb-3">
             <StatCell value={counts.ready} label="Ready" valueCls="text-[var(--success-bg)]" />
-            <StatCell value={counts.inProduction} label="In production" valueCls="text-[var(--info-text)]" />
+            <StatCell value={counts.notReady} label="Not ready" valueCls="text-[var(--text)]" />
             <StatCell value={counts.shipped} label="Shipped" valueCls="text-[var(--text-muted)]" />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-start">
