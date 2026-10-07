@@ -91,7 +91,7 @@ export function mapInvoiceToJobInput(invoice: any, parts: Part[]): MapResult {
     contact_name: "",
     contact_phone: "",
     combo_id: null,
-    priority: "",
+    priority: "normal",
     confirmed_to_ship: false,
     processes: [],
     packing_slip_pdf: null,

@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     contact_name: s(p.contact_name),
     contact_phone: s(p.contact_phone),
     combo_id: p.combo_id ? s(p.combo_id) : null,
-    priority: s(p.priority),
+    priority: s(p.priority) === "rush" ? "rush" : "normal",
     confirmed_to_ship: !!p.confirmed_to_ship,
     processes: procsJson,
     packing_slip_pdf: p.packing_slip_pdf ? String(p.packing_slip_pdf) : null,

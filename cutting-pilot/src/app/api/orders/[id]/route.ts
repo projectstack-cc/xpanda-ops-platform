@@ -86,7 +86,7 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   }
 
   if ("priority" in p) {
-    const v = s(p.priority);
+    const v = s(p.priority) || "normal";
     if (!PRIORITIES.includes(v)) return NextResponse.json({ ok: false, error: "Invalid priority." }, { status: 400 });
     sets.push("priority = ?"); binds.push(v);
   }

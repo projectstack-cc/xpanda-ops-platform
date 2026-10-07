@@ -17,6 +17,8 @@ import PartsPicker from "@/components/orders/PartsPicker";
 import type { OrderLineItem } from "@/components/orders/OrderEntryForm";
 import ProcessPicker from "./ProcessPicker";
 import ShipDaysModal from "./ShipDaysModal";
+import PrioritySelect from "./PrioritySelect";
+import { fromPriorityChoice, toPriorityChoice } from "@/lib/priority";
 import HbFloorStockSection from "./HbFloorStockSection";
 import OrderLinksSection from "./OrderLinksSection";
 import OffloadZonesSection from "./OffloadZonesSection";
@@ -111,12 +113,6 @@ const STATUS_OPTIONS = [
   { value: "done", label: "Done" },
   { value: "loading", label: "Loading" },
   { value: "shipped", label: "Shipped" },
-];
-const PRIORITY_LEVEL_OPTIONS = [
-  { value: 0, label: "Normal" },
-  { value: 1, label: "Elevated" },
-  { value: 2, label: "High" },
-  { value: 3, label: "Critical" },
 ];
 
 const inputClass =
@@ -237,7 +233,13 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
           return;
         }
         // board-lines-01: normalize processes so the dirty snapshot and the picker agree.
-        const j = { ...boardJson.job, processes: parseProcesses(boardJson.job.processes) };
+        // jb-11: normalize priority + level ONCE here (v2/QB-created rows carry priority "") so the
+        // dirty snapshot and the single Priority control agree from the start.
+        const j = {
+          ...boardJson.job,
+          processes: parseProcesses(boardJson.job.processes),
+          ...fromPriorityChoice(toPriorityChoice(boardJson.job.priority, boardJson.job.priority_level)),
+        };
         setJob(j);
         setSavedLoadCount(Math.max(Number(j.load_count) || 1, 1));
         setSavedShipDate(j.ship_date ?? null);
@@ -360,8 +362,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
         ship_to_state: job.ship_to_state ?? "",
         ship_to_zip: job.ship_to_zip ?? "",
         status: job.status,
-        priority: job.priority ?? "normal",
-        priority_level: Number.isFinite(Number(job.priority_level)) ? Number(job.priority_level) : 0,
+        ...fromPriorityChoice(toPriorityChoice(job.priority, job.priority_level)),
         source: job.source ?? "manual",
         processes: job.processes.map((p) => p.name),
         line_items: lineItems.map((li) => ({
@@ -741,10 +742,10 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
             <p className="text-[11px] text-muted">Changing any ship-to field clears the verified badge (set to &quot;unverified&quot; on save).</p>
           </section>
 
-          {/* Ship date + Status + Priority + Priority level */}
+          {/* Ship date + Status + Priority */}
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-text">Schedule</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label className="block">
                 <span className={labelClass}>Ship date</span>
                 <input
@@ -768,29 +769,12 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
                   ))}
                 </select>
               </label>
-              <label className="block">
-                <span className={labelClass}>Priority</span>
-                <select
-                  value={job.priority ?? "normal"}
-                  onChange={(e) => setJob({ ...job, priority: e.target.value })}
-                  className={inputClass}
-                >
-                  <option value="normal">Normal</option>
-                  <option value="rush">Rush</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className={labelClass}>Priority level</span>
-                <select
-                  value={job.priority_level ?? 0}
-                  onChange={(e) => setJob({ ...job, priority_level: Number(e.target.value) })}
-                  className={inputClass}
-                >
-                  {PRIORITY_LEVEL_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </label>
+              <PrioritySelect
+                value={toPriorityChoice(job.priority, job.priority_level)}
+                onChange={(c) => setJob({ ...job, ...fromPriorityChoice(c) })}
+                className={inputClass}
+                labelClassName={labelClass}
+              />
             </div>
           </section>
 

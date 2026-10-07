@@ -1,7 +1,7 @@
 "use client";
 // src/components/board/BoardRowEdit.tsx
 // P439 — inline row-expand edit panel for the production board (P343 — restored). Editable
-// subset ONLY: ship_date, priority(+level), notes, status — everything else on the order
+// subset ONLY: ship_date, priority, notes, status — everything else on the order
 // (customer, po_number, invoice_number, ship_to_*, method/carrier, line items, cutting/packing
 // instructions) is shown read-only here and edited via the full OrderEditModal (P439 modal
 // opened from the Edit button). The "Open in order entry →" link is intentionally gone
@@ -9,6 +9,8 @@
 import { useEffect, useState } from "react";
 import type { BoardJob } from "./ProductionBoard";
 import JobShiftChips from "./JobShiftChips";
+import PrioritySelect from "./PrioritySelect";
+import { fromPriorityChoice, toPriorityChoice, type PriorityChoice } from "@/lib/priority";
 
 interface Assignee {
   user_id: string;
@@ -41,17 +43,9 @@ const STATUS_OPTIONS = [
   { value: "shipped", label: "Shipped" },
 ];
 
-const PRIORITY_LEVEL_OPTIONS = [
-  { value: 0, label: "Normal" },
-  { value: 1, label: "Elevated" },
-  { value: 2, label: "High" },
-  { value: 3, label: "Critical" },
-];
-
 export default function BoardRowEdit({ job, assignableUsers, canManageShifts, onSaved, onCancel }: BoardRowEditProps) {
   const [shipDate, setShipDate] = useState(job.ship_date || "");
-  const [priority, setPriority] = useState(job.priority || "normal");
-  const [priorityLevel, setPriorityLevel] = useState(job.priority_level ?? 0);
+  const [choice, setChoice] = useState<PriorityChoice>(toPriorityChoice(job.priority, job.priority_level));
   const [notes, setNotes] = useState(job.notes || "");
   const [status, setStatus] = useState(job.status);
 
@@ -94,8 +88,7 @@ export default function BoardRowEdit({ job, assignableUsers, canManageShifts, on
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ship_date: shipDate,
-          priority,
-          priority_level: priorityLevel,
+          ...fromPriorityChoice(choice),
           notes,
           status,
         }),
@@ -170,32 +163,12 @@ export default function BoardRowEdit({ job, assignableUsers, canManageShifts, on
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <label className="block">
           <span className={labelClass}>Ship date</span>
           <input type="date" value={shipDate} onChange={(e) => setShipDate(e.target.value)} className={inputClass} />
         </label>
-        <label className="block">
-          <span className={labelClass}>Priority</span>
-          <select value={priority} onChange={(e) => setPriority(e.target.value)} className={inputClass}>
-            <option value="normal">Normal</option>
-            <option value="rush">Rush</option>
-          </select>
-        </label>
-        <label className="block">
-          <span className={labelClass}>Priority level</span>
-          <select
-            value={priorityLevel}
-            onChange={(e) => setPriorityLevel(Number(e.target.value))}
-            className={inputClass}
-          >
-            {PRIORITY_LEVEL_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <PrioritySelect value={choice} onChange={setChoice} className={inputClass} labelClassName={labelClass} />
         <label className="block">
           <span className={labelClass}>Status</span>
           <select

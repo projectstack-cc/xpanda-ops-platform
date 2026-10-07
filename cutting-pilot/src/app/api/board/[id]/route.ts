@@ -9,6 +9,7 @@ import { getEnv } from "@/lib/db";
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const STATUSES = ["not_started", "in_production", "done", "loading", "shipped"];
+const PRIORITIES = ["normal", "rush"];
 
 export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -72,10 +73,17 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
 
   if ("ship_date" in p) { sets.push("ship_date = ?"); binds.push(s(p.ship_date)); }
   if ("notes" in p)     { sets.push("notes = ?");     binds.push(s(p.notes)); }
-  if ("priority" in p)  { sets.push("priority = ?");  binds.push(s(p.priority)); }
+  if ("priority" in p) {
+    const v = s(p.priority) || "normal";
+    if (!PRIORITIES.includes(v)) return NextResponse.json({ ok: false, error: "Invalid priority." }, { status: 400 });
+    sets.push("priority = ?"); binds.push(v);
+  }
   if ("priority_level" in p) {
     const n = Number(p.priority_level);
-    sets.push("priority_level = ?"); binds.push(Number.isFinite(n) ? n : 0);
+    if (!Number.isInteger(n) || n < 0 || n > 3) {
+      return NextResponse.json({ ok: false, error: "Invalid priority level." }, { status: 400 });
+    }
+    sets.push("priority_level = ?"); binds.push(n);
   }
   if ("status" in p) {
     const v = s(p.status);

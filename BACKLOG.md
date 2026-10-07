@@ -196,6 +196,8 @@
   home card's Classic Board button, the `shared-header.js` `/jobs/` active-state clause, the legacy
   `GET /api/jobs` auto-archive sweep (v2 runs it since jb-01), and `routes/quickbooks.js`. Keep every
   `/api/jobs*` worker route — v2 calls them.
+- [ ] **jb-11 follow-up — add the Priority control to `/v2/orders` (order entry)** so priority can be set at
+  creation (today it defaults to Normal). Reuse `components/board/PrioritySelect.tsx` + `lib/priority.ts`.
 - [ ] **jb-06 follow-up — move `PartsPicker` onto the shared `SearchPickerModal`** (one picker primitive).
 - [ ] **jb-06 follow-up — v2 `PUT /v2/api/orders/:id` doesn't enforce `linked_ship_date_locked`.** Legacy
   `PUT /api/jobs` 409s a ship-date change on a trailer-linked job; the v2 route has no `trailer_group_id`
