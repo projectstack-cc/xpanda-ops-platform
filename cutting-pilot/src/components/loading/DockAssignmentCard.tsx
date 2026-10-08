@@ -134,13 +134,13 @@ export default function DockAssignmentCard({
                 e.stopPropagation();
                 onShowShippingInfo(a);
               }}
-              className={`${compact ? "min-w-0" : "shrink-0"} font-mono tabular-nums font-bold text-xs truncate underline decoration-dotted cursor-pointer`}
+              className={`shrink-0 ${compact ? "whitespace-nowrap" : "truncate"} font-mono tabular-nums font-bold text-xs underline decoration-dotted cursor-pointer`}
               style={{ color: variant.text }}
             >
               INV# {a.invoice_number}
             </button>
           ) : (
-            <span className="shrink-0 font-mono tabular-nums font-bold text-xs truncate" style={{ color: variant.text }}>
+            <span className={`shrink-0 ${compact ? "whitespace-nowrap" : "truncate"} font-mono tabular-nums font-bold text-xs`} style={{ color: variant.text }}>
               No INV#
             </span>
           )}

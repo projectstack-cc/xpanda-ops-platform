@@ -47,7 +47,9 @@ interface DockBoardProps {
 const BAY_ACTIVE_STATUSES = ["not_started", "loading", "loaded"];
 
 // One column template for every Overview row so bays and queue tiles share the same columns.
-const TILE_GRID = "grid grid-cols-1 md:grid-cols-[repeat(auto-fill,230px)] gap-2";
+// 6 fluid columns at >=1280px (xl) matches legacy's `.ld-bays-grid { repeat(6, minmax(0,1fr)) }`;
+// 3 at md; 1 on mobile.
+const TILE_GRID = "grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-2";
 // Same 10px left inset for every row as the Awaiting drop zone (p-2 + its 2px drag-ready border),
 // so the first column of every row starts at the same x. Headers use the matching 10px.
 const ROW_INSET = "p-2 border-2 border-transparent";
@@ -551,7 +553,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
         currentPath="/v2/logistics/loading"
       />
 
-      <div className="flex-1 w-full max-w-screen-2xl mx-auto px-4 py-6 space-y-5">
+      <div className="flex-1 w-full px-4 py-6 space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <h1 className="text-xl font-semibold text-text">Loading dashboard</h1>
           <div className="flex items-center gap-2 flex-wrap">
