@@ -27,7 +27,7 @@ interface DockAssignmentCardProps extends CardActionHandlers {
 // manager on a bay card (Advance + BOL + Photos + Move to yard = two action rows). 2x6px padding +
 // 2px border + row1 16 + row2 16 + row3 28 + actions 60 (2x28 + 4 gap) + 3x4px row gaps = 146,
 // plus 2px slack. Must stay <= 150.
-const COMPACT_CARD_H = 148;
+export const COMPACT_CARD_H = 148;
 
 function formatShipDay(iso: string): string {
   const d = new Date(`${iso}T12:00:00`);

@@ -23,7 +23,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import PlatformHeader from "@/components/PlatformHeader";
-import DockAssignmentCard from "@/components/loading/DockAssignmentCard";
+import DockAssignmentCard, { COMPACT_CARD_H } from "@/components/loading/DockAssignmentCard";
 import AssignBayModal from "@/components/loading/AssignBayModal";
 import LoadedChecklistModal from "@/components/loading/LoadedChecklistModal";
 import ShippingInfoModal from "@/components/loading/ShippingInfoModal";
@@ -45,6 +45,15 @@ interface DockBoardProps {
 }
 
 const BAY_ACTIVE_STATUSES = ["not_started", "loading", "loaded"];
+
+// One column template for every Overview row so bays and queue tiles share the same columns.
+const TILE_GRID = "grid grid-cols-1 md:grid-cols-[repeat(auto-fill,230px)] gap-2";
+// Same 10px left inset for every row as the Awaiting drop zone (p-2 + its 2px drag-ready border),
+// so the first column of every row starts at the same x. Headers use the matching 10px.
+const ROW_INSET = "p-2 border-2 border-transparent";
+const SECTION_H2 = "text-xs font-semibold uppercase tracking-wide text-muted px-2.5";
+// Room for two compact cards: 2 x COMPACT_CARD_H + space-y-1.5 (6) + p-2 top+bottom (16) = 318px.
+const BAY_BODY_MIN_H = COMPACT_CARD_H * 2 + 6 /* space-y-1.5 */ + 16 /* p-2 top+bottom */;
 
 export default function DockBoard({ userName, isAdmin, permissions }: DockBoardProps) {
   const canManage = isAdmin || permissions?.["logistics.loading.manage"]?.edit === true;
@@ -655,7 +664,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
             <section className="space-y-2">
               <h2
                 onClick={() => toggleSection("awaiting")}
-                className="text-xs font-semibold uppercase tracking-wide text-muted cursor-pointer select-none flex items-center gap-2"
+                className={`${SECTION_H2} cursor-pointer select-none flex items-center gap-2`}
               >
                 <span aria-hidden="true">{collapsedSections.awaiting ? "▸" : "▾"}</span>
                 Awaiting trailer assignment
@@ -677,9 +686,9 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
                   {awaiting.length === 0 ? (
                     <p className="text-sm text-text-faint px-1">Nothing waiting on a bay.</p>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <div className={TILE_GRID}>
                       {awaiting.map((a) => (
-                        <div key={a.id} className="w-full md:w-[230px] shrink-0">
+                        <div key={a.id} className="min-w-0">
                           {renderCard(a)}
                         </div>
                       ))}
@@ -690,12 +699,14 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
             </section>
 
             <section className="space-y-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted px-2">Bays</h2>
+              <h2 className={SECTION_H2}>Bays</h2>
               {bays.length === 0 ? (
-                <p className="text-sm text-text-faint px-3">No bays configured.</p>
+                <div className={ROW_INSET}>
+                  <p className="text-sm text-text-faint px-1">No bays configured.</p>
+                </div>
               ) : (
-                <div className="overflow-x-auto pb-2 px-2">
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-3 min-w-0 md:min-w-[1320px]">
+                <div className={ROW_INSET}>
+                  <div className={TILE_GRID}>
                     {bays.map((bay) => {
                       const bayAssignments = sortAssignments(
                         set.filter((a) => a.bay_id === bay.id && BAY_ACTIVE_STATUSES.includes(a.loading_status)),
@@ -720,9 +731,12 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
                           <div className="p-2 border-b border-[var(--line)] text-center font-bold text-sm text-text">
                             Bay {bay.bay_number}
                           </div>
-                          <div className="p-2 space-y-1.5 min-h-[150px]">
+                          <div
+                            className={`p-2 space-y-1.5${bayAssignments.length === 0 ? " flex flex-col" : ""}`}
+                            style={{ minHeight: BAY_BODY_MIN_H }}
+                          >
                             {bayAssignments.length === 0 ? (
-                              <p className="text-xs text-text-faint text-center py-6">Empty</p>
+                              <p className="text-xs text-text-faint text-center my-auto">Empty</p>
                             ) : (
                               bayAssignments.map((a) => (
                                 <div key={a.id}>{renderCard(a)}</div>
@@ -737,70 +751,79 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
               )}
             </section>
 
-            <section className="space-y-2 px-2">
+            <section className="space-y-2">
               <h2
                 onClick={() => toggleSection("yard")}
-                className="text-xs font-semibold uppercase tracking-wide text-muted cursor-pointer select-none flex items-center gap-2"
+                className={`${SECTION_H2} cursor-pointer select-none flex items-center gap-2`}
               >
                 <span aria-hidden="true">{collapsedSections.yard ? "▸" : "▾"}</span>
                 Yard
               </h2>
-              {!collapsedSections.yard &&
-                (yard.length === 0 ? (
-                  <p className="text-sm text-text-faint px-1">No trailers in the yard.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {yard.map((a) => (
-                      <div key={a.id} className="w-full md:w-[230px] shrink-0">
-                        {renderCard(a)}
-                      </div>
-                    ))}
-                  </div>
-                ))}
+              {!collapsedSections.yard && (
+                <div className={ROW_INSET}>
+                  {yard.length === 0 ? (
+                    <p className="text-sm text-text-faint px-1">No trailers in the yard.</p>
+                  ) : (
+                    <div className={TILE_GRID}>
+                      {yard.map((a) => (
+                        <div key={a.id} className="min-w-0">
+                          {renderCard(a)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
 
-            <section className="space-y-2 px-2">
+            <section className="space-y-2">
               <h2
                 onClick={() => toggleSection("transit")}
-                className="text-xs font-semibold uppercase tracking-wide text-muted cursor-pointer select-none flex items-center gap-2"
+                className={`${SECTION_H2} cursor-pointer select-none flex items-center gap-2`}
               >
                 <span aria-hidden="true">{collapsedSections.transit ? "▸" : "▾"}</span>
                 In transit
               </h2>
-              {!collapsedSections.transit &&
-                (transit.length === 0 ? (
-                  <p className="text-sm text-text-faint px-1">Nothing in transit.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {transit.map((a) => (
-                      <div key={a.id} className="w-full md:w-[230px] shrink-0">
-                        {renderCard(a)}
-                      </div>
-                    ))}
-                  </div>
-                ))}
+              {!collapsedSections.transit && (
+                <div className={ROW_INSET}>
+                  {transit.length === 0 ? (
+                    <p className="text-sm text-text-faint px-1">Nothing in transit.</p>
+                  ) : (
+                    <div className={TILE_GRID}>
+                      {transit.map((a) => (
+                        <div key={a.id} className="min-w-0">
+                          {renderCard(a)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
 
-            <section className="space-y-2 px-2">
+            <section className="space-y-2">
               <h2
                 onClick={() => toggleSection("delivered")}
-                className="text-xs font-semibold uppercase tracking-wide text-muted cursor-pointer select-none flex items-center gap-2"
+                className={`${SECTION_H2} cursor-pointer select-none flex items-center gap-2`}
               >
                 <span aria-hidden="true">{collapsedSections.delivered ? "▸" : "▾"}</span>
                 Delivered
               </h2>
-              {!collapsedSections.delivered &&
-                (delivered.length === 0 ? (
-                  <p className="text-sm text-text-faint px-1">Nothing delivered yet.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {delivered.map((a) => (
-                      <div key={a.id} className="w-full md:w-[230px] shrink-0">
-                        {renderCard(a, { showArchive: true })}
-                      </div>
-                    ))}
-                  </div>
-                ))}
+              {!collapsedSections.delivered && (
+                <div className={ROW_INSET}>
+                  {delivered.length === 0 ? (
+                    <p className="text-sm text-text-faint px-1">Nothing delivered yet.</p>
+                  ) : (
+                    <div className={TILE_GRID}>
+                      {delivered.map((a) => (
+                        <div key={a.id} className="min-w-0">
+                          {renderCard(a, { showArchive: true })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
           </>
         )}
