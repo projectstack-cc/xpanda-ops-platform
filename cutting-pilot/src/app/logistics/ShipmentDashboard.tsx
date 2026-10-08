@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import ShipmentRow from "@/components/logistics/ShipmentRow";
+import LinkedTableGroups from "@/components/linked/LinkedTableGroups";
 import ShipmentCalendar from "./ShipmentCalendar";
 import BolViewerModal from "@/components/logistics/BolViewerModal";
 import BolGenerateModal from "@/components/logistics/BolGenerateModal";
@@ -561,10 +562,12 @@ export default function ShipmentDashboard({
                             <th className="px-3.5 py-2.5 w-[200px] text-right">Actions</th>
                           </tr>
                         </thead>
-                        <tbody>
-                          {shipments.map((s) => (
+                        <LinkedTableGroups
+                          rows={shipments}
+                          colSpan={9}
+                          keyOf={(s) => s.entry_key ?? String(s.id)}
+                          renderRow={(s) => (
                             <ShipmentRow
-                              key={s.entry_key ?? s.id}
                               shipment={s}
                               onViewBol={setViewerJobId}
                               onGenerateBol={setGenerateJobId}
@@ -575,8 +578,8 @@ export default function ShipmentDashboard({
                               canManageLoading={canManageLoading}
                               onShipDaysSaved={handleShipDaysSaved}
                             />
-                          ))}
-                        </tbody>
+                          )}
+                        />
                       </table>
                     </div>
                   </div>

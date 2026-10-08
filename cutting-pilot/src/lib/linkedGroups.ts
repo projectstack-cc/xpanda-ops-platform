@@ -8,7 +8,7 @@
 // (the caller renders a "linked to an order on another day" chip). No group id → ungrouped.
 
 export interface GroupKeyed {
-  trailer_group_id: string | null;
+  trailer_group_id?: string | null;
 }
 
 // Only a trailer_group_id with >=2 rows PRESENT IN THIS COLUMN counts as a local group. A count of

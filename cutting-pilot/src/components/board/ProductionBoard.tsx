@@ -15,7 +15,7 @@
 // board-ui-01: renamed "Job Board" (legacy parity) and rebuilt on the shared dashboard kit to
 // mirror /v2/logistics — title block, StatTile status cards, toolbar (List/Calendar, week
 // selector, search, status filter), and day-grouped tables. Filtering is client-side, list only.
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import DashboardToolbar from "@/components/dashboard/DashboardToolbar";
@@ -32,6 +32,7 @@ import OrderEditModal from "./OrderEditModal";
 import BolViewerModal from "@/components/logistics/BolViewerModal";
 import CalendarView from "./CalendarView";
 import BoardRowEdit from "./BoardRowEdit";
+import LinkedTableGroups from "@/components/linked/LinkedTableGroups";
 import { JobStatusBadge, PriorityBadge, STATUS_VARIANTS } from "./badges";
 import LinePills from "./LinePills";
 import { PROCESSES, type JobProcess } from "@/lib/processes";
@@ -404,9 +405,12 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                           <th className="px-3.5 py-2.5 w-[160px] text-right">Actions</th>
                         </tr>
                       </thead>
-                      <tbody>
-                        {jobs.map((job) => (
-                          <Fragment key={job.id}>
+                      <LinkedTableGroups
+                        rows={jobs}
+                        colSpan={8}
+                        keyOf={(job) => job.id}
+                        renderRow={(job) => (
+                          <>
                             <tr
                               ref={(el) => {
                                 rowRefs.current[job.id] = el;
@@ -466,9 +470,9 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                                 </td>
                               </tr>
                             )}
-                          </Fragment>
-                        ))}
-                      </tbody>
+                          </>
+                        )}
+                      />
                     </table>
                   </div>
                 </div>

@@ -71,11 +71,15 @@
 
 - [ ] **carrier-06 follow-up — linked groups on load-level views assume single-load linked jobs
   (true today).** If a linked job with `load_count > 1` appears, refine the key: group only its
-  rows whose trailer matches a groupmate's.
+  rows whose trailer matches a groupmate's. (also applies to `/v2/logistics` split-day entries — link-01)
 
 - [ ] **carrier-06 follow-up — Steve eyeball `/v2/schedule` + `/v2/schedule/desk` linked rails**
   after the `linkedGroups.ts` extraction. They should render identically; the selfcheck passes,
   but no browser check was run.
+
+- [ ] **link-01 follow-up — Steve eyeball linked borders on `/v2/board` + `/v2/logistics`.** Check the group
+  border, the "Linked · same trailer" header row, that expanded edit (`BoardRowEdit`) / drill-down rows sit inside
+  the border, and both light and dark themes. No browser check was run.
 
 - [ ] **carrier-04 follow-up — refactor the `loading-assignments` v2 route to use
   `src/lib/push.ts`.** It currently skips notifications (deliberately not ported before the push

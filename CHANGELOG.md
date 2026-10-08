@@ -720,6 +720,21 @@ current series).
 
 ## Orders (v2)
 
+- **link-01 — Linked-order red border on the v2 Job Board + v2 Logistics board (react-component-agent §9b). No
+  migration, no API change** (`trailer_group_id` was already on `BoardJob` and `ShipmentListItem`). Linked orders
+  (same `jobs.trailer_group_id`) now get the schedule board / Carrier View treatment on `/v2/board` and
+  `/v2/logistics`: members are pulled adjacent within a day and wrapped in one block with a 2px `var(--brand)` border
+  and a `Link2` "Linked · same trailer" header row. New shared `components/linked/LinkedTableGroups.tsx` (the table
+  counterpart of `app/carrier/LinkedGroup.tsx`) reuses `groupRows` from `src/lib/linkedGroups.ts`: each grouped block
+  is its own `<tbody>` with a full border (collapsed-border model; expanded `BoardRowEdit` / `ShipmentRow` drill-down
+  rows stay inside it), and contiguous ungrouped rows are merged into one plain `<tbody>` so the rows' `last:border-0`
+  dividers survive. `GroupKeyed.trailer_group_id` made optional (`ShipmentListItem`'s field is optional);
+  `linkedGroups.selfcheck.ts` still 11/11. **No orphan chip, by design:** partners always share a ship date (one
+  trailer), so a lone member only appears when search/a filter hides its partner, and it renders as a plain row. On the
+  Job Board, pulling a group adjacent (anchored at its first member) can move the second member above higher-priority
+  rows, accepted for parity with the other surfaces. `ProductionBoard.tsx` and `ShipmentDashboard.tsx` swap their day
+  `<tbody>` for `<LinkedTableGroups>`; row markup, handlers and `ShipmentRow.tsx` untouched.
+
 - **slip-parse-06 — Packing-slip parser keeps the thin end of tapered thickness ranges (Job Board Agent §2 for
   legacy `jobs/packing-slip-parser.js`; React Component Agent §9b for the v2 parity port `src/lib/packingSlip.ts` +
   fixture). No migration / schema / API change.** QuickBooks prints tapered lines' thickness as a range
@@ -2902,6 +2917,10 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **link-01 (cross-ref) — linked-order red border on `/v2/logistics`.** Day tables render through the new shared
+  `components/linked/LinkedTableGroups.tsx`: linked shipments are pulled adjacent inside a 2px brand-bordered block
+  with a "Linked · same trailer" header; the drill-down row stays inside the border. Full entry under `## Orders (v2)`.
 
 - **carrier-09 (cross-ref) — `/v2/api/shipments/signed-bol` now uses `lib/logistics/signedBolDocs.ts`.** The per-load selection (signed / carrier / photo precedence, NULL load → 0) was extracted verbatim and is shared with the Carrier View's new `/v2/api/carrier/signed-bol`. Response shape is unchanged. Full entry under `## Carrier View (v2)`.
 
