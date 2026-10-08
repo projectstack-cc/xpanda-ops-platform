@@ -264,6 +264,19 @@ function parseShipTo(rows: string[]): ParsedAddress {
 
 // ─── Line item parsing ────────────────────────────────────────────────────
 
+// slip-parse-06: parity port of legacy withTaperLead() (jobs/packing-slip-parser.js). Tapered lines
+// print thickness as a range (`2.5” - 4” x 39” x 80”`); the 3-term dimension match drops the thin
+// end. For tapered items only, emit the platform taper convention `2.5>4” x 39” x 80”`.
+const TAPER_LEAD_RE = /(\d+(?:\.\d+)?(?:-\d+\/\d+)?)(?:\s*["\u201C\u201D]\s*|\s+)[-\u2013\u2014>]\s*$/;
+
+function withTaperLead(lineText: string, dimMatch: RegExpMatchArray, item: ParsedLineItem): string {
+  const dims = dimMatch[0].trim();
+  const ctx = [item.category, ...(item._descLines || []), lineText].join(" ");
+  if (!/taper/i.test(ctx)) return dims;
+  const lead = lineText.slice(0, dimMatch.index ?? 0).match(TAPER_LEAD_RE);
+  return lead ? `${lead[1]}>${dims}` : dims;
+}
+
 function isItemHeader(sortedItems: RawItem[]): boolean {
   if (sortedItems.length < 2) return false;
   const last = sortedItems[sortedItems.length - 1];
@@ -330,7 +343,7 @@ function parseLineItems(groups: LineGroup[], descriptionY: number): ParsedLineIt
         /(\d[\d.\/\-]*)\s*["”]?\s*[xX×]\s*(\d[\d.\/\-]*)\s*["”]?\s*[xX×]\s*(\d[\d.\/\-]*)\s*["”]?/
       );
       if (dimMatch && !current.dimensions) {
-        current.dimensions = dimMatch[0].trim();
+        current.dimensions = withTaperLead(lineText, dimMatch, current);
       }
 
       if (

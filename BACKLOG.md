@@ -408,6 +408,15 @@
 
 ## Job Board
 
+- [ ] **Taper-aware dimension parsing downstream (from slip-parse-06).** `thin>thick` dims (parser output and the
+  hand-entered rows already in D1) are read by `parseFloat` on the first token. As a result:
+  - legacy `parseDimensionString` / `parseDimensionValues` (load builder + part match) treat `2.5>4”` as 2.5";
+  - v2 `jobPull.ts` `parseDimensionString`, `partMatch.ts` `parseDimensionValues`, and `bdft.ts` `bdftPerPiece` do
+    the same.
+
+  Decide and implement: thick end for stack height / load planning / part match, mean thickness for BDFT. Also
+  normalize the legacy hand-entered `4-5.5”` / `4">5.5”` variants. Note that `TAPER_RE` misses the `-` form, so those
+  jobs aren't flagged as taper in the cutting queue.
 - [ ] HB nester is hole-pattern-agnostic and floor-stock uncut chunks are job-level (not per
   8/10-hole) — confirm with the floor whether chunks are holed before slicing; if so, nest + net
   per hole pattern.

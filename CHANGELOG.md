@@ -720,6 +720,25 @@ current series).
 
 ## Orders (v2)
 
+- **slip-parse-06 — Packing-slip parser keeps the thin end of tapered thickness ranges (Job Board Agent §2 for
+  legacy `jobs/packing-slip-parser.js`; React Component Agent §9b for the v2 parity port `src/lib/packingSlip.ts` +
+  fixture). No migration / schema / API change.** QuickBooks prints tapered lines' thickness as a range
+  (`2.5” - 4” x 39” x 80”`); both parsers' 3-term `L x W x H` regex can't cross `2.5” - `, so it anchored on the
+  thick end and stored `4” x 39” x 80”`, dropping the thin end (INV 4477: all 8 tapered rows). New
+  `withTaperLead()` (+ `TAPER_LEAD_RE`) in both parsers, identical logic: for tapered items only (`taper`,
+  case-insensitive, in the category, description lines or the dimension line) it takes the number immediately before
+  the matched dims and emits `<thin>><dims>` — e.g. `2.5>4” x 39” x 80”` — matching the `thin>thick` convention CS
+  already hand-enters in D1 and the v2 cutting queue's `TAPER_RE` (`/v2/api/cutting/queue`). The matched dims text
+  stays byte-identical (inch marks as printed); only `<thin>>` is prefixed. The separator (`-`, `–`, `—` or `>`) must
+  follow an inch mark or whitespace, so a mixed fraction like `54-3/4”` can never be read as a range. Non-tapered
+  items, items with no range prefix, and descriptions are unchanged. New scrubbed two-page **INV 4477** fixture in
+  `packingSlipFixtures.ts` (customer item #s `BWS`→`SPC`; page-2 items carry negative y; qty-0 rows and the CC fee
+  filtered; SPC27's qty on page 1 with its description on page 2) — parity harness **PASS — 8 fixtures**; the 4417
+  rows (`2" x 48" x 144"` / `4" x 48" x 144"`) prove non-taper rows unchanged. Negative check: with the legacy
+  parser stashed, INV 4477 FAILs expect:legacy + parity. Existing job rows are **not** rewritten — this only affects
+  newly parsed slips. Downstream consumers still `parseFloat` the first token (reads `2.5>4”` as 2.5") — filed in
+  BACKLOG. See Job Board → slip-parse-06.
+
 - **jb-11 — One Priority control on `/v2/board` + fix "Invalid priority" blocking order edits (react-component-agent §9b for the control; next-platform-agent §9a for the v2 routes + QB mapper). No schema migration; one-time data repair run on prod D1 (12 rows `priority` → `normal`; 0 rows needed a `priority_level` fix).** **Root cause:** neither v2 creation path set `priority` — `POST /v2/api/orders` stored `s(p.priority)` (order entry sends none) and the QB mapper hardcoded `priority: ""` — so those rows carried `""`; the edit modal sent `job.priority ?? "normal"` → `""`, and `PUT /v2/api/orders/:id` rejected it against `["normal","rush"]` (400, whole save rejected, masked by the select showing "Normal"). **Fix:** new `lib/priority.ts` (`PriorityChoice`, `PRIORITY_CHOICES`, `toPriorityChoice`, `fromPriorityChoice`) maps one choice onto the two existing columns — Normal/Elevated/High/Critical = `normal` + level 0/1/2/3, **Rush = `rush` + level 3** (sorts with Critical at the top of `/v2/board` and the cutting queue; matches what `PriorityBadge` already shows — badge unchanged). New `components/board/PrioritySelect.tsx` replaces the Priority + Priority level pair in both `OrderEditModal` (Schedule grid now `sm:grid-cols-3`; priority normalized once at load so a `""` row opens clean, not dirty; save sends the normalized pair) and `BoardRowEdit` (single `choice` state, PUT sends `...fromPriorityChoice(choice)`, grid `sm:grid-cols-3`); both `PRIORITY_LEVEL_OPTIONS` deleted. API: create route defaults non-`rush` to `normal`; `PUT /v2/api/orders/:id` treats empty priority as `normal` (validation otherwise unchanged); `PUT /v2/api/board/:id` now validates priority (`normal`/`rush`, empty → `normal`, else 400 "Invalid priority.") and `priority_level` (integer 0–3, else 400 "Invalid priority level."). QB mapper default `""` → `"normal"` (priority isn't in `relevantHash`/`HEADER_FIELDS`, so no spurious QB diffs). Verified: `tsc --noEmit` clean, `cf-build` green, QB selfchecks mapper 17/17 + webhook 16/16 (no assertion changes — `webhook.selfcheck.ts`'s `priority: ""` is an input fixture, not mapper output), round-trip of all 5 choices OK, `toPriorityChoice("", null)` → normal, `toPriorityChoice(null, 7)` → critical. Note: BoardRowEdit's shared `inputClass` stays 40 px (pre-existing, shared by all its row fields).
 
 - **jb-10 — Job Shifts moved from the `/v2/board` edit modal into the board row dropdown (react-component-agent §9b). No migration, no API change.** Steve couldn't find the "Job shifts" section midway down `OrderEditModal`; shifts are a quick, frequent action like **Assigned**, so they now live right under Assigned in the expanded row (`BoardRowEdit`). New `components/board/JobShiftChips.tsx` (`"use client"`, props `jobId`, `canManage`) is self-contained: `GET /v2/api/orders/:id/shifts` on mount ("Loading…"), "Add shift…" select offering only unassigned shifts → `POST` `{ shift }` then refetch, × → `DELETE …/shifts/:shift` then drop locally; `SHIFT_LABELS` moved here (exported). Styled like the Assigned block (BoardRowEdit `labelClass` heading "Shifts", same chip/select sizing — moved, not new, so it keeps the Assigned 32 px select / 20 px × sizing). Manager gate unchanged: `isAdmin || jobs.manage edit`, computed in `ProductionBoard` and passed as `BoardRowEdit.canManageShifts`; non-managers see read-only chips + "Only managers can assign shifts." Errors inline in the block (403 → "Manager access required to assign shifts."; else server `error` or "Couldn't add/remove shift. Try again."). Shift writes don't call `onSaved`, so the row neither collapses nor refetches the board (the board doesn't display shifts). `OrderEditModal.tsx`: removed the Job Shifts section, `SHIFT_LABELS`, `shifts`/`addingShift` state, `canManageShifts`, both handlers, the shift resets, `BoardResponse.shifts`, and the parallel shifts fetch (load is now the single `/v2/api/board/:id` fetch); header comment updated. Note: `BoardRowEdit.tsx` working copy was CRLF while HEAD is LF — committed as LF.
@@ -7571,6 +7590,10 @@ current series).
 ---
 
 ## Job Board
+
+- **slip-parse-06 — Packing-slip parser keeps the thin end of tapered thickness ranges (Job Board Agent §2). No
+  migration.** New `withTaperLead()` in `jobs/packing-slip-parser.js`: tapered items' `2.5” - 4” x 39” x 80”` now
+  parse to `2.5>4” x 39” x 80”` instead of dropping the thin end. See Orders (v2) → slip-parse-06.
 
 - **slip-parse-04** — packing-slip fixtures + parity harness landed in `cutting-pilot/` (see `## Orders (v2)`);
   `jobs/packing-slip-parser.js` `_internal` comment updated to point at them (no code change).

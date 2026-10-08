@@ -78,6 +78,22 @@ window.PackingSlipParser = (function () {
     return DIM_PATTERN.test(text);
   }
 
+  // slip-parse-06: tapered lines print thickness as a range, e.g. `2.5” - 4” x 39” x 80”`
+  // (thin end - thick end x width x length). The 3-term dimension match anchors on the thick end
+  // and drops the thin end. For tapered items only, recover the thin end and emit the platform's
+  // taper convention `2.5>4” x 39” x 80”` — the shape CS already hand-enters and the v2 cutting
+  // queue's TAPER_RE keys on. The separator must follow an inch mark or whitespace so a mixed
+  // fraction like `54-3/4”` can never be read as a range.
+  const TAPER_LEAD_RE = /(\d+(?:\.\d+)?(?:-\d+\/\d+)?)(?:\s*["\u201C\u201D]\s*|\s+)[-\u2013\u2014>]\s*$/;
+
+  function withTaperLead(lineText, dimMatch, item) {
+    const dims = dimMatch[0].trim();
+    const ctx = [item.category, ...(item._descLines || []), lineText].join(' ');
+    if (!/taper/i.test(ctx)) return dims;
+    const lead = lineText.slice(0, dimMatch.index).match(TAPER_LEAD_RE);
+    return lead ? `${lead[1]}>${dims}` : dims;
+  }
+
   // ─── Address block parsers ────────────────────────────────────────────────
 
   function parseCityStateLine(text, obj) {
@@ -538,7 +554,7 @@ window.PackingSlipParser = (function () {
         // Extract dimensions if not yet found
         const dimMatch = lineText.match(/(\d[\d.\/\-]*)\s*[""”]?\s*[xX×]\s*(\d[\d.\/\-]*)\s*[""”]?\s*[xX×]\s*(\d[\d.\/\-]*)\s*[""”]?/);
         if (dimMatch && !current.dimensions) {
-          current.dimensions = dimMatch[0].trim();
+          current.dimensions = withTaperLead(lineText, dimMatch, current);
         }
 
         // Collect description lines (skip bundle info and label instructions)
