@@ -18,9 +18,10 @@
 //                     defense-in-depth -- same pattern as X-User-Can-Manage-Cutting elsewhere
 //                     in v2; middleware already gates the whole prefix on logistics.loading).
 //
-// Deliberately NOT ported: push notification dispatch (dispatchNotification -- _worker.js/lib/
-// push.js has no v2 equivalent, orthogonal to this unit, skipping doesn't affect data), the
-// `load-days` per-load-ship-date sub-route (used by the Job Board's split-shipment UI, not by
+// Push notification dispatch IS ported (dock-01): POST new-assignment -> loading.assigned, PUT
+// status transitions -> loading.started/loaded/in_transit/delivered, via src/lib/push.ts, same
+// strings as legacy; a dispatch failure never fails the write.
+// Deliberately NOT ported: the `load-days` per-load-ship-date sub-route (used by the Job Board's split-shipment UI, not by
 // logistics/loading.html's dock dashboard -- confirmed zero call sites here across all 13 legacy
 // PUT sites), and DELETE (no call site in the dock dashboard either -- archive uses PUT
 // loading_status='archived').
@@ -28,10 +29,35 @@
 // Writes are LIVE. Unit 3a's preview bindings make `wrangler dev` land on scratch D1, never prod.
 import { NextResponse, type NextRequest } from "next/server";
 import type { D1Database } from "@cloudflare/workers-types";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";
+import { dispatchNotification } from "@/lib/push";
 
 const LOADING_FLOW = ["awaiting", "not_started", "loading", "loaded", "in_transit", "delivered"];
+
+// Legacy's PUT status -> notification type map (_worker.js/routes/loading.js).
+const LOADING_NOTIF_TYPES: Record<string, string> = {
+  loading: "loading.started",
+  loaded: "loading.loaded",
+  in_transit: "loading.in_transit",
+  delivered: "loading.delivered",
+};
+
+async function notifyLoading(
+  db: D1Database,
+  type: string,
+  title: string,
+  message: string,
+  assignmentId: string
+): Promise<void> {
+  try {
+    const { env } = await getCloudflareContext();
+    await dispatchNotification(db, env as any, type, title, message, "loading_assignment", assignmentId);
+  } catch (e) {
+    console.error("Loading notification dispatch failed (non-fatal):", String((e as any)?.message || e));
+  }
+}
 
 async function syncShipmentStatus(db: D1Database, jobId: string, status: string): Promise<void> {
   try {
@@ -252,6 +278,23 @@ export async function POST(request: NextRequest) {
 
     await syncShipmentStatus(DB, payload.job_id, loadingStatus);
 
+    try {
+      const jobInfo = await DB.prepare("SELECT customer, invoice_number FROM jobs WHERE id = ?")
+        .bind(payload.job_id)
+        .first<{ customer: string | null; invoice_number: string | null }>();
+      const customerName = jobInfo?.customer || "Unknown";
+      const invNum = jobInfo?.invoice_number || "";
+      await notifyLoading(
+        DB,
+        "loading.assigned",
+        "Job Assigned to Loading",
+        `${customerName}${invNum ? " (INV# " + invNum + ")" : ""} assigned to ${payload.bay_id ? "Bay" : "awaiting queue"}`,
+        id
+      );
+    } catch (e) {
+      console.error("Loading notification dispatch failed (non-fatal):", String((e as any)?.message || e));
+    }
+
     await logActivity(
       DB, "create", "loading_assignment", id,
       `Assigned job to loading — ${loadingStatus}`,
@@ -441,6 +484,29 @@ export async function PUT(request: NextRequest) {
     await DB.prepare(`UPDATE loading_assignments SET ${updates.join(", ")} WHERE id = ?`)
       .bind(...binds)
       .run();
+
+    const notifType = pendingShipmentStatus ? LOADING_NOTIF_TYPES[pendingShipmentStatus] : undefined;
+    if (notifType) {
+      try {
+        const jobInfo = await DB.prepare("SELECT customer, invoice_number FROM jobs WHERE id = ?")
+          .bind(existing.job_id)
+          .first<{ customer: string | null; invoice_number: string | null }>();
+        const customerName = jobInfo?.customer || "Unknown";
+        const invNum = jobInfo?.invoice_number || "";
+        const trailerNum = payload.trailer_number || existing.trailer_number || "";
+        const messages: Record<string, string> = {
+          "loading.started": `Trailer${trailerNum ? " " + trailerNum : ""} has begun loading — ${customerName}`,
+          "loading.loaded": `Trailer${trailerNum ? " " + trailerNum : ""} is loaded — ${customerName}`,
+          "loading.in_transit": `Trailer${trailerNum ? " " + trailerNum : ""} has departed — ${customerName}`,
+          "loading.delivered": `Delivery confirmed — ${customerName}${invNum ? " (INV# " + invNum + ")" : ""}`,
+        };
+        const seg = notifType.split(".")[1];
+        const notifTitle = seg.charAt(0).toUpperCase() + seg.slice(1).replace("_", " ");
+        await notifyLoading(DB, notifType, notifTitle, messages[notifType], id);
+      } catch (e) {
+        console.error("Loading notification dispatch failed (non-fatal):", String((e as any)?.message || e));
+      }
+    }
 
     if (pendingShipmentStatus) {
       await syncShipmentStatus(DB, existing.job_id, pendingShipmentStatus);

@@ -167,17 +167,17 @@ export default function PullJobModal({ bays, assignments, defaultBayId, onClose,
           }}
           placeholder="Customer, PO, or INV #"
           autoComplete="off"
-          className="mt-1 w-full min-h-[44px] px-3 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm"
+          className="mt-1 w-full min-h-[44px] px-3 rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm"
         />
       </label>
 
-      <div className="max-h-64 overflow-y-auto border border-[var(--line)] rounded-md divide-y divide-[var(--line)]">
+      <div className="max-h-64 overflow-y-auto border border-[var(--line)] rounded divide-y divide-[var(--line)]">
         {searching && <p className="text-xs text-muted px-3 py-2">Searching…</p>}
         {!searching && query.trim().length >= 2 && rows.length === 0 && (
-          <p className="text-xs text-text-faint italic px-3 py-2">No matches.</p>
+          <p className="text-xs text-text-faint px-3 py-2">No matches.</p>
         )}
         {!searching && query.trim().length < 2 && (
-          <p className="text-xs text-text-faint italic px-3 py-2">Type at least 2 characters to search.</p>
+          <p className="text-xs text-text-faint px-3 py-2">Type at least 2 characters to search.</p>
         )}
         {rows.map((row) => (
           <div
@@ -205,7 +205,7 @@ export default function PullJobModal({ bays, assignments, defaultBayId, onClose,
         <select
           value={bayId}
           onChange={(e) => setBayId(e.target.value)}
-          className="mt-1 w-full min-h-[44px] px-3 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm"
+          className="mt-1 w-full min-h-[44px] px-3 rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm"
         >
           <option value="">Awaiting Queue (no bay)</option>
           {bays.map((b) => (
@@ -222,7 +222,7 @@ export default function PullJobModal({ bays, assignments, defaultBayId, onClose,
         <button
           type="button"
           onClick={onClose}
-          className="min-h-[44px] px-4 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] text-sm font-semibold text-text cursor-pointer"
+          className="min-h-[44px] px-4 rounded border border-[var(--card-border)] bg-[var(--card-bg)] text-sm font-semibold text-text cursor-pointer"
         >
           Cancel
         </button>
@@ -230,7 +230,7 @@ export default function PullJobModal({ bays, assignments, defaultBayId, onClose,
           type="button"
           onClick={handleConfirm}
           disabled={saving || !selected}
-          className="min-h-[44px] px-4 rounded-md bg-[var(--primary-bg)] text-[var(--primary-text)] text-sm font-semibold cursor-pointer disabled:opacity-50"
+          className="min-h-[44px] px-4 rounded bg-[var(--primary-bg)] text-[var(--primary-text)] text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
           {saving ? "Pulling…" : "Pull to Loading"}
         </button>

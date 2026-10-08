@@ -155,7 +155,7 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
           onChange={(e) => setChangesNotes(e.target.value)}
           rows={3}
           placeholder="Describe changes or issues…"
-          className="w-full ml-7 px-3 py-2 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm resize-vertical"
+          className="w-full ml-7 px-3 py-2 rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm resize-vertical"
         />
       )}
 
@@ -175,14 +175,14 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
           <button
             type="button"
             onClick={() => captureRef.current?.click()}
-            className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-md border border-[var(--line)] bg-[var(--surface)] text-xs font-semibold text-text cursor-pointer hover:bg-[var(--ghost-bg)]"
+            className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded border border-[var(--line)] bg-[var(--surface)] text-xs font-semibold text-text cursor-pointer hover:bg-[var(--ghost-bg)]"
           >
             <Camera size={14} aria-hidden="true" /> Take photo
           </button>
           <button
             type="button"
             onClick={() => uploadRef.current?.click()}
-            className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-md border border-[var(--line)] bg-[var(--surface)] text-xs font-semibold text-text cursor-pointer hover:bg-[var(--ghost-bg)]"
+            className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded border border-[var(--line)] bg-[var(--surface)] text-xs font-semibold text-text cursor-pointer hover:bg-[var(--ghost-bg)]"
           >
             <Upload size={14} aria-hidden="true" /> Upload from library
           </button>
@@ -212,7 +212,7 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
         {photos.length > 0 && (
           <div className="flex gap-2 flex-wrap">
             {photos.map((p, i) => (
-              <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-[var(--card-border)]">
+              <div key={i} className="relative w-20 h-20 rounded overflow-hidden border border-[var(--card-border)]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={p.dataUrl} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
                 <button
@@ -235,7 +235,7 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
         <button
           type="button"
           onClick={handleClose}
-          className="min-h-[44px] px-4 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] text-sm font-semibold text-text cursor-pointer"
+          className="min-h-[44px] px-4 rounded border border-[var(--card-border)] bg-[var(--card-bg)] text-sm font-semibold text-text cursor-pointer"
         >
           Cancel
         </button>
@@ -243,7 +243,7 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
           type="button"
           onClick={handleConfirm}
           disabled={saving}
-          className="min-h-[44px] px-4 rounded-md bg-[var(--primary-bg)] text-[var(--primary-text)] text-sm font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-default"
+          className="min-h-[44px] px-4 rounded bg-[var(--primary-bg)] text-[var(--primary-text)] text-sm font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-default"
         >
           {saving ? "Saving…" : "Confirm & mark loaded"}
         </button>

@@ -73,6 +73,9 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   const jobCacheRef = useRef<Map<string, any>>(new Map());
 
   const searchParams = useSearchParams();
+  // The include_archived flag the page mounted with, so the 15s poll keeps a deep-link session's
+  // aged-off rows instead of dropping them on the first tick.
+  const includeArchivedRef = useRef(false);
 
   const load = useCallback(async (opts?: { includeArchived?: boolean }) => {
     try {
@@ -100,6 +103,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
     // A notification deep link needs aged-off (delivered/archived) rows present too, matching
     // legacy's loadDashboard({includeArchived:true}) on the deep-link path.
     const hasDeepLink = !!(searchParams.get("assignment") || searchParams.get("shipment"));
+    includeArchivedRef.current = hasDeepLink;
     load({ includeArchived: hasDeepLink });
     // Mount-only: this must run exactly once against the page's initial URL, matching legacy's
     // one-shot initWhenReady. Re-running on every searchParams/load identity change would refetch
@@ -384,7 +388,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
 
       if (!touchCloneRef.current) {
         const clone = dragEl.cloneNode(true) as HTMLElement;
-        clone.style.cssText = `position:fixed;z-index:10001;pointer-events:none;width:${dragEl.offsetWidth}px;opacity:0.85;box-shadow:0 8px 24px rgba(0,0,0,0.2);transform:rotate(2deg);`;
+        clone.style.cssText = `position:fixed;z-index:10001;pointer-events:none;width:${dragEl.offsetWidth}px;opacity:0.9;box-shadow:0 1px 3px rgba(0,0,0,.15);`;
         document.body.appendChild(clone);
         touchCloneRef.current = clone;
         dragEl.style.opacity = "0.3";
@@ -430,6 +434,33 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
     };
   }, [assignments, canManage, dragOverTarget]);
   // --------------------------------------------------------------------------------------------
+
+  // 15s auto-refresh -- parity with legacy's setInterval(loadDashboard, 15000), so the board stays
+  // live across operators. Only re-runs load(); search/sort/view/showAll/collapse state is never
+  // touched. A tick is skipped while the tab is hidden, a drag is in flight, any modal is open, or
+  // a card's trailer input has focus (so a refetch never lands mid-edit). Current values are read
+  // through a ref so the interval itself is created once.
+  const pollBlockedRef = useRef(false);
+  useEffect(() => {
+    pollBlockedRef.current =
+      draggingId !== null ||
+      bayModalTarget !== null ||
+      checklistTarget !== null ||
+      viewerTarget !== null ||
+      shippingInfoTarget !== null ||
+      pullJobOpen ||
+      photoGalleryJobId !== null;
+  });
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+      if (pollBlockedRef.current || touchDragIdRef.current) return;
+      const active = document.activeElement;
+      if (active?.tagName === "INPUT" && active.closest("[data-assignment-id]")) return;
+      load({ includeArchived: includeArchivedRef.current });
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [load]);
 
   function matchesSearch(a: DockAssignment): boolean {
     const q = searchTerm.trim().toLowerCase();
@@ -493,6 +524,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
         isDragging={draggingId === a.id}
         draggable={isDraggableCard}
         highlighted={highlightedId === a.id}
+        density="compact"
         onCardDragStart={(e) => handleDragStart(a, e)}
         onCardDragEnd={handleDragEnd}
         onCardTouchStart={isDraggableCard ? (e) => handleCardTouchStart(a, e) : undefined}
@@ -514,7 +546,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
         <div className="flex items-center justify-between flex-wrap gap-3">
           <h1 className="text-xl font-semibold text-text">Loading dashboard</h1>
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex rounded-md border border-[var(--input-border)] overflow-hidden">
+            <div className="flex rounded border border-[var(--input-border)] overflow-hidden">
               <button
                 type="button"
                 onClick={() => handleSetView("overview")}
@@ -544,7 +576,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
               <select
                 value={selectedBayId}
                 onChange={(e) => setSelectedBayId(e.target.value)}
-                className="h-8 px-2.5 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs"
+                className="h-8 px-2.5 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs"
               >
                 {bays.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -559,20 +591,20 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="INV#, customer, or PO"
               autoComplete="off"
-              className="h-8 px-2.5 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs"
+              className="h-8 px-2.5 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs"
               style={{ minWidth: 180 }}
             />
             <button
               type="button"
               onClick={() => setShowAll((v) => !v)}
-              className="h-8 px-3 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--surface-2)] transition-colors"
+              className="h-8 px-3 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--surface-2)] transition-colors"
             >
               {showAll ? "Show all" : "This week"}
             </button>
             <select
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value as LdSortOrder)}
-              className="h-8 px-2.5 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs cursor-pointer"
+              className="h-8 px-2.5 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs cursor-pointer"
             >
               <option value="inv_asc">INV# ↑</option>
               <option value="inv_desc">INV# ↓</option>
@@ -582,7 +614,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
               <button
                 type="button"
                 onClick={() => setPullJobOpen(true)}
-                className="min-h-[44px] px-3.5 rounded-md bg-[var(--primary-bg)] text-[var(--primary-text)] text-xs font-semibold cursor-pointer hover:opacity-90 transition-opacity"
+                className="min-h-[44px] px-3.5 rounded bg-[var(--primary-bg)] text-[var(--primary-text)] text-xs font-semibold cursor-pointer hover:opacity-90 transition-opacity"
               >
                 + Pull Job
               </button>
@@ -591,7 +623,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
         </div>
 
         {loadError && (
-          <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
+          <div className="rounded border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
             {loadError}
             <button type="button" onClick={() => load()} className="ml-3 underline cursor-pointer">
               Retry
@@ -599,7 +631,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
           </div>
         )}
         {actionError && (
-          <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
+          <div className="rounded border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
             {actionError}
           </div>
         )}
@@ -631,7 +663,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
               {!collapsedSections.awaiting && (
                 <div
                   data-queue-drop="true"
-                  className={`space-y-2 rounded-xl p-2 transition-colors ${
+                  className={`space-y-2 rounded p-2 transition-colors ${
                     draggingId && canManage
                       ? dragOverTarget === "awaiting"
                         ? "border-2 border-dashed border-[var(--primary-bg)] bg-[var(--primary-bg)]/5"
@@ -643,11 +675,11 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
                   onDrop={draggingId && canManage ? (e) => handleDrop("awaiting", e) : undefined}
                 >
                   {awaiting.length === 0 ? (
-                    <p className="text-sm text-text-faint italic px-1">Nothing waiting on a bay.</p>
+                    <p className="text-sm text-text-faint px-1">Nothing waiting on a bay.</p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {awaiting.map((a) => (
-                        <div key={a.id} className="w-[230px] max-w-full shrink-0">
+                        <div key={a.id} className="w-full md:w-[230px] shrink-0">
                           {renderCard(a)}
                         </div>
                       ))}
@@ -660,7 +692,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
             <section className="space-y-2">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-muted px-2">Bays</h2>
               {bays.length === 0 ? (
-                <p className="text-sm text-text-faint italic px-3">No bays configured.</p>
+                <p className="text-sm text-text-faint px-3">No bays configured.</p>
               ) : (
                 <div className="overflow-x-auto pb-2 px-2">
                   <div className="grid grid-cols-1 md:grid-cols-6 gap-3 min-w-0 md:min-w-[1320px]">
@@ -674,7 +706,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
                         <div
                           key={bay.id}
                           data-bay-drop-id={bay.id}
-                          className={`rounded-xl border flex flex-col min-w-0 transition-colors ${
+                          className={`rounded border flex flex-col min-w-0 transition-colors ${
                             draggingId
                               ? isDragOver
                                 ? "border-2 border-dashed border-[var(--primary-bg)] bg-[var(--primary-bg)]/5"
@@ -690,7 +722,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
                           </div>
                           <div className="p-2 space-y-1.5 min-h-[150px]">
                             {bayAssignments.length === 0 ? (
-                              <p className="text-xs text-text-faint italic text-center py-6">Empty</p>
+                              <p className="text-xs text-text-faint text-center py-6">Empty</p>
                             ) : (
                               bayAssignments.map((a) => (
                                 <div key={a.id}>{renderCard(a)}</div>
@@ -715,11 +747,11 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
               </h2>
               {!collapsedSections.yard &&
                 (yard.length === 0 ? (
-                  <p className="text-sm text-text-faint italic px-1">No trailers in the yard.</p>
+                  <p className="text-sm text-text-faint px-1">No trailers in the yard.</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {yard.map((a) => (
-                      <div key={a.id} className="w-[230px] max-w-full shrink-0">
+                      <div key={a.id} className="w-full md:w-[230px] shrink-0">
                         {renderCard(a)}
                       </div>
                     ))}
@@ -737,11 +769,11 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
               </h2>
               {!collapsedSections.transit &&
                 (transit.length === 0 ? (
-                  <p className="text-sm text-text-faint italic px-1">Nothing in transit.</p>
+                  <p className="text-sm text-text-faint px-1">Nothing in transit.</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {transit.map((a) => (
-                      <div key={a.id} className="w-[230px] max-w-full shrink-0">
+                      <div key={a.id} className="w-full md:w-[230px] shrink-0">
                         {renderCard(a)}
                       </div>
                     ))}
@@ -759,11 +791,11 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
               </h2>
               {!collapsedSections.delivered &&
                 (delivered.length === 0 ? (
-                  <p className="text-sm text-text-faint italic px-1">Nothing delivered yet.</p>
+                  <p className="text-sm text-text-faint px-1">Nothing delivered yet.</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {delivered.map((a) => (
-                      <div key={a.id} className="w-[230px] max-w-full shrink-0">
+                      <div key={a.id} className="w-full md:w-[230px] shrink-0">
                         {renderCard(a, { showArchive: true })}
                       </div>
                     ))}

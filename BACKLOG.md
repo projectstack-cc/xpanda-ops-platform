@@ -59,14 +59,13 @@
 - [ ] Repoint the v2 links that still open legacy Load Builder once v2 is ready: `components/logistics/BolActions.tsx`
   (`/logistics/load-builder.html?job_id=`), `app/logistics/ShipmentDashboard.tsx`, and the home Logistics card.
 
-### Dock Loading — legacy `logistics/loading.html` → `/v2/logistics/loading` · NEEDS VISUAL CLEANUP (dark)
+### Dock Loading — legacy `logistics/loading.html` → `/v2/logistics/loading` · FLOOR TEST NEXT (dark; dock-01 wrap-up done)
 
-- [ ] **Dock Loading v2 visual cleanup pass** (Steve, 2026-10-08) before the floor test. Mockup-first;
-  floor-grade per `agent-react-component.md`.
 - [ ] **Floor-test `/v2/logistics/loading` before retiring legacy `logistics/loading.html`.** Unit 3b's dock dashboard is writes-LIVE but unlinked (v2 visibility gate) and its `wrangler dev` smoke against scratch bindings is still owed (unit 3a's `preview_database_id` was a placeholder when 3b was built — see its `CHANGELOG.md` entry). Run the scratch smoke pass, then floor-test against real data before wiring it into nav or retiring the legacy page. Still dark after lgx-roll-01 (`logistics.v2`); dashboard's Dock Loading button points to legacy.
 - [ ] **Unit 3b follow-up — i18n for the new dock dashboard labels.** `DockAssignmentCard.tsx`/`AssignBayModal.tsx`/`LoadedChecklistModal.tsx`/`DockBoard.tsx`/`TeamView.tsx`/`BayListItem.tsx`/`ShippingInfoModal.tsx`/`PullJobModal.tsx`/`PhotoGalleryModal.tsx` ship English-only strings (v2 has no i18n spine wired yet, matching every other v2 UI unit so far) — needs a pass once v2 gains one.
 - [ ] Busiest legacy write surface (≈700 loading-assignment writes + ≈90 photos in the 30 days to
   2026-10-08). Any cutover needs the dock team trained, with legacy kept one click away.
+- [ ] **dock cutover** — after Steve's eyeball + floor test: remove the `/v2/logistics/loading` `logistics.v2` middleware line; repoint home Loading card Open, `ShipmentDashboard.tsx` Dock Loading button, `shared/notif-bell.js` (`loading_assignment`/`shipment`), and `sw.js` default URL to `/v2/logistics/loading`; keep legacy as a Classic fallback.
 
 ### BOL Email — `logistics/bol-email.html` · NO v2 YET
 
@@ -188,10 +187,6 @@
 - [ ] **link-01 follow-up — Steve eyeball linked borders on `/v2/board` + `/v2/logistics`.** Check the group
   border, the "Linked · same trailer" header row, that expanded edit (`BoardRowEdit`) / drill-down rows sit inside
   the border, and both light and dark themes. No browser check was run.
-
-- [ ] **carrier-04 follow-up — refactor the `loading-assignments` v2 route to use
-  `src/lib/push.ts`.** It currently skips notifications (deliberately not ported before the push
-  port existed).
 
 - [ ] **carrier-04 follow-up — carrier charges: logistics approve/dispute workflow.** Currently
   informational only (append-only rows, read-only on the v2 board).
@@ -548,6 +543,7 @@ schedule badge):**
   `/^\/manufacturing\/(_archived\/)?cutting-dashboard/` row); the page no longer exists.
 - [ ] **AGENTS.md is stale in §1–§2/§4** (single-file worker, flat routing, "no React", module table lists
   `cutting-dashboard.html`). Refresh it to match the file-split worker + v2 migration surface, docs-only.
+- [ ] v2-wide flat styling pass — shared `Modal.tsx` (`rounded-2xl`/`shadow-xl`), `PlatformHeader`, and other boards to the dock-01 standard (≤4px radius, no decorative shadow).
 
 ---
 

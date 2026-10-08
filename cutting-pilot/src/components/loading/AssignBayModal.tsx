@@ -22,7 +22,7 @@ export default function AssignBayModal({ bays, onClose, onConfirm }: AssignBayMo
         <select
           value={bayId}
           onChange={(e) => setBayId(e.target.value)}
-          className="mt-1 w-full min-h-[44px] px-3 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm"
+          className="mt-1 w-full min-h-[44px] px-3 rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm"
         >
           {bays.map((b) => (
             <option key={b.id} value={b.id}>
@@ -36,7 +36,7 @@ export default function AssignBayModal({ bays, onClose, onConfirm }: AssignBayMo
         <button
           type="button"
           onClick={onClose}
-          className="min-h-[44px] px-4 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] text-sm font-semibold text-text cursor-pointer"
+          className="min-h-[44px] px-4 rounded border border-[var(--card-border)] bg-[var(--card-bg)] text-sm font-semibold text-text cursor-pointer"
         >
           Cancel
         </button>
@@ -44,7 +44,7 @@ export default function AssignBayModal({ bays, onClose, onConfirm }: AssignBayMo
           type="button"
           onClick={() => bayId && onConfirm(bayId)}
           disabled={!bayId}
-          className="min-h-[44px] px-4 rounded-md bg-[var(--primary-bg)] text-[var(--primary-text)] text-sm font-semibold cursor-pointer disabled:opacity-50"
+          className="min-h-[44px] px-4 rounded bg-[var(--primary-bg)] text-[var(--primary-text)] text-sm font-semibold cursor-pointer disabled:opacity-50"
         >
           Assign
         </button>

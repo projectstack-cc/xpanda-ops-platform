@@ -34,7 +34,7 @@ export default function BayListItem({ bay, assignments, onSelect }: BayListItemP
           onSelect(bay.id);
         }
       }}
-      className="flex items-center justify-between rounded-xl border cursor-pointer transition-colors hover:bg-[var(--ghost-bg)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      className="flex items-center justify-between rounded border cursor-pointer transition-colors hover:bg-[var(--ghost-bg)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
       style={{
         padding: 16,
         marginBottom: 8,
@@ -79,7 +79,7 @@ export default function BayListItem({ bay, assignments, onSelect }: BayListItemP
       <div className="flex items-center gap-2.5 shrink-0">
         {jobCount > 0 && (
           <span
-            className="text-text font-bold rounded-full"
+            className="text-text font-bold rounded"
             style={{ fontSize: 12, padding: "4px 10px", background: "var(--ghost-bg)" }}
           >
             {jobCount} job{jobCount === 1 ? "" : "s"}

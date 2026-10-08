@@ -82,12 +82,12 @@ export default function PhotoGalleryModal({
       {loading && <p className="text-sm text-muted">Loading photos…</p>}
       {error && <p className="text-sm text-[var(--danger-text)]">{error}</p>}
       {!loading && !error && photos.length === 0 && (
-        <p className="text-sm text-text-faint italic">No photos taken for this shipment.</p>
+        <p className="text-sm text-text-faint">No photos taken for this shipment.</p>
       )}
       {!loading && !error && photos.length > 0 && current && (
         <div className="space-y-3">
           <div
-            className="relative flex items-center justify-center rounded-lg overflow-hidden"
+            className="relative flex items-center justify-center rounded overflow-hidden"
             style={{ minHeight: 320, background: "#111827" }}
             onTouchStart={(e) => {
               touchStartXRef.current = e.touches[0].clientX;
@@ -106,7 +106,7 @@ export default function PhotoGalleryModal({
                 type="button"
                 onClick={() => setIndex((i) => (i - 1 + photos.length) % photos.length)}
                 aria-label="Previous photo"
-                className="absolute left-2 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] rounded-full bg-white/10 text-white flex items-center justify-center cursor-pointer hover:bg-white/20"
+                className="absolute left-2 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] rounded bg-white/10 text-white flex items-center justify-center cursor-pointer hover:bg-white/20"
               >
                 <ChevronLeft size={22} aria-hidden="true" />
               </button>
@@ -122,7 +122,7 @@ export default function PhotoGalleryModal({
                 type="button"
                 onClick={() => setIndex((i) => (i + 1) % photos.length)}
                 aria-label="Next photo"
-                className="absolute right-2 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] rounded-full bg-white/10 text-white flex items-center justify-center cursor-pointer hover:bg-white/20"
+                className="absolute right-2 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] rounded bg-white/10 text-white flex items-center justify-center cursor-pointer hover:bg-white/20"
               >
                 <ChevronRight size={22} aria-hidden="true" />
               </button>
@@ -141,7 +141,7 @@ export default function PhotoGalleryModal({
                   type="button"
                   onClick={() => setIndex(i)}
                   aria-label={`View photo ${i + 1}`}
-                  className="shrink-0 w-16 h-16 rounded-md overflow-hidden cursor-pointer"
+                  className="shrink-0 w-16 h-16 rounded overflow-hidden cursor-pointer"
                   style={{
                     borderStyle: "solid",
                     borderColor: i === index ? "var(--accent)" : "var(--line)",

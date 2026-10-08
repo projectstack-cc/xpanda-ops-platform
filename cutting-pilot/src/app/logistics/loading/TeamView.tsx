@@ -44,7 +44,7 @@ export default function TeamView({
       <div>
         <div>
           {bays.length === 0 ? (
-            <p className="text-sm text-text-faint italic px-1">No bays configured.</p>
+            <p className="text-sm text-text-faint px-1">No bays configured.</p>
           ) : (
             bays.map((bay) => (
               <BayListItem key={bay.id} bay={bay} assignments={assignments} onSelect={onSelectBay} />
@@ -54,7 +54,7 @@ export default function TeamView({
         <section className="space-y-2" style={{ marginTop: 16 }}>
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted px-1">Yard</h2>
           {yard.length === 0 ? (
-            <p className="text-sm text-text-faint italic px-1">No trailers in the yard.</p>
+            <p className="text-sm text-text-faint px-1">No trailers in the yard.</p>
           ) : (
             <div className="space-y-2">
               {yard.map((a) => (
@@ -118,7 +118,7 @@ export default function TeamView({
               {g.label} ({members.length})
             </h3>
             {members.length === 0 ? (
-              <p className="text-sm text-text-faint italic px-1">No jobs {g.label.toLowerCase()}.</p>
+              <p className="text-sm text-text-faint px-1">No jobs {g.label.toLowerCase()}.</p>
             ) : (
               <div className="space-y-2">
                 {members.map((a) => (
