@@ -8,6 +8,116 @@
 
 ---
 
+## v2 Migration — Legacy Retirement
+
+> **Decision (2026-10-08):** the finish line is **full retirement**. Every legacy surface is ported to v2
+> (QC, Reports, Admin, Safety and the shell/auth included), then `_worker.js` and the Pages project retire.
+> **Rollout order is not decided**, so the sub-sections below are inventory, not sequence. A legacy page is
+> retired only after its v2 replacement has run on the floor without fallback use.
+
+### Job Board — legacy `jobs/index.html` (Classic Board) → `/v2/board` · ACTIVE TESTING, no retirement date
+
+- [ ] **jb-09 — retire the legacy job board** once the floor has run on `/v2/board` without needing
+  Classic Board: remove `jobs/index.html`, `jobs-header.js`, `jobs-i18n.js`, `jobs-shared.css`,
+  `diversitech-labels.js`, `packing-slip-parser.js` + test page (confirm each is unreferenced first), the
+  home card's Classic Board button, the `shared-header.js` `/jobs/` active-state clause, the legacy
+  `GET /api/jobs` auto-archive sweep (v2 runs it since jb-01). (`routes/quickbooks.js` is already gone.) Keep every
+  `/api/jobs*` worker route — v2 calls them.
+- [ ] Blocker: qb-03 (QB review queue) is now built on `/v2/board`; see QuickBooks Intake (v2).
+- [ ] [Job Board] **P364 follow-up — legacy BOL viewer modal (`jobs-bol-view-modal`) has no explicit Print
+  button.** It only has Download (relies on the browser's native in-frame PDF toolbar for print).
+  P364 gave the v2 shared `PdfViewer` explicit Download + Print controls instead of relying on that
+  native toolbar (unreliable on tablets); the legacy BOL modal is now the odd one out. Low priority
+  — add an explicit Print button (`iframe.contentWindow.print()`, same pattern as v2) if it comes up
+  on the floor.
+- [ ] [Job Board] **P272 follow-up — unarchiving a legacy `status='archived'` row leaves it in a limbo state.**
+  Manual Unarchive now only clears `archived_at`, never writes `status` (P272, by design — a job's
+  real status should be restored exactly as it was). But for the finite legacy population backfilled
+  by P271 (real prior status unrecoverable), `status` is still literally the string `'archived'` —
+  unarchiving one of these clears `archived_at` but leaves `status='archived'`, which isn't a real
+  Kanban/list status (won't render in any Kanban column, shows a raw "archived" label in List view,
+  isn't in the editable-status set). Not destructive, and the legacy population shrinks over time as
+  new archives stop hitting this path — but if it comes up in practice, the fix is a small one-time
+  prompt (e.g. force such rows to a sane default like `'done'` on unarchive, with a toast explaining
+  why).
+
+### Logistics dashboard — legacy `logistics/index.html` (Classic) → `/v2/logistics` · ACTIVE TESTING, no retirement date
+
+- [ ] **Retire legacy `logistics/index.html`** once v2 has run a few weeks without fallback use. At retirement also remove the home Logistics card's "Classic Dashboard" button (`index.html`) and its `common.classicDashboard` i18n key, and repoint `logistics/logistics-header.js` `dashboardPath`.
+- [ ] **archived-hide-01 follow-up — legacy Classic shipment dashboard still shows archived pre-departure shipments.** Left as-is per the v2-only logistics rule; goes away when legacy `logistics/index.html` retires.
+- [ ] **`shipments.trailer_number` is dead for job-linked shipments** (trailer # lives on
+  `loading_assignments` since lgx-rows-01). Drop the column once legacy `logistics/index.html` is retired.
+- [ ] **Legacy `logistics/index.html` edit form still shows Method and still can't edit job-owned fields.** Retire with the legacy dashboard rather than patching. (Follow-on from lgx-editmodal-01.)
+
+### Load Builder — legacy `logistics/load-builder.html` → `/v2/logistics/load-builder` · NEEDS MAJOR WORK (dark)
+
+- [ ] **Load Builder v2 rework — scope as its own project.** Per Steve (2026-10-08), the v2 port needs
+  substantial work before it can replace legacy, beyond un-darking. Scope with the Orchestrator first; the
+  open `lb-ui-*` / `lb-engine-*` follow-ups under Logistics (v2) feed into that scoping.
+- [ ] **Load builder v2 (`/v2/logistics/load-builder`) still dark after lgx-roll-01.** Un-dark by deleting its `logistics.v2` middleware line, then repoint Build Load / Load Builder links.
+- [ ] **`lb-ui-05` follow-up — `GET /api/load-builder-skus` needs its own permission grant at Phase 3 rollout.** That legacy route is gated by the `logistics.load-builder` key (`_worker.js/lib/core.js:213`); it works today only because `/v2/logistics*` is admin-only and admins bypass permission checks (`middleware.ts`'s dark-launch gate). When Phase 3 grants `logistics.v2` to a non-admin role, that role also needs `logistics.load-builder` (view) or `JobPullModal` dead-ends on "Couldn't load the SKU library." Not currently named in the sprint charter's Phase 3 checklist — add it there when Phase 3 is scoped.
+- [ ] Repoint the v2 links that still open legacy Load Builder once v2 is ready: `components/logistics/BolActions.tsx`
+  (`/logistics/load-builder.html?job_id=`), `app/logistics/ShipmentDashboard.tsx`, and the home Logistics card.
+
+### Dock Loading — legacy `logistics/loading.html` → `/v2/logistics/loading` · NEEDS VISUAL CLEANUP (dark)
+
+- [ ] **Dock Loading v2 visual cleanup pass** (Steve, 2026-10-08) before the floor test. Mockup-first;
+  floor-grade per `agent-react-component.md`.
+- [ ] **Floor-test `/v2/logistics/loading` before retiring legacy `logistics/loading.html`.** Unit 3b's dock dashboard is writes-LIVE but unlinked (v2 visibility gate) and its `wrangler dev` smoke against scratch bindings is still owed (unit 3a's `preview_database_id` was a placeholder when 3b was built — see its `CHANGELOG.md` entry). Run the scratch smoke pass, then floor-test against real data before wiring it into nav or retiring the legacy page. Still dark after lgx-roll-01 (`logistics.v2`); dashboard's Dock Loading button points to legacy.
+- [ ] **Unit 3b follow-up — i18n for the new dock dashboard labels.** `DockAssignmentCard.tsx`/`AssignBayModal.tsx`/`LoadedChecklistModal.tsx`/`DockBoard.tsx`/`TeamView.tsx`/`BayListItem.tsx`/`ShippingInfoModal.tsx`/`PullJobModal.tsx`/`PhotoGalleryModal.tsx` ship English-only strings (v2 has no i18n spine wired yet, matching every other v2 UI unit so far) — needs a pass once v2 gains one.
+- [ ] Busiest legacy write surface (≈700 loading-assignment writes + ≈90 photos in the 30 days to
+  2026-10-08). Any cutover needs the dock team trained, with legacy kept one click away.
+
+### BOL Email — `logistics/bol-email.html` · NO v2 YET
+
+- [ ] Port to v2 (≈22 sends in the 30 days to 2026-10-08; linked from `/v2/logistics` `ShipmentDashboard.tsx`).
+  Mind the bol-print-01 attachment-size items under BOL Issues.
+
+### Manufacturing calculators · NO v2 YET
+
+- [ ] Port `manufacturing/block-calculator.html` (general block nesting; `/v2/blocks` covers taper only).
+- [ ] Port `manufacturing/holey-board-calculator.html`.
+- [ ] [Job Board] Optional: converge `holey-board-calculator.html` onto the shared endpoint (kill the last
+  client-side copy of the packing math).
+
+### QC · NO v2 YET (port, even though usage is low)
+
+- [ ] Port `qc/scrap-log.html` onto the native Scrap Database (see that section); don't port the Google-Sheets-mirror design.
+- [ ] Port `qc/final-inspection.html` (client-side PDF record).
+- [ ] Port `qc/incident-report.html` (gviz Google Sheets integration — decide keep vs native).
+- [ ] Port `qc/density-calculator.html` (standalone, no backend).
+
+### Reports · NO v2 YET
+
+- [ ] Port `reports/` (cutting, incidents ×5, orders, scrap ×3). Chart.js → decide v2 charting lib once.
+
+### Admin · NO v2 YET
+
+- [ ] Port `admin/parts.html` (v2 already has `PartsLibraryPanel.tsx` in Load Builder — reuse it), `users.html`,
+  `roles.html` (`PERMISSION_LABELS`), `activity-log.html`.
+
+### Safety · NO v2 YET — scope separately (large)
+
+- [ ] Scope the Safety port as its own project: SDS browser (public, no auth — v2 middleware gates everything
+  today, so it needs a public-route exemption), 27 SDS PDFs (~15 MB static), training blocks 01–09 + admin,
+  and the trilingual i18n catalog.
+- [ ] Finish caption translation (i18n)
+- [ ] Link user training completion to user records (depends on auth/user system)
+- [ ] **Native-speaker review pass on the Safety i18n catalog** (es/ht) — the SDS/training strings are machine-translated; given liability exposure on a safety portal this should get verified by a native speaker before being treated as authoritative. Non-blocking.
+- [ ] **Dark mode Bucket A — remaining passes** — P184 audit identified Bucket A hits in Safety (0% token adoption — highest priority), `logistics/load-builder.html` (local token system, separate batch), and `track/index.html` (standalone, no tokens.css). P186 covered all other modules. These three remain for dedicated prompts.
+
+### Shell, auth & worker · LAST
+
+- [ ] Port home (`index.html`), `account/password.html`, public `track/index.html` (needs a public-route
+  exemption), `legal/`, `sw.js`/`manifest.json`.
+- [ ] Port login + cookie issuance into v2. This retires the auth bridge's "read, not handshake" constraint (§9a #3).
+- [ ] Port the remaining legacy `/api/*` routes v2 still calls (`/api/jobs*`, `/api/auth*`, `/api/parts`,
+  `/api/loading-assignments*`, `/api/load-builder-skus`, `/api/combos`, `/api/address`, `/api/assignable-users`,
+  `/api/public`), then retire `_worker.js` and the Pages project.
+- [ ] **bol-print-01 follow-up — fontkit missing on two legacy BOL pages.** `jobs/index.html` and `logistics/loading.html` call `BolShared.generatePdf` but don't load `@pdf-lib/fontkit`, so their BOLs take the unembedded-Helvetica fallback (and have never drawn the cursive signature). Add the same fontkit `<script>` the other logistics pages use.
+
+---
+
 ## Auth / Session
 
 - [ ] **P408 follow-up — audit other unbatched hot-path writes against the shared D1.**
@@ -38,15 +148,13 @@
   locked). The silo's supplier/type come from the lot, so progress is unaffected, but the header
   can disagree with its batches. (found in prod-d-02)
 - [ ] Revisit block-weight spec bands after Steve reviews prod-c-04 control limits across
-  a real run; consider a per-recipe target + tolerance as recipe v2.
+  a real run; consider a per-recipe target + tolerance as recipe v2. (Steve declined spec bands for v1.)
 - [ ] Report: consider moving stats server-side if filtered ranges regularly hit the
   5,000-row cap.
-- [ ] Consider a tolerance band on recipes once the report's control limits have been
-  reviewed (prod-c-04) — Steve declined spec bands for v1.
 
 - [ ] **prod-b follow-up — drop legacy v1 tables** (`silos`, `bead_types`,
-  `bead_transactions`) via a separate, held migration once prod-b-04 has shipped and nothing
-  references them. Irreversible — own prompt.
+  `bead_transactions`) via a separate, held migration. prod-b-04 has shipped, so this is actionable
+  once a grep confirms nothing references them. Irreversible — own prompt.
 - [ ] Silo aging: display-only "time since full" ships in prod-b-03; enforce a minimum age
   before molding once the plant has a confirmed aging target (see eps-engineer-agent §6.6).
 
@@ -175,9 +283,9 @@
 
 ## QuickBooks Intake (v2)
 
-> qb-01 shipped (shared `createJob`, QBO client/mapper, admin sandbox import). Remaining milestones:
+> qb-01 and qb-02 shipped (shared `createJob`, QBO client/mapper, admin sandbox import; CloudEvents webhook + review-queue backend). Remaining milestones:
 
-- [ ] **qb-03 — review queue UI on legacy `jobs/index.html`.** Build against `/v2/api/qb/pending*`:
+- [ ] **qb-03 — review queue UI on `/v2/board`** (retargeted 2026-10-08 from legacy `jobs/index.html`, which jb-09 eventually deletes). Build against `/v2/api/qb/pending*`:
   - a diff view (header fields + added, removed and changed lines)
   - apply, including the `confirm_overwrite` flow for 409 `platform_edits`, plus clear messaging for
     409 `floor_records` (list the reasons) and 409 `stale` (re-open to refresh)
@@ -199,19 +307,11 @@
 
 ## Orders (v2)
 
-> **Status:** Orders/Production-board rework built — Phase 1 (P337–P340, order entry) and
-> Phase 2 (P341–P344, production board) are all coded, deployed, and reachable by direct URL.
-> The P344 cutover was reverted same-day; **jb-08 re-links `/v2/board`** (home card + both
-> nav bars + inbound links, Classic Board fallback on the home card) — committed, held from push
-> until Steve signs off on floor testing. Reuses the existing `jobs` + `job_line_items` tables
-> throughout — no new schema.
+> **Status:** Orders/Production-board rework built (Phase 1 P337–P340 order entry, Phase 2 P341–P344
+> production board). jb-08 re-linked `/v2/board` and it is **live on the home card**, with a Classic Board
+> fallback. Both boards are in **active testing**; legacy retirement (jb-09) has no date. Reuses `jobs` +
+> `job_line_items`; no new schema.
 
-- [ ] **jb-09 — retire the legacy job board** once the floor has run on `/v2/board` without needing
-  Classic Board: remove `jobs/index.html`, `jobs-header.js`, `jobs-i18n.js`, `jobs-shared.css`,
-  `diversitech-labels.js`, `packing-slip-parser.js` + test page (confirm each is unreferenced first), the
-  home card's Classic Board button, the `shared-header.js` `/jobs/` active-state clause, the legacy
-  `GET /api/jobs` auto-archive sweep (v2 runs it since jb-01), and `routes/quickbooks.js`. Keep every
-  `/api/jobs*` worker route — v2 calls them.
 - [ ] **jb-11 follow-up — add the Priority control to `/v2/orders` (order entry)** so priority can be set at
   creation (today it defaults to Normal). Reuse `components/board/PrioritySelect.tsx` + `lib/priority.ts`.
 - [ ] **jb-06 follow-up — move `PartsPicker` onto the shared `SearchPickerModal`** (one picker primitive).
@@ -275,10 +375,8 @@
 
 ## Logistics (v2)
 
-- [ ] **split-days-01 follow-up — legacy `/api/loading-assignments/load-days` still returns success on 0 matched rows** (left per v2-only rule; legacy Job Board split modal is the remaining caller).
 - [ ] **split-days-01 follow-up — per-load ship days don't move when the order's ship date changes.** Moving an order's date leaves any `loading_assignments.ship_date` overrides behind. Today this is harmless for unsplit orders (ignored), but a split order would keep its old days. Decide: clear overrides on order-date change, or shift them by the same delta.
 - [ ] **INV 4386 — shipment status stuck `ready_to_ship` while its only load is `delivered`** (after the 9/29 delivered→not_started revert and the 9/30 re-delivery). Investigate the revert/redeliver path's shipment status sync.
-- [ ] **archived-hide-01 follow-up — legacy Classic shipment dashboard still shows archived pre-departure shipments.** Left as-is per the v2-only logistics rule; goes away when legacy `logistics/index.html` retires.
 - [ ] **quickwin-01 follow-up — v2 Parts Library edit form can now expose name/weight/color/category/parent_group.** `PartsLibraryPanel.tsx` still renders these read-only (its header comment cites the old PUT limitation); `PUT /api/parts` now persists them when sent. Widen `buildUpdatePayload` + the edit form, and update that comment.
 - [ ] **tls-01: `nextShipDay` is Mon–Fri only.** Plant holidays aren't modeled, and an occasional Saturday ship
   date never appears on the Load Verification sheets.
@@ -287,19 +385,9 @@
 - [ ] **tls-02: Marina Foam is matched by name** (customer / ship_to_company contains "marina foam"). If the TV
   loading board or the per-order loading sheets should also hide sister-company deliveries, reuse
   `isSisterCompanyDelivery()`.
-- [ ] **`shipments.trailer_number` is dead for job-linked shipments** (trailer # lives on
-  `loading_assignments` since lgx-rows-01). Drop the column once legacy `logistics/index.html` is retired.
 - [ ] **logi-rollout-02: give Invoice Analytics (and Load Builder) their own middleware lines
   before removing the `/v2/logistics` dark-launch rule.** Otherwise the pages fall through to
   `logistics.dashboard` while their APIs stay on `logistics.v2`.
-- [ ] **v2 zone-column editing follow-up.** `bolEditorEngine.ts`'s editor has no zone-column boxes
-  at all yet (legacy's `zoneCol0…N` per-column editing has no v2 equivalent) — noted again while
-  scoping `bol-style-03`, which deliberately did not add zone-column styling to v2 for this reason.
-  Also noted while scoping bol-wysiwyg-03: v2 has no `zcZoneData` concept at all, so unlike legacy
-  (which skips the `commodity` box when a BOL is zoned), v2's `positionAll` always draws an
-  editable commodity box — on a zoned BOL that box sits over columns the operator can't coherently
-  edit through it. Same root cause, same fix (this follow-up), not a separate bug.
-- [ ] **Invoice Analytics — unit F: legacy bridge card.** Surface a link/summary card into the legacy LISMA-spreadsheet-adjacent pages so staff still on the old workflow can find the new tool.
 - [ ] **Invoice Analytics history date-range filter** (needs `/v2/api/logistics/flags` to accept `?from/&to`) — deferred.
 - [ ] **Invoice dedup Replace isn't atomic.** `POST /v2/api/logistics/invoice`'s clean-replace
   (resolve → `DELETE FROM freight_invoice_lines` → persist) is 3 separate D1 calls, not one
@@ -312,10 +400,6 @@
 - [ ] **Fuel surcharge uses the BOL's primary ship-to only.** Multi-stop / zoned trucks would need per-stop mileage if the carrier bills that way. (Follow-on from lgx-fuel-02.)
 - [ ] **Hoist shared pdf-lib helpers** (`wrapText`, `drawRight`, `hr`, logo embed) out of `cutList.ts` / `loadingSheet.ts` into one lib. Must stay pixel-parity for the cut list. (Follow-on from lgx-loadsheet-01.)
 - [ ] **Loading sheet per-trailer split:** only possible once line items carry a load assignment (load builder plan persisted per job). Revisit with v2 load builder rollout. (Follow-on from lgx-loadsheet-01.)
-- [ ] **Load builder v2 (`/v2/logistics/load-builder`) still dark after lgx-roll-01.** Un-dark by deleting its `logistics.v2` middleware line, then repoint Build Load / Load Builder links.
-- [ ] **Legacy `logistics/index.html` edit form still shows Method and still can't edit job-owned fields.** Retire with the legacy dashboard rather than patching. (Follow-on from lgx-editmodal-01.)
-- [ ] **Retire legacy `logistics/index.html`** once v2 has run a few weeks without fallback use. At retirement also remove the home Logistics card's "Classic Dashboard" button (`index.html`) and its `common.classicDashboard` i18n key, and repoint `logistics/logistics-header.js` `dashboardPath`.
-- [ ] **Unit 3 — load builder port + packing-logic rework.** Ports `logistics/load-builder.html` (trailer load planning, auto-pack algorithm, saved loads, BOL generation via the unit-1/2 engine). Broken into task-grouped `lb-engine-NN`/`lb-ui-NN` prompts (see below) rather than sequential `PNNN`s.
 - [ ] **Unit 3 follow-up (lbz-bol-02) — v2 zone-column editing UI.** `bolShared.ts`'s
   `zonecolumns` field type, `buildZoneColumns` layout algorithm, and `ZoneColumnsOverride`
   hydration were ported 1:1 (lbz-bol-02, rendering parity only) — but legacy's `bol-editor.js`
@@ -324,11 +408,10 @@
   draggable/editable zone-column boxes (skip the generic per-field FIELD_MAP loop for
   `type:"zonecolumns"` and `commodity` on a zoned bol, same as legacy), a "Reset columns" action
   that regenerates from `ZoneColumnsOverride.zoneData` via `buildZoneColumns`, and a stale-guard
-  banner comparing a fresh `hashJobZoneData` recompute against the stored `sourceHash`.
+  banner comparing a fresh `hashJobZoneData` recompute against the stored `sourceHash`. Also: v2 has no `zcZoneData` concept, so `positionAll` always draws an editable commodity box even on a zoned BOL (legacy skips it). Same fix.
 - [ ] **`lb-ui-04` follow-up — confirm whether `bols/route.ts`'s "wrangler dev writes hit production" header comment is still accurate.** This prompt found local `next dev` (via `getCloudflareContext()`'s `getPlatformProxy`) uses a fully local, isolated Miniflare SQLite D1 emulation (`.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite`), not a live connection to prod or the declared `preview_database_id`. This may not actually conflict with that comment (`wrangler dev --remote` does hit prod; the comment may predate the current toolchain/describe a different invocation) — flagged as needing confirmation rather than asserted wrong, and not edited (`bols/route.ts` is out of this prompt's fence).
 - [ ] **Sprint Phase 3 — enable `lb-ui-05`'s deferred on-the-fly part-creation write path.** Legacy's `prefillFromJob` creates a new part via `POST /api/parts` when a line item matches nothing; this sprint's port surfaces the unmatched line as a warning instead and does not write. Re-enable once Steve has reviewed the sprint's Phase 2 integration testing and the unfenced-`/api/parts` risk (see the sprint charter's "one sprint-wide exception").
 - [ ] **`lb-ui-05` follow-up — export `packEngine.ts`'s `colorForSku` instead of duplicating it.** `jobPull.ts`'s `colorForSkuId` is a byte-for-byte copy of `packEngine.ts`'s private, unexported `colorForSku` (same palette, same hash) so the job-pull preview's swatches match the eventual trailer-diagram colors. `packEngine.ts` is closed/ratchet-guarded so this prompt couldn't export it directly — worth doing in a future dedicated engine prompt to remove the duplicate. (2026-09-16: `TrailerDiagram.tsx` now renders the per-SKU colors that were already being computed — column border stripes + a per-trailer legend — so the on-screen gap this item worried about is closed; this item itself stays open, since it's about the `colorForSku`/`colorForSkuId` duplication, which is unchanged.)
-- [ ] **`lb-ui-05` follow-up — `GET /api/load-builder-skus` needs its own permission grant at Phase 3 rollout.** That legacy route is gated by the `logistics.load-builder` key (`_worker.js/lib/core.js:213`); it works today only because `/v2/logistics*` is admin-only and admins bypass permission checks (`middleware.ts`'s dark-launch gate). When Phase 3 grants `logistics.v2` to a non-admin role, that role also needs `logistics.load-builder` (view) or `JobPullModal` dead-ends on "Couldn't load the SKU library." Not currently named in the sprint charter's Phase 3 checklist — add it there when Phase 3 is scoped.
 - [ ] **`lb-ui-06` follow-up — Force Sizes still needs new engine work before a UI can wire it.** (Auto-downsize, the other half of this item as originally written, shipped via `lb-ui-12` — see `CHANGELOG.md`.) Step 0 re-grepped `packEngine.ts` for `forceSize`/`variant` — zero real matches (`variant` only appears as a substring of "invariant"). Legacy's remaining trailer-option toggle has no engine-side concept to bind to; scoping a `lb-engine-NN` prompt for forced-size logic is a prerequisite, not a UI task.
 - [ ] **`lb-ui-06` follow-up — `PackOptions.isFlatbed` is declared but never read anywhere in `packEngine.ts`.** Reserved, not implemented — confirmed by grep before this prompt wired anything. If flatbed strap-orientation logic (legacy: `load-builder.html:1444-1516`) turns out to matter, it needs engine work first; do not add a UI toggle for it until the engine reads the field.
 - [ ] **`TrailerDiagram.tsx` has no runner visualization** — `lb-ui-06`'s runner-height control is real (it changes `packOptions.runnerHeight` and the header text notes `· N" runners`), but the diagram itself draws nothing for it. Legacy draws a brown runner strip under every stack plus a "▬ N″ runners" legend, both on-screen (`load-builder.html:1083`/`1108`) and in print (`:1149`/`1158`). Out of `lb-ui-06`'s fence (`TrailerDiagram.tsx` isn't in it), but matters for `lb-ui-08` (print/export parity) — name it now, build it there.
@@ -341,8 +424,6 @@
 - [ ] `CustomizeEditor.tsx`'s keyboard target-picker (`handleChooseTarget`) commits a move with no `canDrop` pre-check at all (width or depth) — only the drag-hover path gets live feedback today. A keyboard-driven move can still trigger `row-width`/`trailer-length` guards after the fact, same as any move, but the picker never warns before confirming the way dragging does.
 - [ ] Dissolve's holding→trailer depth risk is not covered by the `lb-ui-03` `canDrop` fix (`from` is optional and omitted for that path) — a held column dropped into a shallow row can still overflow a downstream row with no pre-drop warning, only the post-apply guard banner.
 - [ ] Dissolve doesn't recompute `packEngine.ts`'s tall/narrow `"[stability: ...]"` rationale note for a receiver column it newly makes tall/narrow — that logic lives inside closed `packEngine.ts` (`applyStabilityWarnings`) and dissolve only preserves an existing note, it doesn't add a new one.
-- [ ] **Floor-test `/v2/logistics/loading` before retiring legacy `logistics/loading.html`.** Unit 3b's dock dashboard is writes-LIVE but unlinked (v2 visibility gate) and its `wrangler dev` smoke against scratch bindings is still owed (unit 3a's `preview_database_id` was a placeholder when 3b was built — see its `CHANGELOG.md` entry). Run the scratch smoke pass, then floor-test against real data before wiring it into nav or retiring the legacy page. Still dark after lgx-roll-01 (`logistics.v2`); dashboard's Dock Loading button points to legacy.
-- [ ] **Unit 3b follow-up — i18n for the new dock dashboard labels.** `DockAssignmentCard.tsx`/`AssignBayModal.tsx`/`LoadedChecklistModal.tsx`/`DockBoard.tsx`/`TeamView.tsx`/`BayListItem.tsx`/`ShippingInfoModal.tsx`/`PullJobModal.tsx`/`PhotoGalleryModal.tsx` ship English-only strings (v2 has no i18n spine wired yet, matching every other v2 UI unit so far) — needs a pass once v2 gains one.
 - [ ] **PXXX-c finding — `?assignment=` deep link can't reach an `archived` row.** The
   `include_archived=1`/`showAll=true` fetch-and-filter widening the deep-link resolver applies
   covers every Overview/Team View grouping except `loading_status === "archived"`, which matches
@@ -357,8 +438,10 @@
   lightweight periodic job that flags any job whose non-archived `loading_assignments` count exceeds
   its `load_count`, so future regressions in the reconcile/backfill/adopt paths surface proactively
   instead of silently accumulating orphan `awaiting` cards again.
-- [ ] **P325 follow-up — harden `/api/loading-assignments/load-days`** to return matched-row count
-  and warn on 0-row saves.
+- [ ] **P325 / split-days-01 follow-up — harden legacy `PUT /api/loading-assignments/load-days`** to return
+  the matched-row count and warn on 0-row saves (it currently returns success on 0 matched rows). Callers:
+  legacy Job Board split modal AND v2 `/v2/board` `ShipDaysModal.tsx`. It is **not** legacy-only, so it
+  survives jb-09 unless the v2 modal moves to its own route.
 - [ ] **P271 follow-up — `loading_assignments.archived_at`.** Apply the same orthogonal-archive
   treatment (P271) to `loading_assignments.loading_status = 'archived'` (site L24 in
   `status-write-site-inventory.md`) — same two-facts-one-column defect, but lower-stakes since the
@@ -402,7 +485,6 @@
 - [ ] **P241 follow-up — manual relink of unrecoverable orphaned BOL job links.** After running `backfill-bol-job-id.sql`, the verification query reported 84 rows still with `job_id IS NULL`: 52 are pre-P170 rows with no `bol_group_id` (can never be auto-relinked — no recovery key exists); the other 32 (13 distinct `bol_group_id` groups) have a group key but *every* row in the group is orphaned — no sibling had a `job_id` to inherit, so the backfill's sibling-inheritance logic couldn't apply. Needs manual investigation per group/job to relink (or accept as permanently orphaned if the source job can't be identified).
 - [ ] **BOL print rendering bug** — when printing the BOL directly (without downloading), the "N" from "Bill of Lading No" and the "S" in "Customer Signature" are clipped/hidden. Likely the same unembedded-template-font substitution bol-print-01 fixed (templates re-saved with fonts embedded) — re-check during the bol-print-01 normal-print acceptance test and close if gone.
 - [ ] **bol-print-02 — draw BOL QR as a single path (merged runs) instead of per-module rectangles; latent print-seam risk.** Both `bol-shared.js` and `bolShared.ts` (bilateral parity).
-- [ ] **bol-print-01 follow-up — fontkit missing on two legacy BOL pages.** `jobs/index.html` and `logistics/loading.html` call `BolShared.generatePdf` but don't load `@pdf-lib/fontkit`, so their BOLs take the unembedded-Helvetica fallback (and have never drawn the cursive signature). Add the same fontkit `<script>` the other logistics pages use.
 - [ ] **bol-print-01 follow-up — BOL PDF size.** Template fonts are still duplicated per page (one `copyPages` per record), and v2 `buildCombinedBolPdf` copies three `generatePdf` outputs into one packet, so Liberation Sans lands 3× (3-copy, 2-record packet ≈ 2.76 MB). If size matters (email attachments), render all three copy passes into one document, or load each template once.
 - [ ] **bol-print-01 follow-up — BOL Email size cap.** A single embedded-font driver BOL is ~1.2 MB (was ~292 KB), ~1.6 MB base64 in `logistics/bol-email.html`'s attachments, so one Resend send (40 MB cap) now fits ~25 BOLs (was ~100). If a day exceeds that, chunk the send or share one font-embedded document across attachments.
 - [ ] **bol-print-01 follow-up — layout-font cache pins the fallback.** `getLayoutFonts()` (both sides) caches its result, so one failed body-font fetch keeps editor measurement on Helvetica for the session even though the byte loader retries. Low impact (metrics differ only by kerning).
@@ -411,6 +493,8 @@
 ---
 
 ## Job Board
+
+> Items mentioning the job form/job card target v2 (`/v2/orders` entry, `/v2/board`) going forward; the legacy board is in testing only.
 
 - [ ] **Taper-aware dimension parsing downstream (from slip-parse-06).** `thin>thick` dims (parser output and the
   hand-entered rows already in D1) are read by `parseFloat` on the first token. As a result:
@@ -433,8 +517,7 @@
 - [ ] Surface ZIP+4 (`ship_to_standardized.zip4`, captured by P249's Lob verification) onto the printed BOL.
 - [ ] **Lob verification: act on diagnostic outcome from P255.** P255 added `key_mode`/`error_detail` observability but changed no verification behavior. After deploy, Steve must save a job with a known-good address and read the browser console: `key_mode: 'test'` → swap the Worker secret to a `live_` key (hypothesis confirmed, no code change needed); `key_mode: 'live'` + `reason: 'lob_error'` → read `error_detail`'s Lob HTTP status (401 bad key / 429 rate limit / 5xx outage) and scope a follow-up fix from there; `key_mode: 'live'` + `no_match` on a verified-correct address → escalate to Lob (data/account issue, not a code bug).
 - [ ] **P254 follow-up — real `street2` form input.** P254 stopped the job form from hardcoding a blank `ship_to_street2` on every save (it now only ever writes a Lob-suggested value), but there is still no manual suite/unit-line input on the job form. Add one if the Lob flow shows manual entry needs it (e.g. addresses with a suite # that Lob doesn't split out).
-- [ ] **Batch Packing Slip upload for job creation** — allow uploading multiple packing slips at once to create multiple jobs in bulk; likely a first feature of a planned Order Entry dashboard.
-- [ ] Fine-tune packing slip PDF parser (edge cases, layout variations, field extraction accuracy — blocked on Quickbase input formatting improvements)
+- [ ] **Batch Packing Slip upload in v2 order entry (`/v2/orders`)** — allow uploading multiple packing slips at once to create multiple jobs in bulk; likely a first feature of a planned Order Entry dashboard.
 - [ ] Create packet feature with Bill of Materials (BOM)
 - [ ] Recurring jobs / job templates — "duplicate as template" or "create from previous" for repeat customers (e.g. DiversiTech, All Florida Weatherproofing)
 - [ ] Label printing — UL labels (DiversiTech labels shipped in P421)
@@ -460,10 +543,11 @@ schedule badge):**
   host (Pages analytics filtered to that host, or a temporary log line + wrangler tail).
 - [ ] Breakdown job board permissions into more granular sub-modules *(easier after F3 audit + F1a shared header — both now done)*
 - [ ] Dashboard KPIs / metrics panel — homepage widget showing jobs by status, BOLs generated this week, shipments pending/in-transit/delivered, most-used parts *(adds new endpoints)*
-- [ ] Scrap batch entry tool *(density calc now centralized in shared-utils.js — safe to add)*
 - [ ] **JS-built table/card content doesn't re-render on language switch (`xpanda:langchange`)** — found 2026-09-04 during the Reports i18n phase (advisor-flagged), but present across every module this sweep has touched so far. `shared/i18n.js`'s `apply(root)` walks `[data-i18n]`/`[data-i18n-attr]`/`[data-i18n-placeholder]` and re-runs on `xpanda:langchange`, but rows/cells built by JS via `innerHTML`/template literals at data-load time (Job Board's `renderList`/`buildCard`, Manufacturing's cut-list rows, QC's dynamically-built rows, Reports' `renderTable`/`sessionsTable`/`cutItemsTable`/invoice groups, etc.) carry no `data-i18n` nodes at all — a language switch after data has loaded leaves that content frozen in whichever language was active at render time until the next reload/refetch. Two narrower instances of the same root cause (a rebuilt placeholder `<option>` losing its tag) were fixed directly in Reports (`incidents/list.html`, `cutting/index.html` — see the i18n sweep bullet above), but the general case — full tables/cards — needs a platform-wide fix, not a per-page patch: likely a shared `xpanda:langchange` listener convention that re-invokes each page's own render function. Revisit once the sweep reaches full-module coverage; not blocking since content is correct on load and after any refetch.
-- [ ] **Native-speaker review pass on the Safety i18n catalog** (es/ht) — the SDS/training strings are machine-translated; given liability exposure on a safety portal this should get verified by a native speaker before being treated as authoritative. Non-blocking.
-- [ ] **Dark mode Bucket A — remaining passes** — P184 audit identified Bucket A hits in Safety (0% token adoption — highest priority), `logistics/load-builder.html` (local token system, separate batch), and `track/index.html` (standalone, no tokens.css). P186 covered all other modules. These three remain for dedicated prompts.
+- [ ] Remove the dead `cutting-dashboard` pattern from `PATH_PERMISSION_MAP` (`_worker.js/lib/core.js`, the
+  `/^\/manufacturing\/(_archived\/)?cutting-dashboard/` row); the page no longer exists.
+- [ ] **AGENTS.md is stale in §1–§2/§4** (single-file worker, flat routing, "no React", module table lists
+  `cutting-dashboard.html`). Refresh it to match the file-split worker + v2 migration surface, docs-only.
 
 ---
 
@@ -488,8 +572,6 @@ schedule badge):**
 
 ---
 
----
-
 ## Production / Manufacturing
 
 *(Cutting Dashboard legacy shipped — see `CHANGELOG.md`.)*
@@ -511,7 +593,6 @@ schedule badge):**
 - [ ] Taper blocks-needed (materials pull): compute `ceil(chunks ÷ chunks-per-block)` once a chunks-per-block datum exists.
 - [ ] Verify the live `job_line_items.dimensions` taper format matches the P227 regex; widen if needed.
 - [ ] Structured taper/chunk geometry capture (chunk L×W×H + kerf) to compute yield instead of manual entry.
-- [ ] v2 cut-plan: units/hr rate and progress bars still open (raw throughput numbers shipped in P233; the rate needs qty-entry to be routine first).
 - [ ] First-pass yield (v2) — blocked on native scrap DB (defect denominator)
 
 ---
@@ -527,15 +608,14 @@ schedule badge):**
 - [ ] Retire the Google-Sheets mirror; migrate existing scrap_log consumers (QC scrap-log form,
       reports) to the native store
 - [ ] Wire v2 cutting CompleteLineModal scrap section to the native API
+- [ ] Batch scrap entry (several events in one submit) as part of the native scrap UI.
 
 ---
 
 ## Manufacturing ERP add-ons (icebox — fold in opportunistically)
 
-- [ ] Throughput / units-per-hour rate (qty_done_delta ÷ tracked time) — per-line/per-job **time** tracking shipped in P216; only the **rate** (units/hour) remains once qty entry is routine
 - [ ] Andon / flag-for-help button on a line → notifies supervisor (first real consumer of v2 notifications)
 - [ ] Downtime reason codes when a line stalls (material wait / changeover / machine) → OEE foundation
-- [ ] First-pass yield: qty_target vs qty_done vs scrap (after scrap DB + BOM wiring)
 - [ ] QR/barcode clock-in to a job (glove-friendly floor input)
 
 ---
@@ -548,8 +628,7 @@ schedule badge):**
 
 ## Safety
 
-- [ ] Finish caption translation (i18n)
-- [ ] Link user training completion to user records (depends on auth/user system)
+*(No open items — the port and its follow-ups live under v2 Migration — Legacy Retirement → Safety.)*
 
 ---
 
@@ -655,22 +734,6 @@ schedule badge):**
 - [ ] [Logistics (v2)] Consider separate dashboards for staff vs. management (TV display)
 - [ ] [Logistics (v2)] Load builder DISSOLVE: optional per-piece (sub-line) granularity within a move-group — current P378 checkbox toggles a whole skuCode|height|dest group at once.
 - [ ] [Logistics (v2)] **P253 follow-up — per-load `shipments` rows.** The job-level `shipments` in_transit/delivered flip is gated on *all* non-archived `loading_assignments` for a job reaching that stage. If a multi-load job with staggered trailer departures/arrivals (days apart) proves the coarse job-level gating is confusing on the logistics dashboard (e.g. "delivered" not showing until the last of several trailers arrives), consider splitting `shipments` to one row per load — larger schema change, needs its own scoped prompt.
-- [ ] [Job Board] **P364 follow-up — legacy BOL viewer modal (`jobs-bol-view-modal`) has no explicit Print
-  button.** It only has Download (relies on the browser's native in-frame PDF toolbar for print).
-  P364 gave the v2 shared `PdfViewer` explicit Download + Print controls instead of relying on that
-  native toolbar (unreliable on tablets); the legacy BOL modal is now the odd one out. Low priority
-  — add an explicit Print button (`iframe.contentWindow.print()`, same pattern as v2) if it comes up
-  on the floor.
-- [ ] [Job Board] **P272 follow-up — unarchiving a legacy `status='archived'` row leaves it in a limbo state.**
-  Manual Unarchive now only clears `archived_at`, never writes `status` (P272, by design — a job's
-  real status should be restored exactly as it was). But for the finite legacy population backfilled
-  by P271 (real prior status unrecoverable), `status` is still literally the string `'archived'` —
-  unarchiving one of these clears `archived_at` but leaves `status='archived'`, which isn't a real
-  Kanban/list status (won't render in any Kanban column, shows a raw "archived" label in List view,
-  isn't in the editable-status set). Not destructive, and the legacy population shrinks over time as
-  new archives stop hitting this path — but if it comes up in practice, the fix is a small one-time
-  prompt (e.g. force such rows to a sane default like `'done'` on unarchive, with a toast explaining
-  why).
 - [ ] [Job Board] Optional: map `/api/holey-chunks/preview` → a permission key in `API_PERMISSION_MAP`
   instead of relying on its QC Cleanup-11 entry in `UNMAPPED_API_MUTATION_ALLOWLIST`
   (`lib/core.js`). No longer an accidental fail-open (the route is now explicitly allowlisted
@@ -685,8 +748,6 @@ schedule badge):**
   matches current UI behavior (notification bell + push opt-in are shown to everyone).
 - [ ] [Job Board] Optional: surface the 51" chunk-height selection at order entry (nester already
   parameterized).
-- [ ] [Job Board] Optional: converge `holey-board-calculator.html` onto the shared endpoint (kill the last
-  client-side copy of the packing math).
 - [ ] [Admin / Platform] (Optional, not required for correctness) Refactor the 29 v2 inline `.replace("T"," ").slice(0,19)` timestamp inserts (across 29 route files, re-counted 2026-09-04) to a shared `nowSqlite()`-equivalent helper in a v2 lib, for mechanism consistency with the legacy side (QC Cleanup-5 left these as-is per the prompt's explicit optionality — they already emit the correct space format, so this is DRY/consistency only, not a bug fix).
 - [ ] [Infra / CI-CD] Optional: evaluate Cloudflare Workers Builds as the native alternative to this Action.
 - [ ] [Manufacturing / Cutting (React pilot)] Hard enforcement on the Work Queue (P259) — block clock-in on lower-priority jobs while higher-priority ones sit incomplete. Deferred by decision; P259 is guide-only (every job stays clickable).
