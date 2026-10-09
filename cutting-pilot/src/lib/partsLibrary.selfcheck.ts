@@ -36,6 +36,13 @@ function makeUpdateForm(overrides: Partial<PartUpdateForm> = {}): PartUpdateForm
     height_in: "8",
     notes: "",
     bundle_qty: "0",
+    // admin-06: optional fields, matching makePart()'s defaults so they read as unchanged.
+    name: "4in block",
+    category: "Blocks",
+    parent_group: "",
+    weight: "10",
+    color: "#D97706",
+    allow_rotation: false,
     ...overrides,
   };
 }
@@ -157,7 +164,7 @@ export function runPartsLibrarySelfCheck(): { pass: boolean; results: CheckResul
     );
   }
   {
-    const payload = buildUpdatePayload(makeUpdateForm({ bundle_qty: "" }));
+    const payload = buildUpdatePayload(makeUpdateForm({ bundle_qty: "" }), makePart());
     check(
       "buildUpdatePayload: blank bundle_qty coerces to 0, id passed through untrimmed-safe",
       payload.bundle_qty === 0 && payload.id === "p1",

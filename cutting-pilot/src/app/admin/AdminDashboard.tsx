@@ -10,6 +10,7 @@ import MetricTile from "@/components/dashboard/MetricTile";
 import UsersTab from "@/components/admin/UsersTab";
 import ActivityTab from "@/components/admin/ActivityTab";
 import RolesTab from "@/components/admin/RolesTab";
+import PartsLibrary from "@/components/parts/PartsLibrary";
 import { adminApi } from "@/lib/admin/client";
 import type { AdminAccess, AdminStats, AdminTab } from "@/lib/admin/types";
 
@@ -28,10 +29,6 @@ const TABS: { key: AdminTab; label: string }[] = [
   { key: "parts", label: "Parts" },
   { key: "activity", label: "Activity" },
 ];
-
-function TabPending({ name }: { name: string }) {
-  return <div className="p-10 text-center text-sm text-muted">{name} — not built yet</div>;
-}
 
 export default function AdminDashboard({ userName, userId, isAdmin, permissions, access, initialTab }: Props) {
   const [tab, setTabState] = useState<AdminTab>(initialTab);
@@ -119,7 +116,15 @@ export default function AdminDashboard({ userName, userId, isAdmin, permissions,
 
           {tab === "users" && access.users && <UsersTab currentUserId={userId} onChanged={refreshStats} />}
           {tab === "roles" && access.roles && <RolesTab onChanged={refreshStats} />}
-          {tab === "parts" && access.parts && <TabPending name="Parts" />}
+          {tab === "parts" && access.parts && (
+            <div className="p-3">
+              <PartsLibrary
+                active
+                layout="page"
+                canEdit={isAdmin || !!permissions["manufacturing.calculators"]?.edit}
+              />
+            </div>
+          )}
           {tab === "activity" && access.activity && <ActivityTab />}
         </div>
       </div>

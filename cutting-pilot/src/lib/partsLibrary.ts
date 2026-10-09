@@ -52,12 +52,10 @@ export interface PartCreateForm {
 }
 
 /**
- * Fields PUT actually persists (handleApiParts, lines 68-115): id, part_number, customer,
- * density_material, length_in, width_in, height_in, notes, and bundle_qty when sent. The UPDATE SQL
- * never sets name/color/allow_rotation/sort_order/category/parent_group, no matter what's in the
- * payload -- those are POST-only (create-time) fields on this endpoint. PartsLibraryPanel.tsx's edit
- * form is built to match this exactly (those fields shown read-only in edit mode), rather than
- * offering controls that silently do nothing server-side.
+ * Edit form for PUT /api/parts (buildPartUpdate, quickwin-01): the core 7 (part_number, customer,
+ * density_material, length_in, width_in, height_in, notes) are always written; each optional column
+ * (name, weight, color, allow_rotation, sort_order, category, parent_group, bundle_qty) is written
+ * only when its key is present. admin-06 widened the form to the optional fields the edit UI exposes.
  */
 export interface PartUpdateForm {
   id: string;
@@ -69,6 +67,12 @@ export interface PartUpdateForm {
   height_in: string;
   notes: string;
   bundle_qty: string;
+  name: string;
+  category: string;
+  parent_group: string;
+  weight: string;
+  color: string;
+  allow_rotation: boolean;
 }
 
 export interface ValidationResult {
@@ -99,6 +103,10 @@ export function validatePartUpdate(form: PartUpdateForm): ValidationResult {
   if (!form.id.trim()) errors.push("id is required.");
   if (!form.part_number.trim()) errors.push("Part number is required.");
   errors.push(...checkDims(form.length_in, form.width_in, form.height_in));
+  if (form.weight.trim()) {
+    const w = Number(form.weight);
+    if (!Number.isFinite(w) || w < 0) errors.push("Weight must be a number ≥ 0.");
+  }
   return { ok: errors.length === 0, errors };
 }
 
@@ -135,8 +143,32 @@ export function buildCreatePayload(form: PartCreateForm, sortOrder: number) {
   };
 }
 
-export function buildUpdatePayload(form: PartUpdateForm) {
-  return {
+/**
+ * Core 7 + id + bundle_qty always (as before admin-06). Optional columns only when the user changed
+ * them versus `original` — the server writes an optional column whenever its key is present, so
+ * sending only real changes means a save never rewrites an untouched column through the server's
+ * normalisation (quickwin-01's "only when sent" contract). A cleared weight is never sent, so the
+ * server's NaN → 1 default can't fire by accident.
+ */
+export function buildUpdatePayload(form: PartUpdateForm, original: PartRecord) {
+  const before = partToUpdateForm(original);
+  const payload: {
+    id: string;
+    part_number: string;
+    customer: string;
+    density_material: string;
+    length_in: number;
+    width_in: number;
+    height_in: number;
+    notes: string;
+    bundle_qty: number;
+    name?: string;
+    category?: string;
+    parent_group?: string;
+    weight?: number;
+    color?: string;
+    allow_rotation?: boolean;
+  } = {
     id: form.id,
     part_number: form.part_number.trim(),
     customer: form.customer.trim(),
@@ -147,6 +179,13 @@ export function buildUpdatePayload(form: PartUpdateForm) {
     notes: form.notes.trim(),
     bundle_qty: parseInt(form.bundle_qty, 10) || 0,
   };
+  for (const k of ["name", "category", "parent_group"] as const) {
+    if (form[k].trim() !== before[k].trim()) payload[k] = form[k].trim();
+  }
+  if (form.weight.trim() !== before.weight.trim() && form.weight.trim() !== "") payload.weight = Number(form.weight);
+  if (form.color !== before.color) payload.color = form.color;
+  if (form.allow_rotation !== before.allow_rotation) payload.allow_rotation = form.allow_rotation;
+  return payload;
 }
 
 export function partToCreateForm(p: PartRecord): PartCreateForm {
@@ -179,6 +218,12 @@ export function partToUpdateForm(p: PartRecord): PartUpdateForm {
     height_in: String(p.height_in ?? ""),
     notes: p.notes || "",
     bundle_qty: String(p.bundle_qty ?? 0),
+    name: p.name || "",
+    category: p.category || "",
+    parent_group: p.parent_group || "",
+    weight: String(p.weight ?? ""),
+    color: p.color || "#D97706",
+    allow_rotation: !!p.allow_rotation,
   };
 }
 
