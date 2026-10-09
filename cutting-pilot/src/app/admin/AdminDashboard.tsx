@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import PlatformHeader from "@/components/PlatformHeader";
 import MetricTile from "@/components/dashboard/MetricTile";
 import UsersTab from "@/components/admin/UsersTab";
+import RolesTab from "@/components/admin/RolesTab";
 import { adminApi } from "@/lib/admin/client";
 import type { AdminAccess, AdminStats, AdminTab } from "@/lib/admin/types";
 
@@ -116,7 +117,7 @@ export default function AdminDashboard({ userName, userId, isAdmin, permissions,
           </nav>
 
           {tab === "users" && access.users && <UsersTab currentUserId={userId} onChanged={refreshStats} />}
-          {tab === "roles" && access.roles && <TabPending name="Roles" />}
+          {tab === "roles" && access.roles && <RolesTab onChanged={refreshStats} />}
           {tab === "parts" && access.parts && <TabPending name="Parts" />}
           {tab === "activity" && access.activity && <TabPending name="Activity" />}
         </div>
