@@ -59,6 +59,8 @@ const BAY_BODY_MIN_H = COMPACT_CARD_H * 2 + 6 /* space-y-1.5 */ + 16 /* p-2 top+
 
 export default function DockBoard({ userName, isAdmin, permissions }: DockBoardProps) {
   const canManage = isAdmin || permissions?.["logistics.loading.manage"]?.edit === true;
+  // dock-05: same gate POST /v2/api/loading-photos enforces server-side.
+  const canEditLoading = isAdmin || permissions?.["logistics.loading"]?.edit === true;
 
   const [bays, setBays] = useState<DockBay[]>([]);
   const [assignments, setAssignments] = useState<DockAssignment[]>([]);
@@ -81,6 +83,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   const [shippingInfoTarget, setShippingInfoTarget] = useState<DockAssignment | null>(null);
   const [pullJobOpen, setPullJobOpen] = useState(false);
   const [photoGalleryJobId, setPhotoGalleryJobId] = useState<string | null>(null);
+  const [photoAddTarget, setPhotoAddTarget] = useState<{ assignmentId: string; jobId: string } | null>(null);
   const jobCacheRef = useRef<Map<string, any>>(new Map());
 
   const searchParams = useSearchParams();
@@ -360,6 +363,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
 
   function handleShowPhotos(a: DockAssignment) {
     setPhotoGalleryJobId(a.job_id);
+    setPhotoAddTarget(canEditLoading && a.loading_status === "loaded" ? { assignmentId: a.id, jobId: a.job_id } : null);
   }
 
   // --- Touch drag for Overview (PXXX-b) -----------------------------------------------------
@@ -522,6 +526,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
     onViewBol: handleViewBol,
     onShowShippingInfo: handleShowShippingInfo,
     onShowPhotos: handleShowPhotos,
+    canAddPhotos: canEditLoading,
   };
 
   function renderCard(a: DockAssignment, extraProps?: { showArchive?: boolean }) {
@@ -873,7 +878,15 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
         />
       )}
 
-      <PhotoGalleryModal jobId={photoGalleryJobId} onClose={() => setPhotoGalleryJobId(null)} />
+      <PhotoGalleryModal
+        jobId={photoGalleryJobId}
+        onClose={() => {
+          setPhotoGalleryJobId(null);
+          setPhotoAddTarget(null);
+        }}
+        addTo={photoAddTarget}
+        onPhotosAdded={load}
+      />
     </div>
   );
 }

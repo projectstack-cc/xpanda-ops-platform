@@ -5,16 +5,14 @@
 // composing the shared Modal primitive -- no forked modal markup. Owns its own network calls
 // (PUT loading-assignments + POST loading-photos per pending photo) and reports back via onDone
 // so the board can refetch (recompute, don't replay -- same rule as unit 2).
-import { useRef, useState } from "react";
-import { Camera, Upload, X } from "lucide-react";
+// dock-05: capture UI lives in PhotoPicker and uploads go through uploadLoadingPhoto; a failed
+// upload keeps the modal open (status already saved) with "Retry upload" instead of closing silently.
+import { useState } from "react";
+import { X } from "lucide-react";
 import Modal from "@/components/Modal";
-import { compressPhoto } from "@/lib/compressPhoto";
+import { uploadLoadingPhoto } from "@/lib/loadingPhotos";
+import PhotoPicker, { type PendingPhoto } from "./PhotoPicker";
 import type { DockAssignment } from "./dockTypes";
-
-interface PendingPhoto {
-  dataUrl: string;
-  filename: string;
-}
 
 interface LoadedChecklistModalProps {
   assignment: DockAssignment | null;
@@ -30,8 +28,8 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
   const [photos, setPhotos] = useState<PendingPhoto[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const captureRef = useRef<HTMLInputElement>(null);
-  const uploadRef = useRef<HTMLInputElement>(null);
+  // dock-05: the PUT succeeded but a photo upload failed -- checklist is locked, only uploads retry.
+  const [statusSaved, setStatusSaved] = useState(false);
 
   function reset() {
     setQtyVerified(false);
@@ -41,89 +39,94 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
     setPhotos([]);
     setError(null);
     setSaving(false);
+    setStatusSaved(false);
   }
 
   function handleClose() {
+    // dock-05: once the status is saved the board must refetch, even if photos are still pending.
+    const saved = statusSaved;
     reset();
-    onClose();
-  }
-
-  async function handleFiles(fileList: FileList | null) {
-    if (!fileList || !fileList.length) return;
-    const next: PendingPhoto[] = [];
-    for (const file of Array.from(fileList)) {
-      try {
-        const dataUrl = await compressPhoto(file, 1200, 0.6);
-        next.push({ dataUrl, filename: file.name });
-      } catch {
-        // skip a file that fails to compress; don't block the rest
-      }
-    }
-    setPhotos((prev) => [...prev, ...next]);
+    if (saved) onDone();
+    else onClose();
   }
 
   async function handleConfirm() {
     if (!assignment) return;
-    if (!qtyVerified) {
-      setError("Confirm quantities have been counted and verified.");
-      return;
-    }
-    if (!paperworkSecured) {
-      setError("Confirm the paperwork was secured inside the trailer.");
-      return;
-    }
-    setError(null);
-    setSaving(true);
+    if (!statusSaved) {
+      if (!qtyVerified) {
+        setError("Confirm quantities have been counted and verified.");
+        return;
+      }
+      if (!paperworkSecured) {
+        setError("Confirm the paperwork was secured inside the trailer.");
+        return;
+      }
+      setError(null);
+      setSaving(true);
 
-    const checklist = {
-      qty_verified: true,
-      changes_issues: changesIssues,
-      changes_notes: changesIssues ? changesNotes.trim() : "",
-      paperwork_secured: true,
-      completed_at: new Date().toISOString(),
-    };
+      const checklist = {
+        qty_verified: true,
+        changes_issues: changesIssues,
+        changes_notes: changesIssues ? changesNotes.trim() : "",
+        paperwork_secured: true,
+        completed_at: new Date().toISOString(),
+      };
 
-    try {
-      const res = await fetch("/v2/api/loading-assignments", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: assignment.id,
-          loading_status: "loaded",
-          ready_checklist: JSON.stringify(checklist),
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        setError(json.error || "Couldn't mark this load as loaded.");
+      try {
+        const res = await fetch("/v2/api/loading-assignments", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: assignment.id,
+            loading_status: "loaded",
+            ready_checklist: JSON.stringify(checklist),
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          setError(json.error || "Couldn't mark this load as loaded.");
+          setSaving(false);
+          return;
+        }
+        setStatusSaved(true);
+      } catch {
+        setError("Network error — couldn't reach the server.");
         setSaving(false);
         return;
       }
+    } else {
+      setError(null);
+      setSaving(true);
+    }
 
-      for (const photo of photos) {
-        const base64 = photo.dataUrl.split(",")[1] || photo.dataUrl;
-        try {
-          await fetch("/v2/api/loading-photos", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              assignment_id: assignment.id,
-              job_id: assignment.job_id,
-              photo_data: base64,
-              filename: photo.filename,
-            }),
-          });
-        } catch {
-          // best-effort — a failed photo upload shouldn't block the status change already saved
-        }
+    // Sequential uploads; each success drops out of the pending list, failures stay for a retry.
+    const total = photos.length;
+    const failedPhotos: PendingPhoto[] = [];
+    let firstError: string | null = null;
+    for (const photo of photos) {
+      const result = await uploadLoadingPhoto({
+        assignmentId: assignment.id,
+        jobId: assignment.job_id,
+        dataUrl: photo.dataUrl,
+        filename: photo.filename,
+      });
+      if (result.ok) {
+        setPhotos((prev) => prev.filter((p) => p !== photo));
+      } else {
+        failedPhotos.push(photo);
+        if (!firstError) firstError = result.error;
       }
+    }
 
+    if (failedPhotos.length === 0) {
       reset();
       onDone();
-    } catch {
-      setError("Network error — couldn't reach the server.");
-      setSaving(false);
+      return;
     }
+    setSaving(false);
+    setError(
+      `Load is marked loaded, but ${failedPhotos.length} of ${total} photo(s) didn't upload: ${(firstError ?? "").replace(/\.$/, "")}. Tap "Retry upload", or close and add photos later from the card's Photos button.`
+    );
   }
 
   return (
@@ -135,6 +138,7 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
           type="checkbox"
           checked={qtyVerified}
           onChange={(e) => setQtyVerified(e.target.checked)}
+          disabled={statusSaved}
           className="mt-0.5 w-[18px] h-[18px] shrink-0"
         />
         Have all quantities been counted and verified?
@@ -145,6 +149,7 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
           type="checkbox"
           checked={changesIssues}
           onChange={(e) => setChangesIssues(e.target.checked)}
+          disabled={statusSaved}
           className="mt-0.5 w-[18px] h-[18px] shrink-0"
         />
         Were there any changes or issues?
@@ -153,6 +158,7 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
         <textarea
           value={changesNotes}
           onChange={(e) => setChangesNotes(e.target.value)}
+          disabled={statusSaved}
           rows={3}
           placeholder="Describe changes or issues…"
           className="w-full ml-7 px-3 py-2 rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm resize-vertical"
@@ -164,6 +170,7 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
           type="checkbox"
           checked={paperworkSecured}
           onChange={(e) => setPaperworkSecured(e.target.checked)}
+          disabled={statusSaved}
           className="mt-0.5 w-[18px] h-[18px] shrink-0"
         />
         Was the paperwork secured inside the trailer?
@@ -171,44 +178,7 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
 
       <div className="border-t border-[var(--line)] pt-3 space-y-2">
         <p className="text-xs font-semibold text-muted">Photos (optional)</p>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => captureRef.current?.click()}
-            className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded border border-[var(--line)] bg-[var(--surface)] text-xs font-semibold text-text cursor-pointer hover:bg-[var(--ghost-bg)]"
-          >
-            <Camera size={14} aria-hidden="true" /> Take photo
-          </button>
-          <button
-            type="button"
-            onClick={() => uploadRef.current?.click()}
-            className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded border border-[var(--line)] bg-[var(--surface)] text-xs font-semibold text-text cursor-pointer hover:bg-[var(--ghost-bg)]"
-          >
-            <Upload size={14} aria-hidden="true" /> Upload from library
-          </button>
-        </div>
-        <input
-          ref={captureRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          hidden
-          onChange={(e) => {
-            handleFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
-        <input
-          ref={uploadRef}
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          onChange={(e) => {
-            handleFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
+        <PhotoPicker onPicked={(p) => setPhotos((prev) => [...prev, ...p])} disabled={saving} />
         {photos.length > 0 && (
           <div className="flex gap-2 flex-wrap">
             {photos.map((p, i) => (
@@ -245,7 +215,7 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
           disabled={saving}
           className="min-h-[44px] px-4 rounded bg-[var(--primary-bg)] text-[var(--primary-text)] text-sm font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-default"
         >
-          {saving ? "Saving…" : "Confirm & mark loaded"}
+          {saving ? "Saving…" : statusSaved ? "Retry upload" : "Confirm & mark loaded"}
         </button>
       </div>
     </Modal>

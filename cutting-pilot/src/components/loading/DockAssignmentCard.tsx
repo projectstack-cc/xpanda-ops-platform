@@ -49,6 +49,7 @@ export default function DockAssignmentCard({
   onViewBol,
   onShowShippingInfo,
   onShowPhotos,
+  canAddPhotos,
   showArchive = false,
   isDragging = false,
   draggable: isDraggable = false,
@@ -100,7 +101,17 @@ export default function DockAssignmentCard({
   // Compact mode shortens View BOL / Photos to icon + count so the worst case never needs a third
   // action row at the narrowest bay column; the label moves to title/aria-label.
   const bolTitle = a.bol_count === 0 ? "No BOL generated for this load yet" : compact ? "View BOL" : undefined;
-  const photosTitle = a.photo_count === 0 ? "No photos attached to this load yet" : compact ? "Photos" : undefined;
+  // dock-05: a Loaded card's Photos button doubles as the "add photo after the fact" entry point.
+  const canAddPhoto = canAddPhotos && a.loading_status === "loaded";
+  const canOpenPhotos = a.photo_count > 0 || canAddPhoto;
+  const addPhotoMode = a.photo_count === 0 && canAddPhoto;
+  const photosTitle = addPhotoMode
+    ? "Add photos to this load"
+    : a.photo_count === 0
+      ? "No photos attached to this load yet"
+      : compact
+        ? "Photos"
+        : undefined;
 
   return (
     <div
@@ -224,16 +235,21 @@ export default function DockAssignmentCard({
         )}
         <button
           type="button"
-          onClick={() => a.photo_count > 0 && onShowPhotos(a)}
-          disabled={a.photo_count === 0}
+          onClick={() => canOpenPhotos && onShowPhotos(a)}
+          disabled={!canOpenPhotos}
           title={photosTitle}
-          aria-label={compact ? `Photos (${a.photo_count})` : undefined}
+          aria-label={compact ? (addPhotoMode ? "Add photo" : `Photos (${a.photo_count})`) : undefined}
           className={`${ACTION_BTN} ${sz} disabled:opacity-40 disabled:cursor-default inline-flex items-center gap-1`}
         >
           {compact ? (
             <>
               <Camera size={11} aria-hidden="true" />
               <span className="font-mono tabular-nums">{a.photo_count}</span>
+            </>
+          ) : addPhotoMode ? (
+            <>
+              <Camera size={11} aria-hidden="true" />
+              Add photo
             </>
           ) : (
             "Photos"

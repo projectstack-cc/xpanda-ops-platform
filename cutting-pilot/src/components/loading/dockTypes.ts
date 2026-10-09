@@ -62,6 +62,8 @@ export interface CardActionHandlers {
   onViewBol: (a: DockAssignment) => void;
   onShowShippingInfo: (a: DockAssignment) => void;
   onShowPhotos: (a: DockAssignment) => void;
+  /** dock-05: user may add photos (logistics.loading edit); gates the add flow on Loaded cards. */
+  canAddPhotos: boolean;
 }
 
 export const LOADING_FLOW = ["awaiting", "not_started", "loading", "loaded", "in_transit", "delivered"];

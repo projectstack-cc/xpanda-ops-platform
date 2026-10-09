@@ -1,11 +1,14 @@
 "use client";
 // src/components/loading/PhotoGalleryModal.tsx
 // Port of legacy shared/photo-gallery.js's lightbox, scoped to the loading dashboard's job-level
-// use (photoGallery.openLightbox({ jobId })). View-only -- capture/upload during the Loaded
-// checklist stays in LoadedChecklistModal, unchanged. Composes @/components/Modal.
-import { useEffect, useRef, useState } from "react";
+// use (photoGallery.openLightbox({ jobId })). View-only unless `addTo` is set (dock-05: the dock
+// board passes it for Loaded cards when the user can edit logistics.loading, so a forgotten photo
+// can be added after the fact). Composes @/components/Modal.
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Modal from "@/components/Modal";
+import { uploadLoadingPhoto } from "@/lib/loadingPhotos";
+import PhotoPicker, { type PendingPhoto } from "./PhotoPicker";
 
 interface Photo {
   id: string;
@@ -23,6 +26,10 @@ interface PhotoGalleryModalProps {
   imageSrc?: (photoId: string) => string;
   /** lgx-photos-01: initial index when opening with provided photos (default 0). */
   startIndex?: number;
+  /** dock-05: when set, show an "Add photos" section that uploads to this assignment. */
+  addTo?: { assignmentId: string; jobId: string } | null;
+  /** dock-05: called after at least one photo uploads, so the caller can refetch counts. */
+  onPhotosAdded?: () => void;
 }
 
 const defaultImageSrc = (photoId: string) => `/v2/api/loading-photos/${encodeURIComponent(photoId)}/image`;
@@ -33,12 +40,40 @@ export default function PhotoGalleryModal({
   photos: providedPhotos,
   imageSrc = defaultImageSrc,
   startIndex,
+  addTo,
+  onPhotosAdded,
 }: PhotoGalleryModalProps) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const touchStartXRef = useRef<number | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // dock-05: factored out of the effect so it can re-run after an upload. Resolves to the fetched
+  // list (null on failure) so the caller can jump to the newest photo.
+  const refetch = useCallback(async (opts?: { silent?: boolean }): Promise<Photo[] | null> => {
+    if (!jobId) return null;
+    if (!opts?.silent) setLoading(true);
+    setError(null);
+    try {
+      const json = await fetch(`/v2/api/loading-photos?job_id=${encodeURIComponent(jobId)}`).then((r) => r.json());
+      if (!json.ok) {
+        setError("Couldn't load photos.");
+        return null;
+      }
+      const list: Photo[] = json.photos ?? [];
+      setPhotos(list);
+      return list;
+    } catch {
+      setError("Couldn't load photos.");
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [jobId]);
 
   useEffect(() => {
     if (!jobId) return;
@@ -49,21 +84,55 @@ export default function PhotoGalleryModal({
       setIndex(Math.min(Math.max(startIndex ?? 0, 0), Math.max(providedPhotos.length - 1, 0)));
       return;
     }
-    setLoading(true);
-    setError(null);
     setIndex(0);
-    fetch(`/v2/api/loading-photos?job_id=${encodeURIComponent(jobId)}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (!json.ok) {
-          setError("Couldn't load photos.");
-          return;
-        }
-        setPhotos(json.photos ?? []);
-      })
-      .catch(() => setError("Couldn't load photos."))
-      .finally(() => setLoading(false));
-  }, [jobId, providedPhotos, startIndex]);
+    refetch();
+  }, [jobId, providedPhotos, startIndex, refetch]);
+
+  // Clear upload feedback whenever the modal closes (or reopens on another job).
+  useEffect(() => {
+    setUploadProgress(null);
+    setUploadError(null);
+  }, [jobId]);
+
+  async function handleAdd(picked: PendingPhoto[]) {
+    if (!addTo) return;
+    setUploadError(null);
+    setUploading(true);
+    let succeeded = 0;
+    let failed = 0;
+    let firstError: string | null = null;
+    for (let i = 0; i < picked.length; i++) {
+      setUploadProgress(`Uploading ${i + 1} of ${picked.length}…`);
+      const result = await uploadLoadingPhoto({
+        assignmentId: addTo.assignmentId,
+        jobId: addTo.jobId,
+        dataUrl: picked[i].dataUrl,
+        filename: picked[i].filename,
+      });
+      if (result.ok) succeeded++;
+      else {
+        failed++;
+        if (!firstError) firstError = result.error;
+      }
+    }
+    setUploadProgress(null);
+    if (succeeded > 0) {
+      const list = await refetch({ silent: true }); // silent: keep the viewer mounted, no flash
+      if (list && list.length) setIndex(list.length - 1);
+      onPhotosAdded?.();
+    }
+    if (failed > 0) setUploadError(`${failed} of ${picked.length} photo(s) didn't upload: ${firstError}`);
+    setUploading(false);
+  }
+
+  const addSection = addTo ? (
+    <div className="border-t border-[var(--line)] pt-3 space-y-2">
+      <p className="text-xs font-semibold text-muted">Add photos</p>
+      <PhotoPicker onPicked={handleAdd} disabled={uploading} />
+      {uploadProgress && <p className="text-xs text-muted">{uploadProgress}</p>}
+      {uploadError && <p className="text-xs text-[var(--danger-text)]">{uploadError}</p>}
+    </div>
+  ) : null;
 
   useEffect(() => {
     if (!jobId || photos.length < 2) return;
@@ -84,6 +153,7 @@ export default function PhotoGalleryModal({
       {!loading && !error && photos.length === 0 && (
         <p className="text-sm text-text-faint">No photos taken for this shipment.</p>
       )}
+      {!loading && !error && photos.length === 0 && addSection}
       {!loading && !error && photos.length > 0 && current && (
         <div className="space-y-3">
           <div
@@ -158,6 +228,7 @@ export default function PhotoGalleryModal({
               ))}
             </div>
           )}
+          {addSection}
         </div>
       )}
     </Modal>
