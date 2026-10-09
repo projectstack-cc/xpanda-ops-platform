@@ -71,8 +71,8 @@
 
   // entity_type -> deep-link URL builder (unchanged from the per-page copies).
   var DEEPLINKS = {
-    loading_assignment: function (id) { return '/logistics/loading.html?assignment=' + encodeURIComponent(id); },
-    shipment: function (id) { return '/logistics/loading.html?shipment=' + encodeURIComponent(id); },
+    loading_assignment: function (id) { return '/v2/logistics/loading?assignment=' + encodeURIComponent(id); },
+    shipment: function (id) { return '/v2/logistics/loading?shipment=' + encodeURIComponent(id); },
     job: function (id) { return '/v2/board?job=' + encodeURIComponent(id); },
   };
 

@@ -19,7 +19,7 @@ self.addEventListener('push', (event) => {
     badge: '/logo/xpanda.png',
     vibrate: [200, 100, 200],
     data: {
-      url: data.url || '/logistics/loading.html',
+      url: data.url || '/v2/logistics/loading',
       type: data.type || '',
       entityType: data.entityType || '',
       entityId: data.entityId || '',
@@ -40,7 +40,7 @@ self.addEventListener('notificationclick', (event) => {
 
   if (event.action === 'dismiss') return;
 
-  const url = event.notification.data?.url || '/logistics/loading.html';
+  const url = event.notification.data?.url || '/v2/logistics/loading';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {

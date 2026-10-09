@@ -351,7 +351,7 @@ export default function ShipmentDashboard({
               Load Builder
             </a>
             <a
-              href="/logistics/loading.html"
+              href="/v2/logistics/loading"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] no-underline transition-colors"
             >
               Dock Loading

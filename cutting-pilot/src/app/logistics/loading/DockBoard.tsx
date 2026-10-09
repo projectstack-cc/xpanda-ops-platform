@@ -549,7 +549,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
         userName={userName}
         isAdmin={isAdmin}
         permissions={permissions}
-        title="Loading dashboard · v2"
+        title="Loading Dashboard"
         currentPath="/v2/logistics/loading"
       />
 

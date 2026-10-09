@@ -65,10 +65,10 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/api/loading-bays", keys: ["logistics.loading"] },
   { prefix: "/v2/api/loading-photos", keys: ["logistics.loading"] },
   // --- lgx-roll-01: /v2/logistics (dashboard) + /v2/logistics/invoice-analytics are LIVE and fall
-  // through to the logistics.dashboard rule below. These two children stay DARK (admin-only: no role
-  // holds "logistics.v2") until Steve finishes them. They must precede the general /v2/logistics rule.
-  // To un-dark one later, delete its line here (loading then falls to the logistics.loading rule below).
-  { prefix: "/v2/logistics/loading", keys: ["logistics.v2"] },
+  // through to the logistics.dashboard rule below. dock-04: /v2/logistics/loading is now LIVE too
+  // (its dark line was deleted, so it falls to the logistics.loading rule below). Only Load Builder
+  // stays DARK (admin-only: no role holds "logistics.v2") until Steve finishes it. It must precede
+  // the general /v2/logistics rule. To un-dark it later, delete its line here.
   { prefix: "/v2/logistics/load-builder", keys: ["logistics.v2"] },
   { prefix: "/v2/logistics/loading", keys: ["logistics.loading"] },
   // PXXX-c: PullJobModal's GET /v2/api/jobs?search= (and ShippingInfoModal's GET

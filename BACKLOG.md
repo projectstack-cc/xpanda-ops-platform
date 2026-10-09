@@ -59,13 +59,10 @@
 - [ ] Repoint the v2 links that still open legacy Load Builder once v2 is ready: `components/logistics/BolActions.tsx`
   (`/logistics/load-builder.html?job_id=`), `app/logistics/ShipmentDashboard.tsx`, and the home Logistics card.
 
-### Dock Loading — legacy `logistics/loading.html` → `/v2/logistics/loading` · FLOOR TEST NEXT (dark; dock-01 wrap-up done)
+### Dock Loading — legacy `logistics/loading.html` → `/v2/logistics/loading` · CUT OVER (dock-04)
 
-- [ ] **Floor-test `/v2/logistics/loading` before retiring legacy `logistics/loading.html`.** Unit 3b's dock dashboard is writes-LIVE but unlinked (v2 visibility gate) and its `wrangler dev` smoke against scratch bindings is still owed (unit 3a's `preview_database_id` was a placeholder when 3b was built — see its `CHANGELOG.md` entry). Run the scratch smoke pass, then floor-test against real data before wiring it into nav or retiring the legacy page. Still dark after lgx-roll-01 (`logistics.v2`); dashboard's Dock Loading button points to legacy.
 - [ ] **Unit 3b follow-up — i18n for the new dock dashboard labels.** `DockAssignmentCard.tsx`/`AssignBayModal.tsx`/`LoadedChecklistModal.tsx`/`DockBoard.tsx`/`TeamView.tsx`/`BayListItem.tsx`/`ShippingInfoModal.tsx`/`PullJobModal.tsx`/`PhotoGalleryModal.tsx` ship English-only strings (v2 has no i18n spine wired yet, matching every other v2 UI unit so far) — needs a pass once v2 gains one.
-- [ ] Busiest legacy write surface (≈700 loading-assignment writes + ≈90 photos in the 30 days to
-  2026-10-08). Any cutover needs the dock team trained, with legacy kept one click away.
-- [ ] **dock cutover** — after Steve's eyeball + floor test: remove the `/v2/logistics/loading` `logistics.v2` middleware line; repoint home Loading card Open, `ShipmentDashboard.tsx` Dock Loading button, `shared/notif-bell.js` (`loading_assignment`/`shipment`), and `sw.js` default URL to `/v2/logistics/loading`; keep legacy as a Classic fallback.
+- [ ] Delete `logistics/loading.html` stub + its `logistics-i18n.js` loading keys once access logs show no hits (stub added dock-04).
 
 ### BOL Email — `logistics/bol-email.html` · NO v2 YET
 
@@ -113,7 +110,7 @@
 - [ ] Port the remaining legacy `/api/*` routes v2 still calls (`/api/jobs*`, `/api/auth*`, `/api/parts`,
   `/api/loading-assignments*`, `/api/load-builder-skus`, `/api/combos`, `/api/address`, `/api/assignable-users`,
   `/api/public`), then retire `_worker.js` and the Pages project.
-- [ ] **bol-print-01 follow-up — fontkit missing on two legacy BOL pages.** `jobs/index.html` and `logistics/loading.html` call `BolShared.generatePdf` but don't load `@pdf-lib/fontkit`, so their BOLs take the unembedded-Helvetica fallback (and have never drawn the cursive signature). Add the same fontkit `<script>` the other logistics pages use.
+- [ ] **bol-print-01 follow-up — fontkit missing on two legacy BOL pages.** `jobs/index.html` and `logistics/loading.html` call `BolShared.generatePdf` but don't load `@pdf-lib/fontkit`, so their BOLs take the unembedded-Helvetica fallback (and have never drawn the cursive signature). Add the same fontkit `<script>` the other logistics pages use. *(dock-04: `logistics/loading.html` is now a redirect stub, so only `jobs/index.html` remains.)*
 
 ---
 

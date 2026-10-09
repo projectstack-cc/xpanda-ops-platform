@@ -366,8 +366,8 @@
       </div>
     </article>
 
-    <!-- Logistics (shipments, BOL, load builder — NOT loading dashboard) -->
-    <article class="hp-card" data-permission="logistics.dashboard,logistics.bol,logistics.load-builder">
+    <!-- Logistics (shipments, BOL, load builder — NOT loading dashboard). dock-04: logistics.bol alone no longer shows this card (every button needs Dashboard or Load Builder; Loading Team gets BOL view-only). -->
+    <article class="hp-card" data-permission="logistics.dashboard,logistics.load-builder">
       <div class="hp-card-head">
         <div class="hp-card-icon hp-icon-logistics"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
         <div class="hp-card-title" data-i18n="common.logistics">Logistics</div>
@@ -388,7 +388,7 @@
       </div>
       <div class="hp-card-desc" data-i18n="home.loadingDesc">Bay assignments, trailer loading status</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-loading" href="/logistics/loading.html" data-perm-key="logistics.loading" data-i18n="common.open">Open</a>
+        <a class="hp-btn hp-btn-loading" href="/v2/logistics/loading" data-perm-key="logistics.loading" data-i18n="common.open">Open</a>
         <a class="hp-btn hp-btn-outline" href="/v2/loading" data-perm-key="logistics.loading.tv" data-i18n="common.tvBoard">TV Board</a>
       </div>
     </article>
