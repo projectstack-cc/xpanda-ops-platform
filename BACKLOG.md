@@ -91,10 +91,11 @@
 
 - [ ] Port `reports/` (cutting, incidents ×5, orders, scrap ×3). Chart.js → decide v2 charting lib once.
 
-### Admin · NO v2 YET
+### Admin · IN PROGRESS (admin-NN → /v2/admin)
 
 - [ ] Port `admin/parts.html` (v2 already has `PartsLibraryPanel.tsx` in Load Builder — reuse it), `users.html`,
   `roles.html` (`PERMISSION_LABELS`), `activity-log.html`.
+- [ ] Drop `roles_perm_backup_admin01` (admin-01 snapshot) once the admin-NN series has shipped and been stable.
 
 ### Safety · NO v2 YET — scope separately (large)
 

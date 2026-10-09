@@ -5953,6 +5953,15 @@ current series).
 
 ---
 
+## Admin (v2)
+
+- **admin-01 — Permission-key cleanup migration (Database & API agent §9 + Admin & Auth agent §8). Migration only, no code change.**
+  - **`DB_Migrations/admin-01-perm-cleanup.sql`** (gitignored, run manually in the D1 console). Strips the orphan `production.calculators` / `production.inventory` keys (pre-P80; no live reader: the only hit is the unlinked `production/_archived/index.html`) and deletes the malformed nested `"logistics": {"loading": …}` object from Administrator and Staff. It is deleted, **not** flattened, because flat `hasPermission()` lookups never matched it; flattening would have granted Staff `logistics.loading`.
+  - **Effective access is unchanged for every role and user.** Orchestrator pre-verified this against live D1 (2026-10-09): 0 changed values, 0 added keys, 0 unexpected removals, 15 expected removals. The migration snapshots `roles_perm_backup_admin01` first, includes a post-check against it, and includes a one-statement rollback.
+  - The new `jobs.create/status/archive` keys are deliberately **not** seeded here; they ship with their enforcement prompt.
+
+---
+
 ## Database / API
 
 - **quickwin-01 — `PUT /api/parts` persists every editable field, only when sent (db-api-agent §9, admin-auth-agent §8 consulted). Legacy Pages; no migration.** The PUT only wrote the 7 core fields (+ `bundle_qty`), silently dropping `name`, `weight`, `color`, `allow_rotation`, `sort_order`, `category`, `parent_group` — so Admin → Parts edits (which send name/category/weight/color/parent_group) returned `ok: true` and discarded the change. New pure `buildPartUpdate()` in `_worker.js/routes/production.js`: core 7 always written (validation unchanged); each optional column written only when its key is present (`!== undefined`) from a fixed whitelist, normalized exactly like POST — so the block calculator's core-7-only payload never blanks name/color. `logActivity` details gain `fields` (optional columns written). 404 / duplicate-number 409 handling unchanged. Verified: `node --check` on a named temp copy; a throwaway harness running the copied builder on admin / block-calculator / v2 payload shapes — admin SQL has name/weight/color/category/parent_group/bundle_qty and no allow_rotation/sort_order, block-calc has no optional columns, v2 adds only bundle_qty; placeholders == binds in all three (15/9/10).
