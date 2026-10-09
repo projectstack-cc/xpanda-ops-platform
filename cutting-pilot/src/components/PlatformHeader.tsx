@@ -22,7 +22,7 @@ const NAV_MODULES = [
   { label: "QC",            href: "/qc/",             perm: "qc" },
   { label: "Reports",       href: "/reports/",        perm: "reports" },
   { label: "Safety",        href: "/safety/",         perm: "safety" },
-  { label: "Admin",         href: "/admin/",          perm: "admin" },
+  { label: "Admin",         href: "/v2/admin",        perm: "admin" },
 ] as const;
 
 // The v2 cutting board lives at /v2/cutting but belongs to the Manufacturing module.

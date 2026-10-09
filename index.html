@@ -463,10 +463,10 @@
       </div>
       <div class="hp-card-desc" data-i18n="home.adminDesc">Parts library, users, roles, activity log</div>
       <div class="hp-card-actions">
-        <a class="hp-btn hp-btn-admin" href="/admin/parts.html" data-i18n="common.parts">Parts</a>
-        <a class="hp-btn hp-btn-outline" href="/admin/users.html" data-i18n="common.users">Users</a>
-        <a class="hp-btn hp-btn-outline" href="/admin/roles.html" data-i18n="common.roles">Roles</a>
-        <a class="hp-btn hp-btn-outline" href="/admin/activity-log.html" data-i18n="common.log">Log</a>
+        <a class="hp-btn hp-btn-admin" href="/v2/admin?tab=parts" data-i18n="common.parts">Parts</a>
+        <a class="hp-btn hp-btn-outline" href="/v2/admin?tab=users" data-i18n="common.users">Users</a>
+        <a class="hp-btn hp-btn-outline" href="/v2/admin?tab=roles" data-i18n="common.roles">Roles</a>
+        <a class="hp-btn hp-btn-outline" href="/v2/admin?tab=activity" data-i18n="common.log">Log</a>
       </div>
     </article>
 
@@ -508,7 +508,7 @@ async function initHomepage() {
       });
 
       // Also hide admin links if not admin
-      document.querySelectorAll('.hp-card a[href*="/admin/"]').forEach(link => {
+      document.querySelectorAll('.hp-card a[href^="/v2/admin"]').forEach(link => {
         if (!perms['admin']?.view) link.style.display = 'none';
       });
     }

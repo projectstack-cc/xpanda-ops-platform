@@ -151,7 +151,7 @@ if (!window.__xpandaPwaInstallLoaded) {
         { label: 'QC',            href: '/qc/',            perm: 'qc' },
         { label: t('common.reports', null, 'Reports'),      href: '/reports/',       perm: 'reports' },
         { label: t('common.safety', null, 'Safety'),        href: '/safety/',        perm: 'safety' },
-        { label: t('common.admin', null, 'Admin'),          href: '/admin/',         perm: 'admin' },
+        { label: t('common.admin', null, 'Admin'),          href: '/v2/admin',         perm: 'admin' },
       ];
       var _links = _mods.map(function (m) {
         var active = _p.startsWith(m.href) || (m.href === '/v2/logistics' && _p.startsWith('/logistics/')) || (m.href === '/v2/board' && _p.startsWith('/jobs/'));

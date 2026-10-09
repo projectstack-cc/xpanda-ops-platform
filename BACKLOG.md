@@ -91,14 +91,12 @@
 
 - [ ] Port `reports/` (cutting, incidents ×5, orders, scrap ×3). Chart.js → decide v2 charting lib once.
 
-### Admin · IN PROGRESS (admin-NN → /v2/admin)
+### Admin · CUT OVER to /v2/admin (admin-08) — retirement in progress
 
-- [ ] Port `admin/parts.html` (v2 already has `PartsLibraryPanel.tsx` in Load Builder — reuse it), `users.html`,
-  `roles.html` (`PERMISSION_LABELS`), `activity-log.html`.
 - [ ] Drop `roles_perm_backup_admin01` (admin-01 snapshot) once the admin-NN series has shipped and been stable.
 - [ ] Drop `roles_perm_backup_admin07` (admin-07 snapshot) with the admin-01 one once stable.
-- [ ] At admin cutover: delete legacy `PERMISSION_LABELS` / `NOTIFICATION_TYPE_LABELS` with `admin/roles.html` — `cutting-pilot/src/lib/permissions.ts` becomes the only copy. Until then, any new permission key must be added to BOTH.
-- [ ] i18n (en/es/ht) for /v2/admin — English-only at port time (bem-01 precedent); legacy admin-i18n.js has the catalog to reuse.
+- [ ] Delete the four admin redirect stubs (`admin/{users,roles,parts,activity-log}.html`) once logs show no hits (admin-11).
+- [ ] i18n (en/es/ht) for /v2/admin — English-only at port time (bem-01 precedent); legacy `admin/_archived/admin-i18n.js` has the catalog to reuse.
 
 ### Safety · NO v2 YET — scope separately (large)
 
