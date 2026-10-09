@@ -7,6 +7,7 @@ import PlatformHeader from "@/components/PlatformHeader";
 import { PICKUP_TRAFFIC_BUFFER_MIN } from "@/lib/deliveryTime";
 import { etDateKey, formatEtDateTime } from "@/lib/etDateTime";
 import { formatUsdCents } from "@/lib/money";
+import { addDays } from "@/lib/productionSchedule";
 import CarrierStatusPill from "./CarrierStatusPill";
 import CarrierUploadModal from "./CarrierUploadModal";
 import CarrierBolModal from "./CarrierBolModal";
@@ -60,7 +61,7 @@ interface CarrierCharge {
 interface CarrierResponse {
   ok: boolean;
   today: string;
-  tomorrow: string;
+  next_day: string;
   rows: CarrierRow[];
   error?: string;
 }
@@ -82,6 +83,17 @@ function dayLabel(dateStr: string): string {
   })
     .format(date)
     .replace(",", " ·");
+}
+
+// Upcoming section heading after Today: "Tomorrow's Loads" for calendar tomorrow, else the full
+// weekday ("Saturday's Loads", "Monday's Loads"). ET-safe: parsed as a UTC calendar date.
+function upcomingDayHeading(today: string, dateStr: string): string {
+  if (dateStr === addDays(today, 1)) return "Tomorrow's Loads";
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(
+    new Date(Date.UTC(y, (m || 1) - 1, d || 1))
+  );
+  return `${weekday}'s Loads`;
 }
 
 function formatDrive(sec: number): string {
@@ -514,7 +526,17 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
 
   const data = upcoming.data;
   const todayRows = data ? data.rows.filter((r) => r.ship_day === data.today) : [];
-  const tomorrowRows = data ? data.rows.filter((r) => r.ship_day === data.tomorrow) : [];
+  // After Today: any weekend day with loads before next_day (rare Saturday ship days), then
+  // next_day itself, which always renders even when empty (carrier-11).
+  const laterDays = data
+    ? [
+        ...Array.from(new Set(data.rows.map((r) => r.ship_day)))
+          .filter((d) => d > data.today && d < data.next_day)
+          .sort(),
+        data.next_day,
+      ]
+    : [];
+  const sectionCount = 1 + laterDays.length;
   const actions: RowActions = { onUpload: setUploadRow, onViewBol: setBolRow, onCharge: setChargeRow };
   // Schedule owns its own fetch (CarrierSchedule, mounted only while that tab is open).
   const active = tab === "history" ? history : tab === "upcoming" ? upcoming : null;
@@ -574,16 +596,23 @@ export default function CarrierBoard({ userName, isAdmin, permissions }: Carrier
             <div className="flex justify-end mb-3">
               <ViewToggle view={upcomingListView} onChange={setUpcomingListView} label="Upcoming view" />
             </div>
-            {/* Compact rows need the full width for their columns, so the two days stack. */}
-            <div className={`grid grid-cols-1 ${upcomingListView === "expanded" ? "md:grid-cols-2" : ""} gap-6 items-start`}>
+            {/* Compact rows need the full width for their columns, so the days stack. */}
+            <div
+              className={`grid grid-cols-1 ${
+                upcomingListView === "expanded" ? (sectionCount === 3 ? "md:grid-cols-2 xl:grid-cols-3" : "md:grid-cols-2") : ""
+              } gap-6 items-start`}
+            >
               <DaySection heading="Today's Loads" label={dayLabel(data.today)} rows={todayRows} view={upcomingListView} {...actions} />
-              <DaySection
-                heading="Tomorrow's Loads"
-                label={dayLabel(data.tomorrow)}
-                rows={tomorrowRows}
-                view={upcomingListView}
-                {...actions}
-              />
+              {laterDays.map((day) => (
+                <DaySection
+                  key={day}
+                  heading={upcomingDayHeading(data.today, day)}
+                  label={dayLabel(day)}
+                  rows={data.rows.filter((r) => r.ship_day === day)}
+                  view={upcomingListView}
+                  {...actions}
+                />
+              ))}
             </div>
           </>
         )}

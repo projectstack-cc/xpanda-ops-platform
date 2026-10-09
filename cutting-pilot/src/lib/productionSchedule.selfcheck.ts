@@ -2,7 +2,7 @@
 // Guarded dev self-check for productionSchedule.ts pure helpers. Mirrors
 // productionRecipes.selfcheck.ts's shape: a check()/results table, one exported run*SelfCheck()
 // function. Not part of the production build path.
-import { addDays, etDayBoundsUtc, expansionKey, validateLineInput, validatePlanDate } from "./productionSchedule";
+import { addDays, etDayBoundsUtc, expansionKey, nextBusinessDay, validateLineInput, validatePlanDate } from "./productionSchedule";
 
 interface CheckResult {
   name: string;
@@ -26,6 +26,15 @@ export function runProductionScheduleSelfCheck(): { pass: boolean; results: Chec
   eq("addDays month end", addDays("2026-09-30", 1), "2026-10-01");
   eq("addDays year end", addDays("2026-12-31", 1), "2027-01-01");
   eq("addDays negative", addDays("2026-03-01", -1), "2026-02-28");
+
+  // nextBusinessDay (carrier-11): Mon–Fri only, Fri/Sat/Sun → Monday, month/year rollover.
+  eq("nextBusinessDay Mon", nextBusinessDay("2026-10-05"), "2026-10-06");
+  eq("nextBusinessDay Thu", nextBusinessDay("2026-10-08"), "2026-10-09");
+  eq("nextBusinessDay Fri", nextBusinessDay("2026-10-09"), "2026-10-12");
+  eq("nextBusinessDay Sat", nextBusinessDay("2026-10-10"), "2026-10-12");
+  eq("nextBusinessDay Sun", nextBusinessDay("2026-10-11"), "2026-10-12");
+  eq("nextBusinessDay year end", nextBusinessDay("2026-12-31"), "2027-01-01");
+  eq("nextBusinessDay month end Fri", nextBusinessDay("2027-01-29"), "2027-02-01");
 
   const today = "2026-09-28";
   eq("plan date ok today", validatePlanDate("2026-09-28", today), null);

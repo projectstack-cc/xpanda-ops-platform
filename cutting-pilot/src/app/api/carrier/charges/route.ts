@@ -5,7 +5,7 @@
 //
 // Gated on logistics.carrier_view EDIT by the /v2/api/carrier middleware prefix (POST → edit).
 // Token → BOL via resolveCarrierBol (other carriers' BOLs 404), then isWithinCarrierWindow
-// (today/tomorrow ship day, or delivered in the last 7 days ET) — outside → 403 outside_window.
+// (ship day today through the next business day, or delivered in the last 7 days ET) — outside → 403 outside_window.
 // Actor comes from the middleware's X-User-* headers only, never the body. Notifies logistics via
 // the role-subscription push system (type carrier.fees_added); a notification failure never fails
 // the request (dispatchNotification swallows + logs, like legacy).

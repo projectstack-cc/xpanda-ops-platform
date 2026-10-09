@@ -31,6 +31,17 @@ export function addDays(date: string, n: number): string {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
+/** Next Mon–Fri date strictly after `date` (YYYY-MM-DD). Fri/Sat/Sun → Monday. No holiday calendar. */
+export function nextBusinessDay(date: string): string {
+  let next = addDays(date, 1);
+  for (;;) {
+    const [y, m, d] = next.split("-").map(Number);
+    const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    if (dow !== 0 && dow !== 6) return next;
+    next = addDays(next, 1);
+  }
+}
+
 // Days from a to b (b - a), both YYYY-MM-DD.
 export function dayDiff(a: string, b: string): number {
   const ms = (s: string) => {

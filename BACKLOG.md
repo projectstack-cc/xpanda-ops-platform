@@ -158,6 +158,8 @@
 
 ## Carrier View (v2)
 
+- [ ] **carrier-11 follow-up — holiday calendar for nextBusinessDay (plant holidays currently treated as business days).**
+
 - [ ] **carrier-10 follow-up — Steve eyeball History compact + expanded (light & dark, phone + wide monitor).**
 
 - [ ] **carrier-09 follow-up — Steve: submit one real fee on a Seal load and confirm a carrier_charges row + logistics notification.**

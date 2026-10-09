@@ -3,7 +3,7 @@
 // ONLY when its job's carrier matches the same filter the carrier board uses — anything else is
 // treated as not found, so the carrier account can never read another carrier's BOL by token.
 import type { D1Database } from "@cloudflare/workers-types";
-import { addDays, etDayBoundsUtc, etToday } from "@/lib/productionSchedule";
+import { addDays, etDayBoundsUtc, etToday, nextBusinessDay } from "@/lib/productionSchedule";
 
 /** SQL predicate over `jobs j` — the one carrier filter every carrier route uses (rows.ts too). */
 export const CARRIER_JOB_FILTER = "(j.carrier LIKE 'LISMA%' OR j.carrier LIKE 'SEAL%')";
@@ -36,8 +36,9 @@ export async function resolveCarrierBol(
 }
 
 /**
- * The carrier may act on a load only while it's on their board: ship day (ET) is today or
- * tomorrow, OR it was delivered within the history window. The BOL's load resolves with the same
+ * The carrier may act on a load only while it's on their board: ship day (ET) is today through
+ * the next business day inclusive (Fri → Mon, so a weekend ship day in between counts — same range
+ * as the Upcoming board, carrier-11), OR it was delivered within the history window. The BOL's load resolves with the same
  * rule as /api/public/bol-delivery (exact load_number, else the job's sole non-archived assignment).
  */
 export async function isWithinCarrierWindow(DB: D1Database, bol: Record<string, any>): Promise<boolean> {
@@ -56,7 +57,7 @@ export async function isWithinCarrierWindow(DB: D1Database, bol: Record<string, 
     .first<{ ship_day: string | null; loading_status: string; recent_delivery: number }>();
   if (!la) return false;
   const today = etToday();
-  const tomorrow = addDays(today, 1);
-  if (la.ship_day === today || la.ship_day === tomorrow) return true;
+  const nextDay = nextBusinessDay(today);
+  if (la.ship_day && la.ship_day >= today && la.ship_day <= nextDay) return true;
   return la.loading_status === "delivered" && !!la.recent_delivery;
 }

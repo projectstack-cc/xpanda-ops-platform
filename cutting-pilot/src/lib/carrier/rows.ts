@@ -1,6 +1,6 @@
 // src/lib/carrier/rows.ts
 // Shared row builder for the carrier load views (carrier-04): GET /v2/api/carrier (Upcoming —
-// today + tomorrow, ET) and GET /v2/api/carrier/history (delivered in the last 7 days, ET). ONE
+// today through the next business day, ET, inclusive range) and GET /v2/api/carrier/history (delivered in the last 7 days, ET). ONE
 // SELECT (extracted from app/api/carrier/route.ts, carrier-01..03) + geocode enrichment + carrier
 // charges, so the two tabs can never drift on row shape. Distance data: Upcoming warms up to
 // MAX_WARM_PER_REQUEST uncached addresses via ORS; History is cache-only (warm: false).
@@ -219,7 +219,7 @@ const SELECT_SQL = `SELECT
          AND la.loading_status <> 'archived'`;
 
 export type CarrierView =
-  | { kind: "upcoming"; today: string; tomorrow: string }
+  | { kind: "upcoming"; today: string; next_day: string }
   | { kind: "history"; sinceUtc: string };
 
 export async function fetchCarrierRows(DB: D1Database, view: CarrierView) {
@@ -229,10 +229,10 @@ export async function fetchCarrierRows(DB: D1Database, view: CarrierView) {
           `${SELECT_SQL}
          AND la.bay_id IS NOT NULL AND la.bay_id <> ''
          AND la.trailer_number IS NOT NULL AND la.trailer_number <> ''
-         AND substr(COALESCE(la.ship_date, j.ship_date), 1, 10) IN (?, ?)
+         AND substr(COALESCE(la.ship_date, j.ship_date), 1, 10) BETWEEN ? AND ?
        ORDER BY ship_day ASC, lb.bay_number ASC, la.load_number ASC`
         )
-          .bind(view.today, view.tomorrow)
+          .bind(view.today, view.next_day)
           .all()
       : await DB.prepare(
           `${SELECT_SQL}
