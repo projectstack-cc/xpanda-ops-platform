@@ -5955,6 +5955,12 @@ current series).
 
 ## Admin (v2)
 
+- **admin-05 — /v2/admin Activity tab (React §9b + Admin & Auth §8). No migration, no API change.**
+  - **`cutting-pilot/src/components/admin/ActivityTab.tsx`** — port of `admin/activity-log.html`, wired into `AdminDashboard.tsx` in place of the Activity `TabPending` line. Read-only (no `onChanged`).
+  - **Filters:** legacy action + entity type, plus new **user** and **time range** (Last 24 hours / 7 days / 30 days / All time, default 7 days), all via the shared `FilterSelect` fed by `GET /v2/api/admin/activity/facets`. `FilterSelect`'s leading all-option is used as `All time` (→ `range=all`). Any filter change resets to the first page; a stale response from a superseded filter is dropped. `Showing n of total` in the toolbar.
+  - **ET timestamps** through `formatEtDateTime` (`@/lib/etDateTime`). Contract note: the admin-05 prompt describes `timestamp` as SQLite UTC only; live rows are mixed SQLite-UTC and ISO (see admin-02), and `parseStoredUtc` already handles both — no new parsing.
+  - **Expandable detail:** per-row ≥44px icon toggle (`aria-expanded`), several rows open at once, `<pre>` of `JSON.stringify(detail, null, 2)` (raw string when not an object). `delete` actions render in the danger color on the neutral chip.
+  - **Load more** appends the next 50 (offset = rows loaded), hidden once all rows are shown, `Loading…` while in flight. Empty state `No activity matches these filters.`; fetch errors show the danger banner + **Retry**.
 - **admin-04 — /v2/admin Roles tab (React §9b + Admin & Auth §8). No migration, no API change.**
   - **`cutting-pilot/src/components/admin/RolesTab.tsx`** — port of `admin/roles.html`: role list (≥52px rows, member count, `System` chip, brand left-border selection; default = first non-system role) beside an editor (name — read-only for `role-administrator` — description, mono id, **Test as this role**, **Delete role**, Discard, **Save changes**). Wired into `AdminDashboard.tsx` in place of the Roles `TabPending` line.
   - **Permission matrix** grouped by `PERMISSION_GROUPS` / `PERMISSION_LABELS` order (imported from `@/lib/permissions`, never redefined): real checkboxes in ≥44px `<label>`s with sr-only `View …` / `Edit …` text. **Legacy View/Edit coupling kept exactly**: unchecking View clears Edit, Edit is disabled while View is off, checking View never auto-checks Edit.
