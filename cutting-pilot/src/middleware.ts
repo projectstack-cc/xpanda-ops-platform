@@ -20,6 +20,11 @@ import { validateSession, hasPermission, SessionLookupError } from "@/lib/sessio
 // First matching prefix wins. A path with no match falls through with no permission gate
 // (still session-gated above) — same as an un-mapped path in the legacy PATH_PERMISSION_MAP.
 const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
+  // admin-02 — v2 Admin. Page: either key (Parts tab is open to manufacturing.calculators, as legacy
+  // /api/parts is). API: `admin`; real-admin-only routes also self-check X-User-Is-Real-Admin
+  // (lib/admin/guard.ts). Parts reuse legacy /api/parts — no /v2/api/admin parts route.
+  { prefix: "/v2/admin", keys: ["admin", "manufacturing.calculators"] },
+  { prefix: "/v2/api/admin", keys: ["admin"] },
   // Both schedule views read the same data API — EITHER key grants read access.
   { prefix: "/v2/api/schedule-board", keys: ["schedule", "schedule.desk"] },
   // Desk page must come BEFORE the general /v2/schedule prefix (first match wins).
@@ -87,6 +92,11 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/logistics", keys: ["logistics.dashboard"] },
 ];
 
+// admin-02 — mirrors legacy ESCAPE_PREFIXES (_worker.js/index.js): a REAL administrator always passes the
+// gate on the admin surface, even while testing as a role whose permissions would deny it — otherwise an
+// admin testing as e.g. Loading Team could not reach /v2/admin to stop testing.
+const ADMIN_ESCAPE_PREFIXES = ["/v2/admin", "/v2/api/admin"];
+
 function permissionKeysFor(pathname: string): string[] | null {
   return PERMISSION_MAP.find((m) => pathname.startsWith(m.prefix))?.keys ?? null;
 }
@@ -148,7 +158,10 @@ export async function middleware(request: NextRequest) {
   const action = request.method === "GET" || request.method === "HEAD" ? "view" : "edit";
   // Unmapped path (null) stays ungated as before; a mapped path passes if the user holds ANY of its keys.
   const requiredKeys = permissionKeysFor(url.pathname);
-  const permitted = requiredKeys === null || requiredKeys.some((k) => hasPermission(user, k, action));
+  const permitted =
+    requiredKeys === null ||
+    requiredKeys.some((k) => hasPermission(user, k, action)) ||
+    (user.isRealAdmin && ADMIN_ESCAPE_PREFIXES.some((p) => url.pathname.startsWith(p)));
   if (!permitted) {
     if (isApi) return NextResponse.json({ ok: false, error: "Access denied." }, { status: 403 });
     return NextResponse.redirect(new URL("/?access_denied=1", url.origin));
@@ -159,6 +172,12 @@ export async function middleware(request: NextRequest) {
   headers.set("X-User-Role", user.role);
   headers.set("X-User-Name", user.displayName || user.username);
   headers.set("X-User-Is-Admin", user.isAdministrator ? "1" : "0");
+  // admin-02 — real-admin flag (true even while testing as a role; X-User-Is-Admin is false then) and the
+  // simulated role's name (URI-encoded; header values must be ASCII). Always set/cleared here so a
+  // client-supplied value can never survive.
+  headers.set("X-User-Is-Real-Admin", user.isRealAdmin ? "1" : "0");
+  headers.delete("X-User-Simulating-Role");
+  if (user.simulatingRole) headers.set("X-User-Simulating-Role", encodeURIComponent(user.simulatingRole.name));
   headers.set(
     "X-User-Can-Manage-Cutting",
     hasPermission(user, "manufacturing.cutting.manage", "edit") ? "1" : "0"

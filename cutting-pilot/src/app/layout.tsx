@@ -1,6 +1,8 @@
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme";
 import { LangProvider } from "@/components/lang";
+import { headers } from "next/headers";
+import SimulationBanner from "@/components/SimulationBanner";
 
 export const metadata = {
   title: "xPanda Cutting — v2",
@@ -11,6 +13,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const simRaw = headers().get("X-User-Simulating-Role");
+  let simRole: string | null = null;
+  if (simRaw) { try { simRole = decodeURIComponent(simRaw); } catch { simRole = simRaw; } }
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -27,7 +32,10 @@ export default function RootLayout({
       </head>
       <body className="bg-bg text-text font-sans antialiased">
         <LangProvider>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider>
+            {simRole && <SimulationBanner roleName={simRole} />}
+            {children}
+          </ThemeProvider>
         </LangProvider>
       </body>
     </html>
