@@ -190,7 +190,6 @@ export const PATH_PERMISSION_MAP = [
   { pattern: /^\/logistics\/load-builder/,                                    key: 'logistics.load-builder' },
   { pattern: /^\/logistics\/loading/,                                         key: 'logistics.loading' },
   { pattern: /^\/logistics\//,                                                key: 'logistics.dashboard' },
-  { pattern: /^\/manufacturing\/(_archived\/)?cutting-dashboard/,             key: 'manufacturing.cutting' },
   { pattern: /^\/manufacturing\//,                                            key: 'manufacturing.calculators' },
   { pattern: /^\/production\//,                                               key: 'production.log' },
   { pattern: /^\/qc\//,                                                       key: 'qc' },
@@ -199,9 +198,6 @@ export const PATH_PERMISSION_MAP = [
 ];
 
 export const API_PERMISSION_MAP = [
-  { pattern: /^\/api\/users/,              key: 'admin' },
-  { pattern: /^\/api\/roles/,              key: 'admin' },
-  { pattern: /^\/api\/activity-log/,       key: 'admin' },
   { pattern: /^\/api\/holey-chunks\/backfill/, key: 'admin' },
   { pattern: /^\/api\/jobs/,              key: 'jobs' },
   { pattern: /^\/api\/address/,           key: 'jobs' },

@@ -10,7 +10,6 @@ import { handleApiCompletions, handleApiScrapLog } from './routes/qc.js';
 import { handleApiReportsScrapSummary, handleApiReportsScrapTrend, handleApiReportsScrapReasons,
          handleIncidentTrend, handleIncidentSummary, handleIncidentList, handleIncidentDetail,
          handleCuttingActivityReport } from './routes/reports.js';
-import { handleApiUsers, handleApiRoles, handleApiActivityLog } from './routes/admin.js';
 import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePassword,
          handleSimulateRoleStart, handleSimulateRoleStop } from './routes/auth.js';
 import { handleApiNotifications, handleApiPushSubscribe, handleApiPushUnsubscribe } from './routes/notifications.js';
@@ -34,8 +33,6 @@ import { handleApiPublicBolLookup, handleApiPublicBolPickup, handleApiPublicBolD
 // ─────────────────────────────────────────────────────────────────────────────
 const API_ROUTES = [
   // Admin
-  { prefix: '/api/users', handler: (req, env) => handleApiUsers(req, env) },
-  { prefix: '/api/roles', handler: (req, env) => handleApiRoles(req, env) },
 
   // QC
   { path: '/api/completions', handler: (req, env) => handleApiCompletions(req, env) },
@@ -85,7 +82,6 @@ const API_ROUTES = [
   { prefix: '/api/loading-photos',      handler: (req, env) => handleApiLoadingPhotos(req, env) },
 
   // Platform
-  { prefix: '/api/activity-log',  handler: (req, env) => handleApiActivityLog(req, env) },
   { prefix: '/api/notifications',  handler: (req, env) => handleApiNotifications(req, env) },
 
   // Push (subscribe/unsubscribe — vapid-public-key stays inline above the session gate)
@@ -206,7 +202,7 @@ export default {
           const permKey = getPermissionKey(url.pathname, isApi);
 
           // Escape hatch: real admins always access admin/auth paths even when simulating
-          const ESCAPE_PREFIXES = ['/admin/', '/api/auth/', '/api/roles', '/api/users', '/api/activity-log', '/login'];
+          const ESCAPE_PREFIXES = ['/admin/', '/api/auth/', '/login'];
           const isEscapePath = user.isRealAdmin && ESCAPE_PREFIXES.some(p => url.pathname.startsWith(p));
 
           if (permKey && !isEscapePath) {
