@@ -6,6 +6,7 @@
 // Gated on `jobs` (view/edit) by middleware.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
+import { canJobAction } from "@/lib/jobPerms";
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const STATUSES = ["not_started", "in_production", "done", "loading", "shipped"];
@@ -95,6 +96,9 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
     const cur = await DB.prepare("SELECT status, archived_at FROM jobs WHERE id = ?").bind(id).first<any>();
     if (!cur) return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 });
     if (cur.archived_at) return NextResponse.json({ ok: false, error: "Job is archived." }, { status: 400 });
+    if (v !== cur.status && !canJobAction(request, "jobs.status")) {
+      return NextResponse.json({ ok: false, error: "Changing job status requires Job Board — Change job status." }, { status: 403 });
+    }
     if ((cur.status === "shipped" || cur.status === "loading") && v !== cur.status) {
       return NextResponse.json({ ok: false, error: "Can't change a loading/shipped job from the board." }, { status: 400 });
     }

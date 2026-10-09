@@ -3,6 +3,14 @@ import { propagateJobCarrierToBols } from '../lib/bol-carrier.js';
 import { nestHoleyChunks, netHoleyChunks } from '../lib/holey-nester.js';
 import { replaceLineItemsPreservingIds } from '../lib/lineItems.js';
 
+// admin-07 — granular Job Board edit rights. Same header pattern as the jobs.manage checks below
+// (X-User-Is-Admin / X-User-Permissions, set by index.js's session gate). Admins always pass.
+function canJobAction(request, key) {
+  if (request.headers.get("X-User-Is-Admin") === "1") return true;
+  try { return JSON.parse(request.headers.get("X-User-Permissions") || "{}")?.[key]?.edit === true; }
+  catch { return false; }
+}
+
 // P379: compute + persist the Holey Board chunk requirement for a job (server-authoritative).
 // Reads the just-saved line items, resolves HB thickness from the parts catalog, runs the FFD
 // nester, writes jobs.hb_chunks_required + hb_chunk_breakdown, and mutates the in-memory `job`
@@ -554,6 +562,9 @@ export async function handleApiJobs(request, env) {
 
   // ── POST ─────────────────────────────────────────────────────────────────
   if (request.method === "POST") {
+    if (!canJobAction(request, "jobs.create")) {
+      return json({ ok: false, error: "Creating jobs requires Job Board — Create jobs." }, 403);
+    }
     let payload;
     try { payload = await request.json(); }
     catch { return json({ ok: false, error: "Invalid JSON" }, 400); }
@@ -773,6 +784,15 @@ export async function handleApiJobs(request, env) {
       "SELECT id, status, ship_date, archived_at, trailer_group_id, carrier FROM jobs WHERE id = ?"
     ).bind(id).first();
     if (!existing) return json({ ok: false, error: "Job not found." }, 404);
+    // admin-07 — only when the value actually changes (full-form saves resend unchanged status).
+    if ("status" in payload && String(payload.status).trim() !== String(existing.status || "")
+        && !canJobAction(request, "jobs.status")) {
+      return json({ ok: false, error: "Changing job status requires Job Board — Change job status." }, 403);
+    }
+    if ("archived_at" in payload && Boolean(payload.archived_at) !== Boolean(existing.archived_at)
+        && !canJobAction(request, "jobs.archive")) {
+      return json({ ok: false, error: "Archiving jobs requires Job Board — Archive / delete jobs." }, 403);
+    }
 
     // Linked jobs must share a ship_date (see trailer_group_id block below). Changing ship_date
     // on a linked job is rejected rather than silently applied to the whole group — a group-wide
@@ -1228,6 +1248,9 @@ export async function handleApiJobs(request, env) {
     const id = String(payload.id || "").trim();
     if (!id) return json({ ok: false, error: "id is required." }, 400);
 
+    if (!canJobAction(request, "jobs.archive")) {
+      return json({ ok: false, error: "Deleting jobs requires Job Board — Archive / delete jobs." }, 403);
+    }
     const existing = await db.prepare("SELECT id, trailer_group_id FROM jobs WHERE id = ?").bind(id).first();
     if (!existing) return json({ ok: false, error: "Job not found." }, 404);
 

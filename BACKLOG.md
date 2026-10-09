@@ -96,6 +96,7 @@
 - [ ] Port `admin/parts.html` (v2 already has `PartsLibraryPanel.tsx` in Load Builder — reuse it), `users.html`,
   `roles.html` (`PERMISSION_LABELS`), `activity-log.html`.
 - [ ] Drop `roles_perm_backup_admin01` (admin-01 snapshot) once the admin-NN series has shipped and been stable.
+- [ ] Drop `roles_perm_backup_admin07` (admin-07 snapshot) with the admin-01 one once stable.
 - [ ] At admin cutover: delete legacy `PERMISSION_LABELS` / `NOTIFICATION_TYPE_LABELS` with `admin/roles.html` — `cutting-pilot/src/lib/permissions.ts` becomes the only copy. Until then, any new permission key must be added to BOTH.
 - [ ] i18n (en/es/ht) for /v2/admin — English-only at port time (bem-01 precedent); legacy admin-i18n.js has the catalog to reuse.
 
@@ -541,7 +542,6 @@ schedule badge):**
 - [ ] Remove temporary `pages.dev` → `xpandaops.com` redirect from `_worker.js/index.js` once all internal links/bookmarks confirmed updated.
   Decision 2026-10-05: hold until access logs confirm no traffic on the pages.dev
   host (Pages analytics filtered to that host, or a temporary log line + wrangler tail).
-- [ ] Breakdown job board permissions into more granular sub-modules *(easier after F3 audit + F1a shared header — both now done)*
 - [ ] Dashboard KPIs / metrics panel — homepage widget showing jobs by status, BOLs generated this week, shipments pending/in-transit/delivered, most-used parts *(adds new endpoints)*
 - [ ] **JS-built table/card content doesn't re-render on language switch (`xpanda:langchange`)** — found 2026-09-04 during the Reports i18n phase (advisor-flagged), but present across every module this sweep has touched so far. `shared/i18n.js`'s `apply(root)` walks `[data-i18n]`/`[data-i18n-attr]`/`[data-i18n-placeholder]` and re-runs on `xpanda:langchange`, but rows/cells built by JS via `innerHTML`/template literals at data-load time (Job Board's `renderList`/`buildCard`, Manufacturing's cut-list rows, QC's dynamically-built rows, Reports' `renderTable`/`sessionsTable`/`cutItemsTable`/invoice groups, etc.) carry no `data-i18n` nodes at all — a language switch after data has loaded leaves that content frozen in whichever language was active at render time until the next reload/refetch. Two narrower instances of the same root cause (a rebuilt placeholder `<option>` losing its tag) were fixed directly in Reports (`incidents/list.html`, `cutting/index.html` — see the i18n sweep bullet above), but the general case — full tables/cards — needs a platform-wide fix, not a per-page patch: likely a shared `xpanda:langchange` listener convention that re-invokes each page's own render function. Revisit once the sweep reaches full-module coverage; not blocking since content is correct on load and after any refetch.
 - [ ] Remove the dead `cutting-dashboard` pattern from `PATH_PERMISSION_MAP` (`_worker.js/lib/core.js`, the

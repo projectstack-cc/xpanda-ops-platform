@@ -14,6 +14,7 @@
 // no new permission key.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
+import { canJobAction } from "@/lib/jobPerms";
 import { PROCESS_NAMES, mergeProcesses, parseProcesses } from "@/lib/processes";
 import { computeAndPersistHoleyChunks } from "@/lib/holeyChunks";
 import { JOB_TO_SHIPMENT_SYNC, reconcileLoadingAssignments, syncJobFieldsToShipment, type JobSyncField } from "@/lib/logistics/jobSync";
@@ -76,6 +77,9 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   if ("status" in p) {
     const v = s(p.status);
     if (!STATUSES.includes(v)) return NextResponse.json({ ok: false, error: "Invalid status." }, { status: 400 });
+    if (v !== existing.status && !canJobAction(request, "jobs.status")) {
+      return NextResponse.json({ ok: false, error: "Changing job status requires Job Board — Change job status." }, { status: 403 });
+    }
     if ((existing.status === "shipped" || existing.status === "loading") && v !== existing.status) {
       return NextResponse.json(
         { ok: false, error: "Can't change a loading/shipped job from the board." },

@@ -114,6 +114,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   // jb-10: same manager rule as the shifts routes (server enforces 403 too).
   const canManageShifts = isAdmin || !!permissions["jobs.manage"]?.edit;
+  const canChangeStatus = isAdmin || !!permissions["jobs.status"]?.edit;
 
   // Week offset: 0 = This Week (default), 1 = Next Week, null = Show All — logistics parity.
   const [weekOffset, setWeekOffset] = useState<number | null>(0);
@@ -461,6 +462,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                                     job={job}
                                     assignableUsers={assignableUsers}
                                     canManageShifts={canManageShifts}
+                                    canChangeStatus={canChangeStatus}
                                     onCancel={() => setExpandedId(null)}
                                     onSaved={() => {
                                       setExpandedId(null);

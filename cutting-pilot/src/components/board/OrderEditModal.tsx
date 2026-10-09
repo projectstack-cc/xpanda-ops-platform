@@ -184,8 +184,10 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
   const statusLocked = job?.status === "loading" || job?.status === "shipped";
   const canAssignShipDays = isAdmin || !!permissions["logistics.loading.manage"]?.edit;
   const canManageAssignees = isAdmin || !!permissions["jobs.manage"]?.edit;
-  // jb-02: same rule as legacy gateJobsWrite — jobs edit (or admin); no status restriction.
-  const canDeleteOrder = isAdmin || !!permissions["jobs"]?.edit;
+  // jb-02 / admin-07: delete needs `jobs.archive` edit (or admin), matching legacy DELETE /api/jobs; no
+  // status restriction. Status changes need `jobs.status` edit. The server enforces both.
+  const canDeleteOrder = isAdmin || !!permissions["jobs.archive"]?.edit;
+  const canChangeStatus = isAdmin || !!permissions["jobs.status"]?.edit;
   // jb-05: HB floor stock writes go through the same `jobs`-edit rule.
   const canEditJob = canDeleteOrder;
 
@@ -760,9 +762,9 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
                 <select
                   value={job.status}
                   onChange={(e) => setJob({ ...job, status: e.target.value })}
-                  disabled={statusLocked}
-                  title={statusLocked ? "Loading/shipped jobs can't be changed from the board." : undefined}
-                  className={`${inputClass} ${statusLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+                  disabled={statusLocked || !canChangeStatus}
+                  title={statusLocked ? "Loading/shipped jobs can't be changed from the board." : !canChangeStatus ? "You don't have permission to change job status." : undefined}
+                  className={`${inputClass} ${(statusLocked || !canChangeStatus) ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {STATUS_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>

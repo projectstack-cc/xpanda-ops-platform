@@ -7,6 +7,9 @@
 export const PERMISSION_LABELS: Record<string, { group: string; label: string }> = {
   "jobs":                           { group: "Jobs",          label: "Job Board" },
   "jobs.manage":                    { group: "Jobs",          label: "Job Board — Assign Production (manager)" },
+  "jobs.create":                    { group: "Jobs",          label: "Job Board — Create jobs / upload packing slips" },
+  "jobs.status":                    { group: "Jobs",          label: "Job Board — Change job status (board moves, mark shipped)" },
+  "jobs.archive":                   { group: "Jobs",          label: "Job Board — Archive / delete jobs" },
   "logistics.dashboard":            { group: "Logistics",     label: "Dashboard & Shipments" },
   "logistics.bol":                  { group: "Logistics",     label: "BOL Generator" },
   "logistics.load-builder":         { group: "Logistics",     label: "Load Builder" },

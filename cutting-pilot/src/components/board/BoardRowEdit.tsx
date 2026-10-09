@@ -27,6 +27,7 @@ interface BoardRowEditProps {
   job: BoardJob;
   assignableUsers: AssignableUser[];
   canManageShifts: boolean;
+  canChangeStatus: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }
@@ -43,7 +44,7 @@ const STATUS_OPTIONS = [
   { value: "shipped", label: "Shipped" },
 ];
 
-export default function BoardRowEdit({ job, assignableUsers, canManageShifts, onSaved, onCancel }: BoardRowEditProps) {
+export default function BoardRowEdit({ job, assignableUsers, canManageShifts, canChangeStatus, onSaved, onCancel }: BoardRowEditProps) {
   const [shipDate, setShipDate] = useState(job.ship_date || "");
   const [choice, setChoice] = useState<PriorityChoice>(toPriorityChoice(job.priority, job.priority_level));
   const [notes, setNotes] = useState(job.notes || "");
@@ -174,9 +175,9 @@ export default function BoardRowEdit({ job, assignableUsers, canManageShifts, on
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            disabled={statusLocked}
-            title={statusLocked ? "Loading/shipped jobs can't be changed from the board." : undefined}
-            className={`${inputClass} ${statusLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+            disabled={statusLocked || !canChangeStatus}
+            title={statusLocked ? "Loading/shipped jobs can't be changed from the board." : !canChangeStatus ? "You don't have permission to change job status." : undefined}
+            className={`${inputClass} ${(statusLocked || !canChangeStatus) ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>

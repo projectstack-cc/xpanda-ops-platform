@@ -5955,6 +5955,24 @@ current series).
 
 ## Admin (v2)
 
+- **admin-07 — Granular Job Board permissions jobs.create / jobs.status / jobs.archive — seeded = jobs, enforced on both boards (Admin & Auth §8 + DB/API §9 + Job Board §2 + Platform §9a + React §9b). MIGRATION: DB_Migrations/admin-07-jobs-subkeys.sql.**
+  - **Seed** (`DB_Migrations/admin-07-jobs-subkeys.sql`, gitignored): each role's three new keys = its current `jobs` value, so **nobody's access changes on delivery**. Orchestrator dry run (2026-10-09): 27 keys added (3 × 9 roles), all JSON objects, all equal to `jobs`, 0 existing keys changed. **Run against prod D1 before this was pushed** (2026-10-09): STEP 1 guard → 0 rows; STEP 3 backup 9/9; STEP 4 updated 9 roles; STEP 5 → `changed_existing 0 · added 27 · unexpected_added 0 · not_object 0 · mismatch_vs_jobs 0`. Backup table `roles_perm_backup_admin07`.
+  - **Labels** added to both copies (`cutting-pilot/src/lib/permissions.ts` and `admin/roles.html` `PERMISSION_LABELS`, which retires in admin-08): `Job Board — Create jobs / upload packing slips`, `— Change job status (board moves, mark shipped)`, `— Archive / delete jobs`. Key-diff self-check: identical, 30 keys. `PERM_ITEM_LABEL_KEY` untouched (`permItemLabel` falls back to the English label).
+  - **Enforcement points** (admins always pass; legacy `canJobAction()` local to `_worker.js/routes/jobs.js`, v2 `src/lib/jobPerms.ts`, both reading `X-User-Is-Admin` / `X-User-Permissions`):
+
+    | Action | Legacy `/api/jobs` | v2 |
+    |---|---|---|
+    | Create | `POST` → `jobs.create` | — (Orders POST out of scope) |
+    | Change status | `PUT` with a changed `status` → `jobs.status` | `PUT /v2/api/board/:id` and `PUT /v2/api/orders/:id` with a changed `status` → `jobs.status` |
+    | Archive / unarchive | `PUT` with a changed `archived_at` → `jobs.archive` | — |
+    | Delete | `DELETE` → `jobs.archive` | via legacy `DELETE /api/jobs` |
+
+  - **Changed-only rule:** status and archive checks fire only when the request actually changes the value, so full-form saves that resend an unchanged `status` / `archived_at` keep working for everyone. The path gates (`jobs` / `orders`) are unchanged; these are an additional AND inside the handlers.
+  - **Deliberately ungated system transitions:** cutting complete → `done`, dock/shipment flows → `loading`/`shipped`, and the auto-archive sweeps on GET are system state changes, not a person moving a card. `/v2/api/jobs` and `/v2/api/jobs/:id` are read-only (Loading Team via `logistics.loading`, unaffected).
+  - **`orders` route:** `PUT /v2/api/orders/:id` is gated on `orders`, so its new `jobs.status` check only affects a user with `orders` edit but not `jobs.status` edit — migration STEP 1 confirmed no role has `orders` edit without `jobs` edit today.
+  - **v2 UI:** `ProductionBoard` passes `canChangeStatus` (`isAdmin || jobs.status` edit) to `BoardRowEdit`; `BoardRowEdit` and `OrderEditModal` disable the status select without it (title: `You don't have permission to change job status.`). `OrderEditModal`'s delete now needs `jobs.archive` edit (was `jobs`). The legacy board needs no UI change: `moveCard` reverts and toasts the server's 403 text.
+  - **The three keys are independent of `jobs` now:** unticking `jobs` edit no longer revokes create / status / archive, and vice versa. To restrict someone, untick the specific key in `/v2/admin` → Roles.
+  - Verification: `node --check` on a named copy of `routes/jobs.js` OK; worker imports with `default.fetch` a function; `tsc` clean. Logic harness (`npx tsx`, scratch): admin → true; `{"jobs.status":{"edit":true}}` → true; `{"jobs":{"edit":true}}` alone → false (independent keys); malformed JSON → false — 4/4 PASS.
 - **admin-06 — /v2/admin Parts tab: shared PartsLibrary extracted from the Load Builder modal; editable name/category/parent group/weight/color/rotation (React §9b + Admin & Auth §8; DB/API §9 consulted). No migration, no API change.**
   - **Extraction — one definition, two hosts.** The whole library moved (not copied) from `components/logistics/PartsLibraryPanel.tsx` into NEW `cutting-pilot/src/components/parts/PartsLibrary.tsx` with props `active` (refetch trigger, was `isOpen`), `layout` (`"modal"` keeps the 50vh scroll box, `"page"` lets the list grow) and `canEdit` (default true). `PartsLibraryPanel.tsx` is now a 20-line `Modal` wrapper (`<PartsLibrary active={isOpen} layout="modal" />`) with unchanged props, so **Load Builder is unchanged**: same modal, same 50vh list, editing on, refetch on open; `LoadPlanView.tsx` not edited. `ReadOnlyField` deleted (no callers). `refetch()` still calls `invalidatePartsLibrary()`.
   - **Category filter** (legacy `admin/parts.html` parity): shared `FilterSelect` (`All categories`) beside the search box, options = distinct non-empty categories (sorted) plus `Uncategorized` (`__none__`) when any part has a blank category; applied before search and `groupByCategory`.
