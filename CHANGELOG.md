@@ -2925,6 +2925,11 @@ current series).
 
 ## Logistics (v2)
 
+- **bem-03 — Retire the legacy BOL Email Queue (logistics agent §3). No migration (`bol_email_recipients` / `plant_holidays` stay — v2 owns them), no v2 change.**
+  - **Archived:** the original legacy page (pre-stub version from git) → `logistics/_archived/bol-email.html`, the module's existing archive folder (alongside `bol-generator.html`; prod-b-04 / QC Cleanup-6 precedent). It is reference only — its API is gone. The `logistics/bol-email.html` redirect stub stays for bookmarks, with its `PATH_PERMISSION_MAP` row.
+  - **Worker:** deleted `_worker.js/routes/bol-email.js`, its `index.js` import + `API_ROUTES` row, and the `/api/bol-email` `API_PERMISSION_MAP` row in `lib/core.js`. Gate behavior for the now-unmapped path (same as prod-b-04): session still required; GET falls through to `ASSETS.fetch` → 404; mutations get 403 `Unmapped route`. Nothing becomes reachable ungated.
+  - **i18n:** removed the three `// BOL Email Queue (bol-email.html)` blocks (132 `bolEmail*` keys, en/es/ht) from `logistics/logistics-i18n.js` — kept `bolEmailQueueLink` (Classic dashboard link) — and `layout.bolEmailTitle` / `bolEmailSubtitle` (×3) from `shared/i18n-common.js`. Grep confirms no live page references them.
+  - **Verification:** `node --check` on `_worker.js/index.js`, `lib/core.js`, both i18n files; the worker module imports cleanly (`default.fetch` is a function); `grep -rn bol-email _worker.js` → only the stub's PATH row. LF line endings.
 - **bem-02 — BOL Email Queue cutover: v2 live, legacy `bol-email.html` redirects (no Classic) (logistics agent §3 + React component agent §9b). No migration, no API changes.**
   - **`ShipmentDashboard.tsx`:** "BOL Email Queue" now links to `/v2/logistics/bol-email` and only renders when `canEditBol` (`isAdmin || permissions["logistics.bol"].edit`), since the page has been edit-only since bem-01.
   - **`logistics/index.html`:** the Classic dashboard's BOL Email Queue link points to `/v2/logistics/bol-email`.

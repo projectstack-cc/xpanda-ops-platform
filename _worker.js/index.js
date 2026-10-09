@@ -15,7 +15,6 @@ import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePasswo
          handleSimulateRoleStart, handleSimulateRoleStop } from './routes/auth.js';
 import { handleApiNotifications, handleApiPushSubscribe, handleApiPushUnsubscribe } from './routes/notifications.js';
 import { handleApiPublicBolLookup, handleApiPublicBolPickup, handleApiPublicBolDelivery, handleApiPublicBolDocument, handleApiPublicBolSigned } from './routes/public.js';
-import { handleApiBolEmail } from './routes/bol-email.js';
 
 // _worker.js — Pages Advanced Mode with SAFE error reporting
 
@@ -66,7 +65,6 @@ const API_ROUTES = [
   { path: '/api/holey-chunks/backfill', method: 'POST', handler: (req, env) => handleHoleyChunksBackfill(req, env) },
   { prefix: '/api/assignable-users', handler: (req, env) => handleApiAssignableUsers(req, env) },
   { path:   '/api/shipments', handler: (req, env) => handleApiShipments(req, env) },
-  { prefix: '/api/bol-email', handler: (req, env) => handleApiBolEmail(req, env) },
 
   // BOL / load builder (specific paths before their shared prefixes)
   { path:   '/api/bol-customers/seed',     handler: (req, env) => handleApiBolCustomersSeed(req, env) },

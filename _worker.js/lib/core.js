@@ -208,7 +208,6 @@ export const API_PERMISSION_MAP = [
   { pattern: /^\/api\/bols/,              key: 'logistics.bol' },
   { pattern: /^\/api\/bol-customers/,     key: 'logistics.bol' },
   { pattern: /^\/api\/bol-carriers/,      key: 'logistics.bol' },
-  { pattern: /^\/api\/bol-email/,         key: 'logistics.bol' },
   { pattern: /^\/api\/shipments/,         key: 'logistics.dashboard' },
   { pattern: /^\/api\/load-builder-skus/, key: 'logistics.load-builder' },
   { pattern: /^\/api\/saved-loads/,       key: 'logistics.load-builder' },
