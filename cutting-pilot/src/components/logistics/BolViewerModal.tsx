@@ -28,8 +28,15 @@
 // sometimes narrowed to one load via `loadNumber` for the PDF preview, but the history list always
 // needs the job's full BOL set. `onDeleted` is a NEW, additive callback (not a widened `onClose`)
 // so DockBoard.tsx's call site, which never deletes, needs no change.
+//
+// lgx-review-01: optional `reviewMode` restores legacy's post-generate review step
+// (bol-compose.js reviewRecords/rrShow). ShipmentDashboard opens the viewer in review mode right
+// after BolGenerateModal saves: title becomes "Review BOL", the BOL-history delete list is hidden,
+// and a footer offers "Make Changes" (same onEdit path as the Edit BOL button) and "Approve"
+// (onApprove -> close + parent refresh). The BOLs are already persisted at this point, so Make
+// Changes is the normal BolEditorModal PUT -- no separate pre-save path.
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Check, Pencil, Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
 import PdfViewer from "@/components/PdfViewer";
 import { buildCombinedBolPdf } from "@/lib/bolDomGlue";
@@ -56,6 +63,11 @@ interface BolViewerModalProps {
   /** Called after a successful BOL delete so the parent dashboard can refetch (bol_count/
    * bol_number would otherwise go stale). Additive -- does not replace onClose. */
   onDeleted?: () => void;
+  /** lgx-review-01: post-generate review step. Changes the title, hides BOL history, and shows a
+   * Make Changes / Approve footer. Only ShipmentDashboard.tsx passes this. */
+  reviewMode?: boolean;
+  /** lgx-review-01: Approve in review mode. Falls back to onClose when omitted. */
+  onApprove?: () => void;
 }
 
 export default function BolViewerModal({
@@ -66,6 +78,8 @@ export default function BolViewerModal({
   viewOnly = false,
   canManageLoading = false,
   onDeleted,
+  reviewMode = false,
+  onApprove,
 }: BolViewerModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -246,7 +260,7 @@ export default function BolViewerModal({
   }
 
   return (
-    <Modal isOpen={!!jobId} onClose={onClose} title="Bill of Lading" size="xl">
+    <Modal isOpen={!!jobId} onClose={onClose} title={reviewMode ? "Review BOL" : "Bill of Lading"} size="xl">
       {loading && <p className="text-sm text-muted py-6 text-center">Building BOL preview…</p>}
 
       {error && !loading && (
@@ -255,7 +269,7 @@ export default function BolViewerModal({
 
       {!loading && !error && src && (
         <div className="space-y-3">
-          {!viewOnly && canManageLoading && historyBols.length > 0 && (
+          {!viewOnly && !reviewMode && canManageLoading && historyBols.length > 0 && (
             <div className="rounded-md border border-[var(--border)] bg-[var(--ghost-bg)] p-3 space-y-2">
               <div className="text-xs font-semibold text-muted uppercase tracking-wider">BOL History</div>
               {deleteFenced && (
@@ -312,7 +326,7 @@ export default function BolViewerModal({
               </div>
             </div>
           )}
-          {editableBols.length > 0 && !viewOnly && (
+          {editableBols.length > 0 && !viewOnly && !reviewMode && (
             <div className="flex justify-end">
               <button
                 type="button"
@@ -333,6 +347,28 @@ export default function BolViewerModal({
             </p>
           )}
           <PdfViewer src={src} filename={`BOL_${bols[0]?.bol_number || jobId}.pdf`} title="Bill of Lading" height={560} />
+          {reviewMode && (
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+              {editableBols.length > 0 && !viewOnly && (
+                <button
+                  type="button"
+                  onClick={() => jobId && onEdit(editableBols, jobId, 0)}
+                  className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 rounded-md border border-[var(--border)] bg-[var(--surface)] text-sm font-semibold text-text cursor-pointer hover:bg-[var(--ghost-bg)]"
+                >
+                  <Pencil size={15} aria-hidden="true" />
+                  Make Changes
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => (onApprove ? onApprove() : onClose())}
+                className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 rounded-md bg-[var(--brand)] text-sm font-semibold text-white cursor-pointer hover:opacity-90"
+              >
+                <Check size={15} aria-hidden="true" />
+                Approve
+              </button>
+            </div>
+          )}
         </div>
       )}
     </Modal>

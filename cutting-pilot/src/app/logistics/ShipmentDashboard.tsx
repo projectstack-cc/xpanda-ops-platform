@@ -93,6 +93,10 @@ export default function ShipmentDashboard({
   const [viewerJobId, setViewerJobId] = useState<string | null>(null);
   const [generateJobId, setGenerateJobId] = useState<string | null>(null);
   const [editorTarget, setEditorTarget] = useState<EditorTarget | null>(null);
+  // lgx-review-01: true while the viewer is showing the post-generate review step. Survives the
+  // viewer -> editor -> viewer round-trip (handleEditFromViewer/handleEditorCancel/Saved only touch
+  // viewerJobId), and is reset whenever the viewer closes, so View BOL always opens in normal mode.
+  const [viewerReview, setViewerReview] = useState(false);
   const [editingShipment, setEditingShipment] = useState<ShipmentListItem | null>(null);
   const [statModalKey, setStatModalKey] = useState<string | null>(null);
 
@@ -241,12 +245,29 @@ export default function ShipmentDashboard({
   }
 
   function handleGenerateDone(generated: boolean) {
+    const jobId = generateJobId;
     setGenerateJobId(null);
     if (generated) {
       // lgx-minimap-01: edits can change address/carrier/loads — drop cached drill-downs so they refetch.
       detailCacheRef.current.clear();
       load(); // Refreshes bol_count so the row flips to "View BOL"
+      // lgx-review-01: legacy parity — after Generate, show the packet for review/edits instead of
+      // just closing. Also fires on a partial save (savedAny) so the operator sees what did save.
+      if (jobId) {
+        setViewerReview(true);
+        setViewerJobId(jobId);
+      }
     }
+  }
+
+  function handleViewerClose() {
+    setViewerJobId(null);
+    setViewerReview(false);
+  }
+
+  function handleReviewApprove() {
+    handleViewerClose();
+    load();
   }
 
   // split-days-02: per-load ship days changed -- drop cached drill-downs and refetch so split rows regroup.
@@ -593,7 +614,9 @@ export default function ShipmentDashboard({
       {/* Modals */}
       <BolViewerModal
         jobId={viewerJobId}
-        onClose={() => setViewerJobId(null)}
+        onClose={handleViewerClose}
+        reviewMode={viewerReview}
+        onApprove={handleReviewApprove}
         onEdit={handleEditFromViewer}
         canManageLoading={canManageLoading}
         onDeleted={load}

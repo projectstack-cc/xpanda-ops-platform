@@ -51,6 +51,7 @@
 
 ### Load Builder — legacy `logistics/load-builder.html` → `/v2/logistics/load-builder` · NEEDS MAJOR WORK (dark)
 
+- [ ] **lgx-review-01 follow-up — Load Builder "Generate BOLs" has no post-generate review step.** LoadPlanView's BolGenerateModal path still just closes. Job-less plans have no job_id, so wiring it needs BolViewerModal to accept saved BOL ids (or the POST responses) instead of a jobId.
 - [ ] **Load Builder v2 rework — scope as its own project.** Per Steve (2026-10-08), the v2 port needs
   substantial work before it can replace legacy, beyond un-darking. Scope with the Orchestrator first; the
   open `lb-ui-*` / `lb-engine-*` follow-ups under Logistics (v2) feed into that scoping.
