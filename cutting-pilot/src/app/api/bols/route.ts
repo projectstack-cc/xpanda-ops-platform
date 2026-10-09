@@ -4,10 +4,15 @@
 // regenerate-replaces-previous / access_token-carryover behavior) but FENCED behind
 // V2_LOGISTICS_WRITES_ENABLED per the prompt's read/write fence -- v2 shares prod D1, and
 // `wrangler dev` writes hit production. See BACKLOG.md for the flip-the-flag follow-up.
+// DELETE /v2/api/bols?job_id= (lgx-boldel-01) -- manager-only delete-all, ports legacy bols.js's
+// bulk branch with a shipped guard (409 if any BOL is locked; nothing deleted) and
+// bol_documents/R2 cleanup.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 import { promoteCarrierOverride } from "@/lib/logistics/bolCarrier";
+import { isBolRowLocked, deleteBolCascade, type BolDeleteRow } from "@/lib/logistics/bolDelete";
+import { logActivity } from "@/lib/activityLog";
 
 function generateAccessToken(): string {
   const bytes = new Uint8Array(16);
@@ -201,6 +206,60 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, message: "BOL created.", bol: row }, { status: 201 });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  if (!V2_LOGISTICS_WRITES_ENABLED) {
+    return NextResponse.json(
+      { ok: false, error: "v2 logistics writes disabled (read-only migration phase)" },
+      { status: 501 }
+    );
+  }
+
+  const jobId = (new URL(request.url).searchParams.get("job_id") || "").trim();
+  if (!jobId) return NextResponse.json({ ok: false, error: "job_id is required." }, { status: 400 });
+
+  const { DB, BOL_PHOTOS } = await getEnv();
+  const actorId = request.headers.get("X-User-Id") || "";
+  if (!actorId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  if (request.headers.get("X-User-Can-Manage-Loading") !== "1") {
+    return NextResponse.json({ ok: false, error: "Manager access required to delete BOLs." }, { status: 403 });
+  }
+
+  try {
+    const rows = ((await DB.prepare("SELECT id, bol_number, job_id, load_number FROM bols WHERE job_id = ?")
+      .bind(jobId)
+      .all()).results ?? []) as unknown as BolDeleteRow[];
+    if (!rows.length) return NextResponse.json({ ok: true, message: "No BOLs to delete.", deleted: 0 });
+
+    // Shipped guard: all-or-nothing. Refuse the whole delete if any load has shipped.
+    const lockedLoads: string[] = [];
+    for (const b of rows) {
+      if (await isBolRowLocked(DB, b)) lockedLoads.push(String(b.load_number ?? b.bol_number ?? b.id));
+    }
+    if (lockedLoads.length) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "BOL locked",
+          detail: `Load${lockedLoads.length > 1 ? "s" : ""} ${lockedLoads.join(", ")} ${lockedLoads.length > 1 ? "have" : "has"} shipped — nothing was deleted. Delete the unshipped BOLs individually from View BOL.`,
+          locked: true,
+        },
+        { status: 409 }
+      );
+    }
+
+    for (const b of rows) await deleteBolCascade(DB, BOL_PHOTOS, String(b.id));
+    await logActivity(
+      DB, "delete", "bol", jobId,
+      `Deleted ${rows.length} BOL(s) for job ${jobId}`,
+      { job_id: jobId, count: rows.length },
+      actorId
+    );
+    return NextResponse.json({ ok: true, message: `Deleted ${rows.length} BOL(s).`, deleted: rows.length });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, { status: 500 });
   }

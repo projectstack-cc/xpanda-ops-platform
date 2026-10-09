@@ -8,6 +8,8 @@
 // stays under the logistics.dashboard permission the dashboard itself already requires -- see
 // that route's header comment for why it doesn't delegate to /v2/api/jobs/:id or
 // /v2/api/board/:id (both gated on the separate "jobs" key).
+// lgx-boldel-01 -- manager-only "Delete all BOLs" (legacy `deleteAllBolsForJob` parity) via
+// `DELETE /v2/api/bols?job_id=`; refused with an inline message if any load has shipped.
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import PhotoGalleryModal from "@/components/loading/PhotoGalleryModal";
@@ -27,6 +29,8 @@ interface ShipmentDetailPanelProps {
   isCustomerPickup?: boolean;
   orderShipDate?: string | null;
   onShipDaysSaved?: () => void;
+  /** lgx-boldel-01: row's bol_count; drives the manager-only "Delete all BOLs" button. */
+  bolCount?: number;
 }
 
 function addressLines(d: ShipmentDetail): string[] {
@@ -47,6 +51,7 @@ export default function ShipmentDetailPanel({
   isCustomerPickup = false,
   orderShipDate = null,
   onShipDaysSaved,
+  bolCount = 0,
 }: ShipmentDetailPanelProps) {
   const [detail, setDetail] = useState<ShipmentDetail | null>(cache.get(shipmentId) ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +62,34 @@ export default function ShipmentDetailPanel({
   const [daysOpen, setDaysOpen] = useState(false);
   // Bumped after a ship-days save: the panel stays mounted across the list refetch, so force a fresh detail.
   const [reloadKey, setReloadKey] = useState(0);
+  // lgx-boldel-01: two-step arm/confirm (house pattern -- PartsLibraryPanel/BolViewerModal), no window.confirm().
+  const [delArmed, setDelArmed] = useState(false);
+  const [delBusy, setDelBusy] = useState(false);
+  const [delError, setDelError] = useState<string | null>(null);
+
+  async function handleDeleteAllBols(jobId: string) {
+    setDelError(null);
+    setDelBusy(true);
+    try {
+      const res = await fetch(`/v2/api/bols?job_id=${encodeURIComponent(jobId)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        setDelError(data.detail || data.error || `HTTP ${res.status}`);
+        setDelArmed(false);
+        return;
+      }
+      setDelArmed(false);
+      cache.delete(shipmentId);
+      setReloadKey((k) => k + 1);
+      // Generic "detail changed" refresh: the dashboard's handler clears the drill-down cache and
+      // reloads the list, so the row's bol_count drops to 0 and it flips back to Generate BOL.
+      onShipDaysSaved?.();
+    } catch {
+      setDelError("Network error — could not delete.");
+    } finally {
+      setDelBusy(false);
+    }
+  }
 
   // lgx-photos-01: every load's photos flattened in display order, so the gallery cycles through the
   // whole order; flatIndex lets each thumbnail open the gallery at itself. Memoized so the gallery's
@@ -287,6 +320,49 @@ export default function ShipmentDetailPanel({
           </table>
         </div>
       </div>
+
+      {canManageLoading && bolCount > 0 && detail.job_id && (
+        <div
+          className="flex flex-wrap items-center justify-end gap-2 pt-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {delError && <p className="text-xs text-[var(--danger-bg)] mr-auto">{delError}</p>}
+          {delArmed ? (
+            <>
+              <span className="text-xs text-muted">
+                Delete all {bolCount} BOL{bolCount === 1 ? "" : "s"} and their signed copies?
+              </span>
+              <button
+                type="button"
+                onClick={() => detail.job_id && handleDeleteAllBols(detail.job_id)}
+                disabled={delBusy}
+                className="min-h-[44px] md:min-h-[32px] px-3 rounded-md bg-[var(--danger-bg)] text-[var(--danger-text)] text-xs font-semibold cursor-pointer disabled:opacity-50"
+              >
+                {delBusy ? "Deleting…" : "Confirm delete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDelArmed(false)}
+                disabled={delBusy}
+                className="min-h-[44px] md:min-h-[32px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-text cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setDelError(null);
+                setDelArmed(true);
+              }}
+              className="min-h-[44px] md:min-h-[32px] px-3 rounded-md border border-[var(--danger-bg)] bg-[var(--surface)] text-xs font-semibold text-[var(--danger-bg)] cursor-pointer hover:bg-[color-mix(in_srgb,var(--danger-bg)_10%,transparent)]"
+            >
+              Delete all BOLs
+            </button>
+          )}
+        </div>
+      )}
 
       {canAssignDays && (
         <AssignShipDaysModal

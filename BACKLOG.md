@@ -43,6 +43,8 @@
 
 ### Logistics dashboard — legacy `logistics/index.html` (Classic) → `/v2/logistics` · ACTIVE TESTING, no retirement date
 
+- [ ] **v2-wide `--danger-text` foreground sweep (found in lgx-boldel-01).** `--danger-text` is #fff (text ON red), but ~30 v2 lines use `text-[var(--danger-text)]` as a red foreground on light surfaces (EditorGuards, PartsLibraryPanel, ShipmentEditModal, LoadPickerModal, ProductionBoard, CarrierChargeModal, TrailerDiagram, NoteRow, CustomizeEditor, …), so those errors/icons render invisible. Classify each use (on-red-bg = keep; foreground = swap to `--danger-bg`), or add a dedicated `--danger-fg` token and sweep.
+- [ ] **lgx-boldel-01 follow-up — dedupe BOL lock/cleanup.** PUT /v2/api/bols/:id's inline bol-lock-01 check and POST's regenerate-replace cleanup loop duplicate `lib/logistics/bolDelete.ts`; switch them to the helpers.
 - [ ] **Retire legacy `logistics/index.html`** once v2 has run a few weeks without fallback use. At retirement also remove the home Logistics card's "Classic Dashboard" button (`index.html`) and its `common.classicDashboard` i18n key, and repoint `logistics/logistics-header.js` `dashboardPath`.
 - [ ] **archived-hide-01 follow-up — legacy Classic shipment dashboard still shows archived pre-departure shipments.** Left as-is per the v2-only logistics rule; goes away when legacy `logistics/index.html` retires.
 - [ ] **`shipments.trailer_number` is dead for job-linked shipments** (trailer # lives on

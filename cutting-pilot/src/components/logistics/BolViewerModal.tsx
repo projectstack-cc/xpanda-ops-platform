@@ -28,6 +28,8 @@
 // sometimes narrowed to one load via `loadNumber` for the PDF preview, but the history list always
 // needs the job's full BOL set. `onDeleted` is a NEW, additive callback (not a widened `onClose`)
 // so DockBoard.tsx's call site, which never deletes, needs no change.
+// lgx-boldel-01 -- icon/error colors fixed (`--danger-text` is white-on-red text, not a red
+// foreground; use `--danger-bg`), shipped rows show "Shipped" instead of a delete.
 //
 // lgx-review-01: optional `reviewMode` restores legacy's post-generate review step
 // (bol-compose.js reviewRecords/rrShow). ShipmentDashboard opens the viewer in review mode right
@@ -264,7 +266,7 @@ export default function BolViewerModal({
       {loading && <p className="text-sm text-muted py-6 text-center">Building BOL preview…</p>}
 
       {error && !loading && (
-        <p className="text-sm text-[var(--danger-text)] py-6 text-center">{error}</p>
+        <p className="text-sm text-[var(--danger-bg)] py-6 text-center">{error}</p>
       )}
 
       {!loading && !error && src && (
@@ -277,12 +279,14 @@ export default function BolViewerModal({
                   Deleting is disabled in the v2 preview phase.
                 </p>
               )}
-              {deleteError && <p className="text-xs text-[var(--danger-text)]">{deleteError}</p>}
+              {deleteError && <p className="text-xs text-[var(--danger-bg)]">{deleteError}</p>}
               <div className="space-y-1.5">
                 {historyBols.map((b) => {
                   const bolId = String(b.id);
                   const isConfirming = confirmDeleteBolId === bolId;
                   const isDeleting = deletingBolId === bolId;
+                  // lgx-boldel-01: server refuses deletes on shipped loads (409); don't offer one.
+                  const isLockedRow = !editableBols.some((e) => String(e.id) === bolId);
                   return (
                     <div key={bolId} className="flex items-center justify-between gap-2 text-sm">
                       <span className="text-text truncate">
@@ -291,7 +295,9 @@ export default function BolViewerModal({
                         {b.date ? ` · ${b.date}` : ""}
                         {b.carrier_name ? ` · ${b.carrier_name}` : ""}
                       </span>
-                      {isConfirming ? (
+                      {isLockedRow ? (
+                        <span className="text-xs text-muted shrink-0">Shipped</span>
+                      ) : isConfirming ? (
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
@@ -314,7 +320,7 @@ export default function BolViewerModal({
                         <button
                           type="button"
                           onClick={() => setConfirmDeleteBolId(bolId)}
-                          className="p-1.5 rounded-md text-[var(--danger-text)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_10%,transparent)] cursor-pointer shrink-0"
+                          className="p-1.5 rounded-md text-[var(--danger-bg)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_10%,transparent)] cursor-pointer shrink-0"
                           aria-label={`Delete BOL ${b.bol_number || bolId}`}
                         >
                           <Trash2 size={14} aria-hidden="true" />

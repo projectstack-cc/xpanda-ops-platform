@@ -9,20 +9,20 @@
 // write -- an existing token is never overwritten (printed-QR invariant); only a legacy row
 // with no token yet gets one minted here.
 //
-// DELETE mirrors legacy's single-BOL DELETE (bols.js:597-616) exactly: gated on
+// DELETE mirrors legacy's single-BOL DELETE (bols.js:597-616): gated on
 // X-User-Is-Admin/logistics.loading.manage (a STRICTER gate than PUT's bare auth check above --
 // matches legacy's own route, which applies this check only to the delete branch), 404 if
-// missing, deletes the row + logs activity. Deliberately single-BOL only, not legacy's separate
-// bulk per-job branch (bols.js:567-595) -- no v2 UI surface calls that today. Also deliberately
-// does NOT clean up bol_documents/R2 objects, matching legacy's own single-delete exactly (only
-// its bulk branch does that cleanup, see ../route.ts's regenerate-replace path for the pattern
-// if this needs to be added later).
+// missing, deletes the row + logs activity. lgx-boldel-01 adds the shipped guard (409, same
+// bol-lock-01 rule as PUT) and cascades to bol_documents + their R2 objects (signed copies) via
+// lib/logistics/bolDelete.ts. The bulk per-job delete (legacy bols.js:567-595) now lives in
+// ../route.ts (DELETE /v2/api/bols?job_id=).
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 import { promoteCarrierOverride } from "@/lib/logistics/bolCarrier";
 import { logActivity } from "@/lib/activityLog";
 import { isBolLocked } from "@/lib/logistics/bolLock";
+import { isBolRowLocked, deleteBolCascade } from "@/lib/logistics/bolDelete";
 
 function generateAccessToken(): string {
   const bytes = new Uint8Array(16);
@@ -173,21 +173,32 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
   }
 
   const { id: bolId } = await ctx.params;
-  const { DB } = await getEnv();
+  const { DB, BOL_PHOTOS } = await getEnv();
   const actorId = request.headers.get("X-User-Id") || "";
   if (!actorId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
   // X-User-Can-Manage-Loading is already exactly "admin OR logistics.loading.manage edit"
-  // (middleware.ts), matching legacy's own stricter gate on this specific delete branch.
+  // (middleware.ts), matching legacy's own stricter gate on the delete branches.
   if (request.headers.get("X-User-Can-Manage-Loading") !== "1") {
     return NextResponse.json({ ok: false, error: "Manager access required to delete BOLs." }, { status: 403 });
   }
 
-  const existing = await DB.prepare("SELECT id, bol_number FROM bols WHERE id = ?").bind(bolId).first<any>();
+  const existing = await DB.prepare("SELECT id, bol_number, job_id, load_number FROM bols WHERE id = ?")
+    .bind(bolId)
+    .first<any>();
   if (!existing) return NextResponse.json({ ok: false, error: "BOL not found." }, { status: 404 });
 
+  // lgx-boldel-01: shipped guard (same rule as PUT's bol-lock-01).
+  if (await isBolRowLocked(DB, existing)) {
+    return NextResponse.json(
+      { ok: false, error: "BOL locked", detail: "This load has shipped; its BOL can't be deleted.", locked: true },
+      { status: 409 }
+    );
+  }
+
   try {
-    await DB.prepare("DELETE FROM bols WHERE id = ?").bind(bolId).run();
+    // lgx-boldel-01: also removes signed copies (bol_documents + R2) -- no orphans.
+    await deleteBolCascade(DB, BOL_PHOTOS, bolId);
     await logActivity(DB, "delete", "bol", bolId, `Deleted BOL #${existing.bol_number || bolId}`, { id: bolId }, actorId);
     return NextResponse.json({ ok: true, message: "BOL deleted." });
   } catch (e: any) {
