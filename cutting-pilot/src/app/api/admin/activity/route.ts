@@ -3,7 +3,9 @@
 // Adds user_id + range filters and the actor's display name. WHERE fragments are fixed strings; every
 // filter value is bound. activity_log.timestamp is mixed-format (ISO "…T…Z" from logActivity, "YYYY-MM-DD
 // HH:MM:SS" from the column default), so the range compares datetime(a.timestamp) — a raw string compare
-// against datetime('now', …) would let every entry on the cutoff date through.
+// against datetime('now', …) would let every entry on the cutoff date through. ORDER BY normalises the
+// same way (both formats are written every day; a raw sort puts every ISO row above every SQLite-format
+// row of that day); a.id breaks ties so offset paging stays stable.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import type { ActivityEntry, ActivityRange } from "@/lib/admin/types";
@@ -44,7 +46,7 @@ export async function GET(request: NextRequest) {
       DB.prepare(
         `SELECT a.*, u.display_name AS user_name
            FROM activity_log a LEFT JOIN users u ON u.id = a.user_id${whereSql}
-          ORDER BY a.timestamp DESC LIMIT ? OFFSET ?`
+          ORDER BY datetime(a.timestamp) DESC, a.id DESC LIMIT ? OFFSET ?`
       ).bind(...binds, limit, offset),
       DB.prepare(`SELECT COUNT(*) AS total FROM activity_log a${whereSql}`).bind(...binds),
     ]);

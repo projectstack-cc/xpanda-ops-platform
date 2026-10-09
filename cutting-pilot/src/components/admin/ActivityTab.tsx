@@ -77,7 +77,11 @@ export default function ActivityTab() {
       setError(r.error);
       return;
     }
-    setEntries((prev) => prev.concat(r.data.entries));
+    // The log is live: a row written between pages shifts the offset, so drop ids already shown.
+    setEntries((prev) => {
+      const seen = new Set(prev.map((x) => x.id));
+      return prev.concat(r.data.entries.filter((x) => !seen.has(x.id)));
+    });
     setTotal(r.data.total);
   }
 
