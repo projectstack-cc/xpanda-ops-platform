@@ -97,6 +97,7 @@
   `roles.html` (`PERMISSION_LABELS`), `activity-log.html`.
 - [ ] Drop `roles_perm_backup_admin01` (admin-01 snapshot) once the admin-NN series has shipped and been stable.
 - [ ] At admin cutover: delete legacy `PERMISSION_LABELS` / `NOTIFICATION_TYPE_LABELS` with `admin/roles.html` — `cutting-pilot/src/lib/permissions.ts` becomes the only copy. Until then, any new permission key must be added to BOTH.
+- [ ] i18n (en/es/ht) for /v2/admin — English-only at port time (bem-01 precedent); legacy admin-i18n.js has the catalog to reuse.
 
 ### Safety · NO v2 YET — scope separately (large)
 
