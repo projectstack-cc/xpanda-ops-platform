@@ -117,6 +117,7 @@ export default function ShipmentDashboard({
   const canEditDashboard = isAdmin || permissions?.["logistics.dashboard"]?.edit === true;
   // Invoice Analytics link mirrors middleware (lgx-roll-01): page + /v2/api/logistics are logistics.dashboard.
   const canSeeInvoiceAnalytics = isAdmin || permissions?.["logistics.dashboard"]?.view === true;
+  const canEditBol = isAdmin || permissions?.["logistics.bol"]?.edit === true;
 
   const activeWeekInfo = useMemo(() => {
     if (weekOffset === null) return null;
@@ -377,13 +378,16 @@ export default function ShipmentDashboard({
             >
               Dock Loading
             </a>
-            <a
-              href="/logistics/bol-email.html"
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] no-underline transition-colors"
-            >
-              <Mail size={14} className="text-muted" />
-              BOL Email Queue
-            </a>
+            {/* bem-02: v2 BOL Email Queue; edit-only since bem-01, so hidden without logistics.bol edit. */}
+            {canEditBol && (
+              <a
+                href="/v2/logistics/bol-email"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] no-underline transition-colors"
+              >
+                <Mail size={14} className="text-muted" />
+                BOL Email Queue
+              </a>
+            )}
             {canSeeInvoiceAnalytics && (
               <a
                 href="/v2/logistics/invoice-analytics"

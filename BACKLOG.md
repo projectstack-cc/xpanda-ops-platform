@@ -67,9 +67,9 @@
 - [ ] **Unit 3b follow-up — i18n for the new dock dashboard labels.** `DockAssignmentCard.tsx`/`AssignBayModal.tsx`/`LoadedChecklistModal.tsx`/`DockBoard.tsx`/`TeamView.tsx`/`BayListItem.tsx`/`ShippingInfoModal.tsx`/`PullJobModal.tsx`/`PhotoGalleryModal.tsx` ship English-only strings (v2 has no i18n spine wired yet, matching every other v2 UI unit so far) — needs a pass once v2 gains one.
 - [ ] Delete `logistics/loading.html` stub + its `logistics-i18n.js` loading keys once access logs show no hits (stub added dock-04).
 
-### BOL Email — `logistics/bol-email.html` · BUILT (bem-01), cutover pending
+### BOL Email — `logistics/bol-email.html` · CUT OVER (bem-02)
 
-- [ ] **bem-02** — cutover (repoint links, legacy redirect stub) after Steve sends one real email from v2.
+- [ ] Delete `logistics/bol-email.html` stub, legacy `_worker.js/routes/bol-email.js` + its index.js/core.js entries, and the `bolEmail*` keys in `logistics-i18n.js` once access logs show no hits (stub added bem-02).
 - [ ] BOL Email v2 i18n (es/ht) — English-only in bem-01.
 - [ ] tls-01's `nextShipDay` (to-load sheets) could reuse `lib/logistics/bolEmail.ts`'s holiday-aware `nextShippingDateStr` — plant_holidays now has a v2 owner.
 
@@ -484,7 +484,7 @@
 - [ ] **BOL print rendering bug** — when printing the BOL directly (without downloading), the "N" from "Bill of Lading No" and the "S" in "Customer Signature" are clipped/hidden. Likely the same unembedded-template-font substitution bol-print-01 fixed (templates re-saved with fonts embedded) — re-check during the bol-print-01 normal-print acceptance test and close if gone.
 - [ ] **bol-print-02 — draw BOL QR as a single path (merged runs) instead of per-module rectangles; latent print-seam risk.** Both `bol-shared.js` and `bolShared.ts` (bilateral parity).
 - [ ] **bol-print-01 follow-up — BOL PDF size.** Template fonts are still duplicated per page (one `copyPages` per record), and v2 `buildCombinedBolPdf` copies three `generatePdf` outputs into one packet, so Liberation Sans lands 3× (3-copy, 2-record packet ≈ 2.76 MB). If size matters (email attachments), render all three copy passes into one document, or load each template once.
-- [ ] **bol-print-01 follow-up — BOL Email size cap.** A single embedded-font driver BOL is ~1.2 MB (was ~292 KB), ~1.6 MB base64 in `logistics/bol-email.html`'s attachments, so one Resend send (40 MB cap) now fits ~25 BOLs (was ~100). If a day exceeds that, chunk the send or share one font-embedded document across attachments.
+- [ ] **bol-print-01 follow-up — BOL Email size cap.** A single embedded-font driver BOL is ~1.2 MB (was ~292 KB), ~1.6 MB base64 in `logistics/bol-email.html`'s attachments, so one Resend send (40 MB cap) now fits ~25 BOLs (was ~100). If a day exceeds that, chunk the send or share one font-embedded document across attachments. Sender is now v2 (`/v2/api/bol-email/send`, client `BolEmailQueue.tsx`) since bem-02.
 - [ ] **bol-print-01 follow-up — layout-font cache pins the fallback.** `getLayoutFonts()` (both sides) caches its result, so one failed body-font fetch keeps editor measurement on Helvetica for the session even though the byte loader retries. Low impact (metrics differ only by kerning).
 - [ ] **Template editing rule** — any future BOL template edit must be re-exported with text outlined (`gs -sDEVICE=pdfwrite -dNoOutputFonts`); Google Docs exports reintroduce name-colliding subset fonts. (bol-print-03)
 
