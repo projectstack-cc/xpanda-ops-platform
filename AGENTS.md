@@ -10,63 +10,67 @@ This is a **production ERP platform** for a foam manufacturing operation. It is 
 
 # 1. Platform Architecture
 
-The xPanda Operations Platform is a **Cloudflare Pages Advanced Mode application** serving as an ERP-lite system for foam manufacturing operations — covering jobs, logistics, production, quality control, and safety.
+The xPanda Operations Platform is an ERP-lite system for foam manufacturing operations — jobs, logistics, production, quality control, and safety. It runs as two halves on one host over one data layer.
 
-**Backend:**
-- `_worker.js` contains ALL API routes in a single file
-- Worker routes use flat `if (url.pathname === "...")` checks
-- Static assets served via `env.ASSETS.fetch(request)`
-- Session-based authentication gates all routes (except `/login`, `/api/auth/*`, and static assets)
-- Role-based permissions enforce per-module view/edit access
+**Legacy app — Cloudflare Pages (Advanced Mode):**
+- Static HTML pages with vanilla JavaScript. No frameworks, build tools, bundlers or module systems in browser code. Chart.js for report charts, pdf-lib for BOL PDFs, pdf.js for packing-slip parsing.
+- **Legacy worker**, which Pages bundles into one worker (there is no build step of ours):
+  - entry `_worker.js/index.js` — the session gate plus the declarative `API_ROUTES` table (F2)
+  - shared helpers in `_worker.js/lib/`: `core.js` (`json()`, `logActivity()`, session validation, `PATH_PERMISSION_MAP` / `API_PERMISSION_MAP`), `bol-carrier.js`, `holey-nester.js`, `lineItems.js`, `push.js`
+  - per-domain handlers in `_worker.js/routes/`: `auth.js`, `bols.js`, `jobs.js`, `loading.js`, `notifications.js`, `production.js`, `public.js`, `qc.js`, `reports.js`
+  - static assets served via `env.ASSETS.fetch(request)`
 
-**Data Sources:**
-- **D1 Database (SQLite)** → all operational records (jobs, BOLs, parts, shipments, users, roles, activity log, inventory)
+**v2 migration surface — `cutting-pilot/`:**
+- Next.js 14 App Router on Cloudflare Workers via OpenNext, served under `/v2/*` on the same host.
+- Shares the **same D1 (`DB`) and R2 (`BOL_PHOTOS`)** bindings and the legacy `xpanda_session` cookie. v2 reads sessions; it never sets cookies (login stays on the legacy app).
+- Deployed by `.github/workflows/deploy-v2-worker.yml` on pushes to `main` that touch `cutting-pilot/**`.
+- **React is allowed only here.** Legacy modules stay vanilla, and nothing outside `/v2` gets React-ified. Full rules: `xpanda-ops-agents.md` §9a (platform) and §9b (React components).
+
+**Data sources:**
+- **D1 Database (SQLite)** → all operational records (jobs, BOLs, parts, shipments, users, roles, activity log, production)
 - **Google Sheets gviz endpoint** → incident report analytics (legacy integration)
 
-**Frontend:**
-- Static HTML pages with vanilla JavaScript
-- No frameworks, no build tools, no bundlers
-- Chart.js for report charts
-- pdf-lib for client-side BOL PDF generation
-- pdf.js for client-side packing slip parsing
-
-**Do NOT introduce:** React, Vue, build tools, frameworks, bundlers, or module systems. The platform is designed for a single maintainer and floor-level simplicity.
+**Migration status.** Strangler pattern: modules are ported one at a time, built unlinked, tested, then cut over (links repointed, legacy pages archived and replaced by redirect stubs). The end state is full retirement of the legacy worker and the Pages project.
+- **Cut over to v2:** Dock Loading (`/v2/logistics/loading`), BOL Email Queue (`/v2/logistics/bol-email`), Production Log (`/v2/production`), Admin (`/v2/admin`).
+- **Still legacy:** Job Board Classic (`/jobs/`) and Logistics Classic (`/logistics/`) — both in active testing alongside their v2 counterparts — the Manufacturing calculators, QC, Reports, Safety, and the shell (home `index.html`, `login.html`, `track/`, `legal/`, `account/`).
 
 ---
 
 # 2. API Structure
 
-All APIs live inside `_worker.js`. No exceptions.
+**Legacy APIs** live in `_worker.js/routes/*.js` and are registered in `_worker.js/index.js`'s `API_ROUTES` table (`path` = exact match, `prefix` = exact or `prefix/…`, optional `method`). To add an endpoint, write the handler in the right routes file and add **one** row. **Never collapse the worker back into one file.** Auth endpoints (`/api/auth/*`) and a few public/system paths are matched directly in `index.js`.
 
-**Route pattern:** `/api/feature-name`
+**v2 APIs** live in `cutting-pilot/src/app/api/**/route.ts` → `/v2/api/*`. v2 pages may also call legacy `/api/*` on the same host (for example `/api/parts`).
 
 **Core API groups:**
 ```
-/api/auth/*           — login, logout, session, password change
-/api/users            — user CRUD (admin only)
-/api/roles            — role CRUD (admin only)
-/api/jobs/*           — job board CRUD, packing slip endpoints
-/api/bols/*           — BOL CRUD, generation
-/api/bol-customers    — customer address book for BOLs
-/api/bol-carriers     — carrier directory
-/api/shipments        — inbound/outbound shipment tracking
-/api/parts            — unified parts library (block calc + load builder + job board)
+/api/auth/*            — login, logout, session (me), password change, simulate-role (legacy)
+/api/jobs              — job board CRUD, packing slip endpoints
+/api/bols              — BOL CRUD, generation
+/api/bol-customers     — customer address book for BOLs
+/api/bol-carriers      — carrier directory
+/api/shipments         — inbound/outbound shipment tracking
+/api/parts             — unified parts library (block calc + load builder + job board + /v2/admin Parts tab)
 /api/load-builder-skus — load builder SKU interface (maps to parts table)
-/api/combos           — saved block calculator combinations
-/api/saved-loads      — saved load builder states (D1, 90-day TTL)
-/api/completions      — QC final inspections
-/api/scrap-log        — QC scrap entries
-/api/reports/*        — read-only analytics
-/api/activity-log     — platform audit trail
+/api/combos            — saved block calculator combinations
+/api/saved-loads       — saved load builder states (D1, 90-day TTL)
+/api/loading-*         — dock bays, assignments, photos
+/api/completions       — QC final inspections
+/api/scrap-log         — QC scrap entries
+/api/reports/*         — read-only analytics
+/api/notifications     — bell notifications (+ /api/push/* web-push)
+/api/public/*          — unauthenticated carrier BOL lookup / pickup / delivery / documents
+/v2/api/admin/*        — users, roles, stats, simulate-role, activity (+ facets) — v2 Admin
+/v2/api/*              — other v2 module APIs (board, orders, cutting, production, logistics, schedule-board, notes, carrier, qb, …)
 ```
+`/api/users`, `/api/roles` and `/api/activity-log` were retired in admin-09 (replaced by `/v2/api/admin/*`).
 
 **Rules:**
-- Do NOT move APIs to separate files
 - Do NOT rename existing routes
 - Do NOT change response shapes of existing routes
-- Use the shared `json()` helper for all responses
-- All new handlers follow: `async function handleSomething(request, env)`
-- All mutating operations (POST/PUT/DELETE) must include `logActivity()` calls
+- Use the shared `json()` helper for all legacy responses (v2: `NextResponse.json`)
+- Legacy handlers follow: `async function handleSomething(request, env)`
+- All mutating operations (POST/PUT/PATCH/DELETE) must include `logActivity()` calls (v2: `cutting-pilot/src/lib/activityLog.ts`)
 - Error responses use the shape: `{ ok: false, error: "Human message", detail: "Technical detail" }`
 
 ---
@@ -77,41 +81,56 @@ All APIs live inside `_worker.js`. No exceptions.
 - Session-based with `xpanda_session` cookie
 - Plaintext passwords in D1 (intentional — admin recovery for floor workers)
 - First-login password change flow
-- Session gate in `_worker.js` redirects unauthenticated page requests to `/login`, returns 401 for API calls
+- The legacy session gate (`_worker.js/index.js`) redirects unauthenticated page requests to `/login` and returns 401 for API calls; v2 `src/middleware.ts` validates the same session row and does the same for `/v2/*`
 - Static assets (CSS, JS, images, fonts) bypass the session gate
 
 **Authorization:**
-- `roles` table stores a JSON `permissions` blob per role
-- Permission keys map modules/sub-modules to `{ view: boolean, edit: boolean }`
-- `Administrator` role bypasses ALL permission checks (hardcoded on `role-administrator` ID)
-- `PATH_PERMISSION_MAP` and `API_PERMISSION_MAP` arrays in `_worker.js` map URLs to permission keys
-- Session gate enforces permissions: GET → requires `view`, POST/PUT/DELETE → requires `edit`
-- Frontend hides inaccessible cards/links based on permissions from `/api/auth/me` response
+- The `roles` table stores a JSON `permissions` blob per role: permission key → `{ view: boolean, edit: boolean }`. A user may hold several roles (`user_roles`); their permissions merge most-permissive per key.
+- The `role-administrator` role (or the legacy `users.role = 'admin'`) bypasses all permission checks.
+- GET/HEAD → requires `view`; mutations → require `edit`.
+- **Two gates:**
+  - **Legacy:** `PATH_PERMISSION_MAP` / `API_PERMISSION_MAP` in `_worker.js/lib/core.js`. An unmapped legacy API **mutation** is denied by default (QC Cleanup-11; explicit allowlist in `core.js`); an unmapped GET is allowed after login.
+  - **v2:** `PERMISSION_MAP` in `cutting-pilot/src/middleware.ts`. The first matching prefix wins, and a mapped prefix may list several keys (any one grants). **An unmapped v2 path is gated only by login**, so every new v2 route needs a `PERMISSION_MAP` row.
+- **Fine-grained checks inside handlers** read headers set by the gate: `X-User-Is-Admin`, `X-User-Permissions` (JSON), `X-User-Is-Real-Admin` and `X-User-Simulating-Role` (v2), and the `X-User-Can-*` booleans. Examples: `jobs.manage`, and admin-07's `jobs.create` / `jobs.status` / `jobs.archive` (enforced only when the request actually changes the value).
+- Frontend hides inaccessible cards/links based on the permissions in `/api/auth/me` (legacy) or the session props (v2).
 
-**Adding new features to the permission system:**
-1. Add the permission key to both `PATH_PERMISSION_MAP` and `API_PERMISSION_MAP`
-2. Add the key to `PERMISSION_LABELS` in `admin/roles.html`
-3. The admin UI will auto-render the new toggle — no other changes needed
+**Test as role:**
+- Started from `/v2/admin` → Roles → **Test as this role** (stored as `sessions.simulating_role_id`).
+- A real admin keeps access to the admin surface while testing: legacy `ESCAPE_PREFIXES` (`/admin/`, `/api/auth/`, `/login`), v2 `ADMIN_ESCAPE_PREFIXES` (`/v2/admin`, `/v2/api/admin`).
+- Every v2 page shows the global "Testing as …" strip with **Stop testing**; legacy module headers show their own.
+
+**Adding a permission key:**
+1. Add the key + label to **`cutting-pilot/src/lib/permissions.ts`**. It is the single source: `/v2/admin` → Roles renders the toggles from it, and new roles are seeded from it with everything false.
+2. Gate the paths: legacy → the `core.js` maps; v2 → the `middleware.ts` `PERMISSION_MAP`.
+3. If the key splits an existing one, ship a seed migration that copies the parent's value — with a backup and a post-check — and run it **before** the code that enforces it (admin-07 pattern).
+4. Never rename a key without a data migration: keys are persisted in `roles.permissions`.
 
 ---
 
 # 4. Module Overview
 
-| Module | Path | Purpose | Key Files |
-|---|---|---|---|
-| **Jobs** | `/jobs/` | Kanban workflow — packing slip upload, job lifecycle, line items | `jobs/index.html`, `jobs/packing-slip-parser.js` |
-| **Logistics** | `/logistics/` | BOL generation, load building, shipment tracking | `logistics/bol-compose.js` (shared BOL engine, consumed by `index.html` + `load-builder.html`), `logistics/load-builder.html`, `logistics/bol-shared.js`, `logistics/index.html` |
-| **Manufacturing** | `/manufacturing/` | Block calculator, holey board calculator, Cutting Dashboard | `manufacturing/block-calculator.html`, `manufacturing/holey-board-calculator.html`, `manufacturing/cutting-dashboard.html` |
-| **Production** | `/v2/production` | Production Log v2 — Molding/Expansion sheets, silo tracking (one lot per silo), bead lots + bag ledger. Legacy `/production/` only redirects here (v1 pages archived in prod-b-04) | `cutting-pilot/src/app/production/`, `cutting-pilot/src/lib/productionSilos.ts` |
-| **QC** | `/qc/` | Scrap log, final inspection, density calculator | `qc/` |
-| **Safety** | `/safety/` | SDS browser, i18n safety content, training | `safety/` |
-| **Reports** | `/reports/` | Read-only analytics dashboards (incidents, scrap) | `reports/` |
-| **Admin** | `/admin/` | Parts library, activity log, user management, role management | `admin/parts.html`, `admin/activity-log.html`, `admin/users.html`, `admin/roles.html` |
+| Module | Path(s) | Status | Purpose | Key files |
+|---|---|---|---|---|
+| **Jobs** | `/v2/board`, `/v2/orders`; Classic `/jobs/` | both (Classic still up, in active testing) | Job lifecycle board, order entry, packing slip upload/parse, line items | `cutting-pilot/src/app/board/`, `cutting-pilot/src/app/orders/`, `jobs/index.html`, `jobs/packing-slip-parser.js` |
+| **Logistics** | `/v2/logistics` (dashboard, invoice analytics), `/v2/logistics/bol-email`, `/v2/logistics/loading` (Dock Loading), `/v2/loading` (Loading TV), `/v2/logistics/load-builder` (dark); Classic `/logistics/` | both (dashboard / BOL email / dock on v2; Load Builder v2 dark, Classic still up) | Shipments, BOL generation, load building, dock loading | `cutting-pilot/src/app/logistics/`, `cutting-pilot/src/app/loading/`, `cutting-pilot/src/lib/bolShared.ts`, `logistics/bol-shared.js`, `logistics/bol-compose.js`, `logistics/index.html`, `logistics/load-builder.html` |
+| **Carrier view** | `/v2/carrier` | v2 | Carrier 2-day schedule, BOLs, charges | `cutting-pilot/src/app/carrier/` |
+| **Cutting** | `/v2/cutting`, `/v2/cutting/crosscutter` | v2 | Main/Blue Line cutting boards, Cross Cutter chunk board | `cutting-pilot/src/app/cutting/` |
+| **Manufacturing** | `/manufacturing/`; block nesting `/v2/blocks` | legacy calculators; block nesting v2 | Block calculator, holey board calculator, block nesting | `manufacturing/block-calculator.html`, `manufacturing/holey-board-calculator.html`, `cutting-pilot/src/app/blocks/` |
+| **Production** | `/v2/production`, `/v2/production/schedule`, `/v2/production/tv` | v2 (legacy `/production/` only redirects) | Production Log — Molding/Expansion sheets, silo tracking (one lot per silo), bead lots + bag ledger, schedule, TV board | `cutting-pilot/src/app/production/`, `cutting-pilot/src/lib/productionSilos.ts` |
+| **Schedule** | `/v2/schedule` (TV), `/v2/schedule/desk` | v2 | Schedule board | `cutting-pilot/src/app/schedule/` |
+| **Shift Notes** | `/v2/notes` | v2 | Shift notes, manager mark-viewed | `cutting-pilot/src/app/notes/` |
+| **QC** | `/qc/` | legacy | Scrap log, final inspection, density calculator, incident report | `qc/` |
+| **Safety** | `/safety/` | legacy | SDS browser, i18n safety content, training | `safety/` |
+| **Reports** | `/reports/` | legacy | Read-only analytics dashboards (cutting, incidents, orders, scrap) | `reports/` |
+| **Admin** | `/v2/admin` (tabs Users · Roles · Parts · Activity) | v2 (legacy `admin/*.html` are redirect stubs; originals in `admin/_archived/`) | Users, roles & permissions, test-as-role, parts library, audit trail | `cutting-pilot/src/app/admin/`, `cutting-pilot/src/components/admin/`, `cutting-pilot/src/components/parts/PartsLibrary.tsx` (shared with Load Builder), `cutting-pilot/src/lib/permissions.ts` |
+| **Shell** | `/` (home), `/login`, `/track/`, `/legal/`, `/account/` | legacy | Home cards, login, public tracking, legal pages, password change | `index.html`, `login.html`, `track/`, `legal/`, `account/` |
 
 **Shared infrastructure:**
-- `logistics/bol-shared.js` — single source of truth for BOL PDF coordinates and rendering. Both BOL generator and load builder consume this. **NEVER duplicate COORDS — edit only this file.**
-- Module header JS files (`*-header.js`) — render top bar, user display, logout button, 401 interceptor. Cache auth response on `window.__xpandaUser`.
+- `logistics/bol-shared.js` — single source of truth for legacy BOL PDF coordinates and rendering. Both the BOL generator and the load builder consume it. **NEVER duplicate COORDS.** While legacy and v2 coexist, BOL rendering changes are mirrored in `cutting-pilot/src/lib/bolShared.ts` (§6 bilateral BOL parity).
+- Module header JS files (`*-header.js`) — render the top bar, user display, logout button, 401 interceptor. Cache the auth response on `window.__xpandaUser`.
 - Module shared CSS files (`*-shared.css`) — scoped per module.
+- `cutting-pilot/src/lib/permissions.ts` — the single source of permission keys, labels and notification types.
+- `cutting-pilot/src/middleware.ts` — the v2 session gate, `PERMISSION_MAP`, and the `X-User-*` identity headers.
 
 ---
 
@@ -221,12 +240,12 @@ When implementing new features:
 
 1. **Scope through conversation first** — understand the full upstream/downstream impact before writing code
 2. Database migration (`.sql` file at project root)
-3. Backend API handler in `_worker.js`
+3. Backend API handler — legacy: `_worker.js/routes/*.js` + one `API_ROUTES` row; v2: `cutting-pilot/src/app/api/**/route.ts`
 4. Add `logActivity()` calls for all create/update/delete operations
-5. Add permission key to `PATH_PERMISSION_MAP` and `API_PERMISSION_MAP` if the feature is a new module
+5. Gate every new path: legacy `core.js` maps and/or v2 `middleware.ts` `PERMISSION_MAP` (see §3)
 6. Build frontend page
 7. Connect navigation (homepage card, module header links)
-8. Add permission key label to `admin/roles.html` if new
+8. Add any new permission key + label to `cutting-pilot/src/lib/permissions.ts` (see §3)
 
 Never build frontend pages that rely on APIs that do not exist yet.
 

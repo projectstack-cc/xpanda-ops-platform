@@ -110,11 +110,7 @@ _root/
     scrap/                (scrap analytics)
     orders/               (order reports)
 
-  admin/
-    parts.html            (29KB — unified parts library CRUD)
-    activity-log.html     (19.4KB — platform audit trail viewer)
-    users.html            (25.2KB — user management)
-    roles.html            (33.1KB — role & permission configuration)
+  admin/                  (redirect stubs → /v2/admin since admin-08; originals in admin/_archived/)
 
   assets/                 (shared platform assets)
   qc-assets/              (QC-specific assets)
@@ -148,7 +144,7 @@ _root/
 | **qc-agent** | `qc/*` | Scrap log, final inspection, incident report, density calculator, quality workflows |
 | **safety-agent** | `safety/*` | SDS browser, i18n training content, safety documentation, compliance |
 | **reports-agent** | `reports/*` | Incident analytics, scrap dashboards, order reports, read-only analytics |
-| **admin-auth-agent** | `admin/*`, `login.html` | Parts library, activity log, user management, roles/permissions, auth system |
+| **admin-auth-agent** | `cutting-pilot/src/app/admin/*`, `src/components/admin/*`, `src/lib/permissions.ts`, `login.html` | Parts library, activity log, user management, roles/permissions, auth system |
 | **db-api-agent** | `_worker.js`, `DB_Migrations/*` | D1 schema, API routes, data integrity, migrations, backend logic |
 | **next-platform-agent** | `cutting-pilot/*`, future `/v2/*` projects | OpenNext/Workers build + deploy, `/v2` routing + asset boundary, auth bridge (session port + middleware), shared D1/R2 bindings, strangler topology, session-model schema. **Migration surface only.** |
 | **react-component-agent** | `cutting-pilot/src/**` (UI), future `/v2/*` UI | React components, reusable-component discipline (no copy-paste modals), state, Tailwind-from-tokens, mobile/floor UX. **Migration surface only.** |
@@ -630,19 +626,17 @@ You build and maintain the Admin module (`/admin/`) and the authentication syste
 - **Parts Library**: Unified CRUD for parts used across ALL modules
 
 ## Key Files You Own
-- `admin/parts.html` (29KB) — Parts library CRUD
-- `admin/activity-log.html` (19.4KB) — Audit trail viewer
-- `admin/users.html` (25.2KB) — User management
-- `admin/roles.html` (33.1KB) — Role & permission configuration
+- `/v2/admin` — one tabbed page (Users · Roles · Parts · Activity): `cutting-pilot/src/app/admin/`, `src/components/admin/`
+- `src/components/parts/PartsLibrary.tsx` — the shared parts library (also Load Builder's modal)
+- `src/lib/permissions.ts` — single source of PERMISSION_LABELS / NOTIFICATION_TYPES
+- `admin/*.html` — redirect stubs (originals in `admin/_archived/`, reference only)
 - `login.html` (6.5KB) — Login page
 - `jobs/jobs-header.js` — Auth bar pattern (copied across modules)
 
 ## API Endpoints You Use
 - `POST /api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/password` — Auth
-- `GET/POST/PUT/DELETE /api/users` — User CRUD (admin only)
-- `GET/POST/PUT/DELETE /api/roles` — Role CRUD (admin only)
 - `GET/POST/PUT/DELETE /api/parts` — Parts CRUD
-- `GET /api/activity-log` — Audit trail
+- `/v2/api/admin/{users,roles,stats,simulate-role,activity}` — real-admin only (activity: `admin` view); legacy /api/users|roles|activity-log retired in admin-09
 
 ## DB Tables You Touch
 - `users` — id, username, password (plaintext), role_id, legacy_role, first_login, created_at
@@ -667,13 +661,13 @@ const PATH_PERMISSION_MAP = [
 
 ## Adding New Permissions
 1. Add key to `PATH_PERMISSION_MAP` and `API_PERMISSION_MAP` in `_worker.js/lib/core.js`
-2. Add label to `PERMISSION_LABELS` in `admin/roles.html`
-3. Admin UI auto-renders the new toggle — no other changes needed
+2. Add the key + label to `cutting-pilot/src/lib/permissions.ts` (single source; /v2/admin → Roles renders it). For v2 paths add a `PERMISSION_MAP` row in `src/middleware.ts`.
+3. If the key splits an existing one, seed it from the parent in a migration run BEFORE the enforcing code ships (admin-07 pattern).
 
 **Migration-surface permission keys (v2):**
 - `manufacturing.cutting` — access to the v2 cutting boards (`/v2/cutting`, `/v2/cutting/crosscutter`); GET→view, mutate→edit.
-- `manufacturing.cutting.manage` — **manager-only** actions on the standalone chunk board: create/edit/delete Cross Cutter assignments and reorder the queue. Enforced in the v2 middleware via the `/v2/api/cutting/manage/*` prefix (placed ABOVE the general cutting prefix — first match wins) and surfaced to the UI as the `X-User-Can-Manage-Cutting` header. Admins always pass. Its label lives in `admin/roles.html` `PERMISSION_LABELS` so it's assignable per role.
-- `manufacturing.cutting.override` — **manager-only** "kick operators": force-closes a stuck-open `cutting_sessions` row (someone forgot to Stop) on the Main Line/Blue Line board (`/v2/cutting`) so another operator can Start. Writes only `status`/`ended_at` on `cutting_sessions` — never touches `cutting_lines.line_status` or `jobs.status` (can't attest to what the kicked operator actually cut); logged via `activity_log` only, no schema change. Enforced in the v2 middleware via the `/v2/api/cutting/kick` prefix (placed ABOVE the general `/v2/api/cutting` prefix — first match wins) and surfaced to the UI as the `X-User-Can-Override-Cutting` header (`route.ts` also checks it directly as defense-in-depth). Admins always pass. Its label lives in `admin/roles.html` `PERMISSION_LABELS` so it's assignable per role.
+- `manufacturing.cutting.manage` — **manager-only** actions on the standalone chunk board: create/edit/delete Cross Cutter assignments and reorder the queue. Enforced in the v2 middleware via the `/v2/api/cutting/manage/*` prefix (placed ABOVE the general cutting prefix — first match wins) and surfaced to the UI as the `X-User-Can-Manage-Cutting` header. Admins always pass. Its label lives in `cutting-pilot/src/lib/permissions.ts` so it's assignable per role.
+- `manufacturing.cutting.override` — **manager-only** "kick operators": force-closes a stuck-open `cutting_sessions` row (someone forgot to Stop) on the Main Line/Blue Line board (`/v2/cutting`) so another operator can Start. Writes only `status`/`ended_at` on `cutting_sessions` — never touches `cutting_lines.line_status` or `jobs.status` (can't attest to what the kicked operator actually cut); logged via `activity_log` only, no schema change. Enforced in the v2 middleware via the `/v2/api/cutting/kick` prefix (placed ABOVE the general `/v2/api/cutting` prefix — first match wins) and surfaced to the UI as the `X-User-Can-Override-Cutting` header (`route.ts` also checks it directly as defense-in-depth). Admins always pass. Its label lives in `cutting-pilot/src/lib/permissions.ts` so it's assignable per role.
 
 ## Implementation Rules
 - Passwords are plaintext in D1 (intentional design for admin recovery)
@@ -768,7 +762,7 @@ async function logActivity(env, userId, action, entityType, entityId, details) {
 5. Add permission key to `PATH_PERMISSION_MAP` and `API_PERMISSION_MAP` (in `lib/core.js`) if new module
 6. Build frontend page
 7. Connect navigation (homepage card, module header links)
-8. Add permission key label to `admin/roles.html` if new
+8. Add any new permission key + label to `cutting-pilot/src/lib/permissions.ts`
 9. Update `BACKLOG.md` (remove completed item) and add a `CHANGELOG.md` entry keyed to the prompt/task name
 
 ---
