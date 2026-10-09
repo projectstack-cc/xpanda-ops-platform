@@ -67,10 +67,11 @@
 - [ ] **Unit 3b follow-up — i18n for the new dock dashboard labels.** `DockAssignmentCard.tsx`/`AssignBayModal.tsx`/`LoadedChecklistModal.tsx`/`DockBoard.tsx`/`TeamView.tsx`/`BayListItem.tsx`/`ShippingInfoModal.tsx`/`PullJobModal.tsx`/`PhotoGalleryModal.tsx` ship English-only strings (v2 has no i18n spine wired yet, matching every other v2 UI unit so far) — needs a pass once v2 gains one.
 - [ ] Delete `logistics/loading.html` stub + its `logistics-i18n.js` loading keys once access logs show no hits (stub added dock-04).
 
-### BOL Email — `logistics/bol-email.html` · NO v2 YET
+### BOL Email — `logistics/bol-email.html` · BUILT (bem-01), cutover pending
 
-- [ ] Port to v2 (≈22 sends in the 30 days to 2026-10-08; linked from `/v2/logistics` `ShipmentDashboard.tsx`).
-  Mind the bol-print-01 attachment-size items under BOL Issues.
+- [ ] **bem-02** — cutover (repoint links, legacy redirect stub) after Steve sends one real email from v2.
+- [ ] BOL Email v2 i18n (es/ht) — English-only in bem-01.
+- [ ] tls-01's `nextShipDay` (to-load sheets) could reuse `lib/logistics/bolEmail.ts`'s holiday-aware `nextShippingDateStr` — plant_holidays now has a v2 owner.
 
 ### Manufacturing calculators · NO v2 YET
 

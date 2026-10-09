@@ -165,6 +165,28 @@ export async function buildCombinedBolPdf(
   return out.save();
 }
 
+// bem-01: ONE copy pass (e.g. the driver copy the BOL Email Queue attaches), same body as one
+// iteration of buildCombinedBolPdf's loop. fetchFuelLines is required here: v2's generatePdf only
+// draws the fuel lines it is passed (legacy bol-shared.js fetched them inside generatePdf).
+export async function buildSingleCopyPdf(
+  bolRecords: BolRecord[],
+  copyType: "driver" | "customer" | undefined
+): Promise<Uint8Array> {
+  const scriptFontBytes = await fetchScriptFontBytes();
+  const bodyFontBytes = await fetchBodyFontBytes();
+  const trackingBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const fuelLines = await fetchFuelLines(bolRecords);
+  const templateBytes = await fetchTemplateBytes(copyType);
+  return generatePdf(bolRecords, {
+    copyType,
+    templateBytes,
+    scriptFontBytes,
+    bodyFontBytes,
+    trackingBaseUrl,
+    fuelLines,
+  });
+}
+
 // Ported from bol-shared.js's openPdf: open in a new tab (no auto-download), revoke after a
 // delay long enough for the tab to finish loading the blob.
 export function openPdf(blobUrl: string): void {

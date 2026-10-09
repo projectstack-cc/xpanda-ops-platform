@@ -57,6 +57,8 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   // in _worker.js/lib/core.js exactly (logistics.dashboard, logistics.bol, logistics.loading,
   // jobs) — no new permission keys introduced.
   { prefix: "/v2/api/bols", keys: ["logistics.bol"] },
+  // bem-01: BOL Email Queue — logistics.bol (routes additionally require EDIT via X-User-Can-Edit-Bol).
+  { prefix: "/v2/api/bol-email", keys: ["logistics.bol"] },
   // lb-ui-04: saved loads live under Load Builder (/v2/logistics/load-builder, gated
   // "logistics.v2" below via the dark-launch lines) -- gate its API the same way rather than
   // borrowing "logistics.bol" (a different sub-feature) or inventing a new key.
@@ -81,6 +83,7 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/api/qb", keys: ["jobs"] },
   { prefix: "/v2/api/jobs", keys: ["jobs", "logistics.loading"] },
   { prefix: "/v2/api/shipments", keys: ["logistics.dashboard"] },
+  { prefix: "/v2/logistics/bol-email", keys: ["logistics.bol"] },
   { prefix: "/v2/logistics", keys: ["logistics.dashboard"] },
 ];
 
@@ -182,6 +185,8 @@ export async function middleware(request: NextRequest) {
     "X-User-Can-Manage-Production",
     hasPermission(user, "production.manage", "edit") ? "1" : "0"
   );
+  // bem-01 — BOL Email Queue is edit-only (GETs included); routes + page check this header.
+  headers.set("X-User-Can-Edit-Bol", hasPermission(user, "logistics.bol", "edit") ? "1" : "0");
   // P439 — JSON blob of the user's merged role permissions, so legacy endpoints (e.g.
   // /api/jobs/:id/assignments, /api/jobs/:id/shifts) and the new v2 /v2/api/orders/:id/shifts
   // route can gate manager-only writes on the same blob the legacy worker already trusts.
