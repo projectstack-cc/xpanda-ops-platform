@@ -228,3 +228,16 @@ html.wall-cursor-hidden * {
   .production-print-region table { width: 100% !important; font-size: 11px; border-collapse: collapse; }
   .production-print-region th, .production-print-region td { border: 1px solid #ccc; padding: 4px 6px; }
 }
+
+/* mobile-zoom-01: iOS Safari auto-zooms the page when a form field under 16px gets focus, and the
+   fixed modal overlay then makes pinching back out nearly impossible. Force 16px on touch devices
+   only (desktop keeps compact text-xs/text-sm). !important is required: Tailwind v3 utilities are
+   unlayered, so .text-sm would otherwise win on specificity. Do NOT "fix" this with
+   maximum-scale/user-scalable=no in the viewport -- that blocks pinch-zoom on Android. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

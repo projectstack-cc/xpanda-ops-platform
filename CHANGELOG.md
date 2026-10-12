@@ -8831,6 +8831,21 @@ current series).
 
 ## Admin / Platform
 
+- **mobile-zoom-01 — v2 form fields 16px on touch devices (stops iOS auto-zoom) (react-component-agent §9b). No migration, API or middleware change.**
+  - **Why:** iOS Safari auto-zooms the page when a form field under 16px gets focus. Reported on the Pull Job modal
+    (`/v2/logistics/loading`: `text-sm` search `<input>` + bay `<select>`); after the zoom the fixed full-screen modal
+    overlay made pinching back out nearly impossible. An audit @ `7f14daf` found 64 explicitly `text-xs`/`text-sm`
+    fields across 33 files, plus 185 that inherit a sub-16px size.
+  - **What:** one global rule at the end of `cutting-pilot/src/app/globals.css`: `@media (pointer: coarse)` forces
+    `font-size: 16px !important` on `input` (except checkbox/radio/range/color/file/hidden), `select` and `textarea`.
+    `!important` is required because Tailwind v3 utilities are unlayered, so `.text-sm` would win on specificity.
+    Desktop (fine pointer) keeps the compact sizes. Viewport untouched — no `maximum-scale`/`user-scalable=no`
+    (Android honors it and it would block pinch-zoom). No component edits.
+  - **Layout scan:** no real breakage. Tightest fields at 16px: Load Builder `CustomizeEditor.tsx` count inputs
+    (`w-16`, `h-8`/`h-9`), `ResolveUnmatchedModal.tsx` state (`w-16`, 2 chars), `ZoneEditorModal.tsx` order
+    (`w-[72px]`), and the compact dock trailer field in `DockAssignmentCard.tsx` (`h-7 w-24`, mono) — all still fit
+    their short values. Blocks / Cross Cutter fields are `min-h-[44px]` and `w-20`+.
+
 - **account-pw-01 — self-service "Change password" page, reachable from legacy and v2 (admin-auth-agent §8 + react-component-agent §9b). No migration; backend unchanged.** `POST /api/auth/change-password` already existed (requires `current_password`, `new_password` ≥ 8, clears `first_login`, deletes the user's other sessions), but only the forced first-login form used it. New standalone vanilla page `account/password.html` (`/account/password`): one implementation, two entry points. It has login.html's card look (`/shared/tokens.css`, theme bootstrap, `var(--…)` tokens; the primary button mirrors login.html — `--primary-bg` with white text) and three fields (current / new / confirm) with ≥44 px controls, `autocomplete` hints and per-field Show/Hide. Client checks (all filled, new ≥ 8, new = confirm, new ≠ current) run before any request. Server errors are shown verbatim; on success the form is replaced by "Password changed. You've been signed out on your other devices." + Back. Back = `history.back()` or `/` (no `?return=`, so no open-redirect surface). Gating: `/account/` matches nothing in `PATH_PERMISSION_MAP` (confirmed in `index.js`), so any signed-in user can open it and the session gate sends signed-out visitors to login; no permission key added. Entry points: a "Change password" row in the legacy settings gear (`shared/shared-header.js`, new injected `.xpanda-gear-link` style; the gear only appears on session-gated pages — login.html doesn't load the shared header) and a muted "Change password" `<a>` beside Sign Out in both the desktop and mobile `PlatformHeader.tsx` layouts (plain `<a>` so basePath `/v2` isn't applied; file kept CRLF as committed). i18n: 12 new `common.*` keys in en/es/ht (`shared/i18n-common.js`, machine-translated es/ht). Verified: `node --check` on named temp copies of both shared JS files; each new key appears 3×; `tsc --noEmit` clean; `cf-build` green (batch build). Walkthrough: mismatched new/confirm → inline error, no request sent; wrong current password → the server's message shown verbatim; success → success panel shown, form hidden.
 
 - **notif-bell-01 — One notification bell on every page (home page look), push self-heal.** New
