@@ -62,7 +62,7 @@
   topped/partial stacks LAST. Series:
   - [x] lbr-01 — regression harness + baseline (`scripts/lb-harness.mjs`, `Audits/lbr-01-engine-baseline.md`)
   - [x] lbr-02 — `src/lib/stackPlanner.ts` (pure, golden-exact) + harness row-direction fix
-  - [ ] lbr-03 — wire `planStacks` into `packEngine.ts` (holey + blocks), multi-family consolidation via re-simulate,
+  - [x] lbr-03 — wire `planStacks` into `packEngine.ts` (holey + blocks), multi-family consolidation via re-simulate,
     row order per rule 5, "N stacks shortened" note + `consolidate` option, selfcheck ratchet updates
   - [ ] lbr-04 — save to order: BOL generated from an order auto-saves the load to it; Build Load reopens it;
     order-linked loads don't expire; "save before leaving?" on tab close + in-app nav
@@ -71,6 +71,11 @@
   - [ ] lbr-06 — tap-select / tap-place customize (replaces drag): green valid targets, faded invalid with
     reason on tap, "move just the top-off", undo, step hints
   - [ ] lbr-07 — cutover with a Classic link (held until Steve has floor-tested)
+  - [ ] lbr follow-up — non-Holey parts with allowRotation:false whose catalog size doesn't fit as entered (34 jobs in
+    the lbr-01 audit; e.g. 2×48×144 with height 144) stay unplaced; decide parts-data fix vs. treating "fits only
+    rotated" as rotatable.
+  - [ ] lbr follow-up — multi-truck loads: topped stacks that spill across a truck boundary open the next truck's nose
+    row; consider per-truck top-off placement. (lbr-03 audit: planner-backed v2 frontRowMixed = 36.)
 - [ ] **Load builder v2 (`/v2/logistics/load-builder`) still dark after lgx-roll-01.** Un-dark by deleting its `logistics.v2` middleware line, then repoint Build Load / Load Builder links.
 - [ ] **`lb-ui-05` follow-up — `GET /api/load-builder-skus` needs its own permission grant at Phase 3 rollout.** That legacy route is gated by the `logistics.load-builder` key (`_worker.js/lib/core.js:213`); it works today only because `/v2/logistics*` is admin-only and admins bypass permission checks (`middleware.ts`'s dark-launch gate). When Phase 3 grants `logistics.v2` to a non-admin role, that role also needs `logistics.load-builder` (view) or `JobPullModal` dead-ends on "Couldn't load the SKU library." Not currently named in the sprint charter's Phase 3 checklist — add it there when Phase 3 is scoped.
 - [ ] Repoint the v2 links that still open legacy Load Builder once v2 is ready: `components/logistics/BolActions.tsx`

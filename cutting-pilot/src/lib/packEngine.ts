@@ -21,6 +21,8 @@
 // Weight is a hard guard, never an objective. Every column carries a human-readable `rationale` —
 // a required trust feature, not decoration.
 
+import { planStacks, planStacksWithin, type PlannedStack, type PlannerBudget, type PlannerSku } from "./stackPlanner";
+
 // --- Dimensions & trailer presets ---
 
 export interface Dimensions {
@@ -107,6 +109,10 @@ export interface PackColumn {
   layers: PackLayer[];
   mixed: boolean;
   rationale: string;
+  // lbr-03: the planner's stack kind — "full" (a full-height pure stack, possibly topped off) or
+  // "partial" (a size's leftover, or a full stack shortened to save a trailer). Set on every column
+  // pack() builds; optional so saved loads and editor-built columns stay valid without it.
+  stackKind?: "full" | "partial";
 }
 
 export interface PackRow {
@@ -146,6 +152,19 @@ export interface PackPlan {
   totalUnits: number;
   totalStacks: number;
   mixedStacks: number;
+  // lbr-03: what consolidation (mixing to save a trailer) did. Always set by pack(); optional on the
+  // type so hand-built plans (saved loads, the customize editor, fixtures) stay valid.
+  consolidation?: PackConsolidation;
+}
+
+export interface PackConsolidation {
+  applied: boolean;
+  pureTrailers: number; // trailers the all-pure plan needs
+  trailers: number;
+  topOffStacks: number;
+  shortenedStacks: number;
+  // e.g. "Mixed 30 stacks to fit on 1 truck instead of 2 (1 stack shortened)"; null when not applied.
+  note: string | null;
 }
 
 export interface PackOptions {
@@ -177,6 +196,9 @@ export interface PackOptions {
   // passes "26ft Box Truck" here on its own recursive pack() call so the one repacked trailer is
   // labeled correctly.
   trailerTypeLabel?: string;
+  // lbr-03: mix (top off) only to save a trailer — Steve's 2026-10-12 rules. false gives the
+  // all-pure plan (lbr-05's "pure plan" toggle). maxSkusPerColumn < 2 also disables it.
+  consolidate?: boolean;
 }
 
 export const DEFAULT_PACK_OPTIONS: PackOptions = {
@@ -187,6 +209,7 @@ export const DEFAULT_PACK_OPTIONS: PackOptions = {
   trailerLimit: 20,
   stabilityWarnRatio: 3,
   autoDownsize: false,
+  consolidate: true,
 };
 
 // --- shared numeric helpers ---
@@ -317,12 +340,17 @@ interface ColumnPlan {
   totalHeight: number;
   totalWeight: number;
   rationale: string;
+  // lbr-03: which family (index into simulate()'s families) built this column — consolidation counts
+  // each family's columns on the last trailer by it — and the planner's stack kind.
+  familyIndex: number;
+  stackKind: "full" | "partial";
 }
 
 interface SimResult {
   trailers: PackTrailer[];
   leftover: Map<string, number>;
   warnings: string[];
+  consolidation: PackConsolidation;
 }
 
 const COLOR_PALETTE = [
@@ -371,36 +399,41 @@ function fmt(n: number): string {
   return String(Math.round(n * 1000) / 1000);
 }
 
-// Solves the 1D column-height fill exactly against dims.height for one family (lb-engine-03 B1).
-// A member that can never stack even once (height alone exceeds the trailer, or weight alone
-// exceeds maxWeight) is reported to `leftover`/`warnings` up front and excluded from the fill
-// pool. Holey Board and ordinary Blocks then diverge (holey-sequential-fill, 2026-09-16 — Steve wants Holey
-// Board to match how the floor crew actually stacks a truck, not an exact-fill optimization) and
-// are handled by two separate functions below:
-//   - Blocks (buildBlockColumns): one column at a time, tries every (base, top-off) pair drawn
-//     from the family's remaining demand — for a fixed base SKU, "pure" count is not fixed at
-//     floor(height/unitHeight), the search also tries every smaller base count paired with every
-//     count of an eligible top-off SKU (unitHeight >= topOffMinInchesPerPiece), because an exact
-//     fill sometimes needs FEWER of the base than the max (e.g. 11x8" + 4x5.25" = 109" exact beats
-//     the naive 13x8" = 104", 5" wasted). Bounded: candidates and base counts are small integers
-//     (board thicknesses, trailer height in inches), so this is a small polynomial search per
-//     column, not exponential.
-//   - Holey Board (buildHoleyColumns): no search, no reducing an already-placed count to hunt for
-//     an exact fit ("papering") — strict sequential descending-height stacking instead. See that
-//     function's own comment.
-// Both paths filter top-off eligibility by K *before* placing, never after — an ineligible
-// candidate is never placed, only remembered (by its own unitHeight, a fixed per-SKU property) for
-// the rejection rationale.
+// Builds one family's columns with the stack planner (stackPlanner.ts, lbr-03). A member that can
+// never stack even once (height alone exceeds the trailer, or weight alone exceeds maxWeight) is
+// reported to `leftover`/`warnings` up front and excluded from the pool, as before.
+//
+// Steve's final loading rules (2026-10-12) replace both earlier fill strategies here:
+//   - holey-sequential-fill (2026-09-16): Holey Board chained descending thicknesses into EVERY
+//     column ("top off every column") — retired.
+//   - lb-engine-03 B1's exact-fill block search (2026-09): Blocks tried every (base, top-off) pair
+//     per column, shortening the base to hunt an exact 109" — retired.
+// Now every family, Holey Board and Blocks alike, starts from the PURE plan: full-height pure
+// stacks of each size plus at most one leftover stack, thickest first (planStacks with
+// consolidate:false). Mixing happens only in simulate()'s consolidation pass, and only when it
+// saves a trailer; the returned toColumns() converts that pass's re-planned stacks the same way.
+// K (topOffMinInchesPerPiece) is passed through as the planner's minTopOffHeight, so a sub-K SKU is
+// never a top-off.
+interface FamilyBuild {
+  columns: ColumnPlan[];
+  // The family's planner input (remaining demand per member, weight cap as maxPerStack) — what
+  // consolidation re-plans with planStacksWithin. Empty when nothing in the family can stack.
+  skus: PlannerSku[];
+  toColumns: (stacks: PlannedStack[]) => ColumnPlan[];
+}
+
 function buildFamilyColumns(
   fam: Family,
+  familyIndex: number,
   orient: FamilyOrientation,
   dims: Dimensions,
   effectiveHeight: number,
   opts: PackOptions,
   warnings: string[],
   leftover: Map<string, number>
-): ColumnPlan[] {
+): FamilyBuild {
   const runnerHeight = dims.height - effectiveHeight;
+  const empty: FamilyBuild = { columns: [], skus: [], toColumns: () => [] };
   if (!approxLte(orient.length, dims.length) || !approxLte(orient.width, dims.width)) {
     for (const member of fam.members) {
       warnings.push(
@@ -408,7 +441,7 @@ function buildFamilyColumns(
       );
       leftover.set(member.sku.id, (leftover.get(member.sku.id) ?? 0) + member.qty);
     }
-    return [];
+    return empty;
   }
 
   interface PoolMember {
@@ -431,247 +464,61 @@ function buildFamilyColumns(
     }
     pool.push({ sku: member.sku, unitHeight, remaining: member.qty, weightCap });
   }
+  if (pool.length === 0) return empty;
 
   const K = opts.topOffMinInchesPerPiece;
-  // Same rep-based category check familyOrientationOptions already uses.
-  const isHoley = fam.members[0].sku.category === HOLEY_BOARD_CATEGORY;
-  if (isHoley) {
-    return buildHoleyColumns(pool, orient, dims, effectiveHeight, runnerHeight, K);
-  }
+  const byId = new Map(pool.map((m) => [m.sku.id, m]));
+  const skus: PlannerSku[] = pool.map((m) => ({
+    skuId: m.sku.id,
+    unitHeight: m.unitHeight,
+    qty: m.remaining,
+    maxPerStack: Number.isFinite(m.weightCap) ? m.weightCap : undefined,
+  }));
 
-  const columns: ColumnPlan[] = [];
-  while (pool.some((p) => p.remaining > 0)) {
-    let winner: {
-      base: PoolMember;
-      c1: number;
-      topoff: PoolMember | null;
-      c2: number;
-      total: number;
-      bestIneligible: PoolMember | null;
-      sawExhaustedCandidate: boolean;
-    } | null = null;
-
-    for (const base of pool) {
-      if (base.remaining <= 0) continue;
-      const maxC1 = Math.min(Math.floor(effectiveHeight / base.unitHeight), base.remaining, base.weightCap);
-      if (maxC1 < 1) continue;
-
-      let bestForBase = { c1: maxC1, topoff: null as PoolMember | null, c2: 0, total: maxC1 * base.unitHeight };
-      let bestIneligibleForBase: PoolMember | null = null;
-      // lb-engine-04 A1/A2: a candidate skipped ONLY because its own demand is used up (not
-      // because it doesn't exist, and not because it's below K) must be tracked separately from
-      // bestIneligibleForBase — otherwise the rationale falls through to "no other SKU on this
-      // footprint", which is false: there WAS another SKU, it's just already fully placed.
-      let sawExhaustedCandidateForBase = false;
-
-      if (opts.maxSkusPerColumn >= 2) {
-        for (const cand of pool) {
-          if (cand === base) continue;
-          if (cand.remaining <= 0) {
-            sawExhaustedCandidateForBase = true;
-            continue;
-          }
-
-          // K-filter BEFORE the search, not after: an ineligible candidate is never optimized
-          // over for placement (it could otherwise win the filled-height search and produce a
-          // sub-K topoff layer that validatePlan's topoff-threshold rule would then reject).
-          if (!approxGte(cand.unitHeight, K)) {
-            if (!bestIneligibleForBase || cand.unitHeight > bestIneligibleForBase.unitHeight) {
-              bestIneligibleForBase = cand;
-            }
-            continue;
-          }
-
-          const maxC2 = Math.min(Math.floor(effectiveHeight / cand.unitHeight), cand.remaining, cand.weightCap);
-          if (maxC2 < 1) continue;
-
-          for (let c2 = 1; c2 <= maxC2; c2++) {
-            const remH = effectiveHeight - c2 * cand.unitHeight;
-            const c1 = Math.min(Math.floor((remH + EPS) / base.unitHeight), maxC1);
-            if (c1 < 1) continue; // a column always needs at least one base piece
-            const total = c1 * base.unitHeight + c2 * cand.unitHeight;
-            if (total > bestForBase.total) {
-              bestForBase = { c1, topoff: cand, c2, total };
-            }
-          }
-        }
-      }
-
-      if (!winner || bestForBase.total > winner.total) {
-        winner = {
-          base,
-          c1: bestForBase.c1,
-          topoff: bestForBase.topoff,
-          c2: bestForBase.c2,
-          total: bestForBase.total,
-          bestIneligible: bestIneligibleForBase,
-          sawExhaustedCandidate: sawExhaustedCandidateForBase,
-        };
-      }
-    }
-
-    // winner is guaranteed: pool.some(remaining>0) held at loop entry, and every pooled member
-    // was pre-filtered so heightCount>=1 && weightCap>=1, so at least one base yields maxC1>=1.
-    const { base, c1, topoff, c2, bestIneligible, sawExhaustedCandidate } = winner as NonNullable<typeof winner>;
-    base.remaining -= c1;
-    const pureFilled = c1 * base.unitHeight;
-    const layers: ColumnPlan["layers"] = [{ sku: base.sku, unitHeight: base.unitHeight, count: c1 }];
-    let totalHeight = pureFilled;
-    let rationale: string;
-
-    if (topoff) {
-      topoff.remaining -= c2;
-      const topoffFilled = c2 * topoff.unitHeight;
-      layers.push({ sku: topoff.sku, unitHeight: topoff.unitHeight, count: c2 });
-      totalHeight += topoffFilled;
-      const gap = effectiveHeight - totalHeight;
-
-      // lb-engine-04 A3: at equal thickness, "topped off with" is the wrong verb — this isn't a
-      // smaller piece filling a residual gap, it's another label at the same thickness. Name both
-      // SKUs and, when the whole family's demand is now used up (checked AFTER both decrements
-      // above — a residual gap here doesn't necessarily mean exhaustion, e.g. two same-height SKUs
-      // whose combined max simply doesn't divide dims.height evenly, with plenty of supply left for
-      // future columns), say so instead of reporting a bare leftover gap.
-      if (approxEq(topoff.unitHeight, base.unitHeight)) {
-        const allExhausted = pool.every((p) => p.remaining <= 0);
-        const tail = gap <= EPS ? "exact" : allExhausted ? "all available pieces placed" : `${fmt(gap)}" left`;
-        rationale = `${c1} × ${fmt(base.unitHeight)}" (${base.sku.name}) + ${c2} × ${fmt(topoff.unitHeight)}" (${topoff.sku.name}) = ${fmt(totalHeight)}" — ${tail}`;
+  const toColumns = (stacks: PlannedStack[]): ColumnPlan[] =>
+    stacks.map((st) => {
+      const base = byId.get(st.base.skuId) as PoolMember;
+      const layers: ColumnPlan["layers"] = [{ sku: base.sku, unitHeight: base.unitHeight, count: st.base.count }];
+      const baseH = st.base.count * base.unitHeight;
+      let totalHeight = baseH;
+      let rationale: string;
+      if (st.top) {
+        const top = byId.get(st.top.skuId) as PoolMember;
+        layers.push({ sku: top.sku, unitHeight: top.unitHeight, count: st.top.count });
+        totalHeight += st.top.count * top.unitHeight;
+        rationale = `${st.base.count} × ${fmt(base.unitHeight)}" + ${st.top.count} × ${fmt(top.unitHeight)}" = ${fmt(totalHeight)}" — topped off to save a truck`;
+      } else if (st.kind === "partial") {
+        rationale = `leftover: ${st.base.count} × ${fmt(base.unitHeight)}" = ${fmt(baseH)}"`;
       } else {
-        const tail =
-          gap > EPS
-            ? `${fmt(totalHeight)}" of ${fmt(effectiveHeight)}", ${fmt(gap)}" left`
-            : `${fmt(totalHeight)}" exact`;
-        rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", topped off with ${c2} × ${fmt(topoff.unitHeight)}" = ${fmt(topoffFilled)}" — ${tail}`;
+        const gap = effectiveHeight - baseH;
+        rationale = gap <= EPS ? `${st.base.count} × ${fmt(base.unitHeight)}" = ${fmt(baseH)}" exact` : `${st.base.count} × ${fmt(base.unitHeight)}" = ${fmt(baseH)}", ${fmt(gap)}" left`;
       }
-    } else {
-      const gap = effectiveHeight - pureFilled;
-      if (gap <= EPS) {
-        rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}" exact`;
-      } else if (bestIneligible) {
-        // Below K (A2 precedence #1): an actionable tuning signal, checked ahead of exhaustion.
-        rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", ${fmt(gap)}" left — best top-off ${fmt(bestIneligible.unitHeight)}"/piece, below K of ${fmt(K)}"`;
-      } else if (sawExhaustedCandidate) {
-        // Demand exhausted (A2 precedence #2, NEW): a footprint-mate exists but all of ITS demand
-        // is already placed — "no other SKU on this footprint" would be false here. Deliberately
-        // drops the "c1 x height = filled" prefix the other cases carry, matching the prompt's
-        // given wording exactly; a future prompt should not "fix" this back to the longer form.
-        rationale = `all available pieces placed — ${fmt(gap)}" open, no remaining demand for this footprint`;
-      } else {
-        // No footprint-mate at all (A2 precedence #3): a genuine single-member family.
-        rationale = `${c1} × ${fmt(base.unitHeight)}" = ${fmt(pureFilled)}", ${fmt(gap)}" left — no other SKU on this footprint`;
+      // With a runner in play, "exact"/"left" only means something against the effective height —
+      // surface the usable height and the runner deduction (unchanged from lb-engine-04 A3).
+      if (runnerHeight > EPS) {
+        rationale += ` — ${fmt(effectiveHeight)}" usable (${fmt(dims.height)}" trailer − ${fmt(runnerHeight)}" runner)`;
       }
-    }
-
-    // A3: with a runner in play, "exact"/"left" only means something against the effective height
-    // — surface the usable height and the runner deduction so the number is self-explanatory.
-    // No runner set (runnerHeight 0) leaves the rationale byte-identical to lb-engine-04.
-    if (runnerHeight > EPS) {
-      rationale += ` — ${fmt(effectiveHeight)}" usable (${fmt(dims.height)}" trailer − ${fmt(runnerHeight)}" runner)`;
-    }
-
-    columns.push({
-      colLength: orient.length,
-      colWidth: orient.width,
-      orientationLabel: orient.label,
-      layers,
-      totalHeight,
-      totalWeight: layers.reduce((s, l) => s + l.count * l.sku.weight, 0),
-      rationale,
+      return {
+        colLength: orient.length,
+        colWidth: orient.width,
+        orientationLabel: orient.label,
+        layers,
+        totalHeight,
+        totalWeight: layers.reduce((s, l) => s + l.count * l.sku.weight, 0),
+        rationale,
+        familyIndex,
+        stackKind: st.kind,
+      };
     });
+
+  // Pure plan: consolidation off, so stacksPerTruck is irrelevant (1).
+  const pure = planStacks(skus, effectiveHeight, 1, { consolidate: false, minTopOffHeight: K });
+  for (const skuId of pure.skippedSkuIds) {
+    const m = byId.get(skuId) as PoolMember;
+    warnings.push(`sku ${skuId}: cannot stack even one unit — ${m.remaining} unplaced`);
+    leftover.set(skuId, (leftover.get(skuId) ?? 0) + m.remaining);
   }
-
-  return columns;
-}
-
-// holey-sequential-fill, 2026-09-16: Holey Board's column fill, replacing the exact-fill search above with
-// strict sequential descending-height stacking — Steve's own description of how the floor crew
-// loads a truck: the tallest board is stacked to its physical max (height cap, remaining demand, or
-// weight cap, whichever binds first), and if the column still has room, the next-tallest SKU with
-// remaining demand chains on top, through as many distinct thicknesses as fit in one column. No
-// search, no reducing an already-placed count to hunt for an exact fill ("papering") — that's
-// deliberately not attempted; per Steve, it's only worth doing when a load spills into extra
-// trailers, which this function doesn't handle (recomputePlan's caller-level concerns).
-// Confirmed with Steve: leftover room is topped off on EVERY column this way, not only once a
-// size's demand is fully used up — pool is sorted once, and each column re-scans it top to bottom,
-// so a tall SKU with plenty of demand left still gets whatever short-SKU demand fits in its own
-// column's leftover gap (this is what keeps FIXTURE_HOLEY_SIPLAST's "every column topped off"
-// ratchet intact: 52 columns of 13×8" + 1×5", not just the last one).
-function buildHoleyColumns(
-  pool: { sku: PackSku; unitHeight: number; remaining: number; weightCap: number }[],
-  orient: FamilyOrientation,
-  dims: Dimensions,
-  effectiveHeight: number,
-  runnerHeight: number,
-  K: number
-): ColumnPlan[] {
-  type PoolMember = (typeof pool)[number];
-  const sorted = [...pool].sort((a, b) => b.unitHeight - a.unitHeight);
-  const columns: ColumnPlan[] = [];
-
-  while (sorted.some((p) => p.remaining > 0)) {
-    const layers: ColumnPlan["layers"] = [];
-    let remainingHeight = effectiveHeight;
-    // Tracked purely for the rationale, same "why did the gap stay open" intent as the block
-    // path's bestIneligible/sawExhaustedCandidate — but there's no combinatorial winner to compare
-    // here, just whichever candidate the single top-to-bottom scan first couldn't place.
-    let blockedByHeight: PoolMember | null = null;
-    let blockedByK: PoolMember | null = null;
-
-    for (const member of sorted) {
-      if (member.remaining <= 0) continue;
-      // K only gates a chained (non-first) layer — a lone piece below K is still placed rather
-      // than left unplaced, matching the block path's own "K is about whether it's worth adding on
-      // top of a stack," not "whether it can be placed at all."
-      if (layers.length > 0 && !approxGte(member.unitHeight, K)) {
-        if (!blockedByK) blockedByK = member;
-        continue;
-      }
-      const maxFit = Math.floor((remainingHeight + EPS) / member.unitHeight);
-      if (maxFit < 1) {
-        if (!blockedByHeight) blockedByHeight = member;
-        continue;
-      }
-      const count = Math.min(maxFit, member.remaining, member.weightCap);
-      if (count < 1) continue;
-      layers.push({ sku: member.sku, unitHeight: member.unitHeight, count });
-      member.remaining -= count;
-      remainingHeight -= count * member.unitHeight;
-      if (remainingHeight <= EPS) break;
-    }
-
-    // layers is guaranteed non-empty: sorted.some(remaining>0) held at loop entry, and the pool was
-    // pre-filtered so every member's heightCount (floor(effectiveHeight/unitHeight)) >= 1 — so the
-    // first sorted member with remaining>0 always clears the K gate (layers.length is still 0) and
-    // the height gate (remainingHeight is still the full effectiveHeight).
-    const totalHeight = layers.reduce((s, l) => s + l.count * l.unitHeight, 0);
-    const gap = effectiveHeight - totalHeight;
-    const parts = layers.map((l) => `${l.count} × ${fmt(l.unitHeight)}" (${l.sku.name})`).join(" + ");
-    let rationale: string;
-    if (gap <= EPS) {
-      rationale = `${parts} = ${fmt(totalHeight)}" exact`;
-    } else if (blockedByHeight) {
-      rationale = `${parts} = ${fmt(totalHeight)}", ${fmt(gap)}" left — ${fmt(blockedByHeight.unitHeight)}" (${blockedByHeight.sku.name}) doesn't fit the remaining gap`;
-    } else if (blockedByK) {
-      rationale = `${parts} = ${fmt(totalHeight)}", ${fmt(gap)}" left — best top-off ${fmt(blockedByK.unitHeight)}"/piece, below K of ${fmt(K)}"`;
-    } else {
-      rationale = `${parts} = ${fmt(totalHeight)}", ${fmt(gap)}" left — no remaining demand for this footprint`;
-    }
-    if (runnerHeight > EPS) {
-      rationale += ` — ${fmt(effectiveHeight)}" usable (${fmt(dims.height)}" trailer − ${fmt(runnerHeight)}" runner)`;
-    }
-
-    columns.push({
-      colLength: orient.length,
-      colWidth: orient.width,
-      orientationLabel: orient.label,
-      layers,
-      totalHeight,
-      totalWeight: layers.reduce((s, l) => s + l.count * l.sku.weight, 0),
-      rationale,
-    });
-  }
-
-  return columns;
+  return { columns: toColumns(pure.stacks), skus: skus.filter((x) => !pure.skippedSkuIds.includes(x.skuId)), toColumns };
 }
 
 function buildColumn(plan: ColumnPlan, posY: number): PackColumn {
@@ -695,6 +542,7 @@ function buildColumn(plan: ColumnPlan, posY: number): PackColumn {
     layers,
     mixed: distinctSkuIds.size > 1,
     rationale: plan.rationale,
+    stackKind: plan.stackKind,
   };
 }
 
@@ -859,23 +707,25 @@ function spillToLeftover(plans: ColumnPlan[], leftover: Map<string, number>): vo
   }
 }
 
-function simulate(
-  families: Family[],
-  chosen: FamilyOrientation[],
+// lbr-03: one trailer-assembly pass over a fixed set of columns — the old simulate() loop, moved
+// verbatim except for the row sort (rule 5, below). Columns not placed within trailerLimit come
+// back in `unplaced` (the caller spills them to the balance); `trailerPlans` records which
+// ColumnPlans landed on each trailer so consolidation can count each family's columns on the last.
+function assembleTrailers(
+  instancesIn: ColumnPlan[],
   dims: Dimensions,
   effectiveHeight: number,
   opts: PackOptions
-): SimResult {
+): { trailers: PackTrailer[]; trailerPlans: ColumnPlan[][]; unplaced: ColumnPlan[]; warnings: string[] } {
+  let instances = instancesIn;
   const warnings: string[] = [];
-  const leftover = new Map<string, number>();
-  let instances: ColumnPlan[] = families.flatMap((fam, i) =>
-    buildFamilyColumns(fam, chosen[i], dims, effectiveHeight, opts, warnings, leftover)
-  );
   const trailers: PackTrailer[] = [];
+  const trailerPlans: ColumnPlan[][] = [];
   const trailerLimit = opts.trailerLimit ?? Infinity;
 
   while (instances.length > 0 && trailers.length < trailerLimit) {
     const rows: PackRow[] = [];
+    const plansOnTrailer: ColumnPlan[] = [];
     let lengthLeft = dims.length;
     let weightLeft = dims.maxWeight;
     let progressed = false;
@@ -884,6 +734,7 @@ function simulate(
       const { row, chosen: used } = buildOneRow(instances, dims, weightLeft, lengthLeft);
       if (!row) break;
       rows.push(row);
+      plansOnTrailer.push(...used);
       lengthLeft -= row.rowLength;
       weightLeft -= row.totalWeight;
       const usedSet = new Set(used);
@@ -892,10 +743,8 @@ function simulate(
     }
 
     if (!progressed) {
-      spillToLeftover(instances, leftover);
       warnings.push(`unable to place remaining ${instances.length} column(s) on any trailer — moved to balance`);
-      instances = [];
-      break;
+      return { trailers, trailerPlans, unplaced: instances, warnings };
     }
 
     // Rear->front ordering (lb-engine-03 B3, row-order-nose-first, 2026-09-16): thinnest base
@@ -913,21 +762,136 @@ function simulate(
     // within the tie group) puts the partial row at the tier's rear-adjacent edge instead — the
     // position a real loader would leave it, having run through the full rows first and hit this
     // size's remainder right before moving on to the next, thinner size.
+    //
+    // Rule 5 (lbr-03, Steve 2026-10-12): within one thickness, pure stacks first (nose-ward) and
+    // topped/partial stacks LAST. So a row holding any non-pure column (mixed, or stackKind
+    // "partial") sorts BEFORE the all-pure rows of its thickness — i.e. rear-ward — ahead of the
+    // rowWidthUsed tie-break. Rows are assembled nose-first, in the planner's loading order, but
+    // this array is rear-first, so it is reversed BEFORE the stable sort: otherwise every tie group
+    // would come out flipped (on the golden load, the 11" row holding the partial 11x6+10x4 would
+    // sit right behind the 12s instead of last among the 11s).
+    const isNonPure = (row: PackRow) => row.columns.some((c) => c.mixed || c.stackKind === "partial");
+    rows.reverse();
     rows.sort((a, b) => {
       const dt = rowBaseThickness(a) - rowBaseThickness(b);
       if (!approxEq(dt, 0)) return dt;
+      const dp = (isNonPure(a) ? 0 : 1) - (isNonPure(b) ? 0 : 1);
+      if (dp !== 0) return dp;
       return a.rowWidthUsed - b.rowWidthUsed;
     });
 
     trailers.push(buildTrailer(rows, dims, effectiveHeight));
+    trailerPlans.push(plansOnTrailer);
   }
 
   if (instances.length > 0) {
-    spillToLeftover(instances, leftover);
     warnings.push(`trailerLimit (${trailerLimit}) reached with ${instances.length} column(s) unplaced`);
   }
+  return { trailers, trailerPlans, unplaced: instances, warnings };
+}
 
-  return { trailers, leftover, warnings };
+function consolidationNote(pureTrailers: number, trailers: number, topOffStacks: number, shortenedStacks: number): string {
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const shortened = shortenedStacks > 0 ? ` (${plural(shortenedStacks, "stack", "stacks")} shortened)` : "";
+  return `Mixed ${plural(topOffStacks, "stack", "stacks")} to fit on ${plural(trailers, "truck", "trucks")} instead of ${pureTrailers}${shortened}`;
+}
+
+const CONSOLIDATION_BUDGET_WARNING = "consolidation stopped early (work budget) — plan may use more trucks than necessary";
+
+function simulate(
+  families: Family[],
+  chosen: FamilyOrientation[],
+  dims: Dimensions,
+  effectiveHeight: number,
+  opts: PackOptions,
+  budget: PlannerBudget
+): SimResult {
+  const warnings: string[] = [];
+  const leftover = new Map<string, number>();
+  const builds: FamilyBuild[] = families.map((fam, i) =>
+    buildFamilyColumns(fam, i, chosen[i], dims, effectiveHeight, opts, warnings, leftover)
+  );
+  const instances: ColumnPlan[] = builds.flatMap((b) => b.columns);
+
+  // Pure pass.
+  const pureResult = assembleTrailers(instances, dims, effectiveHeight, opts);
+  let result = pureResult;
+  let current: ColumnPlan[][] = builds.map((b) => b.columns);
+  const breaksByFamily = new Map<number, number>();
+  let applied = false;
+
+  // Consolidation pass (lbr-03): mix only when it saves a trailer. Skipped when the pure pass hit
+  // trailerLimit (pieces unplaced) — that also keeps huge over-cap carts fast.
+  if (opts.consolidate !== false && opts.maxSkusPerColumn >= 2 && pureResult.trailers.length > 1 && pureResult.unplaced.length === 0) {
+    const K = opts.topOffMinInchesPerPiece;
+    const familyStackLowerBound = builds.map((b) => Math.ceil(b.skus.reduce((s, x) => s + x.unitHeight * x.qty, 0) / effectiveHeight - EPS));
+    let T = pureResult.trailers.length;
+    let budgetHit = false;
+
+    const attempt = (familyIdxs: number[], onLast: number[]): boolean => {
+      const next = current.slice();
+      const breaks = new Map<number, number>();
+      for (const f of familyIdxs) {
+        const target = current[f].length - onLast[f];
+        // Exact prune: a family can never fit in fewer stacks than its volume needs, so skip the
+        // planner search (which would only burn the work budget failing) when target is below it.
+        if (target < 1 || target < familyStackLowerBound[f]) return false;
+        const plan = planStacksWithin(builds[f].skus, effectiveHeight, target, { minTopOffHeight: K, budget });
+        if (!plan) {
+          if (budget.remaining <= 0) budgetHit = true;
+          return false;
+        }
+        next[f] = builds[f].toColumns(plan.stacks);
+        breaks.set(f, plan.shortenedStacks);
+      }
+      const r = assembleTrailers(next.flat(), dims, effectiveHeight, opts);
+      if (r.trailers.length < T && r.unplaced.length === 0) {
+        current = next;
+        result = r;
+        T = r.trailers.length;
+        Array.from(breaks.entries()).forEach(([f, b]) => breaksByFamily.set(f, b));
+        applied = true;
+        return true;
+      }
+      return false;
+    };
+
+    while (T > 1 && !budgetHit) {
+      const onLast = families.map(() => 0);
+      for (const plan of result.trailerPlans[T - 1]) onLast[plan.familyIndex] += 1;
+      const candidates = families
+        .map((_, i) => i)
+        .filter((i) => onLast[i] > 0)
+        .sort((a, b) => onLast[b] - onLast[a] || a - b);
+      let accepted = false;
+      for (const f of candidates) {
+        if (attempt([f], onLast)) {
+          accepted = true;
+          break;
+        }
+        if (budgetHit) break;
+      }
+      if (!accepted && !budgetHit && candidates.length > 1) accepted = attempt(candidates, onLast);
+      if (!accepted) break;
+    }
+    if (budgetHit) warnings.push(CONSOLIDATION_BUDGET_WARNING);
+  }
+
+  warnings.push(...result.warnings);
+  if (result.unplaced.length > 0) spillToLeftover(result.unplaced, leftover);
+
+  const trailers = result.trailers;
+  const topOffStacks = trailers.reduce((s, t) => s + t.mixedStacks, 0);
+  const shortenedStacks = Array.from(breaksByFamily.values()).reduce((s, b) => s + b, 0);
+  const consolidation: PackConsolidation = {
+    applied,
+    pureTrailers: pureResult.trailers.length,
+    trailers: trailers.length,
+    topOffStacks: applied ? topOffStacks : 0,
+    shortenedStacks: applied ? shortenedStacks : 0,
+    note: applied ? consolidationNote(pureResult.trailers.length, trailers.length, topOffStacks, shortenedStacks) : null,
+  };
+  return { trailers, leftover, warnings, consolidation };
 }
 
 // Score, lower-is-better lexicographically: fewest trailers; then fewest total rows; then highest
@@ -989,12 +953,13 @@ function bestCombo(
   familyOptions: FamilyOrientation[][],
   dims: Dimensions,
   effectiveHeight: number,
-  opts: PackOptions
+  opts: PackOptions,
+  budget: PlannerBudget
 ): { chosen: FamilyOrientation[]; result: SimResult } {
   const combos = enumerateCombos(familyOptions);
   let best: { chosen: FamilyOrientation[]; result: SimResult; score: number[] } | null = null;
   for (const combo of combos) {
-    const result = simulate(families, combo, dims, effectiveHeight, opts);
+    const result = simulate(families, combo, dims, effectiveHeight, opts, budget);
     const score = scoreResult(
       result,
       combo.map((c) => c.label)
@@ -1049,12 +1014,14 @@ function applyStabilityWarnings(trailers: PackTrailer[], opts: PackOptions, warn
 }
 
 const COMBO_GUARD = 20000;
+const CONSOLIDATION_MAX_WORK = 50_000;
 
 /**
  * Packs `cart` demand (against the `skus` catalog) into trailers of `dims`. Implements joint
  * orientation selection, width pairing and depth-aware row assembly (lb-engine-02 + lb-engine-03
- * A1/A2), exact multi-SKU column height fill with K top-off (lb-engine-03 B1/B2), rear->front row
- * ordering (B3), and a running balance across up to `opts.trailerLimit` trailers (B4) — this is
+ * A1/A2), the stack planner's pure-first column plans with consolidation (mix only to save a
+ * trailer — lbr-03, which replaced lb-engine-03 B1/B2's exact fill), rule-5 rear->front row ordering
+ * (B3 + lbr-03), and a running balance across up to `opts.trailerLimit` trailers (B4) — this is
  * the complete algorithm.
  */
 export function pack(cart: CartLine[], skus: PackSku[], dims: Dimensions, options?: Partial<PackOptions>): PackPlan {
@@ -1093,19 +1060,27 @@ export function pack(cart: CartLine[], skus: PackSku[], dims: Dimensions, option
 
   const families = groupIntoFamilies(placeable);
   const familyOptions = families.map((f) => familyOrientationOptions(f, opts));
+  // lbr-03: one deterministic consolidation work budget for this whole pack() call, shared across
+  // every orientation combination simulate() tries (place() attempts, never wall-clock).
+  const budget: PlannerBudget = { remaining: CONSOLIDATION_MAX_WORK };
 
   let simResult: SimResult;
   if (families.length === 0) {
-    simResult = { trailers: [], leftover: new Map(), warnings: [] };
+    simResult = {
+      trailers: [],
+      leftover: new Map(),
+      warnings: [],
+      consolidation: { applied: false, pureTrailers: 0, trailers: 0, topOffStacks: 0, shortenedStacks: 0, note: null },
+    };
   } else {
     const comboCount = familyOptions.reduce((p, o) => p * o.length, 1);
     if (comboCount <= COMBO_GUARD) {
-      simResult = bestCombo(families, familyOptions, dims, effectiveHeight, opts).result;
+      simResult = bestCombo(families, familyOptions, dims, effectiveHeight, opts, budget).result;
     } else {
       warnings.push(
         `orientation search space (${comboCount}) exceeds guard (${COMBO_GUARD}) — using greedy largest-family-first fallback`
       );
-      simResult = simulate(families, greedyCombo(families, familyOptions), dims, effectiveHeight, opts);
+      simResult = simulate(families, greedyCombo(families, familyOptions), dims, effectiveHeight, opts, budget);
     }
   }
 
@@ -1182,6 +1157,9 @@ export function pack(cart: CartLine[], skus: PackSku[], dims: Dimensions, option
     totalUnits: trailers.reduce((s, t) => s + t.totalUnits, 0),
     totalStacks: trailers.reduce((s, t) => s + t.totalStacks, 0),
     mixedStacks: trailers.reduce((s, t) => s + t.mixedStacks, 0),
+    // Auto-downsize keeps the outer call's numbers: the box-truck repack is a single trailer, so
+    // it is pure-only by construction.
+    consolidation: simResult.consolidation,
   };
 }
 

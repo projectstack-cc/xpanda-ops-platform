@@ -11,6 +11,10 @@
 //   violates it, built from a single self-consistent baseline plan (recompute() derives every
 //   aggregate field from the structural leaves) so mutating one thing to break a target rule
 //   doesn't accidentally trip an unrelated one.
+// lbr-03 (2026-10-12): pack() now builds every family with the stack planner (pure first, mix only
+// to save a trailer, rule-5 row order). Assertions that encoded the superseded rules
+// (holey-sequential-fill's chaining, lb-engine-03 B1's exact-fill search, and the old explanatory
+// rationale wording) were updated to the new behavior; each is listed in CHANGELOG.md lbr-03.
 // - pack() algorithm checks: call the real algorithm against the real-order fixtures
 //   (FIXTURE_HOLEY_SIPLAST, FIXTURE_BLOCKS_PAIRING, FIXTURE_BLOCKS_MIXED — the last now the real
 //   INV_4347 data, lb-engine-03 Part C) plus lb-engine-03's own targeted fixtures for column fill,
@@ -287,8 +291,11 @@ const RATCHET: Record<string, RatchetBar> = {
   // height utilization is a full 1.0 here and any future change that leaves even one column short
   // of the roof will fail this bar. That is intended.
   FIXTURE_HOLEY_SIPLAST: { trailerCount: 1, rowCount: 13, usedLength: 624, meanHeightUtilization: 1 },
-  // INV_4347 — 94 pieces across six footprints, the messiest of the three.
-  FIXTURE_BLOCKS_MIXED: { trailerCount: 1, rowCount: 7, usedLength: 635.25, meanHeightUtilization: 0.6229 },
+  // INV_4347 — 94 pieces across six footprints, the messiest of the three. lbr-03: mean height
+  // utilization re-pinned 0.6229 -> 0.5352. Pure-first (Steve, 2026-10-12) tops off only the 2
+  // stacks needed to save the second trailer instead of exact-filling every column, so columns are
+  // shorter on average by design; trailer count, row count and used length are unchanged.
+  FIXTURE_BLOCKS_MIXED: { trailerCount: 1, rowCount: 7, usedLength: 635.25, meanHeightUtilization: 0.5352 },
 };
 
 const RATCHET_EPS = 1e-9;
@@ -750,6 +757,11 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("FIXTURE_HOLEY_SIPLAST: no rotation used anywhere (every layer orientation is 'flat')", noRotation);
     const allColumnsToppedOff = siplastTrailer?.rows.every((r) => r.columns.every((c) => c.mixed && c.layers.length === 2 && c.totalHeight === 109)) ?? false;
     check("FIXTURE_HOLEY_SIPLAST: with top-off active, every column mixes both thicknesses to 109\" exact", allColumnsToppedOff);
+    // lbr-03: the same 52 x (13x8" + 1x5") result, now for the rule-1/2 reason — the pure plan needs
+    // 55 stacks (52 x 13x8" + 3 x 5" stacks of 19+19+14) = 2 trailers, so consolidation tops every 8"
+    // stack with one 5" piece to save the second trailer.
+    check("FIXTURE_HOLEY_SIPLAST: consolidation applied (mixing saved a trailer)", siplastPlan.consolidation?.applied === true, JSON.stringify(siplastPlan.consolidation));
+    check("FIXTURE_HOLEY_SIPLAST: the pure plan needed 2 trailers", siplastPlan.consolidation?.pureTrailers === 2, JSON.stringify(siplastPlan.consolidation));
     const validationOnSiplast = validatePlan(siplastPlan, siplastCart, siplastSkus, OPTS);
     check("FIXTURE_HOLEY_SIPLAST: validatePlan reports zero violations (top-off satisfies K)", validationOnSiplast.length === 0, JSON.stringify(validationOnSiplast));
     fixtureMetrics.set("FIXTURE_HOLEY_SIPLAST", planMetrics(siplastPlan, OPTS));
@@ -908,25 +920,25 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     check("familyOrientationOptions: allowRotation:false single-member family returns 1 orientation", familyOrientationOptions(noRotateFamily, OPTS).length === 1);
   }
 
-  // D2/D4. Column fill finds 8x11 + 5.25x4 = 109" exactly for the INV_4347 dominant footprint
-  // (isolated to just those two SKUs so the search has nothing else to consider), and the
-  // resulting column is a correctly-rolled-up mixed/top-off column.
+  // D2/D4. Was: column fill finds 8x11 + 5.25x4 = 109" exactly (lb-engine-03 B1's exact-fill
+  // search). lbr-03 (Steve, 2026-10-12): pure first — the 8" stacks stay full 13x8" = 104" and are
+  // never shortened to hunt an exact fill. 100x8" + 100x5.25" = 13 pure stacks against 11 per
+  // trailer on this 54.75x90.75 footprint, and 1325" of freight needs 13 stacks by volume anyway, so
+  // mixing can't save the second trailer: the plan stays pure (0 mixed, consolidation not applied).
   {
     const fillBase: PackSku = { id: "FILL_BASE", name: "base 8in", sku: "FILL_BASE", length: 54.75, width: 90.75, height: 8, weight: 30, category: "Blocks", allowRotation: true };
     const fillTopoff: PackSku = { id: "FILL_TOPOFF", name: "topoff 5.25in", sku: "FILL_TOPOFF", length: 54.75, width: 90.75, height: 5.25, weight: 20, category: "Blocks", allowRotation: true };
     const fillCart: CartLine[] = [{ skuId: "FILL_BASE", qty: 100 }, { skuId: "FILL_TOPOFF", qty: 100 }];
     const fillPlan = pack(fillCart, [fillBase, fillTopoff], TRAILER_53FT);
 
-    const exactColumn = findColumn(
-      fillPlan,
-      (c) => c.layers.length === 2 && c.layers[0].unitHeight === 8 && c.layers[0].count === 11 && c.layers[1].unitHeight === 5.25 && c.layers[1].count === 4
-    );
-    check("Column fill: 8x11 + 5.25x4 = 109\" exact is found for the INV_4347 dominant footprint", exactColumn !== null);
-    check("Column fill: the exact-fill column totals 109\" with zero gap", exactColumn?.totalHeight === 109, String(exactColumn?.totalHeight));
-    check("D4: the exact-fill (base + accepted top-off) column is marked mixed", exactColumn?.mixed === true);
+    const fullBase = findColumn(fillPlan, (c) => c.layers.length === 1 && c.layers[0].unitHeight === 8 && c.layers[0].count === 13);
+    const shortenedBase = findColumn(fillPlan, (c) => c.layers[0].unitHeight === 8 && c.layers.length === 2);
+    check("Column fill: pure first — full 13x8\" = 104\" stacks are built", fullBase !== null && fullBase.stackKind === "full");
+    check("Column fill: no 8\" stack is shortened to hunt an exact 109\" fill", shortenedBase === null, JSON.stringify(shortenedBase?.layers.map((l) => [l.unitHeight, l.count])));
+    check("D4: mixing can't save a trailer here, so nothing is mixed and consolidation is not applied", fillPlan.mixedStacks === 0 && fillPlan.consolidation?.applied === false && fillPlan.trailers.length === 2, JSON.stringify(fillPlan.consolidation));
 
     const fillViolations = validatePlan(fillPlan, fillCart, [fillBase, fillTopoff], OPTS);
-    check("Column fill: 0 violations, and mixedStacks rolls up (>0) for the accepted top-off", fillViolations.length === 0 && fillPlan.mixedStacks > 0, `violations=${fillViolations.length} mixedStacks=${fillPlan.mixedStacks}`);
+    check("Column fill: 0 violations", fillViolations.length === 0, `violations=${fillViolations.length}`);
   }
 
   // D3. Top-off is rejected when the best available candidate's inches-per-piece < K, the gap is
@@ -943,7 +955,9 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
 
     const rejColumn = findColumn(rejPlan, (c) => c.layers.some((l) => l.skuId === "REJ_A" || l.skuId === "REJ_B"));
     check("D3: below-K top-off is rejected — the column stays single-layer (gap left open)", rejColumn?.layers.length === 1, JSON.stringify(rejColumn));
-    check("D3: rejection rationale names the best top-off candidate and the K threshold", (rejColumn?.rationale ?? "").includes("below K of"), rejColumn?.rationale);
+    // lbr-03: was "rationale names the best top-off candidate and the K threshold". The planner's
+    // rationale is plain fill text; a pure stack is never described as a top-off.
+    check("D3: rationale states the plain fill and never claims a top-off", /^(\d+ × |leftover: )/.test(rejColumn?.rationale ?? "") && !(rejColumn?.rationale ?? "").includes("topped off"), rejColumn?.rationale);
     check("D3: rejected column is not marked mixed", rejColumn?.mixed === false);
   }
 
@@ -998,12 +1012,9 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   // sandwiched between two full rows of its own thickness — a gap in the middle of the diagram a
   // loader would read as a mistake, not an intentional "ran out." The fix's secondary sort key
   // (rowWidthUsed ascending on a thickness tie) should push the sparse row to the rear-adjacent edge
-  // of its tier instead. Quantities picked so 6.5" holey board's own tail column (8 of its 16/column
-  // max) has enough leftover room to chain into 10 units of 5.5" (holey-sequential-fill) before
-  // 5.5" continues as pure columns of its own — ground-truthed by running pack() directly rather
-  // than hand-derived, since the chain absorbs some of 5.5"'s demand into that mixed column: 169
-  // total 5.5" demand, minus 10 chained, leaves 159 = 8 full columns (152) + a 7pc tail, not a
-  // clean 8-full+17-tail split.
+  // of its tier instead. lbr-03: holey-sequential-fill no longer chains 10 units of 5.5" onto 6.5"'s
+  // tail column (pure first — nothing needs a top-off on a one-trailer load), so 5.5"'s 169 pieces
+  // split cleanly into 8 full columns of 19 (152) + a 17pc tail. Was a 7pc tail.
   {
     const tailA: PackSku = { id: "TAIL_65", name: "6.5in holey", sku: "TAIL_65", length: 48, width: 24, height: 6.5, weight: 10, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
     const tailB: PackSku = { id: "TAIL_55", name: "5.5in holey", sku: "TAIL_55", length: 48, width: 24, height: 5.5, weight: 10, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
@@ -1012,9 +1023,9 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     const tailRows = tailPlan.trailers[0]?.rows ?? [];
 
     const sparse55Row = tailRows.find(
-      (r) => r.columns.length === 2 && r.columns.some((c) => c.layers[0]?.skuId === "TAIL_55" && c.layers[0]?.count === 7)
+      (r) => r.columns.length === 2 && r.columns.some((c) => c.layers[0]?.skuId === "TAIL_55" && c.layers[0]?.count === 17)
     );
-    check("D9: the sparse tail row (1 full lane + the 7pc remainder) exists", !!sparse55Row, JSON.stringify(tailRows.map((r) => r.columns.length)));
+    check("D9: the sparse tail row (1 full lane + the 17pc remainder) exists", !!sparse55Row, JSON.stringify(tailRows.map((r) => r.columns.length)));
     check(
       "D9: the sparse 5.5\" row is the rear-most row of its thickness tier (every full 5.5\" row sits farther toward the nose)",
       tailRows.every((r) => {
@@ -1079,9 +1090,26 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     const bkPlan = pack(bkCart, [bkA, bkB], TRAILER_53FT);
     const bkRationale = findColumn(bkPlan, (c) => c.layers.length === 1)?.rationale ?? "";
 
-    check("E1: below-K rationale names the best top-off candidate and the K threshold", bkRationale.includes("below K of"), bkRationale);
+    // lbr-03: was "below-K rationale names the best top-off candidate and the K threshold". The
+    // planner's rationale is plain fill text; K's teeth are asserted by E1b below instead.
+    check("E1: rationale is the plain fill text", /^(\d+ × |leftover: )/.test(bkRationale), bkRationale);
     check("E1: below-K rationale does NOT claim the footprint has no other SKU", !bkRationale.includes("no other SKU"), bkRationale);
     check("E1: below-K rationale does NOT claim demand is exhausted", !bkRationale.includes("no remaining demand"), bkRationale);
+  }
+
+  // E1b (lbr-03). K has teeth through pack(): 88 x 13" (11 full 13x8" stacks, 5" gap each) plus
+  // 2 x 2" fill 12 stacks against 11 per trailer on a 54.75x90.75 footprint. At K = 3 the 2"
+  // pieces may never top off, so the plan stays at 2 trailers; at K = 2 the same cart consolidates
+  // onto 1 trailer by topping a 13" stack with both 2" pieces.
+  {
+    const kBase: PackSku = { id: "K_13", name: "13in", sku: "K_13", length: 54.75, width: 90.75, height: 13, weight: 30, category: "Blocks", allowRotation: false };
+    const kThin: PackSku = { id: "K_2", name: "2in", sku: "K_2", length: 54.75, width: 90.75, height: 2, weight: 5, category: "Blocks", allowRotation: false };
+    const kCart: CartLine[] = [{ skuId: "K_13", qty: 88 }, { skuId: "K_2", qty: 2 }];
+    const atK3 = pack(kCart, [kBase, kThin], TRAILER_53FT);
+    const atK2 = pack(kCart, [kBase, kThin], TRAILER_53FT, { topOffMinInchesPerPiece: 2 });
+    check("E1b: at K = 3 a 2\" piece is never a top-off (2 trailers, 0 mixed)", atK3.trailers.length === 2 && atK3.mixedStacks === 0, JSON.stringify(atK3.consolidation));
+    check("E1b: at K = 2 the same cart consolidates onto 1 trailer", atK2.trailers.length === 1 && atK2.consolidation?.applied === true, JSON.stringify(atK2.consolidation));
+    check("E1b: both plans are violation-free at their own K", validatePlan(atK3, kCart, [kBase, kThin], OPTS).length === 0 && validatePlan(atK2, kCart, [kBase, kThin], { ...OPTS, topOffMinInchesPerPiece: 2 }).length === 0);
   }
 
   // E2. Demand exhausted, the real INV_4347 42.75x54.75 family (KAB CA Comps qty 2 + Westwego GW
@@ -1094,19 +1122,17 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   {
     const kabRationales = (rationalesBySku.get("MIX_KAB") ?? []).concat(rationalesBySku.get("MIX_WESTWEGO_GW") ?? []);
     const kabRationale = kabRationales[0] ?? "";
-    check("E2: INV_4347 42.75x54.75 column reports that all available pieces were placed", kabRationale.includes("all available pieces placed"), kabRationale);
+    // lbr-03: was "reports that all available pieces were placed". Under rule 3 the two 7" labels
+    // are never stacked on each other, so each is its own leftover column, which says so.
+    check("E2: INV_4347 42.75x54.75 column is labelled as a leftover stack", kabRationale.startsWith("leftover: "), kabRationale);
     check("E2: INV_4347 42.75x54.75 column does NOT claim \"no other SKU\"", kabRationale.length > 0 && !kabRationale.includes("no other SKU"), kabRationale);
     check("E2: INV_4347 42.75x54.75 column no longer reports a bare 88\" leftover gap", !kabRationale.includes("88\" left"), kabRationale);
 
-    // The same three-way split on the else branch: the last STOCK piece lands alone on the
-    // dominant 54.75x90.75 footprint after every footprint-mate is used up, so it must take the
-    // demand-exhausted wording rather than "no other SKU on this footprint".
-    const exhaustedElse = findColumn(
-      mixedPlan,
-      (c) => c.layers.length === 1 && c.rationale.includes("no remaining demand for this footprint")
-    );
-    check("E2: a single-layer column on a shared footprint uses the demand-exhausted wording", exhaustedElse !== null, exhaustedElse?.rationale);
-    check("E2: that column does NOT claim \"no other SKU\"", !(exhaustedElse?.rationale ?? "no other SKU").includes("no other SKU"), exhaustedElse?.rationale);
+    // lbr-03: was "a single-layer column on a shared footprint uses the demand-exhausted wording".
+    // Every partial column now reads "leftover: …", and no column claims "no other SKU".
+    const partialColumn = findColumn(mixedPlan, (c) => c.layers.length === 1 && c.stackKind === "partial");
+    check("E2: a single-layer partial column uses the leftover wording", partialColumn !== null && partialColumn.rationale.startsWith("leftover: "), partialColumn?.rationale);
+    check("E2: no column claims \"no other SKU\"", findColumn(mixedPlan, (c) => c.rationale.includes("no other SKU")) === null);
   }
 
   // E3. No footprint-mate at all — a genuine single-member family keeps the original wording.
@@ -1117,19 +1143,22 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     const soloPlan = pack(soloCart, [soloSku], TRAILER_53FT);
     const soloRationale = findColumn(soloPlan, () => true)?.rationale ?? "";
 
-    check("E3: single-member family keeps the no-footprint-mate wording", soloRationale.includes("no other SKU on this footprint"), soloRationale);
+    // lbr-03: was "keeps the no-footprint-mate wording". The planner's full-stack rationale is the
+    // plain fill (and the gap), nothing more.
+    check("E3: single-member family full stack reads exactly 9 × 12\" = 108\", 1\" left", soloRationale === "9 × 12\" = 108\", 1\" left", soloRationale);
     check("E3: single-member family does NOT claim demand exhaustion", !soloRationale.includes("no remaining demand"), soloRationale);
     check("E3: single-member family rationale still shows the fill (9 x 12\" = 108\", 1\" left)", soloRationale.startsWith("9 × 12\" = 108\", 1\" left"), soloRationale);
   }
 
-  // E4. Equal thickness is not a "top-off". Same INV_4347 column as E2: two 7" labels stacked is a
-  // second label at the same thickness, not a thinner piece filling a residual gap, so it names
-  // both SKUs and drops the "topped off with" verb.
+  // E4. Equal thickness is not a "top-off". lbr-03 (rule 3: the top-off is strictly thinner): two
+  // labels of the same thickness are never stacked together at all — was "the pairing names both
+  // SKUs". A genuinely thinner top-off says it was made to save a truck — was "topped off with".
   {
     const kabRationale = (rationalesBySku.get("MIX_KAB") ?? [])[0] ?? "";
-    check("E4: equal-thickness pairing does NOT say \"topped off with\"", kabRationale.length > 0 && !kabRationale.includes("topped off with"), kabRationale);
-    check("E4: equal-thickness pairing names both SKUs", kabRationale.includes("(KAB CA Comps)") && kabRationale.includes("(Westwego GW Comp)"), kabRationale);
-    check("E4: a genuinely thinner top-off still uses \"topped off with\"", ((rationalesBySku.get("MIX_KANSAS525") ?? [])[0] ?? "").includes("topped off with"), (rationalesBySku.get("MIX_KANSAS525") ?? [])[0]);
+    check("E4: equal-thickness labels do NOT say \"topped off\"", kabRationale.length > 0 && !kabRationale.includes("topped off"), kabRationale);
+    const sameThicknessStack = findColumn(mixedPlan, (c) => c.layers.some((l, i) => i > 0 && l.unitHeight === c.layers[0].unitHeight));
+    check("E4: no column stacks two labels of the same thickness", sameThicknessStack === null, JSON.stringify(sameThicknessStack?.layers.map((l) => [l.skuId, l.unitHeight])));
+    check("E4: a genuinely thinner top-off says it saved a truck", ((rationalesBySku.get("MIX_KANSAS525") ?? []).find((r) => r.includes(" + ")) ?? "").includes("topped off to save a truck"), JSON.stringify(rationalesBySku.get("MIX_KANSAS525")));
   }
 
   // E5 (A4). applyStabilityWarnings appends onto rationale after buildFamilyColumns has written
@@ -1138,7 +1167,9 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
   {
     const stabilityColumn = findColumn(mixedPlan, (c) => c.rationale.includes("[stability:"));
     const stabilityRationale = stabilityColumn?.rationale ?? "";
-    const partAIndex = stabilityRationale.indexOf("no other SKU on this footprint");
+    // lbr-03: the Part A rationale is now the planner's plain fill text ("1 × 54.75\" = …"), was
+    // "… no other SKU on this footprint".
+    const partAIndex = stabilityRationale.indexOf("1 × 54.75\" = 54.75\"");
     const noteIndex = stabilityRationale.indexOf("[stability:");
     check("E5: a column with a stability note still carries its Part A rationale", partAIndex >= 0, stabilityRationale);
     check("E5: the stability note is appended AFTER the Part A rationale, not over it", partAIndex >= 0 && noteIndex > partAIndex, stabilityRationale);
@@ -1392,9 +1423,11 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     );
     check("Holey max-base-first: that column totals 16\" (H2 can't fit the 3\" residual gap)", maxedColumn?.totalHeight === 16, String(maxedColumn?.totalHeight));
     check("Holey max-base-first: that column is not mixed — H2 never enters it", maxedColumn?.mixed === false && !maxedColumn?.layers.some((l) => l.skuId === "HOLEY_MAX_OTHER"));
+    // lbr-03: was "rationale names the blocked candidate and explains why". The planner's rationale
+    // for a full stack is the plain fill and gap; it never claims "no other SKU".
     check(
-      "Holey max-base-first: rationale names the blocked candidate and explains why, not a bare \"no other SKU\" (which would be false — H2 exists and has demand)",
-      (maxedColumn?.rationale ?? "").includes("doesn't fit the remaining gap") && (maxedColumn?.rationale ?? "").includes("5\""),
+      "Holey max-base-first: rationale is the plain fill — 2 × 8\" = 16\", 3\" left",
+      maxedColumn?.rationale === "2 × 8\" = 16\", 3\" left",
       maxedColumn?.rationale
     );
 
@@ -1433,11 +1466,15 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       chainPlan.balance.length === 0,
       JSON.stringify(chainPlan.balance)
     );
+    // lbr-03: holey-sequential-fill (chain 3+ thicknesses per column) is retired. Was "at least one
+    // column chains through 3+ distinct thicknesses"; now rule 3 caps every column at 2 sizes, and the
+    // plan still lands on the volume lower bound (449" of freight / (8 stacks x 40") -> 2 trailers).
     check(
-      "Holey sequential chain: at least one column chains through 3+ distinct thicknesses",
-      allColumns.some((c) => c.layers.length >= 3),
+      "Holey (was sequential chain): no column holds more than 2 thicknesses (rule 3)",
+      allColumns.every((c) => new Set(c.layers.map((l) => l.skuId)).size <= 2),
       JSON.stringify(allColumns.map((c) => c.layers.length))
     );
+    check("Holey (was sequential chain): the plan uses the volume lower bound of 2 trailers", chainPlan.trailers.length === 2, String(chainPlan.trailers.length));
     check(
       "Holey sequential chain: descending order within every column (base tallest, chained layers strictly shorter)",
       allColumns.every((c) => c.layers.every((l, i) => i === 0 || l.unitHeight < c.layers[i - 1].unitHeight)),
@@ -1449,6 +1486,54 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
       chainViolations.length === 0,
       JSON.stringify(chainViolations)
     );
+  }
+
+  // --- lbr-03: GOLDEN_4472_T1 through pack() (planner-backed engine, rule-5 row order) ---
+  // INV 4472 trailer 1's piece set: 48x24 Holey Board, 13" x 85, 12" x 120, 11" x 195, 10" x 85,
+  // 9" x 6, 8" x 1, 53ft Standard, default options. The pure plan needs 58 stacks (2 trailers);
+  // consolidation fits it on 1 with 30 top-offs and 1 shortened stack. Rows are checked nose ->
+  // doors (trailer.rows reversed, since rows are stored rear-first), columns in posY order.
+  {
+    const mkGolden = (h: number): PackSku => ({ id: `GOLD_${h}`, name: `${h}in holey`, sku: `GOLD_${h}`, length: 48, width: 24, height: h, weight: 1, category: HOLEY_BOARD_CATEGORY, allowRotation: false });
+    const goldenSkus = [13, 12, 11, 10, 9, 8].map(mkGolden);
+    const goldenQty: Record<number, number> = { 13: 85, 12: 120, 11: 195, 10: 85, 9: 6, 8: 1 };
+    const goldenCart: CartLine[] = goldenSkus.map((s) => ({ skuId: s.id, qty: goldenQty[s.height] }));
+    const goldenPlan = pack(goldenCart, goldenSkus, TRAILER_53FT);
+    const goldenColumns = goldenPlan.trailers.flatMap((t) => t.rows.flatMap((r) => r.columns));
+
+    check("Golden 4472 T1: 1 trailer, 52 columns, 30 mixed", goldenPlan.trailers.length === 1 && goldenColumns.length === 52 && goldenPlan.mixedStacks === 30, `${goldenPlan.trailers.length} / ${goldenColumns.length} / ${goldenPlan.mixedStacks}`);
+    check("Golden 4472 T1: consolidation note present", goldenPlan.consolidation?.note === "Mixed 30 stacks to fit on 1 truck instead of 2 (1 stack shortened)", JSON.stringify(goldenPlan.consolidation));
+    check("Golden 4472 T1: no column holds more than 2 sizes", goldenColumns.every((c) => new Set(c.layers.map((l) => l.skuId)).size <= 2));
+    check("Golden 4472 T1: no inverted stack (every top-off thinner than its base)", goldenColumns.every((c) => c.layers.every((l, i) => i === 0 || l.unitHeight < c.layers[i - 1].unitHeight)));
+    const goldenWant = [
+      "13x8 13x8 13x8 13x8",
+      "13x8 13x8 13x8 13x8",
+      "13x8 13x7+9x2 13x6+10x3 12x9",
+      "12x9 12x9 12x9 12x9",
+      "12x9 12x9 12x9 12x9",
+      "12x9 12x9 12x9 12x9",
+      "12x3+10x7 11x9+10x1 11x9+10x1 11x9+10x1",
+      "11x9+10x1 11x9+10x1 11x9+10x1 11x9+10x1",
+      "11x9+10x1 11x9+10x1 11x9+10x1 11x9+10x1",
+      "11x9+10x1 11x9+10x1 11x9+10x1 11x9+10x1",
+      "11x9+10x1 11x9+10x1 11x9+10x1 11x9+10x1",
+      "11x9+10x1 11x9+10x1 11x6+10x4 10x10+8x1",
+      "10x10+9x1 10x10+9x1 10x10+9x1 10x10+9x1",
+    ];
+    const goldenGot = [...(goldenPlan.trailers[0]?.rows ?? [])]
+      .reverse()
+      .map((r) => [...r.columns].sort((a, b) => a.posY - b.posY).map((c) => c.layers.map((l) => `${l.unitHeight}x${l.count}`).join("+")).join(" "));
+    check("Golden 4472 T1: exact rows, nose -> doors", JSON.stringify(goldenGot) === JSON.stringify(goldenWant), JSON.stringify(goldenGot));
+    check("Golden 4472 T1: validatePlan reports zero violations", validatePlan(goldenPlan, goldenCart, goldenSkus, OPTS).length === 0);
+
+    const goldenPure = pack(goldenCart, goldenSkus, TRAILER_53FT, { consolidate: false });
+    const pureColumns = goldenPure.trailers.flatMap((t) => t.rows.flatMap((r) => r.columns));
+    check(
+      "Golden 4472 T1, consolidate:false: 2 trailers, 58 columns, 0 mixed, consolidation not applied",
+      goldenPure.trailers.length === 2 && pureColumns.length === 58 && goldenPure.mixedStacks === 0 && goldenPure.consolidation?.applied === false && goldenPure.consolidation?.note === null,
+      `${goldenPure.trailers.length} / ${pureColumns.length} / ${goldenPure.mixedStacks} / ${JSON.stringify(goldenPure.consolidation)}`
+    );
+    check("Golden 4472 T1: every column carries a stackKind", goldenColumns.every((c) => c.stackKind === "full" || c.stackKind === "partial"));
   }
 
   // --- lb-ui-12: auto-downsize + trailerTypeLabel (G1-G5) ---

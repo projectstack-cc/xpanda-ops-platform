@@ -2929,6 +2929,54 @@ current series).
 
 ## Logistics (v2)
 
+- **lbr-03 — `pack()` uses the stack planner: pure-first, mix only to save a truck, rule-5 row order (Next/Cloudflare Platform Agent §9a; Logistics Agent §3 owns the rules). Engine only: no UI, API, migration or permission change. The v2 Load Builder UI picks it up as-is.**
+  - **Superseded rules:** Steve's final loading rules (2026-10-12) replace **`holey-sequential-fill` (2026-09-16)**, which chained descending thicknesses into every Holey Board column, and **lb-engine-03 B1's exact-fill block search (2026-09)**, which shortened a base to hunt an exact 109". Every family, Holey Board and Blocks, now starts from the planner's pure plan and mixes only when that saves a trailer.
+  - **`stackPlanner.ts` (additive):**
+    - `minTopOffHeight` (K, passed from `topOffMinInchesPerPiece`).
+    - A deterministic `maxWork` budget (50,000 `place()` attempts, never wall-clock), plus an optional shared `budget` object so one budget covers a whole `pack()` call; `budgetExhausted` on the result.
+    - New `planStacksWithin(skus, H, maxStacks, opts)`: one `consolidate()` run in rule-5 order, or `null`.
+    - The combination walk is now a callback with early exit, because the tsconfig targets ES5 (no generators).
+    - **Deliberate deviation from the reference algorithm, active only when K > 0:** a sub-K stack is never one of the E stacks dropped into the top-off pool; the cut takes the last E K-eligible stacks and keeps the sorted order. Without it, INV 4351 regressed 6 → 7 trucks at K = 3: its 1" leftover stacks were always the ones cut, and they can never be top-offs. With K = 0 it is a no-op, so the golden result and the lbr-02 assertions are unchanged.
+  - **`packEngine.ts`:**
+    - **B. Additive fields:** `PackColumn.stackKind?`, `PackOptions.consolidate?` (default `true`; `maxSkusPerColumn < 2` also disables it), and `PackPlan.consolidation?` (`{ applied, pureTrailers, trailers, topOffStacks, shortenedStacks, note }`, e.g. "Mixed 30 stacks to fit on 1 truck instead of 2 (1 stack shortened)"). `consolidation` is optional on the type so hand-built plans stay valid; `pack()` always sets it.
+    - **C. Column building:** `buildFamilyColumns` keeps its up-front validation, then builds pure columns via `planStacks(…, 1, { consolidate: false, minTopOffHeight: K })`. Rationales are plain: `8 × 13" = 104", 5" left` / `… exact`, `leftover: 5 × 13" = 65"`, `9 × 11" + 1 × 10" = 109" — topped off to save a truck`. The runner suffix is kept. `buildHoleyColumns` and the block exact-fill loop are deleted.
+    - **D. `simulate()`:** the trailer loop is extracted into `assembleTrailers()`. Steps: a pure pass first, then consolidation, which is skipped if it's off, the pure pass fits 1 trailer, or the pure pass hit `trailerLimit`.
+      - Consolidation re-plans the families on the last trailer with `planStacksWithin`: single families first (most columns on the last trailer), then all together. It accepts only fewer trailers with nothing unplaced, and the budget is shared across the whole `pack()` call.
+      - An exact volume prune skips any family re-plan whose target is below `ceil(Σ height×qty / H)`. Without it, impossible targets burned the full budget: INV 4106 took 26 s and the harness 73 s; with it, the harness takes 1.6 s.
+    - **E. Row sort (rule 5):** rows are reversed (assembled nose-first, stored rear-first), then stable-sorted by thickness ascending, then non-pure rows (mixed or partial) rear-ward within a thickness, then `rowWidthUsed`.
+  - **Golden `GOLDEN_4472_T1` through `pack()`:** 1 trailer, 52 columns, 30 mixed, note "Mixed 30 stacks to fit on 1 truck instead of 2 (1 stack shortened)", rows exactly as specified nose → doors. `consolidate:false` gives 2 trailers, 58 columns and 0 mixed.
+  - **Selfcheck `old → new`** (`packEngine.selfcheck.ts` 164 → 178, all green; no `validatePlan` invariant fixture changed):
+    - D2/D4 "8x11 + 5.25x4 = 109\" exact is found" / "exact-fill column totals 109\"" / "marked mixed" / "mixedStacks > 0" → pure 13×8" stacks are built, no 8" stack is shortened, and nothing is mixed because mixing can't save a trailer (13 stacks needed by volume vs 11 per trailer) (exact-fill retired).
+    - D3 "rejection rationale names … K threshold" → "rationale is the plain fill and never claims a top-off" (rationale wording).
+    - D9 "sparse tail row … 7pc remainder" → "… 17pc remainder" (no 10-piece chain absorbs 5.5" demand; 169 = 8×19 + 17).
+    - E1 "below-K rationale names … K threshold" → "rationale is the plain fill text". **New E1b** gives K teeth through `pack()`: 88×13" + 2×2" stays at 2 trailers at K = 3 and consolidates to 1 at K = 2.
+    - E2 "column reports all available pieces placed" → "labelled as a leftover stack"; "single-layer column uses the demand-exhausted wording" (+ "does NOT claim no other SKU") → "partial column uses the leftover wording" + "no column claims no other SKU" (rationale wording; same-thickness labels are no longer stacked together).
+    - E3 "keeps the no-footprint-mate wording" → the rationale is exactly `9 × 12" = 108", 1" left`.
+    - E4 "equal-thickness pairing names both SKUs" → "no column stacks two labels of the same thickness" (rule 3, strictly thinner); "thinner top-off uses 'topped off with'" → "… says it saved a truck".
+    - E5 searches for the new rationale text (`1 × 54.75" = 54.75"`) instead of "no other SKU on this footprint". The stability-note assertions are unchanged.
+    - E7 ratchet: FIXTURE_BLOCKS_MIXED `meanHeightUtilization` re-pinned **0.6229 → 0.5352**. Pure-first tops off only the 2 stacks needed to save the second trailer; trailer count (1), rows (7) and used length (635.25") are unchanged.
+    - "Holey max-base-first: rationale names the blocked candidate" → the rationale is exactly `2 × 8" = 16", 3" left`.
+    - "Holey sequential chain: a column chains 3+ thicknesses" → "no column holds more than 2 thicknesses" + "uses the volume lower bound of 2 trailers" (holey-sequential-fill retired).
+    - FIXTURE_HOLEY_SIPLAST: unchanged at 1 trailer, 13 rows × 4, 52 × (13×8" + 1×5"), now because the pure plan needs 55 stacks / 2 trailers. Added `consolidation.applied === true` and `pureTrailers === 2`.
+    - New golden block (8 assertions) as above.
+    - `stackPlanner.selfcheck.ts` 14 → 29 (the original 14 unchanged): (f) `planStacksWithin` golden@52 equals the golden sequence, and @51 returns null; (g) K: a 2" SKU never tops off at K = 3; (g2) the sub-K cut, shaped like INV 4351; (h) `maxWork: 1` returns `budgetExhausted` and a valid pure plan.
+    - `loadEditor` 119/119, `savedLoad` 15/15, `dissolve` 21/21, `jobPull` 17/17 and `loadingDiagramPdf` 24/24 all pass unchanged.
+  - **Harness gates (all PASS, enforced in `lb-harness.mjs`, which exits non-zero on failure):**
+    - Golden v2 trailer equals the specified rows.
+    - v2 over2 = 0 and inverted = 0 (were 88 / 10).
+    - Per job, v2 trucks ≤ lbr-02 (read from `git show 7f14daf`): 0 of 172 regressed.
+    - The 34 planner jobs have v2 trucks = planner trucks, 34 of 34.
+    - Run time 1.6 s, with a byte-identical second run.
+    - **Unplaced gate exception:** 170 uncapped jobs are unchanged. The two capped quantity-artifact carts move: INV 4174 from 22,824 to 23,448 and INV 4186 from 125,476 to 126,018. Both now equal legacy's pure-plan numbers exactly. D3 skips consolidation when the pure pass hits the 20-trailer cap, and rule 2 forbids mixing that saves no truck, so the gate asserts equality with legacy for capped carts. Consolidation budget stops: 0 jobs.
+  - **Totals (v2 / legacy / planner on 34 jobs):**
+    - Σ trucks 285 / 303 / 100.
+    - Σ mixed **476** (lbr-02 v2: 2961) / 0 / 466.
+    - over2 0 / 0 / 0, inverted 0 / 0 / 0.
+    - frontRowMixed 36 / 0 / 36 (from truck-boundary spill, now a BACKLOG follow-up) and seqViolations 0 / 0 / 0.
+    - 36 jobs changed vs lbr-02, all toward fewer mixed stacks with no truck added. The per-job table is in `Audits/lbr-01-engine-baseline.md` §6.
+  - **Harness:** `lb-harness.mjs` registers a `module.registerHooks` resolve hook, because `packEngine.ts` now imports `./stackPlanner` extensionless and Node's native TS stripping can't resolve that on its own. Banner, §6 and gates were added and the audit regenerated.
+  - **Verification:** all 7 selfchecks green via `npx tsx`. Harness exit 0, byte-identical second run. `node --check` passes. `npx tsc --noEmit` clean. `npm run cf-build` green.
+
 - **lbr-02 — Load Builder rework: `stackPlanner.ts` (pure-first, mix only to save a truck) + harness row-direction fix (Next/Cloudflare Platform Agent §9a; Logistics Agent §3 owns the rules). No migration, no permission change, no UI; `packEngine.ts` untouched (lbr-03 wires the planner in).**
   - **Why:** Steve's review of the lbr-01 baseline (2026-10-12): legacy's pattern of pure stacks with the thickest at the nose is how the floor actually loads, and the floor mixes only when that saves a truck. v2 mixes far too freely, including 3-size stacks. The final locked rules **supersede the 2026-09-16 `holey-sequential-fill` rule**, which topped off every column. Fewest trucks comes first (always mix if it saves one). Then pure full stacks plus at most 1 leftover per size, with overflow as single-piece top-offs. Then ≤2 sizes per stack with a strictly thinner top, and shorten a full stack only as a last resort. Finally, thickest at the nose, and within a size pure first and topped/partial stacks last.
   - **Planner:** NEW `cutting-pilot/src/lib/stackPlanner.ts`, which exports `planStacks(skus, effectiveHeight, stacksPerTruck, { consolidate?, maxBreaks? })` and imports nothing at runtime. It is a direct port of the Orchestrator's reference algorithm, tie-breaks included. Steps: build the pure plan, then step trucks down toward the volume lower bound by trying 0…6 one-piece shortenings (combinations with replacement) and placing the dropped stacks as top-offs. Stacks come back in loading order with `trucks`, `pureTrucks`, `truckLowerBound`, `shortenedStacks` and `topOffStacks`. It adds `skippedSkuIds` for SKUs too tall to stack, so they aren't silently dropped.

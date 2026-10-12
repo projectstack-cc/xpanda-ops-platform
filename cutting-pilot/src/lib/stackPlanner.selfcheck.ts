@@ -4,7 +4,7 @@
 // path, and nothing imports it. Covers the golden INV 4472 trailer-1 load (exact nose->doors
 // sequence), a load that fits pure, a load where consolidation can't save a truck, the
 // consolidate:false pure plan, and the planner's invariants on every case.
-import { planStacks, type PlannerSku, type PlannedStack, type StackPlan } from "./stackPlanner";
+import { planStacks, planStacksWithin, type PlannerSku, type PlannedStack, type StackPlan } from "./stackPlanner";
 
 interface CheckResult {
   name: string;
@@ -143,6 +143,65 @@ export function runStackPlannerSelfCheck(): { pass: boolean; results: CheckResul
   // A SKU taller than H can't form a stack: reported in skippedSkuIds, not silently dropped.
   const tooTall = planStacks([{ skuId: "x-120", unitHeight: 120, qty: 3 }, ...pureFit], 109, 52);
   eq("too tall: skipped + rest planned", { skipped: tooTall.skippedSkuIds, stacks: tooTall.stacks.length }, { skipped: ["x-120"], stacks: 5 });
+
+  // (f) lbr-03 planStacksWithin: one consolidate(52) run on the golden load is exactly planStacks'
+  // golden sequence (same pure -> breaks -> place algorithm and tie-breaks).
+  const f = planStacksWithin(golden, 109, 52);
+  check("planStacksWithin golden@52: equals planStacks' golden sequence", !!f && JSON.stringify(f.stacks.map(fmt)) === JSON.stringify(goldenWant), f ? runs(f.stacks.map(fmt)) : "null");
+  eq("planStacksWithin golden@52: counts (trucks fields 0)", f && { trucks: f.trucks, pureTrucks: f.pureTrucks, truckLowerBound: f.truckLowerBound, topOffStacks: f.topOffStacks, shortenedStacks: f.shortenedStacks }, {
+    trucks: 0,
+    pureTrucks: 0,
+    truckLowerBound: 0,
+    topOffStacks: 30,
+    shortenedStacks: 1,
+  });
+  if (f) invariants("planStacksWithin golden@52", f, golden, 109);
+  check("planStacksWithin golden@51: can't fit -> null", planStacksWithin(golden, 109, 51) === null);
+
+  // (g) K: a 2" SKU is never a top-off with minTopOffHeight 3. 13x8=104" leaves 5" — room for two
+  // 2" pieces — so without K the 2" stack folds into a top-off and saves the truck; with K it can't.
+  const kSkus: PlannerSku[] = [
+    { skuId: "hb-13", unitHeight: 13, qty: 8 },
+    { skuId: "hb-02", unitHeight: 2, qty: 2 },
+  ];
+  const gNoK = planStacks(kSkus, 109, 1);
+  eq("K premise: without K the 2\" pieces top off (1 truck)", { trucks: gNoK.trucks, stacks: gNoK.stacks.map(fmt) }, { trucks: 1, stacks: ["13x8+2x2"] });
+  const gK = planStacks(kSkus, 109, 1, { minTopOffHeight: 3 });
+  eq("K: with minTopOffHeight 3 the 2\" SKU is never a top-off", { trucks: gK.trucks, topOffStacks: gK.topOffStacks, stacks: gK.stacks.map(fmt) }, { trucks: 2, topOffStacks: 0, stacks: ["13x8", "2x2"] });
+  check("K: planStacksWithin also refuses the sub-K top-off", planStacksWithin(kSkus, 109, 1, { minTopOffHeight: 3 }) === null);
+  invariants("K", gK, kSkus, 109);
+
+  // (g2) lbr-03 sub-K cut (INV 4351's shape): with K active, a sub-K leftover stack is never the one
+  // dropped into the top-off pool — an eligible stack is, so the truck is still saved. 7" x 30 = two
+  // 7x15 stacks with a 4" gap each, 3" x 2, 1" x 5; 3 stacks per truck. Pure = 4 stacks (2 trucks).
+  // The reference cut would drop the 1" stack (thinnest) and fail at K = 3; the K-aware cut drops
+  // the 3" stack and tops each 7" stack with one 3" piece -> 3 stacks, 1 truck.
+  const subK: PlannerSku[] = [
+    { skuId: "hb-07", unitHeight: 7, qty: 30 },
+    { skuId: "hb-03", unitHeight: 3, qty: 2 },
+    { skuId: "hb-01", unitHeight: 1, qty: 5 },
+  ];
+  const g2 = planStacks(subK, 109, 3, { minTopOffHeight: 3 });
+  eq("sub-K cut: K = 3 still saves the truck via the eligible 3\" stack", { trucks: g2.trucks, pureTrucks: g2.pureTrucks, stacks: g2.stacks.map(fmt) }, {
+    trucks: 1,
+    pureTrucks: 2,
+    stacks: ["7x15+3x1", "7x15+3x1", "1x5"],
+  });
+  check("sub-K cut: the 1\" SKU is never a top-off", g2.stacks.every((st) => st.top?.skuId !== "hb-01"));
+  invariants("sub-K cut", g2, subK, 109);
+
+  // (h) budget: maxWork 1 on the golden load runs out before the first place() that succeeds is
+  // reached — budgetExhausted, and the pure plan comes back intact and valid.
+  const h = planStacks(golden, 109, 52, { maxWork: 1 });
+  eq("budget: maxWork 1 -> budgetExhausted + pure plan", { budgetExhausted: h.budgetExhausted, trucks: h.trucks, stacks: h.stacks.length, topOffStacks: h.topOffStacks }, {
+    budgetExhausted: true,
+    trucks: 2,
+    stacks: 58,
+    topOffStacks: 0,
+  });
+  invariants("budget", h, golden, 109);
+  check("budget: default budget never reports exhaustion on the golden load", g.budgetExhausted === undefined);
+  check("budget: planStacksWithin with maxWork 1 -> null", planStacksWithin(golden, 109, 52, { maxWork: 1 }) === null);
 
   return { pass: results.every((r) => r.pass), results };
 }
