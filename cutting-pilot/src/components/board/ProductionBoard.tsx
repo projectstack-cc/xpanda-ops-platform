@@ -61,6 +61,8 @@ export interface BoardJob {
   processes: JobProcess[];
   // jb-06: trailer-group candidates in the edit modal (legacy filter needs it).
   trailer_group_id: string | null;
+  // board-search-01: true when archived_at is set (only search results can be archived).
+  is_archived?: boolean;
 }
 
 interface AssignableUser {
@@ -99,6 +101,12 @@ function isOpenStatus(status: string) {
   return status === "not_started" || status === "in_production";
 }
 
+// board-search-01: archived/shipped search results are view-only (no Edit, no row-edit expand).
+const ACTIVE_STATUSES = new Set(BOARD_STATUS_OPTIONS.map((o) => o.value));
+function isReadOnlyJob(job: BoardJob) {
+  return !!job.is_archived || !ACTIVE_STATUSES.has(job.status);
+}
+
 export default function ProductionBoard({ userName, isAdmin, permissions }: ProductionBoardProps) {
   const [data, setData] = useState<BoardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +129,9 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [lineFilter, setLineFilter] = useState("");
+  // board-search-01: archived/shipped matches from GET /v2/api/board/search (debounced 300 ms).
+  const [archivedResults, setArchivedResults] = useState<BoardJob[]>([]);
+  const [archivedTruncated, setArchivedTruncated] = useState(false);
   // Set when a status-modal pick targets a row that wasn't rendered; scrolled to after re-render.
   const [pendingScrollId, setPendingScrollId] = useState<string | null>(null);
 
@@ -149,6 +160,38 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   useEffect(() => {
     load();
   }, [load]);
+
+  // board-search-01: debounced server search for archived/shipped jobs. AbortController drops
+  // stale responses; clearing the query (or < 2 chars) clears the results.
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setArchivedResults([]);
+      setArchivedTruncated(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/v2/api/board/search?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+        const json = await res.json();
+        if (ctrl.signal.aborted) return;
+        if (!res.ok || !json.ok) {
+          setArchivedResults([]);
+          setArchivedTruncated(false);
+          return;
+        }
+        setArchivedResults(json.jobs ?? []);
+        setArchivedTruncated(!!json.truncated);
+      } catch {
+        // Aborted or network error — the active-job search still works client-side.
+      }
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [searchQuery]);
 
   // jb-01: deep link — /v2/board?job=<id> opens that job's read-only detail modal. Uses
   // OrderDetailModal's own GET /v2/api/board/:id fetch, so it works even when the job is outside
@@ -227,13 +270,19 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
   };
 
   // Client-side list filtering: status → search → week. Show All keeps null ship dates.
+  // board-search-01: an active search bypasses the week filter and merges in archived/shipped
+  // results (before status/line/search, so those filters still apply; active rows win on id).
   const filteredJobs = useMemo(() => {
     if (!data) return [];
     let jobs = data.jobs;
+    const q = searchQuery.trim().toLowerCase();
+    if (q && archivedResults.length) {
+      const activeIds = new Set(jobs.map((j) => j.id));
+      jobs = jobs.concat(archivedResults.filter((j) => !activeIds.has(j.id)));
+    }
     if (statusFilter) jobs = jobs.filter((j) => j.status === statusFilter);
     if (lineFilter === "__none__") jobs = jobs.filter((j) => j.processes.length === 0);
     else if (lineFilter) jobs = jobs.filter((j) => j.processes.some((p) => p.name === lineFilter));
-    const q = searchQuery.trim().toLowerCase();
     if (q) {
       jobs = jobs.filter((j) =>
         [
@@ -249,7 +298,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
         ].some((v) => (v || "").toLowerCase().includes(q))
       );
     }
-    if (weekOffset !== null) {
+    if (weekOffset !== null && !q) {
       const { start, end } = weekRange(weekOffset);
       jobs = jobs.filter((j) => {
         const iso = toIsoDate(j.ship_date);
@@ -257,7 +306,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
       });
     }
     return jobs;
-  }, [data, statusFilter, lineFilter, searchQuery, weekOffset]);
+  }, [data, archivedResults, statusFilter, lineFilter, searchQuery, weekOffset]);
 
   // Grouped by ship date; "No Date" last. Within a day, the API's order (priority_level DESC).
   const dayGroups = useMemo(() => {
@@ -335,6 +384,14 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
           }
         />
 
+        {/* board-search-01: search scope feedback */}
+        {view === "list" && searchQuery.trim() && (weekOffset !== null || archivedTruncated) && (
+          <div className="-mt-2 space-y-0.5 text-xs text-muted">
+            {weekOffset !== null && <p>Searching all weeks + archived</p>}
+            {archivedTruncated && <p>Showing first 100 archived matches — refine your search.</p>}
+          </div>
+        )}
+
         {/* Error Alert */}
         {error && (
           <div className="rounded-xl border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3 flex items-center justify-between">
@@ -364,8 +421,8 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
               <div className="rounded-xl border border-[var(--card-border)] bg-surface p-12 text-center">
                 <p className="text-sm font-medium text-text">No jobs found.</p>
                 <p className="text-xs text-muted mt-1">
-                  {searchQuery
-                    ? "Try adjusting your search keywords or clearing filters."
+                  {searchQuery.trim()
+                    ? "No matches in any week or in archived jobs. Try other keywords or clear the filters."
                     : weekOffset === 0
                     ? "No jobs are scheduled for this week. Switch to Next Week or Show All."
                     : "No jobs scheduled for this period."}
@@ -419,12 +476,13 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                               className={`border-b border-[var(--line)] last:border-0 transition-colors cursor-pointer hover:bg-[var(--ghost-bg)] ${
                                 highlightedId === job.id ? "bg-[var(--info-bg)]" : ""
                               }`}
-                              onClick={() => toggleExpand(job.id)}
+                              onClick={() => (isReadOnlyJob(job) ? setViewId(job.id) : toggleExpand(job.id))}
                             >
                               <td className="px-3 py-[8.8px] align-top">
                                 <div className="font-medium text-text truncate">{job.customer || "—"}</div>
                                 <div className="flex items-center gap-1 text-xs text-muted">
-                                  {expandedId === job.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                  {!isReadOnlyJob(job) &&
+                                    (expandedId === job.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />)}
                                   {job.invoice_number ? `INV# ${job.invoice_number}` : "No INV#"}
                                 </div>
                               </td>
@@ -442,20 +500,30 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                                 <LinePills processes={job.processes} />
                               </td>
                               <td className="px-3 py-[8.8px] align-top">
-                                <JobStatusBadge status={job.status} />
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <JobStatusBadge status={job.status} />
+                                  {/* board-search-01: archived marker (shipped already reads "Shipped" in the status badge). */}
+                                  {job.is_archived && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap bg-[var(--ghost-bg)] text-[var(--text-muted)] border border-[var(--border)]">
+                                      Archived
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-3 py-[8.8px] align-top text-right" onClick={(e) => e.stopPropagation()}>
                                 <div className="inline-flex items-center gap-2 justify-end">
                                   <button type="button" onClick={() => setViewId(job.id)} className={actionBtnClass}>
                                     View
                                   </button>
-                                  <button type="button" onClick={() => setEditId(job.id)} className={actionBtnClass}>
-                                    Edit
-                                  </button>
+                                  {!isReadOnlyJob(job) && (
+                                    <button type="button" onClick={() => setEditId(job.id)} className={actionBtnClass}>
+                                      Edit
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
-                            {expandedId === job.id && (
+                            {expandedId === job.id && !isReadOnlyJob(job) && (
                               <tr>
                                 <td colSpan={8} className="p-0">
                                   <BoardRowEdit
