@@ -316,6 +316,9 @@
 - [ ] **jb-11 follow-up — add the Priority control to `/v2/orders` (order entry)** so priority can be set at
   creation (today it defaults to Normal). Reuse `components/board/PrioritySelect.tsx` + `lib/priority.ts`.
 - [ ] **jb-06 follow-up — move `PartsPicker` onto the shared `SearchPickerModal`** (one picker primitive).
+- [ ] **board-prints-01 follow-up — Sweep orphaned `job-prints/` R2 objects for deleted jobs.** Legacy
+  `DELETE /api/jobs` drops the `job_prints` rows but leaves their `BOL_PHOTOS` objects under
+  `job-prints/<jobId>/`. Add a sweep (or delete the prefix inline once the job delete moves to v2).
 - [ ] **board-search-01 follow-up — Calendar view + archived search results (if wanted).** Search on
   `/v2/board` merges archived/shipped matches into the List view only; the Calendar still renders the active
   feed. Extend `CalendarView` to show them (view-only) if Steve wants it.
