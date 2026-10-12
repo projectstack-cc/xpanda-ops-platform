@@ -8831,6 +8831,20 @@ current series).
 
 ## Admin / Platform
 
+- **mobile-zoom-02 — legacy form fields 16px on touch devices (stops iOS auto-zoom) (admin-auth-agent §8 for `login.html`; job-board-agent §2 for `shared/theme.js`, logistics-agent §3 consulted). No migration, no worker change.**
+  - **Why:** same iOS Safari focus auto-zoom as mobile-zoom-01, on the legacy surface. An audit @ `7f14daf` found
+    sub-16px `input`/`select`/`textarea` rules in 14 legacy files (`jobs/jobs-shared.css`,
+    `logistics/logistics-shared.css`, `load-builder.html`, `block-calculator.html`, `login.html`, `index.html`, QC
+    pages); Job Board Classic and the Logistics Classic dashboard are still in daily use.
+  - **What:** `shared/theme.js` (loaded by `shared-header.js` → every `*-header.js` module page, and directly by
+    `index.html`; 27 of 52 live pages, every module page) injects a `<style id="xp-touch-input-size">` once with the
+    same `@media (pointer: coarse)` 16px `!important` rule as v2 `globals.css`. `login.html` (standalone, doesn't
+    load theme.js) gets the rule inline. Redirect stubs, Safety/training, legal, `track/` (no sub-16px field rules)
+    and `logistics/bol-test.html` left alone. Viewport untouched — no `maximum-scale`/`user-scalable=no`.
+  - **Layout scan:** no real breakage. Tightest: Load Builder `.qty-input-sm` (54px wide, 13px → 16px bold mono,
+    ~4 digits fit) and `.qty-input` (72px); forced-trailer count (70px) and BOL invoice # (120px) inline widths;
+    Block Calculator fields are full-width `.field` inputs.
+
 - **mobile-zoom-01 — v2 form fields 16px on touch devices (stops iOS auto-zoom) (react-component-agent §9b). No migration, API or middleware change.**
   - **Why:** iOS Safari auto-zooms the page when a form field under 16px gets focus. Reported on the Pull Job modal
     (`/v2/logistics/loading`: `text-sm` search `<input>` + bay `<select>`); after the zoom the fixed full-screen modal

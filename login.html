@@ -107,6 +107,10 @@
       margin-bottom: 16px;
       text-align: left;
     }
+    /* mobile-zoom-02: touch-only 16px fields to stop iOS auto-zoom (login doesn't load theme.js). */
+    @media (pointer: coarse) {
+      input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea { font-size: 16px !important; }
+    }
   </style>
 </head>
 <body>
