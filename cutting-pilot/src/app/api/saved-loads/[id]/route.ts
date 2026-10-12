@@ -2,10 +2,13 @@
 // PUT /v2/api/saved-loads/:id (fenced) | DELETE /v2/api/saved-loads/:id (fenced)
 // lb-ui-04. Same shared `saved_loads` table as ../route.ts -- see that file's header for why no
 // migration was needed and why GET runs live/unfenced (read-only) while writes are fenced.
+// lbr-04: PUT applies the same expiry rule as POST — an order-linked row never expires, and a PUT
+// that clears job_id puts the row back on the 90-day TTL.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 import { logActivity } from "@/lib/activityLog";
+import { savedLoadExpiresAt } from "@/lib/savedLoad";
 
 export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: loadId } = await ctx.params;
@@ -48,7 +51,8 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   if (!existing) return NextResponse.json({ ok: false, error: "Saved load not found." }, { status: 404 });
 
   const now = new Date().toISOString();
-  const expires_at = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  // lbr-04: an order-linked load never expires; an unlinked one keeps the 90-day TTL.
+  const expires_at = savedLoadExpiresAt(payload.job_id, Date.now());
 
   try {
     await DB.prepare(

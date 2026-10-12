@@ -13,12 +13,19 @@
 // exists to prevent, regardless of the fact that the same DELETE already runs unconditionally on
 // legacy's own equivalent surface. Until the flag flips, v2's list may show a handful of rows
 // legacy has already swept -- a named, bounded, cosmetic divergence, not an ungated prod write.
+//
+// lbr-04: GET takes an optional `?job_id=` filter (that order's rows, newest updated_at first,
+// same columns and response shape) so Load Builder can reopen an order's saved load. POST writes
+// an order-linked row (non-empty job_id) with expires_at = ORDER_LINKED_EXPIRES_AT
+// ("9999-12-31…"), which both apps' ISO-string sweeps (`expires_at < now`) never reach; unlinked
+// rows keep the 90-day TTL.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 import { logActivity } from "@/lib/activityLog";
+import { savedLoadExpiresAt } from "@/lib/savedLoad";
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   const { DB } = await getEnv();
 
   try {
@@ -27,9 +34,16 @@ export async function GET(_request: NextRequest) {
       await DB.prepare("DELETE FROM saved_loads WHERE expires_at < ?").bind(now).run();
     }
 
-    const result = await DB.prepare(
-      "SELECT id, name, job_id, customer, trailer_type, created_at, updated_at FROM saved_loads ORDER BY updated_at DESC"
-    ).all();
+    const jobId = request.nextUrl.searchParams.get("job_id")?.trim() || "";
+    const result = jobId
+      ? await DB.prepare(
+          "SELECT id, name, job_id, customer, trailer_type, created_at, updated_at FROM saved_loads WHERE job_id = ? ORDER BY updated_at DESC"
+        )
+          .bind(jobId)
+          .all()
+      : await DB.prepare(
+          "SELECT id, name, job_id, customer, trailer_type, created_at, updated_at FROM saved_loads ORDER BY updated_at DESC"
+        ).all();
     return NextResponse.json({ ok: true, loads: result.results ?? [] });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: "Server error.", detail: String(e?.message || e) }, { status: 500 });
@@ -62,7 +76,8 @@ export async function POST(request: NextRequest) {
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const expires_at = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  // lbr-04: an order-linked load never expires; an unlinked one keeps the 90-day TTL.
+  const expires_at = savedLoadExpiresAt(payload.job_id, Date.now());
 
   try {
     await DB.prepare(

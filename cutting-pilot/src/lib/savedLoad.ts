@@ -230,6 +230,37 @@ export function buildSavePayload(name: string, customer: string, snapshot: Saved
   };
 }
 
+// --- lbr-04: saving loads to the order ---
+
+/** Dirty-check fingerprint for a snapshot: two snapshots of the same load produce equal keys (it is
+ * the serialized form, so a serialize -> deserialize round trip keeps the key). */
+export function snapshotKey(snapshot: SavedLoadSnapshot): string {
+  return serializeSnapshot(snapshot);
+}
+
+/** Where a save-to-order writes. At most one saved load per order: the load currently open wins,
+ * then the order's existing row, otherwise a new row. */
+export function resolveOrderSaveTarget(
+  currentSavedLoadId: string | null,
+  existingForJob: { id: string } | null
+): { method: "PUT"; id: string } | { method: "POST" } {
+  if (currentSavedLoadId) return { method: "PUT", id: currentSavedLoadId };
+  if (existingForJob) return { method: "PUT", id: existingForJob.id };
+  return { method: "POST" };
+}
+
+/** expires_at for an order-linked row: never. Both apps sweep with an ISO-string compare
+ * (`expires_at < now`), which this sentinel always loses. */
+export const ORDER_LINKED_EXPIRES_AT = "9999-12-31T00:00:00.000Z";
+const UNLINKED_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+/** expires_at for a saved_loads write: no expiry when linked to an order (non-empty job_id),
+ * otherwise the 90-day TTL from `nowMs`. Shared by the POST and PUT routes. */
+export function savedLoadExpiresAt(jobId: unknown, nowMs: number): string {
+  const linked = typeof jobId === "string" ? jobId.trim().length > 0 : jobId != null && String(jobId).trim().length > 0;
+  return linked ? ORDER_LINKED_EXPIRES_AT : new Date(nowMs + UNLINKED_TTL_MS).toISOString();
+}
+
 /** Row shape as the API returns it (list GET omits state_json; single-GET includes it). */
 export interface SavedLoadListItem {
   id: string;

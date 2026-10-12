@@ -2929,6 +2929,39 @@ current series).
 
 ## Logistics (v2)
 
+- **lbr-04 — Load Builder saves to the order: auto-save on BOL, reopen on `?job_id`, no expiry, "save before leaving?" (React Component Agent §9b leads; Next/Cloudflare Platform Agent §9a for the `saved-loads` routes; Logistics Agent §3 consulted). No migration (`saved_loads.job_id` already exists), no permission/middleware change; the page stays dark behind `logistics.v2`.**
+  - **Why (Steve, 2026-10-12):** the logistics manager often forgets to save and has to rebuild loads. Rule: at most one saved load per order; a save for an order that already has one updates that row.
+  - **API (§9a):**
+    - `POST /v2/api/saved-loads` and `PUT /v2/api/saved-loads/[id]` set `expires_at` via the new `savedLoadExpiresAt(job_id, now)`. A non-empty `job_id` gets `ORDER_LINKED_EXPIRES_AT = "9999-12-31T00:00:00.000Z"`; otherwise 90 days. A PUT that clears `job_id` goes back to 90 days.
+    - Legacy's sweep, `DELETE FROM saved_loads WHERE expires_at < ?` bound to `new Date().toISOString()` (`_worker.js/routes/bols.js:811–812`, `handleApiSavedLoads`), compares ISO strings, so these rows are never swept by either app. Legacy wasn't edited.
+    - `GET /v2/api/saved-loads?job_id=<id>` returns that order's rows, newest `updated_at` first, with the same columns and `{ ok, loads }` shape. Without the param the list is unchanged. The fenced sweep still runs first.
+    - Auth, the write fence and the `logActivity` calls are unchanged.
+  - **`savedLoad.ts` (pure):**
+    - `snapshotKey(snapshot)` (the serialized form; the dirty-check fingerprint).
+    - `resolveOrderSaveTarget(currentSavedLoadId, existingForJob)`: current load → the order's existing row → POST.
+    - `savedLoadExpiresAt` / `ORDER_LINKED_EXPIRES_AT`, shared by both routes.
+    - `savedLoad.selfcheck.ts` 15 → 24: `snapshotKey` round-trip stable, changes with `editedPlan` (presence and content), all three `resolveOrderSaveTarget` branches, and the expiry rule including blank/whitespace `job_id`.
+  - **NEW `src/components/logistics/useOrderLoadPersistence.ts` (`"use client"`):** owns all order-linked saving so lbr-05's UI can reuse it unchanged.
+    - **Status:** `status` (`none | unsaved | saving | saved | error`), plus `savedAt` and `error`.
+    - **Saving:** `persist(name?)` (single save path), `saveToOrder()` and `markSaved(snapshot, at?)`.
+    - **Lookup:** `findSavedForJob(jobId)` (also a module export), which calls `GET ?job_id=` and then `GET /[id]` for the full record.
+    - **Leave guard:** a `beforeunload` handler while dirty, and a capture-phase `document` click listener for plain left clicks on leaving `<a href>`s. It skips modifier clicks, `target="_blank"`, `#`-only, `download` and same-page links, and stops propagation so `next/link` doesn't client-navigate. It exposes `pendingHref`, `confirmLeave("save" | "discard")`, `cancelLeave()`, `navigatePending()` and `needsNamedSave` (no `jobId`).
+    - **Disclosed choices:**
+      - The leave guard arms whenever the load is **dirty** (unsaved, a failed save, or a save in flight), not only on `"unsaved"`. A failed auto-save must not drop the guard.
+      - **Manual Save goes through `persist()` too**, so pressing Save for an order that already has a saved load updates that row instead of POSTing a duplicate (the one-per-order rule). `persist` calls `markSaved` itself.
+      - On a save that targets the order's existing row, its name is kept.
+  - **`LoadPlanView.tsx` (thin wiring):**
+    - (1) `?job_id=` first calls `findSavedForJob`. A v2-loadable row is restored through `restoreSavedLoad()`, the former `handlePickerLoad` body now shared by both paths. It then calls `markSaved`, and a dismissible banner reads "Opened this order's saved load (saved {date, ET}). Re-pull from order", where Re-pull opens the existing JobPull. No row, a legacy-format row or a failed lookup opens JobPull as before.
+    - (2) `BolGenerateModal onClose(generated)`: if `generated && pulledSource`, the load auto-saves to the order. Success shows the toast "BOL generated — load saved to order {INV …|customer}"; failure shows an error toast with **Retry**. Neither blocks or undoes the BOL. `BolGenerateModal` already passed `generated`, so it is unchanged.
+    - (3) Manual save and picker load both end in `markSaved`.
+    - (4) A status chip in the header meta row: "Saved to order · {time ET}" (`--loaded-*` tokens), "Unsaved changes" (`--warn-*`), "Saving…", or "Unsaved changes · save failed"; hidden when `none`. It is an inline tokened span, because `StatusPill.tsx` has only job/line-specific pills and no generic primitive.
+    - (5) The leave modal composes `@/components/Modal`: "Save this load before leaving?" with three stacked buttons, each ≥44px: **Save to order and leave** (primary), **Leave without saving** (danger outline) and **Keep working**. A save error shows inline. For a custom build (no order) the primary hands off to the existing `SaveLoadModal`, then navigates after the save succeeds.
+  - **Smoke (`next dev` :3100 + Playwright, `saved-loads` APIs mocked since there's no local D1; header shell without a session):**
+    - **Steps 1 and 3:** `?job_id=` reopened the saved load with the banner and "Saved to order · 3:42 PM ET". Changing the trailer flipped the chip to "Unsaved changes". Clicking a header link opened the modal without navigating; the body names "order INV INV_4202"; the buttons measure 44/44/44 px; Keep working closes it. "Save to order and leave" sent `PUT /saved-loads/LOAD-1` (the order's existing row, `job_id` kept) and navigated only after it succeeded. `?job_id=` with no saved row fell back to JobPull with no banner or chip.
+    - **Step 4:** `beforeunload` is not prevented while saved and is prevented when dirty. A `page.reload()` while dirty raised Chromium's `beforeunload` dialog. Playwright's `page.close({ runBeforeUnload })` did not surface the dialog in headless mode, which is a harness limitation.
+    - **Unverified in a browser:** step 2's literal BOL generation. Driving `BolGenerateModal` needs its customer/carrier/PDF data stack. The auto-save it triggers (`saveToOrder`, the same `persist` path) was exercised through the leave modal's save. The Retry toast and a fresh JobPull confirm were not driven either; the chip's dirty logic was exercised via the trailer change.
+  - **Verification:** `savedLoad` 24/24, `stackPlanner` 29/29, `packEngine` 178/178, `loadEditor` 119/119, `dissolve` 21/21, `jobPull` 17/17 and `loadingDiagramPdf` 24/24, all via `npx tsx`. `npx tsc --noEmit` clean. `npm run cf-build` green.
+
 - **lbr-03 — `pack()` uses the stack planner: pure-first, mix only to save a truck, rule-5 row order (Next/Cloudflare Platform Agent §9a; Logistics Agent §3 owns the rules). Engine only: no UI, API, migration or permission change. The v2 Load Builder UI picks it up as-is.**
   - **Superseded rules:** Steve's final loading rules (2026-10-12) replace **`holey-sequential-fill` (2026-09-16)**, which chained descending thicknesses into every Holey Board column, and **lb-engine-03 B1's exact-fill block search (2026-09)**, which shortened a base to hunt an exact 109". Every family, Holey Board and Blocks, now starts from the planner's pure plan and mixes only when that saves a trailer.
   - **`stackPlanner.ts` (additive):**

@@ -7,6 +7,10 @@ import {
   deserializeSnapshot,
   defaultSaveName,
   buildSavePayload,
+  snapshotKey,
+  resolveOrderSaveTarget,
+  savedLoadExpiresAt,
+  ORDER_LINKED_EXPIRES_AT,
   type SavedLoadSnapshot,
 } from "./savedLoad";
 import type { PackPlan } from "./packEngine";
@@ -307,6 +311,35 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
       result.ok === true && result.snapshot.autoDownsize === false,
       JSON.stringify(result)
     );
+  }
+
+  // 12. lbr-04: snapshotKey — stable across a serialize -> deserialize round trip, and changes when
+  //     editedPlan changes.
+  {
+    const base = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: null, trailerTypeKey: "53ft Standard", runnerHeight: 3, editedPlan: null, autoDownsize: true });
+    const round = deserializeSnapshot(serializeSnapshot(base));
+    check("snapshotKey: stable across a serialize -> deserialize round trip", round.ok === true && snapshotKey(round.snapshot) === snapshotKey(base));
+    const edited: PackPlan = { trailers: [], balance: [], warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 };
+    const withEdit = { ...base, editedPlan: edited };
+    check("snapshotKey: changes when editedPlan changes", snapshotKey(withEdit) !== snapshotKey(base));
+    const withOtherEdit = { ...base, editedPlan: { ...edited, warnings: ["moved a stack"] } };
+    check("snapshotKey: changes when editedPlan's content changes", snapshotKey(withOtherEdit) !== snapshotKey(withEdit));
+  }
+
+  // 13. lbr-04: resolveOrderSaveTarget — current load wins, then the order's existing row, else POST.
+  {
+    check("resolveOrderSaveTarget: current saved load id wins", JSON.stringify(resolveOrderSaveTarget("cur", { id: "job-row" })) === JSON.stringify({ method: "PUT", id: "cur" }));
+    check("resolveOrderSaveTarget: falls back to the order's existing row", JSON.stringify(resolveOrderSaveTarget(null, { id: "job-row" })) === JSON.stringify({ method: "PUT", id: "job-row" }));
+    check("resolveOrderSaveTarget: no current, no existing -> POST", JSON.stringify(resolveOrderSaveTarget(null, null)) === JSON.stringify({ method: "POST" }));
+  }
+
+  // 14. lbr-04: savedLoadExpiresAt — order-linked rows never expire; unlinked / cleared rows get 90 days.
+  {
+    const now = Date.UTC(2026, 9, 12);
+    const ninety = new Date(now + 90 * 24 * 60 * 60 * 1000).toISOString();
+    check("savedLoadExpiresAt: job_id set -> never expires", savedLoadExpiresAt("job-1", now) === ORDER_LINKED_EXPIRES_AT);
+    check("savedLoadExpiresAt: no job_id -> 90 days", savedLoadExpiresAt(null, now) === ninety && savedLoadExpiresAt("", now) === ninety && savedLoadExpiresAt("   ", now) === ninety);
+    check("savedLoadExpiresAt: the sentinel sorts after any real ISO now (legacy/v2 sweeps skip it)", ORDER_LINKED_EXPIRES_AT > new Date(now).toISOString());
   }
 
   return { pass: results.every((r) => r.pass), results };

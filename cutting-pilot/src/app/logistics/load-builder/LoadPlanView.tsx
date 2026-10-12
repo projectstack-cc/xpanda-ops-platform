@@ -58,8 +58,15 @@
 // editedPlan when one exists, else the auto-pack) so a manually-customized load's BOLs match what's
 // actually on screen. `bolPackPlanSource` is memoized so re-renders triggered by the modal's own
 // internal state don't recreate the object and re-trigger its data-loading effect.
+//
+// lbr-04: loads save to the order. All of the logic lives in useOrderLoadPersistence (reused by
+// lbr-05's new UI); this file only wires it: ?job_id= reopens the order's saved load (same restore
+// path as the picker, restoreSavedLoad below) or falls back to the pull; generating BOLs from an
+// order-built load auto-saves it to the order; every save goes through the hook's persist() (at
+// most one saved load per order); a status chip; and the "Save this load before leaving?" modal.
 import { useEffect, useMemo, useState } from "react";
 import { Truck, FileText, Package, Save, FolderOpen } from "lucide-react";
+import Modal from "@/components/Modal";
 import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan, type PackOptions, type CartLine, type PackSku } from "@/lib/packEngine";
 import { runPackEngineSelfCheck } from "@/lib/packEngine.selfcheck";
 import { LOAD_BUILDER_FIXTURES, type LoadBuilderFixture } from "@/lib/loadBuilderFixtures";
@@ -72,7 +79,8 @@ import BolGenerateModal, { type PackPlanSource } from "@/components/logistics/Bo
 import PartsLibraryPanel from "@/components/logistics/PartsLibraryPanel";
 import SaveLoadModal from "@/components/logistics/SaveLoadModal";
 import LoadPickerModal from "@/components/logistics/LoadPickerModal";
-import { buildSnapshot, buildSavePayload, defaultSaveName, type SavedLoadRecord, type SavedLoadSnapshot } from "@/lib/savedLoad";
+import { buildSnapshot, defaultSaveName, deserializeSnapshot, type SavedLoadRecord, type SavedLoadSnapshot } from "@/lib/savedLoad";
+import { useOrderLoadPersistence, findSavedForJob } from "@/components/logistics/useOrderLoadPersistence";
 import CustomizeEditor from "./CustomizeEditor";
 
 // lb-ui-06: shipped runner-height values, confirmed against legacy's own dropdown
@@ -94,6 +102,21 @@ function footprintKey(l: number, w: number): string {
 // is the new default: an empty cart/skus pair pack() handles the same as any other (0 trailers),
 // giving a clean "nothing selected" state instead of silently showing a real-looking invoice.
 const EMPTY_FIXTURE: LoadBuilderFixture = { id: "__none__", invoiceNumber: "", customer: "", label: "No load selected", cart: [], skus: [] };
+
+// lbr-04: "Oct 12, 3:42 PM ET" — saved-load timestamps are read on the dock in Eastern time.
+function formatEt(iso: string, withDate: boolean): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const s = d.toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    ...(withDate ? { month: "short", day: "numeric" } : {}),
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${s} ET`;
+}
+
+const LEAVE_BUTTON = "w-full px-4 min-h-[44px] rounded-lg text-sm font-semibold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] disabled:opacity-50 disabled:cursor-not-allowed";
 
 interface SelectedRef {
   trailerIndex: number;
@@ -160,14 +183,9 @@ export default function LoadPlanView() {
   const [pickerModalOpen, setPickerModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const jobId = new URLSearchParams(window.location.search).get("job_id");
-    if (jobId) {
-      setDeepLinkJobId(jobId);
-      setShowJobPull(true);
-    }
-  }, []);
+  // lbr-04: set when ?job_id= reopened the order's saved load (its updated_at, for the banner).
+  const [reopenedAt, setReopenedAt] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
   const hasSource = !!pulledSource || !!fixtureId;
   const fixture: LoadBuilderFixture = pulledSource ?? (fixtureId ? (LOAD_BUILDER_FIXTURES.find((f) => f.id === fixtureId) ?? EMPTY_FIXTURE) : EMPTY_FIXTURE);
@@ -197,6 +215,70 @@ export default function LoadPlanView() {
     () => plan.trailers.some((t) => t.dims.length !== dims.length || t.dims.width !== dims.width || t.dims.height !== dims.height),
     [plan, dims]
   );
+
+  // lbr-04: the load as it would be saved right now (null when there's nothing to save) — the
+  // hook's dirty check compares this against the last saved/loaded snapshot.
+  const currentSnapshot: SavedLoadSnapshot | null = useMemo(
+    () =>
+      hasSource && plan.trailers.length > 0
+        ? buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize })
+        : null,
+    [hasSource, plan.trailers.length, fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize]
+  );
+  const persistence = useOrderLoadPersistence({
+    jobId: pulledSource?.jobId ?? null,
+    customer: fixture.customer,
+    currentSnapshot,
+    currentSavedLoadId,
+    currentSavedLoadName,
+    setCurrentSavedLoadId,
+    setCurrentSavedLoadName,
+  });
+  const { markSaved } = persistence;
+  const orderLabel = pulledSource ? (pulledSource.invoiceNumber ? `INV ${pulledSource.invoiceNumber}` : pulledSource.customer) : "";
+
+  // lbr-04: ?job_id= reopens that order's saved load (same restore path as the picker) when it has
+  // a v2-loadable one; otherwise — none, a legacy-format row, or the lookup failed — it opens the
+  // job pull exactly as before.
+  useEffect(() => {
+    const jobId = new URLSearchParams(window.location.search).get("job_id");
+    if (!jobId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const record = await findSavedForJob(jobId);
+        const restored = record ? deserializeSnapshot(record.state_json) : null;
+        if (!cancelled && record && restored?.ok) {
+          restoreSavedLoad(record, restored.snapshot);
+          markSaved(restored.snapshot, record.updated_at);
+          setReopenedAt(record.updated_at);
+          return;
+        }
+      } catch {
+        // fall through to the pull
+      }
+      if (cancelled) return;
+      setDeepLinkJobId(jobId);
+      setShowJobPull(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only deep link, as before; restoreSavedLoad/markSaved are stable for this purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (toast?.kind !== "success") return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  async function autoSaveAfterBol() {
+    const label = orderLabel;
+    const ok = await persistence.saveToOrder();
+    setToast(ok ? { kind: "success", message: `BOL generated — load saved to order ${label}` } : { kind: "error", message: "BOL generated, but the load couldn't be saved to the order." });
+  }
 
   // lb-ui-09: only recreated when the actual data changes (or the modal opens/closes) — plan/dims/
   // effectiveSkus are already stable refs from the memos/state above, so this doesn't recreate on
@@ -229,47 +311,38 @@ export default function LoadPlanView() {
     setDeepLinkJobId(null);
     setCurrentSavedLoadId(null);
     setCurrentSavedLoadName(null);
+    setReopenedAt(null);
     window.history.replaceState(null, "", `?job_id=${encodeURIComponent(source.jobId)}`);
   }
 
+  // lbr-04: the manual save goes through the hook's persist() too, so a save for an order that
+  // already has a saved load updates that row (at most one per order) and the chip reads Saved.
+  // The snapshot (fixtureId ?? EMPTY_FIXTURE.id included) is currentSnapshot above — Save is
+  // disabled whenever that is null (no source / no trailers).
   async function handleSaveConfirm(name: string) {
     setSaving(true);
     setSaveError(null);
-    try {
-      // fixtureId ?? EMPTY_FIXTURE.id only satisfies buildSnapshot's non-null argument type -- it
-      // never actually reaches a written row. buildSnapshot itself ignores the fixtureId argument
-      // whenever pulledSource is non-null (writes kind:"pulled" instead, savedLoad.ts:87-89); and
-      // Save is disabled (plan.trailers.length === 0) for every case where pulledSource is null AND
-      // fixtureId is null (that's !hasSource, whose plan is always the empty EMPTY_FIXTURE pack).
-      const snapshot = buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize });
-      const payload = buildSavePayload(name, fixture.customer, snapshot);
-      const isUpdate = !!currentSavedLoadId;
-      const url = isUpdate ? `/v2/api/saved-loads/${encodeURIComponent(currentSavedLoadId!)}` : "/v2/api/saved-loads";
-      const res = await fetch(url, {
-        method: isUpdate ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (res.status === 501) {
-        setSaveError("Saving is disabled in the v2 preview phase. Use the legacy Logistics dashboard to save this load for now.");
-        return;
-      }
-      if (!res.ok || !data.ok) {
-        setSaveError(data.error || `HTTP ${res.status}`);
-        return;
-      }
-      setCurrentSavedLoadId(data.load.id);
-      setCurrentSavedLoadName(data.load.name);
-      setSaveModalOpen(false);
-    } catch {
-      setSaveError("Network error.");
-    } finally {
-      setSaving(false);
+    const result = await persistence.persist(name);
+    setSaving(false);
+    if (!result.ok) {
+      setSaveError(result.error);
+      return;
     }
+    setSaveModalOpen(false);
+    // A custom build's "save before leaving" goes through this named save; leave once it lands.
+    if (persistence.pendingHref) persistence.navigatePending();
   }
 
   function handlePickerLoad(record: SavedLoadRecord, snapshot: SavedLoadSnapshot) {
+    restoreSavedLoad(record, snapshot);
+    setReopenedAt(null);
+    markSaved(snapshot, record.updated_at);
+    setPickerModalOpen(false);
+  }
+
+  // Shared by the picker and lbr-04's ?job_id= reopen: restores a saved load's source, engine
+  // settings and edited plan, and makes it the current saved load.
+  function restoreSavedLoad(record: SavedLoadRecord, snapshot: SavedLoadSnapshot) {
     if (snapshot.source.kind === "pulled") {
       setPulledSource(snapshot.source.pulledSource);
       window.history.replaceState(null, "", `?job_id=${encodeURIComponent(snapshot.source.pulledSource.jobId)}`);
@@ -308,7 +381,6 @@ export default function LoadPlanView() {
     setDeepLinkJobId(null);
     setCurrentSavedLoadId(record.id);
     setCurrentSavedLoadName(record.name);
-    setPickerModalOpen(false);
   }
 
   function handleJobPullClose() {
@@ -394,6 +466,27 @@ export default function LoadPlanView() {
             {currentSavedLoadName && (
               <span className="font-sans">
                 saved as <span className="font-semibold text-text">{currentSavedLoadName}</span>
+              </span>
+            )}
+            {persistence.status !== "none" && (
+              <span
+                role="status"
+                className={[
+                  "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium font-sans whitespace-nowrap border",
+                  persistence.status === "saved"
+                    ? "bg-[var(--loaded-bg)] text-[var(--loaded-text)] border-[var(--loaded-border)]"
+                    : persistence.status === "saving"
+                      ? "border-[var(--border)] text-muted"
+                      : "bg-[var(--warn-bg)] text-[var(--warn-text)] border-[var(--warn-border)]",
+                ].join(" ")}
+              >
+                {persistence.status === "saved"
+                  ? `${pulledSource ? "Saved to order" : "Saved"}${persistence.savedAt ? ` · ${formatEt(persistence.savedAt, false)}` : ""}`
+                  : persistence.status === "saving"
+                    ? "Saving…"
+                    : persistence.status === "error"
+                      ? "Unsaved changes · save failed"
+                      : "Unsaved changes"}
               </span>
             )}
           </div>
@@ -537,6 +630,32 @@ export default function LoadPlanView() {
           )}
         </div>
       </div>
+
+      {/* lbr-04: reopened-from-order banner — informational and dismissible, like the pull banner. */}
+      {reopenedAt && pulledSource && (
+        <div className="rounded-xl border border-[var(--loaded-border)] bg-[var(--loaded-bg)] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-[var(--loaded-text)]">
+            Opened this order&apos;s saved load (saved {formatEt(reopenedAt, true)}).{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setDeepLinkJobId(pulledSource.jobId);
+                setShowJobPull(true);
+              }}
+              className="font-semibold underline cursor-pointer min-h-[32px]"
+            >
+              Re-pull from order
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReopenedAt(null)}
+            className="shrink-0 text-xs font-semibold text-[var(--loaded-text)] cursor-pointer min-h-[32px] px-2"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Pull banner — informational, not blocking (Design Decision): dismissible, doesn't gate
           anything downstream. Piece count reflects the matched cart that actually feeds pack();
@@ -698,7 +817,16 @@ export default function LoadPlanView() {
         <JobPullModal initialJobId={deepLinkJobId ?? undefined} onClose={handleJobPullClose} onConfirm={handlePullConfirm} />
       )}
 
-      <BolGenerateModal jobId={null} packPlanSource={bolPackPlanSource} onClose={() => setGenBolOpen(false)} />
+      <BolGenerateModal
+        jobId={null}
+        packPlanSource={bolPackPlanSource}
+        onClose={(generated) => {
+          setGenBolOpen(false);
+          // lbr-04: generating BOLs from an order-built load saves it to the order. Never blocks or
+          // undoes the BOL — a failed save only raises a Retry toast.
+          if (generated && pulledSource) void autoSaveAfterBol();
+        }}
+      />
 
       <PartsLibraryPanel isOpen={partsLibraryOpen} onClose={() => setPartsLibraryOpen(false)} />
 
@@ -713,6 +841,73 @@ export default function LoadPlanView() {
       />
 
       <LoadPickerModal isOpen={pickerModalOpen} onClose={() => setPickerModalOpen(false)} onLoad={handlePickerLoad} />
+
+      {/* lbr-04: "save before leaving?" for in-app link clicks (tab close/reload falls back to the
+          browser's own prompt). Hidden while the named-save modal it hands off to is open. */}
+      <Modal isOpen={!!persistence.pendingHref && !saveModalOpen} onClose={persistence.cancelLeave} title="Save this load before leaving?">
+        <p className="text-sm text-text">
+          This load hasn&apos;t been saved to {pulledSource ? `order ${orderLabel}` : "an order"}. If you leave now you&apos;ll have to build it again.
+        </p>
+        {persistence.error && <p className="text-sm text-[var(--danger-bg)]">{persistence.error}</p>}
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (persistence.needsNamedSave) {
+                setSaveError(null);
+                setSaveModalOpen(true);
+              } else {
+                void persistence.confirmLeave("save");
+              }
+            }}
+            disabled={persistence.saving}
+            className={`${LEAVE_BUTTON} bg-[var(--brand)] text-white hover:opacity-90`}
+          >
+            {persistence.saving ? "Saving…" : persistence.needsNamedSave ? "Save and leave" : "Save to order and leave"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void persistence.confirmLeave("discard")}
+            disabled={persistence.saving}
+            className={`${LEAVE_BUTTON} border border-[var(--danger-bg)] text-[var(--danger-bg)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_8%,transparent)]`}
+          >
+            Leave without saving
+          </button>
+          <button type="button" onClick={persistence.cancelLeave} className={`${LEAVE_BUTTON} border border-[var(--border)] text-muted hover:text-text hover:bg-[var(--ghost-bg)]`}>
+            Keep working
+          </button>
+        </div>
+      </Modal>
+
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={[
+            "fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded text-sm font-medium flex items-center gap-3",
+            toast.kind === "success" ? "pointer-events-none bg-[var(--success-bg)] text-[var(--success-text)]" : "bg-[var(--danger-bg)] text-[var(--danger-text)]",
+          ].join(" ")}
+        >
+          {toast.message}
+          {toast.kind === "error" && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setToast(null);
+                  void autoSaveAfterBol();
+                }}
+                className="font-semibold underline cursor-pointer min-h-[32px]"
+              >
+                Retry
+              </button>
+              <button type="button" onClick={() => setToast(null)} className="font-semibold cursor-pointer min-h-[32px]" aria-label="Dismiss">
+                ×
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

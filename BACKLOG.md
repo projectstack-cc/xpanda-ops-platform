@@ -64,13 +64,14 @@
   - [x] lbr-02 — `src/lib/stackPlanner.ts` (pure, golden-exact) + harness row-direction fix
   - [x] lbr-03 — wire `planStacks` into `packEngine.ts` (holey + blocks), multi-family consolidation via re-simulate,
     row order per rule 5, "N stacks shortened" note + `consolidate` option, selfcheck ratchet updates
-  - [ ] lbr-04 — save to order: BOL generated from an order auto-saves the load to it; Build Load reopens it;
+  - [x] lbr-04 — save to order: BOL generated from an order auto-saves the load to it; Build Load reopens it;
     order-linked loads don't expire; "save before leaving?" on tab close + in-app nav
   - [ ] lbr-05 — legacy-like UI shell on v2 components; one fixed, lightness-separated color per thickness;
     top-off band + TOP-OFF tag; pure-plan toggle (mockup: claude.ai artifact "Load Builder v2 Mockup")
   - [ ] lbr-06 — tap-select / tap-place customize (replaces drag): green valid targets, faded invalid with
     reason on tap, "move just the top-off", undo, step hints
   - [ ] lbr-07 — cutover with a Classic link (held until Steve has floor-tested)
+  - [ ] lbr-04 follow-up — legacy Load Builder still writes order loads with a 90-day TTL; moot after lbr-07 cutover.
   - [ ] lbr follow-up — non-Holey parts with allowRotation:false whose catalog size doesn't fit as entered (34 jobs in
     the lbr-01 audit; e.g. 2×48×144 with height 144) stay unplaced; decide parts-data fix vs. treating "fits only
     rotated" as rotatable.
