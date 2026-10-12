@@ -21,6 +21,7 @@ import PrioritySelect from "./PrioritySelect";
 import { fromPriorityChoice, toPriorityChoice } from "@/lib/priority";
 import HbFloorStockSection from "./HbFloorStockSection";
 import OrderLinksSection from "./OrderLinksSection";
+import JobPrintsSection from "./JobPrintsSection";
 import OffloadZonesSection from "./OffloadZonesSection";
 import type { BoardJob } from "./ProductionBoard";
 import { mergeProcesses, parseProcesses, type JobProcess } from "@/lib/processes";
@@ -188,6 +189,8 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
   // status restriction. Status changes need `jobs.status` edit. The server enforces both.
   const canDeleteOrder = isAdmin || !!permissions["jobs.archive"]?.edit;
   const canChangeStatus = isAdmin || !!permissions["jobs.status"]?.edit;
+  // board-prints-02: prints follow the server gate (`jobs` edit on /v2/api/board), not jobs.archive.
+  const canEditPrints = isAdmin || !!permissions["jobs"]?.edit;
   // jb-05: HB floor stock writes go through the same `jobs`-edit rule.
   const canEditJob = canDeleteOrder;
 
@@ -841,6 +844,9 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
               </label>
             </div>
           </section>
+
+          {/* board-prints-02: uploads/deletes save immediately (like OrderLinksSection), not via Save. */}
+          <JobPrintsSection jobId={job.id} canEdit={canEditPrints} mode="edit" />
 
           {/* jb-06: Trailer group + combo — immediate-save links, after the schedule/shipping area */}
           <OrderLinksSection

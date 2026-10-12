@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight, Tag } from "lucide-react";
 import Modal from "@/components/Modal";
 import PdfViewer from "@/components/PdfViewer";
 import PackingSlipViewer from "@/components/PackingSlipViewer";
+import JobPrintsSection from "@/components/board/JobPrintsSection";
 import CutListChunkToggle from "@/components/CutListChunkToggle";
 import DiversiTechLabelsModal from "@/components/board/DiversiTechLabelsModal";
 import { buildCutListPdf, type CutListLineItem } from "@/lib/cutList";
@@ -242,6 +243,9 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDet
             src={slipDoc?.src ?? null}
             filename={slipDoc?.filename ?? "packing-slip.pdf"}
           />
+
+          {/* board-prints-02: read-only prints list/preview (also for archived jobs opened from search). */}
+          <JobPrintsSection jobId={job.id} canEdit={false} mode="view" />
 
           {/* jb-02: View BOL — only for jobs with ≥1 BOL. The viewer is mounted at the board level
               (never nested in this modal), read-only; BOL editing lives on the logistics board. */}

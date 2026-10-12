@@ -316,6 +316,8 @@
 - [ ] **jb-11 follow-up — add the Priority control to `/v2/orders` (order entry)** so priority can be set at
   creation (today it defaults to Normal). Reuse `components/board/PrioritySelect.tsx` + `lib/priority.ts`.
 - [ ] **jb-06 follow-up — move `PartsPicker` onto the shared `SearchPickerModal`** (one picker primitive).
+- [ ] **board-prints-02 follow-up — Prints indicator (📎 N) on board rows.** Show a print count on
+  `/v2/board` rows so jobs with drawings are visible without opening the modal.
 - [ ] **board-prints-01 follow-up — Sweep orphaned `job-prints/` R2 objects for deleted jobs.** Legacy
   `DELETE /api/jobs` drops the `job_prints` rows but leaves their `BOL_PHOTOS` objects under
   `job-prints/<jobId>/`. Add a sweep (or delete the prefix inline once the job delete moves to v2).
