@@ -66,11 +66,15 @@
     row order per rule 5, "N stacks shortened" note + `consolidate` option, selfcheck ratchet updates
   - [x] lbr-04 — save to order: BOL generated from an order auto-saves the load to it; Build Load reopens it;
     order-linked loads don't expire; "save before leaving?" on tab close + in-app nav
-  - [ ] lbr-05 — legacy-like UI shell on v2 components; one fixed, lightness-separated color per thickness;
-    top-off band + TOP-OFF tag; pure-plan toggle (mockup: claude.ai artifact "Load Builder v2 Mockup")
-  - [ ] lbr-06 — tap-select / tap-place customize (replaces drag): green valid targets, faded invalid with
+  - [x] lbr-05 — Load · Parts · Results tabs; Results redesign; thickness palette on screen + PDF; top-off band;
+    pure-plan toggle
+  - [ ] lbr-06 — Load tab: legacy manual SKU picker (search + category, qty add, editable load list, clear,
+    Calculate); manual (no-order) loads saved as a new snapshot source kind; order-load qty edits
+  - [ ] lbr-07 — tap-select / tap-place customize (replaces drag): green valid targets, faded invalid with
     reason on tap, "move just the top-off", undo, step hints
-  - [ ] lbr-07 — cutover with a Classic link (held until Steve has floor-tested)
+  - [ ] lbr-08 — cutover with a Classic link (held until Steve has floor-tested)
+  - [ ] lbr-05 follow-up — `PlanMetricsStrip.tsx` is no longer imported (Results uses `MetricTile`); delete it. Loading
+    diagram PDF: the "636"L × 98"W — 1' 0" remaining" caption overlaps the STACK BREAKDOWN heading (observed in the lbr-05 smoke render).
   - [ ] lbr-04 follow-up — legacy Load Builder still writes order loads with a 90-day TTL; moot after lbr-07 cutover.
   - [ ] lbr follow-up — non-Holey parts with allowRotation:false whose catalog size doesn't fit as entered (34 jobs in
     the lbr-01 audit; e.g. 2×48×144 with height 144) stay unplaced; decide parts-data fix vs. treating "fits only

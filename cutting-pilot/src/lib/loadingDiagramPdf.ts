@@ -40,8 +40,17 @@
 // warning string; legacy's own note is driven straight off state.runnerHeight, not a warnings-array
 // lookup, confirmed by grep). Extended with one trailing optional params object rather than widening
 // the first four — a minimal, additive extension, not a rewrite of the given shape.
+//
+// lbr-05: same colors as the screen. Each column is filled with its base layer's thicknessColor
+// (thicknessPalette.ts — the one place diagram data colors live) and labelled in its fg; a topped
+// stack draws its top-off as a band in the top layer's color above a dashed separator, exactly as
+// TrailerDiagram.tsx does. Black-and-white safe: labels always print, and hatching (fractional / >16"
+// sizes) is drawn as real diagonal lines, not a tint. The PIECES table swatches use the same palette
+// (by the SKU's placed thickness) instead of the old per-SKU colorForSku hash. Printed labels use a
+// plain `"` because pdf-lib's standard Helvetica (WinAnsi) can't encode the ″ glyph.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Dimensions, PackColumn, PackRow, PackTrailer, PackSku } from "./packEngine";
+import { thicknessColor } from "./thicknessPalette";
 
 // --- pure helpers (exported for loadingDiagramPdf.selfcheck.ts) ---
 
@@ -71,7 +80,10 @@ export function formatRemainingLabel(dims: Dimensions, trailer: PackTrailer): st
 export interface PieceTableRow {
   skuId: string;
   name: string;
+  /** lbr-05: the thickness palette color for this SKU's placed thickness (was the per-SKU hash). */
   color: string;
+  /** lbr-05: true when that thickness is drawn hatched (fractional or > 16"). */
+  hatched: boolean;
   pieces: number;
   dimsLabel: string;
 }
@@ -99,10 +111,12 @@ export function buildPiecesTable(trailer: PackTrailer, skus: PackSku[]): PieceTa
         if (existing) {
           existing.pieces += layer.count;
         } else {
+          const tc = thicknessColor(layer.unitHeight);
           bySku.set(layer.skuId, {
             skuId: layer.skuId,
             name: layer.skuName,
-            color: layer.color,
+            color: tc.bg,
+            hatched: tc.hatched,
             pieces: layer.count,
             dimsLabel: formatSkuDims(skuById.get(layer.skuId)),
           });
@@ -321,23 +335,33 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
     }
   });
 
-  // Column rects + stack-size labels
+  // Column rects, filled by thickness (lbr-05). The top band of a topped stack sits at the column's
+  // top edge (the same side TrailerDiagram.tsx draws it), sized by the top layer's share of the
+  // stack height with a readable minimum, above a dashed line in the base fg.
   for (const rect of layoutColumnRects(trailer, dims, box)) {
     const column = trailer.rows[rect.rowIndex].columns[rect.columnIndex];
-    page.drawRectangle({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, borderColor: LINE, borderWidth: 1.2, color: rgb(1, 1, 1) });
-    const lines = formatStackLines(column).filter(Boolean);
-    if (lines.length && rect.width > 14 && rect.height > 10) {
-      const size = Math.max(6, Math.min(11, rect.height / (lines.length + 0.6), rect.width / 6));
-      const lineGap = size + 1.5;
-      let ty = rect.y + rect.height / 2 + ((lines.length - 1) * lineGap) / 2;
-      for (const line of lines) {
-        const w = fontBold.widthOfTextAtSize(line, size);
-        if (w <= rect.width - 2) {
-          page.drawText(line, { x: rect.x + rect.width / 2 - w / 2, y: ty - size / 2.6, size, font: fontBold, color: INK });
-        }
-        ty -= lineGap;
-      }
+    const base = column.layers[0];
+    const top = column.layers.length > 1 ? column.layers[column.layers.length - 1] : null;
+    if (!base) continue;
+    const baseColor = thicknessColor(base.unitHeight);
+    page.drawRectangle({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, color: parseHexColor(baseColor.bg) });
+    if (baseColor.hatched) drawHatch(page, rect, parseHexColor(baseColor.fg));
+
+    let baseArea = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    if (top) {
+      const topColor = thicknessColor(top.unitHeight);
+      const total = column.totalHeight > 0 ? column.totalHeight : base.unitHeight * base.count + top.unitHeight * top.count;
+      const frac = total > 0 ? (top.unitHeight * top.count) / total : 0;
+      const bandH = Math.min(rect.height * 0.6, Math.max(rect.height * frac, Math.min(12, rect.height * 0.45)));
+      const band = { x: rect.x, y: rect.y + rect.height - bandH, width: rect.width, height: bandH };
+      page.drawRectangle({ ...band, color: parseHexColor(topColor.bg) });
+      if (topColor.hatched) drawHatch(page, band, parseHexColor(topColor.fg));
+      page.drawLine({ start: { x: band.x, y: band.y }, end: { x: band.x + band.width, y: band.y }, thickness: 1.5, color: parseHexColor(baseColor.fg), dashArray: [3, 2] });
+      drawFittedLabel(page, fontBold, `+${fmtNum(top.unitHeight)}"×${top.count}`, band, parseHexColor(topColor.fg));
+      baseArea = { x: rect.x, y: rect.y, width: rect.width, height: rect.height - bandH };
     }
+    drawFittedLabel(page, fontBold, `${fmtNum(base.unitHeight)}"×${base.count}`, baseArea, parseHexColor(baseColor.fg));
+    page.drawRectangle({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, borderColor: LINE, borderWidth: 1.2 });
   }
 
   // FRONT (nose) / REAR (doors) + dims caption — nose on the left, doors on the right (see
@@ -350,6 +374,39 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
   page.drawText(caption, { x: box.x + box.width / 2 - capW / 2, y: boxBottomY - 24, size: 10, font, color: MUTED });
 }
 
+/** Centers one label in `area`, shrinking down to 5pt to fit — labels are always printed so the
+ * diagram reads on a black-and-white printer (color is never the only signal). */
+function drawFittedLabel(page: PDFPage, font: PDFFont, text: string, area: { x: number; y: number; width: number; height: number }, color: ReturnType<typeof rgb>) {
+  if (area.width < 4 || area.height < 4) return;
+  let size = Math.min(11, area.height * 0.7);
+  while (size > 5 && font.widthOfTextAtSize(text, size) > area.width - 2) size -= 0.5;
+  const w = font.widthOfTextAtSize(text, size);
+  page.drawText(text, { x: area.x + area.width / 2 - w / 2, y: area.y + area.height / 2 - size / 2.8, size, font, color });
+}
+
+/** Diagonal hatch for fractional / > 16" sizes, drawn as real lines clipped to the rect (pdf-lib has
+ * no clip path helper here), so it survives black-and-white printing. Pure segment math: each line
+ * y = x + c is intersected with the rect's four edges. */
+export function hatchSegments(rect: { x: number; y: number; width: number; height: number }, spacing = 5): { x1: number; y1: number; x2: number; y2: number }[] {
+  const segs: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  const { x, y, width: w, height: h } = rect;
+  if (w <= 0 || h <= 0) return segs;
+  // Lines y - y0 = (x - x0) + k, k from -w to h.
+  for (let k = -w + spacing / 2; k < h; k += spacing) {
+    const sx = Math.max(0, -k);
+    const ex = Math.min(w, h - k);
+    if (ex <= sx) continue;
+    segs.push({ x1: x + sx, y1: y + sx + k, x2: x + ex, y2: y + ex + k });
+  }
+  return segs;
+}
+
+function drawHatch(page: PDFPage, rect: { x: number; y: number; width: number; height: number }, color: ReturnType<typeof rgb>) {
+  for (const s of hatchSegments(rect)) {
+    page.drawLine({ start: { x: s.x1, y: s.y1 }, end: { x: s.x2, y: s.y2 }, thickness: 0.6, color, opacity: 0.45 });
+  }
+}
+
 function drawPiecesTable(page: PDFPage, font: PDFFont, fontBold: PDFFont, rows: PieceTableRow[], area: { x: number; yTop: number; width: number }) {
   page.drawText("PIECES", { x: area.x, y: area.yTop, size: 11, font: fontBold, color: INK });
   let y = area.yTop - 16;
@@ -358,7 +415,9 @@ function drawPiecesTable(page: PDFPage, font: PDFFont, fontBold: PDFFont, rows: 
   const dimsColW = 70;
   for (const r of rows) {
     const swatch = parseHexColor(r.color);
-    page.drawRectangle({ x: area.x, y: y - 8, width: 9, height: 9, color: swatch });
+    const sw = { x: area.x, y: y - 8, width: 9, height: 9 };
+    page.drawRectangle({ ...sw, color: swatch, borderColor: LINE, borderWidth: 0.5 });
+    if (r.hatched) drawHatch(page, sw, INK);
     page.drawText(r.name, { x: area.x + 14, y: y - 7, size: 9.5, font, color: INK, maxWidth: area.width - 14 - countColW - dimsColW });
     const dimsW = font.widthOfTextAtSize(r.dimsLabel, 8.5);
     page.drawText(r.dimsLabel, { x: area.x + area.width - countColW - dimsW - 8, y: y - 7, size: 8.5, font, color: MUTED });

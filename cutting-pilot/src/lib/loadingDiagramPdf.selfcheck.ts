@@ -6,7 +6,8 @@
 // dissolve.selfcheck.ts's shape: a hand-built fixture, a check()/results table, one exported
 // run*SelfCheck() function. Not part of the production build path.
 import type { PackColumn, PackRow, PackTrailer, Dimensions, PackSku } from "./packEngine";
-import { formatStackLines, formatRemainingLabel, buildPiecesTable, buildStackBreakdown, filterTrailerWarnings, layoutColumnRects } from "./loadingDiagramPdf";
+import { formatStackLines, formatRemainingLabel, buildPiecesTable, buildStackBreakdown, filterTrailerWarnings, layoutColumnRects, hatchSegments } from "./loadingDiagramPdf";
+import { thicknessColor } from "./thicknessPalette";
 
 interface CheckResult {
   name: string;
@@ -127,6 +128,12 @@ export function runLoadingDiagramPdfSelfCheck(): { pass: boolean; results: Check
       pieces.find((p) => p.skuId === "A")?.pieces === 4,
       JSON.stringify(pieces)
     );
+    // lbr-05: swatches come from the thickness palette (A is 10", B is 8"), not the layer's per-SKU color.
+    check(
+      "buildPiecesTable: swatch colors are the thickness palette (A 10\", B 8\"), not PackLayer.color",
+      pieces.find((p) => p.skuId === "A")?.color === thicknessColor(10).bg && pieces.find((p) => p.skuId === "B")?.color === thicknessColor(8).bg && pieces.every((p) => p.hatched === false),
+      JSON.stringify(pieces)
+    );
     check(
       "buildPiecesTable: SKU B totals 3 (colB only)",
       pieces.find((p) => p.skuId === "B")?.pieces === 3,
@@ -229,6 +236,17 @@ export function runLoadingDiagramPdfSelfCheck(): { pass: boolean; results: Check
       zeroRects.every((r) => Number.isFinite(r.x) && Number.isFinite(r.y) && Number.isFinite(r.width) && Number.isFinite(r.height)),
       JSON.stringify(zeroRects)
     );
+  }
+
+  // lbr-05: hatch lines (fractional / >16" sizes) stay inside their rect and actually cover it.
+  {
+    const rect = { x: 10, y: 20, width: 40, height: 15 };
+    const segs = hatchSegments(rect);
+    const inside = (x: number, y: number) => x >= rect.x - 1e-9 && x <= rect.x + rect.width + 1e-9 && y >= rect.y - 1e-9 && y <= rect.y + rect.height + 1e-9;
+    check("hatchSegments: produces lines for a real rect", segs.length > 5, String(segs.length));
+    check("hatchSegments: every segment stays inside the rect", segs.every((g) => inside(g.x1, g.y1) && inside(g.x2, g.y2)), JSON.stringify(segs.slice(0, 3)));
+    check("hatchSegments: 45° lines (dy === dx)", segs.every((g) => Math.abs(g.y2 - g.y1 - (g.x2 - g.x1)) < 1e-9));
+    check("hatchSegments: empty rect -> no lines", hatchSegments({ x: 0, y: 0, width: 0, height: 10 }).length === 0);
   }
 
   return { pass: results.every((r) => r.pass), results };

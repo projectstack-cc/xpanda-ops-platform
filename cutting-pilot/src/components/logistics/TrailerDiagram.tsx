@@ -47,10 +47,24 @@
 // lb-ui-03: one more optional addition — `headerAction`, an arbitrary node rendered in the header
 // row next to the usedLength/row-count stat, so CustomizeEditor can put a per-trailer "Dissolve…"
 // action there without a second header row or forking the component.
+//
+// lbr-05 (Steve, 2026-10-12: "colors don't differentiate pieces well enough"): cells are FILLED by
+// the base layer's thickness color (thicknessPalette.ts — same thickness, same color, every load,
+// screen and PDF), replacing the per-SKU border stripes and the pure/mixed info tint. Every cell
+// carries its size label (`13″×8`), so color is never the only signal; fractional / >16″ sizes add
+// a diagonal hatch. A topped stack draws its top-off as a band in the top layer's color above a
+// dashed line, with a TOP-OFF tag; a partial pure stack gets a LEFTOVER tag (columns without
+// stackKind — old saved plans — get no tag). Rows are labelled across the top the way legacy prints
+// them: R1 at the doors (array index 0) up to Rn at the nose; display stays nose-left/doors-right.
+// The per-SKU legend becomes a per-thickness Key. Every existing prop and behaviour is unchanged
+// (CustomizeEditor depends on them); selection and edit-mode tints are outlines/overlays so they
+// stay legible over any fill. Two additive optional props, `title` and `subtitle`, let the Results
+// card show "Trailer N · type · L″×W″×H″" plus a legacy-style subtitle without forking.
 "use client";
 
-import type { ReactNode } from "react";
-import type { Dimensions, PackTrailer } from "@/lib/packEngine";
+import type { CSSProperties, ReactNode } from "react";
+import type { Dimensions, PackColumn, PackTrailer } from "@/lib/packEngine";
+import { thicknessColor, thicknessLabel } from "@/lib/thicknessPalette";
 
 interface SelectedColumn {
   rowIndex: number;
@@ -95,6 +109,10 @@ interface TrailerDiagramProps {
    * 26ft Box Truck". Rendered as a small pill next to the "Trailer N" title. Omitted/undefined
    * renders nothing — the common case where every trailer is the primary type. */
   typeBadge?: string;
+  /** lbr-05: replaces the default "Trailer N" heading (e.g. "Trailer 1 · 53ft Standard · 636″×98″×109″"). */
+  title?: ReactNode;
+  /** lbr-05: replaces the default "N″ of M″ used · R rows" stat line. */
+  subtitle?: ReactNode;
 }
 
 // Rows are drawn nose-first (visual left) to rear-most (visual right) — the reverse of
@@ -104,30 +122,40 @@ function displayRowIndices(rowCount: number): number[] {
   return Array.from({ length: rowCount }, (_, i) => rowCount - 1 - i);
 }
 
-// Every distinct SKU placed on this trailer, name-sorted, one entry per skuId — the legend
-// decoding the per-SKU border-stripe colors added to each column box below. Colors come straight
-// off PackLayer.color (packEngine.ts's colorForSku, already computed, previously unused by this
-// component — see loadingDiagramPdf.ts's PIECES table and JobPullModal's SKU swatches for the
-// same palette used elsewhere).
-function skuLegendFor(trailer: PackTrailer): { skuId: string; name: string; color: string }[] {
-  const bySku = new Map<string, { skuId: string; name: string; color: string }>();
-  for (const row of trailer.rows) {
-    for (const column of row.columns) {
-      for (const layer of column.layers) {
-        if (!bySku.has(layer.skuId)) {
-          bySku.set(layer.skuId, { skuId: layer.skuId, name: layer.skuName, color: layer.color });
-        }
-      }
-    }
-  }
-  return Array.from(bySku.values()).sort((a, b) => a.name.localeCompare(b.name));
+// Every distinct thickness on this trailer (base and top-off layers), thickest first — the Key.
+function thicknessesOn(trailer: PackTrailer): number[] {
+  const set = new Set<number>();
+  for (const row of trailer.rows) for (const column of row.columns) for (const layer of column.layers) set.add(layer.unitHeight);
+  return Array.from(set).sort((a, b) => b - a);
 }
 
-const DIAGRAM_HEIGHT_PX = 176;
-// Below these fractions a column's on-screen box is too small to hold ≥11px text legibly —
-// drop the label rather than shrinking the type (per spec).
+/** Diagonal stripe overlay for hatched (fractional / >16″) sizes, in the cell's own fg. */
+function hatchStyle(fg: string): CSSProperties {
+  return { backgroundImage: `repeating-linear-gradient(135deg, ${fg} 0 2px, transparent 2px 7px)`, opacity: 0.35 };
+}
+
+function inches(n: number): string {
+  return thicknessLabel(n).replace("″", " inch");
+}
+
+/** "Stack: 11 inch × 9, 10 inch × 1 on top, 109 inches." */
+function stackAccessibleName(column: PackColumn): string {
+  const [base, ...rest] = column.layers;
+  if (!base) return "Empty stack.";
+  const parts = [`${inches(base.unitHeight)} × ${base.count}`];
+  for (const l of rest) parts.push(`${inches(l.unitHeight)} × ${l.count} on top`);
+  const total = Math.round(column.totalHeight * 100) / 100;
+  return `Stack: ${parts.join(", ")}, ${total} inches.`;
+}
+
+const DIAGRAM_HEIGHT_PX = 240;
+// Below these fractions a column's on-screen box is too small to hold the 14px label legibly —
+// drop the label rather than shrinking the type (the accessible name still carries it).
 const MIN_WIDTH_FRACTION_FOR_LABEL = 0.07;
 const MIN_DEPTH_FRACTION_FOR_LABEL = 0.1;
+// The diagram never squeezes below this; narrower screens scroll it inside its card.
+const DIAGRAM_MIN_WIDTH_PX = 720;
+const TOP_BAND_MIN_PX = 24;
 
 export default function TrailerDiagram({
   trailer,
@@ -147,13 +175,16 @@ export default function TrailerDiagram({
   onChooseTargetRow,
   headerAction,
   typeBadge,
+  title,
+  subtitle,
 }: TrailerDiagramProps) {
-  const skuLegend = skuLegendFor(trailer);
+  const keyThicknesses = thicknessesOn(trailer);
+  const displayOrder = displayRowIndices(trailer.rows.length);
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
       <div className="flex items-baseline justify-between gap-3 mb-3">
         <div className="flex items-baseline gap-2">
-          <h3 className="text-sm font-semibold text-text">Trailer {trailerIndex + 1}</h3>
+          <h3 className="text-sm font-semibold text-text">{title ?? `Trailer ${trailerIndex + 1}`}</h3>
           {typeBadge && (
             <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] text-[var(--brand)]">
               {typeBadge}
@@ -161,23 +192,42 @@ export default function TrailerDiagram({
           )}
         </div>
         <div className="flex items-center gap-3 ml-auto">
-          <span className="text-xs font-mono tabular-nums text-muted">
-            {Math.round(trailer.usedLength)}&quot; of {Math.round(dims.length)}&quot; used · {trailer.rows.length} row{trailer.rows.length === 1 ? "" : "s"}
-          </span>
+          {subtitle === undefined ? (
+            <span className="text-xs font-mono tabular-nums text-muted">
+              {Math.round(trailer.usedLength)}&quot; of {Math.round(dims.length)}&quot; used · {trailer.rows.length} row{trailer.rows.length === 1 ? "" : "s"}
+            </span>
+          ) : null}
           {headerAction}
         </div>
       </div>
 
-      <div className="flex items-center justify-between text-[11px] text-text-hint mb-1">
-        <span>Nose</span>
-        <span>Rear (doors)</span>
+      {subtitle !== undefined && subtitle !== null && <div className="-mt-2 mb-3 text-xs font-mono tabular-nums text-muted">{subtitle}</div>}
+
+      <div className="overflow-x-auto">
+      <div style={{ minWidth: DIAGRAM_MIN_WIDTH_PX }}>
+      <div className="flex items-center justify-between text-[11px] font-semibold tracking-wide text-text-hint mb-1">
+        <span>FRONT · NOSE</span>
+        <span>REAR · DOORS</span>
+      </div>
+
+      {/* Row labels, legacy print style: R1 at the doors (array index 0) up to Rn at the nose. */}
+      <div className="flex w-full mb-0.5" aria-hidden="true">
+        {displayOrder.map((rowIndex) => {
+          const row = trailer.rows[rowIndex];
+          const rowWidthPct = dims.length > 0 ? (row.rowLength / dims.length) * 100 : 0;
+          return (
+            <div key={rowIndex} className="shrink-0 text-center text-[11px] font-mono tabular-nums text-muted" style={{ width: `${rowWidthPct}%` }}>
+              R{rowIndex + 1}
+            </div>
+          );
+        })}
       </div>
 
       <div
         className="flex w-full rounded-md overflow-hidden border border-[var(--line)]"
         style={{ height: DIAGRAM_HEIGHT_PX }}
       >
-        {displayRowIndices(trailer.rows.length).map((rowIndex, displayPos, displayOrder) => {
+        {displayOrder.map((rowIndex, displayPos) => {
           const row = trailer.rows[rowIndex];
           const rowWidthPct = dims.length > 0 ? (row.rowLength / dims.length) * 100 : 0;
           const feedback = editable ? rowDropFeedback?.(rowIndex) ?? null : null;
@@ -254,14 +304,13 @@ export default function TrailerDiagram({
                 const isDragging = draggingFrom?.rowIndex === rowIndex && draggingFrom?.columnIndex === columnIndex;
                 const showLabel = column.colWidth / dims.width >= MIN_WIDTH_FRACTION_FOR_LABEL && column.colLength / row.rowLength >= MIN_DEPTH_FRACTION_FOR_LABEL;
                 const baseLayer = column.layers[0];
-                // Per-SKU color stripes (Steve's requested color coding — colorForSku already
-                // computed by packEngine.ts onto every PackLayer, but never rendered here). Left
-                // edge is always the base SKU's color; a topped-off column also gets its last
-                // (topmost) layer's color on the right edge, so a two-colored box reads as "two
-                // SKUs stacked here" at a glance, without depending on the text label fitting.
-                // Existing pure/mixed background/border stays as the "was this topped off" status
-                // signal — the stripes are layered ON TOP of that, not a replacement for it.
-                const topLayer = column.layers[column.layers.length - 1];
+                const topLayer = column.layers.length > 1 ? column.layers[column.layers.length - 1] : null;
+                const baseColor = baseLayer ? thicknessColor(baseLayer.unitHeight) : null;
+                const topColor = topLayer ? thicknessColor(topLayer.unitHeight) : null;
+                const columnHeightPx = (heightPct / 100) * DIAGRAM_HEIGHT_PX;
+                const topFrac = topLayer && column.totalHeight > 0 ? (topLayer.unitHeight * topLayer.count) / column.totalHeight : 0;
+                const topBandPx = topLayer ? Math.min(columnHeightPx * 0.6, Math.max(TOP_BAND_MIN_PX, columnHeightPx * topFrac)) : 0;
+                const tag = topLayer ? "TOP-OFF" : column.stackKind === "partial" ? "LEFTOVER" : null;
 
                 return (
                   <button
@@ -272,15 +321,13 @@ export default function TrailerDiagram({
                     onDragEnd={editable ? () => onColumnDragEnd?.() : undefined}
                     onClick={() => onSelectColumn(rowIndex, columnIndex)}
                     aria-pressed={isSelected}
-                    aria-label={`Trailer ${trailerIndex + 1}, row ${rowIndex + 1}, column ${columnIndex + 1}${column.mixed ? " (mixed)" : ""}: ${column.rationale}`}
+                    aria-label={`${stackAccessibleName(column)} Trailer ${trailerIndex + 1}, row R${rowIndex + 1}, position ${columnIndex + 1}.`}
+                    title={column.rationale}
                     className={[
-                      "absolute left-0 flex items-center justify-center overflow-hidden",
+                      "absolute left-0 flex flex-col overflow-hidden text-left box-border",
                       editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
-                      "border box-border text-left px-1 transition-colors",
+                      "border border-[var(--line)] transition-[filter] hover:brightness-95",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:z-10",
-                      column.mixed
-                        ? "bg-[var(--info-bg)] border-[var(--info-border)] text-[var(--info-text)] hover:brightness-95"
-                        : "bg-[var(--card-bg)] border-[var(--border)] text-text hover:bg-[var(--ghost-bg)]",
                       isSelected ? "ring-2 ring-[var(--brand)] z-10" : "",
                       isDragging ? "opacity-40 border-dashed" : "",
                     ].join(" ")}
@@ -288,18 +335,40 @@ export default function TrailerDiagram({
                       top: `${topPct}%`,
                       height: `${heightPct}%`,
                       width: `${widthPct}%`,
-                      borderLeftWidth: 4,
-                      borderLeftColor: baseLayer?.color,
-                      ...(column.mixed && topLayer
-                        ? { borderRightWidth: 4, borderRightColor: topLayer.color }
-                        : {}),
+                      background: baseColor?.bg,
+                      color: baseColor?.fg,
+                      // Selection: a 3px outline in the text token, inset so it stays visible over
+                      // any fill, plus the brand ring above.
+                      ...(isSelected ? { outline: "3px solid var(--text)", outlineOffset: -3 } : {}),
                     }}
                   >
-                    {showLabel && baseLayer && (
-                      <span className="text-[11px] leading-tight font-mono tabular-nums truncate">
-                        {baseLayer.unitHeight}&quot; · {column.stackCount}pc
+                    {topLayer && topColor && (
+                      <span
+                        className="relative w-full shrink-0 flex items-center justify-center"
+                        style={{ height: topBandPx, background: topColor.bg, color: topColor.fg, borderBottom: `2px dashed ${baseColor?.fg}` }}
+                      >
+                        {topColor.hatched && <span className="absolute inset-0 pointer-events-none" style={hatchStyle(topColor.fg)} aria-hidden="true" />}
+                        {showLabel && (
+                          <span className="relative text-[14px] leading-none font-mono font-semibold tabular-nums truncate px-1">
+                            +{thicknessLabel(topLayer.unitHeight)}×{topLayer.count}
+                          </span>
+                        )}
                       </span>
                     )}
+                    <span className="relative w-full flex-1 min-h-0 flex flex-col items-center justify-center gap-0.5">
+                      {baseColor?.hatched && <span className="absolute inset-0 pointer-events-none" style={hatchStyle(baseColor.fg)} aria-hidden="true" />}
+                      {showLabel && baseLayer && (
+                        <span className="relative text-[14px] leading-none font-mono font-semibold tabular-nums truncate px-1">
+                          {thicknessLabel(baseLayer.unitHeight)}×{baseLayer.count}
+                        </span>
+                      )}
+                      {/* Stacked under the label (never over it); dropped when both don't fit. */}
+                      {showLabel && tag && columnHeightPx - topBandPx >= 32 && (
+                        <span className="relative text-[9px] font-semibold tracking-wide leading-none px-1 py-0.5 rounded-sm bg-surface text-text border border-[var(--line)]">
+                          {tag}
+                        </span>
+                      )}
+                    </span>
                   </button>
                 );
               })}
@@ -308,38 +377,42 @@ export default function TrailerDiagram({
         })}
       </div>
 
-      <div className="flex items-center gap-4 mt-2 text-[11px] text-muted">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm bg-[var(--card-bg)] border border-[var(--border)]" aria-hidden="true" />
-          Pure stack
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm bg-[var(--info-bg)] border border-[var(--info-border)]" aria-hidden="true" />
-          Mixed (multiple SKUs)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span
-            className="inline-block w-3 h-3 rounded-sm border border-[var(--line)]"
-            style={{
-              backgroundImage:
-                "repeating-linear-gradient(135deg, var(--ghost-bg), var(--ghost-bg) 3px, var(--surface-2) 3px, var(--surface-2) 6px)",
-            }}
-            aria-hidden="true"
-          />
-          Unused floor
-        </span>
+      </div>
       </div>
 
-      {skuLegend.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 pt-1.5 border-t border-[var(--line)] text-[11px] text-muted">
-          {skuLegend.map((s) => (
-            <span key={s.skuId} className="inline-flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: s.color }} aria-hidden="true" />
-              <span className="truncate max-w-[160px]">{s.name}</span>
-            </span>
-          ))}
+      {/* Key (lbr-05): one swatch per thickness on this trailer, plus how to read a box. */}
+      <div className="mt-3 pt-2 border-t border-[var(--line)] text-xs text-muted space-y-1.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="font-semibold text-text">Key</span>
+          {keyThicknesses.map((t) => {
+            const c = thicknessColor(t);
+            return (
+              <span key={t} className="inline-flex items-center gap-1.5">
+                <span className="relative inline-block w-4 h-4 rounded-sm border border-[var(--line)] overflow-hidden" style={{ background: c.bg }} aria-hidden="true">
+                  {c.hatched && <span className="absolute inset-0" style={hatchStyle(c.fg)} />}
+                </span>
+                <span className="font-mono tabular-nums text-text">{thicknessLabel(t).replace("″", " in")}</span>
+              </span>
+            );
+          })}
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-6 border-t-2 border-dashed border-[var(--text)]" aria-hidden="true" />
+            top-off sits above the line
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block w-4 h-4 rounded-sm border border-[var(--line)]"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(135deg, var(--ghost-bg), var(--ghost-bg) 3px, var(--surface-2) 3px, var(--surface-2) 6px)",
+              }}
+              aria-hidden="true"
+            />
+            unused floor
+          </span>
         </div>
-      )}
+        <div>Each box = one stack · “11″×9” = nine 11-inch pieces</div>
+      </div>
     </div>
   );
 }

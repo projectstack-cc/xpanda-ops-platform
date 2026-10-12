@@ -72,6 +72,10 @@ export interface SavedLoadSnapshot {
   // that never had this feature applied when it was saved. Every NEW save always writes the
   // toggle's actual current value explicitly, so this fallback only ever fires for old rows.
   autoDownsize?: boolean;
+  // lbr-05: the pure-plan toggle (PackOptions.consolidate) at save time. Optional and additive;
+  // a missing/malformed value means true (the engine default, "fewest trucks"), so every row saved
+  // before lbr-05 regenerates exactly as it was built. Every new save writes the actual value.
+  consolidate?: boolean;
 }
 
 export function buildSnapshot(args: {
@@ -83,6 +87,7 @@ export function buildSnapshot(args: {
   editedCart?: CartLine[] | null;
   editedSkus?: PackSku[] | null;
   autoDownsize?: boolean;
+  consolidate?: boolean;
 }): SavedLoadSnapshot {
   const source: SavedLoadSource = args.pulledSource
     ? { kind: "pulled", pulledSource: args.pulledSource }
@@ -96,6 +101,7 @@ export function buildSnapshot(args: {
     editedCart: args.editedCart ?? null,
     editedSkus: args.editedSkus ?? null,
     autoDownsize: args.autoDownsize ?? false,
+    consolidate: args.consolidate ?? true,
   };
 }
 
@@ -188,6 +194,7 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
   const editedCart = isValidCartLineArray(parsed.editedCart) ? parsed.editedCart : null;
   const editedSkus = isValidSkuArray(parsed.editedSkus) ? parsed.editedSkus : null;
   const autoDownsize = typeof parsed.autoDownsize === "boolean" ? parsed.autoDownsize : false;
+  const consolidate = typeof parsed.consolidate === "boolean" ? parsed.consolidate : true;
 
   return {
     ok: true,
@@ -200,6 +207,7 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
       editedCart,
       editedSkus,
       autoDownsize,
+      consolidate,
     },
   };
 }

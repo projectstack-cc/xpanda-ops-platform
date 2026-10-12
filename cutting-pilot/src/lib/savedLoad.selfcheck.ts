@@ -342,5 +342,17 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
     check("savedLoadExpiresAt: the sentinel sorts after any real ISO now (legacy/v2 sweeps skip it)", ORDER_LINKED_EXPIRES_AT > new Date(now).toISOString());
   }
 
+  // 15. lbr-05: the pure-plan toggle (consolidate) round-trips, and a row without it defaults to true.
+  {
+    const pure = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: null, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null, autoDownsize: false, consolidate: false });
+    const back = deserializeSnapshot(serializeSnapshot(pure));
+    check("consolidate: false round-trips through serialize -> deserialize", back.ok === true && back.snapshot.consolidate === false, JSON.stringify(back.ok && back.snapshot.consolidate));
+    const { consolidate: _omit, ...legacyShape } = pure;
+    void _omit;
+    const old = deserializeSnapshot(JSON.stringify(legacyShape));
+    check("consolidate: a pre-lbr-05 row (no key) defaults to true", old.ok === true && old.snapshot.consolidate === true, JSON.stringify(old.ok && old.snapshot.consolidate));
+    check("consolidate: changes snapshotKey (dirty check sees the toggle)", snapshotKey(pure) !== snapshotKey({ ...pure, consolidate: true }));
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }

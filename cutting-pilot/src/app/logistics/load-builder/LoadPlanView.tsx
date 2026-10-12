@@ -64,24 +64,31 @@
 // path as the picker, restoreSavedLoad below) or falls back to the pull; generating BOLs from an
 // order-built load auto-saves it to the order; every save goes through the hook's persist() (at
 // most one saved load per order); a status chip; and the "Save this load before leaving?" modal.
+//
+// lbr-05: this file now holds state and handlers only; the page is three presentational tabs —
+// LoadBuilderTabs (Load · Parts · Results, ?tab= in the URL beside job_id, the lbr-04 status chip),
+// LoadTab, PartsTab (the shared parts library inline — replaces the PartsLibraryPanel modal) and
+// ResultsTab (the mockup's Results layout). All three panels stay mounted and are hidden with the
+// `hidden` attribute, so switching tabs never drops an in-progress customize session. New state:
+// `consolidate` (the pure-plan toggle → PackOptions.consolidate, saved in the snapshot). The lb-ui-03
+// dev-only qty multiplier is removed entirely (state and control): the job pull gives real
+// multi-trailer loads now, so the fixture cart feeds pack() as-is.
 import { useEffect, useMemo, useState } from "react";
-import { Truck, FileText, Package, Save, FolderOpen } from "lucide-react";
 import Modal from "@/components/Modal";
-import { pack, planMetrics, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan, type PackOptions, type CartLine, type PackSku } from "@/lib/packEngine";
+import { pack, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan, type PackOptions, type CartLine, type PackSku } from "@/lib/packEngine";
 import { runPackEngineSelfCheck } from "@/lib/packEngine.selfcheck";
 import { LOAD_BUILDER_FIXTURES, type LoadBuilderFixture } from "@/lib/loadBuilderFixtures";
-import PlanMetricsStrip from "@/components/logistics/PlanMetricsStrip";
-import TrailerDiagram from "@/components/logistics/TrailerDiagram";
-import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logistics/ColumnDetailPanel";
+import { type SelectedColumnDetail } from "@/components/logistics/ColumnDetailPanel";
 import JobPullModal, { type PulledLoadSource } from "@/components/logistics/JobPullModal";
-import LoadingDiagramPrintButton from "@/components/logistics/LoadingDiagramPrintButton";
 import BolGenerateModal, { type PackPlanSource } from "@/components/logistics/BolGenerateModal";
-import PartsLibraryPanel from "@/components/logistics/PartsLibraryPanel";
 import SaveLoadModal from "@/components/logistics/SaveLoadModal";
 import LoadPickerModal from "@/components/logistics/LoadPickerModal";
 import { buildSnapshot, defaultSaveName, deserializeSnapshot, type SavedLoadRecord, type SavedLoadSnapshot } from "@/lib/savedLoad";
 import { useOrderLoadPersistence, findSavedForJob } from "@/components/logistics/useOrderLoadPersistence";
-import CustomizeEditor from "./CustomizeEditor";
+import LoadBuilderTabs, { isLoadBuilderTab, type LoadBuilderTab } from "./LoadBuilderTabs";
+import LoadTab from "./LoadTab";
+import PartsTab from "./PartsTab";
+import ResultsTab from "./ResultsTab";
 
 // lb-ui-06: shipped runner-height values, confirmed against legacy's own dropdown
 // (logistics/load-builder.html:1462 — `[0, 3, 4].forEach(rh => ...)`), not invented here.
@@ -103,17 +110,16 @@ function footprintKey(l: number, w: number): string {
 // giving a clean "nothing selected" state instead of silently showing a real-looking invoice.
 const EMPTY_FIXTURE: LoadBuilderFixture = { id: "__none__", invoiceNumber: "", customer: "", label: "No load selected", cart: [], skus: [] };
 
-// lbr-04: "Oct 12, 3:42 PM ET" — saved-load timestamps are read on the dock in Eastern time.
-function formatEt(iso: string, withDate: boolean): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const s = d.toLocaleString("en-US", {
-    timeZone: "America/New_York",
-    ...(withDate ? { month: "short", day: "numeric" } : {}),
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${s} ET`;
+// lbr-05: merges URL params with replaceState, so ?tab= and ?job_id= never clobber each other
+// (null deletes a key).
+function replaceUrlParams(updates: Record<string, string | null>) {
+  const url = new URL(window.location.href);
+  for (const key of Object.keys(updates)) {
+    const v = updates[key];
+    if (v === null) url.searchParams.delete(key);
+    else url.searchParams.set(key, v);
+  }
+  window.history.replaceState(null, "", `${url.pathname}${url.search}`);
 }
 
 const LEAVE_BUTTON = "w-full px-4 min-h-[44px] rounded-lg text-sm font-semibold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] disabled:opacity-50 disabled:cursor-not-allowed";
@@ -138,9 +144,6 @@ export default function LoadPlanView() {
   // one, while a discarded in-progress edit doesn't lose the load's actual prior state.
   const [editedCart, setEditedCart] = useState<CartLine[] | null>(null);
   const [editedSkus, setEditedSkus] = useState<PackSku[] | null>(null);
-  // lb-ui-03 Step 0 dev aid — see file header. Always 1 in production (the control that changes it
-  // is gated out of the bundle's runtime behavior below), so this has no effect on the shipped UI.
-  const [multiplier, setMultiplier] = useState(1);
 
   // lb-ui-06: trailer type / runner height — engine options that existed before this prompt but had
   // no UI control. Defaults match today's shipped behavior exactly (53ft Standard, no runner).
@@ -152,6 +155,11 @@ export default function LoadPlanView() {
   // doesn't change behavior just because this field exists). This toggle is what actually opts a
   // v2 load into the feature.
   const [autoDownsize, setAutoDownsize] = useState(true);
+  // lbr-05: the pure-plan toggle (PackOptions.consolidate). true = lbr-03's default — mix stacks only
+  // when it saves a truck; false = pure stacks only. Same reset contract as the settings above.
+  const [consolidate, setConsolidate] = useState(true);
+  // lbr-05: the explicitly chosen tab (?tab=), or null for the default (Results once there's a load).
+  const [tabChoice, setTabChoice] = useState<LoadBuilderTab | null>(null);
 
   // lb-ui-05: pulled-job source, deep-link state, and the dismissible pull banner.
   const [pulledSource, setPulledSource] = useState<PulledLoadSource | null>(null);
@@ -162,11 +170,6 @@ export default function LoadPlanView() {
   // lb-ui-09: "Generate BOLs" trigger — nullable-object convention BolGenerateModal's own jobId
   // prop already uses, not a bare boolean, so the effect that builds it stays keyed off real data.
   const [genBolOpen, setGenBolOpen] = useState(false);
-
-  // lb-ui-10: "Parts library" trigger. Independent of plan/mode state -- managing the shared parts
-  // catalog doesn't touch the current trailer plan, so (unlike Pull from job / fixture switching)
-  // this isn't disabled in edit mode.
-  const [partsLibraryOpen, setPartsLibraryOpen] = useState(false);
 
   // lb-ui-04: saved loads. currentSavedLoadId/Name track "this is the saved load you loaded or last
   // saved" -- set on a successful Save (create) or Load, cleared only on a genuine source switch
@@ -189,10 +192,9 @@ export default function LoadPlanView() {
 
   const hasSource = !!pulledSource || !!fixtureId;
   const fixture: LoadBuilderFixture = pulledSource ?? (fixtureId ? (LOAD_BUILDER_FIXTURES.find((f) => f.id === fixtureId) ?? EMPTY_FIXTURE) : EMPTY_FIXTURE);
-  const scaledCart = useMemo(
-    () => (multiplier === 1 ? fixture.cart : fixture.cart.map((c) => ({ ...c, qty: c.qty * multiplier }))),
-    [fixture, multiplier]
-  );
+  // lbr-05: the dev multiplier is gone, so this is just the source's own cart (name kept so the
+  // comments below that reference it still read true).
+  const scaledCart = fixture.cart;
   // lb-ui-11: once an edit session has Applied, these are what everything downstream of the plan
   // should treat as "the load's actual cart/SKU set" — scaledCart/fixture.skus describe only the
   // ORIGINAL source, unaware of any parts-library SKU a completed edit session introduced.
@@ -204,26 +206,22 @@ export default function LoadPlanView() {
   // downsized last trailer's type reads "26ft Box Truck" while every other trailer still correctly
   // reads the primary type — see PackOptions.trailerTypeLabel's own comment.
   const packOptions: PackOptions = useMemo(
-    () => ({ ...DEFAULT_PACK_OPTIONS, runnerHeight, autoDownsize, trailerTypeLabel: trailerTypeKey }),
-    [runnerHeight, autoDownsize, trailerTypeKey]
+    () => ({ ...DEFAULT_PACK_OPTIONS, runnerHeight, autoDownsize, consolidate, trailerTypeLabel: trailerTypeKey }),
+    [runnerHeight, autoDownsize, consolidate, trailerTypeKey]
   );
 
   const packedPlan = useMemo(() => pack(scaledCart, fixture.skus, dims, packOptions), [scaledCart, fixture, dims, packOptions]);
   const plan = editedPlan ?? packedPlan;
-  const metrics = useMemo(() => planMetrics(plan, packOptions), [plan, packOptions]);
-  const mixedTrailerTypes = useMemo(
-    () => plan.trailers.some((t) => t.dims.length !== dims.length || t.dims.width !== dims.width || t.dims.height !== dims.height),
-    [plan, dims]
-  );
+  const tab: LoadBuilderTab = tabChoice ?? (hasSource ? "results" : "load");
 
   // lbr-04: the load as it would be saved right now (null when there's nothing to save) — the
   // hook's dirty check compares this against the last saved/loaded snapshot.
   const currentSnapshot: SavedLoadSnapshot | null = useMemo(
     () =>
       hasSource && plan.trailers.length > 0
-        ? buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize })
+        ? buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate })
         : null,
-    [hasSource, plan.trailers.length, fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize]
+    [hasSource, plan.trailers.length, fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate]
   );
   const persistence = useOrderLoadPersistence({
     jobId: pulledSource?.jobId ?? null,
@@ -241,7 +239,10 @@ export default function LoadPlanView() {
   // a v2-loadable one; otherwise — none, a legacy-format row, or the lookup failed — it opens the
   // job pull exactly as before.
   useEffect(() => {
-    const jobId = new URLSearchParams(window.location.search).get("job_id");
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get("tab");
+    if (isLoadBuilderTab(tabParam)) setTabChoice(tabParam);
+    const jobId = params.get("job_id");
     if (!jobId) return;
     let cancelled = false;
     (async () => {
@@ -296,7 +297,11 @@ export default function LoadPlanView() {
     () => new Set(fixture.skus.map((s) => footprintKey(s.length, s.width))).size,
     [fixture]
   );
-  const skuNameById = useMemo(() => new Map(effectiveSkus.map((s) => [s.id, s.name])), [effectiveSkus]);
+
+  function handleTabChange(next: LoadBuilderTab) {
+    setTabChoice(next);
+    replaceUrlParams({ tab: next });
+  }
 
   function handlePullConfirm(source: PulledLoadSource) {
     setPulledSource(source);
@@ -305,14 +310,13 @@ export default function LoadPlanView() {
     setEditedCart(null);
     setEditedSkus(null);
     setMode("view");
-    setMultiplier(1);
     setBannerDismissed(false);
     setShowJobPull(false);
     setDeepLinkJobId(null);
     setCurrentSavedLoadId(null);
     setCurrentSavedLoadName(null);
     setReopenedAt(null);
-    window.history.replaceState(null, "", `?job_id=${encodeURIComponent(source.jobId)}`);
+    replaceUrlParams({ job_id: source.jobId });
   }
 
   // lbr-04: the manual save goes through the hook's persist() too, so a save for an order that
@@ -345,13 +349,11 @@ export default function LoadPlanView() {
   function restoreSavedLoad(record: SavedLoadRecord, snapshot: SavedLoadSnapshot) {
     if (snapshot.source.kind === "pulled") {
       setPulledSource(snapshot.source.pulledSource);
-      window.history.replaceState(null, "", `?job_id=${encodeURIComponent(snapshot.source.pulledSource.jobId)}`);
+      replaceUrlParams({ job_id: snapshot.source.pulledSource.jobId });
     } else {
       setPulledSource(null);
       setFixtureId(snapshot.source.fixtureId);
-      if (new URLSearchParams(window.location.search).has("job_id")) {
-        window.history.replaceState(null, "", window.location.pathname);
-      }
+      replaceUrlParams({ job_id: null });
     }
     setTrailerTypeKey(snapshot.trailerTypeKey);
     setRunnerHeight(snapshot.runnerHeight);
@@ -364,6 +366,8 @@ export default function LoadPlanView() {
     // downsizing under a toggle the planner left on from a previous load — a bigger surprise than
     // the toggle itself changing, and inconsistent with how the two older engine settings behave.
     setAutoDownsize(snapshot.autoDownsize ?? false);
+    // lbr-05: a missing value (any pre-lbr-05 row) means true — lbr-03's mix-to-save-a-truck default.
+    setConsolidate(snapshot.consolidate ?? true);
     setEditedPlan(snapshot.editedPlan);
     // Only restore editedCart/editedSkus alongside a non-null editedPlan -- these two describe
     // divergence FROM the frozen source that a materialized plan already accounts for; restoring
@@ -375,7 +379,6 @@ export default function LoadPlanView() {
     setEditedSkus(snapshot.editedPlan ? snapshot.editedSkus ?? null : null);
     setSelected(null);
     setMode("view");
-    setMultiplier(1);
     setBannerDismissed(false);
     setShowJobPull(false);
     setDeepLinkJobId(null);
@@ -421,6 +424,37 @@ export default function LoadPlanView() {
     setMode("view");
   }
 
+  // lbr-05: the pure-plan toggle (Load tab settings and the Results note share it) — same reset
+  // contract as the other engine settings above.
+  function handleConsolidateChange(value: boolean) {
+    setConsolidate(value);
+    setSelected(null);
+    setEditedPlan(null);
+    setEditedCart(null);
+    setEditedSkus(null);
+    setMode("view");
+  }
+
+  // lbr-05: Results' Re-pack — discards an applied edit and returns to the auto-pack.
+  function handleRepack() {
+    setSelected(null);
+    setEditedPlan(null);
+    setEditedCart(null);
+    setEditedSkus(null);
+    setMode("view");
+  }
+
+  function openSaveModal() {
+    setSaveError(null);
+    setSaveModalOpen(true);
+  }
+
+  function openRepull() {
+    if (!pulledSource) return;
+    setDeepLinkJobId(pulledSource.jobId);
+    setShowJobPull(true);
+  }
+
   function handleApplyEdit(appliedPlan: PackPlan, cart: CartLine[], skus: PackSku[]) {
     setEditedPlan(appliedPlan);
     setEditedCart(cart);
@@ -447,348 +481,97 @@ export default function LoadPlanView() {
   const selfCheck = process.env.NODE_ENV !== "production" ? runPackEngineSelfCheck() : null;
 
   return (
-    <div className="flex-1 w-full max-w-screen-2xl mx-auto px-4 py-6 space-y-4">
-      {/* 1. Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-text">{fixture.label}</h1>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-muted font-mono tabular-nums">
-            {hasSource && (
-              <>
-                <span>{pieceCount} pieces</span>
-                <span>{footprintCount} footprints</span>
-              </>
-            )}
-            <span>
-              {trailerTypeKey} trailer{runnerHeight > 0 ? ` · ${runnerHeight}" runners` : ""}
-            </span>
-            {editedPlan && <span className="text-[var(--brand)] font-sans font-semibold">edited</span>}
-            {currentSavedLoadName && (
-              <span className="font-sans">
-                saved as <span className="font-semibold text-text">{currentSavedLoadName}</span>
-              </span>
-            )}
-            {persistence.status !== "none" && (
-              <span
-                role="status"
-                className={[
-                  "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium font-sans whitespace-nowrap border",
-                  persistence.status === "saved"
-                    ? "bg-[var(--loaded-bg)] text-[var(--loaded-text)] border-[var(--loaded-border)]"
-                    : persistence.status === "saving"
-                      ? "border-[var(--border)] text-muted"
-                      : "bg-[var(--warn-bg)] text-[var(--warn-text)] border-[var(--warn-border)]",
-                ].join(" ")}
-              >
-                {persistence.status === "saved"
-                  ? `${pulledSource ? "Saved to order" : "Saved"}${persistence.savedAt ? ` · ${formatEt(persistence.savedAt, false)}` : ""}`
-                  : persistence.status === "saving"
-                    ? "Saving…"
-                    : persistence.status === "error"
-                      ? "Unsaved changes · save failed"
-                      : "Unsaved changes"}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
-            Trailer
-            <select
-              value={trailerTypeKey}
-              onChange={(e) => handleTrailerTypeChange(e.target.value)}
-              disabled={mode === "edit"}
-              aria-label="Trailer type"
-              className="h-9 pl-2 pr-1 rounded-lg border border-[var(--border)] bg-[var(--card-bg)] text-text text-[13px] font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-            >
-              {TRAILER_TYPE_KEYS.map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5 text-[13px] font-medium text-muted">
-            Runners
-            <select
-              value={runnerHeight}
-              onChange={(e) => handleRunnerHeightChange(Number(e.target.value))}
-              disabled={mode === "edit"}
-              aria-label="Runner height"
-              className="h-9 pl-2 pr-1 rounded-lg border border-[var(--border)] bg-[var(--card-bg)] text-text text-[13px] font-medium font-mono tabular-nums cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-            >
-              {RUNNER_HEIGHT_OPTIONS.map((rh) => (
-                <option key={rh} value={rh}>
-                  {rh === 0 ? "None" : `${rh}"`}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex items-center gap-1.5" role="group" aria-label="Auto-downsize last trailer">
-            <span className="text-[13px] font-medium text-muted">Downsize</span>
-            {([true, false] as const).map((v) => {
-              const active = autoDownsize === v;
-              return (
-                <button
-                  key={String(v)}
-                  type="button"
-                  onClick={() => handleAutoDownsizeChange(v)}
-                  disabled={mode === "edit"}
-                  aria-pressed={active}
-                  className={[
-                    "min-h-[36px] px-2.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors border",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]",
-                    "disabled:opacity-40 disabled:cursor-not-allowed",
-                    active
-                      ? "border-[var(--brand)] text-[var(--brand)] font-semibold"
-                      : "border-[var(--border)] text-muted hover:text-text hover:bg-[var(--ghost-bg)]",
-                  ].join(" ")}
-                >
-                  {v ? "ON" : "OFF"}
-                </button>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowJobPull(true)}
-            disabled={mode === "edit"}
-            className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-          >
-            <Truck size={15} aria-hidden="true" /> Pull from job
-          </button>
-          <button
-            type="button"
-            onClick={() => setPartsLibraryOpen(true)}
-            className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--border)] text-muted hover:text-text hover:bg-[var(--ghost-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] inline-flex items-center gap-1.5"
-          >
-            <Package size={15} aria-hidden="true" /> Parts library
-          </button>
-          {process.env.NODE_ENV !== "production" && (
-            <div className="flex gap-1 items-center" role="group" aria-label="Dev-only fixture quantity multiplier">
-              <span className="text-[11px] text-muted mr-0.5">qty ×</span>
-              {[1, 2, 3, 4].map((n) => {
-                const active = multiplier === n;
-                return (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setMultiplier(n)}
-                    disabled={mode === "edit"}
-                    aria-pressed={active}
-                    className={[
-                      "min-w-[28px] h-[28px] rounded-md text-[12px] font-mono tabular-nums cursor-pointer transition-colors border",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]",
-                      "disabled:opacity-40 disabled:cursor-not-allowed",
-                      active
-                        ? "border-[var(--brand)] text-[var(--brand)] font-semibold"
-                        : "border-[var(--border)] text-muted hover:text-text hover:bg-[var(--ghost-bg)]",
-                    ].join(" ")}
-                  >
-                    {n}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {mode === "view" && (
+    <div className="flex-1 w-full max-w-screen-2xl mx-auto px-4 py-6 space-y-4 min-w-0">
+      <div>
+        <h1 className="text-xl font-semibold text-text">{fixture.label}</h1>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-muted font-mono tabular-nums">
+          {hasSource && (
             <>
-              <button
-                type="button"
-                onClick={() => setMode("edit")}
-                className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-              >
-                Customize load
-              </button>
-              <button
-                type="button"
-                onClick={() => setGenBolOpen(true)}
-                disabled={plan.trailers.length === 0}
-                className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-              >
-                <FileText size={15} aria-hidden="true" /> Generate BOLs
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSaveError(null);
-                  setSaveModalOpen(true);
-                }}
-                disabled={plan.trailers.length === 0}
-                className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
-              >
-                <Save size={15} aria-hidden="true" /> {currentSavedLoadId ? "Update save" : "Save load"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setPickerModalOpen(true)}
-                className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--border)] text-muted hover:text-text hover:bg-[var(--ghost-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] inline-flex items-center gap-1.5"
-              >
-                <FolderOpen size={15} aria-hidden="true" /> Load saved
-              </button>
+              <span>{pieceCount} pieces</span>
+              <span>{footprintCount} footprints</span>
             </>
+          )}
+          <span>
+            {trailerTypeKey} trailer{runnerHeight > 0 ? ` · ${runnerHeight}″ runners` : ""}
+          </span>
+          {editedPlan && <span className="text-[var(--brand)] font-sans font-semibold">edited</span>}
+          {currentSavedLoadName && (
+            <span className="font-sans">
+              saved as <span className="font-semibold text-text">{currentSavedLoadName}</span>
+            </span>
           )}
         </div>
       </div>
 
-      {/* lbr-04: reopened-from-order banner — informational and dismissible, like the pull banner. */}
-      {reopenedAt && pulledSource && (
-        <div className="rounded-xl border border-[var(--loaded-border)] bg-[var(--loaded-bg)] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-[var(--loaded-text)]">
-            Opened this order&apos;s saved load (saved {formatEt(reopenedAt, true)}).{" "}
-            <button
-              type="button"
-              onClick={() => {
-                setDeepLinkJobId(pulledSource.jobId);
-                setShowJobPull(true);
-              }}
-              className="font-semibold underline cursor-pointer min-h-[32px]"
-            >
-              Re-pull from order
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={() => setReopenedAt(null)}
-            className="shrink-0 text-xs font-semibold text-[var(--loaded-text)] cursor-pointer min-h-[32px] px-2"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
+      <LoadBuilderTabs tab={tab} onChange={handleTabChange} status={persistence.status} savedAt={persistence.savedAt} isOrderLoad={!!pulledSource} />
 
-      {/* Pull banner — informational, not blocking (Design Decision): dismissible, doesn't gate
-          anything downstream. Piece count reflects the matched cart that actually feeds pack();
-          unmatched items are named, never silently dropped or auto-created. */}
-      {pulledSource && !bannerDismissed && (
-        <div className="rounded-xl border border-[var(--brand)] bg-[color-mix(in_srgb,var(--brand)_6%,transparent)] px-4 py-3 flex items-start justify-between gap-3">
-          <div className="text-sm text-text">
-            <span className="font-semibold">Pulled from job:</span> {pulledSource.customer}
-            {pulledSource.invoiceNumber && <span className="font-mono tabular-nums"> · INV# {pulledSource.invoiceNumber}</span>}
-            <span className="font-mono tabular-nums"> · {pulledSource.cart.reduce((s, c) => s + c.qty, 0)} pieces matched</span>
-            {pulledSource.unmatchedCount > 0 && (
-              <div className="mt-1 text-[var(--warn-text)]">
-                {pulledSource.unmatchedCount} line item{pulledSource.unmatchedCount === 1 ? "" : "s"} have no matching SKU in the parts
-                library: {pulledSource.unmatchedDescriptions.join(", ")}
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setBannerDismissed(true)}
-            className="shrink-0 text-xs font-semibold text-muted hover:text-text cursor-pointer min-h-[32px] px-2"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
+      <div role="tabpanel" id="lb-panel-load" aria-labelledby="lb-tab-load" hidden={tab !== "load"}>
+        <LoadTab
+          hasSource={hasSource}
+          pulledSource={pulledSource}
+          sourceLabel={fixture.label}
+          pieceCount={pieceCount}
+          footprintCount={footprintCount}
+          currentSavedLoadName={currentSavedLoadName}
+          isUpdate={!!currentSavedLoadId}
+          locked={mode === "edit"}
+          canSave={plan.trailers.length > 0}
+          trailerTypeKey={trailerTypeKey}
+          trailerTypeKeys={TRAILER_TYPE_KEYS}
+          runnerHeight={runnerHeight}
+          runnerHeightOptions={RUNNER_HEIGHT_OPTIONS}
+          autoDownsize={autoDownsize}
+          consolidate={consolidate}
+          onTrailerTypeChange={handleTrailerTypeChange}
+          onRunnerHeightChange={handleRunnerHeightChange}
+          onAutoDownsizeChange={handleAutoDownsizeChange}
+          onConsolidateChange={handleConsolidateChange}
+          onPull={() => setShowJobPull(true)}
+          onRepull={openRepull}
+          onLoadSaved={() => setPickerModalOpen(true)}
+          onSave={openSaveModal}
+          onCalculate={() => handleTabChange("results")}
+          reopenedAt={reopenedAt}
+          onDismissReopened={() => setReopenedAt(null)}
+          bannerDismissed={bannerDismissed}
+          onDismissBanner={() => setBannerDismissed(true)}
+        />
+      </div>
 
-      {!hasSource ? (
-        <div className="rounded-xl border border-[var(--card-border)] bg-surface p-10 text-center space-y-3">
-          <Truck size={28} className="mx-auto text-muted" aria-hidden="true" />
-          <p className="text-sm text-muted max-w-sm mx-auto">
-            Pull a job to build a load — its line items are matched against the parts library automatically.
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowJobPull(true)}
-            className="px-3 py-1.5 rounded-lg text-[13px] font-semibold min-h-[36px] cursor-pointer transition-colors border border-[var(--brand)] text-[var(--brand)] hover:bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] inline-flex items-center gap-1.5"
-          >
-            <Truck size={15} aria-hidden="true" /> Pull from job
-          </button>
-        </div>
-      ) : (
-        <>
-          {/* 2. Metrics strip */}
-          <PlanMetricsStrip metrics={metrics} dims={dims} mixedTrailerTypes={mixedTrailerTypes} />
+      <div role="tabpanel" id="lb-panel-parts" aria-labelledby="lb-tab-parts" hidden={tab !== "parts"}>
+        <PartsTab active={tab === "parts"} />
+      </div>
 
-          {mode === "edit" ? (
-            <CustomizeEditor
-              key={pulledSource ? pulledSource.id : fixtureId}
-              plan={plan}
-              dims={dims}
-              options={packOptions}
-              cart={effectiveCart}
-              skus={effectiveSkus}
-              onApply={handleApplyEdit}
-              onDiscard={handleDiscardEdit}
-            />
-          ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-4 items-start">
-              {/* 3. Trailer diagram(s) */}
-              <div className="space-y-4">
-                {plan.trailers.length === 0 ? (
-                  <div className="rounded-xl border border-[var(--card-border)] bg-surface p-6 text-sm text-muted">
-                    Nothing placed — every piece is in the balance below.
-                  </div>
-                ) : (
-                  plan.trailers.map((trailer, trailerIndex) => (
-                    <TrailerDiagram
-                      key={trailerIndex}
-                      trailer={trailer}
-                      dims={trailer.dims}
-                      trailerIndex={trailerIndex}
-                      typeBadge={trailer.type && trailer.type !== trailerTypeKey ? `Auto-downsized · ${trailer.type}` : undefined}
-                      selectedColumn={
-                        selected && selected.trailerIndex === trailerIndex
-                          ? { rowIndex: selected.rowIndex, columnIndex: selected.columnIndex }
-                          : null
-                      }
-                      onSelectColumn={(rowIndex, columnIndex) => setSelected({ trailerIndex, rowIndex, columnIndex })}
-                      headerAction={
-                        <LoadingDiagramPrintButton
-                          trailer={trailer}
-                          trailerIndex={trailerIndex}
-                          dims={trailer.dims}
-                          skus={effectiveSkus}
-                          runnerHeight={runnerHeight}
-                          warnings={plan.warnings}
-                          invoiceNumber={fixture.invoiceNumber}
-                        />
-                      }
-                    />
-                  ))
-                )}
-              </div>
-
-              {/* 4. Detail panel + warnings + balance */}
-              <div className="space-y-4">
-                <ColumnDetailPanel selected={selectedDetail} dims={selected ? (plan.trailers[selected.trailerIndex]?.dims ?? dims) : dims} options={packOptions} />
-
-                <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
-                  <h3 className="text-sm font-semibold text-text mb-2">Warnings</h3>
-                  {plan.warnings.length === 0 ? (
-                    <p className="text-sm text-muted">No warnings for this plan.</p>
-                  ) : (
-                    <ul className="space-y-1.5 text-sm text-[var(--warn-text)]">
-                      {plan.warnings.map((w, i) => (
-                        <li key={i} className="rounded-md bg-[var(--warn-bg)] border border-[var(--warn-border)] px-2.5 py-1.5">
-                          {w}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
-                  <h3 className="text-sm font-semibold text-text mb-2">Carried to next trailer</h3>
-                  {plan.balance.length === 0 ? (
-                    <p className="text-sm text-muted">Nothing carried forward — the full order placed.</p>
-                  ) : (
-                    <ul className="space-y-1 text-sm font-mono tabular-nums text-text">
-                      {plan.balance.map((b) => (
-                        <li key={b.skuId}>
-                          {b.remaining} × {skuNameById.get(b.skuId) ?? b.skuId}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      )}
+      <div role="tabpanel" id="lb-panel-results" aria-labelledby="lb-tab-results" hidden={tab !== "results"}>
+        <ResultsTab
+          hasSource={hasSource}
+          plan={plan}
+          dims={dims}
+          packOptions={packOptions}
+          trailerTypeKey={trailerTypeKey}
+          runnerHeight={runnerHeight}
+          mode={mode}
+          isEdited={!!editedPlan}
+          effectiveCart={effectiveCart}
+          effectiveSkus={effectiveSkus}
+          invoiceNumber={fixture.invoiceNumber}
+          selected={selected}
+          selectedDetail={selectedDetail}
+          onSelect={setSelected}
+          consolidate={consolidate}
+          onConsolidateChange={handleConsolidateChange}
+          onRepack={handleRepack}
+          onCustomize={() => setMode("edit")}
+          onGenerateBols={() => setGenBolOpen(true)}
+          onSave={openSaveModal}
+          onLoadSaved={() => setPickerModalOpen(true)}
+          isUpdate={!!currentSavedLoadId}
+          onGoToLoad={() => handleTabChange("load")}
+          editorKey={pulledSource ? pulledSource.id : (fixtureId ?? EMPTY_FIXTURE.id)}
+          onApplyEdit={handleApplyEdit}
+          onDiscardEdit={handleDiscardEdit}
+        />
+      </div>
 
       {selfCheck && (
         <details className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
@@ -827,8 +610,6 @@ export default function LoadPlanView() {
           if (generated && pulledSource) void autoSaveAfterBol();
         }}
       />
-
-      <PartsLibraryPanel isOpen={partsLibraryOpen} onClose={() => setPartsLibraryOpen(false)} />
 
       <SaveLoadModal
         isOpen={saveModalOpen}
