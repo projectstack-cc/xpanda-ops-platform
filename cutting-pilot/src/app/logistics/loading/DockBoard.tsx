@@ -19,7 +19,8 @@
 //   same chain as legacy. `?assignment=` deep-linking (scroll + highlight, no modal auto-open --
 //   a deliberate deviation from legacy's auto-opened Shipping Info modal) IS ported too.
 // The This Week / Show All toggle IS kept (not decorative -- without it Delivered/Awaiting grow
-// unbounded at any real data volume).
+// unbounded at any real data volume). dock-06: it scopes ONLY Awaiting + Delivered; bays, Yard,
+// In Transit and Team View always show every load (search still applies).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import PlatformHeader from "@/components/PlatformHeader";
@@ -487,15 +488,14 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   // This working set feeds Team View as well (PXXX-b's own spec, deliberately deviating from
   // legacy, where Team View reads unfiltered allAssignments -- see CHANGELOG.md).
   const searching = searchTerm.trim().length > 0;
-  const set = assignments.filter((a) => {
-    if (!matchesSearch(a)) return false;
-    if (searching) return true;
-    if (showAll) return true;
-    return inCurrentWeek(a.ship_date);
-  });
+  // dock-06: `set` is search-only. Bays, Yard, In Transit and Team View read it directly, so
+  // anything physically on the dock always shows regardless of ship date. The This Week toggle
+  // bounds only the Awaiting queue and Delivered history (inWeekScope below).
+  const set = assignments.filter((a) => matchesSearch(a));
+  const inWeekScope = (a: DockAssignment) => searching || showAll || inCurrentWeek(a.ship_date);
 
   const awaiting = sortAssignments(
-    set.filter((a) => a.loading_status === "awaiting"),
+    set.filter((a) => a.loading_status === "awaiting" && inWeekScope(a)),
     sortOrder
   );
   const yard = sortAssignments(
@@ -509,7 +509,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
     sortOrder
   );
   const delivered = sortAssignments(
-    set.filter((a) => a.loading_status === "delivered"),
+    set.filter((a) => a.loading_status === "delivered" && inWeekScope(a)),
     sortOrder
   );
 
