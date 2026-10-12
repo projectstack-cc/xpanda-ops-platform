@@ -55,19 +55,22 @@
 
 - [ ] **lgx-review-01 follow-up — Load Builder "Generate BOLs" has no post-generate review step.** LoadPlanView's BolGenerateModal path still just closes. Job-less plans have no job_id, so wiring it needs BolViewerModal to accept saved BOL ids (or the POST responses) instead of a jobId.
 - [ ] **Load Builder rework (`lbr-NN`) — scoped 2026-10-12.** Keep the v2 stack; legacy-like layout; engine made as
-  close to optimal as possible; novice-friendly customization. Locked rules: fewest trucks → fewest top-offs (pure
-  stacks when room allows) → ≤2 sizes/stack, thinner on top → thickest at nose, thinnest at doors, mixed stacks only
-  at size hand-offs, never in the front row. Series:
+  close to optimal as possible; novice-friendly customization. Locked rules (final 2026-10-12, supersede
+  holey-sequential-fill): fewest trucks (always mix if it saves one; pure plan one tap away) → pure full stacks +
+  ≤1 leftover per size; mix ONLY to save a truck, single-piece top-offs where possible → ≤2 sizes/stack, thinner on
+  top → shorten full stacks only as a last resort, fewest possible → thickest at nose; within a size pure first,
+  topped/partial stacks LAST. Series:
   - [x] lbr-01 — regression harness + baseline (`scripts/lb-harness.mjs`, `Audits/lbr-01-engine-baseline.md`)
-  - [ ] lbr-02 — optimizing column planner + sequencing in `packEngine.ts`, gated on the harness (exact optimizer
-    for `mixedLB`; golden `GOLDEN_4472_T1` → 1 truck, ≤30 top-offs)
-  - [ ] lbr-03 — save to order: BOL generated from an order auto-saves the load to it; Build Load reopens it;
+  - [x] lbr-02 — `src/lib/stackPlanner.ts` (pure, golden-exact) + harness row-direction fix
+  - [ ] lbr-03 — wire `planStacks` into `packEngine.ts` (holey + blocks), multi-family consolidation via re-simulate,
+    row order per rule 5, "N stacks shortened" note + `consolidate` option, selfcheck ratchet updates
+  - [ ] lbr-04 — save to order: BOL generated from an order auto-saves the load to it; Build Load reopens it;
     order-linked loads don't expire; "save before leaving?" on tab close + in-app nav
-  - [ ] lbr-04 — legacy-like UI shell on v2 components; one fixed, lightness-separated color per thickness;
-    top-off band + TOP-OFF tag (mockup: claude.ai artifact "Load Builder v2 Mockup")
-  - [ ] lbr-05 — tap-select / tap-place customize (replaces drag): green valid targets, faded invalid with
+  - [ ] lbr-05 — legacy-like UI shell on v2 components; one fixed, lightness-separated color per thickness;
+    top-off band + TOP-OFF tag; pure-plan toggle (mockup: claude.ai artifact "Load Builder v2 Mockup")
+  - [ ] lbr-06 — tap-select / tap-place customize (replaces drag): green valid targets, faded invalid with
     reason on tap, "move just the top-off", undo, step hints
-  - [ ] lbr-06 — cutover with a Classic link (held until Steve has floor-tested)
+  - [ ] lbr-07 — cutover with a Classic link (held until Steve has floor-tested)
 - [ ] **Load builder v2 (`/v2/logistics/load-builder`) still dark after lgx-roll-01.** Un-dark by deleting its `logistics.v2` middleware line, then repoint Build Load / Load Builder links.
 - [ ] **`lb-ui-05` follow-up — `GET /api/load-builder-skus` needs its own permission grant at Phase 3 rollout.** That legacy route is gated by the `logistics.load-builder` key (`_worker.js/lib/core.js:213`); it works today only because `/v2/logistics*` is admin-only and admins bypass permission checks (`middleware.ts`'s dark-launch gate). When Phase 3 grants `logistics.v2` to a non-admin role, that role also needs `logistics.load-builder` (view) or `JobPullModal` dead-ends on "Couldn't load the SKU library." Not currently named in the sprint charter's Phase 3 checklist — add it there when Phase 3 is scoped.
 - [ ] Repoint the v2 links that still open legacy Load Builder once v2 is ready: `components/logistics/BolActions.tsx`

@@ -5,9 +5,14 @@
 // through BOTH load engines and writes Audits/lbr-01-engine-baseline.md:
 //   - v2:     pack() from src/lib/packEngine.ts, 53ft Standard, DEFAULT_PACK_OPTIONS (no overrides)
 //   - legacy: calcLoading() sliced out of logistics/load-builder.html and run in a node:vm context
-// Both results are normalized to trailers -> rows (front->rear) -> columns -> layers (base first)
+//   - planner (lbr-02): planStacks() from src/lib/stackPlanner.ts, single-footprint Holey Board jobs only
+// All results are normalized to trailers -> rows (nose->doors) -> columns -> layers (base first)
 // and scored against the locked lbr engine rules (fewest trucks -> fewest top-offs -> <=2 sizes per
-// stack, thinner on top -> thickest at nose / thinnest at doors). lbr-02's planner is gated on it.
+// stack, thinner on top -> thickest at nose / thinnest at doors).
+//
+// Row direction differs per engine (lbr-02 fix): v2's posFromFront 0 is the REAR/doors (packEngine.ts
+// rowBaseThickness + simulate() row sort), so v2 rows sort DESCENDING; legacy's posFromFront 0 is the
+// far wall/nose (load-builder.html's own FRONT label marks the doors), so legacy rows sort ascending.
 //
 // Run with: node scripts/lb-harness.mjs   (from cutting-pilot/; Node 22.6+/23.6+ strips
 // packEngine's TypeScript syntax natively — no build step, no dependencies). Deterministic: the same
@@ -17,6 +22,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { pack, TRAILER_TYPES, DEFAULT_PACK_OPTIONS } from "../src/lib/packEngine.ts";
+import { planStacks } from "../src/lib/stackPlanner.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", ".."); // cutting-pilot/scripts -> cutting-pilot -> repo root
@@ -99,11 +105,14 @@ function loadLegacyEngine() {
 
 const legacy = loadLegacyEngine();
 
-// --- Normalization: trailers -> rows (front->rear) -> columns -> layers (base first) ---
-function normalize(trailers) {
+// --- Normalization: trailers -> rows (nose->doors) -> columns -> layers (base first) ---
+// Each engine passes its own verified nose->doors comparator (see the header comment).
+const V2_NOSE_FIRST = (a, b) => b.posFromFront - a.posFromFront; // v2: posFromFront 0 = rear/doors
+const LEGACY_NOSE_FIRST = (a, b) => a.posFromFront - b.posFromFront; // legacy: posFromFront 0 = nose
+function normalize(trailers, noseFirst) {
   return trailers.map((t) => ({
     rows: [...t.rows]
-      .sort((a, b) => a.posFromFront - b.posFromFront)
+      .sort(noseFirst)
       .map((r) => ({
         columns: [...r.columns]
           .sort((a, b) => (a.posY ?? 0) - (b.posY ?? 0))
@@ -112,20 +121,61 @@ function normalize(trailers) {
   }));
 }
 
-// Row order check: true when the engine already emits rows in ascending posFromFront.
-function rowsAscending(trailers) {
-  return trailers.every((t) => t.rows.every((r, i) => i === 0 || t.rows[i - 1].posFromFront <= r.posFromFront));
+// Row order check: true when the engine's own array order is already nose->doors.
+function rowsNoseFirst(trailers, noseFirst) {
+  return trailers.every((t) => t.rows.every((r, i) => i === 0 || noseFirst(t.rows[i - 1], r) <= 0));
 }
 
 function runV2(cart) {
   const plan = pack(cart, skus, TRAILER_TYPES[TRAILER_KEY], { ...DEFAULT_PACK_OPTIONS });
-  return { trailers: normalize(plan.trailers), asc: rowsAscending(plan.trailers), warnings: plan.warnings, height: TRAILER_TYPES[TRAILER_KEY].height };
+  return { trailers: normalize(plan.trailers, V2_NOSE_FIRST), noseFirst: rowsNoseFirst(plan.trailers, V2_NOSE_FIRST), warnings: plan.warnings, height: TRAILER_TYPES[TRAILER_KEY].height };
 }
 
 function runLegacy(cart) {
   // Fresh copies — calcLoading never mutates inputs we rely on, but keep runs independent anyway.
   const res = legacy.calcLoading(cart.map((c) => ({ ...c })), skus.map((s) => ({ ...s })), legacy.TRAILER_TYPES[TRAILER_KEY], 0, {});
-  return { trailers: normalize(res.trailers), asc: rowsAscending(res.trailers), warnings: res.warnings, height: legacy.TRAILER_TYPES[TRAILER_KEY].height };
+  return { trailers: normalize(res.trailers, LEGACY_NOSE_FIRST), noseFirst: rowsNoseFirst(res.trailers, LEGACY_NOSE_FIRST), warnings: res.warnings, height: legacy.TRAILER_TYPES[TRAILER_KEY].height };
+}
+
+// Planner (lbr-02): single-footprint, all-Holey-Board carts only. planStacks returns stacks in
+// loading order (index 0 = nose); chunk them into trucks of stacksPerTruck and rows of
+// floor(98 / W) columns so the same metrics() applies.
+function plannerEligible(cart) {
+  const lines = cart.filter((c) => c.qty > 0);
+  if (!lines.length || !lines.every((c) => skuById.get(c.skuId)?.category === "Holey Board")) return false;
+  if (new Set(lines.map((c) => footprintKey(c.skuId))).size !== 1) return false;
+  // Carts whose volume alone needs more than the 20-trailer cap (INV 4174 / 4186, quantity
+  // artifacts — see Outliers) are excluded: the engines stop at the cap anyway, and the planner's
+  // exhaustive break search is not meant for 50+-truck carts.
+  return truckLB(cart) <= TRAILER_LIMIT;
+}
+
+function runPlanner(cart) {
+  if (!plannerEligible(cart)) return null;
+  const lines = cart.filter((c) => c.qty > 0);
+  const s0 = skuById.get(lines[0].skuId);
+  const dims = TRAILER_TYPES[TRAILER_KEY];
+  const colsPerRow = Math.floor(dims.width / s0.width);
+  const stacksPerTruck = Math.floor(dims.length / s0.length) * colsPerRow;
+  const plan = planStacks(lines.map((c) => ({ skuId: c.skuId, unitHeight: skuById.get(c.skuId).height, qty: c.qty })), dims.height, stacksPerTruck);
+  const trailers = [];
+  for (let i = 0; i < plan.stacks.length; i += stacksPerTruck) {
+    const truckStacks = plan.stacks.slice(i, i + stacksPerTruck);
+    const rows = [];
+    for (let r = 0; r < truckStacks.length; r += colsPerRow) {
+      rows.push({
+        columns: truckStacks.slice(r, r + colsPerRow).map((st) => ({
+          layers: [st.base, ...(st.top ? [st.top] : [])].map((l) => ({ unitHeight: l.unitHeight, count: l.count, skuId: l.skuId })),
+        })),
+      });
+    }
+    trailers.push({ rows });
+  }
+  if (trailers.length !== plan.trucks) {
+    console.error(`lb-harness: planner stacks chunk into ${trailers.length} trucks but plan.trucks = ${plan.trucks} — stopping.`);
+    process.exit(1);
+  }
+  return { trailers, plan, warnings: [], height: dims.height };
 }
 
 // --- Metrics ---
@@ -194,12 +244,15 @@ function truckLB(cart) {
 const jobs = fixtures.jobs.map((job) => {
   const v2 = runV2(job.cart);
   const lg = runLegacy(job.cart);
+  const pl = runPlanner(job.cart);
   return {
     job,
     v2,
     lg,
+    pl,
     mv2: metrics(v2, job.cart),
     mlg: metrics(lg, job.cart),
+    mpl: pl ? { ...metrics(pl, job.cart), shortened: pl.plan.shortenedStacks } : null,
     lb: truckLB(job.cart),
   };
 });
@@ -220,21 +273,30 @@ for (const [i, h] of [13, 12, 11, 10, 9, 8].entries()) {
     process.exit(1);
   }
 }
-const golden = { v2: runV2(GOLDEN_4472_T1), lg: runLegacy(GOLDEN_4472_T1) };
+const golden = { v2: runV2(GOLDEN_4472_T1), lg: runLegacy(GOLDEN_4472_T1), pl: runPlanner(GOLDEN_4472_T1) };
 golden.mv2 = metrics(golden.v2, GOLDEN_4472_T1);
 golden.mlg = metrics(golden.lg, GOLDEN_4472_T1);
+golden.mpl = { ...metrics(golden.pl, GOLDEN_4472_T1), shortened: golden.pl.plan.shortenedStacks };
 golden.lb = truckLB(GOLDEN_4472_T1);
 
 // --- Report ---
 const n = (x) => (Number.isInteger(x) ? String(x) : String(Number(x.toFixed(3))));
 const KEYS = ["trucks", "stacks", "mixed", "over2", "inverted", "frontRowMixed", "seqViolations", "overHeight", "unplaced"];
-function sum(engine) {
+function sum(engine, list = jobs) {
   const t = Object.fromEntries(KEYS.map((k) => [k, 0]));
-  for (const j of jobs) for (const k of KEYS) t[k] += j[engine][k];
+  for (const j of list) for (const k of KEYS) t[k] += j[engine][k];
   return t;
 }
 const tv2 = sum("mv2");
 const tlg = sum("mlg");
+const plJobs = jobs.filter((j) => j.mpl);
+const tpl = sum("mpl", plJobs);
+const plShortened = plJobs.reduce((s, j) => s + j.mpl.shortened, 0);
+const plAtLB = plJobs.filter((j) => j.mpl.trucks === j.lb).length;
+const plSaved = plJobs.filter((j) => j.pl.plan.trucks < j.pl.plan.pureTrucks);
+// lbr-01 published these with v2's rows reversed (see Notes); kept for the before/after line.
+const LBR01_V2_FRONT_ROW_MIXED = 194;
+const LBR01_V2_SEQ_VIOLATIONS = 205;
 const withLB = jobs.filter((j) => j.lb !== null);
 const v2OverLB = withLB.filter((j) => j.mv2.trucks > j.lb).length;
 const lgOverLB = withLB.filter((j) => j.mlg.trucks > j.lb).length;
@@ -243,7 +305,7 @@ const lbSum = withLB.reduce((s, j) => s + j.lb, 0);
 function diagram(result) {
   const out = [];
   result.trailers.forEach((t, ti) => {
-    out.push(`Trailer ${ti + 1} (${t.rows.length} rows, front -> rear)`);
+    out.push(`Trailer ${ti + 1} (${t.rows.length} rows, nose -> doors)`);
     t.rows.forEach((row, ri) => {
       const cols = row.columns.map((c) => c.layers.map((l) => `${n(l.unitHeight)}x${l.count}`).join("+"));
       out.push(`  R${String(ri + 1).padStart(2, "0")}: ${cols.join("  ")}`);
@@ -263,7 +325,7 @@ function violations(result) {
         if (ids.size > 2) out.push(`${where} \`${desc}\`: ${ids.size} sizes in one stack (rule 3, max 2)`);
         if (col.layers.some((l, i) => i > 0 && l.unitHeight > col.layers[i - 1].unitHeight + EPS))
           out.push(`${where} \`${desc}\`: thicker on thinner (rule 3)`);
-        if (ids.size > 1 && ri === 0) out.push(`${where} \`${desc}\`: mixed stack in the front row (rule 4)`);
+        if (ids.size > 1 && ri === 0) out.push(`${where} \`${desc}\`: mixed stack in the nose row (rule 5)`);
         const h = col.layers.reduce((s, l) => s + l.unitHeight * l.count, 0);
         if (h > result.height + EPS) out.push(`${where} \`${desc}\`: ${n(h)}" exceeds ${result.height}" (over height)`);
       });
@@ -272,7 +334,7 @@ function violations(result) {
       const prev = t.rows[ri - 1].columns.map((c) => c.layers[0].unitHeight);
       const cur = t.rows[ri].columns.map((c) => c.layers[0].unitHeight);
       if (Math.max(...cur) > Math.min(...prev) + EPS)
-        out.push(`T${ti + 1} R${ri}->R${ri + 1}: rear row base ${n(Math.max(...cur))}" > front row base ${n(Math.min(...prev))}" (rule 4 sequencing)`);
+        out.push(`T${ti + 1} R${ri}->R${ri + 1}: door-side row base ${n(Math.max(...cur))}" > nose-side row base ${n(Math.min(...prev))}" (rule 5 sequencing)`);
     }
   });
   return out;
@@ -316,31 +378,53 @@ function outlierCause(j) {
 const L = [];
 L.push("# lbr-01 — Load Builder engine baseline (v2 `pack()` vs legacy `calcLoading`)");
 L.push("");
+L.push("> **Re-run in lbr-02 with the row-direction fix.** lbr-01 read v2's rows back to front: v2's `posFromFront` 0 is the doors, not the nose. That made its v2 front-row and sequencing numbers wrong; everything below is corrected. lbr-02 also adds the `planStacks` planner (`src/lib/stackPlanner.ts`) as a third engine for single-footprint Holey Board jobs, which fills the old `mixedLB` stub.");
+L.push("");
 L.push(`Generated by \`cutting-pilot/scripts/lb-harness.mjs\` from \`cutting-pilot/scripts/lb-fixtures.json\` (exported ${fixtures.exportedAt}; ${fixtures.source}; ${fixtures.jobs.length} jobs with a non-empty cart, ${skus.length} SKUs). Trailer: ${TRAILER_KEY} (${TRAILER_TYPES[TRAILER_KEY].length}×${TRAILER_TYPES[TRAILER_KEY].width}×${TRAILER_TYPES[TRAILER_KEY].height}). v2 runs \`DEFAULT_PACK_OPTIONS\` with no overrides; legacy runs \`calcLoading(cart, skus, TRAILER_TYPES["${TRAILER_KEY}"], 0, {})\`. Re-run with \`node scripts/lb-harness.mjs\` from \`cutting-pilot/\` — output is deterministic.`);
 L.push("");
-L.push("Locked rules (Steve, 2026-10-12), in priority order: 1) fewest trucks; 2) fewest top-off (mixed) stacks; 3) at most 2 sizes per stack, thinner on top; 4) thickest at the nose, thinnest at the doors within a footprint family, mixed stacks only at size hand-offs and never in the front row.");
+L.push("Locked rules (Steve, 2026-10-12, final; they supersede `holey-sequential-fill`), in priority order: 1) fewest trucks: if mixing saves a truck, always mix; 2) pure first: full-height pure stacks plus at most one leftover per size, mixing only to save a truck, with overflow pieces becoming top-offs (single pieces where possible); 3) at most 2 sizes per stack, top-off strictly thinner than the base; 4) shorten a full stack only as a last resort, as few as possible; 5) thickest at the nose, thinnest at the doors; within a size, pure full stacks first and topped-off and partial stacks last.");
 L.push("");
 L.push("## 1. Totals across all jobs");
 L.push("");
-L.push("| Metric | v2 | legacy |");
-L.push("|---|---:|---:|");
-for (const k of KEYS) L.push(`| Σ ${k} | ${tv2[k]} | ${tlg[k]} |`);
-L.push(`| Jobs with trucks > truckLB (of ${withLB.length} single-footprint jobs) | ${v2OverLB} | ${lgOverLB} |`);
-L.push(`| Σ trucks over single-footprint jobs (Σ truckLB = ${lbSum}) | ${withLB.reduce((s, j) => s + j.mv2.trucks, 0)} | ${withLB.reduce((s, j) => s + j.mlg.trucks, 0)} |`);
-L.push(`| Σ mixedLB (exact optimizer — lbr-02) | n/a | n/a |`);
+L.push(`The v2 and legacy columns sum all ${jobs.length} jobs. The planner column sums only the ${plJobs.length} single-footprint Holey Board jobs it runs on; the last three rows compare all three engines on exactly those jobs.`);
+L.push("");
+L.push(`| Metric | v2 | legacy | planner (${plJobs.length} jobs) |`);
+L.push("|---|---:|---:|---:|");
+for (const k of KEYS) L.push(`| Σ ${k} | ${tv2[k]} | ${tlg[k]} | ${tpl[k]} |`);
+L.push(`| Σ shortened stacks (rule 4) | n/a | n/a | ${plShortened} |`);
+L.push(`| Jobs with trucks > truckLB (of ${withLB.length} single-footprint jobs) | ${v2OverLB} | ${lgOverLB} | n/a |`);
+L.push(`| Σ trucks over single-footprint jobs (Σ truckLB = ${lbSum}) | ${withLB.reduce((s, j) => s + j.mv2.trucks, 0)} | ${withLB.reduce((s, j) => s + j.mlg.trucks, 0)} | n/a |`);
+const plLB = plJobs.reduce((s, j) => s + j.lb, 0);
+L.push(`| **Planner jobs only (${plJobs.length}; Σ truckLB = ${plLB}): Σ trucks** | ${plJobs.reduce((s, j) => s + j.mv2.trucks, 0)} | ${plJobs.reduce((s, j) => s + j.mlg.trucks, 0)} | ${tpl.trucks} |`);
+L.push(`| Planner jobs only: Σ mixed | ${plJobs.reduce((s, j) => s + j.mv2.mixed, 0)} | ${plJobs.reduce((s, j) => s + j.mlg.mixed, 0)} | ${tpl.mixed} |`);
+L.push(`| Planner jobs only: jobs at truckLB | ${plJobs.filter((j) => j.mv2.trucks === j.lb).length} | ${plJobs.filter((j) => j.mlg.trucks === j.lb).length} | ${plAtLB} |`);
+L.push("");
+L.push(`Before/after the direction fix (v2): Σ frontRowMixed ${LBR01_V2_FRONT_ROW_MIXED} → ${tv2.frontRowMixed}, Σ seqViolations ${LBR01_V2_SEQ_VIOLATIONS} → ${tv2.seqViolations}. Legacy's numbers are unchanged because its direction was already right.`);
 L.push("");
 L.push("## 2. Per-job table");
 L.push("");
-L.push("Sorted by v2 `mixed` descending (ties: v2 trucks descending, then inv ascending). Engine cells are `trucks/stacks/mixed/over2/inverted/front/seq`; `front` = frontRowMixed, `seq` = seqViolations. `mixedLB` is a stub for lbr-02.");
+L.push("Sorted by v2 `mixed` descending (ties: v2 trucks descending, then inv ascending). v2/legacy cells are `trucks/stacks/mixed/over2/inverted/front/seq`; `front` = frontRowMixed, `seq` = seqViolations. Planner cells are `trucks/stacks/mixed/shortened` for single-footprint Holey Board jobs, and `—` otherwise. The planner column replaces lbr-01's `mixedLB` stub.");
 L.push("");
-L.push("| inv | lines | unmatched | v2 t/s/m/o2/inv/front/seq | legacy t/s/m/o2/inv/front/seq | truckLB | mixedLB |");
-L.push("|---|---:|---:|---|---|---:|---:|");
+L.push("| inv | lines | unmatched | v2 t/s/m/o2/inv/front/seq | legacy t/s/m/o2/inv/front/seq | truckLB | planner t/s/m/sh |");
+L.push("|---|---:|---:|---|---|---:|---|");
+const plCell = (m) => (m ? [m.trucks, m.stacks, m.mixed, m.shortened].join("/") : "—");
 const cell = (m) => [m.trucks, m.stacks, m.mixed, m.over2, m.inverted, m.frontRowMixed, m.seqViolations].join("/");
 const sorted = [...jobs].sort(
   (a, b) => b.mv2.mixed - a.mv2.mixed || b.mv2.trucks - a.mv2.trucks || String(a.job.inv).localeCompare(String(b.job.inv), "en", { numeric: true }) || a.job.jobId.localeCompare(b.job.jobId)
 );
 for (const j of sorted) {
-  L.push(`| ${j.job.inv} | ${j.job.lines} | ${j.job.unmatched} | ${cell(j.mv2)} | ${cell(j.mlg)} | ${j.lb ?? "n/a"} | n/a |`);
+  L.push(`| ${j.job.inv} | ${j.job.lines} | ${j.job.unmatched} | ${cell(j.mv2)} | ${cell(j.mlg)} | ${j.lb ?? "n/a"} | ${plCell(j.mpl)} |`);
+}
+L.push("");
+L.push("### Planner: jobs where mixing saved a truck");
+L.push("");
+if (!plSaved.length) L.push("None.");
+else {
+  L.push("| inv | pure trucks → planner trucks | truckLB | legacy trucks | v2 trucks | planner stacks / top-offs / shortened |");
+  L.push("|---|---|---:|---:|---:|---|");
+  for (const j of [...plSaved].sort((a, b) => String(a.job.inv).localeCompare(String(b.job.inv), "en", { numeric: true }))) {
+    L.push(`| ${j.job.inv} | ${j.pl.plan.pureTrucks} → ${j.pl.plan.trucks} | ${j.lb} | ${j.mlg.trucks} | ${j.mv2.trucks} | ${j.mpl.stacks} / ${j.mpl.mixed} / ${j.mpl.shortened} |`);
+  }
 }
 L.push("");
 L.push("## 3. Outliers");
@@ -365,12 +449,13 @@ L.push("All 48×24 Holey Board: 13\"×85, 12\"×120, 11\"×195, 10\"×85, 9\"×6
 L.push("");
 L.push(`| Engine | trucks | stacks | mixed | over2 | inverted | front | seq | overHeight | unplaced | truckLB |`);
 L.push("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+L.push(`| planner | ${golden.mpl.trucks} | ${golden.mpl.stacks} | ${golden.mpl.mixed} | ${golden.mpl.over2} | ${golden.mpl.inverted} | ${golden.mpl.frontRowMixed} | ${golden.mpl.seqViolations} | ${golden.mpl.overHeight} | ${golden.mpl.unplaced} | ${golden.lb ?? "n/a"} |`);
 L.push(`| v2 | ${golden.mv2.trucks} | ${golden.mv2.stacks} | ${golden.mv2.mixed} | ${golden.mv2.over2} | ${golden.mv2.inverted} | ${golden.mv2.frontRowMixed} | ${golden.mv2.seqViolations} | ${golden.mv2.overHeight} | ${golden.mv2.unplaced} | ${golden.lb ?? "n/a"} |`);
 L.push(`| legacy | ${golden.mlg.trucks} | ${golden.mlg.stacks} | ${golden.mlg.mixed} | ${golden.mlg.over2} | ${golden.mlg.inverted} | ${golden.mlg.frontRowMixed} | ${golden.mlg.seqViolations} | ${golden.mlg.overHeight} | ${golden.mlg.unplaced} | ${golden.lb ?? "n/a"} |`);
 L.push("");
-L.push("Reference (Orchestrator sandbox): exact optimum is 1 truck with 29 top-offs (30 with ≤2 sizes per stack).");
+L.push(`Reference (Orchestrator sandbox): the exact optimum is 1 truck with 29 top-offs (30 with ≤2 sizes per stack). Planner: ${golden.pl.plan.trucks} truck (pure plan ${golden.pl.plan.pureTrucks}), ${golden.pl.plan.topOffStacks} top-offs, ${golden.pl.plan.shortenedStacks} stack shortened.`);
 L.push("");
-for (const [label, res] of [["v2 `pack()`", golden.v2], ["legacy `calcLoading`", golden.lg]]) {
+for (const [label, res] of [["planner `planStacks()`", golden.pl], ["v2 `pack()`", golden.v2], ["legacy `calcLoading`", golden.lg]]) {
   L.push(`### ${label}`);
   L.push("");
   L.push("```");
@@ -390,17 +475,22 @@ L.push("");
 if (full) {
   L.push(`- v2: ${totalsLine(full.mv2)} · truckLB ${full.lb ?? "n/a"}`);
   L.push(`- legacy: ${totalsLine(full.mlg)} · truckLB ${full.lb ?? "n/a"}`);
+  if (full.mpl) L.push(`- planner: ${totalsLine(full.mpl)} · shortened ${full.mpl.shortened} · pure trucks ${full.pl.plan.pureTrucks} · truckLB ${full.lb ?? "n/a"}`);
 } else L.push("- INV 4472 not present in fixtures.");
 L.push("");
 L.push("## 5. Notes");
 L.push("");
 L.push(`- **Legacy slice:** \`logistics/load-builder.html\` lines ${legacy.startLine}–${legacy.endLine} (from \`${START_ANCHOR}\` up to, not including, \`${END_ANCHOR}\`), run in a \`node:vm\` context with a self-returning \`Proxy\` for \`document\`/\`window\` and a no-op \`localStorage\`. No further stubs were needed. The HTML is never edited.`);
 L.push("- **`state` stub:** the slice declares its own `let state = {…}` (including `autoDownsize: true`), so the prompt's stub `{ forcedMode: false, forcedTrailers: [], runnerHeight: 0 }` is assigned over it after the slice loads. With `autoDownsize` therefore falsy, legacy's last-trailer 26ft-box-truck downsize is skipped — matching v2, whose `DEFAULT_PACK_OPTIONS.autoDownsize` is `false`. Both engines thus report every trailer as a 53ft Standard.");
-L.push(`- **Row order:** v2 rows are emitted in ascending \`posFromFront\` (0 = nose) — ${jobs.every((j) => j.v2.asc) && golden.v2.asc ? "confirmed on every run" : "NOT always — re-sorted"}. Legacy rows carry \`posFromFront = curX\` from the same origin (pass-1 rows, then pass-2 remainder rows appended behind them) — ${jobs.every((j) => j.lg.asc) && golden.lg.asc ? "also ascending on every run" : "NOT always ascending — re-sorted"}. The harness sorts both by \`posFromFront\` ascending, so row 1 is the nose and the last row is at the doors; columns are sorted by \`posY\`.`);
+L.push("- **Row order (fixed in lbr-02):** every diagram and metric reads rows nose → doors (row 1 = nose), with columns sorted by `posY`. The two engines use opposite origins:");
+L.push("  - **v2:** `posFromFront` 0 is the REAR (doors), despite the name. Evidence: the comment on `packEngine.ts`'s `rowBaseThickness`, `simulate()`'s row sort (lb-engine-03 B3, row-order-nose-first: \"thinnest base layer at posFromFront 0 (the rear, where the doors are — loaded last)\"), and `TrailerDiagram.tsx`'s header (\"`trailer.rows` itself is still ordered rear-first\"). The harness sorts v2 rows by `posFromFront` **descending**. lbr-01 sorted them ascending, which read every v2 trailer back to front.");
+L.push("  - **legacy:** `posFromFront` 0 is the far wall (nose). `logistics/load-builder.html` says this shop's FRONT/REAR is the reverse of standard trucking terms: \"FRONT = the doors (buildTopViewSVG draws FRONT at the high-posFromFront end), REAR = the far wall\" (:1043–1046, restated at :1329). The diagrams draw the FRONT label at the high-`posFromFront` end (:1499, :1583), and reflow anchors \"posFromFront=0 = rear / left of diagram\" (:2284). `calcLoading` builds its tallest rows first at `curX = 0` (`sortDemandPriority`: \"tallest blocks first (shop floor loading order)\"). The harness sorts legacy rows **ascending**, as lbr-01 did, so lbr-01's legacy numbers were already correct.");
+L.push(`  - Native array order: v2 emits rows ${jobs.every((j) => j.v2.noseFirst) && golden.v2.noseFirst ? "nose-first on every run" : "doors-first (reversed by the sort above)"}; legacy emits them ${jobs.every((j) => j.lg.noseFirst) && golden.lg.noseFirst ? "nose-first on every run" : "not always nose-first (re-sorted)"}.`);
 L.push("- **SKU coercion:** fixture SKUs pass through a verbatim copy of `jobPull.ts`'s `coerceSku` (it is not exported) before either engine runs; legacy receives the same coerced list.");
 L.push("- **`unplaced`** is Σ cart qty − Σ placed layer counts, which covers both v2's `balance` and legacy's \"could not be placed\" warnings.");
 L.push("- **`seqViolations`** groups each row's columns by the base layer's stated catalog L×W (footprint family) and compares adjacent rows that hold that family; `truckLB` uses stated L×W only (no rotation) and is `n/a` for multi-footprint carts.");
-L.push("- **`mixedLB`** is a stub (`n/a`) — lbr-02 adds the exact optimizer.");
+L.push(`- **Planner engine (lbr-02):** \`planStacks(skus, 109, floor(636/L) × floor(98/W))\` runs on the ${plJobs.length} jobs whose cart is all Holey Board with one stated footprint and whose \`truckLB\` is within the ${TRAILER_LIMIT}-trailer cap (this excludes INV ${jobs.filter((j) => !j.mpl && j.lb !== null && j.lb > TRAILER_LIMIT && j.job.cart.every((c) => skuById.get(c.skuId)?.category === "Holey Board")).map((j) => j.job.inv).join(" and ")}, the quantity-artifact outliers). Its loading-order stacks are chunked into trucks of \`stacksPerTruck\` and rows of \`floor(98/W)\` columns (nose first), then scored with the same metrics as the other engines; the harness checks that the chunked truck count equals \`plan.trucks\`. The planner reached \`truckLB\` on ${plAtLB} of ${plJobs.length} jobs and saved a truck over its own pure plan on ${plSaved.length}. No \`maxPerStack\` weight cap is passed.`);
+L.push(`- **Planner \`frontRowMixed\` (${tpl.frontRowMixed}) is a harness artifact, not a planner rule break.** \`planStacks\` returns one nose→doors sequence for the whole load, and the harness chunks it into trucks of \`stacksPerTruck\` naively. When one size's topped-off run spans a truck boundary, those stacks open the next truck's nose row (e.g. INV 4106 trucks 2–7). A size with less than a row of stacks also puts its leftover or topped stack in the first row (e.g. INV 4434 truck 1). Per-truck assignment and ordering is lbr-03's job when \`planStacks\` is wired into \`packEngine.ts\`.`);
 const notableNotes = [];
 const clean = jobs.filter((j) => j.mv2.unplaced === 0 && j.mlg.unplaced === 0);
 const v2Fewer = clean.filter((j) => j.mv2.trucks < j.mlg.trucks).length;
@@ -410,13 +500,13 @@ notableNotes.push(
 );
 const rotJobs = jobs.filter((j) => noFitSkus(j).length > 0 && j.mlg.unplaced === 0).length;
 notableNotes.push(
-  `**\`allowRotation\` divergence (surprising):** on ${rotJobs} jobs v2 leaves non-Holey SKUs unplaced because their catalog L×W×H has \`allowRotation: false\` and doesn't fit upright (e.g. 144"-long pieces stated with 144 as height). Legacy \`buildDemand\` always tries all six orientations for non-Holey parts regardless of the flag. This is a catalog-data and parity question for lbr-02 or the parts library, not something this harness changes.`
+  `**\`allowRotation\` divergence (surprising):** on ${rotJobs} jobs v2 leaves non-Holey SKUs unplaced because their catalog L×W×H has \`allowRotation: false\` and doesn't fit upright (e.g. 144"-long pieces stated with 144 as height). Legacy \`buildDemand\` always tries all six orientations for non-Holey parts regardless of the flag. This is a catalog-data and parity question for lbr-03 or the parts library, not something this harness changes.`
 );
 notableNotes.push(
   `**Legacy never tops off:** legacy produced ${tlg.mixed} mixed stacks across all ${jobs.length} jobs. Pass 1's \`buildColumn\` hard-codes \`shouldMix = false\` and builds each size's remainder as a short pure stack (\`maxBase = min(remaining, floor(H / h))\`), so pass 2's remainder consolidation is left with nothing to mix on these carts.`
 );
 notableNotes.push(
-  `**Golden v2 vs the sandbox:** the Orchestrator's sandbox reported v2 at 51 of 52 mixed stacks on this piece set; the harness measures ${golden.mv2.mixed} of ${golden.mv2.stacks} (cross-checked against \`plan.mixedStacks\` and the per-column \`mixed\` flag, which agree). The truck count (1) and the "thinnest at the nose" shape match. The gap is not explained here (a different engine revision or counting method is possible); lbr-02 should gate on this harness's number.`
+  `**Golden v2 vs the sandbox:** the Orchestrator's sandbox reported v2 at 51 of 52 mixed stacks on this piece set; the harness measures ${golden.mv2.mixed} of ${golden.mv2.stacks} (cross-checked against \`plan.mixedStacks\` and the per-column \`mixed\` flag, which agree). The truck count (1) matches. The sandbox's "thinnest pieces at the nose" was the same row-direction reversal fixed above: v2 actually loads the 13s at the nose. The mixed-count gap is not explained here (a different engine revision or counting method is possible); lbr-03 should gate on this harness's number.`
 );
 for (const s of notableNotes) L.push(`- ${s}`);
 L.push("");
