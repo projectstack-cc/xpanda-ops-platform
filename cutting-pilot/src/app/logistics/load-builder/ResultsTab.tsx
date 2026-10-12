@@ -18,7 +18,7 @@ import LoadingDiagramPrintButton from "@/components/logistics/LoadingDiagramPrin
 import type { CartLine, Dimensions, PackOptions, PackPlan, PackSku, PackTrailer } from "@/lib/packEngine";
 import { thicknessColor, thicknessLabel } from "@/lib/thicknessPalette";
 import CustomizeEditor from "./CustomizeEditor";
-import { BTN_GHOST, BTN_OUTLINE, BTN_PRIMARY, CARD, plural } from "./loadBuilderUi";
+import { BTN_GHOST, BTN_OUTLINE, BTN_PRIMARY, CARD, NO_BOL_REASON, NO_SAVE_REASON, plural } from "./loadBuilderUi";
 
 export interface ResultsSelection {
   trailerIndex: number;
@@ -52,6 +52,9 @@ interface ResultsTabProps {
   onSave: () => void;
   onLoadSaved: () => void;
   isUpdate: boolean;
+  /** lbr-06: logistics.load-builder edit / logistics.bol edit — the buttons disable with a reason. */
+  canSave: boolean;
+  canGenerateBol: boolean;
   onGoToLoad: () => void;
 
   editorKey: string;
@@ -194,15 +197,26 @@ export default function ResultsTab(p: ResultsTabProps) {
           <button type="button" onClick={p.onCustomize} disabled={trucks === 0} className={BTN_OUTLINE}>
             <Pencil size={16} aria-hidden="true" /> Customize
           </button>
-          <button type="button" onClick={p.onGenerateBols} disabled={trucks === 0} className={BTN_PRIMARY}>
+          <button
+            type="button"
+            onClick={p.onGenerateBols}
+            disabled={trucks === 0 || !p.canGenerateBol}
+            title={p.canGenerateBol ? undefined : NO_BOL_REASON}
+            className={BTN_PRIMARY}
+          >
             <FileText size={16} aria-hidden="true" /> Generate BOLs
           </button>
-          <button type="button" onClick={p.onSave} disabled={trucks === 0} className={BTN_GHOST}>
+          <button type="button" onClick={p.onSave} disabled={trucks === 0 || !p.canSave} title={p.canSave ? undefined : NO_SAVE_REASON} className={BTN_GHOST}>
             <Save size={16} aria-hidden="true" /> {p.isUpdate ? "Update save" : "Save load"}
           </button>
           <button type="button" onClick={p.onLoadSaved} className={BTN_GHOST}>
             <FolderOpen size={16} aria-hidden="true" /> Load saved
           </button>
+          {(!p.canGenerateBol || !p.canSave) && (
+            <p className="w-full text-xs text-muted">
+              {[!p.canGenerateBol ? NO_BOL_REASON : null, !p.canSave ? NO_SAVE_REASON : null].filter(Boolean).join(" ")}
+            </p>
+          )}
         </div>
       )}
 

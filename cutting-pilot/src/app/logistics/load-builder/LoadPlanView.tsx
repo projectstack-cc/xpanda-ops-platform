@@ -89,6 +89,7 @@ import LoadBuilderTabs, { isLoadBuilderTab, type LoadBuilderTab } from "./LoadBu
 import LoadTab from "./LoadTab";
 import PartsTab from "./PartsTab";
 import ResultsTab from "./ResultsTab";
+import type { LoadBuilderAccess } from "./loadBuilderUi";
 
 // lb-ui-06: shipped runner-height values, confirmed against legacy's own dropdown
 // (logistics/load-builder.html:1462 — `[0, 3, 4].forEach(rh => ...)`), not invented here.
@@ -130,7 +131,10 @@ interface SelectedRef {
   columnIndex: number;
 }
 
-export default function LoadPlanView() {
+// lbr-06: `access` comes from page.tsx's parsed X-User-Permissions (no re-fetch). A user who can't
+// save gets no snapshot handed to the persistence hook, so its status stays "none" — no chip, no
+// dirty state, no leave prompt — and generating BOLs never auto-saves for them.
+export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) {
   const [fixtureId, setFixtureId] = useState<string | null>(null);
   const [selected, setSelected] = useState<SelectedRef | null>(null);
   const [mode, setMode] = useState<"view" | "edit">("view");
@@ -218,10 +222,10 @@ export default function LoadPlanView() {
   // hook's dirty check compares this against the last saved/loaded snapshot.
   const currentSnapshot: SavedLoadSnapshot | null = useMemo(
     () =>
-      hasSource && plan.trailers.length > 0
+      access.canSave && hasSource && plan.trailers.length > 0
         ? buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate })
         : null,
-    [hasSource, plan.trailers.length, fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate]
+    [access.canSave, hasSource, plan.trailers.length, fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate]
   );
   const persistence = useOrderLoadPersistence({
     jobId: pulledSource?.jobId ?? null,
@@ -483,6 +487,10 @@ export default function LoadPlanView() {
   return (
     <div className="flex-1 w-full max-w-screen-2xl mx-auto px-4 py-6 space-y-4 min-w-0">
       <div>
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
+          Load Builder
+          <span className="px-1.5 py-px rounded text-[10px] font-bold tracking-wide bg-[var(--warn-bg)] text-[var(--warn-text)] border border-[var(--warn-border)]">BETA</span>
+        </div>
         <h1 className="text-xl font-semibold text-text">{fixture.label}</h1>
         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-muted font-mono tabular-nums">
           {hasSource && (
@@ -516,6 +524,7 @@ export default function LoadPlanView() {
           isUpdate={!!currentSavedLoadId}
           locked={mode === "edit"}
           canSave={plan.trailers.length > 0}
+          hasSaveAccess={access.canSave}
           trailerTypeKey={trailerTypeKey}
           trailerTypeKeys={TRAILER_TYPE_KEYS}
           runnerHeight={runnerHeight}
@@ -539,7 +548,7 @@ export default function LoadPlanView() {
       </div>
 
       <div role="tabpanel" id="lb-panel-parts" aria-labelledby="lb-tab-parts" hidden={tab !== "parts"}>
-        <PartsTab active={tab === "parts"} />
+        <PartsTab active={tab === "parts"} canView={access.canViewParts} canEdit={access.canEditParts} />
       </div>
 
       <div role="tabpanel" id="lb-panel-results" aria-labelledby="lb-tab-results" hidden={tab !== "results"}>
@@ -566,6 +575,8 @@ export default function LoadPlanView() {
           onSave={openSaveModal}
           onLoadSaved={() => setPickerModalOpen(true)}
           isUpdate={!!currentSavedLoadId}
+          canSave={access.canSave}
+          canGenerateBol={access.canGenerateBol}
           onGoToLoad={() => handleTabChange("load")}
           editorKey={pulledSource ? pulledSource.id : (fixtureId ?? EMPTY_FIXTURE.id)}
           onApplyEdit={handleApplyEdit}
@@ -607,7 +618,7 @@ export default function LoadPlanView() {
           setGenBolOpen(false);
           // lbr-04: generating BOLs from an order-built load saves it to the order. Never blocks or
           // undoes the BOL — a failed save only raises a Retry toast.
-          if (generated && pulledSource) void autoSaveAfterBol();
+          if (generated && pulledSource && access.canSave) void autoSaveAfterBol();
         }}
       />
 

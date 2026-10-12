@@ -64,19 +64,21 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/api/bols", keys: ["logistics.bol"] },
   // bem-01: BOL Email Queue — logistics.bol (routes additionally require EDIT via X-User-Can-Edit-Bol).
   { prefix: "/v2/api/bol-email", keys: ["logistics.bol"] },
-  // lb-ui-04: saved loads live under Load Builder (/v2/logistics/load-builder, gated
-  // "logistics.v2" below via the dark-launch lines) -- gate its API the same way rather than
+  // lb-ui-04: saved loads live under Load Builder -- gated the same way as its page below rather than
   // borrowing "logistics.bol" (a different sub-feature) or inventing a new key.
-  { prefix: "/v2/api/saved-loads", keys: ["logistics.v2"] },
+  // lbr-06: Load Builder Beta — gated on legacy's own logistics.load-builder key (same audience as
+  // legacy Load Builder); order 'Build Load' links still go to legacy until cutover.
+  { prefix: "/v2/api/saved-loads", keys: ["logistics.load-builder"] },
   { prefix: "/v2/api/loading-assignments", keys: ["logistics.loading"] },
   { prefix: "/v2/api/loading-bays", keys: ["logistics.loading"] },
   { prefix: "/v2/api/loading-photos", keys: ["logistics.loading"] },
   // --- lgx-roll-01: /v2/logistics (dashboard) + /v2/logistics/invoice-analytics are LIVE and fall
   // through to the logistics.dashboard rule below. dock-04: /v2/logistics/loading is now LIVE too
-  // (its dark line was deleted, so it falls to the logistics.loading rule below). Only Load Builder
-  // stays DARK (admin-only: no role holds "logistics.v2") until Steve finishes it. It must precede
-  // the general /v2/logistics rule. To un-dark it later, delete its line here.
-  { prefix: "/v2/logistics/load-builder", keys: ["logistics.v2"] },
+  // (its dark line was deleted, so it falls to the logistics.loading rule below).
+  // lbr-06: Load Builder Beta — gated on legacy's own logistics.load-builder key (same audience as
+  // legacy Load Builder); order 'Build Load' links still go to legacy until cutover. It must precede
+  // the general /v2/logistics rule.
+  { prefix: "/v2/logistics/load-builder", keys: ["logistics.load-builder"] },
   { prefix: "/v2/logistics/loading", keys: ["logistics.loading"] },
   // PXXX-c: PullJobModal's GET /v2/api/jobs?search= (and ShippingInfoModal's GET
   // /v2/api/jobs/:id from PXXX-b) both live under this same prefix as the pre-existing

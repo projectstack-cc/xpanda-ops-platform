@@ -30,6 +30,22 @@ export function formatEt(iso: string, withDate: boolean): string {
   return `${s} ET`;
 }
 
+/** lbr-06: what this user may do on the page, from the middleware's X-User-Permissions (page.tsx).
+ * Viewing is already gated by middleware (logistics.load-builder view); these cover the writes that
+ * call APIs gated on their own keys, so the page degrades instead of erroring. */
+export interface LoadBuilderAccess {
+  /** logistics.load-builder edit — Save / Update, auto-save, the leave prompt. */
+  canSave: boolean;
+  /** logistics.bol edit — Generate BOLs. */
+  canGenerateBol: boolean;
+  /** manufacturing.calculators view / edit — the Parts tab (/api/parts). */
+  canViewParts: boolean;
+  canEditParts: boolean;
+}
+
+export const NO_SAVE_REASON = "You can view loads but not save them (needs Load Builder edit access).";
+export const NO_BOL_REASON = "Generating BOLs needs BOL edit access.";
+
 export function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }

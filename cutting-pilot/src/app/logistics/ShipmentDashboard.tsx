@@ -117,6 +117,9 @@ export default function ShipmentDashboard({
   const canEditDashboard = isAdmin || permissions?.["logistics.dashboard"]?.edit === true;
   // Invoice Analytics link mirrors middleware (lgx-roll-01): page + /v2/api/logistics are logistics.dashboard.
   const canSeeInvoiceAnalytics = isAdmin || permissions?.["logistics.dashboard"]?.view === true;
+  // lbr-06: Load Builder Beta (v2) — same audience as legacy Load Builder (middleware gates the page on
+  // logistics.load-builder too). The legacy "Load Builder" link beside it stays until cutover (lbr-09).
+  const canUseLoadBuilderBeta = isAdmin || permissions?.["logistics.load-builder"]?.view === true;
   const canEditBol = isAdmin || permissions?.["logistics.bol"]?.edit === true;
 
   const activeWeekInfo = useMemo(() => {
@@ -364,7 +367,7 @@ export default function ShipmentDashboard({
             <h1 className="text-xl font-bold tracking-tight text-text">Shipment Dashboard</h1>
             <p className="text-xs text-muted">Manage outbound shipping schedules, trailer loads, and BOL records</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <a
               href="/logistics/load-builder.html"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] no-underline transition-colors"
@@ -372,6 +375,19 @@ export default function ShipmentDashboard({
               <Truck size={14} className="text-muted" />
               Load Builder
             </a>
+            {canUseLoadBuilderBeta && (
+              <a
+                href="/v2/logistics/load-builder"
+                aria-label="Load Builder Beta"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] no-underline transition-colors"
+              >
+                <Truck size={14} className="text-muted" />
+                Load Builder Beta
+                <span aria-hidden="true" className="px-1.5 py-px rounded text-[10px] font-bold tracking-wide bg-[var(--warn-bg)] text-[var(--warn-text)] border border-[var(--warn-border)]">
+                  BETA
+                </span>
+              </a>
+            )}
             <a
               href="/v2/logistics/loading"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] no-underline transition-colors"

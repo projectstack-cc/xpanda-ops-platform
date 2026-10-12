@@ -2929,6 +2929,31 @@ current series).
 
 ## Logistics (v2)
 
+- **lbr-06 — Load Builder Beta: dashboard button + page gated on `logistics.load-builder` (Next/Cloudflare Platform Agent §9a for the middleware; React Component Agent §9b for the button). Beta visibility only — NOT the cutover (that is lbr-09): order "Build Load" links, the home card, `BolActions.tsx`, `PlatformHeader` nav and everything legacy still go to the classic Load Builder. Steve approved this partial visibility step 2026-10-12. No migration, no new permission key.**
+  - **Why (Steve, 2026-10-12):** "Add an additional button on the logistics v2 dashboard that says 'Load Builder Beta' for now. The build load link on an order should still direct to the legacy page until all of the kinks are officially worked out." The people who build loads (mainly the logistics manager, in Management) couldn't reach it: it was admin-only behind the dark-launch key `logistics.v2`.
+  - **`middleware.ts`:** `/v2/logistics/load-builder` and `/v2/api/saved-loads` now gate on legacy's own `logistics.load-builder` key instead of `logistics.v2` (same positions; the page line still precedes the general `/v2/logistics` rule). Stale "stays DARK" comments rewritten. `logistics.v2` stays in `permissions.ts` (nothing gates on it now — BACKLOG). This also resolves the `lb-ui-05` `/api/load-builder-skus` follow-up: that route is gated on the same key.
+  - **No middleware selfcheck exists**, so the expected outcomes per role (D1 grants checked 2026-10-12; GET → view, mutations → edit):
+
+    | Role | `/v2/logistics/load-builder` | `/v2/api/saved-loads` GET | `/v2/api/saved-loads` POST |
+    |---|---|---|---|
+    | Administrator | pass (bypass) | pass | pass |
+    | Management (view+edit) | pass | pass | pass |
+    | Read Only (view) | pass | pass | 403 (mutate needs edit) |
+    | Staff (view) | pass | pass | 403 |
+    | Loading Team (no key) | redirect `/?access_denied=1` | 403 | 403 |
+
+  - **`ShipmentDashboard.tsx`:** `canUseLoadBuilderBeta` (admin or `logistics.load-builder` view) shows a **Load Builder Beta** link (`/v2/logistics/load-builder`, sibling classes, `Truck` icon, a warn-token `BETA` pill; the link carries `aria-label="Load Builder Beta"` and the pill is `aria-hidden` so the name isn't read twice) right after the legacy **Load Builder** link, which is unchanged. The action row didn't wrap — it now has `flex-wrap`.
+  - **The page degrades instead of erroring for roles missing the other keys its writes use** (none widened). `page.tsx` derives a `LoadBuilderAccess` from the `X-User-Permissions` it already parses and passes it down (`LoadPlanView` → tabs; type + reason strings in `loadBuilderUi.ts`):
+    - **Save / Update** (both tabs) disabled with "You can view loads but not save them (needs Load Builder edit access)." without `logistics.load-builder` edit.
+    - **Generate BOLs** disabled with "Generating BOLs needs BOL edit access." without `logistics.bol` edit.
+    - **Parts tab:** "You don't have access to the parts library." without `manufacturing.calculators` view (Read Only, Staff) — no `/api/parts` call; read-only library with view but not edit.
+    - **lbr-04 auto-save / leave prompt:** a user who can't save hands the persistence hook no snapshot, so its status stays `"none"` (no chip, never dirty, no leave modal, no `beforeunload`); BOL auto-save also checks `canSave`. `useOrderLoadPersistence.ts` itself is unchanged.
+  - **Beta labels:** a `BETA` pill beside a "Load Builder" eyebrow above the page title, and on the Load tab: "Beta — order 'Build Load' links still open the classic Load Builder. Report anything odd to Steve."
+  - **Verification:** Load Builder selfchecks unchanged and green (stackPlanner 29, packEngine 178, loadEditor 119, savedLoad 27, dissolve 21, jobPull 17, loadingDiagramPdf 29, thicknessPalette 35); `npx tsc --noEmit` clean; `npm run cf-build` passes.
+  - **Smoke — 21/21.** The page ran under `next dev` :3100 + Playwright with identity sent as `X-User-*` request headers (middleware passes through under `next dev`; `page.tsx` reads those headers) and APIs mocked. The dashboard's server shell reads the session from D1 (empty locally), so its links were checked on `ShipmentDashboard`'s server-rendered first paint per role, screenshotted with the app's own CSS — not the live `/v2/logistics` route. Screenshots (scratchpad, not committed):
+    1. `lbr06-1-dashboard-management-1440.png` / `-390.png` — Management: legacy `Load Builder` (`/logistics/load-builder.html`, unchanged) and `Load Builder Beta` both present; at 390px the row wraps with no horizontal scroll.
+    2. `lbr06-2-dashboard-loadingTeam-1440.png` / `-390.png` — Loading Team (no key): Beta hidden, legacy link kept.
+    3. `lbr06-3a-viewonly-results.png`, `lbr06-3b-viewonly-load.png`, `lbr06-3c-viewonly-parts.png` — Read Only: the order's saved load still opens (GETs only); Generate BOLs and Save disabled with the reasons above; no status chip even after changing the trailer; Parts shows the no-access message and never calls `/api/parts`; a header link navigates with no leave modal and no `beforeunload`; no POST/PUT ever sent. Contrast run as Management: Save, Generate BOLs and the Parts library all enabled.
 - **lbr-05 — Load Builder: legacy-style Load · Parts · Results tabs, Results redesign, thickness colors on screen + PDF, pure-plan toggle (React Component Agent §9b leads; Logistics Agent §3 consulted). No API, migration, permission or engine change; the page stays dark behind `logistics.v2`.**
   - **Why (Steve, 2026-10-12):** approved the "Load Builder v2 Mockup" direction; today's per-SKU colors didn't tell pieces apart.
   - **NEW `src/lib/thicknessPalette.ts` (pure):** the fixed 1–16″ table from the prompt, `thicknessColor(unitHeight)` → `{ bg, fg, hatched }` (fractional sizes use the floor size's colors hatched; > 16″ cycles the table, hatched) and `thicknessLabel()` ("13″", "5.25″"). The one place diagram data colors live (the tokens-only exception). `thicknessPalette.selfcheck.ts` 35/35: every pair ≥ 4.5:1 contrast, adjacent sizes never share a bg, hatching/cycling, labels.

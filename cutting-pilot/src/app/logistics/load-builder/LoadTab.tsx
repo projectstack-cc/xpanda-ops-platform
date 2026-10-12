@@ -7,7 +7,7 @@
 // only: every value and handler comes from LoadPlanView.
 import { Truck, Save, FolderOpen, Calculator } from "lucide-react";
 import type { PulledLoadSource } from "@/components/logistics/JobPullModal";
-import { BTN_GHOST, BTN_OUTLINE, BTN_PRIMARY, CARD, SELECT, formatEt } from "./loadBuilderUi";
+import { BTN_GHOST, BTN_OUTLINE, BTN_PRIMARY, CARD, NO_SAVE_REASON, SELECT, formatEt } from "./loadBuilderUi";
 
 interface LoadTabProps {
   hasSource: boolean;
@@ -21,6 +21,8 @@ interface LoadTabProps {
   /** Settings and source actions are locked while the customize editor is open. */
   locked: boolean;
   canSave: boolean;
+  /** lbr-06: false for a view-only user — Save is disabled with NO_SAVE_REASON. */
+  hasSaveAccess: boolean;
 
   trailerTypeKey: string;
   trailerTypeKeys: string[];
@@ -74,132 +76,145 @@ function Toggle({ label, hint, value, disabled, onChange }: { label: string; hin
 export default function LoadTab(p: LoadTabProps) {
   const { pulledSource } = p;
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-      <div className="space-y-4 min-w-0">
-        {/* Order card */}
-        <section className={CARD} aria-labelledby="lb-order-heading">
-          <h2 id="lb-order-heading" className="text-sm font-semibold text-text mb-1">
-            Order
-          </h2>
-          {p.hasSource ? (
-            <div className="text-sm text-text mb-3">
-              <div className="font-semibold">{p.sourceLabel}</div>
-              <div className="text-muted font-mono tabular-nums">
-                {pulledSource?.invoiceNumber ? `INV# ${pulledSource.invoiceNumber} · ` : ""}
-                {p.pieceCount} pieces · {p.footprintCount} footprints
+    <div className="space-y-4">
+      {/* lbr-06: beta notice — the order links haven't been cut over yet. */}
+      <p className="text-sm text-[var(--warn-text)] bg-[var(--warn-bg)] border border-[var(--warn-border)] rounded-lg px-3 py-2">
+        Beta — order &apos;Build Load&apos; links still open the classic Load Builder. Report anything odd to Steve.
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <div className="space-y-4 min-w-0">
+          {/* Order card */}
+          <section className={CARD} aria-labelledby="lb-order-heading">
+            <h2 id="lb-order-heading" className="text-sm font-semibold text-text mb-1">
+              Order
+            </h2>
+            {p.hasSource ? (
+              <div className="text-sm text-text mb-3">
+                <div className="font-semibold">{p.sourceLabel}</div>
+                <div className="text-muted font-mono tabular-nums">
+                  {pulledSource?.invoiceNumber ? `INV# ${pulledSource.invoiceNumber} · ` : ""}
+                  {p.pieceCount} pieces · {p.footprintCount} footprints
+                </div>
+                {p.currentSavedLoadName && (
+                  <div className="text-muted">
+                    Saved as <span className="font-semibold text-text">{p.currentSavedLoadName}</span>
+                  </div>
+                )}
               </div>
-              {p.currentSavedLoadName && (
-                <div className="text-muted">
-                  Saved as <span className="font-semibold text-text">{p.currentSavedLoadName}</span>
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-muted mb-3">
-              Pull an order to build a load — its line items are matched against the parts library automatically.
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {pulledSource ? (
-              <button type="button" onClick={p.onRepull} disabled={p.locked} className={BTN_OUTLINE}>
-                <Truck size={16} aria-hidden="true" /> Re-pull from order
-              </button>
             ) : (
-              <button type="button" onClick={p.onPull} disabled={p.locked} className={p.hasSource ? BTN_OUTLINE : BTN_PRIMARY}>
-                <Truck size={16} aria-hidden="true" /> Pull from order
-              </button>
+              <p className="text-sm text-muted mb-3">
+                Pull an order to build a load — its line items are matched against the parts library automatically.
+              </p>
             )}
-            {pulledSource && (
-              <button type="button" onClick={p.onPull} disabled={p.locked} className={BTN_GHOST}>
-                Pull a different order
-              </button>
-            )}
-            <button type="button" onClick={p.onLoadSaved} disabled={p.locked} className={BTN_GHOST}>
-              <FolderOpen size={16} aria-hidden="true" /> Load saved
-            </button>
-            <button type="button" onClick={p.onSave} disabled={!p.canSave || p.locked} className={BTN_GHOST}>
-              <Save size={16} aria-hidden="true" /> {p.isUpdate ? "Update save" : "Save load"}
-            </button>
-          </div>
-        </section>
-
-        {/* lbr-04: reopened-from-order banner — informational and dismissible, like the pull banner. */}
-        {p.reopenedAt && pulledSource && (
-          <div className="rounded-xl border border-[var(--loaded-border)] bg-[var(--loaded-bg)] px-4 py-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm text-[var(--loaded-text)]">Opened this order&apos;s saved load (saved {formatEt(p.reopenedAt, true)}).</div>
-            <button type="button" onClick={p.onDismissReopened} className="shrink-0 text-sm font-semibold text-[var(--loaded-text)] cursor-pointer min-h-[44px] px-2">
-              Dismiss
-            </button>
-          </div>
-        )}
-
-        {/* Pull banner — informational, not blocking: unmatched items are named, never silently
-            dropped or auto-created. */}
-        {pulledSource && !p.bannerDismissed && (
-          <div className="rounded-xl border border-[var(--brand)] bg-[color-mix(in_srgb,var(--brand)_6%,transparent)] px-4 py-2 flex items-start justify-between gap-2">
-            <div className="text-sm text-text py-2 min-w-0">
-              <span className="font-semibold">Pulled from order:</span> {pulledSource.customer}
-              {pulledSource.invoiceNumber && <span className="font-mono tabular-nums"> · INV# {pulledSource.invoiceNumber}</span>}
-              <span className="font-mono tabular-nums"> · {pulledSource.cart.reduce((s, c) => s + c.qty, 0)} pieces matched</span>
-              {pulledSource.unmatchedCount > 0 && (
-                <div className="mt-1 text-[var(--warn-text)]">
-                  {pulledSource.unmatchedCount} line item{pulledSource.unmatchedCount === 1 ? "" : "s"} have no matching SKU in the parts library:{" "}
-                  {pulledSource.unmatchedDescriptions.join(", ")}
-                </div>
+            <div className="flex flex-wrap gap-2">
+              {pulledSource ? (
+                <button type="button" onClick={p.onRepull} disabled={p.locked} className={BTN_OUTLINE}>
+                  <Truck size={16} aria-hidden="true" /> Re-pull from order
+                </button>
+              ) : (
+                <button type="button" onClick={p.onPull} disabled={p.locked} className={p.hasSource ? BTN_OUTLINE : BTN_PRIMARY}>
+                  <Truck size={16} aria-hidden="true" /> Pull from order
+                </button>
               )}
+              {pulledSource && (
+                <button type="button" onClick={p.onPull} disabled={p.locked} className={BTN_GHOST}>
+                  Pull a different order
+                </button>
+              )}
+              <button type="button" onClick={p.onLoadSaved} disabled={p.locked} className={BTN_GHOST}>
+                <FolderOpen size={16} aria-hidden="true" /> Load saved
+              </button>
+              <button
+                type="button"
+                onClick={p.onSave}
+                disabled={!p.canSave || p.locked || !p.hasSaveAccess}
+                title={p.hasSaveAccess ? undefined : NO_SAVE_REASON}
+                className={BTN_GHOST}
+              >
+                <Save size={16} aria-hidden="true" /> {p.isUpdate ? "Update save" : "Save load"}
+              </button>
             </div>
-            <button type="button" onClick={p.onDismissBanner} className="shrink-0 text-sm font-semibold text-muted hover:text-text cursor-pointer min-h-[44px] px-2">
-              Dismiss
-            </button>
-          </div>
-        )}
-      </div>
+            {!p.hasSaveAccess && <p className="mt-2 text-xs text-muted">{NO_SAVE_REASON}</p>}
+          </section>
 
-      {/* Settings */}
-      <section className={`${CARD} space-y-3 min-w-0`} aria-labelledby="lb-settings-heading">
-        <h2 id="lb-settings-heading" className="text-sm font-semibold text-text">
-          Settings
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1 text-sm font-medium text-muted">
-            Trailer
-            <select value={p.trailerTypeKey} onChange={(e) => p.onTrailerTypeChange(e.target.value)} disabled={p.locked} className={SELECT}>
-              {p.trailerTypeKeys.map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm font-medium text-muted">
-            Runners
-            <select value={p.runnerHeight} onChange={(e) => p.onRunnerHeightChange(Number(e.target.value))} disabled={p.locked} className={SELECT}>
-              {p.runnerHeightOptions.map((rh) => (
-                <option key={rh} value={rh}>
-                  {rh === 0 ? "None" : `${rh}″`}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* lbr-04: reopened-from-order banner — informational and dismissible, like the pull banner. */}
+          {p.reopenedAt && pulledSource && (
+            <div className="rounded-xl border border-[var(--loaded-border)] bg-[var(--loaded-bg)] px-4 py-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm text-[var(--loaded-text)]">Opened this order&apos;s saved load (saved {formatEt(p.reopenedAt, true)}).</div>
+              <button type="button" onClick={p.onDismissReopened} className="shrink-0 text-sm font-semibold text-[var(--loaded-text)] cursor-pointer min-h-[44px] px-2">
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Pull banner — informational, not blocking: unmatched items are named, never silently
+              dropped or auto-created. */}
+          {pulledSource && !p.bannerDismissed && (
+            <div className="rounded-xl border border-[var(--brand)] bg-[color-mix(in_srgb,var(--brand)_6%,transparent)] px-4 py-2 flex items-start justify-between gap-2">
+              <div className="text-sm text-text py-2 min-w-0">
+                <span className="font-semibold">Pulled from order:</span> {pulledSource.customer}
+                {pulledSource.invoiceNumber && <span className="font-mono tabular-nums"> · INV# {pulledSource.invoiceNumber}</span>}
+                <span className="font-mono tabular-nums"> · {pulledSource.cart.reduce((s, c) => s + c.qty, 0)} pieces matched</span>
+                {pulledSource.unmatchedCount > 0 && (
+                  <div className="mt-1 text-[var(--warn-text)]">
+                    {pulledSource.unmatchedCount} line item{pulledSource.unmatchedCount === 1 ? "" : "s"} have no matching SKU in the parts library:{" "}
+                    {pulledSource.unmatchedDescriptions.join(", ")}
+                  </div>
+                )}
+              </div>
+              <button type="button" onClick={p.onDismissBanner} className="shrink-0 text-sm font-semibold text-muted hover:text-text cursor-pointer min-h-[44px] px-2">
+                Dismiss
+              </button>
+            </div>
+          )}
         </div>
-        <Toggle
-          label="Auto-downsize last trailer"
-          hint="Use a 26ft box truck when the last load fits one."
-          value={p.autoDownsize}
-          disabled={p.locked}
-          onChange={p.onAutoDownsizeChange}
-        />
-        <Toggle
-          label="Mix stacks to save trucks"
-          hint="Top off stacks only when it saves a whole truck. Off = pure stacks only."
-          value={p.consolidate}
-          disabled={p.locked}
-          onChange={p.onConsolidateChange}
-        />
-        <button type="button" onClick={p.onCalculate} disabled={!p.hasSource} className={`${BTN_PRIMARY} w-full`}>
-          <Calculator size={16} aria-hidden="true" /> Calculate load
-        </button>
-      </section>
+
+        {/* Settings */}
+        <section className={`${CARD} space-y-3 min-w-0`} aria-labelledby="lb-settings-heading">
+          <h2 id="lb-settings-heading" className="text-sm font-semibold text-text">
+            Settings
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-sm font-medium text-muted">
+              Trailer
+              <select value={p.trailerTypeKey} onChange={(e) => p.onTrailerTypeChange(e.target.value)} disabled={p.locked} className={SELECT}>
+                {p.trailerTypeKeys.map((key) => (
+                  <option key={key} value={key}>
+                    {key}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-medium text-muted">
+              Runners
+              <select value={p.runnerHeight} onChange={(e) => p.onRunnerHeightChange(Number(e.target.value))} disabled={p.locked} className={SELECT}>
+                {p.runnerHeightOptions.map((rh) => (
+                  <option key={rh} value={rh}>
+                    {rh === 0 ? "None" : `${rh}″`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <Toggle
+            label="Auto-downsize last trailer"
+            hint="Use a 26ft box truck when the last load fits one."
+            value={p.autoDownsize}
+            disabled={p.locked}
+            onChange={p.onAutoDownsizeChange}
+          />
+          <Toggle
+            label="Mix stacks to save trucks"
+            hint="Top off stacks only when it saves a whole truck. Off = pure stacks only."
+            value={p.consolidate}
+            disabled={p.locked}
+            onChange={p.onConsolidateChange}
+          />
+          <button type="button" onClick={p.onCalculate} disabled={!p.hasSource} className={`${BTN_PRIMARY} w-full`}>
+            <Calculator size={16} aria-hidden="true" /> Calculate load
+          </button>
+        </section>
+      </div>
     </div>
   );
 }

@@ -68,21 +68,23 @@
     order-linked loads don't expire; "save before leaving?" on tab close + in-app nav
   - [x] lbr-05 — Load · Parts · Results tabs; Results redesign; thickness palette on screen + PDF; top-off band;
     pure-plan toggle
-  - [ ] lbr-06 — Load tab: legacy manual SKU picker (search + category, qty add, editable load list, clear,
+  - [x] lbr-06 — Load Builder Beta: dashboard button + gated on logistics.load-builder (order links stay legacy)
+  - [ ] lbr-07 — Load tab: legacy manual SKU picker (search + category, qty add, editable load list, clear,
     Calculate); manual (no-order) loads saved as a new snapshot source kind; order-load qty edits
-  - [ ] lbr-07 — tap-select / tap-place customize (replaces drag): green valid targets, faded invalid with
+  - [ ] lbr-08 — tap-select / tap-place customize (replaces drag): green valid targets, faded invalid with
     reason on tap, "move just the top-off", undo, step hints
-  - [ ] lbr-08 — cutover with a Classic link (held until Steve has floor-tested)
+  - [ ] lbr-09 — cutover with a Classic link (held until Steve has floor-tested)
   - [ ] lbr-05 follow-up — `PlanMetricsStrip.tsx` is no longer imported (Results uses `MetricTile`); delete it. Loading
     diagram PDF: the "636"L × 98"W — 1' 0" remaining" caption overlaps the STACK BREAKDOWN heading (observed in the lbr-05 smoke render).
-  - [ ] lbr-04 follow-up — legacy Load Builder still writes order loads with a 90-day TTL; moot after lbr-07 cutover.
+  - [ ] lbr-04 follow-up — legacy Load Builder still writes order loads with a 90-day TTL; moot after lbr-09 cutover.
+  - [ ] lbr-06 follow-up — nothing gates on logistics.v2 any more; drop the key + label (and strip it from roles) in a later admin cleanup.
   - [ ] lbr follow-up — non-Holey parts with allowRotation:false whose catalog size doesn't fit as entered (34 jobs in
     the lbr-01 audit; e.g. 2×48×144 with height 144) stay unplaced; decide parts-data fix vs. treating "fits only
     rotated" as rotatable.
   - [ ] lbr follow-up — multi-truck loads: topped stacks that spill across a truck boundary open the next truck's nose
     row; consider per-truck top-off placement. (lbr-03 audit: planner-backed v2 frontRowMixed = 36.)
 - [ ] **Load builder v2 (`/v2/logistics/load-builder`) still dark after lgx-roll-01.** Un-dark by deleting its `logistics.v2` middleware line, then repoint Build Load / Load Builder links.
-- [ ] **`lb-ui-05` follow-up — `GET /api/load-builder-skus` needs its own permission grant at Phase 3 rollout.** That legacy route is gated by the `logistics.load-builder` key (`_worker.js/lib/core.js:213`); it works today only because `/v2/logistics*` is admin-only and admins bypass permission checks (`middleware.ts`'s dark-launch gate). When Phase 3 grants `logistics.v2` to a non-admin role, that role also needs `logistics.load-builder` (view) or `JobPullModal` dead-ends on "Couldn't load the SKU library." Not currently named in the sprint charter's Phase 3 checklist — add it there when Phase 3 is scoped.
+- [x] **`lb-ui-05` follow-up — `GET /api/load-builder-skus` needs its own permission grant at Phase 3 rollout.** — resolved lbr-06: the v2 page is now gated on the same `logistics.load-builder` key, so anyone who reaches it can call the SKU route. That legacy route is gated by the `logistics.load-builder` key (`_worker.js/lib/core.js:213`); it works today only because `/v2/logistics*` is admin-only and admins bypass permission checks (`middleware.ts`'s dark-launch gate). When Phase 3 grants `logistics.v2` to a non-admin role, that role also needs `logistics.load-builder` (view) or `JobPullModal` dead-ends on "Couldn't load the SKU library." Not currently named in the sprint charter's Phase 3 checklist — add it there when Phase 3 is scoped.
 - [ ] Repoint the v2 links that still open legacy Load Builder once v2 is ready: `components/logistics/BolActions.tsx`
   (`/logistics/load-builder.html?job_id=`), `app/logistics/ShipmentDashboard.tsx`, and the home Logistics card.
 

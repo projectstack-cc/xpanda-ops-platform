@@ -1,7 +1,8 @@
 // src/app/logistics/load-builder/page.tsx  ->  /v2/logistics/load-builder
-// Server shell for the v2 load builder's read-only plan view (lb-ui-01). Inherits the dark-launch
-// gate from the existing `{ prefix: "/v2/logistics", keys: ["logistics.v2"] }` middleware rule —
-// no role holds `logistics.v2` yet, so this resolves admin-only with no middleware change.
+// Server shell for the v2 load builder (lb-ui-01). lbr-06: Load Builder Beta — middleware gates this
+// page on legacy's own logistics.load-builder key (same audience as legacy Load Builder); order
+// 'Build Load' links still go to legacy until cutover. The write permissions the page needs are
+// derived here from the same X-User-Permissions header and passed down (LoadBuilderAccess).
 //
 // Deliberately reads identity from the middleware-injected X-User-* headers only — no
 // validateSession()/getEnv() call, unlike every other page in this module. This prompt's own scope
@@ -10,6 +11,7 @@
 import { headers } from "next/headers";
 import PlatformHeader from "@/components/PlatformHeader";
 import LoadPlanView from "./LoadPlanView";
+import type { LoadBuilderAccess } from "./loadBuilderUi";
 
 export const metadata = {
   title: "xPanda Load Builder — v2",
@@ -27,6 +29,14 @@ export default async function LoadBuilderPage() {
     permissions = {};
   }
 
+  const can = (key: string, action: "view" | "edit") => isAdmin || permissions[key]?.[action] === true;
+  const access: LoadBuilderAccess = {
+    canSave: can("logistics.load-builder", "edit"),
+    canGenerateBol: can("logistics.bol", "edit"),
+    canViewParts: can("manufacturing.calculators", "view"),
+    canEditParts: can("manufacturing.calculators", "edit"),
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-bg">
       <PlatformHeader
@@ -36,7 +46,7 @@ export default async function LoadBuilderPage() {
         title="Load builder · v2"
         currentPath="/v2/logistics/load-builder"
       />
-      <LoadPlanView />
+      <LoadPlanView access={access} />
     </div>
   );
 }
