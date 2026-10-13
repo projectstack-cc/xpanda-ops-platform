@@ -2929,6 +2929,74 @@ current series).
 
 ## Logistics (v2)
 
+- **lbr-10 — Load Builder: Force sizes (pick the exact trucks, legacy parity) + Shift to rear slides stacks on mixed-footprint rows (Next/Cloudflare Platform Agent §9a leads: `forcedPack.ts`, the `loadEditor.ts` shift, the harness; React Component Agent §9b for the Load-tab UI; Logistics Agent §3 on legacy parity). No API, migration or permission change. `stackPlanner.ts` is untouched; the only `packEngine.ts` edit is the optional, type-only `PackTrailer.forced?: true` (nothing in that file reads it).**
+  - **Why (Steve, 2026-10-12/13):**
+    - Force sizes is the last piece of Load-tab parity: the planner picks the exact trucks, e.g. 1 × 53ft Standard + 1 × 26ft Box Truck.
+    - lbr-09's Shift to rear only closed empty rows on trailers with mixed-depth rows (about 100 of 344 real-cart runs, mostly regular block loads). Steve wants stacks to slide there too, without ever mixing footprints or lengthening the trailer.
+  - **NEW `lib/forcedPack.ts` — `packForced(cart, skus, queue, defaultTypeKey, options)`.**
+    - **Legacy behavior** (`load-builder.html` calcLoading ~863–880, 993): the queue is expanded (count clamped 1–10; unknown types are warned and skipped) and filled **in order**. For each entry, `pack()` runs on the *remaining* demand against that type (auto-downsize off, `trailerTypeLabel` = the type, runners via options). Only that call's first trailer is kept, marked `forced: true`, and its pieces are subtracted. A call that places nothing stops the queue.
+    - **Leftovers** go to one `pack()` on the default type: all of its trailers are kept, with the trailer limit reduced by the forced count. Then the warning "{n} pieces didn't fit the forced trucks — added {m} × {type}." is added. `balance` is what that last call couldn't place.
+    - **Warnings.** Per-trailer lines (`trailer N row …`) are re-indexed to the global trailer, so `filterTrailerWarnings` keeps working. For a queued call, only its kept trailer's lines survive. Plain lines are deduped. A queued call's "trailerLimit reached" / "unable to place remaining" lines describe trailers that were thrown away, so they're dropped.
+    - **`consolidation`.**
+      - `applied` is true when any call mixed and kept stacks are topped off.
+      - `trailers` = `pureTrailers` = the total, since the user fixed the truck count.
+      - `note` = "Mixed {n} stacks to fit the trucks you picked".
+      - **Deviation:** `topOffStacks` is counted from the stacks actually kept, because a queued call's own count includes trailers it threw away. `shortenedStacks` is only reported per call, so it stays the per-call sum.
+    - **Empty queue** returns plain `pack()` output unchanged, asserted byte-for-byte.
+  - **NEW `forcedPack.selfcheck.ts` 26/26.**
+    - An empty queue equals `pack()`.
+    - Golden `[53ft × 1]` matches `pack()` exactly: the lbr-03 golden rows, rows deep-equal, and the same balance, totals and warnings. It isn't byte-identical by design: the trailer carries `type` + `forced`, and the note names the picked trucks.
+    - Golden `[26ft Box Truck × 2]`:
+      - trailers 1–2 have box dims, type and `forced`;
+      - the rest are 53ft and not forced;
+      - the overflow warning is present;
+      - pieces are conserved with nothing in balance, `validatePlan` is clean, and totals are summed.
+    - `[53ft × 3]` gives 1 trailer, with no empty trailers and no overflow warning.
+    - An unknown type is warned and skipped, and an unknown-only queue gives plain `pack()` plus the warning.
+    - Stability-warning re-indexing: a box truck exactly filled by a 52×24 filler puts the tall 10×10×40 pieces on forced trailer 2, and the warnings come out as `trailer 1 …`.
+    - A count of 0 clamps to 1, and 4″ runners cap every stack at 104″.
+  - **Load tab.**
+    - **NEW `ForceSizesList.tsx`.** Each row has a type `<select>`, a −/count/+ stepper (1–10) and Remove (`--danger-ink`). **Add truck** adds the current trailer type × 1, and turning the toggle on with an empty list seeds one row. Below the list: "Will load: 2 × 26ft Box Truck, then 53ft Standard for anything left." Every target is ≥44px and rows wrap at 390px.
+    - **`LoadTab.tsx`.** Adds the **Force sizes** On/Off toggle, styled like Auto-downsize. While it's on, Auto-downsize is disabled and shows "Off while Force sizes is on" (legacy: `!state.forcedMode`). `Toggle` gained an optional `disabledReason`.
+  - **`LoadPlanView.tsx`.**
+    - New `forceSizes` / `forcedQueue` state. Changing either discards an applied edit, the same reset contract as the other engine settings.
+    - The plan is `packForced(...)` when forcing is on and the queue is non-empty, otherwise `pack()`.
+    - `packOptions.autoDownsize` is off while forcing is on, so Results, Customize, the PDF and BOLs all see one consistent plan.
+    - The snapshot writes `forcedTrailers` (null when off), and restore turns Force sizes on when a queue comes back.
+  - **Badges.**
+    - `ResultsTab.tsx` shows `Forced · {type}` for forced trailers and keeps `Auto-downsized · {type}` for downsized ones, via a new `trailerBadge()` in `loadBuilderUi.ts`.
+    - **Outside the listed files:** `CustomizeEditor.tsx` (one line) and `loadBuilderUi.ts`. Customize badged *any* trailer whose type differs from the primary as "Auto-downsized", so a forced box truck would have read "Auto-downsized" there. Both screens now share `trailerBadge`. It lives in `loadBuilderUi.ts` because putting it in `ResultsTab.tsx` would have created a ResultsTab ↔ CustomizeEditor import cycle.
+  - **`lib/savedLoad.ts`.** Optional `forcedTrailers?: ForcedTrailer[] | null`, written on every save (null = off) and lightly validated on load (missing or malformed = off). The dirty key follows. **`savedLoad.selfcheck.ts` 38 → 43/43:** round-trip, omitted → null, pre-lbr-10 row → off, malformed → off and still loads, and `snapshotKey` changes with the queue.
+  - **Shift to rear on mixed-footprint rows (`lib/loadEditor.ts`).**
+    - **New behavior.** `reflowTrailer`'s mixed-depth branch now calls the new `slideMixedTrailer`; the uniform-depth path is unchanged. It walks rows rear → front. While a row has free width, it pulls in the **nearest** stack in front of it (rows toward the doors, `posY` order) whose depth **equals** the depth of a stack already in the row and whose width fits. Rows left empty are removed. Stacks never change trailer.
+    - **The old note is gone.** "rows of mixed depth — closed empty rows only" no longer exists. The only note is the guard fallback "Trailer N: couldn't slide stacks without lengthening the trailer — closed empty rows only."
+    - **The guard is unreachable for a well-formed row.** A stack only joins a row that already holds its exact depth, so that row's rowLength can't grow, and the row it left can only shrink or disappear. It stays as a defensive check, and the sweep below confirms it never fires.
+  - **`loadEditor.selfcheck.ts` 264 → 281/281.**
+    - **lbr-09 case 3 rewritten on purpose.** Its three assertions stated exactly the behavior lbr-10 replaces (empty rows only, plus the note). They now assert the lbr-10 result: the rear row pulls back the 48″ stack and no note is emitted. A part-empty rear row on a hole-free mixed trailer also fills. Every other lbr-09 case passes unchanged.
+    - **New mixed cases:**
+      - a hole from `pullToHolding` in `[D90 S48 S48 S48]` is filled by the nearest same-depth stack in front (R2's D90), and R2 then refills from R1 with a 48;
+      - no row gains a new depth and no rowLength grows; the stack count is unchanged;
+      - `validatePlan` is clean, the cart is conserved, used length ≤ before, and undo reverts;
+      - the auto-shift gives the same layout in one history step, and a second shift is a no-op;
+      - a rear row whose depths aren't in front → same reference;
+      - the guard never fires.
+  - **Harness (`scripts/lb-harness.mjs`) + the audit's notes.**
+    - **New lbr-10 sweep** over 172 carts × {consolidated, pure} = 344 runs. For each mixed-depth trailer: pull the middle stack of the middle row to holding, run `shiftToRear`, and count.
+    - **Summary:** 100 mixed-depth trailers → **68 holes filled** from in front, **6 left** (no same-depth stack in front that fits), 26 single-stack rows closed; **0 length increases, 0 validatePlan violations** (0 before), 0 guard fallbacks. This is a new gate.
+    - **Untouched auto-packs that are fixed points: 334 of 344.** The other 10 runs (INV 4279, 4302, 4343, 4393, 4486, each consolidated and pure) have a part-empty row mid-trailer that same-depth stacks from in front can fill. On those loads, the first Customize action also slides a few stacks the planner didn't touch. That follows the spec's rule (gaps close automatically), but it's flagged here.
+    - **Harness-only stub.** `loadEditor.ts` imports `colorForSkuId` from `jobPull.ts`, whose `LibraryFetchError` uses a TS parameter property that Node's strip-only mode rejects. The harness's resolve hook swaps in a one-function stand-in for that import only; the sweep never builds a new column.
+    - The existing audit numbers are unchanged (a one-line diff), and a second run is byte-identical. Runtime is 3.9 s.
+  - **Verified.**
+    - **Selfchecks (`npx tsx`):** forcedPack 26/26, loadEditor 281/281, savedLoad 43/43, loadingDiagramPdf 42/42, dissolve 21/21, packEngine 178/178, stackPlanner 29/29, jobPull 17/17, loadList 28/28, thicknessPalette 35/35.
+    - **Harness:** exit 0, every gate passes, and a second run is byte-identical.
+    - **Build:** `npx tsc --noEmit` clean; `npm run cf-build` exit 0 (ui-tokens guard 480 files OK).
+    - **Browser smoke (38/38).** Run on next dev :3100 + Playwright, light and dark, with jobs / saved-loads / load-builder-skus mocked: `JOB-GOLD` = `GOLDEN_4472_T1`, `JOB-4255` = a real mixed-footprint block cart from `lb-fixtures.json`. Screenshots (scratchpad, not committed):
+      1. Golden, Force sizes on, `[26ft Box Truck × 2]`. Auto-downsize is disabled with "Off while Force sizes is on", and the summary line is exact. Results shows Trailer 1–2 "26ft Box Truck · 312″×72″×108″" badged **Forced · 26ft Box Truck**, then Trailer 3 "53ft Standard", plus the overflow warning, with no Auto-downsized badge (`lbr10-1a-force-sizes-settings[-dark].png`, `lbr10-1b-forced-results[-dark].png`).
+      2. Save → the row stores `forcedTrailers [{26ft Box Truck, 2}]`. After Load saved: Force sizes is On, the list reads 26ft Box Truck × 2, there's no Unsaved chip, and Results still shows the two forced box trucks (`lbr10-2-restored.png`).
+      3. Print / Export on forced trailer 1 → the PDF is captured from the blob and rendered. It reads "312"L × 72"W × 108"H", with FRONT on the R1 side (`lbr10-3-pdf-forced-box.png`).
+      4. INV 4255 Customize: R7 is a mixed row (two stack depths). Send R7's first stack to holding → R7 is back to 4 stacks with the same depths, no new mixed row (3 → 2, since one front row became uniform), every row keeps only depths it already had, and one Undo restores the layout (`lbr10-4-mixed-gap-filled[-dark].png`).
+      5. 390px, Force sizes list with 2 rows: scrollWidth 390, and every Settings button/select is ≥44px (`lbr10-5-390-force-sizes[-dark].png`).
+
 - **lbr-09 — Load Builder: FRONT/REAR label swap, Shift to rear (auto after every move + button), trailer scroll box with a sticky side panel, PDF tables with swatches (React Component Agent §9b leads; Next/Cloudflare Platform Agent §9a for `loadEditor.ts` / `loadingDiagramPdf.ts`; Logistics Agent §3 on floor terms). No API, migration, permission or engine change (`packEngine.ts` / `stackPlanner.ts` untouched).**
   - **Why (Steve, 2026-10-13):** the logistics manager calls the doors the FRONT and the nose the REAR. When a move leaves an empty spot, everything behind it should slide back to fill it (tried in legacy before, never landed). The trailers should scroll in a box about two trailers tall so the tools stay put. In the PDF, PIECES / STACK BREAKDOWN should sit lower and be tables with row lines, with the color right next to each stack line.
   - **A. Labels only (layout, order and R-numbering unchanged).** Floor terms: FRONT = doors (R1, `trailer.rows[0]`, loaded last), REAR = nose (loaded first). Strings changed, old → new:

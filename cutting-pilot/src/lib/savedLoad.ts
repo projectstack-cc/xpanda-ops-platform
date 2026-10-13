@@ -28,6 +28,7 @@
 // in one list. `deserializeSnapshot` below returns a typed ok/reason result rather than throwing, so
 // the picker UI can show "not loadable here" for a legacy row instead of crashing on Load.
 import type { CartLine, PackPlan, PackSku } from "./packEngine";
+import type { ForcedTrailer } from "./forcedPack";
 import type { PulledLoadSource } from "@/components/logistics/JobPullModal";
 import { LOAD_BUILDER_FIXTURES } from "./loadBuilderFixtures";
 
@@ -95,6 +96,9 @@ export interface SavedLoadSnapshot {
   // a missing/malformed value means true (the engine default, "fewest trucks"), so every row saved
   // before lbr-05 regenerates exactly as it was built. Every new save writes the actual value.
   consolidate?: boolean;
+  // lbr-10: the Force sizes queue at save time — null when Force sizes is off. Optional and additive:
+  // a missing/malformed value (every pre-lbr-10 row) means off. Every new save writes it.
+  forcedTrailers?: ForcedTrailer[] | null;
 }
 
 export function buildSnapshot(args: {
@@ -109,6 +113,8 @@ export function buildSnapshot(args: {
   editedSkus?: PackSku[] | null;
   autoDownsize?: boolean;
   consolidate?: boolean;
+  /** lbr-10: null/omitted = Force sizes off. */
+  forcedTrailers?: ForcedTrailer[] | null;
 }): SavedLoadSnapshot {
   const source: SavedLoadSource = args.pulledSource
     ? { kind: "pulled", pulledSource: args.pulledSource }
@@ -125,6 +131,7 @@ export function buildSnapshot(args: {
     editedSkus: args.editedSkus ?? null,
     autoDownsize: args.autoDownsize ?? false,
     consolidate: args.consolidate ?? true,
+    forcedTrailers: args.forcedTrailers ?? null,
   };
 }
 
@@ -199,6 +206,10 @@ function isValidPlan(v: unknown): v is PackPlan {
 function isValidCartLineArray(v: unknown): v is CartLine[] {
   return Array.isArray(v) && v.every((c) => isPlainObject(c) && typeof c.skuId === "string" && typeof c.qty === "number");
 }
+// lbr-10: light duck-typing, like the other optional fields — malformed degrades to "off".
+function isValidForcedArray(v: unknown): v is ForcedTrailer[] {
+  return Array.isArray(v) && v.length > 0 && v.every((f) => isPlainObject(f) && typeof f.type === "string" && typeof f.count === "number");
+}
 function isValidSkuArray(v: unknown): v is PackSku[] {
   return Array.isArray(v) && v.every((s) => isPlainObject(s) && typeof s.id === "string" && typeof s.name === "string");
 }
@@ -230,6 +241,7 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
   const editedSkus = isValidSkuArray(parsed.editedSkus) ? parsed.editedSkus : null;
   const autoDownsize = typeof parsed.autoDownsize === "boolean" ? parsed.autoDownsize : false;
   const consolidate = typeof parsed.consolidate === "boolean" ? parsed.consolidate : true;
+  const forcedTrailers = isValidForcedArray(parsed.forcedTrailers) ? parsed.forcedTrailers.map((f) => ({ type: f.type, count: f.count })) : null;
 
   return {
     ok: true,
@@ -243,6 +255,7 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
       editedSkus,
       autoDownsize,
       consolidate,
+      forcedTrailers,
     },
   };
 }

@@ -91,6 +91,7 @@ import JobPullModal, { type PulledLoadSource } from "@/components/logistics/JobP
 import BolGenerateModal, { type PackPlanSource } from "@/components/logistics/BolGenerateModal";
 import SaveLoadModal from "@/components/logistics/SaveLoadModal";
 import LoadPickerModal from "@/components/logistics/LoadPickerModal";
+import { packForced, type ForcedTrailer } from "@/lib/forcedPack";
 import { buildSnapshot, defaultSaveName, deserializeSnapshot, type ManualLoadSource, type OrderLoadSource, type SavedLoadRecord, type SavedLoadSnapshot } from "@/lib/savedLoad";
 import { fetchLibrarySkus, LibraryFetchError } from "@/lib/jobPull";
 import type { LibraryState } from "./LoadPicker";
@@ -188,6 +189,11 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   // lbr-05: the pure-plan toggle (PackOptions.consolidate). true = lbr-03's default — mix stacks only
   // when it saves a truck; false = pure stacks only. Same reset contract as the settings above.
   const [consolidate, setConsolidate] = useState(true);
+  // lbr-10: Force sizes (legacy parity) — the planner's exact trucks, loaded in order, then
+  // trailerTypeKey for anything left (forcedPack.ts). Auto-downsize is off while it's on. Same
+  // reset contract as the settings above.
+  const [forceSizes, setForceSizes] = useState(false);
+  const [forcedQueue, setForcedQueue] = useState<ForcedTrailer[]>([]);
   // lbr-05: the explicitly chosen tab (?tab=), or null for the default (Results once there's a load).
   const [tabChoice, setTabChoice] = useState<LoadBuilderTab | null>(null);
 
@@ -248,12 +254,19 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   // trailerTypeLabel (lb-ui-12): stamped onto every trailer pack() builds (PackTrailer.type) so a
   // downsized last trailer's type reads "26ft Box Truck" while every other trailer still correctly
   // reads the primary type — see PackOptions.trailerTypeLabel's own comment.
+  // lbr-10: auto-downsize is off while Force sizes is on (legacy: `!state.forcedMode`).
   const packOptions: PackOptions = useMemo(
-    () => ({ ...DEFAULT_PACK_OPTIONS, runnerHeight, autoDownsize, consolidate, trailerTypeLabel: trailerTypeKey }),
-    [runnerHeight, autoDownsize, consolidate, trailerTypeKey]
+    () => ({ ...DEFAULT_PACK_OPTIONS, runnerHeight, autoDownsize: autoDownsize && !forceSizes, consolidate, trailerTypeLabel: trailerTypeKey }),
+    [runnerHeight, autoDownsize, forceSizes, consolidate, trailerTypeKey]
   );
 
-  const packedPlan = useMemo(() => pack(scaledCart, fixture.skus, dims, packOptions), [scaledCart, fixture, dims, packOptions]);
+  const packedPlan = useMemo(
+    () =>
+      forceSizes && forcedQueue.length > 0
+        ? packForced(scaledCart, fixture.skus, forcedQueue, trailerTypeKey, packOptions)
+        : pack(scaledCart, fixture.skus, dims, packOptions),
+    [scaledCart, fixture, dims, packOptions, forceSizes, forcedQueue, trailerTypeKey]
+  );
   const plan = editedPlan ?? packedPlan;
   const tab: LoadBuilderTab = tabChoice ?? (hasSource ? "results" : "load");
 
@@ -262,9 +275,9 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   const currentSnapshot: SavedLoadSnapshot | null = useMemo(
     () =>
       access.canSave && hasSource && plan.trailers.length > 0
-        ? buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, manualSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate })
+        ? buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, manualSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate, forcedTrailers: forceSizes ? forcedQueue : null })
         : null,
-    [access.canSave, hasSource, plan.trailers.length, fixtureId, pulledSource, manualSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate]
+    [access.canSave, hasSource, plan.trailers.length, fixtureId, pulledSource, manualSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate, forceSizes, forcedQueue]
   );
   const persistence = useOrderLoadPersistence({
     jobId: pulledSource?.jobId ?? null,
@@ -439,6 +452,9 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
     setAutoDownsize(snapshot.autoDownsize ?? false);
     // lbr-05: a missing value (any pre-lbr-05 row) means true — lbr-03's mix-to-save-a-truck default.
     setConsolidate(snapshot.consolidate ?? true);
+    // lbr-10: a missing value (any pre-lbr-10 row) means Force sizes off.
+    setForceSizes(!!snapshot.forcedTrailers && snapshot.forcedTrailers.length > 0);
+    setForcedQueue(snapshot.forcedTrailers ?? []);
     setEditedPlan(snapshot.editedPlan);
     // Only restore editedCart/editedSkus alongside a non-null editedPlan -- these two describe
     // divergence FROM the frozen source that a materialized plan already accounts for; restoring
@@ -499,6 +515,27 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   // contract as the other engine settings above.
   function handleConsolidateChange(value: boolean) {
     setConsolidate(value);
+    setSelected(null);
+    setEditedPlan(null);
+    setEditedCart(null);
+    setEditedSkus(null);
+    setMode("view");
+  }
+
+  // lbr-10: Force sizes — same reset contract. Turning it on with an empty list seeds one row of the
+  // current trailer type.
+  function handleForceSizesChange(value: boolean) {
+    setForceSizes(value);
+    if (value && forcedQueue.length === 0) setForcedQueue([{ type: trailerTypeKey, count: 1 }]);
+    setSelected(null);
+    setEditedPlan(null);
+    setEditedCart(null);
+    setEditedSkus(null);
+    setMode("view");
+  }
+
+  function handleForcedQueueChange(next: ForcedTrailer[]) {
+    setForcedQueue(next);
     setSelected(null);
     setEditedPlan(null);
     setEditedCart(null);
@@ -699,6 +736,10 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
           onRunnerHeightChange={handleRunnerHeightChange}
           onAutoDownsizeChange={handleAutoDownsizeChange}
           onConsolidateChange={handleConsolidateChange}
+          forceSizes={forceSizes}
+          forcedQueue={forcedQueue}
+          onForceSizesChange={handleForceSizesChange}
+          onForcedQueueChange={handleForcedQueueChange}
           onPull={() => setShowJobPull(true)}
           onRepull={openRepull}
           onLoadSaved={() => setPickerModalOpen(true)}

@@ -403,5 +403,25 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
     check("snapshotKey: changes when a manual load-list qty changes", snapshotKey(m1) !== snapshotKey(m2));
   }
 
+  // lbr-10: the Force sizes queue round-trips; a missing (pre-lbr-10) or malformed value means off.
+  {
+    const queue = [
+      { type: "26ft Box Truck", count: 2 },
+      { type: "53ft Standard", count: 1 },
+    ];
+    const forced = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: null, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null, forcedTrailers: queue });
+    const back = deserializeSnapshot(serializeSnapshot(forced));
+    check("forcedTrailers: the queue round-trips through serialize -> deserialize", back.ok === true && JSON.stringify(back.snapshot.forcedTrailers) === JSON.stringify(queue), JSON.stringify(back.ok && back.snapshot.forcedTrailers));
+    const off = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: null, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
+    check("forcedTrailers: omitted -> written as null (off)", off.forcedTrailers === null);
+    const { forcedTrailers: _omit, ...legacyShape } = forced;
+    void _omit;
+    const old = deserializeSnapshot(JSON.stringify(legacyShape));
+    check("forcedTrailers: a pre-lbr-10 row (no key) loads with Force sizes off (null)", old.ok === true && old.snapshot.forcedTrailers === null, JSON.stringify(old.ok && old.snapshot.forcedTrailers));
+    const bad = deserializeSnapshot(JSON.stringify({ ...forced, forcedTrailers: [{ type: 5 }] }));
+    check("forcedTrailers: a malformed value degrades to off, row still loads", bad.ok === true && bad.snapshot.forcedTrailers === null);
+    check("forcedTrailers: changes snapshotKey (dirty check sees the queue)", snapshotKey(forced) !== snapshotKey(off) && snapshotKey(forced) !== snapshotKey({ ...forced, forcedTrailers: [{ type: "26ft Box Truck", count: 3 }] }));
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }

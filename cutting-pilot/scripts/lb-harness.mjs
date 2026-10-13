@@ -21,6 +21,11 @@
 // Run with: node scripts/lb-harness.mjs   (from cutting-pilot/; Node 22.6+/23.6+ strips
 // packEngine's TypeScript syntax natively — no build step, no dependencies). Deterministic: the same
 // fixtures produce a byte-identical report (the only date in it is the fixture's exportedAt).
+//
+// lbr-10: adds a Shift to rear sweep (loadEditor.ts) over every cart × {consolidated, pure}: per
+// mixed-depth trailer, pull the middle stack of the middle row to holding, shift, and count holes
+// filled vs left, length increases and validatePlan violations (both must be 0). Reported in the
+// notes and on stdout; the existing numbers are unchanged.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,6 +39,12 @@ import { registerHooks } from "node:module";
 // engine modules load (hence the dynamic imports below).
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    // lbr-10: loadEditor.ts imports colorForSkuId from ./jobPull, whose LibraryFetchError uses a TS
+    // parameter property Node's strip-only mode rejects. The shift sweep never builds a new column
+    // (colorForSkuId's only use), so a one-function stand-in is enough — harness-only.
+    if (specifier === "./jobPull" && context.parentURL?.endsWith("/loadEditor.ts")) {
+      return { url: "data:text/javascript,export function colorForSkuId() { return '%23888888'; }", shortCircuit: true };
+    }
     try {
       return nextResolve(specifier, context);
     } catch (err) {
@@ -46,6 +57,7 @@ registerHooks({
 });
 const { pack, TRAILER_TYPES, DEFAULT_PACK_OPTIONS } = await import("../src/lib/packEngine.ts");
 const { planStacks } = await import("../src/lib/stackPlanner.ts");
+const { createEditorState, pullToHolding, shiftToRear, shiftToRearWithNote, validateForApply } = await import("../src/lib/loadEditor.ts");
 const startedAt = performance.now(); // stdout only — never written to the report (determinism)
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -564,6 +576,49 @@ const gates = [
 ];
 const budgetStops = jobs.filter((j) => j.v2.warnings.some((w) => w.startsWith("consolidation stopped early")));
 
+// --- lbr-10: Shift to rear on mixed-depth trailers ---
+function shiftSweep() {
+  const out = { runs: 0, fixedPoints: 0, notFixed: [], mixedTrailers: 0, filled: 0, left: 0, emptiedRowClosed: 0, lengthIncreases: 0, violations: 0, baselineViolations: 0, guardNotes: 0 };
+  const isMixed = (t) => t.rows.some((r) => r.columns.some((c) => Math.abs(c.colLength - r.columns[0].colLength) > EPS));
+  for (const consolidate of [true, false]) {
+    for (const job of fixtures.jobs) {
+      const opts = { ...DEFAULT_PACK_OPTIONS, consolidate };
+      const plan = pack(job.cart, skus, TRAILER_TYPES[TRAILER_KEY], opts);
+      out.runs++;
+      // Stacks get ids in their rationale (a copy — the plan above is not reused) to find rows again.
+      plan.trailers.forEach((t, ti) => t.rows.forEach((r, ri) => r.columns.forEach((c, ci) => (c.rationale = `#${ti}.${ri}.${ci}`))));
+      const st = createEditorState(plan, TRAILER_TYPES[TRAILER_KEY], opts, job.cart, skus);
+      if (shiftToRear(st) === st) out.fixedPoints++;
+      else out.notFixed.push(`${job.inv}${consolidate ? "" : " (pure)"}`);
+      st.plan.trailers.forEach((trailer, t) => {
+        if (!isMixed(trailer) || trailer.rows.length === 0) return;
+        out.mixedTrailers++;
+        const r = Math.floor(trailer.rows.length / 2);
+        const row = trailer.rows[r];
+        if (row.columns.length === 0) return;
+        const c = Math.floor(row.columns.length / 2);
+        const pulled = pullToHolding(st, { t, r, c });
+        const { state: shifted, note } = shiftToRearWithNote(pulled, t);
+        if (note) out.guardNotes++;
+        if (pulled.plan.trailers[t].usedLength + EPS < shifted.plan.trailers[t].usedLength) out.lengthIncreases++;
+        out.baselineViolations += validateForApply(pulled).length;
+        out.violations += validateForApply(shifted).length;
+        if (row.columns.length === 1) {
+          out.emptiedRowClosed += shifted.plan.trailers[t].rows.length < pulled.plan.trailers[t].rows.length ? 1 : 0;
+          return;
+        }
+        const neighbor = row.columns[c === 0 ? 1 : 0].rationale;
+        const countIn = (s) => s.plan.trailers[t].rows.find((x) => x.columns.some((col) => col.rationale.startsWith(neighbor)))?.columns.length ?? 0;
+        if (countIn(shifted) > countIn(pulled)) out.filled++;
+        else out.left++;
+      });
+    }
+  }
+  return out;
+}
+const sweep = shiftSweep();
+const sweepLine = `**Shift to rear on mixed-depth trailers (lbr-10):** ${sweep.runs} runs (${fixtures.jobs.length} carts × consolidated / pure), ${sweep.mixedTrailers} trailers with a mixed-depth row. Pulling the middle stack of each one's middle row to holding, then Shift to rear: ${sweep.filled} holes filled from in front, ${sweep.left} left (no same-depth stack in front that fits), ${sweep.emptiedRowClosed} single-stack rows closed; ${sweep.lengthIncreases} length increases, ${sweep.violations} validatePlan violations (${sweep.baselineViolations} before the shift), ${sweep.guardNotes} guard fallbacks. Untouched auto-packs that are fixed points: ${sweep.fixedPoints} of ${sweep.runs}${sweep.notFixed.length ? ` (the rest slide a few same-depth stacks into a part-empty row: INV ${sweep.notFixed.join(", ")})` : ""}.`;
+
 L.push("## 5. Notes");
 L.push("");
 L.push(`- **Legacy slice:** \`logistics/load-builder.html\` lines ${legacy.startLine}–${legacy.endLine} (from \`${START_ANCHOR}\` up to, not including, \`${END_ANCHOR}\`), run in a \`node:vm\` context with a self-returning \`Proxy\` for \`document\`/\`window\` and a no-op \`localStorage\`. No further stubs were needed. The HTML is never edited.`);
@@ -594,6 +649,7 @@ notableNotes.push(
 notableNotes.push(
   `**Golden v2 vs the sandbox:** the Orchestrator's sandbox reported v2 at 51 of 52 mixed stacks on this piece set; the harness measures ${golden.mv2.mixed} of ${golden.mv2.stacks} (cross-checked against \`plan.mixedStacks\` and the per-column \`mixed\` flag, which agree). The truck count (1) matches. The sandbox's "thinnest pieces at the nose" was the same row-direction reversal fixed above: v2 actually loads the 13s at the nose. The mixed-count gap is not explained here (a different engine revision or counting method is possible); lbr-03's planner-backed v2 now measures ${golden.mv2.mixed} of ${golden.mv2.stacks} on 1 truck, matching the planner.`
 );
+notableNotes.push(sweepLine);
 for (const s of notableNotes) L.push(`- ${s}`);
 L.push("");
 
@@ -634,5 +690,7 @@ console.log(`  legacy ${totalsLine(tlg)} · over truckLB ${lgOverLB}/${withLB.le
 console.log(`  GOLDEN_4472_T1  v2: ${golden.mv2.trucks} truck(s), ${mixedStackNote(golden.mv2)} · legacy: ${golden.mlg.trucks} truck(s), ${mixedStackNote(golden.mlg)}`);
 const elapsedS = (performance.now() - startedAt) / 1000;
 gates.push(["Harness runs in under ~10 s", elapsedS < 10, `${elapsedS.toFixed(1)} s`]);
+gates.push(["lbr-10 shift sweep: 0 length increases, 0 validatePlan violations after the shift", sweep.lengthIncreases === 0 && sweep.violations === 0, `${sweep.lengthIncreases} / ${sweep.violations}`]);
+console.log(`  lbr-10 shift sweep: ${sweep.mixedTrailers} mixed-depth trailers · filled ${sweep.filled} · left ${sweep.left} · single-stack rows closed ${sweep.emptiedRowClosed} · length increases ${sweep.lengthIncreases} · violations ${sweep.violations} (before ${sweep.baselineViolations}) · guard ${sweep.guardNotes} · fixed points ${sweep.fixedPoints}/${sweep.runs}`);
 for (const [name, pass, detail] of gates) console.log(`  gate ${pass ? "PASS" : "FAIL"}: ${name} — ${detail}`);
 if (gates.some(([, pass]) => !pass)) process.exit(1);

@@ -10,6 +10,9 @@
 // (LoadListCard, which now holds Calculate load — it moved out of Settings, as in legacy). The Order
 // card gains "Start without an order"; Settings gains legacy's right-aligned trailer readout
 // (L × W × H · BDFT, BDFT = L×W×(H − runners)/144).
+//
+// lbr-10: Settings gains Force sizes (On/Off, legacy parity) — when on, ForceSizesList edits the
+// queue of exact trucks, and Auto-downsize is disabled with "Off while Force sizes is on".
 import { Truck, Save, FolderOpen, PencilLine } from "lucide-react";
 import type { CartLine, Dimensions, PackSku } from "@/lib/packEngine";
 import type { LibrarySku } from "@/lib/jobPull";
@@ -18,6 +21,8 @@ import type { OrderLoadSource } from "@/lib/savedLoad";
 import { BTN_GHOST, BTN_OUTLINE, BTN_PRIMARY, CARD, NO_SAVE_REASON, SELECT, formatEt } from "./loadBuilderUi";
 import LoadPicker, { type LibraryState } from "./LoadPicker";
 import LoadListCard from "./LoadListCard";
+import ForceSizesList from "./ForceSizesList";
+import type { ForcedTrailer } from "@/lib/forcedPack";
 
 interface LoadTabProps {
   hasSource: boolean;
@@ -46,6 +51,11 @@ interface LoadTabProps {
   onRunnerHeightChange: (rh: number) => void;
   onAutoDownsizeChange: (v: boolean) => void;
   onConsolidateChange: (v: boolean) => void;
+  /** lbr-10: Force sizes on/off and its queue (loaded in order, then trailerTypeKey for the rest). */
+  forceSizes: boolean;
+  forcedQueue: ForcedTrailer[];
+  onForceSizesChange: (v: boolean) => void;
+  onForcedQueueChange: (next: ForcedTrailer[]) => void;
 
   onPull: () => void;
   onRepull: () => void;
@@ -76,19 +86,35 @@ interface LoadTabProps {
   onDismissBanner: () => void;
 }
 
-function Toggle({ label, hint, value, disabled, onChange }: { label: string; hint: string; value: boolean; disabled: boolean; onChange: (v: boolean) => void }) {
+function Toggle({
+  label,
+  hint,
+  value,
+  disabled,
+  disabledReason,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: boolean;
+  disabled: boolean;
+  /** lbr-10: shown in place of the hint (and as the tooltip) when set — why the control is off. */
+  disabledReason?: string;
+  onChange: (v: boolean) => void;
+}) {
   return (
     <div className="flex items-center justify-between gap-3 min-h-[44px]">
       <div className="min-w-0">
         <div className="text-sm font-medium text-text">{label}</div>
-        <div className="text-xs text-muted">{hint}</div>
+        <div className="text-xs text-muted">{disabledReason ?? hint}</div>
       </div>
       <button
         type="button"
         role="switch"
         aria-checked={value}
         aria-label={label}
-        disabled={disabled}
+        disabled={disabled || !!disabledReason}
+        title={disabledReason}
         onClick={() => onChange(!value)}
         className={[
           "shrink-0 min-h-[44px] min-w-[72px] px-3 rounded-lg text-sm font-semibold cursor-pointer border transition-colors",
@@ -247,10 +273,27 @@ export default function LoadTab(p: LoadTabProps) {
           <Toggle
             label="Auto-downsize last trailer"
             hint="Use a 26ft box truck when the last load fits one."
-            value={p.autoDownsize}
+            value={p.autoDownsize && !p.forceSizes}
             disabled={p.locked}
+            disabledReason={p.forceSizes ? "Off while Force sizes is on" : undefined}
             onChange={p.onAutoDownsizeChange}
           />
+          <Toggle
+            label="Force sizes"
+            hint="Pick the exact trucks, in loading order. Anything left goes on the trailer above."
+            value={p.forceSizes}
+            disabled={p.locked}
+            onChange={p.onForceSizesChange}
+          />
+          {p.forceSizes && (
+            <ForceSizesList
+              queue={p.forcedQueue}
+              trailerTypeKeys={p.trailerTypeKeys}
+              defaultTypeKey={p.trailerTypeKey}
+              disabled={p.locked}
+              onChange={p.onForcedQueueChange}
+            />
+          )}
           <Toggle
             label="Mix stacks to save trucks"
             hint="Top off stacks only when it saves a whole truck. Off = pure stacks only."

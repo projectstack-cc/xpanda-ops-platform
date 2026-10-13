@@ -21,7 +21,7 @@ import LoadingDiagramPrintButton from "@/components/logistics/LoadingDiagramPrin
 import type { CartLine, Dimensions, PackOptions, PackPlan, PackSku, PackTrailer } from "@/lib/packEngine";
 import { thicknessColor, thicknessLabel } from "@/lib/thicknessPalette";
 import CustomizeEditor from "./CustomizeEditor";
-import { BTN_GHOST, BTN_OUTLINE, BTN_PRIMARY, CARD, NO_BOL_REASON, NO_SAVE_REASON, plural } from "./loadBuilderUi";
+import { BTN_GHOST, BTN_OUTLINE, BTN_PRIMARY, CARD, NO_BOL_REASON, NO_SAVE_REASON, plural, trailerBadge } from "./loadBuilderUi";
 
 export interface ResultsSelection {
   trailerIndex: number;
@@ -278,7 +278,7 @@ export default function ResultsTab(p: ResultsTabProps) {
                   trailerIndex={trailerIndex}
                   title={`Trailer ${trailerIndex + 1} · ${trailer.type ?? p.trailerTypeKey} · ${dimsLabel(trailer.dims)}`}
                   subtitle={trailerSubtitle(trailer, p.runnerHeight)}
-                  typeBadge={trailer.type && trailer.type !== p.trailerTypeKey ? `Auto-downsized · ${trailer.type}` : undefined}
+                  typeBadge={trailerBadge(trailer, p.trailerTypeKey)}
                   selectedColumn={p.selected && p.selected.trailerIndex === trailerIndex ? { rowIndex: p.selected.rowIndex, columnIndex: p.selected.columnIndex } : null}
                   onSelectColumn={(rowIndex, columnIndex) => p.onSelect({ trailerIndex, rowIndex, columnIndex })}
                   headerAction={

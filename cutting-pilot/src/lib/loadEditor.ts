@@ -1154,14 +1154,12 @@ function emptyRow(columns: PackColumn[]): PackRow {
  * the next stack doesn't fit the width — or has a different depth, so a refilled row is never mixed-
  * depth. Uniform-depth runs make this next-fit over a fixed order, which never needs more rows than
  * the layout it came from, so used length can't grow; a post-check enforces that (and the width)
- * anyway and falls back to closing empty rows only. A trailer that already has a mixed-depth row is
- * never re-flowed: only its empty rows close, and it gets a note. */
+ * anyway and falls back to closing empty rows only. A trailer that already has a mixed-depth row
+ * (lbr-10) slides stacks with slideMixedTrailer instead — never re-flowed, so footprints never mix. */
 function reflowTrailer(trailer: PackTrailer, trailerIndex: number): { rows: PackRow[] | null; note: string | null } {
   const nonEmpty = trailer.rows.filter((r) => r.columns.length > 0);
   const compactOnly = nonEmpty.length === trailer.rows.length ? null : nonEmpty;
-  if (nonEmpty.some((r) => rowDepth(r) === null)) {
-    return { rows: compactOnly, note: `Trailer ${trailerIndex + 1} has rows of mixed depth — closed empty rows only.` };
-  }
+  if (nonEmpty.some((r) => rowDepth(r) === null)) return slideMixedTrailer(trailer, trailerIndex, compactOnly);
 
   const width = trailer.dims.width;
   const rearFirst = [...nonEmpty].reverse().map((r) => [...r.columns].sort((a, b) => a.posY - b.posY));
@@ -1190,6 +1188,46 @@ function reflowTrailer(trailer: PackTrailer, trailerIndex: number): { rows: Pack
   const fitsWidth = rows.every((r) => r.columns.length === 1 || r.columns.reduce((s, c) => s + c.colWidth, 0) <= width + EPS);
   if (!fitsWidth || usedLengthOf(rows) > usedLengthOf(trailer.rows) + EPS) return { rows: compactOnly, note: null };
   return { rows, note: null };
+}
+
+/** lbr-10 (Steve, 2026-10-13): Shift to rear on a trailer with mixed-footprint rows (the engine's
+ * width pairing puts different depths in one row — most regular block loads). Walks the rows rear →
+ * front; while a row has free width, it pulls in the NEAREST stack in front of it (rows toward the
+ * doors, posY order within a row) whose depth equals the depth of a stack already in that row and
+ * whose width fits. So a row never gains a new depth (no new footprint mix) and its rowLength can't
+ * grow; the source row only shrinks. Rows left empty are removed. The guard (any row's rowLength or
+ * the used length growing → close empty rows only, with a note) can't fire for a well-formed row —
+ * it backs the argument above up rather than being a reachable path (see the selfcheck). Stacks
+ * never change trailer. Returns null rows when nothing moves and no row is empty. */
+function slideMixedTrailer(trailer: PackTrailer, trailerIndex: number, compactOnly: PackRow[] | null): { rows: PackRow[] | null; note: string | null } {
+  const width = trailer.dims.width;
+  const rows = trailer.rows.map((r) => [...r.columns].sort((a, b) => a.posY - b.posY)); // front-first
+  const lengthBefore = trailer.rows.map((r) => (r.columns.length > 0 ? Math.max(...r.columns.map((c) => c.colLength)) : 0));
+  let moved = false;
+  for (let ri = rows.length - 1; ri >= 0; ri--) {
+    const row = rows[ri];
+    if (row.length === 0) continue;
+    for (;;) {
+      const free = width - row.reduce((s, c) => s + c.colWidth, 0);
+      let hit: { rj: number; cj: number } | null = null;
+      for (let rj = ri - 1; rj >= 0 && !hit; rj--) {
+        const cj = rows[rj].findIndex((c) => c.colWidth <= free + EPS && row.some((x) => approxEq(x.colLength, c.colLength)));
+        if (cj >= 0) hit = { rj, cj };
+      }
+      if (!hit) break;
+      const [column] = rows[hit.rj].splice(hit.cj, 1);
+      row.push(column);
+      moved = true;
+    }
+  }
+  if (!moved) return { rows: compactOnly, note: null };
+
+  const grew = rows.some((cols, i) => cols.length > 0 && Math.max(...cols.map((c) => c.colLength)) > lengthBefore[i] + EPS);
+  const next = rows.filter((cols) => cols.length > 0).map(emptyRow);
+  if (grew || usedLengthOf(next) > usedLengthOf(trailer.rows) + EPS) {
+    return { rows: compactOnly, note: `Trailer ${trailerIndex + 1}: couldn't slide stacks without lengthening the trailer — closed empty rows only.` };
+  }
+  return { rows: next, note: null };
 }
 
 /** Shift to rear on one trailer, or every trailer when `trailerIndex` is omitted, with the note (see

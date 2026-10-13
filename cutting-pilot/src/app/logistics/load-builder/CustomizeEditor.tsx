@@ -81,6 +81,7 @@ import {
 import { fetchLoadBuilderSkus } from "@/lib/jobPull";
 import TrailerDiagram, { type TapVerdict } from "@/components/logistics/TrailerDiagram";
 import TrailerScrollBox from "@/components/logistics/TrailerScrollBox";
+import { trailerBadge } from "./loadBuilderUi";
 import HoldingArea from "@/components/logistics/HoldingArea";
 import EditorGuards, { type HoldingSummaryLine } from "@/components/logistics/EditorGuards";
 import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logistics/ColumnDetailPanel";
@@ -543,7 +544,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                 trailer={trailer}
                 dims={trailer.dims}
                 trailerIndex={t}
-                typeBadge={trailer.type && trailer.type !== state.options.trailerTypeLabel ? `Auto-downsized · ${trailer.type}` : undefined}
+                typeBadge={trailerBadge(trailer, state.options.trailerTypeLabel ?? "")}
                 selectedColumn={selection?.kind === "trailer" && selection.ref.t === t ? { rowIndex: selection.ref.r, columnIndex: selection.ref.c } : null}
                 onSelectColumn={(r, c) => handleTapStack(t, r, c)}
                 editable

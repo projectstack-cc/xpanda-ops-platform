@@ -129,6 +129,9 @@ export interface PackRow {
 
 export interface PackTrailer {
   type?: string;
+  // lbr-10: set (true) only by forcedPack.ts's packForced on a trailer from the planner's Force sizes
+  // queue — a display flag for the "Forced · {type}" badge. Type-only; nothing in this file reads it.
+  forced?: true;
   dims: Dimensions;
   rows: PackRow[];
   usedLength: number;

@@ -1099,19 +1099,27 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     check("shift: no refilled row is mixed-depth", depthRows.every((r) => r.every((l) => l === r[0])));
     verifyShift("shift (different-depth rows)", depthHole, shiftedDepths);
 
-    // 3. A trailer with a mixed-depth row: only empty rows close, with the note.
+    // 3. A trailer with a mixed-depth row. lbr-09 closed only its empty rows (with a note); lbr-10
+    //    replaces that branch on purpose: the rear row pulls in the nearest same-depth stack from in
+    //    front, so these three assertions now state the lbr-10 result.
     const mixed = makeShiftFixture([[S48, D90], [S48, S48], [S48]]);
     const mixedHoles = takeToHolding(takeToHolding(mixed, { kind: "column", ref: { t: 0, r: 2, c: 0 } }), { kind: "column", ref: { t: 0, r: 1, c: 1 } });
     const mixedResult = shiftToRearWithNote(mixedHoles);
+    const depthsOf = (st: EditorState) => st.plan.trailers[0].rows.map((r) => r.columns.map((c) => c.colLength));
     check(
-      "shift 3: mixed-depth trailer -> only the empty row is removed (3 rows -> 2), R2's hole stays",
-      JSON.stringify(rowSizes(mixedResult.state)) === "[2,1]",
-      JSON.stringify(rowSizes(mixedResult.state))
+      "shift 3 (lbr-10): mixed-depth trailer -> R2's 48″ stack slides back from R1; the 90″ stays at the front",
+      JSON.stringify(depthsOf(mixedResult.state)) === "[[90],[48,48]]",
+      JSON.stringify(depthsOf(mixedResult.state))
     );
-    check("shift 3: note says why", mixedResult.note === "Trailer 1 has rows of mixed depth — closed empty rows only.", String(mixedResult.note));
+    check("shift 3 (lbr-10): no note (the old mixed-depth note is gone)", mixedResult.note === null, String(mixedResult.note));
     verifyShift("shift 3 (mixed depth)", mixedHoles, mixedResult.state);
-    const mixedNoop = shiftToRearWithNote(mixed);
-    check("shift 3: mixed-depth trailer with no empty row -> same reference, note still set", mixedNoop.state === mixed && mixedNoop.note !== null);
+    const mixedFull = shiftToRearWithNote(mixed);
+    check(
+      "shift 3 (lbr-10): mixed-depth trailer with a part-empty rear row -> the 48″ stacks slide back into it, no note",
+      mixedFull.state !== mixed && JSON.stringify(depthsOf(mixedFull.state)) === "[[90],[48,48,48,48]]" && mixedFull.note === null,
+      JSON.stringify(depthsOf(mixedFull.state))
+    );
+    verifyShift("shift 3 (mixed depth, part-empty rear row)", mixed, mixedFull.state);
 
     // 4. No-op returns the same reference: a full layout, an already-shifted one, withAutoShift on a no-op.
     check("shift 4: a full layout is a no-op (same reference, no note)", shiftToRear(base) === base && shiftToRearWithNote(base).note === null);
@@ -1150,6 +1158,79 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     check("shift golden: order preserved", JSON.stringify(walkIds(goldenAuto)) === JSON.stringify(walkIds(golden).filter((id) => id !== goldenSrcId)));
     verifyShift("shift golden (to holding + auto-shift)", golden, goldenAuto);
     check("shift golden: one undo restores the auto-pack", JSON.stringify(clone(undo(goldenAuto).plan)) === JSON.stringify(clone(golden.plan)) && undo(goldenAuto).holding.length === 0);
+  }
+
+  // --- lbr-10: Shift to rear on mixed-footprint rows. A row with free width pulls in the NEAREST
+  // stack in front of it whose depth matches a stack already in the row — never a new depth, never a
+  // longer row, never a longer trailer. Same 98″-wide trailer as above; stacks carry ids. ---
+  {
+    const MANUAL = " + manually added:";
+    const idOf = (c: PackColumn) => c.rationale.split(MANUAL)[0];
+    const S48: PackSku = { id: "S48", name: "10in 48x24", sku: "S48-1", length: 48, width: 24, height: 10, weight: 1, category: "Blocks", allowRotation: true };
+    const D90: PackSku = { id: "D90", name: "10in 90x24", sku: "D90-1", length: 90, width: 24, height: 10, weight: 1, category: "Blocks", allowRotation: true };
+    const S36: PackSku = { id: "S36", name: "10in 36x24", sku: "S36-1", length: 36, width: 24, height: 10, weight: 1, category: "Blocks", allowRotation: true };
+    const build = (rowsSpec: PackSku[][]): EditorState => {
+      const trailer: PackTrailer = { ...makeTrailer(rowsSpec.map((cols) => makeRow(cols.map((k) => makeStack([[k, 5]], "partial"))))), dims: DIMS_S };
+      const plan: PackPlan = { trailers: [trailer], balance: [], warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 };
+      const qty = new Map<string, number>();
+      for (const cols of rowsSpec) for (const k of cols) qty.set(k.id, (qty.get(k.id) ?? 0) + 5);
+      const st = normalizeState(createEditorState(plan, DIMS_S, OPTS, Array.from(qty.entries()).map(([skuId, q]) => ({ skuId, qty: q })), [S48, D90, S36]));
+      const tagged = clone(st.plan);
+      let n = 0;
+      for (const row of [...tagged.trailers[0].rows].reverse()) for (const c of row.columns) c.rationale = `id-${n++}`;
+      return { ...st, plan: tagged };
+    };
+    const ids = (st: EditorState) => st.plan.trailers[0].rows.map((r) => [...r.columns].sort((a, b) => a.posY - b.posY).map(idOf));
+    const lens = (st: EditorState) => st.plan.trailers[0].rows.map((r) => r.rowLength);
+    const stacks = (st: EditorState) => st.plan.trailers[0].rows.reduce((s, r) => s + r.columns.length, 0);
+
+    // 1. Mixed rows [D90 + 48s], a hole in the rear row made by pullToHolding.
+    //    front-first: R1 [D90 S48 S48], R2 [D90 S48 S48 S48], R3 [D90 S48 S48 S48] -> pull R3's 3rd stack.
+    const mixedBase = build([[D90, S48, S48], [D90, S48, S48, S48], [D90, S48, S48, S48]]);
+    const withHole = pullToHolding(mixedBase, { t: 0, r: 2, c: 2 });
+    const before = ids(withHole);
+    const shifted = shiftToRearWithNote(withHole);
+    const after = ids(shifted.state);
+    // Nearest stack in front of R3 with a depth already in R3 (90 or 48) is R2's first (posY order):
+    // its D90. R2 then has room and pulls R1's nearest 48″ stack (R1's D90 is a depth R2 no longer has).
+    check(
+      "lbr-10 mixed 1: R3's hole is filled by the nearest same-depth stack from in front (R2's first stack)",
+      after[2].length === 4 && after[2][3] === before[1][0],
+      JSON.stringify({ before, after })
+    );
+    check("lbr-10 mixed 1: R2 refilled from R1 with a 48″ stack", JSON.stringify(after[1]) === JSON.stringify([...before[1].slice(1), before[0][1]]), JSON.stringify(after));
+    check(
+      "lbr-10 mixed 1: no row gained a new depth",
+      shifted.state.plan.trailers[0].rows.every((r, i) => r.columns.every((c) => withHole.plan.trailers[0].rows[i]?.columns.some((x) => Math.abs(x.colLength - c.colLength) < 1e-6))),
+      JSON.stringify(shifted.state.plan.trailers[0].rows.map((r) => r.columns.map((c) => c.colLength)))
+    );
+    check(
+      "lbr-10 mixed 1: no row's rowLength grows",
+      lens(shifted.state).every((l, i) => l <= lens(withHole)[i] + 1e-6),
+      JSON.stringify({ before: lens(withHole), after: lens(shifted.state) })
+    );
+    check("lbr-10 mixed 1: stack count unchanged (on the trailer)", stacks(shifted.state) === stacks(withHole), `${stacks(withHole)} -> ${stacks(shifted.state)}`);
+    check("lbr-10 mixed 1: no note", shifted.note === null, String(shifted.note));
+    const v1 = validateForApply(shifted.state);
+    check("lbr-10 mixed 1: validatePlan clean", v1.length === 0, JSON.stringify(v1));
+    check("lbr-10 mixed 1: conservation holds", conservationHolds(shifted.state).ok, conservationHolds(shifted.state).detail);
+    check("lbr-10 mixed 1: used length ≤ before", shifted.state.plan.trailers[0].usedLength <= withHole.plan.trailers[0].usedLength + 1e-6);
+    check("lbr-10 mixed 1: undo reverts the shift", JSON.stringify(clone(undo(shifted.state).plan)) === JSON.stringify(clone(withHole.plan)));
+    const auto = withAutoShift(mixedBase, withHole);
+    check("lbr-10 mixed 1: the auto-shift after the pull gives the same layout, one history step", JSON.stringify(ids(auto)) === JSON.stringify(after) && auto.history.length === withHole.history.length);
+    check("lbr-10 mixed 1: a second shift is a no-op", shiftToRear(shifted.state) === shifted.state);
+
+    // 2. Mixed rear row [S48 S36] with room, but every stack in front is 90″ deep -> no-op.
+    const noMatch = build([[D90, D90, D90, D90], [S48, S36]]);
+    const nm = shiftToRearWithNote(noMatch);
+    check("lbr-10 mixed 2: no same-depth stack in front -> same reference, no note", nm.state === noMatch && nm.note === null);
+
+    // 3. The guard ("couldn't slide stacks without lengthening the trailer") is unreachable for a
+    //    well-formed row: a stack only joins a row that already holds a stack of its exact depth, so
+    //    the row's rowLength (its deepest stack) can't grow, and the row it left can only get shorter
+    //    or disappear — the used length (the sum of rowLengths) can't grow either. It stays in as a
+    //    defensive check; the harness sweep over every real mixed-depth trailer confirms it never fires.
+    check("lbr-10 mixed 3: guard never fired on these fixtures", [shifted.note, nm.note].every((n) => n === null));
   }
 
   return { pass: results.every((r) => r.pass), results };

@@ -2,6 +2,7 @@
 // lbr-05: the class strings and formatters the Load Builder tab components share, defined once so
 // LoadTab / ResultsTab / LoadBuilderTabs don't each copy them. Floor-grade: every control >= 44px.
 // Tokens only (the thickness data colors live in src/lib/thicknessPalette.ts).
+import type { PackTrailer } from "@/lib/packEngine";
 
 const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
 const BASE = `inline-flex items-center justify-center gap-1.5 px-3.5 min-h-[44px] rounded-lg text-sm font-semibold cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${FOCUS}`;
@@ -48,4 +49,10 @@ export const NO_BOL_REASON = "Generating BOLs needs BOL edit access.";
 
 export function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
+}
+
+/** lbr-10: "Forced · {type}" for a Force sizes truck; "Auto-downsized · {type}" for a downsized one. */
+export function trailerBadge(t: Pick<PackTrailer, "forced" | "type">, primaryTypeKey: string): string | undefined {
+  if (t.forced) return `Forced · ${t.type ?? primaryTypeKey}`;
+  return t.type && t.type !== primaryTypeKey ? `Auto-downsized · ${t.type}` : undefined;
 }
