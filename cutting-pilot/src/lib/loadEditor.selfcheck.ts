@@ -7,7 +7,7 @@
 // same apply-gate call CustomizeEditor/EditorGuards use) returning zero violations, UNLESS the
 // check is specifically testing that a violation fires — per Part D's stated discipline.
 import type { CartLine, PackColumn, PackOptions, PackPlan, PackRow, PackSku, PackTrailer, Dimensions } from "./packEngine";
-import { DEFAULT_PACK_OPTIONS } from "./packEngine";
+import { DEFAULT_PACK_OPTIONS, pack, TRAILER_TYPES, HOLEY_BOARD_CATEGORY } from "./packEngine";
 import {
   createEditorState,
   moveColumn,
@@ -37,6 +37,9 @@ import {
   evaluateSwapTarget,
   swapColumns,
   addToHolding,
+  shiftToRear,
+  shiftToRearWithNote,
+  withAutoShift,
   NEW_ROW,
   type EditorState,
   type PieceSource,
@@ -996,6 +999,157 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     check("addToHolding: 25 × 5″ splits into full-height held stacks 21 + 4", addMany.holding.length === 4 && addMany.holding[2].stackCount === 21 && addMany.holding[3].stackCount === 4, JSON.stringify(addMany.holding.map((h) => h.stackCount)));
     verifyResult("addToHolding (split into full-height stacks)", base, addMany);
     check("addToHolding: count <= 0 is a no-op", addToHolding(base, SKU_S12, 0) === base);
+  }
+
+  // --- lbr-09: Shift to rear (shiftToRear / withAutoShift). Floor terms: FRONT = doors =
+  // trailer.rows[0]; REAR = nose = the last row. Stacks are tagged with a unique id in their
+  // rationale (describeManualLayers keeps that prefix), so "order preserved" compares id sequences
+  // walked rear -> front. Every result must pass validatePlan with zero violations, conserve cart,
+  // and never grow a trailer's used length. ---
+  {
+    const MANUAL = " + manually added:";
+    const idOf = (c: PackColumn) => c.rationale.split(MANUAL)[0];
+    const walkIds = (s: EditorState, t = 0) =>
+      [...s.plan.trailers[t].rows].reverse().flatMap((r) => [...r.columns].sort((a, b) => a.posY - b.posY).map(idOf));
+    const rowSizes = (s: EditorState, t = 0) => s.plan.trailers[t].rows.map((r) => r.columns.length);
+    const tagged = (s: EditorState): EditorState => {
+      const plan = clone(s.plan);
+      let n = 0;
+      for (const trailer of plan.trailers) for (const row of [...trailer.rows].reverse()) for (const c of row.columns) c.rationale = `id-${n++}`;
+      return { ...s, plan };
+    };
+    const verifyShift = (name: string, before: EditorState, after: EditorState) => {
+      const v = validateForApply(after);
+      check(`${name}: validatePlan reports zero violations`, v.length === 0, JSON.stringify(v));
+      const c = conservationHolds(after);
+      check(`${name}: conservation holds`, c.ok, c.detail);
+      check(
+        `${name}: used length never grows`,
+        after.plan.trailers.every((t, i) => t.usedLength <= before.plan.trailers[i].usedLength + 1e-6),
+        JSON.stringify(after.plan.trailers.map((t, i) => [before.plan.trailers[i].usedLength, t.usedLength]))
+      );
+    };
+
+    // A uniform-depth trailer: 5 rows × 4 stacks of 48×24 (10″×5 = 50″, so a whole stack fits on
+    // another), 98″ wide — the golden layout's shape with short stacks.
+    const S48: PackSku = { id: "S48", name: "10in 48x24", sku: "S48-1", length: 48, width: 24, height: 10, weight: 1, category: "Blocks", allowRotation: true };
+    const D90: PackSku = { id: "D90", name: "10in 90x24", sku: "D90-1", length: 90, width: 24, height: 10, weight: 1, category: "Blocks", allowRotation: true };
+    const shortStack = (sku: PackSku) => makeStack([[sku, 5]], "partial");
+    const makeShiftFixture = (rowsSpec: PackSku[][]): EditorState => {
+      const trailer: PackTrailer = { ...makeTrailer(rowsSpec.map((cols) => makeRow(cols.map(shortStack)))), dims: DIMS_S };
+      const plan: PackPlan = { trailers: [trailer], balance: [], warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 };
+      const qty = new Map<string, number>();
+      for (const cols of rowsSpec) for (const sku of cols) qty.set(sku.id, (qty.get(sku.id) ?? 0) + 5);
+      const cart = Array.from(qty.entries()).map(([skuId, q]) => ({ skuId, qty: q }));
+      return tagged(normalizeState(createEditorState(plan, DIMS_S, OPTS, cart, [S48, D90])));
+    };
+    const full = [S48, S48, S48, S48];
+    const base = makeShiftFixture([full, full, full, full, full]);
+    check("lbr-09 fixture: baseline validatePlan clean", validateForApply(base).length === 0, JSON.stringify(validateForApply(base)));
+
+    // 1. Golden layout shape: a whole stack off a full middle row onto another stack -> auto-shift.
+    const src = { t: 0, r: 2, c: 1 };
+    const dst = { t: 0, r: 3, c: 0 };
+    const srcId = idOf(base.plan.trailers[0].rows[2].columns[1]);
+    const moved = stackOnto(base, { kind: "column", ref: src }, dst);
+    check("shift 1: stackOnto left a hole in R3 (3 stacks)", rowSizes(moved)[2] === 3, JSON.stringify(rowSizes(moved)));
+    const auto = withAutoShift(base, moved);
+    check("shift 1: row count unchanged or lower (5 -> 5)", auto.plan.trailers[0].rows.length <= 5, JSON.stringify(rowSizes(auto)));
+    check("shift 1: the only gap is at the front (doors) end — R1 holds 3, every other row 4", JSON.stringify(rowSizes(auto)) === "[3,4,4,4,4]", JSON.stringify(rowSizes(auto)));
+    check(
+      "shift 1: every other stack keeps its order (rear -> front id sequence)",
+      JSON.stringify(walkIds(auto)) === JSON.stringify(walkIds(base).filter((id) => id !== srcId)),
+      JSON.stringify(walkIds(auto))
+    );
+    check("shift 1: the merged stack is 10″×10", auto.plan.trailers[0].rows.flatMap((r) => r.columns).some((c) => c.stackCount === 10));
+    check("shift 1: withAutoShift keeps the move's history (one entry for move + shift)", auto.history.length === moved.history.length && auto.history.length === base.history.length + 1);
+    verifyShift("shift 1 (stackOnto + auto-shift)", base, auto);
+    // 5. One undo restores the pre-move plan exactly.
+    const undone1 = undo(auto);
+    check("shift 5: one undo after an auto-shifted move restores the pre-move plan exactly", JSON.stringify(clone(undone1.plan)) === JSON.stringify(clone(base.plan)) && undone1.holding.length === base.holding.length);
+
+    // 2. Two holes in different rows close in one shift (holding keeps the two stacks).
+    const twoHoles = takeToHolding(takeToHolding(base, { kind: "column", ref: { t: 0, r: 1, c: 2 } }), { kind: "column", ref: { t: 0, r: 3, c: 0 } });
+    check("shift 2: fixture has two holes (R2 and R4 hold 3)", JSON.stringify(rowSizes(twoHoles)) === "[4,3,4,3,4]", JSON.stringify(rowSizes(twoHoles)));
+    const shifted2 = shiftToRear(twoHoles);
+    check("shift 2: both holes closed in one shift — R1 holds 2, every other row 4", JSON.stringify(rowSizes(shifted2)) === "[2,4,4,4,4]", JSON.stringify(rowSizes(shifted2)));
+    check("shift 2: order preserved", JSON.stringify(walkIds(shifted2)) === JSON.stringify(walkIds(twoHoles)), JSON.stringify(walkIds(shifted2)));
+    check("shift 2: the button's shift is its own history step", shifted2.history.length === twoHoles.history.length + 1);
+    check("shift 2: holding untouched", shifted2.holding.length === 2);
+    verifyShift("shift 2 (two holes)", twoHoles, shifted2);
+    check("shift 2: undo reverts just the shift", JSON.stringify(clone(undo(shifted2).plan)) === JSON.stringify(clone(twoHoles.plan)));
+
+    // An emptied row (placeholder) is closed too, and the trailer's freed floor ends up at the front.
+    const emptiedRow = [0, 0, 0, 0].reduce((s) => takeToHolding(s, { kind: "column", ref: { t: 0, r: 2, c: 0 } }), base);
+    check("shift: fixture R3 emptied to a placeholder", JSON.stringify(rowSizes(emptiedRow)) === "[4,4,0,4,4]", JSON.stringify(rowSizes(emptiedRow)));
+    const shiftedEmpty = shiftToRear(emptiedRow);
+    check(
+      "shift: the empty row closes (4 rows of 4), order kept",
+      JSON.stringify(rowSizes(shiftedEmpty)) === "[4,4,4,4]" && JSON.stringify(walkIds(shiftedEmpty)) === JSON.stringify(walkIds(emptiedRow)),
+      JSON.stringify(rowSizes(shiftedEmpty))
+    );
+    verifyShift("shift (empty row)", emptiedRow, shiftedEmpty);
+
+    // Rows of different depth (each row uniform): a refilled row never mixes depths.
+    const depths = makeShiftFixture([[S48, S48], full, [D90, D90]]);
+    const depthHole = takeToHolding(depths, { kind: "column", ref: { t: 0, r: 1, c: 0 } });
+    const shiftedDepths = shiftToRear(depthHole);
+    const depthRows = shiftedDepths.plan.trailers[0].rows.map((r) => r.columns.map((c) => c.colLength));
+    check("shift: rows of different depth refill within their own depth (R1 48, R2 48×4, R3 90×2)", JSON.stringify(depthRows) === "[[48],[48,48,48,48],[90,90]]", JSON.stringify(depthRows));
+    check("shift: no refilled row is mixed-depth", depthRows.every((r) => r.every((l) => l === r[0])));
+    verifyShift("shift (different-depth rows)", depthHole, shiftedDepths);
+
+    // 3. A trailer with a mixed-depth row: only empty rows close, with the note.
+    const mixed = makeShiftFixture([[S48, D90], [S48, S48], [S48]]);
+    const mixedHoles = takeToHolding(takeToHolding(mixed, { kind: "column", ref: { t: 0, r: 2, c: 0 } }), { kind: "column", ref: { t: 0, r: 1, c: 1 } });
+    const mixedResult = shiftToRearWithNote(mixedHoles);
+    check(
+      "shift 3: mixed-depth trailer -> only the empty row is removed (3 rows -> 2), R2's hole stays",
+      JSON.stringify(rowSizes(mixedResult.state)) === "[2,1]",
+      JSON.stringify(rowSizes(mixedResult.state))
+    );
+    check("shift 3: note says why", mixedResult.note === "Trailer 1 has rows of mixed depth — closed empty rows only.", String(mixedResult.note));
+    verifyShift("shift 3 (mixed depth)", mixedHoles, mixedResult.state);
+    const mixedNoop = shiftToRearWithNote(mixed);
+    check("shift 3: mixed-depth trailer with no empty row -> same reference, note still set", mixedNoop.state === mixed && mixedNoop.note !== null);
+
+    // 4. No-op returns the same reference: a full layout, an already-shifted one, withAutoShift on a no-op.
+    check("shift 4: a full layout is a no-op (same reference, no note)", shiftToRear(base) === base && shiftToRearWithNote(base).note === null);
+    check("shift 4: shifting twice — the second is a no-op", shiftToRear(shifted2) === shifted2);
+    check("shift 4: withAutoShift(before, before) === before", withAutoShift(base, base) === base);
+    const swapOnly = swapColumns(base, { t: 0, r: 0, c: 0 }, { t: 0, r: 4, c: 3 });
+    check("shift 4: withAutoShift after a hole-free swap returns the swap itself", swapOnly !== base && withAutoShift(base, swapOnly) === swapOnly);
+
+    // trailerIndex: only that trailer moves.
+    const twoTrailers: EditorState = { ...twoHoles, plan: clone(twoHoles.plan) };
+    twoTrailers.plan.trailers.push(clone(twoHoles.plan.trailers[0]));
+    const onlySecond = shiftToRear(twoTrailers, 1);
+    check(
+      "shift: trailerIndex 1 shifts trailer 2 only",
+      JSON.stringify(rowSizes(onlySecond, 0)) === "[4,3,4,3,4]" && JSON.stringify(rowSizes(onlySecond, 1)) === "[2,4,4,4,4]",
+      JSON.stringify([rowSizes(onlySecond, 0), rowSizes(onlySecond, 1)])
+    );
+
+    // Golden 4472 T1 through pack(): already gap-free (a fixed point); take one stack off a full
+    // middle row to holding -> auto-shift closes it, 13 rows, order kept, only R1 short.
+    const mkGolden = (h: number): PackSku => ({ id: `GOLD_${h}`, name: `${h}in holey`, sku: `GOLD_${h}`, length: 48, width: 24, height: h, weight: 1, category: HOLEY_BOARD_CATEGORY, allowRotation: false });
+    const goldenSkus = [13, 12, 11, 10, 9, 8].map(mkGolden);
+    const goldenQty: Record<number, number> = { 13: 85, 12: 120, 11: 195, 10: 85, 9: 6, 8: 1 };
+    const goldenCart: CartLine[] = goldenSkus.map((s) => ({ skuId: s.id, qty: goldenQty[s.height] }));
+    const T53 = TRAILER_TYPES["53ft Standard"];
+    const golden = tagged(createEditorState(pack(goldenCart, goldenSkus, T53), T53, OPTS, goldenCart, goldenSkus));
+    check("shift golden: the auto-pack is a fixed point (same reference)", shiftToRear(golden) === golden, JSON.stringify(rowSizes(golden)));
+    const goldenSrcId = idOf(golden.plan.trailers[0].rows[6].columns[2]);
+    const goldenTook = takeToHolding(golden, { kind: "column", ref: { t: 0, r: 6, c: 2 } });
+    const goldenAuto = withAutoShift(golden, goldenTook);
+    check(
+      "shift golden: 13 rows, only R1 (doors) short",
+      goldenAuto.plan.trailers[0].rows.length === 13 && rowSizes(goldenAuto).slice(1).every((n) => n === 4) && rowSizes(goldenAuto)[0] === 3,
+      JSON.stringify(rowSizes(goldenAuto))
+    );
+    check("shift golden: order preserved", JSON.stringify(walkIds(goldenAuto)) === JSON.stringify(walkIds(golden).filter((id) => id !== goldenSrcId)));
+    verifyShift("shift golden (to holding + auto-shift)", golden, goldenAuto);
+    check("shift golden: one undo restores the auto-pack", JSON.stringify(clone(undo(goldenAuto).plan)) === JSON.stringify(clone(golden.plan)) && undo(goldenAuto).holding.length === 0);
   }
 
   return { pass: results.every((r) => r.pass), results };

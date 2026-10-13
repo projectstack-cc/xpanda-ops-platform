@@ -68,6 +68,12 @@
 // row" at the doors end). In edit mode the diagram is laid out in px, scaled so the shallowest row
 // and the narrowest stack stay ≥ 44px (floor-grade targets); it scrolls inside its card as before.
 // Read-only rendering (Results) is unchanged.
+//
+// lbr-09 (Steve, 2026-10-13): floor terms — the logistics manager calls the DOORS the FRONT and the
+// NOSE the REAR. Labels only: the captions now read REAR · NOSE (left) and FRONT · DOORS (right),
+// and user-facing text says "front (doors)". The layout, row order and R-numbering are unchanged
+// (trailer.rows[0] / posFromFront 0 is still the doors end, R1). Older comments in this file that
+// call the doors the "rear" predate this and describe the same physical end.
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
@@ -241,8 +247,8 @@ export default function TrailerDiagram({
       <div className="overflow-x-auto">
       <div style={editable ? { width: Math.max(editWidthPx, DIAGRAM_MIN_WIDTH_PX) } : { minWidth: DIAGRAM_MIN_WIDTH_PX }}>
       <div className="flex items-center justify-between text-[11px] font-semibold tracking-wide text-text-hint mb-1">
-        <span>FRONT · NOSE</span>
-        <span>REAR · DOORS</span>
+        <span>REAR · NOSE</span>
+        <span>FRONT · DOORS</span>
       </div>
 
       {/* Row labels, legacy print style: R1 at the doors (array index 0) up to Rn at the nose. */}
@@ -373,7 +379,7 @@ export default function TrailerDiagram({
       </div>
 
       {/* lbr-07: "+" new-stack slots, one under each row that has width left, and "+ new row" under
-          the free floor at the doors end. Only drawn while a placement action is armed. */}
+          the free floor at the front (doors) end. Only drawn while a placement action is armed. */}
       {anySlot && (
         <div className="flex mt-1.5" style={{ width: editWidthPx }}>
           {displayOrder.map((rowIndex) => {
@@ -389,7 +395,7 @@ export default function TrailerDiagram({
           {freePx > 0 && (
             <div className="shrink-0 px-0.5" style={{ width: freePx }}>
               {newRowVerdict && (
-                <SlotButton verdict={newRowVerdict} label="+ new row" ariaLabel={`New row at the doors end of trailer ${trailerIndex + 1}.${verdictSuffix(newRowVerdict)}`} onClick={() => onChooseSlot?.("new")} />
+                <SlotButton verdict={newRowVerdict} label="+ new row" ariaLabel={`New row at the front (doors) end of trailer ${trailerIndex + 1}.${verdictSuffix(newRowVerdict)}`} onClick={() => onChooseSlot?.("new")} />
               )}
             </div>
           )}

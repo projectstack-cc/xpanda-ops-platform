@@ -2929,6 +2929,82 @@ current series).
 
 ## Logistics (v2)
 
+- **lbr-09 — Load Builder: FRONT/REAR label swap, Shift to rear (auto after every move + button), trailer scroll box with a sticky side panel, PDF tables with swatches (React Component Agent §9b leads; Next/Cloudflare Platform Agent §9a for `loadEditor.ts` / `loadingDiagramPdf.ts`; Logistics Agent §3 on floor terms). No API, migration, permission or engine change (`packEngine.ts` / `stackPlanner.ts` untouched).**
+  - **Why (Steve, 2026-10-13):** the logistics manager calls the doors the FRONT and the nose the REAR. When a move leaves an empty spot, everything behind it should slide back to fill it (tried in legacy before, never landed). The trailers should scroll in a box about two trailers tall so the tools stay put. In the PDF, PIECES / STACK BREAKDOWN should sit lower and be tables with row lines, with the color right next to each stack line.
+  - **A. Labels only (layout, order and R-numbering unchanged).** Floor terms: FRONT = doors (R1, `trailer.rows[0]`, loaded last), REAR = nose (loaded first). Strings changed, old → new:
+    - `TrailerDiagram.tsx` captions: `FRONT · NOSE` (left) → `REAR · NOSE`; `REAR · DOORS` (right) → `FRONT · DOORS`. Both captions had the same styling, so there was no emphasis to move.
+    - `TrailerDiagram.tsx` "+ new row" aria-label: "New row at the doors end of trailer N." → "New row at the front (doors) end of trailer N."
+    - `EditorGuards.tsx`: "…the load runs X" past the trailer's nose there" → "…past the rear of the trailer there".
+    - `loadingDiagramPdf.ts`: left label `FRONT` (orange) → `REAR` (muted); right label `REAR` (muted) → `FRONT` (orange). Each side keeps its position. The orange emphasis moved with FRONT to the doors side.
+    - The sweep (`nose|doors|front|rear`, case-insensitive) over the Load Builder screens, components, `loadEditor` / `dissolve` / `loadingDiagramPdf` and engine strings found nothing else user-facing. `packEngine.ts`'s "loader may want to rearrange" is a false positive. Code names and comments are unchanged (`posFromFront`, `NEW_ROW`'s "rear (doors)" comment, the engine's comments). New code comments state the floor terms.
+    - `xpanda-ops-agents.md` (Logistics agent → Load Builder) got the terminology note.
+  - **B. Shift to rear (`lib/loadEditor.ts`).**
+    - **`shiftToRearWithNote(state, trailerIndex?)` → `{ state, note }`, plus `shiftToRear(state, trailerIndex?)` → `EditorState`.** The note is returned beside the state, not stored on `EditorState`, because every op spreads `{ ...state }` and a stored note would be carried forward stale.
+    - **How it shifts, per trailer.** It walks the stacks rear → front (last row first, `posY` order within a row) and refills rows from the rear. A row closes when the next stack doesn't fit the width (EPS) or has a different depth. The rows are reversed so index 0 stays the doors end, then `recomputePlan` runs.
+    - **Guards.**
+      - A trailer that already has a mixed-depth row only drops its empty rows (`compactLoad` behavior), with the note "Trailer N has rows of mixed depth — closed empty rows only."
+      - **Beyond the letter of the spec:** rows of different depths, each uniform (e.g. a 48″ row next to a 90″ row), are still re-flowed, but never merged into one row.
+      - A post-check (used length ≤ before, every row within width) falls back to closing empty rows only.
+      - Stacks never change trailer, and an emptied trailer stays.
+      - A no-op returns the same reference. The golden auto-pack is a fixed point.
+    - **`withAutoShift(before, after)`** shifts every trailer but keeps `after.history`, so one Undo reverts the move and the shift together. It is applied at Customize's call sites only, never inside the ops: `canDrop` / `evaluateSlotTarget` simulate through `moveToSlot` and need its unshifted result. `compactLoad` stays exported (selfchecks, and the mixed-depth path's behavior).
+  - **B2/B3. `CustomizeEditor.tsx`.**
+    - **Auto-shift everywhere.** One `applyEdit()` wraps every action's result: `finishAction` (stack onto, move / place into a slot, swap, take to holding, send to holding, Remove from the load, Delete row), Change counts, Dissolve apply, and Add pieces. Change counts drops the selection when the shift moved stacks, since its (t, r, c) could then point at a different stack.
+    - **Shift to rear button.** Next to Undo, 44px. It runs `shiftToRearWithNote` as its own undo step. A no-op shows the toast "Nothing to shift — no gaps."; a note shows the note.
+    - **Compact load removed.** The old Compact load control (empty rows only, now a subset of this) is gone.
+    - **First-use card.** No hint mentioned compact/gaps, so the line "Gaps close automatically — stacks slide toward the rear." was added to the first-use card.
+  - **C. Trailer scroll box + sticky side panel.**
+    - **NEW `components/logistics/TrailerScrollBox.tsx`** (presentational), used by Results and Customize. It applies at `xl` with 3+ trailers:
+      - its own `overflow-y: auto` box, with `max-height` = the first card's measured height × 2 + 16px gap (`ResizeObserver`; `80vh` until measured);
+      - `tabIndex 0`, `role="region"`, `aria-label="Trailers"`, and a `--brand` focus ring;
+      - a "Trailer N of M" count above the box that follows the card at the top.
+    - With one or two trailers it doesn't scroll. Below `xl` it's a plain stack in the page scroll, with no nested scroll areas.
+    - **Side column (both screens).** `xl:sticky xl:top-4`, plus `xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto` so a tall side column can still stick. The page header doesn't stick, so 16px is the offset. Customize's action bar stays the bottom sheet below `xl`.
+  - **D. PDF (`lib/loadingDiagramPdf.ts`).**
+    - **Spacing.** The tables start 14pt lower (`TABLE_DROP`).
+    - **PIECES table.** `Color · Part · Size · Pieces`. The header is bold 8pt, rows are 16pt, Size and Pieces are right-aligned, and the swatch is hatched where the palette hatches. Long names are shortened with "..." rather than wrapping into the next row.
+    - **STACK BREAKDOWN table.** `Color · Stack · Stacks`. **Deviation from the prompt's header list** (`Color · Stacks · Stack`): that order puts the count between the swatch and its pattern, which conflicts with the prompt's own placement rule ("the Color cell sits directly to the left of the pattern") and with Steve's reason ("color directly next to each stack-breakdown line"). So Color stays first, the pattern sits right after it, and the count is right-aligned at the end, the same shape as PIECES. The Color cell shows the base swatch, then the top-off swatch for a topped stack, in the same order as the pattern text.
+    - **Rules (both tables).** 0.5pt (MUTED) under the header and between rows, 0.75pt at the bottom.
+    - **`buildStackBreakdown`** rows gain `layers: { unitHeight }[]` (base first).
+    - **Exported helpers** (they keep the selfcheck honest): `endLabels(box)` (FRONT is the right / doors label and carries the emphasis), `tableRowCapacity`, `paginateRows`, `CONT_TABLE_TOP`.
+    - **Overflow.** A table with more rows than fit continues on a new page titled "Trailer N Loading Diagram (cont.)", with "PIECES (cont.)" / "STACK BREAKDOWN (cont.)" and the header repeated. The first page's capacity comes from the live cursor (runner and warning lines included). This resolves the `lb-ui-08` clipping follow-up.
+  - **Selfchecks.**
+    - **`loadEditor.selfcheck.ts` 216 → 264/264.** Uses a uniform-depth 5 × 4 fixture with ids carried in the rationale:
+      - (1) a whole stack off a full middle row via `stackOnto` → auto-shift → rows `[3,4,4,4,4]` (the gap only at R1 / the doors) and the id sequence preserved;
+      - (2) two holes in two rows closed in one shift, as its own history step;
+      - (3) a mixed-depth trailer → only the empty row is removed, plus the note;
+      - (4) no-op / already-shifted / hole-free-swap → same reference;
+      - (5) one undo restores the pre-move plan exactly;
+      - emptied-row placeholder closed; different-depth rows never mixed; `trailerIndex` scoping;
+      - golden 4472 T1 through `pack()`: a fixed point, then one stack to holding → 13 rows, only R1 short, order kept, one undo back;
+      - every result has zero `validatePlan` violations, conserves the cart, and never grows used length.
+    - **`loadingDiagramPdf.selfcheck.ts` 29 → 42/42** (now async):
+      - `layers` on breakdown rows; a topped pattern has 2 layers;
+      - `endLabels`: FRONT on the R1 (rows[0]) side with the emphasis, REAR on the nose side;
+      - `paginateRows`;
+      - a synthetic 40-pattern / 40-SKU trailer → `PDFDocument.load(bytes).getPageCount() === 2`, still 2 with runner and warning lines; a small trailer → 1.
+  - **Verified.**
+    - **Selfchecks (`npx tsx`):** loadEditor 264/264, loadingDiagramPdf 42/42, dissolve 21/21, packEngine 178/178, stackPlanner 29/29, jobPull 17/17, savedLoad 38/38, loadList 28/28, thicknessPalette 35/35.
+    - **Build:** `npx tsc --noEmit` clean; `npm run cf-build` exit 0 (ui-tokens guard: 477 files OK; the "no such table: jobs" log line is the empty local D1).
+    - **All 172 real carts** in `lb-fixtures.json`, each packed consolidated and pure (344 runs) → `shiftToRearWithNote`: **every auto-pack is a fixed point** (0 shifted), so opening Customize and tapping something unrelated never moves stacks the planner didn't touch. 0 invariant failures. **100 of the 344 runs have one trailer with a mixed-depth row** (the engine's width pairing puts different footprints in one row). Those trailers get the note and only close empty rows; their stacks don't slide.
+    - **PDF consumers:** `LoadingDiagramPrintButton` and `BolGenerateModal` open the whole PDF in a tab, and `bolShared.ts`'s `loadingDiagramPdfBytes` merge copies `getPageIndices()`, so a "(cont.)" page is never dropped. No `bolShared.ts` / `bol-shared.js` change was needed.
+    - **Browser smoke (61/61).** Run on next dev :3100 + Playwright, light and dark, with the jobs / saved-loads / load-builder-skus APIs mocked:
+      - `JOB-GOLD` = `GOLDEN_4472_T1`;
+      - `JOB-4472` = the full INV 4472 cart from `lb-fixtures.json`;
+      - `JOB-4351` = a 6-trailer fixture job, because full INV 4472 packs to 2 trailers with no consolidation, so the pure-plan toggle can't reach 3+.
+    - **Screenshots** (scratchpad, not committed):
+      1. Results: `REAR · NOSE` left, `FRONT · DOORS` right, R1 on the FRONT side. The golden rows read nose → doors from the stacks' aria-labels match lbr-03's list exactly (`lbr09-1-results-captions[-dark].png`).
+      2. Customize, golden. Setup: R7's `12x3+10x7` → Change counts → `12x1`, and one piece off R13's `13x8` to holding → `13x7`. Then the single 12″ piece is stacked onto the `13x7` → `13x7+12x1`, its source empties, and the stacks behind slide toward the rear. Result: rows `[3,4,…,4]` with the gap at R1 (doors) and every other stack in order. One Undo restores the exact pre-move layout (`lbr09-2a-before-stack[-dark].png`, `lbr09-2b-after-stack[-dark].png`). The Shift to rear button is 44px, next to Undo, and Compact load is gone.
+      3. Send to holding (R5 position 2) → gap closed automatically, order kept (`lbr09-3-sent-to-holding.png`).
+      4. An older saved plan with a hand-built gap: the saved `editedPlan` with R7's 2nd stack removed, pieces → balance, no shift. Load saved → Results shows R7 with 3 → Customize → **Shift to rear** closes it. A second tap → "Nothing to shift — no gaps." Undo brings the gap back (`lbr09-4a-shifted.png`, `lbr09-4b-nothing-to-shift.png`).
+      5. Full INV 4472 at 1440 (2 trailers): no inner scroll and no count, per §C. After a 700px page scroll the side panel sits at 16px. *Spec conflict:* the prompt's smoke step says the 2-trailer box scrolls, but §C says one or two trailers don't scroll; §C was followed. INV 4351 (6 trailers):
+         - the box is a focusable "Trailers" region, 912px tall (= 2 × 448 + 16), and scrolls;
+         - "Trailer 1 of 6" → "Trailer 2 of 6" after scrolling the box, and the side panel doesn't move;
+         - Tab reaches the box, which shows the `--brand` ring;
+         - Customize has the same box and sticky panel (`lbr09-5a-2trailers-scrolled[-dark].png`, `lbr09-5b-3plus-scrollbox[-dark].png`, `lbr09-5c-customize-scrollbox[-dark].png`).
+      6. 390px, Results and Customize: no "Trailers" region, scrollWidth 390/390, and the action bar is still `position: fixed` (the bottom sheet) (`lbr09-6-390-results[-dark].png`, `lbr09-6-390-customize[-dark].png`).
+      7. PDFs rendered with pdf.js: the golden trailer (`lbr09-7a-pdf-golden.png`) and Steve's example, full INV 4472 trailer 2 (10″ / 9″ / 8″ / 7″ / 6″, 51 stacks; `lbr09-7b-pdf-inv4472-t2.png`). In both, the tables have row rules, the swatches sit beside each stack line (base then top-off on topped rows), FRONT is on the R1 side, and nothing overlaps. Plus the 40-pattern overflow on 2 pages, where page 1 stops above the margin and page 2 has the "(cont.)" titles and repeated headers (`lbr09-7c-pdf-overflow-p1.png`, `-p2.png`).
+
 - **lbr-08 — Load Builder Load tab: legacy-style parts picker + editable load list (order and no-order loads); PDF caption overlap fix (React Component Agent §9b leads; Logistics Agent §3 consulted on parity with legacy `renderLoadTab`). No API, migration, permission or engine change (`packEngine.ts` / `stackPlanner.ts` / `loadEditor.ts` untouched).**
   - **Why (Steve, 2026-10-12):** the v2 Load Builder should be "very similar to the original load builder", with full Load-tab parity. Until now v2 could only pull an order. Decided: **Force sizes** gets its own prompt (lbr-09, needs engine work; Steve 2026-10-13); legacy's **"Recalculate (different)"** is not ported (the engine is deterministic; Results' pure-plan toggle is the alternative plan).
   - **`lib/jobPull.ts`:** `LibrarySku` (= `PackSku` + `parentGroup`) and `fetchLibrarySkus()` — same `/api/load-builder-skus` call and `coerceSku` validation, keeps `parent_group` (`""` when missing), API order kept; throws `LibraryFetchError` with the HTTP status so the picker can tell "no access" (401/403) from a failure. `fetchLoadBuilderSkus` unchanged; `PackSku` gets no new field (`toPackSku` strips `parentGroup` before a part enters a load).

@@ -1121,3 +1121,109 @@ export function addToHolding(state: EditorState, sku: PackSku, count: number): E
   const cart = cartAfterPlacement(introduced, sku.id, n);
   return { ...introduced, plan, cart, holding: [...state.holding.map(cloneColumn), ...added], history: withHistory(state) };
 }
+
+// --- lbr-09: Shift to rear. Floor terms (Steve, 2026-10-13): FRONT = doors (trailer.rows[0],
+// posFromFront 0, loaded last), REAR = nose (the last row, loaded first). When a move leaves a hole,
+// every stack behind it slides toward the rear to fill it. Stacks keep their order — nothing is
+// re-sorted, nothing changes trailer, and the free floor ends up at the front (doors) end. ---
+
+/** shiftToRear plus any per-trailer note. The note is returned beside the state rather than stored
+ * on EditorState: every op spreads `{ ...state }`, so a note kept there would ride along stale. */
+export interface ShiftResult {
+  state: EditorState;
+  note: string | null;
+}
+
+/** Column depth of one row's columns: null when they don't all share one colLength. */
+function rowDepth(row: PackRow): number | null {
+  const first = row.columns[0];
+  if (!first) return null;
+  return row.columns.every((c) => approxEq(c.colLength, first.colLength)) ? first.colLength : null;
+}
+
+function usedLengthOf(rows: PackRow[]): number {
+  return rows.reduce((s, r) => s + (r.columns.length > 0 ? Math.max(...r.columns.map((c) => c.colLength)) : 0), 0);
+}
+
+function emptyRow(columns: PackColumn[]): PackRow {
+  return { posFromFront: 0, rowLength: 0, rowWidthUsed: 0, wastedFloorArea: 0, columns, totalUnits: 0, totalWeight: 0 };
+}
+
+/** New rows for one (already cloned) trailer, or null when nothing changes. Walks the stacks rear →
+ * front (last row first, posY order within a row) and refills rows from the rear, closing a row when
+ * the next stack doesn't fit the width — or has a different depth, so a refilled row is never mixed-
+ * depth. Uniform-depth runs make this next-fit over a fixed order, which never needs more rows than
+ * the layout it came from, so used length can't grow; a post-check enforces that (and the width)
+ * anyway and falls back to closing empty rows only. A trailer that already has a mixed-depth row is
+ * never re-flowed: only its empty rows close, and it gets a note. */
+function reflowTrailer(trailer: PackTrailer, trailerIndex: number): { rows: PackRow[] | null; note: string | null } {
+  const nonEmpty = trailer.rows.filter((r) => r.columns.length > 0);
+  const compactOnly = nonEmpty.length === trailer.rows.length ? null : nonEmpty;
+  if (nonEmpty.some((r) => rowDepth(r) === null)) {
+    return { rows: compactOnly, note: `Trailer ${trailerIndex + 1} has rows of mixed depth — closed empty rows only.` };
+  }
+
+  const width = trailer.dims.width;
+  const rearFirst = [...nonEmpty].reverse().map((r) => [...r.columns].sort((a, b) => a.posY - b.posY));
+  const refilled: PackColumn[][] = [];
+  let current: PackColumn[] = [];
+  let currentWidth = 0;
+  for (const column of rearFirst.flat()) {
+    if (current.length > 0 && (currentWidth + column.colWidth > width + EPS || !approxEq(column.colLength, current[0].colLength))) {
+      refilled.push(current);
+      current = [];
+      currentWidth = 0;
+    }
+    current.push(column);
+    currentWidth += column.colWidth;
+  }
+  if (current.length > 0) refilled.push(current);
+
+  const unchanged =
+    compactOnly === null &&
+    refilled.length === rearFirst.length &&
+    refilled.every((cols, i) => cols.length === rearFirst[i].length && cols.every((c, j) => c === rearFirst[i][j]));
+  if (unchanged) return { rows: null, note: null };
+
+  // Rows were built rear-first; the model stores them front-first (index 0 = doors).
+  const rows = refilled.reverse().map(emptyRow);
+  const fitsWidth = rows.every((r) => r.columns.length === 1 || r.columns.reduce((s, c) => s + c.colWidth, 0) <= width + EPS);
+  if (!fitsWidth || usedLengthOf(rows) > usedLengthOf(trailer.rows) + EPS) return { rows: compactOnly, note: null };
+  return { rows, note: null };
+}
+
+/** Shift to rear on one trailer, or every trailer when `trailerIndex` is omitted, with the note (see
+ * ShiftResult). One history step; the same `state` reference when nothing moves (like compactLoad). */
+export function shiftToRearWithNote(state: EditorState, trailerIndex?: number): ShiftResult {
+  const plan = clonePlan(state.plan);
+  const notes: string[] = [];
+  let changed = false;
+  plan.trailers.forEach((trailer, t) => {
+    if (trailerIndex !== undefined && t !== trailerIndex) return;
+    const { rows, note } = reflowTrailer(trailer, t);
+    if (note) notes.push(note);
+    if (rows) {
+      trailer.rows = rows;
+      changed = true;
+    }
+  });
+  const note = notes.length > 0 ? notes.join(" ") : null;
+  if (!changed) return { state, note };
+  recomputePlan(plan, state.options);
+  return { state: { ...state, plan, history: withHistory(state) }, note };
+}
+
+/** Shift to rear (see shiftToRearWithNote) when the caller doesn't need the note. */
+export function shiftToRear(state: EditorState, trailerIndex?: number): EditorState {
+  return shiftToRearWithNote(state, trailerIndex).state;
+}
+
+/** Customize's auto-shift: shifts every trailer of `after` (the result of one user action taken on
+ * `before`) but keeps `after.history`, so one Undo reverts the action and the shift together. Applied
+ * at Customize's call sites, never inside the ops — canDrop / evaluateSlotTarget simulate through
+ * moveToSlot and need its unshifted result. */
+export function withAutoShift(before: EditorState, after: EditorState): EditorState {
+  if (after === before) return after;
+  const shifted = shiftToRear(after);
+  return shifted === after ? after : { ...shifted, history: after.history };
+}

@@ -48,6 +48,13 @@
 // sizes) is drawn as real diagonal lines, not a tint. The PIECES table swatches use the same palette
 // (by the SKU's placed thickness) instead of the old per-SKU colorForSku hash. Printed labels use a
 // plain `"` because pdf-lib's standard Helvetica (WinAnsi) can't encode the ″ glyph.
+//
+// lbr-09 (Steve, 2026-10-13): floor terms — FRONT = doors (R1, right), REAR = nose (left); labels
+// only, the layout is unchanged (see endLabels). PIECES and STACK BREAKDOWN start 14pt lower and are
+// real tables: a bold header row, 16pt rows, a 0.5pt rule under the header and between rows, a rule
+// at the bottom, and a Color column — the stack breakdown's swatches (base, then top-off) sit directly
+// left of each pattern (Color · Stack · Stacks). A table that runs past the bottom margin continues on a new page under "Trailer N
+// Loading Diagram (cont.)" with its header repeated, so nothing is drawn off the page.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Dimensions, PackColumn, PackRow, PackTrailer, PackSku } from "./packEngine";
 import { thicknessColor } from "./thicknessPalette";
@@ -130,22 +137,25 @@ export function buildPiecesTable(trailer: PackTrailer, skus: PackSku[]): PieceTa
 export interface StackBreakdownRow {
   pattern: string;
   stacks: number;
+  /** lbr-09: the pattern's layers, base first — drives the Color cell's swatches (base, then top-off). */
+  layers: { unitHeight: number }[];
 }
 
 /** Groups columns by their layer-size signature ("10"-4" for a single-layer stack, "10"-4 · 8"-1"
  * for a topped-off one) and counts how many columns share it — the stack breakdown table. Mirrors
- * legacy's stackPatterns (stacks-descending sort). */
+ * legacy's stackPatterns (stacks-descending sort). Columns sharing a pattern share its layer sizes,
+ * so `layers` comes from the first column seen. */
 export function buildStackBreakdown(trailer: PackTrailer): StackBreakdownRow[] {
-  const byPattern = new Map<string, number>();
+  const byPattern = new Map<string, StackBreakdownRow>();
   for (const row of trailer.rows) {
     for (const column of row.columns) {
       const pattern = formatStackLines(column).join(" · ");
-      byPattern.set(pattern, (byPattern.get(pattern) ?? 0) + 1);
+      const existing = byPattern.get(pattern);
+      if (existing) existing.stacks += 1;
+      else byPattern.set(pattern, { pattern, stacks: 1, layers: column.layers.map((l) => ({ unitHeight: l.unitHeight })) });
     }
   }
-  return Array.from(byPattern.entries())
-    .map(([pattern, stacks]) => ({ pattern, stacks }))
-    .sort((a, b) => b.stacks - a.stacks);
+  return Array.from(byPattern.values()).sort((a, b) => b.stacks - a.stacks);
 }
 
 /** Trailer-scoped subset of PackPlan.warnings — packEngine.ts's applyStabilityWarnings writes
@@ -166,7 +176,7 @@ export interface LayoutRect {
   height: number;
 }
 
-interface DiagramBox {
+export interface DiagramBox {
   x: number;
   yTop: number; // pdf-lib y of the box's TOP edge (pdf-lib's origin is bottom-left)
   width: number;
@@ -228,6 +238,55 @@ const INK = rgb(0.06, 0.09, 0.15); // ~#0f172a, matches legacy's print body colo
 const LINE = rgb(0.2, 0.24, 0.33); // ~#334155, matches legacy's print stroke color
 const MUTED = rgb(0.4, 0.45, 0.55); // ~#64748b
 const WARN = rgb(0.57, 0.25, 0.02); // ~#92400e, matches legacy's runner-note color
+const FRONT_ORANGE = rgb(0.85, 0.55, 0.02);
+
+// lbr-09: tables. TABLE_DROP is the extra space between the diagram caption and the tables.
+const TABLE_DROP = 14;
+const TABLE_TITLE_H = 18; // title baseline -> bottom of the header row
+const TABLE_HEADER_H = 14;
+const TABLE_ROW_H = 16;
+const CONT_TITLE_H = 26;
+
+export interface EndLabel {
+  text: "FRONT" | "REAR";
+  side: "left" | "right";
+  x: number;
+  y: number;
+  /** The orange emphasis — always on FRONT. */
+  emphasis: boolean;
+}
+
+/** The diagram's end labels. Floor terms (Steve, 2026-10-13): FRONT = doors, REAR = nose. The doors
+ * end (trailer.rows[0], posFromFront 0, R1) draws on the right — see layoutColumnRects — so FRONT is
+ * the right-side label and carries the orange emphasis; REAR is the left-side label. */
+export function endLabels(box: DiagramBox): EndLabel[] {
+  const boxBottomY = box.yTop - box.height;
+  return [
+    { text: "REAR", side: "left", x: box.x - 32, y: boxBottomY - 12, emphasis: false },
+    { text: "FRONT", side: "right", x: box.x + box.width + 6, y: box.yTop - box.height / 2 - 4, emphasis: true },
+  ];
+}
+
+/** Rows that fit under a table whose title baseline is at `yTop`, above the bottom margin. */
+export function tableRowCapacity(yTop: number): number {
+  return Math.max(1, Math.floor((yTop - TABLE_TITLE_H - MARGIN) / TABLE_ROW_H));
+}
+
+/** Splits `rowCount` table rows into per-page counts: `firstCapacity` on the first page, then
+ * `contCapacity` on each continuation page. An empty table still takes its one first-page slot. */
+export function paginateRows(rowCount: number, firstCapacity: number, contCapacity: number): number[] {
+  const pages = [Math.min(rowCount, firstCapacity)];
+  let left = rowCount - pages[0];
+  while (left > 0) {
+    const n = Math.min(left, contCapacity);
+    pages.push(n);
+    left -= n;
+  }
+  return pages;
+}
+
+/** Title baseline of a table on a continuation page (under the "(cont.)" title). */
+export const CONT_TABLE_TOP = PAGE_HEIGHT - MARGIN - CONT_TITLE_H - TABLE_DROP;
 
 export interface BuildLoadingDiagramPdfOptions {
   /** Drives the runner-dunnage note, exactly like legacy's `state.runnerHeight > 0` gate — not a
@@ -290,14 +349,25 @@ export async function buildLoadingDiagramPdf(
   const diagramTop = cursorY;
   const box: DiagramBox = { x: MARGIN + 30, yTop: diagramTop, width: PAGE_WIDTH - MARGIN * 2 - 60, height: diagramHeight };
   drawDiagram(page, font, fontBold, trailer, dims, box);
-  cursorY = diagramTop - diagramHeight - 34 - DIAGRAM_CAPTION_H;
+  cursorY = diagramTop - diagramHeight - 34 - DIAGRAM_CAPTION_H - TABLE_DROP;
 
-  // Two-column tables: pieces (left) / stack breakdown (right)
+  // Two-column tables: pieces (left) / stack breakdown (right). Each continues onto new pages on its
+  // own when it runs out of room; a continuation page is created once and shared by both.
   const tableTop = cursorY;
   const colGap = 16;
   const colWidth = (PAGE_WIDTH - MARGIN * 2 - colGap) / 2;
-  drawPiecesTable(page, font, fontBold, buildPiecesTable(trailer, skus), { x: MARGIN, yTop: tableTop, width: colWidth });
-  drawStackTable(page, font, fontBold, buildStackBreakdown(trailer), { x: MARGIN + colWidth + colGap, yTop: tableTop, width: colWidth });
+  const pages: PDFPage[] = [page];
+  const pageAt = (i: number): PDFPage => {
+    while (pages.length <= i) {
+      const more = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      more.drawText(`Trailer ${trailerIndex + 1} Loading Diagram (cont.)`, { x: MARGIN, y: PAGE_HEIGHT - MARGIN - 20, size: 20, font: fontBold, color: INK });
+      pages.push(more);
+    }
+    return pages[i];
+  };
+  const fonts = { font, fontBold };
+  drawTable(pageAt, fonts, piecesTableSpec(buildPiecesTable(trailer, skus), colWidth), { x: MARGIN, width: colWidth }, tableTop);
+  drawTable(pageAt, fonts, stackTableSpec(buildStackBreakdown(trailer), colWidth), { x: MARGIN + colWidth + colGap, width: colWidth }, tableTop);
 
   return doc.save();
 }
@@ -368,10 +438,10 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
     page.drawRectangle({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, borderColor: LINE, borderWidth: 1.2 });
   }
 
-  // FRONT (nose) / REAR (doors) + dims caption — nose on the left, doors on the right (see
-  // layoutColumnRects' header comment for why).
-  page.drawText("FRONT", { x: box.x - 32, y: boxBottomY - 12, size: 10, font: fontBold, color: rgb(0.85, 0.55, 0.02) });
-  page.drawText("REAR", { x: box.x + box.width + 6, y: box.yTop - box.height / 2 - 4, size: 10, font: fontBold, color: MUTED });
+  // REAR (nose, left) / FRONT (doors, right) + dims caption — see endLabels() for the floor terms.
+  for (const l of endLabels(box)) {
+    page.drawText(l.text, { x: l.x, y: l.y, size: 10, font: fontBold, color: l.emphasis ? FRONT_ORANGE : MUTED });
+  }
   const remaining = formatRemainingLabel(dims, trailer);
   const caption = remaining ? `${dims.length}"L × ${dims.width}"W — ${remaining}` : `${dims.length}"L × ${dims.width}"W`;
   const capW = font.widthOfTextAtSize(caption, 10);
@@ -411,43 +481,143 @@ function drawHatch(page: PDFPage, rect: { x: number; y: number; width: number; h
   }
 }
 
-function drawPiecesTable(page: PDFPage, font: PDFFont, fontBold: PDFFont, rows: PieceTableRow[], area: { x: number; yTop: number; width: number }) {
-  page.drawText("PIECES", { x: area.x, y: area.yTop, size: 11, font: fontBold, color: INK });
-  let y = area.yTop - 16;
-  const rowH = 14;
-  const countColW = 26;
-  const dimsColW = 70;
-  for (const r of rows) {
-    const swatch = parseHexColor(r.color);
-    const sw = { x: area.x, y: y - 8, width: 9, height: 9 };
-    page.drawRectangle({ ...sw, color: swatch, borderColor: LINE, borderWidth: 0.5 });
-    if (r.hatched) drawHatch(page, sw, INK);
-    page.drawText(r.name, { x: area.x + 14, y: y - 7, size: 9.5, font, color: INK, maxWidth: area.width - 14 - countColW - dimsColW });
-    const dimsW = font.widthOfTextAtSize(r.dimsLabel, 8.5);
-    page.drawText(r.dimsLabel, { x: area.x + area.width - countColW - dimsW - 8, y: y - 7, size: 8.5, font, color: MUTED });
-    const countText = String(r.pieces);
-    const countW = font.widthOfTextAtSize(countText, 9.5);
-    page.drawText(countText, { x: area.x + area.width - countW, y: y - 7, size: 9.5, font: fontBold, color: INK });
-    y -= rowH;
-  }
-  if (rows.length === 0) {
-    page.drawText("No pieces placed.", { x: area.x, y: y - 7, size: 9.5, font, color: MUTED });
-  }
+// --- lbr-09: tables ---
+
+interface Fonts {
+  font: PDFFont;
+  fontBold: PDFFont;
 }
 
-function drawStackTable(page: PDFPage, font: PDFFont, fontBold: PDFFont, rows: StackBreakdownRow[], area: { x: number; yTop: number; width: number }) {
-  page.drawText("STACK BREAKDOWN", { x: area.x, y: area.yTop, size: 11, font: fontBold, color: INK });
-  let y = area.yTop - 16;
-  const rowH = 14;
-  for (const r of rows) {
-    const countText = String(r.stacks);
-    page.drawText(countText, { x: area.x, y: y - 7, size: 9.5, font: fontBold, color: INK });
-    page.drawText(r.pattern, { x: area.x + 24, y: y - 7, size: 9.5, font, color: INK, maxWidth: area.width - 24 });
-    y -= rowH;
-  }
-  if (rows.length === 0) {
-    page.drawText("No stacks placed.", { x: area.x, y: y - 7, size: 9.5, font, color: MUTED });
-  }
+type Swatch = { color: string; hatched: boolean };
+type Cell = { text: string; bold?: boolean; muted?: boolean } | { swatches: Swatch[] };
+
+interface TableColumn {
+  label: string;
+  width: number;
+  align: "left" | "right";
+}
+
+interface TableSpec {
+  title: string;
+  columns: TableColumn[];
+  rows: Cell[][];
+  emptyText: string;
+}
+
+const CELL_PAD = 6;
+const SWATCH = 10;
+
+function piecesTableSpec(rows: PieceTableRow[], width: number): TableSpec {
+  const colorW = 34;
+  const sizeW = 92;
+  const piecesW = 44;
+  return {
+    title: "PIECES",
+    columns: [
+      { label: "Color", width: colorW, align: "left" },
+      { label: "Part", width: width - colorW - sizeW - piecesW, align: "left" },
+      { label: "Size", width: sizeW, align: "right" },
+      { label: "Pieces", width: piecesW, align: "right" },
+    ],
+    rows: rows.map((r) => [
+      { swatches: [{ color: r.color, hatched: r.hatched }] },
+      { text: r.name },
+      { text: r.dimsLabel, muted: true },
+      { text: String(r.pieces), bold: true },
+    ]),
+    emptyText: "No pieces placed.",
+  };
+}
+
+/** Color · Stack · Stacks: the swatches (base, then top-off) sit directly left of the pattern they
+ * color, and the count is right-aligned at the end — the same shape as PIECES. */
+function stackTableSpec(rows: StackBreakdownRow[], width: number): TableSpec {
+  const colorW = 40;
+  const stacksW = 48;
+  return {
+    title: "STACK BREAKDOWN",
+    columns: [
+      { label: "Color", width: colorW, align: "left" },
+      { label: "Stack", width: width - colorW - stacksW, align: "left" },
+      { label: "Stacks", width: stacksW, align: "right" },
+    ],
+    rows: rows.map((r) => [
+      { swatches: r.layers.map((l) => ({ color: thicknessColor(l.unitHeight).bg, hatched: thicknessColor(l.unitHeight).hatched })) },
+      { text: r.pattern },
+      { text: String(r.stacks), bold: true },
+    ]),
+    emptyText: "No stacks placed.",
+  };
+}
+
+/** Shortens `text` with "..." until it fits `width` at `size`. */
+function fitText(font: PDFFont, text: string, size: number, width: number): string {
+  if (font.widthOfTextAtSize(text, size) <= width) return text;
+  let t = text;
+  while (t.length > 1 && font.widthOfTextAtSize(`${t}...`, size) > width) t = t.slice(0, -1);
+  return `${t}...`;
+}
+
+function drawRule(page: PDFPage, x: number, width: number, y: number, thickness: number) {
+  page.drawLine({ start: { x, y }, end: { x: x + width, y }, thickness, color: MUTED });
+}
+
+/** Draws one table with its title baseline at `firstTop` on page 0, continuing onto pageAt(1),
+ * pageAt(2)… (title + header repeated at CONT_TABLE_TOP) when its rows run past the bottom margin. */
+function drawTable(pageAt: (i: number) => PDFPage, fonts: Fonts, spec: TableSpec, area: { x: number; width: number }, firstTop: number) {
+  const perPage = paginateRows(spec.rows.length, tableRowCapacity(firstTop), tableRowCapacity(CONT_TABLE_TOP));
+  let next = 0;
+  perPage.forEach((count, pageIndex) => {
+    const page = pageAt(pageIndex);
+    const top = pageIndex === 0 ? firstTop : CONT_TABLE_TOP;
+    page.drawText(pageIndex === 0 ? spec.title : `${spec.title} (cont.)`, { x: area.x, y: top, size: 11, font: fonts.fontBold, color: INK });
+
+    // Header row: bold, smaller; a 0.5pt rule under it.
+    let y = top - TABLE_TITLE_H + TABLE_HEADER_H; // top edge of the header row
+    let cx = area.x;
+    spec.columns.forEach((col, ci) => {
+      const size = 8;
+      const w = fonts.fontBold.widthOfTextAtSize(col.label, size);
+      const tx = col.align === "right" ? cx + col.width - w - CELL_PAD : cx + (ci === 0 ? 0 : CELL_PAD);
+      page.drawText(col.label, { x: tx, y: y - TABLE_HEADER_H + 4, size, font: fonts.fontBold, color: INK });
+      cx += col.width;
+    });
+    y -= TABLE_HEADER_H;
+    drawRule(page, area.x, area.width, y, 0.5);
+
+    if (spec.rows.length === 0) {
+      page.drawText(spec.emptyText, { x: area.x, y: y - TABLE_ROW_H + 5, size: 9.5, font: fonts.font, color: MUTED });
+      drawRule(page, area.x, area.width, y - TABLE_ROW_H, 0.75);
+      return;
+    }
+
+    for (let i = 0; i < count; i++, next++) {
+      const rowBottom = y - TABLE_ROW_H;
+      let x = area.x;
+      spec.rows[next].forEach((cell, ci) => {
+        const col = spec.columns[ci];
+        const lead = ci === 0 ? 0 : CELL_PAD;
+        if ("swatches" in cell) {
+          cell.swatches.forEach((sw, si) => {
+            const r = { x: x + lead + si * (SWATCH + 3), y: rowBottom + (TABLE_ROW_H - SWATCH) / 2, width: SWATCH, height: SWATCH };
+            page.drawRectangle({ ...r, color: parseHexColor(sw.color), borderColor: LINE, borderWidth: 0.5 });
+            if (sw.hatched) drawHatch(page, r, INK);
+          });
+        } else {
+          const size = cell.muted ? 8.5 : 9.5;
+          const f = cell.bold ? fonts.fontBold : fonts.font;
+          const text = fitText(f, cell.text, size, col.width - lead - CELL_PAD);
+          const w = f.widthOfTextAtSize(text, size);
+          const tx = col.align === "right" ? x + col.width - w - CELL_PAD : x + lead;
+          page.drawText(text, { x: tx, y: rowBottom + 5, size, font: f, color: cell.muted ? MUTED : INK });
+        }
+        x += col.width;
+      });
+      // 0.5pt between rows; a slightly heavier rule closes the table (or this page's part of it).
+      drawRule(page, area.x, area.width, rowBottom, i === count - 1 ? 0.75 : 0.5);
+      y = rowBottom;
+    }
+  });
 }
 
 function parseHexColor(hex: string): ReturnType<typeof rgb> {

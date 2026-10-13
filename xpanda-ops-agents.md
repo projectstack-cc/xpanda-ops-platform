@@ -293,6 +293,7 @@ You build and maintain the Logistics module (`/logistics/`). This covers BOL gen
   generation today runs through `bol-compose.js` — the shared BOL engine — invoked from a modal on
   `logistics/index.html` and from `logistics/load-builder.html`.
 - **Load Builder**: Trailer load planning (53ft standard, 109" height), auto-pack algorithm, drag-and-drop customize mode, saved loads (90-day TTL)
+  - Floor terms (Steve, 2026-10-13): FRONT = doors (R1, loaded last), REAR = nose (loaded first). In code, `posFromFront` 0 and `trailer.rows[0]` are the doors end. Never re-order the layout to 'fix' this — only labels follow floor terms.
 - **Loading Dashboard**: Dock bay assignments, trailer numbers, loading status, photo capture
 - **Shipment Tracking**: Inbound/outbound, carrier management, BOL numbers, PRO tracking
 - **Customer/Carrier**: Address book and carrier directory for BOLs

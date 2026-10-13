@@ -33,7 +33,7 @@ interface EditorGuardsProps {
 }
 
 function overflowLabel(o: RowOverflow): string {
-  return `Trailer ${o.trailerIndex + 1}, row ${o.rowIndex + 1} — the load runs ${Math.round(o.overflowBy * 100) / 100}" past the trailer's nose there`;
+  return `Trailer ${o.trailerIndex + 1}, row ${o.rowIndex + 1} — the load runs ${Math.round(o.overflowBy * 100) / 100}" past the rear of the trailer there`;
 }
 
 export default function EditorGuards({ guards, holdingSummary }: EditorGuardsProps) {

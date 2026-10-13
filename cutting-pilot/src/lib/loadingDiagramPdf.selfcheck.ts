@@ -5,8 +5,22 @@
 // plainly" — here there IS real pure logic worth isolating, so that's tested instead). Mirrors
 // dissolve.selfcheck.ts's shape: a hand-built fixture, a check()/results table, one exported
 // run*SelfCheck() function. Not part of the production build path.
+//
+// lbr-09: async — the overflow check builds a real PDF and counts its pages with pdf-lib.
+import { PDFDocument } from "pdf-lib";
 import type { PackColumn, PackRow, PackTrailer, Dimensions, PackSku } from "./packEngine";
-import { formatStackLines, formatRemainingLabel, buildPiecesTable, buildStackBreakdown, filterTrailerWarnings, layoutColumnRects, hatchSegments } from "./loadingDiagramPdf";
+import {
+  formatStackLines,
+  formatRemainingLabel,
+  buildPiecesTable,
+  buildStackBreakdown,
+  filterTrailerWarnings,
+  layoutColumnRects,
+  hatchSegments,
+  endLabels,
+  paginateRows,
+  buildLoadingDiagramPdf,
+} from "./loadingDiagramPdf";
 import { thicknessColor } from "./thicknessPalette";
 
 interface CheckResult {
@@ -72,7 +86,7 @@ function makeFixture(): PackTrailer {
   };
 }
 
-export function runLoadingDiagramPdfSelfCheck(): { pass: boolean; results: CheckResult[] } {
+export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; results: CheckResult[] }> {
   const results: CheckResult[] = [];
   function check(name: string, pass: boolean, detail?: string) {
     results.push({ name, pass, detail });
@@ -172,6 +186,82 @@ export function runLoadingDiagramPdfSelfCheck(): { pass: boolean; results: Check
       stacks[1]?.pattern === '8"-3' && stacks[1]?.stacks === 1,
       JSON.stringify(stacks)
     );
+    // lbr-09: layers (base first) drive the Color cell's swatches.
+    check(
+      "buildStackBreakdown: each row carries its layers (10\" and 8\" pure stacks -> one layer each)",
+      JSON.stringify(stacks.map((r) => r.layers)) === JSON.stringify([[{ unitHeight: 10 }], [{ unitHeight: 8 }]]),
+      JSON.stringify(stacks.map((r) => r.layers))
+    );
+    const topped: PackTrailer = {
+      ...trailer,
+      rows: [
+        makeRow(0, 20, [
+          makeColumn(0, 20, 20, [
+            { skuId: "A", skuName: "SKU A", skuCode: "A-1", color: "#000", unitHeight: 10, count: 4, orientation: { length: 20, width: 20, height: 10, label: "flat" } },
+            { skuId: "B", skuName: "SKU B", skuCode: "B-1", color: "#000", unitHeight: 8, count: 1, orientation: { length: 20, width: 20, height: 8, label: "flat" } },
+          ]),
+        ]),
+      ],
+    };
+    const toppedRows = buildStackBreakdown(topped);
+    check(
+      'buildStackBreakdown: a topped pattern ("10"-4 · 8"-1") has 2 layers, base first',
+      toppedRows.length === 1 && toppedRows[0].pattern === '10"-4 · 8"-1' && JSON.stringify(toppedRows[0].layers) === JSON.stringify([{ unitHeight: 10 }, { unitHeight: 8 }]),
+      JSON.stringify(toppedRows)
+    );
+  }
+
+  // lbr-09: FRONT (doors) / REAR (nose) labels follow the floor terms. The doors end is
+  // trailer.rows[0] (R1), drawn on the right — FRONT must sit on that side, with the emphasis.
+  {
+    const box = { x: 60, yTop: 400, width: 650, height: 190 };
+    const labels = endLabels(box);
+    const front = labels.find((l) => l.text === "FRONT");
+    const rear = labels.find((l) => l.text === "REAR");
+    const r1 = layoutColumnRects(trailer, DIMS, box).find((r) => r.rowIndex === 0)!;
+    const r1Center = r1.x + r1.width / 2;
+    const boxCenter = box.x + box.width / 2;
+    check("endLabels: R1 (rows[0], the doors) draws on the right half", r1Center > boxCenter, JSON.stringify(r1));
+    check(
+      "endLabels: FRONT is on the doors (R1) side, right of the box, and carries the emphasis",
+      !!front && front.side === "right" && front.x >= box.x + box.width && front.x > r1Center && front.emphasis,
+      JSON.stringify(front)
+    );
+    check("endLabels: REAR is on the nose side, left of the box, no emphasis", !!rear && rear.side === "left" && rear.x < box.x && !rear.emphasis, JSON.stringify(rear));
+  }
+
+  // lbr-09: table pagination.
+  {
+    check("paginateRows: fits on one page", JSON.stringify(paginateRows(5, 13, 30)) === "[5]", JSON.stringify(paginateRows(5, 13, 30)));
+    check("paginateRows: 40 rows -> 13 + 27", JSON.stringify(paginateRows(40, 13, 30)) === "[13,27]", JSON.stringify(paginateRows(40, 13, 30)));
+    check("paginateRows: 80 rows -> 13 + 30 + 30 + 7", JSON.stringify(paginateRows(80, 13, 30)) === "[13,30,30,7]", JSON.stringify(paginateRows(80, 13, 30)));
+    check("paginateRows: empty table keeps one slot", JSON.stringify(paginateRows(0, 13, 30)) === "[0]");
+  }
+
+  // lbr-09: a synthetic trailer with 40 distinct stack patterns (and 40 SKUs) overflows both tables
+  // onto exactly one continuation page; the golden-size fixture above stays on one page.
+  {
+    const wide: Dimensions = { length: 636, width: 98, height: 109, maxWeight: 44000 };
+    const manySkus: PackSku[] = [];
+    const rows: PackRow[] = [];
+    for (let r = 0; r < 10; r++) {
+      const cols: PackColumn[] = [];
+      for (let c = 0; c < 4; c++) {
+        const i = r * 4 + c;
+        const h = 1 + i * 0.25;
+        manySkus.push({ id: `P${i}`, name: `Part ${i}`, sku: `P-${i}`, length: 48, width: 24, height: h, weight: 1, allowRotation: false });
+        cols.push(makeColumn(c * 24, 24, 48, [{ skuId: `P${i}`, skuName: `Part ${i}`, skuCode: `P-${i}`, color: "#000", unitHeight: h, count: 2, orientation: { length: 48, width: 24, height: h, label: "flat" } }]));
+      }
+      rows.push(makeRow(r * 48, 48, cols));
+    }
+    const many: PackTrailer = { ...trailer, dims: wide, rows, usedLength: 480, totalStacks: 40 };
+    check("overflow fixture: 40 distinct stack patterns", buildStackBreakdown(many).length === 40, String(buildStackBreakdown(many).length));
+    const manyPages = (await PDFDocument.load(await buildLoadingDiagramPdf(many, 1, wide, manySkus))).getPageCount();
+    check("buildLoadingDiagramPdf: 40 patterns -> 2 pages (tables continue, nothing off the page)", manyPages === 2, String(manyPages));
+    const manyWithNotes = (await PDFDocument.load(await buildLoadingDiagramPdf(many, 1, wide, manySkus, { runnerHeight: 4, warnings: ["trailer 1 row 0 column 0: stability: x"] }))).getPageCount();
+    check("buildLoadingDiagramPdf: runner + warning lines push rows down but still 2 pages", manyWithNotes === 2, String(manyWithNotes));
+    const smallPages = (await PDFDocument.load(await buildLoadingDiagramPdf(trailer, 0, DIMS, SKUS))).getPageCount();
+    check("buildLoadingDiagramPdf: a small trailer stays on 1 page", smallPages === 1, String(smallPages));
   }
 
   // filterTrailerWarnings: only this trailer's lines, prefix-matched exactly (not a substring match

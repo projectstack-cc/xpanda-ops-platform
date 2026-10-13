@@ -25,12 +25,18 @@
 //
 // lb-ui-08: a "Print / Export" action (LoadingDiagramPrintButton) sits alongside Dissolve… in each
 // trailer's header; see loadingDiagramPdf.ts.
+//
+// lbr-09 (Steve, 2026-10-13): every action that can leave a hole goes through applyEdit(), which runs
+// loadEditor's withAutoShift — stacks behind the hole slide toward the rear (nose), order kept, and
+// one Undo reverts the action and the shift together. A "Shift to rear" toolbar button runs the same
+// shift as its own step (it replaces "Compact load", which only closed empty rows). At xl the
+// trailers sit in TrailerScrollBox and the side panel is sticky.
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import {
   Undo2,
-  Rows3,
+  ArrowLeftToLine,
   XCircle,
   Check,
   PackageMinus,
@@ -50,7 +56,8 @@ import {
 import type { CartLine, Dimensions, PackColumn, PackOptions, PackPlan, PackSku } from "@/lib/packEngine";
 import {
   createEditorState,
-  compactLoad,
+  shiftToRearWithNote,
+  withAutoShift,
   undo,
   evaluateGuards,
   planForApply,
@@ -73,6 +80,7 @@ import {
 } from "@/lib/loadEditor";
 import { fetchLoadBuilderSkus } from "@/lib/jobPull";
 import TrailerDiagram, { type TapVerdict } from "@/components/logistics/TrailerDiagram";
+import TrailerScrollBox from "@/components/logistics/TrailerScrollBox";
 import HoldingArea from "@/components/logistics/HoldingArea";
 import EditorGuards, { type HoldingSummaryLine } from "@/components/logistics/EditorGuards";
 import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logistics/ColumnDetailPanel";
@@ -145,7 +153,6 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
   const [armed, setArmed] = useState<Armed | null>(null);
   const [pendingWarn, setPendingWarn] = useState<{ reason: string; target: Target } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [compactMessage, setCompactMessage] = useState<string | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showBlockedHint, setShowBlockedHint] = useState(false);
@@ -230,8 +237,12 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
 
   function commit(next: EditorState) {
     setState(next);
-    setCompactMessage(null);
     setShowBlockedHint(false);
+  }
+
+  /** lbr-09: a user action's result with the auto-shift applied (one history step for both). */
+  function applyEdit(next: EditorState): EditorState {
+    return withAutoShift(state, next);
   }
 
   function cancelAll() {
@@ -242,7 +253,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
   }
 
   function finishAction(next: EditorState) {
-    if (next !== state) commit(next);
+    if (next !== state) commit(applyEdit(next));
     cancelAll();
   }
 
@@ -360,9 +371,11 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
     if (selection?.kind !== "trailer") return;
     const next = setLayerCount(state, selection.ref, layerIndex, count);
     if (next === state) return;
-    commit(next);
-    // Zeroing the last layer removes the stack itself — nothing left to show counts for.
-    if (!next.plan.trailers[selection.ref.t]?.rows[selection.ref.r]?.columns[selection.ref.c]) cancelAll();
+    const shifted = applyEdit(next);
+    commit(shifted);
+    // Zeroing the last layer removes the stack itself — nothing left to show counts for. If the
+    // auto-shift moved stacks, the selected (t, r, c) may now point at a different stack.
+    if (shifted !== next || !next.plan.trailers[selection.ref.t]?.rows[selection.ref.r]?.columns[selection.ref.c]) cancelAll();
   }
 
   // --- toolbar ---
@@ -372,14 +385,16 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
     cancelAll();
   }
 
-  function handleCompact() {
-    const next = compactLoad(state);
+  /** lbr-09: Shift to rear on every trailer, as its own undo step. */
+  function handleShiftToRear() {
+    const { state: next, note } = shiftToRearWithNote(state);
     if (next === state) {
-      setCompactMessage("Load already compact — nothing to shift.");
+      setToast(note ?? "Nothing to shift — no gaps.");
       return;
     }
     commit(next);
     cancelAll();
+    if (note) setToast(note);
   }
 
   /** Back to the plan Customize opened with, as one undoable step (the auto-pack, unless an earlier
@@ -395,7 +410,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
     const next = addToHolding(state, sku, count);
     setShowAddPieces(false);
     if (next === state) return;
-    commit(next);
+    commit(applyEdit(next));
     const index = state.holding.length;
     setPanel("actions");
     setSelection({ kind: "holding", index });
@@ -438,17 +453,14 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
           <Undo2 className="w-4 h-4" aria-hidden="true" />
           Undo
         </button>
+        <button type="button" onClick={handleShiftToRear} className={BTN} title="Close gaps — stacks slide toward the rear (nose)">
+          <ArrowLeftToLine className="w-4 h-4" aria-hidden="true" />
+          Shift to rear
+        </button>
         <button type="button" onClick={() => setShowAddPieces(true)} className={BTN}>
           <PackagePlus className="w-4 h-4" aria-hidden="true" />
           Add pieces…
         </button>
-        <div className="flex flex-col">
-          <button type="button" onClick={handleCompact} className={BTN}>
-            <Rows3 className="w-4 h-4" aria-hidden="true" />
-            Compact load
-          </button>
-          {compactMessage && <span className="text-[12px] text-muted mt-1">{compactMessage}</span>}
-        </div>
         <button type="button" onClick={() => setShowResetConfirm(true)} className={BTN}>
           <RotateCcw className="w-4 h-4" aria-hidden="true" />
           Reset to auto-pack
@@ -487,6 +499,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
             <p>1. Tap a stack — on a trailer or in holding — to pick it.</p>
             <p>2. Choose what to do: move it, stack it onto another stack, or take pieces off the top.</p>
             <p>3. Tap a green spot. Faded spots can&apos;t take it — tap one to see why. Undo reverses any step.</p>
+            <p>Gaps close automatically — stacks slide toward the rear.</p>
           </div>
           <button type="button" onClick={dismissHowto} className="shrink-0 min-h-[44px] px-3 rounded-lg border border-[var(--info-border)] bg-surface text-text text-sm font-semibold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]">
             Got it
@@ -520,11 +533,11 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
       <EditorGuards guards={guards} holdingSummary={holdingSummary} />
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-4 items-start">
-        <div className="space-y-4 min-w-0">
-          {state.plan.trailers.length === 0 ? (
-            <div className="rounded-xl border border-[var(--card-border)] bg-surface p-6 text-sm text-muted">Nothing placed on any trailer.</div>
-          ) : (
-            state.plan.trailers.map((trailer, t) => (
+        {state.plan.trailers.length === 0 ? (
+          <div className="rounded-xl border border-[var(--card-border)] bg-surface p-6 text-sm text-muted">Nothing placed on any trailer.</div>
+        ) : (
+          <TrailerScrollBox count={state.plan.trailers.length}>
+            {state.plan.trailers.map((trailer, t) => (
               <TrailerDiagram
                 key={t}
                 trailer={trailer}
@@ -559,11 +572,12 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                   </div>
                 }
               />
-            ))
-          )}
-        </div>
+            ))}
+          </TrailerScrollBox>
+        )}
 
-        <div className="space-y-4 min-w-0">
+        {/* Side column — sticky at xl (lbr-09; the page header doesn't stick, so top-4 is the offset). */}
+        <div className="space-y-4 min-w-0 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
           {/* Action bar: the side panel on xl, a sticky bottom sheet on narrow screens. */}
           {selection && selectedColumn ? (
             <section
@@ -652,7 +666,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
           state={state}
           srcTi={dissolveTi}
           onApply={(next) => {
-            commit(next);
+            commit(applyEdit(next));
             setDissolveTi(null);
             cancelAll();
           }}

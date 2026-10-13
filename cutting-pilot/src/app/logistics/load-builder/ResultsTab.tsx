@@ -7,12 +7,15 @@
 //   3. the consolidation note + pure-plan toggle (PackOptions.consolidate).
 //   4. one card per trailer (TrailerDiagram with a legacy-style title/subtitle, print in headerAction).
 //   5. side column (below the diagrams under xl) — ColumnDetailPanel, Pieces, Warnings, Carried.
+// lbr-09: at xl the trailer cards sit in TrailerScrollBox (about two trailers tall) and the side
+// column is sticky, so the tools stay in view while scrolling through trucks.
 // Edit mode swaps 4+5 for the existing drag CustomizeEditor, unchanged (lbr-07 replaces it).
 // Presentational: everything here is derived from props; nothing is fetched.
 import { useMemo, type ReactNode } from "react";
 import { FileText, FolderOpen, Pencil, RotateCcw, Save } from "lucide-react";
 import MetricTile from "@/components/dashboard/MetricTile";
 import TrailerDiagram from "@/components/logistics/TrailerDiagram";
+import TrailerScrollBox from "@/components/logistics/TrailerScrollBox";
 import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logistics/ColumnDetailPanel";
 import LoadingDiagramPrintButton from "@/components/logistics/LoadingDiagramPrintButton";
 import type { CartLine, Dimensions, PackOptions, PackPlan, PackSku, PackTrailer } from "@/lib/packEngine";
@@ -263,11 +266,11 @@ export default function ResultsTab(p: ResultsTabProps) {
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
           {/* 4. One card per trailer */}
-          <div className="space-y-4 min-w-0">
-            {trucks === 0 ? (
-              <div className={`${CARD} text-sm text-muted`}>Nothing placed — every piece is in the balance.</div>
-            ) : (
-              plan.trailers.map((trailer, trailerIndex) => (
+          {trucks === 0 ? (
+            <div className={`${CARD} text-sm text-muted`}>Nothing placed — every piece is in the balance.</div>
+          ) : (
+            <TrailerScrollBox count={trucks}>
+              {plan.trailers.map((trailer, trailerIndex) => (
                 <TrailerDiagram
                   key={trailerIndex}
                   trailer={trailer}
@@ -294,12 +297,12 @@ export default function ResultsTab(p: ResultsTabProps) {
                     </div>
                   }
                 />
-              ))
-            )}
-          </div>
+              ))}
+            </TrailerScrollBox>
+          )}
 
-          {/* 5. Side column */}
-          <div className="space-y-4 min-w-0">
+          {/* 5. Side column — sticky at xl (the page header doesn't stick, so top-4 is the offset) */}
+          <div className="space-y-4 min-w-0 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
             <ColumnDetailPanel
               selected={p.selectedDetail}
               dims={p.selected ? (plan.trailers[p.selected.trailerIndex]?.dims ?? p.dims) : p.dims}
