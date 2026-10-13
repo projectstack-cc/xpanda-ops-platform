@@ -57,6 +57,9 @@ export function QtyStepper({ qty, label, disabled, onStep, onSet }: { qty: numbe
       return;
     }
     if (n !== qty) onSet(n);
+    // Snap back to the real qty: if the change lands, the effect above shows the new value; if it's
+    // cancelled (the re-pack confirm), the field doesn't keep — and re-commit on blur — the typed one.
+    setDraft(String(qty));
   }
   const btn = `inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg border border-[var(--border)] text-text cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-40 disabled:cursor-not-allowed ${FOCUS}`;
   return (
