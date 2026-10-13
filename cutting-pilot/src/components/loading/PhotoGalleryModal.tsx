@@ -130,7 +130,7 @@ export default function PhotoGalleryModal({
       <p className="text-xs font-semibold text-muted">Add photos</p>
       <PhotoPicker onPicked={handleAdd} disabled={uploading} />
       {uploadProgress && <p className="text-xs text-muted">{uploadProgress}</p>}
-      {uploadError && <p className="text-xs text-[var(--danger-text)]">{uploadError}</p>}
+      {uploadError && <p className="text-xs text-[var(--danger-ink)]">{uploadError}</p>}
     </div>
   ) : null;
 
@@ -149,7 +149,7 @@ export default function PhotoGalleryModal({
   return (
     <Modal isOpen={!!jobId} onClose={onClose} title="Loading photos" size="lg">
       {loading && <p className="text-sm text-muted">Loading photos…</p>}
-      {error && <p className="text-sm text-[var(--danger-text)]">{error}</p>}
+      {error && <p className="text-sm text-[var(--danger-ink)]">{error}</p>}
       {!loading && !error && photos.length === 0 && (
         <p className="text-sm text-text-faint">No photos taken for this shipment.</p>
       )}

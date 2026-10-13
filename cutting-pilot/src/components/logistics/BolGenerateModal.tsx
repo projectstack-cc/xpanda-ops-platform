@@ -524,7 +524,7 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
   return (
     <Modal isOpen={isOpen} onClose={() => onClose(savedAny)} title="Generate BOL" size="lg">
       {loading && <p className="text-sm text-muted py-6 text-center">Loading job…</p>}
-      {loadError && !loading && <p className="text-sm text-[var(--danger-text)] py-6 text-center">{loadError}</p>}
+      {loadError && !loading && <p className="text-sm text-[var(--danger-ink)] py-6 text-center">{loadError}</p>}
 
       {fenced && (
         <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
@@ -719,7 +719,7 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
           {progress.length > 0 && (
             <ul className="text-xs text-muted space-y-1 list-none p-0 m-0">
               {progress.map((p, i) => (
-                <li key={i} className={p.done ? "text-[var(--success-text)]" : ""}>
+                <li key={i} className={p.done ? "text-[var(--success-ink)]" : ""}>
                   {p.text}
                 </li>
               ))}

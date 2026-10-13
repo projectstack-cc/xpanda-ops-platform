@@ -85,7 +85,7 @@ export default function LoadingSheetButton(props: Props) {
   const modal = (
     <Modal isOpen={isOpen} onClose={handleClose} title={title} size="xl">
       {loading && <p className="text-sm text-muted">Building loading sheet…</p>}
-      {!loading && error && <p className="text-sm text-[var(--danger-text)]">{error}</p>}
+      {!loading && error && <p className="text-sm text-[var(--danger-ink)]">{error}</p>}
       {!loading && !error && emptyDate !== null && (
         <p className="text-sm text-muted">
           {props.mode === "day" ? `No outbound orders ship on ${emptyDate}.` : "No outbound shipment found for this order."}

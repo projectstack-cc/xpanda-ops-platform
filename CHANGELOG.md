@@ -9805,6 +9805,27 @@ current series).
 
 ## Infra / Docs
 
+- **ui-tokens-01 — `--danger-ink` / `--success-ink` for colored text on normal surfaces; 37 invisible white-on-white usages fixed across v2; build-time guard so it can't come back.**
+  - **Tokens (`cutting-pilot/src/app/globals.css`, both themes; `tailwind.config.ts` maps `danger-ink` / `success-ink`):** light `--danger-ink #b91c1c` (6.47:1 on `--surface` #fff, 5.98:1 on `--bg` #f4f6f9), `--success-ink #15803d` (5.02:1 / 4.63:1); dark `--danger-ink #f87171` (6.07:1 on `--surface` #1a1d29, 6.82:1 on `--bg` #0f1117), `--success-ink #4ade80` (9.63:1 / 10.83:1). All ≥ 4.5:1 at the prompt's values — none adjusted.
+  - **Guard (`cutting-pilot/scripts/check-on-color-tokens.mjs`, new, dependency-free):** every `var(--danger|success|primary-text)` used as a text color (`[variant:]text-[…]` class or a `color:` style value) must have the matching `[same variant:]bg-[var(--X-bg)]` / `background: var(--X-bg)` on the same element — the same string literal, the enclosing `[...]` array (`.join(" ")` class lists) or the enclosing object literal (style objects, `{ bg, text }` variant maps). `color-mix(...)` hover tints don't count; `hover:text-` needs `hover:bg-`; borders/rings/fills ignored; comments skipped. Unsure → flagged; reviewed false positives take `// on-color-ok: <reason>` on the line above. Wired as the first step of `npm run cf-build` (CI + local deploys) and as `npm run check:tokens`. **Proof it bites:** temporarily reverting `SaveLoadModal.tsx:33` to `--danger-text` (plus a scratch file with an array-element misuse and a `hover:bg-[var(--danger-bg)]`-only pairing) made it exit 1 with all three `file:line`s; reverted → exit 0 (473 files).
+  - **Fixed (`--danger-text` → `--danger-ink`, `--success-text` → `--success-ink` unless noted), by file:**
+    - `app/carrier/CarrierBolModal.tsx:74` (error)
+    - `app/cutting/BlockPlanner.tsx:291` (error)
+    - `app/cutting/JobRow.tsx:55` — rank-1 badge was `bg-[var(--accent)]` + `--primary-text` (white on light slate in dark mode); now `bg-[var(--primary-bg)]` — the on-color pairing it was meant to be
+    - `app/logistics/load-builder/CustomizeEditor.tsx:827` (Delete row — outline button, keeps `--border` + color-mix hover), `:872` (remove-layer ×)
+    - `components/board/HbFloorStockSection.tsx:203` (success notice)
+    - `components/loading/LoadedChecklistModal.tsx:202`, `PhotoGalleryModal.tsx:133, 152`, `PullJobModal.tsx:219`, `ShippingInfoModal.tsx:97` (errors)
+    - `components/loading/LoadCard.tsx:33` — not changed: status pill filled with the status's solid border color (legacy `LD_STATUS_COLORS`), white label intended → `on-color-ok` comment
+    - `components/logistics/BolGenerateModal.tsx:527` (error), `:722` (done step, success)
+    - `components/logistics/FuelSurchargeControl.tsx:155`, `JobPullModal.tsx:293, 325`, `LoadingSheetButton.tsx:88`, `SaveLoadModal.tsx:33`, `SignedBolButton.tsx:179, 222`, `StatBreakdownModal.tsx:60`, `ToLoadSheetButton.tsx:138` (errors)
+    - `components/logistics/InvoiceAnalytics.tsx:389`, `ResolveUnmatchedModal.tsx:104, 136` (success text)
+    - `components/logistics/LoadPickerModal.tsx:105` (load error), `:135` (delete icon button), `:144` (delete confirm text), `:163` (row error)
+    - `components/logistics/ShipmentEditModal.tsx:629` (delete confirm text), `:653` (Delete shipment ghost button)
+    - `components/logistics/TrailerDiagram.tsx:279` — drop feedback background was an 85% `color-mix` tint; now the solid matching `--success-bg` / `--danger-bg`, so the white text is a real on-color pairing (`on-color-ok` comment: the guard can't pair two ternaries)
+    - `components/parts/PartsLibrary.tsx:258` (load error), `:395` (delete icon button), `:404` (delete confirm text)
+  - Valid on-color pairings (solid confirm buttons, toasts, pills, `bg-[var(--danger-bg)]` alert boxes) untouched.
+  - **Doctrine:** `agent-react-component.md` Definition of Done gains the `--*-text` on-color rule.
+  - **Verified:** `check-on-color-tokens` exit 0; `npx tsc --noEmit` clean; `npm run cf-build` green with the guard running first. Browser spot-check (next dev + mocked APIs, light and dark): Customize → Edit trailer → Delete row, Parts tab delete confirm, Load picker delete confirm, Load picker list error — measured text contrast 6.47:1 (light) / 6.07:1 (dark) on each.
 - **admin-10 — Docs: AGENTS.md §1–§4 + §10 rewritten for the file-split worker, the /v2 migration surface and the new permission workflow; xpanda-ops-agents.md admin/permission sections updated (docs-only).**
   - **AGENTS.md §1 Platform Architecture:** two halves on one host — legacy Pages app + worker (`_worker.js/index.js` gate + `API_ROUTES`, `lib/` and `routes/` files listed from the tree) and the `cutting-pilot/` v2 surface (Next.js 14 / OpenNext under `/v2/*`, same D1 `DB` + R2 `BOL_PHOTOS` + session cookie, deployed by `deploy-v2-worker.yml`, React allowed only there). Migration status: cut over = Dock Loading, BOL Email Queue, Production Log, Admin; still legacy = Job Board Classic, Logistics Classic, Manufacturing calculators, QC, Reports, Safety, shell.
   - **§2 API Structure:** legacy `routes/*.js` + one `API_ROUTES` row (never collapse back to one file); v2 `src/app/api/**/route.ts`. Core list refreshed (removed `/api/users`, `/api/roles`, `/api/activity-log`; added `/v2/api/admin/*`, loading, notifications/push, public BOL). Deleted the stale "All APIs live inside `_worker.js`. No exceptions." and "Do NOT move APIs to separate files."

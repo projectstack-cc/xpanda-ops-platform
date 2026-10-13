@@ -33,6 +33,10 @@
   --danger-text: #ffffff;
   --success-bg: #16a34a;
   --success-text: #ffffff;
+  /* Ink (ui-tokens-01): red/green TEXT on normal surfaces. --*-text above are on-color (white)
+     and only go on their matching --*-bg. Guarded by scripts/check-on-color-tokens.mjs. */
+  --danger-ink: #b91c1c;
+  --success-ink: #15803d;
 
   /* Links + banners */
   --link: #0074cc;
@@ -110,6 +114,8 @@
   --danger-text: #ffffff;
   --success-bg: #22c55e;
   --success-text: #ffffff;
+  --danger-ink: #f87171;
+  --success-ink: #4ade80;
 
   --link: #60a5fa;
   --info-bg: rgba(59, 130, 246, 0.12);

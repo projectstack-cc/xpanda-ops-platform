@@ -216,7 +216,7 @@ export default function PullJobModal({ bays, assignments, defaultBayId, onClose,
         </select>
       </label>
 
-      {error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}
+      {error && <p className="text-xs text-[var(--danger-ink)]">{error}</p>}
 
       <div className="flex justify-end gap-2 pt-2">
         <button

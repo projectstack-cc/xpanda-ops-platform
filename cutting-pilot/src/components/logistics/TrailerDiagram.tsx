@@ -275,7 +275,8 @@ export default function TrailerDiagram({
                 <div
                   className="absolute inset-x-0 top-0 z-20 px-1.5 py-1 text-[10px] font-mono tabular-nums leading-tight pointer-events-none"
                   style={{
-                    background: feedback.ok ? "color-mix(in srgb, var(--success-bg) 85%, transparent)" : "color-mix(in srgb, var(--danger-bg) 85%, transparent)",
+                    background: feedback.ok ? "var(--success-bg)" : "var(--danger-bg)",
+                    // on-color-ok: same ternary sets the solid matching --success-bg / --danger-bg above
                     color: feedback.ok ? "var(--success-text)" : "var(--danger-text)",
                   }}
                 >

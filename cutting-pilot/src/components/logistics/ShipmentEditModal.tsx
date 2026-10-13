@@ -626,7 +626,7 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
           <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--line)]">
             {deleteArmed ? (
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-semibold text-[var(--danger-text)]">
+                <span className="text-xs font-semibold text-[var(--danger-ink)]">
                   Delete this shipment permanently?
                 </span>
                 <button
@@ -650,7 +650,7 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
               <button
                 type="button"
                 onClick={() => setDeleteArmed(true)}
-                className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-md text-sm font-semibold text-[var(--danger-text)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_10%,transparent)] cursor-pointer"
+                className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-md text-sm font-semibold text-[var(--danger-ink)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_10%,transparent)] cursor-pointer"
               >
                 <Trash2 size={14} aria-hidden="true" />
                 Delete shipment

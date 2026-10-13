@@ -255,7 +255,7 @@ export default function PartsLibrary({ active, layout, canEdit = true }: PartsLi
           {statusMessage}
         </div>
       )}
-      {loadError && <p className="text-sm text-[var(--danger-text)] px-1">{loadError}</p>}
+      {loadError && <p className="text-sm text-[var(--danger-ink)] px-1">{loadError}</p>}
 
       <div className="flex items-center gap-2 flex-wrap">
         <input
@@ -392,7 +392,7 @@ export default function PartsLibrary({ active, layout, canEdit = true }: PartsLi
                                   <button
                                     type="button"
                                     onClick={() => setConfirmDeleteId(p.id)}
-                                    className="p-1.5 rounded-md text-[var(--danger-text)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_10%,transparent)] cursor-pointer"
+                                    className="p-1.5 rounded-md text-[var(--danger-ink)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_10%,transparent)] cursor-pointer"
                                     aria-label={`Delete ${p.part_number}`}
                                   >
                                     <Trash2 size={14} aria-hidden="true" />
@@ -401,7 +401,7 @@ export default function PartsLibrary({ active, layout, canEdit = true }: PartsLi
                               )}
                               {isConfirmingDelete && (
                                 <div className="w-full flex items-center gap-2 flex-wrap">
-                                  <span className="text-xs font-semibold text-[var(--danger-text)]">
+                                  <span className="text-xs font-semibold text-[var(--danger-ink)]">
                                     Remove {p.part_number} from the shared catalog (Orders + job matching), permanently?
                                   </span>
                                   <button

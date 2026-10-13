@@ -199,7 +199,7 @@ export default function LoadedChecklistModal({ assignment, onClose, onDone }: Lo
         )}
       </div>
 
-      {error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}
+      {error && <p className="text-xs text-[var(--danger-ink)]">{error}</p>}
 
       <div className="flex justify-end gap-2 pt-1">
         <button

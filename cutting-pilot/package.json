@@ -5,9 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "cf-build": "opennextjs-cloudflare && node scripts/fix-asset-prefix.mjs && node scripts/copy-pdf-worker.mjs",
+    "cf-build": "node scripts/check-on-color-tokens.mjs && opennextjs-cloudflare && node scripts/fix-asset-prefix.mjs && node scripts/copy-pdf-worker.mjs",
     "deploy": "npm run cf-build && wrangler deploy",
     "preview": "npm run cf-build && wrangler dev",
+    "check:tokens": "node scripts/check-on-color-tokens.mjs",
     "cf-typegen": "wrangler types",
     "postinstall": "patch-package"
   },

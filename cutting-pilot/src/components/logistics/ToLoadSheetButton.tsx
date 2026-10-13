@@ -135,7 +135,7 @@ export default function ToLoadSheetButton() {
         </button>
       </div>
       {loading && <p className="text-sm text-muted">Building load verification sheet…</p>}
-      {!loading && error && <p className="text-sm text-[var(--danger-text)]">{error}</p>}
+      {!loading && error && <p className="text-sm text-[var(--danger-ink)]">{error}</p>}
       {!loading && !error && pdfDoc && (
         <PdfViewer src={pdfDoc.src} filename={pdfDoc.filename} title={title} />
       )}

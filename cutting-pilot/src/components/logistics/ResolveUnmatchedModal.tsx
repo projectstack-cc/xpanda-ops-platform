@@ -101,7 +101,7 @@ export default function ResolveUnmatchedModal({ isOpen, onClose, lines, onResolv
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Resolve unmatched lines (${lines.length})`} size="xl">
       {lines.length === 0 ? (
-        <p className="text-sm font-medium text-[var(--success-text)]">
+        <p className="text-sm font-medium text-[var(--success-ink)]">
           All lines resolved — the report is up to date.
         </p>
       ) : (
@@ -133,7 +133,7 @@ export default function ResolveUnmatchedModal({ isOpen, onClose, lines, onResolv
               {l.note && !isDone && <div className="text-xs text-[var(--warn-text)] mb-2">{l.note}</div>}
 
               {isDone ? (
-                <div className="text-sm font-medium text-[var(--success-text)]">Resolved.</div>
+                <div className="text-sm font-medium text-[var(--success-ink)]">Resolved.</div>
               ) : (
                 <>
                   <div className="flex flex-wrap gap-2">

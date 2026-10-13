@@ -57,7 +57,7 @@ export default function StatBreakdownModal({ statKey, label, onClose }: StatBrea
   return (
     <Modal isOpen={!!statKey} onClose={onClose} title={label || "Breakdown"}>
       {loading && <p className="text-sm text-muted py-6 text-center">Loading…</p>}
-      {error && !loading && <p className="text-sm text-[var(--danger-text)] py-4 text-center">{error}</p>}
+      {error && !loading && <p className="text-sm text-[var(--danger-ink)] py-4 text-center">{error}</p>}
       {!loading && !error && rows && rows.length === 0 && (
         <p className="text-sm text-muted py-6 text-center">No shipments match this tile right now.</p>
       )}

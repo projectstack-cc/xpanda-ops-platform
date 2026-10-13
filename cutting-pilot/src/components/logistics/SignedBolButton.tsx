@@ -176,7 +176,7 @@ export default function SignedBolButton({ jobId, available }: { jobId: string; a
   const modal = (
     <Modal isOpen={isOpen} onClose={handleClose} title="Signed BOL" size="xl">
       {loading && <p className="text-sm text-muted">Loading signed BOL…</p>}
-      {!loading && error && <p className="text-sm text-[var(--danger-text)]">{error}</p>}
+      {!loading && error && <p className="text-sm text-[var(--danger-ink)]">{error}</p>}
       {!loading && !error && loads && loads.length === 0 && (
         <p className="text-sm text-muted">No signed copy on file.</p>
       )}
@@ -219,7 +219,7 @@ export default function SignedBolButton({ jobId, available }: { jobId: string; a
           </div>
 
           {fileLoading && <p className="text-sm text-muted">Loading…</p>}
-          {!fileLoading && fileError && <p className="text-sm text-[var(--danger-text)]">{fileError}</p>}
+          {!fileLoading && fileError && <p className="text-sm text-[var(--danger-ink)]">{fileError}</p>}
           {!fileLoading && !fileError && view && (
             view.mime.startsWith("image/") ? (
               // eslint-disable-next-line @next/next/no-img-element

@@ -52,7 +52,7 @@ export default function JobRow({ job, isActive, onClick, onViewPhotos, rank }: P
                 className={[
                   "shrink-0 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold tabular-nums",
                   rank === 1
-                    ? "bg-[var(--accent)] text-[var(--primary-text)]"
+                    ? "bg-[var(--primary-bg)] text-[var(--primary-text)]"
                     : "bg-[var(--ghost-bg)] text-muted border border-border",
                 ].join(" ")}
                 aria-label={`Work-queue rank ${rank}`}

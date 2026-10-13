@@ -288,7 +288,7 @@ export default function BlockPlanner({ job, isOpen, onClose, onSaved }: Props) {
               </span>
             </div>
 
-            {err && <p className="text-xs text-[var(--danger-text)]">{err}</p>}
+            {err && <p className="text-xs text-[var(--danger-ink)]">{err}</p>}
 
             <div className="flex gap-2 pt-1">
               <button

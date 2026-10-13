@@ -146,6 +146,9 @@ read, dials, anti-default typography/color, reduced motion, dependency verificat
 - [ ] `font-mono tabular-nums` on all numeric data.
 - [ ] Empty, loading, AND error states all designed (no blank divs, no bare spinners).
 - [ ] All colors from tokens — no hex literals; palette locked across components.
+- [ ] `--*-text` tokens are on-color (white) and only go on their matching `--*-bg`. For red/green text
+      on a normal surface use `--danger-ink` / `--success-ink`. `check-on-color-tokens.mjs` enforces
+      this at build.
 
 **Interaction & accessibility:**
 - [ ] `cursor-pointer` on every clickable element; visible hover + `:focus-visible`.

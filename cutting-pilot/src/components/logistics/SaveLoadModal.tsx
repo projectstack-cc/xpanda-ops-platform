@@ -30,7 +30,7 @@ export default function SaveLoadModal({ isOpen, defaultName, isUpdate, saving, e
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isUpdate ? "Update saved load" : "Save load"}>
       <div className="space-y-3">
-        {error && <p className="text-sm text-[var(--danger-text)]">{error}</p>}
+        {error && <p className="text-sm text-[var(--danger-ink)]">{error}</p>}
         <label className="block space-y-1">
           <span className="block text-xs font-semibold text-muted">Name</span>
           <input

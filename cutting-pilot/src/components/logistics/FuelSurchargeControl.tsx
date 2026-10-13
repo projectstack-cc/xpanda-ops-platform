@@ -152,7 +152,7 @@ export default function FuelSurchargeControl({ canEdit }: Props) {
         <span className="text-xs text-muted">{status}</span>
       </div>
       <p className="mt-1 text-xs text-muted">Charged on the BOL as rate × round-trip miles from the plant.</p>
-      {error && <p className="mt-2 text-xs text-[var(--danger-text)]">{error}</p>}
+      {error && <p className="mt-2 text-xs text-[var(--danger-ink)]">{error}</p>}
     </div>
   );
 }

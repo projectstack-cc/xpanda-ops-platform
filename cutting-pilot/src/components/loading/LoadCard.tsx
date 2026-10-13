@@ -30,6 +30,7 @@ export default function LoadCard({ load }: LoadCardProps) {
           )}
           <span
             className="font-mono tabular-nums text-[clamp(0.6rem,1vh,0.75rem)] font-semibold px-1.5 py-[1px] rounded"
+            // on-color-ok: pill fill is the status's solid border color (legacy LD_STATUS_COLORS); white label is intended
             style={{ background: variant.border, color: "var(--primary-text)" }}
           >
             {variant.label}

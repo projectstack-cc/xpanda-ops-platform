@@ -71,7 +71,7 @@ export default function CarrierBolModal({ token, title, onClose }: Props) {
     <Modal isOpen={!!token} onClose={onClose} title={title} size="xl">
       {loading && <p className="text-sm text-[var(--text-hint)] py-6 text-center">Building BOL…</p>}
       {error && !loading && (
-        <p className="text-sm font-semibold text-[var(--danger-text)] py-6 text-center">{error}</p>
+        <p className="text-sm font-semibold text-[var(--danger-ink)] py-6 text-center">{error}</p>
       )}
       {!loading && !error && src && (
         <PdfViewer src={src} filename={`BOL_${bolNumber || "carrier"}.pdf`} title="Bill of Lading" height={560} />

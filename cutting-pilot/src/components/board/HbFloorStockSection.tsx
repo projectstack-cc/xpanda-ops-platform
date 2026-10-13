@@ -200,7 +200,7 @@ export default function HbFloorStockSection({ jobId, hbChunkBreakdown, hbOnHand,
           </p>
 
           {error && <p className="text-sm text-[var(--warn-text)]">{error}</p>}
-          {notice && !error && <p className="text-sm text-[var(--success-text)]">{notice}</p>}
+          {notice && !error && <p className="text-sm text-[var(--success-ink)]">{notice}</p>}
 
           {canEdit &&
             (confirmingClear ? (

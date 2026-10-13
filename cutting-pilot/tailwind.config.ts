@@ -18,6 +18,8 @@ const config: Config = {
         "border-light": "var(--border-light, #e2e8f0)",
         green: "var(--green, #22c55e)",
         red: "var(--red, #ef4444)",
+        "danger-ink": "var(--danger-ink, #b91c1c)",
+        "success-ink": "var(--success-ink, #15803d)",
       },
       fontFamily: {
         sans: ["var(--font)", "system-ui", "sans-serif"],

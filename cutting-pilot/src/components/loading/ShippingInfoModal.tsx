@@ -94,7 +94,7 @@ export default function ShippingInfoModal({ assignment, jobCache, onClose }: Shi
   return (
     <Modal isOpen={!!assignment} onClose={onClose} title="Shipping information">
       {loading && !job && !error && <p className="text-sm text-muted">Loading…</p>}
-      {error && <p className="text-sm text-[var(--danger-text)]">{error}</p>}
+      {error && <p className="text-sm text-[var(--danger-ink)]">{error}</p>}
       {assignment && job && (
         <div className="text-sm leading-relaxed">
           <div className="font-bold text-text mb-2.5 flex items-center gap-2 flex-wrap">

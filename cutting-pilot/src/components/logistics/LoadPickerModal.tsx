@@ -102,7 +102,7 @@ export default function LoadPickerModal({ isOpen, onClose, onLoad }: Props) {
           Deleting is disabled in the v2 preview phase. Use the legacy Logistics dashboard to delete this saved load for now.
         </div>
       )}
-      {loadError && <p className="text-sm text-[var(--danger-text)] px-1">{loadError}</p>}
+      {loadError && <p className="text-sm text-[var(--danger-ink)] px-1">{loadError}</p>}
       <div className="max-h-[55vh] overflow-y-auto -mx-1 px-1">
         {loading && <p className="text-sm text-muted px-2 py-3">Loading…</p>}
         {!loading && !loadError && loads.length === 0 && <p className="text-sm text-muted px-2 py-3">No saved loads yet.</p>}
@@ -132,7 +132,7 @@ export default function LoadPickerModal({ isOpen, onClose, onLoad }: Props) {
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteId(item.id)}
-                        className="p-1.5 rounded-md text-[var(--danger-text)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_10%,transparent)] cursor-pointer"
+                        className="p-1.5 rounded-md text-[var(--danger-ink)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_10%,transparent)] cursor-pointer"
                         aria-label={`Delete ${item.name || "saved load"}`}
                       >
                         <Trash2 size={14} aria-hidden="true" />
@@ -141,7 +141,7 @@ export default function LoadPickerModal({ isOpen, onClose, onLoad }: Props) {
                   )}
                   {isConfirming && (
                     <div className="w-full flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-semibold text-[var(--danger-text)]">Delete &quot;{item.name || "Unnamed"}&quot; permanently?</span>
+                      <span className="text-xs font-semibold text-[var(--danger-ink)]">Delete &quot;{item.name || "Unnamed"}&quot; permanently?</span>
                       <button
                         type="button"
                         onClick={() => handleDeleteConfirm(item.id)}
@@ -160,7 +160,7 @@ export default function LoadPickerModal({ isOpen, onClose, onLoad }: Props) {
                     </div>
                   )}
                 </div>
-                {err && <p className="text-xs text-[var(--danger-text)]">{err}</p>}
+                {err && <p className="text-xs text-[var(--danger-ink)]">{err}</p>}
               </div>
             );
           })}

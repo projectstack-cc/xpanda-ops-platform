@@ -824,7 +824,7 @@ function TrailerEditModal({
               <button
                 type="button"
                 onClick={() => onRemoveRow(selectedRow)}
-                className="min-h-[32px] px-2.5 rounded-md text-[12px] font-medium border border-[var(--border)] text-[var(--danger-text)] flex items-center gap-1 cursor-pointer hover:bg-[color-mix(in_srgb,var(--danger-bg)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                className="min-h-[32px] px-2.5 rounded-md text-[12px] font-medium border border-[var(--border)] text-[var(--danger-ink)] flex items-center gap-1 cursor-pointer hover:bg-[color-mix(in_srgb,var(--danger-bg)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
               >
                 <Trash2 className="w-3 h-3" aria-hidden="true" />
                 Delete row (moves its columns to holding)
@@ -869,7 +869,7 @@ function TrailerEditModal({
                           type="button"
                           onClick={() => onSetLayerCount(selectedRow, selectedCol, li, 0)}
                           aria-label={`Remove ${layer.skuName} layer`}
-                          className="min-h-[32px] min-w-[32px] rounded-md border border-[var(--border)] text-[var(--danger-text)] cursor-pointer hover:bg-[color-mix(in_srgb,var(--danger-bg)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                          className="min-h-[32px] min-w-[32px] rounded-md border border-[var(--border)] text-[var(--danger-ink)] cursor-pointer hover:bg-[color-mix(in_srgb,var(--danger-bg)_8%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
                         >
                           ×
                         </button>

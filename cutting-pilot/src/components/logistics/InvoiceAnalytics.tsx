@@ -386,7 +386,7 @@ function MatchRateBanner({
         {vendor || "Invoice"} #{invoiceNumber}
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-semibold">
-        <span className="text-[var(--success-text)]">
+        <span className="text-[var(--success-ink)]">
           {summary.matchedCount} / {summary.lineCount} matched
         </span>
         <span className="text-[var(--warn-text)]">{summary.unmatchedCount} unmatched</span>

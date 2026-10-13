@@ -290,7 +290,7 @@ export default function JobPullModal({ initialJobId, onClose, onConfirm }: JobPu
           </div>
 
           {error && (
-            <p className="text-xs text-[var(--danger-text)] flex items-center gap-1.5">
+            <p className="text-xs text-[var(--danger-ink)] flex items-center gap-1.5">
               <AlertTriangle size={14} aria-hidden="true" /> {error}
             </p>
           )}
@@ -322,7 +322,7 @@ export default function JobPullModal({ initialJobId, onClose, onConfirm }: JobPu
       )}
 
       {error && !preview && !loadingPreview && (
-        <p className="text-xs text-[var(--danger-text)] flex items-center gap-1.5">
+        <p className="text-xs text-[var(--danger-ink)] flex items-center gap-1.5">
           <AlertTriangle size={14} aria-hidden="true" /> {error}
         </p>
       )}
