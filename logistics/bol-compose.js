@@ -636,6 +636,9 @@ function h(tag, attrs = {}, ...children) {
           load_number: i + 1,
           load_count: bm.trailerData.length,
           commodity_description: td.commodityDescription,
+          // lgx-loadsheet-02: only the load builder sets td.loadManifest; the logistics/index.html
+          // job-path modal doesn't, so it sends null (loading sheet falls back for that load).
+          load_manifest: Array.isArray(td.loadManifest) && td.loadManifest.length ? td.loadManifest : null,
           handling_unit_qty: String(td.totalStacks), handling_unit_type: 'stacks',
           package_qty: String(td.totalPieces), package_type: 'pcs',
           weight: String(td.totalWeight), delivery_time: td.deliveryTime,

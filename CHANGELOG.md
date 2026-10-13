@@ -2929,6 +2929,37 @@ current series).
 
 ## Logistics (v2)
 
+- **lgx-loadsheet-02 — loading sheet prints one sheet per load (Next/Cloudflare Platform Agent §9a: the v2 loading-sheet route and v2 BOL POST; React Component Agent §9b: the sheet PDF + `BolGenerateModal`; Logistics Agent §3: legacy `load-builder.html` / `bol-compose.js`, write-only; Database & API Agent §9: the migration and legacy `POST /api/bols`). Migration-gated: `bols.load_manifest` was added on production D1 before this was pushed.**
+  - **Why / root cause.** lgx-loadsheet-01 printed one sheet per *order*, which is wrong for a multi-load order (Inv 4434 has 8 loads). Both load builders compute an exact per-trailer split when they build BOLs (legacy `trailer.skuBreakdown`, v2 `buildPiecesTable`), but it was never stored. Only the BOL's `commodity_description` was saved, and logistics hand-edits that text, so it can't be the source. No multi-load job has a `saved_loads` row.
+  - **Migration (applied, `wrangler d1 execute DB --remote`).** `ALTER TABLE bols ADD COLUMN load_manifest TEXT;` (file `DB_Migrations/bols-load-manifest.sql`, gitignored, not committed). It holds a JSON array of `{ name, sku, dims: "L x W x H", pieces }`, or NULL. `PRAGMA table_info(bols)`: before, no `load_manifest`; after, `load_manifest TEXT`. All 662 existing rows are NULL. SQLite has no `ADD COLUMN IF NOT EXISTS`, so a "duplicate column" error on a re-run means it's already applied. To revert: `ALTER TABLE bols DROP COLUMN load_manifest;`.
+  - **NEW `lib/logistics/loadManifest.ts`.** `LoadManifestItem` and `parseLoadManifest(raw)`:
+    - accepts a JSON string or an array;
+    - keeps items with a non-empty name and finite pieces > 0;
+    - rounds pieces to an integer (at least 1); missing sku/dims become `""`;
+    - returns null when the input is empty, malformed, or has no valid items.
+    The legacy worker reproduces the same rule inline (commented as mirroring `loadManifest.ts`).
+  - **Writers (at BOL generation only).**
+    - Legacy `openBolModal` builds `td.loadManifest` from the same `breakdown` as the commodity text, never from the text. `bol-compose.js` sends `load_manifest`, which is null when absent (the `logistics/index.html` job-path modal never sets it).
+    - v2 `BolGenerateModal`'s plan-sourced path maps its `buildPiecesTable` rows: `sku` = `PackSku.sku`, `dims` from the SKU's L/W/H. The dock-assignment path leaves it undefined, so it posts null.
+  - **Server.** Both `POST /api/bols` (legacy `routes/bols.js`) and `POST /v2/api/bols` gain `load_manifest` in the INSERT. Counted, not eyeballed: 43 columns, 43 placeholders, 43 binds in each, with `parseLoadManifest` → JSON string or null. **The PUT handlers are untouched**, so editing a BOL never changes its manifest or the sheet. The regenerate-replace path's new row carries the new manifest.
+  - **Loading-sheet route (`api/shipments/loading-sheet`).**
+    - A job's loads are the union of its non-archived assignment load numbers and its BOLs' load numbers.
+    - Each load carries its assignment's bay / trailer and its newest BOL's number plus parsed `manifest`. This is the same newest-per-load / single-null-BOL fallback rule as `api/shipments/[id]`.
+    - No numbered load anywhere keeps today's behavior (unnumbered assignments, or "No trailer assigned").
+    - `LoadingSheetLoad` gains `manifest: LoadManifestItem[] | null`.
+  - **`lib/logistics/loadingSheet.ts`.** New pure `expandLoadingSheets(orders)` → `LoadingSheetPage[]`:
+    - **0–1 loads:** one page from the job line items, exactly as before, even if a manifest exists, because the line items carry part numbers and descriptions.
+    - **2+ loads:** one page per load in `load_number` order. A page with a manifest prints only that load's items as `name (sku)` / dims / pieces. A page without one prints the full order's items under a bordered banner **"Load split not recorded — see BOL for this load's contents."** (an empty manifest counts as missing).
+    - Each order's pages stay together, in invoice order.
+    - **PDF:** each page entry starts a fresh page. The header shows `Load N of M` (bold, 11) above the delivery line, followed by only that load's Bay / Trailer / BOL. The title and continuation title read `Inv #4434 · Load 2/8`. Totals and LOADED boxes cover the page's own items. New strings use only WinAnsi characters (—, ·, x).
+  - **NEW `loadingSheet.selfcheck.ts` 22/22.** Covers single load, no loads, 3 split loads (qty 70/90/40, `Load n of 3`), load 2 missing → full items + banner, `parseLoadManifest` (zero-piece / nameless dropped, string + array, integer coercion, null on garbage), and day mode grouping. A sample 3-load PDF (load 2 without a manifest) was rendered with pdf.js and checked: per-load header, banner above the column header with no overlap, per-load totals.
+  - **Verified.**
+    - Every anchor had `grep -Fc` == 1 before its edit.
+    - `node --check` passes on both `load-builder.html` script blocks (extracted to named temp files), `bol-compose.js` and `_worker.js/routes/bols.js`.
+    - `npx tsc --noEmit` is clean and `npm run cf-build` exits 0 (ui-tokens guard 482 files OK).
+    - `git diff` touches only the POST INSERT sections; `api/bols/[id]/route.ts` is unchanged.
+  - **Not verified:** a browser click-through of real BOL generation → loading sheet was not run; it needs live order data. Steve's test steps: rebuild a multi-load order in the load builder, generate its BOLs, print the loading sheet (expect one sheet per load with only that trailer's pieces), then edit one BOL's commodity text and reprint (the sheet must not change).
+
 - **lbr-10 — Load Builder: Force sizes (pick the exact trucks, legacy parity) + Shift to rear slides stacks on mixed-footprint rows (Next/Cloudflare Platform Agent §9a leads: `forcedPack.ts`, the `loadEditor.ts` shift, the harness; React Component Agent §9b for the Load-tab UI; Logistics Agent §3 on legacy parity). No API, migration or permission change. `stackPlanner.ts` is untouched; the only `packEngine.ts` edit is the optional, type-only `PackTrailer.forced?: true` (nothing in that file reads it).**
   - **Why (Steve, 2026-10-12/13):**
     - Force sizes is the last piece of Load-tab parity: the planner picks the exact trucks, e.g. 1 × 53ft Standard + 1 × 26ft Box Truck.
@@ -6769,6 +6800,8 @@ current series).
   `node --check` clean.
 
 ## Logistics
+
+- **lgx-loadsheet-02 (cross-reference) — `load-builder.html` / `bol-compose.js` write-only addition.** `openBolModal` adds `td.loadManifest`, the per-trailer item list built from `breakdown`, and `bol-compose.js` posts it as `load_manifest` so the v2 loading sheet can print one sheet per load. No UI change. Full entry under Logistics (v2).
 
 - **bol-print-04 — Driver template's ATTENTION DRIVER / QR scan instructions recolored red (logistics-agent §3). Asset-only; no code change, no migration.** `logistics/assets/BLANK_BOL_Xpanda_driver.pdf` replaced with the supplied file (SHA-256 `cacf0412…a5e785dac23e7961b59e11` verified against the prompt). The "ATTENTION DRIVER: Scan the QR code at Pickup and Delivery…" block's outlined glyph fills are now `rgb(1, 0, 0)`, the same red `generatePdf` uses for red fields. The template still has zero fonts, ~341 KB. The customer and original templates are untouched. v2 reads the same file, so `bol-shared.js` / `bolShared.ts` were not touched. **Verified:** `bol-parity.mjs` renders (1,257,804 bytes, unchanged). A throwaway harness (not committed) rendered a driver-copy BOL through v2 `generatePdf` against the old and new driver templates: 1 page each (unchanged), output 1,295,915 → 1,295,017 bytes.
 

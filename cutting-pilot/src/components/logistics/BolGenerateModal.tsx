@@ -42,6 +42,7 @@ import { formatCutListDims } from "@/lib/cutList";
 import { buildPiecesTable, buildLoadingDiagramPdf } from "@/lib/loadingDiagramPdf";
 import type { PackPlan, Dimensions, PackSku } from "@/lib/packEngine";
 import type { JobForBol, LoadingAssignmentForJob } from "./types";
+import type { LoadManifestItem } from "@/lib/logistics/loadManifest";
 
 /** lb-ui-09: a Load Builder plan as an alternate BOL-generation source. `jobId` here is optional
  * (set only when the plan came from lb-ui-05's job pull) -- unlike the top-level `jobId` prop below,
@@ -101,6 +102,8 @@ interface TrailerForm {
   // packageQtyOverride carries that trailer's own totalUnits (legacy: `totalPieces: trailer.totalUnits`
   // per trailer, load-builder.html:2671) instead of the job-wide piecesGuess() below.
   packageQtyOverride?: number;
+  // lgx-loadsheet-02: plan-sourced trailers only; undefined on the dock-assignment path.
+  loadManifest?: LoadManifestItem[];
   includeLoadingDiagram: boolean;
 }
 
@@ -233,6 +236,12 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
               hideDimensions: false,
               commodityDescription: commodityDescriptionFull,
               packageQtyOverride: trailer.totalUnits,
+              // lgx-loadsheet-02: the same per-trailer pieces as the commodity text (never the text
+              // itself, which the planner can hand-edit), saved to bols.load_manifest.
+              loadManifest: pieces.map((p) => {
+                const sku = skuById.get(p.skuId);
+                return { name: p.name, sku: sku?.sku ?? "", dims: sku ? `${sku.length} x ${sku.width} x ${sku.height}` : "", pieces: p.pieces };
+              }),
               includeLoadingDiagram: false,
             };
           });
@@ -436,6 +445,7 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
         // silently discard anything typed in the Commodity Description textarea (the bug this
         // task fixes).
         commodity_description: td.commodityDescription,
+        load_manifest: td.loadManifest && td.loadManifest.length ? td.loadManifest : null,
         handling_unit_qty: "",
         handling_unit_type: "stacks",
         package_qty: td.packageQtyOverride != null ? String(td.packageQtyOverride) : job ? String(piecesGuess(job) || "") : "",

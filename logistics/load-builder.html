@@ -3192,6 +3192,18 @@ function openBolModal(result) {
       commodityDescription: commodityDescriptionFull,
       commodityDescriptionFull,
       commodityDescriptionNoDims,
+      // lgx-loadsheet-02: structured per-trailer item list, saved to bols.load_manifest so the
+      // loading sheet can print one sheet per load. Built from the same breakdown as the
+      // commodity text, but never from the (hand-editable) text itself.
+      loadManifest: breakdown.map(item => {
+        const sku = state.skus.find(s => s.id === item.skuId);
+        return {
+          name: item.name || '',
+          sku: item.sku || '',
+          dims: sku ? `${sku.length} x ${sku.width} x ${sku.height}` : '',
+          pieces: Number(item.pieces) || 0,
+        };
+      }).filter(m => m.name && m.pieces > 0),
       totalStacks: trailer.totalStacks,
       totalPieces: trailer.totalUnits,
       totalWeight: trailer.usedWeight,

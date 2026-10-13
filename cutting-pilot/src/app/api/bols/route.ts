@@ -13,6 +13,7 @@ import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 import { promoteCarrierOverride } from "@/lib/logistics/bolCarrier";
 import { isBolRowLocked, deleteBolCascade, type BolDeleteRow } from "@/lib/logistics/bolDelete";
 import { logActivity } from "@/lib/activityLog";
+import { parseLoadManifest } from "@/lib/logistics/loadManifest";
 
 function generateAccessToken(): string {
   const bytes = new Uint8Array(16);
@@ -157,6 +158,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // lgx-loadsheet-02: the load builder's per-trailer item list -> bols.load_manifest (JSON or null).
+    const lm = parseLoadManifest(payload.load_manifest);
     await DB.prepare(
       `INSERT INTO bols (
          id, bol_number, date, customer_id,
@@ -166,8 +169,8 @@ export async function POST(request: NextRequest) {
          freight_terms, is_scrap_pickup, third_party_bill_to, special_instructions, contact_info, is_master_bol, siplast,
          commodity_description, handling_unit_qty, handling_unit_type,
          package_qty, package_type, weight, delivery_time, job_id, notes, po_number, render_overrides, access_token, shipper_name,
-         bol_group_id, load_number, load_count, created_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         bol_group_id, load_number, load_count, load_manifest, created_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(
       id, bol_number, date,
       payload.customer_id ? String(payload.customer_id).trim() : null,
@@ -184,6 +187,7 @@ export async function POST(request: NextRequest) {
       payload.bol_group_id ? String(payload.bol_group_id).trim() : null,
       payload.load_number != null ? Number(payload.load_number) : null,
       payload.load_count != null ? Number(payload.load_count) : null,
+      lm ? JSON.stringify(lm) : null,
       now
     ).run();
 

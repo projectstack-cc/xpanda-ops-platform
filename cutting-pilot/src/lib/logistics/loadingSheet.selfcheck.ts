@@ -1,0 +1,121 @@
+// src/lib/logistics/loadingSheet.selfcheck.ts
+// lgx-loadsheet-02: guarded dev self-check for loadingSheet.ts's expandLoadingSheets (one sheet per
+// load) and loadManifest.ts's parseLoadManifest. Same check()/results shape as toLoadSheet.selfcheck.ts.
+// Not part of the production build path.
+import { expandLoadingSheets, type LoadingSheetLineItem, type LoadingSheetLoad, type LoadingSheetOrder } from "./loadingSheet";
+import { parseLoadManifest, type LoadManifestItem } from "./loadManifest";
+
+interface CheckResult {
+  name: string;
+  pass: boolean;
+  detail?: string;
+}
+
+const LINE_ITEMS: LoadingSheetLineItem[] = [
+  { part_number: "HB-10", description: "10in holey board", quantity: 120, dimensions: "48x24x10" },
+  { part_number: "HB-12", description: "12in holey board", quantity: 80, dimensions: "48x24x12" },
+];
+
+function order(inv: string, loads: LoadingSheetLoad[]): LoadingSheetOrder {
+  return {
+    job_id: `job-${inv}`,
+    invoice_number: inv,
+    ship_date: "2026-10-14",
+    customer: `Customer ${inv}`,
+    carrier: "Carrier",
+    delivery_time: null,
+    notes: null,
+    ship_to_company: null,
+    ship_to_attention: null,
+    ship_to_street: null,
+    ship_to_street2: null,
+    ship_to_city: null,
+    ship_to_state: null,
+    ship_to_zip: null,
+    line_items: LINE_ITEMS,
+    loads,
+  };
+}
+
+function load(n: number | null, manifest: LoadManifestItem[] | null): LoadingSheetLoad {
+  return { load_number: n, trailer_number: n != null ? `T${n}` : null, bay_number: n, bol_number: n != null ? `B${n}` : null, manifest };
+}
+
+const m = (name: string, sku: string, pieces: number): LoadManifestItem => ({ name, sku, dims: "48 x 24 x 10", pieces });
+const qty = (items: LoadingSheetLineItem[]) => items.reduce((s, li) => s + (Number(li.quantity) || 0), 0);
+
+export function runLoadingSheetSelfCheck(): { pass: boolean; results: CheckResult[] } {
+  const results: CheckResult[] = [];
+  const check = (name: string, pass: boolean, detail?: string) => results.push({ name, pass, detail });
+
+  // Single-load order -> 1 page, the job line items, no banner (even with a manifest).
+  {
+    const pages = expandLoadingSheets([order("4001", [load(1, [m("10in block", "HB-10", 5)])])]);
+    check("single load: 1 page", pages.length === 1, String(pages.length));
+    check("single load: the job line items, not the manifest", pages[0].items === LINE_ITEMS);
+    check("single load: no banner", pages[0].splitMissing === false);
+    check("single load: load set, loadCount 1", pages[0].load?.load_number === 1 && pages[0].loadCount === 1 && pages[0].loadIndex === 1);
+  }
+
+  // No assignments, no BOLs -> 1 page, load null.
+  {
+    const pages = expandLoadingSheets([order("4002", [])]);
+    check("no loads: 1 page, load null, line items, no banner", pages.length === 1 && pages[0].load === null && pages[0].items === LINE_ITEMS && !pages[0].splitMissing && pages[0].loadCount === 0);
+  }
+
+  // 3 loads, all with manifests -> 3 pages, each with only its own items.
+  {
+    const loads = [
+      load(3, [m("12in block", "HB-12", 40)]),
+      load(1, [m("10in block", "HB-10", 60), m("12in block", "", 10)]),
+      load(2, [m("10in block", "HB-10", 60), m("12in block", "HB-12", 30)]),
+    ];
+    const pages = expandLoadingSheets([order("4434", loads)]);
+    check("3 loads: 3 pages", pages.length === 3, String(pages.length));
+    check("3 loads: load_number order, Load n of 3", pages.map((p) => `${p.load?.load_number}:${p.loadIndex}/${p.loadCount}`).join(",") === "1:1/3,2:2/3,3:3/3", pages.map((p) => `${p.load?.load_number}:${p.loadIndex}/${p.loadCount}`).join(","));
+    check("3 loads: per-page qty sums (70 / 90 / 40)", pages.map((p) => qty(p.items)).join(",") === "70,90,40", pages.map((p) => qty(p.items)).join(","));
+    check("3 loads: no banner on any page", pages.every((p) => !p.splitMissing));
+    check(
+      "3 loads: manifest rows map to part 'name (sku)', no description, dims kept",
+      pages[0].items[0].part_number === "10in block (HB-10)" && pages[0].items[0].description === null && pages[0].items[0].dimensions === "48 x 24 x 10" && pages[0].items[1].part_number === "12in block",
+      JSON.stringify(pages[0].items)
+    );
+  }
+
+  // 3 loads, load 2 missing a manifest -> page 2 is the full order + banner; 1 and 3 are split.
+  {
+    const pages = expandLoadingSheets([order("4500", [load(1, [m("10in block", "HB-10", 60)]), load(2, null), load(3, [m("12in block", "HB-12", 80)])])]);
+    check("missing split: page 2 lists the full order's line items", pages[1].items === LINE_ITEMS && qty(pages[1].items) === 200);
+    check("missing split: page 2 has the banner", pages[1].splitMissing === true);
+    check("missing split: pages 1 and 3 are split, no banner", !pages[0].splitMissing && !pages[2].splitMissing && qty(pages[0].items) === 60 && qty(pages[2].items) === 80);
+    const empty = expandLoadingSheets([order("4501", [load(1, []), load(2, [m("x", "", 1)])])]);
+    check("missing split: an empty manifest counts as missing", empty[0].splitMissing && empty[0].items === LINE_ITEMS);
+  }
+
+  // parseLoadManifest.
+  {
+    const good = [m("10in block", "HB-10", 5)];
+    check("parse: drops a zero-piece item and a nameless item", JSON.stringify(parseLoadManifest([...good, { name: "z", sku: "", dims: "", pieces: 0 }, { name: "  ", sku: "", dims: "", pieces: 3 }])) === JSON.stringify(good));
+    check("parse: accepts an array", JSON.stringify(parseLoadManifest(good)) === JSON.stringify(good));
+    check("parse: accepts a JSON string", JSON.stringify(parseLoadManifest(JSON.stringify(good))) === JSON.stringify(good));
+    check("parse: coerces pieces to an integer", parseLoadManifest([{ name: "a", pieces: "7.4" }])?.[0].pieces === 7);
+    check("parse: missing sku/dims become \"\"", JSON.stringify(parseLoadManifest([{ name: "a", pieces: 2 }])) === JSON.stringify([{ name: "a", sku: "", dims: "", pieces: 2 }]));
+    check(
+      "parse: null on garbage / empty / no valid items",
+      [parseLoadManifest("not json"), parseLoadManifest(""), parseLoadManifest(null), parseLoadManifest({ name: "a" }), parseLoadManifest(42), parseLoadManifest([]), parseLoadManifest([{ pieces: 3 }])].every((v) => v === null)
+    );
+  }
+
+  // Day mode: two orders -> pages grouped per order, invoice order preserved.
+  {
+    const pages = expandLoadingSheets([order("4100", [load(1, [m("a", "", 1)]), load(2, [m("b", "", 2)])]), order("4200", [load(1, null)])]);
+    check(
+      "day mode: pages grouped per order, invoice order kept",
+      pages.map((p) => `${p.order.invoice_number}/${p.loadIndex}`).join(",") === "4100/1,4100/2,4200/1",
+      pages.map((p) => `${p.order.invoice_number}/${p.loadIndex}`).join(",")
+    );
+    check("day mode: the single-load order prints its line items, no banner", pages[2].items === LINE_ITEMS && !pages[2].splitMissing);
+  }
+
+  return { pass: results.every((r) => r.pass), results };
+}

@@ -5,9 +5,46 @@
 // shipment row), sorted by invoice number ascending. The static `loading-sheet` segment takes
 // precedence over the sibling `[id]` dynamic segment (same as `distances/`). Gate is inherited from
 // middleware's `/v2/api/shipments` -> `logistics.dashboard` rule.
+//
+// lgx-loadsheet-02: loads per job are the union of the job's non-archived loading_assignments load
+// numbers and its BOLs' load numbers, each carrying that load's bay/trailer (assignment) and its
+// newest BOL's number + load_manifest (the load builder's per-trailer item list). The split into one
+// sheet per load happens in loadingSheet.ts's pure expandLoadingSheets.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import type { LoadingSheetLineItem, LoadingSheetLoad, LoadingSheetOrder } from "@/lib/logistics/loadingSheet";
+import { parseLoadManifest } from "@/lib/logistics/loadManifest";
+
+interface AssignmentRow {
+  load_number: number | null;
+  trailer_number: string | null;
+  bay_number: string | number | null;
+}
+interface BolRow {
+  bol_number: string | number | null;
+  load_number: number | null;
+  load_manifest: string | null;
+}
+
+/** Same newest-per-load / null-load_number fallback rule as api/shipments/[id]/route.ts (carrier-03):
+ * the newest BOL for this load number, or — when the job has exactly one BOL and it has no load
+ * number — that BOL. `bols` is newest first. */
+function bolForLoad(bols: BolRow[], loadNumber: number | null): BolRow | null {
+  const exact = loadNumber != null ? bols.find((b) => b.load_number === loadNumber) : undefined;
+  if (exact) return exact;
+  return bols.length === 1 && bols[0].load_number == null ? bols[0] : null;
+}
+
+function toLoad(a: AssignmentRow | null, loadNumber: number | null, bols: BolRow[]): LoadingSheetLoad {
+  const bol = bolForLoad(bols, loadNumber);
+  return {
+    load_number: loadNumber,
+    trailer_number: a?.trailer_number ?? null,
+    bay_number: a?.bay_number ?? null,
+    bol_number: bol?.bol_number ?? null,
+    manifest: parseLoadManifest(bol?.load_manifest ?? null),
+  };
+}
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -59,22 +96,30 @@ export async function GET(request: NextRequest) {
         .bind(r.job_id)
         .all<LoadingSheetLineItem>();
 
-      // BOL-per-load subquery: same newest-per-load / null-load_number fallback rule as
-      // api/shipments/[id]/route.ts (carrier-03). Keep them identical.
-      const lr = await DB.prepare(
-        `SELECT la.load_number, la.trailer_number, lb.bay_number,
-                (SELECT b.bol_number FROM bols b
-                  WHERE b.job_id = la.job_id
-                    AND ( b.load_number = la.load_number
-                       OR (b.load_number IS NULL AND (SELECT COUNT(*) FROM bols b2 WHERE b2.job_id = la.job_id) = 1) )
-                  ORDER BY b.created_at DESC LIMIT 1) AS bol_number
+      const ar = await DB.prepare(
+        `SELECT la.load_number, la.trailer_number, lb.bay_number
            FROM loading_assignments la
            LEFT JOIN loading_bays lb ON lb.id = la.bay_id
           WHERE la.job_id = ? AND la.loading_status <> 'archived'
           ORDER BY la.load_number ASC`
       )
         .bind(r.job_id)
-        .all<LoadingSheetLoad>();
+        .all<AssignmentRow>();
+      const br = await DB.prepare(
+        "SELECT bol_number, load_number, load_manifest FROM bols WHERE job_id = ? ORDER BY created_at DESC"
+      )
+        .bind(r.job_id)
+        .all<BolRow>();
+      const assignments = ar.results ?? [];
+      const bols = br.results ?? [];
+      const loadNumbers = Array.from(
+        new Set([...assignments.map((a) => a.load_number), ...bols.map((b) => b.load_number)].filter((n): n is number => n != null).map(Number))
+      ).sort((a, b) => a - b);
+      // No numbered load anywhere: today's behavior — the job's (unnumbered) assignments, if any,
+      // with the single-BOL fallback; none at all prints "No trailer assigned".
+      const loads: LoadingSheetLoad[] = loadNumbers.length
+        ? loadNumbers.map((n) => toLoad(assignments.find((a) => Number(a.load_number) === n) ?? null, n, bols))
+        : assignments.map((a) => toLoad(a, null, bols));
 
       orders.push({
         job_id: r.job_id,
@@ -92,7 +137,7 @@ export async function GET(request: NextRequest) {
         ship_to_state: r.ship_to_state ?? null,
         ship_to_zip: r.ship_to_zip ?? null,
         line_items: li.results ?? [],
-        loads: lr.results ?? [],
+        loads,
       });
     }
 

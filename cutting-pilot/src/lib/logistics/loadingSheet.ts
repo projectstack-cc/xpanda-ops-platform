@@ -4,8 +4,16 @@
 // lib/cutList.ts exactly (margin 40, US Letter portrait, Helvetica/HelveticaBold, same colors, same
 // logo embed, same drawRight/hr helpers). cutList.ts itself is pixel-parity locked to legacy and is
 // NOT modified — its two exported formatters are imported; its file-local helpers are copied below.
+//
+// lgx-loadsheet-02: one sheet per LOAD for a multi-load order. Each load carries the load builder's
+// per-trailer item list (bols.load_manifest, captured at BOL generation — never the hand-editable
+// commodity text). expandLoadingSheets (pure, self-checked) turns orders into pages: single-load
+// orders print exactly as before; a multi-load order prints one page per load with only that load's
+// items, or — when a load has no manifest — the full order's items under a "Load split not recorded"
+// banner. Header shows "Load N of M" plus only that load's Bay / Trailer / BOL.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import { formatCutListAddress, formatCutListDims, type CutListJob } from "@/lib/cutList";
+import type { LoadManifestItem } from "@/lib/logistics/loadManifest";
 
 export interface LoadingSheetLineItem {
   part_number: string | null;
@@ -19,6 +27,8 @@ export interface LoadingSheetLoad {
   trailer_number: string | null;
   bay_number: string | number | null;
   bol_number: string | number | null;
+  /** lgx-loadsheet-02: this load's items from its newest BOL's load_manifest; null when not recorded. */
+  manifest: LoadManifestItem[] | null;
 }
 
 export interface LoadingSheetOrder {
@@ -38,6 +48,60 @@ export interface LoadingSheetOrder {
   ship_to_zip: string | null;
   line_items: LoadingSheetLineItem[];
   loads: LoadingSheetLoad[];
+}
+
+export interface LoadingSheetPage {
+  /** Header / customer / notes source. */
+  order: LoadingSheetOrder;
+  /** null = single-load / unassigned (the pre-lgx-loadsheet-02 sheet). */
+  load: LoadingSheetLoad | null;
+  /** 1-based position among this order's loads. */
+  loadIndex: number;
+  loadCount: number;
+  /** Rows to print on this sheet. */
+  items: LoadingSheetLineItem[];
+  /** true -> print the "Load split not recorded" banner. */
+  splitMissing: boolean;
+}
+
+export const SPLIT_MISSING_BANNER = "Load split not recorded — see BOL for this load's contents.";
+
+function manifestToItems(manifest: LoadManifestItem[]): LoadingSheetLineItem[] {
+  return manifest.map((m) => ({
+    part_number: m.name + (m.sku ? ` (${m.sku})` : ""),
+    description: null,
+    quantity: m.pieces,
+    dimensions: m.dims,
+  }));
+}
+
+/** Orders -> printed sheets. 0 or 1 loads: one page from the job line items (exactly the old sheet,
+ * even if a manifest exists — the line items carry part numbers and descriptions). 2+ loads: one page
+ * per load in load_number order, with that load's manifest items, or the full order's line items +
+ * splitMissing when it has none. Each order's pages stay contiguous, in the given (invoice) order. */
+export function expandLoadingSheets(orders: LoadingSheetOrder[]): LoadingSheetPage[] {
+  const pages: LoadingSheetPage[] = [];
+  for (const order of orders) {
+    const lineItems = Array.isArray(order.line_items) ? order.line_items : [];
+    const loads = Array.isArray(order.loads) ? order.loads : [];
+    if (loads.length <= 1) {
+      pages.push({ order, load: loads[0] ?? null, loadIndex: 1, loadCount: loads.length, items: lineItems, splitMissing: false });
+      continue;
+    }
+    const sorted = [...loads].sort((a, b) => (a.load_number ?? Infinity) - (b.load_number ?? Infinity));
+    sorted.forEach((load, i) => {
+      const manifest = load.manifest && load.manifest.length ? load.manifest : null;
+      pages.push({
+        order,
+        load,
+        loadIndex: i + 1,
+        loadCount: sorted.length,
+        items: manifest ? manifestToItems(manifest) : lineItems,
+        splitMissing: !manifest,
+      });
+    });
+  }
+  return pages;
 }
 
 // Copied verbatim from lib/cutList.ts (file-local there). See BACKLOG: hoist shared pdf-lib helpers.
@@ -148,8 +212,10 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
     return y;
   };
 
-  for (const order of orders) {
-    const inv = order.invoice_number || "";
+  for (const sheet of expandLoadingSheets(orders)) {
+    const { order } = sheet;
+    const multi = sheet.loadCount > 1;
+    const inv = (order.invoice_number || "") + (multi ? ` · Load ${sheet.loadIndex}/${sheet.loadCount}` : "");
 
     const drawPage1Header = (page: PDFPage) => {
       let y = pageH - margin;
@@ -180,13 +246,18 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
 
       let ry = y;
       const rightW = right - colRightX;
+      if (multi) {
+        page.drawText(`Load ${sheet.loadIndex} of ${sheet.loadCount}`, { x: colRightX, y: ry, size: 11, font: fontBold, color: black });
+        ry -= 15;
+      }
       if (order.delivery_time && String(order.delivery_time).trim()) {
         for (const l of wrapText(`Delivery: ${order.delivery_time}`, font, 10, rightW)) {
           page.drawText(l, { x: colRightX, y: ry, size: 10, font, color: black });
           ry -= 13;
         }
       }
-      const loads = Array.isArray(order.loads) ? order.loads : [];
+      // A multi-load sheet lists only its own load; otherwise every load (or none), as before.
+      const loads = multi && sheet.load ? [sheet.load] : Array.isArray(order.loads) ? order.loads : [];
       if (!loads.length) {
         page.drawText("No trailer assigned", { x: colRightX, y: ry, size: 10, font, color: gray });
         ry -= 13;
@@ -220,6 +291,13 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
       y -= 14;
       hr(page, y);
       y -= 18;
+      if (sheet.splitMissing) {
+        // lgx-loadsheet-02 fallback banner — the full order's items follow.
+        const bannerH = 24;
+        page.drawRectangle({ x: margin, y: y - bannerH + 12, width: right - margin, height: bannerH, borderColor: rule, borderWidth: 1.5 });
+        page.drawText(SPLIT_MISSING_BANNER, { x: margin + 8, y: y - 4, size: 10, font: fontBold, color: black });
+        y -= bannerH + 10;
+      }
       return drawColumnHeader(page, y);
     };
 
@@ -294,7 +372,7 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
       }
     };
 
-    const items = Array.isArray(order.line_items) ? order.line_items : [];
+    const items = sheet.items;
     const totalQty = items.reduce((sum, li) => sum + (Number(li.quantity) || 0), 0);
 
     let page = doc.addPage([pageW, pageH]);

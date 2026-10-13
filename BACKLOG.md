@@ -437,7 +437,8 @@
 - [ ] **Unit 2 follow-up — BOL delete doesn't clean up `bol_documents`/R2 objects.** `bols/[id]/route.ts`'s new single-BOL `DELETE` matches legacy's own single-delete route exactly, including this gap: only legacy's separate bulk per-job delete branch (`bols.js:567-595`) cleans up `bol_documents` rows and their R2 objects. Deleting a BOL through the new UI (`BolViewerModal.tsx`'s BOL History panel) leaves orphaned document rows/R2 objects behind, same as legacy's single-delete always has. Not a regression, but worth fixing in both places if Steve wants it addressed.
 - [ ] **Fuel surcharge uses the BOL's primary ship-to only.** Multi-stop / zoned trucks would need per-stop mileage if the carrier bills that way. (Follow-on from lgx-fuel-02.)
 - [ ] **Hoist shared pdf-lib helpers** (`wrapText`, `drawRight`, `hr`, logo embed) out of `cutList.ts` / `loadingSheet.ts` into one lib. Must stay pixel-parity for the cut list. (Follow-on from lgx-loadsheet-01.)
-- [ ] **Loading sheet per-trailer split:** only possible once line items carry a load assignment (load builder plan persisted per job). Revisit with v2 load builder rollout. (Follow-on from lgx-loadsheet-01.)
+- [ ] Backfill `load_manifest` for multi-load orders generated before lgx-loadsheet-02 is not possible (split was never stored). Those print the fallback banner until regenerated from the load builder.
+- [ ] Generating a BOL from the logistics dashboard modal (job path, no load builder) for a load replaces that load's row with a null manifest. Consider carrying the prior manifest forward on regenerate-replace if it causes confusion. (Follow-on from lgx-loadsheet-02.)
 - [ ] **Unit 3 follow-up (lbz-bol-02) — v2 zone-column editing UI.** `bolShared.ts`'s
   `zonecolumns` field type, `buildZoneColumns` layout algorithm, and `ZoneColumnsOverride`
   hydration were ported 1:1 (lbz-bol-02, rendering parity only) — but legacy's `bol-editor.js`

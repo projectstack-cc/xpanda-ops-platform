@@ -442,6 +442,24 @@ export async function handleApiBols(request, env) {
     }
 
     try {
+      // lgx-loadsheet-02: the load builder's per-trailer item list (bols.load_manifest, JSON or null).
+      // mirrors cutting-pilot/src/lib/logistics/loadManifest.ts parseLoadManifest
+      let loadManifest = null;
+      {
+        let raw = payload.load_manifest;
+        if (typeof raw === "string") { try { raw = raw.trim() ? JSON.parse(raw) : null; } catch { raw = null; } }
+        if (Array.isArray(raw)) {
+          const items = [];
+          for (const it of raw) {
+            if (!it || typeof it !== "object") continue;
+            const name = typeof it.name === "string" ? it.name.trim() : "";
+            const n = Number(it.pieces);
+            if (!name || !Number.isFinite(n) || n <= 0) continue;
+            items.push({ name, sku: typeof it.sku === "string" ? it.sku.trim() : "", dims: typeof it.dims === "string" ? it.dims.trim() : "", pieces: Math.max(1, Math.round(n)) });
+          }
+          if (items.length) loadManifest = JSON.stringify(items);
+        }
+      }
       await db.prepare(`
         INSERT INTO bols (
           id, bol_number, date, customer_id,
@@ -451,8 +469,8 @@ export async function handleApiBols(request, env) {
           freight_terms, is_scrap_pickup, third_party_bill_to, special_instructions, contact_info, is_master_bol, siplast,
           commodity_description, handling_unit_qty, handling_unit_type,
           package_qty, package_type, weight, delivery_time, job_id, notes, po_number, render_overrides, access_token, shipper_name,
-          bol_group_id, load_number, load_count, created_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          bol_group_id, load_number, load_count, load_manifest, created_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(
         id, bol_number, date,
         payload.customer_id ? String(payload.customer_id).trim() : null,
@@ -470,6 +488,7 @@ export async function handleApiBols(request, env) {
         payload.bol_group_id ? String(payload.bol_group_id).trim() : null,
         payload.load_number != null ? Number(payload.load_number) : null,
         payload.load_count  != null ? Number(payload.load_count)  : null,
+        loadManifest,
         now
       ).run();
 
