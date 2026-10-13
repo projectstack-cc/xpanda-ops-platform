@@ -73,6 +73,14 @@
 // `consolidate` (the pure-plan toggle → PackOptions.consolidate, saved in the snapshot). The lb-ui-03
 // dev-only qty multiplier is removed entirely (state and control): the job pull gives real
 // multi-trailer loads now, so the fixture cart feeds pack() as-is.
+//
+// lbr-08: the load list. The Load tab's parts picker and list card edit the cart pack() consumes —
+// one source of truth, no mirror state: an order load's list IS `pulledSource.cart` (+ `.skus` for
+// added parts; `orderCart` keeps the pull's original), a no-order load's list is `manualSource`
+// (snapshot kind "manual"). Precedence everywhere is pulled > manual > fixture, and every switch
+// clears the other two. Every list edit goes through requestListChange, which asks first when a
+// customized layout would be discarded (and for Clear / Reset to order), then writes back to
+// whichever source is live; the plan re-derives from the new list.
 import { useEffect, useMemo, useState } from "react";
 import Modal from "@/components/Modal";
 import { pack, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, type PackPlan, type PackOptions, type CartLine, type PackSku } from "@/lib/packEngine";
@@ -83,7 +91,10 @@ import JobPullModal, { type PulledLoadSource } from "@/components/logistics/JobP
 import BolGenerateModal, { type PackPlanSource } from "@/components/logistics/BolGenerateModal";
 import SaveLoadModal from "@/components/logistics/SaveLoadModal";
 import LoadPickerModal from "@/components/logistics/LoadPickerModal";
-import { buildSnapshot, defaultSaveName, deserializeSnapshot, type SavedLoadRecord, type SavedLoadSnapshot } from "@/lib/savedLoad";
+import { buildSnapshot, defaultSaveName, deserializeSnapshot, type ManualLoadSource, type OrderLoadSource, type SavedLoadRecord, type SavedLoadSnapshot } from "@/lib/savedLoad";
+import { fetchLibrarySkus, LibraryFetchError } from "@/lib/jobPull";
+import type { LibraryState } from "./LoadPicker";
+import { addLine, clear as clearList, diffFromOrder, setQty as setLineQty, step as stepLine, withSku } from "@/lib/loadList";
 import { useOrderLoadPersistence, findSavedForJob } from "@/components/logistics/useOrderLoadPersistence";
 import LoadBuilderTabs, { isLoadBuilderTab, type LoadBuilderTab } from "./LoadBuilderTabs";
 import LoadTab from "./LoadTab";
@@ -110,6 +121,21 @@ function footprintKey(l: number, w: number): string {
 // is the new default: an empty cart/skus pair pack() handles the same as any other (0 trailers),
 // giving a clean "nothing selected" state instead of silently showing a real-looking invoice.
 const EMPTY_FIXTURE: LoadBuilderFixture = { id: "__none__", invoiceNumber: "", customer: "", label: "No load selected", cart: [], skus: [] };
+
+// lbr-08: a no-order load's label, and the lbr-04 hook's `customer` for it (default save name
+// "Manual load — {date ET}").
+const MANUAL_LABEL = "Manual load";
+const MANUAL_ID = "__manual__";
+const CUSTOMIZED_WARNING = "This load has a customized layout. Changing the load list will re-pack it and discard those changes.";
+
+/** A confirm-before-acting request (Clear, Reset to order, Re-pull, or any list change that would
+ * discard a customized layout). */
+interface PendingConfirm {
+  title: string;
+  body: string[];
+  confirmLabel: string;
+  run: () => void;
+}
 
 // lbr-05: merges URL params with replaceState, so ?tab= and ?job_id= never clobber each other
 // (null deletes a key).
@@ -166,7 +192,14 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   const [tabChoice, setTabChoice] = useState<LoadBuilderTab | null>(null);
 
   // lb-ui-05: pulled-job source, deep-link state, and the dismissible pull banner.
-  const [pulledSource, setPulledSource] = useState<PulledLoadSource | null>(null);
+  const [pulledSource, setPulledSource] = useState<OrderLoadSource | null>(null);
+  // lbr-08: the no-order load list (null = none started), the parts library the picker browses, the
+  // pending confirm, and a counter that focuses the picker's search box when bumped.
+  const [manualSource, setManualSource] = useState<ManualLoadSource | null>(null);
+  const [library, setLibrary] = useState<LibraryState>({ status: "loading" });
+  const [libraryAttempt, setLibraryAttempt] = useState(0);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [searchFocusKey, setSearchFocusKey] = useState(0);
   const [showJobPull, setShowJobPull] = useState(false);
   const [deepLinkJobId, setDeepLinkJobId] = useState<string | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -194,11 +227,17 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   const [reopenedAt, setReopenedAt] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
-  const hasSource = !!pulledSource || !!fixtureId;
-  const fixture: LoadBuilderFixture = pulledSource ?? (fixtureId ? (LOAD_BUILDER_FIXTURES.find((f) => f.id === fixtureId) ?? EMPTY_FIXTURE) : EMPTY_FIXTURE);
+  // lbr-08: memoized so its identity only changes with manualSource — packedPlan memoizes on `fixture`.
+  const manualFixture: LoadBuilderFixture | null = useMemo(
+    () => (manualSource ? { id: MANUAL_ID, invoiceNumber: "", customer: MANUAL_LABEL, label: manualSource.label, cart: manualSource.cart, skus: manualSource.skus } : null),
+    [manualSource]
+  );
+  const hasSource = !!pulledSource || (!!manualSource && manualSource.cart.length > 0) || !!fixtureId;
+  const fixture: LoadBuilderFixture = pulledSource ?? manualFixture ?? (fixtureId ? (LOAD_BUILDER_FIXTURES.find((f) => f.id === fixtureId) ?? EMPTY_FIXTURE) : EMPTY_FIXTURE);
   // lbr-05: the dev multiplier is gone, so this is just the source's own cart (name kept so the
-  // comments below that reference it still read true).
+  // comments below that reference it still read true). lbr-08: this is the load list.
   const scaledCart = fixture.cart;
+  const orderDiff = useMemo(() => (pulledSource ? diffFromOrder(pulledSource.orderCart ?? pulledSource.cart, pulledSource.cart) : []), [pulledSource]);
   // lb-ui-11: once an edit session has Applied, these are what everything downstream of the plan
   // should treat as "the load's actual cart/SKU set" — scaledCart/fixture.skus describe only the
   // ORIGINAL source, unaware of any parts-library SKU a completed edit session introduced.
@@ -223,9 +262,9 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   const currentSnapshot: SavedLoadSnapshot | null = useMemo(
     () =>
       access.canSave && hasSource && plan.trailers.length > 0
-        ? buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate })
+        ? buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, manualSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate })
         : null,
-    [access.canSave, hasSource, plan.trailers.length, fixtureId, pulledSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate]
+    [access.canSave, hasSource, plan.trailers.length, fixtureId, pulledSource, manualSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate]
   );
   const persistence = useOrderLoadPersistence({
     jobId: pulledSource?.jobId ?? null,
@@ -273,6 +312,24 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // lbr-08: the parts library for the Load tab's picker (same endpoint and validation as the pull).
+  useEffect(() => {
+    let cancelled = false;
+    setLibrary({ status: "loading" });
+    fetchLibrarySkus()
+      .then((skus) => {
+        if (!cancelled) setLibrary({ status: "ready", skus });
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        if (e instanceof LibraryFetchError && (e.status === 401 || e.status === 403)) setLibrary({ status: "denied" });
+        else setLibrary({ status: "error", message: e instanceof Error ? e.message : "Couldn't load the parts library." });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [libraryAttempt]);
+
   useEffect(() => {
     if (toast?.kind !== "success") return;
     const t = setTimeout(() => setToast(null), 4000);
@@ -293,14 +350,13 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
     [genBolOpen, plan, dims, effectiveSkus, pulledSource, runnerHeight]
   );
 
-  // Describe the ORIGINAL source (fixture/job pull), deliberately not effectiveCart/effectiveSkus —
-  // these are the header's "N pieces, M footprints" summary of what was pulled in, not a live
-  // recount of the current edited state.
+  // Describe the load list (lbr-08: the source's live cart), deliberately not effectiveCart/
+  // effectiveSkus — a Customize session's own additions aren't part of the list.
   const pieceCount = useMemo(() => scaledCart.reduce((s, c) => s + c.qty, 0), [scaledCart]);
-  const footprintCount = useMemo(
-    () => new Set(fixture.skus.map((s) => footprintKey(s.length, s.width))).size,
-    [fixture]
-  );
+  const footprintCount = useMemo(() => {
+    const inList = new Set(scaledCart.map((c) => c.skuId));
+    return new Set(fixture.skus.filter((s) => inList.has(s.id)).map((s) => footprintKey(s.length, s.width))).size;
+  }, [fixture, scaledCart]);
 
   function handleTabChange(next: LoadBuilderTab) {
     setTabChoice(next);
@@ -308,7 +364,10 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   }
 
   function handlePullConfirm(source: PulledLoadSource) {
-    setPulledSource(source);
+    // lbr-08: orderCart is the pull's matched cart, frozen here for the "Changed from the order" note.
+    setPulledSource({ ...source, orderCart: source.cart });
+    setManualSource(null);
+    setFixtureId(null);
     setSelected(null);
     setEditedPlan(null);
     setEditedCart(null);
@@ -353,9 +412,17 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   function restoreSavedLoad(record: SavedLoadRecord, snapshot: SavedLoadSnapshot) {
     if (snapshot.source.kind === "pulled") {
       setPulledSource(snapshot.source.pulledSource);
+      setManualSource(null);
+      setFixtureId(null);
       replaceUrlParams({ job_id: snapshot.source.pulledSource.jobId });
+    } else if (snapshot.source.kind === "manual") {
+      setPulledSource(null);
+      setFixtureId(null);
+      setManualSource({ label: snapshot.source.label, cart: snapshot.source.cart, skus: snapshot.source.skus });
+      replaceUrlParams({ job_id: null });
     } else {
       setPulledSource(null);
+      setManualSource(null);
       setFixtureId(snapshot.source.fixtureId);
       replaceUrlParams({ job_id: null });
     }
@@ -453,10 +520,106 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
     setSaveModalOpen(true);
   }
 
+  // lbr-08: Re-pull resets the load list to a fresh pull (handlePullConfirm), so it asks first when
+  // the list has been changed from the order.
   function openRepull() {
     if (!pulledSource) return;
-    setDeepLinkJobId(pulledSource.jobId);
-    setShowJobPull(true);
+    const jobId = pulledSource.jobId;
+    const run = () => {
+      setDeepLinkJobId(jobId);
+      setShowJobPull(true);
+    };
+    if (orderDiff.length === 0) {
+      run();
+      return;
+    }
+    setPendingConfirm({
+      title: "Re-pull from the order?",
+      body: ["Re-pulling replaces the load list with the order's current lines. Your changes to the list will be lost."],
+      confirmLabel: "Re-pull",
+      run,
+    });
+  }
+
+  // --- lbr-08: load list edits ---
+
+  /** Writes a new load list to whichever source is live (pulled > manual > fixture/none — a fixture
+   * row or an empty page becomes a manual load on its first edit), then re-derives the plan. */
+  function commitList(nextCart: CartLine[], addedSku?: PackSku) {
+    if (pulledSource) {
+      // orderCart is set lazily for a pre-lbr-08 row: its cart is still exactly the original pull.
+      setPulledSource({ ...pulledSource, orderCart: pulledSource.orderCart ?? pulledSource.cart, cart: nextCart, skus: addedSku ? withSku(pulledSource.skus, addedSku) : pulledSource.skus });
+    } else {
+      const base = manualSource ?? (fixtureId ? { label: fixture.label, cart: fixture.cart, skus: fixture.skus } : { label: MANUAL_LABEL, cart: [], skus: [] });
+      setManualSource({ label: base.label, cart: nextCart, skus: addedSku ? withSku(base.skus, addedSku) : base.skus });
+      setFixtureId(null);
+      // Stay on the Load tab while building (the default tab flips to Results once there's a load).
+      if (tabChoice === null) setTabChoice("load");
+    }
+    setSelected(null);
+    setEditedPlan(null);
+    setEditedCart(null);
+    setEditedSkus(null);
+    setMode("view");
+  }
+
+  /** Every list edit comes through here: asks first when a customized layout would be discarded
+   * (or when the action has its own confirm), otherwise applies immediately. */
+  function requestListChange(nextCart: CartLine[], addedSku?: PackSku, confirm?: Omit<PendingConfirm, "run">) {
+    const run = () => commitList(nextCart, addedSku);
+    if (!editedPlan && !confirm) {
+      run();
+      return;
+    }
+    setPendingConfirm({
+      title: confirm?.title ?? "Re-pack this load?",
+      body: [...(confirm?.body ?? []), ...(editedPlan ? [CUSTOMIZED_WARNING] : [])],
+      confirmLabel: editedPlan ? "Change and re-pack" : (confirm?.confirmLabel ?? "Continue"),
+      run,
+    });
+  }
+
+  function handleAddPart(sku: PackSku) {
+    requestListChange(addLine(scaledCart, sku), sku);
+  }
+
+  function handleStepPart(sku: PackSku, delta: 1 | -1) {
+    requestListChange(stepLine(scaledCart, sku.id, delta), delta === 1 ? sku : undefined);
+  }
+
+  function handleSetPartQty(sku: PackSku, qty: number) {
+    requestListChange(setLineQty(scaledCart, sku.id, qty), qty > 0 ? sku : undefined);
+  }
+
+  function handleClearList() {
+    const n = scaledCart.length;
+    requestListChange(clearList(scaledCart), undefined, { title: "Clear the load list?", body: [`Clear all ${n} line${n === 1 ? "" : "s"}?`], confirmLabel: "Clear" });
+  }
+
+  function handleResetToOrder() {
+    if (!pulledSource?.orderCart) return;
+    requestListChange(
+      pulledSource.orderCart.map((c) => ({ ...c })),
+      undefined,
+      { title: "Reset to the order?", body: ["Put the load list back to the order's lines? Your changes to the list will be lost."], confirmLabel: "Reset to order" }
+    );
+  }
+
+  function handleStartManual() {
+    setPulledSource(null);
+    setFixtureId(null);
+    setManualSource({ label: MANUAL_LABEL, cart: [], skus: [] });
+    setSelected(null);
+    setEditedPlan(null);
+    setEditedCart(null);
+    setEditedSkus(null);
+    setMode("view");
+    setCurrentSavedLoadId(null);
+    setCurrentSavedLoadName(null);
+    setReopenedAt(null);
+    replaceUrlParams({ job_id: null });
+    handleTabChange("load");
+    setSearchFocusKey((k) => k + 1);
   }
 
   function handleApplyEdit(appliedPlan: PackPlan, cart: CartLine[], skus: PackSku[]) {
@@ -516,6 +679,7 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
       <div role="tabpanel" id="lb-panel-load" aria-labelledby="lb-tab-load" hidden={tab !== "load"}>
         <LoadTab
           hasSource={hasSource}
+          isManual={!pulledSource && !!manualSource}
           pulledSource={pulledSource}
           sourceLabel={fixture.label}
           pieceCount={pieceCount}
@@ -540,6 +704,20 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
           onLoadSaved={() => setPickerModalOpen(true)}
           onSave={openSaveModal}
           onCalculate={() => handleTabChange("results")}
+          onStartManual={handleStartManual}
+          dims={dims}
+          library={library}
+          onRetryLibrary={() => setLibraryAttempt((n) => n + 1)}
+          searchFocusKey={searchFocusKey}
+          listCart={scaledCart}
+          listSkus={fixture.skus}
+          orderDiff={orderDiff}
+          canEditList={access.canSave}
+          onAddPart={handleAddPart}
+          onStepPart={handleStepPart}
+          onSetPartQty={handleSetPartQty}
+          onClearList={handleClearList}
+          onResetToOrder={handleResetToOrder}
           reopenedAt={reopenedAt}
           onDismissReopened={() => setReopenedAt(null)}
           bannerDismissed={bannerDismissed}
@@ -578,7 +756,7 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
           canSave={access.canSave}
           canGenerateBol={access.canGenerateBol}
           onGoToLoad={() => handleTabChange("load")}
-          editorKey={pulledSource ? pulledSource.id : (fixtureId ?? EMPTY_FIXTURE.id)}
+          editorKey={pulledSource ? pulledSource.id : manualSource ? MANUAL_ID : (fixtureId ?? EMPTY_FIXTURE.id)}
           onApplyEdit={handleApplyEdit}
           onDiscardEdit={handleDiscardEdit}
         />
@@ -633,6 +811,32 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
       />
 
       <LoadPickerModal isOpen={pickerModalOpen} onClose={() => setPickerModalOpen(false)} onLoad={handlePickerLoad} />
+
+      {/* lbr-08: confirm for Clear / Reset to order / Re-pull, and for any load-list change that
+          would discard a customized layout. */}
+      <Modal isOpen={!!pendingConfirm} onClose={() => setPendingConfirm(null)} title={pendingConfirm?.title ?? ""}>
+        {pendingConfirm?.body.map((line) => (
+          <p key={line} className="text-sm text-text">
+            {line}
+          </p>
+        ))}
+        <div className="flex flex-col sm:flex-row-reverse gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const run = pendingConfirm?.run;
+              setPendingConfirm(null);
+              run?.();
+            }}
+            className={`${LEAVE_BUTTON} sm:w-auto bg-[var(--brand)] text-white hover:opacity-90`}
+          >
+            {pendingConfirm?.confirmLabel}
+          </button>
+          <button type="button" onClick={() => setPendingConfirm(null)} className={`${LEAVE_BUTTON} sm:w-auto border border-[var(--border)] text-muted hover:text-text hover:bg-[var(--ghost-bg)]`}>
+            Cancel
+          </button>
+        </div>
+      </Modal>
 
       {/* lbr-04: "save before leaving?" for in-app link clicks (tab close/reload falls back to the
           browser's own prompt). Hidden while the named-save modal it hands off to is open. */}

@@ -5,13 +5,25 @@
 // runners, auto-downsize, and the "Mix stacks to save trucks" toggle — the same state as the Results
 // tab's pure-plan toggle), and the existing pull / unmatched-items / reopened banners. Presentational
 // only: every value and handler comes from LoadPlanView.
-import { Truck, Save, FolderOpen, Calculator } from "lucide-react";
-import type { PulledLoadSource } from "@/components/logistics/JobPullModal";
+//
+// lbr-08: legacy's picker lands (LoadPicker) under Settings, then the editable Load list
+// (LoadListCard, which now holds Calculate load — it moved out of Settings, as in legacy). The Order
+// card gains "Start without an order"; Settings gains legacy's right-aligned trailer readout
+// (L × W × H · BDFT, BDFT = L×W×(H − runners)/144).
+import { Truck, Save, FolderOpen, PencilLine } from "lucide-react";
+import type { CartLine, Dimensions, PackSku } from "@/lib/packEngine";
+import type { LibrarySku } from "@/lib/jobPull";
+import type { LoadListDiff } from "@/lib/loadList";
+import type { OrderLoadSource } from "@/lib/savedLoad";
 import { BTN_GHOST, BTN_OUTLINE, BTN_PRIMARY, CARD, NO_SAVE_REASON, SELECT, formatEt } from "./loadBuilderUi";
+import LoadPicker, { type LibraryState } from "./LoadPicker";
+import LoadListCard from "./LoadListCard";
 
 interface LoadTabProps {
   hasSource: boolean;
-  pulledSource: PulledLoadSource | null;
+  /** lbr-08: a no-order (manual) load has been started — possibly still empty. */
+  isManual: boolean;
+  pulledSource: OrderLoadSource | null;
   /** Source heading, e.g. the order's customer or a fixture label. */
   sourceLabel: string;
   pieceCount: number;
@@ -40,6 +52,23 @@ interface LoadTabProps {
   onLoadSaved: () => void;
   onSave: () => void;
   onCalculate: () => void;
+
+  // lbr-08: picker + load list.
+  onStartManual: () => void;
+  dims: Dimensions;
+  library: LibraryState;
+  onRetryLibrary: () => void;
+  searchFocusKey: number;
+  listCart: CartLine[];
+  listSkus: PackSku[];
+  orderDiff: LoadListDiff[];
+  /** false for a view-only user (browse only). */
+  canEditList: boolean;
+  onAddPart: (sku: LibrarySku) => void;
+  onStepPart: (sku: PackSku, d: 1 | -1) => void;
+  onSetPartQty: (sku: PackSku, qty: number) => void;
+  onClearList: () => void;
+  onResetToOrder: () => void;
 
   reopenedAt: string | null;
   onDismissReopened: () => void;
@@ -75,6 +104,8 @@ function Toggle({ label, hint, value, disabled, onChange }: { label: string; hin
 
 export default function LoadTab(p: LoadTabProps) {
   const { pulledSource } = p;
+  const effHeight = p.dims.height - p.runnerHeight;
+  const bdft = Math.round((p.dims.length * p.dims.width * effHeight) / 144);
   return (
     <div className="space-y-4">
       {/* lbr-06: beta notice — the order links haven't been cut over yet. */}
@@ -101,9 +132,13 @@ export default function LoadTab(p: LoadTabProps) {
                   </div>
                 )}
               </div>
+            ) : p.isManual ? (
+              <p className="text-sm text-muted mb-3">
+                <span className="font-semibold text-text">Manual load</span> — no order. Add parts below.
+              </p>
             ) : (
               <p className="text-sm text-muted mb-3">
-                Pull an order to build a load — its line items are matched against the parts library automatically.
+                Pull an order to build a load — its line items are matched against the parts library automatically. Or start without an order and pick parts below.
               </p>
             )}
             <div className="flex flex-wrap gap-2">
@@ -112,8 +147,13 @@ export default function LoadTab(p: LoadTabProps) {
                   <Truck size={16} aria-hidden="true" /> Re-pull from order
                 </button>
               ) : (
-                <button type="button" onClick={p.onPull} disabled={p.locked} className={p.hasSource ? BTN_OUTLINE : BTN_PRIMARY}>
+                <button type="button" onClick={p.onPull} disabled={p.locked} className={p.hasSource || p.isManual ? BTN_OUTLINE : BTN_PRIMARY}>
                   <Truck size={16} aria-hidden="true" /> Pull from order
+                </button>
+              )}
+              {!p.hasSource && !p.isManual && (
+                <button type="button" onClick={p.onStartManual} disabled={p.locked} className={BTN_OUTLINE}>
+                  <PencilLine size={16} aria-hidden="true" /> Start without an order
                 </button>
               )}
               {pulledSource && (
@@ -154,7 +194,7 @@ export default function LoadTab(p: LoadTabProps) {
               <div className="text-sm text-text py-2 min-w-0">
                 <span className="font-semibold">Pulled from order:</span> {pulledSource.customer}
                 {pulledSource.invoiceNumber && <span className="font-mono tabular-nums"> · INV# {pulledSource.invoiceNumber}</span>}
-                <span className="font-mono tabular-nums"> · {pulledSource.cart.reduce((s, c) => s + c.qty, 0)} pieces matched</span>
+                <span className="font-mono tabular-nums"> · {(pulledSource.orderCart ?? pulledSource.cart).reduce((s, c) => s + c.qty, 0)} pieces matched</span>
                 {pulledSource.unmatchedCount > 0 && (
                   <div className="mt-1 text-[var(--warn-text)]">
                     {pulledSource.unmatchedCount} line item{pulledSource.unmatchedCount === 1 ? "" : "s"} have no matching SKU in the parts library:{" "}
@@ -171,9 +211,17 @@ export default function LoadTab(p: LoadTabProps) {
 
         {/* Settings */}
         <section className={`${CARD} space-y-3 min-w-0`} aria-labelledby="lb-settings-heading">
-          <h2 id="lb-settings-heading" className="text-sm font-semibold text-text">
-            Settings
-          </h2>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <h2 id="lb-settings-heading" className="text-sm font-semibold text-text">
+              Settings
+            </h2>
+            <span
+              className="ml-auto text-sm font-semibold text-muted font-mono tabular-nums"
+              title={p.runnerHeight > 0 ? `Board feet use ${effHeight}″ of height (${p.dims.height}″ less ${p.runnerHeight}″ runners).` : undefined}
+            >
+              {p.dims.length}″L × {p.dims.width}″W × {p.dims.height}″H · {bdft.toLocaleString("en-US")} BDFT
+            </span>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="flex flex-col gap-1 text-sm font-medium text-muted">
               Trailer
@@ -210,11 +258,38 @@ export default function LoadTab(p: LoadTabProps) {
             disabled={p.locked}
             onChange={p.onConsolidateChange}
           />
-          <button type="button" onClick={p.onCalculate} disabled={!p.hasSource} className={`${BTN_PRIMARY} w-full`}>
-            <Calculator size={16} aria-hidden="true" /> Calculate load
-          </button>
         </section>
       </div>
+
+      <LoadPicker
+        library={p.library}
+        onRetry={p.onRetryLibrary}
+        dims={p.dims}
+        runnerHeight={p.runnerHeight}
+        cart={p.listCart}
+        canAdd={p.canEditList}
+        locked={p.locked}
+        searchFocusKey={p.searchFocusKey}
+        onAdd={p.onAddPart}
+        onStep={p.onStepPart}
+        onSetQty={p.onSetPartQty}
+      />
+
+      {p.listCart.length > 0 && (
+        <LoadListCard
+          cart={p.listCart}
+          skus={p.listSkus}
+          orderDiff={p.orderDiff}
+          canReset={!!pulledSource?.orderCart}
+          canEdit={p.canEditList}
+          locked={p.locked}
+          onStep={p.onStepPart}
+          onSetQty={p.onSetPartQty}
+          onClear={p.onClearList}
+          onResetToOrder={p.onResetToOrder}
+          onCalculate={p.onCalculate}
+        />
+      )}
     </div>
   );
 }

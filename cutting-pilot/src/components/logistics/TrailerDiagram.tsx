@@ -35,7 +35,7 @@
 //
 // Token note: the prompt's spec named var(--surface-2)/var(--border-strong) for pure columns and
 // var(--bg-accent)/var(--border-accent)/var(--text-accent) for mixed columns — none of the accent
-// trio exists in globals.css (see PlanMetricsStrip.tsx's token note for --surface-1). Substituted
+// trio exists in globals.css (nor does --surface-1, the same finding for the old metrics strip, deleted lbr-08). Substituted
 // the platform's existing "info" semantic tokens for the mixed-column tint (already theme-aware,
 // already used for banners elsewhere) and --border/--card-bg for pure columns.
 //

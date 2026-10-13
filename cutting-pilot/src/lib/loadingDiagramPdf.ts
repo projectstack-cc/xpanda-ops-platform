@@ -219,6 +219,10 @@ export function layoutColumnRects(trailer: PackTrailer, dims: Dimensions, box: D
 const PAGE_WIDTH = 792; // US Letter landscape, points — matches bolShared.ts's template convention
 const PAGE_HEIGHT = 612;
 const MARGIN = 36;
+// lbr-08: the dims / remaining-footage caption's band under the diagram box. The caption used to sit
+// where the PIECES / STACK BREAKDOWN headings start (it overlapped them); it now sits right under the
+// box and the tables start this much lower.
+const DIAGRAM_CAPTION_H = 16;
 
 const INK = rgb(0.06, 0.09, 0.15); // ~#0f172a, matches legacy's print body color
 const LINE = rgb(0.2, 0.24, 0.33); // ~#334155, matches legacy's print stroke color
@@ -286,7 +290,7 @@ export async function buildLoadingDiagramPdf(
   const diagramTop = cursorY;
   const box: DiagramBox = { x: MARGIN + 30, yTop: diagramTop, width: PAGE_WIDTH - MARGIN * 2 - 60, height: diagramHeight };
   drawDiagram(page, font, fontBold, trailer, dims, box);
-  cursorY = diagramTop - diagramHeight - 34;
+  cursorY = diagramTop - diagramHeight - 34 - DIAGRAM_CAPTION_H;
 
   // Two-column tables: pieces (left) / stack breakdown (right)
   const tableTop = cursorY;
@@ -371,7 +375,7 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
   const remaining = formatRemainingLabel(dims, trailer);
   const caption = remaining ? `${dims.length}"L × ${dims.width}"W — ${remaining}` : `${dims.length}"L × ${dims.width}"W`;
   const capW = font.widthOfTextAtSize(caption, 10);
-  page.drawText(caption, { x: box.x + box.width / 2 - capW / 2, y: boxBottomY - 24, size: 10, font, color: MUTED });
+  page.drawText(caption, { x: box.x + box.width / 2 - capW / 2, y: boxBottomY - DIAGRAM_CAPTION_H + 2, size: 10, font, color: MUTED });
 }
 
 /** Centers one label in `area`, shrinking down to 5pt to fit — labels are always printed so the

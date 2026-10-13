@@ -155,3 +155,30 @@ export async function fetchLoadBuilderSkus(): Promise<PackSku[]> {
   if (!res.ok || !Array.isArray(json)) throw new Error("Couldn't load the SKU library.");
   return json.map(coerceSku).filter((s): s is PackSku => s !== null);
 }
+
+// lbr-08: the Load tab's parts picker needs legacy's `parent_group` (the card grid's sub-headings),
+// which PackSku deliberately doesn't carry — so it gets its own fetch over the same endpoint and the
+// same coerceSku validation, in the API's own order (sort_order, height, name). Callers strip
+// parentGroup before a SKU enters a load (loadList.toPackSku), so it never reaches pack() or a snapshot.
+export interface LibrarySku extends PackSku {
+  parentGroup: string;
+}
+
+/** Thrown by fetchLibrarySkus; `status` lets the picker tell "no access" (401/403) from a failure. */
+export class LibraryFetchError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
+export async function fetchLibrarySkus(): Promise<LibrarySku[]> {
+  const res = await fetch("/api/load-builder-skus");
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !Array.isArray(json)) throw new LibraryFetchError("Couldn't load the parts library.", res.status);
+  const out: LibrarySku[] = [];
+  for (const raw of json) {
+    const sku = coerceSku(raw);
+    if (sku) out.push({ ...sku, parentGroup: typeof raw?.parent_group === "string" ? raw.parent_group.trim() : "" });
+  }
+  return out;
+}

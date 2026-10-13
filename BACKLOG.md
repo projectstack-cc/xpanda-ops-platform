@@ -71,12 +71,13 @@
   - [x] lbr-06 — Load Builder Beta: dashboard button + gated on logistics.load-builder (order links stay legacy)
   - [x] lbr-07 — tap-to-place customize (drag removed): stack pieces onto stacks, take N off the top, place from
     holding (new stack or onto a stack), swap, green/amber/faded targets with reasons, undo, step hints
-  - [ ] lbr-08 — Load tab: legacy manual SKU picker (search + category, qty add, editable load list, clear,
-    Calculate); manual (no-order) loads saved as a new snapshot source kind; order-load qty edits
-  - [ ] lbr-09 — cutover with a Classic link (held until Steve has floor-tested)
-  - [ ] lbr-05 follow-up — `PlanMetricsStrip.tsx` is no longer imported (Results uses `MetricTile`); delete it. Loading
-    diagram PDF: the "636"L × 98"W — 1' 0" remaining" caption overlaps the STACK BREAKDOWN heading (observed in the lbr-05 smoke render).
-  - [ ] lbr-04 follow-up — legacy Load Builder still writes order loads with a 90-day TTL; moot after lbr-09 cutover.
+  - [x] lbr-08 — Load tab: legacy parts picker (rail + search + grid + subgroups), editable load list (order + no-order),
+    changed-from-order note + reset, manual source kind, BDFT readout
+  - [ ] lbr-09 — Force sizes: choose exact trailer types/counts per load (engine: per-trailer dims queue) + Load tab UI
+  - [ ] lbr-10 — cutover with a Classic link (held until Steve has floor-tested)
+  - [x] lbr-05 follow-up — `PlanMetricsStrip.tsx` is no longer imported (Results uses `MetricTile`); delete it. Loading
+    diagram PDF: the "636"L × 98"W — 1' 0" remaining" caption overlaps the STACK BREAKDOWN heading (observed in the lbr-05 smoke render). (resolved lbr-08)
+  - [ ] lbr-04 follow-up — legacy Load Builder still writes order loads with a 90-day TTL; moot after lbr-10 cutover.
   - [ ] lbr-06 follow-up — nothing gates on logistics.v2 any more; drop the key + label (and strip it from roles) in a later admin cleanup.
   - [ ] lbr follow-up — non-Holey parts with allowRotation:false whose catalog size doesn't fit as entered (34 jobs in
     the lbr-01 audit; e.g. 2×48×144 with height 144) stay unplaced; decide parts-data fix vs. treating "fits only

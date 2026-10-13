@@ -568,7 +568,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
           {selection && selectedColumn ? (
             <section
               aria-label="Actions for the selected stack"
-              className="fixed inset-x-0 bottom-0 z-40 max-h-[60vh] overflow-y-auto rounded-t-2xl border-t border-[var(--card-border)] bg-surface p-4 shadow-[0_-8px_24px_rgba(0,0,0,0.18)] xl:static xl:z-auto xl:max-h-none xl:overflow-visible xl:rounded-xl xl:border xl:shadow-none"
+              className="fixed inset-x-0 bottom-0 z-40 max-h-[60vh] overflow-y-auto rounded-t-2xl border-t border-[var(--card-border)] bg-surface p-4 shadow-[var(--shadow-md)] xl:static xl:z-auto xl:max-h-none xl:overflow-visible xl:rounded-xl xl:border xl:shadow-none"
             >
               <ActionBar
                 selection={selection}

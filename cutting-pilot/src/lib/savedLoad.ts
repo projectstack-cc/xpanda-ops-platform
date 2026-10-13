@@ -38,12 +38,31 @@ export interface SavedLoadFixtureSource {
   fixtureId: string;
 }
 
+/** lbr-08: a pulled order whose load list may since have been edited. `orderCart` is the matched
+ * cart exactly as the pull produced it — set once at pull time, never changed — and is what the
+ * "Changed from the order" note diffs against. Optional, so every older row stays valid; missing
+ * means "same as cart". Declared here (not on JobPullModal's PulledLoadSource) because it is a
+ * snapshot/page concern the pull modal never sets. */
+export type OrderLoadSource = PulledLoadSource & { orderCart?: CartLine[] };
+
 export interface SavedLoadPulledSource {
   kind: "pulled";
-  pulledSource: PulledLoadSource;
+  pulledSource: OrderLoadSource;
 }
 
-export type SavedLoadSource = SavedLoadFixtureSource | SavedLoadPulledSource;
+/** lbr-08: a load built in the Load tab's picker with no order behind it. jobId is always null for
+ * it, so the lbr-04 hook takes the named-save path. */
+export interface ManualLoadSource {
+  label: string;
+  cart: CartLine[];
+  skus: PackSku[];
+}
+
+export interface SavedLoadManualSource extends ManualLoadSource {
+  kind: "manual";
+}
+
+export type SavedLoadSource = SavedLoadFixtureSource | SavedLoadPulledSource | SavedLoadManualSource;
 
 export interface SavedLoadSnapshot {
   version: typeof SAVED_LOAD_SNAPSHOT_VERSION;
@@ -80,7 +99,9 @@ export interface SavedLoadSnapshot {
 
 export function buildSnapshot(args: {
   fixtureId: string;
-  pulledSource: PulledLoadSource | null;
+  pulledSource: OrderLoadSource | null;
+  /** lbr-08: written (kind "manual") when there's no pulled order and its cart isn't empty. */
+  manualSource?: ManualLoadSource | null;
   trailerTypeKey: string;
   runnerHeight: number;
   editedPlan: PackPlan | null;
@@ -91,7 +112,9 @@ export function buildSnapshot(args: {
 }): SavedLoadSnapshot {
   const source: SavedLoadSource = args.pulledSource
     ? { kind: "pulled", pulledSource: args.pulledSource }
-    : { kind: "fixture", fixtureId: args.fixtureId };
+    : args.manualSource && args.manualSource.cart.length > 0
+      ? { kind: "manual", label: args.manualSource.label, cart: args.manualSource.cart, skus: args.manualSource.skus }
+      : { kind: "fixture", fixtureId: args.fixtureId };
   return {
     version: SAVED_LOAD_SNAPSHOT_VERSION,
     source,
@@ -145,10 +168,16 @@ function isValidPulledSource(v: unknown): v is PulledLoadSource {
   );
 }
 
+// lbr-08: the same light check for a manual (no-order) source.
+function isValidManualSource(v: Record<string, unknown>): boolean {
+  return typeof v.label === "string" && Array.isArray(v.cart) && Array.isArray(v.skus);
+}
+
 function isValidSource(v: unknown): v is SavedLoadSource {
   if (!isPlainObject(v)) return false;
   if (v.kind === "fixture") return typeof v.fixtureId === "string";
   if (v.kind === "pulled") return isValidPulledSource(v.pulledSource);
+  if (v.kind === "manual") return isValidManualSource(v);
   return false;
 }
 
@@ -184,7 +213,13 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
   if (!isPlainObject(parsed)) return { ok: false, reason: INCOMPATIBLE_REASON };
   if (parsed.version !== SAVED_LOAD_SNAPSHOT_VERSION) return { ok: false, reason: INCOMPATIBLE_REASON };
   if (!isValidSource(parsed.source)) return { ok: false, reason: INCOMPATIBLE_REASON };
-  const source: SavedLoadSource = parsed.source;
+  let source: SavedLoadSource = parsed.source;
+  // lbr-08: a malformed orderCart degrades to "same as cart" (dropped), never to incompatible.
+  if (source.kind === "pulled" && source.pulledSource.orderCart !== undefined && !isValidCartLineArray(source.pulledSource.orderCart)) {
+    const { orderCart: _bad, ...rest } = source.pulledSource;
+    void _bad;
+    source = { kind: "pulled", pulledSource: rest };
+  }
   if (source.kind === "fixture" && !LOAD_BUILDER_FIXTURES.some((f) => f.id === source.fixtureId)) {
     return { ok: false, reason: FIXTURE_REMOVED_REASON };
   }
@@ -215,7 +250,8 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
 /** Default save name, matching legacy's own `${customer} — ${date}` / bare-date fallback
  * (load-builder.html:2806-2807). */
 export function defaultSaveName(customer: string): string {
-  const dateStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  // lbr-08: dated in Eastern time, like every other Load Builder timestamp (formatEt).
+  const dateStr = new Date().toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" });
   return customer ? `${customer} — ${dateStr}` : dateStr;
 }
 

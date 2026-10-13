@@ -354,5 +354,54 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
     check("consolidate: changes snapshotKey (dirty check sees the toggle)", snapshotKey(pure) !== snapshotKey({ ...pure, consolidate: true }));
   }
 
+  // 16. lbr-08: manual (no-order) source round-trips; an empty manual list falls back to fixture.
+  {
+    const manual = { label: "Manual load", cart: [{ skuId: "SKU-1", qty: 3 }], skus: makePulledSource().skus };
+    const snap = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: null, manualSource: manual, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null, autoDownsize: true, consolidate: true });
+    check("manual: buildSnapshot writes kind 'manual' when there's no pull and the list isn't empty", snap.source.kind === "manual");
+    const back = deserializeSnapshot(serializeSnapshot(snap));
+    check("manual: round-trips deep-equal", back.ok === true && JSON.stringify(back.snapshot) === JSON.stringify(snap), back.ok ? "" : back.reason);
+    check("manual: buildSavePayload job_id is null (named-save path)", buildSavePayload("x", "Manual load", snap).job_id === null);
+    const empty = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: null, manualSource: { ...manual, cart: [] }, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
+    check("manual: an empty manual list is not written as manual", empty.source.kind === "fixture");
+    const pulledWins = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: makePulledSource(), manualSource: manual, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
+    check("manual: a pulled order takes precedence", pulledWins.source.kind === "pulled");
+    const broken = JSON.parse(serializeSnapshot(snap));
+    delete broken.source.cart;
+    const brokenBack = deserializeSnapshot(JSON.stringify(broken));
+    check("manual: a manual source without a cart is incompatible", brokenBack.ok === false);
+  }
+
+  // 17. lbr-08: pulled rows with and without orderCart; a qty edit changes snapshotKey.
+  {
+    const withOrder = makePulledSource({ cart: [{ skuId: "SKU-1", qty: 8 }] });
+    const withOrderCart = { ...withOrder, orderCart: [{ skuId: "SKU-1", qty: 10 }] };
+    const a = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: withOrderCart, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
+    const aBack = deserializeSnapshot(serializeSnapshot(a));
+    check(
+      "orderCart: a pulled row with orderCart round-trips it",
+      aBack.ok === true && aBack.snapshot.source.kind === "pulled" && JSON.stringify(aBack.snapshot.source.pulledSource.orderCart) === JSON.stringify([{ skuId: "SKU-1", qty: 10 }])
+    );
+    const b = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: makePulledSource(), trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
+    const bBack = deserializeSnapshot(serializeSnapshot(b));
+    check(
+      "orderCart: a pulled row without it stays valid (orderCart undefined)",
+      bBack.ok === true && bBack.snapshot.source.kind === "pulled" && bBack.snapshot.source.pulledSource.orderCart === undefined
+    );
+    const bad = JSON.parse(serializeSnapshot(a));
+    bad.source.pulledSource.orderCart = "nope";
+    const badBack = deserializeSnapshot(JSON.stringify(bad));
+    check(
+      "orderCart: a malformed orderCart is dropped, row still loads",
+      badBack.ok === true && badBack.snapshot.source.kind === "pulled" && badBack.snapshot.source.pulledSource.orderCart === undefined
+    );
+    const edited = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: { ...withOrderCart, cart: [{ skuId: "SKU-1", qty: 9 }] }, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
+    check("snapshotKey: changes when a pulled load-list qty changes", snapshotKey(a) !== snapshotKey(edited));
+    const manual = { label: "Manual load", cart: [{ skuId: "SKU-1", qty: 3 }], skus: makePulledSource().skus };
+    const m1 = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: null, manualSource: manual, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
+    const m2 = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: null, manualSource: { ...manual, cart: [{ skuId: "SKU-1", qty: 4 }] }, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
+    check("snapshotKey: changes when a manual load-list qty changes", snapshotKey(m1) !== snapshotKey(m2));
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }

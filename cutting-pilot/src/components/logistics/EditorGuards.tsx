@@ -143,7 +143,7 @@ export default function EditorGuards({ guards, holdingSummary }: EditorGuardsPro
           <div className="text-sm text-[var(--warn-text)]">
             <p className="font-semibold flex items-center gap-1.5">
               <PackageOpen className="w-3.5 h-3.5" aria-hidden="true" />
-              {guards.holdingCount} column{guards.holdingCount === 1 ? "" : "s"} will be dropped from the load if you apply now
+              {guards.holdingCount} column{guards.holdingCount === 1 ? "" : "s"} will be dropped from the load when you tap Done customizing
             </p>
             <ul className="mt-1 space-y-0.5 font-mono text-[13px]">
               {holdingSummary.map((h, i) => (
