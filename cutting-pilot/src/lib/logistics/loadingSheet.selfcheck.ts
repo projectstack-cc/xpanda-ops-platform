@@ -1,8 +1,10 @@
 // src/lib/logistics/loadingSheet.selfcheck.ts
 // lgx-loadsheet-02: guarded dev self-check for loadingSheet.ts's expandLoadingSheets (one sheet per
 // load) and loadManifest.ts's parseLoadManifest. Same check()/results shape as toLoadSheet.selfcheck.ts.
-// Not part of the production build path.
-import { expandLoadingSheets, type LoadingSheetLineItem, type LoadingSheetLoad, type LoadingSheetOrder } from "./loadingSheet";
+// lgx-loadsheet-03: + fitInvoiceBox geometry (the header's centered invoice box); now async because the
+// Helvetica-Bold metrics come from a pdf-lib embed. Not part of the production build path.
+import { PDFDocument, StandardFonts } from "pdf-lib";
+import { HEADER_BAND_H, INVOICE_BOX_MAX_SIZE, INVOICE_BOX_MIN_SIZE, expandLoadingSheets, fitInvoiceBox, type LoadingSheetLineItem, type LoadingSheetLoad, type LoadingSheetOrder } from "./loadingSheet";
 import { parseLoadManifest, type LoadManifestItem } from "./loadManifest";
 
 interface CheckResult {
@@ -44,7 +46,7 @@ function load(n: number | null, manifest: LoadManifestItem[] | null): LoadingShe
 const m = (name: string, sku: string, pieces: number): LoadManifestItem => ({ name, sku, dims: "48 x 24 x 10", pieces });
 const qty = (items: LoadingSheetLineItem[]) => items.reduce((s, li) => s + (Number(li.quantity) || 0), 0);
 
-export function runLoadingSheetSelfCheck(): { pass: boolean; results: CheckResult[] } {
+export async function runLoadingSheetSelfCheck(): Promise<{ pass: boolean; results: CheckResult[] }> {
   const results: CheckResult[] = [];
   const check = (name: string, pass: boolean, detail?: string) => results.push({ name, pass, detail });
 
@@ -115,6 +117,34 @@ export function runLoadingSheetSelfCheck(): { pass: boolean; results: CheckResul
       pages.map((p) => `${p.order.invoice_number}/${p.loadIndex}`).join(",")
     );
     check("day mode: the single-load order prints its line items, no banner", pages[2].items === LINE_ITEMS && !pages[2].splitMissing);
+  }
+
+  // fitInvoiceBox (lgx-loadsheet-03). Bounds as drawn on a real sheet: logo right edge (40 + 97) + 16,
+  // and the widest right-column string's left x - 16.
+  {
+    const doc = await PDFDocument.create();
+    const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+    const top = 792 - 40;
+    const L = 40 + 97 + 16;
+    const R = 572 - fontBold.widthOfTextAtSize("Loading sheet", 18) - 16;
+    const inBounds = (b: { x: number; width: number }, l: number, r: number) => b.x >= l - 1e-9 && b.x + b.width <= r + 1e-9;
+
+    const short = fitInvoiceBox("4487", fontBold, L, R, 306, top);
+    check("invoice box: \"4487\" fits at 28pt", short?.size === INVOICE_BOX_MAX_SIZE && !!short && inBounds(short, L, R), JSON.stringify(short));
+    check("invoice box: bottom above the header rule at 28pt", !!short && short.size === 28 && short.y > top - HEADER_BAND_H, short ? `bottom ${short.y.toFixed(1)} vs rule ${top - HEADER_BAND_H}` : "null");
+
+    const long = fitInvoiceBox("INV-2026-10-13", fontBold, L, R, 306, top);
+    check(
+      "invoice box: 14-char invoice shrinks below 28pt, not below 18pt, stays in bounds",
+      !!long && long.size < INVOICE_BOX_MAX_SIZE && long.size >= INVOICE_BOX_MIN_SIZE && inBounds(long, L, R),
+      long ? `size ${long.size}, x ${long.x.toFixed(1)}..${(long.x + long.width).toFixed(1)} in ${L}..${R.toFixed(1)}` : "null"
+    );
+
+    // Off-center bounds: centering on 306 would cross leftBound, so the box clamps to it.
+    const clamped = fitInvoiceBox("4487", fontBold, 290, 520, 306, top);
+    check("invoice box: clamped inside [leftBound, rightBound]", !!clamped && clamped.x === 290 && inBounds(clamped, 290, 520), clamped ? `x ${clamped.x}` : "null");
+
+    check("invoice box: empty / blank / null invoice -> no box", [fitInvoiceBox("", fontBold, L, R), fitInvoiceBox("   ", fontBold, L, R), fitInvoiceBox(null, fontBold, L, R)].every((b) => b === null));
   }
 
   return { pass: results.every((r) => r.pass), results };

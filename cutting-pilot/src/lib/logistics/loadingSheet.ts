@@ -11,6 +11,10 @@
 // orders print exactly as before; a multi-load order prints one page per load with only that load's
 // items, or — when a load has no manifest — the full order's items under a "Load split not recorded"
 // banner. Header shows "Load N of M" plus only that load's Bay / Trailer / BOL.
+//
+// lgx-loadsheet-03: big auto-fit `Inv #...` box centered in the page-1 header band (fitInvoiceBox, pure,
+// self-checked); delivery time 16pt bold and the Loaded by / Date row on yellow highlight bands with a
+// thin black border (mono dock printers render yellow near-white).
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import { formatCutListAddress, formatCutListDims, type CutListJob } from "@/lib/cutList";
 import type { LoadManifestItem } from "@/lib/logistics/loadManifest";
@@ -143,6 +147,56 @@ const wrapText = (text: string | null | undefined, f: PDFFont, size: number, max
   return lines;
 };
 
+// lgx-loadsheet-03: the big centered invoice box in the page-1 header band.
+export const INVOICE_BOX_MAX_SIZE = 28;
+export const INVOICE_BOX_MIN_SIZE = 18;
+const INVOICE_BOX_PAD_X = 12;
+const INVOICE_BOX_PAD_Y = 6;
+export const HEADER_BAND_H = 76; // page-1 header band height; the header rule sits at top - HEADER_BAND_H
+
+export interface InvoiceBox {
+  text: string;
+  size: number;
+  /** Box left / bottom edge, width, height (points). */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Text origin, centered inside the box. */
+  textX: number;
+  textY: number;
+}
+
+type MeasureFont = Pick<PDFFont, "widthOfTextAtSize" | "heightAtSize">;
+
+/** Pure geometry for the `Inv #…` box: 28pt shrinking 1pt at a time (floor 18pt) until it fits in
+ * [leftBound, rightBound] with 12pt horizontal padding; centered on centerX, then clamped into the
+ * bounds; its top at `top`. Returns null for an empty invoice number (no box). */
+export function fitInvoiceBox(
+  inv: string | null | undefined,
+  fontBold: MeasureFont,
+  leftBound: number,
+  rightBound: number,
+  centerX = 306,
+  top = 752
+): InvoiceBox | null {
+  const s = String(inv ?? "").trim();
+  if (!s) return null;
+  const text = `Inv #${s}`;
+  const avail = rightBound - leftBound;
+  let size = INVOICE_BOX_MAX_SIZE;
+  while (size > INVOICE_BOX_MIN_SIZE && fontBold.widthOfTextAtSize(text, size) + 2 * INVOICE_BOX_PAD_X > avail) size -= 1;
+  const textW = fontBold.widthOfTextAtSize(text, size);
+  const width = textW + 2 * INVOICE_BOX_PAD_X;
+  const height = fontBold.heightAtSize(size) + 2 * INVOICE_BOX_PAD_Y;
+  // Center, then clamp (a box wider than the bounds pins to leftBound).
+  const x = Math.max(leftBound, Math.min(centerX - width / 2, rightBound - width));
+  const y = top - height;
+  // Visually center the cap height (invoice text has no descenders).
+  const capH = fontBold.heightAtSize(size, { descender: false });
+  return { text, size, x, y, width, height, textX: x + INVOICE_BOX_PAD_X, textY: y + height / 2 - capH / 2 };
+}
+
 function formatLoadLine(ld: LoadingSheetLoad): string {
   const has = (v: unknown) => v != null && String(v).trim() !== "";
   return [
@@ -162,6 +216,8 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
   const black = rgb(0.06, 0.09, 0.16);
   const gray = rgb(0.45, 0.48, 0.52);
   const rule = rgb(0.82, 0.84, 0.87);
+  const highlight = rgb(0.992, 0.878, 0.278); // #FDE047 (lgx-loadsheet-03)
+  const HL_BORDER = 0.75; // thin black border on every highlight band (mono-printer safety)
   const margin = 40;
   const pageW = 612;
   const pageH = 792; // US Letter portrait (points)
@@ -219,16 +275,31 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
 
     const drawPage1Header = (page: PDFPage) => {
       let y = pageH - margin;
+      let leftBound = margin + 16;
       if (logoImg) {
         const logoH = 34;
         const logoW = logoImg.width * (logoH / logoImg.height);
         page.drawImage(logoImg, { x: margin, y: y - logoH, width: logoW, height: logoH });
+        leftBound = margin + logoW + 16;
       }
-      drawRight(page, "Loading sheet", 18, fontBold, black, y - 15);
-      drawRight(page, `Inv #${inv}`, 11, font, gray, y - 33);
-      drawRight(page, `Ship date: ${formatShipDate(order.ship_date)}`, 11, font, gray, y - 47);
-      drawRight(page, `Ship via: ${order.carrier || ""}`, 11, font, gray, y - 61);
-      y -= 76;
+      // Right column. lgx-loadsheet-03: the invoice moved to the center box; a multi-load sheet keeps
+      // `Load n/m` in its slot, a single-load sheet moves Ship date / Ship via up one slot.
+      const rightCol: { text: string; size: number; f: PDFFont; color: ReturnType<typeof rgb> }[] = [
+        { text: "Loading sheet", size: 18, f: fontBold, color: black },
+      ];
+      if (multi) rightCol.push({ text: `Load ${sheet.loadIndex}/${sheet.loadCount}`, size: 11, f: font, color: gray });
+      rightCol.push({ text: `Ship date: ${formatShipDate(order.ship_date)}`, size: 11, f: font, color: gray });
+      rightCol.push({ text: `Ship via: ${order.carrier || ""}`, size: 11, f: font, color: gray });
+      const rightColY = [y - 15, y - 33, y - 47, y - 61];
+      rightCol.forEach((r, i) => drawRight(page, r.text, r.size, r.f, r.color, rightColY[i]));
+      const rightBound = Math.min(...rightCol.map((r) => right - r.f.widthOfTextAtSize(r.text, r.size))) - 16;
+      // lgx-loadsheet-03: big centered invoice box between the logo and the title block.
+      const invBox = fitInvoiceBox(order.invoice_number, fontBold, leftBound, rightBound, pageW / 2, y);
+      if (invBox) {
+        page.drawRectangle({ x: invBox.x, y: invBox.y, width: invBox.width, height: invBox.height, borderColor: black, borderWidth: 1.5 });
+        page.drawText(invBox.text, { x: invBox.textX, y: invBox.textY, size: invBox.size, font: fontBold, color: black });
+      }
+      y -= HEADER_BAND_H;
       hr(page, y);
       y -= 18;
 
@@ -251,10 +322,16 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
         ry -= 15;
       }
       if (order.delivery_time && String(order.delivery_time).trim()) {
-        for (const l of wrapText(`Delivery: ${order.delivery_time}`, font, 10, rightW)) {
-          page.drawText(l, { x: colRightX, y: ry, size: 10, font, color: black });
-          ry -= 13;
-        }
+        // lgx-loadsheet-03: 16pt bold on a bordered yellow band (band first; pdf-lib paints in call order).
+        const dLines = wrapText(`Delivery: ${order.delivery_time}`, fontBold, 16, rightW - 2 * 6);
+        const bandW = Math.max(...dLines.map((l) => fontBold.widthOfTextAtSize(l, 16))) + 12;
+        const bandH = dLines.length * 19 + 8;
+        const bandTop = ry + 12;
+        page.drawRectangle({ x: colRightX, y: bandTop - bandH, width: bandW, height: bandH, color: highlight, borderColor: black, borderWidth: HL_BORDER });
+        dLines.forEach((l, i) => {
+          page.drawText(l, { x: colRightX + 6, y: bandTop - 4 - 15 - i * 19, size: 16, font: fontBold, color: black });
+        });
+        ry -= bandH + 6;
       }
       // A multi-load sheet lists only its own load; otherwise every load (or none), as before.
       const loads = multi && sheet.load ? [sheet.load] : Array.isArray(order.loads) ? order.loads : [];
@@ -279,16 +356,19 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
       // Sign-off (page 1 only) — same geometry as cutList.ts's operator initials/date line.
       page.drawText("All quantities loaded and counted?", { x: margin, y, size: 11, font: fontBold, color: black });
       y -= 26;
+      // lgx-loadsheet-03: full-width bordered yellow band behind the Loaded by / Date row (drawn first).
+      page.drawRectangle({ x: margin, y: y - 2 - 8, width: right - margin, height: 8 + 2 + 10 + 6, color: highlight, borderColor: black, borderWidth: HL_BORDER });
+      const soX = margin + 8; // inset so the label clears the band's border
       const soByLabel = "Loaded by:";
-      page.drawText(soByLabel, { x: margin, y, size: 10, font, color: black });
-      const soByX = margin + font.widthOfTextAtSize(soByLabel, 10) + 6;
+      page.drawText(soByLabel, { x: soX, y, size: 10, font, color: black });
+      const soByX = soX + font.widthOfTextAtSize(soByLabel, 10) + 6;
       page.drawLine({ start: { x: soByX, y: y - 2 }, end: { x: soByX + 90, y: y - 2 }, thickness: 0.75, color: black });
       const soDateLabel = "Date:";
       const soDateLabelX = soByX + 90 + 30;
       page.drawText(soDateLabel, { x: soDateLabelX, y, size: 10, font, color: black });
       const soDateX = soDateLabelX + font.widthOfTextAtSize(soDateLabel, 10) + 6;
       page.drawLine({ start: { x: soDateX, y: y - 2 }, end: { x: soDateX + 110, y: y - 2 }, thickness: 0.75, color: black });
-      y -= 14;
+      y -= 18; // lgx-loadsheet-03: was 14; keeps the band clear of the rule below
       hr(page, y);
       y -= 18;
       if (sheet.splitMissing) {
