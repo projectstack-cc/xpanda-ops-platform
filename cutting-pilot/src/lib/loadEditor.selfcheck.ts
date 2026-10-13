@@ -29,7 +29,17 @@ import {
   addRowFromLibrary,
   addColumnFromLibrary,
   addLayerFromLibrary,
+  evaluateStackTarget,
+  stackOnto,
+  evaluateSlotTarget,
+  moveToSlot,
+  takeToHolding,
+  evaluateSwapTarget,
+  swapColumns,
+  addToHolding,
+  NEW_ROW,
   type EditorState,
+  type PieceSource,
 } from "./loadEditor";
 
 interface CheckResult {
@@ -197,6 +207,71 @@ function conservationHolds(state: EditorState): { ok: boolean; detail: string } 
     if (got !== line.qty) mismatches.push(`${line.skuId}: trailers+holding+balance=${got} != cart qty ${line.qty}`);
   }
   return { ok: mismatches.length === 0, detail: mismatches.join("; ") };
+}
+
+// --- lbr-07 fixture: golden-like stacks on one 90×42-footprint family, 109″ clearance ---
+const DIMS_S: Dimensions = { length: 380, width: 98, height: 109, maxWeight: 44000 };
+function stackSku(id: string, height: number, length = 90, width = 42): PackSku {
+  return { id, name: `${height}" ${id}`, sku: `${id}-1`, length, width, height, weight: 1, category: "Blocks", allowRotation: true };
+}
+const SKU_S13 = stackSku("S13", 13);
+const SKU_S12 = stackSku("S12", 12);
+const SKU_S11 = stackSku("S11", 11);
+const SKU_S10 = stackSku("S10", 10);
+const SKU_S9 = stackSku("S9", 9);
+const SKU_S2 = stackSku("S2", 2);
+const SKU_SX = stackSku("SX", 10, 48, 24); // a different footprint
+const SKU_SW = stackSku("SW", 10, 90, 60); // a 60″-wide stack, for the swap width check
+// Not in the job: stands in for a parts-library pick.
+const SKU_S5L = stackSku("S5L", 5);
+
+function makeStack(layers: [PackSku, number][], stackKind?: "full" | "partial"): PackColumn {
+  const [first] = layers[0];
+  return {
+    posY: 0,
+    colWidth: first.width,
+    colLength: first.length,
+    totalHeight: layers.reduce((s, [k, n]) => s + k.height * n, 0),
+    totalWeight: layers.reduce((s, [k, n]) => s + k.weight * n, 0),
+    stackCount: layers.reduce((s, [, n]) => s + n, 0),
+    layers: layers.map(([k, n]) => ({
+      skuId: k.id,
+      skuName: k.name,
+      skuCode: k.sku,
+      color: "#333333",
+      unitHeight: k.height,
+      count: n,
+      orientation: { length: k.length, width: k.width, height: k.height, label: "flat" },
+    })),
+    mixed: new Set(layers.map(([k]) => k.id)).size > 1,
+    rationale: "Fixture stack",
+    stackKind,
+  };
+}
+
+function makeStackFixture(): EditorState {
+  const trailer: PackTrailer = {
+    ...makeTrailer([
+      makeRow([makeStack([[SKU_S11, 9]], "full"), makeStack([[SKU_S13, 8]], "full")]),
+      makeRow([makeStack([[SKU_S10, 10], [SKU_S9, 1]], "full"), makeStack([[SKU_S10, 9]], "partial")]),
+      makeRow([makeStack([[SKU_SW, 5]], "partial")]),
+    ]),
+    dims: DIMS_S,
+  };
+  const plan: PackPlan = { trailers: [trailer], balance: [{ skuId: "S12", remaining: 4 }], warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 };
+  const skus = [SKU_S13, SKU_S12, SKU_S11, SKU_S10, SKU_S9, SKU_S2, SKU_SX, SKU_SW];
+  const cart: CartLine[] = [
+    { skuId: "S13", qty: 8 },
+    { skuId: "S12", qty: 4 },
+    { skuId: "S11", qty: 9 },
+    { skuId: "S10", qty: 19 },
+    { skuId: "S9", qty: 1 },
+    { skuId: "S2", qty: 5 },
+    { skuId: "SX", qty: 2 },
+    { skuId: "SW", qty: 5 },
+  ];
+  const normalized = normalizeState(createEditorState(plan, DIMS_S, OPTS, cart, skus));
+  return { ...normalized, holding: [makeStack([[SKU_SX, 2]], "partial"), makeStack([[SKU_S2, 5]], "partial")] };
 }
 
 export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[] } {
@@ -784,6 +859,143 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     check("addLayerFromLibrary: cart gains {L: 1}", withLayer.cart.find((c) => c.skuId === "L")?.qty === 1, JSON.stringify(withLayer.cart));
     check("addLayerFromLibrary: no balance entry for L", withLayer.plan.balance.find((b) => b.skuId === "L") === undefined, JSON.stringify(withLayer.plan.balance));
     check("addLayerFromLibrary: conservation holds", conservationHolds(withLayer).ok, conservationHolds(withLayer).detail);
+  }
+
+
+  // --- lbr-07: tap-to-place operations (stackOnto / moveToSlot / takeToHolding / swapColumns /
+  // addToHolding) and every verdict reason, on a golden-like fixture (makeStackFixture below):
+  //   R1 [A 11″×9 (99″), B 13″×8 (104″)]   R2 [C 10″×10+9″×1 (109″), D 10″×9 (90″)]   R3 [W 60″-wide 10″×5]
+  //   holding [X 48×24 10″×2, T 2″×5]   balance {12″: 4}   effective height 109″, 98″ wide, 380″ long.
+  // Every ok/warn result must pass validateForApply (validatePlan) with zero violations, conserve
+  // cart (trailers + holding + balance), and undo back to exactly the prior state.
+  {
+    const base = makeStackFixture();
+    const sameAs = (a: EditorState, b: EditorState) =>
+      JSON.stringify(clone(a.plan)) === JSON.stringify(clone(b.plan)) &&
+      JSON.stringify(clone(a.holding)) === JSON.stringify(clone(b.holding)) &&
+      JSON.stringify(a.cart) === JSON.stringify(b.cart) &&
+      JSON.stringify(a.skus.map((s) => s.id)) === JSON.stringify(b.skus.map((s) => s.id));
+    const layersOf = (s: EditorState, r: number, c: number) =>
+      s.plan.trailers[0].rows[r].columns[c].layers.map((l) => `${l.unitHeight}x${l.count}`).join("+");
+    const verifyResult = (name: string, before: EditorState, after: EditorState) => {
+      check(`${name}: the state changed`, after !== before);
+      const v = validateForApply(after);
+      check(`${name}: validatePlan reports zero violations`, v.length === 0, JSON.stringify(v));
+      const c = conservationHolds(after);
+      check(`${name}: conservation holds`, c.ok, c.detail);
+      check(`${name}: undo restores exactly`, sameAs(undo(after), before));
+    };
+
+    check("lbr-07 fixture: baseline validatePlan clean", validateForApply(base).length === 0, JSON.stringify(validateForApply(base)));
+    check("lbr-07 fixture: baseline conservation", conservationHolds(base).ok, conservationHolds(base).detail);
+
+    const A = { t: 0, r: 0, c: 0 };
+    const B = { t: 0, r: 0, c: 1 };
+    const C = { t: 0, r: 1, c: 0 };
+    const D = { t: 0, r: 1, c: 1 };
+    const W = { t: 0, r: 2, c: 0 };
+    const oneTenFromD: PieceSource = { kind: "top", ref: D, count: 1 };
+
+    // a. a single 10″ piece onto 11x9 -> 11x9+10x1, ok
+    const vA = evaluateStackTarget(base, oneTenFromD, A);
+    check("evaluateStackTarget: one 10″ piece onto 11x9 is ok (109″)", vA.level === "ok" && vA.heightAfter === 109, JSON.stringify(vA));
+    const sA = stackOnto(base, oneTenFromD, A);
+    check("stackOnto: 11x9 now reads 11x9+10x1", layersOf(sA, 0, 0) === "11x9+10x1", layersOf(sA, 0, 0));
+    check("stackOnto: the source lost one piece off its top (10x8) and is now a partial", layersOf(sA, 1, 1) === "10x8" && sA.plan.trailers[0].rows[1].columns[1].stackKind === "partial", layersOf(sA, 1, 1));
+    check("stackOnto: target is mixed with a rationale", sA.plan.trailers[0].rows[0].columns[0].mixed && sA.plan.trailers[0].rows[0].columns[0].rationale.length > 0);
+    check("stackOnto: balance and cart untouched", JSON.stringify(sA.plan.balance) === JSON.stringify(base.plan.balance) && sA.cart === base.cart);
+    verifyResult("stackOnto (10″ onto 11x9)", base, sA);
+
+    // b. 10″ onto 13x8 -> no (114″ > 109″)
+    const vB = evaluateStackTarget(base, oneTenFromD, B);
+    check("evaluateStackTarget: 10″ onto 13x8 is no — would be 114″ tall (limit 109″)", vB.level === "no" && vB.reason === "would be 114″ tall (limit 109″)", JSON.stringify(vB));
+    check("stackOnto: refuses a 'no' (same state)", stackOnto(base, oneTenFromD, B) === base);
+
+    // c. 3 sizes -> no. D gets C's 9″ top-off first (10x9+9x1 = 99″), then a 2″ piece from holding.
+    const nineOnD = stackOnto(base, { kind: "top", ref: C, count: 1 }, D);
+    check("stackOnto: C's 9″ top-off onto D -> 10x9+9x1", layersOf(nineOnD, 1, 1) === "10x9+9x1", layersOf(nineOnD, 1, 1));
+    verifyResult("stackOnto (9″ top-off onto 10x9)", base, nineOnD);
+    const vC = evaluateStackTarget(nineOnD, { kind: "holdingTop", index: 1, count: 1 }, D);
+    check("evaluateStackTarget: a third size is no — would be 3 sizes in one stack (max 2)", vC.level === "no" && vC.reason === "would be 3 sizes in one stack (max 2)", JSON.stringify(vC));
+
+    // d. sub-K -> no
+    const vD = evaluateStackTarget(base, { kind: "holdingTop", index: 1, count: 1 }, A);
+    check("evaluateStackTarget: a 2″ piece onto 11x9 is no — too thin to top off (min 3″)", vD.level === "no" && vD.reason === "2″ pieces are too thin to top off (min 3″)", JSON.stringify(vD));
+
+    // e. thicker-on-thinner -> warn (allowed)
+    const elevenFromA: PieceSource = { kind: "top", ref: A, count: 1 };
+    const vE = evaluateStackTarget(base, elevenFromA, D);
+    check("evaluateStackTarget: an 11″ piece onto 10x9 is warn — thicker on thinner", vE.level === "warn" && vE.reason === "thicker pieces on thinner — usually loaded the other way", JSON.stringify(vE));
+    const sE = stackOnto(base, elevenFromA, D);
+    check("stackOnto: a warn still applies (10x9+11x1)", layersOf(sE, 1, 1) === "10x9+11x1", layersOf(sE, 1, 1));
+    verifyResult("stackOnto (warn: 11″ onto 10x9)", base, sE);
+
+    // f. footprint mismatch -> no
+    const vF = evaluateStackTarget(base, { kind: "holding", index: 0 }, A);
+    check("evaluateStackTarget: 48×24 pieces onto a 90×42 stack is no — different footprint (48×24 vs 90×42)", vF.level === "no" && vF.reason === "different footprint (48×24 vs 90×42)", JSON.stringify(vF));
+    check("evaluateStackTarget: a stack onto itself is no", evaluateStackTarget(base, { kind: "column", ref: A }, A).level === "no");
+
+    // g. holdingTop split + stack: 3 of the five 2″ pieces become a new rear row, then 1 more stacks onto it.
+    const split = moveToSlot(base, { kind: "holdingTop", index: 1, count: 3 }, { t: 0, r: NEW_ROW, slot: 0 });
+    check("moveToSlot (holdingTop -> new row): new rear row at index 0 holds 2x3", split.plan.trailers[0].rows.length === 4 && layersOf(split, 0, 0) === "2x3", JSON.stringify(split.plan.trailers[0].rows.map((r) => r.columns.length)));
+    check("moveToSlot (holdingTop): the held stack keeps the other 2 pieces", split.holding[1]?.stackCount === 2, JSON.stringify(split.holding.map((h) => h.stackCount)));
+    verifyResult("moveToSlot (holdingTop split to a new row)", base, split);
+    const onSplit = stackOnto(split, { kind: "holdingTop", index: 1, count: 1 }, { t: 0, r: 0, c: 0 });
+    check("stackOnto (holdingTop, same size): merges into one layer 2x4", layersOf(onSplit, 0, 0) === "2x4", layersOf(onSplit, 0, 0));
+    verifyResult("stackOnto (holdingTop onto a same-size stack)", split, onSplit);
+
+    // h. slot verdicts: width, depth (incl. a held stack — the lb-ui-03 gap), height.
+    const vH1 = evaluateSlotTarget(base, { kind: "holding", index: 0 }, { t: 0, r: 0, slot: 2 });
+    check("evaluateSlotTarget: X (24″ wide) into R1 (84″ used) is no — too wide", vH1.level === "no" && vH1.reason.startsWith("too wide"), JSON.stringify(vH1));
+    const vH2 = evaluateSlotTarget(base, { kind: "column", ref: D }, { t: 0, r: NEW_ROW, slot: 0 });
+    check("evaluateSlotTarget: D as a new rear row is ok (270″ -> 360″ of 380″)", vH2.level === "ok", JSON.stringify(vH2));
+    const newRow = moveToSlot(base, { kind: "column", ref: D }, { t: 0, r: NEW_ROW, slot: 0 });
+    verifyResult("moveToSlot (column -> new row)", base, newRow);
+    const vH3 = evaluateSlotTarget(newRow, { kind: "top", ref: { t: 0, r: 1, c: 1 }, count: 1 }, { t: 0, r: NEW_ROW, slot: 0 });
+    check("evaluateSlotTarget: another 90″-deep new row is no — too deep", vH3.level === "no" && vH3.reason.startsWith("too deep"), JSON.stringify(vH3));
+    const vH4 = evaluateSlotTarget(newRow, { kind: "holding", index: 0 }, { t: 0, r: 0, slot: 1 });
+    check("evaluateSlotTarget: X (48″ deep) beside D in the new row is ok", vH4.level === "ok", JSON.stringify(vH4));
+    const placed = moveToSlot(newRow, { kind: "holding", index: 0 }, { t: 0, r: 0, slot: 1 });
+    verifyResult("moveToSlot (whole held stack into a row slot)", newRow, placed);
+    check("placeFromHolding (wrapper) == moveToSlot holding", JSON.stringify(clone(placeFromHolding(newRow, 0, { t: 0, r: 0, slot: 1 }).plan)) === JSON.stringify(clone(placed.plan)));
+
+    // i. takeToHolding
+    const tookTop = takeToHolding(base, { kind: "top", ref: C, count: 1 });
+    check("takeToHolding (top): C is 10x10, the 9″ piece is a new held stack", layersOf(tookTop, 1, 0) === "10x10" && tookTop.holding.length === 3 && tookTop.holding[2].layers[0].unitHeight === 9, layersOf(tookTop, 1, 0));
+    verifyResult("takeToHolding (top)", base, tookTop);
+    const tookCol = takeToHolding(base, { kind: "column", ref: A });
+    check("takeToHolding (column) == pullToHolding", JSON.stringify(clone(tookCol.plan)) === JSON.stringify(clone(pullToHolding(base, A).plan)) && tookCol.holding.length === 3);
+    verifyResult("takeToHolding (column)", base, tookCol);
+    const emptiedRow = takeToHolding(takeToHolding(base, { kind: "column", ref: W }), { kind: "column", ref: { t: 0, r: 0, c: 0 } });
+    check("takeToHolding: a row that empties stays as a placeholder", emptiedRow.plan.trailers[0].rows.length === 3 && emptiedRow.plan.trailers[0].rows[2].columns.length === 0);
+
+    // j. swapColumns
+    const vJ1 = evaluateSwapTarget(base, A, D);
+    check("evaluateSwapTarget: A <-> D (same widths) is ok", vJ1.level === "ok", JSON.stringify(vJ1));
+    const swappedAD = swapColumns(base, A, D);
+    check("swapColumns: A and D traded places", layersOf(swappedAD, 0, 0) === "10x9" && layersOf(swappedAD, 1, 1) === "11x9");
+    verifyResult("swapColumns", base, swappedAD);
+    const vJ2 = evaluateSwapTarget(base, W, A);
+    check("evaluateSwapTarget: the 60″-wide W into R1 (B is 42″) is no — row R1 would be 102″ wide", vJ2.level === "no" && vJ2.reason.includes("row R1 would be 102\" wide"), JSON.stringify(vJ2));
+    check("swapColumns: refuses a 'no' (same state)", swapColumns(base, W, A) === base);
+
+    // k. addToHolding — job SKU draws balance; library SKU grows cart; both then placed onto a stack.
+    const addJob = addToHolding(base, SKU_S12, 1);
+    check("addToHolding (job): one 12″ held stack, balance 4 -> 3, cart unchanged", addJob.holding.length === 3 && addJob.plan.balance.find((b) => b.skuId === "S12")?.remaining === 3 && addJob.cart === base.cart, JSON.stringify(addJob.plan.balance));
+    verifyResult("addToHolding (job)", base, addJob);
+    const jobOnD = stackOnto(addJob, { kind: "holding", index: 2 }, D);
+    check("addToHolding -> stackOnto (job, warn 12″ on 10″): D reads 10x9+12x1", layersOf(jobOnD, 1, 1) === "10x9+12x1", layersOf(jobOnD, 1, 1));
+    verifyResult("addToHolding -> stackOnto (job)", addJob, jobOnD);
+    const addLib = addToHolding(base, SKU_S5L, 1);
+    check("addToHolding (library): SKU introduced, cart gains {S5L: 1}, no balance entry", addLib.skus.some((s) => s.id === "S5L") && addLib.cart.find((c) => c.skuId === "S5L")?.qty === 1 && !addLib.plan.balance.some((b) => b.skuId === "S5L"), JSON.stringify(addLib.cart));
+    verifyResult("addToHolding (library)", base, addLib);
+    const libOnA = stackOnto(addLib, { kind: "holding", index: 2 }, A);
+    check("addToHolding -> stackOnto (library): A reads 11x9+5x1", layersOf(libOnA, 0, 0) === "11x9+5x1", layersOf(libOnA, 0, 0));
+    verifyResult("addToHolding -> stackOnto (library)", addLib, libOnA);
+    const addMany = addToHolding(base, SKU_S5L, 25);
+    check("addToHolding: 25 × 5″ splits into full-height held stacks 21 + 4", addMany.holding.length === 4 && addMany.holding[2].stackCount === 21 && addMany.holding[3].stackCount === 4, JSON.stringify(addMany.holding.map((h) => h.stackCount)));
+    verifyResult("addToHolding (split into full-height stacks)", base, addMany);
+    check("addToHolding: count <= 0 is a no-op", addToHolding(base, SKU_S12, 0) === base);
   }
 
   return { pass: results.every((r) => r.pass), results };

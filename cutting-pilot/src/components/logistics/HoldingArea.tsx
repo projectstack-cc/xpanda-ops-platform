@@ -1,59 +1,52 @@
 // src/components/logistics/HoldingArea.tsx
 // lb-ui-02 Part C: the holding area — columns pulled off a trailer, listed with base SKU,
-// thickness, and piece count, each with a Place action. Also a native HTML5 drop target (dragging
-// a trailer column here pulls it to holding) and a drag source (dragging a held column onto a row
-// places it back), with "Place" as the full keyboard equivalent for both directions.
+// thickness, and piece count.
+//
+// lbr-07: drag-and-drop removed. Each held stack is one ≥ 44px button: tap it to select it
+// (Customize's Step 1 — the action bar then offers Place / Stack onto / Take off the top). While a
+// placement action is armed (Step 2), `holdingTarget` turns the tray itself into a target ("Put it
+// in holding", for pieces taken off a trailer stack), and `itemVerdict` fades held stacks that
+// can't take the pieces, with the same green/amber/faded language as the trailer diagram.
 "use client";
 
 import { PackageOpen, Layers } from "lucide-react";
 import type { PackColumn } from "@/lib/packEngine";
+import type { TapVerdict } from "./TrailerDiagram";
 
 interface HoldingAreaProps {
   holding: PackColumn[];
   editable?: boolean;
-  armedHoldingIndex?: number | null;
-  onRequestPlace?: (holdingIndex: number) => void;
-  onColumnDragStart?: (holdingIndex: number) => void;
-  onColumnDragEnd?: () => void;
-  isDropTarget?: boolean;
-  onDragOverHolding?: () => void;
-  onDropOnHolding?: () => void;
+  selectedIndex?: number | null;
+  onSelect?: (holdingIndex: number) => void;
+  /** Step 2: per-held-stack verdict (null = not a target). */
+  itemVerdict?: (holdingIndex: number) => TapVerdict | null;
+  /** Step 2: the tray as a target; null hides it. */
+  holdingTarget?: TapVerdict | null;
+  onChooseHolding?: () => void;
+}
+
+function stackLabel(column: PackColumn): string {
+  return column.layers.map((l) => `${l.unitHeight}″×${l.count}`).join(" + ");
 }
 
 export default function HoldingArea({
   holding,
   editable = false,
-  armedHoldingIndex = null,
-  onRequestPlace,
-  onColumnDragStart,
-  onColumnDragEnd,
-  isDropTarget = false,
-  onDragOverHolding,
-  onDropOnHolding,
+  selectedIndex = null,
+  onSelect,
+  itemVerdict,
+  holdingTarget = null,
+  onChooseHolding,
 }: HoldingAreaProps) {
+  const targetOk = holdingTarget && holdingTarget.level !== "no";
   return (
     <div
       className="rounded-xl border p-4 transition-colors"
       style={{
-        borderColor: isDropTarget ? "var(--brand)" : "var(--card-border)",
-        background: isDropTarget ? "color-mix(in srgb, var(--brand) 6%, var(--surface))" : "var(--surface)",
+        borderColor: holdingTarget ? (targetOk ? "var(--success-bg)" : "var(--card-border)") : "var(--card-border)",
+        borderWidth: holdingTarget ? 2 : 1,
+        background: "var(--surface)",
       }}
-      onDragOver={
-        editable
-          ? (e) => {
-              e.preventDefault();
-              onDragOverHolding?.();
-            }
-          : undefined
-      }
-      onDrop={
-        editable
-          ? (e) => {
-              e.preventDefault();
-              onDropOnHolding?.();
-            }
-          : undefined
-      }
     >
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-text flex items-center gap-1.5">
@@ -61,54 +54,69 @@ export default function HoldingArea({
           Holding area
         </h3>
         <span className="text-xs font-mono tabular-nums text-muted">
-          {holding.length} column{holding.length === 1 ? "" : "s"}
+          {holding.length} stack{holding.length === 1 ? "" : "s"}
         </span>
       </div>
 
+      {editable && holdingTarget && (
+        <button
+          type="button"
+          onClick={onChooseHolding}
+          aria-label={`Holding area. ${holdingTarget.level === "no" ? "Can't go here" : "Can go here"} — ${holdingTarget.reason}.`}
+          className="w-full mb-2 min-h-[48px] rounded-lg border-2 border-dashed text-sm font-semibold text-text bg-surface cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+          style={{ borderColor: targetOk ? "var(--success-bg)" : "var(--border)", opacity: targetOk ? 1 : 0.45 }}
+        >
+          Put it in holding
+        </button>
+      )}
+
       {holding.length === 0 ? (
         <p className="text-sm text-muted">
-          {editable ? "No columns held. Drag a column here, or select it and choose Pull to Holding, to set it aside." : "No columns held."}
+          {editable ? "No stacks held. Tap a stack, then choose Send to holding to set it aside." : "No columns held."}
         </p>
       ) : (
         <ul className="space-y-1.5">
           {holding.map((column, index) => {
             const base = column.layers[0];
             if (!base) return null;
-            const isArmed = armedHoldingIndex === index;
-            return (
-              <li
-                key={index}
-                draggable={editable}
-                onDragStart={editable ? () => onColumnDragStart?.(index) : undefined}
-                onDragEnd={editable ? () => onColumnDragEnd?.() : undefined}
-                className={[
-                  "flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-sm",
-                  editable ? "cursor-grab active:cursor-grabbing" : "",
-                  isArmed ? "ring-2 ring-[var(--brand)]" : "",
-                ].join(" ")}
-                style={{ borderColor: "var(--border)", background: "var(--ghost-bg)" }}
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-text font-medium">{base.skuName}</p>
-                  <p className="text-[11px] text-muted font-mono tabular-nums flex items-center gap-1">
+            const isSelected = selectedIndex === index;
+            const verdict = editable && !isSelected ? itemVerdict?.(index) ?? null : null;
+            const body = (
+              <>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-text font-medium">{base.skuName}</span>
+                  <span className="text-[12px] text-muted font-mono tabular-nums flex items-center gap-1">
                     <Layers className="w-3 h-3" aria-hidden="true" />
-                    {base.unitHeight}&quot; thick · {column.stackCount}pc
-                  </p>
-                </div>
+                    {stackLabel(column)} · {column.stackCount}pc
+                  </span>
+                </span>
                 {editable && (
+                  <span className="shrink-0 text-[12px] font-semibold text-muted">{isSelected ? "Selected" : "Tap to pick"}</span>
+                )}
+              </>
+            );
+            return (
+              <li key={index}>
+                {editable ? (
                   <button
                     type="button"
-                    onClick={() => onRequestPlace?.(index)}
-                    className={[
-                      "shrink-0 min-h-[36px] px-2.5 rounded-md text-[12px] font-semibold cursor-pointer transition-colors border",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]",
-                      isArmed
-                        ? "border-[var(--brand)] text-[var(--brand)] bg-transparent"
-                        : "border-[var(--border)] text-muted hover:text-text hover:bg-[var(--surface-2)]",
-                    ].join(" ")}
+                    onClick={() => onSelect?.(index)}
+                    aria-pressed={isSelected}
+                    aria-label={`Held stack: ${base.skuName}, ${stackLabel(column)}.${verdict ? (verdict.level === "no" ? ` Can't go here — ${verdict.reason}.` : ` Can go here — ${verdict.reason}.`) : ""}`}
+                    className="w-full min-h-[48px] flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-sm text-left cursor-pointer transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                    style={{
+                      borderColor: "var(--border)",
+                      background: "var(--ghost-bg)",
+                      ...(isSelected ? { outline: "3px solid var(--text)", outlineOffset: -3, boxShadow: "inset 0 0 0 7px var(--warn-border)" } : {}),
+                      ...(verdict?.level === "no" ? { opacity: 0.35 } : {}),
+                    }}
                   >
-                    {isArmed ? "Choose a row…" : "Place"}
+                    {body}
                   </button>
+                ) : (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-sm" style={{ borderColor: "var(--border)", background: "var(--ghost-bg)" }}>
+                    {body}
+                  </div>
                 )}
               </li>
             );

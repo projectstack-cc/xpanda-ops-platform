@@ -2,8 +2,9 @@
 // lb-ui-02: pure, headless edit operations for the v2 load builder's customize editor. No React,
 // no DOM — CustomizeEditor.tsx calls these and re-renders from the returned EditorState.
 //
-// The move unit is a whole column (Decision, locked) — individual layers are never peeled off a
-// stack; a column carries its full layer composition wherever it goes.
+// lb-ui-02's move unit was a whole column. lbr-07 adds pieces off the TOP layer (PieceSource
+// "top"/"holdingTop" — the way the floor unstacks), stacking onto an existing stack (stackOnto) and
+// swaps; a layer is still never pulled out from under another one.
 //
 // EditorState extends the prompt's stated 3-field shape (plan/holding/history) with dims/options/
 // cart/skus. This is a necessary, not cosmetic, extension: pack() still takes dims as a separate
@@ -62,7 +63,7 @@ import type {
   PackBalance,
   PackViolation,
 } from "./packEngine";
-import { validatePlan, skuOrientations } from "./packEngine";
+import { validatePlan, skuOrientations, HOLEY_BOARD_CATEGORY } from "./packEngine";
 // Reuses lb-ui-05's reproduction of packEngine.ts's private, unexported colorForSku rather than
 // duplicating the palette/hash a third time — packEngine.ts is closed/ratchet-guarded and exports
 // neither. See jobPull.ts's own header note; BACKLOG.md's existing "export colorForSku instead of
@@ -280,24 +281,11 @@ function getColumn(plan: PackPlan, ref: ColumnRef): PackColumn | null {
 
 // --- operations ---
 
-/** Moves a column from one row (possibly the same row, for reordering) to another. */
+/** Moves a column from one row (possibly the same row, for reordering) to another. lbr-07: a thin
+ * wrapper over moveToSlot, kept so existing callers and selfchecks keep working. */
 export function moveColumn(state: EditorState, from: ColumnRef, to: DropTarget): EditorState {
-  const column = getColumn(state.plan, from);
-  const targetRowExists = state.plan.trailers[to.t]?.rows[to.r];
-  if (!column || !targetRowExists) return state;
-
-  const plan = clonePlan(state.plan);
-  const fromRow = plan.trailers[from.t].rows[from.r];
-  const [moved] = fromRow.columns.splice(from.c, 1);
-  if (!moved) return state;
-  // When from and to name the same row, toRow IS fromRow (same object) — the splice above already
-  // applied, so clamping against its now-shorter length is correct with no special-casing needed.
-  const toRow = plan.trailers[to.t].rows[to.r];
-  const slot = Math.max(0, Math.min(to.slot, toRow.columns.length));
-  toRow.columns.splice(slot, 0, moved);
-
-  recomputePlan(plan, state.options);
-  return { ...state, plan, history: withHistory(state) };
+  if (!getColumn(state.plan, from) || !state.plan.trailers[to.t]?.rows[to.r]) return state;
+  return moveToSlot(state, { kind: "column", ref: from }, to);
 }
 
 /** Pulls a column off a trailer into the holding area. The row it leaves behind is NOT removed
@@ -316,20 +304,10 @@ export function pullToHolding(state: EditorState, from: ColumnRef): EditorState 
   return { ...state, plan, holding: [...state.holding, pulled], history: withHistory(state) };
 }
 
-/** Places a held column back onto a trailer. */
+/** Places a held column back onto a trailer. lbr-07: a thin wrapper over moveToSlot. */
 export function placeFromHolding(state: EditorState, holdingIndex: number, to: DropTarget): EditorState {
-  const column = state.holding[holdingIndex];
-  const targetRowExists = state.plan.trailers[to.t]?.rows[to.r];
-  if (!column || !targetRowExists) return state;
-
-  const plan = clonePlan(state.plan);
-  const toRow = plan.trailers[to.t].rows[to.r];
-  const slot = Math.max(0, Math.min(to.slot, toRow.columns.length));
-  toRow.columns.splice(slot, 0, cloneColumn(column));
-  recomputePlan(plan, state.options);
-
-  const holding = state.holding.filter((_, i) => i !== holdingIndex);
-  return { ...state, plan, holding, history: withHistory(state) };
+  if (!state.holding[holdingIndex] || !state.plan.trailers[to.t]?.rows[to.r]) return state;
+  return moveToSlot(state, { kind: "holding", index: holdingIndex }, to);
 }
 
 /** Closes gaps left by emptied rows, front-to-back, WITHOUT reordering columns within a row or
@@ -769,4 +747,377 @@ export function removeRow(state: EditorState, trailerIndex: number, rowIndex: nu
 
   recomputePlan(plan, state.options);
   return { ...state, plan, holding: [...state.holding, ...movedToHolding], history: withHistory(state) };
+}
+
+// --- lbr-07: tap-to-place customize. Pieces move as a whole stack OR come off the TOP layer only
+// (the way the floor actually unstacks), from a trailer stack or a held stack, and land either ON
+// another stack (stackOnto) or as a NEW stack in a row slot (moveToSlot). Every op below is pure,
+// returns a new EditorState with one history step, and is a no-op (same reference) on bad input —
+// the same contract as the operations above. The evaluate* functions are the UI's per-target
+// verdicts; stackOnto refuses whatever evaluateStackTarget says "no" to, mirroring validatePlan's
+// own column-height / max-skus-per-column / topoff-threshold thresholds (never new ones). ---
+
+export type PieceSource =
+  | { kind: "column"; ref: ColumnRef } // the whole stack
+  | { kind: "top"; ref: ColumnRef; count: number } // N pieces off the TOP layer only
+  | { kind: "holding"; index: number } // a whole held stack
+  | { kind: "holdingTop"; index: number; count: number }; // N pieces off a held stack's top layer
+
+export interface TargetVerdict {
+  level: "ok" | "warn" | "no";
+  reason: string;
+  heightAfter: number;
+}
+
+/** DropTarget.r value meaning "a brand-new row at the rear (doors) end of the trailer". trailer.rows
+ * is rear-first (index 0 = the doors row — see TrailerDiagram's header), so the new row is inserted
+ * at index 0, next to the free floor the diagram draws at the rear. */
+export const NEW_ROW = -1;
+
+const THICKER_ON_THINNER = "thicker pieces on thinner — usually loaded the other way";
+
+function effectiveHeightOf(state: EditorState, dims: Dimensions): number {
+  return dims.height - (state.options.runnerHeight ?? 0);
+}
+
+function fmtIn(n: number): string {
+  return `${fmtInches(n)}″`;
+}
+
+function sameRef(a: ColumnRef, b: ColumnRef): boolean {
+  return a.t === b.t && a.r === b.r && a.c === b.c;
+}
+
+/** Totals, mixed flag, stackKind and rationale for a column whose layers just changed. stackKind
+ * becomes "partial" when a pure stack is below full height (fewer pieces than fit the clearance);
+ * otherwise the planner's own value is kept. */
+function refreshColumn(column: PackColumn, state: EditorState, dims: Dimensions): void {
+  const weightOf = (l: PackLayer) => (state.skus.find((s) => s.id === l.skuId)?.weight ?? 0) * l.count;
+  column.totalHeight = column.layers.reduce((s, l) => s + l.unitHeight * l.count, 0);
+  column.totalWeight = column.layers.reduce((s, l) => s + weightOf(l), 0);
+  column.stackCount = column.layers.reduce((s, l) => s + l.count, 0);
+  column.mixed = new Set(column.layers.map((l) => l.skuId)).size > 1;
+  if (!column.mixed && column.layers.length > 0) {
+    const unit = column.layers[0].unitHeight;
+    const fullCount = unit > 0 ? Math.floor((effectiveHeightOf(state, dims) + EPS) / unit) : 0;
+    if (column.stackCount < fullCount) column.stackKind = "partial";
+  }
+  if (column.layers.length > 0) column.rationale = describeManualLayers(column);
+}
+
+/** Splits `count` pieces off the top layer of `column` (mutating it) and returns them as a new
+ * one-layer column with the same footprint. null when count is out of range. */
+function splitTop(column: PackColumn, count: number, state: EditorState, dims: Dimensions): PackColumn | null {
+  const top = column.layers[column.layers.length - 1];
+  const n = Math.floor(count);
+  if (!top || n < 1 || n > top.count) return null;
+  const piece: PackColumn = {
+    posY: 0,
+    colWidth: column.colWidth,
+    colLength: column.colLength,
+    totalHeight: 0,
+    totalWeight: 0,
+    stackCount: 0,
+    layers: [{ ...top, orientation: { ...top.orientation }, count: n }],
+    mixed: false,
+    rationale: `Taken off the top of a stack — ${n} × ${fmtInches(top.unitHeight)}" = ${fmtInches(top.unitHeight * n)}"`,
+  };
+  refreshColumn(piece, state, dims);
+  if (n === top.count) column.layers.pop();
+  else top.count -= n;
+  refreshColumn(column, state, dims);
+  return piece;
+}
+
+interface Extracted {
+  plan: PackPlan;
+  holding: PackColumn[];
+  pieces: PackColumn;
+  // The clone of the column at `keepRef` (the caller's target), found BEFORE the removal so index
+  // shifts in a shared row can't point the caller at the wrong stack.
+  kept: PackColumn | null;
+}
+
+/** Clones plan + holding and removes the source's pieces from the clone. A column or held stack
+ * that empties is removed; a trailer row that empties stays as a placeholder (pullToHolding's rule). */
+function extractPieces(state: EditorState, source: PieceSource, keepRef?: ColumnRef): Extracted | null {
+  const plan = clonePlan(state.plan);
+  const holding = state.holding.map(cloneColumn);
+  const kept = keepRef ? getColumn(plan, keepRef) : null;
+  if (source.kind === "column" || source.kind === "top") {
+    const row = plan.trailers[source.ref.t]?.rows[source.ref.r];
+    const column = row?.columns[source.ref.c];
+    if (!row || !column) return null;
+    if (source.kind === "column") {
+      row.columns.splice(source.ref.c, 1);
+      return { plan, holding, pieces: column, kept };
+    }
+    const pieces = splitTop(column, source.count, state, plan.trailers[source.ref.t].dims);
+    if (!pieces) return null;
+    if (column.layers.length === 0) row.columns.splice(source.ref.c, 1);
+    return { plan, holding, pieces, kept };
+  }
+  const held = holding[source.index];
+  if (!held) return null;
+  if (source.kind === "holding") {
+    holding.splice(source.index, 1);
+    return { plan, holding, pieces: held, kept };
+  }
+  const pieces = splitTop(held, source.count, state, state.dims);
+  if (!pieces) return null;
+  if (held.layers.length === 0) holding.splice(source.index, 1);
+  return { plan, holding, pieces, kept };
+}
+
+/** The pieces a source would move, without changing anything. */
+export function piecesFor(state: EditorState, source: PieceSource): PackColumn | null {
+  return extractPieces(state, source)?.pieces ?? null;
+}
+
+/** Re-orients every layer of `pieces` onto a target footprint: as-is when it already matches,
+ * otherwise each layer's SKU needs a legal orientation with that footprint at the SAME thickness
+ * (a 48×24 piece turned 24×48). null when any layer can't. */
+function layersOnFootprint(state: EditorState, pieces: PackColumn, length: number, width: number): PackLayer[] | null {
+  if (approxEq(pieces.colLength, length) && approxEq(pieces.colWidth, width)) {
+    return pieces.layers.map((l) => ({ ...l, orientation: { ...l.orientation } }));
+  }
+  const out: PackLayer[] = [];
+  for (const layer of pieces.layers) {
+    const sku = state.skus.find((s) => s.id === layer.skuId);
+    if (!sku) return null;
+    const o = skuOrientations(sku, state.options).find(
+      (x) => approxEq(x.length, length) && approxEq(x.width, width) && approxEq(x.height, layer.unitHeight)
+    );
+    if (!o) return null;
+    out.push({ ...layer, orientation: { ...o } });
+  }
+  return out;
+}
+
+/** Target layers + moved layers, base first; a moved layer of the same SKU as the current top merges. */
+function combineLayers(target: PackLayer[], moved: PackLayer[]): PackLayer[] {
+  const out = target.map((l) => ({ ...l, orientation: { ...l.orientation } }));
+  for (const layer of moved) {
+    const top = out[out.length - 1];
+    if (top && top.skuId === layer.skuId && approxEq(top.unitHeight, layer.unitHeight)) top.count += layer.count;
+    else out.push({ ...layer, orientation: { ...layer.orientation } });
+  }
+  return out;
+}
+
+/** Can `source`'s pieces go ON TOP of the stack at `to`? "no" mirrors validatePlan's column-height,
+ * max-skus-per-column (Holey Board exempt, as there) and topoff-threshold rules on the combined
+ * stack; "warn" = allowed, but thicker pieces are going onto thinner ones. */
+export function evaluateStackTarget(state: EditorState, source: PieceSource, to: ColumnRef): TargetVerdict {
+  const target = getColumn(state.plan, to);
+  if (!target) return { level: "no", reason: "no such stack", heightAfter: 0 };
+  if ((source.kind === "column" || source.kind === "top") && sameRef(source.ref, to)) {
+    return { level: "no", reason: "that's the same stack", heightAfter: target.totalHeight };
+  }
+  const pieces = piecesFor(state, source);
+  if (!pieces) return { level: "no", reason: "nothing to move", heightAfter: target.totalHeight };
+  const heightAfter = target.totalHeight + pieces.totalHeight;
+
+  const moved = layersOnFootprint(state, pieces, target.colLength, target.colWidth);
+  if (!moved) {
+    return {
+      level: "no",
+      reason: `different footprint (${fmtInches(pieces.colLength)}×${fmtInches(pieces.colWidth)} vs ${fmtInches(target.colLength)}×${fmtInches(target.colWidth)})`,
+      heightAfter,
+    };
+  }
+
+  const limit = effectiveHeightOf(state, state.plan.trailers[to.t].dims);
+  if (heightAfter > limit + EPS) {
+    return { level: "no", reason: `would be ${fmtIn(heightAfter)} tall (limit ${fmtIn(limit)})`, heightAfter };
+  }
+
+  const combined = combineLayers(target.layers, moved);
+  const distinct = new Set(combined.map((l) => l.skuId)).size;
+  const baseSku = state.skus.find((s) => s.id === combined[0]?.skuId);
+  const isHoley = baseSku?.category === HOLEY_BOARD_CATEGORY;
+  if (!isHoley && distinct > state.options.maxSkusPerColumn) {
+    return { level: "no", reason: `would be ${distinct} sizes in one stack (max ${state.options.maxSkusPerColumn})`, heightAfter };
+  }
+  if (distinct > 1) {
+    const thin = combined.slice(1).find((l) => l.unitHeight < state.options.topOffMinInchesPerPiece - EPS);
+    if (thin) {
+      return {
+        level: "no",
+        reason: `${fmtIn(thin.unitHeight)} pieces are too thin to top off (min ${fmtIn(state.options.topOffMinInchesPerPiece)})`,
+        heightAfter,
+      };
+    }
+  }
+
+  const currentTop = target.layers[target.layers.length - 1];
+  if (currentTop && moved[0] && moved[0].unitHeight > currentTop.unitHeight + EPS) {
+    return { level: "warn", reason: THICKER_ON_THINNER, heightAfter };
+  }
+  return { level: "ok", reason: `fits · ${fmtIn(heightAfter)} of ${fmtIn(limit)}`, heightAfter };
+}
+
+/** Puts `source`'s pieces on top of the stack at `to` — refused (same state) when the verdict is
+ * "no". Pieces only move, so balance and cart are untouched. */
+export function stackOnto(state: EditorState, source: PieceSource, to: ColumnRef): EditorState {
+  if (evaluateStackTarget(state, source, to).level === "no") return state;
+  const extracted = extractPieces(state, source, to);
+  if (!extracted?.kept) return state;
+  const { plan, holding, pieces, kept: target } = extracted;
+  const moved = layersOnFootprint(state, pieces, target.colLength, target.colWidth);
+  if (!moved) return state;
+  target.layers = combineLayers(target.layers, moved);
+  refreshColumn(target, state, plan.trailers[to.t].dims);
+  recomputePlan(plan, state.options);
+  return { ...state, plan, holding, history: withHistory(state) };
+}
+
+/** Moves `source`'s pieces into a row slot as a NEW stack (`to.r === NEW_ROW` = a new row at the
+ * rear). Generalizes moveColumn/placeFromHolding to all four source kinds. Like moveColumn it does
+ * not pre-validate — evaluateSlotTarget is the UI's gate, validateForApply the apply gate. */
+export function moveToSlot(state: EditorState, source: PieceSource, to: DropTarget): EditorState {
+  const trailer = state.plan.trailers[to.t];
+  if (!trailer) return state;
+  if (to.r !== NEW_ROW && !trailer.rows[to.r]) return state;
+  const extracted = extractPieces(state, source);
+  if (!extracted) return state;
+  const { plan, holding, pieces } = extracted;
+  const toTrailer = plan.trailers[to.t];
+  if (to.r === NEW_ROW) {
+    toTrailer.rows.unshift({ posFromFront: 0, rowLength: 0, rowWidthUsed: 0, wastedFloorArea: 0, columns: [pieces], totalUnits: 0, totalWeight: 0 });
+  } else {
+    // The row object survives the source removal (rows are never removed by it), so a same-row
+    // reorder clamps against the already-shortened row with no special-casing.
+    const toRow = toTrailer.rows[to.r];
+    const slot = Math.max(0, Math.min(to.slot, toRow.columns.length));
+    toRow.columns.splice(slot, 0, pieces);
+  }
+  recomputePlan(plan, state.options);
+  return { ...state, plan, holding, history: withHistory(state) };
+}
+
+/** Can `source`'s pieces stand as a new stack in this slot? Width (and depth, for a trailer column)
+ * from canDrop, plus a simulated move for depth on EVERY source kind — a held stack dropped into a
+ * shallow row can push a later row past the doors, which canDrop alone doesn't see (the lb-ui-03
+ * holding→trailer gap) — and the column-height limit for a stack built in holding. */
+export function evaluateSlotTarget(state: EditorState, source: PieceSource, to: DropTarget): TargetVerdict {
+  const trailer = state.plan.trailers[to.t];
+  const pieces = piecesFor(state, source);
+  if (!trailer || !pieces) return { level: "no", reason: "nothing to move", heightAfter: 0 };
+  const heightAfter = pieces.totalHeight;
+  const limit = effectiveHeightOf(state, trailer.dims);
+  if (heightAfter > limit + EPS) {
+    return { level: "no", reason: `would be ${fmtIn(heightAfter)} tall (limit ${fmtIn(limit)})`, heightAfter };
+  }
+
+  let reason: string;
+  if (to.r === NEW_ROW) {
+    if (pieces.colWidth > trailer.dims.width + EPS) {
+      return { level: "no", reason: `too wide · would be ${fmtInches(pieces.colWidth)}"`, heightAfter };
+    }
+    reason = `fits · new row ${fmtInches(pieces.colLength)}" deep`;
+  } else {
+    if (!trailer.rows[to.r]) return { level: "no", reason: "no such row", heightAfter };
+    // canDrop excludes a same-row column's own width by object identity, so a whole trailer column
+    // is passed as the original object.
+    const original = source.kind === "column" ? getColumn(state.plan, source.ref) : null;
+    const feedback = canDrop(state, original ?? pieces, { t: to.t, r: to.r }, source.kind === "column" ? source.ref : undefined);
+    if (!feedback.ok) return { level: "no", reason: feedback.reason, heightAfter };
+    reason = feedback.reason;
+  }
+
+  const simulated = moveToSlot(state, source, to);
+  if (simulated === state) return { level: "no", reason: "can't go there", heightAfter };
+  const sourceTrailer = source.kind === "column" || source.kind === "top" ? source.ref.t : to.t;
+  const overflow = findOverflowingRows(simulated).find((o) => o.trailerIndex === to.t || o.trailerIndex === sourceTrailer);
+  if (overflow) {
+    const total = (simulated.plan.trailers[overflow.trailerIndex]?.dims ?? state.dims).length + overflow.overflowBy;
+    return { level: "no", reason: `too deep · pushes trailer ${overflow.trailerIndex + 1} to ${fmtInches(total)}"`, heightAfter };
+  }
+  return { level: "ok", reason, heightAfter };
+}
+
+/** "column" = pullToHolding; "top" = split N pieces off the top into a new held stack. */
+export function takeToHolding(
+  state: EditorState,
+  source: { kind: "column"; ref: ColumnRef } | { kind: "top"; ref: ColumnRef; count: number }
+): EditorState {
+  if (source.kind === "column") return pullToHolding(state, source.ref);
+  const extracted = extractPieces(state, source);
+  if (!extracted) return state;
+  const { plan, holding, pieces } = extracted;
+  recomputePlan(plan, state.options);
+  return { ...state, plan, holding: [...holding, pieces], history: withHistory(state) };
+}
+
+function swappedPlan(state: EditorState, a: ColumnRef, b: ColumnRef): PackPlan | null {
+  if (sameRef(a, b) || !getColumn(state.plan, a) || !getColumn(state.plan, b)) return null;
+  const plan = clonePlan(state.plan);
+  const rowA = plan.trailers[a.t].rows[a.r];
+  const rowB = plan.trailers[b.t].rows[b.r];
+  const colA = rowA.columns[a.c];
+  rowA.columns[a.c] = rowB.columns[b.c];
+  rowB.columns[b.c] = colA;
+  recomputePlan(plan, state.options);
+  return plan;
+}
+
+/** Will swapping the stacks at `a` and `b` still fit both rows' width and both trailers' length? */
+export function evaluateSwapTarget(state: EditorState, a: ColumnRef, b: ColumnRef): TargetVerdict {
+  const heightAfter = getColumn(state.plan, a)?.totalHeight ?? 0;
+  if (sameRef(a, b)) return { level: "no", reason: "that's the same stack", heightAfter };
+  const plan = swappedPlan(state, a, b);
+  if (!plan) return { level: "no", reason: "no such stack", heightAfter };
+  for (const ref of [a, b]) {
+    const trailer = plan.trailers[ref.t];
+    const row = trailer.rows[ref.r];
+    if (row.rowWidthUsed > trailer.dims.width + EPS) {
+      return {
+        level: "no",
+        reason: `won't fit · row R${ref.r + 1} would be ${fmtInches(row.rowWidthUsed)}" wide (limit ${fmtInches(trailer.dims.width)}")`,
+        heightAfter,
+      };
+    }
+  }
+  const overflow = findOverflowingRows({ ...state, plan }).find((o) => o.trailerIndex === a.t || o.trailerIndex === b.t);
+  if (overflow) {
+    const total = plan.trailers[overflow.trailerIndex].dims.length + overflow.overflowBy;
+    return { level: "no", reason: `too deep · pushes trailer ${overflow.trailerIndex + 1} to ${fmtInches(total)}"`, heightAfter };
+  }
+  return { level: "ok", reason: "swap places", heightAfter };
+}
+
+/** Swaps two stacks' positions — only when evaluateSwapTarget says it fits; same state otherwise. */
+export function swapColumns(state: EditorState, a: ColumnRef, b: ColumnRef): EditorState {
+  if (evaluateSwapTarget(state, a, b).level !== "ok") return state;
+  const plan = swappedPlan(state, a, b);
+  if (!plan) return state;
+  return { ...state, plan, history: withHistory(state) };
+}
+
+/** The one "Add pieces" path: job or library pieces go to HOLDING first, then get placed with the
+ * same tap flow. Built in the SKU's flat orientation (skuOrientations[0], as buildColumn does) and
+ * split into full-height stacks so no held stack is taller than the trailer's clearance. Job SKUs
+ * draw down plan.balance; a library SKU is introduced and grows the cart by the shortfall — the same
+ * adjustBalance/cartAfterPlacement accounting addRow uses, so conservation holds exactly. One undo
+ * step reverts all of it (history is the TRUE pre-introduction state, as addRowFromLibrary). */
+export function addToHolding(state: EditorState, sku: PackSku, count: number): EditorState {
+  const n = Math.floor(count);
+  if (!sku || !(n > 0)) return state;
+  const introduced = introduceSku(state, sku);
+  const unit = skuOrientations(sku, state.options)[0]?.height ?? 0;
+  if (!(unit > 0)) return state;
+  const perStack = Math.max(1, Math.floor((effectiveHeightOf(state, state.dims) + EPS) / unit));
+  const source = state.originalSkuIds.has(sku.id) ? "this job" : "the parts library";
+  const added: PackColumn[] = [];
+  for (let left = n; left > 0; left -= perStack) {
+    const column = buildColumn(sku, Math.min(perStack, left), state.options);
+    column.rationale = `Added from ${source} — ${column.stackCount} × ${fmtInches(unit)}" = ${fmtInches(column.totalHeight)}"`;
+    refreshColumn(column, introduced, state.dims);
+    added.push(column);
+  }
+  const plan = clonePlan(state.plan);
+  plan.balance = adjustBalance(plan.balance, sku.id, -n);
+  const cart = cartAfterPlacement(introduced, sku.id, n);
+  return { ...introduced, plan, cart, holding: [...state.holding.map(cloneColumn), ...added], history: withHistory(state) };
 }

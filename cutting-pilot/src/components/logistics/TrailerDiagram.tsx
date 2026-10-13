@@ -60,6 +60,14 @@
 // (CustomizeEditor depends on them); selection and edit-mode tints are outlines/overlays so they
 // stay legible over any fill. Two additive optional props, `title` and `subtitle`, let the Results
 // card show "Trailer N · type · L″×W″×H″" plus a legacy-style subtitle without forking.
+//
+// lbr-07: drag-and-drop removed (Customize is tap-to-place now). The drag props, the keyboard
+// "Move here" overlay and the drop-feedback strip are gone; in their place, three optional props for
+// Customize's Step 2 — `columnVerdict` (green ring = ok, amber ring + "!" = warn, faded = no),
+// `slotVerdict`/`onChooseSlot` (a lane of dashed "+" new-stack slots under the rows, plus "+ new
+// row" at the doors end). In edit mode the diagram is laid out in px, scaled so the shallowest row
+// and the narrowest stack stay ≥ 44px (floor-grade targets); it scrolls inside its card as before.
+// Read-only rendering (Results) is unchanged.
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
@@ -71,9 +79,25 @@ interface SelectedColumn {
   columnIndex: number;
 }
 
-export interface RowDropFeedback {
-  ok: boolean;
+/** lbr-07: a Customize target's verdict (loadEditor's TargetVerdict, minus heightAfter). */
+export interface TapVerdict {
+  level: "ok" | "warn" | "no";
   reason: string;
+}
+
+/** Ring/fade for a stack that is (or isn't) a valid target. */
+function verdictStyle(v: TapVerdict | null): CSSProperties {
+  if (!v) return {};
+  if (v.level === "ok") return { boxShadow: "inset 0 0 0 4px var(--success-bg)" };
+  if (v.level === "warn") return { boxShadow: "inset 0 0 0 4px var(--warn-text)" };
+  return { opacity: 0.3 };
+}
+
+function verdictSuffix(v: TapVerdict | null): string {
+  if (!v) return "";
+  if (v.level === "ok") return ` Can go here — ${v.reason}.`;
+  if (v.level === "warn") return ` Can go here, with a warning — ${v.reason}.`;
+  return ` Can't go here — ${v.reason}.`;
 }
 
 interface TrailerDiagramProps {
@@ -82,26 +106,17 @@ interface TrailerDiagramProps {
   trailerIndex: number;
   selectedColumn: SelectedColumn | null;
   onSelectColumn: (rowIndex: number, columnIndex: number) => void;
-  // --- lb-ui-02 additions, all optional ---
-  /** Enables drag sources, drop targets, and the keyboard target-picker. */
+  // --- lb-ui-02 / lbr-07 editing additions, all optional ---
+  /** Customize mode: px layout with ≥ 44px targets, verdict rings, the "+" slot lane. */
   editable?: boolean;
-  /** The column currently being dragged, if it lives on this trailer — rendered as a dashed
-   * placeholder in its original position rather than removed, so the drop target it came from
-   * doesn't vanish mid-drag. */
-  draggingFrom?: SelectedColumn | null;
-  onColumnDragStart?: (rowIndex: number, columnIndex: number) => void;
-  onColumnDragEnd?: () => void;
-  /** Fires while something is dragged over a row, so the parent can compute live canDrop() feedback. */
-  onRowDragOver?: (rowIndex: number) => void;
-  onRowDrop?: (rowIndex: number) => void;
-  /** Parent-computed hover feedback for the row currently being dragged over. */
-  rowDropFeedback?: (rowIndex: number) => RowDropFeedback | null;
-  /** Persistent (not drag-dependent) tint for a row a blocking guard has implicated. */
+  /** Persistent tint for a row a blocking guard has implicated. */
   rowGuardTint?: (rowIndex: number) => boolean;
-  /** True while a column is selected and "Move" has been invoked — every row grows a
-   * keyboard-focusable "Move here" target. */
-  targetPickerActive?: boolean;
-  onChooseTargetRow?: (rowIndex: number) => void;
+  /** lbr-07: this stack's verdict as a Step 2 target (null = not a target / nothing armed). */
+  columnVerdict?: (rowIndex: number, columnIndex: number) => TapVerdict | null;
+  /** lbr-07: a "+" new-stack slot at the end of a row, or "new" = a new row at the doors end.
+   * null = no slot drawn there. */
+  slotVerdict?: (rowIndex: number | "new") => TapVerdict | null;
+  onChooseSlot?: (rowIndex: number | "new") => void;
   /** lb-ui-03: rendered in the header row, right of the usedLength stat. */
   headerAction?: ReactNode;
   /** lb-ui-12: set by the caller (who knows the plan's primary trailer type — this component only
@@ -156,6 +171,10 @@ const MIN_DEPTH_FRACTION_FOR_LABEL = 0.1;
 // The diagram never squeezes below this; narrower screens scroll it inside its card.
 const DIAGRAM_MIN_WIDTH_PX = 720;
 const TOP_BAND_MIN_PX = 24;
+// lbr-07 (edit mode): every stack and row is at least this big, so each tap target is ≥ 44px.
+const EDIT_MIN_TARGET_PX = 48;
+const EDIT_EMPTY_ROW_PX = 56;
+const EDIT_NEW_ROW_MIN_PX = 96;
 
 export default function TrailerDiagram({
   trailer,
@@ -164,15 +183,10 @@ export default function TrailerDiagram({
   selectedColumn,
   onSelectColumn,
   editable = false,
-  draggingFrom = null,
-  onColumnDragStart,
-  onColumnDragEnd,
-  onRowDragOver,
-  onRowDrop,
-  rowDropFeedback,
   rowGuardTint,
-  targetPickerActive = false,
-  onChooseTargetRow,
+  columnVerdict,
+  slotVerdict,
+  onChooseSlot,
   headerAction,
   typeBadge,
   title,
@@ -180,6 +194,27 @@ export default function TrailerDiagram({
 }: TrailerDiagramProps) {
   const keyThicknesses = thicknessesOn(trailer);
   const displayOrder = displayRowIndices(trailer.rows.length);
+
+  // lbr-07: edit-mode px layout. Inches -> px, scaled so the shallowest stack (along the length) and
+  // the narrowest stack (across the width) are each ≥ EDIT_MIN_TARGET_PX; empty placeholder rows get
+  // a fixed width so their "+" slot still exists.
+  const allColumns = trailer.rows.flatMap((r) => r.columns);
+  const minColLength = Math.min(...allColumns.map((c) => c.colLength), dims.length);
+  const minColWidth = Math.min(...allColumns.map((c) => c.colWidth), dims.width);
+  const pxPerInch = editable && dims.length > 0 ? Math.max(DIAGRAM_MIN_WIDTH_PX / dims.length, EDIT_MIN_TARGET_PX / Math.max(1, minColLength)) : 0;
+  const bandHeightPx = editable && dims.width > 0 ? Math.max(DIAGRAM_HEIGHT_PX, Math.ceil((EDIT_MIN_TARGET_PX * dims.width) / Math.max(1, minColWidth))) : DIAGRAM_HEIGHT_PX;
+  const rowPx = (rowIndex: number) => {
+    const len = trailer.rows[rowIndex].rowLength;
+    return len > 0 ? Math.round(len * pxPerInch) : EDIT_EMPTY_ROW_PX;
+  };
+  const freeLength = Math.max(0, dims.length - trailer.usedLength);
+  const newRowVerdict = editable ? slotVerdict?.("new") ?? null : null;
+  const freePx = editable ? Math.max(freeLength * pxPerInch, newRowVerdict ? EDIT_NEW_ROW_MIN_PX : 0) : 0;
+  const editWidthPx = editable ? displayOrder.reduce((s, r) => s + rowPx(r), 0) + freePx : 0;
+  const rowWidthStyle = (rowIndex: number): CSSProperties =>
+    editable ? { width: rowPx(rowIndex) } : { width: `${dims.length > 0 ? (trailer.rows[rowIndex].rowLength / dims.length) * 100 : 0}%` };
+  const anySlot = editable && !!slotVerdict && (newRowVerdict !== null || displayOrder.some((r) => slotVerdict(r) !== null));
+
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
       <div className="flex items-baseline justify-between gap-3 mb-3">
@@ -204,7 +239,7 @@ export default function TrailerDiagram({
       {subtitle !== undefined && subtitle !== null && <div className="-mt-2 mb-3 text-xs font-mono tabular-nums text-muted">{subtitle}</div>}
 
       <div className="overflow-x-auto">
-      <div style={{ minWidth: DIAGRAM_MIN_WIDTH_PX }}>
+      <div style={editable ? { width: Math.max(editWidthPx, DIAGRAM_MIN_WIDTH_PX) } : { minWidth: DIAGRAM_MIN_WIDTH_PX }}>
       <div className="flex items-center justify-between text-[11px] font-semibold tracking-wide text-text-hint mb-1">
         <span>FRONT · NOSE</span>
         <span>REAR · DOORS</span>
@@ -212,25 +247,19 @@ export default function TrailerDiagram({
 
       {/* Row labels, legacy print style: R1 at the doors (array index 0) up to Rn at the nose. */}
       <div className="flex w-full mb-0.5" aria-hidden="true">
-        {displayOrder.map((rowIndex) => {
-          const row = trailer.rows[rowIndex];
-          const rowWidthPct = dims.length > 0 ? (row.rowLength / dims.length) * 100 : 0;
-          return (
-            <div key={rowIndex} className="shrink-0 text-center text-[11px] font-mono tabular-nums text-muted" style={{ width: `${rowWidthPct}%` }}>
-              R{rowIndex + 1}
-            </div>
-          );
-        })}
+        {displayOrder.map((rowIndex) => (
+          <div key={rowIndex} className="shrink-0 text-center text-[11px] font-mono tabular-nums text-muted" style={rowWidthStyle(rowIndex)}>
+            R{rowIndex + 1}
+          </div>
+        ))}
       </div>
 
       <div
         className="flex w-full rounded-md overflow-hidden border border-[var(--line)]"
-        style={{ height: DIAGRAM_HEIGHT_PX }}
+        style={{ height: bandHeightPx }}
       >
         {displayOrder.map((rowIndex, displayPos) => {
           const row = trailer.rows[rowIndex];
-          const rowWidthPct = dims.length > 0 ? (row.rowLength / dims.length) * 100 : 0;
-          const feedback = editable ? rowDropFeedback?.(rowIndex) ?? null : null;
           const guarded = editable ? rowGuardTint?.(rowIndex) ?? false : false;
           const isLastDisplayed = displayPos === displayOrder.length - 1;
           return (
@@ -238,28 +267,12 @@ export default function TrailerDiagram({
               key={rowIndex}
               className={`relative shrink-0 border-[var(--line)] ${isLastDisplayed ? "" : "border-r"}`}
               style={{
-                width: `${rowWidthPct}%`,
+                ...rowWidthStyle(rowIndex),
                 // Striped "unused floor" backdrop — shows through wherever a column doesn't cover
                 // its lane (shallow depth) or the row's total column width falls short of dims.width.
                 backgroundImage:
                   "repeating-linear-gradient(135deg, var(--ghost-bg), var(--ghost-bg) 6px, var(--surface-2) 6px, var(--surface-2) 12px)",
               }}
-              onDragOver={
-                editable
-                  ? (e) => {
-                      e.preventDefault();
-                      onRowDragOver?.(rowIndex);
-                    }
-                  : undefined
-              }
-              onDrop={
-                editable
-                  ? (e) => {
-                      e.preventDefault();
-                      onRowDrop?.(rowIndex);
-                    }
-                  : undefined
-              }
             >
               {guarded && (
                 <div
@@ -271,44 +284,18 @@ export default function TrailerDiagram({
                   aria-hidden="true"
                 />
               )}
-              {feedback && (
-                <div
-                  className="absolute inset-x-0 top-0 z-20 px-1.5 py-1 text-[10px] font-mono tabular-nums leading-tight pointer-events-none"
-                  style={{
-                    background: feedback.ok ? "var(--success-bg)" : "var(--danger-bg)",
-                    // on-color-ok: same ternary sets the solid matching --success-bg / --danger-bg above
-                    color: feedback.ok ? "var(--success-text)" : "var(--danger-text)",
-                  }}
-                >
-                  {feedback.reason}
-                </div>
-              )}
-              {targetPickerActive && (
-                <button
-                  type="button"
-                  onClick={() => onChooseTargetRow?.(rowIndex)}
-                  className="absolute inset-0 z-20 flex items-center justify-center text-[11px] font-semibold cursor-pointer border-2 border-dashed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-                  style={{
-                    background: "color-mix(in srgb, var(--brand) 10%, transparent)",
-                    borderColor: "var(--brand)",
-                    color: "var(--brand)",
-                  }}
-                >
-                  Move here (row {rowIndex + 1})
-                </button>
-              )}
               {row.columns.map((column, columnIndex) => {
                 const heightPct = dims.width > 0 ? (column.colWidth / dims.width) * 100 : 0;
                 const topPct = dims.width > 0 ? (column.posY / dims.width) * 100 : 0;
                 const widthPct = row.rowLength > 0 ? (column.colLength / row.rowLength) * 100 : 100;
                 const isSelected = selectedColumn?.rowIndex === rowIndex && selectedColumn?.columnIndex === columnIndex;
-                const isDragging = draggingFrom?.rowIndex === rowIndex && draggingFrom?.columnIndex === columnIndex;
+                const verdict = editable ? columnVerdict?.(rowIndex, columnIndex) ?? null : null;
                 const showLabel = column.colWidth / dims.width >= MIN_WIDTH_FRACTION_FOR_LABEL && column.colLength / row.rowLength >= MIN_DEPTH_FRACTION_FOR_LABEL;
                 const baseLayer = column.layers[0];
                 const topLayer = column.layers.length > 1 ? column.layers[column.layers.length - 1] : null;
                 const baseColor = baseLayer ? thicknessColor(baseLayer.unitHeight) : null;
                 const topColor = topLayer ? thicknessColor(topLayer.unitHeight) : null;
-                const columnHeightPx = (heightPct / 100) * DIAGRAM_HEIGHT_PX;
+                const columnHeightPx = (heightPct / 100) * bandHeightPx;
                 const topFrac = topLayer && column.totalHeight > 0 ? (topLayer.unitHeight * topLayer.count) / column.totalHeight : 0;
                 const topBandPx = topLayer ? Math.min(columnHeightPx * 0.6, Math.max(TOP_BAND_MIN_PX, columnHeightPx * topFrac)) : 0;
                 const tag = topLayer ? "TOP-OFF" : column.stackKind === "partial" ? "LEFTOVER" : null;
@@ -317,20 +304,15 @@ export default function TrailerDiagram({
                   <button
                     key={columnIndex}
                     type="button"
-                    draggable={editable}
-                    onDragStart={editable ? () => onColumnDragStart?.(rowIndex, columnIndex) : undefined}
-                    onDragEnd={editable ? () => onColumnDragEnd?.() : undefined}
                     onClick={() => onSelectColumn(rowIndex, columnIndex)}
                     aria-pressed={isSelected}
-                    aria-label={`${stackAccessibleName(column)} Trailer ${trailerIndex + 1}, row R${rowIndex + 1}, position ${columnIndex + 1}.`}
-                    title={column.rationale}
+                    aria-label={`${stackAccessibleName(column)} Trailer ${trailerIndex + 1}, row R${rowIndex + 1}, position ${columnIndex + 1}.${verdictSuffix(verdict)}`}
+                    title={verdict ? verdict.reason : column.rationale}
                     className={[
-                      "absolute left-0 flex flex-col overflow-hidden text-left box-border",
-                      editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+                      "absolute left-0 flex flex-col overflow-hidden text-left box-border cursor-pointer",
                       "border border-[var(--line)] transition-[filter] hover:brightness-95",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:z-10",
                       isSelected ? "ring-2 ring-[var(--brand)] z-10" : "",
-                      isDragging ? "opacity-40 border-dashed" : "",
                     ].join(" ")}
                     style={{
                       top: `${topPct}%`,
@@ -338,11 +320,22 @@ export default function TrailerDiagram({
                       width: `${widthPct}%`,
                       background: baseColor?.bg,
                       color: baseColor?.fg,
+                      ...verdictStyle(verdict),
                       // Selection: a 3px outline in the text token, inset so it stays visible over
-                      // any fill, plus the brand ring above.
+                      // any fill, plus the brand ring above — and, in Customize (lbr-07), a yellow ring.
                       ...(isSelected ? { outline: "3px solid var(--text)", outlineOffset: -3 } : {}),
+                      ...(isSelected && editable ? { boxShadow: "inset 0 0 0 7px var(--warn-border)" } : {}),
                     }}
                   >
+                    {verdict?.level === "warn" && (
+                      <span
+                        className="absolute top-1 right-1 z-10 w-5 h-5 rounded-full flex items-center justify-center text-[12px] font-bold border"
+                        style={{ background: "var(--warn-bg)", color: "var(--warn-text)", borderColor: "var(--warn-text)" }}
+                        aria-hidden="true"
+                      >
+                        !
+                      </span>
+                    )}
                     {topLayer && topColor && (
                       <span
                         className="relative w-full shrink-0 flex items-center justify-center"
@@ -376,7 +369,32 @@ export default function TrailerDiagram({
             </div>
           );
         })}
+        {editable && freePx > 0 && <div className="shrink-0" style={{ width: freePx }} aria-hidden="true" />}
       </div>
+
+      {/* lbr-07: "+" new-stack slots, one under each row that has width left, and "+ new row" under
+          the free floor at the doors end. Only drawn while a placement action is armed. */}
+      {anySlot && (
+        <div className="flex mt-1.5" style={{ width: editWidthPx }}>
+          {displayOrder.map((rowIndex) => {
+            const v = slotVerdict?.(rowIndex) ?? null;
+            return (
+              <div key={rowIndex} className="shrink-0 px-0.5" style={rowWidthStyle(rowIndex)}>
+                {v && (
+                  <SlotButton verdict={v} label="+" ariaLabel={`New stack at the end of row R${rowIndex + 1}.${verdictSuffix(v)}`} onClick={() => onChooseSlot?.(rowIndex)} />
+                )}
+              </div>
+            );
+          })}
+          {freePx > 0 && (
+            <div className="shrink-0 px-0.5" style={{ width: freePx }}>
+              {newRowVerdict && (
+                <SlotButton verdict={newRowVerdict} label="+ new row" ariaLabel={`New row at the doors end of trailer ${trailerIndex + 1}.${verdictSuffix(newRowVerdict)}`} onClick={() => onChooseSlot?.("new")} />
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       </div>
       </div>
@@ -415,5 +433,22 @@ export default function TrailerDiagram({
         <div>Each box = one stack · “11″×9” = nine 11-inch pieces</div>
       </div>
     </div>
+  );
+}
+
+/** lbr-07: a dashed "+" target in the slot lane — ≥ 44px, colored by its verdict. */
+function SlotButton({ verdict, label, ariaLabel, onClick }: { verdict: TapVerdict; label: string; ariaLabel: string; onClick: () => void }) {
+  const color = verdict.level === "ok" ? "var(--success-bg)" : verdict.level === "warn" ? "var(--warn-text)" : "var(--border)";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      title={verdict.reason}
+      className="w-full min-h-[44px] rounded-md border-2 border-dashed text-[13px] font-semibold cursor-pointer bg-surface text-text whitespace-nowrap overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+      style={{ borderColor: color, opacity: verdict.level === "no" ? 0.45 : 1 }}
+    >
+      {label}
+    </button>
   );
 }
