@@ -414,7 +414,10 @@
 
 ## Logistics (v2)
 
-- [ ] **dlv-02 — schedule sheet → per-load delivery-time sync** (match at job creation, stale-BOL update, change alerts). Depends on dlv-01's `job_load_times`.
+- [ ] **dlv-02 follow-up — Carrier View and the late-pickup check should read per-load appointments from `job_load_times`** instead of parsing `jobs.delivery_time` (today they see only the summary's first weekday + time).
+- [ ] **dlv-02 follow-up — multi-day orders still group under the job's single `ship_date` on dashboards**, even when `job_load_times` puts loads on different days.
+- [ ] **dlv-02 follow-up — sheet rows whose suffix skips loads mis-number them.** Sequential numbering by `load_count` is the rule (suffixes are inconsistent in live data), but INV 4440 (`001-005` Mon ×5 + `009` Tue ×1, job has 9 loads) gives Tue 11:00AM to load 6. A mismatch only logs `Sheet describes N loads; job has M`. Decide whether a mismatch should skip the job or surface on the dashboard.
+- [ ] **dlv-02 follow-up — subscribe roles to "Delivery time changed"** in `/v2/admin` → Roles (ships with no subscribers).
 - [ ] **dlv-03 — per-load delivery-time input UI** (order entry, v2 Job Board edit modal, logistics shipment edit modal).
 - [ ] **dlv-04 — per-load times downstream** (BOL prefill, loading sheet time + `INV-01` suffix, dashboard "time changed" badge).
 - [ ] **split-days-01 follow-up — per-load ship days don't move when the order's ship date changes.** Moving an order's date leaves any `loading_assignments.ship_date` overrides behind. Today this is harmless for unsplit orders (ignored), but a split order would keep its old days. Decide: clear overrides on order-date change, or shift them by the same delta.

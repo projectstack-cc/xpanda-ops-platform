@@ -5,8 +5,12 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import * as XLSX from "xlsx";
 import { getAccessToken, type GoogleAuthEnv } from "./google-auth";
+import type { PushEnv } from "./push";
+import { syncLoadTimesForJobs } from "./loadTimesSync";
 
-export interface ScheduleEnv extends GoogleAuthEnv {
+// dlv-02: PushEnv's optional VAPID keys ride along so the per-load delivery-time sync can push its
+// change alerts (custom-worker.ts passes the full Worker env).
+export interface ScheduleEnv extends GoogleAuthEnv, PushEnv {
   DB: D1Database;
   SCHEDULE_SHEET_ID: string;
 }
@@ -435,4 +439,5 @@ export async function runSchedulePoll(env: ScheduleEnv): Promise<void> {
   }
 
   await matchAndUpsert(env.DB, parsedRows, Array.from(sheetData.keys()));
+  await syncLoadTimesForJobs(env).catch((err) => console.error("load-times: sync failed", err));
 }

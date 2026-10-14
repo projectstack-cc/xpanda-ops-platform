@@ -10,6 +10,7 @@
 import type { D1Database, D1PreparedStatement, R2Bucket } from "@cloudflare/workers-types";
 import { computeAndPersistHoleyChunks } from "@/lib/holeyChunks";
 import { logActivity } from "@/lib/activityLog";
+import { syncLoadTimesForInvoice } from "@/lib/loadTimesSync";
 
 export interface JobCreateLineItem {
   part_id: string | null;
@@ -205,6 +206,18 @@ export async function createJob(
         `).bind(crypto.randomUUID(), id, n, n2, n2).run();
       }
     } catch (e: any) { console.error("Auto loading assignment failed:", String(e?.message || e)); }
+  }
+
+  // dlv-02: match at job creation — pull this invoice's per-load delivery times from schedule_rows
+  // now instead of waiting for the next 10-min poll (the sheet wins over the typed field). Runs
+  // after the shipment insert so the summary mirrors onto it. `{ DB }` only: a brand-new job can
+  // only first-fill (never a change), so no push alert can fire here. Non-fatal by contract.
+  if (invoiceTrim) {
+    try {
+      await syncLoadTimesForInvoice({ DB }, invoiceTrim);
+    } catch (e: any) {
+      console.error("load-times: match at create failed:", String(e?.message || e));
+    }
   }
 
   // NOTE: legacy reconcileCuttingSteps() is intentionally NOT called. v2 cutting_lines

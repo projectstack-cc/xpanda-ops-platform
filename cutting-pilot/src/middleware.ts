@@ -99,7 +99,18 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
 // admin testing as e.g. Loading Team could not reach /v2/admin to stop testing.
 const ADMIN_ESCAPE_PREFIXES = ["/v2/admin", "/v2/api/admin"];
 
+// dlv-02: per-load delivery times live under /v2/api/orders/:id/ but are acted on from the v2
+// logistics dashboard too. PERMISSION_MAP is prefix-only, and its /v2/api/orders row would 403 a
+// logistics-only role (Staff holds logistics.dashboard edit without `orders`), so these exact path
+// shapes are checked first. Same any-key-grants semantics as PERMISSION_MAP.
+const PATTERN_PERMISSION_MAP: Array<{ pattern: RegExp; keys: string[] }> = [
+  // Ack = the shipment-edit gate on the logistics dashboard.
+  { pattern: /^\/v2\/api\/orders\/[^/]+\/load-times\/ack\/?$/, keys: ["logistics.dashboard"] },
+];
+
 function permissionKeysFor(pathname: string): string[] | null {
+  const pattern = PATTERN_PERMISSION_MAP.find((m) => m.pattern.test(pathname));
+  if (pattern) return pattern.keys;
   return PERMISSION_MAP.find((m) => pathname.startsWith(m.prefix))?.keys ?? null;
 }
 

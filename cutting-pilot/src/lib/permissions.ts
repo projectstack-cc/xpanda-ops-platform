@@ -53,4 +53,5 @@ export const NOTIFICATION_TYPES: readonly { key: string; label: string }[] = [
   { key: "qb.error",            label: "QuickBooks sync error" },
   { key: "loading.late_pickup", label: "Late pickup" },
   { key: "cutting.shift_risk",  label: "Cutting at risk (shift end)" },
+  { key: "logistics.delivery_time_changed", label: "Delivery time changed" },
 ];
