@@ -43,6 +43,7 @@ import { buildPiecesTable, buildLoadingDiagramPdf } from "@/lib/loadingDiagramPd
 import type { PackPlan, Dimensions, PackSku } from "@/lib/packEngine";
 import type { JobForBol, LoadingAssignmentForJob } from "./types";
 import type { LoadManifestItem } from "@/lib/logistics/loadManifest";
+import { fillBolNumbers } from "@/lib/bolNumberFill";
 
 /** lb-ui-09: a Load Builder plan as an alternate BOL-generation source. `jobId` here is optional
  * (set only when the plan came from lb-ui-05's job pull) -- unlike the top-level `jobId` prop below,
@@ -53,6 +54,8 @@ export interface PackPlanSource {
   skus: PackSku[];
   jobId: string | null;
   runnerHeight?: number;
+  /** lb-ui-13: the Load Builder's per-trailer BOL #s (trailer i → index i); seeds each trailer's INV / BOL #. */
+  bolNumbers?: string[];
 }
 
 /** dlv-04: load_number → that load's per-load delivery display (job_load_times via GET
@@ -235,7 +238,7 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
             const commodityDescriptionFull = buildPlanCommodityDescription(pieces, skuById, true);
             const commodityDescriptionNoDims = buildPlanCommodityDescription(pieces, skuById, false);
             return {
-              invNumber: i === 0 ? j?.invoice_number || "" : "",
+              invNumber: packPlanSource.bolNumbers?.[i] || (i === 0 ? j?.invoice_number || "" : ""),
               invAutoFilled: false,
               date: j?.ship_date || today(),
               shipToCompany: j?.ship_to_company || j?.customer || "",
@@ -382,24 +385,15 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
   // auto-filled trailers. A manual edit to ANY trailer clears THAT trailer's own auto-fill flag
   // — unlike legacy, which never cleared a later trailer's flag on direct edit, so a second edit
   // to trailer 0 could silently clobber a hand-typed value on trailer 2+.
+  // lb-ui-13: the rule itself lives in lib/bolNumberFill.ts (shared with the Load Builder cards).
   function handleInvNumberChange(index: number, value: string) {
     setTrailers((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], invNumber: value, invAutoFilled: false };
-      if (index === 0) {
-        const match = value.trim().match(/^(.+-)(\d+)$/);
-        if (match) {
-          const prefix = match[1];
-          const startNum = parseInt(match[2], 10);
-          for (let j = 1; j < next.length; j++) {
-            if (!next[j].invNumber || next[j].invAutoFilled) {
-              const suffix = String(startNum + j).padStart(match[2].length, "0");
-              next[j] = { ...next[j], invNumber: prefix + suffix, invAutoFilled: true };
-            }
-          }
-        }
-      }
-      return next;
+      const filled = fillBolNumbers(prev.map((t) => t.invNumber), prev.map((t) => t.invAutoFilled), index, value);
+      return prev.map((t, i) =>
+        filled.numbers[i] === t.invNumber && filled.autoFilled[i] === t.invAutoFilled
+          ? t
+          : { ...t, invNumber: filled.numbers[i], invAutoFilled: filled.autoFilled[i] }
+      );
     });
   }
 

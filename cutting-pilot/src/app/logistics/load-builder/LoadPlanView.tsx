@@ -94,6 +94,7 @@ import LoadPickerModal from "@/components/logistics/LoadPickerModal";
 import { packForced, type ForcedTrailer } from "@/lib/forcedPack";
 import { buildSnapshot, defaultSaveName, deserializeSnapshot, type ManualLoadSource, type OrderLoadSource, type SavedLoadRecord, type SavedLoadSnapshot } from "@/lib/savedLoad";
 import { fetchLibrarySkus, LibraryFetchError } from "@/lib/jobPull";
+import { fillBolNumbers, reconcileBolNumbers, type BolNumberState } from "@/lib/bolNumberFill";
 import type { LibraryState } from "./LoadPicker";
 import { addLine, clear as clearList, diffFromOrder, setQty as setLineQty, step as stepLine, withSku } from "@/lib/loadList";
 import { useOrderLoadPersistence, findSavedForJob } from "@/components/logistics/useOrderLoadPersistence";
@@ -174,6 +175,9 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   // exactly as they were — so a stale library addition from a PREVIOUS load never leaks into a new
   // one, while a discarded in-progress edit doesn't lose the load's actual prior state.
   const [editedCart, setEditedCart] = useState<CartLine[] | null>(null);
+  // lb-ui-13: per-trailer BOL #s on the trailer cards (numbers + bolAutoFilled), keyed to the load
+  // source so a different order/fixture re-seeds. Persisted in the snapshot.
+  const [bolState, setBolState] = useState<(BolNumberState & { key: string }) | null>(null);
   const [editedSkus, setEditedSkus] = useState<PackSku[] | null>(null);
 
   // lb-ui-06: trailer type / runner height — engine options that existed before this prompt but had
@@ -268,6 +272,37 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
     [scaledCart, fixture, dims, packOptions, forceSizes, forcedQueue, trailerTypeKey]
   );
   const plan = editedPlan ?? packedPlan;
+
+  // lb-ui-13: BOL #s follow the plan — kept by index on a re-pack, extra trailers dropped, new ones
+  // seeded `${invoice}-0N` (bare invoice for one trailer; blank for a manual load). Reconciled only
+  // when the source, trailer count or invoice changes, never on a keystroke.
+  const bolSourceKey = pulledSource ? pulledSource.id : manualSource ? MANUAL_ID : (fixtureId ?? EMPTY_FIXTURE.id);
+  const trailerCount = plan.trailers.length;
+  const bolInvoice = fixture.invoiceNumber || "";
+  useEffect(() => {
+    setBolState((prev) => {
+      const base = prev && prev.key === bolSourceKey ? prev : null;
+      const next = reconcileBolNumbers(base, trailerCount, bolInvoice);
+      if (base && JSON.stringify(next.numbers) === JSON.stringify(base.numbers) && JSON.stringify(next.autoFilled) === JSON.stringify(base.autoFilled)) return prev;
+      return { key: bolSourceKey, ...next };
+    });
+  }, [bolSourceKey, trailerCount, bolInvoice]);
+  const bolNumbers = useMemo(
+    () => (bolState && bolState.key === bolSourceKey ? bolState.numbers : reconcileBolNumbers(null, trailerCount, bolInvoice).numbers),
+    [bolState, bolSourceKey, trailerCount, bolInvoice]
+  );
+  // Persisted only once someone has typed one: untouched seeds re-seed identically on load, so an
+  // old saved load (no bolNumbers) doesn't read as unsaved the moment it opens.
+  const savedBolNumbers = useMemo(
+    () => (bolState && bolState.key === bolSourceKey && bolState.autoFilled.some((a, i) => !a && bolState.numbers[i] !== "") ? bolState.numbers : null),
+    [bolState, bolSourceKey]
+  );
+  function handleBolNumberChange(index: number, value: string) {
+    setBolState((prev) => {
+      const base = prev && prev.key === bolSourceKey ? prev : reconcileBolNumbers(null, trailerCount, bolInvoice);
+      return { key: bolSourceKey, ...fillBolNumbers(base.numbers, base.autoFilled, index, value) };
+    });
+  }
   const tab: LoadBuilderTab = tabChoice ?? (hasSource ? "results" : "load");
 
   // lbr-04: the load as it would be saved right now (null when there's nothing to save) — the
@@ -275,9 +310,9 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   const currentSnapshot: SavedLoadSnapshot | null = useMemo(
     () =>
       access.canSave && hasSource && plan.trailers.length > 0
-        ? buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, manualSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate, forcedTrailers: forceSizes ? forcedQueue : null })
+        ? buildSnapshot({ fixtureId: fixtureId ?? EMPTY_FIXTURE.id, pulledSource, manualSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate, forcedTrailers: forceSizes ? forcedQueue : null, bolNumbers: savedBolNumbers })
         : null,
-    [access.canSave, hasSource, plan.trailers.length, fixtureId, pulledSource, manualSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate, forceSizes, forcedQueue]
+    [access.canSave, hasSource, plan.trailers.length, fixtureId, pulledSource, manualSource, trailerTypeKey, runnerHeight, editedPlan, editedCart, editedSkus, autoDownsize, consolidate, forceSizes, forcedQueue, savedBolNumbers]
   );
   const persistence = useOrderLoadPersistence({
     jobId: pulledSource?.jobId ?? null,
@@ -359,8 +394,8 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   // effectiveSkus are already stable refs from the memos/state above, so this doesn't recreate on
   // every LoadPlanView render, which would otherwise re-trigger BolGenerateModal's data-load effect.
   const bolPackPlanSource: PackPlanSource | null = useMemo(
-    () => (genBolOpen ? { plan, dims, skus: effectiveSkus, jobId: pulledSource?.jobId ?? null, runnerHeight } : null),
-    [genBolOpen, plan, dims, effectiveSkus, pulledSource, runnerHeight]
+    () => (genBolOpen ? { plan, dims, skus: effectiveSkus, jobId: pulledSource?.jobId ?? null, runnerHeight, bolNumbers } : null),
+    [genBolOpen, plan, dims, effectiveSkus, pulledSource, runnerHeight, bolNumbers]
   );
 
   // Describe the load list (lbr-08: the source's live cart), deliberately not effectiveCart/
@@ -464,6 +499,14 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
     // nothing enforces it against a hand-edited or future-format row, so guard here too.
     setEditedCart(snapshot.editedPlan ? snapshot.editedCart ?? null : null);
     setEditedSkus(snapshot.editedPlan ? snapshot.editedSkus ?? null : null);
+    // lb-ui-13: saved BOL #s come back as hand-typed (kept as-is); none saved → re-seeded by the effect.
+    const restoredKey =
+      snapshot.source.kind === "pulled" ? snapshot.source.pulledSource.id : snapshot.source.kind === "manual" ? MANUAL_ID : snapshot.source.fixtureId;
+    setBolState(
+      snapshot.bolNumbers
+        ? { key: restoredKey, numbers: snapshot.bolNumbers, autoFilled: snapshot.bolNumbers.map((b) => b === "") }
+        : null
+    );
     setSelected(null);
     setMode("view");
     setBannerDismissed(false);
@@ -783,6 +826,8 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
           effectiveCart={effectiveCart}
           effectiveSkus={effectiveSkus}
           invoiceNumber={fixture.invoiceNumber}
+          bolNumbers={bolNumbers}
+          onBolNumberChange={handleBolNumberChange}
           selected={selected}
           selectedDetail={selectedDetail}
           onSelect={setSelected}

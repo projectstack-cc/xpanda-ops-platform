@@ -10,6 +10,9 @@
 // lbr-09: at xl the trailer cards sit in TrailerScrollBox (about two trailers tall) and the side
 // column is sticky, so the tools stay in view while scrolling through trucks.
 // Edit mode swaps 4+5 for the existing drag CustomizeEditor, unchanged (lbr-07 replaces it).
+// lb-ui-13: each card header carries a BOL # input (legacy `data-trailer-inv` parity). Values + the
+// auto-fill rule live in LoadPlanView / lib/bolNumberFill.ts; the trailer's own number goes to its
+// loading-diagram print (legacy printed the per-trailer number) and seeds the BOL modal.
 // Presentational: everything here is derived from props; nothing is fetched.
 import { useMemo, type ReactNode } from "react";
 import { FileText, FolderOpen, Pencil, RotateCcw, Save } from "lucide-react";
@@ -41,6 +44,9 @@ interface ResultsTabProps {
   effectiveCart: CartLine[];
   effectiveSkus: PackSku[];
   invoiceNumber: string;
+  /** lb-ui-13: per-trailer BOL #s (index = trailer) and the edit handler (auto-fill applied upstream). */
+  bolNumbers: string[];
+  onBolNumberChange: (trailerIndex: number, value: string) => void;
 
   selected: ResultsSelection | null;
   selectedDetail: SelectedColumnDetail | null;
@@ -284,7 +290,16 @@ export default function ResultsTab(p: ResultsTabProps) {
                   headerAction={
                     // Floor-grade 44px target for the shared print button (its own 28px sizing is kept
                     // for the drag editor, which lbr-07 replaces) — sized from here, not by editing it.
-                    <div className="[&_button]:min-h-[44px] [&_button]:px-3.5 [&_button]:text-sm">
+                    <div className="flex flex-wrap items-center gap-2 [&_button]:min-h-[44px] [&_button]:px-3.5 [&_button]:text-sm">
+                      <input
+                        type="text"
+                        inputMode="text"
+                        aria-label={`Trailer ${trailerIndex + 1} BOL #`}
+                        placeholder="BOL #"
+                        value={p.bolNumbers[trailerIndex] ?? ""}
+                        onChange={(e) => p.onBolNumberChange(trailerIndex, e.target.value)}
+                        className="w-32 min-h-[44px] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm font-mono tabular-nums px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                      />
                       <LoadingDiagramPrintButton
                         trailer={trailer}
                         trailerIndex={trailerIndex}
@@ -292,7 +307,7 @@ export default function ResultsTab(p: ResultsTabProps) {
                         skus={p.effectiveSkus}
                         runnerHeight={p.runnerHeight}
                         warnings={plan.warnings}
-                        invoiceNumber={p.invoiceNumber}
+                        invoiceNumber={p.bolNumbers[trailerIndex] || p.invoiceNumber}
                       />
                     </div>
                   }

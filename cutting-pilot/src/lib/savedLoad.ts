@@ -99,6 +99,10 @@ export interface SavedLoadSnapshot {
   // lbr-10: the Force sizes queue at save time — null when Force sizes is off. Optional and additive:
   // a missing/malformed value (every pre-lbr-10 row) means off. Every new save writes it.
   forcedTrailers?: ForcedTrailer[] | null;
+  // lb-ui-13: the trailer cards' per-trailer BOL #s (index = trailer). Optional and additive like
+  // editedCart (absent on every pre-lb-ui-13 row; no version bump): a missing/malformed value means
+  // "re-seed from the order's invoice" on load.
+  bolNumbers?: string[] | null;
 }
 
 export function buildSnapshot(args: {
@@ -115,6 +119,8 @@ export function buildSnapshot(args: {
   consolidate?: boolean;
   /** lbr-10: null/omitted = Force sizes off. */
   forcedTrailers?: ForcedTrailer[] | null;
+  /** lb-ui-13: null/omitted = re-seed on load. */
+  bolNumbers?: string[] | null;
 }): SavedLoadSnapshot {
   const source: SavedLoadSource = args.pulledSource
     ? { kind: "pulled", pulledSource: args.pulledSource }
@@ -132,6 +138,7 @@ export function buildSnapshot(args: {
     autoDownsize: args.autoDownsize ?? false,
     consolidate: args.consolidate ?? true,
     forcedTrailers: args.forcedTrailers ?? null,
+    bolNumbers: args.bolNumbers ?? null,
   };
 }
 
@@ -242,6 +249,8 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
   const autoDownsize = typeof parsed.autoDownsize === "boolean" ? parsed.autoDownsize : false;
   const consolidate = typeof parsed.consolidate === "boolean" ? parsed.consolidate : true;
   const forcedTrailers = isValidForcedArray(parsed.forcedTrailers) ? parsed.forcedTrailers.map((f) => ({ type: f.type, count: f.count })) : null;
+  // lb-ui-13: light duck-typing like the other optional fields — malformed degrades to "re-seed".
+  const bolNumbers = Array.isArray(parsed.bolNumbers) && parsed.bolNumbers.every((b) => typeof b === "string") ? (parsed.bolNumbers as string[]) : null;
 
   return {
     ok: true,
@@ -256,6 +265,7 @@ export function deserializeSnapshot(raw: string): DeserializeResult {
       autoDownsize,
       consolidate,
       forcedTrailers,
+      bolNumbers,
     },
   };
 }
