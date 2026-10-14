@@ -102,6 +102,11 @@ export function formatLoadTime(date: string | null, minutes: number | null): str
   return day ? `${day} ${time}` : time;
 }
 
+/** dlv-03: true when the text leads with a weekday ("Thurs 7AM") — the editor then keeps the parsed day. */
+export function hasLeadingWeekday(text: string | null | undefined): boolean {
+  return !!text && WEEKDAY_RE.test(text);
+}
+
 /** True when a sheet cell is a pure ditto: the INV# followed only by carets ("INV 4356 ^^^"). */
 export function isDittoCell(cell: string | null | undefined): boolean {
   return !!cell && DITTO_RE.test(cell);
@@ -264,22 +269,18 @@ export function summarizeLoadTimes(times: LoadTime[]): string {
     }
   }
 
-  const groups: string[] = [];
-  let curDate: string | null | undefined = undefined;
-  let cur: string[] = [];
-  const flush = () => {
-    if (!cur.length) return;
-    const day = dayLabel(curDate ?? null);
-    groups.push(`${day ? day + " " : ""}${cur.join(", ")}`);
-    cur = [];
-  };
+  // Grouped by day in first-appearance order (load 1's day leads), times in load order.
+  const groups = new Map<string, string[]>();
   for (const t of timed) {
-    if (t.date !== curDate) {
-      flush();
-      curDate = t.date;
-    }
-    cur.push(clockLabel(t.minutes as number));
+    const key = t.date ?? "";
+    const list = groups.get(key) ?? [];
+    list.push(clockLabel(t.minutes as number));
+    groups.set(key, list);
   }
-  flush();
-  return groups.join(" | ");
+  return Array.from(groups.entries())
+    .map(([date, clocks]) => {
+      const day = dayLabel(date || null);
+      return `${day ? day + " " : ""}${clocks.join(", ")}`;
+    })
+    .join(" | ");
 }

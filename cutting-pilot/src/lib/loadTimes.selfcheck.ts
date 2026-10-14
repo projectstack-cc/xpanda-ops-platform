@@ -5,6 +5,7 @@
 import {
   assignSheetLoads,
   formatLoadTime,
+  hasLeadingWeekday,
   isDittoCell,
   parseLoadTimePattern,
   summarizeLoadTimes,
@@ -124,6 +125,8 @@ export function runLoadTimesSelfCheck(): { pass: boolean; results: CheckResult[]
   eq("summary one load", summarizeLoadTimes([lt(1, THU, h(9))]), "Thurs 9:00AM");
   eq("summary same-day range", summarizeLoadTimes([lt(1, THU, h(9)), lt(2, THU, h(10)), lt(3, THU, h(11)), lt(4, THU, h(12))]), "Thurs 9:00AM–12:00PM (4 loads)");
   eq("summary multi-day", summarizeLoadTimes([lt(1, THU, h(9)), lt(2, THU, h(10)), lt(3, FRI, h(8))]), "Thurs 9:00AM, 10:00AM | Fri 8:00AM");
+  eq("summary groups by day, load 1's day first", summarizeLoadTimes([lt(1, THU, h(8)), lt(2, FRI, h(9)), lt(3, THU, h(10))]), "Thurs 8:00AM, 10:00AM | Fri 9:00AM");
+  eq("hasLeadingWeekday", [hasLeadingWeekday("Thurs 7AM"), hasLeadingWeekday("8am & HRLY"), hasLeadingWeekday("INV 4434 ^^^"), hasLeadingWeekday(null)], [true, false, false, false]);
   eq("summary uneven same day", summarizeLoadTimes([lt(1, THU, h(8)), lt(2, THU, h(9)), lt(3, THU, h(11))]), "Thurs 8:00AM, 9:00AM, 11:00AM");
   eq("summary untimed load → list", summarizeLoadTimes([lt(1, THU, h(10)), lt(2, THU, null)]), "Thurs 10:00AM");
   eq("summary none", summarizeLoadTimes([lt(1, THU, null)]), "");

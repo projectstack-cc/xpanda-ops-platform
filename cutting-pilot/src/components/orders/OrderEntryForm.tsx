@@ -15,6 +15,13 @@ import PartsPicker from "@/components/orders/PartsPicker";
 import CutListChunkToggle from "@/components/CutListChunkToggle";
 import AddressCorrectionModal, { type AddressParts } from "@/components/orders/AddressCorrectionModal";
 import ProcessPicker from "@/components/board/ProcessPicker";
+import LoadTimesEditor, {
+  draftsHaveTime,
+  draftsSummary,
+  draftsToPut,
+  expandPattern,
+  type LoadTimeDraft,
+} from "@/components/orders/LoadTimesEditor";
 
 export interface OrderLineItem {
   // cutting-ids-01: existing job_line_items.id, round-tripped by the edit modal so saves keep
@@ -150,6 +157,9 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
   const [carrier, setCarrier] = useState("");
   const [loadCount, setLoadCount] = useState("1");
   const [deliveryTime, setDeliveryTime] = useState("");
+  // dlv-03: per-load delivery times (one row per load). `deliveryTime` is now the editor's pattern text.
+  const [loadTimes, setLoadTimes] = useState<LoadTimeDraft[]>([]);
+  const [loadTimesNote, setLoadTimesNote] = useState<{ text: string; warn: boolean } | null>(null);
   const [scrapPickup, setScrapPickup] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -371,6 +381,8 @@ function setQtyAsBdftConvert(on: boolean) {
     setCarrier("");
     setLoadCount("1");
     setDeliveryTime("");
+    setLoadTimes([]);
+    setLoadTimesNote(null);
     setScrapPickup("");
     setContactName("");
     setContactPhone("");
@@ -533,6 +545,41 @@ function setQtyAsBdftConvert(on: boolean) {
     };
   }, []);
 
+  // dlv-03: after the create returns the id, save the per-load rows. createJob has already run the
+  // dlv-02 match-at-create server-side, and a sheet match wins: if the new job already has sheet
+  // rows, the manual PUT is skipped. A typed-but-never-expanded pattern is expanded here so it
+  // doesn't stay a single unexpanded string. Best-effort — the order itself is already saved.
+  async function savePerLoadTimes(jobId: string, invoice: string) {
+    setLoadTimesNote(null);
+    const count = Number.isFinite(Number(loadCount)) && Number(loadCount) > 0 ? Number(loadCount) : 1;
+    let drafts = loadTimes;
+    if (!draftsHaveTime(drafts) && deliveryTime.trim()) {
+      drafts = expandPattern(deliveryTime, drafts, count, shipDate || null, {}) ?? drafts;
+    }
+    const wantPut = draftsHaveTime(drafts);
+    if (!wantPut && !invoice) return;
+    try {
+      const res = await fetch(`/v2/api/orders/${encodeURIComponent(jobId)}/load-times`);
+      const data = await res.json();
+      if (res.ok && data.ok && Array.isArray(data.times) && data.times.some((t: any) => t.source === "sheet")) {
+        setLoadTimesNote({ text: "Times pulled from the schedule sheet", warn: false });
+        return;
+      }
+      if (!wantPut) return;
+      const put = await fetch(`/v2/api/orders/${encodeURIComponent(jobId)}/load-times`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ times: draftsToPut(drafts) }),
+      });
+      const putData = await put.json().catch(() => null);
+      if (!put.ok || !putData?.ok) throw new Error(putData?.error || `HTTP ${put.status}`);
+    } catch {
+      if (wantPut) {
+        setLoadTimesNote({ text: "The order saved, but its per-load delivery times didn't — set them from the Job Board.", warn: true });
+      }
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -561,7 +608,8 @@ function setQtyAsBdftConvert(on: boolean) {
       customer_pickup: customerPickup,
       carrier: carrier.trim(),
       ship_date: shipDate,
-      delivery_time: deliveryTime.trim(),
+      // dlv-03: createJob is unchanged — the typed pattern if any, else the expanded rows' summary.
+      delivery_time: deliveryTime.trim() || draftsSummary(loadTimes),
       scrap_pickup: scrapPickup,
       contact_name: contactName.trim(),
       contact_phone: contactPhone.trim(),
@@ -655,6 +703,7 @@ function setQtyAsBdftConvert(on: boolean) {
         setError(data.error || "Couldn't save the order. Try again.");
         return;
       }
+      await savePerLoadTimes(data.id, payload.invoice_number);
       setSavedId(data.id);
       setIncludeChunks(false);
       setSavedOrder({
@@ -694,6 +743,9 @@ function setQtyAsBdftConvert(on: boolean) {
           <div className="w-full max-w-[770px] bg-surface border border-[var(--card-border)] rounded-2xl p-8 text-center space-y-4">
             <h2 className="text-lg font-semibold text-text">{t("orders.orderSaved")}</h2>
             <p className="text-sm text-muted">The order was created successfully.</p>
+            {loadTimesNote && (
+              <p role="status" className={`text-sm ${loadTimesNote.warn ? "text-[var(--warn-text)]" : "text-text"}`}>{loadTimesNote.text}</p>
+            )}
             {printError && (
               <p className="text-sm text-[var(--warn-text)]">{printError}</p>
             )}
@@ -816,7 +868,17 @@ function setQtyAsBdftConvert(on: boolean) {
               <span className={labelClass}>Ship date</span>
               <input type="date" value={shipDate} onChange={(e) => setShipDate(e.target.value)} className={inputClass} />
             </label>
-            <TextField label="Delivery time" value={deliveryTime} onChange={setDeliveryTime} placeholder="e.g. 7:00 am & HRLY" />
+            <div className="sm:col-span-2">
+              <LoadTimesEditor
+                loadCount={Number.isFinite(Number(loadCount)) && Number(loadCount) > 0 ? Number(loadCount) : 1}
+                shipDate={shipDate || null}
+                assignedDays={{}}
+                value={loadTimes}
+                onChange={setLoadTimes}
+                pattern={deliveryTime}
+                onPatternChange={setDeliveryTime}
+              />
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <TextField label="Carrier" value={carrier} onChange={setCarrier} placeholder="e.g. LISMA" />

@@ -106,6 +106,12 @@ const ADMIN_ESCAPE_PREFIXES = ["/v2/admin", "/v2/api/admin"];
 const PATTERN_PERMISSION_MAP: Array<{ pattern: RegExp; keys: string[] }> = [
   // Ack = the shipment-edit gate on the logistics dashboard.
   { pattern: /^\/v2\/api\/orders\/[^/]+\/load-times\/ack\/?$/, keys: ["logistics.dashboard"] },
+  // dlv-03: GET is read by order entry / Job Board and by the logistics dashboard, BOL modal, Load
+  // Builder and dock. PUT is narrowed in the handler to `orders` OR `logistics.dashboard` edit.
+  {
+    pattern: /^\/v2\/api\/orders\/[^/]+\/load-times\/?$/,
+    keys: ["orders", "logistics.dashboard", "logistics.bol", "logistics.load-builder", "logistics.loading"],
+  },
 ];
 
 function permissionKeysFor(pathname: string): string[] | null {

@@ -33,10 +33,14 @@
 //   - scrap_pickup is a TEXT "YES"/"NO" enum -- rendered as a <select>, never a checkbox.
 //   - load_count / total_bdft are validated client-side whenever they're sent -- never sent as
 //     "" or whitespace.
-//   - notes, delivery_time, scrap_pickup, delivery_incident, delivery_incident_notes are never
-//     job-synced and stay editable regardless of job_id.
-//   - delivery_time is deliberately free text (see src/lib/deliveryTime.ts's own doc comment) --
-//     never reformatted here.
+//   - notes, scrap_pickup, delivery_incident, delivery_incident_notes are never job-synced and stay
+//     editable regardless of job_id.
+//   - delivery_time (dlv-03): on a JOB-LINKED shipment it is never sent as free text from this
+//     modal. It renders the per-load LoadTimesEditor and saves through PUT
+//     /v2/api/orders/:id/load-times after the shipment PUT succeeds (changed only); that route
+//     mirrors the summary onto jobs.delivery_time + shipments.delivery_time. An UNLINKED shipment has
+//     no job to hold per-load rows, so it keeps the single free-text field (see
+//     src/lib/deliveryTime.ts's doc comment), sent in the shipment PUT and never reformatted.
 //   - status is ALWAYS editable (flows shipment -> job, never job -> shipment) but restricted to
 //     the 8-value set legacy's own manual edit form offers -- rendered as a <select> using
 //     ShipmentRow.tsx's own STATUS_VARIANTS labels, not hand-written copy. A change cascades
@@ -64,6 +68,13 @@ import Modal from "@/components/Modal";
 import PackingSlipViewer from "@/components/PackingSlipViewer";
 import { STATUS_VARIANTS } from "./ShipmentRow";
 import type { ShipmentListItem, ShipmentDetail, ShipmentLoad } from "./types";
+import LoadTimesEditor, {
+  draftsFromRows,
+  draftsKey,
+  draftsToPut,
+  type LoadTimeDraft,
+  type LoadTimesData,
+} from "@/components/orders/LoadTimesEditor";
 
 // Mirrors loading-assignments/route.ts's trailer lock -- the server remains the authority.
 const TRAILER_LOCKED_STATUSES = ["in_transit", "delivered", "archived"];
@@ -168,6 +179,11 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
   // True once any write has landed (e.g. shipment PUT ok but a load trailer PUT failed) so a later
   // Cancel still tells the dashboard to refetch.
   const [partialSaved, setPartialSaved] = useState(false);
+  // dlv-03: per-load delivery times for a job-linked shipment.
+  const [loadTimesData, setLoadTimesData] = useState<LoadTimesData | null>(null);
+  const [loadTimes, setLoadTimes] = useState<LoadTimeDraft[]>([]);
+  const [loadTimesSeed, setLoadTimesSeed] = useState("");
+  const [loadTimesError, setLoadTimesError] = useState<string | null>(null);
 
   const isOpen = !!shipment;
   const jobLinked = !!shipment?.job_id;
@@ -249,6 +265,37 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     };
   }, [shipment?.id, shipment?.job_id]);
 
+  // dlv-03: per-load times (job-linked only). Best-effort — the rest of the modal works without it.
+  useEffect(() => {
+    setLoadTimesData(null);
+    setLoadTimes([]);
+    setLoadTimesSeed("");
+    setLoadTimesError(null);
+    const jobId = shipment?.job_id;
+    if (!jobId) return;
+    let cancelled = false;
+    fetch(`/v2/api/orders/${encodeURIComponent(jobId)}/load-times`)
+      .then((r) => r.json().then((json) => ({ ok: r.ok, json })))
+      .then(({ ok, json }) => {
+        if (cancelled) return;
+        if (!ok || !json.ok) {
+          setLoadTimesError("Delivery times unavailable.");
+          return;
+        }
+        const data: LoadTimesData = json;
+        const drafts = draftsFromRows(data.times || [], data.load_count);
+        setLoadTimesData(data);
+        setLoadTimes(drafts);
+        setLoadTimesSeed(draftsKey(drafts));
+      })
+      .catch(() => {
+        if (!cancelled) setLoadTimesError("Delivery times unavailable.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shipment?.id, shipment?.job_id]);
+
   function set<K extends keyof EditForm>(field: K, value: EditForm[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
@@ -285,7 +332,6 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
 
     const payload: Record<string, unknown> = {
       notes: form.notes,
-      delivery_time: form.deliveryTime,
       scrap_pickup: form.scrapPickup,
       delivery_incident: form.deliveryIncident,
       delivery_incident_notes: form.deliveryIncidentNotes,
@@ -296,6 +342,8 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     if (form.status !== shipment.status) {
       payload.status = form.status;
     }
+    // dlv-03: free-text delivery_time only for unlinked shipments; job-linked goes to load-times below.
+    if (!jobLinked) payload.delivery_time = form.deliveryTime;
 
     // trailer_number omitted entirely unless the user can manage loading -- its mere presence
     // in the payload is checked server-side too, but never send it if the control was read-only.
@@ -333,6 +381,26 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
         return;
       }
       setPartialSaved(true);
+
+      // dlv-03: per-load delivery times -> PUT /v2/api/orders/:id/load-times, only when changed.
+      if (jobLinked && shipment.job_id && loadTimesData && draftsKey(loadTimes) !== loadTimesSeed) {
+        try {
+          const r = await fetch(`/v2/api/orders/${encodeURIComponent(shipment.job_id)}/load-times`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ times: draftsToPut(loadTimes) }),
+          });
+          const d = await r.json().catch(() => null);
+          if (!r.ok || !d?.ok) {
+            setSaveError(`Shipment saved, but the delivery times didn't save — ${d?.error || `HTTP ${r.status}`}`);
+            return;
+          }
+          setLoadTimesSeed(draftsKey(loadTimes));
+        } catch {
+          setSaveError("Shipment saved, but the delivery times didn't save — network error");
+          return;
+        }
+      }
 
       // lgx-rows-01: per-load trailer # -> PUT /v2/api/loading-assignments, changed loads only,
       // sequentially. A failure names the load and keeps the modal open; loads that saved are
@@ -555,15 +623,33 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Delivery Time">
-              <input
-                type="text"
-                className={inputClass}
-                value={form.deliveryTime}
-                onChange={(e) => set("deliveryTime", e.target.value)}
-                placeholder="Free text — e.g. Delivery @ 10:00 am"
-              />
-            </Field>
+            {jobLinked ? (
+              <div className="sm:col-span-2">
+                {loadTimesData ? (
+                  <LoadTimesEditor
+                    loadCount={loadTimesData.load_count}
+                    shipDate={loadTimesData.ship_date}
+                    assignedDays={loadTimesData.assigned_days || {}}
+                    value={loadTimes}
+                    onChange={setLoadTimes}
+                  />
+                ) : (
+                  <Field label="Delivery Time">
+                    <div className={readOnlyClass}>{loadTimesError || "Loading delivery times…"}</div>
+                  </Field>
+                )}
+              </div>
+            ) : (
+              <Field label="Delivery Time">
+                <input
+                  type="text"
+                  className={inputClass}
+                  value={form.deliveryTime}
+                  onChange={(e) => set("deliveryTime", e.target.value)}
+                  placeholder="Free text — e.g. Delivery @ 10:00 am"
+                />
+              </Field>
+            )}
             <Field label="Scrap Pickup">
               <select
                 className={inputClass}

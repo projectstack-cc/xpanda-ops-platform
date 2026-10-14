@@ -23,6 +23,13 @@ import HbFloorStockSection from "./HbFloorStockSection";
 import OrderLinksSection from "./OrderLinksSection";
 import JobPrintsSection from "./JobPrintsSection";
 import OffloadZonesSection from "./OffloadZonesSection";
+import LoadTimesEditor, {
+  draftsFromRows,
+  draftsKey,
+  draftsToPut,
+  type LoadTimeDraft,
+  type LoadTimesData,
+} from "@/components/orders/LoadTimesEditor";
 import type { BoardJob } from "./ProductionBoard";
 import { mergeProcesses, parseProcesses, type JobProcess } from "@/lib/processes";
 
@@ -178,6 +185,12 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
   const [savedLoadCount, setSavedLoadCount] = useState(1);
   const [shipDaysOpen, setShipDaysOpen] = useState(false);
 
+  // dlv-03: per-load delivery times (GET/PUT /v2/api/orders/:id/load-times), saved after the order PUT.
+  const [loadTimesData, setLoadTimesData] = useState<LoadTimesData | null>(null);
+  const [loadTimes, setLoadTimes] = useState<LoadTimeDraft[]>([]);
+  const [loadTimesSeed, setLoadTimesSeed] = useState("");
+  const [loadTimesError, setLoadTimesError] = useState<string | null>(null);
+
   // jb-06: the SAVED ship date (not the live field) — trailer-group candidates match on it, and the
   // linked-job ship-date guard in handleSave compares against it.
   const [savedShipDate, setSavedShipDate] = useState<string | null>(null);
@@ -209,6 +222,10 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
     setDeleteError(null);
     setShipDaysOpen(false);
     setSavedLoadCount(1);
+    setLoadTimesData(null);
+    setLoadTimes([]);
+    setLoadTimesSeed("");
+    setLoadTimesError(null);
     setSavedShipDate(null);
 
     if (!jobId) {
@@ -252,6 +269,23 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
         setLineItems(lis.length ? lis : [{ ...EMPTY_LINE }]);
         const snapshot = JSON.stringify({ ...j, line_items: lis });
         setOriginalSnapshot(snapshot);
+        // dlv-03: best-effort — the order stays editable if the per-load times can't load.
+        try {
+          const ltRes = await fetch(`/v2/api/orders/${jobId}/load-times`);
+          const ltJson = await ltRes.json();
+          if (cancelled) return;
+          if (ltRes.ok && ltJson.ok) {
+            const data: LoadTimesData = ltJson;
+            const drafts = draftsFromRows(data.times || [], Math.max(Number(j.load_count) || 1, 1));
+            setLoadTimesData(data);
+            setLoadTimes(drafts);
+            setLoadTimesSeed(draftsKey(drafts));
+          } else {
+            setLoadTimesError("Delivery times unavailable.");
+          }
+        } catch {
+          if (!cancelled) setLoadTimesError("Delivery times unavailable.");
+        }
       } catch {
         if (!cancelled) setLoadError("Network error — couldn't reach the server.");
       } finally {
@@ -330,6 +364,8 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
     if (!originalSnapshot) return false;
     return originalSnapshot !== buildCurrentSnapshot();
   }
+  // dlv-03: unsaved per-load times also raise the banner (kept out of isDirty so they don't lock offload zones).
+  const loadTimesDirty = !!loadTimesData && draftsKey(loadTimes) !== loadTimesSeed;
 
   async function handleSave() {
     if (!job) return;
@@ -390,6 +426,24 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
       if (!res.ok || !data.ok) {
         setSaveError(data.error || "Couldn't save. Try again.");
         return;
+      }
+      // dlv-03: per-load times save after the order PUT, only when they changed. Rows past the
+      // just-saved load count are dropped (the server deletes them too).
+      if (loadTimesData && draftsKey(loadTimes) !== loadTimesSeed) {
+        const savedCount = payload.load_count;
+        try {
+          const ltRes = await fetch(`/v2/api/orders/${job.id}/load-times`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ times: draftsToPut(loadTimes.filter((d) => d.load_number <= savedCount)) }),
+          });
+          const ltJson = await ltRes.json().catch(() => null);
+          if (!ltRes.ok || !ltJson?.ok) throw new Error(ltJson?.error || `HTTP ${ltRes.status}`);
+        } catch (e: any) {
+          onSaved();
+          setSaveError(`Order saved, but delivery times didn't: ${e?.message || "try again"}`);
+          return;
+        }
       }
       onSaved();
       onClose();
@@ -629,7 +683,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
             </div>
           )}
 
-          {isDirty() && !saving && (
+          {(isDirty() || loadTimesDirty) && !saving && (
             <div className="rounded-md border border-[var(--brand)] bg-[var(--info-bg)] text-[var(--info-text)] text-sm px-3 py-2 flex items-center justify-between gap-3">
               <span>You have unsaved changes.</span>
               <button
@@ -843,6 +897,25 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
                 />
               </label>
             </div>
+          </section>
+
+          {/* dlv-03: per-load delivery times — one row per SAVED load (same as Assign Ship Days). */}
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold text-text">Delivery times</h2>
+            {loadTimesData ? (
+              <LoadTimesEditor
+                loadCount={savedLoadCount}
+                shipDate={savedShipDate}
+                assignedDays={loadTimesData.assigned_days || {}}
+                value={loadTimes}
+                onChange={setLoadTimes}
+              />
+            ) : (
+              <p className="text-sm text-muted">{loadTimesError || "Loading delivery times…"}</p>
+            )}
+            {Number(job.load_count ?? 1) !== savedLoadCount && (
+              <p className="text-[11px] text-muted">Save the new load count, then reopen to set times for every load.</p>
+            )}
           </section>
 
           {/* board-prints-02: uploads/deletes save immediately (like OrderLinksSection), not via Save. */}
