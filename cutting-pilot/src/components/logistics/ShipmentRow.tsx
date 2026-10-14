@@ -9,6 +9,7 @@ import ShipmentDetailPanel from "./ShipmentDetailPanel";
 import { formatDuration } from "@/lib/time";
 import { formatEtDateTime } from "@/lib/etDateTime";
 import { formatUsdCents } from "@/lib/money";
+import { capLoadTimesLabel } from "@/lib/loadTimes";
 import type { ShipmentDetail, ShipmentListItem } from "./types";
 
 const badgeBase = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap";
@@ -149,7 +150,11 @@ export default function ShipmentRow({
           {s.day_loads && s.ship_date !== s.day_date && (
             <div className="text-xs text-muted whitespace-nowrap">Order date {fmtDate(s.ship_date)}</div>
           )}
-          {s.delivery_time && <div className="text-xs text-muted whitespace-nowrap">{s.delivery_time}</div>}
+          {s.delivery_time && (
+            <div className="text-xs text-muted whitespace-nowrap truncate" title={s.delivery_time}>
+              {capLoadTimesLabel(s.delivery_time)}
+            </div>
+          )}
           {/* dlv-04: the schedule sheet changed a load's time — tap opens the drill-down (per-load list + Acknowledge). */}
           {Boolean(s.delivery_time_changed) && s.job_id && (
             <button

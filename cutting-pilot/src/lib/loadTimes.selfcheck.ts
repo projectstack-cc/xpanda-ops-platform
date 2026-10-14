@@ -4,6 +4,7 @@
 // path. Every parse case is a real schedule_rows.delivery_time cell from D1 with its load count.
 import {
   assignSheetLoads,
+  capLoadTimesLabel,
   formatLoadTime,
   hasLeadingWeekday,
   isDittoCell,
@@ -138,6 +139,17 @@ export function runLoadTimesSelfCheck(): { pass: boolean; results: CheckResult[]
   eq("suffix 2 loads", [loadSuffix("4472", 1, 2), loadSuffix("4472", 2, 2)], ["4472-01", "4472-02"]);
   eq("suffix load 10 of 12", loadSuffix("4440", 10, 12), "4440-10");
   eq("suffix empty invoice", loadSuffix("", 3, 5), "");
+
+  // ── capLoadTimesLabel (dlv-05) ────────────────────────────────────────────────────────────
+  eq("cap 6 times over 2 days", capLoadTimesLabel("Mon 8:00AM, 9:00AM, 10:00AM, 11:00AM, 12:00PM | Tues 11:00AM"), "Mon 8:00AM, 9:00AM…");
+  eq("cap 3 times one day", capLoadTimesLabel("Thurs 8:00AM, 9:00AM, 11:00AM"), "Thurs 8:00AM, 9:00AM…");
+  eq("cap spans day groups", capLoadTimesLabel("Mon 8:00AM | Tues 11:00AM, 12:00PM"), "Mon 8:00AM | Tues 11:00AM…");
+  eq("cap drops whole later group", capLoadTimesLabel("Thurs 9:00AM, 10:00AM | Fri 8:00AM"), "Thurs 9:00AM, 10:00AM…");
+  eq("cap 2 times unchanged", capLoadTimesLabel("Thurs 9:00AM, 10:00AM"), "Thurs 9:00AM, 10:00AM");
+  eq("cap 2 groups of 1 unchanged", capLoadTimesLabel("Mon 8:00AM | Tues 11:00AM"), "Mon 8:00AM | Tues 11:00AM");
+  eq("cap range form unchanged", capLoadTimesLabel("Thurs 9:00AM–12:00PM (4 loads)"), "Thurs 9:00AM–12:00PM (4 loads)");
+  eq("cap legacy free text unchanged", capLoadTimesLabel("8:00 AM & HRLY"), "8:00 AM & HRLY");
+  eq("cap empty", capLoadTimesLabel(""), "");
 
   return { pass: results.every((r) => r.pass), results };
 }

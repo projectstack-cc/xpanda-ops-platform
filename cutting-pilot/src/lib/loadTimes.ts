@@ -294,3 +294,35 @@ export function loadSuffix(invoice: string, loadNumber: number, loadCount: numbe
   if (!inv || loadCount <= 1) return inv;
   return `${inv}-${String(loadNumber).padStart(2, "0")}`;
 }
+
+const CLOCK_RE = /^\d{1,2}:\d{2}[AP]M$/;
+const GROUP_RE = new RegExp(`^(?:(${DAY_ABBR.join("|")}) )?(.+)$`);
+
+/**
+ * dlv-05: cap a summarizeLoadTimes list label at `max` times for one-line table cells.
+ * "Mon 8:00AM, 9:00AM, 10:00AM | Tues 11:00AM" → "Mon 8:00AM, 9:00AM…" (day prefixes kept per group).
+ * The same-day range form, empty input and anything unparseable (legacy free text) come back unchanged.
+ */
+export function capLoadTimesLabel(summary: string, max = 2): string {
+  if (!summary) return summary;
+  const groups: { day: string | undefined; clocks: string[] }[] = [];
+  for (const part of summary.split(" | ")) {
+    const m = part.match(GROUP_RE);
+    if (!m) return summary;
+    const clocks = m[2].split(", ");
+    if (!clocks.every((c) => CLOCK_RE.test(c))) return summary;
+    groups.push({ day: m[1], clocks });
+  }
+
+  const kept: string[] = [];
+  let taken = 0;
+  let total = 0;
+  for (const g of groups) {
+    total += g.clocks.length;
+    if (taken >= max) continue;
+    const slice = g.clocks.slice(0, max - taken);
+    taken += slice.length;
+    kept.push(`${g.day ? g.day + " " : ""}${slice.join(", ")}`);
+  }
+  return total > taken ? `${kept.join(" | ")}…` : summary;
+}
