@@ -18,6 +18,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import { formatCutListAddress, formatCutListDims, type CutListJob } from "@/lib/cutList";
 import type { LoadManifestItem } from "@/lib/logistics/loadManifest";
+import { loadSuffix } from "@/lib/loadTimes";
 
 export interface LoadingSheetLineItem {
   part_number: string | null;
@@ -33,6 +34,8 @@ export interface LoadingSheetLoad {
   bol_number: string | number | null;
   /** lgx-loadsheet-02: this load's items from its newest BOL's load_manifest; null when not recorded. */
   manifest: LoadManifestItem[] | null;
+  /** dlv-04: this load's delivery display (job_load_times); null → the order-level delivery_time. */
+  delivery_time: string | null;
 }
 
 export interface LoadingSheetOrder {
@@ -66,6 +69,12 @@ export interface LoadingSheetPage {
   items: LoadingSheetLineItem[];
   /** true -> print the "Load split not recorded" banner. */
   splitMissing: boolean;
+}
+
+/** dlv-04: the invoice box text — "4440-03" on a multi-load sheet (live BOL-number style), the bare
+ * invoice on a single-load sheet (unchanged). */
+export function sheetInvoiceText(sheet: LoadingSheetPage): string {
+  return loadSuffix(sheet.order.invoice_number || "", sheet.load?.load_number ?? sheet.loadIndex, sheet.loadCount);
 }
 
 export const SPLIT_MISSING_BANNER = "Load split not recorded — see BOL for this load's contents.";
@@ -294,7 +303,7 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
       rightCol.forEach((r, i) => drawRight(page, r.text, r.size, r.f, r.color, rightColY[i]));
       const rightBound = Math.min(...rightCol.map((r) => right - r.f.widthOfTextAtSize(r.text, r.size))) - 16;
       // lgx-loadsheet-03: big centered invoice box between the logo and the title block.
-      const invBox = fitInvoiceBox(order.invoice_number, fontBold, leftBound, rightBound, pageW / 2, y);
+      const invBox = fitInvoiceBox(sheetInvoiceText(sheet), fontBold, leftBound, rightBound, pageW / 2, y);
       if (invBox) {
         page.drawRectangle({ x: invBox.x, y: invBox.y, width: invBox.width, height: invBox.height, borderColor: black, borderWidth: 1.5 });
         page.drawText(invBox.text, { x: invBox.textX, y: invBox.textY, size: invBox.size, font: fontBold, color: black });
@@ -321,9 +330,11 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
         page.drawText(`Load ${sheet.loadIndex} of ${sheet.loadCount}`, { x: colRightX, y: ry, size: 11, font: fontBold, color: black });
         ry -= 15;
       }
-      if (order.delivery_time && String(order.delivery_time).trim()) {
+      // dlv-04: this load's own time when recorded, else the order summary.
+      const deliveryText = (sheet.load?.delivery_time || order.delivery_time || "").trim();
+      if (deliveryText) {
         // lgx-loadsheet-03: 16pt bold on a bordered yellow band (band first; pdf-lib paints in call order).
-        const dLines = wrapText(`Delivery: ${order.delivery_time}`, fontBold, 16, rightW - 2 * 6);
+        const dLines = wrapText(`Delivery: ${deliveryText}`, fontBold, 16, rightW - 2 * 6);
         const bandW = Math.max(...dLines.map((l) => fontBold.widthOfTextAtSize(l, 16))) + 12;
         const bandH = dLines.length * 19 + 8;
         const bandTop = ry + 12;

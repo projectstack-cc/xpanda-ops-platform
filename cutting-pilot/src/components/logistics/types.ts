@@ -28,6 +28,8 @@ export interface ShipmentListItem {
   bol_count: number;
   /** lgx-signed-01: any signed artifact (QR-signed PDF, carrier upload, or delivery photo) on any of the job's BOLs. */
   has_signed_bol?: number | boolean;
+  /** dlv-04: the schedule sheet changed a load's delivery time and nobody has acknowledged it (0/1 from SQLite). */
+  delivery_time_changed?: number | boolean;
   status: string;
   ship_date: string | null;
   ship_to_city: string | null;

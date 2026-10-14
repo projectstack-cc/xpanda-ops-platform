@@ -4,7 +4,7 @@
 // lgx-loadsheet-03: + fitInvoiceBox geometry (the header's centered invoice box); now async because the
 // Helvetica-Bold metrics come from a pdf-lib embed. Not part of the production build path.
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { HEADER_BAND_H, INVOICE_BOX_MAX_SIZE, INVOICE_BOX_MIN_SIZE, expandLoadingSheets, fitInvoiceBox, type LoadingSheetLineItem, type LoadingSheetLoad, type LoadingSheetOrder } from "./loadingSheet";
+import { HEADER_BAND_H, INVOICE_BOX_MAX_SIZE, INVOICE_BOX_MIN_SIZE, expandLoadingSheets, fitInvoiceBox, sheetInvoiceText, type LoadingSheetLineItem, type LoadingSheetLoad, type LoadingSheetOrder } from "./loadingSheet";
 import { parseLoadManifest, type LoadManifestItem } from "./loadManifest";
 
 interface CheckResult {
@@ -40,7 +40,7 @@ function order(inv: string, loads: LoadingSheetLoad[]): LoadingSheetOrder {
 }
 
 function load(n: number | null, manifest: LoadManifestItem[] | null): LoadingSheetLoad {
-  return { load_number: n, trailer_number: n != null ? `T${n}` : null, bay_number: n, bol_number: n != null ? `B${n}` : null, manifest };
+  return { load_number: n, trailer_number: n != null ? `T${n}` : null, bay_number: n, bol_number: n != null ? `B${n}` : null, manifest, delivery_time: null };
 }
 
 const m = (name: string, sku: string, pieces: number): LoadManifestItem => ({ name, sku, dims: "48 x 24 x 10", pieces });
@@ -117,6 +117,24 @@ export async function runLoadingSheetSelfCheck(): Promise<{ pass: boolean; resul
       pages.map((p) => `${p.order.invoice_number}/${p.loadIndex}`).join(",")
     );
     check("day mode: the single-load order prints its line items, no banner", pages[2].items === LINE_ITEMS && !pages[2].splitMissing);
+  }
+
+  // dlv-04: invoice box text carries the per-load suffix on multi-load sheets only.
+  {
+    const single = expandLoadingSheets([order("4487", [load(1, null)])]);
+    check("box text: single load unchanged", sheetInvoiceText(single[0]) === "4487", sheetInvoiceText(single[0]));
+    const none = expandLoadingSheets([order("4488", [])]);
+    check("box text: no loads unchanged", sheetInvoiceText(none[0]) === "4488", sheetInvoiceText(none[0]));
+    const multi = expandLoadingSheets([order("4440", [load(3, null), load(1, null), load(2, null)])]);
+    check(
+      "box text: multi-load -> INV-0N by load_number",
+      multi.map(sheetInvoiceText).join(",") === "4440-01,4440-02,4440-03",
+      multi.map(sheetInvoiceText).join(",")
+    );
+    const unnumbered = expandLoadingSheets([order("4441", [load(null, null), load(null, null)])]);
+    check("box text: unnumbered loads fall back to loadIndex", unnumbered.map(sheetInvoiceText).join(",") === "4441-01,4441-02", unnumbered.map(sheetInvoiceText).join(","));
+    const blank = expandLoadingSheets([{ ...order("x", [load(1, null), load(2, null)]), invoice_number: null }]);
+    check("box text: null invoice -> \"\" (no box)", sheetInvoiceText(blank[0]) === "");
   }
 
   // fitInvoiceBox (lgx-loadsheet-03). Bounds as drawn on a real sheet: logo right edge (40 + 97) + 16,

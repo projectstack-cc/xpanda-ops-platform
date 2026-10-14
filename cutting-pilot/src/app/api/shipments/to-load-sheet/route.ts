@@ -7,10 +7,12 @@
 // pickup reuses the Carrier View math (deliveryTime.ts) + its bounded ORS warm (resolveGeo, warm=true).
 // The static `to-load-sheet` segment takes precedence over the sibling `[id]` (same as `loading-sheet/`).
 // Gate is inherited from middleware's `/v2/api/shipments` -> `logistics.dashboard` rule.
+// dlv-04: a load with its own job_load_times display uses that time (and the suggested pickup derived
+// from it) on its row; loads without one keep the order-level delivery text as before.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { addressKeyOf, resolveGeo } from "@/lib/carrier/rows";
-import { parseAppointment, suggestedPickup } from "@/lib/deliveryTime";
+import { parseAppointment, suggestedPickup, type WallClock } from "@/lib/deliveryTime";
 import { etNowWallClock, formatClockMinutes, weekdayShort } from "@/lib/etDateTime";
 import {
   buildToLoadSheet, isSisterCompanyDelivery, nextShipDay, shipDayLabel, toLoadWindow, type Shift, type ToLoadRow,
@@ -18,6 +20,30 @@ import {
 
 const IN_CHUNK = 90;
 const DELIVERY_MAX_CHARS = 40;
+
+/** Delivery + suggested-pickup labels for one appointment: the order's free text, or (dlv-04) a load's
+ * stored job_load_times day + minutes, used directly so it's never re-parsed. */
+function labelsFor(deliveryText: string, shipDay: string, durationSec: number | null, stored?: WallClock | null) {
+  const appt = stored ?? parseAppointment(deliveryText, shipDay);
+  let deliveryLabel: string;
+  if (appt) {
+    const clock = formatClockMinutes(appt.minutes);
+    deliveryLabel = appt.date === shipDay ? clock : `${weekdayShort(appt.date)} ${clock}`;
+  } else if (deliveryText) {
+    deliveryLabel = deliveryText.length > DELIVERY_MAX_CHARS ? deliveryText.slice(0, DELIVERY_MAX_CHARS) : deliveryText;
+  } else {
+    deliveryLabel = "—";
+  }
+
+  const pickup = suggestedPickup(appt, durationSec);
+  const pickupEarly = !!pickup && pickup.date !== shipDay;
+  const pickupLabel = pickup
+    ? pickupEarly
+      ? `${weekdayShort(pickup.date)} ${formatClockMinutes(pickup.minutes)}*`
+      : formatClockMinutes(pickup.minutes)
+    : null;
+  return { delivery_label: deliveryLabel, pickup_label: pickupLabel, pickup_early: pickupEarly };
+}
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -96,6 +122,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // dlv-04: per-load delivery displays, same chunked IN.
+    const loadTimesByJob = new Map<string, Map<number, { display: string; appt: WallClock | null }>>();
+    for (let i = 0; i < jobIds.length; i += IN_CHUNK) {
+      const chunk = jobIds.slice(i, i + IN_CHUNK);
+      const tr = await DB.prepare(
+        `SELECT job_id, load_number, display, delivery_date, delivery_minutes FROM job_load_times
+          WHERE job_id IN (${chunk.map(() => "?").join(",")}) AND display <> ''`
+      )
+        .bind(...chunk)
+        .all<{ job_id: string; load_number: number; display: string; delivery_date: string | null; delivery_minutes: number | null }>();
+      for (const t of tr.results ?? []) {
+        const m = loadTimesByJob.get(t.job_id) ?? new Map<number, { display: string; appt: WallClock | null }>();
+        const appt = t.delivery_date && t.delivery_minutes != null ? { date: t.delivery_date, minutes: Number(t.delivery_minutes) } : null;
+        m.set(Number(t.load_number), { display: t.display, appt });
+        loadTimesByJob.set(t.job_id, m);
+      }
+    }
+
     const geo = await resolveGeo(DB, jobs, true);
 
     const rows: ToLoadRow[] = [];
@@ -106,24 +150,12 @@ export async function GET(request: NextRequest) {
       const durationSec = g?.info?.ok ? g.info.duration_sec : null;
 
       const deliveryText: string = String(j.s_delivery_time || j.j_delivery_time || "").trim();
-      const appt = parseAppointment(deliveryText, shipDay);
-      let deliveryLabel: string;
-      if (appt) {
-        const clock = formatClockMinutes(appt.minutes);
-        deliveryLabel = appt.date === shipDay ? clock : `${weekdayShort(appt.date)} ${clock}`;
-      } else if (deliveryText) {
-        deliveryLabel = deliveryText.length > DELIVERY_MAX_CHARS ? deliveryText.slice(0, DELIVERY_MAX_CHARS) : deliveryText;
-      } else {
-        deliveryLabel = "—";
-      }
-
-      const pickup = suggestedPickup(appt, durationSec);
-      const pickupEarly = !!pickup && pickup.date !== shipDay;
-      const pickupLabel = pickup
-        ? pickupEarly
-          ? `${weekdayShort(pickup.date)} ${formatClockMinutes(pickup.minutes)}*`
-          : formatClockMinutes(pickup.minutes)
-        : null;
+      const orderLabels = labelsFor(deliveryText, shipDay, durationSec);
+      const loadTimes = loadTimesByJob.get(j.job_id);
+      const labelsForLoad = (n: number) => {
+        const t = loadTimes?.get(n);
+        return t ? labelsFor(t.display, shipDay, durationSec, t.appt) : orderLabels;
+      };
 
       const city = String(j.ship_to_city ?? "").trim();
       const state = String(j.ship_to_state ?? "").trim();
@@ -136,9 +168,7 @@ export async function GET(request: NextRequest) {
         customer: j.customer ?? null,
         load_count: j.load_count != null ? Number(j.load_count) : null,
         city_label: cityLabel,
-        delivery_label: deliveryLabel,
-        pickup_label: pickupLabel,
-        pickup_early: pickupEarly,
+        ...orderLabels,
       };
 
       const assignments = assignmentsByJob.get(j.job_id) ?? [];
@@ -151,12 +181,13 @@ export async function GET(request: NextRequest) {
             location: a.location === "yard" ? "yard" : a.location === "bay" ? "bay" : null,
             load_number: Number(a.load_number) || 1,
             loading_status: a.loading_status ?? null,
+            ...labelsForLoad(Number(a.load_number) || 1),
           });
         }
       } else {
         const n = Math.max(1, Number(j.load_count) || 0);
         for (let k = 1; k <= n; k++) {
-          rows.push({ ...base, assignment_id: null, bay_number: null, location: null, load_number: k, loading_status: null });
+          rows.push({ ...base, assignment_id: null, bay_number: null, location: null, load_number: k, loading_status: null, ...labelsForLoad(k) });
         }
       }
     }

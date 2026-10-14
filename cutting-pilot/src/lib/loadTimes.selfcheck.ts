@@ -7,6 +7,7 @@ import {
   formatLoadTime,
   hasLeadingWeekday,
   isDittoCell,
+  loadSuffix,
   parseLoadTimePattern,
   summarizeLoadTimes,
   type LoadTime,
@@ -131,6 +132,12 @@ export function runLoadTimesSelfCheck(): { pass: boolean; results: CheckResult[]
   eq("summary untimed load → list", summarizeLoadTimes([lt(1, THU, h(10)), lt(2, THU, null)]), "Thurs 10:00AM");
   eq("summary none", summarizeLoadTimes([lt(1, THU, null)]), "");
   eq("summary unordered input", summarizeLoadTimes([lt(2, THU, h(10)), lt(1, THU, h(9))]), "Thurs 9:00AM–10:00AM (2 loads)");
+
+  // ── loadSuffix (dlv-04) ───────────────────────────────────────────────────────────────────
+  eq("suffix 1 load → bare", loadSuffix("4440", 1, 1), "4440");
+  eq("suffix 2 loads", [loadSuffix("4472", 1, 2), loadSuffix("4472", 2, 2)], ["4472-01", "4472-02"]);
+  eq("suffix load 10 of 12", loadSuffix("4440", 10, 12), "4440-10");
+  eq("suffix empty invoice", loadSuffix("", 3, 5), "");
 
   return { pass: results.every((r) => r.pass), results };
 }

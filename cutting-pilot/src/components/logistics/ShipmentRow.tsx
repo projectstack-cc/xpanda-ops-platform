@@ -150,6 +150,22 @@ export default function ShipmentRow({
             <div className="text-xs text-muted whitespace-nowrap">Order date {fmtDate(s.ship_date)}</div>
           )}
           {s.delivery_time && <div className="text-xs text-muted whitespace-nowrap">{s.delivery_time}</div>}
+          {/* dlv-04: the schedule sheet changed a load's time — tap opens the drill-down (per-load list + Acknowledge). */}
+          {Boolean(s.delivery_time_changed) && s.job_id && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!expanded) onToggleExpand(s.entry_key ?? s.id);
+              }}
+              className="inline-flex items-center min-h-[44px] cursor-pointer"
+              aria-label="Delivery time changed — show details"
+            >
+              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)]">
+                Time changed
+              </span>
+            </button>
+          )}
         </td>
         <td className="px-3 py-[8.8px] align-top text-sm text-text">
           {isPickup && !s.carrier ? null : <div>{carrier}</div>}

@@ -284,3 +284,13 @@ export function summarizeLoadTimes(times: LoadTime[]): string {
     })
     .join(" | ");
 }
+
+/**
+ * dlv-04: per-load invoice label, matching live BOL numbers ("4440-03"). One load (or none) → the
+ * invoice unchanged; otherwise `${invoice}-${2-digit load}`. An empty invoice stays "".
+ */
+export function loadSuffix(invoice: string, loadNumber: number, loadCount: number): string {
+  const inv = String(invoice ?? "");
+  if (!inv || loadCount <= 1) return inv;
+  return `${inv}-${String(loadNumber).padStart(2, "0")}`;
+}

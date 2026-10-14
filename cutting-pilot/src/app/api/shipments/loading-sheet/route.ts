@@ -10,6 +10,10 @@
 // numbers and its BOLs' load numbers, each carrying that load's bay/trailer (assignment) and its
 // newest BOL's number + load_manifest (the load builder's per-trailer item list). The split into one
 // sheet per load happens in loadingSheet.ts's pure expandLoadingSheets.
+//
+// dlv-04: each load also carries its own delivery display from job_load_times (one chunked query for
+// every requested job); the order-level delivery_time stays the fallback. An order with no loads gets
+// load 1's time only when load_count = 1 — otherwise its single page keeps the order summary.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import type { LoadingSheetLineItem, LoadingSheetLoad, LoadingSheetOrder } from "@/lib/logistics/loadingSheet";
@@ -35,7 +39,9 @@ function bolForLoad(bols: BolRow[], loadNumber: number | null): BolRow | null {
   return bols.length === 1 && bols[0].load_number == null ? bols[0] : null;
 }
 
-function toLoad(a: AssignmentRow | null, loadNumber: number | null, bols: BolRow[]): LoadingSheetLoad {
+const IN_CHUNK = 90; // D1 100-bound-param ceiling
+
+function toLoad(a: AssignmentRow | null, loadNumber: number | null, bols: BolRow[], times: Map<number, string> | undefined): LoadingSheetLoad {
   const bol = bolForLoad(bols, loadNumber);
   return {
     load_number: loadNumber,
@@ -43,6 +49,7 @@ function toLoad(a: AssignmentRow | null, loadNumber: number | null, bols: BolRow
     bay_number: a?.bay_number ?? null,
     bol_number: bol?.bol_number ?? null,
     manifest: parseLoadManifest(bol?.load_manifest ?? null),
+    delivery_time: loadNumber != null ? times?.get(loadNumber) || null : null,
   };
 }
 
@@ -69,7 +76,7 @@ export async function GET(request: NextRequest) {
   try {
     const res = await DB.prepare(
       `SELECT s.job_id, s.ship_date, s.carrier AS s_carrier, s.notes AS s_notes, s.delivery_time AS s_delivery_time,
-              j.invoice_number, j.customer, j.carrier AS j_carrier, j.delivery_time AS j_delivery_time,
+              j.invoice_number, j.customer, j.carrier AS j_carrier, j.delivery_time AS j_delivery_time, j.load_count AS j_load_count,
               j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_street2,
               j.ship_to_city, j.ship_to_state, j.ship_to_zip
          FROM shipments s JOIN jobs j ON j.id = s.job_id
@@ -87,6 +94,24 @@ export async function GET(request: NextRequest) {
       seen.add(r.job_id);
       return true;
     });
+
+    // dlv-04: per-load delivery displays for every requested job, one chunked query.
+    const timesByJob = new Map<string, Map<number, string>>();
+    const jobIds = rows.map((r: any) => r.job_id as string);
+    for (let i = 0; i < jobIds.length; i += IN_CHUNK) {
+      const chunk = jobIds.slice(i, i + IN_CHUNK);
+      const tr = await DB.prepare(
+        `SELECT job_id, load_number, display FROM job_load_times
+          WHERE job_id IN (${chunk.map(() => "?").join(",")}) AND display <> ''`
+      )
+        .bind(...chunk)
+        .all<{ job_id: string; load_number: number; display: string }>();
+      for (const t of tr.results ?? []) {
+        const m = timesByJob.get(t.job_id) ?? new Map<number, string>();
+        m.set(Number(t.load_number), t.display);
+        timesByJob.set(t.job_id, m);
+      }
+    }
 
     const orders: LoadingSheetOrder[] = [];
     for (const r of rows) {
@@ -118,8 +143,12 @@ export async function GET(request: NextRequest) {
       // No numbered load anywhere: today's behavior — the job's (unnumbered) assignments, if any,
       // with the single-BOL fallback; none at all prints "No trailer assigned".
       const loads: LoadingSheetLoad[] = loadNumbers.length
-        ? loadNumbers.map((n) => toLoad(assignments.find((a) => Number(a.load_number) === n) ?? null, n, bols))
-        : assignments.map((a) => toLoad(a, null, bols));
+        ? loadNumbers.map((n) => toLoad(assignments.find((a) => Number(a.load_number) === n) ?? null, n, bols, timesByJob.get(r.job_id)))
+        : assignments.map((a) => toLoad(a, null, bols, timesByJob.get(r.job_id)));
+      // dlv-04: no numbered load → one synthetic page; load 1's time applies only to a one-load order.
+      const orderDelivery = r.s_delivery_time || r.j_delivery_time || null;
+      const syntheticTime =
+        !loadNumbers.length && (Number(r.j_load_count) || 1) === 1 ? timesByJob.get(r.job_id)?.get(1) || null : null;
 
       orders.push({
         job_id: r.job_id,
@@ -127,7 +156,7 @@ export async function GET(request: NextRequest) {
         ship_date: r.ship_date ?? null,
         customer: r.customer ?? null,
         carrier: r.s_carrier || r.j_carrier || null,
-        delivery_time: r.s_delivery_time || r.j_delivery_time || null,
+        delivery_time: syntheticTime || orderDelivery,
         notes: r.s_notes ?? null,
         ship_to_company: r.ship_to_company ?? null,
         ship_to_attention: r.ship_to_attention ?? null,

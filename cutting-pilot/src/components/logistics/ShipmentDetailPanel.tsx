@@ -10,6 +10,9 @@
 // /v2/api/board/:id (both gated on the separate "jobs" key).
 // lgx-boldel-01 -- manager-only "Delete all BOLs" (legacy `deleteAllBolsForJob` parity) via
 // `DELETE /v2/api/bols?job_id=`; refused with an inline message if any load has shipped.
+// dlv-04 -- the Shipping time cell lists per-load delivery times (GET /v2/api/orders/:id/load-times);
+// loads the schedule sheet changed show `was <old>` in warn tokens, with an Acknowledge button
+// (POST …/load-times/ack) for the same users the panel's other edits are for (canManageLoading).
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import PhotoGalleryModal from "@/components/loading/PhotoGalleryModal";
@@ -18,6 +21,7 @@ import { formatUsdCents } from "@/lib/money";
 import { StatusBadge } from "./ShipmentRow";
 import AssignShipDaysModal, { fmtDay } from "./AssignShipDaysModal";
 import type { ShipmentDetail, ShipmentLoad } from "./types";
+import type { LoadTimeRow } from "@/components/orders/LoadTimesEditor";
 
 // lgx-minimap-01: shared with the Carrier View. Leaflet touches `window` at import -> client-only.
 const DestinationMiniMap = dynamic(() => import("@/components/DestinationMiniMap"), { ssr: false });
@@ -66,6 +70,51 @@ export default function ShipmentDetailPanel({
   const [delArmed, setDelArmed] = useState(false);
   const [delBusy, setDelBusy] = useState(false);
   const [delError, setDelError] = useState<string | null>(null);
+  // dlv-04: per-load delivery times + acknowledge.
+  const [loadTimes, setLoadTimes] = useState<LoadTimeRow[] | null>(null);
+  const [ackBusy, setAckBusy] = useState(false);
+  const [ackMsg, setAckMsg] = useState<{ text: string; error: boolean } | null>(null);
+
+  const jobIdForTimes = detail?.job_id ?? null;
+  useEffect(() => {
+    setLoadTimes(null);
+    if (!jobIdForTimes) return;
+    let cancelled = false;
+    fetch(`/v2/api/orders/${encodeURIComponent(jobIdForTimes)}/load-times`)
+      .then((r) => r.json().then((json) => ({ ok: r.ok, json })))
+      .then(({ ok, json }) => {
+        if (!cancelled && ok && json.ok && Array.isArray(json.times)) setLoadTimes(json.times);
+      })
+      .catch(() => {
+        // Best-effort: the cell falls back to the shipment's delivery_time.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [jobIdForTimes, reloadKey]);
+
+  async function handleAck(jobId: string) {
+    setAckBusy(true);
+    setAckMsg(null);
+    try {
+      const res = await fetch(`/v2/api/orders/${encodeURIComponent(jobId)}/load-times/ack`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        setAckMsg({ text: data.error || `HTTP ${res.status}`, error: true });
+        return;
+      }
+      setAckMsg({ text: "Acknowledged", error: false });
+      setReloadKey((k) => k + 1);
+      cache.delete(shipmentId);
+      // Same generic "detail changed" refresh as the BOL delete: the dashboard reloads the list, so
+      // the row's "Time changed" pill clears.
+      onShipDaysSaved?.();
+    } catch {
+      setAckMsg({ text: "Network error — could not acknowledge.", error: true });
+    } finally {
+      setAckBusy(false);
+    }
+  }
 
   async function handleDeleteAllBols(jobId: string) {
     setDelError(null);
@@ -181,7 +230,43 @@ export default function ShipmentDetailPanel({
           <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">Carrier</div>
           <div className="text-sm text-text">{detail.carrier || "—"}</div>
           <div className="text-xs font-semibold uppercase tracking-wide text-muted mt-2.5 mb-1">Shipping time</div>
-          <div className="text-sm text-text">{detail.delivery_time || "—"}</div>
+          {loadTimes && loadTimes.some((t) => t.display) ? (
+            <div className="space-y-0.5">
+              {loadTimes.filter((t) => t.display).map((t) => {
+                const changed = !!t.changed_at && !t.change_acked_at;
+                return (
+                  <div key={t.load_number} className="text-sm text-text">
+                    <span className="tabular-nums">Load {t.load_number} · {t.display}</span>
+                    {changed && t.prev_display && (
+                      <span className="ml-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)]">
+                        was {t.prev_display}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              {canManageLoading && detail.job_id && loadTimes.some((t) => t.changed_at && !t.change_acked_at) && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (detail.job_id) handleAck(detail.job_id);
+                  }}
+                  disabled={ackBusy}
+                  className="mt-1.5 min-h-[44px] px-3 rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {ackBusy ? "Acknowledging…" : "Acknowledge"}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-text">{detail.delivery_time || "—"}</div>
+          )}
+          {ackMsg && (
+            <div role="status" className={`mt-1 text-xs font-semibold ${ackMsg.error ? "text-[var(--danger-ink)]" : "text-[var(--success-ink)]"}`}>
+              {ackMsg.text}
+            </div>
+          )}
         </div>
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">Load count</div>

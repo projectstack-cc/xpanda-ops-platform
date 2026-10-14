@@ -169,6 +169,8 @@ async function loadDaysByJob(DB: D1Database, jobIds: string[]): Promise<Map<stri
 // split-days-01: list SELECT shared by the main list query and the tile's current-week query.
 function listSelect(whereSql: string): string {
   // shipments.* already carries delivered_at (typed on ShipmentListItem since carrier-03).
+  // dlv-04: delivery_time_changed = a sheet-driven delivery-time change nobody has acknowledged yet —
+  // a correlated EXISTS, never a join (a join on job_load_times would multiply rows per load).
   return `SELECT shipments.*, j.invoice_number,
                 j.ship_to_street, j.ship_to_city, j.ship_to_state, j.ship_to_zip,
                 j.trailer_group_id,
@@ -184,7 +186,9 @@ function listSelect(whereSql: string): string {
                     ORDER BY la.load_number ASC)) AS trailer_numbers,
                 (LOWER(TRIM(COALESCE(j.method, ''))) = 'customer pickup') AS is_customer_pickup,
                 (SELECT COALESCE(SUM(cc.fee_amount_cents), 0) FROM carrier_charges cc WHERE cc.job_id = shipments.job_id) AS carrier_charges_total_cents,
-                (SELECT COUNT(*) FROM carrier_charges cc WHERE cc.job_id = shipments.job_id) AS carrier_charges_count
+                (SELECT COUNT(*) FROM carrier_charges cc WHERE cc.job_id = shipments.job_id) AS carrier_charges_count,
+                EXISTS (SELECT 1 FROM job_load_times t
+                         WHERE t.job_id = shipments.job_id AND t.changed_at IS NOT NULL AND t.change_acked_at IS NULL) AS delivery_time_changed
            FROM shipments
            LEFT JOIN jobs j ON j.id = shipments.job_id
           WHERE ${whereSql}
