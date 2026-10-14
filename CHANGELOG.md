@@ -9255,6 +9255,13 @@ current series).
 
 ## Admin / Platform
 
+- **pwa-01 — fix Android PWA install: square 192/512 + maskable icons, manifest `id`/`scope`, v2 manifest link (Admin & Auth Agent §8 for the shell manifest/icons; Next/Cloudflare Platform Agent §9a for `cutting-pilot/src/app/layout.tsx`). No migration, no worker change.**
+  - **Root cause.** `manifest.json` declared one icon, `/logo/xpanda.png`, as `192x192`, but the file is the 211×74 wordmark. Chrome needs a square icon of at least 192px (and expects 512px) matching its declared size, so it refused install and only offered "Add to Home screen" (a plain shortcut). iOS was unaffected because it uses `apple-touch-icon` (`/assets/img/favicon.png`, 1024²).
+  - **Icons.** Four new PNGs in `assets/img/`: `icon-192.png` / `icon-512.png` (panda favicon, transparent, `purpose: any`) and `icon-maskable-192.png` / `icon-maskable-512.png` (panda at ~72% on solid `#1e293b`, `purpose: maskable`). Sizes checked from the PNG headers. `/assets/` is already a worker static prefix, so they bypass the session gate.
+  - **`manifest.json`** rewritten: adds `"id": "/"` and `"scope": "/"` (scope covers `/v2/*`) and the four icons. `logo/xpanda.png` stays as the push notification icon/badge in `sw.js`.
+  - **v2 layout.** `cutting-pilot/src/app/layout.tsx` never linked the manifest, so install couldn't start from any `/v2/*` page. It now has raw `<link rel="manifest" href="/manifest.json">`, `<meta name="theme-color" content="#1e293b">` and `<link rel="apple-touch-icon" href="/assets/img/favicon.png">`. These are absolute hrefs, not Next `metadata.manifest`, so `basePath: "/v2"` can't prefix them.
+  - **Untouched:** `sw.js`, `shared/notif-bell.js` and service-worker registration (decoupling SW registration from the bell → BACKLOG), `_worker.js/**`, and legacy pages' manifest/apple-touch-icon tags.
+
 - **mobile-zoom-02 — legacy form fields 16px on touch devices (stops iOS auto-zoom) (admin-auth-agent §8 for `login.html`; job-board-agent §2 for `shared/theme.js`, logistics-agent §3 consulted). No migration, no worker change.**
   - **Why:** same iOS Safari focus auto-zoom as mobile-zoom-01, on the legacy surface. An audit @ `7f14daf` found
     sub-16px `input`/`select`/`textarea` rules in 14 legacy files (`jobs/jobs-shared.css`,

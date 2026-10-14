@@ -29,6 +29,9 @@ export default function RootLayout({
             __html: `(function(){try{var l=localStorage.getItem('xpanda_lang');if(l==='es'||l==='ht'||l==='en'){document.documentElement.lang=l;}}catch(e){}})();`,
           }}
         />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#1e293b" />
+        <link rel="apple-touch-icon" href="/assets/img/favicon.png" />
       </head>
       <body className="bg-bg text-text font-sans antialiased">
         <LangProvider>

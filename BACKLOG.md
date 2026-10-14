@@ -153,6 +153,7 @@
 
 ## Auth / Session
 
+- [ ] Register /sw.js independently of shared/notif-bell.js (currently only registered on legacy pages via the push bell). Not required for Chrome install today, but install/offline shouldn't ride on the notification UI. (Follow-on from pwa-01.)
 - [ ] **P408 follow-up — audit other unbatched hot-path writes against the shared D1.**
   `schedule-ingest.ts`'s cron writes were the one identified structural contention hazard against
   the same D1 `validateSession` reads on every request (P404 investigation, batched in P408). If
