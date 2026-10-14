@@ -11,7 +11,7 @@
 // The delivery time is always stated before any driver-note time, so first-match is correct.
 // Invoice-number guard: the hour is 1-2 digits AND must be immediately followed (whitespace only)
 // by am/pm, so a 4-digit INV number like "4307" can never match as a time.
-const TIME_RE = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m/i;
+export const TIME_RE = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m/i;
 
 export function parseDeliveryTime(raw: string | null): string | null {
   if (!raw) return null;
