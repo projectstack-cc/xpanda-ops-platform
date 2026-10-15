@@ -6485,6 +6485,19 @@ current series).
 
 ## Admin (v2)
 
+- **admin-11 — Admin retirement close-out: legacy redirect stubs deleted, role-permission backups dropped (Admin &
+  Auth Agent §8 lead; Database & API Agent §9 owns the migration). No code or permission change.** Steve 2026-10-15:
+  close out now (sole Admin user, `jobs.*` split stable) without waiting for the log check. `git rm` the four
+  admin-08 redirect stubs `admin/{users,roles,parts,activity-log}.html`; `admin/_archived/` kept exactly as is
+  (`admin-i18n.js` is the catalog the `/v2/admin` i18n item reuses). Intentionally kept: the `/^\/admin\//` → `admin`
+  row in `_worker.js/lib/core.js` (still gates `admin/_archived/`) and `'/admin/'` in `ESCAPE_PREFIXES`
+  (`_worker.js/index.js`) — no worker edits. Migration `DB_Migrations/admin-11-drop-perm-backups.sql` (gitignored)
+  drops `roles_perm_backup_admin01` and `roles_perm_backup_admin07`, with a preflight/verify `sqlite_master` check;
+  **run in the D1 console (each statement separately) before push.** No code referenced either table. The
+  `logistics/loading.html` / `logistics/bol-email.html` stubs are out of scope (other staff use them; still on the
+  log check). Docs: AGENTS.md Admin row, xpanda-ops-agents.md repo tree + §8 Key Files; BACKLOG heading → RETIRED,
+  the two drop items and the stub item removed.
+
 - **admin-09 — Retire legacy admin API (/api/users, /api/roles, /api/activity-log) + dead cutting-dashboard gate row (DB/API §9 + Admin & Auth §8). No migration.**
   - **`_worker.js/routes/admin.js` deleted** (`git rm`). It exported only `handleApiActivityLog`, `handleApiUsers` and `handleApiRoles` (plus an orphaned `/api/admin/r2-backfill` comment block; that handler lives in `index.js` and its `API_ROUTES` row is untouched).
   - **`_worker.js/index.js`:** the `routes/admin.js` import and the three `API_ROUTES` rows (`/api/users`, `/api/roles`, `/api/activity-log`) removed. `ESCAPE_PREFIXES` trimmed to `['/admin/', '/api/auth/', '/login']` — `/admin/` stays so a real admin testing a role still reaches the redirect stubs, and `/api/auth/` stays because every legacy `*-header.js` **Stop testing** button calls `/api/auth/simulate-role`.

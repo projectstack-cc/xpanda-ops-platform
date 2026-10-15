@@ -110,7 +110,7 @@ _root/
     scrap/                (scrap analytics)
     orders/               (order reports)
 
-  admin/                  (redirect stubs → /v2/admin since admin-08; originals in admin/_archived/)
+  admin/                  (_archived/ only — legacy pages retired admin-08, stubs deleted admin-11)
 
   assets/                 (shared platform assets)
   qc-assets/              (QC-specific assets)
@@ -630,7 +630,7 @@ You build and maintain the Admin module (`/admin/`) and the authentication syste
 - `/v2/admin` — one tabbed page (Users · Roles · Parts · Activity): `cutting-pilot/src/app/admin/`, `src/components/admin/`
 - `src/components/parts/PartsLibrary.tsx` — the shared parts library (also Load Builder's modal)
 - `src/lib/permissions.ts` — single source of PERMISSION_LABELS / NOTIFICATION_TYPES
-- `admin/*.html` — redirect stubs (originals in `admin/_archived/`, reference only)
+- `admin/_archived/*` — retired legacy pages + `admin-i18n.js` catalog (reference only; stubs deleted admin-11)
 - `login.html` (6.5KB) — Login page
 - `jobs/jobs-header.js` — Auth bar pattern (copied across modules)
 

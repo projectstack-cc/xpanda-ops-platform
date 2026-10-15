@@ -120,11 +120,8 @@
 
 - [ ] Port `reports/` (cutting, incidents ×5, orders, scrap ×3). Chart.js → decide v2 charting lib once.
 
-### Admin · CUT OVER to /v2/admin (admin-08) — retirement in progress
+### Admin · RETIRED — v2 at /v2/admin (admin-08 cutover, admin-11 close-out)
 
-- [ ] Drop `roles_perm_backup_admin01` (admin-01 snapshot) once the admin-NN series has shipped and been stable.
-- [ ] Drop `roles_perm_backup_admin07` (admin-07 snapshot) with the admin-01 one once stable.
-- [ ] Delete the four admin redirect stubs (`admin/{users,roles,parts,activity-log}.html`) once logs show no hits (admin-11).
 - [ ] i18n (en/es/ht) for /v2/admin — English-only at port time (bem-01 precedent); legacy `admin/_archived/admin-i18n.js` has the catalog to reuse.
 
 ### Safety · NO v2 YET — scope separately (large)

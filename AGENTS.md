@@ -122,7 +122,7 @@ The xPanda Operations Platform is an ERP-lite system for foam manufacturing oper
 | **QC** | `/qc/` | legacy | Scrap log, final inspection, density calculator, incident report | `qc/` |
 | **Safety** | `/safety/` | legacy | SDS browser, i18n safety content, training | `safety/` |
 | **Reports** | `/reports/` | legacy | Read-only analytics dashboards (cutting, incidents, orders, scrap) | `reports/` |
-| **Admin** | `/v2/admin` (tabs Users · Roles · Parts · Activity) | v2 (legacy `admin/*.html` are redirect stubs; originals in `admin/_archived/`) | Users, roles & permissions, test-as-role, parts library, audit trail | `cutting-pilot/src/app/admin/`, `cutting-pilot/src/components/admin/`, `cutting-pilot/src/components/parts/PartsLibrary.tsx` (shared with Load Builder), `cutting-pilot/src/lib/permissions.ts` |
+| **Admin** | `/v2/admin` (tabs Users · Roles · Parts · Activity) | v2 (legacy stubs deleted admin-11; originals in `admin/_archived/`, reference only) | Users, roles & permissions, test-as-role, parts library, audit trail | `cutting-pilot/src/app/admin/`, `cutting-pilot/src/components/admin/`, `cutting-pilot/src/components/parts/PartsLibrary.tsx` (shared with Load Builder), `cutting-pilot/src/lib/permissions.ts` |
 | **Shell** | `/` (home), `/login`, `/track/`, `/legal/`, `/account/` | legacy | Home cards, login, public tracking, legal pages, password change | `index.html`, `login.html`, `track/`, `legal/`, `account/` |
 
 **Shared infrastructure:**
