@@ -758,6 +758,9 @@ schedule badge):**
   unstable. **inv-dup-01:** the anticipated instability was found and fixed — the header regex captured
   only the first token, so every Seal Express invoice (`Invoice #SE 5046`) keyed as `SE`. The
   different-/blank-number edge above still stands.
+- [ ] [Logistics (v2)] **Invoice lines: explicit manual-resolution flag** — inv-dup-02's Replace carry-forward
+  infers "manual" from "matched before, unmatched now". A `resolved_manually` column set by `resolve-line`
+  would make it exact and let the UI badge hand-fixed lines. Needs a migration — deferred.
 - [ ] [Logistics (v2)] **Invoice export: PDF export option / branded print header** — deferred. PXXX-k shipped
   browser print (`window.print()`) + XLSX export for both the per-invoice/per-month view and an
   annual rollup; a true PDF export and a branded (logo/letterhead) print header were named in the

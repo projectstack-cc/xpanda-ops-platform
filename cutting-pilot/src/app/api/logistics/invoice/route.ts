@@ -11,6 +11,7 @@ import { extractBolTokens, normalizeAddressKey, composeAddress } from "@/lib/log
 import { FACILITY_ORIGIN_ADDRESS, ORIGIN_CACHE_KEY } from "@/lib/logistics/origin";
 import { geocode, drivingMiles, routePathMiles, type GeoPoint } from "@/lib/logistics/ors";
 import { computeZipVariance, computeInversions, type FlagRow } from "@/lib/logistics/flags";
+import { logActivity } from "@/lib/activityLog";
 
 interface InLine {
   lineNo: number;
@@ -604,7 +605,75 @@ export async function POST(req: Request) {
     }
 
     if (body.confirm === true) {
+      // inv-dup-02: snapshot stored matched lines before the delete so a Replace keeps resolutions the
+      // fresh ingest can't reproduce (e.g. fixed by hand via resolve-line). Keyed by carrier load #
+      // (stable per shipment), falling back to line # when there is no load #.
+      const snapshot = await DB.prepare(
+        `SELECT line_no, load_number, bol_number, bol_numbers, ship_to_city, ship_to_state, ship_to_zip, miles
+         FROM freight_invoice_lines
+         WHERE invoice_number = ? AND match_status = 'matched' AND miles IS NOT NULL AND miles > 0`
+      )
+        .bind(body.invoiceNumber)
+        .all<{
+          line_no: number;
+          load_number: string | null;
+          bol_number: string | null;
+          bol_numbers: string | null;
+          ship_to_city: string | null;
+          ship_to_state: string | null;
+          ship_to_zip: string | null;
+          miles: number;
+        }>();
+      const countRow = await DB.prepare(`SELECT COUNT(*) AS n FROM freight_invoice_lines WHERE invoice_number = ?`)
+        .bind(body.invoiceNumber)
+        .first<{ n: number }>();
+      const deletedLineCount = countRow?.n ?? 0;
+
+      const keyOf = (loadNumber: string | null | undefined, lineNo: number) =>
+        loadNumber && loadNumber.trim() !== "" ? `load:${loadNumber.trim()}` : `line:${lineNo}`;
+      const prior = new Map<string, (typeof snapshot.results)[number]>();
+      for (const row of snapshot.results ?? []) prior.set(keyOf(row.load_number, row.line_no), row);
+
+      // Only lines the new ingest leaves unmatched are patched; fresh matches and multi_destination win.
+      const carried: number[] = [];
+      for (const r of resolved) {
+        if (r.matchStatus !== "unmatched") continue;
+        const hit = prior.get(keyOf(r.loadNumber, r.lineNo));
+        if (!hit) continue;
+        let bolNumbers: string[];
+        try {
+          bolNumbers = JSON.parse(hit.bol_numbers ?? "");
+          if (!Array.isArray(bolNumbers)) throw new Error("not an array");
+        } catch {
+          bolNumbers = hit.bol_number ? [hit.bol_number] : [];
+        }
+        r.bolNumber = hit.bol_number;
+        r.bolNumbers = bolNumbers;
+        r.shipTo = { city: hit.ship_to_city ?? "", state: hit.ship_to_state ?? "", zip: hit.ship_to_zip ?? "" };
+        r.miles = hit.miles;
+        r.pricePerMile = r.amount / hit.miles;
+        r.matchStatus = "matched";
+        r.excludedFromStats = false;
+        r.note = "Kept manual resolution from previous ingest.";
+        carried.push(r.lineNo);
+      }
+
       await DB.prepare(`DELETE FROM freight_invoice_lines WHERE invoice_number = ?`).bind(body.invoiceNumber).run();
+
+      await logActivity(
+        DB,
+        "replace",
+        "freight_invoice",
+        body.invoiceNumber,
+        `Replaced invoice ${body.invoiceNumber} — ${deletedLineCount} stored line(s) → ${resolved.length} incoming; kept ${carried.length} manual resolution(s)`,
+        {
+          vendor: body.vendor ?? "",
+          deletedLineCount,
+          incomingLineCount: resolved.length,
+          carriedForwardLineNos: carried,
+        },
+        req.headers.get("X-User-Id") || null
+      );
     }
 
     for (const r of resolved) {

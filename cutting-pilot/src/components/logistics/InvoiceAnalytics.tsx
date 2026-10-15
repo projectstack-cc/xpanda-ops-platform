@@ -336,7 +336,7 @@ export default function InvoiceAnalytics({ userName, isAdmin, permissions }: Pro
                   stored — {duplicateInfo.existingLineCount} line{duplicateInfo.existingLineCount === 1 ? "" : "s"},{" "}
                   {money(duplicateInfo.existingTotalAmount ?? 0)}, last ingested{" "}
                   {duplicateInfo.existingIngestedAt ? new Date(duplicateInfo.existingIngestedAt).toLocaleString() : "an unknown time"}.
-                  Replacing deletes the stored copy and re-ingests this upload ({duplicateInfo.incomingLineCount} line
+                  Replacing re-ingests this upload; lines you resolved by hand are kept ({duplicateInfo.incomingLineCount} line
                   {duplicateInfo.incomingLineCount === 1 ? "" : "s"}).
                 </p>
                 <div className="flex justify-end gap-2 pt-2">
