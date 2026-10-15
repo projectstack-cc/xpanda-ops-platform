@@ -44,6 +44,9 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/api/notes", keys: ["notes"] },
   { prefix: "/v2/notes", keys: ["notes"] },
   { prefix: "/v2/api/blocks", keys: ["manufacturing.blocks"] },
+  // qc-01: v2 QC board (/v2/qc) — legacy's own `qc` key (PATH_PERMISSION_MAP /^\/qc\//). GET→view, mutate→edit.
+  { prefix: "/v2/api/qc", keys: ["qc"] },
+  { prefix: "/v2/qc", keys: ["qc"] },
   { prefix: "/v2/blocks", keys: ["manufacturing.blocks"] },
   // lgx-roll-01: Invoice Analytics API (the only thing under /v2/api/logistics) opens with the dashboard.
   { prefix: "/v2/api/logistics", keys: ["logistics.dashboard"] },

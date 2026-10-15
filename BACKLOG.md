@@ -109,12 +109,15 @@
 - [ ] Port `manufacturing/block-calculator.html` (general block nesting; `/v2/blocks` covers taper only).
 - [ ] Delete the `manufacturing/holey-board-calculator.html` redirect stub once access logs show no hits (hb-archive-01; original kept in `manufacturing/_archived/`).
 
-### QC · NO v2 YET (port, even though usage is low)
+### QC · v2 IN PROGRESS at /v2/qc (qc-NN) — unlinked
 
 - [ ] Port `qc/scrap-log.html` onto the native Scrap Database (see that section); don't port the Google-Sheets-mirror design.
-- [ ] Port `qc/final-inspection.html` (client-side PDF record).
+- [ ] qc-02 — inspection tables (migration) + API + per-part Inspect modal on /v2/qc.
+- [ ] qc-03 — Worker forwards each inspection to the Apps Script (Drive Doc + Sheet, as today); record sync status + Retry. Needs Steve to redeploy both scripts as "Anyone" + a shared secret.
+- [ ] Retire `qc/final-inspection.html` at QC cutover.
+- [ ] qc-01 follow-up — shared dashboard primitives under 44px touch targets: `WeekSelector` arrows (`w-8 h-8`) and segment buttons (~30px), `SearchInput` / `FilterSelect` (`h-9`). Used by /v2/qc, /v2/logistics and /v2/board — raise in one shared change.
 - [ ] Port `qc/incident-report.html` (gviz Google Sheets integration — decide keep vs native).
-- [ ] Port `qc/density-calculator.html` (standalone, no backend).
+- [ ] Retire `qc/density-calculator.html` at QC cutover (ported as the /v2/qc popup in qc-01).
 
 ### Reports · NO v2 YET
 
