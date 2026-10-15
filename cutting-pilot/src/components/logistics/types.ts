@@ -30,6 +30,9 @@ export interface ShipmentListItem {
   has_signed_bol?: number | boolean;
   /** dlv-04: the schedule sheet changed a load's delivery time and nobody has acknowledged it (0/1 from SQLite). */
   delivery_time_changed?: number | boolean;
+  /** lgx-printed-01: last loading-sheet print/download (UTC 'YYYY-MM-DD HH:MM:SS'); null = never printed. */
+  loading_sheet_printed_at?: string | null;
+  loading_sheet_printed_by?: string | null;
   status: string;
   ship_date: string | null;
   ship_to_city: string | null;

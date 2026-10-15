@@ -3,13 +3,15 @@
 // LoadingSheetButton order mode, SignedBolButton). 38x38 square, icon at 16. Label is the tooltip +
 // aria-label; when disabledReason is set the action is grayed, inert, and the tooltip shows the reason.
 // href -> <a> (a <span> when disabled); onClick -> <button>. Tokens only.
+// lgx-printed-01: `printed` variant (orange --printed-* tokens) marks an order whose loading sheet was
+// printed/downloaded; a disabled action still grays out whatever its variant.
 import type { LucideIcon } from "lucide-react";
 
 interface IconActionProps {
   icon: LucideIcon;
   label: string;
   disabledReason?: string | null;
-  variant?: "default" | "primary";
+  variant?: "default" | "primary" | "printed";
   href?: string;
   onClick?: () => void;
 }
@@ -19,11 +21,13 @@ const base = "w-[38px] h-[38px] inline-flex items-center justify-center rounded-
 const variantCls = {
   default: "border border-[var(--border)] bg-[var(--surface)] text-text",
   primary: "bg-[var(--brand)] text-white shadow-sm",
+  printed: "border border-[var(--printed-border)] bg-[var(--printed-bg)] text-[var(--printed-text)] shadow-sm",
 } as const;
 
 const hoverCls = {
   default: "hover:bg-[var(--ghost-bg)] transition-colors cursor-pointer",
   primary: "hover:opacity-90 transition-opacity cursor-pointer",
+  printed: "hover:opacity-90 transition-opacity cursor-pointer",
 } as const;
 
 export default function IconAction({

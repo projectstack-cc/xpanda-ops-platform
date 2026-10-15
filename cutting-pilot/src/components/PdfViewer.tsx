@@ -12,13 +12,17 @@ interface PdfViewerProps {
   filename: string;
   title: string;
   height?: number;
+  /** lgx-printed-01: optional hooks fired when the user clicks Print / Download (before the action). */
+  onPrint?: () => void;
+  onDownload?: () => void;
 }
 
-export default function PdfViewer({ src, filename, title, height = 420 }: PdfViewerProps) {
+export default function PdfViewer({ src, filename, title, height = 420, onPrint, onDownload }: PdfViewerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [loadError, setLoadError] = useState(false);
 
   function handlePrint() {
+    onPrint?.();
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     try {
@@ -30,6 +34,7 @@ export default function PdfViewer({ src, filename, title, height = 420 }: PdfVie
   }
 
   function handleDownload() {
+    onDownload?.();
     const a = document.createElement("a");
     a.href = src;
     a.download = filename;

@@ -36,7 +36,13 @@ export default function BolActions({ shipment, onViewBol, onGenerateBol }: BolAc
       />
 
       {jobId ? (
-        <LoadingSheetButton mode="order" jobId={jobId} disabledReason={loadingSheetReason} />
+        <LoadingSheetButton
+          mode="order"
+          jobId={jobId}
+          disabledReason={loadingSheetReason}
+          printedAt={shipment.loading_sheet_printed_at ?? null}
+          printedBy={shipment.loading_sheet_printed_by ?? null}
+        />
       ) : (
         <IconAction icon={Printer} label="Print loading sheet" disabledReason={NO_JOB} />
       )}

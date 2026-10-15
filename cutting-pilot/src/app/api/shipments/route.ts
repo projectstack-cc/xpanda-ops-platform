@@ -174,6 +174,7 @@ function listSelect(whereSql: string): string {
   return `SELECT shipments.*, j.invoice_number,
                 j.ship_to_street, j.ship_to_city, j.ship_to_state, j.ship_to_zip,
                 j.trailer_group_id,
+                j.loading_sheet_printed_at, j.loading_sheet_printed_by,
                 (SELECT COUNT(*) FROM bols b WHERE b.job_id = shipments.job_id) AS bol_count,
                 EXISTS (SELECT 1 FROM bols b
                          WHERE b.job_id = shipments.job_id

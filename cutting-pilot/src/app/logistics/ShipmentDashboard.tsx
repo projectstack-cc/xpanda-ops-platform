@@ -413,7 +413,7 @@ export default function ShipmentDashboard({
                 Invoice Analytics
               </a>
             )}
-            <LoadingSheetButton mode="day" />
+            <LoadingSheetButton mode="day" onPrinted={load} />
             <ToLoadSheetButton />
             <button
               type="button"

@@ -410,6 +410,8 @@
 
 ## Logistics (v2)
 
+- [ ] **Loading-sheet printed flag: optional reset when an order's loads/BOLs/manifest change after print** (lgx-printed-01 follow-on).
+- [ ] **Consider mirroring the loading-sheet printed state on the v2 Job Board / dock board if requested** (lgx-printed-01 follow-on).
 - [ ] **dlv-02 follow-up — Carrier View and the late-pickup check should read per-load appointments from `job_load_times`** instead of parsing `jobs.delivery_time` (today they see only the summary's first weekday + time).
 - [ ] **dlv-02 follow-up — multi-day orders still group under the job's single `ship_date` on dashboards**, even when `job_load_times` puts loads on different days.
 - [ ] **dlv-02 follow-up — sheet rows whose suffix skips loads mis-number them.** Sequential numbering by `load_count` is the rule (suffixes are inconsistent in live data), but INV 4440 (`001-005` Mon ×5 + `009` Tue ×1, job has 9 loads) gives Tue 11:00AM to load 6. A mismatch only logs `Sheet describes N loads; job has M`. Decide whether a mismatch should skip the job or surface on the dashboard.

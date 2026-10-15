@@ -56,6 +56,10 @@
   --loaded-bg: #d1fae5;
   --loaded-border: #6ee7b7;
   --loaded-text: #065f46;
+  /* lgx-printed-01: "loading sheet printed" marker (orange). */
+  --printed-bg: #f97316;
+  --printed-border: #ea580c;
+  --printed-text: #ffffff;
 
   /* Brand red */
   --brand: #e31837;
@@ -131,6 +135,9 @@
   --loaded-bg: rgba(16, 185, 129, 0.20);
   --loaded-border: rgba(16, 185, 129, 0.40);
   --loaded-text: #6ee7b7;
+  --printed-bg: #ea580c;
+  --printed-border: #f97316;
+  --printed-text: #ffffff;
 
   --brand: #ef4356;
   --brand-hover: #e31837;

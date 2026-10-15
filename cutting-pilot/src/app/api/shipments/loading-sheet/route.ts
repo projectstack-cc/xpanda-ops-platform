@@ -14,8 +14,14 @@
 // dlv-04: each load also carries its own delivery display from job_load_times (one chunked query for
 // every requested job); the order-level delivery_time stays the fallback. An order with no loads gets
 // load 1's time only when load_count = 1 — otherwise its single page keeps the order summary.
+//
+// lgx-printed-01: POST /v2/api/shipments/loading-sheet  { job_ids: string[] } marks those jobs' loading
+// sheets printed (jobs.loading_sheet_printed_at/_by), fired by LoadingSheetButton when the user clicks
+// Print or Download in the PdfViewer. Inherits the same gate (POST = logistics.dashboard edit).
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
+import { logActivity } from "@/lib/activityLog";
+import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 import type { LoadingSheetLineItem, LoadingSheetLoad, LoadingSheetOrder } from "@/lib/logistics/loadingSheet";
 import { parseLoadManifest } from "@/lib/logistics/loadManifest";
 
@@ -171,6 +177,68 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, orders });
+  } catch (e: any) {
+    return NextResponse.json(
+      { ok: false, error: "Server error.", detail: String(e?.message || e) },
+      { status: 500 }
+    );
+  }
+}
+
+const MAX_PRINT_IDS = 200;
+
+export async function POST(request: NextRequest) {
+  if (!V2_LOGISTICS_WRITES_ENABLED) {
+    return NextResponse.json(
+      { ok: false, error: "v2 logistics writes disabled (read-only migration phase)" },
+      { status: 501 }
+    );
+  }
+
+  const body = (await request.json().catch(() => null)) as { job_ids?: unknown } | null;
+  const raw = body?.job_ids;
+  if (
+    !Array.isArray(raw) ||
+    !raw.length ||
+    raw.length > MAX_PRINT_IDS ||
+    !raw.every((id) => typeof id === "string" && id.trim() !== "")
+  ) {
+    return NextResponse.json(
+      { ok: false, error: "job_ids must be a non-empty list of job ids.", detail: `Expected 1-${MAX_PRINT_IDS} non-empty strings` },
+      { status: 400 }
+    );
+  }
+  const jobIds = Array.from(new Set((raw as string[]).map((id) => id.trim())));
+
+  const actorId = request.headers.get("X-User-Id") || "";
+  const actorName = request.headers.get("X-User-Name") || null;
+  // UTC 'YYYY-MM-DD HH:MM:SS' (same format as SQLite datetime('now')), computed once so the response matches the rows.
+  const printedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
+
+  const { DB } = await getEnv();
+
+  try {
+    for (let i = 0; i < jobIds.length; i += IN_CHUNK) {
+      const chunk = jobIds.slice(i, i + IN_CHUNK);
+      await DB.prepare(
+        `UPDATE jobs SET loading_sheet_printed_at = ?, loading_sheet_printed_by = ?
+          WHERE id IN (${chunk.map(() => "?").join(",")})`
+      )
+        .bind(printedAt, actorName, ...chunk)
+        .run();
+    }
+
+    await logActivity(
+      DB,
+      "print",
+      "job",
+      jobIds.length === 1 ? jobIds[0] : "multiple",
+      `Loading sheet printed (${jobIds.length} order${jobIds.length === 1 ? "" : "s"})`,
+      { job_ids: jobIds },
+      actorId
+    );
+
+    return NextResponse.json({ ok: true, printed_at: printedAt, printed_by: actorName });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "Server error.", detail: String(e?.message || e) },

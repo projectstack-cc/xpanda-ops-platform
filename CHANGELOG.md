@@ -2939,6 +2939,23 @@ current series).
 
 ## Logistics (v2)
 
+- **lgx-printed-01 — Logistics dashboard: the per-order Print loading sheet action turns orange once printed
+  (Next/Cloudflare Platform Agent §9a + React Component Agent §9b). Migration `DB_Migrations/lgx-printed-01.sql`**
+  adds `jobs.loading_sheet_printed_at` (UTC `YYYY-MM-DD HH:MM:SS`) + `jobs.loading_sheet_printed_by` (display name).
+  Locked decisions (Steve 2026-10-15): **persisted in D1** so every user/device sees it; **marked only by Print or
+  Download inside the loading-sheet PdfViewer** (opening/previewing the modal does not count); **a whole-day
+  Loading sheets print/download marks every order included**; **no reset** — re-printing only refreshes time/user.
+  - New `POST /v2/api/shipments/loading-sheet` `{ job_ids }` (1–200, deduped, chunked at 90) stamps the rows from the
+    `X-User-Name` header, logs one `print` activity per request, and returns `{ ok, printed_at, printed_by }`. Gate
+    inherited (`logistics.dashboard` edit); behind `V2_LOGISTICS_WRITES_ENABLED` like the other shipment writes.
+  - `PdfViewer` gains optional `onPrint` / `onDownload` callbacks (fired before the action; the other call sites
+    pass nothing). `LoadingSheetButton` remembers the job ids in the built PDF and marks them best-effort — a failed
+    mark (network, 403 for view-only users) only `console.warn`s and never blocks the print.
+  - `IconAction` gains a `printed` variant on new `--printed-bg/-border/-text` tokens (light + dark). The order
+    button turns orange immediately (local state) with tooltip "Loading sheet printed Oct 15, 1:42 PM by <name> —
+    print again" (ET); the day toolbar button keeps its style and refetches the dashboard (`onPrinted={load}`) so
+    every included row goes orange. The shipments list now selects the two new columns.
+
 - **lbr-rot-01 — Load Builder: parts that can't fit as entered are rotatable (legacy parity) (Next/Cloudflare
   Platform Agent §9a). No UI / migration / parts-data change.** Steve 2026-10-15: a non-Holey part whose identity
   L×W×H exceeds the largest trailer envelope can't ship as entered, so it is treated as rotatable even with
