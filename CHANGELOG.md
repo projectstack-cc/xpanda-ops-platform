@@ -2939,6 +2939,12 @@ current series).
 
 ## Logistics (v2)
 
+- **inv-dup-01 — Invoice Analytics: parser truncated `Invoice #SE 5046` to `SE` → false duplicate (React Component Agent §9b). No migration, no API change.**
+  - **Why.** `extractHeader()` in `src/lib/logistics/parseInvoicePdf.ts` matched `/Invoice\s*#\s*(\S+)/i`; `(\S+)` stopped at the first space, so Seal Express's `Invoice #SE 5046` parsed as `SE`. The POST duplicate check keys on `invoice_number` alone, so every Seal Express invoice collided with the first one stored (the August invoice, stored as `'SE'`), and uploading SE 5046 (Sept shipments) showed the "Invoice already stored" modal.
+  - **Fix.** The regex now captures an optional ≤4-letter prefix plus the digits (`([A-Za-z]{0,4}[\s-]?\d[\w-]*)`), and the captured value has its whitespace normalized. A digit is required, so a bare `SE` can never become the key — with no digit-bearing number, `invoiceNumber` stays `""` and the existing POST guard returns 400 (loud failure, no fallback). `Invoice #SE 5046`→`SE 5046`, `Invoice # 4611`→`4611`, `Invoice #4611 Date: 03/31/26`→`4611`, `Invoice #SE5046`→`SE5046`, `Invoice #SE`→no match.
+  - **Untouched.** `app/api/logistics/invoice/route.ts` (duplicate check, `confirm` replace path, `persistLine`), `InvoiceAnalytics.tsx` and its modal, line/table parsing, BOL-token extraction, mileage. The stored `'SE'` rows are re-keyed manually by Steve in the D1 console.
+  - **BACKLOG.** "Invoice dedup residual edge" annotated (instability found + fixed); item left open.
+
 - **dlv-05 — v2 logistics dashboard row: delivery times capped at 2 + "…" (React Component Agent §9b). No migration, no API change.**
   - **Why.** Multi-load orders put the full per-load summary (`Mon 8:00AM, 9:00AM, 10:00AM, 11:00AM, 12:00PM | Tues 11:00AM`) into the row's ship date/time cell, which is `whitespace-nowrap`, so it ran into the Distance / ETA column.
   - **`capLoadTimesLabel(summary, max = 2)`** (`src/lib/loadTimes.ts`) walks a `summarizeLoadTimes` list label's ` | ` day groups in order, keeping each group's day prefix, until `max` times are kept, then appends `…` (`Mon 8:00AM | Tues 11:00AM, 12:00PM` → `Mon 8:00AM | Tues 11:00AM…`). Labels with ≤ max times, empty input and anything it can't parse (legacy free text such as `8:00 AM & HRLY`) come back unchanged. The same-day range form (`Thurs 9:00AM–12:00PM (4 loads)`) is intentionally left uncapped, because it is already one short label.

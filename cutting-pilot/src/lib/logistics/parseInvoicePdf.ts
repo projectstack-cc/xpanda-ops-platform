@@ -271,9 +271,12 @@ function extractHeader(items: RawItem[], headerY: number): { vendor: string; inv
 
   let invoiceNumber = "";
   for (const line of lines) {
-    const m = line.match(/Invoice\s*#\s*(\S+)/i);
+    // Capture an optional short alpha prefix + the digits ("SE 5046", "SE5046", "4611"). Requiring a
+    // digit means a bare prefix like "SE" can never become the key — the old (\S+) stopped at the
+    // first space and stored every Seal Express invoice as "SE" (inv-dup-01).
+    const m = line.match(/Invoice\s*#\s*([A-Za-z]{0,4}[\s-]?\d[\w-]*)/i);
     if (m) {
-      invoiceNumber = m[1].trim();
+      invoiceNumber = m[1].replace(/\s+/g, " ").trim();
       break;
     }
   }
