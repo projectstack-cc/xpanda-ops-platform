@@ -6,7 +6,10 @@
 // with the freshly recomputed InvoiceResult for that invoice (summary/flags included) so the
 // report reflects the fix immediately. One stop → matched; 2–6 stops (inv-resolve-01) → stored as
 // a multi-destination line, routed in the order entered — matches the resolve-line API.
-import { useState } from "react";
+// inv-resolve-02: a stop's BOL # is looked up (on blur / Enter, and once on open for prefilled BOLs)
+// via /v2/api/logistics/invoice/bol-lookup — the ingest's own linkage — and fills that stop's
+// address unless the user typed one. Filling is not resolving; Resolve is still a click.
+import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/Modal";
 
 export interface UnresolvedLine {
@@ -26,7 +29,15 @@ interface StopForm {
   city: string;
   state: string;
   zip: string;
+  autoFilledFrom: string | null;
 }
+
+interface LookupState {
+  kind: "loading" | "filled" | "notfound" | "error";
+  text: string;
+}
+
+const ADDRESS_FIELDS: (keyof StopForm)[] = ["street", "city", "state", "zip"];
 
 interface FormState {
   stops: StopForm[];
@@ -48,23 +59,32 @@ function keyFor(l: UnresolvedLine): string {
 }
 
 function blankStop(bol = ""): StopForm {
-  return { bol, street: "", city: "", state: "", zip: "" };
+  return { bol, street: "", city: "", state: "", zip: "", autoFilledFrom: null };
 }
 
 function StopRow({
   stop,
   disabled,
   onChange,
+  onBolCommit,
 }: {
   stop: StopForm;
   disabled: boolean;
-  onChange: (field: keyof StopForm, value: string) => void;
+  onChange: (field: "bol" | "street" | "city" | "state" | "zip", value: string) => void;
+  onBolCommit: () => void;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
       <input
         value={stop.bol}
         onChange={(e) => onChange("bol", e.target.value)}
+        onBlur={onBolCommit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onBolCommit();
+          }
+        }}
         placeholder="BOL #"
         disabled={disabled}
         className="min-h-[44px] w-28 rounded-md border border-[var(--input-border)] bg-surface text-text text-sm px-2"
@@ -107,23 +127,137 @@ export default function ResolveUnmatchedModal({ isOpen, onClose, lines, onResolv
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [doneKeys, setDoneKeys] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Per-stop lookup status, keyed `${lineKey}#${stopIndex}`; cleared for a line when a stop is removed.
+  const [lookups, setLookups] = useState<Record<string, LookupState>>({});
+  const lastLookedUp = useRef<Record<string, string>>({});
+  // Latest forms for async lookups, so a fill decision never uses a stale render's state.
+  const formsRef = useRef(forms);
+  formsRef.current = forms;
 
-  function formFor(l: UnresolvedLine): FormState {
-    const existing = forms[keyFor(l)];
-    if (existing) return existing;
+  function defaultForm(l: UnresolvedLine): FormState {
     // A line already carrying several BOL tokens is most likely multi-stop — one stop per token.
     if (l.bolNumbers.length > 1) return { stops: l.bolNumbers.map((b) => blankStop(b)) };
     return { stops: [blankStop(l.bolNumbers[0] ?? "")] };
   }
 
-  function setStops(l: UnresolvedLine, update: (stops: StopForm[]) => StopForm[]) {
-    const k = keyFor(l);
-    setForms((prev) => ({ ...prev, [k]: { stops: update((prev[k] ?? formFor(l)).stops) } }));
+  function formFor(l: UnresolvedLine): FormState {
+    return forms[keyFor(l)] ?? defaultForm(l);
   }
 
-  function setStopField(l: UnresolvedLine, index: number, field: keyof StopForm, value: string) {
-    setStops(l, (stops) => stops.map((st, i) => (i === index ? { ...st, [field]: value } : st)));
+  function setStops(l: UnresolvedLine, update: (stops: StopForm[]) => StopForm[]) {
+    const k = keyFor(l);
+    setForms((prev) => {
+      const next = { ...prev, [k]: { stops: update((prev[k] ?? defaultForm(l)).stops) } };
+      formsRef.current = next;
+      return next;
+    });
   }
+
+  function setLookup(stopKey: string, state: LookupState | null) {
+    setLookups((prev) => {
+      const next = { ...prev };
+      if (state) next[stopKey] = state;
+      else delete next[stopKey];
+      return next;
+    });
+  }
+
+  function setStopField(l: UnresolvedLine, index: number, field: "bol" | "street" | "city" | "state" | "zip", value: string) {
+    const isAddress = ADDRESS_FIELDS.includes(field);
+    // A manual address edit makes the address the user's own: never auto-overwrite it again.
+    if (isAddress && formFor(l).stops[index]?.autoFilledFrom) setLookup(`${keyFor(l)}#${index}`, null);
+    setStops(l, (stops) =>
+      stops.map((st, i) => (i === index ? { ...st, [field]: value, ...(isAddress ? { autoFilledFrom: null } : {}) } : st))
+    );
+  }
+
+  function removeStop(l: UnresolvedLine, index: number) {
+    const k = keyFor(l);
+    setStops(l, (s) => s.filter((_, j) => j !== index));
+    // Stop indexes shift — drop this line's lookup state rather than mislabel the remaining stops.
+    setLookups((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${k}#`))));
+    for (const key of Object.keys(lastLookedUp.current)) {
+      if (key.startsWith(`${k}#`)) delete lastLookedUp.current[key];
+    }
+  }
+
+  async function lookupStop(l: UnresolvedLine, index: number) {
+    const k = keyFor(l);
+    const stopKey = `${k}#${index}`;
+    const current = (formsRef.current[k] ?? defaultForm(l)).stops[index];
+    const bol = current?.bol.trim() ?? "";
+    if (!bol || lastLookedUp.current[stopKey] === bol) return;
+    lastLookedUp.current[stopKey] = bol;
+
+    setLookup(stopKey, { kind: "loading", text: "Looking up…" });
+    try {
+      const res = await fetch(`/v2/api/logistics/invoice/bol-lookup?bol=${encodeURIComponent(bol)}`, {
+        credentials: "same-origin",
+      });
+      const body = await res.json();
+      if (!body.ok) {
+        setLookup(stopKey, { kind: "error", text: body.error || "Could not look up that BOL." });
+        return;
+      }
+      if (!body.found) {
+        setLookup(stopKey, { kind: "notfound", text: "No BOL or order on file — enter the address." });
+        return;
+      }
+
+      const latest = (formsRef.current[k] ?? defaultForm(l)).stops[index];
+      if (!latest) return;
+      const addressEmpty = ADDRESS_FIELDS.every((f) => String(latest[f] ?? "").trim() === "");
+      if (!addressEmpty && !latest.autoFilledFrom) {
+        // The user typed this address — leave it alone.
+        setLookup(stopKey, null);
+        return;
+      }
+      setStops(l, (stops) =>
+        stops.map((st, i) =>
+          i === index
+            ? {
+                ...st,
+                street: body.address.street ?? "",
+                city: body.address.city ?? "",
+                state: String(body.address.state ?? "").toUpperCase(),
+                zip: body.address.zip ?? "",
+                autoFilledFrom: body.bolNumber,
+              }
+            : st
+        )
+      );
+      setLookup(stopKey, {
+        kind: "filled",
+        text:
+          body.source === "job" && body.fallbackBase
+            ? `Address from order INV# ${body.fallbackBase}`
+            : `Address from BOL ${body.bolNumber}`,
+      });
+    } catch (e: any) {
+      setLookup(stopKey, { kind: "error", text: e?.message || "Could not reach the server." });
+    }
+  }
+
+  // On open, look up each prefilled BOL once — sequentially, only stops that have a BOL.
+  const prefetchedOpen = useRef(false);
+  useEffect(() => {
+    if (!isOpen) {
+      prefetchedOpen.current = false;
+      return;
+    }
+    if (prefetchedOpen.current) return;
+    prefetchedOpen.current = true;
+    (async () => {
+      for (const l of lines) {
+        if (doneKeys.has(keyFor(l))) continue;
+        const stops = (formsRef.current[keyFor(l)] ?? defaultForm(l)).stops;
+        for (let i = 0; i < stops.length; i++) {
+          if (stops[i].bol.trim()) await lookupStop(l, i);
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   async function resolve(l: UnresolvedLine) {
     const k = keyFor(l);
@@ -227,7 +361,7 @@ export default function ResolveUnmatchedModal({ isOpen, onClose, lines, onResolv
                             <button
                               type="button"
                               disabled={isBusy}
-                              onClick={() => setStops(l, (s) => s.filter((_, j) => j !== i))}
+                              onClick={() => removeStop(l, i)}
                               className="min-h-[44px] px-3 rounded-md text-xs font-medium text-muted hover:text-text hover:bg-[var(--surface-2)] disabled:opacity-60 cursor-pointer"
                             >
                               Remove
@@ -238,7 +372,17 @@ export default function ResolveUnmatchedModal({ isOpen, onClose, lines, onResolv
                           stop={st}
                           disabled={isBusy}
                           onChange={(field, value) => setStopField(l, i, field, value)}
+                          onBolCommit={() => lookupStop(l, i)}
                         />
+                        {lookups[`${k}#${i}`] && (
+                          <div
+                            className={`text-xs mt-1 ${
+                              lookups[`${k}#${i}`].kind === "error" ? "text-[var(--warn-text)]" : "text-muted"
+                            }`}
+                          >
+                            {lookups[`${k}#${i}`].text}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
