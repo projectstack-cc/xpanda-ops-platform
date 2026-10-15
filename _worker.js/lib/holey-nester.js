@@ -1,6 +1,6 @@
 // _worker.js/lib/holey-nester.js
 // Holey Board chunk nester — server-authoritative port of the FFD packing in
-// manufacturing/holey-board-calculator.html (binPack). A "chunk" is 48"×24"×height; boards are
+// the retired manufacturing/_archived/holey-board-calculator.html (binPack; archived hb-archive-01). A "chunk" is 48"×24"×height; boards are
 // guillotine-sliced along the height. Pattern-agnostic (hole count does not affect the horizontal
 // cut). Kerf is charged BETWEEN boards only (interior cuts — n boards need n−1 cuts); the first
 // board in a chunk incurs no kerf. Pure: given resolved {thickness,qty} items, returns chunk count.

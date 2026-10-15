@@ -9147,6 +9147,21 @@ current series).
 
 ## Production / Manufacturing
 
+- **hb-archive-01 — archive the legacy Holey Board Calculator (manufacturing-agent §4a lead; admin-auth-agent §8
+  consulted, gate row unchanged). No migration, no API or permission change.** Steve's call: archive, don't port —
+  the per-order chunk breakdown is already server-side (`_worker.js/lib/holey-nester.js` + the v2 order modals,
+  `CutListChunkToggle`). `git mv manufacturing/holey-board-calculator.html` → `manufacturing/_archived/` (new folder,
+  reference only, header comment notes its i18n keys are gone so it may render raw keys). New
+  `manufacturing/holey-board-calculator.html` is a redirect stub to `/manufacturing/` (the `production/index.html`
+  pattern: meta refresh + `location.replace` + fallback link). Removed the dashboard tile from
+  `manufacturing/index.html`; in `manufacturing/manufacturing-i18n.js` removed the `holeyCalcTitle` / `holeyCalcDesc`
+  tile keys and the whole `// ── Holey Board Calculator` section (38 `hb*` keys) in en / es / ht, and dropped the
+  page from the header comment. Home card text (`index.html` + `shared/i18n-common.js` en/es/ht) now reads "Block
+  calculator, taper nesting, cutting boards". `holey-nester.js` header comment points at the archived file. The
+  `/^\/manufacturing\//` → `manufacturing.calculators` gate row covers both the stub and the archive. Docs:
+  AGENTS.md Manufacturing row, xpanda-ops-agents.md repo tree + §4a. BACKLOG: dropped the port + converge items,
+  added "delete the stub once access logs show no hits".
+
 - **QC Cleanup-13 — Legacy Cutting retirement, code removal (manufacturing-agent + db-api-agent).**
   Closes AUDIT-301. Wave D. Destructive — DROP held for Steve. Superseded by the v2 React session
   model (`/v2/cutting` + `/v2/cutting/crosscutter`), which has been the only cutting surface linked

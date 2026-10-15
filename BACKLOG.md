@@ -107,9 +107,7 @@
 ### Manufacturing calculators · NO v2 YET
 
 - [ ] Port `manufacturing/block-calculator.html` (general block nesting; `/v2/blocks` covers taper only).
-- [ ] Port `manufacturing/holey-board-calculator.html`.
-- [ ] [Job Board] Optional: converge `holey-board-calculator.html` onto the shared endpoint (kill the last
-  client-side copy of the packing math).
+- [ ] Delete the `manufacturing/holey-board-calculator.html` redirect stub once access logs show no hits (hb-archive-01; original kept in `manufacturing/_archived/`).
 
 ### QC · NO v2 YET (port, even though usage is low)
 

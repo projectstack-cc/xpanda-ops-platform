@@ -74,7 +74,7 @@ _root/
   manufacturing/
     index.html                        (Manufacturing dashboard)
     block-calculator.html             (108KB — multi-part nesting, 2D diagrams, parts library, XLSX export)
-    holey-board-calculator.html       (32.6KB — bin-packing optimization)
+    holey-board-calculator.html       (redirect stub → /manufacturing/; original in _archived/ — hb-archive-01)
     cutting-dashboard.html            (live cutting floor board; P193 worker + P194 frontend)
     manufacturing-header.js
     manufacturing-shared.css
@@ -414,13 +414,13 @@ You build and maintain the Manufacturing module (`/manufacturing/`). This covers
 
 ## Domain Knowledge
 - **Block Calculator**: Multi-part nesting, 2D Canvas diagrams, parts library integration, saved combinations, XLSX export
-- **Holey Board Calculator**: Bin-packing optimization for board orders with thickness optimization
+- **Holey Board Calculator**: RETIRED (hb-archive-01). Chunk counts per order are server-side (`_worker.js/lib/holey-nester.js`), shown in the v2 order modals. Do not revive.
 - **Cutting Dashboard (LEGACY — pending removal)**: Five-lane cutting floor board (Cross Cutter, Hole Cutter, Main Line, Blue Line, Laminate). The live vanilla page (`cutting-dashboard.html`) is backed by `cutting_steps` + `/api/cutting*` (P193+P194) with **bidirectional sync** to `jobs.processes` pills. ⚠️ **This step-checkbox model is SUPERSEDED by the v2 React session model** (`cutting_lines` + `cutting_sessions`, owned by §9a/§9b under `/v2/cutting`). The bidirectional pill sync was identified as an anti-pattern. **Do not invest new feature work in the `cutting_steps` model.** Keep the legacy page live and untouched until v2 reaches the floor, then retire `cutting_steps`, `cutting-dashboard.html`, `_worker.js/routes/cutting.js`, and `_worker.js/lib/cutting.js`. New cutting work routes to §9a/§9b, NOT here.
 
 ## Key Files You Own
 - `manufacturing/index.html` — Manufacturing dashboard (tile nav to tools)
 - `manufacturing/block-calculator.html` (108KB) — Block calculator
-- `manufacturing/holey-board-calculator.html` (32.6KB) — Board optimization
+- `manufacturing/holey-board-calculator.html` — redirect stub (retired hb-archive-01; per-order chunk counts come from `holey-nester.js`)
 - `manufacturing/cutting-dashboard.html` — Live cutting floor board (P193 worker + P194 frontend)
 - `manufacturing/manufacturing-header.js` — Auth bar (delegates to `/shared/shared-header.js`)
 - `manufacturing/manufacturing-shared.css` — Module styles
