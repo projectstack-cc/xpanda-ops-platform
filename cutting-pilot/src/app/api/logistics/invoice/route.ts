@@ -609,9 +609,9 @@ export async function POST(req: Request) {
       // fresh ingest can't reproduce (e.g. fixed by hand via resolve-line). Keyed by carrier load #
       // (stable per shipment), falling back to line # when there is no load #.
       const snapshot = await DB.prepare(
-        `SELECT line_no, load_number, bol_number, bol_numbers, ship_to_city, ship_to_state, ship_to_zip, miles
+        `SELECT line_no, load_number, bol_number, bol_numbers, ship_to_city, ship_to_state, ship_to_zip, miles, match_status
          FROM freight_invoice_lines
-         WHERE invoice_number = ? AND match_status = 'matched' AND miles IS NOT NULL AND miles > 0`
+         WHERE invoice_number = ? AND match_status IN ('matched', 'multi_destination') AND excluded_from_stats = 0 AND miles IS NOT NULL AND miles > 0`
       )
         .bind(body.invoiceNumber)
         .all<{
@@ -623,6 +623,7 @@ export async function POST(req: Request) {
           ship_to_state: string | null;
           ship_to_zip: string | null;
           miles: number;
+          match_status: "matched" | "multi_destination";
         }>();
       const countRow = await DB.prepare(`SELECT COUNT(*) AS n FROM freight_invoice_lines WHERE invoice_number = ?`)
         .bind(body.invoiceNumber)
@@ -634,7 +635,8 @@ export async function POST(req: Request) {
       const prior = new Map<string, (typeof snapshot.results)[number]>();
       for (const row of snapshot.results ?? []) prior.set(keyOf(row.load_number, row.line_no), row);
 
-      // Only lines the new ingest leaves unmatched are patched; fresh matches and multi_destination win.
+      // Fresh auto-resolutions (matched or multi_destination) always win; a stored manual resolution
+      // (single or multi-stop, inv-resolve-01) is restored only when the fresh ingest is unmatched.
       const carried: number[] = [];
       for (const r of resolved) {
         if (r.matchStatus !== "unmatched") continue;
@@ -652,7 +654,7 @@ export async function POST(req: Request) {
         r.shipTo = { city: hit.ship_to_city ?? "", state: hit.ship_to_state ?? "", zip: hit.ship_to_zip ?? "" };
         r.miles = hit.miles;
         r.pricePerMile = r.amount / hit.miles;
-        r.matchStatus = "matched";
+        r.matchStatus = hit.match_status;
         r.excludedFromStats = false;
         r.note = "Kept manual resolution from previous ingest.";
         carried.push(r.lineNo);
