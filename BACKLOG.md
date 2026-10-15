@@ -707,7 +707,8 @@ schedule badge):**
   in carrier-03 (appointment, drive time, suggested pickup on each tile). Revisit dock
   instructions if the carrier asks.
 - [ ] [Shift Notes (v2)] **P359 follow-up — v2 activity-log parity for notes.** `logActivity()` is legacy-worker-only;
-  v2's `/v2/api/notes` POST/mark-viewed don't write to the shared `activity_log` table. Revisit if
+  v2's `/v2/api/notes` POST/mark-viewed don't write to the shared `activity_log` table. DELETE now logs
+  (`delete` / `shift_note`) as of notes-del-01; POST and mark-viewed still don't. Revisit if
   Steve wants an audit trail for shift notes.
 - [ ] [Manufacturing / Cutting (React pilot)] **Block-nesting width step-down end-cap view** (deferred unless testing requires) — P411's
   `ChunkElevation.tsx` surfaces width step-downs only in the table's `Part W×L` column; a true

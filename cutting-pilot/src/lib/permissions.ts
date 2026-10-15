@@ -23,7 +23,7 @@ export const PERMISSION_LABELS: Record<string, { group: string; label: string }>
   "manufacturing.cutting.manage":   { group: "Manufacturing", label: "Cutting — Manage (assign/reorder chunk tasks)" },
   "manufacturing.cutting.override": { group: "Manufacturing", label: "Cutting — Override (kick operators)" },
   "notes":                          { group: "Shift Notes",   label: "Shift Notes (view / add)" },
-  "notes.manage":                   { group: "Shift Notes",   label: "Shift Notes — Mark viewed (manager)" },
+  "notes.manage":                   { group: "Shift Notes",   label: "Shift Notes — Mark viewed / delete any (manager)" },
   "manufacturing.blocks":           { group: "Manufacturing", label: "Block nesting" },
   "production.log":                 { group: "Production",    label: "Production Log (Molding / Expansion)" },
   "production.manage":              { group: "Production",    label: "Production Log — Manage (add dropdown options, hide sheets)" },

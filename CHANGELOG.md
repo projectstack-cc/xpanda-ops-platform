@@ -2146,6 +2146,16 @@ current series).
 
 ## Shift Notes (v2)
 
+- **notes-del-01 — Shift Notes delete: the author can delete their own note, `notes.manage` can delete any (admins pass via `hasPermission`).**
+  New `DELETE /v2/api/notes?id=…` (existing `/v2/api/notes` → `notes` middleware row already gates non-GET as `notes` edit;
+  ownership / `X-User-Can-Manage-Notes` checked in-route → 403 otherwise, 404 if missing). Hard `DELETE` from `shift_notes`
+  (no FKs, nothing references it) plus an `activity_log` row (`delete` / `shift_note`, detail carries subject, author, `by_manager`).
+  GET now returns a server-computed per-row `can_delete` and never leaks `author_id`. `NoteRow` gains a Delete button
+  (only when `can_delete`) using the house two-step arm/confirm (first tap → "Tap again to delete" danger fill, auto-disarms
+  after 4s or on collapse; no `window.confirm`), sharing one action row with Mark viewed; errors show inline.
+  `notes.manage` label → "Mark viewed / delete any (manager)" (key unchanged). Lifts P359's immutability for delete only — edit
+  stays out of scope. No migration. The homepage unviewed bubble counts live rows, so it self-corrects.
+
 - **P361 — Shift Notes roles labels + homepage card with unviewed bubble, border pulse, and "New: {subject}" subtitle polling `/v2/api/notes/unviewed-count` (60s, 403-safe).**
   `admin/roles.html` `PERMISSION_LABELS` gained `notes`/`notes.manage` rows (new "Shift Notes" group,
   auto-renders in the two existing toggle loops — no other roles.html change). `index.html` gained a

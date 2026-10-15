@@ -14,6 +14,7 @@ export interface ShiftNote {
   created_at: string;
   viewed_at: string | null;
   viewed_by_name: string | null;
+  can_delete: boolean;
 }
 
 export default function ShiftNotesBoard() {
@@ -105,7 +106,13 @@ export default function ShiftNotesBoard() {
 
           {!error &&
             notes.map((note) => (
-              <NoteRow key={note.id} note={note} canManage={canManage} onViewed={() => fetchNotes(true)} />
+              <NoteRow
+                key={note.id}
+                note={note}
+                canManage={canManage}
+                onViewed={() => fetchNotes(true)}
+                onDeleted={() => fetchNotes(true)}
+              />
             ))}
         </div>
       )}

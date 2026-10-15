@@ -2,8 +2,8 @@
 // One shift note as a single-tap accordion row. Unviewed notes carry a danger-tinted
 // background + a small "● new" marker; viewed notes are flat surface with a
 // "✓ viewed by {name}" meta suffix. Manager Mark-viewed lives inside the expanded panel.
-import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import type { ShiftNote } from "./ShiftNotesBoard";
 
 // D1 datetime strings are UTC 'YYYY-MM-DD HH:MM:SS'.
@@ -22,13 +22,48 @@ interface Props {
   note: ShiftNote;
   canManage: boolean;
   onViewed: () => void;
+  onDeleted: () => void;
 }
 
-export default function NoteRow({ note, canManage, onViewed }: Props) {
+export default function NoteRow({ note, canManage, onViewed, onDeleted }: Props) {
   const [open, setOpen] = useState(false);
   const [marking, setMarking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const unviewed = !note.viewed_at;
+  // Two-step arm/confirm delete (house pattern, lgx-boldel-01) — notes-del-01.
+  const [delArmed, setDelArmed] = useState(false);
+  const [delBusy, setDelBusy] = useState(false);
+
+  // Auto-disarm after 4s if the second tap never comes.
+  useEffect(() => {
+    if (!delArmed || delBusy) return;
+    const t = setTimeout(() => setDelArmed(false), 4000);
+    return () => clearTimeout(t);
+  }, [delArmed, delBusy]);
+
+  // Collapsing the row disarms.
+  useEffect(() => {
+    if (!open) setDelArmed(false);
+  }, [open]);
+
+  async function deleteNote() {
+    setDelBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/v2/api/notes?id=${encodeURIComponent(note.id)}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.ok) {
+        onDeleted();
+      } else {
+        setError(data.error || "Failed to delete note.");
+      }
+    } catch {
+      setError("Network error.");
+    } finally {
+      setDelBusy(false);
+      setDelArmed(false);
+    }
+  }
 
   async function markViewed() {
     setMarking(true);
@@ -108,15 +143,36 @@ export default function NoteRow({ note, canManage, onViewed }: Props) {
             </p>
           )}
 
-          {canManage && unviewed && (
-            <button
-              type="button"
-              disabled={marking}
-              onClick={markViewed}
-              className="mt-3 min-h-[44px] px-4 py-2 bg-[var(--success-bg)] text-[var(--success-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-            >
-              {marking ? "Marking…" : "Mark viewed"}
-            </button>
+          {((canManage && unviewed) || note.can_delete) && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {canManage && unviewed && (
+                <button
+                  type="button"
+                  disabled={marking}
+                  onClick={markViewed}
+                  className="min-h-[44px] px-4 py-2 bg-[var(--success-bg)] text-[var(--success-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                >
+                  {marking ? "Marking…" : "Mark viewed"}
+                </button>
+              )}
+
+              {note.can_delete && (
+                <button
+                  type="button"
+                  disabled={delBusy || marking}
+                  onClick={() => (delArmed ? deleteNote() : setDelArmed(true))}
+                  className={[
+                    "min-h-[44px] px-4 py-2 rounded text-sm font-semibold inline-flex items-center gap-1.5 cursor-pointer hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                    delArmed
+                      ? "bg-[var(--danger-bg)] text-[var(--danger-text)]"
+                      : "border border-border text-[var(--danger-bg)]",
+                  ].join(" ")}
+                >
+                  <Trash2 size={15} aria-hidden="true" />
+                  {delBusy ? "Deleting…" : delArmed ? "Tap again to delete" : "Delete"}
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}
