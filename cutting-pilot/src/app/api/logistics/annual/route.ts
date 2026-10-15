@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
 import { computePerZip, computeZipVariance, type FlagRow } from "@/lib/logistics/flags";
+import { SERVICE_MONTH_CTE } from "@/lib/logistics/serviceMonth";
 
 type MatchStatus = "matched" | "unmatched" | "multi_destination";
 
@@ -78,13 +79,13 @@ export async function GET(request: Request) {
     let year = requestedYear;
     if (!year) {
       const maxYear = await DB.prepare(
-        `SELECT MAX(substr(invoice_date, 1, 4)) AS year FROM freight_invoice_lines WHERE invoice_date IS NOT NULL`
+        `${SERVICE_MONTH_CTE}SELECT MAX(substr(service_month, 1, 4)) AS year FROM invoice_lines WHERE service_month IS NOT NULL`
       ).first<{ year: string | null }>();
       year = maxYear?.year ?? String(new Date().getFullYear());
     }
 
     const totalsRow = await DB.prepare(
-      `SELECT
+      `${SERVICE_MONTH_CTE}SELECT
          COUNT(*) AS lineCount,
          SUM(amount) AS totalSpend,
          SUM(CASE WHEN match_status = 'matched' THEN 1 ELSE 0 END) AS matchedCount,
@@ -92,7 +93,7 @@ export async function GET(request: Request) {
          SUM(CASE WHEN match_status = 'multi_destination' THEN 1 ELSE 0 END) AS multiCount,
          SUM(CASE WHEN match_status = 'matched' AND miles IS NOT NULL THEN amount ELSE NULL END) AS matchedSpend,
          SUM(CASE WHEN match_status = 'matched' THEN miles ELSE NULL END) AS totalMiles
-       FROM freight_invoice_lines WHERE substr(invoice_date, 1, 4) = ?`
+       FROM invoice_lines WHERE substr(service_month, 1, 4) = ?`
     )
       .bind(year)
       .first<TotalsRow>();
@@ -117,14 +118,14 @@ export async function GET(request: Request) {
     };
 
     const monthlyRows = await DB.prepare(
-      `SELECT
-         substr(invoice_date, 1, 7) AS month,
+      `${SERVICE_MONTH_CTE}SELECT
+         service_month AS month,
          COUNT(*) AS lineCount,
          SUM(amount) AS totalSpend,
          SUM(CASE WHEN match_status = 'matched' THEN amount ELSE NULL END) AS matchedSpend,
          SUM(CASE WHEN match_status = 'matched' THEN miles ELSE NULL END) AS totalMiles
-       FROM freight_invoice_lines
-       WHERE substr(invoice_date, 1, 4) = ? AND invoice_date IS NOT NULL
+       FROM invoice_lines
+       WHERE substr(service_month, 1, 4) = ?
        GROUP BY month
        ORDER BY month ASC`
     )
@@ -145,15 +146,15 @@ export async function GET(request: Request) {
     });
 
     const topLanesRows = await DB.prepare(
-      `SELECT
+      `${SERVICE_MONTH_CTE}SELECT
          ship_to_zip AS zip,
          ship_to_city AS city,
          COUNT(*) AS lineCount,
          SUM(amount) AS totalSpend,
          AVG(miles) AS avgMiles,
          SUM(amount) / SUM(miles) AS blendedPricePerMile
-       FROM freight_invoice_lines
-       WHERE match_status = 'matched' AND miles IS NOT NULL AND substr(invoice_date, 1, 4) = ?
+       FROM invoice_lines
+       WHERE match_status = 'matched' AND miles IS NOT NULL AND substr(service_month, 1, 4) = ?
        GROUP BY ship_to_zip
        ORDER BY totalSpend DESC
        LIMIT 10`
@@ -163,11 +164,11 @@ export async function GET(request: Request) {
     const topLanes = topLanesRows.results ?? [];
 
     const yearRows = await DB.prepare(
-      `SELECT invoice_date, line_no, ship_date, load_number, po_text, bol_number, bol_numbers,
+      `${SERVICE_MONTH_CTE}SELECT invoice_date, line_no, ship_date, load_number, po_text, bol_number, bol_numbers,
               amount, ship_to_city, ship_to_state, ship_to_zip, miles, price_per_mile, match_status
-       FROM freight_invoice_lines
-       WHERE substr(invoice_date, 1, 4) = ?
-       ORDER BY invoice_date ASC, line_no ASC`
+       FROM invoice_lines
+       WHERE substr(service_month, 1, 4) = ?
+       ORDER BY service_month ASC, invoice_number ASC, line_no ASC`
     )
       .bind(year)
       .all<YearLineRow>();

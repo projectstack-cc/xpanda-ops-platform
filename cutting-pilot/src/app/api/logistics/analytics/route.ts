@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
 import { computePerZip, computeZipVariance, type FlagRow } from "@/lib/logistics/flags";
+import { SERVICE_MONTH_CTE } from "@/lib/logistics/serviceMonth";
 
 interface TotalsRow {
   lineCount: number;
@@ -69,14 +70,14 @@ export async function GET() {
     };
 
     const monthlyRows = await DB.prepare(
-      `SELECT
-         substr(invoice_date, 1, 7) AS month,
+      `${SERVICE_MONTH_CTE}SELECT
+         service_month AS month,
          COUNT(*) AS lineCount,
          SUM(amount) AS totalSpend,
          SUM(CASE WHEN match_status = 'matched' THEN amount ELSE NULL END) AS matchedSpend,
          SUM(CASE WHEN match_status = 'matched' THEN miles ELSE NULL END) AS totalMiles
-       FROM freight_invoice_lines
-       WHERE invoice_date IS NOT NULL
+       FROM invoice_lines
+       WHERE service_month IS NOT NULL
        GROUP BY month
        ORDER BY month ASC`
     ).all<MonthlyRow>();

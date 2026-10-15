@@ -751,7 +751,9 @@ schedule badge):**
   header for a month with >1 distinct invoice (`vendor: "Multiple"`, `invoiceNumber: "<n> invoices"`,
   `invoiceDate: <month>`) is untested against a real multi-invoice month — today there's exactly 1
   invoice/month. Revisit `MatchRateBanner`'s rendering of that fallback once a month actually holds
-  several invoices.
+  several invoices. **inv-month-01:** months are now bucketed by service month (ship dates), so late
+  invoices will share a month with on-time ones sooner — September holds only SE 5046 today, but this
+  fallback header will be exercised soon.
 - [ ] [Logistics (v2)] **Financials tab: vendor breakdown widget** — deferred until multi-vendor data exists (currently 1 vendor).
 - [ ] [Logistics (v2)] **Invoice dedup residual edge** — same-month invoice under a different/blank `invoice_number`
   is not flagged (relies on stable parsed invoice numbers); revisit if parser numbering proves

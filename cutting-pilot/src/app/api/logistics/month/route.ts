@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/db";
 import { computeZipVariance, computeInversions, type FlagRow } from "@/lib/logistics/flags";
+import { SERVICE_MONTH_CTE } from "@/lib/logistics/serviceMonth";
 
 type MatchStatus = "matched" | "unmatched" | "multi_destination";
 
@@ -53,8 +54,8 @@ export async function GET(request: Request) {
     const { DB } = await getEnv();
 
     const monthsRows = await DB.prepare(
-      `SELECT DISTINCT substr(invoice_date, 1, 7) AS month FROM freight_invoice_lines
-       WHERE invoice_date IS NOT NULL ORDER BY month DESC`
+      `${SERVICE_MONTH_CTE}SELECT DISTINCT service_month AS month FROM invoice_lines
+       WHERE service_month IS NOT NULL ORDER BY month DESC`
     ).all<{ month: string }>();
     const months = (monthsRows.results ?? []).map((r) => r.month);
 
@@ -65,12 +66,12 @@ export async function GET(request: Request) {
     const month = requestedMonth && months.includes(requestedMonth) ? requestedMonth : months[0];
 
     const lineRows = await DB.prepare(
-      `SELECT invoice_number, invoice_date, vendor, line_no, ship_date, load_number, po_text,
+      `${SERVICE_MONTH_CTE}SELECT invoice_number, invoice_date, vendor, line_no, ship_date, load_number, po_text,
               bol_number, bol_numbers, amount, ship_to_city, ship_to_state, ship_to_zip, miles,
               price_per_mile, match_status, excluded_from_stats
-       FROM freight_invoice_lines
-       WHERE substr(invoice_date, 1, 7) = ?
-       ORDER BY line_no ASC`
+       FROM invoice_lines
+       WHERE service_month = ?
+       ORDER BY invoice_number ASC, line_no ASC`
     )
       .bind(month)
       .all<MonthLineRow>();
