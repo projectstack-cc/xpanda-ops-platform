@@ -555,6 +555,32 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     const noRotate: PackSku = { ...block, id: "P2", allowRotation: false };
     check("skuOrientations: allowRotation:false returns 1 orientation", skuOrientations(noRotate, OPTS).length === 1);
 
+    // lbr-rot-01: a non-Holey part that can't fit any trailer as entered (144" tall > the 109"
+    // envelope) is rotatable regardless of its flag; identity stays first. Holey never rotates.
+    const tooTall: PackSku = { id: "R1", name: "Too-tall sheet", sku: "R1", length: 48, width: 2, height: 144, weight: 1, category: "Blocks", allowRotation: false };
+    const tooTallOrients = skuOrientations(tooTall, OPTS);
+    check("lbr-rot-01: allowRotation:false part too tall as entered gets >1 orientation", tooTallOrients.length > 1, String(tooTallOrients.length));
+    check(
+      "lbr-rot-01: identity stays first for the rotated-anyway part",
+      tooTallOrients[0].length === 48 && tooTallOrients[0].width === 2 && tooTallOrients[0].height === 144,
+      JSON.stringify(tooTallOrients[0])
+    );
+    check(
+      "lbr-rot-01: engine-wide allowRotation:false still rotates a part that can't fit as entered",
+      skuOrientations(tooTall, { ...OPTS, allowRotation: false }).length > 1
+    );
+    const tallHoley: PackSku = { id: "R2", name: "Too-tall holey", sku: "R2", length: 48, width: 24, height: 120, weight: 1, category: HOLEY_BOARD_CATEGORY, allowRotation: true };
+    check("lbr-rot-01: Holey Board too tall as entered still returns exactly 1 orientation", skuOrientations(tallHoley, OPTS).length === 1);
+    const tooTallPlan = pack([{ skuId: "R1", qty: 10 }], [tooTall], TRAILER_TYPES["53ft Standard"]);
+    check("lbr-rot-01: pack() places all 10 too-tall pieces (balance empty)", tooTallPlan.balance.length === 0, JSON.stringify(tooTallPlan.balance));
+    check(
+      "lbr-rot-01: pack() emits no 'does not fit trailer' warning for the too-tall piece",
+      !tooTallPlan.warnings.some((w) => w.includes("does not fit trailer")),
+      JSON.stringify(tooTallPlan.warnings)
+    );
+    const tooTallViolations = validatePlan(tooTallPlan, [{ skuId: "R1", qty: 10 }], [tooTall], OPTS);
+    check("lbr-rot-01: validatePlan on the too-tall pack returns no violations", tooTallViolations.length === 0, JSON.stringify(tooTallViolations));
+
     const squareFootprint: PackSku = { id: "P3", name: "Square-footprint block", sku: "P3", length: 20, width: 20, height: 5, weight: 2, category: "Blocks", allowRotation: true };
     check(
       "skuOrientations: two equal dimensions (20x20x5) dedupes to 3 distinct shapes",

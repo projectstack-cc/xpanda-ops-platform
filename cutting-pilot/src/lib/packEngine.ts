@@ -45,6 +45,15 @@ export const TRAILER_TYPES: TrailerType = {
   "26ft Box Truck": { length: 312, width: 72, height: 108, maxWeight: 28000 },
 };
 
+// lbr-rot-01: the largest envelope any trailer offers — max length, max width and max height across
+// TRAILER_TYPES, taken independently. A piece whose identity exceeds it can't ship as entered on any
+// trailer, so skuOrientations treats it as rotatable regardless of its allowRotation flag.
+export const MAX_TRAILER_ENVELOPE: Pick<Dimensions, "length" | "width" | "height"> = {
+  length: Math.max(...Object.values(TRAILER_TYPES).map((t) => t.length)),
+  width: Math.max(...Object.values(TRAILER_TYPES).map((t) => t.width)),
+  height: Math.max(...Object.values(TRAILER_TYPES).map((t) => t.height)),
+};
+
 // Matches legacy's `sku.category === 'Holey Board'` string exactly (verified against
 // logistics/load-builder.html 2026-09-14). Holey board never rotates: length stays along the
 // trailer, width stays across, height stacks up.
@@ -223,6 +232,10 @@ function approxLte(a: number, b: number, eps = EPS): boolean {
   return a <= b + eps;
 }
 
+function fitsEnvelope(o: { length: number; width: number; height: number }, env: { length: number; width: number; height: number }): boolean {
+  return approxLte(o.length, env.length) && approxLte(o.width, env.width) && approxLte(o.height, env.height);
+}
+
 function approxGte(a: number, b: number, eps = EPS): boolean {
   return a >= b - eps;
 }
@@ -286,11 +299,17 @@ function dedupeOrientations(orientations: Orientation[]): Orientation[] {
  * locked to exactly one: its declared L/W/H, identity. Decision (locked): blocks may be tipped
  * or stood on end — otherwise all six axis-aligned permutations are legal, deduplicated so a SKU
  * with two equal dimensions (or a cube) isn't scored as the same shape twice.
+ * Exception (lbr-rot-01): a non-Holey SKU whose identity exceeds MAX_TRAILER_ENVELOPE gets all
+ * permutations even when the flag (SKU or engine-wide) says no. Identity always stays first.
  */
 export function skuOrientations(sku: PackSku, options: PackOptions): Orientation[] {
   const identity: Orientation = { length: sku.length, width: sku.width, height: sku.height, label: "flat" };
   const isHoley = sku.category === HOLEY_BOARD_CATEGORY;
-  const rotationAllowed = !isHoley && options.allowRotation && sku.allowRotation;
+  if (isHoley) return [identity];
+  // lbr-rot-01: a part that can't fit any trailer as entered is rotatable regardless of its flag
+  // (legacy rotates every non-Holey part; Steve 2026-10-15). Parts that fit as entered keep the flag.
+  const fitsAsEntered = fitsEnvelope(identity, MAX_TRAILER_ENVELOPE);
+  const rotationAllowed = !fitsAsEntered || (options.allowRotation && sku.allowRotation);
   if (!rotationAllowed) return [identity];
   return dedupeOrientations(allPermutations(sku));
 }
@@ -391,7 +410,10 @@ export function familyOrientationOptions(fam: Family, opts: PackOptions): Family
     return skuOrientations(rep, opts).map((o) => ({ length: o.length, width: o.width, height: o.height, label: o.label }));
   }
   const isHoley = rep.category === HOLEY_BOARD_CATEGORY;
-  const rotationAllowed = !isHoley && opts.allowRotation && fam.members.every((m) => m.sku.allowRotation);
+  // lbr-rot-01: a member counts as rotatable if its flag allows it or it can't fit any trailer as entered.
+  const rotationAllowed =
+    !isHoley &&
+    fam.members.every((m) => !fitsEnvelope(m.sku, MAX_TRAILER_ENVELOPE) || (opts.allowRotation && m.sku.allowRotation));
   const flat: FamilyOrientation = { length: fam.length, width: fam.width, height: rep.height, label: "flat" };
   if (!rotationAllowed || approxEq(fam.length, fam.width)) return [flat];
   const rotated: FamilyOrientation = { length: fam.width, width: fam.length, height: rep.height, label: "flat-rotated" };
@@ -1062,7 +1084,21 @@ export function pack(cart: CartLine[], skus: PackSku[], dims: Dimensions, option
   }
 
   const families = groupIntoFamilies(placeable);
-  const familyOptions = families.map((f) => familyOrientationOptions(f, opts));
+  // lbr-rot-01: drop orientation options that can't stack even once on THIS trailer (footprint over
+  // the floor, or — single-member families only — a unit taller than the effective height). The
+  // combo score ranks trailers first and never counts leftover, so a dead option (place nothing,
+  // 0 trailers) would otherwise beat a live rotated one. Legality still lives in skuOrientations; if
+  // every option is dead the original list is kept so the existing "cannot stack" warning fires.
+  const familyOptions = families.map((f) => {
+    const all = familyOrientationOptions(f, opts);
+    const live = all.filter(
+      (o) =>
+        approxLte(o.length, dims.length) &&
+        approxLte(o.width, dims.width) &&
+        (f.members.length > 1 || approxLte(o.height, effectiveHeight))
+    );
+    return live.length > 0 ? live : all;
+  });
   // lbr-03: one deterministic consolidation work budget for this whole pack() call, shared across
   // every orientation combination simulate() tries (place() attempts, never wall-clock).
   const budget: PlannerBudget = { remaining: CONSOLIDATION_MAX_WORK };

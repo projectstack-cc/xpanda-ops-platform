@@ -82,9 +82,9 @@
     diagram PDF: the "636"L × 98"W — 1' 0" remaining" caption overlaps the STACK BREAKDOWN heading (observed in the lbr-05 smoke render). (resolved lbr-08)
   - [ ] lbr-04 follow-up — legacy Load Builder still writes order loads with a 90-day TTL; moot after lbr-11 cutover.
   - [ ] lbr-06 follow-up — nothing gates on logistics.v2 any more; drop the key + label (and strip it from roles) in a later admin cleanup.
-  - [ ] lbr follow-up — non-Holey parts with allowRotation:false whose catalog size doesn't fit as entered (34 jobs in
-    the lbr-01 audit; e.g. 2×48×144 with height 144) stay unplaced; decide parts-data fix vs. treating "fits only
-    rotated" as rotatable.
+  - [ ] lbr-rot-01 follow-up — a too-tall-as-entered part that shares its L×W footprint with another SKU joins a 2+
+    member family, which only offers flat / flat-rotated (never tips height), so it stays unplaced. Harness: INV 4462,
+    4×55×110 (with 4×55×96) — 10 pcs. Fix idea: split envelope-misfit members into their own family.
   - [ ] lbr follow-up — multi-truck loads: topped stacks that spill across a truck boundary open the next truck's nose
     row; consider per-truck top-off placement. (lbr-03 audit: planner-backed v2 frontRowMixed = 36.)
 - [ ] **Load builder v2 (`/v2/logistics/load-builder`) still dark after lgx-roll-01.** Un-dark by deleting its `logistics.v2` middleware line, then repoint Build Load / Load Builder links.

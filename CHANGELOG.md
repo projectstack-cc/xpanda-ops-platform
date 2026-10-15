@@ -2939,6 +2939,38 @@ current series).
 
 ## Logistics (v2)
 
+- **lbr-rot-01 — Load Builder: parts that can't fit as entered are rotatable (legacy parity) (Next/Cloudflare
+  Platform Agent §9a). No UI / migration / parts-data change.** Steve 2026-10-15: a non-Holey part whose identity
+  L×W×H exceeds the largest trailer envelope can't ship as entered, so it is treated as rotatable even with
+  `allowRotation: false` (SKU or engine-wide). Parts that fit as entered keep honoring the flag; Holey Board never
+  rotates. The rule lives once, in `skuOrientations()` (`packEngine.ts`): new module constant
+  `MAX_TRAILER_ENVELOPE` (max length / width / height across `TRAILER_TYPES`, independently — 636 × 98 × 109 today,
+  computed not hardcoded) + `fitsEnvelope()` (`approxLte`, so an exact fit fits). Identity stays `[0]`. One source,
+  so `pack()`'s fit check, `validatePlan`, auto-downsize, `loadEditor` (Customize / buildColumn / swap / top-off) and
+  the harness all inherit it — "anything Customize allows passes at Done" stays true. `familyOrientationOptions`'s
+  2+ member branch uses the same rule per member (flag allows it **or** identity misfits).
+  - **Deviation from the locked design (needed for the prompt's own selfcheck #4):** the rule alone left every
+    affected job unplaced — just with a "cannot stack even one unit" warning instead of "does not fit". The combo
+    search's `scoreResult` ranks trailers first and never counts leftover, so the identity option (places nothing,
+    0 trailers) beat the rotated one. `pack()` now drops orientation options that can't stack even once on this
+    trailer (footprint over the floor, or — single-member families — taller than the effective height) before the
+    combo search, keeping the full list if every option is dead so the existing warning still fires. Legality is
+    untouched (still `skuOrientations`); this only stops the search choosing a dead option. Re-ranking by leftover
+    was rejected: it would change scoring globally (e.g. the capped 4174 / 4186 parity).
+  - **Selfchecks:** 7 new C1 checks (48×2×144 `allowRotation:false` → >1 orientation with identity first, also with
+    engine-wide `allowRotation:false`; Holey 48×24×120 → 1; `pack()` of 10 on a 53ft places all, no "does not fit",
+    `validatePlan` clean). `packEngine` 185/185 (golden `GOLDEN_4472_T1` unchanged); `loadEditor` 281/281,
+    `dissolve` 21/21, `forcedPack` 26/26, `jobPull` 17/17, `loadingDiagramPdf` 42/42, `loadList` 28/28, `savedLoad`
+    43/43, `stackPlanner` 29/29.
+  - **Harness (`Audits/lbr-01-engine-baseline.md` regenerated):** v2 Σ unplaced 157,092 → 149,476 (legacy 149,466;
+    the 10-pc gap is INV 4462, below). Jobs unplaced because of no fit: 34 → 0 (INV 4372, previously "no fit
+    warning", is also fixed). Σ trucks 285 → 311, because 25 jobs that placed nothing (0 trucks) now ship; each matches
+    legacy's truck count. Golden, mixed 476, over2 0, inverted 0, frontRowMixed 36, seq 0 unchanged. Two lbr-03 gates
+    now FAIL **by design** (the harness wasn't edited): "v2 trucks ≤ lbr-02" (those 25 jobs, 0 → legacy's count) and "v2
+    unplaced unchanged per job" (35 jobs, every drift is a decrease). Capped 4174 / 4186 still equal legacy.
+  - **Still unplaced:** INV 4462, 10 × 4×55×110. It shares the 4×55 footprint with 4×55×96, so it joins a 2-member
+    family that only offers flat / flat-rotated → BACKLOG follow-up.
+
 - **inv-resolve-02 — Resolve unmatched lines: BOL # auto-fills the stop's address, via the ingest's own linkage (Next/Cloudflare Platform Agent §9a for the shared lookup + route; React Component Agent §9b for the modal). No migration, no schema change.**
   - **New `src/lib/logistics/bolLookup.ts`.** `DestRow`, `ResolvedDestination`, `bolBase()` and `pickBest()` moved **verbatim** out of `app/api/logistics/invoice/route.ts` and exported, plus `lookupBolDestinations(DB, tokens)` — the former inline block of `resolveLine()` (newest `bols` row with a ZIP; else `jobs` by `invoice_number = bolBase(token)`, recording `fallbackBase`), carried over unchanged (same SQL, order, `pickBest` / blank-ZIP rules). Returns `{ resolved, bolTokensFound }` (`bolTokensFound` = keys of `bolRowsByKey`); empty `tokens` → empty result, no query.
   - **`invoice/route.ts` — move-only refactor.** Imports `lookupBolDestinations` + `type DestRow` (`distinctZips` stays); the block is replaced by one call and `missing` filters on `bolTokensFound`. **Parity:** the block, interfaces and functions were diffed against HEAD and match byte for byte; `bolTokensFound.has(token)` ≡ `bolRowsByKey.has(token)` (same key set); the empty-tokens early return is unreachable from `resolveLine()` (it already returns before the lookup when there are no tokens). Ingest output is identical.

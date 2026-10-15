@@ -14,18 +14,18 @@ The v2 and legacy columns sum all 172 jobs. The planner column sums only the 34 
 
 | Metric | v2 | legacy | planner (34 jobs) |
 |---|---:|---:|---:|
-| Σ trucks | 285 | 303 | 100 |
-| Σ stacks | 22594 | 25388 | 4716 |
+| Σ trucks | 311 | 303 | 100 |
+| Σ stacks | 24568 | 25388 | 4716 |
 | Σ mixed | 476 | 0 | 466 |
 | Σ over2 | 0 | 0 | 0 |
 | Σ inverted | 0 | 0 | 0 |
 | Σ frontRowMixed | 36 | 0 | 36 |
 | Σ seqViolations | 0 | 0 | 0 |
 | Σ overHeight | 0 | 0 | 0 |
-| Σ unplaced | 157092 | 149466 | 0 |
+| Σ unplaced | 149476 | 149466 | 0 |
 | Σ shortened stacks (rule 4) | n/a | n/a | 0 |
 | Jobs with trucks > truckLB (of 86 single-footprint jobs) | 0 | 9 | n/a |
-| Σ trucks over single-footprint jobs (Σ truckLB = 410) | 187 | 204 | n/a |
+| Σ trucks over single-footprint jobs (Σ truckLB = 410) | 205 | 204 | n/a |
 | **Planner jobs only (34; Σ truckLB = 100): Σ trucks** | 100 | 109 | 100 |
 | Planner jobs only: Σ mixed | 476 | 0 | 466 |
 | Planner jobs only: jobs at truckLB | 34 | 25 | 34 |
@@ -59,6 +59,7 @@ Sorted by v2 `mixed` descending (ties: v2 trucks descending, then inv ascending)
 | 4154 | 3 | 0 | 2/48/0/0/0/0/0 | 1/401/0/0/0/0/0 | n/a | — |
 | 4239 | 1 | 0 | 2/45/0/0/0/0/0 | 1/444/0/0/0/0/0 | 2 | — |
 | 4243 | 17 | 0 | 2/20/0/0/0/0/0 | 2/20/0/0/0/0/0 | n/a | — |
+| 4251 | 1 | 0 | 2/400/0/0/0/0/0 | 2/400/0/0/0/0/0 | n/a | — |
 | 4257 | 1 | 0 | 2/45/0/0/0/0/0 | 1/447/0/0/0/0/0 | 2 | — |
 | 4260 | 1 | 0 | 2/36/0/0/0/0/0 | 2/36/0/0/0/0/0 | 2 | — |
 | 4262 | 8 | 1 | 2/31/0/0/0/0/0 | 2/259/0/0/0/0/0 | n/a | — |
@@ -96,41 +97,54 @@ Sorted by v2 `mixed` descending (ties: v2 trucks descending, then inv ascending)
 | 4481 | 1 | 0 | 2/34/0/0/0/0/0 | 2/34/0/0/0/0/0 | 2 | — |
 | 4486 | 6 | 1 | 2/32/0/0/0/0/0 | 1/274/0/0/0/0/0 | n/a | — |
 | 4053 | 8 | 0 | 1/39/0/0/0/0/0 | 1/39/0/0/0/0/0 | 1 | 1/39/0/0 |
+| 4123 | 3 | 1 | 1/11/0/0/0/0/0 | 1/51/0/0/0/0/0 | n/a | — |
+| 4126 | 2 | 1 | 1/2/0/0/0/0/0 | 1/2/0/0/0/0/0 | 1 | — |
 | 4202 | 2 | 0 | 1/8/0/0/0/0/0 | 1/8/0/0/0/0/0 | n/a | — |
 | 4212 | 5 | 3 | 1/27/0/0/0/0/0 | 1/153/0/0/0/0/0 | n/a | — |
 | 4240 | 6 | 3 | 1/43/0/0/0/0/0 | 1/183/0/0/0/0/0 | n/a | — |
 | 4241 | 9 | 0 | 1/27/0/0/0/0/0 | 1/27/0/0/0/0/0 | 1 | 1/27/0/0 |
 | 4246 | 1 | 0 | 1/2080/0/0/0/0/0 | 1/174/0/0/0/0/0 | 1 | — |
 | 4248 | 1 | 0 | 1/6/0/0/0/0/0 | 1/6/0/0/0/0/0 | 1 | — |
+| 4249 | 3 | 2 | 1/135/0/0/0/0/0 | 1/5/0/0/0/0/0 | 1 | — |
 | 4250 | 2 | 0 | 1/600/0/0/0/0/0 | 1/600/0/0/0/0/0 | n/a | — |
+| 4254 | 2 | 1 | 1/8/0/0/0/0/0 | 1/8/0/0/0/0/0 | 1 | — |
 | 4255 | 6 | 1 | 1/33/0/0/0/0/0 | 1/210/0/0/0/0/0 | n/a | — |
 | 4258 | 3 | 2 | 1/17/0/0/0/0/0 | 1/17/0/0/0/0/0 | 1 | — |
 | 4263 | 1 | 0 | 1/6/0/0/0/0/0 | 1/3/0/0/0/0/0 | 1 | — |
 | 4266 | 7 | 0 | 1/383/0/0/0/0/0 | 1/13/0/0/0/0/0 | n/a | — |
+| 4269 | 1 | 0 | 1/180/0/0/0/0/0 | 1/7/0/0/0/0/0 | 1 | — |
+| 4270 | 2 | 1 | 1/8/0/0/0/0/0 | 1/8/0/0/0/0/0 | 1 | — |
 | 4271 | 7 | 4 | 1/56/0/0/0/0/0 | 1/3/0/0/0/0/0 | n/a | — |
 | 4276 | 8 | 2 | 1/34/0/0/0/0/0 | 1/214/0/0/0/0/0 | n/a | — |
 | 4279 | 3 | 0 | 1/61/0/0/0/0/0 | 1/160/0/0/0/0/0 | n/a | — |
-| 4280 | 5 | 2 | 1/40/0/0/0/0/0 | 1/41/0/0/0/0/0 | n/a | — |
-| 4284 | 2 | 0 | 1/12/0/0/0/0/0 | 1/35/0/0/0/0/0 | n/a | — |
+| 4280 | 5 | 2 | 1/41/0/0/0/0/0 | 1/41/0/0/0/0/0 | n/a | — |
+| 4284 | 2 | 0 | 1/17/0/0/0/0/0 | 1/35/0/0/0/0/0 | n/a | — |
 | 4287 | 8 | 1 | 1/360/0/0/0/0/0 | 1/14/0/0/0/0/0 | n/a | — |
-| 4289 | 3 | 1 | 1/67/0/0/0/0/0 | 1/68/0/0/0/0/0 | n/a | — |
+| 4288 | 3 | 2 | 1/135/0/0/0/0/0 | 1/5/0/0/0/0/0 | 1 | — |
+| 4289 | 3 | 1 | 1/68/0/0/0/0/0 | 1/68/0/0/0/0/0 | n/a | — |
 | 4292 | 2 | 1 | 1/24/0/0/0/0/0 | 1/24/0/0/0/0/0 | 1 | — |
 | 4294 | 5 | 1 | 1/43/0/0/0/0/0 | 1/173/0/0/0/0/0 | n/a | — |
 | 4295 | 6 | 3 | 1/19/0/0/0/0/0 | 1/119/0/0/0/0/0 | n/a | — |
-| 4296 | 8 | 4 | 1/39/0/0/0/0/0 | 1/4/0/0/0/0/0 | n/a | — |
-| 4298 | 4 | 0 | 1/113/0/0/0/0/0 | 1/114/0/0/0/0/0 | n/a | — |
+| 4296 | 8 | 4 | 1/40/0/0/0/0/0 | 1/4/0/0/0/0/0 | n/a | — |
+| 4298 | 4 | 0 | 1/127/0/0/0/0/0 | 1/114/0/0/0/0/0 | n/a | — |
 | 4299 | 1 | 0 | 1/31/0/0/0/0/0 | 1/31/0/0/0/0/0 | 1 | 1/31/0/0 |
 | 4301 | 1 | 0 | 1/6/0/0/0/0/0 | 1/6/0/0/0/0/0 | 1 | — |
 | 4302 | 6 | 2 | 1/23/0/0/0/0/0 | 1/143/0/0/0/0/0 | n/a | — |
+| 4304 | 2 | 1 | 1/8/0/0/0/0/0 | 1/8/0/0/0/0/0 | 1 | — |
+| 4305 | 2 | 0 | 1/5/0/0/0/0/0 | 1/18/0/0/0/0/0 | n/a | — |
+| 4306 | 1 | 0 | 1/39/0/0/0/0/0 | 1/39/0/0/0/0/0 | 1 | — |
 | 4310 | 10 | 0 | 1/30/0/0/0/0/0 | 1/30/0/0/0/0/0 | 1 | 1/30/0/0 |
 | 4311 | 8 | 0 | 1/13/0/0/0/0/0 | 1/13/0/0/0/0/0 | 1 | 1/13/0/0 |
+| 4312 | 1 | 0 | 1/180/0/0/0/0/0 | 1/7/0/0/0/0/0 | 1 | — |
 | 4317 | 7 | 0 | 1/389/0/0/0/0/0 | 1/12/0/0/0/0/0 | n/a | — |
 | 4318 | 1 | 0 | 1/28/0/0/0/0/0 | 1/28/0/0/0/0/0 | 1 | — |
 | 4321 | 5 | 1 | 1/40/0/0/0/0/0 | 1/283/0/0/0/0/0 | n/a | — |
+| 4326 | 3 | 0 | 1/8/0/0/0/0/0 | 1/14/0/0/0/0/0 | n/a | — |
 | 4327 | 4 | 1 | 1/46/0/0/0/0/0 | 1/328/0/0/0/0/0 | n/a | — |
 | 4328 | 2 | 1 | 1/27/0/0/0/0/0 | 1/27/0/0/0/0/0 | 1 | — |
 | 4330 | 8 | 0 | 1/31/0/0/0/0/0 | 1/31/0/0/0/0/0 | 1 | 1/31/0/0 |
-| 4332 | 4 | 1 | 1/112/0/0/0/0/0 | 1/127/0/0/0/0/0 | n/a | — |
+| 4332 | 4 | 1 | 1/127/0/0/0/0/0 | 1/127/0/0/0/0/0 | n/a | — |
+| 4335 | 2 | 0 | 1/6/0/0/0/0/0 | 1/29/0/0/0/0/0 | n/a | — |
 | 4341 | 4 | 0 | 1/44/0/0/0/0/0 | 1/96/0/0/0/0/0 | n/a | — |
 | 4343 | 6 | 2 | 1/32/0/0/0/0/0 | 1/76/0/0/0/0/0 | n/a | — |
 | 4344 | 6 | 3 | 1/27/0/0/0/0/0 | 1/247/0/0/0/0/0 | n/a | — |
@@ -140,15 +154,20 @@ Sorted by v2 `mixed` descending (ties: v2 trucks descending, then inv ascending)
 | 4348 | 1 | 0 | 1/2/0/0/0/0/0 | 1/2/0/0/0/0/0 | 1 | 1/2/0/0 |
 | 4353 | 1 | 0 | 1/910/0/0/0/0/0 | 1/11/0/0/0/0/0 | 1 | — |
 | 4354 | 8 | 0 | 1/51/0/0/0/0/0 | 1/51/0/0/0/0/0 | 1 | 1/51/0/0 |
+| 4357 | 1 | 0 | 1/5/0/0/0/0/0 | 1/23/0/0/0/0/0 | 1 | — |
+| 4359 | 2 | 1 | 1/5/0/0/0/0/0 | 1/23/0/0/0/0/0 | 1 | — |
+| 4360 | 3 | 2 | 1/135/0/0/0/0/0 | 1/5/0/0/0/0/0 | 1 | — |
 | 4363 | 8 | 1 | 1/372/0/0/0/0/0 | 1/12/0/0/0/0/0 | n/a | — |
 | 4364 | 7 | 1 | 1/38/0/0/0/0/0 | 1/248/0/0/0/0/0 | n/a | — |
 | 4369 | 3 | 1 | 1/24/0/0/0/0/0 | 1/209/0/0/0/0/0 | n/a | — |
 | 4370 | 5 | 1 | 1/42/0/0/0/0/0 | 1/116/0/0/0/0/0 | n/a | — |
+| 4372 | 2 | 0 | 1/4/0/0/0/0/0 | 1/15/0/0/0/0/0 | n/a | — |
 | 4374 | 2 | 0 | 1/600/0/0/0/0/0 | 1/600/0/0/0/0/0 | n/a | — |
 | 4378 | 4 | 1 | 1/42/0/0/0/0/0 | 1/163/0/0/0/0/0 | n/a | — |
 | 4381 | 1 | 0 | 1/3809/0/0/0/0/0 | 1/53/0/0/0/0/0 | 1 | — |
 | 4382 | 6 | 4 | 1/56/0/0/0/0/0 | 1/2/0/0/0/0/0 | n/a | — |
 | 4389 | 4 | 0 | 1/70/0/0/0/0/0 | 1/19/0/0/0/0/0 | n/a | — |
+| 4390 | 1 | 0 | 1/180/0/0/0/0/0 | 1/7/0/0/0/0/0 | 1 | — |
 | 4391 | 1 | 0 | 1/6/0/0/0/0/0 | 1/3/0/0/0/0/0 | 1 | — |
 | 4392 | 7 | 0 | 1/371/0/0/0/0/0 | 1/13/0/0/0/0/0 | n/a | — |
 | 4393 | 3 | 0 | 1/49/0/0/0/0/0 | 2/245/0/0/0/0/0 | n/a | — |
@@ -160,7 +179,10 @@ Sorted by v2 `mixed` descending (ties: v2 trucks descending, then inv ascending)
 | 4406 | 1 | 0 | 1/6/0/0/0/0/0 | 1/6/0/0/0/0/0 | 1 | — |
 | 4409 | 10 | 0 | 1/46/0/0/0/0/0 | 1/46/0/0/0/0/0 | 1 | 1/46/0/0 |
 | 4411 | 2 | 1 | 1/40/0/0/0/0/0 | 1/3/0/0/0/0/0 | 1 | — |
+| 4412 | 3 | 1 | 1/15/0/0/0/0/0 | 1/24/0/0/0/0/0 | n/a | — |
 | 4414 | 2 | 1 | 1/11/0/0/0/0/0 | 1/1/0/0/0/0/0 | 1 | — |
+| 4416 | 1 | 0 | 1/180/0/0/0/0/0 | 1/7/0/0/0/0/0 | 1 | — |
+| 4417 | 2 | 1 | 1/1/0/0/0/0/0 | 1/1/0/0/0/0/0 | 1 | — |
 | 4420 | 6 | 0 | 1/27/0/0/0/0/0 | 1/27/0/0/0/0/0 | 1 | 1/27/0/0 |
 | 4421 | 7 | 0 | 1/365/0/0/0/0/0 | 1/13/0/0/0/0/0 | n/a | — |
 | 4423 | 2 | 0 | 1/57/0/0/0/0/0 | 1/431/0/0/0/0/0 | n/a | — |
@@ -169,47 +191,25 @@ Sorted by v2 `mixed` descending (ties: v2 trucks descending, then inv ascending)
 | 4427 | 13 | 10 | 1/7/0/0/0/0/0 | 1/7/0/0/0/0/0 | n/a | — |
 | 4431 | 7 | 3 | 1/62/0/0/0/0/0 | 1/4/0/0/0/0/0 | n/a | — |
 | 4433 | 6 | 2 | 1/44/0/0/0/0/0 | 1/206/0/0/0/0/0 | n/a | — |
-| 4437 | 5 | 3 | 1/56/0/0/0/0/0 | 1/57/0/0/0/0/0 | n/a | — |
+| 4437 | 5 | 3 | 1/81/0/0/0/0/0 | 1/57/0/0/0/0/0 | n/a | — |
 | 4439 | 4 | 0 | 1/12/0/0/0/0/0 | 1/12/0/0/0/0/0 | 1 | 1/12/0/0 |
-| 4444 | 3 | 0 | 1/112/0/0/0/0/0 | 1/113/0/0/0/0/0 | n/a | — |
+| 4443 | 1 | 0 | 1/200/0/0/0/0/0 | 1/3/0/0/0/0/0 | 1 | — |
+| 4444 | 3 | 0 | 1/113/0/0/0/0/0 | 1/113/0/0/0/0/0 | n/a | — |
+| 4447 | 2 | 1 | 1/6/0/0/0/0/0 | 1/6/0/0/0/0/0 | 1 | — |
 | 4449 | 4 | 1 | 1/69/0/0/0/0/0 | 1/226/0/0/0/0/0 | n/a | — |
 | 4450 | 5 | 2 | 1/32/0/0/0/0/0 | 1/258/0/0/0/0/0 | n/a | — |
 | 4453 | 7 | 0 | 1/365/0/0/0/0/0 | 1/13/0/0/0/0/0 | n/a | — |
 | 4454 | 4 | 0 | 1/22/0/0/0/0/0 | 1/191/0/0/0/0/0 | n/a | — |
 | 4456 | 3 | 0 | 1/60/0/0/0/0/0 | 1/298/0/0/0/0/0 | n/a | — |
-| 4462 | 9 | 0 | 1/108/0/0/0/0/0 | 1/8/0/0/0/0/0 | n/a | — |
+| 4462 | 9 | 0 | 1/116/0/0/0/0/0 | 1/8/0/0/0/0/0 | n/a | — |
 | 4466 | 4 | 0 | 1/8/0/0/0/0/0 | 1/8/0/0/0/0/0 | 1 | 1/8/0/0 |
 | 4467 | 1 | 0 | 1/6/0/0/0/0/0 | 1/6/0/0/0/0/0 | 1 | — |
-| 4468 | 4 | 1 | 1/167/0/0/0/0/0 | 1/180/0/0/0/0/0 | n/a | — |
+| 4468 | 4 | 1 | 1/189/0/0/0/0/0 | 1/180/0/0/0/0/0 | n/a | — |
 | 4473 | 2 | 1 | 1/550/0/0/0/0/0 | 1/550/0/0/0/0/0 | 1 | — |
+| 4475 | 2 | 1 | 1/25/0/0/0/0/0 | 1/1/0/0/0/0/0 | 1 | — |
 | 4478 | 5 | 1 | 1/48/0/0/0/0/0 | 1/125/0/0/0/0/0 | n/a | — |
 | 4483 | 5 | 0 | 1/47/0/0/0/0/0 | 1/389/0/0/0/0/0 | n/a | — |
 | 4484 | 4 | 0 | 1/46/0/0/0/0/0 | 1/231/0/0/0/0/0 | n/a | — |
-| 4123 | 3 | 1 | 0/0/0/0/0/0/0 | 1/51/0/0/0/0/0 | n/a | — |
-| 4126 | 2 | 1 | 0/0/0/0/0/0/0 | 1/2/0/0/0/0/0 | 1 | — |
-| 4249 | 3 | 2 | 0/0/0/0/0/0/0 | 1/5/0/0/0/0/0 | 1 | — |
-| 4251 | 1 | 0 | 0/0/0/0/0/0/0 | 2/400/0/0/0/0/0 | n/a | — |
-| 4254 | 2 | 1 | 0/0/0/0/0/0/0 | 1/8/0/0/0/0/0 | 1 | — |
-| 4269 | 1 | 0 | 0/0/0/0/0/0/0 | 1/7/0/0/0/0/0 | 1 | — |
-| 4270 | 2 | 1 | 0/0/0/0/0/0/0 | 1/8/0/0/0/0/0 | 1 | — |
-| 4288 | 3 | 2 | 0/0/0/0/0/0/0 | 1/5/0/0/0/0/0 | 1 | — |
-| 4304 | 2 | 1 | 0/0/0/0/0/0/0 | 1/8/0/0/0/0/0 | 1 | — |
-| 4305 | 2 | 0 | 0/0/0/0/0/0/0 | 1/18/0/0/0/0/0 | n/a | — |
-| 4306 | 1 | 0 | 0/0/0/0/0/0/0 | 1/39/0/0/0/0/0 | 1 | — |
-| 4312 | 1 | 0 | 0/0/0/0/0/0/0 | 1/7/0/0/0/0/0 | 1 | — |
-| 4326 | 3 | 0 | 0/0/0/0/0/0/0 | 1/14/0/0/0/0/0 | n/a | — |
-| 4335 | 2 | 0 | 0/0/0/0/0/0/0 | 1/29/0/0/0/0/0 | n/a | — |
-| 4357 | 1 | 0 | 0/0/0/0/0/0/0 | 1/23/0/0/0/0/0 | 1 | — |
-| 4359 | 2 | 1 | 0/0/0/0/0/0/0 | 1/23/0/0/0/0/0 | 1 | — |
-| 4360 | 3 | 2 | 0/0/0/0/0/0/0 | 1/5/0/0/0/0/0 | 1 | — |
-| 4372 | 2 | 0 | 0/0/0/0/0/0/0 | 1/15/0/0/0/0/0 | n/a | — |
-| 4390 | 1 | 0 | 0/0/0/0/0/0/0 | 1/7/0/0/0/0/0 | 1 | — |
-| 4412 | 3 | 1 | 0/0/0/0/0/0/0 | 1/24/0/0/0/0/0 | n/a | — |
-| 4416 | 1 | 0 | 0/0/0/0/0/0/0 | 1/7/0/0/0/0/0 | 1 | — |
-| 4417 | 2 | 1 | 0/0/0/0/0/0/0 | 1/1/0/0/0/0/0 | 1 | — |
-| 4443 | 1 | 0 | 0/0/0/0/0/0/0 | 1/3/0/0/0/0/0 | 1 | — |
-| 4447 | 2 | 1 | 0/0/0/0/0/0/0 | 1/6/0/0/0/0/0 | 1 | — |
-| 4475 | 2 | 1 | 0/0/0/0/0/0/0 | 1/1/0/0/0/0/0 | 1 | — |
 
 ### Planner: jobs where mixing saved a truck
 
@@ -231,43 +231,9 @@ Every job where either engine hits the 20-trailer limit or leaves pieces unplace
 
 | inv | v2 trucks / unplaced | legacy trucks / unplaced | likely cause |
 |---|---|---|---|
-| 4123 | 0 / 450 | 1 / 0 | v2 can't place 2 non-Holey SKUs stated as L×W×H 1.5x11.875x144, 2.5x11.875x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4126 | 0 / 100 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
 | 4174 | 20 / 23448 | 20 / 23448 | 32,600 pcs (300,698 stacked in.) need ≥ 54 trailers by volume alone, so both engines stop at the 20-trailer cap — a quantity artifact on the job (not one shipment), not an engine fault |
 | 4186 | 20 / 126018 | 20 / 126018 | 132,344 pcs (1,082,500 stacked in.) need ≥ 191 trailers by volume alone, so both engines stop at the 20-trailer cap — a quantity artifact on the job (not one shipment), not an engine fault |
-| 4249 | 0 / 270 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4251 | 0 / 400 | 2 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 57.5x102.75x5 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4254 | 0 / 424 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4269 | 0 / 360 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4270 | 0 / 424 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4280 | 1 / 20 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4284 | 1 / 200 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2.5x11.875x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4288 | 0 / 270 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4289 | 1 / 35 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4296 | 1 / 16 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2.5x48x110 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4298 | 1 / 20 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4304 | 0 / 424 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4305 | 0 / 175 | 1 / 0 | v2 can't place 2 non-Holey SKUs stated as L×W×H 2.5x11.875x144, 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4306 | 0 / 350 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2.5x11.875x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4312 | 0 / 360 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4326 | 0 / 150 | 1 / 0 | v2 can't place 2 non-Holey SKUs stated as L×W×H 2x48x144, 11.875x1.25x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4332 | 1 / 145 | 1 / 0 | v2 can't place 2 non-Holey SKUs stated as L×W×H 11.875x1.25x144, 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4335 | 0 / 250 | 1 / 0 | v2 can't place 2 non-Holey SKUs stated as L×W×H 1.5x11.875x144, 2.5x11.875x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4357 | 0 / 200 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2.5x11.875x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4359 | 0 / 200 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2.5x11.875x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4360 | 0 / 270 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4372 | 0 / 136 | 1 / 0 | unplaced pieces with no fit warning — needs a look |
-| 4390 | 0 / 360 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4412 | 0 / 220 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2.5x11.875x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4416 | 0 / 360 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4417 | 0 / 31 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4437 | 1 / 50 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4443 | 0 / 400 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 0.75x48x120 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4444 | 1 / 40 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4447 | 0 / 320 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4462 | 1 / 26 | 1 / 0 | v2 can't place 2 non-Holey SKUs stated as L×W×H 2.5x48x110, 4x55x110 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4468 | 1 / 120 | 1 / 0 | v2 can't place 2 non-Holey SKUs stated as L×W×H 2x48x144, 2.5x11.875x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
-| 4475 | 0 / 50 | 1 / 0 | v2 can't place a non-Holey SKU stated as L×W×H 2x48x144 with `allowRotation: false` (no legal orientation fits 636×98×109); legacy ignores `allowRotation` for non-Holey parts and stands them on another face |
+| 4462 | 1 / 10 | 1 / 0 | unplaced pieces with no fit warning — needs a look |
 
 ## 4. Golden fixture: INV 4472, trailer-1 piece set (`GOLDEN_4472_T1`)
 
@@ -372,56 +338,91 @@ Rule violations (0):
 - **`seqViolations`** groups each row's columns by the base layer's stated catalog L×W (footprint family) and compares adjacent rows that hold that family; `truckLB` uses stated L×W only (no rotation) and is `n/a` for multi-footprint carts.
 - **Planner engine (lbr-02):** `planStacks(skus, 109, floor(636/L) × floor(98/W))` runs on the 34 jobs whose cart is all Holey Board with one stated footprint and whose `truckLB` is within the 20-trailer cap (this excludes INV 4174 and 4186, the quantity-artifact outliers). Its loading-order stacks are chunked into trucks of `stacksPerTruck` and rows of `floor(98/W)` columns (nose first), then scored with the same metrics as the other engines; the harness checks that the chunked truck count equals `plan.trucks`. The planner reached `truckLB` on 34 of 34 jobs and saved a truck over its own pure plan on 9. No `maxPerStack` weight cap is passed.
 - **Planner `frontRowMixed` (36) is a harness artifact, not a planner rule break.** `planStacks` returns one nose→doors sequence for the whole load, and the harness chunks it into trucks of `stacksPerTruck` naively. When one size's topped-off run spans a truck boundary, those stacks open the next truck's nose row (e.g. INV 4106 trucks 2–7). A size with less than a row of stacks also puts its leftover or topped stack in the first row (e.g. INV 4434 truck 1). Per-truck assignment and ordering is lbr-03's job when `planStacks` is wired into `packEngine.ts`.
-- **Like-for-like trucks:** on the 135 jobs where neither engine leaves pieces unplaced, v2 uses fewer trucks than legacy on 10, more on 18, the same on 107 (Σ 235 v2 vs 227 legacy). The raw Σ trucks / Σ unplaced totals in section 1 are skewed by the outliers in section 3.
-- **`allowRotation` divergence (surprising):** on 34 jobs v2 leaves non-Holey SKUs unplaced because their catalog L×W×H has `allowRotation: false` and doesn't fit upright (e.g. 144"-long pieces stated with 144 as height). Legacy `buildDemand` always tries all six orientations for non-Holey parts regardless of the flag. This is a catalog-data and parity question for lbr-03 or the parts library, not something this harness changes.
+- **Like-for-like trucks:** on the 169 jobs where neither engine leaves pieces unplaced, v2 uses fewer trucks than legacy on 10, more on 18, the same on 141 (Σ 270 v2 vs 262 legacy). The raw Σ trucks / Σ unplaced totals in section 1 are skewed by the outliers in section 3.
+- **`allowRotation` divergence (surprising):** on 0 jobs v2 leaves non-Holey SKUs unplaced because their catalog L×W×H has `allowRotation: false` and doesn't fit upright (e.g. 144"-long pieces stated with 144 as height). Legacy `buildDemand` always tries all six orientations for non-Holey parts regardless of the flag. This is a catalog-data and parity question for lbr-03 or the parts library, not something this harness changes.
 - **Legacy never tops off:** legacy produced 0 mixed stacks across all 172 jobs. Pass 1's `buildColumn` hard-codes `shouldMix = false` and builds each size's remainder as a short pure stack (`maxBase = min(remaining, floor(H / h))`), so pass 2's remainder consolidation is left with nothing to mix on these carts.
 - **Golden v2 vs the sandbox:** the Orchestrator's sandbox reported v2 at 51 of 52 mixed stacks on this piece set; the harness measures 30 of 52 (cross-checked against `plan.mixedStacks` and the per-column `mixed` flag, which agree). The truck count (1) matches. The sandbox's "thinnest pieces at the nose" was the same row-direction reversal fixed above: v2 actually loads the 13s at the nose. The mixed-count gap is not explained here (a different engine revision or counting method is possible); lbr-03's planner-backed v2 now measures 30 of 52 on 1 truck, matching the planner.
-- **Shift to rear on mixed-depth trailers (lbr-10):** 344 runs (172 carts × consolidated / pure), 100 trailers with a mixed-depth row. Pulling the middle stack of each one's middle row to holding, then Shift to rear: 68 holes filled from in front, 6 left (no same-depth stack in front that fits), 26 single-stack rows closed; 0 length increases, 0 validatePlan violations (0 before the shift), 0 guard fallbacks. Untouched auto-packs that are fixed points: 334 of 344 (the rest slide a few same-depth stacks into a part-empty row: INV 4279, 4302, 4343, 4393, 4486, 4279 (pure), 4302 (pure), 4343 (pure), 4393 (pure), 4486 (pure)).
+- **Shift to rear on mixed-depth trailers (lbr-10):** 344 runs (172 carts × consolidated / pure), 112 trailers with a mixed-depth row. Pulling the middle stack of each one's middle row to holding, then Shift to rear: 78 holes filled from in front, 8 left (no same-depth stack in front that fits), 26 single-stack rows closed; 0 length increases, 0 validatePlan violations (0 before the shift), 0 guard fallbacks. Untouched auto-packs that are fixed points: 334 of 344 (the rest slide a few same-depth stacks into a part-empty row: INV 4279, 4302, 4343, 4393, 4486, 4279 (pure), 4302 (pure), 4343 (pure), 4393 (pure), 4486 (pure)).
 
 ## 6. lbr-03 vs lbr-02 v2
 
 v2 before (lbr-02, `7f14daf`, read from git) and after (lbr-03, planner-backed) for every job whose v2 trucks, mixed or unplaced changed. Sorted by inv.
 
-36 of 172 jobs changed. Σ v2 trucks 285 → 285; Σ v2 mixed 2961 → 476.
+71 of 172 jobs changed. Σ v2 trucks 285 → 311; Σ v2 mixed 2961 → 476.
 
 | inv | trucks lbr-02 → lbr-03 | mixed lbr-02 → lbr-03 | unplaced lbr-02 → lbr-03 |
 |---|---|---|---|
 | 4053 | 1 | 16 → 0 | 0 |
 | 4106 | 7 | 259 → 185 | 0 |
+| 4123 | 0 → 1 | 0 | 450 → 0 |
+| 4126 | 0 → 1 | 0 | 100 → 0 |
 | 4174 | 20 | 624 → 0 | 22824 → 23448 |
 | 4179 | 5 | 162 → 0 | 0 |
 | 4186 | 20 | 508 → 0 | 125476 → 126018 |
 | 4235 | 10 | 7 → 0 | 0 |
 | 4241 | 1 | 15 → 0 | 0 |
 | 4243 | 2 | 11 → 0 | 0 |
+| 4249 | 0 → 1 | 0 | 270 → 0 |
+| 4251 | 0 → 2 | 0 | 400 → 0 |
+| 4254 | 0 → 1 | 0 | 424 → 0 |
 | 4268 | 2 | 69 → 0 | 0 |
+| 4269 | 0 → 1 | 0 | 360 → 0 |
+| 4270 | 0 → 1 | 0 | 424 → 0 |
 | 4272 | 3 | 99 → 51 | 0 |
 | 4273 | 3 | 99 → 50 | 0 |
+| 4280 | 1 | 0 | 20 → 0 |
+| 4284 | 1 | 0 | 200 → 0 |
+| 4288 | 0 → 1 | 0 | 270 → 0 |
+| 4289 | 1 | 0 | 35 → 0 |
+| 4296 | 1 | 0 | 16 → 0 |
+| 4298 | 1 | 0 | 20 → 0 |
 | 4300 | 2 | 7 → 0 | 0 |
+| 4304 | 0 → 1 | 0 | 424 → 0 |
+| 4305 | 0 → 1 | 0 | 175 → 0 |
+| 4306 | 0 → 1 | 0 | 350 → 0 |
 | 4307 | 3 | 46 → 0 | 0 |
 | 4309 | 1 | 22 → 7 | 0 |
 | 4310 | 1 | 17 → 0 | 0 |
 | 4311 | 1 | 6 → 0 | 0 |
+| 4312 | 0 → 1 | 0 | 360 → 0 |
+| 4326 | 0 → 1 | 0 | 150 → 0 |
 | 4330 | 1 | 3 → 0 | 0 |
+| 4332 | 1 | 0 | 145 → 0 |
+| 4335 | 0 → 1 | 0 | 250 → 0 |
 | 4336 | 2 | 54 → 0 | 0 |
 | 4347 | 1 | 6 → 0 | 0 |
 | 4351 | 6 | 84 → 13 | 0 |
 | 4354 | 1 | 35 → 0 | 0 |
 | 4356 | 3 | 66 → 31 | 0 |
+| 4357 | 0 → 1 | 0 | 200 → 0 |
+| 4359 | 0 → 1 | 0 | 200 → 0 |
+| 4360 | 0 → 1 | 0 | 270 → 0 |
+| 4372 | 0 → 1 | 0 | 136 → 0 |
 | 4384 | 7 | 146 → 0 | 0 |
+| 4390 | 0 → 1 | 0 | 360 → 0 |
 | 4402 | 2 | 34 → 0 | 0 |
 | 4403 | 3 | 101 → 0 | 0 |
 | 4404 | 1 | 24 → 0 | 0 |
 | 4408 | 6 | 110 → 70 | 0 |
 | 4409 | 1 | 12 → 0 | 0 |
+| 4412 | 0 → 1 | 0 | 220 → 0 |
+| 4416 | 0 → 1 | 0 | 360 → 0 |
+| 4417 | 0 → 1 | 0 | 31 → 0 |
 | 4420 | 1 | 5 → 0 | 0 |
 | 4434 | 8 | 195 → 51 | 0 |
+| 4437 | 1 | 0 | 50 → 0 |
 | 4439 | 1 | 7 → 0 | 0 |
 | 4440 | 9 | 3 → 0 | 0 |
+| 4443 | 0 → 1 | 0 | 400 → 0 |
+| 4444 | 1 | 0 | 40 → 0 |
+| 4447 | 0 → 1 | 0 | 320 → 0 |
+| 4462 | 1 | 0 | 26 → 10 |
 | 4463 | 2 | 7 → 0 | 0 |
 | 4466 | 1 | 2 → 0 | 0 |
+| 4468 | 1 | 0 | 120 → 0 |
 | 4471 | 2 | 41 → 0 | 0 |
 | 4472 | 2 | 41 → 0 | 0 |
+| 4475 | 0 → 1 | 0 | 50 → 0 |
 
 ### lbr-03 gates
 
@@ -430,8 +431,8 @@ v2 before (lbr-02, `7f14daf`, read from git) and after (lbr-03, planner-backed) 
 | Golden: v2 trailer 1 equals the lbr-03 rows (nose → doors) | PASS | 1 trailer(s) |
 | v2 over2 = 0 across all jobs | PASS | Σ over2 0 |
 | v2 inverted = 0 across all jobs | PASS | Σ inverted 0 |
-| Per job, v2 trucks ≤ lbr-02 v2 trucks | PASS | 0 of 172 regressed |
+| Per job, v2 trucks ≤ lbr-02 v2 trucks | **FAIL** | regressed: 4251, 4249, 4254, 4269, 4288, 4270, 4305, 4306, 4312, 4326, 4335, 4123, 4126, 4359, 4357, 4304, 4372, 4360, 4390, 4412, 4417, 4416, 4443, 4447, 4475 |
 | On the 34 planner jobs, v2 trucks = planner trucks | PASS | 34 of 34 equal |
-| v2 unplaced unchanged per job (capped carts: = legacy's pure plan) | PASS | 170 uncapped jobs unchanged; capped INV 4174 22824 → 23448 (legacy 23448), INV 4186 125476 → 126018 (legacy 126018) |
+| v2 unplaced unchanged per job (capped carts: = legacy's pure plan) | **FAIL** | 170 uncapped jobs unchanged; capped INV 4174 22824 → 23448 (legacy 23448), INV 4186 125476 → 126018 (legacy 126018); DRIFT: 4251, 4249, 4254, 4269, 4288, 4280, 4270, 4289, 4284, 4296, 4305, 4306, 4298, 4312, 4326, 4332, 4335, 4123, 4126, 4359, 4357, 4304, 4372, 4360, 4390, 4412, 4417, 4416, 4444, 4443, 4437, 4468, 4447, 4462, 4475 |
 
 The run-time gate (under ~10 s) is printed to stdout only, so this report stays byte-identical across runs. Consolidation work-budget stops: 0 job(s).
