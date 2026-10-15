@@ -9,11 +9,17 @@
 // layout). Bagging: 4 pcs/bag, remainder in the last bag of each line; no SKU shares a bag; bag
 // numbering is sequential across the whole loaded PO in grid order (array order = PO
 // top-to-bottom).
+// jb-12: also called from the job board (/v2/board, Core Covers) via coreCoverLabels.ts; its
+// `onlyLines` option prints a subset of lines while keeping whole-order "BAG x of y" numbering.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { SkuLine } from "./blockTypes";
 
 export interface BagLabelOptions {
   customer?: string;
+  /** jb-12: when set, only bags whose source line index is in this set get a page. Numbering
+   *  ("BAG x of y") is still computed across ALL lines — whole-order numbering, so a partial
+   *  reprint matches the original labels. Omitted = every bag (Block Calculator behaviour). */
+  onlyLines?: ReadonlySet<number>;
 }
 
 export interface BagLabel {
@@ -22,6 +28,8 @@ export interface BagLabel {
   densityStr: string;
   piecesInBag: number;
   bagNumber: number;
+  /** jb-12: index of the source line in the array passed to computeBags (pre-filter). */
+  lineIndex: number;
   totalBags: number;
 }
 
@@ -89,27 +97,28 @@ function findUnparsedRows(lines: SkuLine[]): { item: string; raw: string }[] {
 // --- Bagging logic (pure, no PDF — the unit-testable core) ---
 
 export function computeBags(lines: SkuLine[]): BagLabel[] {
-  const usable = lines.filter((l) => l.qty > 0);
-  const perLine = usable.map((line) => {
+  const usable = lines.map((line, lineIndex) => ({ line, lineIndex })).filter((u) => u.line.qty > 0);
+  const perLine = usable.map(({ line, lineIndex }) => {
     const bagCount = Math.ceil(line.qty / PIECES_PER_BAG);
     const pieces: number[] = [];
     for (let i = 0; i < bagCount; i++) {
       pieces.push(i === bagCount - 1 ? line.qty - PIECES_PER_BAG * (bagCount - 1) : PIECES_PER_BAG);
     }
-    return { line, pieces };
+    return { line, lineIndex, pieces };
   });
 
   const totalBags = perLine.reduce((sum, p) => sum + p.pieces.length, 0);
 
   const out: BagLabel[] = [];
   let n = 0;
-  for (const { line, pieces } of perLine) {
+  for (const { line, lineIndex, pieces } of perLine) {
     const sizeStr = sizeString(line);
     const densityStr = densityString(line);
     for (const piecesInBag of pieces) {
       n += 1;
       out.push({
         item: line.item,
+        lineIndex,
         sizeStr,
         densityStr,
         piecesInBag,
@@ -161,10 +170,15 @@ export async function buildBagLabelsPdf(lines: SkuLine[], opts?: BagLabelOptions
 
   const date = dateString();
 
+  let pages = 0;
   for (const bag of bags) {
+    if (opts?.onlyLines && !opts.onlyLines.has(bag.lineIndex)) continue;
     const page = doc.addPage([PAGE_W, PAGE_H]);
     drawLabelPage(page, font, fontBold, black, logoImg, customer, date, bag);
+    pages += 1;
   }
+  // jb-12: defense in depth — the UI blocks an empty selection before calling.
+  if (opts?.onlyLines && pages === 0) throw new Error("No bags selected");
 
   return await doc.save();
 }

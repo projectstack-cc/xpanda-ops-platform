@@ -245,10 +245,9 @@
 - [ ] **shift-alert follow-up — pace-based "may not finish".** Once the block-calc BOM populates
   `cutting_lines.qty_target`, gate or annotate the T-2h alert on projected completion (rate from
   `cutting_sessions.qty_done_delta`) instead of "not finished yet".
-- [ ] **P413 follow-up — PO→job creation from the block-calculator spreadsheet.** The Block
-  Calculator's loaded PO spreadsheet carries only parts (no customer/job info), so bag labels are
-  generated straight from `skuLines` with no job created. Wiring PO→job creation is a separate,
-  deliberately deferred step.
+- [ ] **jb-12 follow-up — flat (non-tapered) Core Covers lines.** `coreCoverLabels.ts` currently
+  flags a line with no `lo-hi` taper token as unreadable (blocks printing for the order); extend
+  `sizeString` and the adapter if Core Covers ever orders flat stock.
 - [ ] **P413 follow-up — multi-density / customer-configurable label header.** `Core Covers` is
   currently a constant string in `bagLabels.ts` (`DEFAULT_CUSTOMER`); generalize to a per-customer
   configurable header once a second labelled customer appears.

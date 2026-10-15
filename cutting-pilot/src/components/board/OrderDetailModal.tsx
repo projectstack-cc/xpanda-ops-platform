@@ -13,8 +13,10 @@ import PackingSlipViewer from "@/components/PackingSlipViewer";
 import JobPrintsSection from "@/components/board/JobPrintsSection";
 import CutListChunkToggle from "@/components/CutListChunkToggle";
 import DiversiTechLabelsModal from "@/components/board/DiversiTechLabelsModal";
+import CoreCoverLabelsModal from "@/components/board/CoreCoverLabelsModal";
 import { buildCutListPdf, type CutListLineItem } from "@/lib/cutList";
 import { isDiversiTechCustomer } from "@/lib/diversitechLabels";
+import { isCoreCoversCustomer } from "@/lib/coreCoverLabels";
 
 interface DetailJob {
   id: string;
@@ -64,6 +66,8 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDet
   const [includeChunks, setIncludeChunks] = useState(false);
   // jb-04: DiversiTech label checklist/viewer (closed on every job-context change).
   const [labelsOpen, setLabelsOpen] = useState(false);
+  // jb-12: Core Covers bag-label checklist/viewer.
+  const [coreLabelsOpen, setCoreLabelsOpen] = useState(false);
 
   // Reset per job-context change (opening a different order, or closing) — mirrors legacy
   // clearForm()-on-openModal(): revoke any previous cut-list blob and collapse both viewers so
@@ -80,6 +84,7 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDet
     setCutListOpen(false);
     setIncludeChunks(false);
     setLabelsOpen(false);
+    setCoreLabelsOpen(false);
 
     if (!jobId) {
       setData(null);
@@ -276,6 +281,20 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDet
             </div>
           )}
 
+          {/* jb-12: Core Covers bag labels (4 pcs/bag) — reuses bagLabels.ts from the Block Calculator. */}
+          {isCoreCoversCustomer(job.customer) && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setCoreLabelsOpen(true)}
+                className="flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-[var(--link)] cursor-pointer"
+              >
+                <Tag size={16} className="shrink-0" aria-hidden="true" />
+                Print Core Covers labels
+              </button>
+            </div>
+          )}
+
           {/* Cut List — independent dropdown-link viewer, own PdfViewer instance/state; builds
               lazily on first open and never touches the packing-slip viewer above. */}
           <div className="space-y-2">
@@ -322,6 +341,14 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDet
         isOpen={labelsOpen}
         onClose={() => setLabelsOpen(false)}
         job={job}
+        lineItems={data?.line_items ?? []}
+        fileKey={job.invoice_number || job.id}
+      />
+    )}
+    {job && (
+      <CoreCoverLabelsModal
+        isOpen={coreLabelsOpen}
+        onClose={() => setCoreLabelsOpen(false)}
         lineItems={data?.line_items ?? []}
         fileKey={job.invoice_number || job.id}
       />

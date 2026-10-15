@@ -126,6 +126,29 @@ export function runBagLabelsSelfCheck(): { pass: boolean; results: CheckResult[]
       bags.length === 1 && bags[0].item === "J",
       `bags=${JSON.stringify(bags.map((b) => b.item))}`
     );
+    // jb-12: lineIndex maps back to the original (pre-filter) array index.
+    check(
+      "lineIndex survives the qty 0 filter (J -> 1)",
+      bags.length === 1 && bags[0].lineIndex === 1,
+      `lineIndex=${JSON.stringify(bags.map((b) => b.lineIndex))}`
+    );
+  }
+
+  // jb-12: whole-order numbering under selection — A qty 5 + B qty 6 -> 4 bags; keeping only
+  // lineIndex 1 (B) leaves bag numbers [3,4], each with totalBags 4.
+  {
+    const bags = computeBags([line({ item: "A", qty: 5 }), line({ item: "B", qty: 6 })]);
+    const onlyB = bags.filter((b) => b.lineIndex === 1);
+    check(
+      "selection keeps whole-order numbers: B -> [3,4]",
+      arraysEqual(onlyB.map((b) => b.bagNumber), [3, 4]) && onlyB.every((b) => b.item === "B"),
+      `numbers=${JSON.stringify(onlyB.map((b) => b.bagNumber))}`
+    );
+    check(
+      "selection keeps whole-order total: totalBags=4",
+      onlyB.length === 2 && onlyB.every((b) => b.totalBags === 4),
+      `totalBags=${JSON.stringify(onlyB.map((b) => b.totalBags))}`
+    );
   }
 
   return { pass: results.every((r) => r.pass), results };
