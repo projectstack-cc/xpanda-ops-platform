@@ -66,6 +66,10 @@ export interface CardActionHandlers {
   canAddPhotos: boolean;
 }
 
+// Statuses that keep a load "on a bay" (bay columns, Team View, BayDetail). dock-07: single
+// definition, shared by DockBoard and BayDetail.
+export const BAY_ACTIVE_STATUSES = ["not_started", "loading", "loaded"];
+
 export const LOADING_FLOW = ["awaiting", "not_started", "loading", "loaded", "in_transit", "delivered"];
 
 export function nextLoadingStatus(current: string): string | null {

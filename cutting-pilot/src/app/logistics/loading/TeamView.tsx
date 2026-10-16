@@ -7,11 +7,10 @@
 // PXXX-b's notification deep-link both need to drive the same drill-in state from outside this
 // component.
 import BayListItem from "@/components/loading/BayListItem";
+import BayDetail from "@/components/loading/BayDetail";
 import DockAssignmentCard from "@/components/loading/DockAssignmentCard";
 import { sortAssignments, type LdSortOrder } from "@/components/loading/sortAssignments";
 import type { CardActionHandlers, DockAssignment, DockBay } from "@/components/loading/dockTypes";
-
-const BAY_ACTIVE_STATUSES = ["not_started", "loading", "loaded"];
 
 interface TeamViewProps {
   bays: DockBay[];
@@ -76,65 +75,14 @@ export default function TeamView({
   const bay = bays.find((b) => b.id === selectedBayId);
   if (!bay) return null;
 
-  const bayAssignments = assignments.filter(
-    (a) => a.bay_id === selectedBayId && BAY_ACTIVE_STATUSES.includes(a.loading_status)
-  );
-  const activeJob = bayAssignments.find((a) => a.loading_status === "loading") ?? bayAssignments[0] ?? null;
-
-  const groups: { status: string; label: string }[] = [
-    { status: "not_started", label: "Not Started" },
-    { status: "loading", label: "Loading" },
-    { status: "loaded", label: "Loaded" },
-  ];
-
   return (
-    <div className="space-y-4">
-      <button
-        type="button"
-        onClick={() => onSelectBay(null)}
-        className="cursor-pointer"
-        style={{ color: "#3b82f6", fontSize: 14, fontWeight: 600 }}
-      >
-        ← All bays
-      </button>
-      <div className="flex items-center gap-4 flex-wrap">
-        <h2 className="font-bold text-text" style={{ fontSize: 26, margin: 0 }}>
-          Bay {bay.bay_number}
-        </h2>
-        {activeJob?.trailer_number && (
-          <span
-            className="font-bold text-text rounded"
-            style={{ fontSize: 16, padding: "4px 12px", background: "var(--ghost-bg)" }}
-          >
-            🚛 {activeJob.trailer_number}
-          </span>
-        )}
-      </div>
-      {groups.map((g) => {
-        const members = sortAssignments(bayAssignments.filter((a) => a.loading_status === g.status), sortOrder);
-        return (
-          <section key={g.status} className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted px-1">
-              {g.label} ({members.length})
-            </h3>
-            {members.length === 0 ? (
-              <p className="text-sm text-text-faint px-1">No jobs {g.label.toLowerCase()}.</p>
-            ) : (
-              <div className="space-y-2">
-                {members.map((a) => (
-                  <DockAssignmentCard
-                    key={a.id}
-                    a={a}
-                    {...cardHandlers}
-                    draggable={false}
-                    highlighted={highlightedId === a.id}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
-        );
-      })}
-    </div>
+    <BayDetail
+      bay={bay}
+      assignments={assignments}
+      sortOrder={sortOrder}
+      cardHandlers={cardHandlers}
+      highlightedId={highlightedId}
+      onBack={() => onSelectBay(null)}
+    />
   );
 }

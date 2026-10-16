@@ -25,15 +25,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import PlatformHeader from "@/components/PlatformHeader";
 import DockAssignmentCard, { COMPACT_CARD_H } from "@/components/loading/DockAssignmentCard";
-import AssignBayModal from "@/components/loading/AssignBayModal";
-import LoadedChecklistModal from "@/components/loading/LoadedChecklistModal";
-import ShippingInfoModal from "@/components/loading/ShippingInfoModal";
-import PullJobModal from "@/components/loading/PullJobModal";
-import PhotoGalleryModal from "@/components/loading/PhotoGalleryModal";
-import BolViewerModal from "@/components/logistics/BolViewerModal";
+import DockModalHost from "@/components/loading/DockModalHost";
+import { useDockActions } from "@/components/loading/useDockActions";
 import TeamView from "./TeamView";
 import { sortAssignments, type LdSortOrder } from "@/components/loading/sortAssignments";
-import { inCurrentWeek, type CardActionHandlers, type DockAssignment, type DockBay } from "@/components/loading/dockTypes";
+import { BAY_ACTIVE_STATUSES, inCurrentWeek, type DockAssignment, type DockBay } from "@/components/loading/dockTypes";
 
 // Byte-exact match to logistics/loading.html's LD_COLLAPSE_KEY so an operator's section-collapse
 // state survives the legacy->v2 cutover.
@@ -44,8 +40,6 @@ interface DockBoardProps {
   isAdmin: boolean;
   permissions: Record<string, { view?: boolean; edit?: boolean }>;
 }
-
-const BAY_ACTIVE_STATUSES = ["not_started", "loading", "loaded"];
 
 // One column template for every Overview row so bays and queue tiles share the same columns.
 // 6 fluid columns at >=1280px (xl) matches legacy's `.ld-bays-grid { repeat(6, minmax(0,1fr)) }`;
@@ -67,7 +61,6 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   const [assignments, setAssignments] = useState<DockAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOrder, setSortOrder] = useState<LdSortOrder>("inv_asc");
@@ -77,15 +70,6 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
-
-  const [bayModalTarget, setBayModalTarget] = useState<DockAssignment | null>(null);
-  const [checklistTarget, setChecklistTarget] = useState<DockAssignment | null>(null);
-  const [viewerTarget, setViewerTarget] = useState<{ jobId: string; loadNumber: number | null } | null>(null);
-  const [shippingInfoTarget, setShippingInfoTarget] = useState<DockAssignment | null>(null);
-  const [pullJobOpen, setPullJobOpen] = useState(false);
-  const [photoGalleryJobId, setPhotoGalleryJobId] = useState<string | null>(null);
-  const [photoAddTarget, setPhotoAddTarget] = useState<{ assignmentId: string; jobId: string } | null>(null);
-  const jobCacheRef = useRef<Map<string, any>>(new Map());
 
   const searchParams = useSearchParams();
   // The include_archived flag the page mounted with, so the 15s poll keeps a deep-link session's
@@ -113,6 +97,10 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
       setLoading(false);
     }
   }, []);
+
+  // dock-07: mutation handlers + modal state live in the shared hook (also used by Bay Pair).
+  const actions = useDockActions({ assignments, load, canManage, canEditLoading });
+  const { cardHandlers, actionError } = actions;
 
   useEffect(() => {
     // A notification deep link needs aged-off (delivered/archived) rows present too, matching
@@ -229,80 +217,6 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
     if (next === "team") setSelectedBayId(null);
   }
 
-  async function putAssignment(id: string, body: Record<string, unknown>): Promise<boolean> {
-    setActionError(null);
-    try {
-      const res = await fetch("/v2/api/loading-assignments", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...body }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        setActionError(json.error || "That update failed.");
-        return false;
-      }
-      return true;
-    } catch {
-      setActionError("Network error — couldn't reach the server.");
-      return false;
-    }
-  }
-
-  async function handleAdvance(a: DockAssignment, next: string) {
-    if (next === "loaded") {
-      setChecklistTarget(a);
-      return;
-    }
-    if (await putAssignment(a.id, { loading_status: next })) load();
-  }
-
-  function handleAssignBay(a: DockAssignment) {
-    setBayModalTarget(a);
-  }
-
-  async function confirmAssignBay(bayId: string) {
-    if (!bayModalTarget) return;
-    if (await putAssignment(bayModalTarget.id, { bay_id: bayId, loading_status: "not_started" })) {
-      setBayModalTarget(null);
-      load();
-    }
-  }
-
-  async function handleMoveToYard(a: DockAssignment) {
-    if (await putAssignment(a.id, { location: "yard", bay_id: null })) load();
-  }
-
-  async function handleRevertToBay(a: DockAssignment) {
-    if (!window.confirm("Move this trailer back to its bay?")) return;
-    if (await putAssignment(a.id, { loading_status: "loaded", location: "bay" })) load();
-  }
-
-  async function handleRevertYardToBay(a: DockAssignment) {
-    if (!window.confirm("Move this trailer back to the bay queue?")) return;
-    if (await putAssignment(a.id, { location: "bay", bay_id: null, loading_status: "awaiting" })) load();
-  }
-
-  async function handleSendBackToQueue(a: DockAssignment) {
-    if (!window.confirm("Send this delivered load back to the awaiting queue?")) return;
-    if (await putAssignment(a.id, { location: "bay", bay_id: null, loading_status: "awaiting" })) load();
-  }
-
-  async function handleArchive(a: DockAssignment) {
-    if (await putAssignment(a.id, { loading_status: "archived" })) load();
-  }
-
-  async function handleTrailerChange(a: DockAssignment, value: string) {
-    // Refetch either way: on success to reflect the saved value everywhere it's rendered, on
-    // failure to discard the optimistic input and show the real last-saved value.
-    await putAssignment(a.id, { trailer_number: value });
-    load();
-  }
-
-  function handleViewBol(a: DockAssignment) {
-    setViewerTarget({ jobId: a.job_id, loadNumber: a.load_number });
-  }
-
   function cardDraggable(a: DockAssignment): boolean {
     // Terminal statuses are never draggable
     if (["in_transit", "delivered", "archived"].includes(a.loading_status)) return false;
@@ -330,41 +244,13 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
     setDragOverTarget(targetId);
   }
 
-  // Shared by the native (mouse) drop handler and the touch-drag effect below -- both resolve to
-  // the same PUT, matching legacy's onBayDrop/onQueueDrop bodies exactly.
-  async function moveAssignmentToTarget(assignmentId: string, targetId: string) {
-    const a = assignments.find((x) => x.id === assignmentId);
-    if (!a) return;
-
-    if (targetId === "awaiting") {
-      // Drop to awaiting queue — unassign bay
-      if (a.loading_status === "awaiting" && !a.bay_id) return; // already there
-      if (await putAssignment(a.id, { bay_id: null, loading_status: "awaiting" })) load();
-    } else {
-      // Drop to a bay
-      if (a.bay_id === targetId && a.loading_status !== "awaiting") return; // already in this bay
-      const body: Record<string, unknown> = { bay_id: targetId };
-      if (a.loading_status === "awaiting") body.loading_status = "not_started";
-      if (await putAssignment(a.id, body)) load();
-    }
-  }
-
   async function handleDrop(targetId: string, e: React.DragEvent) {
     e.preventDefault();
     setDraggingId(null);
     setDragOverTarget(null);
     const assignmentId = e.dataTransfer.getData("text/plain");
     if (!assignmentId) return;
-    await moveAssignmentToTarget(assignmentId, targetId);
-  }
-
-  function handleShowShippingInfo(a: DockAssignment) {
-    setShippingInfoTarget(a);
-  }
-
-  function handleShowPhotos(a: DockAssignment) {
-    setPhotoGalleryJobId(a.job_id);
-    setPhotoAddTarget(canEditLoading && a.loading_status === "loaded" ? { assignmentId: a.id, jobId: a.job_id } : null);
+    await actions.moveAssignmentToTarget(assignmentId, targetId);
   }
 
   // --- Touch drag for Overview (PXXX-b) -----------------------------------------------------
@@ -438,7 +324,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
       setDragOverTarget(null);
 
       if (dragId && moved && target) {
-        await moveAssignmentToTarget(dragId, target);
+        await actions.moveAssignmentToTarget(dragId, target);
       }
     }
 
@@ -458,14 +344,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   // through a ref so the interval itself is created once.
   const pollBlockedRef = useRef(false);
   useEffect(() => {
-    pollBlockedRef.current =
-      draggingId !== null ||
-      bayModalTarget !== null ||
-      checklistTarget !== null ||
-      viewerTarget !== null ||
-      shippingInfoTarget !== null ||
-      pullJobOpen ||
-      photoGalleryJobId !== null;
+    pollBlockedRef.current = draggingId !== null || actions.anyModalOpen;
   });
   useEffect(() => {
     const timer = setInterval(() => {
@@ -512,22 +391,6 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
     set.filter((a) => a.loading_status === "delivered" && inWeekScope(a)),
     sortOrder
   );
-
-  const cardHandlers: CardActionHandlers = {
-    canManage,
-    onAdvance: handleAdvance,
-    onAssignBay: handleAssignBay,
-    onMoveToYard: handleMoveToYard,
-    onRevertToBay: handleRevertToBay,
-    onRevertYardToBay: handleRevertYardToBay,
-    onSendBackToQueue: handleSendBackToQueue,
-    onArchive: handleArchive,
-    onTrailerChange: handleTrailerChange,
-    onViewBol: handleViewBol,
-    onShowShippingInfo: handleShowShippingInfo,
-    onShowPhotos: handleShowPhotos,
-    canAddPhotos: canEditLoading,
-  };
 
   function renderCard(a: DockAssignment, extraProps?: { showArchive?: boolean }) {
     const isDraggableCard = cardDraggable(a);
@@ -629,7 +492,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
             {canManage && (
               <button
                 type="button"
-                onClick={() => setPullJobOpen(true)}
+                onClick={() => actions.openPullJob()}
                 className="min-h-[44px] px-3.5 rounded bg-[var(--primary-bg)] text-[var(--primary-text)] text-xs font-semibold cursor-pointer hover:opacity-90 transition-opacity"
               >
                 + Pull Job
@@ -836,56 +699,12 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
         )}
       </div>
 
-      {bayModalTarget && (
-        <AssignBayModal bays={bays} onClose={() => setBayModalTarget(null)} onConfirm={confirmAssignBay} />
-      )}
-
-      <LoadedChecklistModal
-        assignment={checklistTarget}
-        onClose={() => setChecklistTarget(null)}
-        onDone={() => {
-          setChecklistTarget(null);
-          load();
-        }}
-      />
-
-      <BolViewerModal
-        jobId={viewerTarget?.jobId ?? null}
-        loadNumber={viewerTarget?.loadNumber ?? null}
-        viewOnly
-        onClose={() => setViewerTarget(null)}
-        onEdit={() => {
-          /* view-only on the dock dashboard -- Edit is unreachable (viewOnly hides the button) */
-        }}
-      />
-
-      <ShippingInfoModal
-        assignment={shippingInfoTarget}
-        jobCache={jobCacheRef.current}
-        onClose={() => setShippingInfoTarget(null)}
-      />
-
-      {pullJobOpen && (
-        <PullJobModal
-          bays={bays}
-          assignments={assignments}
-          defaultBayId={view === "team" && selectedBayId !== null ? selectedBayId : null}
-          onClose={() => setPullJobOpen(false)}
-          onDone={() => {
-            setPullJobOpen(false);
-            load();
-          }}
-        />
-      )}
-
-      <PhotoGalleryModal
-        jobId={photoGalleryJobId}
-        onClose={() => {
-          setPhotoGalleryJobId(null);
-          setPhotoAddTarget(null);
-        }}
-        addTo={photoAddTarget}
-        onPhotosAdded={load}
+      <DockModalHost
+        modals={actions.modals}
+        bays={bays}
+        assignments={assignments}
+        pullJobDefaultBayId={view === "team" && selectedBayId !== null ? selectedBayId : null}
+        onReload={() => load()}
       />
     </div>
   );
