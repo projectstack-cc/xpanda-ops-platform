@@ -74,6 +74,7 @@ export interface QcDriveRecord {
   invoice_number: string | null;
   customer: string | null;
   part_description: string | null;
+  dimensions_text: string | null;
   line_quantity: number | null;
   lot_size: number;
   sample_size: number;
@@ -123,13 +124,29 @@ function etDateTime(ts: string): { date: string; time: string } {
   return { date, time: `${hh}:${mm}` };
 }
 
+// qc-03b: the template's Product Cut cell (and the PDF name) — dimensions, not the line description,
+// which ran the PDF onto two pages. Thickness first, as orders are written: "3-5 x 47 x 96" (taper en
+// dash → ASCII "-") or "3.5625 x 15.5 x 37.5"; no H/taper → "W x L". Fallbacks: dimensions text, then
+// the first 40 chars of the description, then "".
+export function productCutFor(rec: Pick<QcDriveRecord, "nominal_length" | "nominal_width" | "nominal_height" | "nominal_taper" | "dimensions_text" | "part_description">): string {
+  const w = numStr(rec.nominal_width);
+  const l = numStr(rec.nominal_length);
+  if (w && l) {
+    const thick = rec.nominal_taper ? rec.nominal_taper.replace(/–/g, "-") : numStr(rec.nominal_height);
+    return thick ? `${thick} x ${w} x ${l}` : `${w} x ${l}`;
+  }
+  const dims = (rec.dimensions_text ?? "").trim();
+  if (dims) return dims;
+  return (rec.part_description ?? "").trim().slice(0, 40).trim();
+}
+
 export function buildGasPayload(rec: QcDriveRecord, samples: QcDriveSample[], customerForSheet: string | null): GasPayload {
   const { date, time } = etDateTime(rec.inspected_at);
   return {
     jobId: rec.invoice_number ?? "",
     date,
     time,
-    productCut: rec.part_description ?? "",
+    productCut: productCutFor(rec),
     totalPieces: String(rec.line_quantity ?? ""),
     inspector: rec.inspector_name ?? "",
     lotSize: String(rec.lot_size),

@@ -20,6 +20,8 @@ export type DriveOutcome = "synced" | "failed" | "skipped";
 
 const POST_TIMEOUT_MS = 25_000; // < the 2-minute claim window, so attempts never overlap
 const CUSTOMERS_TIMEOUT_MS = 10_000;
+// qc-03b: post-save path only — 3 s + 25 s script = 28 s, inside waitUntil's ~30 s.
+export const POST_SAVE_CUSTOMERS_TIMEOUT_MS = 3_000;
 const MAX_AUTO_ATTEMPTS = 3;
 const SWEEP_BATCH = 10;
 export const TIMEOUT_ERROR = "Timed out — the PDF may still have been created; check Drive before retrying.";
@@ -54,10 +56,10 @@ async function fetchTextWithTimeout(url: string, init: RequestInit, ms: number):
 
 // Active customer names from the script's master sheet. Any failure → [] (raw-name fallback; the
 // script then files to its default folder) — never fails the forward.
-export async function fetchSheetCustomers(gasUrl: string): Promise<string[]> {
+export async function fetchSheetCustomers(gasUrl: string, timeoutMs: number = CUSTOMERS_TIMEOUT_MS): Promise<string[]> {
   try {
     const sep = gasUrl.includes("?") ? "&" : "?";
-    const text = await fetchTextWithTimeout(`${gasUrl}${sep}action=getCustomers`, { redirect: "follow" }, CUSTOMERS_TIMEOUT_MS);
+    const text = await fetchTextWithTimeout(`${gasUrl}${sep}action=getCustomers`, { redirect: "follow" }, timeoutMs);
     const json = JSON.parse(text);
     return Array.isArray(json) ? json.filter((n): n is string => typeof n === "string" && n.trim() !== "") : [];
   } catch (e) {
@@ -71,7 +73,7 @@ export async function forwardInspection(
   gasUrl: string | undefined,
   id: string,
   // actorId: the retrying user, for the manual-retry activity row (cron/auto runs log nothing).
-  opts: { manual: boolean; customerNames?: string[]; actorId?: string | null }
+  opts: { manual: boolean; customerNames?: string[]; actorId?: string | null; customersTimeoutMs?: number }
 ): Promise<DriveOutcome> {
   let invoice = "";
   const finish = async (status: "synced" | "failed", detail: Record<string, unknown>): Promise<DriveOutcome> => {
@@ -108,7 +110,7 @@ export async function forwardInspection(
     // 3. Load the record + samples (before the URL check so a manual retry's log can name the INV).
     const rec = await db
       .prepare(
-        `SELECT id, invoice_number, customer, part_description, line_quantity, lot_size, sample_size, tolerance_in,
+        `SELECT id, invoice_number, customer, part_description, dimensions_text, line_quantity, lot_size, sample_size, tolerance_in,
                 nominal_length, nominal_width, nominal_height, nominal_taper, inspector_name, inspected_at
            FROM qc_inspections WHERE id = ?`
       )
@@ -129,7 +131,7 @@ export async function forwardInspection(
       .all<QcDriveSample>();
 
     // 4–5. Map the order customer onto a master-sheet name (null → raw name, default folder).
-    const names = opts.customerNames ?? (await fetchSheetCustomers(gasUrl));
+    const names = opts.customerNames ?? (await fetchSheetCustomers(gasUrl, opts.customersTimeoutMs));
     const sheetCustomer = matchSheetCustomer(rec.customer ?? "", names);
 
     // 6. POST form-encoded `payload` (the script reads e.parameter.payload); Apps Script 302s to

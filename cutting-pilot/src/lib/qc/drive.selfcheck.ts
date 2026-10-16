@@ -1,7 +1,7 @@
 // src/lib/qc/drive.selfcheck.ts — qc-03
 // Self-check for the pure Drive-forward helpers (drive.ts). No DB, no network.
 // Run with: npx tsx src/lib/qc/drive.selfcheck.ts   (from cutting-pilot/). Exits 1 on any failure.
-import { buildGasPayload, matchSheetCustomer, parseGasResponse, toleranceLabel, type QcDriveRecord, type QcDriveSample } from "./drive";
+import { buildGasPayload, matchSheetCustomer, parseGasResponse, productCutFor, toleranceLabel, type QcDriveRecord, type QcDriveSample } from "./drive";
 
 const results: { name: string; pass: boolean; detail?: string }[] = [];
 function check(name: string, pass: boolean, detail?: string) {
@@ -50,6 +50,7 @@ const rec: QcDriveRecord = {
   invoice_number: "4477",
   customer: "Blue Water Spa Covers",
   part_description: "1.5# VIRGIN - TAPERED",
+  dimensions_text: null,
   line_quantity: 16,
   lot_size: 17,
   sample_size: 3,
@@ -72,13 +73,22 @@ eq("payload ET date", p.date, "2026-10-16");
 eq("payload ET time (13:05 UTC → 09:05 EDT)", p.time, "09:05");
 eq("payload tolerance label", p.tolerance, "1/8 (.125) inch");
 eq("payload numbers as strings, no float noise", [p.totalPieces, p.lotSize, p.sampleSizeRequired, p.dimLength, p.dimWidth, p.dimHeight], ["16", "17", "3", "80", "39", "4"]);
-eq("payload taper + customer (sheet name)", [p.dimTapers, p.customer, p.productCut, p.inspector], ["2.5–4", "Blue Water Spa Cover", "1.5# VIRGIN - TAPERED", "Pat Inspector"]);
+eq("payload taper + customer (sheet name)", [p.dimTapers, p.customer, p.productCut, p.inspector], ["2.5–4", "Blue Water Spa Cover", "2.5-4 x 39 x 80", "Pat Inspector"]);
 eq("payload samples ordered by sample_no", p.samples.map((s) => s.length), ["80.0625", "79.9", "80"]);
 eq("payload passFail Y/N", p.samples.map((s) => s.passFail), ["Y", "Y", "N"]);
 eq("payload visualPass boolean", p.samples.map((s) => s.visualPass), [true, false, true]);
 eq("payload sample taper/height", [p.samples[0].taper, p.samples[2].taper, p.samples[2].height], ["2.5-4", "", "3.5625"]);
 eq("payload raw customer when unmatched", buildGasPayload(rec, [], null).customer, "Blue Water Spa Covers");
 eq("payload ET date in winter (EST)", buildGasPayload({ ...rec, inspected_at: "2026-12-01 03:30:00" }, [], null).date, "2026-11-30");
+
+// productCutFor — qc-03b: dimensions, thickness first; fallbacks dims text → description[0..40] → "".
+const cutBase = { nominal_length: null, nominal_width: null, nominal_height: null, nominal_taper: null, dimensions_text: null, part_description: null };
+eq("productCut no taper H/W/L", productCutFor({ ...cutBase, nominal_height: 3.5625, nominal_width: 15.5, nominal_length: 37.5 }), "3.5625 x 15.5 x 37.5");
+eq("productCut W x L only", productCutFor({ ...cutBase, nominal_width: 47, nominal_length: 96 }), "47 x 96");
+eq("productCut no nominals → dimensions_text trimmed", productCutFor({ ...cutBase, dimensions_text: '  2" x 48" x 144"  ' }), '2" x 48" x 144"');
+const longDesc = "1.5# VIRGIN EPS - TAPERED SPA COVER INSERT 2.5 TO 4 INCH WITH CHAMFER";
+eq("productCut description only → first 40 chars", productCutFor({ ...cutBase, part_description: longDesc }), longDesc.slice(0, 40).trim());
+eq("productCut nothing → empty", productCutFor(cutBase), "");
 
 // parseGasResponse.
 eq("parse ok", parseGasResponse('{"ok":true,"type":"finalInspection","pdfFileId":"abc123","pdfName":"X-4477","savedFolderId":"f"}'), { ok: true, pdfFileId: "abc123", pdfName: "X-4477" });

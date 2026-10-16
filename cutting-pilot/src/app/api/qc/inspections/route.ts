@@ -13,7 +13,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";
-import { forwardInspection } from "@/lib/qc/driveForward";
+import { forwardInspection, POST_SAVE_CUSTOMERS_TIMEOUT_MS } from "@/lib/qc/driveForward";
 import {
   TOLERANCES,
   inspectionResult,
@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
     if (process.env.NODE_ENV === "production") {
       try {
         const { env, ctx } = await getCloudflareContext();
-        ctx?.waitUntil?.(forwardInspection(DB, (env as any).QC_GAS_URL, id, { manual: false }));
+        ctx?.waitUntil?.(forwardInspection(DB, (env as any).QC_GAS_URL, id, { manual: false, customersTimeoutMs: POST_SAVE_CUSTOMERS_TIMEOUT_MS }));
       } catch {
         // No Cloudflare context — the */5 cron sweep forwards it.
       }
