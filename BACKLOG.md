@@ -99,6 +99,7 @@
 - [ ] **Dock tablet i18n (Español / Kreyòl labels)** once the v2 i18n spine reaches logistics (dock-10 ships English-only).
 - [ ] **Dock tablets — Fully Kiosk setup:** start URL `/v2/dock?bays=NN,NN` per tablet, keep-screen-on, exit PIN, return-to-start-URL on idle; consider a shared dock-tablet login with Loading Team permissions if sessions expire too often.
 - [ ] *(optional)* **wake-lock / keep-awake for dock tablets (Screen Wake Lock API)** — only if tablets dim during loading (dock-08 follow-on).
+- [ ] Packing instructions — consider surfacing on the loading sheet / BOL once the team is consistently filling them in (dock-12 shows them on the tablet only).
 - [ ] **dock-05 follow-up — require ≥1 photo before "Confirm & mark loaded" enables.** Deferred on purpose: make it mandatory once Steve confirms the dock team is consistently using the photo step (dock-05 added the after-the-fact add flow as the forgiving interim).
 
 ### BOL Email — `logistics/bol-email.html` · RETIRED (bem-03), v2 at `/v2/logistics/bol-email`

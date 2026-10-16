@@ -43,4 +43,10 @@ export const DOCK_TABLET = {
   pickerCaption: "#cbd5e1",
   pickerTileBg: "#f8fafc",
   pickerTileInk: "#374151",
+
+  // Packing instructions footer (dock-12)
+  packBorder: "#eab308",
+  packBg: "#fefce8",
+  packLabel: "#713f12",
+  packInk: "#422006",
 } as const;

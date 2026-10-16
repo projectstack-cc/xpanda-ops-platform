@@ -36,6 +36,7 @@ export interface DockAssignment {
   bay_label: string | null;
   photo_count: number;
   bol_count: number;
+  packing_instructions: string | null;
 }
 
 export interface DockBay {

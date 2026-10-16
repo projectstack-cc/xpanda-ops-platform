@@ -3,7 +3,7 @@
 // dock-10: one bay tile on the Dock Tablet page. Tinted by the dominant load's status (the TV
 // BayTile rule: any "loading" load, else the lowest load_number); an empty bay gets the neutral
 // "Nothing in Bay N" state. Long bays scroll inside their own tile.
-import { Truck } from "lucide-react";
+import { ClipboardList, Truck } from "lucide-react";
 import DockTabletCard from "./DockTabletCard";
 import { sortAssignments } from "../sortAssignments";
 import { statusVariant } from "../status";
@@ -91,6 +91,16 @@ export default function DockBayPanel({ bay, assignments, cardHandlers, canManage
   const trailer = (dominant.trailer_number ?? "").trim();
   const sharedCount = trailer ? loads.filter((l) => (l.trailer_number ?? "").trim() === trailer).length : 0;
   const layout = loads.length === 1 ? "full" : "compact";
+  // dock-12: one packing-instructions entry per distinct job with non-empty text (INV#-sorted).
+  const seenJobs = new Set<string>();
+  const packing: { jobId: string; invoice: string | null; customer: string; text: string }[] = [];
+  for (const a of loads) {
+    if (seenJobs.has(a.job_id)) continue;
+    seenJobs.add(a.job_id);
+    const text = a.packing_instructions?.trim();
+    if (!text) continue;
+    packing.push({ jobId: a.job_id, invoice: (a.invoice_number ?? "").trim() || null, customer: (a.customer ?? "").trim(), text });
+  }
 
   return (
     <div
@@ -131,6 +141,46 @@ export default function DockBayPanel({ bay, assignments, cardHandlers, canManage
           />
         ))}
       </div>
+      {packing.length > 0 && (
+        <section
+          aria-label="Packing instructions"
+          className="flex flex-col"
+          style={{
+            flexShrink: 0,
+            margin: "0 16px 16px",
+            border: `2px solid ${P.packBorder}`,
+            background: P.packBg,
+            borderRadius: 14,
+            padding: "14px 18px",
+            gap: 8,
+            maxHeight: 200,
+            overflowY: "auto",
+          }}
+        >
+          <div className="flex items-center" style={{ gap: 8, color: P.packLabel }}>
+            <ClipboardList size={20} aria-hidden="true" />
+            <span className="font-bold" style={{ fontSize: 14, letterSpacing: ".08em" }}>
+              PACKING INSTRUCTIONS
+            </span>
+          </div>
+          {packing.length === 1 ? (
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 600, lineHeight: 1.3, color: P.packInk, whiteSpace: "pre-line" }}>
+              {packing[0].text}
+            </p>
+          ) : (
+            <div className="flex flex-col" style={{ gap: 10 }}>
+              {packing.map((e) => (
+                <p
+                  key={e.jobId}
+                  style={{ margin: 0, fontSize: 22, fontWeight: 600, lineHeight: 1.3, color: P.packInk, whiteSpace: "pre-line" }}
+                >
+                  <span className="font-mono">{e.invoice ? `INV# ${e.invoice}` : e.customer} —</span> {e.text}
+                </p>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }
