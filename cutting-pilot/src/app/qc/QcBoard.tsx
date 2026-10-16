@@ -1,11 +1,12 @@
 "use client";
-// src/app/qc/QcBoard.tsx — qc-01
-// v2 QC Final Inspection board (read-only). Week of orders grouped by ship day, each expandable to
-// its inspectable lines (Holey Board lines are excluded server-side). Composes the shared dashboard
+// src/app/qc/QcBoard.tsx — qc-01, qc-02
+// v2 QC Final Inspection board. Week of orders grouped by ship day, each expandable to its
+// inspectable lines (Holey Board lines are excluded server-side). Composes the shared dashboard
 // primitives (DashboardToolbar, WeekSelector, SearchInput, FilterSelect, DayGroupHeader, MetricTile).
-// qc-01: every line is "Not inspected"; qc-02 adds the per-line Inspect action + results.
+// qc-02: per-line Inspect / Re-inspect (InspectModal, `qc` edit only) and the latest result under
+// each chip (inspector · ET time · Drive status, plus a stale-line flag). View-only users see results.
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Calculator, ChevronDown, ChevronRight, ClipboardList, RefreshCw, TriangleAlert } from "lucide-react";
+import { Calculator, Check, ChevronDown, ChevronRight, ClipboardList, RefreshCw, TriangleAlert } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import DashboardToolbar from "@/components/dashboard/DashboardToolbar";
 import WeekSelector from "@/components/dashboard/WeekSelector";
@@ -14,6 +15,8 @@ import FilterSelect from "@/components/dashboard/FilterSelect";
 import DayGroupHeader from "@/components/dashboard/DayGroupHeader";
 import MetricTile from "@/components/dashboard/MetricTile";
 import DensityCalculatorModal from "@/components/qc/DensityCalculatorModal";
+import InspectModal from "@/components/qc/InspectModal";
+import { formatEtDateTime } from "@/lib/etDateTime";
 import { getMondayForOffset } from "@/lib/week";
 import {
   groupByShipDay,
@@ -21,6 +24,7 @@ import {
   isLineInspected,
   orderState,
   type QcLine,
+  type QcLineInspection,
   type QcOrder,
   type QcOrderState,
 } from "@/lib/qc/board";
@@ -88,6 +92,32 @@ function LineChip({ line }: { line: QcLine }) {
   return <StateChip state="open" failed={0} />;
 }
 
+// Under a line's chip: "{inspector} · {M/D h:mm AM ET} · Drive {pending | ✓ | failed}", plus the stale flag.
+function InspectionMeta({ inspection }: { inspection: QcLineInspection | null }) {
+  if (!inspection) return null;
+  const when = formatEtDateTime(inspection.inspected_at) ?? inspection.inspected_at;
+  return (
+    <div className="mt-1 space-y-1">
+      <div className="text-[11px] text-muted">
+        {inspection.inspector_name || "—"} · <span className="font-mono tabular-nums">{when}</span> · Drive{" "}
+        {inspection.drive_status === "synced" ? (
+          <>
+            <Check size={11} className="inline -mt-0.5" aria-hidden="true" />
+            <span className="sr-only">synced</span>
+          </>
+        ) : (
+          inspection.drive_status
+        )}
+      </div>
+      {inspection.stale && (
+        <span className={`${CHIP} bg-[var(--warn-bg)] text-[var(--warn-text)] border-[var(--warn-border)]`}>
+          Line changed since inspection
+        </span>
+      )}
+    </div>
+  );
+}
+
 const HEADER_BTN =
   "inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-lg border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] no-underline transition-colors cursor-pointer";
 
@@ -106,28 +136,53 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
 
   // Drops stale responses when the week changes mid-fetch.
   const reqIdRef = useRef(0);
-  const load = useCallback(async () => {
+  // quiet: reconcile after a save — no spinner, and a failed quiet refetch keeps what's on screen.
+  const load = useCallback(async (opts: { quiet?: boolean } = {}) => {
+    const quiet = opts.quiet === true;
     const reqId = ++reqIdRef.current;
-    setLoading(true);
-    setError(null);
+    if (!quiet) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await fetch(`/v2/api/qc/board?week=${encodeURIComponent(weekInfo.mondayStr)}`);
       const json = await res.json().catch(() => null);
       if (reqId !== reqIdRef.current) return;
       if (!res.ok || !json?.ok) {
+        if (quiet) return;
         setError(json?.error || "Couldn't load the QC board.");
         setOrders(null);
         return;
       }
       setOrders(json.orders ?? []);
     } catch {
-      if (reqId !== reqIdRef.current) return;
+      if (reqId !== reqIdRef.current || quiet) return;
       setError("Network error — couldn't reach the server.");
       setOrders(null);
     } finally {
       if (reqId === reqIdRef.current) setLoading(false);
     }
   }, [weekInfo.mondayStr]);
+
+  const canInspect = isAdmin || permissions?.qc?.edit === true;
+  const [inspectTarget, setInspectTarget] = useState<{ order: QcOrder; line: QcLine } | null>(null);
+
+  // Patch the saved line in place so chips, progress and KPIs update at once, then reconcile quietly.
+  const handleSaved = useCallback(
+    (lineId: string, inspection: QcLineInspection) => {
+      setOrders((prev) =>
+        prev
+          ? prev.map((o) =>
+              o.lines.some((l) => l.id === lineId)
+                ? { ...o, lines: o.lines.map((l) => (l.id === lineId ? { ...l, inspection } : l)) }
+                : o
+            )
+          : prev
+      );
+      load({ quiet: true });
+    },
+    [load]
+  );
 
   useEffect(() => {
     load();
@@ -258,7 +313,7 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
             <span>{error}</span>
             <button
               type="button"
-              onClick={load}
+              onClick={() => load()}
               className="min-h-[44px] px-3 underline cursor-pointer font-semibold text-xs"
             >
               Retry
@@ -341,7 +396,7 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
                             {isOpen && (
                               <tr className="border-b border-[var(--line)] last:border-b-0 bg-[var(--ghost-bg)]">
                                 <td colSpan={6} className="px-4 py-3">
-                                  <div className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-surface">
+                                  <div className="relative overflow-x-auto rounded-lg border border-[var(--card-border)] bg-surface">
                                     <table className="w-full text-sm">
                                       <thead>
                                         <tr className="border-b border-[var(--line)] text-left text-xs font-semibold text-muted">
@@ -349,6 +404,7 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
                                           <th className="px-3 py-2">Dimensions</th>
                                           <th className="px-3 py-2 text-right">Qty</th>
                                           <th className="px-3 py-2">Result</th>
+                                          <th className="px-3 py-2 text-right"><span className="sr-only">Action</span></th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -361,6 +417,25 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
                                             </td>
                                             <td className="px-3 py-2">
                                               <LineChip line={l} />
+                                              <InspectionMeta inspection={l.inspection} />
+                                            </td>
+                                            <td className="px-3 py-2 text-right">
+                                              {canInspect && (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setInspectTarget({ order: o, line: l });
+                                                  }}
+                                                  className={
+                                                    l.inspection
+                                                      ? "min-h-[44px] px-4 rounded-md border border-[var(--border)] bg-surface text-sm font-semibold text-text hover:bg-[var(--ghost-bg)] cursor-pointer whitespace-nowrap"
+                                                      : "min-h-[44px] px-4 rounded-md bg-[var(--brand)] text-white text-sm font-semibold cursor-pointer hover:opacity-90 whitespace-nowrap"
+                                                  }
+                                                >
+                                                  {l.inspection ? "Re-inspect" : "Inspect"}
+                                                </button>
+                                              )}
                                             </td>
                                           </tr>
                                         ))}
@@ -383,6 +458,16 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
       </div>
 
       <DensityCalculatorModal isOpen={densityOpen} onClose={() => setDensityOpen(false)} />
+      {inspectTarget && (
+        <InspectModal
+          isOpen
+          onClose={() => setInspectTarget(null)}
+          order={inspectTarget.order}
+          line={inspectTarget.line}
+          inspectorName={userName}
+          onSaved={handleSaved}
+        />
+      )}
     </div>
   );
 }

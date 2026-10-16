@@ -5,11 +5,12 @@
 // inspected, so they're left out; an order with no other lines drops off entirely. Lines with no
 // part_id are inspectable. Jobs: not archived, or archived but shipped (shipped-then-archived
 // stays visible for its week). No status filter — inspection can happen before or after cutting.
-// Every line's `inspection` is null until qc-02 adds the inspection tables.
+// qc-02: each line carries its latest (non-superseded) qc_inspections row, or null, with `stale`
+// set when the line's quantity/dimensions no longer match that inspection's snapshot.
 // Gated on `qc` by middleware (GET view). Read-only, so no logActivity.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
-import type { QcLine, QcOrder } from "@/lib/qc/board";
+import { isStale, type QcLine, type QcLineInspection, type QcOrder } from "@/lib/qc/board";
 
 interface JobRow {
   id: string;
@@ -17,6 +18,17 @@ interface JobRow {
   customer: string;
   ship_date: string;
   status: string;
+}
+
+interface InspectionRow {
+  id: string;
+  line_item_id: string;
+  result: "pass" | "fail";
+  inspector_name: string | null;
+  inspected_at: string;
+  drive_status: "pending" | "synced" | "failed";
+  line_quantity: number | null;
+  dimensions_text: string | null;
 }
 
 interface LineRow {
@@ -75,6 +87,36 @@ export async function GET(request: NextRequest) {
           inspection: null,
         });
         linesByJob.set(r.job_id, list);
+      }
+    }
+
+    // Latest inspection per line (superseded rows are audit-only), one chunked query.
+    const lineIds = Array.from(linesByJob.values()).flatMap((ls) => ls.map((l) => l.id));
+    const inspByLine = new Map<string, InspectionRow>();
+    for (let i = 0; i < lineIds.length; i += CHUNK) {
+      const chunk = lineIds.slice(i, i + CHUNK);
+      if (!chunk.length) continue;
+      const res = await DB.prepare(
+        `SELECT id, line_item_id, result, inspector_name, inspected_at, drive_status, line_quantity, dimensions_text
+           FROM qc_inspections WHERE superseded_at IS NULL AND line_item_id IN (${chunk.map(() => "?").join(",")})`
+      )
+        .bind(...chunk)
+        .all<InspectionRow>();
+      for (const r of res.results ?? []) inspByLine.set(r.line_item_id, r);
+    }
+    for (const lines of Array.from(linesByJob.values())) {
+      for (const l of lines) {
+        const r = inspByLine.get(l.id);
+        l.inspection = r
+          ? ({
+              id: r.id,
+              result: r.result,
+              inspector_name: r.inspector_name ?? "",
+              inspected_at: r.inspected_at,
+              drive_status: r.drive_status,
+              stale: isStale(r.line_quantity, r.dimensions_text, l.quantity, l.dimensions),
+            } satisfies QcLineInspection)
+          : null;
       }
     }
 

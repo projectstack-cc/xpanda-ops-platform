@@ -8,8 +8,17 @@ export interface QcLine {
   dimensions: string;
   quantity: number;
   sort_order: number;
-  // qc-02: becomes the line's latest inspection record ({ result: "pass" | "fail", ... }). Always null in qc-01.
-  inspection: null;
+  inspection: QcLineInspection | null;
+}
+
+// qc-02: the line's latest (non-superseded) inspection, as the board shows it.
+export interface QcLineInspection {
+  id: string;
+  result: "pass" | "fail";
+  inspector_name: string;
+  inspected_at: string;          // "YYYY-MM-DD HH:MM:SS" UTC, as stored
+  drive_status: "pending" | "synced" | "failed";
+  stale: boolean;                // line qty/dimensions changed since this inspection
 }
 
 export interface QcOrder {
@@ -23,10 +32,9 @@ export interface QcOrder {
 
 export type QcOrderState = "open" | "partial" | "passed" | "failed";
 
-// Written against qc-02's future `inspection.result`; null (no inspection yet) counts as open.
+// null (no inspection yet) counts as open.
 function lineResult(line: QcLine): "pass" | "fail" | null {
-  const insp = line.inspection as { result?: "pass" | "fail" } | null;
-  return insp?.result ?? null;
+  return line.inspection?.result ?? null;
 }
 
 export function isLineInspected(line: QcLine): boolean {
@@ -113,4 +121,137 @@ export function densityVsTarget(density: number, target: number): DensityVsTarge
   const variance = round3(d - t);
   const verdict = d === t ? "on" : d > t ? "above" : "below";
   return { variance, variancePct: t > 0 ? (variance / t) * 100 : 0, verdict };
+}
+
+// ── qc-02: Inspect modal + POST /v2/api/qc/inspections ──────────────────────────────────────────
+
+export const TOLERANCES: { label: string; value: number }[] = [
+  { label: "1/16 (.0625) in", value: 0.0625 },
+  { label: "1/8 (.125) in", value: 0.125 },
+  { label: "3/16 (.1875) in", value: 0.1875 },
+  { label: "1/4 (.25) in", value: 0.25 },
+];
+export const DEFAULT_TOLERANCE = 0.125;
+
+export interface Nominal {
+  length: number | null;
+  width: number | null;
+  height: number | null;
+  taper: string | null;
+}
+
+const EMPTY_NOMINAL: Nominal = { length: null, width: null, height: null, taper: null };
+
+// Curly/prime inch marks and doubled single quotes → ", every x/X/× separator → x.
+function normalizeDims(raw: string): string {
+  return raw
+    .replace(/[“”„‟″]/g, '"')
+    .replace(/''|[‘’′]{2}/g, '"')
+    .replace(/[×X]/g, "x");
+}
+
+const NUM = String.raw`\d+(?:\.\d+)?|\.\d+`;
+
+// One segment → its number (taper: the thick end) plus the taper text when it is one.
+function parseSegment(seg: string): { value: number; taper: string | null } | null {
+  const s = seg.replace(/["'\s]/g, "");
+  if (!s) return null;
+  const mixed = s.match(/^(\d+)-(\d+)\/(\d+)$/);
+  if (mixed) {
+    const den = parseInt(mixed[3], 10);
+    return den ? { value: parseInt(mixed[1], 10) + parseInt(mixed[2], 10) / den, taper: null } : null;
+  }
+  const frac = s.match(/^(\d+)\/(\d+)$/);
+  if (frac) {
+    const den = parseInt(frac[2], 10);
+    return den ? { value: parseInt(frac[1], 10) / den, taper: null } : null;
+  }
+  // Taper a-b / a>b / a–b — b is never a fraction (that's a mixed number, handled above), b > a.
+  const taper = s.match(new RegExp(`^(${NUM})[-–>](${NUM})$`));
+  if (taper) {
+    const a = parseFloat(taper[1]);
+    const b = parseFloat(taper[2]);
+    return b > a ? { value: b, taper: `${taper[1]}–${taper[2]}` } : null;
+  }
+  if (new RegExp(`^(?:${NUM})$`).test(s)) return { value: parseFloat(s), taper: null };
+  return null;
+}
+
+function parseDims(raw: string): { values: number[]; taper: string | null } {
+  const parts = normalizeDims(raw).split(/\s*x\s*/i);
+  const values: number[] = [];
+  let taper: string | null = null;
+  if (parts.length < 2) return { values, taper };
+  for (const p of parts) {
+    const seg = parseSegment(p);
+    if (!seg) return { values: [], taper: null };
+    values.push(seg.value);
+    if (seg.taper && !taper) taper = seg.taper;
+  }
+  return { values, taper };
+}
+
+// Leading dimension-like token of a description ("FOAM-HT1840-4 ~ 15.5X37.5X3-9/16" → "15.5X37.5X3-9/16").
+function dimsTokenFromDescription(description: string): string | null {
+  const seg = String.raw`(?:\d+(?:\.\d+)?|\.\d+)(?:[-–>](?:\d+(?:\.\d+)?)(?:\/\d+)?|\/\d+)?["”″']*`;
+  // Prefix group, not a lookbehind — lookbehind needs Safari 16.4+, and older floor iPads would throw.
+  const m = normalizeDims(description).match(new RegExp(String.raw`(?:^|[^\w.])(${seg}(?:\s*x\s*${seg})+)`, "i"));
+  return m ? m[1] : null;
+}
+
+// Pre-fill for the Inspect modal's nominal row. Order varies by customer, so the values are sorted:
+// height = smallest, length = largest, width = middle. Two numbers → height null. Nothing → all null.
+export function nominalFromLine(dimensions: string, description: string): Nominal {
+  let parsed = parseDims(dimensions || "");
+  if (parsed.values.length < 2) {
+    const token = dimsTokenFromDescription(description || "");
+    parsed = token ? parseDims(token) : { values: [], taper: null };
+  }
+  if (parsed.values.length < 2) return { ...EMPTY_NOMINAL };
+  const v = [...parsed.values].sort((a, b) => a - b);
+  if (v.length === 2) return { length: v[1], width: v[0], height: null, taper: parsed.taper };
+  return { length: v[v.length - 1], width: v[v.length - 2], height: v[0], taper: parsed.taper };
+}
+
+export function outOfTolerance(measured: number | null | undefined, nominal: number | null | undefined, tol: number): boolean {
+  if (typeof measured !== "number" || typeof nominal !== "number") return false;
+  if (!Number.isFinite(measured) || !Number.isFinite(nominal)) return false;
+  return Math.abs(measured - nominal) > tol + 1e-9;
+}
+
+export interface QcSampleInput {
+  length: number | null;
+  width: number | null;
+  height: number | null;
+  taper: string;
+  visual_pass: boolean;
+  result: "pass" | "fail" | null;
+  notes: string;
+}
+
+function finiteNum(v: unknown): boolean {
+  return typeof v === "number" && Number.isFinite(v);
+}
+
+// Mirrors legacy isSampleComplete (qc/final-inspection.html): L, W, H and Pass/Fail required.
+export function isSampleComplete(s: { length?: unknown; width?: unknown; height?: unknown; result?: unknown }): boolean {
+  return finiteNum(s.length) && finiteNum(s.width) && finiteNum(s.height) && (s.result === "pass" || s.result === "fail");
+}
+
+export function inspectionResult(samples: { result?: unknown }[]): "pass" | "fail" {
+  return samples.some((s) => s.result === "fail") ? "fail" : "pass";
+}
+
+function normDimsText(s: string | null | undefined): string {
+  return String(s ?? "").trim().replace(/\s+/g, " ");
+}
+
+// Line changed since inspection: quantity compared numerically, dimensions whitespace-insensitively.
+export function isStale(
+  snapshotQty: number | null | undefined,
+  snapshotDims: string | null | undefined,
+  lineQty: number | null | undefined,
+  lineDims: string | null | undefined
+): boolean {
+  return Number(snapshotQty ?? 0) !== Number(lineQty ?? 0) || normDimsText(snapshotDims) !== normDimsText(lineDims);
 }
