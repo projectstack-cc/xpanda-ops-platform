@@ -43,7 +43,7 @@ const LD_PAIR_BAYS_KEY = "ld_pair_bays_v1";
 type DockView = "overview" | "team" | "pair";
 
 // dock-08: dedupe, keep positive integers, max 2.
-function cleanBayNumbers(list: unknown[]): number[] {
+function cleanPairList(list: unknown[]): number[] {
   return Array.from(new Set(list.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0))).slice(0, 2);
 }
 
@@ -51,23 +51,25 @@ function readStoredPair(): number[] {
   try {
     const raw = localStorage.getItem(LD_PAIR_BAYS_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
-    return Array.isArray(parsed) ? cleanBayNumbers(parsed) : [];
+    return Array.isArray(parsed) ? cleanPairList(parsed) : [];
   } catch {
     return [];
   }
 }
 
-// Rewrites `view`/`bays` in the URL (null = drop both) without a navigation, keeping any other
-// params and literal commas so a home-screen shortcut reads `bays=20,21`.
-function writePairUrl(bayNumbers: number[] | null) {
+// Writes `?view=pair&bays=…` (literal commas, so a home-screen shortcut reads `bays=20,21`)
+// without a navigation, keeping any other params.
+function writePairUrl(bayNumbers: number[]) {
   try {
     const url = new URL(window.location.href);
     url.searchParams.delete("view");
     url.searchParams.delete("bays");
     const rest = url.searchParams.toString();
-    const pair = bayNumbers ? `view=pair${bayNumbers.length ? `&bays=${bayNumbers.join(",")}` : ""}` : "";
-    const query = [pair, rest].filter(Boolean).join("&");
-    window.history.replaceState(null, "", url.pathname + (query ? `?${query}` : ""));
+    window.history.replaceState(
+      null,
+      "",
+      `${url.pathname}?view=pair&bays=${bayNumbers.join(",")}${rest ? `&${rest}` : ""}`
+    );
   } catch {
     // best-effort URL update only
   }
@@ -262,7 +264,7 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
     if (searchParams.get("view") !== "pair") return;
     const fromUrl = searchParams.get("bays");
     // No stored pair either -> [] -> the picker opens.
-    setPairBayNumbers(fromUrl ? cleanBayNumbers(fromUrl.split(",")) : readStoredPair());
+    setPairBayNumbers(fromUrl ? cleanPairList(fromUrl.split(",")) : readStoredPair());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -282,19 +284,26 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   // Switching INTO Team View via the toolbar toggle always lands on the bay list (screen 1),
   // matching legacy's setLdView('bay') -- drillIntoBay/backToBayList are separate actions from
   // the toggle itself.
-  // dock-09: the toggle's "Bay Pair" restores this device's last pair (picker if none) and puts
-  // `?view=pair&bays=` in the URL; leaving pair view drops those params so a reload lands where
-  // the user is.
+  // dock-09: the toggle's "Bay Pair" restores the pair in state, else this device's last pair
+  // (showPairPicker covers none) and puts `?view=pair&bays=` in the URL; leaving pair view drops
+  // `view`/`bays` so a reload lands on the normal board.
   function handleSetView(next: DockView) {
-    setView(next);
-    if (next === "team") setSelectedBayId(null);
     if (next === "pair") {
       const nums = pairBayNumbers.length ? pairBayNumbers : readStoredPair();
       setPairBayNumbers(nums);
-      writePairUrl(nums);
-    } else {
-      writePairUrl(null);
+      if (nums.length) writePairUrl(nums);
+    } else if (view === "pair") {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("view");
+        url.searchParams.delete("bays");
+        window.history.replaceState(null, "", url.pathname + url.search.replace(/%2C/gi, ","));
+      } catch {
+        // best-effort URL cleanup only
+      }
     }
+    setView(next);
+    if (next === "team") setSelectedBayId(null);
   }
 
   function cardDraggable(a: DockAssignment): boolean {
