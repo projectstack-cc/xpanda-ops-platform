@@ -83,6 +83,8 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   // the general /v2/logistics rule.
   { prefix: "/v2/logistics/load-builder", keys: ["logistics.load-builder"] },
   { prefix: "/v2/logistics/loading", keys: ["logistics.loading"] },
+  // dock-10: dock tablet page, same audience as the dock board
+  { prefix: "/v2/dock", keys: ["logistics.loading"] },
   // PXXX-c: PullJobModal's GET /v2/api/jobs?search= (and ShippingInfoModal's GET
   // /v2/api/jobs/:id from PXXX-b) both live under this same prefix as the pre-existing
   // /v2/api/jobs/:id lookup (BolGenerateModal), so they can't get their own more-specific rule --

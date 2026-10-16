@@ -21,7 +21,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('xpanda-theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark');}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('xpanda-theme');var f=location.pathname.indexOf('/v2/dock')===0;document.documentElement.setAttribute('data-theme',(f||t==='light')?'light':'dark');}catch(e){}})();`,
           }}
         />
         <script

@@ -96,6 +96,8 @@
 
 - [ ] **Unit 3b follow-up — i18n for the new dock dashboard labels.** `DockAssignmentCard.tsx`/`AssignBayModal.tsx`/`LoadedChecklistModal.tsx`/`DockBoard.tsx`/`TeamView.tsx`/`BayListItem.tsx`/`ShippingInfoModal.tsx`/`PullJobModal.tsx`/`PhotoGalleryModal.tsx` ship English-only strings (v2 has no i18n spine wired yet, matching every other v2 UI unit so far) — needs a pass once v2 gains one.
 - [ ] Delete `logistics/loading.html` stub + its `logistics-i18n.js` loading keys once access logs show no hits (stub added dock-04).
+- [ ] **dock-11 — link `/v2/dock` from the dock board (Bay Pair button) and retire the in-board pair view; redirect `?view=pair` URLs.**
+- [ ] **Dock tablet i18n (Español / Kreyòl labels)** once the v2 i18n spine reaches logistics (dock-10 ships English-only).
 - [ ] **Dock tablets — Fully Kiosk setup:** start URL `/v2/logistics/loading?view=pair&bays=NN,NN` per tablet, keep-screen-on, exit PIN, return-to-start-URL on idle; consider a shared dock-tablet login with Loading Team permissions if sessions expire too often.
 - [ ] *(optional)* **wake-lock / keep-awake for dock tablets (Screen Wake Lock API)** — only if tablets dim during loading (dock-08 follow-on).
 - [ ] **dock-05 follow-up — require ≥1 photo before "Confirm & mark loaded" enables.** Deferred on purpose: make it mandatory once Steve confirms the dock team is consistently using the photo step (dock-05 added the after-the-fact add flow as the forgiving interim).

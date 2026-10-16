@@ -17,6 +17,13 @@ export const LD_STATUS_COLORS: Record<string, LoadingStatusVariant> = {
   delivered:   { bg: '#ccfbf1', border: '#0d9488', text: '#115e59', label: 'Delivered' },
 };
 
+// dock-10: tablet primary-button colours, keyed by the TARGET status -- the button matches the
+// status the load moves into.
+export const LD_ADVANCE_STYLE: Record<"loading" | "loaded", { bg: string; text: string }> = {
+  loading: { bg: '#f59e0b', text: '#451a03' },
+  loaded:  { bg: '#15803d', text: '#ffffff' },
+};
+
 export function statusVariant(status: string | null | undefined): LoadingStatusVariant {
   return LD_STATUS_COLORS[status ?? ""] ?? LD_STATUS_COLORS.awaiting;
 }
