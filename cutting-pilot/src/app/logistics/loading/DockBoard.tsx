@@ -42,6 +42,37 @@ const LD_PAIR_BAYS_KEY = "ld_pair_bays_v1";
 
 type DockView = "overview" | "team" | "pair";
 
+// dock-08: dedupe, keep positive integers, max 2.
+function cleanBayNumbers(list: unknown[]): number[] {
+  return Array.from(new Set(list.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0))).slice(0, 2);
+}
+
+function readStoredPair(): number[] {
+  try {
+    const raw = localStorage.getItem(LD_PAIR_BAYS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? cleanBayNumbers(parsed) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Rewrites `view`/`bays` in the URL (null = drop both) without a navigation, keeping any other
+// params and literal commas so a home-screen shortcut reads `bays=20,21`.
+function writePairUrl(bayNumbers: number[] | null) {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("view");
+    url.searchParams.delete("bays");
+    const rest = url.searchParams.toString();
+    const pair = bayNumbers ? `view=pair${bayNumbers.length ? `&bays=${bayNumbers.join(",")}` : ""}` : "";
+    const query = [pair, rest].filter(Boolean).join("&");
+    window.history.replaceState(null, "", url.pathname + (query ? `?${query}` : ""));
+  } catch {
+    // best-effort URL update only
+  }
+}
+
 interface DockBoardProps {
   userName: string;
   isAdmin: boolean;
@@ -229,20 +260,9 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   // below); if none remain, the picker opens with no Cancel.
   useEffect(() => {
     if (searchParams.get("view") !== "pair") return;
-    const clean = (list: unknown[]) =>
-      Array.from(new Set(list.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0))).slice(0, 2);
     const fromUrl = searchParams.get("bays");
-    if (fromUrl) {
-      setPairBayNumbers(clean(fromUrl.split(",")));
-      return;
-    }
-    try {
-      const raw = localStorage.getItem(LD_PAIR_BAYS_KEY);
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (Array.isArray(parsed)) setPairBayNumbers(clean(parsed));
-    } catch {
-      // no stored pair -- the picker opens
-    }
+    // No stored pair either -> [] -> the picker opens.
+    setPairBayNumbers(fromUrl ? cleanBayNumbers(fromUrl.split(",")) : readStoredPair());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -256,27 +276,25 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
     } catch {
       // best-effort persistence only
     }
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("view");
-      url.searchParams.delete("bays");
-      const rest = url.searchParams.toString();
-      window.history.replaceState(
-        null,
-        "",
-        `${url.pathname}?view=pair&bays=${bayNumbers.join(",")}${rest ? `&${rest}` : ""}`
-      );
-    } catch {
-      // best-effort URL update only
-    }
+    writePairUrl(bayNumbers);
   }
 
   // Switching INTO Team View via the toolbar toggle always lands on the bay list (screen 1),
   // matching legacy's setLdView('bay') -- drillIntoBay/backToBayList are separate actions from
   // the toggle itself.
+  // dock-09: the toggle's "Bay Pair" restores this device's last pair (picker if none) and puts
+  // `?view=pair&bays=` in the URL; leaving pair view drops those params so a reload lands where
+  // the user is.
   function handleSetView(next: DockView) {
     setView(next);
     if (next === "team") setSelectedBayId(null);
+    if (next === "pair") {
+      const nums = pairBayNumbers.length ? pairBayNumbers : readStoredPair();
+      setPairBayNumbers(nums);
+      writePairUrl(nums);
+    } else {
+      writePairUrl(null);
+    }
   }
 
   function cardDraggable(a: DockAssignment): boolean {
@@ -492,48 +510,61 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
       <div className="flex-1 w-full px-4 py-6 space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <h1 className="text-xl font-semibold text-text">Loading dashboard</h1>
-          {/* dock-08: pair view shows none of the toolbar (Overview stays the manager surface). */}
-          {view !== "pair" && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex rounded border border-[var(--input-border)] overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => handleSetView("overview")}
-                  className="h-8 px-3.5 text-xs font-semibold cursor-pointer transition-colors"
-                  style={
-                    view === "overview"
-                      ? { background: "var(--accent)", color: "var(--bg)" }
-                      : { background: "var(--surface)", color: "var(--muted)" }
-                  }
-                >
-                  Overview
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSetView("team")}
-                  className="h-8 px-3.5 text-xs font-semibold cursor-pointer transition-colors"
-                  style={
-                    view === "team"
-                      ? { background: "var(--accent)", color: "var(--bg)" }
-                      : { background: "var(--surface)", color: "var(--muted)" }
-                  }
-                >
-                  Loading Team View
-                </button>
-              </div>
-              {view === "team" && selectedBayId !== null && (
-                <select
-                  value={selectedBayId}
-                  onChange={(e) => setSelectedBayId(e.target.value)}
-                  className="h-8 px-2.5 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs"
-                >
-                  {bays.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      Bay {b.bay_number}
-                    </option>
-                  ))}
-                </select>
-              )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex rounded border border-[var(--input-border)] overflow-hidden">
+              <button
+                type="button"
+                onClick={() => handleSetView("overview")}
+                className="h-8 px-3.5 text-xs font-semibold cursor-pointer transition-colors"
+                style={
+                  view === "overview"
+                    ? { background: "var(--accent)", color: "var(--bg)" }
+                    : { background: "var(--surface)", color: "var(--muted)" }
+                }
+              >
+                Overview
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetView("team")}
+                className="h-8 px-3.5 text-xs font-semibold cursor-pointer transition-colors"
+                style={
+                  view === "team"
+                    ? { background: "var(--accent)", color: "var(--bg)" }
+                    : { background: "var(--surface)", color: "var(--muted)" }
+                }
+              >
+                Loading Team View
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetView("pair")}
+                className="h-8 px-3.5 text-xs font-semibold cursor-pointer transition-colors"
+                style={
+                  view === "pair"
+                    ? { background: "var(--accent)", color: "var(--bg)" }
+                    : { background: "var(--surface)", color: "var(--muted)" }
+                }
+              >
+                Bay Pair
+              </button>
+            </div>
+            {view === "team" && selectedBayId !== null && (
+              <select
+                value={selectedBayId}
+                onChange={(e) => setSelectedBayId(e.target.value)}
+                className="h-8 px-2.5 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs"
+              >
+                {bays.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    Bay {b.bay_number}
+                  </option>
+                ))}
+              </select>
+            )}
+            {/* dock-09: pair view keeps only the view toggle (the way back); the rest stays hidden. */}
+            {view !== "pair" && (
+              <>
               <input
                 type="text"
                 value={searchTerm}
@@ -568,8 +599,9 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
                   + Pull Job
                 </button>
               )}
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </div>
 
         {loadError && (
