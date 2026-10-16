@@ -96,8 +96,8 @@
 
 - [ ] **Unit 3b follow-up — i18n for the new dock dashboard labels.** `DockAssignmentCard.tsx`/`AssignBayModal.tsx`/`LoadedChecklistModal.tsx`/`DockBoard.tsx`/`TeamView.tsx`/`BayListItem.tsx`/`ShippingInfoModal.tsx`/`PullJobModal.tsx`/`PhotoGalleryModal.tsx` ship English-only strings (v2 has no i18n spine wired yet, matching every other v2 UI unit so far) — needs a pass once v2 gains one.
 - [ ] Delete `logistics/loading.html` stub + its `logistics-i18n.js` loading keys once access logs show no hits (stub added dock-04).
-- [ ] **dock-08 — Bay Pair tablet view (`?view=pair&bays=`).**
 - [ ] **dock-09 — expose Bay Pair in the view toggle** (held until Steve floor-tests on a tablet).
+- [ ] *(optional)* **wake-lock / keep-awake for dock tablets (Screen Wake Lock API)** — only if tablets dim during loading (dock-08 follow-on).
 - [ ] **dock-05 follow-up — require ≥1 photo before "Confirm & mark loaded" enables.** Deferred on purpose: make it mandatory once Steve confirms the dock team is consistently using the photo step (dock-05 added the after-the-fact add flow as the forgiving interim).
 
 ### BOL Email — `logistics/bol-email.html` · RETIRED (bem-03), v2 at `/v2/logistics/bol-email`

@@ -28,12 +28,19 @@ import DockAssignmentCard, { COMPACT_CARD_H } from "@/components/loading/DockAss
 import DockModalHost from "@/components/loading/DockModalHost";
 import { useDockActions } from "@/components/loading/useDockActions";
 import TeamView from "./TeamView";
+import BayPairView from "./BayPairView";
+import BayPairPicker from "@/components/loading/BayPairPicker";
 import { sortAssignments, type LdSortOrder } from "@/components/loading/sortAssignments";
 import { BAY_ACTIVE_STATUSES, inCurrentWeek, type DockAssignment, type DockBay } from "@/components/loading/dockTypes";
 
 // Byte-exact match to logistics/loading.html's LD_COLLAPSE_KEY so an operator's section-collapse
 // state survives the legacy->v2 cutover.
 const LD_COLLAPSE_KEY = "ld_section_collapsed_v1";
+// dock-08: a dock tablet's last-chosen Bay Pair (JSON array of bay_numbers). Fallback only --
+// `?bays=` in the URL always wins.
+const LD_PAIR_BAYS_KEY = "ld_pair_bays_v1";
+
+type DockView = "overview" | "team" | "pair";
 
 interface DockBoardProps {
   userName: string;
@@ -65,13 +72,17 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOrder, setSortOrder] = useState<LdSortOrder>("inv_asc");
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
-  const [view, setView] = useState<"overview" | "team">("overview");
+  const searchParams = useSearchParams();
+  // dock-08: `?view=pair` is read in the initializer (searchParams is the same on server and
+  // client, so no hydration desync) so a tablet never flashes the Overview toolbar.
+  const [view, setView] = useState<DockView>(() => (searchParams.get("view") === "pair" ? "pair" : "overview"));
+  const [pairBayNumbers, setPairBayNumbers] = useState<number[]>([]);
+  const [pairPickerOpen, setPairPickerOpen] = useState(false);
   const [selectedBayId, setSelectedBayId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
-  const searchParams = useSearchParams();
   // The include_archived flag the page mounted with, so the 15s poll keeps a deep-link session's
   // aged-off rows instead of dropping them on the first tick.
   const includeArchivedRef = useRef(false);
@@ -195,7 +206,9 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
       const url = new URL(window.location.href);
       url.searchParams.delete("assignment");
       url.searchParams.delete("shipment");
-      window.history.replaceState(null, "", url.pathname + url.search);
+      // dock-08: `view`/`bays` survive (only the two deep-link params are deleted); keep the
+      // pair list's commas literal so a home-screen shortcut stays readable (`bays=20,21`).
+      window.history.replaceState(null, "", url.pathname + url.search.replace(/%2C/gi, ","));
     } catch {
       // best-effort URL cleanup only
     }
@@ -206,13 +219,62 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   // this effect only ever runs once, on the empty-deps mount). Must run in an effect, not during
   // render, so SSR/CSR hydration never desyncs on window.matchMedia.
   useEffect(() => {
+    if (searchParams.get("view") === "pair") return; // dock-08: pair view skips the responsive default
     if (window.matchMedia("(max-width: 767px)").matches) setView("team");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // dock-08: resolve the Bay Pair once on mount -- `?bays=` (comma-separated bay_numbers) first,
+  // else this device's localStorage. Unknown/inactive numbers are dropped at render (pairBays
+  // below); if none remain, the picker opens with no Cancel.
+  useEffect(() => {
+    if (searchParams.get("view") !== "pair") return;
+    const clean = (list: unknown[]) =>
+      Array.from(new Set(list.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0))).slice(0, 2);
+    const fromUrl = searchParams.get("bays");
+    if (fromUrl) {
+      setPairBayNumbers(clean(fromUrl.split(",")));
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(LD_PAIR_BAYS_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed)) setPairBayNumbers(clean(parsed));
+    } catch {
+      // no stored pair -- the picker opens
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A chosen pair is remembered on this device AND written into the URL, so "Add to Home Screen"
+  // captures it. Display-only: nothing is written to D1.
+  function handleChoosePair(bayNumbers: number[]) {
+    setPairBayNumbers(bayNumbers);
+    setPairPickerOpen(false);
+    try {
+      localStorage.setItem(LD_PAIR_BAYS_KEY, JSON.stringify(bayNumbers));
+    } catch {
+      // best-effort persistence only
+    }
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("view");
+      url.searchParams.delete("bays");
+      const rest = url.searchParams.toString();
+      window.history.replaceState(
+        null,
+        "",
+        `${url.pathname}?view=pair&bays=${bayNumbers.join(",")}${rest ? `&${rest}` : ""}`
+      );
+    } catch {
+      // best-effort URL update only
+    }
+  }
 
   // Switching INTO Team View via the toolbar toggle always lands on the bay list (screen 1),
   // matching legacy's setLdView('bay') -- drillIntoBay/backToBayList are separate actions from
   // the toggle itself.
-  function handleSetView(next: "overview" | "team") {
+  function handleSetView(next: DockView) {
     setView(next);
     if (next === "team") setSelectedBayId(null);
   }
@@ -344,7 +406,8 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   // through a ref so the interval itself is created once.
   const pollBlockedRef = useRef(false);
   useEffect(() => {
-    pollBlockedRef.current = draggingId !== null || actions.anyModalOpen;
+    // dock-08: showPairPicker (not just pairPickerOpen) so the first-run picker also pauses the poll.
+    pollBlockedRef.current = draggingId !== null || actions.anyModalOpen || showPairPicker;
   });
   useEffect(() => {
     const timer = setInterval(() => {
@@ -371,6 +434,11 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
   // anything physically on the dock always shows regardless of ship date. The This Week toggle
   // bounds only the Awaiting queue and Delivered history (inWeekScope below).
   const set = assignments.filter((a) => matchesSearch(a));
+  // dock-08: the Bay Pair's DockBays, in chosen order; unknown/inactive bay_numbers drop out.
+  const pairBays = pairBayNumbers
+    .map((n) => bays.find((b) => b.bay_number === n && b.is_active))
+    .filter((b): b is DockBay => !!b);
+  const showPairPicker = view === "pair" && !loading && !loadError && (pairPickerOpen || pairBays.length === 0);
   const inWeekScope = (a: DockAssignment) => searching || showAll || inCurrentWeek(a.ship_date);
 
   const awaiting = sortAssignments(
@@ -424,81 +492,84 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
       <div className="flex-1 w-full px-4 py-6 space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <h1 className="text-xl font-semibold text-text">Loading dashboard</h1>
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex rounded border border-[var(--input-border)] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => handleSetView("overview")}
-                className="h-8 px-3.5 text-xs font-semibold cursor-pointer transition-colors"
-                style={
-                  view === "overview"
-                    ? { background: "var(--accent)", color: "var(--bg)" }
-                    : { background: "var(--surface)", color: "var(--muted)" }
-                }
-              >
-                Overview
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetView("team")}
-                className="h-8 px-3.5 text-xs font-semibold cursor-pointer transition-colors"
-                style={
-                  view === "team"
-                    ? { background: "var(--accent)", color: "var(--bg)" }
-                    : { background: "var(--surface)", color: "var(--muted)" }
-                }
-              >
-                Loading Team View
-              </button>
-            </div>
-            {view === "team" && selectedBayId !== null && (
-              <select
-                value={selectedBayId}
-                onChange={(e) => setSelectedBayId(e.target.value)}
+          {/* dock-08: pair view shows none of the toolbar (Overview stays the manager surface). */}
+          {view !== "pair" && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex rounded border border-[var(--input-border)] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => handleSetView("overview")}
+                  className="h-8 px-3.5 text-xs font-semibold cursor-pointer transition-colors"
+                  style={
+                    view === "overview"
+                      ? { background: "var(--accent)", color: "var(--bg)" }
+                      : { background: "var(--surface)", color: "var(--muted)" }
+                  }
+                >
+                  Overview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetView("team")}
+                  className="h-8 px-3.5 text-xs font-semibold cursor-pointer transition-colors"
+                  style={
+                    view === "team"
+                      ? { background: "var(--accent)", color: "var(--bg)" }
+                      : { background: "var(--surface)", color: "var(--muted)" }
+                  }
+                >
+                  Loading Team View
+                </button>
+              </div>
+              {view === "team" && selectedBayId !== null && (
+                <select
+                  value={selectedBayId}
+                  onChange={(e) => setSelectedBayId(e.target.value)}
+                  className="h-8 px-2.5 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs"
+                >
+                  {bays.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      Bay {b.bay_number}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="INV#, customer, or PO"
+                autoComplete="off"
                 className="h-8 px-2.5 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs"
-              >
-                {bays.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    Bay {b.bay_number}
-                  </option>
-                ))}
-              </select>
-            )}
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="INV#, customer, or PO"
-              autoComplete="off"
-              className="h-8 px-2.5 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs"
-              style={{ minWidth: 180 }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowAll((v) => !v)}
-              className="h-8 px-3 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--surface-2)] transition-colors"
-            >
-              {showAll ? "Show all" : "This week"}
-            </button>
-            <select
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as LdSortOrder)}
-              className="h-8 px-2.5 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs cursor-pointer"
-            >
-              <option value="inv_asc">INV# ↑</option>
-              <option value="inv_desc">INV# ↓</option>
-              <option value="date_asc">Date added</option>
-            </select>
-            {canManage && (
+                style={{ minWidth: 180 }}
+              />
               <button
                 type="button"
-                onClick={() => actions.openPullJob()}
-                className="min-h-[44px] px-3.5 rounded bg-[var(--primary-bg)] text-[var(--primary-text)] text-xs font-semibold cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={() => setShowAll((v) => !v)}
+                className="h-8 px-3 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--surface-2)] transition-colors"
               >
-                + Pull Job
+                {showAll ? "Show all" : "This week"}
               </button>
-            )}
-          </div>
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as LdSortOrder)}
+                className="h-8 px-2.5 rounded border border-[var(--input-border)] bg-[var(--card-bg)] text-text text-xs cursor-pointer"
+              >
+                <option value="inv_asc">INV# ↑</option>
+                <option value="inv_desc">INV# ↓</option>
+                <option value="date_asc">Date added</option>
+              </select>
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => actions.openPullJob()}
+                  className="min-h-[44px] px-3.5 rounded bg-[var(--primary-bg)] text-[var(--primary-text)] text-xs font-semibold cursor-pointer hover:opacity-90 transition-opacity"
+                >
+                  + Pull Job
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {loadError && (
@@ -526,6 +597,18 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
             onSelectBay={setSelectedBayId}
             cardHandlers={cardHandlers}
             highlightedId={highlightedId}
+          />
+        )}
+
+        {!loading && !loadError && view === "pair" && (
+          <BayPairView
+            bays={bays}
+            assignments={set}
+            sortOrder={sortOrder}
+            cardHandlers={cardHandlers}
+            highlightedId={highlightedId}
+            pairBayNumbers={pairBays.map((b) => b.bay_number)}
+            onChangeBays={() => setPairPickerOpen(true)}
           />
         )}
 
@@ -706,6 +789,16 @@ export default function DockBoard({ userName, isAdmin, permissions }: DockBoardP
         pullJobDefaultBayId={view === "team" && selectedBayId !== null ? selectedBayId : null}
         onReload={() => load()}
       />
+
+      {showPairPicker && (
+        <BayPairPicker
+          bays={bays}
+          initial={pairBays.map((b) => b.bay_number)}
+          canCancel={pairBays.length > 0}
+          onConfirm={handleChoosePair}
+          onClose={() => setPairPickerOpen(false)}
+        />
+      )}
     </div>
   );
 }
