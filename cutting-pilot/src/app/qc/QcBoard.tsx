@@ -5,8 +5,10 @@
 // primitives (DashboardToolbar, WeekSelector, SearchInput, FilterSelect, DayGroupHeader, MetricTile).
 // qc-02: per-line Inspect / Re-inspect (InspectModal, `qc` edit only) and the latest result under
 // each chip (inspector · ET time · Drive status, plus a stale-line flag). View-only users see results.
+// qc-03: Drive status = a PDF link once synced, "Drive failed" (error on hover) or "pending (retrying)"
+// when stuck, with a Retry Drive button for `qc` edit (POST /v2/api/qc/inspections/:id/drive).
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Calculator, Check, ChevronDown, ChevronRight, ClipboardList, RefreshCw, TriangleAlert } from "lucide-react";
+import { Calculator, ChevronDown, ChevronRight, ClipboardList, FileText, RefreshCw, TriangleAlert } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import DashboardToolbar from "@/components/dashboard/DashboardToolbar";
 import WeekSelector from "@/components/dashboard/WeekSelector";
@@ -16,7 +18,7 @@ import DayGroupHeader from "@/components/dashboard/DayGroupHeader";
 import MetricTile from "@/components/dashboard/MetricTile";
 import DensityCalculatorModal from "@/components/qc/DensityCalculatorModal";
 import InspectModal from "@/components/qc/InspectModal";
-import { formatEtDateTime } from "@/lib/etDateTime";
+import { formatEtDateTime, parseStoredUtc } from "@/lib/etDateTime";
 import { getMondayForOffset } from "@/lib/week";
 import {
   groupByShipDay,
@@ -92,27 +94,120 @@ function LineChip({ line }: { line: QcLine }) {
   return <StateChip state="open" failed={0} />;
 }
 
-// Under a line's chip: "{inspector} · {M/D h:mm AM ET} · Drive {pending | ✓ | failed}", plus the stale flag.
-function InspectionMeta({ inspection }: { inspection: QcLineInspection | null }) {
+// A pending row is "stuck" once its last forward attempt (or, never attempted, its save) is over
+// 2 minutes old — the forwarder's claim window — so a retry can't overlap a live attempt.
+const DRIVE_STUCK_MS = 2 * 60 * 1000;
+const RETRY_CLIENT_TIMEOUT_MS = 40_000; // the server bounds the Apps Script POST at 25 s
+
+function isDriveStuck(inspection: QcLineInspection): boolean {
+  if (inspection.drive_status !== "pending") return false;
+  const since = parseStoredUtc(inspection.drive_attempted_at ?? inspection.inspected_at);
+  return since !== null && Date.now() - since > DRIVE_STUCK_MS;
+}
+
+// Under a line's chip: "{inspector} · {M/D h:mm AM ET} · {PDF | Drive failed | Drive pending}", the
+// stale flag, and (qc edit) Retry Drive for a failed or stuck row.
+function InspectionMeta({
+  inspection,
+  lineId,
+  canInspect,
+  onPatched,
+}: {
+  inspection: QcLineInspection | null;
+  lineId: string;
+  canInspect: boolean;
+  onPatched: (lineId: string, inspection: QcLineInspection) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   if (!inspection) return null;
   const when = formatEtDateTime(inspection.inspected_at) ?? inspection.inspected_at;
+  const stuck = isDriveStuck(inspection);
+  const showRetry = canInspect && (inspection.drive_status === "failed" || stuck);
+
+  async function retry() {
+    if (!inspection) return;
+    setBusy(true);
+    setRetryError(null);
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), RETRY_CLIENT_TIMEOUT_MS);
+    try {
+      const res = await fetch(`/v2/api/qc/inspections/${encodeURIComponent(inspection.id)}/drive`, {
+        method: "POST",
+        signal: ac.signal,
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        setRetryError(json?.error || `Retry failed (HTTP ${res.status}).`);
+        return;
+      }
+      onPatched(lineId, json.inspection as QcLineInspection);
+    } catch (e) {
+      setRetryError(
+        (e as any)?.name === "AbortError"
+          ? "No answer after 40 s — refresh in a minute to see whether it went through."
+          : "Network error — couldn't reach the server."
+      );
+    } finally {
+      clearTimeout(timer);
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="mt-1 space-y-1">
       <div className="text-[11px] text-muted">
-        {inspection.inspector_name || "—"} · <span className="font-mono tabular-nums">{when}</span> · Drive{" "}
-        {inspection.drive_status === "synced" ? (
-          <>
-            <Check size={11} className="inline -mt-0.5" aria-hidden="true" />
-            <span className="sr-only">synced</span>
-          </>
+        {inspection.inspector_name || "—"} · <span className="font-mono tabular-nums">{when}</span> ·{" "}
+        {inspection.drive_status === "synced" && inspection.drive_file_id ? (
+          <a
+            href={`https://drive.google.com/file/d/${encodeURIComponent(inspection.drive_file_id)}/view`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="View inspection PDF"
+            className="inline-flex items-center gap-0.5 font-semibold text-[var(--link)] hover:underline"
+          >
+            <FileText size={11} aria-hidden="true" />
+            PDF
+          </a>
+        ) : inspection.drive_status === "synced" ? (
+          "Drive synced"
+        ) : inspection.drive_status === "failed" ? (
+          <span className="font-semibold text-[var(--danger-ink)]" title={inspection.drive_error ?? undefined}>
+            Drive failed
+            {inspection.drive_error && <span className="sr-only">: {inspection.drive_error}</span>}
+          </span>
+        ) : stuck ? (
+          "Drive pending (retrying)"
         ) : (
-          inspection.drive_status
+          "Drive pending"
         )}
       </div>
       {inspection.stale && (
         <span className={`${CHIP} bg-[var(--warn-bg)] text-[var(--warn-text)] border-[var(--warn-border)]`}>
           Line changed since inspection
         </span>
+      )}
+      {showRetry && (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              retry();
+            }}
+            disabled={busy}
+            aria-busy={busy}
+            className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-surface text-xs font-semibold text-text hover:bg-[var(--ghost-bg)] cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+          >
+            <RefreshCw size={12} className={busy ? "animate-spin" : ""} aria-hidden="true" />
+            {busy ? "Retrying…" : "Retry Drive"}
+          </button>
+          {retryError && (
+            <p role="alert" className="text-xs text-[var(--danger-ink)]">
+              {retryError}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
@@ -417,7 +512,7 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
                                             </td>
                                             <td className="px-3 py-2">
                                               <LineChip line={l} />
-                                              <InspectionMeta inspection={l.inspection} />
+                                              <InspectionMeta inspection={l.inspection} lineId={l.id} canInspect={canInspect} onPatched={handleSaved} />
                                             </td>
                                             <td className="px-3 py-2 text-right">
                                               {canInspect && (

@@ -390,7 +390,7 @@ function InspectForm({ order, line, inspectorName, onSaved, requestClose, markDi
       {/* Footer */}
       <div className="space-y-3 pt-3 border-t border-[var(--line)]">
         <p className="text-xs text-muted">
-          Saves to the platform. Drive and the inspection Sheet update after the Drive step ships (qc-03).
+          Saves to the platform, then files the inspection PDF to the customer's Drive folder (usually within a minute).
         </p>
         {error && (
           <div role="alert" className="rounded-lg border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-3 py-2">

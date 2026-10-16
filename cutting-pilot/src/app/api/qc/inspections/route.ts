@@ -4,12 +4,16 @@
 // DB.batch as the insert. Each record snapshots INV / customer / part / dimensions / quantity and
 // has no FKs, so it outlives later order edits and job deletion. Holey Board lines are refused
 // (same parts.category test as the board). The overall result is computed here from the samples —
-// the client never sends it. drive_status starts 'pending'; qc-03 forwards pending rows to Drive.
+// the client never sends it. drive_status starts 'pending'; qc-03: right after save, ctx.waitUntil
+// forwards it to the Inspection Tool Apps Script (PDF → customer's Drive folder) — never awaited, the
+// modal doesn't wait on Google. No ctx (next dev) → skipped; the */5 cron sweep picks the row up.
 // Inspector = the session user (X-User-Id / X-User-Name from middleware), never a form field.
 // Gated on `qc` by middleware (POST → edit).
 import { NextResponse, type NextRequest } from "next/server";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";
+import { forwardInspection } from "@/lib/qc/driveForward";
 import {
   TOLERANCES,
   inspectionResult,
@@ -156,8 +160,23 @@ export async function POST(request: NextRequest) {
       inspector_name: actorName,
       inspected_at: now,
       drive_status: "pending",
+      drive_file_id: null,
+      drive_error: null,
+      drive_attempted_at: null,
       stale: false,
     };
+    // qc-03: forward to Drive off the response path. forwardInspection never throws. Production
+    // builds only: under next dev, getPlatformProxy hands back a ctx AND the real QC_GAS_URL from
+    // wrangler.toml, so a local test save would file a real PDF into Steve's Drive.
+    if (process.env.NODE_ENV === "production") {
+      try {
+        const { env, ctx } = await getCloudflareContext();
+        ctx?.waitUntil?.(forwardInspection(DB, (env as any).QC_GAS_URL, id, { manual: false }));
+      } catch {
+        // No Cloudflare context — the */5 cron sweep forwards it.
+      }
+    }
+
     return NextResponse.json({ ok: true, inspection }, { status: 201 });
   } catch (e: any) {
     return NextResponse.json(

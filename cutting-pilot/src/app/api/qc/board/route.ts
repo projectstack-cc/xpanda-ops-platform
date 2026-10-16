@@ -10,7 +10,7 @@
 // Gated on `qc` by middleware (GET view). Read-only, so no logActivity.
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
-import { isStale, type QcLine, type QcLineInspection, type QcOrder } from "@/lib/qc/board";
+import { toLineInspection, type QcInspectionRow, type QcLine, type QcOrder } from "@/lib/qc/board";
 
 interface JobRow {
   id: string;
@@ -20,15 +20,8 @@ interface JobRow {
   status: string;
 }
 
-interface InspectionRow {
-  id: string;
+interface InspectionRow extends QcInspectionRow {
   line_item_id: string;
-  result: "pass" | "fail";
-  inspector_name: string | null;
-  inspected_at: string;
-  drive_status: "pending" | "synced" | "failed";
-  line_quantity: number | null;
-  dimensions_text: string | null;
 }
 
 interface LineRow {
@@ -97,7 +90,7 @@ export async function GET(request: NextRequest) {
       const chunk = lineIds.slice(i, i + CHUNK);
       if (!chunk.length) continue;
       const res = await DB.prepare(
-        `SELECT id, line_item_id, result, inspector_name, inspected_at, drive_status, line_quantity, dimensions_text
+        `SELECT id, line_item_id, result, inspector_name, inspected_at, drive_status, line_quantity, dimensions_text, drive_file_id, drive_error, drive_attempted_at
            FROM qc_inspections WHERE superseded_at IS NULL AND line_item_id IN (${chunk.map(() => "?").join(",")})`
       )
         .bind(...chunk)
@@ -107,16 +100,7 @@ export async function GET(request: NextRequest) {
     for (const lines of Array.from(linesByJob.values())) {
       for (const l of lines) {
         const r = inspByLine.get(l.id);
-        l.inspection = r
-          ? ({
-              id: r.id,
-              result: r.result,
-              inspector_name: r.inspector_name ?? "",
-              inspected_at: r.inspected_at,
-              drive_status: r.drive_status,
-              stale: isStale(r.line_quantity, r.dimensions_text, l.quantity, l.dimensions),
-            } satisfies QcLineInspection)
-          : null;
+        l.inspection = r ? toLineInspection(r, l.quantity, l.dimensions) : null;
       }
     }
 

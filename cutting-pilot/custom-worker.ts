@@ -6,6 +6,7 @@
 // ONE cron, "*/5 * * * *": every run = late-pickup check (late-pickup-02); runs whose scheduled
 // UTC minute is a multiple of 10 also run the schedule ingest (keeps its 10-min cadence).
 // Every run also does the cutting shift-risk check (shift-alert-01; no-op outside its checkpoint windows).
+// qc-03: every run also sweeps unsynced QC inspections to the Inspection Tool Apps Script (Drive PDFs).
 // late-pickup-03: do NOT go back to two crons branched on controller.cron — with "*/10" + "*/5"
 // on one Worker, Cloudflare delivered two events every 10 min, BOTH labeled "*/10 * * * *", and
 // none at :05/:15, so the "*/5" branch never ran.
@@ -15,13 +16,14 @@ import openNextHandler from "./.open-next/worker.js";
 import { runSchedulePoll, type ScheduleEnv } from "./src/lib/schedule-ingest";
 import { runLatePickupCheck, type LatePickupEnv } from "./src/lib/logistics/latePickupCron";
 import { runShiftRiskCheck, type ShiftRiskEnv } from "./src/lib/cutting/shiftRiskCron";
+import { runQcDriveSweep, type QcDriveEnv } from "./src/lib/qc/driveForward";
 
 export default {
   fetch: openNextHandler.fetch,
 
   async scheduled(
     controller: ScheduledController,
-    env: ScheduleEnv & LatePickupEnv & ShiftRiskEnv,
+    env: ScheduleEnv & LatePickupEnv & ShiftRiskEnv & QcDriveEnv,
     ctx: ExecutionContext
   ) {
     // Scheduled context has no user session — the poller never injects X-User-*, never sets cookies.
@@ -31,6 +33,7 @@ export default {
     ctx.waitUntil(
       runShiftRiskCheck(env).catch((err) => console.error("shift-risk: scheduled run failed", err))
     );
+    ctx.waitUntil(runQcDriveSweep(env).catch((err) => console.error("qc-drive: scheduled run failed", err)));
     if (new Date(controller.scheduledTime).getUTCMinutes() % 10 !== 0) return;
     ctx.waitUntil(
       runSchedulePoll(env).catch((err) => {
@@ -38,4 +41,4 @@ export default {
       })
     );
   },
-} satisfies ExportedHandler<ScheduleEnv & LatePickupEnv & ShiftRiskEnv>;
+} satisfies ExportedHandler<ScheduleEnv & LatePickupEnv & ShiftRiskEnv & QcDriveEnv>;

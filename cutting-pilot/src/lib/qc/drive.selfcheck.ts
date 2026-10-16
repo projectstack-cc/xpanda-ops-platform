@@ -1,0 +1,92 @@
+// src/lib/qc/drive.selfcheck.ts — qc-03
+// Self-check for the pure Drive-forward helpers (drive.ts). No DB, no network.
+// Run with: npx tsx src/lib/qc/drive.selfcheck.ts   (from cutting-pilot/). Exits 1 on any failure.
+import { buildGasPayload, matchSheetCustomer, parseGasResponse, toleranceLabel, type QcDriveRecord, type QcDriveSample } from "./drive";
+
+const results: { name: string; pass: boolean; detail?: string }[] = [];
+function check(name: string, pass: boolean, detail?: string) {
+  results.push({ name, pass, detail });
+}
+function eq(name: string, actual: unknown, expected: unknown) {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  check(name, a === e, `got ${a}, expected ${e}`);
+}
+
+// Real names from "Customer Name - FINAL INSPECTION - Master Sheet" (Customers tab), 2026-10-16.
+const SHEET = [
+  "DiversiTech", "Blue Water Spa Cover", "YanaEx", "Blue Hippo", "AccuDock", "AccuSolar", "New Panel Kits",
+  "Deck Systems", "Quadriga Architectural", "John Abell Corp", "Alumflo", "Lansing Building Products",
+  "Bellingham Marine Industries", "All Florida", "Cellucrete", "Plaid Jackalope", "Italian Cast Stone Inc",
+  "Precast and Foam Works LLC", "Joyner Lumber & Supply Co", "Ocala Arch Foam", "Cast Systems", "EM Studios",
+  "Community Roofing", "Spray Rock Manufacturing", "Coolstructures", "HarborMasters", "Crown Packaging", "Virginia Foam",
+];
+const match: [string, string | null][] = [
+  ["DiversiTech", "DiversiTech"],
+  ["Blue Water Spa Covers", "Blue Water Spa Cover"],
+  ["YanaEx, Inc - Attn: Misha Gryb 8802 Corporate Square", "YanaEx"],
+  ["PRECAST AND FOAM WORKS LLC", "Precast and Foam Works LLC"],
+  ["Joe Perrini Community Roofing", "Community Roofing"],
+  ["All Florida Weatherproofing & Construction", "All Florida"],
+  ["Lansing Building Products Inc - OCALA 095 5371 Southeast", "Lansing Building Products"],
+  ["Customer pickup via DeCruiz Transport Crown Packaging - Orlando", "Crown Packaging"],
+  ["AccuSolar", "AccuSolar"],
+  ["Kramer America", null],
+  ["Marina Foam, LLC", null],
+];
+for (const [job, want] of match) eq(`matchSheetCustomer(${JSON.stringify(job)})`, matchSheetCustomer(job, SHEET), want);
+eq("matchSheetCustomer tie → null", matchSheetCustomer("Alpha Beta", ["Alpha", "Beta"]), null);
+eq("matchSheetCustomer longer run beats shorter", matchSheetCustomer("Ocala Arch Foam Inc", ["Ocala", "Ocala Arch Foam"]), "Ocala Arch Foam");
+eq("matchSheetCustomer empty", matchSheetCustomer("", SHEET), null);
+
+// toleranceLabel — legacy's exact strings.
+eq("toleranceLabel(.0625)", toleranceLabel(0.0625), "1/16 (.0625) inch");
+eq("toleranceLabel(.125)", toleranceLabel(0.125), "1/8 (.125) inch");
+eq("toleranceLabel(.1875)", toleranceLabel(0.1875), "3/16 (.1875) inch");
+eq("toleranceLabel(.25)", toleranceLabel(0.25), "1/4 (.25) inch");
+
+// buildGasPayload — 3 samples, ET date/time, Y/N, booleans, no float noise.
+const rec: QcDriveRecord = {
+  invoice_number: "4477",
+  customer: "Blue Water Spa Covers",
+  part_description: "1.5# VIRGIN - TAPERED",
+  line_quantity: 16,
+  lot_size: 17,
+  sample_size: 3,
+  tolerance_in: 0.125,
+  nominal_length: 80,
+  nominal_width: 39,
+  nominal_height: 0.1 + 0.2 + 3.7, // float noise → "4"
+  nominal_taper: "2.5–4",
+  inspector_name: "Pat Inspector",
+  inspected_at: "2026-10-16 13:05:00",
+};
+const samples: QcDriveSample[] = [
+  { sample_no: 3, length: 80, width: 39, height: 3.5625, taper: null, visual_pass: 1, result: "fail" },
+  { sample_no: 1, length: 80.0625, width: 39, height: 4, taper: "2.5-4", visual_pass: 1, result: "pass" },
+  { sample_no: 2, length: 79.9, width: 39.1, height: 4, taper: "", visual_pass: 0, result: "pass" },
+];
+const p = buildGasPayload(rec, samples, "Blue Water Spa Cover");
+eq("payload jobId", p.jobId, "4477");
+eq("payload ET date", p.date, "2026-10-16");
+eq("payload ET time (13:05 UTC → 09:05 EDT)", p.time, "09:05");
+eq("payload tolerance label", p.tolerance, "1/8 (.125) inch");
+eq("payload numbers as strings, no float noise", [p.totalPieces, p.lotSize, p.sampleSizeRequired, p.dimLength, p.dimWidth, p.dimHeight], ["16", "17", "3", "80", "39", "4"]);
+eq("payload taper + customer (sheet name)", [p.dimTapers, p.customer, p.productCut, p.inspector], ["2.5–4", "Blue Water Spa Cover", "1.5# VIRGIN - TAPERED", "Pat Inspector"]);
+eq("payload samples ordered by sample_no", p.samples.map((s) => s.length), ["80.0625", "79.9", "80"]);
+eq("payload passFail Y/N", p.samples.map((s) => s.passFail), ["Y", "Y", "N"]);
+eq("payload visualPass boolean", p.samples.map((s) => s.visualPass), [true, false, true]);
+eq("payload sample taper/height", [p.samples[0].taper, p.samples[2].taper, p.samples[2].height], ["2.5-4", "", "3.5625"]);
+eq("payload raw customer when unmatched", buildGasPayload(rec, [], null).customer, "Blue Water Spa Covers");
+eq("payload ET date in winter (EST)", buildGasPayload({ ...rec, inspected_at: "2026-12-01 03:30:00" }, [], null).date, "2026-11-30");
+
+// parseGasResponse.
+eq("parse ok", parseGasResponse('{"ok":true,"type":"finalInspection","pdfFileId":"abc123","pdfName":"X-4477","savedFolderId":"f"}'), { ok: true, pdfFileId: "abc123", pdfName: "X-4477" });
+eq("parse ok:false passes error", parseGasResponse('{"ok":false,"error":"Template not found"}'), { ok: false, error: "Template not found" });
+const html = parseGasResponse("<!DOCTYPE html><html><head><title>Sign in - Google Accounts</title></head><body><p>Sign in</p></body></html>");
+check("parse HTML → non-JSON failure, tags stripped", !html.ok && html.error.startsWith("Apps Script returned non-JSON: ") && !html.error.includes("<"), JSON.stringify(html));
+
+const failed = results.filter((r) => !r.pass);
+for (const r of results) console.log(`${r.pass ? "PASS" : "FAIL"}  ${r.name}${r.pass ? "" : `  (${r.detail})`}`);
+console.log(`\n${results.length - failed.length}/${results.length} passed`);
+if (failed.length) process.exit(1);

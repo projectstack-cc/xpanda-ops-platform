@@ -66,7 +66,7 @@ eq("densityVsTarget on after rounding (1.0004 vs 1.0)", densityVsTarget(1.0004, 
 
 // orderState — real QcLineInspection objects (qc-02).
 function insp(result: "pass" | "fail"): QcLineInspection {
-  return { id: `i-${result}`, result, inspector_name: "Tester", inspected_at: "2026-10-16 14:00:00", drive_status: "pending", stale: false };
+  return { id: `i-${result}`, result, inspector_name: "Tester", inspected_at: "2026-10-16 14:00:00", drive_status: "pending", drive_file_id: null, drive_error: null, drive_attempted_at: null, stale: false };
 }
 function ln(id: string, result: "pass" | "fail" | null): QcLine {
   return { id, description: id, dimensions: "", quantity: 1, sort_order: 0, inspection: result ? insp(result) : null };

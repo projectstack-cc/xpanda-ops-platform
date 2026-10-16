@@ -18,6 +18,9 @@ export interface QcLineInspection {
   inspector_name: string;
   inspected_at: string;          // "YYYY-MM-DD HH:MM:SS" UTC, as stored
   drive_status: "pending" | "synced" | "failed";
+  drive_file_id: string | null;
+  drive_error: string | null;
+  drive_attempted_at: string | null;
   stale: boolean;                // line qty/dimensions changed since this inspection
 }
 
@@ -244,6 +247,38 @@ export function inspectionResult(samples: { result?: unknown }[]): "pass" | "fai
 
 function normDimsText(s: string | null | undefined): string {
   return String(s ?? "").trim().replace(/\s+/g, " ");
+}
+
+// qc-03: one qc_inspections row → the board's QcLineInspection (board route + Retry Drive route).
+export interface QcInspectionRow {
+  id: string;
+  result: "pass" | "fail";
+  inspector_name: string | null;
+  inspected_at: string;
+  drive_status: "pending" | "synced" | "failed";
+  drive_file_id: string | null;
+  drive_error: string | null;
+  drive_attempted_at: string | null;
+  line_quantity: number | null;
+  dimensions_text: string | null;
+}
+
+export function toLineInspection(
+  r: QcInspectionRow,
+  lineQty: number | null | undefined,
+  lineDims: string | null | undefined
+): QcLineInspection {
+  return {
+    id: r.id,
+    result: r.result,
+    inspector_name: r.inspector_name ?? "",
+    inspected_at: r.inspected_at,
+    drive_status: r.drive_status,
+    drive_file_id: r.drive_file_id ?? null,
+    drive_error: r.drive_error ?? null,
+    drive_attempted_at: r.drive_attempted_at ?? null,
+    stale: isStale(r.line_quantity, r.dimensions_text, lineQty, lineDims),
+  };
 }
 
 // Line changed since inspection: quantity compared numerically, dimensions whitespace-insensitively.

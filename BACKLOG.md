@@ -114,7 +114,8 @@
 - [ ] Port `qc/scrap-log.html` onto the native Scrap Database (see that section); don't port the Google-Sheets-mirror design.
 - [ ] qc follow-up — view a past inspection (samples + nominals) from the drill-down; today only the latest result chip shows.
 - [ ] qc follow-up — "Line changed since inspection" only flags; decide whether a changed line should drop back to Not inspected.
-- [ ] qc-03 — Worker forwards each inspection to the Apps Script (Drive Doc + Sheet, as today); record sync status + Retry. Needs Steve to redeploy both scripts as "Anyone" + a shared secret.
+- [ ] qc follow-up — the Inspection Tool Apps Script is anonymous with no shared secret (as legacy always was). At QC cutover, when legacy qc/*.html stop posting, add a secret check in doPost and send it from the Worker.
+- [ ] qc follow-up — customers not in the FINAL INSPECTION master sheet land in the default Drive folder (drive_customer NULL). Add them to the sheet (Name, Active=YES, Folder ID) to route their PDFs.
 - [ ] Retire `qc/final-inspection.html` at QC cutover.
 - [ ] qc-01 follow-up — shared dashboard primitives under 44px touch targets: `WeekSelector` arrows (`w-8 h-8`) and segment buttons (~30px), `SearchInput` / `FilterSelect` (`h-9`). Used by /v2/qc, /v2/logistics and /v2/board — raise in one shared change.
 - [ ] Port `qc/incident-report.html` (gviz Google Sheets integration — decide keep vs native).
