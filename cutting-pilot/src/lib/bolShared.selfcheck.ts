@@ -19,6 +19,8 @@ import {
   formatBolDate,
   pickCommodityTier,
   pickZoneColumnTier,
+  resolveCommodityColumns,
+  pickCommodityColumnsTier,
   isBaseDensity,
   buildZoneColumnLines,
   buildZoneColumns,
@@ -71,6 +73,9 @@ const LEGACY_COORDS = {
   // lbz-bol-01/lbz-bol-02: COORDS.zoneColumns, bolted onto COORDS after the initial literal in
   // legacy (`COORDS.zoneColumns = {...}`) — transcribed here the same way as every other entry.
   zoneColumns: { x: 55, y: 380, maxW: 510, cols: 3, colMaxH: [95, 216, 216] },
+  // bol-2col-01: COORDS.commodity2 / COORDS.commodityCols, bolted on after zoneColumns the same way.
+  commodity2: { x: 340, y: 380, size: 12, lineH: 14, maxW: 225 },
+  commodityCols: { x: 105, y: 380, colW: 225, gap: 10, splitAt: 10 },
 };
 
 const LEGACY_PAGE = { width: 612, height: 792 };
@@ -134,8 +139,9 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
     JSON.stringify(ZONE_COLUMN_TIERS)
   );
 
-  // --- FIELD_MAP: same 12 entries (zoneColumns inserted after commodity, before scrap — lbz-bol-01/
-  //     lbz-bol-02), same order, coord refs point at the real COORDS objects ---
+  // --- FIELD_MAP: same 13 entries (zoneColumns inserted after commodity, before scrap — lbz-bol-01/
+  //     lbz-bol-02; commodity2 right after commodity — bol-2col-01), same order, coord refs point at
+  //     the real COORDS objects ---
   const expectedKeys = [
     "deliveryTime",
     "date",
@@ -147,11 +153,12 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
     "contactInfo",
     "poNumber",
     "commodity",
+    "commodity2",
     "zoneColumns",
     "scrap",
   ];
   check(
-    "FIELD_MAP has the 12 legacy entries in order",
+    "FIELD_MAP has the 13 legacy entries in order",
     JSON.stringify(FIELD_MAP.map((f) => f.key)) === JSON.stringify(expectedKeys),
     JSON.stringify(FIELD_MAP.map((f) => f.key))
   );
@@ -164,13 +171,18 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
   );
   check(
     "FIELD_MAP.zoneColumns.coord === COORDS.zoneColumns (same object), type 'zonecolumns'",
-    FIELD_MAP[10].key === "zoneColumns" && FIELD_MAP[10].type === "zonecolumns" && FIELD_MAP[10].coord === COORDS.zoneColumns
+    FIELD_MAP[11].key === "zoneColumns" && FIELD_MAP[11].type === "zonecolumns" && FIELD_MAP[11].coord === COORDS.zoneColumns
+  );
+  check(
+    "FIELD_MAP.commodity2.coord === COORDS.commodity2 (same object), type 'multiline', right after commodity (bol-2col-01)",
+    FIELD_MAP[10].key === "commodity2" && FIELD_MAP[10].type === "multiline" && FIELD_MAP[10].coord === COORDS.commodity2 &&
+      FIELD_MAP[9].key === "commodity"
   );
   check(
     "FIELD_MAP.scrap.coords === {yes:scrapYes,no:scrapNo} (same objects)",
-    !Array.isArray(FIELD_MAP[11].coords) &&
-      (FIELD_MAP[11].coords as { yes: unknown; no: unknown }).yes === COORDS.scrapYes &&
-      (FIELD_MAP[11].coords as { yes: unknown; no: unknown }).no === COORDS.scrapNo
+    !Array.isArray(FIELD_MAP[12].coords) &&
+      (FIELD_MAP[12].coords as { yes: unknown; no: unknown }).yes === COORDS.scrapYes &&
+      (FIELD_MAP[12].coords as { yes: unknown; no: unknown }).no === COORDS.scrapNo
   );
 
   // --- buildShipToLines ---
@@ -603,6 +615,101 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
       zc0.length === 1 && zc0[0].maxWidth === undefined && !boxes.commodity,
       JSON.stringify({ count: zc0.length, maxWidth: zc0[0]?.maxWidth, hasCommodityBox: !!boxes.commodity })
     );
+  }
+
+  // --- Two-box commodity (bol-2col-01) ---
+  {
+    const lines = (n: number, from = 1) => Array.from({ length: n }, (_, i) => `Line ${from + i}`);
+    const textOf = (runs: { fieldKey: string; text: string }[], k: string) => runs.filter((r) => r.fieldKey === k).map((r) => r.text);
+
+    // (a) 10 lines → one centered `commodity` box, no `commodity2`.
+    {
+      const { runs, boxes } = layoutBol({ commodity_description: lines(10).join("\n") }, FIXED_FONTS);
+      const c = runs.filter((r) => r.fieldKey === "commodity");
+      check(
+        "bol-2col-01 (a): 10 lines → single centered commodity box, no commodity2",
+        !!boxes.commodity && !boxes.commodity2 && c.length === 10 && c.every((r) => r.x === 55 + (510 - r.width) / 2),
+        JSON.stringify({ n: c.length, x0: c[0]?.x, has2: !!boxes.commodity2 })
+      );
+      const trailing = lines(10).join("\n") + "\n\n";
+      check(
+        "bol-2col-01 (a'): 10 lines + trailing blanks → left is the source text untouched (single column)",
+        JSON.stringify(resolveCommodityColumns({ commodity_description: trailing })) === JSON.stringify({ left: trailing, right: "", twoCol: false })
+      );
+    }
+
+    // (b) 20 lines → commodity = 1–10, commodity2 = 11–20, x 105 / 340, same size in both columns.
+    {
+      const { runs, boxes } = layoutBol({ commodity_description: lines(20).join("\n") }, FIXED_FONTS);
+      const both = runs.filter((r) => r.fieldKey === "commodity" || r.fieldKey === "commodity2");
+      check(
+        "bol-2col-01 (b): 20 lines → left box holds lines 1–10, right box lines 11–20",
+        JSON.stringify(textOf(runs, "commodity")) === JSON.stringify(lines(10)) &&
+          JSON.stringify(textOf(runs, "commodity2")) === JSON.stringify(lines(10, 11)),
+        JSON.stringify({ left: textOf(runs, "commodity"), right: textOf(runs, "commodity2") })
+      );
+      check(
+        "bol-2col-01 (b): left box x = 105, right box x = 340, both columns the same size, left-aligned",
+        boxes.commodity?.x === 105 && boxes.commodity2?.x === 340 && new Set(both.map((r) => r.size)).size === 1 &&
+          both.filter((r) => r.fieldKey === "commodity").every((r) => r.x === 105) &&
+          both.filter((r) => r.fieldKey === "commodity2").every((r) => r.x === 340),
+        JSON.stringify({ x1: boxes.commodity?.x, x2: boxes.commodity2?.x, sizes: Array.from(new Set(both.map((r) => r.size))) })
+      );
+    }
+
+    // (c) Old 14-line full-text `_overrides.commodity` (no commodity2 key) splits 10/4.
+    {
+      const { runs } = layoutBol({ commodity_description: "ignored", _overrides: { commodity: lines(14) } }, FIXED_FONTS);
+      check(
+        "bol-2col-01 (c): old 14-line full-text commodity override splits 10/4",
+        textOf(runs, "commodity").length === 10 && JSON.stringify(textOf(runs, "commodity2")) === JSON.stringify(lines(4, 11)),
+        JSON.stringify({ left: textOf(runs, "commodity").length, right: textOf(runs, "commodity2") })
+      );
+    }
+
+    // (d) `_overrides.commodity2 = []` → single column (left = the base split's left).
+    {
+      const bol: BolRecord = { commodity_description: lines(20).join("\n"), _overrides: { commodity2: [] } };
+      const { runs, boxes } = layoutBol(bol, FIXED_FONTS);
+      check(
+        "bol-2col-01 (d): commodity2 = [] → single centered column, no commodity2 box",
+        !boxes.commodity2 && JSON.stringify(textOf(runs, "commodity")) === JSON.stringify(lines(10)) && boxes.commodity?.x === 55,
+        JSON.stringify({ has2: !!boxes.commodity2, left: textOf(runs, "commodity").length, x: boxes.commodity?.x })
+      );
+    }
+
+    // (e) `_pos.commodity2` shifts only the right box.
+    {
+      const base: BolRecord = { commodity_description: lines(20).join("\n") };
+      const moved: BolRecord = { ...base, _overrides: { _pos: { commodity2: { dx: 5, dy: -7 } } } };
+      const a = layoutBol(base, FIXED_FONTS).boxes;
+      const b = layoutBol(moved, FIXED_FONTS).boxes;
+      check(
+        "bol-2col-01 (e): _pos.commodity2 shifts only the right box",
+        b.commodity2.x === a.commodity2.x + 5 && b.commodity2.y === a.commodity2.y - 7 && JSON.stringify(b.commodity) === JSON.stringify(a.commodity),
+        JSON.stringify({ a2: a.commodity2, b2: b.commodity2, a1: a.commodity, b1: b.commodity })
+      );
+    }
+
+    // (f) A zone-column BOL emits no commodity2 (even with a >10-line description).
+    {
+      const bol: BolRecord = {
+        commodity_description: lines(20).join("\n"),
+        _overrides: { zoneColumns: { items: [{ label: "Zone A", text: "x", x: 55, y: 380 }], zoneData: [] } },
+      };
+      const { runs, boxes } = layoutBol(bol, FIXED_FONTS);
+      check(
+        "bol-2col-01 (f): zone-column BOL → no commodity / commodity2 boxes or runs",
+        !boxes.commodity && !boxes.commodity2 && !runs.some((r) => r.fieldKey === "commodity" || r.fieldKey === "commodity2"),
+        JSON.stringify(Object.keys(boxes))
+      );
+    }
+
+    // Shared column tier = the smaller of the two columns' tiers.
+    {
+      const t = pickCommodityColumnsTier("a", lines(12).join("\n"), FIXED_WIDTH_MEASURER);
+      check("bol-2col-01: pickCommodityColumnsTier takes the smaller column's tier", t.size === 12 && t.lineH === 14, JSON.stringify(t));
+    }
   }
 
   return { pass: results.every((r) => r.pass), results };

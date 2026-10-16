@@ -2941,6 +2941,46 @@ current series).
 
 ## Logistics (v2)
 
+- **bol-2col-01 — BOL commodity with more than 10 source lines renders as two separate text boxes (Logistics
+  Agent §3 lead; Next/Cloudflare Platform Agent §9a: `bolShared.ts`, selfcheck, parity script; React Component
+  Agent §9b: `bolEditorEngine.ts`). Legacy mirror in the same commit (bilateral parity): `logistics/bol-shared.js`
+  + `logistics/bol-editor.js`. No migration, no API change — new state lives in `bols.render_overrides`.**
+  Why: INV 4487 (CDM pool order) has 20 line items, past the single centered box's smallest tier (18 lines).
+  **Geometry (identical both files):** `COORDS.commodity2 = { x: 340, y: 380, size: 12, lineH: 14, maxW: 225 }`,
+  `COORDS.commodityCols = { x: 105, y: 380, colW: 225, gap: 10, splitAt: 10 }` — left column x 105–330 (clear of
+  the QR at x 40–100), right x 340–565 (same right edge as commodity). `FIELD_MAP` gains
+  `commodity2` (multiline) right after `commodity`, so both editors' generic loops give it a textarea, drag
+  handle, `_pos`, `_style` and override collection; `FIELD_HEIGHT_BUDGET.commodity2 = 216`. **New exported pure
+  helpers (both files + legacy `BolShared`):** `resolveCommodityColumns(bol)` → `{ left, right, twoCol }`, the
+  single source for rendering and both editors — `'commodity2' in _overrides` = explicit two-box override;
+  else an old full-text `commodity` override (array only, exactly what the renderer honoured before) or the
+  base text, split at 10 source lines after trimming trailing blanks; with no split `left` is the source text
+  untouched; `twoCol = right.trim() !== ''`. `pickCommodityColumnsTier(left, right, font)` — each column's
+  `pickZoneColumnTier` at colW 225, the smaller of the two for both. **Render (`layoutBol`'s non-zone branch):**
+  single-column renders exactly as before (`pickCommodityTier`, centered, no `commodity2` box); two-column
+  renders `commodity` (left, base `{ ...COORDS.commodity, x: 105, maxW: 225 }`) and `commodity2` (right,
+  `COORDS.commodity2`) left-aligned with the shared tier, a box-level `_style.<key>.size` short-circuiting the
+  tier for that box. Siplast `(X)` → `(Siplast X)` still applied in the render path only, now to both columns.
+  Zone-column BOLs untouched (never show `commodity2`). **Editors (both):** `deriveValue` / `deriveBaseValue`
+  for `commodity` / `commodity2` come from the resolver (with / without overrides), ahead of the generic
+  `k in ov` so an old 14-line override splits 10/4 in the boxes; `computeOverrides` writes BOTH keys whenever
+  either differs from its base (a lone `commodity` would read as an old full-text override and lose the right
+  box); legacy skips `commodity2` everywhere it skips `commodity` for `zcZoneData`; `positionAll` hides a field
+  with no box this layout (and its handle) and restores it when the box returns — no stray textarea when a BOL
+  flips to one column mid-edit; the commodity textarea is left-aligned while `commodity2` has a box, centered
+  otherwise; the toolbar's base size uses the shared column tier in two-column mode. **Verified:**
+  `bolShared.selfcheck` 84/84 (FIELD_MAP 13 entries, zoneColumns/scrap indices 11/12, COORDS incl. the two new
+  entries, plus (a) 10 lines → one centered box, (a') trailing blanks leave the text untouched, (b) 20 lines →
+  1–10 / 11–20 at x 105 / 340, same size, (c) old 14-line override → 10/4, (d) `commodity2: []` → single column,
+  (e) `_pos.commodity2` moves only the right box, (f) zoned BOL → no `commodity2`, shared-tier pick); a vm-loaded
+  layout diff — `HEAD`'s `bol-shared.js` vs the new one deep-equal on 10 single-column fixtures (1 / 10 lines,
+  trailing blanks, Siplast, empty, null, old array override, string override, box size + `_pos` dy −42, long
+  wrapping lines), and new legacy vs `bolShared.ts` deep-equal on those plus 6 two-column / zone fixtures;
+  `scripts/bol-parity.mjs` now also writes `bol-v2-sample-2col.pdf` (INV 4487's 20 lines as the generate modal
+  builds them, via `formatCutListDims` → `45 × 16.5 × 48 in`) — rasterized and inspected: two columns at 12pt,
+  no QR overlap, nothing past the right edge, nothing clipped (the two longest Taper C lines wrap "in" onto a
+  second line at colW 225). `node --check` on both legacy files (named temp copies), `tsc --noEmit` clean,
+  `cf-build` green.
 - **lgx-printed-01 — Logistics dashboard: the per-order Print loading sheet action turns orange once printed
   (Next/Cloudflare Platform Agent §9a + React Component Agent §9b). Migration `DB_Migrations/lgx-printed-01.sql`**
   adds `jobs.loading_sheet_printed_at` (UTC `YYYY-MM-DD HH:MM:SS`) + `jobs.loading_sheet_printed_by` (display name).

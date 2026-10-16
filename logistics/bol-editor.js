@@ -36,6 +36,12 @@ window.BolEditor = (function () {
     }
 
     if (field.type === 'multiline') {
+      // bol-2col-01: both commodity boxes come from the shared resolver (ahead of the generic
+      // `k in ov` — an old full-text `commodity` override must split across the two boxes).
+      if (k === 'commodity' || k === 'commodity2') {
+        const _cc = BolShared.resolveCommodityColumns(bol);
+        return k === 'commodity' ? _cc.left : _cc.right;
+      }
       if (k in ov) return Array.isArray(ov[k]) ? ov[k].join('\n') : String(ov[k]);
       if (k === 'deliveryTime') return bol.delivery_time || '';
       if (k === 'specialInstr') return bol.special_instructions || '';
@@ -47,7 +53,6 @@ window.BolEditor = (function () {
         const v = bol.po_number || bol.poNumber || '';
         return v ? 'PO: ' + v : '';
       }
-      if (k === 'commodity') return bol.commodity_description || '';
     }
 
     if (field.type === 'scrap') {
@@ -91,7 +96,10 @@ window.BolEditor = (function () {
         const v = bol.po_number || bol.poNumber || '';
         return v ? 'PO: ' + v : '';
       }
-      if (k === 'commodity') return bol.commodity_description || '';
+      if (k === 'commodity' || k === 'commodity2') {
+        const _cc = BolShared.resolveCommodityColumns({ ...bol, _overrides: {} });
+        return k === 'commodity' ? _cc.left : _cc.right;
+      }
     }
 
     if (field.type === 'scrap') {
@@ -273,7 +281,12 @@ window.BolEditor = (function () {
       const field = BolShared.FIELD_MAP.find(f => f.overrideKey === fieldKey);
       if (!field) return { size: 10, lineH: 12 };
       if (field.type === 'shipto') return field.coords[0];
-      if (fieldKey === 'commodity' && !zcZoneData) {
+      if ((fieldKey === 'commodity' || fieldKey === 'commodity2') && !zcZoneData) {
+        // bol-2col-01: two-column → the shared smaller column tier the renderer uses for both boxes.
+        if (fieldKey === 'commodity2' || (currentTextValue('commodity2') || '').trim() !== '') {
+          const colTier = BolShared.pickCommodityColumnsTier(currentTextValue('commodity'), currentTextValue('commodity2'), fonts.regular);
+          return { size: colTier.size, lineH: colTier.lineH };
+        }
         const tier = BolShared.pickCommodityTier(currentTextValue('commodity') || '', fonts.regular);
         return { size: tier.size, lineH: tier.lineH };
       }
@@ -360,6 +373,17 @@ window.BolEditor = (function () {
         } else if (field.type === 'scrap') {
           const val = el.dataset.scrapValue === 'true';
           if (val !== deriveBaseValue(bol, field)) overrides[k] = val;
+        }
+      }
+
+      // bol-2col-01: the two commodity boxes are ONE override — if either differs from its base,
+      // write BOTH (a lone `commodity` would be read as a pre-bol-2col-01 full-text override and the
+      // right box would be lost). On a zoned BOL neither element exists, so neither is written.
+      if (inputEls.commodity && inputEls.commodity2 && ('commodity' in overrides || 'commodity2' in overrides)) {
+        for (const ck of ['commodity', 'commodity2']) {
+          const ckLines = inputEls[ck].value.split('\n').map(l => l.trimEnd());
+          while (ckLines.length && !ckLines[ckLines.length - 1].trim()) ckLines.pop();
+          overrides[ck] = ckLines;
         }
       }
 
@@ -646,7 +670,7 @@ window.BolEditor = (function () {
 
     for (const field of BolShared.FIELD_MAP) {
       if (field.type === 'zonecolumns') continue; // handled separately below (N boxes, not 1)
-      if (field.overrideKey === 'commodity' && zcZoneData) continue; // zone columns replace this field entirely on a zoned bol
+      if ((field.overrideKey === 'commodity' || field.overrideKey === 'commodity2') && zcZoneData) continue; // zone columns replace this field entirely on a zoned bol
       const k       = field.overrideKey;
       const initVal = deriveValue(bol, field);
       initialValues[k] = initVal;
@@ -663,7 +687,8 @@ window.BolEditor = (function () {
         el = document.createElement('textarea');
         el.value = initVal;
         el.style.cssText = EDIT_SURFACE_CSS;
-        if (k === 'commodity') el.style.textAlign = 'center';
+        if (k === 'commodity') el.style.textAlign = 'center'; // bol-2col-01: re-set on every relayout (positionAll)
+        if (k === 'commodity2') el.style.textAlign = 'left';
       }
 
       inputEls[k] = el;
@@ -882,10 +907,21 @@ window.BolEditor = (function () {
       for (const field of BolShared.FIELD_MAP) {
         if (field.type === 'zonecolumns') continue;
         const k = field.overrideKey;
-        if (k === 'commodity' && zcZoneData) continue;
+        if ((k === 'commodity' || k === 'commodity2') && zcZoneData) continue;
         const el = inputEls[k];
         const box = boxes[k];
-        if (!el || !box) continue;
+        if (!el) continue;
+        // bol-2col-01: a field with no box this layout (commodity2 on a single-column BOL) is hidden
+        // with its handle — never left stranded at a stale position — and shown again when it returns.
+        const _h = handleEls[k];
+        if (!box) {
+          el.style.display = 'none';
+          if (_h) _h.style.display = 'none';
+          continue;
+        }
+        if (el.style.display === 'none') el.style.display = '';
+        if (_h && _h.style.display === 'none') _h.style.display = '';
+        if (k === 'commodity') el.style.textAlign = boxes.commodity2 ? 'left' : 'center';
 
         el.style.left   = Math.round(box.x * s) + 'px';
         el.style.top    = Math.round((H - box.y) * s) + 'px';

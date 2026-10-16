@@ -85,6 +85,10 @@ export interface BolCoord {
   // parallel coord type.
   cols?: number;
   colMaxH?: number[];
+  // Two-box commodity only (bol-2col-01): COORDS.commodityCols, bolted on the same way.
+  colW?: number;
+  gap?: number;
+  splitAt?: number;
   // Fuel surcharge only (lgx-fuel-02): font size of the regular-weight detail run after the bold main run.
   detailSize?: number;
 }
@@ -146,6 +150,14 @@ COORDS.zoneColumns = {
   colMaxH: [95, 216, 216],
 };
 
+// Two-box commodity (bol-2col-01): commodity text with more than `splitAt` source lines renders as
+// two separate, left-aligned boxes — left = lines 1–10 (field `commodity`), right = lines 11+ (field
+// `commodity2`). Starts at x=105 so neither column can touch the QR code (x 40–100, y 222–282); left
+// column x 105–330, right x 340–565 (same right edge as commodity, 55+510). Mirrored exactly from
+// logistics/bol-shared.js's `COORDS.commodity2` / `COORDS.commodityCols` assignments.
+COORDS.commodity2 = { x: 340, y: 380, size: 12, lineH: 14, maxW: 225 };
+COORDS.commodityCols = { x: 105, y: 380, colW: 225, gap: 10, splitAt: 10 };
+
 export const PAGE = { width: 612, height: 792 }; // template is fixed US Letter
 
 // Field map — single source of truth for what is editable and how it renders.
@@ -175,6 +187,7 @@ export const FIELD_MAP: BolFieldMapEntry[] = [
   { key: "contactInfo", type: "multiline", coord: COORDS.contactInfo, overrideKey: "contactInfo" },
   { key: "poNumber", type: "multiline", coord: COORDS.poNumber, overrideKey: "poNumber" },
   { key: "commodity", type: "multiline", coord: COORDS.commodity, overrideKey: "commodity" },
+  { key: "commodity2", type: "multiline", coord: COORDS.commodity2, overrideKey: "commodity2" },
   { key: "zoneColumns", type: "zonecolumns", coord: COORDS.zoneColumns, overrideKey: "zoneColumns" },
   { key: "scrap", type: "scrap", coords: { yes: COORDS.scrapYes, no: COORDS.scrapNo }, overrideKey: "scrap" },
 ];
@@ -206,6 +219,63 @@ export function pickCommodityTier(text: string, pdfFont: WidthMeasurer): { size:
     }
   }
   return { size: 10, lineH: 12 };
+}
+
+// bol-2col-01 (mirrors logistics/bol-shared.js): splits commodity text into the two boxes. The
+// trailing-blank-trimmed line count only DECIDES the split — with no split, `left` is the source
+// text untouched, so every <=10-line BOL renders byte-identically to before.
+function splitCommodityText(text: string | null | undefined): { left: string | null | undefined; right: string } {
+  if (text == null || text === "") return { left: text, right: "" };
+  const lines = String(text).split("\n");
+  let n = lines.length;
+  while (n > 0 && !lines[n - 1].trim()) n--;
+  const at = COORDS.commodityCols.splitAt as number;
+  if (n <= at) return { left: text, right: "" };
+  return { left: lines.slice(0, at).join("\n"), right: lines.slice(at, n).join("\n") };
+}
+
+export interface CommodityColumns {
+  left: string;
+  right: string;
+  twoCol: boolean;
+}
+
+/**
+ * bol-2col-01: the single source of truth for the commodity boxes — layoutBol and both editors.
+ * `'commodity2' in _overrides` = an explicit two-box override (the editors always write both keys);
+ * otherwise a pre-bol-2col-01 full-text `commodity` override (array only — exactly what layoutBol
+ * honoured before) or the base text, split at COORDS.commodityCols.splitAt. The Siplast rewrite is
+ * NOT applied here (render-only, in layoutBol) so the editors never save rewritten text.
+ */
+export function resolveCommodityColumns(bol: BolRecord): CommodityColumns {
+  const ov: BolOverrides = (bol && bol._overrides) || {};
+  const asText = (v: unknown): string => (Array.isArray(v) ? v.join("\n") : v == null ? "" : String(v));
+  let parts: { left: string | null | undefined; right: string };
+  if ("commodity2" in ov) {
+    parts = {
+      left: "commodity" in ov ? asText(ov.commodity) : splitCommodityText(bol.commodity_description).left,
+      right: asText(ov.commodity2),
+    };
+  } else {
+    parts = splitCommodityText(Array.isArray(ov.commodity) ? ov.commodity.join("\n") : bol.commodity_description);
+  }
+  const left = parts.left == null ? "" : String(parts.left);
+  const right = parts.right == null ? "" : String(parts.right);
+  return { left, right, twoCol: right.trim() !== "" };
+}
+
+// bol-2col-01: one shared size for both commodity columns — each column's pickZoneColumnTier at
+// COORDS.commodityCols.colW, the SMALLER of the two. Used by layoutBol and both editors' toolbars.
+export function pickCommodityColumnsTier(
+  left: string | null | undefined,
+  right: string | null | undefined,
+  pdfFont: WidthMeasurer
+): { size: number; lineH: number } {
+  const colW = COORDS.commodityCols.colW as number;
+  const a = pickZoneColumnTier(String(left || "").split("\n"), pdfFont, colW);
+  const b = pickZoneColumnTier(String(right || "").split("\n"), pdfFont, colW);
+  const t = b.size < a.size ? b : a;
+  return { size: t.size, lineH: t.lineH };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -578,7 +648,7 @@ export interface BolFieldStyle extends BolTextStyle {
 // affects rendering). See logistics/bol-shared.js's FIELD_HEIGHT_BUDGET comment for derivation.
 const FIELD_HEIGHT_BUDGET: Record<string, number> = {
   deliveryTime: 46, date: 20, bolNumber: 20, carrierName: 20, trailerNo: 20,
-  specialInstr: 60, contactInfo: 57, poNumber: 88, commodity: 216,
+  specialInstr: 60, contactInfo: 57, poNumber: 88, commodity: 216, commodity2: 216,
 };
 const SHIP_TO_LINE_GAP = 14;
 const SHIP_TO_MAX_LINES = 4;
@@ -1055,21 +1125,43 @@ export function layoutBol(bol: BolRecord, fonts: BolLayoutFonts): LayoutBolResul
         runs.push(...r);
       });
     } else {
-      let _commodityText = Array.isArray(_ov.commodity) ? _ov.commodity.join("\n") : bol.commodity_description;
-      if (_commodityText && bol.siplast) {
+      // bol-2col-01: >10 source lines → two separate boxes (resolveCommodityColumns); otherwise the
+      // single centered box exactly as before (no `commodity2` box at all).
+      const _cols = resolveCommodityColumns(bol);
+      let _commodityText: string = _cols.left;
+      let _commodity2Text: string = _cols.right;
+      if (bol.siplast) {
         // Siplast products: prefix the SKU inside parens, e.g. (HB-10) -> (Siplast HB-10)
-        _commodityText = String(_commodityText).replace(/\(([^)]+)\)/g, "(Siplast $1)");
+        if (_commodityText) _commodityText = String(_commodityText).replace(/\(([^)]+)\)/g, "(Siplast $1)");
+        if (_commodity2Text) _commodity2Text = String(_commodity2Text).replace(/\(([^)]+)\)/g, "(Siplast $1)");
       }
-      const _commodityFieldStyle = _style.commodity;
-      const _commodityHasBoxSize = !!_commodityFieldStyle && _commodityFieldStyle.size != null;
-      let _commodityCoord: BolCoord;
-      if (_commodityHasBoxSize) {
-        _commodityCoord = { ...COORDS.commodity };
+      if (!_cols.twoCol) {
+        const _commodityFieldStyle = _style.commodity;
+        const _commodityHasBoxSize = !!_commodityFieldStyle && _commodityFieldStyle.size != null;
+        let _commodityCoord: BolCoord;
+        if (_commodityHasBoxSize) {
+          _commodityCoord = { ...COORDS.commodity };
+        } else {
+          const _tier = pickCommodityTier(String(_commodityText || ""), fonts.regular);
+          _commodityCoord = { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH };
+        }
+        multilineFieldLayout("commodity", _commodityText, _commodityCoord, { center: true });
       } else {
-        const _tier = pickCommodityTier(String(_commodityText || ""), fonts.regular);
-        _commodityCoord = { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH };
+        // Both columns left-aligned at colW with one shared (smaller) tier; a box-level _style size
+        // short-circuits the tier for that box only. _pos.commodity / _pos.commodity2 apply
+        // independently via multilineFieldLayout's off().
+        const _cc = COORDS.commodityCols;
+        const _colTier = pickCommodityColumnsTier(_commodityText, _commodity2Text, fonts.regular);
+        const _leftBase: BolCoord = { ...COORDS.commodity, x: _cc.x, maxW: _cc.colW, center: false };
+        const _leftCoord: BolCoord =
+          _style.commodity && _style.commodity.size != null ? _leftBase : { ..._leftBase, size: _colTier.size, lineH: _colTier.lineH };
+        const _rightCoord: BolCoord =
+          _style.commodity2 && _style.commodity2.size != null
+            ? { ...COORDS.commodity2 }
+            : { ...COORDS.commodity2, size: _colTier.size, lineH: _colTier.lineH };
+        multilineFieldLayout("commodity", _commodityText, _leftCoord, { center: false });
+        multilineFieldLayout("commodity2", _commodity2Text, _rightCoord, { center: false });
       }
-      multilineFieldLayout("commodity", _commodityText, _commodityCoord, { center: true });
     }
   }
 
@@ -1101,6 +1193,7 @@ export interface BolOverrides {
   contactInfo?: string | string[];
   poNumber?: string | string[];
   commodity?: string | string[];
+  commodity2?: string | string[]; // bol-2col-01: right commodity box (always written alongside `commodity`)
   zoneColumns?: ZoneColumnsOverride;
   scrap?: boolean;
 }

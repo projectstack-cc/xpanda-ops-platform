@@ -61,6 +61,14 @@ window.BolShared = (function() {
     cols: 3, colMaxH: [95, 216, 216],
   };
 
+  // Two-box commodity (bol-2col-01): commodity text with more than `splitAt` source lines renders
+  // as two separate, left-aligned boxes — left = lines 1–10 (field `commodity`), right = lines 11+
+  // (field `commodity2`). Starts at x=105 so neither column can touch the QR code (x 40–100,
+  // y 222–282); left column x 105–330, right x 340–565 (same right edge as commodity, 55+510).
+  // Mirror these exact numbers into bolShared.ts.
+  COORDS.commodity2 = { x: 340, y: 380, size: 12, lineH: 14, maxW: 225 };
+  COORDS.commodityCols = { x: 105, y: 380, colW: 225, gap: 10, splitAt: 10 };
+
   const PAGE = { width: 612, height: 792 }; // template is fixed US Letter
 
   const COPY_ORDER = ['driver', 'customer', undefined]; // Driver, Customer, then remaining/original
@@ -78,6 +86,7 @@ window.BolShared = (function() {
     { key: 'contactInfo',   type: 'multiline', coord: COORDS.contactInfo,  overrideKey: 'contactInfo' },
     { key: 'poNumber',      type: 'multiline', coord: COORDS.poNumber,     overrideKey: 'poNumber' },
     { key: 'commodity',     type: 'multiline', coord: COORDS.commodity,    overrideKey: 'commodity' },
+    { key: 'commodity2',    type: 'multiline', coord: COORDS.commodity2,   overrideKey: 'commodity2' },
     { key: 'zoneColumns',   type: 'zonecolumns', coord: COORDS.zoneColumns, overrideKey: 'zoneColumns' },
     { key: 'scrap',         type: 'scrap',     coords: { yes: COORDS.scrapYes, no: COORDS.scrapNo }, overrideKey: 'scrap' },
   ];
@@ -101,6 +110,54 @@ window.BolShared = (function() {
       }
     }
     return { size: 10, lineH: 12 };
+  }
+
+  // bol-2col-01: splits commodity text into the two boxes. The trailing-blank-trimmed line count
+  // only DECIDES the split — with no split, `left` is the source text untouched, so every <=10-line
+  // BOL renders byte-identically to before.
+  function _splitCommodityText(text) {
+    if (text == null || text === '') return { left: text, right: '' };
+    const lines = String(text).split('\n');
+    let n = lines.length;
+    while (n > 0 && !lines[n - 1].trim()) n--;
+    const at = COORDS.commodityCols.splitAt;
+    if (n <= at) return { left: text, right: '' };
+    return { left: lines.slice(0, at).join('\n'), right: lines.slice(at, n).join('\n') };
+  }
+
+  /**
+   * bol-2col-01: the single source of truth for the commodity boxes — layoutBol and both editors.
+   * `'commodity2' in _overrides` = an explicit two-box override (the editors always write both keys);
+   * otherwise a pre-bol-2col-01 full-text `commodity` override (array only — exactly what layoutBol
+   * honoured before) or the base text, split at COORDS.commodityCols.splitAt. The Siplast rewrite is
+   * NOT applied here (render-only, in layoutBol) so the editors never save rewritten text.
+   * @returns {{ left: string, right: string, twoCol: boolean }}
+   */
+  function resolveCommodityColumns(bol) {
+    const ov = (bol && bol._overrides) || {};
+    const asText = (v) => Array.isArray(v) ? v.join('\n') : (v == null ? '' : String(v));
+    let parts;
+    if ('commodity2' in ov) {
+      parts = {
+        left: ('commodity' in ov) ? asText(ov.commodity) : _splitCommodityText(bol.commodity_description).left,
+        right: asText(ov.commodity2),
+      };
+    } else {
+      parts = _splitCommodityText(Array.isArray(ov.commodity) ? ov.commodity.join('\n') : bol.commodity_description);
+    }
+    const left = parts.left == null ? '' : String(parts.left);
+    const right = parts.right == null ? '' : String(parts.right);
+    return { left, right, twoCol: right.trim() !== '' };
+  }
+
+  // bol-2col-01: one shared size for both commodity columns — each column's pickZoneColumnTier at
+  // COORDS.commodityCols.colW, the SMALLER of the two. Used by layoutBol and both editors' toolbars.
+  function pickCommodityColumnsTier(left, right, pdfFont) {
+    const colW = COORDS.commodityCols.colW;
+    const a = pickZoneColumnTier(String(left || '').split('\n'), pdfFont, colW);
+    const b = pickZoneColumnTier(String(right || '').split('\n'), pdfFont, colW);
+    const t = b.size < a.size ? b : a;
+    return { size: t.size, lineH: t.lineH };
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -271,7 +328,7 @@ window.BolShared = (function() {
   // (real data, not a gap estimate) — see measureStyledField.
   const FIELD_HEIGHT_BUDGET = {
     deliveryTime: 46, date: 20, bolNumber: 20, carrierName: 20, trailerNo: 20,
-    specialInstr: 60, contactInfo: 57, poNumber: 88, commodity: 216,
+    specialInstr: 60, contactInfo: 57, poNumber: 88, commodity: 216, commodity2: 216,
   };
   const SHIP_TO_LINE_GAP = 14;
   const SHIP_TO_MAX_LINES = 4;
@@ -741,16 +798,38 @@ window.BolShared = (function() {
           runs.push(...r);
         });
       } else {
-        let _commodityText = Array.isArray(_ov.commodity) ? _ov.commodity.join('\n') : bol.commodity_description;
-        if (_commodityText && bol.siplast) {
+        // bol-2col-01: >10 source lines → two separate boxes (resolveCommodityColumns); otherwise
+        // the single centered box exactly as before (no `commodity2` box at all).
+        const _cols = resolveCommodityColumns(bol);
+        let _commodityText = _cols.left;
+        let _commodity2Text = _cols.right;
+        if (bol.siplast) {
           // Siplast products: prefix the SKU inside parens, e.g. (HB-10) -> (Siplast HB-10)
-          _commodityText = String(_commodityText).replace(/\(([^)]+)\)/g, '(Siplast $1)');
+          if (_commodityText) _commodityText = String(_commodityText).replace(/\(([^)]+)\)/g, '(Siplast $1)');
+          if (_commodity2Text) _commodity2Text = String(_commodity2Text).replace(/\(([^)]+)\)/g, '(Siplast $1)');
         }
-        const _commodityHasBoxSize = _style.commodity && _style.commodity.size != null;
-        const _commodityCoord = _commodityHasBoxSize
-          ? { ...COORDS.commodity }
-          : (() => { const _tier = pickCommodityTier(String(_commodityText || ''), fonts.regular); return { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH }; })();
-        multilineFieldLayout('commodity', _commodityText, _commodityCoord, { center: true });
+        if (!_cols.twoCol) {
+          const _commodityHasBoxSize = _style.commodity && _style.commodity.size != null;
+          const _commodityCoord = _commodityHasBoxSize
+            ? { ...COORDS.commodity }
+            : (() => { const _tier = pickCommodityTier(String(_commodityText || ''), fonts.regular); return { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH }; })();
+          multilineFieldLayout('commodity', _commodityText, _commodityCoord, { center: true });
+        } else {
+          // Both columns left-aligned at colW with one shared (smaller) tier; a box-level _style
+          // size short-circuits the tier for that box only. _pos.commodity / _pos.commodity2 apply
+          // independently via multilineFieldLayout's off().
+          const _cc = COORDS.commodityCols;
+          const _colTier = pickCommodityColumnsTier(_commodityText, _commodity2Text, fonts.regular);
+          const _leftBase = { ...COORDS.commodity, x: _cc.x, maxW: _cc.colW, center: false };
+          const _leftCoord = (_style.commodity && _style.commodity.size != null)
+            ? _leftBase
+            : { ..._leftBase, size: _colTier.size, lineH: _colTier.lineH };
+          const _rightCoord = (_style.commodity2 && _style.commodity2.size != null)
+            ? { ...COORDS.commodity2 }
+            : { ...COORDS.commodity2, size: _colTier.size, lineH: _colTier.lineH };
+          multilineFieldLayout('commodity', _commodityText, _leftCoord, { center: false });
+          multilineFieldLayout('commodity2', _commodity2Text, _rightCoord, { center: false });
+        }
       }
     }
 
@@ -1063,6 +1142,8 @@ window.BolShared = (function() {
     FIELD_MAP,
     pickCommodityTier,
     pickZoneColumnTier,
+    resolveCommodityColumns,
+    pickCommodityColumnsTier,
     isBaseDensity,
     buildZoneColumnLines,
     buildZoneColumns,

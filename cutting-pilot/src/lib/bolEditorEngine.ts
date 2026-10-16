@@ -30,6 +30,8 @@ import {
   isLikelyFontBytes,
   SCRIPT_FONT_ASSET_PATH,
   pickCommodityTier,
+  pickCommodityColumnsTier,
+  resolveCommodityColumns,
   formatBolDate,
   type BolFieldMapEntry,
   type BolOverrides,
@@ -167,6 +169,12 @@ function deriveValue(bol: BolRecord, field: BolFieldMapEntry): string | boolean 
   }
 
   if (field.type === "multiline") {
+    // bol-2col-01: both commodity boxes come from the shared resolver (ahead of the generic `k in ov`
+    // — an old full-text `commodity` override must split across the two boxes).
+    if (k === "commodity" || k === "commodity2") {
+      const cc = resolveCommodityColumns(bol);
+      return k === "commodity" ? cc.left : cc.right;
+    }
     if (k in ov) {
       const v = (ov as any)[k];
       return Array.isArray(v) ? v.join("\n") : String(v);
@@ -182,7 +190,6 @@ function deriveValue(bol: BolRecord, field: BolFieldMapEntry): string | boolean 
       const v = bol.po_number || bol.poNumber || "";
       return v ? "PO: " + v : "";
     }
-    if (k === "commodity") return bol.commodity_description || "";
   }
 
   if (field.type === "scrap") {
@@ -227,7 +234,10 @@ function deriveBaseValue(bol: BolRecord, field: BolFieldMapEntry): string | bool
       const v = bol.po_number || bol.poNumber || "";
       return v ? "PO: " + v : "";
     }
-    if (k === "commodity") return bol.commodity_description || "";
+    if (k === "commodity" || k === "commodity2") {
+      const cc = resolveCommodityColumns({ ...bol, _overrides: {} });
+      return k === "commodity" ? cc.left : cc.right;
+    }
   }
 
   if (field.type === "scrap") {
@@ -445,7 +455,12 @@ export async function mountBolEditor(
     const field = FIELD_MAP.find((f) => f.overrideKey === fieldKey);
     if (!field) return { x: 0, y: 0, size: 10, lineH: 12 };
     if (field.type === "shipto") return (field.coords as BolCoord[])[0];
-    if (fieldKey === "commodity") {
+    if (fieldKey === "commodity" || fieldKey === "commodity2") {
+      // bol-2col-01: two-column → the shared smaller column tier the renderer uses for both boxes.
+      if (fieldKey === "commodity2" || currentTextValue("commodity2").trim() !== "") {
+        const colTier = pickCommodityColumnsTier(currentTextValue("commodity"), currentTextValue("commodity2"), fonts.regular);
+        return { x: 0, y: 0, size: colTier.size, lineH: colTier.lineH };
+      }
       const tier = pickCommodityTier(currentTextValue("commodity"), fonts.regular);
       return { x: 0, y: 0, size: tier.size, lineH: tier.lineH };
     }
@@ -565,7 +580,8 @@ export async function mountBolEditor(
       const textarea = document.createElement("textarea");
       textarea.value = String(initVal);
       textarea.style.cssText = EDIT_SURFACE_CSS;
-      if (k === "commodity") textarea.style.textAlign = "center";
+      if (k === "commodity") textarea.style.textAlign = "center"; // bol-2col-01: re-set on every relayout (positionAll)
+      if (k === "commodity2") textarea.style.textAlign = "left";
       el = textarea;
     }
 
@@ -743,6 +759,17 @@ export async function mountBolEditor(
       } else if (field.type === "scrap") {
         const val = (el as HTMLDivElement).dataset.scrapValue === "true";
         if (val !== deriveBaseValue(bol, field)) overrides.scrap = val;
+      }
+    }
+
+    // bol-2col-01: the two commodity boxes are ONE override — if either differs from its base, write
+    // BOTH (a lone `commodity` would be read as a pre-bol-2col-01 full-text override and the right box
+    // would be lost).
+    if (inputEls.commodity && inputEls.commodity2 && ("commodity" in overrides || "commodity2" in overrides)) {
+      for (const ck of ["commodity", "commodity2"] as const) {
+        const ckLines = (inputEls[ck] as HTMLTextAreaElement).value.split("\n").map((l) => l.trimEnd());
+        while (ckLines.length && !ckLines[ckLines.length - 1].trim()) ckLines.pop();
+        overrides[ck] = ckLines;
       }
     }
 
@@ -929,7 +956,19 @@ export async function mountBolEditor(
       const k = field.overrideKey;
       const el = inputEls[k];
       const box = boxes[k];
-      if (!el || !box) continue;
+      if (!el) continue;
+      // bol-2col-01: a field with no box this layout (commodity2 on a single-column BOL, or the
+      // commodity boxes on a zoned BOL) is hidden with its handle — never left stranded at a stale
+      // position — and shown again when its box comes back.
+      const h = handleEls[k];
+      if (!box) {
+        (el as HTMLElement).style.display = "none";
+        if (h) h.style.display = "none";
+        continue;
+      }
+      if ((el as HTMLElement).style.display === "none") (el as HTMLElement).style.display = "";
+      if (h && h.style.display === "none") h.style.display = "";
+      if (k === "commodity") (el as HTMLElement).style.textAlign = boxes.commodity2 ? "left" : "center";
 
       el.style.left = Math.round(box.x * s) + "px";
       el.style.top = Math.round((H - box.y) * s) + "px";
