@@ -27,6 +27,7 @@ export async function buildToLoadSheetPdf(
   const black = rgb(0.06, 0.09, 0.16);
   const gray = rgb(0.45, 0.48, 0.52);
   const rule = rgb(0.82, 0.84, 0.87);
+  const red = rgb(0.80, 0.07, 0.07); // live-03: live-load delivery cell
   const margin = 40;
   const pageW = 612;
   const pageH = 792; // US Letter portrait (points)
@@ -165,6 +166,7 @@ export async function buildToLoadSheetPdf(
     for (const c of cols) {
       let text = "";
       let f = font;
+      let color = black;
       switch (c.key) {
         case "check":
           page.drawRectangle({ x: c.x + 2, y: y - 1, width: 10, height: 10, borderColor: black, borderWidth: 1 });
@@ -179,12 +181,21 @@ export async function buildToLoadSheetPdf(
           text = r.pickup_label ?? "—";
           if (r.pickup_early) { f = fontBold; earlyPages.add(page); }
           break;
-        case "delivery": text = r.delivery_label || "—"; break;
+        case "delivery":
+          text = r.delivery_label || "—";
+          // live-03: the 78pt cell can't hold the loading sheet's 14pt line — red bold "LIVE" + the
+          // driver's arrival at our dock when set, else + the delivery time.
+          if (r.live_load) {
+            text = r.live_time ? `LIVE arr ${r.live_time}` : `LIVE ${text}`;
+            f = fontBold;
+            color = red;
+          }
+          break;
         case "city": text = r.city_label || ""; break;
         case "loaded": text = loadedLabel(r); f = fontBold; break;
       }
       const s = fit(text, f, ROW_SIZE, c.w - CELL_PAD);
-      if (s) page.drawText(s, { x: c.x, y, size: ROW_SIZE, font: f, color: black });
+      if (s) page.drawText(s, { x: c.x, y, size: ROW_SIZE, font: f, color });
     }
     hr(page, y - 4, 0.5);
     y -= ROW_H;

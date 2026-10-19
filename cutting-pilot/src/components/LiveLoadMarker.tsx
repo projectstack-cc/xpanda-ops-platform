@@ -49,25 +49,39 @@ export function LiveLoadPill({
   );
 }
 
-/** "Live load" chip for surfaces with room. `loads` → "Live load · L2" when only some loads are live. */
+/** live-03: the first live load's arrival display (in load order), with "+" when the live loads'
+ *  times differ (or only some are set). null when none is set. */
+export function liveTimeLabel(times: Record<number, string> | null | undefined, loads: number[] | null | undefined): string | null {
+  if (!times || !loads?.length) return null;
+  const set = loads.map((n) => times[n] || null);
+  const first = set.find((t) => !!t) ?? null;
+  if (!first) return null;
+  return set.every((t) => t === first) ? first : `${first}+`;
+}
+
+/** "Live load" chip for surfaces with room. `loads` → "Live load · L2" when only some loads are live;
+ *  live-03 `time` → "Live load · Mon 10:00 AM" (the driver's arrival at our dock). */
 export function LiveLoadChip({
   label = "Live load",
   loads,
+  time,
   size = "md",
   className = "",
 }: {
   label?: string;
   loads?: number[];
+  time?: string | null;
   /** sm = fits a 16px compact line (dock board compact cards). */
   size?: "sm" | "md";
   className?: string;
 }) {
-  const suffix = loads && loads.length ? ` · ${loads.map((n) => `L${n}`).join(", ")}` : "";
+  const suffix =
+    (loads && loads.length ? ` · ${loads.map((n) => `L${n}`).join(", ")}` : "") + (time ? ` · ${time}` : "");
   return (
     <span
       className={`${PILL_CLS} ${size === "sm" ? "py-0 text-[10px]" : "py-px text-[11px]"} ${className}`}
       title={LIVE_LOAD_TITLE}
-      aria-label={`${LIVE_LOAD_TITLE}${suffix ? ` (loads ${loads!.join(", ")})` : ""}`}
+      aria-label={`${LIVE_LOAD_TITLE}${loads && loads.length ? ` (loads ${loads.join(", ")})` : ""}${time ? `, arrives ${time}` : ""}`}
     >
       <Truck size={size === "sm" ? 10 : 12} aria-hidden="true" className="shrink-0" />
       {label}

@@ -72,5 +72,6 @@ export async function loadBoardRows(
     processes: parseProcesses(j.processes),
     live_load: liveMap.get(j.id)?.live ?? false,
     live_loads: liveMap.get(j.id)?.live_loads ?? [],
+    live_times: liveMap.get(j.id)?.live_times ?? {},
   }));
 }

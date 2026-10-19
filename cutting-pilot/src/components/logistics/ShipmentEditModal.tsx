@@ -82,6 +82,28 @@ import LoadTimesEditor, {
   type LoadTimeDraft,
   type LoadTimesData,
 } from "@/components/orders/LoadTimesEditor";
+import { LiveLoadPill } from "@/components/LiveLoadMarker";
+import { isLiveLoadCarrier } from "@/lib/logistics/liveLoad";
+import { effectiveLoadCarrier } from "@/lib/logistics/loadCarriers";
+import { formatLoadTime } from "@/lib/loadTimes";
+
+// live-03: per-load Live Load arrival (GET/PUT /v2/api/orders/:id/live-load-times).
+interface LiveTimeRow {
+  load_number: number;
+  arrive_date: string | null;
+  arrive_minutes: number;
+  display: string;
+}
+type LiveDraft = { date: string | null; minutes: number | null };
+
+const minutesToHHMM = (m: number | null) =>
+  m == null ? "" : `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const hhmmToMinutes = (v: string): number | null => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(v);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+};
+const liveDraftsFromRows = (rows: LiveTimeRow[]): Record<number, LiveDraft> =>
+  Object.fromEntries(rows.map((r) => [Number(r.load_number), { date: r.arrive_date, minutes: Number(r.arrive_minutes) }]));
 
 // Mirrors loading-assignments/route.ts's trailer lock -- the server remains the authority.
 const TRAILER_LOCKED_STATUSES = ["in_transit", "delivered", "archived"];
@@ -194,6 +216,9 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
   // mlc-02: per-load carriers for a job-linked shipment. null = not loaded (column hidden, never saved).
   const [loadCarriers, setLoadCarriers] = useState<Record<number, string> | null>(null);
   const [loadCarriersSeed, setLoadCarriersSeed] = useState("");
+  // live-03: stored arrival rows (null = not loaded / unavailable) + the editor's drafts per load.
+  const [liveTimesRows, setLiveTimesRows] = useState<LiveTimeRow[] | null>(null);
+  const [liveDrafts, setLiveDrafts] = useState<Record<number, LiveDraft>>({});
 
   const isOpen = !!shipment;
   const jobLinked = !!shipment?.job_id;
@@ -283,6 +308,8 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     setLoadTimesError(null);
     setLoadCarriers(null);
     setLoadCarriersSeed("");
+    setLiveTimesRows(null);
+    setLiveDrafts({});
     const jobId = shipment?.job_id;
     if (!jobId) return;
     let cancelled = false;
@@ -295,6 +322,16 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
         const map = carriersFromPayload(json.carriers || [], count);
         setLoadCarriers(map);
         setLoadCarriersSeed(carriersKey(map, count));
+      })
+      .catch(() => {});
+    // live-03: Live Load arrival times, same best-effort rule (section hidden if this fails).
+    fetch(`/v2/api/orders/${encodeURIComponent(jobId)}/live-load-times`)
+      .then((r) => r.json().then((json) => ({ ok: r.ok, json })))
+      .then(({ ok, json }) => {
+        if (cancelled || !ok || !json?.ok) return;
+        const rows: LiveTimeRow[] = Array.isArray(json.times) ? json.times : [];
+        setLiveTimesRows(rows);
+        setLiveDrafts(liveDraftsFromRows(rows));
       })
       .catch(() => {});
     fetch(`/v2/api/orders/${encodeURIComponent(jobId)}/load-times`)
@@ -340,6 +377,37 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
   const loadCarriersDirty =
     !!loadCarriers && !!loadTimesData && carriersKey(loadCarriers, loadTimesData.load_count) !== loadCarriersSeed;
   const showBolNotice = Number(shipment?.bol_count || 0) > 0 && (bolDetailsChanged || loadCarriersDirty);
+
+  // live-03: which loads are live AS CURRENTLY EDITED (order carrier + per-load carriers), so the
+  // arrival rows appear the moment someone picks King of Freight. Same rule as the server.
+  const liveMethod = shipment?.is_customer_pickup ? "customer pickup" : null;
+  const liveLoadCount = loadTimesData?.load_count ?? 0;
+  const liveCarrierMap = new Map(Object.entries(loadCarriers ?? {}).map(([k, v]) => [Number(k), v]));
+  const liveLoadNums: number[] = [];
+  for (let n = 1; n <= liveLoadCount; n++) {
+    if (isLiveLoadCarrier(effectiveLoadCarrier(form.carrier, liveCarrierMap, n), liveMethod)) liveLoadNums.push(n);
+  }
+  // Default date = that load's ship day (same rule as LoadTimesEditor: assigned day, else the order's).
+  const liveDefaultDate = (n: number) => loadTimesData?.assigned_days?.[n] ?? loadTimesData?.ship_date ?? null;
+  // The PUT: every live load (null minutes = clear) + nulls for stored rows on loads no longer live.
+  const livePut = liveTimesRows
+    ? [
+        ...liveLoadNums.map((n) => {
+          const d = liveDrafts[n];
+          const minutes = d?.minutes ?? null;
+          return { load_number: n, arrive_date: minutes == null ? null : d?.date ?? liveDefaultDate(n), arrive_minutes: minutes };
+        }),
+        ...liveTimesRows
+          .filter((r) => !liveLoadNums.includes(Number(r.load_number)))
+          .map((r) => ({ load_number: Number(r.load_number), arrive_date: null, arrive_minutes: null })),
+      ]
+    : [];
+  const liveKey = (rows: Array<[number, string | null, number | null]>) =>
+    JSON.stringify(rows.filter((r) => r[2] != null).sort((a, b) => a[0] - b[0]));
+  const liveTimesDirty =
+    !!liveTimesRows &&
+    liveKey(liveTimesRows.map((r) => [Number(r.load_number), r.arrive_date, Number(r.arrive_minutes)])) !==
+      liveKey(livePut.map((p) => [p.load_number, p.arrive_date, p.arrive_minutes]));
 
   async function handleSave() {
     if (!shipment) return;
@@ -446,6 +514,29 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
           setLoadCarriersSeed(carriersKey(map, loadTimesData.load_count));
         } catch {
           setSaveError("Shipment saved, but the per-load carriers didn't save — network error");
+          return;
+        }
+      }
+
+      // live-03: Live Load arrival -> PUT /v2/api/orders/:id/live-load-times, only when changed. Runs after
+      // the carriers PUT so liveness is final; loads no longer live are sent as null (stale rows removed).
+      if (jobLinked && shipment.job_id && liveTimesRows && liveTimesDirty) {
+        try {
+          const r = await fetch(`/v2/api/orders/${encodeURIComponent(shipment.job_id)}/live-load-times`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ times: livePut }),
+          });
+          const d = await r.json().catch(() => null);
+          if (!r.ok || !d?.ok) {
+            setSaveError(`Shipment saved, but the live load arrival times didn't save — ${d?.error || `HTTP ${r.status}`}`);
+            return;
+          }
+          const rows: LiveTimeRow[] = Array.isArray(d.times) ? d.times : [];
+          setLiveTimesRows(rows);
+          setLiveDrafts(liveDraftsFromRows(rows));
+        } catch {
+          setSaveError("Shipment saved, but the live load arrival times didn't save — network error");
           return;
         }
       }
@@ -683,7 +774,50 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
                     onCarriersChange={loadCarriers ? setLoadCarriers : undefined}
                     defaultCarrier={form.carrier}
                   />
-                ) : (
+                ) : null}
+                {loadTimesData && liveTimesRows && liveLoadNums.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-[var(--border)] p-3 space-y-2">
+                    <div className="text-sm font-semibold text-text">Live load arrival</div>
+                    <p className="text-xs text-muted">When the third-party driver arrives at our dock (not the delivery time).</p>
+                    {liveLoadNums.map((n) => {
+                      const d = liveDrafts[n] ?? { date: null, minutes: null };
+                      const date = d.date ?? liveDefaultDate(n);
+                      const preview = formatLoadTime(date, d.minutes);
+                      return (
+                        <div key={n} className="flex flex-wrap items-center gap-2">
+                          <LiveLoadPill className="text-xs py-1 px-2">Load {n}</LiveLoadPill>
+                          <input
+                            type="date"
+                            aria-label={`Load ${n} arrival date`}
+                            className={inputClass}
+                            style={{ width: "auto" }}
+                            value={date ?? ""}
+                            onChange={(e) => setLiveDrafts((prev) => ({ ...prev, [n]: { ...d, date: e.target.value || null } }))}
+                          />
+                          <input
+                            type="time"
+                            aria-label={`Load ${n} arrival time`}
+                            className={inputClass}
+                            style={{ width: "auto" }}
+                            value={minutesToHHMM(d.minutes)}
+                            onChange={(e) => setLiveDrafts((prev) => ({ ...prev, [n]: { ...d, date, minutes: hhmmToMinutes(e.target.value) } }))}
+                          />
+                          {d.minutes != null && (
+                            <button
+                              type="button"
+                              onClick={() => setLiveDrafts((prev) => ({ ...prev, [n]: { date: null, minutes: null } }))}
+                              className="min-h-[44px] px-3 rounded-md border border-[var(--border)] text-sm text-text hover:bg-[var(--ghost-bg)] cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          )}
+                          {preview && <span className="text-xs text-muted tabular-nums">{preview}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {loadTimesData ? null : (
                   <Field label="Delivery Time">
                     <div className={readOnlyClass}>{loadTimesError || "Loading delivery times…"}</div>
                   </Field>

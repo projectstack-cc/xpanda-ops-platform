@@ -1269,6 +1269,7 @@ export async function handleApiJobs(request, env) {
       await db.prepare("DELETE FROM job_prints WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM job_load_times WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM job_load_carriers WHERE job_id = ?").bind(id).run();
+      await db.prepare("DELETE FROM job_live_load_times WHERE job_id = ?").bind(id).run();
       await db.prepare("DELETE FROM jobs WHERE id = ?").bind(id).run();
 
       // Linking Rule 1 — never leave a group of one. The deleted job may have been half of a

@@ -27,6 +27,7 @@ import { logActivity } from "@/lib/activityLog";
 import { V2_LOGISTICS_WRITES_ENABLED } from "@/lib/logistics/writeFence";
 import type { LoadingSheetLineItem, LoadingSheetLoad, LoadingSheetOrder } from "@/lib/logistics/loadingSheet";
 import { parseLoadManifest } from "@/lib/logistics/loadManifest";
+import { fetchLiveLoadByJob, type LiveLoadInfo } from "@/lib/logistics/liveLoad";
 
 interface AssignmentRow {
   load_number: number | null;
@@ -56,7 +57,8 @@ function toLoad(
   bols: BolRow[],
   times: Map<number, string> | undefined,
   carriers: Map<number, string> | undefined,
-  orderCarrier: string | null
+  orderCarrier: string | null,
+  live: LiveLoadInfo | undefined
 ): LoadingSheetLoad {
   const bol = bolForLoad(bols, loadNumber);
   return {
@@ -67,6 +69,9 @@ function toLoad(
     manifest: parseLoadManifest(bol?.load_manifest ?? null),
     delivery_time: loadNumber != null ? times?.get(loadNumber) || null : null,
     carrier: (loadNumber != null ? carriers?.get(loadNumber) : undefined) || orderCarrier,
+    // live-03: an unnumbered load falls back to the job-level flag (and load 1's time).
+    live_load: loadNumber != null ? !!live?.live_loads.includes(loadNumber) : !!live?.live,
+    live_time: live?.live_times[loadNumber ?? 1] || null,
   };
 }
 
@@ -111,6 +116,9 @@ export async function GET(request: NextRequest) {
       seen.add(r.job_id);
       return true;
     });
+
+    // live-03: live-load flags + arrival times for every requested job (best-effort, chunked).
+    const liveByJob = await fetchLiveLoadByJob(DB, rows.map((r: any) => r.job_id as string));
 
     // dlv-04: per-load delivery displays for every requested job, one chunked query.
     const timesByJob = new Map<string, Map<number, string>>();
@@ -182,9 +190,9 @@ export async function GET(request: NextRequest) {
       const jobCarriers = carriersByJob.get(r.job_id);
       const loads: LoadingSheetLoad[] = loadNumbers.length
         ? loadNumbers.map((n) =>
-            toLoad(assignments.find((a) => Number(a.load_number) === n) ?? null, n, bols, timesByJob.get(r.job_id), jobCarriers, orderCarrier)
+            toLoad(assignments.find((a) => Number(a.load_number) === n) ?? null, n, bols, timesByJob.get(r.job_id), jobCarriers, orderCarrier, liveByJob.get(r.job_id))
           )
-        : assignments.map((a) => toLoad(a, null, bols, timesByJob.get(r.job_id), jobCarriers, orderCarrier));
+        : assignments.map((a) => toLoad(a, null, bols, timesByJob.get(r.job_id), jobCarriers, orderCarrier, liveByJob.get(r.job_id)));
       // dlv-04: no numbered load → one synthetic page; load 1's time applies only to a one-load order.
       const orderDelivery = r.s_delivery_time || r.j_delivery_time || null;
       const syntheticTime =
@@ -207,6 +215,8 @@ export async function GET(request: NextRequest) {
         ship_to_zip: r.ship_to_zip ?? null,
         line_items: li.results ?? [],
         loads,
+        live_load: !!liveByJob.get(r.job_id)?.live,
+        live_time: liveByJob.get(r.job_id)?.live_times[1] || null,
       });
     }
 

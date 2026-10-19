@@ -420,8 +420,8 @@
 
 ## Logistics (v2)
 
-- [ ] **live-01 follow-up — Live-load flag on the printed loading sheet / BOL email (live-NN follow-up).** The flag is
-  on every v2 API and screen (live-01/02) but not on paper or in the carrier email.
+- [ ] **live-03 follow-up — Live load arrival on the dock tablet (declined for now, live-03).** The arrival time shows
+  on the schedule, Job Board, Logistics and the loading sheet; Steve chose not to put it on `/v2/dock` yet.
 - [ ] **mlc-05 follow-up — carrier list management in `/v2/admin`** (rename / deactivate / reorder `bol_carriers`).
   Today the only write path is the dropdown's "+ Add carrier…" (append at `MAX(sort_order) + 10`); anything else
   is a D1 console edit.
@@ -435,7 +435,7 @@
   already exists (any casing) returns its generic 500 instead of a friendly message. Low priority — no current
   legacy UI was found relying on it; make it reuse the existing row if it comes up.
 
-- [ ] **mlc-01 follow-up — the v2 Delete Job port must also delete `job_load_carriers`** (legacy `jobs.js` delete already does).
+- [ ] **mlc-01 follow-up — the v2 Delete Job port must also delete `job_load_carriers` and (live-03) `job_live_load_times`** (legacy `jobs.js` delete already does both).
 - [ ] **mlc follow-up — per-load carrier display on v2 shipment rows / dock `ShippingInfoModal`.** They still show the order carrier only.
 
 - [ ] **Loading-sheet printed flag: optional reset when an order's loads/BOLs/manifest change after print** (lgx-printed-01 follow-on).

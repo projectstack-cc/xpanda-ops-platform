@@ -12,13 +12,19 @@ interface CheckResult {
 }
 
 // Minimal in-memory D1 stub keyed off the SQL: the jobs query returns `jobs`, the
-// job_load_carriers query returns `jlc` (already filtered to load_number <= load_count).
+// job_load_carriers query returns `jlc` (already filtered to load_number <= load_count), the
+// job_live_load_times query returns `times` (or throws when `times` is "throw").
 function stubDb(
   jobs: Array<{ id: string; carrier: string | null; method: string | null; load_count: number | null }>,
-  jlc: Array<{ job_id: string; load_number: number; carrier: string }>
+  jlc: Array<{ job_id: string; load_number: number; carrier: string }>,
+  times: Array<{ job_id: string; load_number: number; display: string }> | "throw" = []
 ): D1Database {
   return {
     prepare(sql: string) {
+      if (sql.includes("job_live_load_times")) {
+        if (times === "throw") throw new Error("no such table: job_live_load_times");
+        return { bind: () => ({ all: async () => ({ results: times }) }) };
+      }
       const results = sql.includes("job_load_carriers") ? jlc : jobs;
       return { bind: () => ({ all: async () => ({ results }) }) };
     },
@@ -58,13 +64,28 @@ export async function runLiveLoadSelfCheck(): Promise<{ pass: boolean; results: 
       { id: "c", carrier: "KOF", method: null, load_count: null },
       { id: "d", carrier: "KOF", method: "customer pickup", load_count: 2 },
     ],
-    [{ job_id: "a", load_number: 2, carrier: "King of Freight" }]
+    [{ job_id: "a", load_number: 2, carrier: "King of Freight" }],
+    [
+      { job_id: "a", load_number: 2, display: "Mon 10:00 AM" },
+      { job_id: "a", load_number: 1, display: "Mon 8:00 AM" }, // load 1 is Seal → not live → dropped
+      { job_id: "c", load_number: 1, display: "7:30 AM" },
+    ]
   );
   const map = await fetchLiveLoadByJob(db, ["a", "b", "c", "d"]);
-  eq("per-load: Seal + L2 KOF", map.get("a"), { live: true, live_loads: [2] });
-  eq("per-load: all Seal", map.get("b"), { live: false, live_loads: [] });
-  eq("per-load: KOF, null load_count → 1 load", map.get("c"), { live: true, live_loads: [1] });
-  eq("per-load: customer pickup never live", map.get("d"), { live: false, live_loads: [] });
+  eq("per-load: Seal + L2 KOF (+ L2 time only)", map.get("a"), { live: true, live_loads: [2], live_times: { 2: "Mon 10:00 AM" } });
+  eq("per-load: all Seal", map.get("b"), { live: false, live_loads: [], live_times: {} });
+  eq("per-load: KOF, null load_count → 1 load", map.get("c"), { live: true, live_loads: [1], live_times: { 1: "7:30 AM" } });
+  eq("per-load: customer pickup never live", map.get("d"), { live: false, live_loads: [], live_times: {} });
+
+  // live-03: the times table failing (e.g. migration not run) keeps the flags.
+  const origErr = console.error;
+  console.error = () => {};
+  const noTimes = await fetchLiveLoadByJob(
+    stubDb([{ id: "k", carrier: "KOF", method: null, load_count: 1 }], [], "throw"),
+    ["k"]
+  );
+  console.error = origErr;
+  eq("times table error → flags kept, no times", noTimes.get("k"), { live: true, live_loads: [1], live_times: {} });
 
   const broken = { prepare() { throw new Error("boom"); } } as unknown as D1Database;
   const origError = console.error;

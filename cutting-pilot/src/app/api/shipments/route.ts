@@ -316,6 +316,7 @@ export async function GET(request: NextRequest) {
       const info = r.job_id ? liveMap.get(r.job_id) : undefined;
       r.live_load = info ? info.live : isLiveLoadCarrier(r.carrier, null);
       r.live_loads = info ? info.live_loads : [];
+      r.live_times = info ? info.live_times : {};
     }
 
     // split-days-01: one entry per (order, effective ship day). Explicit job/shipment lookups keep the

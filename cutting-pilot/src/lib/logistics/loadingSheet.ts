@@ -38,6 +38,10 @@ export interface LoadingSheetLoad {
   delivery_time: string | null;
   /** mlc-04: this load's effective carrier (job_load_carriers override, else the order carrier). */
   carrier: string | null;
+  /** live-03: this load is a live load (lib/logistics/liveLoad.ts). Optional: absent = not live. */
+  live_load?: boolean;
+  /** live-03: this load's Live Load arrival display (job_live_load_times); null when unset. */
+  live_time?: string | null;
 }
 
 export interface LoadingSheetOrder {
@@ -57,6 +61,10 @@ export interface LoadingSheetOrder {
   ship_to_zip: string | null;
   line_items: LoadingSheetLineItem[];
   loads: LoadingSheetLoad[];
+  /** live-03: any load live. Used (with live_time) only for single-load / unassigned sheets. */
+  live_load?: boolean;
+  /** live-03: load 1's Live Load arrival display. */
+  live_time?: string | null;
 }
 
 export interface LoadingSheetPage {
@@ -232,6 +240,30 @@ function formatLoadLine(ld: LoadingSheetLoad): string {
     .join(" · ");
 }
 
+// live-03: the red LIVE LOAD text beside / under the Delivery band. Pure geometry so the
+// self-check can test placement without rendering.
+export const LIVE_LOAD_TEXT_SIZE = 14;
+export const LIVE_LOAD_GAP = 8;
+
+export function liveLoadText(liveTime: string | null | undefined): string {
+  const t = (liveTime || "").trim();
+  return t ? `LIVE LOAD · Arrives ${t}` : "LIVE LOAD";
+}
+
+export interface LiveLoadPlacement {
+  /** beside = on the band's first line, GAP right of the band; below = own line(s) under the band;
+   *  slot = no delivery band, the text takes the band's place. */
+  mode: "beside" | "below" | "slot";
+  lines: string[];
+}
+
+export function placeLiveLoad(text: string, fontBold: PDFFont, rightW: number, bandW: number | null): LiveLoadPlacement {
+  const width = fontBold.widthOfTextAtSize(text, LIVE_LOAD_TEXT_SIZE);
+  if (bandW == null) return { mode: "slot", lines: wrapText(text, fontBold, LIVE_LOAD_TEXT_SIZE, rightW) };
+  if (bandW + LIVE_LOAD_GAP + width <= rightW) return { mode: "beside", lines: [text] };
+  return { mode: "below", lines: wrapText(text, fontBold, LIVE_LOAD_TEXT_SIZE, rightW) };
+}
+
 export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
@@ -240,6 +272,7 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
   const gray = rgb(0.45, 0.48, 0.52);
   const rule = rgb(0.82, 0.84, 0.87);
   const highlight = rgb(0.992, 0.878, 0.278); // #FDE047 (lgx-loadsheet-03)
+  const red = rgb(0.80, 0.07, 0.07); // live-03: LIVE LOAD text
   const HL_BORDER = 0.75; // thin black border on every highlight band (mono-printer safety)
   const margin = 40;
   const pageW = 612;
@@ -356,6 +389,9 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
       }
       // dlv-04: this load's own time when recorded, else the order summary.
       const deliveryText = (sheet.load?.delivery_time || order.delivery_time || "").trim();
+      // live-03: the load's own flag/time on a per-load sheet, else the order's.
+      const liveSrc = sheet.load ?? order;
+      const liveText = liveSrc.live_load ? liveLoadText(liveSrc.live_time) : null;
       if (deliveryText) {
         // lgx-loadsheet-03: 16pt bold on a bordered yellow band (band first; pdf-lib paints in call order).
         const dLines = wrapText(`Delivery: ${deliveryText}`, fontBold, 16, rightW - 2 * 6);
@@ -366,7 +402,25 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
         dLines.forEach((l, i) => {
           page.drawText(l, { x: colRightX + 6, y: bandTop - 4 - 15 - i * 19, size: 16, font: fontBold, color: black });
         });
+        const livePl = liveText ? placeLiveLoad(liveText, fontBold, rightW, bandW) : null;
+        if (livePl?.mode === "beside") {
+          page.drawText(livePl.lines[0], { x: colRightX + bandW + LIVE_LOAD_GAP, y: bandTop - 4 - 15, size: LIVE_LOAD_TEXT_SIZE, font: fontBold, color: red });
+        }
         ry -= bandH + 6;
+        if (livePl?.mode === "below") {
+          for (const l of livePl.lines) {
+            page.drawText(l, { x: colRightX, y: ry, size: LIVE_LOAD_TEXT_SIZE, font: fontBold, color: red });
+            ry -= 17;
+          }
+          ry -= 2;
+        }
+      } else if (liveText) {
+        // live-03: no delivery band — the LIVE LOAD text takes its slot.
+        for (const l of placeLiveLoad(liveText, fontBold, rightW, null).lines) {
+          page.drawText(l, { x: colRightX, y: ry - 3, size: LIVE_LOAD_TEXT_SIZE, font: fontBold, color: red });
+          ry -= 17;
+        }
+        ry -= 4;
       }
       // A multi-load sheet lists only its own load; otherwise every load (or none), as before.
       const loads = multi && sheet.load ? [sheet.load] : Array.isArray(order.loads) ? order.loads : [];

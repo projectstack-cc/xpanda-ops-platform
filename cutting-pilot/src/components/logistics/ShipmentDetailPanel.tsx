@@ -38,6 +38,8 @@ interface ShipmentDetailPanelProps {
   bolCount?: number;
   /** live-02: the order's live load numbers (live-01); each matching load row gets the live pill. */
   liveLoads?: number[];
+  /** live-03: Live Load arrival display per live load. */
+  liveTimes?: Record<number, string>;
 }
 
 function addressLines(d: ShipmentDetail): string[] {
@@ -60,6 +62,7 @@ export default function ShipmentDetailPanel({
   onShipDaysSaved,
   bolCount = 0,
   liveLoads = [],
+  liveTimes = {},
 }: ShipmentDetailPanelProps) {
   const [detail, setDetail] = useState<ShipmentDetail | null>(cache.get(shipmentId) ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -305,7 +308,10 @@ export default function ShipmentDetailPanel({
                 <div key={`${ld.load_number ?? "x"}-${i}`} className="px-3 py-2 text-sm space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     {liveLoads.includes(n) ? (
-                      <LiveLoadPill className="text-sm tabular-nums">{suffix || "Load"}</LiveLoadPill>
+                      <>
+                        <LiveLoadPill className="text-sm tabular-nums">{suffix || "Load"}</LiveLoadPill>
+                        {liveTimes[n] && <span className="text-xs font-semibold text-text tabular-nums">Arrives {liveTimes[n]}</span>}
+                      </>
                     ) : (
                       <span className="font-mono tabular-nums font-semibold text-text">{suffix || "Load"}</span>
                     )}

@@ -11,7 +11,7 @@ import StatusBadge from "./StatusBadge";
 import { formatLoadLabel } from "@/lib/truckType";
 import { parseDeliveryTime } from "@/lib/deliveryTime";
 import { SHOW_STATUS_BADGES } from "./flags";
-import { LiveLoadPill, LiveLoadStripe } from "@/components/LiveLoadMarker";
+import { LiveLoadPill, LiveLoadStripe, liveTimeLabel } from "@/components/LiveLoadMarker";
 
 interface OrderRowProps {
   row: ScheduleBoardRow;
@@ -58,6 +58,13 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect, intera
   // of the status-badge feature flag.
   const showBadge = SHOW_STATUS_BADGES || row.unmatched;
   const live = row.live_load === true;
+  // live-03: on a live row the pill carries the driver's arrival at our dock in place of the delivery
+  // part ("TL x2 @ Mon 10:00 AM"); unset → the live-02 label.
+  const liveTime = live ? liveTimeLabel(row.live_times, row.live_loads) : null;
+  const liveTimeShort = liveTime
+    ? (parseDeliveryTime(liveTime.replace(/\+$/, "")) ?? liveTime.replace(/\+$/, "")) + (liveTime.endsWith("+") ? "+" : "")
+    : null;
+  const livePillLabel = liveTimeShort ? [loadLabel, `@ ${liveTimeShort}`].filter(Boolean).join(" ") : loadTimeLabel;
   // live-02: a live row with no load/time label still gets a "LIVE" pill, so line 2 must render.
   const showSecondLine = showBadge || scrapYes || !!loadTimeLabel || live;
   // Unmatched rows are dimmed; on a live row the dimming moves to an inner wrapper so the hazard
@@ -141,7 +148,7 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect, intera
             )}
           </div>
           {live ? (
-            <LiveLoadPill className={`shrink-0 tabular-nums ${smallText}`}>{loadTimeLabel || "LIVE"}</LiveLoadPill>
+            <LiveLoadPill className={`shrink-0 tabular-nums ${smallText}`}>{livePillLabel || "LIVE"}</LiveLoadPill>
           ) : loadTimeLabel && (
             <span
               className={`shrink-0 font-mono tabular-nums ${smallText} text-text-hint`}

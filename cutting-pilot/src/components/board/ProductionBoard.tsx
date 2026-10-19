@@ -36,7 +36,7 @@ import LinkedTableGroups from "@/components/linked/LinkedTableGroups";
 import { JobStatusBadge, PriorityBadge, STATUS_VARIANTS } from "./badges";
 import LinePills from "./LinePills";
 import { PROCESSES, type JobProcess } from "@/lib/processes";
-import { LiveLoadChip } from "@/components/LiveLoadMarker";
+import { LiveLoadChip, liveTimeLabel } from "@/components/LiveLoadMarker";
 
 export interface BoardJob {
   id: string;
@@ -67,6 +67,8 @@ export interface BoardJob {
   // live-01: live-load flags + load count (lib/logistics/liveLoad.ts).
   live_load?: boolean;
   live_loads?: number[];
+  /** live-03: arrival display per live load. */
+  live_times?: Record<number, string>;
   load_count?: number | null;
 }
 
@@ -495,7 +497,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                                   {!isReadOnlyJob(job) &&
                                     (expandedId === job.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />)}
                                   {job.invoice_number ? `INV# ${job.invoice_number}` : "No INV#"}
-                                  {job.live_load && <LiveLoadChip loads={partialLiveLoads(job)} className="ml-1" />}
+                                  {job.live_load && <LiveLoadChip loads={partialLiveLoads(job)} time={liveTimeLabel(job.live_times, job.live_loads)} className="ml-1" />}
                                 </div>
                               </td>
                               <td className="px-3 py-[8.8px] align-top text-muted">

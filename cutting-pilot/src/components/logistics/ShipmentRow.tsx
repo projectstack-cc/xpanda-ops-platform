@@ -11,7 +11,7 @@ import { formatEtDateTime } from "@/lib/etDateTime";
 import { formatUsdCents } from "@/lib/money";
 import { capLoadTimesLabel } from "@/lib/loadTimes";
 import type { ShipmentDetail, ShipmentListItem } from "./types";
-import { LiveLoadChip } from "@/components/LiveLoadMarker";
+import { LiveLoadChip, liveTimeLabel } from "@/components/LiveLoadMarker";
 
 const badgeBase = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap";
 
@@ -195,7 +195,10 @@ export default function ShipmentRow({
           )}
           {liveLoads && (
             <div className="mt-1">
-              <LiveLoadChip loads={liveLoads.length ? liveLoads : undefined} />
+              <LiveLoadChip
+                loads={liveLoads.length ? liveLoads : undefined}
+                time={liveTimeLabel(s.live_times, liveLoads.length ? liveLoads : s.day_loads ?? s.live_loads)}
+              />
             </div>
           )}
         </td>
@@ -239,6 +242,7 @@ export default function ShipmentRow({
               onShipDaysSaved={onShipDaysSaved}
               bolCount={Number(s.bol_count || 0)}
               liveLoads={s.live_load ? s.live_loads ?? [] : []}
+              liveTimes={s.live_times}
             />
           </td>
         </tr>

@@ -17,6 +17,7 @@ import { etNowWallClock, formatClockMinutes, weekdayShort } from "@/lib/etDateTi
 import {
   buildToLoadSheet, isSisterCompanyDelivery, nextShipDay, shipDayLabel, toLoadWindow, type Shift, type ToLoadRow,
 } from "@/lib/logistics/toLoadSheet";
+import { fetchLiveLoadByJob } from "@/lib/logistics/liveLoad";
 
 const IN_CHUNK = 90;
 const DELIVERY_MAX_CHARS = 40;
@@ -141,6 +142,8 @@ export async function GET(request: NextRequest) {
     }
 
     const geo = await resolveGeo(DB, jobs, true);
+    // live-03: per-load live flags + arrival times (best-effort).
+    const liveByJob = await fetchLiveLoadByJob(DB, jobIds);
 
     const rows: ToLoadRow[] = [];
     for (const j of jobs) {
@@ -156,6 +159,11 @@ export async function GET(request: NextRequest) {
         const t = loadTimes?.get(n);
         return t ? labelsFor(t.display, shipDay, durationSec, t.appt) : orderLabels;
       };
+
+      const live = liveByJob.get(j.job_id);
+      // Only set on live loads, so non-live rows keep their exact shape.
+      const liveFor = (n: number) =>
+        live?.live_loads.includes(n) ? { live_load: true, live_time: live.live_times[n] || null } : {};
 
       const city = String(j.ship_to_city ?? "").trim();
       const state = String(j.ship_to_state ?? "").trim();
@@ -182,12 +190,13 @@ export async function GET(request: NextRequest) {
             load_number: Number(a.load_number) || 1,
             loading_status: a.loading_status ?? null,
             ...labelsForLoad(Number(a.load_number) || 1),
+            ...liveFor(Number(a.load_number) || 1),
           });
         }
       } else {
         const n = Math.max(1, Number(j.load_count) || 0);
         for (let k = 1; k <= n; k++) {
-          rows.push({ ...base, assignment_id: null, bay_number: null, location: null, load_number: k, loading_status: null, ...labelsForLoad(k) });
+          rows.push({ ...base, assignment_id: null, bay_number: null, location: null, load_number: k, loading_status: null, ...labelsForLoad(k), ...liveFor(k) });
         }
       }
     }

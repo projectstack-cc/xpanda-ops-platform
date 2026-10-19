@@ -129,6 +129,7 @@ interface ScheduleBoardRow {
   chunks_required: number | null;
   live_load: boolean;
   live_loads: number[] | null;
+  live_times: Record<number, string> | null;
   shifts: string[];
 }
 
@@ -217,6 +218,8 @@ export async function GET() {
           ? isLiveLoadCarrier(row.carrier, row.method)
           : liveByJobId.get(row.match_job_id!)?.live ?? false,
         live_loads: unmatched ? null : liveByJobId.get(row.match_job_id!)?.live_loads ?? [],
+        // live-03: arrival display per live load; null when unmatched (no platform job to hold it).
+        live_times: unmatched ? null : liveByJobId.get(row.match_job_id!)?.live_times ?? {},
         // sched-shifts-02: hide shift chips once cutting is complete (see isCuttingComplete in
         // lib/schedule-status.ts). Keys on completion, not the status label, so a job that is
         // Loading after cutting finished clears, while one loading-but-still-cutting keeps its

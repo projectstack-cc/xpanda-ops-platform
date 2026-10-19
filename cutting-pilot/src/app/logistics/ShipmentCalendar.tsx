@@ -9,7 +9,7 @@ import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, FileText, Eye } fr
 import { formatDuration } from "@/lib/time";
 import type { ShipmentListItem } from "@/components/logistics/types";
 import { CustomerPickupBadge, entryLiveLoads } from "@/components/logistics/ShipmentRow";
-import { LiveLoadChip } from "@/components/LiveLoadMarker";
+import { LiveLoadChip, liveTimeLabel } from "@/components/LiveLoadMarker";
 
 interface ShipmentCalendarProps {
   shipments: ShipmentListItem[];
@@ -295,7 +295,10 @@ export default function ShipmentCalendar({
                   const live = entryLiveLoads(selectedShipment);
                   return live ? (
                     <span className="block mt-1">
-                      <LiveLoadChip loads={live.length ? live : undefined} />
+                      <LiveLoadChip
+                        loads={live.length ? live : undefined}
+                        time={liveTimeLabel(selectedShipment.live_times, live.length ? live : selectedShipment.day_loads ?? selectedShipment.live_loads)}
+                      />
                     </span>
                   ) : null;
                 })()}

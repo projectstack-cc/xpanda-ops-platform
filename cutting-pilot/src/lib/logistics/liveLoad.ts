@@ -26,11 +26,13 @@ export function isLiveLoadCarrier(carrier: string | null | undefined, method?: s
 export interface LiveLoadInfo {
   live: boolean;
   live_loads: number[];
+  /** live-03: arrival display per load (job_live_load_times), only for loads that are live. */
+  live_times: Record<number, string>;
 }
 
 const CHUNK = 90; // D1 100-bound-param ceiling
 
-/** Per-job flags from the platform (job carrier + mlc per-load overrides). Chunk ids ≤ 90 per query.
+/** Per-job flags from the platform (job carrier + mlc per-load overrides) + live-03 arrival times. Chunk ids ≤ 90 per query.
  *  Best-effort: on error logs and returns an empty map — never fails the parent request. */
 export async function fetchLiveLoadByJob(DB: D1Database, jobIds: string[]): Promise<Map<string, LiveLoadInfo>> {
   const out = new Map<string, LiveLoadInfo>();
@@ -52,6 +54,23 @@ export async function fetchLiveLoadByJob(DB: D1Database, jobIds: string[]): Prom
           .bind(...chunk)
           .all<{ job_id: string; load_number: number; carrier: string }>(),
       ]);
+      // live-03: arrival times in their own try so a missing/failed table never drops the flags.
+      const timesByJob = new Map<string, Map<number, string>>();
+      try {
+        const tr = await DB.prepare(
+          `SELECT job_id, load_number, display FROM job_live_load_times
+            WHERE job_id IN (${placeholders}) AND display <> ''`
+        )
+          .bind(...chunk)
+          .all<{ job_id: string; load_number: number; display: string }>();
+        for (const t of tr.results ?? []) {
+          const m = timesByJob.get(t.job_id) ?? new Map<number, string>();
+          m.set(Number(t.load_number), t.display);
+          timesByJob.set(t.job_id, m);
+        }
+      } catch (e) {
+        console.error("fetchLiveLoadByJob live times failed:", e);
+      }
       const overrides = new Map<string, Map<number, string>>();
       for (const r of jlcRes.results ?? []) {
         const m = overrides.get(r.job_id) ?? new Map<number, string>();
@@ -65,7 +84,13 @@ export async function fetchLiveLoadByJob(DB: D1Database, jobIds: string[]): Prom
         for (let n = 1; n <= loadCount; n++) {
           if (isLiveLoadCarrier(effectiveLoadCarrier(j.carrier, jobOverrides, n), j.method)) live_loads.push(n);
         }
-        out.set(j.id, { live: live_loads.length > 0, live_loads });
+        const live_times: Record<number, string> = {};
+        const times = timesByJob.get(j.id);
+        for (const n of live_loads) {
+          const t = times?.get(n);
+          if (t) live_times[n] = t;
+        }
+        out.set(j.id, { live: live_loads.length > 0, live_loads, live_times });
       }
     }
   } catch (e) {

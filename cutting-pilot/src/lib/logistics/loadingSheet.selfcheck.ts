@@ -4,7 +4,7 @@
 // lgx-loadsheet-03: + fitInvoiceBox geometry (the header's centered invoice box); now async because the
 // Helvetica-Bold metrics come from a pdf-lib embed. Not part of the production build path.
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { HEADER_BAND_H, INVOICE_BOX_MAX_SIZE, INVOICE_BOX_MIN_SIZE, expandLoadingSheets, fitInvoiceBox, sheetCarrierText, sheetInvoiceText, type LoadingSheetLineItem, type LoadingSheetLoad, type LoadingSheetOrder } from "./loadingSheet";
+import { HEADER_BAND_H, INVOICE_BOX_MAX_SIZE, INVOICE_BOX_MIN_SIZE, LIVE_LOAD_GAP, LIVE_LOAD_TEXT_SIZE, buildLoadingSheetPdf, expandLoadingSheets, fitInvoiceBox, liveLoadText, placeLiveLoad, sheetCarrierText, sheetInvoiceText, type LoadingSheetLineItem, type LoadingSheetLoad, type LoadingSheetOrder } from "./loadingSheet";
 import { parseLoadManifest, type LoadManifestItem } from "./loadManifest";
 
 interface CheckResult {
@@ -176,6 +176,36 @@ export async function runLoadingSheetSelfCheck(): Promise<{ pass: boolean; resul
     check("carrier: no order carrier, no load carrier -> \"\"", sheetCarrierText({ carrier: null }, { carrier: null }) === "");
     const pages = expandLoadingSheets([order("4512", [{ ...load(1, null), carrier: "Seal Express" }, { ...load(2, null), carrier: "XPanda truck" }])]);
     check("carrier: expand keeps each load's carrier", pages.map((p) => p.load?.carrier).join("|") === "Seal Express|XPanda truck");
+  }
+
+  // live-03: red LIVE LOAD text placement beside / below / in the band's slot; non-live unchanged.
+  {
+    const doc = await PDFDocument.create();
+    const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+    const rightW = 242; // the right column on a US Letter sheet (colRightX ≈ 330 → right 572)
+    const band = (t: string) => fontBold.widthOfTextAtSize(`Delivery: ${t}`, 16) + 12;
+    check("live text: no time", liveLoadText(null) === "LIVE LOAD" && liveLoadText("  ") === "LIVE LOAD");
+    check("live text: with time", liveLoadText("Tue 3:30 PM") === "LIVE LOAD · Arrives Tue 3:30 PM");
+    const fits = placeLiveLoad("LIVE LOAD", fontBold, rightW, band("9a"));
+    check("live: fits beside a short band", fits.mode === "beside" && fits.lines.length === 1, JSON.stringify(fits));
+    check("live: beside stays inside rightW",
+      band("9a") + LIVE_LOAD_GAP + fontBold.widthOfTextAtSize("LIVE LOAD", LIVE_LOAD_TEXT_SIZE) <= rightW);
+    const wraps = placeLiveLoad(liveLoadText("Tue 3:30 PM"), fontBold, rightW, band("Wed 9:00 AM"));
+    check("live: wraps below a wide band", wraps.mode === "below" && wraps.lines.length >= 1, JSON.stringify(wraps));
+    check("live: below lines fit rightW",
+      wraps.lines.every((l) => fontBold.widthOfTextAtSize(l, LIVE_LOAD_TEXT_SIZE) <= rightW), JSON.stringify(wraps.lines));
+    const slot = placeLiveLoad(liveLoadText("7:30 AM"), fontBold, rightW, null);
+    check("live: no delivery → takes the band's slot", slot.mode === "slot" && slot.lines.join(" ") === "LIVE LOAD · Arrives 7:30 AM", JSON.stringify(slot));
+
+    // Non-live: an order with live_load false renders the same bytes as one without the fields.
+    const norm = (b: Uint8Array) => Buffer.from(b).toString("latin1").replace(/\/(CreationDate|ModDate) \([^)]*\)/g, "");
+    const origWarn = console.warn, origErr = console.error;
+    console.warn = () => {}; console.error = () => {};
+    const base = order("4100", [load(1, null)]);
+    const flagged: LoadingSheetOrder = { ...base, live_load: false, live_time: null, loads: [{ ...load(1, null), live_load: false, live_time: null }] };
+    const [a, b] = [norm(await buildLoadingSheetPdf([base])), norm(await buildLoadingSheetPdf([flagged]))];
+    console.warn = origWarn; console.error = origErr;
+    check("live: non-live sheet unchanged", a === b, `${a.length} vs ${b.length}`);
   }
 
   return { pass: results.every((r) => r.pass), results };

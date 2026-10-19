@@ -31,6 +31,8 @@ export interface ScheduleBoardRow {
   live_load: boolean;
   /** live-01: live load numbers for a matched row; null when unmatched (sheet-only). */
   live_loads: number[] | null;
+  /** live-03: Live Load arrival display per live load; null when unmatched. */
+  live_times: Record<number, string> | null;
   shifts: string[];
 }
 

@@ -64,6 +64,8 @@ export interface ShipmentListItem {
   live_load?: boolean;
   /** live-01: live load numbers (job-linked rows; [] when unlinked). */
   live_loads?: number[];
+  /** live-03: Live Load arrival display per live load (job-linked rows; {} otherwise). */
+  live_times?: Record<number, string>;
   /** split-days-01: effective ship day of this entry (per-load day for split orders, else the order's ship_date). */
   day_date?: string | null;
   /** split-days-01: load numbers shipping on day_date when the order is split across days; null when unsplit. */

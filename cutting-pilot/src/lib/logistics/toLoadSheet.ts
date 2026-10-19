@@ -22,6 +22,10 @@ export interface ToLoadRow {
   delivery_label: string;
   pickup_label: string | null;
   pickup_early: boolean;
+  /** live-03: this load is a live load; absent = not live. */
+  live_load?: boolean;
+  /** live-03: this load's Live Load arrival display; null when unset. */
+  live_time?: string | null;
 }
 
 export interface ToLoadDay {

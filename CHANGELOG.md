@@ -720,6 +720,8 @@ current series).
 
 ## Orders (v2)
 
+- **live-03 (cross-reference) — Job Board rows carry `live_times`; the Live load chip shows the arrival time. New
+  `GET/PUT /v2/api/orders/:id/live-load-times` (PUT: logistics.dashboard edit / admin).** Full entry under Logistics (v2).
 - **live-01 (cross-reference) — Job Board rows (`/v2/api/board`, `/v2/api/board/search`) carry `live_load` /
   `live_loads` and `load_count`.** Full entry under Logistics (v2).
 - **mlc-05 (cross-reference) — the order-entry Carrier field and the per-load Carrier column are now the shared
@@ -1381,6 +1383,8 @@ current series).
 
 ## Schedule Board (v2)
 
+- **live-03 (cross-reference) — schedule rows carry `live_times`; a live row's pill shows the driver's arrival at our
+  dock (`TL x2 @ 10a`) in place of the delivery part.** Migration ran 2026-10-19. Full entry under Logistics (v2).
 - **live-02 — Live-load hazard marker on Schedule, Job Board, Logistics and Dock (React Component Agent §9b, Frontend
   Designer guidance for the TV board). No migration; UI only on live-01's flags.** The look, locked with Steve: the
   "dock hazard stripe" — black + safety yellow, used nowhere else (never the amber `--warn-*` tokens; amber means "in
@@ -3018,6 +3022,57 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **live-03 — Live Load arrival time (per load) + red LIVE LOAD on the loading sheet (Next/Cloudflare Platform Agent
+  §9a: table, API, loading-sheet PDF; React Component Agent §9b: edit modal + displays; §9 for one legacy delete line).
+  MIGRATION: `DB_Migrations/live-03-job-live-load-times.sql` (gitignored) — new table `job_live_load_times (job_id,
+  load_number ≥ 1, arrive_date, arrive_minutes 0–1439, display, updated_at, updated_by, PK(job_id, load_number))`.
+  **Ran in prod D1 2026-10-19 before push (Steve authorized the agent to run it); verified via `sqlite_master` — table
+  present, 0 rows.** A separate table on purpose: the dlv-02 sheet sync rewrites `job_load_times`. On a live load the
+  time that matters is when the third-party driver arrives at OUR dock, not the customer delivery time.
+  - **API** `GET/PUT /v2/api/orders/:id/live-load-times` (new, modeled on load-carriers): GET → `{ ok, load_count,
+    times[] }` (rows ≤ load_count). PUT `{ times: [{ load_number, arrive_date | null, arrive_minutes | null }] }` —
+    null minutes deletes, validates 1..load_count / 0..1439 / `YYYY-MM-DD`, `display = formatLoadTime(...)`
+    server-side, drops rows > load_count, one batch, one `logActivity` row; returns GET. PUT re-checked in the handler:
+    `logistics.dashboard` edit or admin only (`orders` edit does NOT grant it). Middleware `PATTERN_PERMISSION_MAP`
+    row added right after load-carriers, same GET keys.
+  - **`lib/logistics/liveLoad.ts`:** `fetchLiveLoadByJob` also returns `live_times` (display per load, live loads
+    only) from one extra chunked query in its own try — a missing/failed table logs and keeps the flags.
+    `liveLoad.selfcheck.ts` **31/31** (+ a non-live load's stored time excluded, + table error keeps flags). Carried
+    through: schedule-board rows (`live_times`, null when unmatched; route-local + `types/schedule.ts`), board rows
+    (`boardRows.ts` + `BoardJob`), shipments (+ `components/logistics/types.ts`). Dock: unchanged.
+  - **Loading sheet** (`/v2/api/shipments/loading-sheet` + `lib/logistics/loadingSheet.ts`): per load `live_load` /
+    `live_time` (unnumbered loads fall back to the job-level flag and load 1's time); order level `live_load` (any)
+    / `live_time` (load 1's), used only for single-load / unassigned sheets. Red (`rgb(0.80,0.07,0.07)`)
+    HelveticaBold 14pt `LIVE LOAD` or `LIVE LOAD · Arrives {time}`: on the Delivery band's first line 8pt right of
+    the band when it fits `rightW`, else on its own line(s) directly under the band; no delivery text → it takes the
+    band's slot. Pure `placeLiveLoad()` / `liveLoadText()` helpers; `loadingSheet.selfcheck.ts` **46/46** (+ fits
+    beside a short band, wraps below a wide band and stays inside `rightW`, no-delivery slot, non-live sheet
+    unchanged). Rendered (2026-10-19): a 2-load King of Freight order — load 1 "Delivery: Wed 9:00 AM" band with
+    "LIVE LOAD · Arrives Tue 3:30 PM" in red on its own line under it (too wide to sit beside on the 242pt right
+    column), load 2 "LIVE LOAD" under the band; a single unassigned order with no delivery time — "LIVE LOAD ·
+    Arrives 7:30 AM" in the band's slot above "No trailer assigned". A non-live 2-order fixture renders
+    **byte-identical** to HEAD (pdf-lib dates normalized; both builds in the same run).
+  - **To-Load sheet** (`toLoadSheetPdf.ts` prints a per-row DELIVERY column, so it gets the flag): the route adds
+    `live_load` / `live_time` to live rows only (non-live rows keep their exact shape). The 78pt cell can't hold the
+    14pt line, so a live row's delivery cell prints red HelveticaBold `LIVE arr {time}` (or `LIVE {delivery}` when no
+    arrival is set), truncated to the cell like every other cell. Non-live rows draw exactly as before.
+    `toLoadSheet.selfcheck.ts` 30/30 unchanged.
+  - **Logistics edit modal** (`ShipmentEditModal`): fetches live-load-times beside load-carriers; a **"Live load
+    arrival"** section under the per-load times editor, shown only for loads live AS CURRENTLY EDITED
+    (`isLiveLoadCarrier(effectiveLoadCarrier(form.carrier, per-load carriers, n), method)`, method = `customer pickup`
+    when the row is a pickup) so it appears the moment someone picks King of Freight. One row per live load: hazard
+    `LiveLoadPill` "Load N" + date (defaults to the load's assigned day, else the order ship date — LoadTimesEditor's
+    rule) + time input + Clear + a `formatLoadTime` preview. Saved after the per-load carriers PUT, only when the
+    stored rows differ from the desired set; loads no longer live are sent as null so stale times are removed; same
+    error surfacing as the other per-load PUTs; re-seeded from the response.
+  - **Displays:** `LiveLoadChip` gains `time` ("Live load · Mon 10:00 AM") and `liveTimeLabel()` (first live load's
+    time, `+` when the live loads' times differ). Schedule `OrderRow` pill shows `@ {arrival}` in place of the
+    delivery part ("TL x2 @ 10a", `+` kept); unset → live-02 label. Logistics row chip + calendar chip carry the time;
+    the drill-down prints "Arrives {time}" beside each live load's pill. Job Board chip carries the time. Dock tablet
+    and BOL email: no change (decided with Steve).
+  Verified: anchors `grep -Fc` (all 1), `node --check` on `_worker.js/routes/jobs.js` via a scratchpad `.mjs` copy,
+  self-checks above, `tsc --noEmit` clean, `npm run cf-build` green.
 
 - **live-02 (cross-reference) — live-load chip on the shipment row carrier cell, pill on each live load in the
   drill-down, chip in the calendar detail, "· N live" in the day headers.** Full entry under Schedule Board (v2).
@@ -7350,6 +7405,8 @@ current series).
 
 ## Logistics
 
+- **live-03 (cross-reference) — legacy job delete (`_worker.js/routes/jobs.js`) also deletes `job_live_load_times`
+  rows**, right after `job_load_carriers`. Migration ran in D1 before this shipped. Full entry under Logistics (v2).
 - **mlc-03 (cross-reference) — `logistics/load-builder.html` + `logistics/index.html`.** Build Load and the
   dashboard "Generate BOL" prefill each trailer's carrier from its load's override (`/v2/api/orders/:id/load-carriers`,
   best-effort), else `job.carrier`. `bol-compose.js` is unchanged; its carry-over runs only on user toggle. Full entry
