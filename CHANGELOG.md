@@ -7424,6 +7424,55 @@ current series).
 
 ## Logistics
 
+- **lb-box-02 — Legacy Load Builder: holey-board on-edge 4th set in the box truck's 19" slot (Logistics Agent §3).
+  No migration, no API change, `STORAGE_KEY` (`foam_trailer_loader_v31`) untouched.** In the 91" box truck, three flat
+  24" holey columns leave a 19" wall slot; it is now filled with boards stood on edge (48" along the truck, thickness
+  across, 24" vertical).
+  - **Hard-fence override (explicit, Steve 2026-10-19), narrow.** The only change inside `calcLoading` / `buildRow` is
+    the edge-pass hook: `buildRow` takes a trailing `edgeFill` param and calls the new `fillHoleyEdgeSlot()` after its
+    flat-column loop; Pass 2 calls it after each consolidated row; both only when `options.edgeFill &&
+    currentDims.holeyEdgeSlot`. The auto-downsize recursion now goes through the wrapper (below). `buildColumn` and
+    everything else in the loop are unchanged.
+  - **Locked rules as implemented.** (1) Gate is data: `TRAILER_TYPES["26ft Box Truck"].holeyEdgeSlot = true`; it rides
+    through the runner-height spread, forced-queue dims and `downsizedDims`. Holey only (`category === 'Holey Board'`,
+    48×24 footprint). (2) `slotWidth = width − floor(width/24)·24` = 19"; edge columns start at posY = the flat width
+    (72") and only in 48"-long rows whose flat columns are all 48×24 holey. (3) One thickness per edge column,
+    `colWidth` = thickness, tiers = `floor(effectiveHeight/24)` capped by demand, `totalHeight` = count × 24. (4) New
+    `pickHoleyEdgeColumns()` — width-based subset-sum in `exactFillHeight`'s DFS shape, ties to more pieces (thinner),
+    weight budget respected. (5) Boards come off the row's working demand, so later rows shrink. (6) New
+    `calcLoadingEdgeBest()` wraps the existing call: with no slot trailer in play it is exactly `calcLoading`;
+    otherwise it packs with and without the edge pass and keeps the edge plan only for fewer trailers, or the same
+    count and a strictly shorter total length, and only if it places every piece the no-edge plan placed. Used by the
+    primary pack (`getResult`), the auto-downsize repack, the forced queue (checked via `state.forcedTrailers`), and
+    zoned segments (one zone's cart per call, so edges never cross zones; boundary gap-fill skips a row whose wall
+    slot is taken). (7) Edge columns carry `onEdge: true`, `edgeUnitHeight: 24`, a `" (on edge)"` layer-name suffix,
+    one layer with `unitHeight` = thickness and `count` = boards.
+  - **Stats / print / diagram.** `buildTrailerStats`: edge stacks key separately and read `6" on edge - 4`; the pieces
+    list strips the suffix. `getStackPrintLines` reads `6" on edge-4`. Top view + print/PDF SVG draw edge columns at
+    true width with a diagonal hatch (existing slate stroke colours, no new hex) and one label per row's slot
+    (`ON EDGE` / `7×1"-4 2×6"-4`, shrinking to `EDGE` in narrow slots) — never per-column text in a 1"–6" strip.
+  - **Customize + dissolve.** Edge columns are carried through the editor round-trip as locked originals: shown as
+    "ON EDGE (locked)", not draggable, not a drop target, untouched by the row SKU selector; Apply re-appends them at
+    the wall slot and refuses a layout whose flat stacks would run into the slot. `recomputeColumnGeom` keeps an edge
+    column's 24"-per-board height and width; `reflowRowGeometry` never slides one out of the slot. Dissolve neither
+    moves edge pieces nor uses an edge column as a receiver. A dense re-pack (dissolve leftovers) runs edge-off, as
+    before. Saved loads: `onEdge` is additive in the layout JSON; old loads behave exactly as before.
+  - **Scenarios (throwaway vm harness over the page's own functions, not committed) — all pass.**
+    A: 6" ×200 edge-on → every 3-flat row carries 3 × 6" edge columns × 4 tiers. Note 200 > 3 rows × 66, so it is 4
+    rows (192") either way — keep-if-better correctly returns the no-edge plan, deep-equal to baseline. At 198 boards
+    the edge plan is kept: 192" → 144". B: 6"/1"/13" ×40 → slots `7×1" + 2×6"` and `1" + 3×6"`, both exactly 19" (ties
+    to thinner); this cart is 144" either way, so the no-edge plan is kept. C: A and B carts on the 53ft (downsize off)
+    and blocks-only on the box truck / 53ft are deep-equal to the pre-change baseline; the only difference on a
+    downsized trailer is the additive `downsizedDims.holeyEdgeSlot` key. D: 3 boards → no edge columns, baseline
+    output. E: 6" ×1326 on the 53ft → the last trailer (390 boards) was not downsized before and now downsizes to a
+    6-row box truck with edge columns. F: forced box truck + 400 boards, runner 4" → 4 tiers, runner 13" → 3 tiers;
+    only the box truck carries edge columns. Conservation held in every scenario. Render/editor smoke: hatch + labels
+    present, `recomputeColumnGeom` keeps 96"/width, reflow keeps the slot, dissolve never touches edge columns.
+    Inline scripts `node --check` OK.
+  - **Manual check for Steve** (`/logistics/load-builder.html`, 26ft Box Truck, a holey order of ≥ ~60 boards of one
+    thickness ≤ 19"): the top view shows a hatched strip along the wall labelled EDGE; Print Loading Diagram / the BOL
+    PDF show "ON EDGE" in the slot and `6" on edge - 4` in Stack Breakdown; Customize shows those columns as
+    "ON EDGE (locked)" and won't drag them.
 - **lb-box-01 (cross-reference) — `logistics/load-builder.html`: "26ft Box Truck" width 72" → 91".** Data constant
   only; no algorithm or `STORAGE_KEY` change. Full entry under Logistics (v2).
 - **live-03 (cross-reference) — legacy job delete (`_worker.js/routes/jobs.js`) also deletes `job_live_load_times`

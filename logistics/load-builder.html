@@ -475,7 +475,8 @@ const TRAILER_TYPES = {
   "48ft Flatbed":  { length: 576, width: 98, height: 108, maxWeight: 44000 },
   "40ft Container": { length: 480, width: 90, height: 102, maxWeight: 55000 },
   "20ft Container": { length: 240, width: 90, height: 86, maxWeight: 44000 },
-  "26ft Box Truck": { length: 312, width: 91, height: 108, maxWeight: 28000 },
+  // lb-box-02: holeyEdgeSlot — the 19" wall slot beside 3 flat 24" holey columns takes a 4th set on edge.
+  "26ft Box Truck": { length: 312, width: 91, height: 108, maxWeight: 28000, holeyEdgeSlot: true },
 };
 
 const COLORS = [
@@ -785,7 +786,126 @@ function buildColumn(baseDemand, pool, dims, usedWeightSoFar, preferredSkuId = n
   };
 }
 
-function buildRow(demand, dims, curX, trailerUsedWeight, variant, preferredSkuId = null, allowMixing = true) {
+// ─── lb-box-02: holey-board on-edge 4th set (box truck wall slot) ───────────────
+// Holey board is 48" × 24" × thickness. On a trailer whose dims carry `holeyEdgeSlot`, the slot left
+// beside the flat 24" columns (91 − 3 × 24 = 19") takes boards stood on edge: 48" along the truck,
+// thickness across, 24" vertical. Only rows whose flat columns are all 48×24 holey get a slot, and
+// edge columns sit at posY ≥ the flat width (the wall), never as general filler. Runs only when
+// calcLoading's options.edgeFill is set; calcLoadingEdgeBest keeps the result only if it saves space.
+const HOLEY_EDGE_LENGTH = 48, HOLEY_EDGE_WIDTH = 24, HOLEY_EDGE_SUFFIX = ' (on edge)';
+
+function isEdgeHoley(sku) {
+  return !!sku && sku.category === 'Holey Board' && sku.length === HOLEY_EDGE_LENGTH && sku.width === HOLEY_EDGE_WIDTH;
+}
+
+// Width-based subset-sum (exactFillHeight's DFS shape): pick edge columns — one thickness each,
+// up to `tiers` boards per column — whose thicknesses fill as much of slotWidth as possible.
+// Ties go to more pieces (thinner boards). Respects the weight budget.
+function pickHoleyEdgeColumns(slotWidth, candidates, tiers, weightBudget) {
+  const EPS = 1e-9;
+  const opts = candidates
+    .filter(d => d.remaining > 0 && d.sku.height <= slotWidth + EPS)
+    .sort((a, b) => a.sku.height - b.sku.height)
+    .map(d => ({ demand: d, maxCols: Math.min(Math.ceil(d.remaining / tiers), Math.floor((slotWidth + EPS) / d.sku.height)) }))
+    .filter(o => o.maxCols > 0);
+  if (!opts.length) return [];
+  let best = { width: 0, pieces: 0, cols: [] };
+  let iterations = 0;
+  const LIMIT = 20000;
+  function dfs(idx, width, weight, pieces, cols) {
+    iterations++;
+    if (iterations > LIMIT) return;
+    if (width > best.width + EPS || (Math.abs(width - best.width) <= EPS && pieces > best.pieces)) {
+      best = { width, pieces, cols: cols.map(c => ({ ...c })) };
+    }
+    if (idx >= opts.length) return;
+    const o = opts[idx], t = o.demand.sku.height;
+    const maxTake = Math.min(o.maxCols, Math.floor((slotWidth - width + EPS) / t));
+    for (let take = maxTake; take >= 0; take--) {
+      let addPieces = 0, addWeight = 0;
+      const added = [];
+      for (let j = 0; j < take; j++) {
+        const count = Math.min(tiers, o.demand.remaining - j * tiers);
+        if (count <= 0) break;
+        added.push({ demand: o.demand, count });
+        addPieces += count;
+        addWeight += count * o.demand.sku.weight;
+      }
+      if (weight + addWeight > weightBudget) continue;
+      dfs(idx + 1, width + added.length * t, weight + addWeight, pieces + addPieces, cols.concat(added));
+    }
+  }
+  dfs(0, 0, 0, 0, []);
+  return best.cols;
+}
+
+// Appends on-edge columns to a just-built row (buildRow / Pass 2). Mutates `pool` (the row's
+// working demand) so the pulled boards come off later rows, and the row's width/unit/weight totals.
+function fillHoleyEdgeSlot(row, pool, dims, weightBudget) {
+  if (row.rowLength !== HOLEY_EDGE_LENGTH || !row.columns.length) return;
+  const byId = new Map(pool.map(d => [d.skuId, d]));
+  const allFlatHoley = row.columns.every(c => !c.onEdge && c.layers.every(l => isEdgeHoley((byId.get(l.skuId) || {}).sku)));
+  if (!allFlatHoley) return;
+  const flatWidth = Math.floor(dims.width / HOLEY_EDGE_WIDTH) * HOLEY_EDGE_WIDTH;
+  const slotWidth = dims.width - flatWidth;
+  if (slotWidth <= 0 || row.rowWidthUsed > flatWidth) return;
+  const tiers = Math.floor(dims.height / HOLEY_EDGE_WIDTH);
+  if (tiers <= 0) return;
+  const picks = pickHoleyEdgeColumns(slotWidth, pool.filter(d => isEdgeHoley(d.sku)), tiers, weightBudget);
+  let posY = flatWidth;
+  picks.forEach(p => {
+    const sku = p.demand.sku, count = p.count;
+    p.demand.remaining -= count;
+    const name = sku.name + HOLEY_EDGE_SUFFIX;
+    const layers = [{ skuId: sku.id, skuName: name, skuCode: sku.sku, color: sku.color, unitHeight: sku.height, count }];
+    const col = {
+      colWidth: sku.height, posY,
+      skuId: sku.id, skuName: name, skuCode: sku.sku, color: sku.color, unitHeight: sku.height,
+      totalHeight: count * sku.width, totalWeight: count * sku.weight,
+      stackCount: count, layers, mixed: false,
+      onEdge: true, edgeUnitHeight: sku.width,
+      label: `${sku.height}" on edge`,
+    };
+    row.columns.push(col);
+    row.rowWidthUsed += col.colWidth;
+    row.totalUnits += count;
+    row.totalWeight += col.totalWeight;
+    posY += col.colWidth;
+  });
+}
+
+function edgeColumnCount(result) {
+  return (result.trailers || []).reduce((s, t) => s + t.rows.reduce((s2, r) => s2 + r.columns.filter(c => c.onEdge).length, 0), 0);
+}
+
+// Rule 6 keep-if-better: fewer trailers, else same count and strictly shorter total used length —
+// and never strand a piece the no-edge plan placed.
+function edgeResultIsBetter(edge, base) {
+  if (!edgeColumnCount(edge)) return false;
+  const placed = r => {
+    const m = {};
+    r.trailers.forEach(t => t.rows.forEach(row => row.columns.forEach(c => c.layers.forEach(l => { m[l.skuId] = (m[l.skuId] || 0) + l.count; }))));
+    return m;
+  };
+  const pe = placed(edge), pb = placed(base);
+  if (Object.keys(pb).some(k => (pe[k] || 0) < pb[k])) return false;
+  if (edge.trailers.length !== base.trailers.length) return edge.trailers.length < base.trailers.length;
+  const len = r => r.trailers.reduce((s, t) => s + t.usedLength, 0);
+  return len(edge) < len(base);
+}
+
+// Wrapper around the existing calcLoading call (the loop itself is unchanged). When no slot trailer
+// is in play this is exactly calcLoading; otherwise pack with and without the edge pass and keep
+// the edge result only if it saves space.
+function calcLoadingEdgeBest(cart, skus, dims, variant = 0, options = {}) {
+  const forcedSlot = state.forcedMode && (state.forcedTrailers || []).some(ft => TRAILER_TYPES[ft.type] && TRAILER_TYPES[ft.type].holeyEdgeSlot);
+  if (!dims.holeyEdgeSlot && !forcedSlot) return calcLoading(cart, skus, dims, variant, options);
+  const base = calcLoading(cart, skus, dims, variant, { ...options, edgeFill: false });
+  const edge = calcLoading(cart, skus, dims, variant, { ...options, edgeFill: true });
+  return edgeResultIsBetter(edge, base) ? edge : base;
+}
+
+function buildRow(demand, dims, curX, trailerUsedWeight, variant, preferredSkuId = null, allowMixing = true, edgeFill = false) {
   const ordered = sortDemandPriority(demand.filter(d => d.remaining > 0 && d.sku.length <= dims.length - curX && d.sku.width <= dims.width && d.sku.height <= dims.height), variant);
   if (!ordered.length) return null;
   let dominant = preferredSkuId ? ordered.find(d => d.skuId === preferredSkuId) : null;
@@ -816,6 +936,7 @@ function buildRow(demand, dims, curX, trailerUsedWeight, variant, preferredSkuId
     }
     if (!placed) break;
   }
+  if (edgeFill && row.columns.length) fillHoleyEdgeSlot(row, working, dims, dims.maxWeight - trailerUsedWeight - row.totalWeight);
   if (!row.columns.length) return null;
   const workingById = new Map(working.map(d => [d.skuId, d.remaining]));
   const mergedDemand = cloneDemand(demand).map(d => ({ ...d, remaining: workingById.has(d.skuId) ? workingById.get(d.skuId) : d.remaining }));
@@ -832,11 +953,13 @@ function buildTrailerStats(rows, dims) {
   const skuBreakdown = {}, stackPatterns = {};
   rows.forEach(row => row.columns.forEach(col => {
     col.layers.forEach(layer => {
-      if (!skuBreakdown[layer.skuId]) skuBreakdown[layer.skuId] = { skuId: layer.skuId, name: layer.skuName, sku: layer.skuCode, color: layer.color, pieces: 0 };
+      const pieceName = col.onEdge ? String(layer.skuName).replace(HOLEY_EDGE_SUFFIX, '') : layer.skuName;
+      if (!skuBreakdown[layer.skuId]) skuBreakdown[layer.skuId] = { skuId: layer.skuId, name: pieceName, sku: layer.skuCode, color: layer.color, pieces: 0 };
       skuBreakdown[layer.skuId].pieces += layer.count;
     });
-    const key = col.layers.map(l => `${l.unitHeight}"-${l.count}`).join("|");
-    if (!stackPatterns[key]) stackPatterns[key] = { key, stacks: 0, lines: col.layers.map(l => `${l.unitHeight}" - ${l.count}`) };
+    // lb-box-02: on-edge columns get their own pattern so the list never reads them as a flat stack.
+    const key = col.onEdge ? `edge|${col.layers.map(l => `${l.unitHeight}"-${l.count}`).join("|")}` : col.layers.map(l => `${l.unitHeight}"-${l.count}`).join("|");
+    if (!stackPatterns[key]) stackPatterns[key] = { key, stacks: 0, lines: col.layers.map(l => col.onEdge ? `${l.unitHeight}" on edge - ${l.count}` : `${l.unitHeight}" - ${l.count}`) };
     stackPatterns[key].stacks += 1;
   }));
   return { rows, usedLength, usedFloorArea, usedWeight, totalStacks, totalUnits, mixedStacks, skuBreakdown, stackPatterns: Object.values(stackPatterns) };
@@ -882,6 +1005,7 @@ function calcLoading(cart, skus, dims, variant = 0, options = {}) {
     }
     const forcedEntry = trailerIdx < trailerQueue.length ? trailerQueue[trailerIdx] : null;
     const currentDims = forcedEntry ? forcedEntry.dims : dims;
+    const edgeOn = !!(options.edgeFill && currentDims.holeyEdgeSlot);
     trailerIdx++;
 
     demand = sortDemandPriority(demand, variant);
@@ -892,8 +1016,8 @@ function calcLoading(cart, skus, dims, variant = 0, options = {}) {
     // Single pass: tallest-first, top-off when a size runs out mid-column
     while (progress && curX < currentDims.length) {
       progress = false;
-      let best = buildRow(demand, currentDims, curX, usedWeight, variant, preferredSkuId, true);
-      if (!best) best = buildRow(demand, currentDims, curX, usedWeight, variant, null, true);
+      let best = buildRow(demand, currentDims, curX, usedWeight, variant, preferredSkuId, true, edgeOn);
+      if (!best) best = buildRow(demand, currentDims, curX, usedWeight, variant, null, true, edgeOn);
       if (!best) break;
       rows.push(best.row);
       demand = best.updatedDemand;
@@ -969,6 +1093,7 @@ function calcLoading(cart, skus, dims, variant = 0, options = {}) {
           posY += colWidth; widthLeft -= colWidth;
         }
 
+        if (edgeOn && row.columns.length) fillHoleyEdgeSlot(row, group, currentDims, currentDims.maxWeight - usedWeight - row.totalWeight);
         if (!row.columns.length) continue;
         rows.push(row);
         curX += rowLength;
@@ -1017,7 +1142,7 @@ function calcLoading(cart, skus, dims, variant = 0, options = {}) {
         return a[0] <= b[0] && a[1] <= b[1] && a[2] <= b[2];
       });
       if (allSkusFit && tempCart.length) {
-        const boxResult = calcLoading(tempCart, skus, boxTruckDims, variant, { skipDownsize: true });
+        const boxResult = calcLoadingEdgeBest(tempCart, skus, boxTruckDims, variant, { skipDownsize: true });
         if (boxResult && boxResult.trailers.length === 1) {
           const repacked = boxResult.trailers[0];
           trailers[trailers.length - 1] = repacked;
@@ -1145,6 +1270,7 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
       const gapCart = nextZone.cart.filter(c => c.qty > 0);
       if (!gapCart.length) continue;
       const lastRow = truck.rows[truck.rows.length - 1];
+      if (lastRow.columns.some(c => c.onEdge)) return; // lb-box-02: the wall slot is taken — no gap-fill beside it
       const gapWidth = dims.width - lastRow.rowWidthUsed;
       if (gapWidth <= 0) return; // fully closed — nothing left to chain into
       const minFootprint = zoneMinFootprint(gapCart);
@@ -1199,7 +1325,7 @@ function calcZonedLoading(cart, skus, dims, variant = 0, options = {}) {
         const availableLength = dims.length - truck.usedLength;
         if (availableLength <= 0) { closeTruck(); continue; }
         const segDims = { ...dims, length: availableLength, maxWeight: dims.maxWeight - truck.usedWeight };
-        const segResult = calcLoading(remaining.filter(c => c.qty > 0), skus, segDims, variant, { isFlatbed: options.isFlatbed === true, skipDownsize: true });
+        const segResult = calcLoadingEdgeBest(remaining.filter(c => c.qty > 0), skus, segDims, variant, { isFlatbed: options.isFlatbed === true, skipDownsize: true });
         (segResult.warnings || []).forEach(w => warnings.push(`[${zone.label}] ${w}`));
         const segTrailer = segResult.trailers[0];
         if (!segTrailer || !segTrailer.rows.length) {
@@ -1356,6 +1482,7 @@ function buildPackingList(trailer) {
 }
 
 function getStackPrintLines(col) {
+  if (col.onEdge && Array.isArray(col.layers) && col.layers.length) return col.layers.map(l => `${l.unitHeight}" on edge-${l.count}`);
   if (Array.isArray(col.layers) && col.layers.length) return col.layers.map(l => `${l.unitHeight}"-${l.count}`);
   if (col.unitHeight && col.stackCount) return [`${col.unitHeight}"-${col.stackCount}`];
   if (col.label) return [String(col.label)];
@@ -1420,6 +1547,28 @@ function svgZoneLabel(cx, y, spanW, label, fontSize) {
   return `<text x="${cx}" y="${y}" text-anchor="middle" fill="#fff" font-size="${fontSize}" font-weight="800">${esc(display)}<title>${esc(label)}</title></text>`;
 }
 
+// lb-box-02: one label per row's on-edge slot (union of its edge columns), so 1"–6" slots never
+// carry per-column text. Shrinks to "EDGE <detail>" then "EDGE" as the slot narrows.
+function edgeSlotLabelSvg(row, x0, y0, SC, maxFs, color) {
+  const edges = (row.columns || []).filter(c => c.onEdge);
+  if (!edges.length) return '';
+  const top = Math.min(...edges.map(c => c.posY)), bottom = Math.max(...edges.map(c => c.posY + c.colWidth));
+  const x = x0 + row.posFromFront * SC, w = row.rowLength * SC, y = y0 + top * SC, hpx = (bottom - top) * SC;
+  const groups = {};
+  edges.forEach(c => { const k = `${c.unitHeight}"-${c.stackCount}`; groups[k] = (groups[k] || 0) + 1; });
+  const detail = Object.entries(groups).map(([k, n]) => n > 1 ? `${n}×${k}` : k).join(' ');
+  const fit = ls => Math.min(maxFs, hpx / (ls.length + 0.4), (w - 4) / (Math.max(...ls.map(l => l.length)) * 0.62));
+  let lines = ['ON EDGE', detail], fs = fit(lines);
+  if (fs < 6) { lines = [`EDGE ${detail}`]; fs = fit(lines); }
+  if (fs < 5) { lines = ['EDGE']; fs = fit(lines); }
+  if (fs < 3) return '';
+  const lineGap = fs + 1, startY = y + hpx / 2 - ((lines.length - 1) * lineGap) / 2;
+  const boxW = Math.min(w - 2, Math.max(...lines.map(l => l.length)) * fs * 0.62 + 6), boxH = Math.min(hpx, lines.length * lineGap + 2);
+  let out = `<rect x="${x + w / 2 - boxW / 2}" y="${y + hpx / 2 - boxH / 2}" width="${boxW}" height="${boxH}" fill="#ffffff" opacity="0.9" rx="2"/>`;
+  out += lines.map((l, i) => `<text x="${x + w / 2}" y="${startY + i * lineGap}" text-anchor="middle" dominant-baseline="middle" font-size="${fs}" font-weight="800" fill="${color}">${esc(l)}</text>`).join('');
+  return out;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // SVG BUILDERS
 // ═══════════════════════════════════════════════════════════════
@@ -1442,7 +1591,7 @@ function buildTopViewSVG(trailer, dims) {
   const emptyW = pxL - (trailer.usedLength || 0) * SC;
 
   let svg = `<svg width="${svgW}" height="${svgH}" style="display:block;font-family:DM Sans,Arial,sans-serif">`;
-  svg += `<defs><pattern id="ep" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#CBD5E1" stroke-width="2"/></pattern></defs>`;
+  svg += `<defs><pattern id="ep" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#CBD5E1" stroke-width="2"/></pattern><pattern id="eh" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" stroke="#475569" stroke-width="1.2"/></pattern></defs>`;
   if (zoned) {
     // lbz-pack-02 §2/§4: span now comes from the zone's own column extents, which can
     // overlap slightly across zones after a boundary gap-fill (a filled zone's startX can
@@ -1474,9 +1623,10 @@ function buildTopViewSVG(trailer, dims) {
     svg += `<line x1="${W + row.posFromFront * SC}" y1="${W}" x2="${W + row.posFromFront * SC}" y2="${W + pxW}" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="4,3"/>`;
   });
   rects.forEach(r => {
-    svg += `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="${r.col.color}55" stroke="${r.col.color}" stroke-width="1.5" rx="2"/>`;
+    svg += `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="${r.col.color}55" stroke="${r.col.color}" stroke-width="${r.col.onEdge ? 0.8 : 1.5}" rx="${r.col.onEdge ? 0 : 2}"/>`;
+    if (r.col.onEdge) svg += `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="url(#eh)"/>`;
     if (runnerH > 0) svg += `<rect x="${r.x}" y="${r.y + r.h - 3}" width="${r.w}" height="3" fill="#92400E" opacity="0.7" rx="1"/>`;
-    if (r.w > 18 && r.h > 12) {
+    if (!r.col.onEdge && r.w > 18 && r.h > 12) {
       const stackCount = r.col.stackCount || 0;
       const heightLabel = r.col.mixed ? 'MIX' : `${r.col.unitHeight}"`;
       if (r.h > 30 && stackCount) {
@@ -1491,6 +1641,7 @@ function buildTopViewSVG(trailer, dims) {
       }
     }
   });
+  (trailer.rows || []).forEach(row => { svg += edgeSlotLabelSvg(row, W, W, SC, 9, '#475569'); });
   (trailer.rows || []).forEach((row, ri) => {
     svg += `<text x="${W + row.posFromFront * SC + row.rowLength * SC / 2}" y="${W - 3}" text-anchor="middle" fill="#64748B" font-size="9" font-weight="700">R${ri + 1}</text>`;
   });
@@ -1533,7 +1684,7 @@ function buildPrintSvg(trailer, dims) {
   const svgW = pxL + M * 2 + 78, svgH = pxW + M * 2 + 64 + (printRunnerH > 0 ? 20 : 0) + zoneStripH;
   const rects = [];
   (trailer.rows || []).forEach((row, ri) => row.columns.forEach((col, ci) => {
-    rects.push({ x: M + row.posFromFront * SC, y: M + col.posY * SC, w: row.rowLength * SC, h: col.colWidth * SC, lines: getStackPrintLines(col), zoneLabel: col.zoneLabel, zoneColor: col.zoneColor });
+    rects.push({ x: M + row.posFromFront * SC, y: M + col.posY * SC, w: row.rowLength * SC, h: col.colWidth * SC, lines: getStackPrintLines(col), zoneLabel: col.zoneLabel, zoneColor: col.zoneColor, onEdge: !!col.onEdge });
   }));
   const renderLines = r => {
     const lines = r.lines.filter(Boolean);
@@ -1546,7 +1697,7 @@ function buildPrintSvg(trailer, dims) {
   const printUsedPxL = (trailer.usedLength || 0) * SC;
   const printEmptyW = pxL - printUsedPxL;
   let svg = `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg" style="font-family:Arial,sans-serif;display:block;">`;
-  svg += `<defs><pattern id="pep" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#CBD5E1" stroke-width="2"/></pattern></defs>`;
+  svg += `<defs><pattern id="pep" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#CBD5E1" stroke-width="2"/></pattern><pattern id="peh" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#334155" stroke-width="1.4"/></pattern></defs>`;
   if (zoned) {
     // lbz-pack-02 §2/§4: clamp the drawn band so overlapping column-extent spans (a
     // gap-filled zone's startX can sit inside the previous zone's row) stay tiled with no
@@ -1573,10 +1724,13 @@ function buildPrintSvg(trailer, dims) {
     svg += `<text x="${M + printUsedPxL + printEmptyW / 2}" y="${M + pxW / 2 + 5}" text-anchor="middle" fill="#94A3B8" font-size="${remFs}" font-weight="700">${remLabel}</text>`;
   }
   rects.forEach(r => {
-    svg += `<g><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="#ffffff" stroke="#334155" stroke-width="1.8" rx="2"/>${renderLines(r)}`;
+    svg += r.onEdge
+      ? `<g><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="url(#peh)" stroke="#334155" stroke-width="0.9"/>`
+      : `<g><rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="#ffffff" stroke="#334155" stroke-width="1.8" rx="2"/>${renderLines(r)}`;
     if (printRunnerH > 0) svg += `<rect x="${r.x}" y="${r.y + r.h - 4}" width="${r.w}" height="4" fill="#92400E" opacity="0.7" rx="1"/>`;
     svg += `</g>`;
   });
+  (trailer.rows || []).forEach(row => { svg += edgeSlotLabelSvg(row, M, M, SC, 13, '#111827'); });
   (trailer.rows || []).forEach((row, ri) => {
     svg += `<text x="${M + row.posFromFront * SC + row.rowLength * SC / 2}" y="${M - 4}" text-anchor="middle" font-size="13" font-weight="700" fill="#475569">R${ri + 1}</text>`;
   });
@@ -1791,7 +1945,7 @@ function getResult() {
   const loadingOptions = { isFlatbed: state.trailerType === '48ft Flatbed' };
   const autoResult = state.zoneMode
     ? calcZonedLoading(state.cart, sorted, effectiveDims, state.variant, loadingOptions)
-    : calcLoading(state.cart, sorted, effectiveDims, state.variant, loadingOptions);
+    : calcLoadingEdgeBest(state.cart, sorted, effectiveDims, state.variant, loadingOptions);
   if (!Object.keys(state.manualRowsByTrailer).length) return autoResult;
   const trailers = autoResult.trailers.map((t, i) => {
     const manualRows = state.manualRowsByTrailer[i];
@@ -2296,7 +2450,7 @@ function reflowRowGeometry(rows) {
   (rows || []).forEach(row => {
     row.posFromFront = posFromFront;
     let posY = 0;
-    row.columns.forEach(col => { col.posY = posY; posY += col.colWidth; });
+    row.columns.forEach(col => { col.posY = col.onEdge ? Math.max(posY, col.posY || 0) : posY; posY = col.posY + col.colWidth; });
     row.rowWidthUsed = row.columns.reduce((s, c) => s + c.colWidth, 0);
     posFromFront += row.rowLength;
   });
@@ -2313,6 +2467,11 @@ function recomputeColumnGeom(col) {
   col.skuCode = col.layers[0].skuCode; col.color = col.layers[0].color;
   col.unitHeight = col.layers[0].unitHeight;
   col.label = col.layers.map(l => `${l.unitHeight}"`).join(" + ");
+  // lb-box-02: an on-edge column stands its boards 24" tall; colWidth (thickness) is never touched here.
+  if (col.onEdge) {
+    col.totalHeight = col.stackCount * (col.edgeUnitHeight || HOLEY_EDGE_WIDTH);
+    col.label = `${col.unitHeight}" on edge`;
+  }
   return col;
 }
 
@@ -2370,7 +2529,7 @@ function planDissolve(result, srcTi) {
   // Expand the source trailer's pieces into individual placeable units.
   const src = result.trailers[srcTi];
   const units = [];
-  (src.rows || []).forEach((row, ri) => row.columns.forEach((col, ci) => col.layers.forEach((layer, li) => {
+  (src.rows || []).forEach((row, ri) => row.columns.forEach((col, ci) => !col.onEdge && col.layers.forEach((layer, li) => {
     for (let n = 0; n < layer.count; n++) {
       units.push({
         ri, ci, li, length: row.rowLength, width: col.colWidth, unitHeight: layer.unitHeight,
@@ -2392,7 +2551,7 @@ function planDissolve(result, srcTi) {
         if (row.rowLength !== u.length) continue;
         for (let cIdx = 0; cIdx < row.columns.length; cIdx++) {
           const col = row.columns[cIdx];
-          if (col.colWidth !== u.width) continue;
+          if (col.onEdge || col.colWidth !== u.width) continue; // lb-box-02: edge columns never receive
           if ((rec.heightCap - col.totalHeight) < u.unitHeight) continue;
           if (rec.runWeight + u.weight > rec.maxWeight) continue;
           col.layers.push({ skuId: u.skuId, skuName: u.skuName, skuCode: u.skuCode, color: u.color, unitHeight: u.unitHeight, count: 1 });
@@ -2823,6 +2982,9 @@ function renderTrailerEditor(trailer, ti, skuLib) {
       offloadSeq: col.offloadSeq != null ? col.offloadSeq : (row.offloadSeq != null ? row.offloadSeq : null),
       zoneColor: col.zoneColor != null ? col.zoneColor : (row.zoneColor || null),
       layers: col.layers.map(l => ({ skuId: l.skuId, count: l.count })),
+      // lb-box-02: on-edge columns are locked in Customize — carried through unchanged.
+      onEdge: !!col.onEdge,
+      locked: col.onEdge ? JSON.parse(JSON.stringify(col)) : null,
     })),
   }));
 
@@ -2861,7 +3023,7 @@ function renderEditorContent(box, ti, skuLib) {
     const sel = h('select', { className: 'inp', value: String(row.skuId), style: { width: '220px', padding: '8px 10px' }, onChange: e => {
       const sku = skuLib.find(s => s.id === e.target.value); if (!sku) return;
       editorRows[ri].skuId = sku.id; editorRows[ri].length = sku.length;
-      editorRows[ri].columns.forEach(c => c.width = sku.width);
+      editorRows[ri].columns.forEach(c => { if (!c.onEdge) c.width = sku.width; });
       const box = document.getElementById('editor-' + ti); box.innerHTML = ''; renderEditorContent(box, ti, skuLib);
     } });
     skuLib.forEach(s => { const opt = h('option', { value: String(s.id) }, s.name); if (s.id === row.skuId) opt.selected = true; sel.appendChild(opt); });
@@ -2888,6 +3050,14 @@ function renderEditorContent(box, ti, skuLib) {
 
     const colsGrid = h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px' } });
     row.columns.forEach((col, ci) => {
+      if (col.onEdge && col.locked) {
+        // lb-box-02: locked — not a drag source, not a drop target, no edits.
+        const lockEl = h('div', { className: 'editor-col', title: 'On-edge holey boards are locked in Customize', style: { opacity: '0.7', cursor: 'not-allowed' } });
+        lockEl.appendChild(h('strong', {}, `Col ${ci + 1} · ON EDGE (locked)`));
+        lockEl.appendChild(h('div', { style: { marginTop: '8px', fontSize: '13px', color: 'var(--text-muted)' } }, `${col.locked.skuName} — ${col.locked.unitHeight}" on edge × ${col.locked.stackCount}`));
+        colsGrid.appendChild(lockEl);
+        return;
+      }
       const colEl = h('div', { className: 'editor-col', 'data-row-idx': String(ri), 'data-col-idx': String(ci) });
       colEl.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -3002,7 +3172,19 @@ function applyEditorRows(ti, skuLib) {
   const effectiveHeight = trailerDims.height - (state.runnerHeight || 0);
 
   for (const row of editorRows) {
+    // lb-box-02: no flat stack may spill into a row's locked on-edge slot.
+    const edgeCols = row.columns.filter(c => c.onEdge && c.locked);
+    if (edgeCols.length) {
+      const slotStart = Math.min(...edgeCols.map(c => c.locked.posY));
+      const baseSku = skuLib.find(s => s.id === row.skuId);
+      const flatW = row.columns.filter(c => !c.onEdge && c.layers.some(l => l.count > 0)).reduce((s, c) => s + (c.width || (baseSku ? baseSku.width : 0)), 0);
+      if (flatW > slotStart) {
+        showToast(`⚠ Flat stacks (${flatW}") would run into the on-edge slot (starts at ${slotStart}"). Remove a column from that row before applying.`, 'error');
+        return;
+      }
+    }
     for (const col of row.columns) {
+      if (col.onEdge) continue;
       const colHeight = col.layers.reduce((sum, layer) => {
         const sku = skuLib.find(s => s.id === layer.skuId);
         return sum + (sku ? sku.height * layer.count : 0);
@@ -3037,6 +3219,7 @@ function applyEditorRows(ti, skuLib) {
     if (!baseSku || !row.columns.length) return;
     let posY = 0;
     const cols = row.columns.map(col => {
+      if (col.onEdge) return null; // lb-box-02: appended below, at the wall slot
       const layers = col.layers.map(l => {
         const sku = skuLib.find(s => s.id === l.skuId);
         if (!sku || l.count <= 0) return null;
@@ -3057,6 +3240,13 @@ function applyEditorRows(ti, skuLib) {
       posY += built.colWidth;
       return built;
     }).filter(Boolean);
+    let edgeY = posY;
+    row.columns.filter(c => c.onEdge && c.locked).forEach(c => {
+      const e = JSON.parse(JSON.stringify(c.locked));
+      e.posY = Math.max(edgeY, c.locked.posY);
+      edgeY = e.posY + e.colWidth;
+      cols.push(e);
+    });
     if (!cols.length) return;
     // Row-level zone fields are kept only as a back-compat alias for the row's first column.
     const firstCol = cols[0];

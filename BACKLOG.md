@@ -53,8 +53,8 @@
 
 ### Load Builder — legacy `logistics/load-builder.html` → `/v2/logistics/load-builder` · NEEDS MAJOR WORK (dark)
 
-- [ ] **lb-box-02 — legacy box truck holey-board on-edge 4th set.** Fill the 91" box truck's 19" wall slot with
-  holey boards stood on edge (`logistics/load-builder.html`).
+- [ ] **Edit/move on-edge holey columns in the legacy customize editor + dissolve** (lb-box-02 locked them: not
+  draggable, not drop targets, never dissolve receivers; a dense re-pack flattens them).
 - [ ] **lb-box-03 — v2 box truck holey-board on-edge 4th set.** Same contract as lb-box-02 in `packEngine.ts` + v2 UI.
 - [ ] **lgx-review-01 follow-up — Load Builder "Generate BOLs" has no post-generate review step.** LoadPlanView's BolGenerateModal path still just closes. Job-less plans have no job_id, so wiring it needs BolViewerModal to accept saved BOL ids (or the POST responses) instead of a jobId.
 - [ ] **Load Builder rework (`lbr-NN`) — scoped 2026-10-12.** Keep the v2 stack; legacy-like layout; engine made as
