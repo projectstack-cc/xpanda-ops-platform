@@ -155,11 +155,18 @@ export async function buildCutListPdf(job: CutListJob, opts: CutListOptions = {}
     y -= 18;
     page.drawText("CUSTOMER", { x: margin, y, size: 9, font: fontBold, color: gray });
     y -= 15;
-    page.drawText(job.customer || "", { x: margin, y, size: 12, font: fontBold, color: black });
-    y -= 16;
+    // lgx-loadsheet-04: wrap customer + ship-to to the content width so long lines never run off the page.
+    const custLines = wrapText(job.customer || "", fontBold, 12, right - margin);
+    custLines.forEach((l, i) => {
+      page.drawText(l, { x: margin, y, size: 12, font: fontBold, color: black });
+      y -= i === custLines.length - 1 ? 16 : 14;
+    });
+    if (!custLines.length) y -= 16;
     for (const line of formatCutListAddress(job)) {
-      page.drawText(line, { x: margin, y, size: 10, font, color: gray });
-      y -= 13;
+      for (const wl of wrapText(line, font, 10, right - margin)) {
+        page.drawText(wl, { x: margin, y, size: 10, font, color: gray });
+        y -= 13;
+      }
     }
     y -= 6;
     hr(page, y);

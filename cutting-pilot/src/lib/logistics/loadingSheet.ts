@@ -248,6 +248,8 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
   const colDimsX = 330;
   const colQtyRight = 510;
   const colRightX = 330; // right column of the customer/loads block
+  const COL_GUTTER = 14; // gap between the customer/ship-to column and the delivery/loads column
+  const leftColW = colRightX - margin - COL_GUTTER; // max width of the left (customer/ship-to) column
 
   const MIN_Y_FOR_TOTAL = 70; // same rule as cutList.ts
   const LH_PART = 13; // line height for wrapped part-label lines (size 11)
@@ -330,12 +332,20 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
       let ly = y;
       page.drawText("CUSTOMER", { x: margin, y: ly, size: 9, font: fontBold, color: gray });
       ly -= 15;
-      page.drawText(order.customer || "", { x: margin, y: ly, size: 12, font: fontBold, color: black });
-      ly -= 16;
+      // lgx-loadsheet-04: wrap within the left column so a long name never runs under the right column.
+      const custLines = wrapText(order.customer || "", fontBold, 12, leftColW);
+      custLines.forEach((l, i) => {
+        page.drawText(l, { x: margin, y: ly, size: 12, font: fontBold, color: black });
+        ly -= i === custLines.length - 1 ? 16 : 14;
+      });
+      if (!custLines.length) ly -= 16;
       // formatCutListAddress only reads the ship_to_* fields, which LoadingSheetOrder carries.
       for (const line of formatCutListAddress(order as unknown as CutListJob)) {
-        page.drawText(line, { x: margin, y: ly, size: 10, font, color: gray });
-        ly -= 13;
+        // lgx-loadsheet-04: each address line wraps to the left column (e.g. long ship-to company names).
+        for (const wl of wrapText(line, font, 10, leftColW)) {
+          page.drawText(wl, { x: margin, y: ly, size: 10, font, color: gray });
+          ly -= 13;
+        }
       }
 
       let ry = y;
