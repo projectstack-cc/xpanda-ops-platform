@@ -2227,6 +2227,37 @@ current series).
 
 ## Carrier View (v2)
 
+- **mlc-04 — Carrier View scoped per load + loading sheet shows the per-load carrier (Next/Cloudflare Platform Agent
+  §9a; no React UI touch was needed). No migration. Completes the multi-carrier (`mlc-NN`) feature.** Carrier View
+  decided visibility by the **job** carrier, so on a mixed order (job Seal, load 2 our truck) Seal saw the our-truck
+  load and could open its BOL by token. Both are now per load, using the mlc-01 rule. **`lib/carrier/scope.ts`:**
+  `CARRIER_JOB_FILTER` is removed. New `CARRIER_MATCH(expr)` is the one LISMA/SEAL match, and
+  `CARRIER_LOAD_FILTER = CARRIER_MATCH(effectiveCarrierSql("j"))` reuses mlc-01's helpers from
+  `lib/logistics/loadCarriers.ts` rather than a second COALESCE. `resolveCarrierBol` adds
+  `LOAD_CARRIER_JOIN("b")` (`jlc` on `b.job_id` / `b.load_number`); a BOL with `load_number IS NULL` matches no
+  override and falls back to the job carrier, as before. **`lib/carrier/rows.ts`:** `SELECT_SQL` adds
+  `LOAD_CARRIER_JOIN("la")` and filters on `CARRIER_LOAD_FILTER`. The `-NN` suffix logic is untouched; numbering is
+  still against the BOL's `load_count`, so Seal sees `4512-01` even when `-02` is ours, matching the printed BOL.
+  **Per-order aggregation check:** the Upcoming / History board is one row per load (status pill per load), and
+  `LinkedGroup` / `CarrierCompactRow` group by `trailer_group_id` without counting loads, so nothing on that board
+  derives Y from `load_count`, and nothing needed fixing. The only "Loading (X of Y)" / Ready-when-all-loaded logic
+  is the Schedule tab (`api/carrier/schedule`, sheet-driven and order-level); it is out of scope and goes to the
+  backlog. **Grep of `src/app/api/carrier/**` + `src/lib/carrier/**`:** `CARRIER_JOB_FILTER` had two hits,
+  `scope.ts` `resolveCarrierBol` and `rows.ts` `SELECT_SQL`, both converted; no hits remain, and the export is
+  removed. `j.carrier` has no remaining hits; the only reference is inside `effectiveCarrierSql("j")`.
+  `api/carrier/schedule/route.ts`'s `carrier LIKE 'SEAL%' OR carrier LIKE 'LISMA%'` is deliberately left: it
+  filters `schedule_rows.carrier` (the sheet), not jobs. The other carrier routes (`bol`, `carrier-copy`,
+  `charges`, `signed-bol`) go through `resolveCarrierBol`, and `history` goes through `rows.ts`, so all of them
+  inherit the per-load scope. **Loading sheet:** `LoadingSheetLoad` gains `carrier`, the load's effective carrier
+  (`job_load_carriers` override, one chunked query like `timesByJob`, rows past `load_count` ignored; else the
+  order-level `s_carrier || j_carrier`). The order-level `carrier` is unchanged. New pure
+  `sheetCarrierText(order, load)` drives the header "Ship via:" line. It returns the load's carrier only when it
+  differs (case/whitespace-insensitive) from the order carrier, so single-carrier orders print exactly as before.
+  **Verified:** `loadingSheet.selfcheck.ts` **38/38** (`npx tsx`; +6 carrier cases). Read-only production D1
+  sanity check: the old job-level predicate and the new load-level predicate return the same counts on today's
+  data (0 overrides): non-archived loading assignments **189 = 189**, BOLs **443 = 443**. `npx tsc --noEmit`
+  clean; `npm run cf-build` green.
+
 - **carrier-11 — Carrier Upcoming covers today through the next business day (Fri → Mon), weekend loads never hidden (next-cloudflare-platform-agent §9a + react-component-agent §9b). No migration, no schema/permission change.**
   - **Bug:** on Friday the Upcoming tab's second day was calendar tomorrow (Saturday, almost always empty), so Monday's loads were invisible to the carrier until Monday morning.
   - **`nextBusinessDay(date)`** added to `lib/productionSchedule.ts` next to `addDays`: the next Mon–Fri date strictly after `date` (Fri/Sat/Sun → Monday), UTC-safe parsing, no holiday calendar. Self-check cases added to `productionSchedule.selfcheck.ts` (Mon→Tue, Thu→Fri, Fri/Sat/Sun→Mon, Thu 2026-12-31→Fri 2027-01-01, Fri 2027-01-29→Mon 2027-02-01), all passing.
@@ -2943,6 +2974,10 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **mlc-04 (cross-reference) — the loading sheet's "Ship via" shows a load's own carrier when it differs from the
+  order carrier** (`LoadingSheetLoad.carrier`, `sheetCarrierText`). The multi-carrier feature (mlc-01..04) is
+  complete. Full entry under Carrier View (v2).
 
 - **mlc-03 — BOL generation prefills each trailer with its load's carrier, v2 and legacy (React Component Agent
   §9b: `BolGenerateModal.tsx`; Logistics Agent §3: `logistics/load-builder.html`, `logistics/index.html`). No

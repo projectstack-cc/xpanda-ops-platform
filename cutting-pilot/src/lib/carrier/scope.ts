@@ -1,12 +1,22 @@
 // src/lib/carrier/scope.ts
 // Carrier-account guards for token-addressed carrier routes (/v2/api/carrier/*). A BOL resolves
-// ONLY when its job's carrier matches the same filter the carrier board uses — anything else is
-// treated as not found, so the carrier account can never read another carrier's BOL by token.
+// ONLY when its LOAD's effective carrier matches the same filter the carrier board uses — anything
+// else is treated as not found, so the carrier account can never read another carrier's BOL by token.
+// mlc-04: per load — a job_load_carriers override for (job, load) wins, else jobs.carrier
+// (lib/logistics/loadCarriers.ts). A BOL with load_number NULL never matches an override row, so it
+// falls back to the job carrier (the pre-mlc-04 behavior).
 import type { D1Database } from "@cloudflare/workers-types";
+import { LOAD_CARRIER_JOIN, effectiveCarrierSql } from "@/lib/logistics/loadCarriers";
 import { addDays, etDayBoundsUtc, etToday, nextBusinessDay } from "@/lib/productionSchedule";
 
-/** SQL predicate over `jobs j` — the one carrier filter every carrier route uses (rows.ts too). */
-export const CARRIER_JOB_FILTER = "(j.carrier LIKE 'LISMA%' OR j.carrier LIKE 'SEAL%')";
+/** The one LISMA/SEAL carrier match, over any SQL expression. */
+export const CARRIER_MATCH = (expr: string) => `(${expr} LIKE 'LISMA%' OR ${expr} LIKE 'SEAL%')`;
+
+/**
+ * Load-level predicate every carrier route uses (rows.ts too). Requires `jobs j` and the
+ * `LOAD_CARRIER_JOIN(<load alias>)` join (alias `jlc`) in the same query.
+ */
+export const CARRIER_LOAD_FILTER = CARRIER_MATCH(effectiveCarrierSql("j"));
 
 /** Delivered loads stay addable/visible for this many ET calendar days (incl. today). */
 export const CARRIER_HISTORY_DAYS = 7;
@@ -26,8 +36,9 @@ export async function resolveCarrierBol(
   const row = await DB.prepare(
     `SELECT b.* FROM bols b
        JOIN jobs j ON j.id = b.job_id
+       ${LOAD_CARRIER_JOIN("b")}
       WHERE b.access_token = ?
-        AND ${CARRIER_JOB_FILTER}
+        AND ${CARRIER_LOAD_FILTER}
       LIMIT 1`
   )
     .bind(t)

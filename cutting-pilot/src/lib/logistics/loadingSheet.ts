@@ -36,6 +36,8 @@ export interface LoadingSheetLoad {
   manifest: LoadManifestItem[] | null;
   /** dlv-04: this load's delivery display (job_load_times); null → the order-level delivery_time. */
   delivery_time: string | null;
+  /** mlc-04: this load's effective carrier (job_load_carriers override, else the order carrier). */
+  carrier: string | null;
 }
 
 export interface LoadingSheetOrder {
@@ -92,6 +94,18 @@ function manifestToItems(manifest: LoadManifestItem[]): LoadingSheetLineItem[] {
  * even if a manifest exists — the line items carry part numbers and descriptions). 2+ loads: one page
  * per load in load_number order, with that load's manifest items, or the full order's line items +
  * splitMissing when it has none. Each order's pages stay contiguous, in the given (invoice) order. */
+/**
+ * mlc-04: the "Ship via" text for a sheet — the load's own carrier only when it differs
+ * (case/whitespace-insensitive) from the order carrier, else the order carrier, so single-carrier
+ * orders print exactly as before.
+ */
+export function sheetCarrierText(order: Pick<LoadingSheetOrder, "carrier">, load: Pick<LoadingSheetLoad, "carrier"> | null): string {
+  const norm = (x: unknown) => String(x ?? "").trim().toLowerCase();
+  const own = (load?.carrier ?? "").trim();
+  if (own && norm(own) !== norm(order.carrier)) return own;
+  return order.carrier || "";
+}
+
 export function expandLoadingSheets(orders: LoadingSheetOrder[]): LoadingSheetPage[] {
   const pages: LoadingSheetPage[] = [];
   for (const order of orders) {
@@ -298,7 +312,7 @@ export async function buildLoadingSheetPdf(orders: LoadingSheetOrder[]): Promise
       ];
       if (multi) rightCol.push({ text: `Load ${sheet.loadIndex}/${sheet.loadCount}`, size: 11, f: font, color: gray });
       rightCol.push({ text: `Ship date: ${formatShipDate(order.ship_date)}`, size: 11, f: font, color: gray });
-      rightCol.push({ text: `Ship via: ${order.carrier || ""}`, size: 11, f: font, color: gray });
+      rightCol.push({ text: `Ship via: ${sheetCarrierText(order, sheet.load)}`, size: 11, f: font, color: gray });
       const rightColY = [y - 15, y - 33, y - 47, y - 61];
       rightCol.forEach((r, i) => drawRight(page, r.text, r.size, r.f, r.color, rightColY[i]));
       const rightBound = Math.min(...rightCol.map((r) => right - r.f.widthOfTextAtSize(r.text, r.size))) - 16;

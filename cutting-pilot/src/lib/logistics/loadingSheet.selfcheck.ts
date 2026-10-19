@@ -4,7 +4,7 @@
 // lgx-loadsheet-03: + fitInvoiceBox geometry (the header's centered invoice box); now async because the
 // Helvetica-Bold metrics come from a pdf-lib embed. Not part of the production build path.
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { HEADER_BAND_H, INVOICE_BOX_MAX_SIZE, INVOICE_BOX_MIN_SIZE, expandLoadingSheets, fitInvoiceBox, sheetInvoiceText, type LoadingSheetLineItem, type LoadingSheetLoad, type LoadingSheetOrder } from "./loadingSheet";
+import { HEADER_BAND_H, INVOICE_BOX_MAX_SIZE, INVOICE_BOX_MIN_SIZE, expandLoadingSheets, fitInvoiceBox, sheetCarrierText, sheetInvoiceText, type LoadingSheetLineItem, type LoadingSheetLoad, type LoadingSheetOrder } from "./loadingSheet";
 import { parseLoadManifest, type LoadManifestItem } from "./loadManifest";
 
 interface CheckResult {
@@ -40,7 +40,7 @@ function order(inv: string, loads: LoadingSheetLoad[]): LoadingSheetOrder {
 }
 
 function load(n: number | null, manifest: LoadManifestItem[] | null): LoadingSheetLoad {
-  return { load_number: n, trailer_number: n != null ? `T${n}` : null, bay_number: n, bol_number: n != null ? `B${n}` : null, manifest, delivery_time: null };
+  return { load_number: n, trailer_number: n != null ? `T${n}` : null, bay_number: n, bol_number: n != null ? `B${n}` : null, manifest, delivery_time: null, carrier: "Carrier" };
 }
 
 const m = (name: string, sku: string, pieces: number): LoadManifestItem => ({ name, sku, dims: "48 x 24 x 10", pieces });
@@ -163,6 +163,19 @@ export async function runLoadingSheetSelfCheck(): Promise<{ pass: boolean; resul
     check("invoice box: clamped inside [leftBound, rightBound]", !!clamped && clamped.x === 290 && inBounds(clamped, 290, 520), clamped ? `x ${clamped.x}` : "null");
 
     check("invoice box: empty / blank / null invoice -> no box", [fitInvoiceBox("", fontBold, L, R), fitInvoiceBox("   ", fontBold, L, R), fitInvoiceBox(null, fontBold, L, R)].every((b) => b === null));
+  }
+
+  // mlc-04: per-load carrier prints only when it differs from the order carrier.
+  {
+    const o = order("4512", []);
+    check("carrier: same as order -> order carrier", sheetCarrierText(o, { carrier: "Carrier" }) === "Carrier");
+    check("carrier: case/whitespace-equal -> order carrier", sheetCarrierText({ carrier: "Seal Express" }, { carrier: " seal express " }) === "Seal Express");
+    check("carrier: split load -> its own carrier", sheetCarrierText({ carrier: "Seal Express - Dry Van" }, { carrier: "XPanda truck" }) === "XPanda truck");
+    check("carrier: null load / null load carrier -> order carrier",
+      sheetCarrierText(o, null) === "Carrier" && sheetCarrierText(o, { carrier: null }) === "Carrier");
+    check("carrier: no order carrier, no load carrier -> \"\"", sheetCarrierText({ carrier: null }, { carrier: null }) === "");
+    const pages = expandLoadingSheets([order("4512", [{ ...load(1, null), carrier: "Seal Express" }, { ...load(2, null), carrier: "XPanda truck" }])]);
+    check("carrier: expand keeps each load's carrier", pages.map((p) => p.load?.carrier).join("|") === "Seal Express|XPanda truck");
   }
 
   return { pass: results.every((r) => r.pass), results };

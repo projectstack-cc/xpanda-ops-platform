@@ -200,6 +200,8 @@
 
 ## Carrier View (v2)
 
+- [ ] **mlc-04 follow-up — the Carrier View Schedule tab is sheet-driven (`schedule_rows.carrier`, order-level).** A split order still shows there until the sheet itself is per-load. (The per-load multi-carrier feature, mlc-01..04, is otherwise complete.)
+
 - [ ] **carrier-11 follow-up — holiday calendar for nextBusinessDay (plant holidays currently treated as business days).**
 
 - [ ] **carrier-10 follow-up — Steve eyeball History compact + expanded (light & dark, phone + wide monitor).**

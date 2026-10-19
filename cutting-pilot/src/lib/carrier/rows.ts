@@ -11,7 +11,8 @@ import { singleLineAddress } from "@/lib/logistics/address";
 import { resolveOrigin, resolveDestRoute } from "@/lib/logistics/routeCache";
 import type { GeoPoint } from "@/lib/logistics/ors";
 import { fetchBolDocs, fetchBolRowsForJobs, loadKey, pickLoadDocs } from "@/lib/logistics/signedBolDocs";
-import { CARRIER_JOB_FILTER } from "./scope";
+import { CARRIER_LOAD_FILTER } from "./scope";
+import { LOAD_CARRIER_JOIN } from "@/lib/logistics/loadCarriers";
 
 const MAX_WARM_PER_REQUEST = 3;
 const IN_CHUNK = 90;
@@ -201,6 +202,7 @@ const SELECT_SQL = `SELECT
        FROM loading_assignments la
        JOIN jobs j ON j.id = la.job_id
        LEFT JOIN loading_bays lb ON lb.id = la.bay_id
+       ${LOAD_CARRIER_JOIN("la")}
        LEFT JOIN bols b
          ON b.job_id = la.job_id
         AND (
@@ -215,7 +217,7 @@ const SELECT_SQL = `SELECT
                    OR (b3.load_number IS NULL AND (SELECT COUNT(*) FROM bols b2 WHERE b2.job_id = la.job_id) = 1)
                     )
             )
-       WHERE ${CARRIER_JOB_FILTER}
+       WHERE ${CARRIER_LOAD_FILTER}
          AND la.loading_status <> 'archived'`;
 
 export type CarrierView =

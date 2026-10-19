@@ -11,6 +11,9 @@
 // newest BOL's number + load_manifest (the load builder's per-trailer item list). The split into one
 // sheet per load happens in loadingSheet.ts's pure expandLoadingSheets.
 //
+// mlc-04: each load also carries its effective carrier (job_load_carriers override, else the
+// order-level carrier); the sheet prints it only when it differs (loadingSheet.ts sheetCarrierText).
+//
 // dlv-04: each load also carries its own delivery display from job_load_times (one chunked query for
 // every requested job); the order-level delivery_time stays the fallback. An order with no loads gets
 // load 1's time only when load_count = 1 — otherwise its single page keeps the order summary.
@@ -47,7 +50,14 @@ function bolForLoad(bols: BolRow[], loadNumber: number | null): BolRow | null {
 
 const IN_CHUNK = 90; // D1 100-bound-param ceiling
 
-function toLoad(a: AssignmentRow | null, loadNumber: number | null, bols: BolRow[], times: Map<number, string> | undefined): LoadingSheetLoad {
+function toLoad(
+  a: AssignmentRow | null,
+  loadNumber: number | null,
+  bols: BolRow[],
+  times: Map<number, string> | undefined,
+  carriers: Map<number, string> | undefined,
+  orderCarrier: string | null
+): LoadingSheetLoad {
   const bol = bolForLoad(bols, loadNumber);
   return {
     load_number: loadNumber,
@@ -56,6 +66,7 @@ function toLoad(a: AssignmentRow | null, loadNumber: number | null, bols: BolRow
     bol_number: bol?.bol_number ?? null,
     manifest: parseLoadManifest(bol?.load_manifest ?? null),
     delivery_time: loadNumber != null ? times?.get(loadNumber) || null : null,
+    carrier: (loadNumber != null ? carriers?.get(loadNumber) : undefined) || orderCarrier,
   };
 }
 
@@ -119,6 +130,25 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // mlc-04: per-load carrier overrides, same chunking. Rows past the job's load_count are ignored.
+    const loadCountByJob = new Map(rows.map((r: any) => [r.job_id as string, Math.max(Number(r.j_load_count) || 1, 1)]));
+    const carriersByJob = new Map<string, Map<number, string>>();
+    for (let i = 0; i < jobIds.length; i += IN_CHUNK) {
+      const chunk = jobIds.slice(i, i + IN_CHUNK);
+      const cr = await DB.prepare(
+        `SELECT job_id, load_number, carrier FROM job_load_carriers
+          WHERE job_id IN (${chunk.map(() => "?").join(",")}) AND TRIM(carrier) <> ''`
+      )
+        .bind(...chunk)
+        .all<{ job_id: string; load_number: number; carrier: string }>();
+      for (const c of cr.results ?? []) {
+        if (Number(c.load_number) > (loadCountByJob.get(c.job_id) ?? 1)) continue;
+        const m = carriersByJob.get(c.job_id) ?? new Map<number, string>();
+        m.set(Number(c.load_number), c.carrier);
+        carriersByJob.set(c.job_id, m);
+      }
+    }
+
     const orders: LoadingSheetOrder[] = [];
     for (const r of rows) {
       const li = await DB.prepare(
@@ -148,9 +178,13 @@ export async function GET(request: NextRequest) {
       ).sort((a, b) => a - b);
       // No numbered load anywhere: today's behavior — the job's (unnumbered) assignments, if any,
       // with the single-BOL fallback; none at all prints "No trailer assigned".
+      const orderCarrier: string | null = r.s_carrier || r.j_carrier || null;
+      const jobCarriers = carriersByJob.get(r.job_id);
       const loads: LoadingSheetLoad[] = loadNumbers.length
-        ? loadNumbers.map((n) => toLoad(assignments.find((a) => Number(a.load_number) === n) ?? null, n, bols, timesByJob.get(r.job_id)))
-        : assignments.map((a) => toLoad(a, null, bols, timesByJob.get(r.job_id)));
+        ? loadNumbers.map((n) =>
+            toLoad(assignments.find((a) => Number(a.load_number) === n) ?? null, n, bols, timesByJob.get(r.job_id), jobCarriers, orderCarrier)
+          )
+        : assignments.map((a) => toLoad(a, null, bols, timesByJob.get(r.job_id), jobCarriers, orderCarrier));
       // dlv-04: no numbered load → one synthetic page; load 1's time applies only to a one-load order.
       const orderDelivery = r.s_delivery_time || r.j_delivery_time || null;
       const syntheticTime =
