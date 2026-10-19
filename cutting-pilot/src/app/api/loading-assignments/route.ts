@@ -33,6 +33,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";
 import { dispatchNotification } from "@/lib/push";
+import { fetchLiveLoadByJob } from "@/lib/logistics/liveLoad";
 
 const LOADING_FLOW = ["awaiting", "not_started", "loading", "loaded", "in_transit", "delivered"];
 
@@ -76,6 +77,17 @@ async function syncShipmentStatus(db: D1Database, jobId: string, status: string)
   }
 }
 
+// live-01: each assignment is one load — live when its load number is in the job's live_loads
+// (job-level `live` when load_number is null). Best-effort via fetchLiveLoadByJob.
+async function withLiveLoad(DB: D1Database, rows: any[]): Promise<any[]> {
+  const map = await fetchLiveLoadByJob(DB, Array.from(new Set(rows.map((r) => r.job_id).filter(Boolean))));
+  return rows.map((r) => {
+    const info = map.get(r.job_id);
+    const live = !info ? false : r.load_number == null ? info.live : info.live_loads.includes(Number(r.load_number));
+    return { ...r, live_load: live };
+  });
+}
+
 export async function GET(request: NextRequest) {
   const { DB } = await getEnv();
   const url = new URL(request.url);
@@ -91,7 +103,7 @@ export async function GET(request: NextRequest) {
       )
         .bind(jobId)
         .all();
-      return NextResponse.json({ ok: true, assignments: rows.results ?? [] });
+      return NextResponse.json({ ok: true, assignments: await withLiveLoad(DB, (rows.results ?? []) as any[]) });
     } catch (e: any) {
       return NextResponse.json(
         { ok: false, error: "Server error.", detail: String(e?.message || e) },
@@ -160,7 +172,7 @@ export async function GET(request: NextRequest) {
     const rows = await DB.prepare(query)
       .bind(...binds)
       .all();
-    return NextResponse.json({ ok: true, assignments: rows.results ?? [] });
+    return NextResponse.json({ ok: true, assignments: await withLiveLoad(DB, (rows.results ?? []) as any[]) });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "Server error.", detail: String(e?.message || e) },

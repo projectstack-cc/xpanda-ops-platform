@@ -420,6 +420,8 @@
 
 ## Logistics (v2)
 
+- [ ] **live-01 follow-up — Live-load flag on the printed loading sheet / BOL email (live-NN follow-up).** The flag is
+  on every v2 API and screen (live-01/02) but not on paper or in the carrier email.
 - [ ] **mlc-05 follow-up — carrier list management in `/v2/admin`** (rename / deactivate / reorder `bol_carriers`).
   Today the only write path is the dropdown's "+ Add carrier…" (append at `MAX(sort_order) + 10`); anything else
   is a D1 console edit.

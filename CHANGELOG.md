@@ -720,6 +720,8 @@ current series).
 
 ## Orders (v2)
 
+- **live-01 (cross-reference) — Job Board rows (`/v2/api/board`, `/v2/api/board/search`) carry `live_load` /
+  `live_loads` and `load_count`.** Full entry under Logistics (v2).
 - **mlc-05 (cross-reference) — the order-entry Carrier field and the per-load Carrier column are now the shared
   `CarrierSelect` dropdown (with "+ Add carrier…").** Migration-gated. Full entry under Logistics (v2).
 
@@ -1379,6 +1381,8 @@ current series).
 
 ## Schedule Board (v2)
 
+- **live-01 (cross-reference) — `/v2/api/schedule-board` rows carry `live_load` / `live_loads`** (matched rows from the
+  platform job, unmatched from the sheet's carrier/method). Full entry under Logistics (v2).
 - **sched-dual-01 — Separate Cutting / Loading pills on schedule boards; `Cutting – x%` (next-platform-agent §9a + react-component-agent §9b).**
   Root cause: in `deriveOne()` (`lib/schedule-status.ts`) the dock rungs (Shipped → Loaded → Loading) return before
   the cutting rungs, so a job being cut and loaded at once showed only "Loading". The ladder and `deriveOne()` are
@@ -2068,6 +2072,8 @@ current series).
 
 ## Loading Board (v2)
 
+- **live-01 (cross-reference) — `/v2/api/loading-assignments` rows carry per-load `live_load`** (dock board + bay-pair
+  tablet). `/v2/api/loading-board` (Loading TV) unchanged. Full entry under Logistics (v2).
 - **pickup-buffer-01 — Suggested pickup buffer 60 → 30 min; Late Pickup grace 30 → 15 min.** `deliveryTime.ts`
   gains `PICKUP_TRAFFIC_BUFFER_MIN = 30` (was a hard-coded `− 60` in `suggestedPickup()`); `latePickup.ts`
   `LATE_GRACE_MIN` 30 → 15. Every suggested-pickup consumer goes through `suggestedPickup()`, so this moves the TV
@@ -2977,6 +2983,37 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **live-01 — Live-load classifier + `live_load` / `live_loads` flags on every v2 surface's API (Next/Cloudflare
+  Platform Agent §9a). No migration.** A live load = a third-party driver waits at the dock while we load; anything
+  that isn't Seal Express / our own truck, excluding customer pickups and hand deliveries. New single source
+  `lib/logistics/liveLoad.ts`: `isLiveLoadCarrier(carrier, method)` (method `customer pickup`/`cpu`/`hand deliver` →
+  false; blank carrier → false, an unknown carrier is never flagged; whole-word `live` in the carrier text → true,
+  e.g. CS's `KOF "LIVE LOAD WED"` — whole-word because "Hand De**live**r" contains the substring; `seal`/`lisma`/
+  `xpanda`/`xp truck`/`xp co`/`xp ` prefixes → false; `pick up`/`pickup`/`cpu`/`hand deliver` anywhere → false;
+  anything else → true) and `fetchLiveLoadByJob(DB, jobIds)` (jobs carrier/method/load_count + `job_load_carriers`
+  rows `<= load_count`, per-load `effectiveLoadCarrier`, chunked at 90, best-effort → empty map on error). A Seal
+  order with one King of Freight load reports `live: true, live_loads: [2]`. `liveLoad.selfcheck.ts` **30/30**
+  (`npx tsx`): every carrier string in D1 as of 2026-10-19, method overrides, the Seal + L2 KOF per-load case,
+  null `load_count`, customer-pickup method, error → empty map. Additive fields only:
+  - **Schedule board** (`/v2/api/schedule-board`, `types/schedule.ts` + the route's local row interface):
+    `live_load`, `live_loads`. Matched rows follow the platform job (not the sheet); unmatched rows use
+    `isLiveLoadCarrier(row.carrier, row.method)` from the sheet text with `live_loads: null`.
+  - **Job Board** (`lib/boardRows.ts`): `live_load`, `live_loads`, plus `j.load_count` added to the SELECT (live-02
+    needs it for "only some loads live"). `/v2/api/board/search` shares `loadBoardRows` — confirmed, gets the fields.
+  - **Logistics** (`/v2/api/shipments`, `components/logistics/types.ts`): job-linked rows from the map, unlinked
+    shipments from `isLiveLoadCarrier(s.carrier, null)`; enriched in JS right after the list query, before split-day
+    expansion so per-day entries inherit the fields.
+  - **Dock** (`/v2/api/loading-assignments`, `dockTypes.ts`): per-load `live_load` (load number in the job's
+    `live_loads`; job-level `live` when `load_number` is null) via one `withLiveLoad()` helper used by both GET
+    return paths (the `?job_id=` lookup and the board list). The bay-pair tablet (`/v2/dock`, `DockTablet.tsx`)
+    renders from `/v2/api/loading-assignments`; `/v2/api/loading-board` backs only the Loading TV, so it is
+    unchanged.
+  D1 sanity (read-only, 2026-10-19), this + next ship week (`10-19-26`, `10-26-26`): 26 schedule rows, all matched,
+  **1 flagged live** — INV 4510 (King of Freight, loads [1,2]). All Seal / LISMA / `+ XCT` / XPanda / XP TRUCK / CPU
+  / Hand Deliver rows unflagged (INV 4474, carrier `XP TRUCK` with method `customer pickup`, unflagged). No per-load
+  overrides exist in these weeks yet. Verified: anchors `grep -Fc` (dock 2nd anchor = 2 by design, lines 94/163),
+  `tsc --noEmit` clean, `npm run cf-build` green.
 
 - **mlc-05 — one shared carrier dropdown, with "+ Add carrier…", on every v2 carrier input (Next/Cloudflare
   Platform Agent §9a: API + middleware; React Component Agent §9b: `CarrierSelect` + call sites). MIGRATION:

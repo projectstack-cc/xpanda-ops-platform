@@ -27,6 +27,10 @@ export interface ScheduleBoardRow {
   job_id: string | null;
   trailer_group_id: string | null;
   chunks_required: number | null;
+  /** live-01: third-party driver waits at the dock (lib/logistics/liveLoad.ts). */
+  live_load: boolean;
+  /** live-01: live load numbers for a matched row; null when unmatched (sheet-only). */
+  live_loads: number[] | null;
   shifts: string[];
 }
 

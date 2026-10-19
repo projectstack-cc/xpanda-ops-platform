@@ -9,6 +9,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 import { getEnv } from "@/lib/db";
 import { currentAndNextShipWeekTabs } from "@/lib/schedule-ingest";
 import { deriveStatuses, type ScheduleStatus } from "@/lib/schedule-status";
+import { fetchLiveLoadByJob, isLiveLoadCarrier } from "@/lib/logistics/liveLoad";
 
 const GROUP_CHUNK = 90; // D1 100-bound-param ceiling — same approach as deriveStatuses' allByJobIds
 
@@ -126,6 +127,8 @@ interface ScheduleBoardRow {
   job_id: string | null;
   trailer_group_id: string | null;
   chunks_required: number | null;
+  live_load: boolean;
+  live_loads: number[] | null;
   shifts: string[];
 }
 
@@ -162,11 +165,12 @@ export async function GET() {
     const jobIds = Array.from(
       new Set(rows.map((r) => r.match_job_id).filter((id): id is string => !!id))
     );
-    const [statusByJobId, groupIdByJobId, chunksByJobId, shiftsByJobId] = await Promise.all([
+    const [statusByJobId, groupIdByJobId, chunksByJobId, shiftsByJobId, liveByJobId] = await Promise.all([
       deriveStatuses(DB, jobIds),
       fetchGroupIds(DB, jobIds),
       fetchChunksByJob(DB, jobIds),
       fetchShiftsByJob(DB, jobIds),
+      fetchLiveLoadByJob(DB, jobIds),
     ]);
 
     // One entry per calendar date (ship_date is unique across the two fetched weeks — they
@@ -207,6 +211,12 @@ export async function GET() {
         job_id: row.match_job_id,
         trailer_group_id: unmatched ? null : groupIdByJobId.get(row.match_job_id!) ?? null,
         chunks_required: unmatched ? null : chunksByJobId.get(row.match_job_id!) ?? null,
+        // live-01: a matched row follows the platform job (carrier + per-load overrides), not the
+        // sheet; an unmatched row falls back to the sheet's carrier/method text.
+        live_load: unmatched
+          ? isLiveLoadCarrier(row.carrier, row.method)
+          : liveByJobId.get(row.match_job_id!)?.live ?? false,
+        live_loads: unmatched ? null : liveByJobId.get(row.match_job_id!)?.live_loads ?? [],
         // sched-shifts-02: hide shift chips once cutting is complete (see isCuttingComplete in
         // lib/schedule-status.ts). Keys on completion, not the status label, so a job that is
         // Loading after cutting finished clears, while one loading-but-still-cutting keeps its

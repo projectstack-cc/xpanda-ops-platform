@@ -37,6 +37,8 @@ export interface DockAssignment {
   photo_count: number;
   bol_count: number;
   packing_instructions: string | null;
+  /** live-01: this load is live (third-party driver waits at the dock). */
+  live_load?: boolean;
 }
 
 export interface DockBay {

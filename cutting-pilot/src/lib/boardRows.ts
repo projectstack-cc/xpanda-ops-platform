@@ -5,6 +5,7 @@
 // is_loading enrichment. Adds `is_archived` (archived_at IS NOT NULL).
 import type { D1Database } from "@cloudflare/workers-types";
 import { parseProcesses } from "@/lib/processes";
+import { fetchLiveLoadByJob } from "@/lib/logistics/liveLoad";
 
 // `whereSql` / `orderSql` are trusted SQL fragments written by the caller (no user text);
 // user input goes through `binds` only.
@@ -25,7 +26,7 @@ export async function loadBoardRows(
     SELECT j.id, j.customer, j.po_number, j.invoice_number, j.status, j.priority, j.priority_level,
            j.ship_date, j.notes, j.cutting_instructions, j.packing_instructions,
            j.ship_to_company, j.ship_to_attention, j.ship_to_street, j.ship_to_city,
-           j.ship_to_state, j.ship_to_zip, j.processes, j.trailer_group_id, j.archived_at,
+           j.ship_to_state, j.ship_to_zip, j.processes, j.trailer_group_id, j.archived_at, j.load_count,
            EXISTS (SELECT 1 FROM cutting_lines cl
                      WHERE cl.job_id = j.id AND cl.line_status = 'in_progress') AS in_cutting,
            EXISTS (SELECT 1 FROM loading_assignments la
@@ -59,6 +60,9 @@ export async function loadBoardRows(
     }
   }
 
+  // live-01: per-job live-load flags (best-effort; empty map on error).
+  const liveMap = await fetchLiveLoadByJob(DB, ids);
+
   return jobs.map((j) => ({
     ...j,
     in_cutting: !!j.in_cutting,
@@ -66,5 +70,7 @@ export async function loadBoardRows(
     is_archived: j.archived_at != null,
     assignees: assigneeMap[j.id] ?? [],
     processes: parseProcesses(j.processes),
+    live_load: liveMap.get(j.id)?.live ?? false,
+    live_loads: liveMap.get(j.id)?.live_loads ?? [],
   }));
 }

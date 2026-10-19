@@ -20,6 +20,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { D1Database } from "@cloudflare/workers-types";
 import { getEnv } from "@/lib/db";
 import { normalizeAddressKey } from "@/lib/logistics/freightInvoice";
+import { fetchLiveLoadByJob, isLiveLoadCarrier } from "@/lib/logistics/liveLoad";
 import { expandShipmentDays, inWeek, sortEntries, weekTileCounts, type LoadDayRow } from "@/lib/logistics/splitDays";
 
 interface CacheRow {
@@ -305,6 +306,17 @@ export async function GET(request: NextRequest) {
 
     const rows = (listResult.results ?? []) as any[];
     await attachDistanceEta(DB, rows);
+    // live-01: job-linked rows follow the platform (job carrier + per-load overrides); unlinked
+    // shipments fall back to their own carrier text. Before expand() so split-day entries inherit it.
+    const liveMap = await fetchLiveLoadByJob(
+      DB,
+      Array.from(new Set(rows.map((r) => r.job_id).filter((v): v is string => !!v)))
+    );
+    for (const r of rows) {
+      const info = r.job_id ? liveMap.get(r.job_id) : undefined;
+      r.live_load = info ? info.live : isLiveLoadCarrier(r.carrier, null);
+      r.live_loads = info ? info.live_loads : [];
+    }
 
     // split-days-01: one entry per (order, effective ship day). Explicit job/shipment lookups keep the
     // 1-row-per-shipment shape (BolViewerModal / DockBoard depend on it) and are never expanded.

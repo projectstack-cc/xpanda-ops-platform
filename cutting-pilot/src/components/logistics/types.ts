@@ -60,6 +60,10 @@ export interface ShipmentListItem {
   trailer_numbers?: string | null;
   /** lgx-rows-01: the linked job's method is 'customer pickup' (set on the Orders form). */
   is_customer_pickup?: number | boolean;
+  /** live-01: third-party driver waits at the dock (lib/logistics/liveLoad.ts). */
+  live_load?: boolean;
+  /** live-01: live load numbers (job-linked rows; [] when unlinked). */
+  live_loads?: number[];
   /** split-days-01: effective ship day of this entry (per-load day for split orders, else the order's ship_date). */
   day_date?: string | null;
   /** split-days-01: load numbers shipping on day_date when the order is split across days; null when unsplit. */
