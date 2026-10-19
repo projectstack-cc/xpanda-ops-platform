@@ -138,11 +138,13 @@ export function runForcedPackSelfCheck(): { pass: boolean; results: CheckResult[
   }
 
   // 5. Stability-warning re-indexing. Box truck 1 is filled exactly by a 52×24 filler (6 rows × 3
-  //    across × 10 high = 180 pieces); the tall 10×10×40 pieces (40 > 3 × 10) land on forced trailer
-  //    2, whose pack() call numbers it "trailer 0" — it must come out as "trailer 1 …".
+  //    across × 10 high = 180 pieces); the tall 10×20×40 pieces (40 > 3 × 10) land on forced trailer
+  //    2, whose pack() call numbers it "trailer 0" — it must come out as "trailer 1 …". (lb-box-01:
+  //    the box truck is now 91" wide, so 3 × 24" filler leaves a 19" gap — the tall piece is now 20"
+  //    wide (was 10×10) so it can't ride in that gap and the premise holds.)
   {
     const filler: PackSku = { id: "FILL", name: "filler", sku: "FILL", length: 52, width: 24, height: 10, weight: 1, category: "Blocks", allowRotation: false };
-    const tall: PackSku = { id: "TALL", name: "tall", sku: "TALL", length: 10, width: 10, height: 40, weight: 1, category: "Blocks", allowRotation: false };
+    const tall: PackSku = { id: "TALL", name: "tall", sku: "TALL", length: 10, width: 20, height: 40, weight: 1, category: "Blocks", allowRotation: false };
     const cart: CartLine[] = [
       { skuId: "FILL", qty: 180 },
       { skuId: "TALL", qty: 2 },

@@ -3023,6 +3023,25 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-box-01 — Box truck interior width 72" → 91" (legacy + v2 Load Builder). Logistics Agent §3
+  (`logistics/load-builder.html`) + Next/Cloudflare Platform Agent §9a (`cutting-pilot/src/lib/packEngine.ts`). No
+  migration, no API change.** The "26ft Box Truck" preset in `TRAILER_TYPES` now reads `width: 91` on both surfaces
+  (the real truck); length 312, height 108 and maxWeight 28000 are unchanged. One data constant per side: no
+  auto-pack algorithm code and no `STORAGE_KEY` touched. Sweep (`26ft Box Truck`, `width: 72`): no other copy of the
+  box-truck width exists (labels, i18n); the only other `width: 72` hit is an unrelated 72px CSS rule in
+  load-builder.html.
+  - **Saved loads:** a saved load that carries a frozen `trailer.dims` (v2 `editedPlan`, legacy saved layouts) keeps
+    72" until it is re-packed. That is expected, not a bug.
+  - **Selfcheck adjusted (`forcedPack.selfcheck.ts` §5, stability re-indexing):** the fixture fills box truck 1 with
+    3 × 24" filler columns and expects the tall stability-warning pieces on forced trailer 2. At 91" the 3 columns
+    leave a 19" gap and the old 10×10 tall piece rode in it on trailer 1 (2 failures — a direct consequence of the
+    width). The tall piece is now 10×20×40 (still 40 > 3 × 10, so it still warns; 20" > the 19" gap), which restores
+    the premise; the assertions are unchanged.
+  - **Verified:** legacy inline scripts `node --check` OK. Selfchecks via `npx tsx`, before → after: packEngine
+    185/185 → 185/185 (G-series reads the box truck dynamically; G4's premise — fixture exceeds one box truck's
+    length — still holds), forcedPack 26/26 → 24/26 → 26/26 after the fixture fix, savedLoad 43/43, loadEditor
+    281/281, dissolve 21/21, stackPlanner 29/29, loadingDiagramPdf 42/42. `npx tsc --noEmit` clean; `npm run
+    cf-build` green.
 - **live-03 — Live Load arrival time (per load) + red LIVE LOAD on the loading sheet (Next/Cloudflare Platform Agent
   §9a: table, API, loading-sheet PDF; React Component Agent §9b: edit modal + displays; §9 for one legacy delete line).
   MIGRATION: `DB_Migrations/live-03-job-live-load-times.sql` (gitignored) — new table `job_live_load_times (job_id,
@@ -7405,6 +7424,8 @@ current series).
 
 ## Logistics
 
+- **lb-box-01 (cross-reference) — `logistics/load-builder.html`: "26ft Box Truck" width 72" → 91".** Data constant
+  only; no algorithm or `STORAGE_KEY` change. Full entry under Logistics (v2).
 - **live-03 (cross-reference) — legacy job delete (`_worker.js/routes/jobs.js`) also deletes `job_live_load_times`
   rows**, right after `job_load_carriers`. Migration ran in D1 before this shipped. Full entry under Logistics (v2).
 - **mlc-03 (cross-reference) — `logistics/load-builder.html` + `logistics/index.html`.** Build Load and the

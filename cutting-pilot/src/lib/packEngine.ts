@@ -42,7 +42,7 @@ export const TRAILER_TYPES: TrailerType = {
   "48ft Flatbed": { length: 576, width: 98, height: 108, maxWeight: 44000 },
   "40ft Container": { length: 480, width: 90, height: 102, maxWeight: 55000 },
   "20ft Container": { length: 240, width: 90, height: 86, maxWeight: 44000 },
-  "26ft Box Truck": { length: 312, width: 72, height: 108, maxWeight: 28000 },
+  "26ft Box Truck": { length: 312, width: 91, height: 108, maxWeight: 28000 },
 };
 
 // lbr-rot-01: the largest envelope any trailer offers — max length, max width and max height across
