@@ -477,6 +477,7 @@ You build and maintain the QC module (`/qc/`). This covers scrap logging, final 
 - `GET /api/parts` — Part lookup for inspections
 
 ## DB Tables You Touch
+- **Native scrap table is `scrap_events` (qc-04); `scrap_log` is a compatibility VIEW over its non-voided rows — never INSERT into it.**
 - `scrap_log` — id, job_id, part_id, reason_code, weight, dimensions, density, disposition, created_by
 - `completions` — id, job_id, inspector, results{}, pass_count, fail_count, pdf_base64, created_at
 - `incidents` — id, type, severity, description, job_id, customer_id, root_cause, corrective_action, status, created_by

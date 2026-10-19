@@ -7,6 +7,8 @@
 // each chip (inspector · ET time · Drive status, plus a stale-line flag). View-only users see results.
 // qc-03: Drive status = a PDF link once synced, "Drive failed" (error on hover) or "pending (retrying)"
 // when stuck, with a Retry Drive button for `qc` edit (POST /v2/api/qc/inspections/:id/drive).
+// qc-04: "Scrap log" opens ScrapLogModal (native scrap_events) instead of leaving for the legacy form;
+// ?scrap=1 (where the retired qc/scrap-log.html redirects) opens it on load.
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Calculator, ChevronDown, ChevronRight, ClipboardList, FileText, RefreshCw, TriangleAlert } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
@@ -18,6 +20,7 @@ import DayGroupHeader from "@/components/dashboard/DayGroupHeader";
 import MetricTile from "@/components/dashboard/MetricTile";
 import DensityCalculatorModal from "@/components/qc/DensityCalculatorModal";
 import InspectModal from "@/components/qc/InspectModal";
+import ScrapLogModal from "@/components/qc/ScrapLogModal";
 import { formatEtDateTime, parseStoredUtc } from "@/lib/etDateTime";
 import { getMondayForOffset } from "@/lib/week";
 import {
@@ -226,6 +229,16 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
   const [stateFilter, setStateFilter] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [densityOpen, setDensityOpen] = useState(false);
+  const [scrapOpen, setScrapOpen] = useState(false);
+
+  // ?scrap=1 opens the Scrap log popup (the legacy scrap-log.html redirect lands here), then drops the param.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("scrap") !== "1") return;
+    setScrapOpen(true);
+    url.searchParams.delete("scrap");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   const weekInfo = useMemo(() => getMondayForOffset(weekOffset), [weekOffset]);
 
@@ -348,11 +361,11 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
               <Calculator size={14} className="text-muted" aria-hidden="true" />
               Density calculator
             </button>
-            {/* Legacy pages until they port — plain <a>, they leave the v2 app. */}
-            <a href="/qc/scrap-log.html" className={HEADER_BTN}>
+            <button type="button" className={HEADER_BTN} onClick={() => setScrapOpen(true)}>
               <ClipboardList size={14} className="text-muted" aria-hidden="true" />
               Scrap log
-            </a>
+            </button>
+            {/* Incident report is legacy until it ports — plain <a>, it leaves the v2 app. */}
             <a href="/qc/incident-report.html" className={HEADER_BTN}>
               <TriangleAlert size={14} className="text-muted" aria-hidden="true" />
               Incident report
@@ -553,6 +566,12 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
       </div>
 
       <DensityCalculatorModal isOpen={densityOpen} onClose={() => setDensityOpen(false)} />
+      <ScrapLogModal
+        isOpen={scrapOpen}
+        onClose={() => setScrapOpen(false)}
+        canEdit={canInspect}
+        mondayStr={weekInfo.mondayStr}
+      />
       {inspectTarget && (
         <InspectModal
           isOpen

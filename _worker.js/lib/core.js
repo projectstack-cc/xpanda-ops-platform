@@ -213,7 +213,6 @@ export const API_PERMISSION_MAP = [
   { pattern: /^\/api\/parts/,             key: 'manufacturing.calculators' },
   { pattern: /^\/api\/combos/,            key: 'manufacturing.calculators' },
   { pattern: /^\/api\/cutting/,           key: 'manufacturing.cutting' },
-  { pattern: /^\/api\/scrap-log/,         key: 'qc' },
   { pattern: /^\/api\/completions/,       key: 'qc' },
   { pattern: /^\/api\/reports/,           key: 'reports' },
 ];

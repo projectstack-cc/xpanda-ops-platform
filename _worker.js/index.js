@@ -6,7 +6,7 @@ import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers,
          handleApiSavedLoads } from './routes/bols.js';
 import { handleApiJobs, handleApiShipments, handleApiAddressValidate, handleApiAssignableUsers, handleHoleyChunksPreview, handleHoleyChunksBackfill } from './routes/jobs.js';
 import { handleApiParts, handleApiCombos } from './routes/production.js';
-import { handleApiCompletions, handleApiScrapLog } from './routes/qc.js';
+import { handleApiCompletions } from './routes/qc.js';
 import { handleApiReportsScrapSummary, handleApiReportsScrapTrend, handleApiReportsScrapReasons,
          handleIncidentTrend, handleIncidentSummary, handleIncidentList, handleIncidentDetail,
          handleCuttingActivityReport } from './routes/reports.js';
@@ -36,7 +36,6 @@ const API_ROUTES = [
 
   // QC
   { path: '/api/completions', handler: (req, env) => handleApiCompletions(req, env) },
-  { path: '/api/scrap-log',   handler: (req, env) => handleApiScrapLog(req, env) },
 
   // Reports (scrap)
   { path: '/api/reports/scrap-summary', handler: (req, env) => handleApiReportsScrapSummary(req, env) },

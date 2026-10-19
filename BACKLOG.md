@@ -115,7 +115,7 @@
 
 ### QC · v2 IN PROGRESS at /v2/qc (qc-NN) — unlinked
 
-- [ ] Port `qc/scrap-log.html` onto the native Scrap Database (see that section); don't port the Google-Sheets-mirror design.
+- [ ] Retire the `qc/scrap-log.html` redirect stub + its qc-i18n keys once logs show no hits (qc-04).
 - [ ] qc follow-up — view a past inspection (samples + nominals) from the drill-down; today only the latest result chip shows.
 - [ ] qc follow-up — "Line changed since inspection" only flags; decide whether a changed line should drop back to Not inspected.
 - [ ] qc follow-up — the Inspection Tool Apps Script is anonymous with no shared secret (as legacy always was). At QC cutover, when legacy qc/*.html stop posting, add a secret check in doPost and send it from the Worker.
@@ -669,18 +669,21 @@ schedule badge):**
 
 ---
 
-## Scrap Database (native — replaces Google Sheets) · SCOPED, SEPARATE PROJECT
+## Scrap Database (native) · SHIPPED qc-04 — scrap_events
 
 > Move scrap off the Google-Sheets mirror (`mirrorScrapLogToSheet`) onto a first-class platform
 > database. Becomes the persistence target for the v2 CompleteLineModal scrap section.
-- [ ] Design the native scrap schema/UI (own dashboard + entry); decide whether to extend the
-      existing `scrap_log` table or supersede it
-- [ ] Add "Laminate" to the scrap line/machine options for cutting-floor capture (current QC enum
+- [x] Design the native scrap schema/UI (own dashboard + entry); decide whether to extend the
+      existing `scrap_log` table or supersede it — qc-04: `scrap_events` supersedes it; `scrap_log`
+      is a compatibility VIEW
+- [x] Add "Laminate" to the scrap line/machine options for cutting-floor capture (current QC enum
       omits it)
-- [ ] Retire the Google-Sheets mirror; migrate existing scrap_log consumers (QC scrap-log form,
-      reports) to the native store
-- [ ] Wire v2 cutting CompleteLineModal scrap section to the native API
-- [ ] Batch scrap entry (several events in one submit) as part of the native scrap UI.
+- [x] Retire the Google-Sheets mirror; migrate existing scrap_log consumers (QC scrap-log form,
+      reports) to the native store — form + mirror retired; reports read the compat VIEW
+- [ ] **qc-05** — Wire v2 cutting CompleteLineModal scrap section to the native API
+- [x] Batch scrap entry (several events in one submit) as part of the native scrap UI.
+- [ ] Reports port: read scrap_events directly and drop the scrap_log compatibility VIEW.
+- [ ] Steve: delete the SCRAP_MIRROR_URL secret from the legacy Pages project and archive the "xpanda_scrap_mirror" Apps Script.
 
 ---
 
