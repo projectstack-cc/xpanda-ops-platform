@@ -8,6 +8,7 @@
 // check is specifically testing that a violation fires — per Part D's stated discipline.
 import type { CartLine, PackColumn, PackOptions, PackPlan, PackRow, PackSku, PackTrailer, Dimensions } from "./packEngine";
 import { DEFAULT_PACK_OPTIONS, pack, TRAILER_TYPES, HOLEY_BOARD_CATEGORY } from "./packEngine";
+import { proposeDissolve } from "./dissolve";
 import {
   createEditorState,
   moveColumn,
@@ -1231,6 +1232,49 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     //    or disappear — the used length (the sum of rowLengths) can't grow either. It stays in as a
     //    defensive check; the harness sweep over every real mixed-depth trailer confirms it never fires.
     check("lbr-10 mixed 3: guard never fired on these fixtures", [shifted.note, nm.note].every((n) => n === null));
+  }
+
+  // lb-box-03 H8. On-edge columns are locked in Customize; dissolve never moves or targets them.
+  {
+    const BOX = TRAILER_TYPES["26ft Box Truck"];
+    const hb6: PackSku = { id: "EDGE6", name: "6in holey", sku: "EDGE6", length: 48, width: 24, height: 6, weight: 1, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
+    const opts = { ...DEFAULT_PACK_OPTIONS };
+    const cart: CartLine[] = [{ skuId: "EDGE6", qty: 198 }];
+    const plan = pack(cart, [hb6], BOX, opts);
+    const st = createEditorState(plan, BOX, opts, cart, [hb6]);
+    const rows = st.plan.trailers[0].rows;
+    const ri = rows.findIndex((r) => r.columns.some((c) => c.onEdge));
+    const edgeRef = { t: 0, r: ri, c: rows[ri].columns.findIndex((c) => c.onEdge) };
+    const flatRef = { t: 0, r: ri, c: rows[ri].columns.findIndex((c) => !c.onEdge) };
+    const otherRi = rows.findIndex((r, i) => i !== ri && r.columns.some((c) => !c.onEdge));
+    const otherFlat = { t: 0, r: otherRi, c: rows[otherRi].columns.findIndex((c) => !c.onEdge) };
+    check("H8 fixture: the box-truck plan has on-edge columns", ri >= 0 && edgeRef.c >= 0 && flatRef.c >= 0 && otherRi >= 0);
+    check("H8: an edge column can't be pulled to holding", pullToHolding(st, edgeRef) === st);
+    check("H8: an edge column can't be moved to a slot", moveToSlot(st, { kind: "column", ref: edgeRef }, { t: 0, r: otherRi, slot: 0 }) === st);
+    check("H8: pieces can't come off an edge column's top", takeToHolding(st, { kind: "top", ref: edgeRef, count: 1 }) === st);
+    check("H8: nothing stacks onto an edge column", evaluateStackTarget(st, { kind: "top", ref: otherFlat, count: 1 }, edgeRef).level === "no");
+    check("H8: an edge column can't be swapped", swapColumns(st, flatRef, edgeRef) === st && evaluateSwapTarget(st, otherFlat, edgeRef).level === "no");
+    check("H8: an edge column's count can't change", setLayerCount(st, edgeRef, 0, 1) === st);
+    check("H8: a row holding edge columns can't be deleted", removeRow(st, 0, ri) === st);
+    const held = takeToHolding(st, { kind: "top", ref: otherFlat, count: 1 });
+    check("H8: a flat stack can't be placed into a full wall slot", evaluateSlotTarget(held, { kind: "holding", index: held.holding.length - 1 }, { t: 0, r: ri, slot: rows[ri].columns.length }).level === "no");
+    const edgesBefore = JSON.stringify(st.plan.trailers[0].rows.map((r) => r.columns.filter((c) => c.onEdge).map((c) => [c.posY, c.colWidth, c.stackCount])));
+    const shifted = shiftToRear(st);
+    const edgesAfter = JSON.stringify(shifted.plan.trailers[0].rows.map((r) => r.columns.filter((c) => c.onEdge).map((c) => [c.posY, c.colWidth, c.stackCount])));
+    check("H8: Shift to rear leaves edge columns in place", edgesBefore === edgesAfter, edgesAfter);
+    const swapped = swapColumns(st, flatRef, otherFlat);
+    check("H8: an allowed edit (swap two flat stacks) still validates", swapped !== st && validateForApply(swapped).length === 0, JSON.stringify(validateForApply(swapped)));
+    // Dissolve: two box trucks; the second's pieces may go onto the first, never into its slot, and
+    // the first's edge boards are never offered as a source.
+    const cart2: CartLine[] = [{ skuId: "EDGE6", qty: 396 + 10 }];
+    const plan2 = pack(cart2, [hb6], BOX, opts);
+    const st2 = createEditorState(plan2, BOX, opts, cart2, [hb6]);
+    const isEdgeAt = (ti: number, r: number, c: number) => st2.plan.trailers[ti]?.rows[r]?.columns[c]?.onEdge === true;
+    const fromLast = proposeDissolve(st2, st2.plan.trailers.length - 1);
+    const fromFirst = proposeDissolve(st2, 0);
+    check("H8 fixture: dissolve plan has 2 box trucks with edge columns", st2.plan.trailers.length === 2 && st2.plan.trailers.some((t) => t.rows.some((r) => r.columns.some((c) => c.onEdge))), String(st2.plan.trailers.length));
+    check("H8: dissolve never targets an edge column", [...fromLast.moves, ...fromFirst.moves].every((m) => !isEdgeAt(m.toTi, m.toRi, m.toCi)));
+    check("H8: dissolve never sources from an edge column", fromFirst.moves.every((m) => !isEdgeAt(0, m.fromRi, m.fromCi)) && fromLast.moves.every((m) => !isEdgeAt(fromLast.srcTi, m.fromRi, m.fromCi)));
   }
 
   return { pass: results.every((r) => r.pass), results };

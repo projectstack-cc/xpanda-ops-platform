@@ -165,5 +165,20 @@ export function runForcedPackSelfCheck(): { pass: boolean; results: CheckResult[
     check("runnerHeight 4: no stack taller than 104″", tallest <= 104 + 1e-6, String(tallest));
   }
 
+  // lb-box-03 H6. Forced box truck: on-edge tiers follow the runner (floor((108 − runner) / 24)), and
+  // only the box truck in a [box truck, 53ft] queue gets edge columns.
+  {
+    const hb6: PackSku = { id: "EDGE6", name: "6in holey", sku: "EDGE6", length: 48, width: 24, height: 6, weight: 1, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
+    const cart: CartLine[] = [{ skuId: "EDGE6", qty: 600 }];
+    for (const [runner, tiers] of [[4, 4], [13, 3]] as const) {
+      const opts = { ...OPTS, runnerHeight: runner };
+      const forced = packForced(cart, [hb6], [{ type: BOX, count: 1 }], T53, opts);
+      const edgeTiers = forced.trailers[0]?.rows.flatMap((r) => r.columns.filter((c) => c.onEdge).map((c) => c.stackCount)) ?? [];
+      check(`H6: forced box truck, runner ${runner}" → ${tiers} tiers on edge`, forced.trailers[0]?.type === BOX && edgeTiers.length > 0 && Math.max(...edgeTiers) === tiers, JSON.stringify(edgeTiers));
+      check(`H6: runner ${runner}" — only the box truck has edge columns`, forced.trailers.slice(1).every((t) => t.type === T53 && !t.rows.some((r) => r.columns.some((c) => c.onEdge))), JSON.stringify(forced.trailers.map((t) => t.type)));
+      check(`H6: runner ${runner}" — conserved, validatePlan clean`, conserves(forced, cart) && validatePlan(forced, cart, [hb6], opts).length === 0, JSON.stringify(validatePlan(forced, cart, [hb6], opts)));
+    }
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }

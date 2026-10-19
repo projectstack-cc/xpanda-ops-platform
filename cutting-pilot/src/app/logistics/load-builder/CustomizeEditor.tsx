@@ -72,6 +72,8 @@ import {
   evaluateSwapTarget,
   swapColumns,
   addToHolding,
+  isEdgeLocked,
+  EDGE_LOCKED_REASON,
   NEW_ROW,
   type EditorState,
   type ColumnRef,
@@ -131,6 +133,7 @@ const key = (r: ColumnRef) => `${r.t}:${r.r}:${r.c}`;
 const sameRef = (a: ColumnRef, b: ColumnRef) => a.t === b.t && a.r === b.r && a.c === b.c;
 
 function sizeLabel(column: PackColumn): string {
+  if (column.onEdge) return column.layers.map((l) => `${column.colWidth}″ on edge ×${l.count}`).join(" + ");
   return column.layers.map((l) => `${l.unitHeight}″×${l.count}`).join(" + ");
 }
 
@@ -262,6 +265,11 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
 
   function handleTapStack(t: number, r: number, c: number) {
     const ref = { t, r, c };
+    // lb-box-03: on-edge boards are locked (the diagram disables them too; this is the backstop).
+    if (isEdgeLocked(state, ref)) {
+      setToast(`Can't move that — ${EDGE_LOCKED_REASON}.`);
+      return;
+    }
     if (armed) {
       if (selection?.kind === "trailer" && sameRef(selection.ref, ref)) {
         cancelAll();

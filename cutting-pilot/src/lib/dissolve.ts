@@ -126,6 +126,7 @@ function expandSourceUnits(state: EditorState, srcTi: number, skuById: Map<strin
   if (!trailer) return units;
   trailer.rows.forEach((row, ri) => {
     row.columns.forEach((col, ci) => {
+      if (col.onEdge) return; // lb-box-03: on-edge boards are locked — they stay on the source trailer
       col.layers.forEach((layer, li) => {
         const weight = skuById.get(layer.skuId)?.weight ?? 0;
         for (let n = 0; n < layer.count; n++) {
@@ -178,6 +179,7 @@ export function proposeDissolve(state: EditorState, srcTi: number): DissolveProp
           // differs from the unit's, producing an orientation the SKU doesn't have (piece-fits-
           // trailer failure at apply). Stacking into an existing column never changes that
           // column's own footprint, so no rowLength check is needed here at all.
+          if (col.onEdge) continue; // lb-box-03: never a receiver
           if (!approxEq(col.colLength, unit.length) || !approxEq(col.colWidth, unit.width)) continue;
 
           const distinctSkuIds = new Set(col.layers.map((l) => l.skuId));

@@ -6,6 +6,7 @@
 
 import { Check, X } from "lucide-react";
 import type { PackColumn, Dimensions, PackOptions } from "@/lib/packEngine";
+import { useLang } from "@/components/lang";
 
 export interface SelectedColumnDetail {
   trailerIndex: number;
@@ -21,6 +22,7 @@ interface ColumnDetailPanelProps {
 }
 
 export default function ColumnDetailPanel({ selected, dims, options }: ColumnDetailPanelProps) {
+  const { t } = useLang();
   if (!selected) {
     return (
       <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
@@ -57,6 +59,19 @@ export default function ColumnDetailPanel({ selected, dims, options }: ColumnDet
         </p>
       </div>
 
+      {column.onEdge && baseLayer ? (
+        // lb-box-03: an on-edge column is one SKU stood on edge — its readout is thickness × boards,
+        // not a flat layer table (its layer unitHeight is the 24″ tier, not a size).
+        <div>
+          <div className="text-[13px] text-muted mb-1">{t("lb.edge.onEdge")}</div>
+          <p className="text-sm text-text">
+            <span className="font-semibold">
+              {t("lb.edge.onEdge")} · {column.colWidth}&quot; × {baseLayer.count} {t("lb.edge.boards")}
+            </span>{" "}
+            <span className="text-muted">— {baseLayer.skuName}</span>
+          </p>
+        </div>
+      ) : (
       <div>
         <div className="text-[13px] text-muted mb-1">Layers</div>
         <div className="overflow-x-auto">
@@ -106,6 +121,7 @@ export default function ColumnDetailPanel({ selected, dims, options }: ColumnDet
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 }

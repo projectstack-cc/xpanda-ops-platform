@@ -13,7 +13,8 @@ import {
   ORDER_LINKED_EXPIRES_AT,
   type SavedLoadSnapshot,
 } from "./savedLoad";
-import type { PackPlan } from "./packEngine";
+import type { PackPlan, PackSku } from "./packEngine";
+import { pack, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, HOLEY_BOARD_CATEGORY } from "./packEngine";
 import type { PulledLoadSource } from "@/components/logistics/JobPullModal";
 import { LOAD_BUILDER_FIXTURES } from "./loadBuilderFixtures";
 
@@ -421,6 +422,24 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
     const bad = deserializeSnapshot(JSON.stringify({ ...forced, forcedTrailers: [{ type: 5 }] }));
     check("forcedTrailers: a malformed value degrades to off, row still loads", bad.ok === true && bad.snapshot.forcedTrailers === null);
     check("forcedTrailers: changes snapshotKey (dirty check sees the queue)", snapshotKey(forced) !== snapshotKey(off) && snapshotKey(forced) !== snapshotKey({ ...forced, forcedTrailers: [{ type: "26ft Box Truck", count: 3 }] }));
+  }
+
+  // lb-box-03 H8. onEdge round-trips through a saved editedPlan; a snapshot without it stays as-is.
+  {
+    const hb6: PackSku = { id: "EDGE6", name: "6in holey", sku: "EDGE6", length: 48, width: 24, height: 6, weight: 1, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
+    const edgePlan = pack([{ skuId: "EDGE6", qty: 198 }], [hb6], TRAILER_TYPES["26ft Box Truck"], DEFAULT_PACK_OPTIONS);
+    const count = (p: PackPlan | null) => (p ? p.trailers.reduce((s, t) => s + t.rows.reduce((s2, r) => s2 + r.columns.filter((c) => c.onEdge === true).length, 0), 0) : -1);
+    const snapshot = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: null, trailerTypeKey: "26ft Box Truck", runnerHeight: 0, editedPlan: edgePlan });
+    const result = deserializeSnapshot(serializeSnapshot(snapshot));
+    check(
+      "H8: onEdge survives a save/load round trip",
+      result.ok === true && count(edgePlan) > 0 && count(result.snapshot.editedPlan) === count(edgePlan) && JSON.stringify(result.snapshot) === JSON.stringify(snapshot),
+      String(result.ok ? count(result.snapshot.editedPlan) : result)
+    );
+    const old = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: null, trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: makePlan({}) });
+    const oldRaw = serializeSnapshot(old);
+    const oldBack = deserializeSnapshot(oldRaw);
+    check("H8: an old snapshot (no onEdge anywhere) loads unchanged", oldBack.ok === true && JSON.stringify(oldBack.snapshot) === JSON.stringify(old) && !oldRaw.includes("onEdge"));
   }
 
   return { pass: results.every((r) => r.pass), results };

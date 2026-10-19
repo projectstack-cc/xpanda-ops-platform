@@ -1669,5 +1669,140 @@ export function runPackEngineSelfCheck(): { pass: boolean; results: CheckResult[
     );
   }
 
+  // --- lb-box-03: holey-board on-edge 4th set in the box truck's 19" wall slot ---
+  {
+    const BOX = TRAILER_TYPES["26ft Box Truck"];
+    const T53 = TRAILER_TYPES["53ft Standard"];
+    const hb = (t: number): PackSku => ({ id: `HB${t}`, name: `${t}in holey`, sku: `HB-${t}`, length: 48, width: 24, height: t, weight: 1, category: HOLEY_BOARD_CATEGORY, allowRotation: false });
+    const blk = (id: string, l: number, w: number, h: number): PackSku => ({ id, name: id, sku: id, length: l, width: w, height: h, weight: 1, category: "Blocks", allowRotation: true });
+    const EOPTS: PackOptions = { ...OPTS, autoDownsize: false, consolidate: true };
+    const edgeCols = (p: PackPlan) => p.trailers.flatMap((t) => t.rows.flatMap((r) => r.columns.filter((c) => c.onEdge)));
+    const usedLen = (p: PackPlan) => p.trailers.reduce((s, t) => s + t.usedLength, 0);
+    const conserved = (p: PackPlan, cart: CartLine[]) =>
+      p.balance.length === 0 && p.trailers.reduce((s, t) => s + t.totalUnits, 0) === cart.reduce((s, c) => s + c.qty, 0);
+    // Pre-change output signatures, captured from pack() at lb-box-02's commit (before any lb-box-03
+    // engine change) — the "deep-equal to today" baseline for H3/H4.
+    const sig = (p: PackPlan) =>
+      p.trailers
+        .map((t) => `${t.dims.length}|` + t.rows.map((r) => r.columns.map((c) => `${c.colLength}x${c.colWidth}:${c.layers.map((l) => `${l.skuId}*${l.count}`).join("+")}`).join(",")).join(";"))
+        .join(" / ");
+    const BASE_A_53 = "636|48x24:HB6*18,48x24:HB6*18,48x24:HB6*18,48x24:HB6*2;48x24:HB6*18,48x24:HB6*18,48x24:HB6*18,48x24:HB6*18;48x24:HB6*18,48x24:HB6*18,48x24:HB6*18,48x24:HB6*18";
+    const BASE_B_53 = "636|48x24:HB1*40;48x24:HB13*8,48x24:HB6*18,48x24:HB6*18,48x24:HB6*4;48x24:HB13*8,48x24:HB13*8,48x24:HB13*8,48x24:HB13*8";
+    const BASE_BLK_BOX = "312|48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4;48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4;60x20:B2*3,60x20:B2*3,48x12:B1*4;60x20:B2*3,60x20:B2*3,60x20:B2*3,60x20:B2*3;60x20:B2*3,60x20:B2*3,60x20:B2*3,60x20:B2*3";
+    const BASE_BLK_53 = "636|60x30:B2*5,60x30:B2*5,60x30:B2*5;60x30:B2*5,60x30:B2*5,60x30:B2*5;48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4;48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4,48x12:B1*4";
+    const BASE_D_BOX = "312|48x24:HB6*3";
+
+    check("lb-box-03: the box truck preset carries holeyEdgeSlot (91\" wide); the 53ft does not", BOX.holeyEdgeSlot === true && BOX.width === 91 && !T53.holeyEdgeSlot);
+
+    // H1. Slot fill. 6" ×198: 11 full 18-high stacks — 4 rows (192") without the slot. With it, every
+    // 3-flat row carries 3 × 6" on-edge columns of 4 tiers (96"), and 198 = 3 rows × 66 → 144".
+    // (The prompt's ×200 is 3 × 66 + 2, i.e. 4 rows either way — keep-if-better rightly returns the
+    // no-edge plan there; checked too.)
+    {
+      const cart: CartLine[] = [{ skuId: "HB6", qty: 198 }];
+      const plan = pack(cart, [hb(6)], BOX, EOPTS);
+      const fullRows = plan.trailers[0]?.rows.filter((r) => r.columns.filter((c) => !c.onEdge).length === 3) ?? [];
+      const rowsOk = fullRows.length > 0 && fullRows.every((r) => {
+        const e = r.columns.filter((c) => c.onEdge);
+        return e.length === 3 && e.reduce((s, c) => s + c.colWidth, 0) === 18 && e.every((c) => c.stackCount === 4 && c.totalHeight === 96 && c.posY >= 72);
+      });
+      check("H1: 6\" ×198 box truck — every 3-flat row carries 18\" of on-edge columns × 4 tiers at posY ≥ 72", rowsOk, JSON.stringify(plan.trailers[0]?.rows.map((r) => r.columns.map((c) => `${c.onEdge ? "E" : ""}${c.colWidth}x${c.stackCount}@${c.posY}`))));
+      check("H1: usedLength drops 192\" → 144\" (edge-off length is 4 rows of 48\")", usedLen(plan) === 144, String(usedLen(plan)));
+      check("H1: validatePlan clean, conserved", validatePlan(plan, cart, [hb(6)], EOPTS).length === 0 && conserved(plan, cart), JSON.stringify(validatePlan(plan, cart, [hb(6)], EOPTS)));
+      const cart200: CartLine[] = [{ skuId: "HB6", qty: 200 }];
+      const p200 = pack(cart200, [hb(6)], BOX, EOPTS);
+      check("H1: 6\" ×200 needs 4 rows either way — no edge columns kept, 192\"", edgeCols(p200).length === 0 && usedLen(p200) === 192 && conserved(p200, cart200), String(usedLen(p200)));
+    }
+
+    // H2. Mixed fill: a slot holds mixed thicknesses filling 19" exactly, thinner boards winning ties
+    // (7 × 1" + 2 × 6" rather than 13" + 6").
+    {
+      const skus = [hb(6), hb(1), hb(13)];
+      const cart: CartLine[] = [{ skuId: "HB6", qty: 36 }, { skuId: "HB1", qty: 28 }, { skuId: "HB13", qty: 32 }];
+      const plan = pack(cart, skus, BOX, EOPTS);
+      const slots = plan.trailers.flatMap((t) => t.rows.map((r) => r.columns.filter((c) => c.onEdge))).filter((s) => s.length > 0);
+      const widths = slots.map((s) => s.reduce((a, c) => a + c.colWidth, 0));
+      const mixed = slots.find((s) => new Set(s.map((c) => c.colWidth)).size > 1);
+      check("H2: a slot holds mixed thicknesses; every slot ≤ 19\"", !!mixed && widths.every((w) => w <= 19 + 1e-9), JSON.stringify(widths));
+      const mixedWidth = mixed ? mixed.reduce((a, c) => a + c.colWidth, 0) : 0;
+      const ones = mixed ? mixed.filter((c) => c.colWidth === 1).length : 0;
+      check("H2: the mixed slot is maximized (19\") with thinner boards winning (7 × 1\" + 2 × 6\")", mixedWidth === 19 && ones === 7, JSON.stringify(mixed?.map((c) => c.colWidth)));
+      check("H2: validatePlan clean, conserved", validatePlan(plan, cart, skus, EOPTS).length === 0 && conserved(plan, cart), JSON.stringify(validatePlan(plan, cart, skus, EOPTS)));
+    }
+
+    // H3. Gate off: the 53ft and blocks-only on the box truck are the pre-change output.
+    {
+      const bS = [hb(6), hb(1), hb(13)];
+      const bC: CartLine[] = [{ skuId: "HB6", qty: 40 }, { skuId: "HB1", qty: 40 }, { skuId: "HB13", qty: 40 }];
+      const kS = [blk("B1", 48, 24, 12), blk("B2", 60, 30, 20)];
+      const kC: CartLine[] = [{ skuId: "B1", qty: 60 }, { skuId: "B2", qty: 30 }];
+      const a53 = pack([{ skuId: "HB6", qty: 200 }], [hb(6)], T53, EOPTS);
+      const b53 = pack(bC, bS, T53, EOPTS);
+      const kBox = pack(kC, kS, BOX, EOPTS);
+      const k53 = pack(kC, kS, T53, EOPTS);
+      check("H3: 6\" ×200 on the 53ft — pre-change output, no edge", sig(a53) === BASE_A_53 && edgeCols(a53).length === 0, sig(a53));
+      check("H3: 6/1/13\" ×40 on the 53ft — pre-change output, no edge", sig(b53) === BASE_B_53 && edgeCols(b53).length === 0, sig(b53));
+      check("H3: blocks-only on the box truck — pre-change output, no edge", sig(kBox) === BASE_BLK_BOX && edgeCols(kBox).length === 0, sig(kBox));
+      check("H3: blocks-only on the 53ft — pre-change output", sig(k53) === BASE_BLK_53, sig(k53));
+    }
+
+    // H4. Keep-if-better: 3 boards save nothing → no edge columns, pre-change output.
+    {
+      const cart: CartLine[] = [{ skuId: "HB6", qty: 3 }];
+      const plan = pack(cart, [hb(6)], BOX, EOPTS);
+      check("H4: 3 boards on the box truck — no edge columns, pre-change output, conserved", edgeCols(plan).length === 0 && sig(plan) === BASE_D_BOX && conserved(plan, cart), sig(plan));
+    }
+
+    // H5. Downsize only via the slot: the 53ft holds 936 6" boards (13 rows × 4 × 18); the 390 left
+    // over exceed a flat box truck (6 rows × 3 × 18 = 324) but fit one with the slot (6 × 66 = 396).
+    {
+      const cart: CartLine[] = [{ skuId: "HB6", qty: 936 + 390 }];
+      const dOpts: PackOptions = { ...EOPTS, autoDownsize: true };
+      const plan = pack(cart, [hb(6)], T53, dOpts);
+      const last = plan.trailers[plan.trailers.length - 1];
+      check("H5 premise: the leftover (390) is more than a flat box truck holds (324)", 390 > 6 * 3 * 18 && 390 <= 6 * 66);
+      check("H5: the last trailer is now downsized to the box truck, with on-edge columns", plan.trailers.length === 2 && last?.type === "26ft Box Truck" && last.dims.width === 91 && last.rows.some((r) => r.columns.some((c) => c.onEdge)), JSON.stringify(plan.trailers.map((t) => t.type)));
+      check("H5: the downsized plan validates and is conserved", validatePlan(plan, cart, [hb(6)], dOpts).length === 0 && conserved(plan, cart), JSON.stringify(validatePlan(plan, cart, [hb(6)], dOpts)));
+    }
+
+    // H7. Validator: an on-edge column on a 53ft, at a wrong width, or outside the slot → edge-slot.
+    {
+      const cart: CartLine[] = [{ skuId: "HB6", qty: 198 }];
+      const good = pack(cart, [hb(6)], BOX, EOPTS);
+      const v0 = validatePlan(good, cart, [hb(6)], EOPTS);
+      check("H7: a real on-edge plan has no edge-slot / piece-fits-trailer / holey-no-rotation violation", v0.length === 0, JSON.stringify(v0));
+      const mutate = (f: (p: PackPlan) => void) => {
+        const p = JSON.parse(JSON.stringify(good)) as PackPlan;
+        f(p);
+        return validatePlan(p, cart, [hb(6)], EOPTS);
+      };
+      const firstEdge = (p: PackPlan) => p.trailers[0].rows.flatMap((r) => r.columns).find((c) => c.onEdge) as PackColumn;
+      const on53 = mutate((p) => {
+        p.trailers[0].dims = { ...T53 };
+      });
+      check("H7: on-edge column on a 53ft (no slot) → edge-slot", ruleViolations(on53, "edge-slot") > 0, JSON.stringify(on53.map((v) => v.rule)));
+      const wrongWidth = mutate((p) => {
+        firstEdge(p).colWidth = 5;
+      });
+      check("H7: on-edge column at the wrong width → edge-slot", ruleViolations(wrongWidth, "edge-slot") > 0, JSON.stringify(wrongWidth.map((v) => v.rule)));
+      const outside = mutate((p) => {
+        const row = p.trailers[0].rows.find((r) => r.columns.some((c) => c.onEdge)) as PackRow;
+        const e = row.columns.filter((c) => c.onEdge);
+        e[e.length - 1].posY = 88; // 88 + 6 > 91
+      });
+      check("H7: on-edge column outside the slot → edge-slot", ruleViolations(outside, "edge-slot") > 0, JSON.stringify(outside.map((v) => v.rule)));
+      const tooTall = mutate((p) => {
+        const c = firstEdge(p);
+        c.layers[0].count = 5;
+      });
+      check("H7: more boards than tiers → edge-slot", ruleViolations(tooTall, "edge-slot") > 0, JSON.stringify(tooTall.map((v) => v.rule)));
+      const flatAsEdge = mutate((p) => {
+        const flat = p.trailers[0].rows[0].columns.find((c) => !c.onEdge) as PackColumn;
+        flat.onEdge = true;
+      });
+      check("H7: a flat stack flagged onEdge → edge-slot", ruleViolations(flatAsEdge, "edge-slot") > 0, JSON.stringify(flatAsEdge.map((v) => v.rule)));
+    }
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }

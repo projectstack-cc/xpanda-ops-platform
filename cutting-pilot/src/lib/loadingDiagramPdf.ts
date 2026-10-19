@@ -66,7 +66,31 @@ import { thicknessColor } from "./thicknessPalette";
  * so only that one branch applies here — still worth naming/testing since it's the one piece of
  * text-formatting logic the diagram and the stack-breakdown table both depend on. */
 export function formatStackLines(column: PackColumn): string[] {
+  // lb-box-03: an on-edge column's layer unitHeight is the 24" tier, not a size — it reads by
+  // thickness (colWidth) so the floor never mistakes it for a flat stack.
+  if (column.onEdge) return column.layers.map((l) => `${fmtNum(column.colWidth)}" on edge - ${l.count}`);
   return column.layers.map((l) => `${fmtNum(l.unitHeight)}"-${l.count}`);
+}
+
+/** lb-box-03: the board thickness a layer represents — colWidth for an on-edge column (its layer
+ * unitHeight is the 24" tier), unitHeight otherwise. Drives the thickness palette. */
+export function layerThickness(column: PackColumn, layer: { unitHeight: number }): number {
+  return column.onEdge ? column.colWidth : layer.unitHeight;
+}
+
+/** lb-box-03: one compact label for a row's whole on-edge slot ("7×1"-4 2×6"-4"), so 1"–6" columns
+ * never carry their own text. null when the row has no on-edge column. */
+export function formatEdgeSlotDetail(row: PackRow): string | null {
+  const edges = row.columns.filter((c) => c.onEdge);
+  if (edges.length === 0) return null;
+  const groups = new Map<string, number>();
+  for (const c of edges) {
+    const key = `${fmtNum(c.colWidth)}"-${c.stackCount}`;
+    groups.set(key, (groups.get(key) ?? 0) + 1);
+  }
+  return Array.from(groups.entries())
+    .map(([key, n]) => (n > 1 ? `${n}×${key}` : key))
+    .join(" ");
 }
 
 function fmtNum(n: number): string {
@@ -118,7 +142,7 @@ export function buildPiecesTable(trailer: PackTrailer, skus: PackSku[]): PieceTa
         if (existing) {
           existing.pieces += layer.count;
         } else {
-          const tc = thicknessColor(layer.unitHeight);
+          const tc = thicknessColor(layerThickness(column, layer));
           bySku.set(layer.skuId, {
             skuId: layer.skuId,
             name: layer.skuName,
@@ -152,7 +176,7 @@ export function buildStackBreakdown(trailer: PackTrailer): StackBreakdownRow[] {
       const pattern = formatStackLines(column).join(" · ");
       const existing = byPattern.get(pattern);
       if (existing) existing.stacks += 1;
-      else byPattern.set(pattern, { pattern, stacks: 1, layers: column.layers.map((l) => ({ unitHeight: l.unitHeight })) });
+      else byPattern.set(pattern, { pattern, stacks: 1, layers: column.layers.map((l) => ({ unitHeight: layerThickness(column, l) })) });
     }
   }
   return Array.from(byPattern.values()).sort((a, b) => b.stacks - a.stacks);
@@ -417,6 +441,14 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
     const base = column.layers[0];
     const top = column.layers.length > 1 ? column.layers[column.layers.length - 1] : null;
     if (!base) continue;
+    if (column.onEdge) {
+      // lb-box-03: true narrow width, thickness color, always hatched (the EDGE treatment, B/W safe);
+      // the text lives in one per-row slot label below, never inside a 1"–6" strip.
+      page.drawRectangle({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, color: parseHexColor(thicknessColor(column.colWidth).bg) });
+      drawHatch(page, rect, LINE);
+      page.drawRectangle({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, borderColor: LINE, borderWidth: 0.6 });
+      continue;
+    }
     const baseColor = thicknessColor(base.unitHeight);
     page.drawRectangle({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, color: parseHexColor(baseColor.bg) });
     if (baseColor.hatched) drawHatch(page, rect, parseHexColor(baseColor.fg));
@@ -438,6 +470,18 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
     page.drawRectangle({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, borderColor: LINE, borderWidth: 1.2 });
   }
 
+  // lb-box-03: one label per row's on-edge slot, on a white tab so it reads over the hatch.
+  const rects = layoutColumnRects(trailer, dims, box);
+  trailer.rows.forEach((row, rowIndex) => {
+    const detail = formatEdgeSlotDetail(row);
+    if (!detail) return;
+    const slotRects = rects.filter((r) => r.rowIndex === rowIndex && row.columns[r.columnIndex]?.onEdge);
+    const yLo = Math.min(...slotRects.map((r) => r.y));
+    const yHi = Math.max(...slotRects.map((r) => r.y + r.height));
+    const area = { x: slotRects[0].x, y: yLo, width: slotRects[0].width, height: yHi - yLo };
+    drawEdgeSlotLabel(page, fontBold, detail, area);
+  });
+
   // REAR (nose, left) / FRONT (doors, right) + dims caption — see endLabels() for the floor terms.
   for (const l of endLabels(box)) {
     page.drawText(l.text, { x: l.x, y: l.y, size: 10, font: fontBold, color: l.emphasis ? FRONT_ORANGE : MUTED });
@@ -446,6 +490,38 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
   const caption = remaining ? `${dims.length}"L × ${dims.width}"W — ${remaining}` : `${dims.length}"L × ${dims.width}"W`;
   const capW = font.widthOfTextAtSize(caption, 10);
   page.drawText(caption, { x: box.x + box.width / 2 - capW / 2, y: boxBottomY - DIAGRAM_CAPTION_H + 2, size: 10, font, color: MUTED });
+}
+
+/** lb-box-03: "ON EDGE" over the slot detail when both fit, else "EDGE <detail>", else "EDGE". */
+function drawEdgeSlotLabel(page: PDFPage, font: PDFFont, detail: string, area: { x: number; y: number; width: number; height: number }) {
+  if (area.width < 8 || area.height < 4) return;
+  const fits = (text: string, size: number) => font.widthOfTextAtSize(text, size) <= area.width - 6;
+  const twoLine = Math.min(10, (area.height - 2) / 2.3);
+  let lines: string[];
+  let size: number;
+  if (twoLine >= 5 && fits("ON EDGE", twoLine) && fits(detail, twoLine)) {
+    lines = ["ON EDGE", detail];
+    size = twoLine;
+  } else {
+    size = Math.min(10, area.height * 0.7);
+    lines = [`EDGE ${detail}`];
+    while (size > 4 && !fits(lines[0], size)) size -= 0.5;
+    if (!fits(lines[0], size)) {
+      lines = ["EDGE"];
+      size = Math.min(10, area.height * 0.7);
+    }
+  }
+  const lineH = size * 1.15;
+  const tabW = Math.max(...lines.map((l) => font.widthOfTextAtSize(l, size))) + 4;
+  const tabH = Math.min(area.height, lines.length * lineH + 1);
+  const cx = area.x + area.width / 2;
+  const cy = area.y + area.height / 2;
+  page.drawRectangle({ x: cx - tabW / 2, y: cy - tabH / 2, width: tabW, height: tabH, color: rgb(1, 1, 1), opacity: 0.9 });
+  lines.forEach((text, i) => {
+    const w = font.widthOfTextAtSize(text, size);
+    const y = cy + ((lines.length - 1) / 2 - i) * lineH - size / 2.8;
+    page.drawText(text, { x: cx - w / 2, y, size, font, color: INK });
+  });
 }
 
 /** Centers one label in `area`, shrinking down to 5pt to fit — labels are always printed so the

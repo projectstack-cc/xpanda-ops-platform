@@ -90,6 +90,9 @@ interface PiecesRow {
   placed: number;
   ordered: number;
   stacks: number;
+  /** lb-box-03: of `placed`/`stacks`, how many stand on edge in the box truck's wall slot. */
+  onEdge: number;
+  edgeStacks: number;
 }
 
 /** Per-thickness placed/ordered/stacks. A SKU's thickness is the height it was placed at (its first
@@ -100,7 +103,7 @@ function piecesByThickness(plan: PackPlan, cart: CartLine[], skus: PackSku[]): P
   const rowFor = (t: number) => {
     let r = rows.get(t);
     if (!r) {
-      r = { thickness: t, placed: 0, ordered: 0, stacks: 0 };
+      r = { thickness: t, placed: 0, ordered: 0, stacks: 0, onEdge: 0, edgeStacks: 0 };
       rows.set(t, r);
     }
     return r;
@@ -109,11 +112,18 @@ function piecesByThickness(plan: PackPlan, cart: CartLine[], skus: PackSku[]): P
     for (const row of trailer.rows) {
       for (const column of row.columns) {
         // Stacks that hold this size (base or top-off) — so a size used only as top-offs never reads 0.
-        const sizes = new Set(column.layers.map((l) => l.unitHeight));
-        sizes.forEach((t) => (rowFor(t).stacks += 1));
+        // lb-box-03: an on-edge column's thickness is its colWidth (its unitHeight is the 24″ tier).
+        const thicknessOf = (unitHeight: number) => (column.onEdge ? column.colWidth : unitHeight);
+        const sizes = new Set(column.layers.map((l) => thicknessOf(l.unitHeight)));
+        sizes.forEach((t) => {
+          rowFor(t).stacks += 1;
+          if (column.onEdge) rowFor(t).edgeStacks += 1;
+        });
         for (const layer of column.layers) {
-          if (!skuThickness.has(layer.skuId)) skuThickness.set(layer.skuId, layer.unitHeight);
-          rowFor(layer.unitHeight).placed += layer.count;
+          const t = thicknessOf(layer.unitHeight);
+          if (!skuThickness.has(layer.skuId)) skuThickness.set(layer.skuId, t);
+          rowFor(t).placed += layer.count;
+          if (column.onEdge) rowFor(t).onEdge += layer.count;
         }
       }
     }
@@ -350,6 +360,11 @@ export default function ResultsTab(p: ResultsTabProps) {
                             <Swatch thickness={r.thickness} />
                             {thicknessLabel(r.thickness)}
                           </span>
+                          {r.onEdge > 0 && (
+                            <span className="block text-[12px] text-muted font-sans">
+                              {r.onEdge} on edge · {plural(r.edgeStacks, "stack", "stacks")}
+                            </span>
+                          )}
                         </td>
                         <td className={["py-1.5 text-right", r.placed < r.ordered ? "text-[var(--warn-text)] font-semibold" : ""].join(" ")}>
                           {r.placed} / {r.ordered}

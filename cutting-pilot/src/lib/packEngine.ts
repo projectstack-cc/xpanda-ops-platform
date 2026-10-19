@@ -30,6 +30,9 @@ export interface Dimensions {
   width: number;
   height: number;
   maxWeight: number;
+  // lb-box-03: this trailer's wall slot (width − floor(width / 24) × 24 — 19" on the 91" box truck)
+  // takes holey board stood on edge. Optional and additive; gate on this flag, never on a type name.
+  holeyEdgeSlot?: boolean;
 }
 
 // Named trailer presets, keyed by display name (matches legacy's TRAILER_TYPES keys exactly).
@@ -42,7 +45,7 @@ export const TRAILER_TYPES: TrailerType = {
   "48ft Flatbed": { length: 576, width: 98, height: 108, maxWeight: 44000 },
   "40ft Container": { length: 480, width: 90, height: 102, maxWeight: 55000 },
   "20ft Container": { length: 240, width: 90, height: 86, maxWeight: 44000 },
-  "26ft Box Truck": { length: 312, width: 91, height: 108, maxWeight: 28000 },
+  "26ft Box Truck": { length: 312, width: 91, height: 108, maxWeight: 28000, holeyEdgeSlot: true },
 };
 
 // lbr-rot-01: the largest envelope any trailer offers — max length, max width and max height across
@@ -122,6 +125,12 @@ export interface PackColumn {
   // "partial" (a size's leftover, or a full stack shortened to save a trailer). Set on every column
   // pack() builds; optional so saved loads and editor-built columns stay valid without it.
   stackKind?: "full" | "partial";
+  // lb-box-03: holey board stood on edge in a slot trailer's wall slot (see Dimensions.holeyEdgeSlot):
+  // colWidth = thickness, colLength = 48, one SKU, one layer whose orientation is
+  // { 48, thickness, 24 } and unitHeight 24 (one tier). Optional and additive, like stackKind, so
+  // saved loads and fixtures stay valid. Only pack() creates one; validatePlan's edge-slot rule
+  // polices it.
+  onEdge?: true;
 }
 
 export interface PackRow {
@@ -680,12 +689,216 @@ function buildOneRow(
   return { row: winner.row, chosen: winner.chosen };
 }
 
+// --- lb-box-03: holey-board on-edge 4th set (box truck wall slot) ---
+// Holey board is 48" × 24" × thickness. On a trailer whose dims carry holeyEdgeSlot, three flat 24"
+// columns leave a wall slot (19" on the 91" box truck); the floor fills it with boards stood on edge —
+// 48" along the truck, thickness across, 24" vertical. Same contract as legacy lb-box-02.
+
+export const HOLEY_EDGE_LABEL = "on edge";
+
+/** The flat width (whole flat columns of `skuWidth`) and the wall slot left beside it. */
+export function holeyEdgeSlot(dims: Dimensions, skuWidth: number): { flatWidth: number; slotWidth: number } {
+  const flatWidth = skuWidth > 0 ? Math.floor((dims.width + EPS) / skuWidth) * skuWidth : dims.width;
+  return { flatWidth, slotWidth: Math.max(0, dims.width - flatWidth) };
+}
+
+/** Width-based subset-sum (legacy exactFillHeight's DFS shape, on thickness instead of height): edge
+ * columns of one thickness each, up to `tiers` boards per column, filling as much of `slotWidth` as
+ * possible. Ties go to more pieces (thinner boards). Respects the weight budget. */
+function pickHoleyEdgeColumns(
+  slotWidth: number,
+  candidates: { sku: PackSku; available: number }[],
+  tiers: number,
+  weightBudget: number
+): { sku: PackSku; count: number }[] {
+  const opts = candidates
+    .filter((c) => c.available > 0 && c.sku.height > 0 && approxLte(c.sku.height, slotWidth))
+    .sort((a, b) => a.sku.height - b.sku.height || a.sku.id.localeCompare(b.sku.id))
+    .map((c) => ({ ...c, maxCols: Math.min(Math.ceil(c.available / tiers), Math.floor((slotWidth + EPS) / c.sku.height)) }))
+    .filter((o) => o.maxCols > 0);
+  let best = { width: 0, pieces: 0, cols: [] as { sku: PackSku; count: number }[] };
+  let iterations = 0;
+  const LIMIT = 20000;
+  const dfs = (idx: number, width: number, weight: number, pieces: number, cols: { sku: PackSku; count: number }[]) => {
+    iterations++;
+    if (iterations > LIMIT) return;
+    if (width > best.width + EPS || (approxEq(width, best.width) && pieces > best.pieces)) best = { width, pieces, cols: cols.slice() };
+    if (idx >= opts.length) return;
+    const o = opts[idx];
+    const maxTake = Math.min(o.maxCols, Math.floor((slotWidth - width + EPS) / o.sku.height));
+    for (let take = maxTake; take >= 0; take--) {
+      const added: { sku: PackSku; count: number }[] = [];
+      let addPieces = 0;
+      let addWeight = 0;
+      for (let j = 0; j < take; j++) {
+        const count = Math.min(tiers, o.available - j * tiers);
+        if (count <= 0) break;
+        added.push({ sku: o.sku, count });
+        addPieces += count;
+        addWeight += count * o.sku.weight;
+      }
+      if (weight + addWeight > weightBudget + EPS) continue;
+      dfs(idx + 1, width + added.length * o.sku.height, weight + addWeight, pieces + addPieces, cols.concat(added));
+    }
+  };
+  dfs(0, 0, 0, 0, []);
+  return best.cols;
+}
+
+/** Fills one just-assembled row's wall slot with on-edge columns (mutates `row`). Boards come from the
+ * not-yet-placed ColumnPlans of the same holey footprint, which are shrunk or consumed — never mutated:
+ * a changed plan is replaced by a new object, since the same plans are shared across consolidation
+ * attempts. Returns the remaining instances. Runs only for a row whose flat columns are all holey
+ * board of one footprint and only when that footprint leaves a slot. */
+function fillHoleyEdgeSlot(
+  row: PackRow,
+  used: ColumnPlan[],
+  instances: ColumnPlan[],
+  dims: Dimensions,
+  effectiveHeight: number,
+  weightBudget: number
+): ColumnPlan[] {
+  if (used.length === 0) return instances;
+  const L = used[0].colLength;
+  const W = used[0].colWidth;
+  const isHoleyFlat = (plan: ColumnPlan) =>
+    approxEq(plan.colLength, L) &&
+    approxEq(plan.colWidth, W) &&
+    plan.layers.every((l) => l.sku.category === HOLEY_BOARD_CATEGORY && approxEq(l.sku.length, L) && approxEq(l.sku.width, W));
+  if (!used.every(isHoleyFlat)) return instances;
+  const { flatWidth, slotWidth } = holeyEdgeSlot(dims, W);
+  if (slotWidth <= EPS || row.rowWidthUsed > flatWidth + EPS) return instances;
+  const tiers = Math.floor((effectiveHeight + EPS) / W);
+  if (tiers < 1) return instances;
+
+  const available = new Map<string, { sku: PackSku; available: number }>();
+  for (const plan of instances) {
+    if (!isHoleyFlat(plan)) continue;
+    for (const l of plan.layers) {
+      const e = available.get(l.sku.id) ?? { sku: l.sku, available: 0 };
+      e.available += l.count;
+      available.set(l.sku.id, e);
+    }
+  }
+  const picks = pickHoleyEdgeColumns(slotWidth, Array.from(available.values()), tiers, weightBudget);
+  if (picks.length === 0) return instances;
+
+  // Pull the picked boards, smallest plans first (a leftover stack goes before a full one), top
+  // layers before base layers.
+  const next: (ColumnPlan | null)[] = instances.slice();
+  const order = next
+    .map((_, i) => i)
+    .filter((i) => isHoleyFlat(next[i] as ColumnPlan))
+    .sort((a, b) => {
+      const ca = (next[a] as ColumnPlan).layers.reduce((s, l) => s + l.count, 0);
+      const cb = (next[b] as ColumnPlan).layers.reduce((s, l) => s + l.count, 0);
+      return ca - cb || a - b;
+    });
+  const needBySku = new Map<string, number>();
+  for (const p of picks) needBySku.set(p.sku.id, (needBySku.get(p.sku.id) ?? 0) + p.count);
+  for (const [skuId, total] of Array.from(needBySku.entries())) {
+    let need = total;
+    for (const i of order) {
+      if (need <= 0) break;
+      const plan = next[i];
+      if (!plan) continue;
+      const layers = plan.layers.map((l) => ({ ...l }));
+      let taken = 0;
+      for (let li = layers.length - 1; li >= 0 && need > 0; li--) {
+        if (layers[li].sku.id !== skuId) continue;
+        const take = Math.min(need, layers[li].count);
+        layers[li].count -= take;
+        need -= take;
+        taken += take;
+      }
+      if (taken === 0) continue;
+      const kept = layers.filter((l) => l.count > 0);
+      next[i] =
+        kept.length === 0
+          ? null
+          : {
+              ...plan,
+              layers: kept,
+              totalHeight: kept.reduce((s, l) => s + l.unitHeight * l.count, 0),
+              totalWeight: kept.reduce((s, l) => s + l.count * l.sku.weight, 0),
+              rationale: `${plan.rationale} — ${taken} moved to the ${HOLEY_EDGE_LABEL} slot`,
+              stackKind: "partial",
+            };
+    }
+  }
+
+  // Re-split each pulled SKU's pure (single-layer) plans into full stacks plus one leftover, so the
+  // pull leaves whole columns behind instead of several short ones (a shortened full stack would
+  // still need its own floor slot and the edge boards would save nothing).
+  for (const skuId of Array.from(needBySku.keys())) {
+    const idxs = next
+      .map((plan, i) => (plan && plan.layers.length === 1 && plan.layers[0].sku.id === skuId && isHoleyFlat(plan) ? i : -1))
+      .filter((i) => i >= 0);
+    if (idxs.length < 2) continue;
+    const plans = idxs.map((i) => next[i] as ColumnPlan);
+    const unit = plans[0].layers[0].unitHeight;
+    const sku = plans[0].layers[0].sku;
+    const perStack = Math.max(...plans.map((pl) => pl.layers[0].count), 1);
+    let left = plans.reduce((s, pl) => s + pl.layers[0].count, 0);
+    idxs.forEach((i, k) => {
+      const count = Math.min(perStack, left);
+      left -= count;
+      next[i] =
+        count <= 0
+          ? null
+          : {
+              ...plans[k],
+              layers: [{ sku, unitHeight: unit, count }],
+              totalHeight: count * unit,
+              totalWeight: count * sku.weight,
+              rationale: `${count} × ${fmt(unit)}" = ${fmt(count * unit)}" (rest of this size went to the ${HOLEY_EDGE_LABEL} slot)`,
+              stackKind: count === perStack ? "full" : "partial",
+            };
+    });
+  }
+
+  let posY = flatWidth;
+  for (const p of picks) {
+    const t = p.sku.height;
+    const column: PackColumn = {
+      posY,
+      colWidth: t,
+      colLength: L,
+      totalHeight: p.count * W,
+      totalWeight: p.count * p.sku.weight,
+      stackCount: p.count,
+      layers: [
+        {
+          skuId: p.sku.id,
+          skuName: p.sku.name,
+          skuCode: p.sku.sku,
+          color: colorForSku(p.sku.id),
+          unitHeight: W,
+          count: p.count,
+          orientation: { length: L, width: t, height: W, label: HOLEY_EDGE_LABEL },
+        },
+      ],
+      mixed: false,
+      rationale: `${HOLEY_EDGE_LABEL}: ${p.count} × ${fmt(t)}" boards stood ${fmt(W)}" tall in the ${fmt(slotWidth)}" wall slot`,
+      onEdge: true,
+    };
+    row.columns.push(column);
+    row.rowWidthUsed += t;
+    row.totalUnits += p.count;
+    row.totalWeight += column.totalWeight;
+    row.wastedFloorArea += (row.rowLength - L) * t;
+    posY += t;
+  }
+  return next.filter((x): x is ColumnPlan => x !== null);
+}
+
 // A row's sort key for rear->front ordering (lb-engine-03 B3, row-order-nose-first): the thickest
 // BASE layer (layers[0], never a top-off layer) among the row's columns. Rows are sorted ascending
 // by this before posFromFront is assigned, so the thinnest freight sits at the rear (posFromFront
 // 0, where the trailer doors are, loaded last) and the thickest sits at the nose (loaded first).
+// lb-box-03: on-edge columns are excluded — their unitHeight (24) is a tier, not a thickness.
 function rowBaseThickness(row: PackRow): number {
-  return row.columns.reduce((max, c) => Math.max(max, c.layers[0]?.unitHeight ?? 0), 0);
+  return row.columns.reduce((max, c) => (c.onEdge ? max : Math.max(max, c.layers[0]?.unitHeight ?? 0)), 0);
 }
 
 function buildTrailer(rows: PackRow[], dims: Dimensions, effectiveHeight: number): PackTrailer {
@@ -740,7 +953,8 @@ function assembleTrailers(
   instancesIn: ColumnPlan[],
   dims: Dimensions,
   effectiveHeight: number,
-  opts: PackOptions
+  opts: PackOptions,
+  edgeFill = false
 ): { trailers: PackTrailer[]; trailerPlans: ColumnPlan[][]; unplaced: ColumnPlan[]; warnings: string[] } {
   let instances = instancesIn;
   const warnings: string[] = [];
@@ -764,6 +978,11 @@ function assembleTrailers(
       weightLeft -= row.totalWeight;
       const usedSet = new Set(used);
       instances = instances.filter((inst) => !usedSet.has(inst));
+      if (edgeFill && dims.holeyEdgeSlot) {
+        const flatWeight = row.totalWeight;
+        instances = fillHoleyEdgeSlot(row, used, instances, dims, effectiveHeight, weightLeft);
+        weightLeft -= row.totalWeight - flatWeight;
+      }
       progressed = true;
     }
 
@@ -829,7 +1048,8 @@ function simulate(
   dims: Dimensions,
   effectiveHeight: number,
   opts: PackOptions,
-  budget: PlannerBudget
+  budget: PlannerBudget,
+  edgeFill = false
 ): SimResult {
   const warnings: string[] = [];
   const leftover = new Map<string, number>();
@@ -839,7 +1059,7 @@ function simulate(
   const instances: ColumnPlan[] = builds.flatMap((b) => b.columns);
 
   // Pure pass.
-  const pureResult = assembleTrailers(instances, dims, effectiveHeight, opts);
+  const pureResult = assembleTrailers(instances, dims, effectiveHeight, opts, edgeFill);
   let result = pureResult;
   let current: ColumnPlan[][] = builds.map((b) => b.columns);
   const breaksByFamily = new Map<number, number>();
@@ -869,7 +1089,7 @@ function simulate(
         next[f] = builds[f].toColumns(plan.stacks);
         breaks.set(f, plan.shortenedStacks);
       }
-      const r = assembleTrailers(next.flat(), dims, effectiveHeight, opts);
+      const r = assembleTrailers(next.flat(), dims, effectiveHeight, opts, edgeFill);
       if (r.trailers.length < T && r.unplaced.length === 0) {
         current = next;
         result = r;
@@ -979,12 +1199,13 @@ function bestCombo(
   dims: Dimensions,
   effectiveHeight: number,
   opts: PackOptions,
-  budget: PlannerBudget
+  budget: PlannerBudget,
+  edgeFill = false
 ): { chosen: FamilyOrientation[]; result: SimResult } {
   const combos = enumerateCombos(familyOptions);
   let best: { chosen: FamilyOrientation[]; result: SimResult; score: number[] } | null = null;
   for (const combo of combos) {
-    const result = simulate(families, combo, dims, effectiveHeight, opts, budget);
+    const result = simulate(families, combo, dims, effectiveHeight, opts, budget, edgeFill);
     const score = scoreResult(
       result,
       combo.map((c) => c.label)
@@ -1024,6 +1245,9 @@ function applyStabilityWarnings(trailers: PackTrailer[], opts: PackOptions, warn
   trailers.forEach((trailer, ti) => {
     trailer.rows.forEach((row, ri) => {
       row.columns.forEach((column, ci) => {
+        // lb-box-03: an on-edge column is braced by the wall and the stack beside it — a 1"-wide,
+        // 96"-tall board column would otherwise always warn.
+        if (column.onEdge) return;
         const footprint = Math.min(column.colLength, column.colWidth);
         if (footprint <= 0) return;
         for (const layer of column.layers) {
@@ -1050,6 +1274,27 @@ const CONSOLIDATION_MAX_WORK = 50_000;
  * the complete algorithm.
  */
 export function pack(cart: CartLine[], skus: PackSku[], dims: Dimensions, options?: Partial<PackOptions>): PackPlan {
+  // lb-box-03 rule 6 (keep-if-better): on a slot trailer, pack with and without the on-edge pass and
+  // keep the edge plan only when it saves space. Every other trailer is exactly the pre-slot pack.
+  if (!dims.holeyEdgeSlot) return packOnce(cart, skus, dims, options, false);
+  const base = packOnce(cart, skus, dims, options, false);
+  const edge = packOnce(cart, skus, dims, options, true);
+  return edgePlanIsBetter(edge, base) ? edge : base;
+}
+
+/** Fewer trailers, or the same count and a strictly shorter total used length — and never a larger
+ * balance for any SKU. A plan with no on-edge column never wins (the no-edge plan is returned). */
+function edgePlanIsBetter(edge: PackPlan, base: PackPlan): boolean {
+  const hasEdge = edge.trailers.some((t) => t.rows.some((r) => r.columns.some((c) => c.onEdge)));
+  if (!hasEdge) return false;
+  const baseBalance = new Map(base.balance.map((b) => [b.skuId, b.remaining]));
+  if (edge.balance.some((b) => b.remaining > (baseBalance.get(b.skuId) ?? 0))) return false;
+  if (edge.trailers.length !== base.trailers.length) return edge.trailers.length < base.trailers.length;
+  const len = (p: PackPlan) => p.trailers.reduce((s, t) => s + t.usedLength, 0);
+  return len(edge) < len(base) - EPS;
+}
+
+function packOnce(cart: CartLine[], skus: PackSku[], dims: Dimensions, options: Partial<PackOptions> | undefined, edgeFill: boolean): PackPlan {
   const opts: PackOptions = { ...DEFAULT_PACK_OPTIONS, ...options };
   const warnings: string[] = [];
   const { effectiveHeight } = resolveEffectiveHeight(dims, opts, warnings);
@@ -1114,12 +1359,12 @@ export function pack(cart: CartLine[], skus: PackSku[], dims: Dimensions, option
   } else {
     const comboCount = familyOptions.reduce((p, o) => p * o.length, 1);
     if (comboCount <= COMBO_GUARD) {
-      simResult = bestCombo(families, familyOptions, dims, effectiveHeight, opts, budget).result;
+      simResult = bestCombo(families, familyOptions, dims, effectiveHeight, opts, budget, edgeFill).result;
     } else {
       warnings.push(
         `orientation search space (${comboCount}) exceeds guard (${COMBO_GUARD}) — using greedy largest-family-first fallback`
       );
-      simResult = simulate(families, greedyCombo(families, familyOptions), dims, effectiveHeight, opts, budget);
+      simResult = simulate(families, greedyCombo(families, familyOptions), dims, effectiveHeight, opts, budget, edgeFill);
     }
   }
 
@@ -1331,11 +1576,44 @@ export function validatePlan(
       }
 
       row.columns.forEach((column, ci) => {
-        // row-geometry (width axis): same invariant as above, across the row.
-        if (!approxEq(column.posY, runningWidth)) {
+        // row-geometry (width axis): same invariant as above, across the row. lb-box-03: an on-edge
+        // column sits at the wall slot, so it may start past a row of fewer flat columns (never before).
+        if (column.onEdge ? !approxGte(column.posY, runningWidth) : !approxEq(column.posY, runningWidth)) {
           violate("row-geometry", `column.posY ${column.posY} != running width ${runningWidth}`, ti, ri, ci);
         }
-        runningWidth += column.colWidth;
+        runningWidth = (column.onEdge ? Math.max(runningWidth, column.posY) : runningWidth) + column.colWidth;
+
+        // edge-slot (lb-box-03): an on-edge column is legal only on a slot trailer, as one holey SKU
+        // stood { length, thickness, 24 }, colWidth = thickness, inside [flatWidth, dims.width], at
+        // most floor(effectiveHeight / 24) boards. When it holds, piece-fits-trailer and
+        // holey-no-rotation accept the on-edge orientation; otherwise both still fire as usual.
+        let edgeOk = false;
+        if (column.onEdge) {
+          const problems: string[] = [];
+          const edgeLayer = column.layers[0];
+          const edgeSku = edgeLayer ? skuById.get(edgeLayer.skuId) : undefined;
+          if (!dims.holeyEdgeSlot) problems.push("trailer has no on-edge slot");
+          if (column.layers.length !== 1) problems.push(`${column.layers.length} layers (must be one SKU, one layer)`);
+          if (!edgeLayer || !edgeSku || edgeSku.category !== HOLEY_BOARD_CATEGORY) {
+            problems.push("not holey board");
+          } else {
+            const { flatWidth } = holeyEdgeSlot(dims, edgeSku.width);
+            const o = edgeLayer.orientation;
+            if (!approxEq(o.length, edgeSku.length) || !approxEq(o.width, edgeSku.height) || !approxEq(o.height, edgeSku.width)) {
+              problems.push(`orientation ${o.length}x${o.width}x${o.height} != ${edgeSku.length}x${edgeSku.height}x${edgeSku.width}`);
+            }
+            if (!approxEq(edgeLayer.unitHeight, edgeSku.width)) problems.push(`unitHeight ${edgeLayer.unitHeight} != ${edgeSku.width}`);
+            if (!approxEq(column.colWidth, edgeSku.height)) problems.push(`colWidth ${column.colWidth} != thickness ${edgeSku.height}`);
+            if (!approxEq(column.colLength, edgeSku.length)) problems.push(`colLength ${column.colLength} != ${edgeSku.length}`);
+            if (column.posY < flatWidth - EPS || column.posY + column.colWidth > dims.width + EPS) {
+              problems.push(`spans ${column.posY}–${column.posY + column.colWidth}, outside the slot ${flatWidth}–${dims.width}`);
+            }
+            const tiers = Math.floor((effectiveHeight + EPS) / edgeSku.width);
+            if (edgeLayer.count > tiers) problems.push(`${edgeLayer.count} boards > ${tiers} tiers`);
+          }
+          edgeOk = problems.length === 0;
+          if (!edgeOk) violate("edge-slot", problems.join("; "), ti, ri, ci);
+        }
 
         // column-height: catches a stack taller than the trailer's usable clearance (nominal
         // height minus any runner — see resolveEffectiveHeight).
@@ -1460,7 +1738,7 @@ export function validatePlan(
             approxLte(layer.orientation.length, dims.length) &&
             approxLte(layer.orientation.width, dims.width) &&
             approxLte(layer.orientation.height, dims.height);
-          if (!isLegalOrientation || !matchesPlacement || !withinTrailer) {
+          if (!edgeOk && (!isLegalOrientation || !matchesPlacement || !withinTrailer)) {
             violate(
               "piece-fits-trailer",
               `sku ${layer.skuId} orientation ${JSON.stringify(layer.orientation)} vs column ${column.colLength}x${column.colWidth} unitHeight ${layer.unitHeight} (legal=${isLegalOrientation}, matchesPlacement=${matchesPlacement}, withinTrailer=${withinTrailer})`,
@@ -1474,7 +1752,7 @@ export function validatePlan(
           // Compares against column.colLength, NOT row.rowLength — rows may now be mixed-depth
           // (A1), so rowLength can legitimately exceed this column's own depth even when the
           // holey column itself is placed correctly.
-          if (sku.category === HOLEY_BOARD_CATEGORY) {
+          if (sku.category === HOLEY_BOARD_CATEGORY && !edgeOk) {
             if (
               !approxEq(column.colLength, sku.length) ||
               !approxEq(column.colWidth, sku.width) ||

@@ -4,6 +4,22 @@ export const DEFAULT_LANG: Lang = "en";
 export const LANG_STORAGE_KEY = "xpanda_lang";
 
 export const catalog: Record<string, Record<Lang, string>> = {
+  // lb-box-03: holey board stood on edge in the box truck's wall slot (Load Builder).
+  "lb.edge.slot": { en: "ON EDGE", es: "DE CANTO", ht: "SOU KAN" },
+  "lb.edge.onEdge": { en: "On edge", es: "De canto", ht: "Sou kan" },
+  "lb.edge.boards": { en: "boards", es: "tableros", ht: "planch" },
+  "lb.edge.locked": { en: "Locked", es: "Bloqueado", ht: "Bloke" },
+  "lb.edge.lockedHint": {
+    en: "On-edge boards are locked in Customize",
+    es: "Los tableros de canto están bloqueados en Personalizar",
+    ht: "Planch sou kan yo bloke nan Personalize",
+  },
+  "lb.edge.key": {
+    en: "boards on edge in the wall slot",
+    es: "tableros de canto en el hueco de la pared",
+    ht: "planch sou kan nan espas bò mi a",
+  },
+  "lb.edge.ofWhich": { en: "on edge", es: "de canto", ht: "sou kan" },
   "orders.newOrder": { en: "New order", es: "Pedido nuevo", ht: "Nouvo kòmand" },
   "orders.customerOrderSection": {
     en: "Customer & order",

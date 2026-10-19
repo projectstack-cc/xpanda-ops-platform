@@ -3023,6 +3023,62 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-box-03 — v2 Load Builder: holey-board on-edge 4th set in the box truck's 19" slot (Next/Cloudflare Platform
+  Agent §9a leads the engine; React Component Agent §9b the UI). No migration, no API change; still dark (unlinked).**
+  Same contract as legacy lb-box-02, so the two surfaces agree on which loads get a slot and what the floor reads.
+  - **Engine (`packEngine.ts`).** `Dimensions.holeyEdgeSlot?` (set on `TRAILER_TYPES["26ft Box Truck"]`, gate on the
+    flag only) and `PackColumn.onEdge?: true` (optional/additive like `stackKind`). The edge pass runs at row assembly in
+    `assembleTrailers` (new `fillHoleyEdgeSlot`), after `buildOneRow` picks the flat columns, so flat planning,
+    consolidation and the rule-5 row order are untouched. Rows whose flat columns are all one holey footprint get a
+    slot of `width − floor(width / sku.width) × sku.width` (19") at posY = the flat width; `pickHoleyEdgeColumns` is a
+    width subset-sum (ties → thinner/more pieces, weight budget respected); boards come off the not-yet-placed
+    ColumnPlans of that footprint, smallest first, which are then re-split into full stacks + one leftover (otherwise a
+    full stack shortened by 4–12 boards still needs its own floor slot and the slot saves nothing). Plans are replaced,
+    never mutated — they are shared across consolidation attempts. Edge column: one SKU, one layer, orientation
+    `{48, thickness, 24, "on edge"}`, `unitHeight` 24, `count` = tiers = `min(remaining, floor(effectiveHeight / 24))`,
+    `totalHeight` = count × 24; the runner height flows in via effectiveHeight. `pack()` is now the keep-if-better
+    wrapper (rule 6) around the unchanged body (`packOnce`): non-slot dims → exactly the old call; slot dims → pack with
+    and without the pass and keep the edge plan only for fewer trailers, or the same count and a strictly shorter used
+    length, with no SKU's balance larger. The auto-downsize recursion and `forcedPack.ts` (`TRAILER_TYPES[type]`, no
+    logic change) both go through it. `rowBaseThickness` and `applyStabilityWarnings` skip on-edge columns; their width
+    counts in rowWidthUsed / floor area / stacks / units; weight counts against maxWeight. `skuOrientations` is
+    unchanged (holey stays identity-only).
+  - **`validatePlan`.** New `edge-slot` violation: an on-edge column must sit on a slot trailer, as one holey SKU with
+    orientation `{length, thickness, width}`, `unitHeight` = sku width, `colWidth` = thickness, inside
+    `[flatWidth, dims.width]`, count ≤ tiers. When that holds, `piece-fits-trailer` and `holey-no-rotation` accept it;
+    otherwise both still fire. Row geometry lets an on-edge column start past a row of fewer flat columns (never before).
+    Every other invariant is unchanged.
+  - **Editor / dissolve / saved loads.** `loadEditor.ts`: edge columns are locked — not a move/top/holding/swap source,
+    not a stack-onto target, count fixed, a row holding them can't be deleted, new stacks land before them
+    (`moveToSlot`, `addColumn`), `evaluateSlotTarget` refuses a flat stack that would run into the slot, and Shift to
+    rear only closes empty rows on a trailer with edge columns; `recomputeRow` keeps them at the wall. Exports
+    `isEdgeLocked` / `EDGE_LOCKED_REASON`. `dissolve.ts`: never sources from or targets an edge column. `savedLoad.ts`:
+    no change needed — `onEdge` round-trips in `editedPlan` JSON; old snapshots are untouched (no version bump).
+  - **PDF (`loadingDiagramPdf.ts`).** Edge columns draw at true width in their thickness colour with a hatch, no
+    per-column text; one label per row's slot on a white tab (`ON EDGE` / `7×1"-4 2×6"-4`, shrinking to `EDGE`). Stack
+    lines read `6" on edge - 4`; pieces/stack tables colour by thickness (new `layerThickness`, `formatEdgeSlotDetail`).
+  - **UI (§9b).** `TrailerDiagram.tsx`: edge columns at true scale, thickness fill + a `--text` hatch, one "ON EDGE"
+    chip per slot (with the slot detail when tall enough, a lock icon in Customize), a Key entry; in Customize they are
+    disabled with a lock tooltip and excluded from the ≥ 44px target scaling (a 1" board would otherwise blow the band
+    up). `ColumnDetailPanel.tsx`: "On edge · 6" × 4 boards". `ResultsTab.tsx`: the per-thickness table counts edge
+    boards by thickness and shows "N on edge · M stacks" under the size. `CustomizeEditor.tsx`: tapping an edge column
+    toasts the lock reason; size labels read "6″ on edge ×4". `LoadPlanView.tsx` needed no change (it renders Results +
+    ColumnDetailPanel). New i18n keys `lb.edge.*` (EN/ES/HT) for the diagram chip/key/lock and the detail panel — the
+    ES/HT wording is a best effort for Steve to confirm. The Results/Customize lines stay English like every other
+    label in those (not yet i18n-wired) files.
+  - **Selfchecks (`npx tsx`), before → after:** packEngine 185 → 207 (H1 slot fill 192" → 144" at 6" ×198 + the
+    ×200 keep-if-better case, H2 mixed 19" slot 7×1" + 2×6", H3 53ft/blocks pinned to the pre-change output, H4 3
+    boards, H5 downsize via the slot, H7 validator), forcedPack 26 → 32 (H6 runner 4" → 4 tiers, 13" → 3, box truck
+    only), loadEditor 281 → 295 (H8 locks, shift, allowed edit validates, dissolve), savedLoad 43 → 45 (H8 round trip /
+    old snapshot), loadingDiagramPdf 42 → 48, dissolve 21/21, stackPlanner 29/29. A scratch probe also confirmed
+    deep-equality with the captured pre-change `pack()` output (53ft carts; box-truck carts differ only by the additive
+    `trailer.dims.holeyEdgeSlot`). `scripts/lb-harness.mjs` (172 real carts, both engines, 53ft): every number
+    unchanged — the regenerated report differed only in the legacy slice's line range (restored, not committed); its two
+    failing gates fail identically on the pre-lb-box commit. `npx tsc --noEmit` clean; `npm run cf-build` green.
+  - **Manual check for Steve** (`/v2/logistics/load-builder`, 26ft Box Truck): a holey order of ~66–400 boards of one
+    thickness ≤ 19" shows a hatched slot along the wall with an ON EDGE chip; the loading diagram PDF reads "ON EDGE" in
+    the slot and `6" on edge - 4` in Stack breakdown; in Customize the edge strip is greyed with a lock and won't
+    select; on a 53ft order whose last truck holds ~325–396 6" boards, Auto-downsize now picks the box truck.
 - **lb-box-01 — Box truck interior width 72" → 91" (legacy + v2 Load Builder). Logistics Agent §3
   (`logistics/load-builder.html`) + Next/Cloudflare Platform Agent §9a (`cutting-pilot/src/lib/packEngine.ts`). No
   migration, no API change.** The "26ft Box Truck" preset in `TRAILER_TYPES` now reads `width: 91` on both surfaces

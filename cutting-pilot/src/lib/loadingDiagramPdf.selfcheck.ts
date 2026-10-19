@@ -20,7 +20,10 @@ import {
   endLabels,
   paginateRows,
   buildLoadingDiagramPdf,
+  formatEdgeSlotDetail,
+  layerThickness,
 } from "./loadingDiagramPdf";
+import { pack, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, HOLEY_BOARD_CATEGORY } from "./packEngine";
 import { thicknessColor } from "./thicknessPalette";
 
 interface CheckResult {
@@ -337,6 +340,25 @@ export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; 
     check("hatchSegments: every segment stays inside the rect", segs.every((g) => inside(g.x1, g.y1) && inside(g.x2, g.y2)), JSON.stringify(segs.slice(0, 3)));
     check("hatchSegments: 45° lines (dy === dx)", segs.every((g) => Math.abs(g.y2 - g.y1 - (g.x2 - g.x1)) < 1e-9));
     check("hatchSegments: empty rect -> no lines", hatchSegments({ x: 0, y: 0, width: 0, height: 10 }).length === 0);
+  }
+
+  // lb-box-03: on-edge columns read by thickness, never as a flat stack; one label per slot; the
+  // PDF still builds on one page.
+  {
+    const hb = (t: number): PackSku => ({ id: `EDGE${t}`, name: `${t}in holey`, sku: `EDGE${t}`, length: 48, width: 24, height: t, weight: 1, category: HOLEY_BOARD_CATEGORY, allowRotation: false });
+    const skus = [hb(6), hb(1), hb(13)];
+    const box = TRAILER_TYPES["26ft Box Truck"];
+    const plan = pack([{ skuId: "EDGE6", qty: 36 }, { skuId: "EDGE1", qty: 28 }, { skuId: "EDGE13", qty: 32 }], skus, box, DEFAULT_PACK_OPTIONS);
+    const t0 = plan.trailers[0];
+    const edge6 = t0.rows.flatMap((r) => r.columns).find((c) => c.onEdge && c.colWidth === 6);
+    check("lb-box-03: edge stack line reads `6\" on edge - 4`", !!edge6 && formatStackLines(edge6)[0] === '6" on edge - 4', edge6 ? formatStackLines(edge6)[0] : "no 6\" edge column");
+    check("lb-box-03: edge layer thickness is the board (6), not the 24\" tier", !!edge6 && layerThickness(edge6, edge6.layers[0]) === 6);
+    const slotRow = t0.rows.find((r) => r.columns.filter((c) => c.onEdge).length > 2);
+    check("lb-box-03: slot detail groups the row's edge columns", !!slotRow && formatEdgeSlotDetail(slotRow) === '7×1"-4 2×6"-4', slotRow ? String(formatEdgeSlotDetail(slotRow)) : "no slot row");
+    check("lb-box-03: stack breakdown keeps on-edge apart from flat", buildStackBreakdown(t0).some((b) => b.pattern.includes("on edge")) && buildStackBreakdown(t0).some((b) => !b.pattern.includes("on edge")));
+    check("lb-box-03: pieces table colors an edge-only size by its thickness", buildPiecesTable(t0, skus).every((p) => p.color === thicknessColor(Number(p.skuId.replace("EDGE", ""))).bg));
+    const pages = (await PDFDocument.load(await buildLoadingDiagramPdf(t0, 0, box, skus))).getPageCount();
+    check("lb-box-03: an on-edge trailer's PDF builds (1 page)", pages === 1, String(pages));
   }
 
   return { pass: results.every((r) => r.pass), results };

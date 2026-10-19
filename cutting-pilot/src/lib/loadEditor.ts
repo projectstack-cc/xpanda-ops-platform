@@ -189,10 +189,11 @@ export function createEditorState(
 function recomputeRow(row: PackRow): void {
   let posY = 0;
   for (const column of row.columns) {
-    column.posY = posY;
-    posY += column.colWidth;
+    // lb-box-03: an on-edge column keeps its wall-slot position (never slides left into flat floor).
+    column.posY = column.onEdge ? Math.max(posY, column.posY) : posY;
+    posY = column.posY + column.colWidth;
   }
-  row.rowWidthUsed = posY;
+  row.rowWidthUsed = row.columns.reduce((s, c) => s + c.colWidth, 0);
   row.rowLength = row.columns.length > 0 ? Math.max(...row.columns.map((c) => c.colLength)) : 0;
   row.wastedFloorArea = row.columns.reduce((s, c) => s + (row.rowLength - c.colLength) * c.colWidth, 0);
   row.totalUnits = row.columns.reduce((s, c) => s + c.stackCount, 0);
@@ -279,6 +280,19 @@ function getColumn(plan: PackPlan, ref: ColumnRef): PackColumn | null {
   return plan.trailers[ref.t]?.rows[ref.r]?.columns[ref.c] ?? null;
 }
 
+// lb-box-03: on-edge holey columns are locked in Customize for now (BACKLOG: full edge editing) —
+// never a move/stack/swap source or target, never resized, and no flat stack goes into the slot.
+export const EDGE_LOCKED_REASON = "on-edge boards are locked";
+
+/** True when the stack at `ref` is an on-edge column (locked). */
+export function isEdgeLocked(state: EditorState, ref: ColumnRef): boolean {
+  return getColumn(state.plan, ref)?.onEdge === true;
+}
+
+function rowHasEdge(row: PackRow | undefined): boolean {
+  return !!row && row.columns.some((c) => c.onEdge);
+}
+
 // --- operations ---
 
 /** Moves a column from one row (possibly the same row, for reordering) to another. lbr-07: a thin
@@ -293,7 +307,7 @@ export function moveColumn(state: EditorState, from: ColumnRef, to: DropTarget):
  * compactLoad (or apply) removes it. */
 export function pullToHolding(state: EditorState, from: ColumnRef): EditorState {
   const column = getColumn(state.plan, from);
-  if (!column) return state;
+  if (!column || column.onEdge) return state;
 
   const plan = clonePlan(state.plan);
   const fromRow = plan.trailers[from.t].rows[from.r];
@@ -597,7 +611,11 @@ export function addColumn(state: EditorState, trailerIndex: number, rowIndex: nu
 
   const plan = clonePlan(state.plan);
   const column = buildColumn(sku, count, state.options);
-  plan.trailers[trailerIndex].rows[rowIndex].columns.push(column);
+  // lb-box-03: on-edge columns stay rightmost (the wall slot) — a new stack goes in before them.
+  const targetCols = plan.trailers[trailerIndex].rows[rowIndex].columns;
+  const firstEdge = targetCols.findIndex((c) => c.onEdge);
+  if (firstEdge >= 0) targetCols.splice(firstEdge, 0, column);
+  else targetCols.push(column);
   plan.balance = adjustBalance(plan.balance, skuId, -count);
   const cart = cartAfterPlacement(state, skuId, count);
 
@@ -616,7 +634,7 @@ export function addColumn(state: EditorState, trailerIndex: number, rowIndex: nu
 export function addLayer(state: EditorState, ref: ColumnRef, skuId: string, count: number): EditorState {
   const sku = state.skus.find((s) => s.id === skuId);
   const existingColumn = getColumn(state.plan, ref);
-  if (!sku || !existingColumn || count <= 0) return state;
+  if (!sku || !existingColumn || count <= 0 || existingColumn.onEdge) return state;
 
   const plan = clonePlan(state.plan);
   const column = getColumn(plan, ref)!;
@@ -697,7 +715,7 @@ export function addLayerFromLibrary(state: EditorState, ref: ColumnRef, sku: Pac
 export function setLayerCount(state: EditorState, ref: ColumnRef, layerIndex: number, count: number): EditorState {
   const existingColumn = getColumn(state.plan, ref);
   const existingLayer = existingColumn?.layers[layerIndex];
-  if (!existingColumn || !existingLayer) return state;
+  if (!existingColumn || !existingLayer || existingColumn.onEdge) return state;
   const priorCount = existingLayer.count;
   const nextCount = Math.max(0, Math.floor(count));
   const delta = nextCount - priorCount;
@@ -738,7 +756,7 @@ export function setLayerCount(state: EditorState, ref: ColumnRef, layerIndex: nu
  * consistent with lb-ui-02's own CHANGELOG precedent for the same divergence on column delete. */
 export function removeRow(state: EditorState, trailerIndex: number, rowIndex: number): EditorState {
   const row = state.plan.trailers[trailerIndex]?.rows[rowIndex];
-  if (!row) return state;
+  if (!row || rowHasEdge(row)) return state; // lb-box-03: a row holding on-edge boards is locked
 
   const plan = clonePlan(state.plan);
   const removedRow = plan.trailers[trailerIndex].rows[rowIndex];
@@ -847,7 +865,7 @@ function extractPieces(state: EditorState, source: PieceSource, keepRef?: Column
   if (source.kind === "column" || source.kind === "top") {
     const row = plan.trailers[source.ref.t]?.rows[source.ref.r];
     const column = row?.columns[source.ref.c];
-    if (!row || !column) return null;
+    if (!row || !column || column.onEdge) return null;
     if (source.kind === "column") {
       row.columns.splice(source.ref.c, 1);
       return { plan, holding, pieces: column, kept };
@@ -858,7 +876,7 @@ function extractPieces(state: EditorState, source: PieceSource, keepRef?: Column
     return { plan, holding, pieces, kept };
   }
   const held = holding[source.index];
-  if (!held) return null;
+  if (!held || held.onEdge) return null;
   if (source.kind === "holding") {
     holding.splice(source.index, 1);
     return { plan, holding, pieces: held, kept };
@@ -911,6 +929,7 @@ function combineLayers(target: PackLayer[], moved: PackLayer[]): PackLayer[] {
 export function evaluateStackTarget(state: EditorState, source: PieceSource, to: ColumnRef): TargetVerdict {
   const target = getColumn(state.plan, to);
   if (!target) return { level: "no", reason: "no such stack", heightAfter: 0 };
+  if (target.onEdge) return { level: "no", reason: EDGE_LOCKED_REASON, heightAfter: target.totalHeight };
   if ((source.kind === "column" || source.kind === "top") && sameRef(source.ref, to)) {
     return { level: "no", reason: "that's the same stack", heightAfter: target.totalHeight };
   }
@@ -989,7 +1008,10 @@ export function moveToSlot(state: EditorState, source: PieceSource, to: DropTarg
     // The row object survives the source removal (rows are never removed by it), so a same-row
     // reorder clamps against the already-shortened row with no special-casing.
     const toRow = toTrailer.rows[to.r];
-    const slot = Math.max(0, Math.min(to.slot, toRow.columns.length));
+    // lb-box-03: on-edge columns stay rightmost (the wall slot) — a new stack lands before them.
+    const firstEdge = toRow.columns.findIndex((c) => c.onEdge);
+    const maxSlot = firstEdge >= 0 ? firstEdge : toRow.columns.length;
+    const slot = Math.max(0, Math.min(to.slot, maxSlot));
     toRow.columns.splice(slot, 0, pieces);
   }
   recomputePlan(plan, state.options);
@@ -1018,6 +1040,14 @@ export function evaluateSlotTarget(state: EditorState, source: PieceSource, to: 
     reason = `fits · new row ${fmtInches(pieces.colLength)}" deep`;
   } else {
     if (!trailer.rows[to.r]) return { level: "no", reason: "no such row", heightAfter };
+    // lb-box-03: no flat stack may run into a row's on-edge slot.
+    const toRow = trailer.rows[to.r];
+    if (rowHasEdge(toRow)) {
+      const slotStart = Math.min(...toRow.columns.filter((c) => c.onEdge).map((c) => c.posY));
+      const sourceCol = source.kind === "column" ? getColumn(state.plan, source.ref) : null;
+      const flatAfter = toRow.columns.filter((c) => !c.onEdge && c !== sourceCol).reduce((s, c) => s + c.colWidth, 0) + pieces.colWidth;
+      if (flatAfter > slotStart + EPS) return { level: "no", reason: `${EDGE_LOCKED_REASON} · the wall slot is full`, heightAfter };
+    }
     // canDrop excludes a same-row column's own width by object identity, so a whole trailer column
     // is passed as the original object.
     const original = source.kind === "column" ? getColumn(state.plan, source.ref) : null;
@@ -1066,6 +1096,7 @@ function swappedPlan(state: EditorState, a: ColumnRef, b: ColumnRef): PackPlan |
 export function evaluateSwapTarget(state: EditorState, a: ColumnRef, b: ColumnRef): TargetVerdict {
   const heightAfter = getColumn(state.plan, a)?.totalHeight ?? 0;
   if (sameRef(a, b)) return { level: "no", reason: "that's the same stack", heightAfter };
+  if (isEdgeLocked(state, a) || isEdgeLocked(state, b)) return { level: "no", reason: EDGE_LOCKED_REASON, heightAfter };
   const plan = swappedPlan(state, a, b);
   if (!plan) return { level: "no", reason: "no such stack", heightAfter };
   for (const ref of [a, b]) {
@@ -1159,6 +1190,9 @@ function emptyRow(columns: PackColumn[]): PackRow {
 function reflowTrailer(trailer: PackTrailer, trailerIndex: number): { rows: PackRow[] | null; note: string | null } {
   const nonEmpty = trailer.rows.filter((r) => r.columns.length > 0);
   const compactOnly = nonEmpty.length === trailer.rows.length ? null : nonEmpty;
+  // lb-box-03: on-edge boards are locked to their row's wall slot — stacks don't slide across rows on
+  // this trailer; empty rows still close.
+  if (nonEmpty.some(rowHasEdge)) return { rows: compactOnly, note: null };
   if (nonEmpty.some((r) => rowDepth(r) === null)) return slideMixedTrailer(trailer, trailerIndex, compactOnly);
 
   const width = trailer.dims.width;

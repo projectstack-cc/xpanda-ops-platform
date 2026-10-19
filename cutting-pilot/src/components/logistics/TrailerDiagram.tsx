@@ -69,6 +69,12 @@
 // and the narrowest stack stay ≥ 44px (floor-grade targets); it scrolls inside its card as before.
 // Read-only rendering (Results) is unchanged.
 //
+// lb-box-03: on-edge columns (PackColumn.onEdge — holey board stood on edge in the box truck's wall
+// slot) draw at their true narrow width, filled by THICKNESS (colWidth — their layer unitHeight is the
+// 24″ tier) with a diagonal hatch in the text token, and carry no per-stack text; one "ON EDGE" chip
+// per row sits over the slot. In Customize they are locked (disabled, lock tooltip) and excluded from
+// the ≥ 44px target scaling — a 1″ board would otherwise blow the band up to thousands of px.
+//
 // lbr-09 (Steve, 2026-10-13): floor terms — the logistics manager calls the DOORS the FRONT and the
 // NOSE the REAR. Labels only: the captions now read REAR · NOSE (left) and FRONT · DOORS (right),
 // and user-facing text says "front (doors)". The layout, row order and R-numbering are unchanged
@@ -77,8 +83,10 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import type { Dimensions, PackColumn, PackTrailer } from "@/lib/packEngine";
+import { Lock } from "lucide-react";
+import type { Dimensions, PackColumn, PackRow, PackTrailer } from "@/lib/packEngine";
 import { thicknessColor, thicknessLabel } from "@/lib/thicknessPalette";
+import { useLang } from "@/components/lang";
 
 interface SelectedColumn {
   rowIndex: number;
@@ -143,11 +151,32 @@ function displayRowIndices(rowCount: number): number[] {
   return Array.from({ length: rowCount }, (_, i) => rowCount - 1 - i);
 }
 
-// Every distinct thickness on this trailer (base and top-off layers), thickest first — the Key.
+// Every distinct thickness on this trailer (base and top-off layers), thickest first — the Key. An
+// on-edge column's thickness is its colWidth (its layer unitHeight is the 24″ tier).
 function thicknessesOn(trailer: PackTrailer): number[] {
   const set = new Set<number>();
-  for (const row of trailer.rows) for (const column of row.columns) for (const layer of column.layers) set.add(layer.unitHeight);
+  for (const row of trailer.rows)
+    for (const column of row.columns) for (const layer of column.layers) set.add(column.onEdge ? column.colWidth : layer.unitHeight);
   return Array.from(set).sort((a, b) => b - a);
+}
+
+/** lb-box-03: diagonal hatch marking an on-edge column, in the text token (theme-aware). */
+const EDGE_HATCH: CSSProperties = {
+  backgroundImage: "repeating-linear-gradient(135deg, var(--text) 0 1.5px, transparent 1.5px 6px)",
+  opacity: 0.4,
+};
+
+/** lb-box-03: "3×6″ 7×1″" — the row's slot in one line (each on-edge column is too narrow for text). */
+function edgeSlotDetail(row: PackRow): string {
+  const groups = new Map<string, number>();
+  for (const c of row.columns) {
+    if (!c.onEdge) continue;
+    const k = `${thicknessLabel(c.colWidth)}×${c.stackCount}`;
+    groups.set(k, (groups.get(k) ?? 0) + 1);
+  }
+  return Array.from(groups.entries())
+    .map(([k, n]) => (n > 1 ? `${n}× ${k}` : k))
+    .join(" · ");
 }
 
 /** Diagonal stripe overlay for hatched (fractional / >16″) sizes, in the cell's own fg. */
@@ -163,6 +192,7 @@ function inches(n: number): string {
 function stackAccessibleName(column: PackColumn): string {
   const [base, ...rest] = column.layers;
   if (!base) return "Empty stack.";
+  if (column.onEdge) return `On edge: ${inches(column.colWidth)} boards × ${base.count}, ${Math.round(column.totalHeight)} inches tall.`;
   const parts = [`${inches(base.unitHeight)} × ${base.count}`];
   for (const l of rest) parts.push(`${inches(l.unitHeight)} × ${l.count} on top`);
   const total = Math.round(column.totalHeight * 100) / 100;
@@ -198,13 +228,16 @@ export default function TrailerDiagram({
   title,
   subtitle,
 }: TrailerDiagramProps) {
+  const { t } = useLang();
   const keyThicknesses = thicknessesOn(trailer);
+  const hasEdge = trailer.rows.some((r) => r.columns.some((c) => c.onEdge));
   const displayOrder = displayRowIndices(trailer.rows.length);
 
   // lbr-07: edit-mode px layout. Inches -> px, scaled so the shallowest stack (along the length) and
   // the narrowest stack (across the width) are each ≥ EDIT_MIN_TARGET_PX; empty placeholder rows get
   // a fixed width so their "+" slot still exists.
-  const allColumns = trailer.rows.flatMap((r) => r.columns);
+  // lb-box-03: locked on-edge columns aren't tap targets — they don't drive the ≥ 44px scaling.
+  const allColumns = trailer.rows.flatMap((r) => r.columns).filter((c) => !c.onEdge);
   const minColLength = Math.min(...allColumns.map((c) => c.colLength), dims.length);
   const minColWidth = Math.min(...allColumns.map((c) => c.colWidth), dims.width);
   const pxPerInch = editable && dims.length > 0 ? Math.max(DIAGRAM_MIN_WIDTH_PX / dims.length, EDIT_MIN_TARGET_PX / Math.max(1, minColLength)) : 0;
@@ -292,6 +325,32 @@ export default function TrailerDiagram({
               )}
               {row.columns.map((column, columnIndex) => {
                 const heightPct = dims.width > 0 ? (column.colWidth / dims.width) * 100 : 0;
+                if (column.onEdge) {
+                  const topPctEdge = dims.width > 0 ? (column.posY / dims.width) * 100 : 0;
+                  const widthPctEdge = row.rowLength > 0 ? (column.colLength / row.rowLength) * 100 : 100;
+                  const edgeColor = thicknessColor(column.colWidth);
+                  const isSelectedEdge = selectedColumn?.rowIndex === rowIndex && selectedColumn?.columnIndex === columnIndex;
+                  return (
+                    <button
+                      key={columnIndex}
+                      type="button"
+                      disabled={editable}
+                      onClick={() => onSelectColumn(rowIndex, columnIndex)}
+                      aria-pressed={isSelectedEdge}
+                      aria-label={`${stackAccessibleName(column)} Trailer ${trailerIndex + 1}, row R${rowIndex + 1}, position ${columnIndex + 1}.${editable ? ` ${t("lb.edge.lockedHint")}.` : ""}`}
+                      title={editable ? t("lb.edge.lockedHint") : column.rationale}
+                      className={[
+                        "absolute left-0 overflow-hidden box-border border-y border-[var(--line)]",
+                        editable ? "cursor-not-allowed" : "cursor-pointer hover:brightness-95",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:z-10",
+                        isSelectedEdge ? "ring-2 ring-[var(--brand)] z-10" : "",
+                      ].join(" ")}
+                      style={{ top: `${topPctEdge}%`, height: `${heightPct}%`, width: `${widthPctEdge}%`, background: edgeColor.bg }}
+                    >
+                      <span className="absolute inset-0 pointer-events-none" style={EDGE_HATCH} aria-hidden="true" />
+                    </button>
+                  );
+                }
                 const topPct = dims.width > 0 ? (column.posY / dims.width) * 100 : 0;
                 const widthPct = row.rowLength > 0 ? (column.colLength / row.rowLength) * 100 : 100;
                 const isSelected = selectedColumn?.rowIndex === rowIndex && selectedColumn?.columnIndex === columnIndex;
@@ -372,6 +431,25 @@ export default function TrailerDiagram({
                   </button>
                 );
               })}
+              {row.columns.some((c) => c.onEdge) && (() => {
+                const edges = row.columns.filter((c) => c.onEdge);
+                const slotTop = Math.min(...edges.map((c) => c.posY));
+                const slotBottom = Math.max(...edges.map((c) => c.posY + c.colWidth));
+                const slotPx = dims.width > 0 ? ((slotBottom - slotTop) / dims.width) * bandHeightPx : 0;
+                return (
+                  <div
+                    className="absolute left-0 right-0 z-[6] pointer-events-none flex items-center justify-center px-0.5"
+                    style={{ top: `${(slotTop / dims.width) * 100}%`, height: `${((slotBottom - slotTop) / dims.width) * 100}%` }}
+                    aria-hidden="true"
+                  >
+                    <span className="max-w-full truncate rounded-sm border border-[var(--line)] bg-surface text-text px-1 py-0.5 text-[11px] leading-none font-semibold tracking-wide inline-flex items-center gap-1">
+                      {editable && <Lock size={11} aria-hidden="true" />}
+                      {t("lb.edge.slot")}
+                      {slotPx >= 30 && <span className="font-mono tabular-nums font-medium text-muted">{edgeSlotDetail(row)}</span>}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
@@ -424,6 +502,15 @@ export default function TrailerDiagram({
             <span className="inline-block w-6 border-t-2 border-dashed border-[var(--text)]" aria-hidden="true" />
             top-off sits above the line
           </span>
+          {hasEdge && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="relative inline-block w-4 h-4 rounded-sm border border-[var(--line)] overflow-hidden bg-surface" aria-hidden="true">
+                <span className="absolute inset-0" style={EDGE_HATCH} />
+              </span>
+              {t("lb.edge.key")}
+              {editable && <span className="inline-flex items-center gap-1 font-semibold text-text"><Lock size={12} aria-hidden="true" />{t("lb.edge.locked")}</span>}
+            </span>
+          )}
           <span className="inline-flex items-center gap-1.5">
             <span
               className="inline-block w-4 h-4 rounded-sm border border-[var(--line)]"
