@@ -2944,6 +2944,33 @@ current series).
 
 ## Logistics (v2)
 
+- **mlc-03 — BOL generation prefills each trailer with its load's carrier, v2 and legacy (React Component Agent
+  §9b: `BolGenerateModal.tsx`; Logistics Agent §3: `logistics/load-builder.html`, `logistics/index.html`). No
+  migration. Not a BOL rendering change: `bol-shared.js` / `bolShared.ts` are untouched, so bilateral render parity
+  is not triggered.** Every trailer-form builder now uses trailer `i` → load `i + 1` (the dlv-04 mapping) and the
+  mlc-01 rule: `job_load_carriers` override, else `jobs.carrier`. Because the saved `bols.carrier_name` is right
+  from the start, the BOL Email queue (`carrier_name LIKE 'SEAL%'`) picks up only the Seal trailer. Source is
+  `GET /v2/api/orders/:id/load-carriers`; any fetch failure falls back to `job.carrier` and never blocks generation.
+  **v2 `BolGenerateModal`:** new `fetchLoadCarriers(jobId)` (overrides only, empty map on error) runs in the same
+  `Promise.all` as `fetchLoadTimeDisplays` in both the Load-Builder and dock-assignment branches; `carrierName =
+  carrierForLoad(i + 1) || j.carrier || ""`. The modal has no carry-over logic that copies `carrierName`, so
+  nothing else changed. **Legacy Load Builder:** `prefillFromJob` fires a non-awaited same-host fetch into
+  `state.prefillLoadCarriers` (`{}` on failure; ignored if the user has since pulled a different job), so the
+  existing prefill path never waits. The trailer builder sets `td.carrierName` from the load override, else
+  `job.carrier`. The auto carry-over loop still copies the address; after it, **when the job has any override**,
+  every trailer gets its own load's effective carrier back. That goes slightly past "re-apply each override": a
+  non-overridden load after an overridden one would otherwise inherit the override. With no overrides nothing new
+  runs, so single-carrier jobs behave exactly as before. A saved-load restore has no `prefillJobData`, so it is
+  unaffected. **Legacy dashboard `openBolModalForJob`:** the load-carriers fetch starts alongside the
+  loading-assignments fetch; each trailer gets `carrierName: <override for load i + 1> || base.carrierName`.
+  **`bol-compose.js` carry-over finding:** `td.carrierName = prev.carrierName` sits inside the carry-over checkbox
+  `change` listener, so it runs only when the user toggles it, never automatically on open. Not touched. (The
+  automatic carry-over is the Load Builder loop above.) **Verified:** `node --check` on the extracted inline
+  scripts of both legacy HTML files; `npx tsc --noEmit` clean; `npm run cf-build` green. **Expected behavior, not
+  floor-tested in this session:** a 2-load job with default `Seal Express - Dry Van` and load 2 = `XPanda truck`
+  generates BOL -01 as Seal and -02 as XPanda truck from v2 Generate BOL, legacy Load Builder and the legacy
+  dashboard, and only -01 appears in the BOL Email queue for that ship date.
+
 - **mlc-02 — Per-load Carrier column in order entry, `/v2/board` OrderEditModal and the logistics ShipmentEditModal
   (React Component Agent §9b; consumes mlc-01's `GET/PUT /v2/api/orders/:id/load-carriers`). No migration.** One
   component change plus three thin parent wirings. **`LoadTimesEditor.tsx`:** optional `carriers` /
@@ -7143,6 +7170,11 @@ current series).
   `node --check` clean.
 
 ## Logistics
+
+- **mlc-03 (cross-reference) — `logistics/load-builder.html` + `logistics/index.html`.** Build Load and the
+  dashboard "Generate BOL" prefill each trailer's carrier from its load's override (`/v2/api/orders/:id/load-carriers`,
+  best-effort), else `job.carrier`. `bol-compose.js` is unchanged; its carry-over runs only on user toggle. Full entry
+  under Logistics (v2).
 
 - **mlc-01 (cross-reference) — `_worker.js/lib/bol-carrier.js` + `_worker.js/routes/jobs.js`.** Legacy
   `propagateJobCarrierToBols` gets the same skip clause as v2 (BOLs on a load with a `job_load_carriers` override

@@ -1219,6 +1219,19 @@ async function openBolModalForJob(jobId) {
       freightTerms: 'prepaid', specialInstructions: '', carryOver: true,
     };
 
+    // mlc-03: per-load carrier overrides from v2, fetched alongside the loading assignments.
+    // Best-effort: {} on any failure, so every trailer falls back to job.carrier.
+    const loadCarriersPromise = fetch('/v2/api/orders/' + encodeURIComponent(job.id) + '/load-carriers', { credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        const map = {};
+        if (d && d.ok && Array.isArray(d.carriers)) {
+          for (const c of d.carriers) if (c && c.carrier && String(c.carrier).trim()) map[Number(c.load_number)] = String(c.carrier);
+        }
+        return map;
+      })
+      .catch(() => ({}));
+
     // Fetch loading assignments to pre-populate trailer numbers on each load.
     let assignmentsByLoad = {};
     try {
@@ -1230,10 +1243,13 @@ async function openBolModalForJob(jobId) {
       }
     } catch (_) {}
 
+    const loadCarriers = await loadCarriersPromise;
+
     const trailerData = [];
     for (let i = 0; i < loadCount; i++) {
       const assignment = assignmentsByLoad[i + 1] || {};
       trailerData.push(Object.assign({}, base, {
+        carrierName: loadCarriers[i + 1] || base.carrierName,
         trailerIndex: i,
         trailerLabel: loadCount > 1 ? t('logistics.trailerLabelMulti', { n: i + 1, count: loadCount }) : t('logistics.trailerLabelSingle'),
         invNumber: i === 0 ? (job.invoice_number || '') : '',

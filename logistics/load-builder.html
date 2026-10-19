@@ -511,6 +511,7 @@ let state = {
   forcedMode: false,
   prefillJobId: null,
   prefillJobData: null,
+  prefillLoadCarriers: {}, // mlc-03: load_number → per-load carrier override (job_load_carriers)
   trailerInvNumbers: {},
   collapsedCategories: {},
   collapsedParentGroups: {},
@@ -3240,7 +3241,8 @@ function openBolModal(result) {
       td.shipToCity     = job.ship_to_city     || (job.location || '').split(',')[0]?.trim() || '';
       td.shipToState    = job.ship_to_state    || (job.location || '').split(',')[1]?.trim() || '';
       td.shipToZip      = job.ship_to_zip      || '';
-      td.carrierName    = job.carrier          || '';
+      // mlc-03: trailer i → load i + 1; a per-load override wins over the job carrier.
+      td.carrierName    = (state.prefillLoadCarriers || {})[i + 1] || job.carrier || '';
       td.contactName    = job.contact_name     || '';
       td.contactPhone   = job.contact_phone    || '';
       td.poNumber       = job.po_number        || '';
@@ -3267,6 +3269,14 @@ function openBolModal(result) {
       if (!td.zoned) td.specialInstructions = prev.specialInstructions;
       td.poNumber = prev.poNumber; td.deliveryTime = prev.deliveryTime;
     }
+  }
+  // mlc-03: carry-over still copies the address, but never a carrier across a split. When the job
+  // has per-load overrides, every trailer gets its own load's effective carrier back (override, else
+  // job.carrier), so a non-overridden load after an overridden one doesn't inherit the override.
+  // No overrides → nothing here runs (today's behavior).
+  if (state.prefillJobData && Object.keys(state.prefillLoadCarriers || {}).length) {
+    const lc = state.prefillLoadCarriers;
+    trailerData.forEach((td, i) => { td.carrierName = lc[i + 1] || state.prefillJobData.carrier || ''; });
   }
   BolCompose.open({
     trailerData,
@@ -3535,6 +3545,19 @@ async function prefillFromJob(jobId) {
 
     state.prefillJobId = jobId;
     state.prefillJobData = job;
+    // mlc-03: per-load carrier overrides from v2 (same-host fetch, same pattern as bol-shared.js's
+    // fuel quote). Best-effort and not awaited — the prefill never waits on it; {} on failure, so
+    // every trailer falls back to job.carrier.
+    state.prefillLoadCarriers = {};
+    fetch('/v2/api/orders/' + encodeURIComponent(job.id) + '/load-carriers', { credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!d || !d.ok || !Array.isArray(d.carriers) || state.prefillJobId !== jobId) return;
+        const map = {};
+        for (const c of d.carriers) if (c && c.carrier && String(c.carrier).trim()) map[Number(c.load_number)] = String(c.carrier);
+        state.prefillLoadCarriers = map;
+      })
+      .catch(() => {});
 
     const existingSkus = [...state.skus];
     const cartMap = new Map();

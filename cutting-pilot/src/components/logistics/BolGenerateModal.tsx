@@ -74,6 +74,22 @@ async function fetchLoadTimeDisplays(jobId: string): Promise<Map<number, string>
   return out;
 }
 
+/** mlc-03: load_number → that load's explicit carrier override (job_load_carriers via GET
+ * /v2/api/orders/:id/load-carriers). Overrides only — a load without one follows j.carrier. Non-fatal:
+ * any failure returns an empty map, so every trailer falls back to the job carrier as before. */
+async function fetchLoadCarriers(jobId: string): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  try {
+    const r = await fetch(`/v2/api/orders/${encodeURIComponent(jobId)}/load-carriers`);
+    const json = await r.json();
+    if (!r.ok || !json?.ok || !Array.isArray(json.carriers)) return out;
+    for (const c of json.carriers) if (c?.carrier && String(c.carrier).trim()) out.set(Number(c.load_number), String(c.carrier));
+  } catch {
+    // fall back to j.carrier
+  }
+  return out;
+}
+
 interface BolGenerateModalProps {
   /** Dock-assignment path (Shipment Dashboard) -- unchanged. */
   jobId: string | null;
@@ -213,13 +229,16 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
           // already made, not an extra one (Design Decision's "don't re-fetch" read literally).
           let j: JobForBol | null = null;
           let loadTimes = new Map<number, string>();
+          let loadCarriers = new Map<number, string>();
           if (packPlanSource.jobId) {
-            const [jobJson, lt] = await Promise.all([
+            const [jobJson, lt, lc] = await Promise.all([
               fetch(`/v2/api/jobs/${encodeURIComponent(packPlanSource.jobId)}`).then((r) => r.json()),
               fetchLoadTimeDisplays(packPlanSource.jobId),
+              fetchLoadCarriers(packPlanSource.jobId),
             ]);
             if (cancelled) return;
             loadTimes = lt;
+            loadCarriers = lc;
             if (jobJson.ok && jobJson.job) {
               j = jobJson.job;
               setJob(j);
@@ -233,6 +252,8 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
           const skuById = new Map(packPlanSource.skus.map((s) => [s.id, s]));
           // dlv-04: trailer i → load_number i + 1.
           const timeForLoad = (n: number) => loadTimes.get(n) || "";
+          // mlc-03: same mapping for the per-load carrier override.
+          const carrierForLoad = (n: number) => loadCarriers.get(n) || "";
           const built: TrailerForm[] = packPlanSource.plan.trailers.map((trailer, i) => {
             const pieces = buildPiecesTable(trailer, packPlanSource.skus);
             const commodityDescriptionFull = buildPlanCommodityDescription(pieces, skuById, true);
@@ -250,7 +271,7 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
               shipToZip: j?.ship_to_zip || "",
               contactName: j?.contact_name || "",
               contactPhone: j?.contact_phone || "",
-              carrierName: j?.carrier || "",
+              carrierName: carrierForLoad(i + 1) || j?.carrier || "",
               poNumber: j?.po_number || "",
               deliveryTime: timeForLoad(i + 1) || j?.delivery_time || "",
               specialInstructions: "",
@@ -273,13 +294,16 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
           });
           setTrailers(built);
         } else if (jobId) {
-          const [jobJson, laJson, loadTimes] = await Promise.all([
+          const [jobJson, laJson, loadTimes, loadCarriers] = await Promise.all([
             fetch(`/v2/api/jobs/${encodeURIComponent(jobId)}`).then((r) => r.json()),
             fetch(`/v2/api/loading-assignments?job_id=${encodeURIComponent(jobId)}`).then((r) => r.json()),
             fetchLoadTimeDisplays(jobId),
+            fetchLoadCarriers(jobId),
           ]);
           // dlv-04: trailer i → load_number i + 1, the same mapping byLoad.get(i + 1) uses below.
           const timeForLoad = (n: number) => loadTimes.get(n) || "";
+          // mlc-03: same mapping for the per-load carrier override.
+          const carrierForLoad = (n: number) => loadCarriers.get(n) || "";
           if (cancelled) return;
           if (!jobJson.ok || !jobJson.job) {
             setLoadError("Could not load this job.");
@@ -313,7 +337,7 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
               shipToZip: j.ship_to_zip || "",
               contactName: j.contact_name || "",
               contactPhone: j.contact_phone || "",
-              carrierName: j.carrier || "",
+              carrierName: carrierForLoad(i + 1) || j.carrier || "",
               poNumber: j.po_number || "",
               deliveryTime: timeForLoad(i + 1) || j.delivery_time || "",
               specialInstructions: "",
