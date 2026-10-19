@@ -2941,6 +2941,32 @@ current series).
 
 ## Logistics (v2)
 
+- **mlc-01 — Per-load carriers: `job_load_carriers` table, `GET/PUT /v2/api/orders/:id/load-carriers`, per-load BOL
+  propagation (Next/Cloudflare Platform Agent §9a; Database & API Agent §9 for the legacy `_worker.js` touch).
+  MIGRATION: `DB_Migrations/mlc-01-job-load-carriers.sql` (gitignored) — run in production D1 on 2026-10-19 before
+  push; verified the table exists with 0 rows and `bols.load_number` exists.** Why: the carrier lived only on
+  `jobs.carrier`, so a multi-load order with one Seal trailer printed "Seal" on every BOL and queued every BOL for
+  Seal. **The rule (single source, `lib/logistics/loadCarriers.ts`):** `job_load_carriers` is a sparse override —
+  effective carrier of load N = its row if one exists, else `jobs.carrier`. A row is stored only when non-empty and
+  different (`normCarrier`) from the order carrier at save time, so single-carrier orders have zero rows and every
+  job-level reader is unchanged. Rows past `load_count` are ignored by readers and deleted on the next PUT.
+  **New `loadCarriers.ts`:** `readLoadCarriers(db, jobId)` → `{ default_carrier, load_count, carriers }`;
+  `effectiveLoadCarrier(jobCarrier, overrides, loadNumber)`; `LOAD_CARRIER_JOIN(laAlias)` /
+  `effectiveCarrierSql(jobAlias)` string helpers (alias `jlc`) for mlc-04. **`bolCarrier.ts`:** new
+  `propagateLoadCarrierToBols` (same contract as the job-level one, scoped to `job_id = ? AND load_number = ?`
+  unsigned BOLs, rewrites only BOLs whose effective carrier still equals the old effective, one `logActivity`, never
+  throws). `propagateJobCarrierToBols` now skips BOLs on a load that has an override (`load_number NOT IN (SELECT …
+  job_load_carriers …)`, `jobId` bound twice). **Route:** modelled on load-times (same `canEdit` = `orders` edit OR
+  `logistics.dashboard` edit; admin passes). PUT validates first (400 on load_number outside 1–`load_count` or a
+  carrier over 120 chars), upserts/deletes in one `db.batch` (plus the `> load_count` prune), then calls
+  `propagateLoadCarrierToBols` for each load whose effective carrier changed, logs one `update`/`job` row
+  (`… set load carriers: L1 Seal Express - Dry Van, L2 XPanda truck`), and returns the fresh GET payload. The
+  load-times route is untouched. **Middleware:** `PATTERN_PERMISSION_MAP` row for `/orders/:id/load-carriers` with
+  the load-times keys. **Verified:** `bolCarrier.selfcheck.ts` **27/27** (`npx tsx`; the fake D1 now keys off the
+  SQL — new cases prove an overridden load's BOL is skipped by the job-level propagation, and the per-load function
+  touches only its load and skips a hand-edited override). `node --check` on `bol-carrier.js` and `jobs.js`.
+  `npx tsc --noEmit` clean; `npm run cf-build` green.
+
 - **bol-2col-01 — BOL commodity with more than 10 source lines renders as two separate text boxes (Logistics
   Agent §3 lead; Next/Cloudflare Platform Agent §9a: `bolShared.ts`, selfcheck, parity script; React Component
   Agent §9b: `bolEditorEngine.ts`). Legacy mirror in the same commit (bilateral parity): `logistics/bol-shared.js`
@@ -7091,6 +7117,11 @@ current series).
   `node --check` clean.
 
 ## Logistics
+
+- **mlc-01 (cross-reference) — `_worker.js/lib/bol-carrier.js` + `_worker.js/routes/jobs.js`.** Legacy
+  `propagateJobCarrierToBols` gets the same skip clause as v2 (BOLs on a load with a `job_load_carriers` override
+  don't follow a Job Board Classic carrier edit); the per-load function stays v2-only. Legacy job delete also deletes
+  `job_load_carriers` rows. Full entry under Logistics (v2).
 
 - **lgx-loadsheet-02 (cross-reference) — `load-builder.html` / `bol-compose.js` write-only addition.** `openBolModal` adds `td.loadManifest`, the per-trailer item list built from `breakdown`, and `bol-compose.js` posts it as `load_manifest` so the v2 loading sheet can print one sheet per load. No UI change. Full entry under Logistics (v2).
 

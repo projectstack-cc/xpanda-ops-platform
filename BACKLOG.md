@@ -418,6 +418,9 @@
 
 ## Logistics (v2)
 
+- [ ] **mlc-01 follow-up — the v2 Delete Job port must also delete `job_load_carriers`** (legacy `jobs.js` delete already does).
+- [ ] **mlc follow-up — per-load carrier display on v2 shipment rows / dock `ShippingInfoModal`.** They still show the order carrier only.
+
 - [ ] **Loading-sheet printed flag: optional reset when an order's loads/BOLs/manifest change after print** (lgx-printed-01 follow-on).
 - [ ] **Consider mirroring the loading-sheet printed state on the v2 Job Board / dock board if requested** (lgx-printed-01 follow-on).
 - [ ] **dlv-02 follow-up — Carrier View and the late-pickup check should read per-load appointments from `job_load_times`** instead of parsing `jobs.delivery_time` (today they see only the summary's first weekday + time).

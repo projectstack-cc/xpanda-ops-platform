@@ -117,6 +117,12 @@ const PATTERN_PERMISSION_MAP: Array<{ pattern: RegExp; keys: string[] }> = [
     pattern: /^\/v2\/api\/orders\/[^/]+\/load-times\/?$/,
     keys: ["orders", "logistics.dashboard", "logistics.bol", "logistics.load-builder", "logistics.loading"],
   },
+  // mlc-01: per-load carriers — same readers as load-times (legacy Load Builder GETs it in mlc-03).
+  // PUT is narrowed in the handler to `orders` OR `logistics.dashboard` edit.
+  {
+    pattern: /^\/v2\/api\/orders\/[^/]+\/load-carriers\/?$/,
+    keys: ["orders", "logistics.dashboard", "logistics.bol", "logistics.load-builder", "logistics.loading"],
+  },
 ];
 
 function permissionKeysFor(pathname: string): string[] | null {

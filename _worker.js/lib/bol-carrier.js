@@ -1,5 +1,6 @@
 // lib/bol-carrier.js — job carrier → BOL carrier rules (bolc-01, bolc-02).
 // Mirrored in cutting-pilot/src/lib/logistics/bolCarrier.ts. Keep both in lockstep.
+// (mlc-01: the per-load propagateLoadCarrierToBols is v2-only — only v2 writes per-load carriers.)
 import { logActivity } from './core.js';
 
 export function normCarrier(x) {
@@ -58,9 +59,11 @@ export async function propagateJobCarrierToBols(db, jobId, oldCarrier, newCarrie
   try {
     if (normCarrier(oldCarrier) === normCarrier(newCarrier)) return 0;
     const next = String(newCarrier ?? '').trim();
+    // mlc-01: loads with a job_load_carriers override don't follow the job default (v2 writes them).
     const { results } = await db.prepare(
-      'SELECT id, carrier_name, render_overrides FROM bols WHERE job_id = ? AND signed_bol_photo_key IS NULL'
-    ).bind(jobId).all();
+      'SELECT id, carrier_name, render_overrides FROM bols WHERE job_id = ? AND signed_bol_photo_key IS NULL' +
+      ' AND (load_number IS NULL OR load_number NOT IN (SELECT load_number FROM job_load_carriers WHERE job_id = ?))'
+    ).bind(jobId, jobId).all();
     const stmts = [];
     const bolIds = [];
     for (const r of results || []) {

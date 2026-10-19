@@ -71,8 +71,13 @@ export async function propagateJobCarrierToBols(
     if (normCarrier(oldCarrier) === normCarrier(newCarrier)) return 0;
     const next = String(newCarrier ?? "").trim();
     const { results } = await db
-      .prepare("SELECT id, carrier_name, render_overrides FROM bols WHERE job_id = ? AND signed_bol_photo_key IS NULL")
-      .bind(jobId)
+      // mlc-01: loads with a job_load_carriers override don't follow the job default.
+      .prepare(
+        `SELECT id, carrier_name, render_overrides FROM bols
+          WHERE job_id = ? AND signed_bol_photo_key IS NULL
+            AND (load_number IS NULL OR load_number NOT IN (SELECT load_number FROM job_load_carriers WHERE job_id = ?))`
+      )
+      .bind(jobId, jobId)
       .all<{ id: string; carrier_name: string | null; render_overrides: string | null }>();
     const stmts: D1PreparedStatement[] = [];
     const bolIds: string[] = [];
@@ -92,6 +97,48 @@ export async function propagateJobCarrierToBols(
     return bolIds.length;
   } catch (e) {
     console.error("propagateJobCarrierToBols failed:", String((e as Error)?.message || e));
+    return 0;
+  }
+}
+
+// mlc-01: per-load counterpart of propagateJobCarrierToBols, scoped to one load's unsigned BOLs.
+// Rewrites only BOLs whose effective carrier is still the load's old effective carrier.
+// Best-effort: never throws. Returns the number of BOLs updated.
+export async function propagateLoadCarrierToBols(
+  db: D1Database,
+  jobId: string,
+  loadNumber: number,
+  oldEffective: string | null,
+  newEffective: string | null,
+  actorId: string | null
+): Promise<number> {
+  try {
+    if (normCarrier(oldEffective) === normCarrier(newEffective)) return 0;
+    const next = String(newEffective ?? "").trim();
+    const { results } = await db
+      .prepare(
+        "SELECT id, carrier_name, render_overrides FROM bols WHERE job_id = ? AND load_number = ? AND signed_bol_photo_key IS NULL"
+      )
+      .bind(jobId, loadNumber)
+      .all<{ id: string; carrier_name: string | null; render_overrides: string | null }>();
+    const stmts: D1PreparedStatement[] = [];
+    const bolIds: string[] = [];
+    for (const r of results || []) {
+      if (normCarrier(effectiveCarrier(r.carrier_name, r.render_overrides)) !== normCarrier(oldEffective)) continue;
+      stmts.push(
+        db.prepare("UPDATE bols SET carrier_name = ?, render_overrides = ? WHERE id = ?")
+          .bind(next, stripCarrierOverride(r.render_overrides), r.id)
+      );
+      bolIds.push(r.id);
+    }
+    if (!stmts.length) return 0;
+    await db.batch(stmts);
+    await logActivity(db, "update", "bol", jobId,
+      `Load ${loadNumber} carrier propagated to ${bolIds.length} BOL(s): ${newEffective}`,
+      { job_id: jobId, load_number: loadNumber, from: oldEffective, to: newEffective, bol_ids: bolIds }, actorId);
+    return bolIds.length;
+  } catch (e) {
+    console.error("propagateLoadCarrierToBols failed:", String((e as Error)?.message || e));
     return 0;
   }
 }
