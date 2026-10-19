@@ -22,6 +22,7 @@ import { StatusBadge } from "./ShipmentRow";
 import AssignShipDaysModal, { fmtDay } from "./AssignShipDaysModal";
 import type { ShipmentDetail, ShipmentLoad } from "./types";
 import type { LoadTimeRow } from "@/components/orders/LoadTimesEditor";
+import { LiveLoadPill } from "@/components/LiveLoadMarker";
 
 // lgx-minimap-01: shared with the Carrier View. Leaflet touches `window` at import -> client-only.
 const DestinationMiniMap = dynamic(() => import("@/components/DestinationMiniMap"), { ssr: false });
@@ -35,6 +36,8 @@ interface ShipmentDetailPanelProps {
   onShipDaysSaved?: () => void;
   /** lgx-boldel-01: row's bol_count; drives the manager-only "Delete all BOLs" button. */
   bolCount?: number;
+  /** live-02: the order's live load numbers (live-01); each matching load row gets the live pill. */
+  liveLoads?: number[];
 }
 
 function addressLines(d: ShipmentDetail): string[] {
@@ -56,6 +59,7 @@ export default function ShipmentDetailPanel({
   orderShipDate = null,
   onShipDaysSaved,
   bolCount = 0,
+  liveLoads = [],
 }: ShipmentDetailPanelProps) {
   const [detail, setDetail] = useState<ShipmentDetail | null>(cache.get(shipmentId) ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -300,7 +304,11 @@ export default function ShipmentDetailPanel({
               return (
                 <div key={`${ld.load_number ?? "x"}-${i}`} className="px-3 py-2 text-sm space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono tabular-nums font-semibold text-text">{suffix || "Load"}</span>
+                    {liveLoads.includes(n) ? (
+                      <LiveLoadPill className="text-sm tabular-nums">{suffix || "Load"}</LiveLoadPill>
+                    ) : (
+                      <span className="font-mono tabular-nums font-semibold text-text">{suffix || "Load"}</span>
+                    )}
                     <StatusBadge status={ld.loading_status} />
                     {ld.trailer_number && (
                       <span className="text-xs">

@@ -8,6 +8,7 @@ import { formatEtClock } from "@/lib/etDateTime";
 import { LD_ADVANCE_STYLE, statusVariant } from "../status";
 import type { CardActionHandlers, DockAssignment } from "../dockTypes";
 import { DOCK_TABLET as P } from "./palette";
+import { LiveLoadPill, LiveLoadStripe } from "@/components/LiveLoadMarker";
 
 interface DockTabletCardProps {
   a: DockAssignment;
@@ -152,15 +153,18 @@ export default function DockTabletCard({ a, siblings, layout, cardHandlers, canM
   return (
     <div
       data-assignment-id={a.id}
-      className="flex flex-col"
+      className={a.live_load ? "relative flex flex-col overflow-hidden" : "flex flex-col"}
       style={{
         border: `1px solid ${P.cardBorder}`,
         borderRadius: 14,
         padding: full ? 18 : 16,
+        // live-02: clear the 10px hazard stripe.
+        paddingLeft: a.live_load ? (full ? 28 : 26) : undefined,
         gap: full ? 14 : 12,
         background: `linear-gradient(0deg, ${variant.border}0d, ${variant.border}0d), ${P.surface}`,
       }}
     >
+      {a.live_load && <LiveLoadStripe width={10} />}
       {/* Top row */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -178,20 +182,40 @@ export default function DockTabletCard({ a, siblings, layout, cardHandlers, canM
             )}
           </div>
         </div>
-        <span
-          className="shrink-0 font-bold uppercase whitespace-nowrap"
-          style={{
-            padding: "6px 12px",
-            borderRadius: 9999,
-            background: variant.bg,
-            border: `1px solid ${variant.border}`,
-            color: variant.text,
-            fontSize: 14,
-            letterSpacing: ".06em",
-          }}
-        >
-          {variant.label}
-        </span>
+        <div className="shrink-0 flex items-center gap-2">
+          {/* live-02: same box as the status pill (padding, radius, font, 1px border) so heights match. */}
+          {a.live_load && (
+            <LiveLoadPill
+              className="uppercase"
+              style={{
+                padding: "6px 12px",
+                borderRadius: 9999,
+                background: P.liveInk,
+                color: P.liveYellow,
+                border: `1px solid ${P.liveInk}`,
+                fontSize: 14,
+                lineHeight: "inherit",
+                letterSpacing: ".06em",
+              }}
+            >
+              Live load
+            </LiveLoadPill>
+          )}
+          <span
+            className="shrink-0 font-bold uppercase whitespace-nowrap"
+            style={{
+              padding: "6px 12px",
+              borderRadius: 9999,
+              background: variant.bg,
+              border: `1px solid ${variant.border}`,
+              color: variant.text,
+              fontSize: 14,
+              letterSpacing: ".06em",
+            }}
+          >
+            {variant.label}
+          </span>
+        </div>
       </div>
 
       {/* Meta row */}

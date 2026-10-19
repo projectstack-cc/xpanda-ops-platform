@@ -11,6 +11,7 @@ import StatusBadge from "./StatusBadge";
 import { formatLoadLabel } from "@/lib/truckType";
 import { parseDeliveryTime } from "@/lib/deliveryTime";
 import { SHOW_STATUS_BADGES } from "./flags";
+import { LiveLoadPill, LiveLoadStripe } from "@/components/LiveLoadMarker";
 
 interface OrderRowProps {
   row: ScheduleBoardRow;
@@ -56,14 +57,22 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect, intera
   // Unmatched rows always show their flag (operator's only "no platform job" signal), regardless
   // of the status-badge feature flag.
   const showBadge = SHOW_STATUS_BADGES || row.unmatched;
-  const showSecondLine = showBadge || scrapYes || !!loadTimeLabel;
+  const live = row.live_load === true;
+  // live-02: a live row with no load/time label still gets a "LIVE" pill, so line 2 must render.
+  const showSecondLine = showBadge || scrapYes || !!loadTimeLabel || live;
+  // Unmatched rows are dimmed; on a live row the dimming moves to an inner wrapper so the hazard
+  // stripe stays at full color.
+  const dimCls = row.unmatched ? "opacity-60 grayscale-[30%]" : "";
 
   return (
     <div
       className={[
-        interactive ? "px-3 py-2.5 min-h-[44px] sm:px-1.5 sm:py-1 sm:min-h-0" : "px-1.5 py-1",
+        // live-02: extra left padding clears the 6px stripe.
+        interactive
+          ? live ? "pl-[18px] pr-3 py-2.5 min-h-[44px] sm:pl-3 sm:pr-1.5 sm:py-1 sm:min-h-0" : "px-3 py-2.5 min-h-[44px] sm:px-1.5 sm:py-1 sm:min-h-0"
+          : live ? "pl-3 pr-1.5 py-1" : "px-1.5 py-1",
         inGroup ? "" : "border-b border-[var(--border-light)]",
-        row.unmatched ? "opacity-60 grayscale-[30%]" : "",
+        live ? "relative" : dimCls,
         clickable ? "cursor-pointer hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]" : "",
       ].join(" ")}
       {...(clickable
@@ -80,6 +89,8 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect, intera
           }
         : {})}
     >
+      {live && <LiveLoadStripe />}
+      <div className={live ? dimCls : undefined}>
       <div className="flex items-center justify-between gap-1 min-w-0">
         <span className={`truncate ${primaryCls}`}>{row.customer || "—"}</span>
         <span className="shrink-0 flex items-center gap-0.5">
@@ -129,7 +140,9 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect, intera
               <Recycle size={11} className="shrink-0 text-[var(--warn-text)]" aria-label="Scrap pickup" />
             )}
           </div>
-          {loadTimeLabel && (
+          {live ? (
+            <LiveLoadPill className={`shrink-0 tabular-nums ${smallText}`}>{loadTimeLabel || "LIVE"}</LiveLoadPill>
+          ) : loadTimeLabel && (
             <span
               className={`shrink-0 font-mono tabular-nums ${smallText} text-text-hint`}
               title={row.delivery_time ?? undefined}
@@ -139,6 +152,7 @@ export default function OrderRow({ row, orphanedGroup, inGroup, onSelect, intera
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

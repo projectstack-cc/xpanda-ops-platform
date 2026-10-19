@@ -43,6 +43,10 @@
   --info-bg: #eff6ff;
   --info-border: #bfdbfe;
   --info-text: #1e40af;
+  /* live-02: dock hazard stripe — same in both modes (hazard colors don't invert). */
+  --live-yellow: #f5c400;
+  --live-ink: #111111;
+  --live-pill-border: var(--live-ink);
   --warn-bg: #fef3c7;
   --warn-border: #fde68a;
   --warn-text: #92400e;
@@ -125,6 +129,9 @@
   --info-bg: rgba(59, 130, 246, 0.12);
   --info-border: rgba(59, 130, 246, 0.35);
   --info-text: #93c5fd;
+  --live-yellow: #f5c400;
+  --live-ink: #111111;
+  --live-pill-border: var(--live-yellow); /* black pill would vanish on a dark surface */
   --warn-bg: rgba(245, 158, 11, 0.12);
   --warn-border: rgba(245, 158, 11, 0.35);
   --warn-text: #fcd34d;

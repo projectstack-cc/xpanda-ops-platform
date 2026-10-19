@@ -8,7 +8,8 @@ import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, FileText, Eye } from "lucide-react";
 import { formatDuration } from "@/lib/time";
 import type { ShipmentListItem } from "@/components/logistics/types";
-import { CustomerPickupBadge } from "@/components/logistics/ShipmentRow";
+import { CustomerPickupBadge, entryLiveLoads } from "@/components/logistics/ShipmentRow";
+import { LiveLoadChip } from "@/components/LiveLoadMarker";
 
 interface ShipmentCalendarProps {
   shipments: ShipmentListItem[];
@@ -290,6 +291,14 @@ export default function ShipmentCalendar({
                     <CustomerPickupBadge />
                   </span>
                 )}
+                {(() => {
+                  const live = entryLiveLoads(selectedShipment);
+                  return live ? (
+                    <span className="block mt-1">
+                      <LiveLoadChip loads={live.length ? live : undefined} />
+                    </span>
+                  ) : null;
+                })()}
               </div>
               <div>
                 <span className="text-muted block">Trailer #</span>

@@ -19,7 +19,7 @@ import {
   Receipt,
 } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
-import ShipmentRow from "@/components/logistics/ShipmentRow";
+import ShipmentRow, { entryLiveLoads } from "@/components/logistics/ShipmentRow";
 import LinkedTableGroups from "@/components/linked/LinkedTableGroups";
 import ShipmentCalendar from "./ShipmentCalendar";
 import BolViewerModal from "@/components/logistics/BolViewerModal";
@@ -565,6 +565,7 @@ export default function ShipmentDashboard({
                   const share = s.day_loads ? s.day_loads.length / Math.max(s.load_count ?? 1, 1) : 1;
                   return sum + (val || 0) * share;
                 }, 0);
+                const liveCount = shipments.filter((s) => entryLiveLoads(s) !== null).length;
 
                 return (
                   <div key={dateKey} className="space-y-2">
@@ -574,15 +575,23 @@ export default function ShipmentDashboard({
                       count={shipments.length}
                       noun={["shipment", "shipments"]}
                       extra={
-                        totalBdft > 0 && (
-                          <span title={hasSplit ? "Split orders prorated evenly by load" : undefined}>
-                            <strong className="text-text tabular-nums font-mono">
-                              {hasSplit ? "≈" : ""}
-                              {totalBdft.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                            </strong>{" "}
-                            BDFT
-                          </span>
-                        )
+                        <>
+                          {totalBdft > 0 && (
+                            <span title={hasSplit ? "Split orders prorated evenly by load" : undefined}>
+                              <strong className="text-text tabular-nums font-mono">
+                                {hasSplit ? "≈" : ""}
+                                {totalBdft.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                              </strong>{" "}
+                              BDFT
+                            </span>
+                          )}
+                          {/* live-02: shipments on this day with a live load. */}
+                          {liveCount > 0 && (
+                            <span title="Live load — driver waits at the dock">
+                              · <strong className="text-text tabular-nums">{liveCount}</strong> live
+                            </span>
+                          )}
+                        </>
                       }
                     />
 

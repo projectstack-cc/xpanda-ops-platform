@@ -49,4 +49,8 @@ export const DOCK_TABLET = {
   packBg: "#fefce8",
   packLabel: "#713f12",
   packInk: "#422006",
+
+  // live-02: dock hazard stripe (same values as globals.css --live-*; hazard colors don't invert)
+  liveYellow: "var(--live-yellow)",
+  liveInk: "var(--live-ink)",
 } as const;

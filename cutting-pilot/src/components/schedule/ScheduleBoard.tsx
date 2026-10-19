@@ -10,6 +10,7 @@ import PlatformHeader from "@/components/PlatformHeader";
 import type { ScheduleBoardResponse } from "@/types/schedule";
 import WeekBand from "./WeekBand";
 import FreshnessClock from "./FreshnessClock";
+import { LiveLoadLegend } from "@/components/LiveLoadMarker";
 
 const POLL_MS = 60_000;
 
@@ -301,6 +302,7 @@ export default function ScheduleBoard({ userName, isAdmin, permissions }: Schedu
                   showing last loaded data
                 </span>
               )}
+              {data.days.some((d) => d.rows.some((r) => r.live_load)) && <LiveLoadLegend />}
               <FreshnessClock sourceUpdatedAt={data.source_updated_at} />
             </div>
           </div>

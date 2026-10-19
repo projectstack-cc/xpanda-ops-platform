@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { Camera, FileText } from "lucide-react";
 import { statusVariant } from "./status";
+import { LiveLoadChip, LiveLoadStripe } from "@/components/LiveLoadMarker";
 import { advanceLabel, nextLoadingStatus, type CardActionHandlers, type DockAssignment } from "./dockTypes";
 
 interface DockAssignmentCardProps extends CardActionHandlers {
@@ -121,14 +122,16 @@ export default function DockAssignmentCard({
       onDragEnd={onCardDragEnd}
       onTouchStart={onCardTouchStart}
       className={
-        compact
+        (compact
           ? "rounded border px-2 py-1.5 flex flex-col gap-1 text-left w-full overflow-hidden"
-          : "rounded border px-2.5 py-2 space-y-1.5 text-left w-full"
+          : "rounded border px-2.5 py-2 space-y-1.5 text-left w-full") + (a.live_load ? " relative" : "")
       }
       style={{
         background: `linear-gradient(0deg, ${variant.border}1a, ${variant.border}1a), var(--surface)`,
         borderColor: variant.border,
         borderLeftWidth: 4,
+        // live-02: clear the 6px hazard stripe.
+        paddingLeft: a.live_load ? (compact ? 14 : 16) : undefined,
         height: compact ? COMPACT_CARD_H : undefined,
         opacity: isDragging ? 0.5 : 1,
         transform: isDragging ? 'scale(0.95)' : 'none',
@@ -136,6 +139,7 @@ export default function DockAssignmentCard({
         boxShadow: highlighted ? '0 0 0 3px var(--accent)' : undefined,
       }}
     >
+      {a.live_load && <LiveLoadStripe />}
       <div className={`flex items-center justify-between gap-1${compact ? " h-4 shrink-0 whitespace-nowrap" : ""}`}>
         <div className={`flex items-center gap-1.5 min-w-0 ${compact ? "flex-nowrap overflow-hidden" : "flex-wrap"}`}>
           {a.invoice_number ? (
@@ -178,7 +182,14 @@ export default function DockAssignmentCard({
         className={compact ? "h-4 shrink-0 text-xs leading-4 text-muted truncate" : "text-sm text-muted truncate leading-tight"}
         title={a.customer ?? "Unknown customer"}
       >
-        {a.customer || "Unknown customer"}
+        {a.live_load ? (
+          <span className="flex items-center gap-1 min-w-0">
+            <span className="truncate min-w-0">{a.customer || "Unknown customer"}</span>
+            <LiveLoadChip size={compact ? "sm" : "md"} className="shrink-0" />
+          </span>
+        ) : (
+          a.customer || "Unknown customer"
+        )}
       </div>
 
       <div

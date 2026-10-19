@@ -10,6 +10,7 @@ import PlatformHeader from "@/components/PlatformHeader";
 import type { ScheduleBoardResponse } from "@/types/schedule";
 import WeekBand from "./WeekBand";
 import FreshnessClock from "./FreshnessClock";
+import { LiveLoadLegend } from "@/components/LiveLoadMarker";
 import OrderDetailModal from "@/components/board/OrderDetailModal";
 
 const POLL_MS = 60_000;
@@ -118,6 +119,7 @@ export default function InteractiveScheduleBoard({ userName, isAdmin, permission
           <h1 className="text-[11px] font-semibold uppercase tracking-wide text-muted">Shipping Schedule — Desk</h1>
           <div className="flex items-center gap-2">
             {stale && <span className="font-mono text-[10px] text-[var(--warn-text)]">showing last loaded data</span>}
+            {data.days.some((d) => d.rows.some((r) => r.live_load)) && <LiveLoadLegend />}
             <FreshnessClock sourceUpdatedAt={data.source_updated_at} />
           </div>
         </div>
@@ -142,7 +144,17 @@ export default function InteractiveScheduleBoard({ userName, isAdmin, permission
         </div>
       </div>
 
-      <OrderDetailModal jobId={selectedJobId} onClose={() => setSelectedJobId(null)} />
+      <OrderDetailModal
+        jobId={selectedJobId}
+        onClose={() => setSelectedJobId(null)}
+        liveLoads={(() => {
+          // live-02: the clicked row's live-01 flags; [] = every load live, [n…] = only those.
+          const r = data.days.flatMap((d) => d.rows).find((x) => x.job_id === selectedJobId);
+          if (!r?.live_load) return null;
+          const loads = r.live_loads ?? [];
+          return loads.length < Math.max(Number(r.load_count) || 1, 1) ? loads : [];
+        })()}
+      />
     </div>
   );
 }

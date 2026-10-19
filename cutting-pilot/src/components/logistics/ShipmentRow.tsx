@@ -11,6 +11,7 @@ import { formatEtDateTime } from "@/lib/etDateTime";
 import { formatUsdCents } from "@/lib/money";
 import { capLoadTimesLabel } from "@/lib/loadTimes";
 import type { ShipmentDetail, ShipmentListItem } from "./types";
+import { LiveLoadChip } from "@/components/LiveLoadMarker";
 
 const badgeBase = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap";
 
@@ -37,6 +38,18 @@ export function StatusBadge({ status }: { status: string }) {
 }
 
 // lgx-rows-01: jobs.method = 'customer pickup' marker, shown under Carrier (row + calendar detail).
+// live-02: live loads for one list entry (a split-day entry only counts its own day's loads).
+// null = not live; [] = every load in the entry is live; [n…] = only those loads (chip names them).
+export function entryLiveLoads(s: ShipmentListItem): number[] | null {
+  if (!s.live_load) return null;
+  const all = s.live_loads ?? [];
+  if (!all.length) return []; // unlinked shipment flagged from its carrier text
+  const scope = s.day_loads ?? Array.from({ length: Math.max(Number(s.load_count) || 1, 1) }, (_, i) => i + 1);
+  const live = scope.filter((n) => all.includes(n));
+  if (!live.length) return null;
+  return live.length < scope.length ? live : [];
+}
+
 export function CustomerPickupBadge() {
   return (
     <span className={`${badgeBase} bg-[var(--ghost-bg)] text-text border border-[var(--border)]`}>Customer pickup</span>
@@ -102,6 +115,7 @@ export default function ShipmentRow({
 }: ShipmentRowProps) {
   const carrier = s.carrier || "—";
   const isPickup = Boolean(s.is_customer_pickup);
+  const liveLoads = entryLiveLoads(s);
 
   return (
     <Fragment>
@@ -179,6 +193,11 @@ export default function ShipmentRow({
               <CustomerPickupBadge />
             </div>
           )}
+          {liveLoads && (
+            <div className="mt-1">
+              <LiveLoadChip loads={liveLoads.length ? liveLoads : undefined} />
+            </div>
+          )}
         </td>
         <td className="px-3 py-[8.8px] align-top">
           <DistanceEta shipment={s} />
@@ -219,6 +238,7 @@ export default function ShipmentRow({
               orderShipDate={s.ship_date}
               onShipDaysSaved={onShipDaysSaved}
               bolCount={Number(s.bol_count || 0)}
+              liveLoads={s.live_load ? s.live_loads ?? [] : []}
             />
           </td>
         </tr>

@@ -36,6 +36,7 @@ import LinkedTableGroups from "@/components/linked/LinkedTableGroups";
 import { JobStatusBadge, PriorityBadge, STATUS_VARIANTS } from "./badges";
 import LinePills from "./LinePills";
 import { PROCESSES, type JobProcess } from "@/lib/processes";
+import { LiveLoadChip } from "@/components/LiveLoadMarker";
 
 export interface BoardJob {
   id: string;
@@ -63,6 +64,16 @@ export interface BoardJob {
   trailer_group_id: string | null;
   // board-search-01: true when archived_at is set (only search results can be archived).
   is_archived?: boolean;
+  // live-01: live-load flags + load count (lib/logistics/liveLoad.ts).
+  live_load?: boolean;
+  live_loads?: number[];
+  load_count?: number | null;
+}
+
+// live-02: "partial" = some but not all of the order's loads are live → the chip names them.
+function partialLiveLoads(job: Pick<BoardJob, "live_loads" | "load_count">): number[] | undefined {
+  const loads = job.live_loads ?? [];
+  return loads.length > 0 && loads.length < Math.max(Number(job.load_count) || 1, 1) ? loads : undefined;
 }
 
 interface AssignableUser {
@@ -484,6 +495,7 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                                   {!isReadOnlyJob(job) &&
                                     (expandedId === job.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />)}
                                   {job.invoice_number ? `INV# ${job.invoice_number}` : "No INV#"}
+                                  {job.live_load && <LiveLoadChip loads={partialLiveLoads(job)} className="ml-1" />}
                                 </div>
                               </td>
                               <td className="px-3 py-[8.8px] align-top text-muted">
@@ -562,7 +574,15 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
         />
       )}
 
-      <OrderDetailModal jobId={viewId} onClose={() => setViewId(null)} onViewBol={setBolJobId} />
+      <OrderDetailModal
+        jobId={viewId}
+        onClose={() => setViewId(null)}
+        onViewBol={setBolJobId}
+        liveLoads={(() => {
+          const j = (data?.jobs ?? []).concat(archivedResults).find((x) => x.id === viewId);
+          return j?.live_load ? partialLiveLoads(j) ?? [] : null;
+        })()}
+      />
       {/* jb-02: mounted after OrderDetailModal so it stacks above it (same z-50, later DOM wins). */}
       <BolViewerModal jobId={bolJobId} onClose={() => setBolJobId(null)} viewOnly onEdit={() => {}} />
 

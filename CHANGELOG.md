@@ -1381,6 +1381,39 @@ current series).
 
 ## Schedule Board (v2)
 
+- **live-02 — Live-load hazard marker on Schedule, Job Board, Logistics and Dock (React Component Agent §9b, Frontend
+  Designer guidance for the TV board). No migration; UI only on live-01's flags.** The look, locked with Steve: the
+  "dock hazard stripe" — black + safety yellow, used nowhere else (never the amber `--warn-*` tokens; amber means "in
+  progress"). Tokens in `globals.css` light and dark blocks: `--live-yellow: #f5c400; --live-ink: #111111;` (same in
+  both — hazard colors don't invert) + `--live-pill-border` (ink in light, yellow in dark so the black pill doesn't
+  vanish on a dark surface). New `components/LiveLoadMarker.tsx`, the only place the pattern lives: `LiveLoadStripe`
+  (absolute left edge, `repeating-linear-gradient(45deg, yellow 0 6px, ink 6px 12px)`, 6px default; bands ≥ 6px so
+  they read on the plant TV), `LiveLoadPill` (wraps existing text, mono bold, ink bg / yellow text), `LiveLoadChip`
+  (lucide `Truck` 12px + "Live load", optional `loads` → "Live load · L2", `size="sm"` for the 16px compact dock line),
+  `LiveLoadLegend` (stripe swatch + "Live load"). Every marker carries the title "Live load — driver waits at the dock".
+  - **Schedule (`OrderRow`, TV + desk):** no new field. Live rows go `relative`, render the stripe with extra left
+    padding, and the existing load/time label (`TL x1 @ 9a`) renders inside the pill; no label → pill `LIVE`. Unmatched
+    rows move their opacity/grayscale onto an inner wrapper so the stripe stays full color. Inside a linked group the
+    stripe sits inside the brand rail. Legend beside the freshness clock in `ScheduleBoard` and
+    `InteractiveScheduleBoard`, shown only when a row in view is live.
+  - **Job Board (`ProductionBoard`):** chip on the INV# line; `partial` (some, not all, loads live) passes the load
+    list. `OrderDetailModal` (Job Board View + schedule desk click) gets an optional `liveLoads` prop from the caller's
+    row and shows the chip beside Carrier (its `/v2/api/board/:id` source was not enriched in live-01).
+  - **Logistics:** `ShipmentRow` carrier cell chip under the carrier (same slot pattern as `CustomerPickupBadge`), via
+    exported `entryLiveLoads(s)` — a split-day entry only counts its own day's loads. `ShipmentDetailPanel` (new
+    `liveLoads` prop) wraps each live load's `-NN` / "Load" label in the pill. `ShipmentCalendar` selected-shipment
+    detail: chip under the customer-pickup badge. Day-group header gains "· N live" beside BDFT (same text style).
+  - **Dock:** desktop `DockAssignmentCard` — stripe on the card's left edge (padding 14/16px) + chip after the
+    customer (small chip in compact mode). Tablet `DockTabletCard` — 10px stripe + "LIVE LOAD" pill beside the status
+    pill with the same box (padding 6×12, radius, 14px, 1px border) so heights match; `palette.ts` gains `liveYellow`
+    / `liveInk` → the CSS vars. No new dock actions.
+  Visual check (next dev + Playwright fixtures, 2026-10-19): TV board 1920×1080 dark — a live row standalone (stripe
+  + `TL x2 @ 9a` pill), a live row inside a linked group (stripe inside the rail, non-live groupmate unmarked), a
+  live row with no label (`LIVE` pill), a dimmed unmatched LTL row (stripe full color), legend in the header;
+  desk board dark mode — same, pill ring visible on the dark surface; tablet card — stripe + LIVE LOAD pill level
+  with the LOADING pill, the Seal card in the next bay unmarked. Verified: anchors `grep -Fc` (all 1), `tsc --noEmit`
+  clean, `npm run cf-build` green.
+
 - **live-01 (cross-reference) — `/v2/api/schedule-board` rows carry `live_load` / `live_loads`** (matched rows from the
   platform job, unmatched from the sheet's carrier/method). Full entry under Logistics (v2).
 - **sched-dual-01 — Separate Cutting / Loading pills on schedule boards; `Cutting – x%` (next-platform-agent §9a + react-component-agent §9b).**
@@ -2072,6 +2105,8 @@ current series).
 
 ## Loading Board (v2)
 
+- **live-02 (cross-reference) — hazard stripe + Live load chip on dock cards; 10px stripe + LIVE LOAD pill on the
+  bay-pair tablet.** Full entry under Schedule Board (v2).
 - **live-01 (cross-reference) — `/v2/api/loading-assignments` rows carry per-load `live_load`** (dock board + bay-pair
   tablet). `/v2/api/loading-board` (Loading TV) unchanged. Full entry under Logistics (v2).
 - **pickup-buffer-01 — Suggested pickup buffer 60 → 30 min; Late Pickup grace 30 → 15 min.** `deliveryTime.ts`
@@ -2984,6 +3019,8 @@ current series).
 
 ## Logistics (v2)
 
+- **live-02 (cross-reference) — live-load chip on the shipment row carrier cell, pill on each live load in the
+  drill-down, chip in the calendar detail, "· N live" in the day headers.** Full entry under Schedule Board (v2).
 - **live-01 — Live-load classifier + `live_load` / `live_loads` flags on every v2 surface's API (Next/Cloudflare
   Platform Agent §9a). No migration.** A live load = a third-party driver waits at the dock while we load; anything
   that isn't Seal Express / our own truck, excluding customer pickups and hand deliveries. New single source

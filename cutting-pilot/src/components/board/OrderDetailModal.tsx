@@ -17,6 +17,7 @@ import CoreCoverLabelsModal from "@/components/board/CoreCoverLabelsModal";
 import { buildCutListPdf, type CutListLineItem } from "@/lib/cutList";
 import { isDiversiTechCustomer } from "@/lib/diversitechLabels";
 import { isCoreCoversCustomer } from "@/lib/coreCoverLabels";
+import { LiveLoadChip } from "@/components/LiveLoadMarker";
 
 interface DetailJob {
   id: string;
@@ -50,11 +51,14 @@ interface OrderDetailModalProps {
   // jb-02: opens the board-level BolViewerModal. Optional — the schedule desk mounts this modal
   // without it, and the View BOL row only renders when a handler is supplied.
   onViewBol?: (jobId: string) => void;
+  // live-02: from the caller's row (live-01 flags). null/undefined = not live; [] = every load live;
+  // [n…] = only those loads live.
+  liveLoads?: number[] | null;
 }
 
 type CutListDoc = { src: string; filename: string } | null;
 
-export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDetailModalProps) {
+export default function OrderDetailModal({ jobId, onClose, onViewBol, liveLoads }: OrderDetailModalProps) {
   const [data, setData] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [cutListOpen, setCutListOpen] = useState(false);
@@ -204,6 +208,7 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol }: OrderDet
               {job.carrier && (
                 <div className="mt-2 text-muted">
                   <span className="text-xs font-semibold uppercase tracking-wide">Carrier</span> {job.carrier}
+                  {liveLoads && <LiveLoadChip loads={liveLoads.length ? liveLoads : undefined} className="ml-2 align-middle" />}
                 </div>
               )}
             </div>
