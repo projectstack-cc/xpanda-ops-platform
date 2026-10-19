@@ -109,6 +109,13 @@ const ADMIN_ESCAPE_PREFIXES = ["/v2/admin", "/v2/api/admin"];
 // logistics-only role (Staff holds logistics.dashboard edit without `orders`), so these exact path
 // shapes are checked first. Same any-key-grants semantics as PERMISSION_MAP.
 const PATTERN_PERMISSION_MAP: Array<{ pattern: RegExp; keys: string[] }> = [
+  // mlc-05: shared carrier dropdown list. Must be matched here — the PERMISSION_MAP prefix
+  // "/v2/api/carrier" (Carrier View, logistics.carrier_view) would otherwise prefix-match
+  // "/v2/api/carrier-options" and 403 every internal user. POST is narrowed in the handler.
+  {
+    pattern: /^\/v2\/api\/carrier-options\/?$/,
+    keys: ["orders", "logistics.dashboard", "logistics.bol", "logistics.load-builder"],
+  },
   // Ack = the shipment-edit gate on the logistics dashboard.
   { pattern: /^\/v2\/api\/orders\/[^/]+\/load-times\/ack\/?$/, keys: ["logistics.dashboard"] },
   // dlv-03: GET is read by order entry / Job Board and by the logistics dashboard, BOL modal, Load

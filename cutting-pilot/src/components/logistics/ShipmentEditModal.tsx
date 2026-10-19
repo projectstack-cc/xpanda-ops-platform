@@ -69,6 +69,7 @@ import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
 import PackingSlipViewer from "@/components/PackingSlipViewer";
+import CarrierSelect from "@/components/orders/CarrierSelect";
 import { STATUS_VARIANTS } from "./ShipmentRow";
 import type { ShipmentListItem, ShipmentDetail, ShipmentLoad } from "./types";
 import LoadTimesEditor, {
@@ -558,11 +559,10 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
               />
             </Field>
             <Field label="Carrier">
-              <input
-                type="text"
+              <CarrierSelect
                 className={inputClass}
-                value={form.carrier}
-                onChange={(e) => set("carrier", e.target.value)}
+                value={form.carrier ?? ""}
+                onChange={(v) => set("carrier", v)}
               />
             </Field>
             <Field label="Ship Date">

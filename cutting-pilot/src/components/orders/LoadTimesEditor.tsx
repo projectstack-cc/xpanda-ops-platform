@@ -8,6 +8,7 @@
 // date, else the order's ship date, unless the pattern leads with a weekday. Display text is only a
 // preview here — the server recomputes it with formatLoadTime.
 import { useEffect, useId, useState } from "react";
+import CarrierSelect from "./CarrierSelect";
 import {
   DAY_ABBR,
   formatLoadTime,
@@ -390,13 +391,11 @@ export default function LoadTimesEditor({
                       Carrier
                     </label>
                     <div className="flex items-center gap-2">
-                      <input
+                      <CarrierSelect
                         id={`${patternId}-carrier-${d.load_number}`}
-                        type="text"
-                        maxLength={120}
                         value={explicit}
-                        onChange={(e) => onCarriersChange({ ...carriers, [d.load_number]: e.target.value })}
-                        placeholder={defaultCarrier || "Order carrier"}
+                        onChange={(v) => onCarriersChange({ ...carriers, [d.load_number]: v })}
+                        placeholder={defaultCarrier?.trim() ? `Follow order (${defaultCarrier.trim()})` : "Follow order"}
                         disabled={readOnly}
                         className={inputClass}
                       />

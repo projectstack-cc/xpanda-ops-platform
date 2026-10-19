@@ -37,6 +37,7 @@
 // allow) -- see LoadPlanView.tsx for the caller, ShipmentDashboard.tsx for the unchanged original.
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
+import CarrierSelect from "@/components/orders/CarrierSelect";
 import { confirmNoBolNumber } from "@/lib/bolDomGlue";
 import { formatCutListDims } from "@/lib/cutList";
 import { buildPiecesTable, buildLoadingDiagramPdf } from "@/lib/loadingDiagramPdf";
@@ -696,11 +697,10 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
               />
             </Field>
             <Field label="Carrier">
-              <input
-                type="text"
+              <CarrierSelect
                 className={inputClass}
-                value={trailer.carrierName}
-                onChange={(e) => updateField(page, "carrierName", e.target.value)}
+                value={trailer.carrierName ?? ""}
+                onChange={(v) => updateField(page, "carrierName", v)}
               />
             </Field>
             <Field label="PO Number">

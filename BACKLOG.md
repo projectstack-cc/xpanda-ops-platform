@@ -420,6 +420,19 @@
 
 ## Logistics (v2)
 
+- [ ] **mlc-05 follow-up — carrier list management in `/v2/admin`** (rename / deactivate / reorder `bol_carriers`).
+  Today the only write path is the dropdown's "+ Add carrier…" (append at `MAX(sort_order) + 10`); anything else
+  is a D1 console edit.
+- [ ] **mlc-05 follow-up — carrier dropdown on the BOL editor** (`render_overrides` carrier field is still free text,
+  as are all legacy carrier inputs, including the legacy Job Board).
+- [ ] **mlc-05 follow-up — optional one-time backfill normalizing historical `jobs.carrier` spellings**
+  (`XPanda truck` / `XP TRUCK` / `Xpanda Truck`, LISMA variants). Deliberately not done in mlc-05: it would fire
+  bolc-01 BOL propagation, and history isn't hurting anything — the dropdown shows such values as
+  "(not in list)" and saves them unchanged.
+- [ ] **mlc-05 follow-up — legacy `POST /api/bol-carriers` now hits `ux_bol_carriers_name`.** Adding a name that
+  already exists (any casing) returns its generic 500 instead of a friendly message. Low priority — no current
+  legacy UI was found relying on it; make it reuse the existing row if it comes up.
+
 - [ ] **mlc-01 follow-up — the v2 Delete Job port must also delete `job_load_carriers`** (legacy `jobs.js` delete already does).
 - [ ] **mlc follow-up — per-load carrier display on v2 shipment rows / dock `ShippingInfoModal`.** They still show the order carrier only.
 

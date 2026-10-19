@@ -14,6 +14,7 @@ import PdfViewer from "@/components/PdfViewer";
 import CutListChunkToggle from "@/components/CutListChunkToggle";
 import { buildCutListPdf, type CutListJob, type CutListLineItem } from "@/lib/cutList";
 import PartsPicker from "@/components/orders/PartsPicker";
+import CarrierSelect from "@/components/orders/CarrierSelect";
 import type { OrderLineItem } from "@/components/orders/OrderEntryForm";
 import ProcessPicker from "./ProcessPicker";
 import ShipDaysModal from "./ShipDaysModal";
@@ -886,10 +887,9 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <label className="block">
                 <span className={labelClass}>Carrier</span>
-                <input
-                  type="text"
+                <CarrierSelect
                   value={job.carrier ?? ""}
-                  onChange={(e) => setJob({ ...job, carrier: e.target.value })}
+                  onChange={(v) => setJob({ ...job, carrier: v })}
                   className={inputClass}
                 />
               </label>

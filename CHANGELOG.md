@@ -720,6 +720,9 @@ current series).
 
 ## Orders (v2)
 
+- **mlc-05 (cross-reference) — the order-entry Carrier field and the per-load Carrier column are now the shared
+  `CarrierSelect` dropdown (with "+ Add carrier…").** Migration-gated. Full entry under Logistics (v2).
+
 - **mlc-02 (cross-reference) — per-load Carrier column in order entry and the `/v2/board` OrderEditModal.** Rows
   appear only on multi-load orders; blank = follow the order carrier. Full entry under Logistics (v2).
 
@@ -2974,6 +2977,66 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **mlc-05 — one shared carrier dropdown, with "+ Add carrier…", on every v2 carrier input (Next/Cloudflare
+  Platform Agent §9a: API + middleware; React Component Agent §9b: `CarrierSelect` + call sites). MIGRATION:
+  `DB_Migrations/mlc-05-carrier-list.sql` (gitignored, run in D1 before push — see HOLD below).** Free-text carrier
+  is what produced the `XPanda truck` / `XP TRUCK` / `Xpanda Truck` / LISMA spelling drift. The list now lives in the
+  existing `bol_carriers` table: new `sort_order` column, unique `ux_bol_carriers_name` (`name COLLATE NOCASE`), and
+  six active rows in this order: Seal Express - Dry Van, Seal Express - Flatbed, XPanda Truck (renamed from
+  `Xpanda Truck`, same id), King of Freight, Priority One (renamed from `Priority1`, same id), Third Party Carrier.
+  The LISMA Logistics / LISMA Flatbed / Customer Pickup (CPU) / XP Co. Truck rows are kept inactive for history.
+  LISMA is retired from the list only: historical job values and the `LISMA%` filters in the BOL Email queue and
+  Carrier View are untouched. Customer Pickup stays the order form's `customer_pickup` checkbox. Legacy
+  `_worker.js/routes/bols.js` seeds carriers only `if (!carrierRow || carrierRow.cnt === 0)` (grep-confirmed), so it
+  never re-adds the old rows. Its `GET /api/bol-carriers` (`is_active = 1 ORDER BY name`) now returns the six names
+  alphabetically. Its `POST` now hits the unique index on a duplicate name, which is backlogged; no legacy UI calls it.
+  **API:** new `src/app/api/carrier-options/route.ts`.
+  - `GET /v2/api/carrier-options` → `{ ok, carriers: [{ id, name }], can_add }`. Returns active rows, `ORDER BY
+    sort_order, name`. `can_add` = admin OR `orders` edit OR `logistics.dashboard` edit (same `canEdit` as
+    load-carriers).
+  - `POST { name }`:
+    - Re-checks `can_add` → 403.
+    - Trims and collapses whitespace; 2–60 characters → 400 otherwise.
+    - A case-insensitive existing match is reactivated if inactive and returned with 200 (an idempotent pick, never a
+      409; logged as `update bol_carrier` when it reactivates).
+    - Otherwise inserts at `MAX(sort_order) + 10` → 201 `{ carrier }` with `logActivity('create', 'bol_carrier')`,
+      actor from `X-User-Id` / `X-User-Name`.
+    - A UNIQUE violation from a concurrent add falls back to the existing row.
+  **Middleware:** a `PATTERN_PERMISSION_MAP` row `/^\/v2\/api\/carrier-options\/?$/` → `orders`,
+  `logistics.dashboard`, `logistics.bol`, `logistics.load-builder`. It has to sit there because the `PERMISSION_MAP`
+  prefix `/v2/api/carrier` (Carrier View) would otherwise 403 every internal user. A D1 check of `roles` found no role
+  with `jobs` edit lacking `logistics.dashboard` view, so `/v2/board` editors (Staff, Management, Administrator) all
+  reach the list without adding `jobs`.
+  **Component:** new `src/components/orders/CarrierSelect.tsx`.
+  - A native `<select>` (`min-h-[44px]`, takes the call site's `inputClass`).
+  - `useCarrierOptions()` uses a module-level cache: one fetch per page, and `refresh()` after an add updates every
+    mounted select.
+  - Option order: the placeholder (`""`, default "Select carrier"), the active carriers, then, for a saved value
+    matching nothing, a preserved `"{value} (not in list)"` option (loads and saves unchanged), then
+    "+ Add carrier…" when `can_add`. The sentinel never reaches `onChange`.
+  - **Case normalization:** a value that matches an option in different casing displays as that option. The parent
+    value is deliberately **not** rewritten on open, because that would raise OrderEditModal's "unsaved changes"
+    banner and the per-load dirty state just from opening an order. The canonical spelling is written when the user
+    picks it from the list.
+  - The Add dialog is composed from `@/components/Modal`:
+    - It is portaled to `<body>`, because call sites sit inside `<label>`s and OrderEntryForm's `<form>`.
+    - It has no `<form>`; Enter is handled on the input.
+    - Escape is stopped at the dialog so the parent edit modal (its listener is on `document`) stays open.
+    - 400/403 errors show inline.
+  **Call sites** (each anchor `grep -Fc` = 1; label, state and save path unchanged):
+  - `OrderEntryForm` Carrier `TextField` → a labelled `CarrierSelect`.
+  - `OrderEditModal` Carrier input.
+  - `ShipmentEditModal` Carrier input (linked and unlinked shipments).
+  - `BolGenerateModal` per-trailer Carrier. The mlc-03 per-load prefill still flows through `value`.
+  - `LoadTimesEditor` per-load Carrier (mlc-02) with placeholder "Follow order ({order carrier})". `""` still means
+    follow the order.
+  Out of scope (backlogged): the BOL editor's `render_overrides` carrier field and every legacy page (the legacy Job
+  Board keeps free text). Verified: `tsc --noEmit` clean, `npm run cf-build` green, LF-only.
+  **D1 read-only check** of the GET query (`SELECT name FROM bol_carriers WHERE is_active = 1 ORDER BY sort_order,
+  name`) on 2026-10-19 returned exactly Seal Express - Dry Van, Seal Express - Flatbed, XPanda Truck, King of Freight,
+  Priority One, Third Party Carrier. The four retired rows are `is_active = 0`. **HOLD (cleared):** the migration ran
+  in D1 before the push, because v2's GET orders by `sort_order` and would 500 without the column.
 
 - **mlc-04 (cross-reference) — the loading sheet's "Ship via" shows a load's own carrier when it differs from the
   order carrier** (`LoadingSheetLoad.carrier`, `sheetCarrierText`). The multi-carrier feature (mlc-01..04) is

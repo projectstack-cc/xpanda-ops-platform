@@ -15,6 +15,7 @@ import PartsPicker from "@/components/orders/PartsPicker";
 import CutListChunkToggle from "@/components/CutListChunkToggle";
 import AddressCorrectionModal, { type AddressParts } from "@/components/orders/AddressCorrectionModal";
 import ProcessPicker from "@/components/board/ProcessPicker";
+import CarrierSelect from "@/components/orders/CarrierSelect";
 import LoadTimesEditor, {
   carriersToPut,
   draftsHaveTime,
@@ -914,7 +915,10 @@ function setQtyAsBdftConvert(on: boolean) {
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <TextField label="Carrier" value={carrier} onChange={setCarrier} placeholder="e.g. LISMA" />
+            <label className="block">
+              <span className={labelClass}>Carrier</span>
+              <CarrierSelect value={carrier} onChange={setCarrier} className={inputClass} />
+            </label>
             <label className="block">
               <span className={labelClass}>Load count</span>
               <input
