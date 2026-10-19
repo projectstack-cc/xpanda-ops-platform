@@ -94,6 +94,36 @@ export function draftsHaveTime(drafts: LoadTimeDraft[]): boolean {
   return drafts.some((d) => d.delivery_minutes != null);
 }
 
+// mlc-02: per-load carrier column. The map is load_number → explicit carrier; "" / missing =
+// follow the order carrier. The server (PUT /v2/api/orders/:id/load-carriers) prunes values equal
+// to the order carrier.
+
+/** Seed the carrier map from GET …/load-carriers `carriers` (sparse overrides). */
+export function carriersFromPayload(rows: { load_number: number; carrier: string }[], loadCount: number): Record<number, string> {
+  const out: Record<number, string> = {};
+  for (const r of rows || []) {
+    const n = Number(r.load_number);
+    if (n >= 1 && n <= Math.max(1, loadCount) && r.carrier) out[n] = r.carrier;
+  }
+  return out;
+}
+
+/** Stable comparison key for dirty tracking, trimmed to 1..loadCount. */
+export function carriersKey(map: Record<number, string>, loadCount: number): string {
+  const out: string[] = [];
+  for (let n = 1; n <= Math.max(1, loadCount); n++) out.push((map[n] ?? "").trim());
+  return JSON.stringify(out);
+}
+
+/** One entry per load 1..loadCount, "" for blanks. */
+export function carriersToPut(map: Record<number, string>, loadCount: number) {
+  const out: { load_number: number; carrier: string }[] = [];
+  for (let n = 1; n <= Math.max(1, loadCount); n++) out.push({ load_number: n, carrier: (map[n] ?? "").trim() });
+  return out;
+}
+
+const normCarrier = (x: unknown) => String(x ?? "").trim().toLowerCase();
+
 export function draftsSummary(drafts: LoadTimeDraft[]): string {
   return summarizeLoadTimes(
     drafts.map((d) => ({
@@ -188,6 +218,10 @@ interface LoadTimesEditorProps {
   /** Optional controlled pattern text (order entry sends it as jobs.delivery_time). */
   pattern?: string;
   onPatternChange?: (text: string) => void;
+  /** mlc-02: per-load carrier column. Omitted → no column (unchanged behavior). */
+  carriers?: Record<number, string>; // load_number → explicit carrier ("" / missing = follow order)
+  onCarriersChange?: (next: Record<number, string>) => void;
+  defaultCarrier?: string; // the order carrier as currently typed in the parent (unsaved)
 }
 
 export default function LoadTimesEditor({
@@ -199,6 +233,9 @@ export default function LoadTimesEditor({
   readOnlyReason,
   pattern: patternProp,
   onPatternChange,
+  carriers,
+  onCarriersChange,
+  defaultCarrier,
 }: LoadTimesEditorProps) {
   const [patternLocal, setPatternLocal] = useState("");
   const pattern = patternProp ?? patternLocal;
@@ -211,6 +248,7 @@ export default function LoadTimesEditor({
   const [droppedNote, setDroppedNote] = useState<string | null>(null);
   const count = Math.max(1, Math.floor(Number(loadCount)) || 1);
   const readOnly = !!readOnlyReason;
+  const showCarrier = !!carriers && !!onCarriersChange && count > 1;
   const validShip = shipDate && DATE_RE.test(shipDate) ? shipDate : null;
 
   // Rows follow the load count. Shrinking drops trailing rows with a visible note.
@@ -296,7 +334,11 @@ export default function LoadTimesEditor({
           return (
             <div
               key={d.load_number}
-              className="grid grid-cols-1 sm:grid-cols-[4.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)] gap-2 items-center rounded-md border border-[var(--border)] p-2"
+              className={`grid grid-cols-1 ${
+                showCarrier
+                  ? "sm:grid-cols-[4.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.3fr)]"
+                  : "sm:grid-cols-[4.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)]"
+              } gap-2 items-center rounded-md border border-[var(--border)] p-2`}
             >
               <span className="text-sm font-semibold text-text">Load {d.load_number}</span>
               <select
@@ -336,6 +378,40 @@ export default function LoadTimesEditor({
                   <span className={`${chipBase} border border-[var(--border)] text-muted`}>Manual</span>
                 ) : null}
               </div>
+              {showCarrier && carriers && onCarriersChange && (() => {
+                const explicit = carriers[d.load_number] ?? "";
+                const split = explicit.trim() !== "" && normCarrier(explicit) !== normCarrier(defaultCarrier);
+                return (
+                  <div className="min-w-0">
+                    <label
+                      htmlFor={`${patternId}-carrier-${d.load_number}`}
+                      className={`${labelClass} ${d.load_number === 1 ? "sm:block" : "sm:sr-only"}`}
+                    >
+                      Carrier
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        id={`${patternId}-carrier-${d.load_number}`}
+                        type="text"
+                        maxLength={120}
+                        value={explicit}
+                        onChange={(e) => onCarriersChange({ ...carriers, [d.load_number]: e.target.value })}
+                        placeholder={defaultCarrier || "Order carrier"}
+                        disabled={readOnly}
+                        className={inputClass}
+                      />
+                      {split && (
+                        <span
+                          className={`${chipBase} border border-[var(--info-border)] bg-[var(--info-bg)] text-[var(--info-text)]`}
+                          title="This load ships on a different carrier than the order"
+                        >
+                          Split
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })}

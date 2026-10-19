@@ -41,6 +41,9 @@
 //     mirrors the summary onto jobs.delivery_time + shipments.delivery_time. An UNLINKED shipment has
 //     no job to hold per-load rows, so it keeps the single free-text field (see
 //     src/lib/deliveryTime.ts's doc comment), sent in the shipment PUT and never reformatted.
+//   - Per-load carriers (mlc-02): job-linked only. The LoadTimesEditor's carrier column saves through
+//     PUT /v2/api/orders/:id/load-carriers after the load-times PUT (changed only); that route
+//     rewrites the load's unsigned BOLs, so the BOL notice mentions it.
 //   - status is ALWAYS editable (flows shipment -> job, never job -> shipment) but restricted to
 //     the 8-value set legacy's own manual edit form offers -- rendered as a <select> using
 //     ShipmentRow.tsx's own STATUS_VARIANTS labels, not hand-written copy. A change cascades
@@ -69,6 +72,9 @@ import PackingSlipViewer from "@/components/PackingSlipViewer";
 import { STATUS_VARIANTS } from "./ShipmentRow";
 import type { ShipmentListItem, ShipmentDetail, ShipmentLoad } from "./types";
 import LoadTimesEditor, {
+  carriersFromPayload,
+  carriersKey,
+  carriersToPut,
   draftsFromRows,
   draftsKey,
   draftsToPut,
@@ -184,6 +190,9 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
   const [loadTimes, setLoadTimes] = useState<LoadTimeDraft[]>([]);
   const [loadTimesSeed, setLoadTimesSeed] = useState("");
   const [loadTimesError, setLoadTimesError] = useState<string | null>(null);
+  // mlc-02: per-load carriers for a job-linked shipment. null = not loaded (column hidden, never saved).
+  const [loadCarriers, setLoadCarriers] = useState<Record<number, string> | null>(null);
+  const [loadCarriersSeed, setLoadCarriersSeed] = useState("");
 
   const isOpen = !!shipment;
   const jobLinked = !!shipment?.job_id;
@@ -271,9 +280,22 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
     setLoadTimes([]);
     setLoadTimesSeed("");
     setLoadTimesError(null);
+    setLoadCarriers(null);
+    setLoadCarriersSeed("");
     const jobId = shipment?.job_id;
     if (!jobId) return;
     let cancelled = false;
+    // mlc-02: per-load carriers load alongside, same best-effort rule.
+    fetch(`/v2/api/orders/${encodeURIComponent(jobId)}/load-carriers`)
+      .then((r) => r.json().then((json) => ({ ok: r.ok, json })))
+      .then(({ ok, json }) => {
+        if (cancelled || !ok || !json?.ok) return;
+        const count = Math.max(Number(json.load_count) || 1, 1);
+        const map = carriersFromPayload(json.carriers || [], count);
+        setLoadCarriers(map);
+        setLoadCarriersSeed(carriersKey(map, count));
+      })
+      .catch(() => {});
     fetch(`/v2/api/orders/${encodeURIComponent(jobId)}/load-times`)
       .then((r) => r.json().then((json) => ({ ok: r.ok, json })))
       .then(({ ok, json }) => {
@@ -314,7 +336,9 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
   const shipDateChanged = form.shipDate !== seed.shipDate;
   const bolDetailsChanged =
     form.customer !== seed.customer || form.carrier !== seed.carrier || shipDateChanged || changedShipTo.length > 0;
-  const showBolNotice = Number(shipment?.bol_count || 0) > 0 && bolDetailsChanged;
+  const loadCarriersDirty =
+    !!loadCarriers && !!loadTimesData && carriersKey(loadCarriers, loadTimesData.load_count) !== loadCarriersSeed;
+  const showBolNotice = Number(shipment?.bol_count || 0) > 0 && (bolDetailsChanged || loadCarriersDirty);
 
   async function handleSave() {
     if (!shipment) return;
@@ -398,6 +422,29 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
           setLoadTimesSeed(draftsKey(loadTimes));
         } catch {
           setSaveError("Shipment saved, but the delivery times didn't save — network error");
+          return;
+        }
+      }
+
+      // mlc-02: per-load carriers -> PUT /v2/api/orders/:id/load-carriers, only when changed.
+      if (jobLinked && shipment.job_id && loadTimesData && loadCarriers && loadCarriersDirty) {
+        try {
+          const r = await fetch(`/v2/api/orders/${encodeURIComponent(shipment.job_id)}/load-carriers`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ carriers: carriersToPut(loadCarriers, loadTimesData.load_count) }),
+          });
+          const d = await r.json().catch(() => null);
+          if (!r.ok || !d?.ok) {
+            setSaveError(`Shipment saved, but the per-load carriers didn't save — ${d?.error || `HTTP ${r.status}`}`);
+            return;
+          }
+          const count = Math.max(Number(d.load_count) || loadTimesData.load_count, 1);
+          const map = carriersFromPayload(d.carriers || [], count);
+          setLoadCarriers(map);
+          setLoadCarriersSeed(carriersKey(map, loadTimesData.load_count));
+        } catch {
+          setSaveError("Shipment saved, but the per-load carriers didn't save — network error");
           return;
         }
       }
@@ -632,6 +679,9 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
                     assignedDays={loadTimesData.assigned_days || {}}
                     value={loadTimes}
                     onChange={setLoadTimes}
+                    carriers={loadCarriers ?? undefined}
+                    onCarriersChange={loadCarriers ? setLoadCarriers : undefined}
+                    defaultCarrier={form.carrier}
                   />
                 ) : (
                   <Field label="Delivery Time">
@@ -700,6 +750,7 @@ export default function ShipmentEditModal({ shipment, canManageLoading, onClose 
           {showBolNotice && (
             <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
               This order already has a BOL. Existing BOLs keep the old details — regenerate the BOL to update it.
+              {loadCarriersDirty && " Per-load carrier changes do rewrite that load's unsigned BOL."}
             </div>
           )}
 

@@ -24,6 +24,9 @@ import OrderLinksSection from "./OrderLinksSection";
 import JobPrintsSection from "./JobPrintsSection";
 import OffloadZonesSection from "./OffloadZonesSection";
 import LoadTimesEditor, {
+  carriersFromPayload,
+  carriersKey,
+  carriersToPut,
   draftsFromRows,
   draftsKey,
   draftsToPut,
@@ -190,6 +193,10 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
   const [loadTimes, setLoadTimes] = useState<LoadTimeDraft[]>([]);
   const [loadTimesSeed, setLoadTimesSeed] = useState("");
   const [loadTimesError, setLoadTimesError] = useState<string | null>(null);
+  // mlc-02: per-load carriers (GET/PUT /v2/api/orders/:id/load-carriers), saved after the load-times PUT.
+  // null = not loaded (the column stays hidden and nothing is saved).
+  const [loadCarriers, setLoadCarriers] = useState<Record<number, string> | null>(null);
+  const [loadCarriersSeed, setLoadCarriersSeed] = useState("");
 
   // jb-06: the SAVED ship date (not the live field) — trailer-group candidates match on it, and the
   // linked-job ship-date guard in handleSave compares against it.
@@ -226,6 +233,8 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
     setLoadTimes([]);
     setLoadTimesSeed("");
     setLoadTimesError(null);
+    setLoadCarriers(null);
+    setLoadCarriersSeed("");
     setSavedShipDate(null);
 
     if (!jobId) {
@@ -270,6 +279,17 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
         const snapshot = JSON.stringify({ ...j, line_items: lis });
         setOriginalSnapshot(snapshot);
         // dlv-03: best-effort — the order stays editable if the per-load times can't load.
+        // mlc-02: the per-load carriers load alongside (same best-effort rule).
+        const lcPromise = fetch(`/v2/api/orders/${jobId}/load-carriers`)
+          .then(async (r) => {
+            const lc = await r.json().catch(() => null);
+            if (cancelled || !r.ok || !lc?.ok) return;
+            const count = Math.max(Number(j.load_count) || 1, 1);
+            const map = carriersFromPayload(lc.carriers || [], count);
+            setLoadCarriers(map);
+            setLoadCarriersSeed(carriersKey(map, count));
+          })
+          .catch(() => {});
         try {
           const ltRes = await fetch(`/v2/api/orders/${jobId}/load-times`);
           const ltJson = await ltRes.json();
@@ -286,6 +306,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
         } catch {
           if (!cancelled) setLoadTimesError("Delivery times unavailable.");
         }
+        await lcPromise;
       } catch {
         if (!cancelled) setLoadError("Network error — couldn't reach the server.");
       } finally {
@@ -366,6 +387,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
   }
   // dlv-03: unsaved per-load times also raise the banner (kept out of isDirty so they don't lock offload zones).
   const loadTimesDirty = !!loadTimesData && draftsKey(loadTimes) !== loadTimesSeed;
+  const loadCarriersDirty = !!loadCarriers && carriersKey(loadCarriers, savedLoadCount) !== loadCarriersSeed;
 
   async function handleSave() {
     if (!job) return;
@@ -442,6 +464,27 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
         } catch (e: any) {
           onSaved();
           setSaveError(`Order saved, but delivery times didn't: ${e?.message || "try again"}`);
+          return;
+        }
+      }
+      // mlc-02: per-load carriers save after the load times, only when they changed. Trimmed to the
+      // just-saved load count; the server prunes values equal to the order carrier.
+      if (loadCarriers && carriersKey(loadCarriers, savedLoadCount) !== loadCarriersSeed) {
+        const savedCount = Math.max(Number(payload.load_count) || 1, 1);
+        try {
+          const lcRes = await fetch(`/v2/api/orders/${job.id}/load-carriers`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ carriers: carriersToPut(loadCarriers, savedCount) }),
+          });
+          const lcJson = await lcRes.json().catch(() => null);
+          if (!lcRes.ok || !lcJson?.ok) throw new Error(lcJson?.error || `HTTP ${lcRes.status}`);
+          const map = carriersFromPayload(lcJson.carriers || [], lcJson.load_count || savedCount);
+          setLoadCarriers(map);
+          setLoadCarriersSeed(carriersKey(map, savedLoadCount));
+        } catch (e: any) {
+          onSaved();
+          setSaveError(`Order saved, but per-load carriers didn't: ${e?.message || "try again"}`);
           return;
         }
       }
@@ -683,7 +726,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
             </div>
           )}
 
-          {(isDirty() || loadTimesDirty) && !saving && (
+          {(isDirty() || loadTimesDirty || loadCarriersDirty) && !saving && (
             <div className="rounded-md border border-[var(--brand)] bg-[var(--info-bg)] text-[var(--info-text)] text-sm px-3 py-2 flex items-center justify-between gap-3">
               <span>You have unsaved changes.</span>
               <button
@@ -909,6 +952,9 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
                 assignedDays={loadTimesData.assigned_days || {}}
                 value={loadTimes}
                 onChange={setLoadTimes}
+                carriers={loadCarriers ?? undefined}
+                onCarriersChange={loadCarriers ? setLoadCarriers : undefined}
+                defaultCarrier={job.carrier ?? ""}
               />
             ) : (
               <p className="text-sm text-muted">{loadTimesError || "Loading delivery times…"}</p>

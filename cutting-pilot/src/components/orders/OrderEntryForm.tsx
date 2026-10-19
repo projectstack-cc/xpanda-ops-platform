@@ -16,6 +16,7 @@ import CutListChunkToggle from "@/components/CutListChunkToggle";
 import AddressCorrectionModal, { type AddressParts } from "@/components/orders/AddressCorrectionModal";
 import ProcessPicker from "@/components/board/ProcessPicker";
 import LoadTimesEditor, {
+  carriersToPut,
   draftsHaveTime,
   draftsSummary,
   draftsToPut,
@@ -160,6 +161,9 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
   // dlv-03: per-load delivery times (one row per load). `deliveryTime` is now the editor's pattern text.
   const [loadTimes, setLoadTimes] = useState<LoadTimeDraft[]>([]);
   const [loadTimesNote, setLoadTimesNote] = useState<{ text: string; warn: boolean } | null>(null);
+  // mlc-02: per-load carriers (load_number → explicit carrier; blank = follow the order carrier).
+  const [loadCarriers, setLoadCarriers] = useState<Record<number, string>>({});
+  const [loadCarriersNote, setLoadCarriersNote] = useState<string | null>(null);
   const [scrapPickup, setScrapPickup] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -383,6 +387,8 @@ function setQtyAsBdftConvert(on: boolean) {
     setDeliveryTime("");
     setLoadTimes([]);
     setLoadTimesNote(null);
+    setLoadCarriers({});
+    setLoadCarriersNote(null);
     setScrapPickup("");
     setContactName("");
     setContactPhone("");
@@ -580,6 +586,26 @@ function setQtyAsBdftConvert(on: boolean) {
     }
   }
 
+  // mlc-02: on create there is nothing to seed from — PUT only when some load has its own carrier.
+  // Runs after savePerLoadTimes (its sheet-match early return must not skip carriers). Best-effort.
+  async function savePerLoadCarriers(jobId: string) {
+    setLoadCarriersNote(null);
+    const count = Number.isFinite(Number(loadCount)) && Number(loadCount) > 0 ? Number(loadCount) : 1;
+    const body = carriersToPut(loadCarriers, count);
+    if (count < 2 || !body.some((c) => c.carrier !== "")) return;
+    try {
+      const put = await fetch(`/v2/api/orders/${encodeURIComponent(jobId)}/load-carriers`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ carriers: body }),
+      });
+      const putData = await put.json().catch(() => null);
+      if (!put.ok || !putData?.ok) throw new Error(putData?.error || `HTTP ${put.status}`);
+    } catch {
+      setLoadCarriersNote("The order saved, but its per-load carriers didn't — set them from the Job Board.");
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -704,6 +730,7 @@ function setQtyAsBdftConvert(on: boolean) {
         return;
       }
       await savePerLoadTimes(data.id, payload.invoice_number);
+      await savePerLoadCarriers(data.id);
       setSavedId(data.id);
       setIncludeChunks(false);
       setSavedOrder({
@@ -745,6 +772,9 @@ function setQtyAsBdftConvert(on: boolean) {
             <p className="text-sm text-muted">The order was created successfully.</p>
             {loadTimesNote && (
               <p role="status" className={`text-sm ${loadTimesNote.warn ? "text-[var(--warn-text)]" : "text-text"}`}>{loadTimesNote.text}</p>
+            )}
+            {loadCarriersNote && (
+              <p role="status" className="text-sm text-[var(--warn-text)]">{loadCarriersNote}</p>
             )}
             {printError && (
               <p className="text-sm text-[var(--warn-text)]">{printError}</p>
@@ -877,6 +907,9 @@ function setQtyAsBdftConvert(on: boolean) {
                 onChange={setLoadTimes}
                 pattern={deliveryTime}
                 onPatternChange={setDeliveryTime}
+                carriers={loadCarriers}
+                onCarriersChange={setLoadCarriers}
+                defaultCarrier={carrier}
               />
             </div>
           </div>
