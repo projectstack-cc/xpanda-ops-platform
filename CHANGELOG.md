@@ -7529,6 +7529,11 @@ current series).
     thickness ≤ 19"): the top view shows a hatched strip along the wall labelled EDGE; Print Loading Diagram / the BOL
     PDF show "ON EDGE" in the slot and `6" on edge - 4` in Stack Breakdown; Customize shows those columns as
     "ON EDGE (locked)" and won't drag them.
+  - **Strings:** no `logistics-i18n.js` keys added — the new text (editor "ON EDGE (locked)" / lock tooltip, the
+    Apply refusal toast, the SVG "ON EDGE"/"EDGE" labels, stack lines) sits in the editor, toasts and print SVG, which
+    are hard-coded English throughout; it matches its surroundings. Pre-push check: the customize editor round-trip
+    (render → Apply) on a box-truck plan keeps all 9 edge columns at posY ≥ 72, 96" tall, `6" on edge - 4` intact, and
+    refuses a 4th flat column in an edge row.
 - **lb-box-01 (cross-reference) — `logistics/load-builder.html`: "26ft Box Truck" width 72" → 91".** Data constant
   only; no algorithm or `STORAGE_KEY` change. Full entry under Logistics (v2).
 - **live-03 (cross-reference) — legacy job delete (`_worker.js/routes/jobs.js`) also deletes `job_live_load_times`
