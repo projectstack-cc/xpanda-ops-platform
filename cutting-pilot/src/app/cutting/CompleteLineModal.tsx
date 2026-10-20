@@ -1,13 +1,30 @@
 "use client";
 import { useState, useEffect } from "react";
-import { AlertTriangle, Lock } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import Modal from "@/components/Modal";
+import CuttingScrapSection, {
+  CuttingScrapProblems,
+  CuttingScrapSaveError,
+  cuttingScrapProblems,
+  draftHasEntries,
+  emptyCuttingScrapDraft,
+  toCuttingScrapEntries,
+  type CuttingScrapDraft,
+} from "@/components/qc/CuttingScrapSection";
+import { postCuttingScrap } from "@/lib/qc/scrapClient";
+import type { CuttingLineItem } from "./types";
+
+const SCRAP_LINES = ["Main Line", "Blue Line"];
 
 interface Props {
   lineLabel: string;
   customer: string;
   invoice: string;
-  isLaminate: boolean;
+  // qc-05: optional scrap capture — posted to /v2/api/cutting/scrap before onSubmit runs.
+  jobId: string;
+  lineItems: CuttingLineItem[];
+  operatorName: string;
+  onScrapResult?: (count: number, skipped: boolean) => void;
   isOpen: boolean;
   onClose: () => void;
   // cutting-ids-01: parts checklist state for this line — soft guard only, never blocks.
@@ -21,7 +38,10 @@ export default function CompleteLineModal({
   lineLabel,
   customer,
   invoice,
-  isLaminate,
+  jobId,
+  lineItems,
+  operatorName,
+  onScrapResult,
   isOpen,
   onClose,
   checkedCount,
@@ -30,14 +50,61 @@ export default function CompleteLineModal({
   acting,
 }: Props) {
   const [note, setNote] = useState("");
+  const [scrap, setScrap] = useState<CuttingScrapDraft>(() => emptyCuttingScrapDraft());
+  const [scrapError, setScrapError] = useState<string | null>(null);
+  const [scrapBusy, setScrapBusy] = useState(false);
+  const [showScrapProblems, setShowScrapProblems] = useState(false);
   const unchecked = totalCount > 0 && checkedCount < totalCount ? totalCount - checkedCount : 0;
+  const scrapEnabled = !!jobId && SCRAP_LINES.includes(lineLabel);
+  const scrapProblems = cuttingScrapProblems(scrap);
+  const busy = acting || scrapBusy;
 
   useEffect(() => {
-    if (isOpen) setNote("");
+    if (isOpen) {
+      setNote("");
+      setScrap(emptyCuttingScrapDraft());
+      setScrapError(null);
+      setScrapBusy(false);
+      setShowScrapProblems(false);
+    }
   }, [isOpen]);
 
+  // Scrap first; the existing complete flow (onSubmit) runs only after it saves, or when skipped.
+  async function handleSubmit() {
+    if (busy) return;
+    if (!scrapEnabled || !draftHasEntries(scrap)) {
+      onSubmit(note);
+      return;
+    }
+    if (scrapProblems.length) {
+      setShowScrapProblems(true);
+      return;
+    }
+    setScrapBusy(true);
+    setScrapError(null);
+    const r = await postCuttingScrap({ job_id: jobId, line: lineLabel, shift: scrap.shift, entries: toCuttingScrapEntries(scrap) });
+    setScrapBusy(false);
+    if (!r.ok) {
+      setScrapError(r.error);
+      return;
+    }
+    // Clear the draft before completing so a failed complete + retry never re-posts the scrap.
+    const count = scrap.entries.length;
+    setScrap(emptyCuttingScrapDraft());
+    onScrapResult?.(count, false);
+    onSubmit(note);
+  }
+
+  function continueWithoutScrap() {
+    setScrap(emptyCuttingScrapDraft());
+    setScrapError(null);
+    setShowScrapProblems(false);
+    onScrapResult?.(0, true);
+    onSubmit(note);
+  }
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Mark Complete — ${lineLabel}`}>
+    <Modal isOpen={isOpen} onClose={scrapBusy ? () => {} : onClose} title={`Mark Complete — ${lineLabel}`} size={scrap.open ? "lg" : "md"}>
       <div className="space-y-4">
         {/* Confirmation context */}
         <p className="text-sm text-muted">
@@ -77,50 +144,22 @@ export default function CompleteLineModal({
           />
         </div>
 
-        {/* Scrap — DISABLED PLACEHOLDER. Not wired; hidden on Laminate. */}
-        {!isLaminate && (
-          <div className="rounded border border-dashed border-border px-3 py-3 space-y-3 opacity-70">
-            <div className="flex items-center gap-2">
-              <Lock size={13} className="text-muted shrink-0" aria-hidden="true" />
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Scrap — coming soon
-              </span>
-            </div>
-            <p className="text-xs text-muted">
-              Waste logging moves here once the native scrap database ships. Not yet active.
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <select
-                disabled
-                aria-hidden="true"
-                tabIndex={-1}
-                className="min-h-[44px] rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-muted px-2 text-sm cursor-not-allowed"
-              >
-                <option>Reason…</option>
-              </select>
-              <input
-                disabled
-                aria-hidden="true"
-                tabIndex={-1}
-                placeholder="Scrap (cubic in)"
-                className="min-h-[44px] rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-muted px-2 text-sm cursor-not-allowed"
-              />
-              <select
-                disabled
-                aria-hidden="true"
-                tabIndex={-1}
-                className="min-h-[44px] rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-muted px-2 text-sm cursor-not-allowed"
-              >
-                <option>Shift…</option>
-              </select>
-              <input
-                disabled
-                aria-hidden="true"
-                tabIndex={-1}
-                placeholder="Material / density"
-                className="min-h-[44px] rounded border border-[var(--input-border)] bg-[var(--input-bg)] text-muted px-2 text-sm cursor-not-allowed"
-              />
-            </div>
+        {/* qc-05: optional scrap — collapsed by default, never blocks completing when skipped. */}
+        {scrapEnabled && (
+          <div className="space-y-2">
+            <CuttingScrapSection
+              lineItems={lineItems}
+              value={scrap}
+              onChange={setScrap}
+              disabled={busy}
+              line={lineLabel}
+              invoice={invoice}
+              operatorName={operatorName}
+            />
+            {showScrapProblems && <CuttingScrapProblems problems={scrapProblems} />}
+            {scrapError && (
+              <CuttingScrapSaveError error={scrapError} busy={busy} onRetry={handleSubmit} onSkip={continueWithoutScrap} />
+            )}
           </div>
         )}
 
@@ -128,16 +167,17 @@ export default function CompleteLineModal({
         <div className="flex gap-3 pt-1">
           <button
             type="button"
-            disabled={acting}
-            onClick={() => onSubmit(note)}
+            disabled={busy}
+            onClick={handleSubmit}
             className="flex-1 min-h-[44px] bg-[var(--success-bg)] text-[var(--success-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
           >
-            {acting ? "Saving…" : unchecked > 0 ? "Complete anyway" : "Mark Complete"}
+            {scrapBusy ? "Saving scrap…" : acting ? "Saving…" : unchecked > 0 ? "Complete anyway" : "Mark Complete"}
           </button>
           <button
             type="button"
+            disabled={scrapBusy}
             onClick={onClose}
-            className="min-h-[44px] px-4 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)]"
+            className="min-h-[44px] px-4 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)] disabled:opacity-50"
           >
             Cancel
           </button>

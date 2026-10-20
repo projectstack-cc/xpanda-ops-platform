@@ -180,7 +180,7 @@ export async function GET(request: Request) {
     // Line items (parts + qty) for each job — for the Parts slide-over.
     // jobIds + placeholders are already in scope from the lines/sessions queries above.
     const lineItemRows = await allByJobIds(
-      (ph) => `SELECT id, job_id, part_number, description, quantity, dimensions
+      (ph) => `SELECT id, job_id, part_number, description, quantity, dimensions, density
        FROM job_line_items
        WHERE job_id IN (${ph})
        ORDER BY job_id, sort_order ASC`,
@@ -196,6 +196,7 @@ export async function GET(request: Request) {
         description: row.description || "",
         quantity: row.quantity ?? null,
         dimensions: row.dimensions || "",
+        density: row.density ?? null,
       });
     }
 

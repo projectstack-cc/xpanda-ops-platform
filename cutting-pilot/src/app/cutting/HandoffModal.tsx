@@ -1,6 +1,19 @@
 "use client";
 import { useState, useEffect } from "react";
 import Modal from "@/components/Modal";
+import CuttingScrapSection, {
+  CuttingScrapProblems,
+  CuttingScrapSaveError,
+  cuttingScrapProblems,
+  draftHasEntries,
+  emptyCuttingScrapDraft,
+  toCuttingScrapEntries,
+  type CuttingScrapDraft,
+} from "@/components/qc/CuttingScrapSection";
+import { postCuttingScrap } from "@/lib/qc/scrapClient";
+import type { CuttingLineItem } from "./types";
+
+const SCRAP_LINES = ["Main Line", "Blue Line"];
 
 interface UncheckedItem {
   id: string;
@@ -12,6 +25,13 @@ interface UncheckedItem {
 interface Props {
   lineLabel: string;
   items: UncheckedItem[];
+  // qc-05: optional scrap capture — posted to /v2/api/cutting/scrap before onSubmit runs.
+  // lineItems is ALL of the job's items (not just the unchecked `items`).
+  jobId: string;
+  invoice: string;
+  lineItems: CuttingLineItem[];
+  operatorName: string;
+  onScrapResult?: (count: number, skipped: boolean) => void;
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (
@@ -25,6 +45,11 @@ interface Props {
 export default function HandoffModal({
   lineLabel,
   items,
+  jobId,
+  invoice,
+  lineItems,
+  operatorName,
+  onScrapResult,
   isOpen,
   onClose,
   onSubmit,
@@ -33,11 +58,22 @@ export default function HandoffModal({
   const [note, setNote] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [qtys, setQtys] = useState<Record<string, string>>({});
+  const [scrap, setScrap] = useState<CuttingScrapDraft>(() => emptyCuttingScrapDraft());
+  const [scrapError, setScrapError] = useState<string | null>(null);
+  const [scrapBusy, setScrapBusy] = useState(false);
+  const [showScrapProblems, setShowScrapProblems] = useState(false);
+  const scrapEnabled = !!jobId && SCRAP_LINES.includes(lineLabel);
+  const scrapProblems = cuttingScrapProblems(scrap);
+  const busy = acting || scrapBusy;
 
   useEffect(() => {
     if (isOpen) {
       setNote("");
       setPhoto(null);
+      setScrap(emptyCuttingScrapDraft());
+      setScrapError(null);
+      setScrapBusy(false);
+      setShowScrapProblems(false);
       const seed: Record<string, string> = {};
       for (const it of items) seed[it.id] = String(it.completedQty ?? 0);
       setQtys(seed);
@@ -50,7 +86,7 @@ export default function HandoffModal({
     return v === undefined || v === "" || isNaN(parseInt(v, 10));
   });
 
-  function handleSubmit() {
+  function runClockOut() {
     const itemQtys = items.map((it) => ({
       line_item_id: it.id,
       completed_qty: Math.max(0, parseInt(qtys[it.id], 10) || 0),
@@ -58,8 +94,42 @@ export default function HandoffModal({
     onSubmit(note, photo, itemQtys);
   }
 
+  // Scrap first; the existing clock-out flow (qtys → photo → clock-out) runs only after it saves, or when skipped.
+  async function handleSubmit() {
+    if (busy) return;
+    if (!scrapEnabled || !draftHasEntries(scrap)) {
+      runClockOut();
+      return;
+    }
+    if (scrapProblems.length) {
+      setShowScrapProblems(true);
+      return;
+    }
+    setScrapBusy(true);
+    setScrapError(null);
+    const r = await postCuttingScrap({ job_id: jobId, line: lineLabel, shift: scrap.shift, entries: toCuttingScrapEntries(scrap) });
+    setScrapBusy(false);
+    if (!r.ok) {
+      setScrapError(r.error);
+      return;
+    }
+    // Clear the draft before clocking out so a failed clock-out + retry never re-posts the scrap.
+    const count = scrap.entries.length;
+    setScrap(emptyCuttingScrapDraft());
+    onScrapResult?.(count, false);
+    runClockOut();
+  }
+
+  function continueWithoutScrap() {
+    setScrap(emptyCuttingScrapDraft());
+    setScrapError(null);
+    setShowScrapProblems(false);
+    onScrapResult?.(0, true);
+    runClockOut();
+  }
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Stop — ${lineLabel}`}>
+    <Modal isOpen={isOpen} onClose={scrapBusy ? () => {} : onClose} title={`Stop — ${lineLabel}`} size={scrap.open ? "lg" : "md"}>
       <div className="space-y-4">
         <div>
           <label htmlFor="handoff-note" className="block text-sm font-medium text-text mb-1">
@@ -122,22 +192,47 @@ export default function HandoffModal({
           {photo && <p className="mt-1 text-xs text-muted truncate">Selected: {photo.name}</p>}
         </div>
 
+        {/* qc-05: optional scrap — collapsed by default, never blocks clocking out when skipped. */}
+        {scrapEnabled && (
+          <div className="space-y-2">
+            <CuttingScrapSection
+              lineItems={lineItems}
+              value={scrap}
+              onChange={setScrap}
+              disabled={busy}
+              line={lineLabel}
+              invoice={invoice}
+              operatorName={operatorName}
+            />
+            {showScrapProblems && <CuttingScrapProblems problems={scrapProblems} />}
+            {scrapError && (
+              <CuttingScrapSaveError
+                error={scrapError}
+                busy={busy || missingQty}
+                onRetry={handleSubmit}
+                onSkip={continueWithoutScrap}
+              />
+            )}
+          </div>
+        )}
+
         <div className="flex gap-3 pt-1">
           <button
             type="button"
-            disabled={acting || missingQty}
+            disabled={busy || missingQty}
             title={
               missingQty ? "Enter a quantity for each unchecked part (0 is fine)." : undefined
             }
             onClick={handleSubmit}
             className="touch-manipulation flex-1 min-h-[44px] bg-[var(--primary-bg)] text-[var(--primary-text)] rounded text-sm font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
           >
-            {acting ? "Saving…" : "Stop"}
+            {scrapBusy ? "Saving scrap…" : acting ? "Saving…" : "Stop"}
           </button>
           <button
             type="button"
+            disabled={scrapBusy}
             onClick={onClose}
-            className="min-h-[44px] px-4 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)]"
+            className="min-h-[44px] px-4 bg-[var(--ghost-bg)] text-text border border-border rounded text-sm font-semibold cursor-pointer hover:bg-[var(--border-light)] disabled:opacity-50"
           >
             Cancel
           </button>

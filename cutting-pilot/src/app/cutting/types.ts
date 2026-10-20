@@ -22,6 +22,7 @@ export interface CuttingLineItem {
   description: string;
   quantity: number | null;
   dimensions: string;
+  density: string | null;
 }
 
 export interface CuttingJob {

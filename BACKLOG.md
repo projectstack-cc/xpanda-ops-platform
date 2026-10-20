@@ -659,7 +659,7 @@ schedule badge):**
 - [ ] Block-calc: per-setup 2D cut diagram (port the legacy Canvas render) — optional polish.
 - [ ] Block-calc: optional per-setup secondary/scrap nesting (small parts into a big part's block remnants) — the old single-part secondaries feature, re-expressed per setup, if yield demands it.
 - [ ] Cutting route is tribal knowledge (supervisor decides which line cuts which axis; Main Line can chunk, Blue Line can run standalone). Consider capturing the route on the job so chunk/part targets stop depending on unwritten context.
-- [ ] Wire scrap capture into `<CompleteLineModal>` once the native scrap DB lands (reason + cubic-in + shift + density; derive operator/inv/line/date from session+job; no Laminate scrap)
+- [x] Wire scrap capture into `<CompleteLineModal>` once the native scrap DB lands (reason + cubic-in + shift + density; derive operator/inv/line/date from session+job; no Laminate scrap) — qc-05 (also on clock-out)
 - [ ] Material-consumption capture at line-complete — needs a job→block_inventory link + on-hand block picker (block_consumption_log decrements real stock)
 - [ ] Cut-list photo polish if asked: multi-photo per session, lightbox zoom, delete/replace, retention cleanup
 - [ ] Wire notifications into v2 cutting (v2 dispatch now exists: `src/lib/push.ts`, carrier-04; triggers: job-done, andon/flag-for-help)
@@ -686,9 +686,11 @@ schedule badge):**
       omits it)
 - [x] Retire the Google-Sheets mirror; migrate existing scrap_log consumers (QC scrap-log form,
       reports) to the native store — form + mirror retired; reports read the compat VIEW
-- [ ] **qc-05** — Wire v2 cutting CompleteLineModal scrap section to the native API
+- [x] **qc-05** — Wire v2 cutting CompleteLineModal scrap section to the native API (Mark Complete + clock-out; `POST /v2/api/cutting/scrap`)
 - [x] Batch scrap entry (several events in one submit) as part of the native scrap UI.
 - [ ] Reports port: read scrap_events directly and drop the scrap_log compatibility VIEW.
+- [ ] qc follow-up — scrap capture on the Cross Cutter / Hole Cutter board (ChunkStopModal), if the floor wants it.
+- [ ] qc follow-up — consider making scrap an explicit answer ("No scrap" or entries) at Mark Complete once operators are used to it.
 - [ ] Steve: delete the SCRAP_MIRROR_URL secret from the legacy Pages project and archive the "xpanda_scrap_mirror" Apps Script.
 
 ---

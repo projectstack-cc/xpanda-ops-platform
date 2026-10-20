@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { AlertCircle, Calculator, Search, X } from "lucide-react";
 import Sheet from "@/components/Sheet";
 import PlatformHeader from "@/components/PlatformHeader";
@@ -66,6 +66,20 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       orphaned: boolean;
     }[]
   >([]);
+
+  // qc-05: scrap saved / skipped in the Mark Complete or clock-out modal, appended to the success toast.
+  const scrapResultRef = useRef({ count: 0, skipped: false });
+  function recordScrapResult(count: number, skipped: boolean) {
+    scrapResultRef.current = {
+      count: scrapResultRef.current.count + count,
+      skipped: scrapResultRef.current.skipped || skipped,
+    };
+  }
+  function takeScrapSuffix(): string {
+    const { count, skipped } = scrapResultRef.current;
+    scrapResultRef.current = { count: 0, skipped: false };
+    return (count > 0 ? ` · ${count} scrap logged` : "") + (skipped ? " · scrap not saved" : "");
+  }
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -269,6 +283,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
   }
 
   function openClockOut(sessionId: string, line: string, jobId?: string) {
+    scrapResultRef.current = { count: 0, skipped: false };
     setClockOutTarget({ sessionId, line, jobId: jobId ?? selectedJob?.id ?? "" });
   }
 
@@ -328,7 +343,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       });
       const data = await res.json();
       if (data.ok) {
-        showToast(`Stopped ${clockOutTarget.line}.`);
+        showToast(`Stopped ${clockOutTarget.line}.${takeScrapSuffix()}`);
         setClockOutTarget(null);
         await fetchQueue(true);
       } else {
@@ -342,6 +357,7 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
   }
 
   function completeLine(jobId: string, line: string) {
+    scrapResultRef.current = { count: 0, skipped: false };
     setCompleteTarget({ jobId, line });
   }
 
@@ -358,9 +374,9 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       const data = await res.json();
       if (data.ok) {
         showToast(
-          data.all_lines_complete
+          (data.all_lines_complete
             ? `${line} complete — all lines done, job marked done.`
-            : `${line} marked complete.`
+            : `${line} marked complete.`) + takeScrapSuffix()
         );
         setCompleteTarget(null);
         await fetchQueue(true);
@@ -701,7 +717,10 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
         lineLabel={completeTarget?.line ?? ""}
         customer={selectedJob?.customer ?? ""}
         invoice={selectedJob?.invoice_number ?? ""}
-        isLaminate={completeTarget?.line === "Laminate"}
+        jobId={completeJob?.id ?? ""}
+        lineItems={completeItems}
+        operatorName={userName}
+        onScrapResult={recordScrapResult}
         isOpen={!!completeTarget}
         onClose={() => setCompleteTarget(null)}
         onSubmit={submitComplete}
@@ -721,6 +740,11 @@ export default function CuttingBoard({ userId, userName, isAdmin, permissions }:
       <HandoffModal
         lineLabel={clockOutTarget?.line ?? ""}
         items={clockOutItems}
+        jobId={clockOutJob?.id ?? ""}
+        invoice={clockOutJob?.invoice_number ?? ""}
+        lineItems={clockOutJob?.line_items ?? []}
+        operatorName={userName}
+        onScrapResult={recordScrapResult}
         isOpen={!!clockOutTarget}
         onClose={() => setClockOutTarget(null)}
         onSubmit={submitClockOut}
