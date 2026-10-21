@@ -2,56 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>xPanda QC Dashboard</title>
+<title>xPanda QC</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="/manifest.json">
-
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="mobile-web-app-capable" content="yes">
-
-    <link rel="icon" href="/qc-assets/qc-favicon.png" sizes="any">
-<link rel="apple-touch-icon" href="/qc-assets/qc-favicon.png">
-
-<link rel="stylesheet" href="/qc/qc-shared.css">
+<!-- qc-07: legacy QC dashboard retired — QC lives on /v2/qc. -->
+<meta http-equiv="refresh" content="0; url=/v2/qc">
+<script>location.replace('/v2/qc');</script>
 </head>
-
 <body>
-
-<script src="/qc/qc-header.js"></script>
-<script>
-function tt(key, fallback) { return window.I18n ? window.I18n.t(key) : fallback; }
-document.getElementById('qc-page-subtitle').textContent = tt('layout.qcIndexSubtitle', 'Launch quality workflows');
-</script>
-
-<div class="qc-wrap">
-
-    <div class="qc-section-intro">
-        <h1 class="qc-section-title" data-i18n="qc.sectionTitle">Quality Workflows</h1>
-        <p class="qc-section-subtitle" data-i18n="qc.sectionSubtitle">Select a task to begin</p>
-    </div>
-
-    <a class="qc-tile" href="/qc/final-inspection.html">
-        <h2 data-i18n="qc.tileFinalInspectionTitle">Final Inspection</h2>
-        <p data-i18n="qc.tileFinalInspectionDesc">Perform dimensional inspection and generate controlled PDF record</p>
-    </a>
-
-    <a class="qc-tile" href="/qc/incident-report.html">
-        <h2 data-i18n="qc.tileIncidentReportTitle">Incident Report</h2>
-        <p data-i18n="qc.tileIncidentReportDesc">Create and document quality incidents for customer or production issues</p>
-    </a>
-
-    <a class="qc-tile" href="/qc/scrap-log.html">
-    <h2 data-i18n="qc.tileScrapLogTitle">Scrap Log</h2>
-    <p data-i18n="qc.tileScrapLogDesc">Record scrap events for tracking, reporting, and future analytics</p>
-   </a>
-
-    <a class="qc-tile" href="/qc/density-calculator.html">
-        <h2 data-i18n="qc.tileDensityCalculatorTitle">Density Calculator</h2>
-        <p data-i18n="qc.tileDensityCalculatorDesc">Calculate foam density quickly from dimensions and weight on the floor</p>
-    </a>
-
-</div>
-
+<p>QC has moved. <a href="/v2/qc">Open QC</a>.</p>
 </body>
 </html>

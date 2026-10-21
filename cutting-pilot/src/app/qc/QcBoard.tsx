@@ -11,6 +11,7 @@
 // ?scrap=1 (where the retired qc/scrap-log.html redirects) opens it on load.
 // qc-06: admin-only "Bulk inspect" (BulkInspectModal) — hidden while an admin tests as a role
 // (isAdmin is false then; the API 403s too).
+// qc-07: cut over — /v2/qc is QC (home card + both navs); legacy /qc/ pages redirect here; ?density=1 opens the calculator. Incident report is the last legacy link.
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Calculator, ChevronDown, ChevronRight, ClipboardList, FileText, ListChecks, RefreshCw, TriangleAlert } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
@@ -235,12 +236,16 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
   const [scrapOpen, setScrapOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
 
-  // ?scrap=1 opens the Scrap log popup (the legacy scrap-log.html redirect lands here), then drops the param.
+  // ?scrap=1 / ?density=1 open their popups (the retired qc/scrap-log.html and qc/density-calculator.html redirect here), then drop the param.
   useEffect(() => {
     const url = new URL(window.location.href);
-    if (url.searchParams.get("scrap") !== "1") return;
-    setScrapOpen(true);
+    const scrap = url.searchParams.get("scrap") === "1";
+    const density = url.searchParams.get("density") === "1";
+    if (scrap) setScrapOpen(true);
+    if (density) setDensityOpen(true);
+    if (!url.searchParams.has("scrap") && !url.searchParams.has("density")) return;
     url.searchParams.delete("scrap");
+    url.searchParams.delete("density");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
 

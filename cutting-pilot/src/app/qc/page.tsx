@@ -1,9 +1,6 @@
 // src/app/qc/page.tsx  ->  /v2/qc
 // qc-01: server shell for the v2 QC Final Inspection board. Middleware gates this path on
-// `qc` (same permission key as legacy's /qc/). Deliberately NOT wired into PlatformHeader's nav,
-// the home page or qc/index.html — reachable by direct URL only, per the v2 visibility gate
-// (xpanda-ops-agents.md §1): a module is built-and-deployed-but-unlinked until Steve has tested
-// it and confirmed it's complete.
+// `qc` (same permission key as legacy's /qc/). Live since qc-07: home card, v2 + legacy nav, and the legacy /qc/ URLs redirect here.
 import { headers } from "next/headers";
 import { validateSession } from "@/lib/session";
 import { getEnv } from "@/lib/db";

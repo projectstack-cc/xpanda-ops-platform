@@ -84,14 +84,17 @@ _root/
     _archived/            (retired v1 pages: inventory.html, bead-inventory.html, index.html,
                            production-header.js, production-shared.css, production-i18n.js)
 
-  qc/
-    index.html            (1.7KB — QC tool dashboard)
-    final-inspection.html (31.7KB — inspection form, PDF record generation)
-    incident-report.html  (15.6KB — quality incident logging)
-    scrap-log.html        (6.8KB — scrap entry with density calc)
-    density-calculator.html (11.5KB — standalone floor calculator)
-    qc-header.js          (3.3KB)
-    qc-shared.css         (6.9KB)
+  qc/                     (QC cut over to /v2/qc in qc-07 — incident-report.html is the last legacy page)
+    incident-report.html  (15.6KB — quality incident logging; live until the qc-08 port)
+    index.html            (redirect → /v2/qc — qc-07)
+    final-inspection.html (redirect → /v2/qc — qc-07)
+    density-calculator.html (redirect → /v2/qc?density=1 — qc-07)
+    scrap-log.html        (redirect → /v2/qc?scrap=1 — qc-04)
+    qc-header.js          (3.3KB — incident page auth bar)
+    qc-shared.css         (6.9KB — incident page styles)
+    qc-i18n.js            (incident page strings; prune after qc-08)
+    _archived/            (retired originals: index.html, final-inspection.html — PDF payload
+                           contract reference — density-calculator.html)
 
   safety/
     index.html            (6.9KB — SDS search, training portal)
@@ -462,13 +465,13 @@ You build and maintain the QC module (`/qc/`). This covers scrap logging, final 
 - **Density Calculator**: Standalone floor tool — lb/ft³ from inches and pounds
 
 ## Key Files You Own
-- `qc/index.html` (1.7KB) — QC tool dashboard
-- `qc/final-inspection.html` (31.7KB) — Inspection form
-- `qc/incident-report.html` (15.6KB) — Incident logging
-- `qc/scrap-log.html` (6.8KB) — Scrap entry
-- `qc/density-calculator.html` (11.5KB) — Floor calculator
-- `qc/qc-header.js` — Auth bar
-- `qc/qc-shared.css` — Module styles
+QC is on v2 at `/v2/qc` since qc-07 (home card + both navs point there).
+- `cutting-pilot/src/app/qc/` — `page.tsx` (server shell) + `QcBoard.tsx` (Final Inspection board; toolbar opens the Density calculator, Scrap log and admin Bulk inspect popups; `?scrap=1` / `?density=1` open them on load)
+- `cutting-pilot/src/components/qc/` — the board's modals (inspect, bulk inspect, scrap log, density calculator) + the cutting board's scrap section
+- `cutting-pilot/src/lib/qc/` — board/inspection/scrap/Drive logic (+ `*.selfcheck.ts`)
+- `cutting-pilot/src/app/api/qc/**` — `/v2/api/qc/*` routes
+- `qc/incident-report.html` — Incident logging, **the last legacy QC page** (reached from the /v2/qc toolbar; port is qc-08), with its `qc/qc-header.js`, `qc/qc-shared.css`, `qc/qc-i18n.js`
+- `qc/index.html`, `qc/final-inspection.html`, `qc/density-calculator.html`, `qc/scrap-log.html` — redirect stubs to `/v2/qc` (qc-04 / qc-07); retired originals in `qc/_archived/` (`final-inspection.html` is the reference for the Drive PDF payload contract)
 
 ## API Endpoints You Use
 - `GET/POST /api/scrap-log` — Scrap entries

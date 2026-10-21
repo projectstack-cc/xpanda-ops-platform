@@ -19,7 +19,7 @@ const NAV_MODULES = [
   { label: "Block nesting", href: "/v2/blocks",       perm: "manufacturing.blocks" },
   { label: "Schedule",      href: "/v2/schedule",     perm: "schedule" },
   { label: "Production",    href: "/v2/production",   perm: "production.log" },
-  { label: "QC",            href: "/qc/",             perm: "qc" },
+  { label: "QC",            href: "/v2/qc",           perm: "qc" },
   { label: "Reports",       href: "/reports/",        perm: "reports" },
   { label: "Safety",        href: "/safety/",         perm: "safety" },
   { label: "Admin",         href: "/v2/admin",        perm: "admin" },
