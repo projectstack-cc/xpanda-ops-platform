@@ -1,7 +1,8 @@
 // src/lib/qc/drive.selfcheck.ts — qc-03
 // Self-check for the pure Drive-forward helpers (drive.ts). No DB, no network.
+// qc-08: incident payload key set, Doc response parsing, matching against the incident customer sheet.
 // Run with: npx tsx src/lib/qc/drive.selfcheck.ts   (from cutting-pilot/). Exits 1 on any failure.
-import { buildGasPayload, matchSheetCustomer, parseGasResponse, productCutFor, toleranceLabel, type QcDriveRecord, type QcDriveSample } from "./drive";
+import { buildGasPayload, buildIncidentPayload, matchSheetCustomer, parseGasResponse, productCutFor, toleranceLabel, type QcDriveRecord, type QcDriveSample } from "./drive";
 
 const results: { name: string; pass: boolean; detail?: string }[] = [];
 function check(name: string, pass: boolean, detail?: string) {
@@ -91,10 +92,69 @@ eq("productCut description only → first 40 chars", productCutFor({ ...cutBase,
 eq("productCut nothing → empty", productCutFor(cutBase), "");
 
 // parseGasResponse.
-eq("parse ok", parseGasResponse('{"ok":true,"type":"finalInspection","pdfFileId":"abc123","pdfName":"X-4477","savedFolderId":"f"}'), { ok: true, pdfFileId: "abc123", pdfName: "X-4477" });
+// qc-08: normalized to { fileId, fileName } (was { pdfFileId, pdfName }).
+eq("parse ok", parseGasResponse('{"ok":true,"type":"finalInspection","pdfFileId":"abc123","pdfName":"X-4477","savedFolderId":"f"}'), { ok: true, fileId: "abc123", fileName: "X-4477" });
+eq(
+  "parse incident Doc ok",
+  parseGasResponse('{"ok":true,"type":"incidentReport","docFileId":"doc9","docName":"XPanda Incident Report - All Florida - 20261020","savedFolderId":"f"}'),
+  { ok: true, fileId: "doc9", fileName: "XPanda Incident Report - All Florida - 20261020" }
+);
+eq("parse ok:true without a file id → failure", parseGasResponse('{"ok":true,"type":"incidentReport"}'), { ok: false, error: "Apps Script returned ok:false with no error." });
 eq("parse ok:false passes error", parseGasResponse('{"ok":false,"error":"Template not found"}'), { ok: false, error: "Template not found" });
 const html = parseGasResponse("<!DOCTYPE html><html><head><title>Sign in - Google Accounts</title></head><body><p>Sign in</p></body></html>");
 check("parse HTML → non-JSON failure, tags stripped", !html.ok && html.error.startsWith("Apps Script returned non-JSON: ") && !html.error.includes("<"), JSON.stringify(html));
+
+// ── qc-08: incidents ────────────────────────────────────────────────────────────────────────────
+
+// The incident customer sheet (1jmNy…, Customers tab), read 2026-10-21: the FINAL INSPECTION list plus
+// two more, with "All Florida" and "Coolstructures" listed twice each.
+const INCIDENT_SHEET = [...SHEET, "Architectural Foam Fabricators", "TCI ORL", "All Florida", "Coolstructures"];
+eq("incident sheet: duplicate All Florida isn't a tie", matchSheetCustomer("All Florida Weatherproofing & Construction", INCIDENT_SHEET), "All Florida");
+eq("incident sheet: duplicate Coolstructures isn't a tie", matchSheetCustomer("Coolstructures Inc", INCIDENT_SHEET), "Coolstructures");
+eq("incident sheet: TCI store → null", matchSheetCustomer("ABC Outdoor Solutions aka TCI #768 HUDSON", INCIDENT_SHEET), null);
+eq("incident sheet: Architectural Foam Fabricators exact", matchSheetCustomer("ARCHITECTURAL FOAM FABRICATORS", INCIDENT_SHEET), "Architectural Foam Fabricators");
+
+const incident = {
+  incident_date: "2026-10-20",
+  person_completing: "Steve Cook",
+  reporting_individual: null,
+  customer: "All Florida Weatherproofing & Construction",
+  job_ref: "4477",
+  product_delivered: "Block",
+  delivery_date: null,
+  incident_category: "Tolerances",
+  incident_details: "Short on length.",
+  root_cause: null,
+  implicated_departments: ["Cutting", "Delivery"],
+  corrective_actions: null,
+  risk_level: "High",
+};
+const ip = buildIncidentPayload(incident, "All Florida");
+// Legacy qc/incident-report.html's createIncidentReport payload, key for key.
+const LEGACY_INCIDENT_KEYS = [
+  "action", "date", "personCompletingReport", "reportingIndividual", "customer", "jobId", "productDelivered",
+  "deliveryDate", "incidentCategory", "incidentDetails", "rootCauseDescription", "implicatedDepartments",
+  "correctiveActions", "riskLevel",
+].sort();
+eq("incident payload key set = legacy", Object.keys(ip).sort(), LEGACY_INCIDENT_KEYS);
+eq("incident payload values", ip, {
+  action: "createIncidentReport",
+  date: "2026-10-20",
+  personCompletingReport: "Steve Cook",
+  reportingIndividual: "",
+  customer: "All Florida",
+  jobId: "4477",
+  productDelivered: "Block",
+  deliveryDate: "",
+  incidentCategory: "Tolerances",
+  incidentDetails: "Short on length.",
+  rootCauseDescription: "",
+  implicatedDepartments: ["Cutting", "Delivery"],
+  correctiveActions: "",
+  riskLevel: "High",
+});
+eq("incident payload raw customer when unmatched", buildIncidentPayload(incident, null).customer, "All Florida Weatherproofing & Construction");
+eq("incident payload no job_ref → empty jobId", buildIncidentPayload({ ...incident, job_ref: null }, null).jobId, "");
 
 const failed = results.filter((r) => !r.pass);
 for (const r of results) console.log(`${r.pass ? "PASS" : "FAIL"}  ${r.name}${r.pass ? "" : `  (${r.detail})`}`);

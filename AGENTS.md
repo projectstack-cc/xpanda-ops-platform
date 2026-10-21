@@ -32,7 +32,7 @@ The xPanda Operations Platform is an ERP-lite system for foam manufacturing oper
 
 **Migration status.** Strangler pattern: modules are ported one at a time, built unlinked, tested, then cut over (links repointed, legacy pages archived and replaced by redirect stubs). The end state is full retirement of the legacy worker and the Pages project.
 - **Cut over to v2:** Dock Loading (`/v2/logistics/loading`), BOL Email Queue (`/v2/logistics/bol-email`), Production Log (`/v2/production`), Admin (`/v2/admin`).
-- **Still legacy:** Job Board Classic (`/jobs/`) and Logistics Classic (`/logistics/`) — both in active testing alongside their v2 counterparts — the Manufacturing calculators, QC Incident Report, Reports, Safety, and the shell (home `index.html`, `login.html`, `track/`, `legal/`, `account/`).
+- **Still legacy:** Job Board Classic (`/jobs/`) and Logistics Classic (`/logistics/`) — both in active testing alongside their v2 counterparts — the Manufacturing calculators, Reports, Safety, and the shell (home `index.html`, `login.html`, `track/`, `legal/`, `account/`).
 
 ---
 
@@ -119,7 +119,7 @@ The xPanda Operations Platform is an ERP-lite system for foam manufacturing oper
 | **Production** | `/v2/production`, `/v2/production/schedule`, `/v2/production/tv` | v2 (legacy `/production/` only redirects) | Production Log — Molding/Expansion sheets, silo tracking (one lot per silo), bead lots + bag ledger, schedule, TV board | `cutting-pilot/src/app/production/`, `cutting-pilot/src/lib/productionSilos.ts` |
 | **Schedule** | `/v2/schedule` (TV), `/v2/schedule/desk` | v2 | Schedule board | `cutting-pilot/src/app/schedule/` |
 | **Shift Notes** | `/v2/notes` | v2 | Shift notes, manager mark-viewed | `cutting-pilot/src/app/notes/` |
-| **QC** | `/v2/qc` (legacy `/qc/` redirects; Incident report still legacy) | v2 | Final inspection (+ Drive PDF), scrap log, density calculator; incident report (legacy) | `cutting-pilot/src/app/qc/`, `cutting-pilot/src/components/qc/`, `cutting-pilot/src/lib/qc/`, `qc/incident-report.html` |
+| **QC** | `/v2/qc` (every legacy `/qc/` page is a redirect stub; originals in `qc/_archived/`) | v2 | Final inspection (+ Drive PDF), scrap log, density calculator, incident report (+ Drive Doc + incident tracker row) | `cutting-pilot/src/app/qc/`, `cutting-pilot/src/components/qc/` (`IncidentModal.tsx`), `cutting-pilot/src/lib/qc/` (`incident.ts`, `drive.ts`, `driveForward.ts`), `cutting-pilot/src/app/api/qc/incidents/` |
 | **Safety** | `/safety/` | legacy | SDS browser, i18n safety content, training | `safety/` |
 | **Reports** | `/reports/` | legacy | Read-only analytics dashboards (cutting, incidents, orders, scrap) | `reports/` |
 | **Admin** | `/v2/admin` (tabs Users · Roles · Parts · Activity) | v2 (legacy stubs deleted admin-11; originals in `admin/_archived/`, reference only) | Users, roles & permissions, test-as-role, parts library, audit trail | `cutting-pilot/src/app/admin/`, `cutting-pilot/src/components/admin/`, `cutting-pilot/src/components/parts/PartsLibrary.tsx` (shared with Load Builder), `cutting-pilot/src/lib/permissions.ts` |

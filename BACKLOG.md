@@ -117,16 +117,18 @@
 - [ ] Port `manufacturing/block-calculator.html` (general block nesting; `/v2/blocks` covers taper only).
 - [ ] Delete the `manufacturing/holey-board-calculator.html` redirect stub once access logs show no hits (hb-archive-01; original kept in `manufacturing/_archived/`).
 
-### QC · CUT OVER to /v2/qc (qc-07) — Incident Report still legacy
+### QC · v2 COMPLETE at /v2/qc (qc-01..08)
 
-- [ ] Retire the `qc/scrap-log.html` redirect stub + its qc-i18n keys once logs show no hits (qc-04).
 - [ ] qc follow-up — view a past inspection (samples + nominals) from the drill-down; today only the latest result chip shows.
 - [ ] qc follow-up — "Line changed since inspection" only flags; decide whether a changed line should drop back to Not inspected.
 - [ ] qc follow-up — customers not in the FINAL INSPECTION master sheet land in the default Drive folder (drive_customer NULL). Add them to the sheet (Name, Active=YES, Folder ID) to route their PDFs.
 - [ ] qc follow-up — admin bulk inspect (qc-06) skips lines with unreadable dimensions; if that list is long in practice, consider a per-line nominal override in the bulk modal.
 - [ ] qc-01 follow-up — shared dashboard primitives under 44px touch targets: `WeekSelector` arrows (`w-8 h-8`) and segment buttons (~30px), `SearchInput` / `FilterSelect` (`h-9`). Used by /v2/qc, /v2/logistics and /v2/board — raise in one shared change.
-- [ ] qc-08 — port Incident Report to /v2/qc (same Apps Script createIncidentReport + incident tracker Sheet; Reports' incident pages read that Sheet via gviz).
-- [ ] After qc-08: add the Apps Script shared-secret check (both legacy forms will be gone), prune qc-i18n.js, delete the qc/ redirect stubs once logs show no hits.
+- [ ] qc-09 — Apps Script shared secret: no legacy form posts to the Inspection Tool any more. Add a secret check in doPost (new script version) + a Worker secret QC_GAS_SECRET sent by both forwarders. Steve deploys the script.
+- [ ] Incident follow-up — add root cause / corrective actions after the initial report (today: create-only, like legacy; the Doc is the record).
+- [ ] Incident customers not in the incident customer sheet land in the default incident folder — add them to the sheet to route their Docs.
+- [ ] Delete the qc/ redirect stubs once logs show no hits.
+- [ ] Reports port: incident pages still read the tracker Sheet via gviz; consider reading qc_incidents.
 
 ### Reports · NO v2 YET
 

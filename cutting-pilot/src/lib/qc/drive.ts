@@ -4,6 +4,9 @@
 // it, exports a PDF into the customer's Drive folder and returns { ok, pdfFileId, pdfName } — with
 // HTTP 200 even on error. The payload shape below is legacy qc/final-inspection.html's, field for
 // field. No DB, no fetch — exercised by drive.selfcheck.ts (`npx tsx src/lib/qc/drive.selfcheck.ts`).
+// qc-08: buildIncidentPayload — legacy qc/_archived/incident-report.html's createIncidentReport payload, key for
+// key (handleIncidentReport fills the incident Doc and appends the tracker-Sheet row); parseGasResponse
+// now reads the incident Doc reply too, normalized to { fileId, fileName }.
 import { etNowWallClock, parseStoredUtc } from "@/lib/etDateTime";
 
 // ── Customer → master-sheet name ────────────────────────────────────────────────────────────────
@@ -170,9 +173,66 @@ export function buildGasPayload(rec: QcDriveRecord, samples: QcDriveSample[], cu
   };
 }
 
+// ── Incident payload (qc-08) ────────────────────────────────────────────────────────────────────
+
+export interface QcIncidentDriveRecord {
+  incident_date: string;
+  person_completing: string;
+  reporting_individual: string | null;
+  customer: string;
+  job_ref: string | null;
+  product_delivered: string;
+  delivery_date: string | null;
+  incident_category: string;
+  incident_details: string;
+  root_cause: string | null;
+  implicated_departments: string[];
+  corrective_actions: string | null;
+  risk_level: string;
+}
+
+export interface GasIncidentPayload {
+  action: "createIncidentReport";
+  date: string;
+  personCompletingReport: string;
+  reportingIndividual: string;
+  customer: string;
+  jobId: string;
+  productDelivered: string;
+  deliveryDate: string;
+  incidentCategory: string;
+  incidentDetails: string;
+  rootCauseDescription: string;
+  implicatedDepartments: string[];
+  correctiveActions: string;
+  riskLevel: string;
+}
+
+// Exactly legacy's keys; nulls → "". jobId is the INV as entered (job_ref), customer the sheet name
+// when one matched (else the raw name → the script's default incident folder).
+export function buildIncidentPayload(rec: QcIncidentDriveRecord, customerForSheet: string | null): GasIncidentPayload {
+  return {
+    action: "createIncidentReport",
+    date: rec.incident_date ?? "",
+    personCompletingReport: rec.person_completing ?? "",
+    reportingIndividual: rec.reporting_individual ?? "",
+    customer: customerForSheet ?? rec.customer ?? "",
+    jobId: rec.job_ref ?? "",
+    productDelivered: rec.product_delivered ?? "",
+    deliveryDate: rec.delivery_date ?? "",
+    incidentCategory: rec.incident_category ?? "",
+    incidentDetails: rec.incident_details ?? "",
+    rootCauseDescription: rec.root_cause ?? "",
+    implicatedDepartments: [...(rec.implicated_departments ?? [])],
+    correctiveActions: rec.corrective_actions ?? "",
+    riskLevel: rec.risk_level ?? "",
+  };
+}
+
 // ── Response ────────────────────────────────────────────────────────────────────────────────────
 
-export type GasResult = { ok: true; pdfFileId: string; pdfName: string } | { ok: false; error: string };
+// qc-08: normalized — the inspection reply carries pdfFileId/pdfName, the incident reply docFileId/docName.
+export type GasResult = { ok: true; fileId: string; fileName: string } | { ok: false; error: string };
 
 // The script answers HTTP 200 for errors too, so the body decides. Non-JSON (a Google HTML error or
 // login page) is a failure with the first 200 chars, tags stripped.
@@ -188,8 +248,9 @@ export function parseGasResponse(text: string): GasResult {
       .slice(0, 200);
     return { ok: false, error: `Apps Script returned non-JSON: ${snippet}` };
   }
-  if (json && json.ok === true && json.pdfFileId) {
-    return { ok: true, pdfFileId: String(json.pdfFileId), pdfName: String(json.pdfName ?? "") };
+  const fileId = json?.pdfFileId || json?.docFileId;
+  if (json && json.ok === true && fileId) {
+    return { ok: true, fileId: String(fileId), fileName: String(json.pdfName ?? json.docName ?? "") };
   }
   return { ok: false, error: String(json?.error || "Apps Script returned ok:false with no error.") };
 }

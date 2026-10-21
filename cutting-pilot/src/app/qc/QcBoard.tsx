@@ -12,6 +12,7 @@
 // qc-06: admin-only "Bulk inspect" (BulkInspectModal) — hidden while an admin tests as a role
 // (isAdmin is false then; the API 403s too).
 // qc-07: cut over — /v2/qc is QC (home card + both navs); legacy /qc/ pages redirect here; ?density=1 opens the calculator. Incident report is the last legacy link.
+// qc-08: "Incident report" opens IncidentModal (native qc_incidents → incident Doc + tracker row); ?incident=1 (where the retired qc/incident-report.html redirects) opens it. No legacy QC links remain.
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Calculator, ChevronDown, ChevronRight, ClipboardList, FileText, ListChecks, RefreshCw, TriangleAlert } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
@@ -23,6 +24,7 @@ import DayGroupHeader from "@/components/dashboard/DayGroupHeader";
 import MetricTile from "@/components/dashboard/MetricTile";
 import BulkInspectModal from "@/components/qc/BulkInspectModal";
 import DensityCalculatorModal from "@/components/qc/DensityCalculatorModal";
+import IncidentModal from "@/components/qc/IncidentModal";
 import InspectModal from "@/components/qc/InspectModal";
 import ScrapLogModal from "@/components/qc/ScrapLogModal";
 import { formatEtDateTime, parseStoredUtc } from "@/lib/etDateTime";
@@ -235,17 +237,21 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
   const [densityOpen, setDensityOpen] = useState(false);
   const [scrapOpen, setScrapOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [incidentOpen, setIncidentOpen] = useState(false);
 
-  // ?scrap=1 / ?density=1 open their popups (the retired qc/scrap-log.html and qc/density-calculator.html redirect here), then drop the param.
+  // ?scrap=1 / ?density=1 / ?incident=1 open their popups (the retired qc/scrap-log.html, qc/density-calculator.html and qc/incident-report.html redirect here), then drop the param.
   useEffect(() => {
     const url = new URL(window.location.href);
     const scrap = url.searchParams.get("scrap") === "1";
     const density = url.searchParams.get("density") === "1";
+    const incident = url.searchParams.get("incident") === "1";
     if (scrap) setScrapOpen(true);
     if (density) setDensityOpen(true);
-    if (!url.searchParams.has("scrap") && !url.searchParams.has("density")) return;
+    if (incident) setIncidentOpen(true);
+    if (!url.searchParams.has("scrap") && !url.searchParams.has("density") && !url.searchParams.has("incident")) return;
     url.searchParams.delete("scrap");
     url.searchParams.delete("density");
+    url.searchParams.delete("incident");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
 
@@ -380,11 +386,10 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
               <ClipboardList size={14} className="text-muted" aria-hidden="true" />
               Scrap log
             </button>
-            {/* Incident report is legacy until it ports — plain <a>, it leaves the v2 app. */}
-            <a href="/qc/incident-report.html" className={HEADER_BTN}>
+            <button type="button" className={HEADER_BTN} onClick={() => setIncidentOpen(true)}>
               <TriangleAlert size={14} className="text-muted" aria-hidden="true" />
               Incident report
-            </a>
+            </button>
           </div>
         </div>
 
@@ -595,6 +600,7 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
         canEdit={canInspect}
         mondayStr={weekInfo.mondayStr}
       />
+      <IncidentModal isOpen={incidentOpen} onClose={() => setIncidentOpen(false)} canEdit={canInspect} userName={userName} />
       {inspectTarget && (
         <InspectModal
           isOpen

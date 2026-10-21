@@ -84,17 +84,15 @@ _root/
     _archived/            (retired v1 pages: inventory.html, bead-inventory.html, index.html,
                            production-header.js, production-shared.css, production-i18n.js)
 
-  qc/                     (QC cut over to /v2/qc in qc-07 — incident-report.html is the last legacy page)
-    incident-report.html  (15.6KB — quality incident logging; live until the qc-08 port)
+  qc/                     (QC is v2 at /v2/qc — qc-07 cutover, qc-08 incident port; no live legacy page)
     index.html            (redirect → /v2/qc — qc-07)
     final-inspection.html (redirect → /v2/qc — qc-07)
     density-calculator.html (redirect → /v2/qc?density=1 — qc-07)
+    incident-report.html  (redirect → /v2/qc?incident=1 — qc-08)
     scrap-log.html        (redirect → /v2/qc?scrap=1 — qc-04)
-    qc-header.js          (3.3KB — incident page auth bar)
-    qc-shared.css         (6.9KB — incident page styles)
-    qc-i18n.js            (incident page strings; prune after qc-08)
     _archived/            (retired originals: index.html, final-inspection.html — PDF payload
-                           contract reference — density-calculator.html)
+                           contract reference — density-calculator.html, incident-report.html —
+                           incident payload reference — and qc-header.js, qc-shared.css, qc-i18n.js)
 
   safety/
     index.html            (6.9KB — SDS search, training portal)
@@ -461,17 +459,16 @@ You build and maintain the QC module (`/qc/`). This covers scrap logging, final 
 ## Domain Knowledge
 - **Scrap Log**: Record scrap events with reason codes, weight, dimensions, density auto-calculation
 - **Final Inspection**: Dimensional inspection form with pass/fail/NA, PDF record generation
-- **Incident Report**: Quality incidents for customer or production issues, linked to Google Sheets gviz endpoint
+- **Incident Report** (qc-08, native `qc_incidents`): quality incidents for customer or production issues. Create-only — the incident Google Doc the Inspection Tool Apps Script makes (`createIncidentReport`) is the document of record; the same call appends a row to the incident tracker Sheet, which legacy Reports' incident pages read through gviz, so that row must keep its legacy shape
 - **Density Calculator**: Standalone floor tool — lb/ft³ from inches and pounds
 
 ## Key Files You Own
 QC is on v2 at `/v2/qc` since qc-07 (home card + both navs point there).
-- `cutting-pilot/src/app/qc/` — `page.tsx` (server shell) + `QcBoard.tsx` (Final Inspection board; toolbar opens the Density calculator, Scrap log and admin Bulk inspect popups; `?scrap=1` / `?density=1` open them on load)
-- `cutting-pilot/src/components/qc/` — the board's modals (inspect, bulk inspect, scrap log, density calculator) + the cutting board's scrap section
-- `cutting-pilot/src/lib/qc/` — board/inspection/scrap/Drive logic (+ `*.selfcheck.ts`)
+- `cutting-pilot/src/app/qc/` — `page.tsx` (server shell) + `QcBoard.tsx` (Final Inspection board; toolbar opens the Density calculator, Scrap log, Incident report and admin Bulk inspect popups; `?scrap=1` / `?density=1` / `?incident=1` open them on load)
+- `cutting-pilot/src/components/qc/` — the board's modals (inspect, bulk inspect, scrap log, density calculator, incident report) + the cutting board's scrap section
+- `cutting-pilot/src/lib/qc/` — board/inspection/scrap/incident/Drive logic (+ `*.selfcheck.ts`); `driveForward.ts` forwards both inspections (PDF) and incidents (Doc + tracker row) through one claim/sweep
 - `cutting-pilot/src/app/api/qc/**` — `/v2/api/qc/*` routes
-- `qc/incident-report.html` — Incident logging, **the last legacy QC page** (reached from the /v2/qc toolbar; port is qc-08), with its `qc/qc-header.js`, `qc/qc-shared.css`, `qc/qc-i18n.js`
-- `qc/index.html`, `qc/final-inspection.html`, `qc/density-calculator.html`, `qc/scrap-log.html` — redirect stubs to `/v2/qc` (qc-04 / qc-07); retired originals in `qc/_archived/` (`final-inspection.html` is the reference for the Drive PDF payload contract)
+- **The legacy QC pages are all redirect stubs or archived (qc-08):** `qc/index.html`, `qc/final-inspection.html`, `qc/density-calculator.html`, `qc/incident-report.html`, `qc/scrap-log.html` redirect to `/v2/qc` (qc-04 / qc-07 / qc-08); retired originals plus `qc-header.js` / `qc-shared.css` / `qc-i18n.js` are in `qc/_archived/` (`final-inspection.html` and `incident-report.html` are the references for the Drive payload contracts)
 
 ## API Endpoints You Use
 - `GET/POST /api/scrap-log` — Scrap entries
