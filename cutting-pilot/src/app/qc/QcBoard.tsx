@@ -9,8 +9,10 @@
 // when stuck, with a Retry Drive button for `qc` edit (POST /v2/api/qc/inspections/:id/drive).
 // qc-04: "Scrap log" opens ScrapLogModal (native scrap_events) instead of leaving for the legacy form;
 // ?scrap=1 (where the retired qc/scrap-log.html redirects) opens it on load.
+// qc-06: admin-only "Bulk inspect" (BulkInspectModal) — hidden while an admin tests as a role
+// (isAdmin is false then; the API 403s too).
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Calculator, ChevronDown, ChevronRight, ClipboardList, FileText, RefreshCw, TriangleAlert } from "lucide-react";
+import { Calculator, ChevronDown, ChevronRight, ClipboardList, FileText, ListChecks, RefreshCw, TriangleAlert } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import DashboardToolbar from "@/components/dashboard/DashboardToolbar";
 import WeekSelector from "@/components/dashboard/WeekSelector";
@@ -18,6 +20,7 @@ import SearchInput from "@/components/dashboard/SearchInput";
 import FilterSelect from "@/components/dashboard/FilterSelect";
 import DayGroupHeader from "@/components/dashboard/DayGroupHeader";
 import MetricTile from "@/components/dashboard/MetricTile";
+import BulkInspectModal from "@/components/qc/BulkInspectModal";
 import DensityCalculatorModal from "@/components/qc/DensityCalculatorModal";
 import InspectModal from "@/components/qc/InspectModal";
 import ScrapLogModal from "@/components/qc/ScrapLogModal";
@@ -230,6 +233,7 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [densityOpen, setDensityOpen] = useState(false);
   const [scrapOpen, setScrapOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   // ?scrap=1 opens the Scrap log popup (the legacy scrap-log.html redirect lands here), then drops the param.
   useEffect(() => {
@@ -361,6 +365,12 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
               <Calculator size={14} className="text-muted" aria-hidden="true" />
               Density calculator
             </button>
+            {isAdmin && (
+              <button type="button" onClick={() => setBulkOpen(true)} className={HEADER_BTN}>
+                <ListChecks size={14} className="text-muted" aria-hidden="true" />
+                Bulk inspect
+              </button>
+            )}
             <button type="button" className={HEADER_BTN} onClick={() => setScrapOpen(true)}>
               <ClipboardList size={14} className="text-muted" aria-hidden="true" />
               Scrap log
@@ -565,6 +575,14 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
         )}
       </div>
 
+      {isAdmin && (
+        <BulkInspectModal
+          isOpen={bulkOpen}
+          onClose={() => setBulkOpen(false)}
+          orders={orders ?? []}
+          onDone={() => load({ quiet: true })}
+        />
+      )}
       <DensityCalculatorModal isOpen={densityOpen} onClose={() => setDensityOpen(false)} />
       <ScrapLogModal
         isOpen={scrapOpen}

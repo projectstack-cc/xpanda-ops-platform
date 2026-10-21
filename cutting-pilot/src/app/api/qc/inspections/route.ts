@@ -8,30 +8,15 @@
 // forwards it to the Inspection Tool Apps Script (PDF → customer's Drive folder) — never awaited, the
 // modal doesn't wait on Google. No ctx (next dev) → skipped; the */5 cron sweep picks the row up.
 // Inspector = the session user (X-User-Id / X-User-Name from middleware), never a form field.
+// qc-06: validation stays here; the supersede/insert/samples batch and its activity row moved to
+// lib/qc/inspectionWrite.ts (shared with the admin bulk route), written with entry_method 'manual'.
 // Gated on `qc` by middleware (POST → edit).
 import { NextResponse, type NextRequest } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getEnv } from "@/lib/db";
-import { logActivity } from "@/lib/activityLog";
 import { forwardInspection, POST_SAVE_CUSTOMERS_TIMEOUT_MS } from "@/lib/qc/driveForward";
-import {
-  TOLERANCES,
-  inspectionResult,
-  isSampleComplete,
-  sampleSizeFor,
-  type QcLineInspection,
-} from "@/lib/qc/board";
-
-interface LineRow {
-  id: string;
-  job_id: string;
-  description: string | null;
-  dimensions: string | null;
-  quantity: number | null;
-  category: string | null;
-  invoice_number: string | null;
-  customer: string | null;
-}
+import { TOLERANCES, isSampleComplete, sampleSizeFor } from "@/lib/qc/board";
+import { inspectionNow, saveInspection, type LineRow } from "@/lib/qc/inspectionWrite";
 
 function bad(error: string, detail = "") {
   return NextResponse.json({ ok: false, error, detail }, { status: 400 });
@@ -41,10 +26,6 @@ function str(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim().slice(0, max);
   return t || null;
-}
-
-function num(v: unknown): number | null {
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
 export async function POST(request: NextRequest) {
@@ -97,74 +78,18 @@ export async function POST(request: NextRequest) {
     if (incomplete.length) return bad(`Sample(s) ${incomplete.join(", ")} incomplete.`);
 
     const nominal = body?.nominal ?? {};
-    const result = inspectionResult(samples);
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const { id, inspection } = await saveInspection(DB, {
+      line,
+      lot,
+      tolerance,
+      nominal,
+      samples,
+      actorId,
+      actorName,
+      now: inspectionNow(),
+      entryMethod: "manual",
+    });
 
-    const stmts = [
-      DB.prepare(`UPDATE qc_inspections SET superseded_at = ? WHERE line_item_id = ? AND superseded_at IS NULL`).bind(
-        now,
-        lineItemId
-      ),
-      DB.prepare(
-        `INSERT INTO qc_inspections
-           (id, job_id, line_item_id, invoice_number, customer, part_description, dimensions_text, line_quantity,
-            lot_size, sample_size, tolerance_in, nominal_length, nominal_width, nominal_height, nominal_taper,
-            result, inspector_id, inspector_name, inspected_at, drive_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
-      ).bind(
-        id,
-        line.job_id,
-        line.id,
-        line.invoice_number ?? "",
-        line.customer ?? "",
-        line.description ?? "",
-        line.dimensions ?? "",
-        Number(line.quantity) || 0,
-        lot,
-        sampleSize,
-        tolerance,
-        num(nominal.length),
-        num(nominal.width),
-        num(nominal.height),
-        str(nominal.taper, 50),
-        result,
-        actorId,
-        actorName,
-        now
-      ),
-      ...samples.map((s, i) =>
-        DB.prepare(
-          `INSERT INTO qc_inspection_samples
-             (inspection_id, sample_no, length, width, height, taper, visual_pass, result, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).bind(id, i + 1, s.length, s.width, s.height, str(s.taper, 50), s.visual_pass === false ? 0 : 1, s.result, str(s.notes, 500))
-      ),
-    ];
-    const res = await DB.batch(stmts);
-    const superseded = Number(res[0]?.meta?.changes ?? 0);
-
-    await logActivity(
-      DB,
-      "create",
-      "qc_inspection",
-      id,
-      `Inspected INV ${line.invoice_number || "—"} — ${line.description || "line"} (${result})`,
-      { job_id: line.job_id, line_item_id: line.id, lot_size: lot, sample_size: sampleSize, result, superseded },
-      actorId
-    );
-
-    const inspection: QcLineInspection = {
-      id,
-      result,
-      inspector_name: actorName,
-      inspected_at: now,
-      drive_status: "pending",
-      drive_file_id: null,
-      drive_error: null,
-      drive_attempted_at: null,
-      stale: false,
-    };
     // qc-03: forward to Drive off the response path. forwardInspection never throws. Production
     // builds only: under next dev, getPlatformProxy hands back a ctx AND the real QC_GAS_URL from
     // wrangler.toml, so a local test save would file a real PDF into Steve's Drive.

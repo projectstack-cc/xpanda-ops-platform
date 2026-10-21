@@ -290,3 +290,53 @@ export function isStale(
 ): boolean {
   return Number(snapshotQty ?? 0) !== Number(lineQty ?? 0) || normDimsText(snapshotDims) !== normDimsText(lineDims);
 }
+
+// ── qc-06: admin bulk inspect (POST /v2/api/qc/inspections/bulk + BulkInspectModal) ─────────────
+
+export type BulkSkipReason = "already_inspected" | "no_quantity" | "no_dimensions";
+
+export interface BulkLinePlan {
+  line_item_id: string;
+  description: string;
+  action: "record" | "skip";
+  reason?: BulkSkipReason;
+  lot?: number;
+  sampleSize?: number;
+  nominal?: Nominal;
+}
+
+export const BULK_SKIP_LABELS: Record<BulkSkipReason, string> = {
+  already_inspected: "Already inspected",
+  no_quantity: "No quantity on the line",
+  no_dimensions: "Couldn't read dimensions — inspect manually",
+};
+
+// A line is auto-filled only when every sample can be written complete: a whole quantity ≥ 1 and
+// nominal L, W and H. nominalFromLine gives H for every 3-dimension line (a taper's thick end); a
+// 2-dimension taper ("2.5-4 x 39") has no H, so it's left for a manual inspection.
+export function planBulkInspection(order: QcOrder): BulkLinePlan[] {
+  return order.lines.map((l): BulkLinePlan => {
+    const base = { line_item_id: l.id, description: l.description };
+    if (l.inspection) return { ...base, action: "skip", reason: "already_inspected" };
+    const qty = Number(l.quantity);
+    if (!Number.isInteger(qty) || qty < 1) return { ...base, action: "skip", reason: "no_quantity" };
+    const nominal = nominalFromLine(l.dimensions, l.description);
+    if (nominal.length === null || nominal.width === null || nominal.height === null) {
+      return { ...base, action: "skip", reason: "no_dimensions" };
+    }
+    return { ...base, action: "record", lot: qty, sampleSize: sampleSizeFor(qty) as number, nominal };
+  });
+}
+
+// N identical passing samples at nominal (visual pass, taper = the nominal taper text or null).
+export function bulkSamples(nominal: Nominal, sampleSize: number) {
+  return Array.from({ length: sampleSize }, () => ({
+    length: nominal.length,
+    width: nominal.width,
+    height: nominal.height,
+    taper: nominal.taper,
+    visual_pass: true,
+    result: "pass" as const,
+    notes: null,
+  }));
+}

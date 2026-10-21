@@ -1,9 +1,10 @@
-// src/lib/qc/board.selfcheck.ts — qc-01
+// src/lib/qc/board.selfcheck.ts — qc-01 (qc-06: planBulkInspection / bulkSamples)
 // Self-check for the pure QC board helpers (board.ts). No DB.
 // Run with: npx tsx src/lib/qc/board.selfcheck.ts   (from cutting-pilot/). Exits 1 on any failure.
 import {
   DEFAULT_TOLERANCE,
   TOLERANCES,
+  bulkSamples,
   calcDensity,
   densityVsTarget,
   fmt3,
@@ -14,6 +15,7 @@ import {
   nominalFromLine,
   orderState,
   outOfTolerance,
+  planBulkInspection,
   sampleSizeFor,
   type QcLine,
   type QcLineInspection,
@@ -130,6 +132,46 @@ eq("inspectionResult any fail", inspectionResult([{ result: "pass" }, { result: 
 eq("isStale same", isStale(16, '2-4" x 53" x 96"', 16, ' 2-4"  x 53" x  96" '), false);
 eq("isStale qty changed", isStale(16, "a", 20, "a"), true);
 eq("isStale dims changed", isStale(16, '2" x 48"', 16, '3" x 48"'), true);
+
+// qc-06: planBulkInspection — skip order already_inspected → no_quantity → no_dimensions; record otherwise.
+function bl(id: string, dimensions: string, description: string, quantity: number, inspection: QcLineInspection | null = null): QcLine {
+  return { id, description, dimensions, quantity, sort_order: 0, inspection };
+}
+const bulkPlan = planBulkInspection(
+  ord("b", "2026-10-20", [
+    bl("sheet", '2" x 48" x 144"', "2# EPS", 20),
+    bl("dtech", "", "FOAM-HT1840-4 ~ 15.5X37.5X3-9/16", 400),
+    bl("taper", '2.5-4" x 39" x 80"', "1.5# taper", 17),
+    bl("done", '1 x 10 x 20', "Done", 5, insp("fail")),
+    bl("zero", '1 x 2 x 3', "Zero", 0),
+    bl("nodims", "", "Custom offcut", 4),
+    bl("frac", '1 x 2 x 3', "Fraction qty", 2.5),
+    bl("taper2d", '2.5-4" x 39"', "Two-dim taper", 3),
+    bl("donezero", "", "Inspected, no qty", 0, insp("pass")),
+  ])
+);
+const plan = (id: string) => bulkPlan.find((p) => p.line_item_id === id);
+eq("bulk 2x48x144 ×20 → record lot 20, 3 samples", [plan("sheet")?.action, plan("sheet")?.lot, plan("sheet")?.sampleSize], ["record", 20, 3]);
+eq("bulk 2x48x144 nominal H/W/L", [plan("sheet")?.nominal?.height, plan("sheet")?.nominal?.width, plan("sheet")?.nominal?.length], [2, 48, 144]);
+eq("bulk DiversiTech description dims ×400 → record, 8 samples", [plan("dtech")?.action, plan("dtech")?.sampleSize], ["record", 8]);
+eq("bulk taper ×17 → record, taper 2.5–4, H 4", [plan("taper")?.action, plan("taper")?.nominal?.taper, plan("taper")?.nominal?.height], ["record", "2.5–4", 4]);
+eq("bulk already inspected (failed) → skip", [plan("done")?.action, plan("done")?.reason], ["skip", "already_inspected"]);
+eq("bulk qty 0 → skip no_quantity", [plan("zero")?.action, plan("zero")?.reason], ["skip", "no_quantity"]);
+eq("bulk no dims → skip no_dimensions", [plan("nodims")?.action, plan("nodims")?.reason], ["skip", "no_dimensions"]);
+eq("bulk fractional qty → skip no_quantity", plan("frac")?.reason, "no_quantity");
+eq("bulk 2-dim taper (no H) → skip no_dimensions", plan("taper2d")?.reason, "no_dimensions");
+eq("bulk already_inspected wins over no_quantity", plan("donezero")?.reason, "already_inspected");
+eq("bulk skip carries no lot/nominal", [plan("zero")?.lot, plan("zero")?.nominal], [undefined, undefined]);
+eq("bulk keeps line order", bulkPlan.map((p) => p.line_item_id), ["sheet", "dtech", "taper", "done", "zero", "nodims", "frac", "taper2d", "donezero"]);
+
+// bulkSamples — N identical passing rows at nominal.
+const bs = bulkSamples(plan("taper")!.nominal!, 3);
+eq("bulkSamples count", bs.length, 3);
+eq("bulkSamples row", bs[0], { length: 80, width: 39, height: 4, taper: "2.5–4", visual_pass: true, result: "pass", notes: null });
+check("bulkSamples rows identical", bs.every((r) => JSON.stringify(r) === JSON.stringify(bs[0])));
+check("bulkSamples rows complete", bs.every((r) => isSampleComplete(r)));
+eq("bulkSamples no taper → null", bulkSamples(plan("sheet")!.nominal!, 1)[0].taper, null);
+eq("bulkSamples overall result", inspectionResult(bs), "pass");
 
 const failed = results.filter((r) => !r.pass);
 for (const r of results) console.log(`${r.pass ? "PASS" : "FAIL"}  ${r.name}${r.pass ? "" : `  (${r.detail})`}`);
