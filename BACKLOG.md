@@ -709,16 +709,20 @@ schedule badge):**
 ### Marina Foam inspection — own page at `/v2/qc/marina` (marina-01 schema + `qc.marina` gate shipped)
 
 Admins only for now (no permission seed); Steve grants `qc.marina` to a role in `/v2/admin` → Roles when ready.
-Scope: `marina-scope.md` (Project doc), with placement changed from a `/v2/qc` tab to its own page.
+Scope: `Prompts/marina-scope.md` + `Prompts/marina-scope-update-2026-10-22.md` (the update wins: own page, not a `/v2/qc` tab).
+Fully decoupled from jobs/orders/parts/Drive/native scrap. Run sequentially (shared CHANGELOG).
 
-- [ ] marina-02 — per `marina-scope.md` (placement: `/v2/qc/marina`).
-- [ ] marina-03 — per `marina-scope.md` (placement: `/v2/qc/marina`).
-- [ ] marina-04 — per `marina-scope.md` (placement: `/v2/qc/marina`).
-- [ ] marina-05 — per `marina-scope.md` (placement: `/v2/qc/marina`).
-- [ ] marina-06 — per `marina-scope.md` (placement: `/v2/qc/marina`).
-- [ ] marina-07 — Marina Foam header button on `/v2/qc` (gated on `X-User-Can-Marina`) — only after Steve tests. Until then the page is direct-URL only.
-- [ ] Phase 2: marina-08 — email intake (files land in `marina_files` with `job_id` NULL + `intake_id`).
-- [ ] Phase 2: marina-09 — Inbox (assign intake files to a Marina job).
+- [ ] marina-02 — `src/lib/inches.ts` (`parseInches` "41 3/8" | "41.375" | "41-3/8"; `formatInches` → nearest 1/16"; new — `board.ts` parser is private), R2 file routes (`BOL_PHOTOS`, copy the `api/board/[id]/prints` pattern: 25 MB cap, `sanitizeFilename`, `r2_key` never returned; `GET /files/{id}` streams, `PATCH /files/{id}` supersede/kind), jobs CRUD (`GET /jobs?status=` with tallies; create/edit/complete/reopen; delete cascades children + R2 objects). All under `/v2/api/qc/marina/*`, all mutations `logActivity()`.
+- [ ] marina-03 — parts / dims / pieces / measure routes + piece state machine (pass | rework_pending → accepted | scrapped; fail forces a Rework/Scrap disposition; rework = attempt N+1). Tolerance check authoritative server-side vs `marina_jobs.tolerance_in`; `PUT /parts/{id}/dims` → 409 `dims_locked` once any piece has measurements.
+- [ ] marina-04 — `/v2/qc/marina` page (direct URL only): open/complete job list with tally chips + rework-pending badge, "New job" (name + customer), job detail (files with superseded collapsed, parts list with "Next piece"), manual PDF upload. Edit controls gated on `X-User-Can-Edit-Marina`.
+- [ ] marina-05 — cut-sheet setup screen: pdf.js (`pdfjs-dist` lazy loader from `lib/packingSlip.ts`) renders each page; prefilled label from `… TOP` text, deduped value chips (`\d+( \d+/\d+)?`, desc, minus label numbers) → tap to make a dim with L/W/H/custom name; callouts (REPLACE / NO FILE) → notes; Skip page / Save all; manual entry fallback.
+- [ ] marina-06 — inspect piece (collapsible page thumbnail, one big input per dim, fraction keypad ⅛…⅞ + 1/16, live red when out of ±3/16) → disposition sheet on fail → "Add another of this part"; rework queue (rework_pending filter → re-measure).
+- [ ] marina-07 — Marina Foam header button on `/v2/qc` (shown on `X-User-Can-Marina`) — only after Steve tests. Until then the page is direct-URL only.
+- [ ] Phase 2: marina-08 — `DB_Migrations/marina-intake.sql` (`marina_intake`, `message_id` UNIQUE) + separate Email Worker (`xpanda-marina-intake/`, postal-mime, same `DB` + `BOL_PHOTOS`): accept only original sender `@marinafoam.com` via Steve's Gmail forward, PDFs → R2 + `marina_files` (job_id NULL), drop `*.zip`, kind pre-classified by filename, Gmail forwarding-verification passthrough. MIGRATION-GATED + Steve's manual steps (verify no MX on xpandaops.com, Email Routing `marina@` → Worker, Gmail forwarding address + filter `from:piper@marinafoam.com has:attachment`). Decide CI path filter vs manual deploy at prompt time.
+- [ ] Phase 2: marina-09 — Inbox section on `/v2/qc/marina`: file → job(s) (one per cut-sheet filename; drawings attach to same-email jobs), kind flip, "Replace file on job X" on revision (supersede; dims stay locked if measured), ignore. No auto-setup — Steve confirms. After 08 is live and a test email lands.
+- [ ] Marina candidate — printable inspection record per job.
+- [ ] Marina candidate — per-dim tolerance override, if a print ever specifies one.
+- [ ] Marina candidate — surface Piper's email body (ship dates, "hold off" notes) on the job header (already stored in `marina_intake.body_text`).
 
 ---
 
