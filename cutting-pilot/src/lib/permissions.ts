@@ -29,6 +29,7 @@ export const PERMISSION_LABELS: Record<string, { group: string; label: string }>
   "production.manage":              { group: "Production",    label: "Production Log — Manage (add dropdown options, hide sheets)" },
   "production.tv":                  { group: "Production",    label: "Production Board (TV)" },
   "qc":                             { group: "QC",            label: "Quality Control" },
+  "qc.marina":                      { group: "QC",            label: "Marina Foam inspection" },
   "safety":                         { group: "Safety",        label: "Safety Portal" },
   "reports":                        { group: "Reports",       label: "Reports & Analytics" },
   "orders":                         { group: "Orders",        label: "Order Entry" },

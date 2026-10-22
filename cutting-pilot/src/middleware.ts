@@ -44,6 +44,10 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/api/notes", keys: ["notes"] },
   { prefix: "/v2/notes", keys: ["notes"] },
   { prefix: "/v2/api/blocks", keys: ["manufacturing.blocks"] },
+  // marina-01: Marina Foam inspection (/v2/qc/marina) — its own key, ABOVE the general qc rows (first match
+  // wins), so `qc` alone does not open it. GET→view, mutate→edit. Admins always pass.
+  { prefix: "/v2/api/qc/marina", keys: ["qc.marina"] },
+  { prefix: "/v2/qc/marina", keys: ["qc.marina"] },
   // qc-01: v2 QC board (/v2/qc) — legacy's own `qc` key (PATH_PERMISSION_MAP /^\/qc\//). GET→view, mutate→edit.
   { prefix: "/v2/api/qc", keys: ["qc"] },
   { prefix: "/v2/qc", keys: ["qc"] },
@@ -249,6 +253,9 @@ export async function middleware(request: NextRequest) {
   );
   // bem-01 — BOL Email Queue is edit-only (GETs included); routes + page check this header.
   headers.set("X-User-Can-Edit-Bol", hasPermission(user, "logistics.bol", "edit") ? "1" : "0");
+  // marina-01: Marina Foam inspection — view shows the /v2/qc entry button; edit enables inspecting.
+  headers.set("X-User-Can-Marina", hasPermission(user, "qc.marina", "view") ? "1" : "0");
+  headers.set("X-User-Can-Edit-Marina", hasPermission(user, "qc.marina", "edit") ? "1" : "0");
   // P439 — JSON blob of the user's merged role permissions, so legacy endpoints (e.g.
   // /api/jobs/:id/assignments, /api/jobs/:id/shifts) and the new v2 /v2/api/orders/:id/shifts
   // route can gate manager-only writes on the same blob the legacy worker already trusts.

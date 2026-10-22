@@ -706,7 +706,19 @@ schedule badge):**
 
 ## QC
 
-*(No open items — tracked here for future additions.)*
+### Marina Foam inspection — own page at `/v2/qc/marina` (marina-01 schema + `qc.marina` gate shipped)
+
+Admins only for now (no permission seed); Steve grants `qc.marina` to a role in `/v2/admin` → Roles when ready.
+Scope: `marina-scope.md` (Project doc), with placement changed from a `/v2/qc` tab to its own page.
+
+- [ ] marina-02 — per `marina-scope.md` (placement: `/v2/qc/marina`).
+- [ ] marina-03 — per `marina-scope.md` (placement: `/v2/qc/marina`).
+- [ ] marina-04 — per `marina-scope.md` (placement: `/v2/qc/marina`).
+- [ ] marina-05 — per `marina-scope.md` (placement: `/v2/qc/marina`).
+- [ ] marina-06 — per `marina-scope.md` (placement: `/v2/qc/marina`).
+- [ ] marina-07 — Marina Foam header button on `/v2/qc` (gated on `X-User-Can-Marina`) — only after Steve tests. Until then the page is direct-URL only.
+- [ ] Phase 2: marina-08 — email intake (files land in `marina_files` with `job_id` NULL + `intake_id`).
+- [ ] Phase 2: marina-09 — Inbox (assign intake files to a Marina job).
 
 ---
 
