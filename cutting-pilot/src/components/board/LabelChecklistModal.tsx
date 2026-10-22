@@ -3,7 +3,7 @@
 // jb-12 — generic "SKU checklist → PdfViewer" label modal for the v2 board, extracted unchanged in
 // behaviour from jb-04's DiversiTechLabelsModal. Callers (DiversiTechLabelsModal,
 // CoreCoverLabelsModal) are thin wrappers that supply row text, the PDF builder and the filename.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Modal from "@/components/Modal";
 import PdfViewer from "@/components/PdfViewer";
 
@@ -23,6 +23,12 @@ export interface LabelChecklistModalProps<T> {
   filename: string;
   /** Modal title in the viewer step and the PdfViewer title (e.g. "DiversiTech labels"). */
   viewerTitle: string;
+  /** jb-13: extra control rendered at the right of each row, OUTSIDE the <label> so typing in it never toggles the checkbox. */
+  rowExtra?: (item: T, index: number) => ReactNode;
+  /** jb-13: rendered between the Select All/None links and the list (e.g. a "set all" control). */
+  headerExtra?: ReactNode;
+  /** jb-13: given the current selection, return a reason to block printing (shown as the error, Print disabled) or null; and an optional footer summary (e.g. "Prints 9 labels"). */
+  printStatus?: (selected: boolean[]) => { blocked: string | null; summary?: string };
 }
 
 type LabelsDoc = { src: string; filename: string } | null;
@@ -40,6 +46,9 @@ export default function LabelChecklistModal<T>({
   errorMessage,
   filename,
   viewerTitle,
+  rowExtra,
+  headerExtra,
+  printStatus,
 }: LabelChecklistModalProps<T>) {
   const [checked, setChecked] = useState<boolean[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +81,10 @@ export default function LabelChecklistModal<T>({
     setChecked(items.map(() => value));
   }
 
+  const currentSelected = items.map((_, i) => !!checked[i]);
+  const status = printStatus ? printStatus(currentSelected) : null;
+  const blocked = status?.blocked ?? null;
+
   async function handlePrint() {
     setError(null);
     const selected = items.map((_, i) => !!checked[i]);
@@ -79,6 +92,7 @@ export default function LabelChecklistModal<T>({
       setError("Select at least one SKU.");
       return;
     }
+    if (blocked) return;
     setGenerating(true);
     try {
       const pdfBytes = await buildPdf(selected);
@@ -133,11 +147,15 @@ export default function LabelChecklistModal<T>({
             <button type="button" onClick={() => setAll(true)} className={linkBtn}>Select All</button>
             <button type="button" onClick={() => setAll(false)} className={linkBtn}>Select None</button>
           </div>
+          {headerExtra}
           <div className="rounded-lg border border-[var(--card-border)] divide-y divide-[var(--line)]">
             {items.map((item, i) => {
               const warning = rowWarning ? rowWarning(item, i) : null;
-              return (
-                <label key={i} className="flex items-center gap-3 min-h-[44px] px-3 text-sm text-text cursor-pointer">
+              const row = (
+                <label
+                  key={rowExtra ? undefined : i}
+                  className={`flex items-center gap-3 min-h-[44px] ${rowExtra ? "flex-1 min-w-0" : "px-3"} text-sm text-text cursor-pointer`}
+                >
                   <input
                     type="checkbox"
                     checked={!!checked[i]}
@@ -154,12 +172,20 @@ export default function LabelChecklistModal<T>({
                   </span>
                 </label>
               );
+              if (!rowExtra) return row;
+              return (
+                <div key={i} className="flex items-center gap-3 min-h-[44px] px-3">
+                  {row}
+                  {rowExtra(item, i)}
+                </div>
+              );
             })}
           </div>
-          {error && <p className="text-sm text-[var(--warn-text)]">{error}</p>}
+          {(error || blocked) && <p className="text-sm text-[var(--warn-text)]">{error || blocked}</p>}
           <div className="flex items-center justify-end gap-2">
+            {status?.summary && <span className="text-sm text-muted">{status.summary}</span>}
             <button type="button" onClick={onClose} className={ghostBtn}>Cancel</button>
-            <button type="button" onClick={handlePrint} disabled={generating} className={primaryBtn}>
+            <button type="button" onClick={handlePrint} disabled={generating || !!blocked} className={primaryBtn}>
               {generating ? "Generating labels…" : "Print labels"}
             </button>
           </div>

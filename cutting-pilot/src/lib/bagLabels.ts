@@ -6,7 +6,8 @@
 // work in scope).
 //
 // One page per bag, 4x6" PORTRAIT (288x432pt @ 72pt/in — P417 supersedes P413's landscape
-// layout). Bagging: 4 pcs/bag, remainder in the last bag of each line; no SKU shares a bag; bag
+// layout). Bagging: 4 pcs/bag by default (the Block Calculator always uses 4; the job board can
+// override it per line — jb-13), remainder in the last bag of each line; no SKU shares a bag; bag
 // numbering is sequential across the whole loaded PO in grid order (array order = PO
 // top-to-bottom).
 // jb-12: also called from the job board (/v2/board, Core Covers) via coreCoverLabels.ts; its
@@ -20,6 +21,9 @@ export interface BagLabelOptions {
    *  ("BAG x of y") is still computed across ALL lines — whole-order numbering, so a partial
    *  reprint matches the original labels. Omitted = every bag (Block Calculator behaviour). */
   onlyLines?: ReadonlySet<number>;
+  /** jb-13: pieces per bag by source line index (same indexing as onlyLines). Missing/undefined
+   *  entry → DEFAULT_PIECES_PER_BAG. Block Calculator omits it (always 4). */
+  piecesPerBag?: ReadonlyArray<number | undefined>;
 }
 
 export interface BagLabel {
@@ -43,7 +47,22 @@ export class UnparsedRowsError extends Error {
 }
 
 const DEFAULT_CUSTOMER = "Core Covers";
-const PIECES_PER_BAG = 4;
+export const DEFAULT_PIECES_PER_BAG = 4;
+
+/** jb-13: thrown by buildBagLabelsPdf when a pieces-per-bag override is invalid (UI checks first). */
+export class InvalidPiecesPerBagError extends Error {
+  lineIndexes: number[];
+  constructor(lineIndexes: number[]) {
+    super("Pieces per bag must be a whole number from 1 to 999");
+    this.name = "InvalidPiecesPerBagError";
+    this.lineIndexes = lineIndexes;
+  }
+}
+
+/** jb-13: a pieces-per-bag value is an integer 1–999. */
+export function isValidPiecesPerBag(n: number): boolean {
+  return Number.isInteger(n) && n >= 1 && n <= 999;
+}
 
 // --- Formatting helpers (pure, unit-friendly) ---
 
@@ -96,13 +115,14 @@ function findUnparsedRows(lines: SkuLine[]): { item: string; raw: string }[] {
 
 // --- Bagging logic (pure, no PDF — the unit-testable core) ---
 
-export function computeBags(lines: SkuLine[]): BagLabel[] {
+export function computeBags(lines: SkuLine[], piecesPerBag?: ReadonlyArray<number | undefined>): BagLabel[] {
   const usable = lines.map((line, lineIndex) => ({ line, lineIndex })).filter((u) => u.line.qty > 0);
   const perLine = usable.map(({ line, lineIndex }) => {
-    const bagCount = Math.ceil(line.qty / PIECES_PER_BAG);
+    const per = piecesPerBag?.[lineIndex] ?? DEFAULT_PIECES_PER_BAG;
+    const bagCount = Math.ceil(line.qty / per);
     const pieces: number[] = [];
     for (let i = 0; i < bagCount; i++) {
-      pieces.push(i === bagCount - 1 ? line.qty - PIECES_PER_BAG * (bagCount - 1) : PIECES_PER_BAG);
+      pieces.push(i === bagCount - 1 ? line.qty - per * (bagCount - 1) : per);
     }
     return { line, lineIndex, pieces };
   });
@@ -153,7 +173,18 @@ export async function buildBagLabelsPdf(lines: SkuLine[], opts?: BagLabelOptions
   const offending = findUnparsedRows(lines);
   if (offending.length) throw new UnparsedRowsError(offending);
 
-  const bags = computeBags(lines);
+  // jb-13: defense in depth — the UI blocks invalid pieces-per-bag before calling.
+  const ppb = opts?.piecesPerBag;
+  if (ppb) {
+    const bad: number[] = [];
+    lines.forEach((l, i) => {
+      const v = ppb[i];
+      if (l.qty > 0 && v !== undefined && !isValidPiecesPerBag(v)) bad.push(i);
+    });
+    if (bad.length) throw new InvalidPiecesPerBagError(bad);
+  }
+
+  const bags = computeBags(lines, ppb);
 
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);

@@ -286,7 +286,7 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol, liveLoads 
             </div>
           )}
 
-          {/* jb-12: Core Covers bag labels (4 pcs/bag) — reuses bagLabels.ts from the Block Calculator. */}
+          {/* jb-12: Core Covers bag labels (pcs/bag editable, default 4 — jb-13) — reuses bagLabels.ts from the Block Calculator. */}
           {isCoreCoversCustomer(job.customer) && (
             <div>
               <button

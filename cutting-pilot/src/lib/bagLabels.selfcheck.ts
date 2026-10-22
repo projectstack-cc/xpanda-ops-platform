@@ -5,7 +5,7 @@
 // numbering across multiple lines sharing one loaded PO, and that no bag mixes pieces from two
 // different SKU lines.
 import type { SkuLine } from "./blockTypes";
-import { computeBags } from "./bagLabels";
+import { computeBags, isValidPiecesPerBag } from "./bagLabels";
 
 interface CheckResult {
   name: string;
@@ -149,6 +149,63 @@ export function runBagLabelsSelfCheck(): { pass: boolean; results: CheckResult[]
       onlyB.length === 2 && onlyB.every((b) => b.totalBags === 4),
       `totalBags=${JSON.stringify(onlyB.map((b) => b.totalBags))}`
     );
+  }
+
+  // jb-13: per-line pieces-per-bag overrides (job board only; the Block Calculator omits them).
+  {
+    const bags = computeBags([line({ item: "K", qty: 14 })], [6]);
+    check(
+      "qty 14 @ 6/bag -> [6,6,2]",
+      arraysEqual(bags.map((b) => b.piecesInBag), [6, 6, 2]),
+      `pieces=${JSON.stringify(bags.map((b) => b.piecesInBag))}`
+    );
+  }
+  {
+    const bags = computeBags([line({ item: "L", qty: 12 })], [12]);
+    check(
+      "qty 12 @ 12/bag -> 1 bag [12]",
+      arraysEqual(bags.map((b) => b.piecesInBag), [12]),
+      `pieces=${JSON.stringify(bags.map((b) => b.piecesInBag))}`
+    );
+  }
+  {
+    const bags = computeBags([line({ item: "M", qty: 3 })], [10]);
+    check(
+      "qty 3 @ 10/bag -> 1 bag [3]",
+      arraysEqual(bags.map((b) => b.piecesInBag), [3]),
+      `pieces=${JSON.stringify(bags.map((b) => b.piecesInBag))}`
+    );
+  }
+  {
+    const bags = computeBags([line({ item: "A", qty: 5 }), line({ item: "B", qty: 6 })], [4, 3]);
+    check(
+      "mixed A 5@4 + B 6@3 -> pieces [4,1,3,3]",
+      arraysEqual(bags.map((b) => b.piecesInBag), [4, 1, 3, 3]),
+      `pieces=${JSON.stringify(bags.map((b) => b.piecesInBag))}`
+    );
+    check(
+      "mixed A 5@4 + B 6@3 -> numbers [1,2,3,4], totalBags=4",
+      arraysEqual(bags.map((b) => b.bagNumber), [1, 2, 3, 4]) && bags.every((b) => b.totalBags === 4),
+      `numbers=${JSON.stringify(bags.map((b) => b.bagNumber))} totalBags=${JSON.stringify(bags.map((b) => b.totalBags))}`
+    );
+    check(
+      "mixed A 5@4 + B 6@3 -> lineIndex [0,0,1,1]",
+      arraysEqual(bags.map((b) => b.lineIndex), [0, 0, 1, 1]),
+      `lineIndex=${JSON.stringify(bags.map((b) => b.lineIndex))}`
+    );
+  }
+  {
+    const bags = computeBags([line({ item: "N", qty: 6 }), line({ item: "O", qty: 6 })], [undefined, 6]);
+    check(
+      "undefined pieces-per-bag entry falls back to 4: N -> [4,2], O -> [6]",
+      arraysEqual(bags.map((b) => b.piecesInBag), [4, 2, 6]),
+      `pieces=${JSON.stringify(bags.map((b) => b.piecesInBag))}`
+    );
+  }
+  {
+    const rejects = [0, -1, 1.5, NaN, 1000].every((n) => !isValidPiecesPerBag(n));
+    const accepts = [1, 999].every((n) => isValidPiecesPerBag(n));
+    check("isValidPiecesPerBag rejects 0,-1,1.5,NaN,1000 and accepts 1,999", rejects && accepts);
   }
 
   return { pass: results.every((r) => r.pass), results };

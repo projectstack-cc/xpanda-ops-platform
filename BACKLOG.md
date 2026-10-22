@@ -261,6 +261,9 @@
 - [ ] **shift-alert follow-up — pace-based "may not finish".** Once the block-calc BOM populates
   `cutting_lines.qty_target`, gate or annotate the T-2h alert on projected completion (rate from
   `cutting_sessions.qty_done_delta`) instead of "not finished yet".
+- [ ] **jb-13 follow-up — Core Covers pcs/bag: persist per order line** (`job_line_items.pcs_per_bag`,
+  migration-gated) if reprint mismatches become a problem (today the value lives in the print dialog only,
+  so a partial reprint matches only when the same pcs/bag values are re-entered).
 - [ ] **jb-12 follow-up — flat (non-tapered) Core Covers lines.** `coreCoverLabels.ts` currently
   flags a line with no `lo-hi` taper token as unreadable (blocks printing for the order); extend
   `sizeString` and the adapter if Core Covers ever orders flat stock.
