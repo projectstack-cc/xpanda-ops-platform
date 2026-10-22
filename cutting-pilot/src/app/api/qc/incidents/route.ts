@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
     if (process.env.NODE_ENV === "production") {
       try {
         const { env, ctx } = await getCloudflareContext();
-        ctx?.waitUntil?.(forwardIncident(DB, (env as any).QC_GAS_URL, id, { manual: false, customersTimeoutMs: POST_SAVE_CUSTOMERS_TIMEOUT_MS }));
+        ctx?.waitUntil?.(forwardIncident(DB, (env as any).QC_GAS_URL, id, { manual: false, customersTimeoutMs: POST_SAVE_CUSTOMERS_TIMEOUT_MS, secret: (env as any).QC_GAS_SECRET }));
       } catch {
         // No Cloudflare context — the */5 cron sweep forwards it.
       }

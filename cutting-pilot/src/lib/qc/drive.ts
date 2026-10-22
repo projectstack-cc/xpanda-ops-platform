@@ -236,6 +236,17 @@ export type GasResult = { ok: true; fileId: string; fileName: string } | { ok: f
 
 // The script answers HTTP 200 for errors too, so the body decides. Non-JSON (a Google HTML error or
 // login page) is a failure with the first 200 chars, tags stripped.
+// qc-09: the script's shared secret travels as request param `key`; never let it reach a log or drive_error.
+export function withGasKey(url: string, secret: string | undefined): string {
+  if (!secret) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}key=${encodeURIComponent(secret)}`;
+}
+
+export function redactSecret(s: string, secret: string | undefined): string {
+  if (!secret) return s;
+  return s.split(secret).join("[redacted]").split(encodeURIComponent(secret)).join("[redacted]");
+}
+
 export function parseGasResponse(text: string): GasResult {
   let json: any;
   try {

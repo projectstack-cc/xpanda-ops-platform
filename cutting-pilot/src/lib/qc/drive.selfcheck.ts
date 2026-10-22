@@ -2,7 +2,7 @@
 // Self-check for the pure Drive-forward helpers (drive.ts). No DB, no network.
 // qc-08: incident payload key set, Doc response parsing, matching against the incident customer sheet.
 // Run with: npx tsx src/lib/qc/drive.selfcheck.ts   (from cutting-pilot/). Exits 1 on any failure.
-import { buildGasPayload, buildIncidentPayload, matchSheetCustomer, parseGasResponse, productCutFor, toleranceLabel, type QcDriveRecord, type QcDriveSample } from "./drive";
+import { buildGasPayload, buildIncidentPayload, matchSheetCustomer, parseGasResponse, productCutFor, redactSecret, toleranceLabel, withGasKey, type QcDriveRecord, type QcDriveSample } from "./drive";
 
 const results: { name: string; pass: boolean; detail?: string }[] = [];
 function check(name: string, pass: boolean, detail?: string) {
@@ -155,6 +155,19 @@ eq("incident payload values", ip, {
 });
 eq("incident payload raw customer when unmatched", buildIncidentPayload(incident, null).customer, "All Florida Weatherproofing & Construction");
 eq("incident payload no job_ref → empty jobId", buildIncidentPayload({ ...incident, job_ref: null }, null).jobId, "");
+
+// qc-09: shared-secret helpers (dummy secret only).
+const S = "test-secret+/=";
+const SE = encodeURIComponent(S);
+eq("withGasKey no secret → url unchanged", withGasKey("https://x/exec?action=getCustomers", undefined), "https://x/exec?action=getCustomers");
+eq("withGasKey empty secret → url unchanged", withGasKey("https://x/exec", ""), "https://x/exec");
+eq("withGasKey uses & after a query", withGasKey("https://x/exec?action=getCustomers", S), `https://x/exec?action=getCustomers&key=${SE}`);
+eq("withGasKey uses ? with no query", withGasKey("https://x/exec", S), `https://x/exec?key=${SE}`);
+eq("withGasKey url-encodes the value", withGasKey("https://x/exec", S), "https://x/exec?key=test-secret%2B%2F%3D");
+eq("redactSecret raw + encoded", redactSecret(`raw ${S} enc ${SE} again ${S}`, S), "raw [redacted] enc [redacted] again [redacted]");
+eq("redactSecret empty secret → no-op", redactSecret("nothing to hide", ""), "nothing to hide");
+eq("redactSecret undefined secret → no-op", redactSecret("nothing to hide", undefined), "nothing to hide");
+eq("parseGasResponse unauthorized", parseGasResponse('{"ok":false,"error":"unauthorized"}'), { ok: false, error: "unauthorized" });
 
 const failed = results.filter((r) => !r.pass);
 for (const r of results) console.log(`${r.pass ? "PASS" : "FAIL"}  ${r.name}${r.pass ? "" : `  (${r.detail})`}`);

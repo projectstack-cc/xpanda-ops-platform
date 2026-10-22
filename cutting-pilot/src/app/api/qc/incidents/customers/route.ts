@@ -27,7 +27,7 @@ export async function GET() {
     const { env } = await getCloudflareContext();
     const gasUrl = (env as any).QC_GAS_URL as string | undefined;
     if (!gasUrl) return NextResponse.json({ ok: true, names: [], warning: "QC_GAS_URL not configured." });
-    const names = await fetchSheetCustomers(gasUrl, TIMEOUT_MS, "getIncidentCustomers");
+    const names = await fetchSheetCustomers(gasUrl, TIMEOUT_MS, "getIncidentCustomers", (env as any).QC_GAS_SECRET);
     if (!names.length) {
       return NextResponse.json({ ok: true, names: [], warning: "Couldn't load the incident customer list — type the customer." });
     }

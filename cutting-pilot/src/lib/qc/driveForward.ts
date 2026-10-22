@@ -11,6 +11,9 @@
 // (qc_incidents → incident Doc + incident-tracker Sheet row, customers from getIncidentCustomers).
 // Both share the claim, timeouts, response parsing and recording below; forwardInspection is unchanged
 // for its callers, forwardIncident sits beside it, and the */5 sweep covers both tables.
+// qc-09: the script is gated by a shared secret — QC_GAS_SECRET (Worker secret) is sent as param `key`
+// (POST: form body; GET: query string, via withGasKey). Every error string that could carry the GET URL
+// goes through redactSecret before console.error / drive_error.
 import type { D1Database } from "@cloudflare/workers-types";
 import { logActivity } from "@/lib/activityLog";
 import {
@@ -18,6 +21,8 @@ import {
   buildIncidentPayload,
   matchSheetCustomer,
   parseGasResponse,
+  redactSecret,
+  withGasKey,
   type QcDriveRecord,
   type QcDriveSample,
 } from "./drive";
@@ -26,6 +31,7 @@ import { parseDepartments, type IncidentRow } from "./incident";
 export interface QcDriveEnv {
   DB: D1Database;
   QC_GAS_URL?: string;
+  QC_GAS_SECRET?: string;
 }
 
 export type DriveOutcome = "synced" | "failed" | "skipped";
@@ -99,13 +105,17 @@ async function fetchTextWithTimeout(url: string, init: RequestInit, ms: number):
 export async function fetchSheetCustomers(
   gasUrl: string,
   timeoutMs: number = CUSTOMERS_TIMEOUT_MS,
-  action: string = "getCustomers"
+  action: string = "getCustomers",
+  secret?: string
 ): Promise<string[]> {
   try {
     const sep = gasUrl.includes("?") ? "&" : "?";
-    const text = await fetchTextWithTimeout(`${gasUrl}${sep}action=${action}`, { redirect: "follow" }, timeoutMs);
+    const text = await fetchTextWithTimeout(withGasKey(`${gasUrl}${sep}action=${action}`, secret), { redirect: "follow" }, timeoutMs);
     const json = JSON.parse(text);
-    if (!Array.isArray(json)) return [];
+    if (!Array.isArray(json)) {
+      if (json?.error === "unauthorized") console.error(`qc-drive: ${action} refused`, json.error);
+      return [];
+    }
     const seen = new Set<string>();
     const out: string[] = [];
     for (const n of json) {
@@ -117,7 +127,7 @@ export async function fetchSheetCustomers(
     }
     return out;
   } catch (e) {
-    console.error(`qc-drive: ${action} failed`, String((e as any)?.message || e));
+    console.error(`qc-drive: ${action} failed`, redactSecret(String((e as any)?.message || e), secret));
     return [];
   }
 }
@@ -128,6 +138,7 @@ export interface ForwardOpts {
   // actorId: the retrying user, for the manual-retry activity row (cron/auto runs log nothing).
   actorId?: string | null;
   customersTimeoutMs?: number;
+  secret?: string; // qc-09: QC_GAS_SECRET, sent as `key`
 }
 
 // What a target's loader hands the shared send: the manual-retry log label, the raw customer to map
@@ -188,7 +199,7 @@ async function forwardRow(
     if (!gasUrl) return fail("QC_GAS_URL not configured");
 
     // 4–5. Map the customer onto a sheet name (null → raw name, default folder).
-    const names = opts.customerNames ?? (await fetchSheetCustomers(gasUrl, opts.customersTimeoutMs, t.customersAction));
+    const names = opts.customerNames ?? (await fetchSheetCustomers(gasUrl, opts.customersTimeoutMs, t.customersAction, opts.secret));
     const sheetCustomer = matchSheetCustomer(rec.customer, names);
     const payload = await rec.payload(sheetCustomer);
 
@@ -201,13 +212,13 @@ async function forwardRow(
         {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ payload: JSON.stringify(payload) }).toString(),
+          body: new URLSearchParams({ payload: JSON.stringify(payload), ...(opts.secret ? { key: opts.secret } : {}) }).toString(),
           redirect: "follow",
         },
         POST_TIMEOUT_MS
       );
     } catch (e) {
-      return fail(isAbort(e) ? t.timeoutError : `Apps Script request failed: ${String((e as any)?.message || e)}`);
+      return fail(isAbort(e) ? t.timeoutError : `Apps Script request failed: ${redactSecret(String((e as any)?.message || e), opts.secret)}`);
     }
 
     // 7. The script answers 200 even on error — the body decides.
@@ -226,7 +237,7 @@ async function forwardRow(
     return finish("synced", { drive_file_id: parsed.fileId, drive_customer: sheetCustomer });
   } catch (e) {
     // 8. Never throw.
-    return fail(isAbort(e) ? t.timeoutError : String((e as any)?.message || e));
+    return fail(isAbort(e) ? t.timeoutError : redactSecret(String((e as any)?.message || e), opts.secret));
   }
 }
 
@@ -314,9 +325,9 @@ export async function runQcDriveSweep(env: QcDriveEnv): Promise<void> {
       ).all<{ id: string }>();
       const ids = (results ?? []).map((r) => r.id);
       if (!ids.length) continue;
-      const customerNames = await fetchSheetCustomers(env.QC_GAS_URL, CUSTOMERS_TIMEOUT_MS, t.customersAction);
+      const customerNames = await fetchSheetCustomers(env.QC_GAS_URL, CUSTOMERS_TIMEOUT_MS, t.customersAction, env.QC_GAS_SECRET);
       for (const id of ids) {
-        await FORWARDERS[target](env.DB, env.QC_GAS_URL, id, { manual: false, customerNames });
+        await FORWARDERS[target](env.DB, env.QC_GAS_URL, id, { manual: false, customerNames, secret: env.QC_GAS_SECRET });
       }
     } catch (e) {
       console.error(`qc-drive: ${target} sweep failed`, String((e as any)?.message || e));

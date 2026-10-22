@@ -35,7 +35,7 @@ crons = ["*/5 * * * *"]
 
 [vars]
 SCHEDULE_SHEET_ID = "1X57jb_FWPlYTwi3fMJ9I_Yc_meS8AAe4"
-# qc-03: Inspection Tool Apps Script web app (anonymous; already public in legacy qc/*.html). Final-inspection PDFs.
+# qc-03/qc-09: Inspection Tool Apps Script web app. Callers must send key=QC_GAS_SECRET (Worker secret, set in the dashboard — never in this file).
 QC_GAS_URL = "https://script.google.com/macros/s/AKfycbwCULfoSrZQCcbKm2vRG5GWQHQhplfSDgX81mre6RaocuVT5FrNlZm0FN7agm64yczZ/exec"
 
 # OpenNext static assets

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { DB } = await getEnv();
     const { env } = await getCloudflareContext();
 
-    const outcome = await forwardInspection(DB, (env as any).QC_GAS_URL, id, { manual: true, actorId });
+    const outcome = await forwardInspection(DB, (env as any).QC_GAS_URL, id, { manual: true, actorId, secret: (env as any).QC_GAS_SECRET });
     if (outcome === "skipped") {
       return NextResponse.json(
         { ok: false, error: "Already sent or being sent — refresh in a minute.", detail: id },

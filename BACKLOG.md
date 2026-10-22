@@ -124,7 +124,7 @@
 - [ ] qc follow-up — customers not in the FINAL INSPECTION master sheet land in the default Drive folder (drive_customer NULL). Add them to the sheet (Name, Active=YES, Folder ID) to route their PDFs.
 - [ ] qc follow-up — admin bulk inspect (qc-06) skips lines with unreadable dimensions; if that list is long in practice, consider a per-line nominal override in the bulk modal.
 - [ ] qc-01 follow-up — shared dashboard primitives under 44px touch targets: `WeekSelector` arrows (`w-8 h-8`) and segment buttons (~30px), `SearchInput` / `FilterSelect` (`h-9`). Used by /v2/qc, /v2/logistics and /v2/board — raise in one shared change.
-- [ ] qc-09 — Apps Script shared secret: no legacy form posts to the Inspection Tool any more. Add a secret check in doPost (new script version) + a Worker secret QC_GAS_SECRET sent by both forwarders. Steve deploys the script.
+- [ ] qc-09 follow-up — delete the dead `addCustomer` / `addIncidentCustomer` functions from the Inspection Tool script (unreachable since qc-09 removed their `doGet` dispatch lines).
 - [ ] Incident follow-up — add root cause / corrective actions after the initial report (today: create-only, like legacy; the Doc is the record).
 - [ ] Incident customers not in the incident customer sheet land in the default incident folder — add them to the sheet to route their Docs.
 - [ ] Delete the qc/ redirect stubs once logs show no hits.
