@@ -130,9 +130,15 @@
 - [ ] Delete the qc/ redirect stubs once logs show no hits.
 - [ ] Reports port: incident pages still read the tracker Sheet via gviz; consider reading qc_incidents.
 
-### Reports · NO v2 YET
+### Reports · v2 IN PROGRESS at /v2/reports (rpt-01 cutting; direct URL only)
 
-- [ ] Port `reports/` (cutting, incidents ×5, orders, scrap ×3). Chart.js → decide v2 charting lib once.
+- [x] rpt-01 Cutting activity → `/v2/reports/cutting` (ET days, flagged sessions, recharts)
+- [ ] rpt-02 Incident history backfill: tracker Sheet → `qc_incidents` (MIGRATION-GATED, one-time)
+- [ ] rpt-03 Incidents (summary, trend, by type, list, detail) on `qc_incidents`; retire gviz + `INCIDENT_TRACKER_JSON_URL`
+- [ ] rpt-04 Scrap (summary, trend, reasons) on `scrap_events`; then drop the `scrap_log` VIEW
+- [ ] rpt-05 Cutover after Steve tests: home card + both navs → `/v2/reports`; legacy `reports/*` → stubs; Orders report retired → Job Board; remove `/api/reports/*` worker routes
+- [ ] Reports i18n (en/es/ht) — legacy `reports/reports-i18n.js` as the source
+- [ ] Cutting data hygiene (from rpt-01 numbers): operators tap Start/Stop without cutting (8/32 sessions < 1 min, wk of 10-16) and tick items off with near-zero session time; floor training, not code
 
 ### Admin · RETIRED — v2 at /v2/admin (admin-08 cutover, admin-11 close-out)
 

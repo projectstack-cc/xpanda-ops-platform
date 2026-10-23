@@ -52,6 +52,10 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   { prefix: "/v2/api/qc", keys: ["qc"] },
   { prefix: "/v2/qc", keys: ["qc"] },
   { prefix: "/v2/blocks", keys: ["manufacturing.blocks"] },
+  // rpt-01: v2 Reports (/v2/reports/*) — legacy's own `reports` key (PATH_PERMISSION_MAP /^\/reports\//).
+  // Read-only surface: every route is GET (→ view).
+  { prefix: "/v2/api/reports", keys: ["reports"] },
+  { prefix: "/v2/reports", keys: ["reports"] },
   // lgx-roll-01: Invoice Analytics API (the only thing under /v2/api/logistics) opens with the dashboard.
   { prefix: "/v2/api/logistics", keys: ["logistics.dashboard"] },
   { prefix: "/v2/api/carrier", keys: ["logistics.carrier_view"] },
