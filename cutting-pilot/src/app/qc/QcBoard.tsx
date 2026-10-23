@@ -13,8 +13,9 @@
 // (isAdmin is false then; the API 403s too).
 // qc-07: cut over — /v2/qc is QC (home card + both navs); legacy /qc/ pages redirect here; ?density=1 opens the calculator. Incident report is the last legacy link.
 // qc-08: "Incident report" opens IncidentModal (native qc_incidents → incident Doc + tracker row); ?incident=1 (where the retired qc/incident-report.html redirects) opens it. No legacy QC links remain.
+// marina-07: "Marina Foam" header link → /v2/qc/marina (shown on qc.marina view; admins).
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Calculator, ChevronDown, ChevronRight, ClipboardList, FileText, ListChecks, RefreshCw, TriangleAlert } from "lucide-react";
+import { Anchor, Calculator, ChevronDown, ChevronRight, ClipboardList, FileText, ListChecks, RefreshCw, TriangleAlert } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
 import DashboardToolbar from "@/components/dashboard/DashboardToolbar";
 import WeekSelector from "@/components/dashboard/WeekSelector";
@@ -288,6 +289,8 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
   }, [weekInfo.mondayStr]);
 
   const canInspect = isAdmin || permissions?.qc?.edit === true;
+  // marina-07: Marina Foam inspection lives at /v2/qc/marina (own key qc.marina; admins pass).
+  const canMarina = isAdmin || permissions?.["qc.marina"]?.view === true;
   const [inspectTarget, setInspectTarget] = useState<{ order: QcOrder; line: QcLine } | null>(null);
 
   // Patch the saved line in place so chips, progress and KPIs update at once, then reconcile quietly.
@@ -390,6 +393,12 @@ export default function QcBoard({ userName, isAdmin, permissions }: QcBoardProps
               <TriangleAlert size={14} className="text-muted" aria-hidden="true" />
               Incident report
             </button>
+            {canMarina && (
+              <a href="/v2/qc/marina" className={HEADER_BTN}>
+                <Anchor size={14} className="text-muted" aria-hidden="true" />
+                Marina Foam
+              </a>
+            )}
           </div>
         </div>
 
