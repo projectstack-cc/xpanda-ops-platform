@@ -1,11 +1,14 @@
-// src/lib/marina/store.ts — marina-02
+// src/lib/marina/store.ts — marina-02 (+ marina-03 parts / pieces / measurements)
 // Server-side helpers for the Marina Foam routes (/v2/api/qc/marina/*), so the routes stay thin.
 // Marina is fully decoupled: no jobs / parts / orders / Drive linkage, never scrap_events.
 // r2_key is read here and never leaves the server — publicFile() strips it from every file row.
-import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
+import type { D1Database, D1PreparedStatement, D1Result, R2Bucket } from "@cloudflare/workers-types";
+import { formatInches, parseInches } from "../inches";
+import type { Disposition, MeasureInput } from "./pieces";
 import type {
   MarinaDim, MarinaFile, MarinaFileKind, MarinaJob, MarinaJobDetail, MarinaJobStatus,
-  MarinaJobSummary, MarinaPartSummary, MarinaTallies,
+  MarinaJobSummary, MarinaMeasurement, MarinaPartDetail, MarinaPartSummary, MarinaPiece, MarinaPieceStatus,
+  MarinaReworkItem, MarinaTallies,
 } from "./types";
 
 export const MARINA_MAX_FILE_BYTES = 25 * 1024 * 1024;
@@ -144,50 +147,61 @@ export async function listJobs(DB: D1Database, status: "open" | "complete" | "al
   }));
 }
 
-// Job detail: one batch — files, parts, dims, piece tallies grouped by part_id, measured parts.
-export async function loadJobDetail(DB: D1Database, id: string): Promise<MarinaJobDetail | null> {
-  const job = await loadJob(DB, id);
-  if (!job) return null;
-  const [files, parts, dims, tallies, measured] = await DB.batch([
+// Part summaries (marina-03 refactor of marina-02's job-detail block, shared by job detail, part
+// summary and part detail): parts, dims, piece tallies grouped by part_id, measured parts — four
+// statements scoped to one job (`p.job_id = ?`) or one part (`p.id = ?`), for the caller's batch.
+type PartScope = "job" | "part";
+
+function partSummaryStmts(DB: D1Database, scope: PartScope, id: string): D1PreparedStatement[] {
+  const w = scope === "job" ? "p.job_id = ?" : "p.id = ?";
+  return [
     DB.prepare(
-      `SELECT ${FILE_COLS} FROM marina_files WHERE job_id = ?
-        ORDER BY (superseded_at IS NOT NULL), uploaded_at DESC`
-    ).bind(id),
-    DB.prepare(
-      `SELECT id, job_id, file_id, page_no, label, notes, sort_order FROM marina_parts WHERE job_id = ?
-        ORDER BY sort_order, page_no, label`
+      `SELECT p.id, p.job_id, p.file_id, p.page_no, p.label, p.notes, p.sort_order FROM marina_parts p WHERE ${w}
+        ORDER BY p.sort_order, p.page_no, p.label`
     ).bind(id),
     DB.prepare(
       `SELECT d.id, d.part_id, d.label, d.nominal_in, d.nominal_text, d.sort_order
          FROM marina_part_dims d JOIN marina_parts p ON p.id = d.part_id
-        WHERE p.job_id = ? ORDER BY d.sort_order, d.rowid`
+        WHERE ${w} ORDER BY d.sort_order, d.rowid`
     ).bind(id),
     DB.prepare(
       `SELECT p.id AS part_id, ${TALLY_SELECT}
          FROM marina_parts p LEFT JOIN marina_pieces pc ON pc.part_id = p.id
-        WHERE p.job_id = ? GROUP BY p.id`
+        WHERE ${w} GROUP BY p.id`
     ).bind(id),
     DB.prepare(
       `SELECT DISTINCT pc.part_id
          FROM marina_pieces pc
          JOIN marina_parts p ON p.id = pc.part_id
          JOIN marina_measurements m ON m.piece_id = pc.id
-        WHERE p.job_id = ?`
+        WHERE ${w}`
     ).bind(id),
-  ]);
+  ];
+}
+
+function toDim(r: Record<string, any>): MarinaDim {
+  return {
+    id: r.id, part_id: r.part_id, label: r.label, nominal_in: Number(r.nominal_in),
+    nominal_text: r.nominal_text ?? null, sort_order: Number(r.sort_order ?? 0),
+  };
+}
+
+function groupDims(dims: D1Result): Map<string, MarinaDim[]> {
   const dimsBy = new Map<string, MarinaDim[]>();
   for (const r of (dims.results ?? []) as Record<string, any>[]) {
     const list = dimsBy.get(r.part_id) ?? [];
-    list.push({
-      id: r.id, part_id: r.part_id, label: r.label, nominal_in: Number(r.nominal_in),
-      nominal_text: r.nominal_text ?? null, sort_order: Number(r.sort_order ?? 0),
-    });
+    list.push(toDim(r));
     dimsBy.set(r.part_id, list);
   }
+  return dimsBy;
+}
+
+function assemblePartSummaries(parts: D1Result, dims: D1Result, tallies: D1Result, measured: D1Result): MarinaPartSummary[] {
+  const dimsBy = groupDims(dims);
   const tallyBy = new Map<string, Record<string, any>>();
   for (const r of (tallies.results ?? []) as Record<string, any>[]) tallyBy.set(r.part_id, r);
   const locked = new Set(((measured.results ?? []) as Record<string, any>[]).map((r) => r.part_id as string));
-  const partList: MarinaPartSummary[] = ((parts.results ?? []) as Record<string, any>[]).map((r) => ({
+  return ((parts.results ?? []) as Record<string, any>[]).map((r) => ({
     id: r.id,
     job_id: r.job_id,
     file_id: r.file_id ?? null,
@@ -199,7 +213,260 @@ export async function loadJobDetail(DB: D1Database, id: string): Promise<MarinaJ
     tallies: tallyFrom(tallyBy.get(r.id)),
     locked: locked.has(r.id),
   }));
-  return { job, files: ((files.results ?? []) as Record<string, any>[]).map(publicFile), parts: partList };
+}
+
+// Job detail: one batch — files, then the job's part summaries.
+export async function loadJobDetail(DB: D1Database, id: string): Promise<MarinaJobDetail | null> {
+  const job = await loadJob(DB, id);
+  if (!job) return null;
+  const [files, parts, dims, tallies, measured] = await DB.batch([
+    DB.prepare(
+      `SELECT ${FILE_COLS} FROM marina_files WHERE job_id = ?
+        ORDER BY (superseded_at IS NOT NULL), uploaded_at DESC`
+    ).bind(id),
+    ...partSummaryStmts(DB, "job", id),
+  ]);
+  return {
+    job,
+    files: ((files.results ?? []) as Record<string, any>[]).map(publicFile),
+    parts: assemblePartSummaries(parts, dims, tallies, measured),
+  };
+}
+
+// ── marina-03: parts / pieces / measurements ───────────────────────────────────────────────────
+
+export const JOB_COMPLETE_ERROR = { ok: false, code: "job_complete", error: "Reopen the job to change it." } as const;
+
+// D1 surfaces a UNIQUE index rejection as a thrown error carrying SQLite's message.
+export function isUniqueViolation(e: unknown): boolean {
+  return /UNIQUE constraint failed/i.test(String((e as any)?.message || e));
+}
+
+export async function loadPartSummary(DB: D1Database, partId: string): Promise<MarinaPartSummary | null> {
+  const [parts, dims, tallies, measured] = await DB.batch(partSummaryStmts(DB, "part", partId));
+  return assemblePartSummaries(parts, dims, tallies, measured)[0] ?? null;
+}
+
+// Pieces + all their measurements (attempt ASC, then dim sort_order), scoped by a WHERE over `pc`
+// (marina_pieces), `p` (marina_parts) and `j` (marina_jobs). Two statements for the caller's batch.
+const PIECE_FROM = "marina_pieces pc JOIN marina_parts p ON p.id = pc.part_id JOIN marina_jobs j ON j.id = p.job_id";
+
+function pieceStmts(DB: D1Database, where: string, binds: unknown[], order: string): D1PreparedStatement[] {
+  return [
+    DB.prepare(
+      `SELECT pc.id, pc.part_id, pc.piece_no, pc.status, pc.disposition_note, pc.created_by, pc.created_at, pc.updated_at,
+              p.label AS part_label, j.id AS job_id, j.name AS job_name, j.customer AS job_customer
+         FROM ${PIECE_FROM} WHERE ${where} ORDER BY ${order}`
+    ).bind(...binds),
+    DB.prepare(
+      `SELECT m.id, m.piece_id, m.dim_id, m.attempt, m.nominal_in, m.measured_in, m.measured_text, m.in_tol,
+              m.measured_by, m.measured_at
+         FROM marina_measurements m
+         JOIN marina_pieces pc ON pc.id = m.piece_id
+         JOIN marina_parts p ON p.id = pc.part_id
+         JOIN marina_jobs j ON j.id = p.job_id
+         LEFT JOIN marina_part_dims d ON d.id = m.dim_id
+        WHERE ${where} ORDER BY m.piece_id, m.attempt, COALESCE(d.sort_order, 0), d.rowid`
+    ).bind(...binds),
+  ];
+}
+
+type PieceWithRow = MarinaPiece & { _row: Record<string, any> };
+
+function assemblePieces(pieces: D1Result, measurements: D1Result): PieceWithRow[] {
+  const measBy = new Map<string, MarinaMeasurement[]>();
+  for (const r of (measurements.results ?? []) as Record<string, any>[]) {
+    const list = measBy.get(r.piece_id) ?? [];
+    list.push({
+      id: r.id, piece_id: r.piece_id, dim_id: r.dim_id, attempt: Number(r.attempt),
+      nominal_in: Number(r.nominal_in), measured_in: Number(r.measured_in), measured_text: r.measured_text ?? null,
+      in_tol: Number(r.in_tol) === 1, measured_by: r.measured_by ?? null, measured_at: r.measured_at,
+    });
+    measBy.set(r.piece_id, list);
+  }
+  return ((pieces.results ?? []) as Record<string, any>[]).map((r) => {
+    const ms = measBy.get(r.id) ?? [];
+    return {
+      id: r.id,
+      part_id: r.part_id,
+      piece_no: Number(r.piece_no),
+      status: r.status as MarinaPieceStatus,
+      disposition_note: r.disposition_note ?? null,
+      created_by: r.created_by ?? null,
+      created_at: r.created_at,
+      updated_at: r.updated_at ?? null,
+      attempts: ms.reduce((max, m) => Math.max(max, m.attempt), 0),
+      measurements: ms,
+      _row: r,
+    };
+  });
+}
+
+function stripRow(p: PieceWithRow): MarinaPiece {
+  const { _row, ...piece } = p;
+  return piece;
+}
+
+export async function loadPiece(DB: D1Database, pieceId: string): Promise<MarinaPiece | null> {
+  const [pieces, meas] = await DB.batch(pieceStmts(DB, "pc.id = ?", [pieceId], "pc.piece_no"));
+  const p = assemblePieces(pieces, meas)[0];
+  return p ? stripRow(p) : null;
+}
+
+const prefixed = (cols: string, alias: string) => cols.split(", ").map((c) => `${alias}.${c}`).join(", ");
+
+// Part detail: one batch — the part-summary statements, job, file, pieces, measurements.
+export async function loadPartDetail(DB: D1Database, partId: string): Promise<MarinaPartDetail | null> {
+  const [parts, dims, tallies, measured, jobRes, fileRes, pieces, meas] = await DB.batch([
+    ...partSummaryStmts(DB, "part", partId),
+    DB.prepare(
+      `SELECT j.id, j.name, j.customer, j.tolerance_in, j.status
+         FROM marina_jobs j JOIN marina_parts p ON p.job_id = j.id WHERE p.id = ?`
+    ).bind(partId),
+    DB.prepare(
+      `SELECT ${prefixed(FILE_COLS, "f")} FROM marina_files f JOIN marina_parts p ON p.file_id = f.id WHERE p.id = ?`
+    ).bind(partId),
+    ...pieceStmts(DB, "pc.part_id = ?", [partId], "pc.piece_no"),
+  ]);
+  const summary = assemblePartSummaries(parts, dims, tallies, measured)[0];
+  const j = (jobRes.results ?? [])[0] as Record<string, any> | undefined;
+  if (!summary || !j) return null;
+  const f = (fileRes.results ?? [])[0] as Record<string, any> | undefined;
+  return {
+    ...summary,
+    job: { id: j.id, name: j.name, customer: j.customer ?? null, tolerance_in: Number(j.tolerance_in), status: j.status as MarinaJobStatus },
+    file: f ? publicFile(f) : null,
+    pieces: assemblePieces(pieces, meas).map(stripRow),
+  };
+}
+
+// Rework queue: every rework_pending piece on open jobs (or on the one job), oldest first. One batch.
+export async function listRework(DB: D1Database, jobId: string | null): Promise<MarinaReworkItem[]> {
+  const where = `pc.status = 'rework_pending' AND ${jobId ? "p.job_id = ?" : "j.status = 'open'"}`;
+  const binds = jobId ? [jobId] : [];
+  const [pieces, meas, dims] = await DB.batch([
+    ...pieceStmts(DB, where, binds, "COALESCE(pc.updated_at, pc.created_at), pc.created_at, pc.piece_no"),
+    DB.prepare(
+      `SELECT d.id, d.part_id, d.label, d.nominal_in, d.nominal_text, d.sort_order
+         FROM marina_part_dims d
+        WHERE d.part_id IN (SELECT pc.part_id FROM ${PIECE_FROM} WHERE ${where})
+        ORDER BY d.sort_order, d.rowid`
+    ).bind(...binds),
+  ]);
+  const dimsBy = groupDims(dims);
+  return assemblePieces(pieces, meas).map((p) => ({
+    piece: stripRow(p),
+    part: { id: p.part_id, label: p._row.part_label, dims: dimsBy.get(p.part_id) ?? [] },
+    job: { id: p._row.job_id, name: p._row.job_name, customer: p._row.job_customer ?? null },
+  }));
+}
+
+export interface MarinaPartRef { id: string; job_id: string; label: string; }
+export interface MarinaPieceRef { id: string; part_id: string; piece_no: number; status: MarinaPieceStatus; disposition_note: string | null; }
+
+// The owning job (job_complete guard, tolerance, log summaries) plus the part's identity.
+export async function jobForPart(DB: D1Database, partId: string): Promise<{ job: MarinaJob; part: MarinaPartRef } | null> {
+  const row = await DB.prepare(
+    `SELECT ${prefixed(JOB_COLS, "j")}, p.id AS part_id, p.label AS part_label
+       FROM marina_parts p JOIN marina_jobs j ON j.id = p.job_id WHERE p.id = ?`
+  ).bind(partId).first<Record<string, any>>();
+  if (!row) return null;
+  return { job: toJob(row), part: { id: row.part_id, job_id: row.id, label: row.part_label } };
+}
+
+export async function jobForPiece(DB: D1Database, pieceId: string): Promise<{ job: MarinaJob; part: MarinaPartRef; piece: MarinaPieceRef } | null> {
+  const row = await DB.prepare(
+    `SELECT ${prefixed(JOB_COLS, "j")}, p.id AS part_id, p.label AS part_label,
+            pc.id AS piece_id, pc.piece_no, pc.status AS piece_status, pc.disposition_note
+       FROM marina_pieces pc JOIN marina_parts p ON p.id = pc.part_id JOIN marina_jobs j ON j.id = p.job_id
+      WHERE pc.id = ?`
+  ).bind(pieceId).first<Record<string, any>>();
+  if (!row) return null;
+  return {
+    job: toJob(row),
+    part: { id: row.part_id, job_id: row.id, label: row.part_label },
+    piece: {
+      id: row.piece_id, part_id: row.part_id, piece_no: Number(row.piece_no),
+      status: row.piece_status as MarinaPieceStatus, disposition_note: row.disposition_note ?? null,
+    },
+  };
+}
+
+// Log summary: "<job name> · <part label>" or "<job name> · <part label> #<piece_no>".
+export function partLogSummary(jobName: string, partLabel: string, pieceNo?: number): string {
+  return pieceNo === undefined ? `${jobName} · ${partLabel}` : `${jobName} · ${partLabel} #${pieceNo}`;
+}
+
+export interface CleanDim { label: string; nominal_in: number; nominal_text: string; }
+
+// Dims for bulk create and PUT /dims: 1–20; label 1–40; nominal from nominal_text (parseInches, stored
+// trimmed) else nominal_in (finite > 0, stored text = formatInches). Errors name the part and the dim.
+export function cleanDims(raw: unknown, partLabel: string): FieldResult<CleanDim[]> {
+  if (!Array.isArray(raw) || raw.length < 1) return { ok: false, error: `Part "${partLabel}" needs at least one dimension.` };
+  if (raw.length > 20) return { ok: false, error: `Part "${partLabel}" can have at most 20 dimensions.` };
+  const out: CleanDim[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const d = (raw[i] && typeof raw[i] === "object" ? raw[i] : {}) as Record<string, unknown>;
+    const name = typeof d.label === "string" ? d.label.trim() : "";
+    const where = `Part "${partLabel}", dimension ${name ? `"${name}"` : `#${i + 1}`}`;
+    if (!name || name.length > 40) return { ok: false, error: `${where}: label must be 1–40 characters.` };
+    const text = typeof d.nominal_text === "string" ? d.nominal_text.trim() : "";
+    let nominal: number | null = null;
+    let nominalText = "";
+    if (text) {
+      nominal = parseInches(text);
+      nominalText = text;
+    } else if (typeof d.nominal_in === "number" && Number.isFinite(d.nominal_in) && d.nominal_in > 0) {
+      nominal = d.nominal_in;
+      nominalText = formatInches(nominal);
+    }
+    if (nominal === null || !(nominal > 0)) {
+      return { ok: false, error: `${where}: needs a nominal size in inches${text ? ` (couldn't read "${text}")` : ""}.` };
+    }
+    out.push({ label: name, nominal_in: nominal, nominal_text: nominalText });
+  }
+  return { ok: true, value: out };
+}
+
+// MeasureBody shape check (values are evaluated by pieces.ts evaluateMeasurements).
+export function cleanMeasureBody(body: Record<string, unknown>): FieldResult<{
+  measurements: MeasureInput[]; disposition: Disposition | null; note: string | null; noteGiven: boolean;
+}> {
+  if (!Array.isArray(body.measurements)) return { ok: false, error: "measurements must be a list." };
+  const measurements: MeasureInput[] = [];
+  for (const m of body.measurements) {
+    if (!m || typeof m !== "object") return { ok: false, error: "Each measurement needs dim_id and value." };
+    const r = m as Record<string, unknown>;
+    measurements.push({ dim_id: String(r.dim_id ?? ""), value: typeof r.value === "string" ? r.value : String(r.value ?? "") });
+  }
+  const d = body.disposition;
+  if (d !== undefined && d !== null && d !== "rework" && d !== "scrap") {
+    return { ok: false, error: "disposition must be rework or scrap." };
+  }
+  const note = cleanOptional(body.note, 2000, "Note");
+  if (!note.ok) return note;
+  return {
+    ok: true,
+    value: { measurements, disposition: (d as Disposition | null | undefined) ?? null, note: note.value, noteGiven: "note" in body },
+  };
+}
+
+// Dims in order, for evaluateMeasurements.
+export async function partDimNominals(DB: D1Database, partId: string): Promise<{ id: string; nominal_in: number }[]> {
+  const res = await DB.prepare(
+    "SELECT id, nominal_in FROM marina_part_dims WHERE part_id = ? ORDER BY sort_order, rowid"
+  ).bind(partId).all<Record<string, any>>();
+  return (res.results ?? []).map((r) => ({ id: r.id, nominal_in: Number(r.nominal_in) }));
+}
+
+// Shared JSON-body reader for the marina-03 routes: null on a missing / non-object body.
+export async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
+  try {
+    const body = await request.json();
+    return body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface MarinaDeleteCounts { parts: number; pieces: number; measurements: number; files: number; }
