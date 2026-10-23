@@ -3,6 +3,7 @@
 // /v2/qc/marina — Marina Foam job list. Open | Complete toggle (kept in ?status= via replaceState) →
 // GET /jobs?status=. Each job is a full-width card link (works at phone width) with tally chips, the
 // rework-pending badge and a "No cut sheet yet" hint. New job (canEdit) → NewJobModal → job detail.
+// marina-06: "Rework queue" link (everyone) with a count of the Open tab's pending rework.
 // Direct URL only until marina-07 adds the /v2/qc button.
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Plus } from "lucide-react";
@@ -56,6 +57,9 @@ export default function MarinaJobList({ userName, isAdmin, permissions, canEdit,
     }
   }
 
+  // Count only on the Open tab: the global rework queue lists open jobs only, so the numbers match.
+  const reworkCount = status === "open" ? (jobs ?? []).reduce((s, j) => s + j.tallies.rework_pending, 0) : 0;
+
   return (
     <div className="min-h-screen flex flex-col bg-bg text-text">
       <PlatformHeader userName={userName} isAdmin={isAdmin} permissions={permissions} title="Quality Control · v2" currentPath="/v2/qc" />
@@ -70,12 +74,22 @@ export default function MarinaJobList({ userName, isAdmin, permissions, canEdit,
             <h1 className="text-xl font-bold tracking-tight text-text">Marina Foam</h1>
             <p className="text-xs text-muted">Inspect Marina Foam parts against their cut sheets.</p>
           </div>
-          {canEdit && (
-            <button type="button" className={HEADER_BTN} onClick={() => setNewOpen(true)}>
-              <Plus size={14} className="text-muted" aria-hidden="true" />
-              New job
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <a href="/v2/qc/marina/rework" className={HEADER_BTN}>
+              Rework queue
+              {reworkCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[1.5rem] px-1.5 rounded-full bg-[var(--info-bg)] text-[var(--info-text)] border border-[var(--info-border)] text-xs font-bold">
+                  {reworkCount}
+                </span>
+              )}
+            </a>
+            {canEdit && (
+              <button type="button" className={HEADER_BTN} onClick={() => setNewOpen(true)}>
+                <Plus size={14} className="text-muted" aria-hidden="true" />
+                New job
+              </button>
+            )}
+          </div>
         </div>
 
         <div role="tablist" aria-label="Job status" className="inline-flex rounded-lg border border-[var(--border)] bg-surface p-1 gap-1">

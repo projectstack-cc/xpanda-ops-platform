@@ -141,6 +141,9 @@ export default function MarinaJobDetail({ userName, isAdmin, permissions, canEdi
             <div className="flex flex-wrap items-center gap-2">
               <TallyChips tallies={{ parts: parts.length, ...sumTallies(parts) }} />
               {reworkPending > 0 && <span className={REWORK_BADGE}>{reworkPending} rework pending</span>}
+              {reworkPending > 0 && (
+                <a href={`/v2/qc/marina/rework?job=${encodeURIComponent(job.id)}`} className={HEADER_BTN}>Rework queue</a>
+              )}
             </div>
           </div>
           {job.notes && <p className="text-sm text-text whitespace-pre-wrap break-words">{job.notes}</p>}
@@ -303,6 +306,11 @@ function PartRow({
             {part.tallies.rework_pending > 0 && <span className={REWORK_BADGE}>{part.tallies.rework_pending} rework pending</span>}
           </div>
           {part.notes && <p className="text-sm text-muted whitespace-pre-wrap break-words">{part.notes}</p>}
+          {part.dims.length > 0 && (
+            <a href={`/v2/qc/marina/parts/${encodeURIComponent(part.id)}`} className={`${editable ? PRIMARY : GHOST} no-underline`}>
+              {editable ? "Inspect" : "Pieces"}
+            </a>
+          )}
         </div>
         {editable && (
           <button

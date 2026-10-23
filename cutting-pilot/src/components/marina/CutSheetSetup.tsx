@@ -6,15 +6,14 @@
 // as one part on "Save & next", so a reload loses at most the page in progress; a page with a part on
 // this file + page_no is Done (read-only here — edit from the job page). Skips are session-only.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PDFDocumentProxy } from "pdfjs-dist";
 import { ArrowLeft, Maximize2 } from "lucide-react";
 import Modal from "@/components/Modal";
 import PlatformHeader from "@/components/PlatformHeader";
-import { loadPdfJs } from "@/lib/pdfjs";
 import { fallbackLabelFor, suggestFromPage, textItemsFromContent, type PageSuggestion } from "@/lib/marina/cutSheet";
 import type { MarinaJobDetail as Detail, MarinaPartSummary } from "@/lib/marina/types";
+import PageCanvas, { useMarinaPdf } from "./PageCanvas";
 import PartEditor, { checkDraft, dimsPayload, draftFromPart, emptyDraft, type PartDraft } from "./PartEditor";
-import { API, CARD, ERROR_TEXT, GHOST, PRIMARY, jsonInit, marinaFetch, plural } from "./ui";
+import { CARD, ERROR_TEXT, GHOST, PRIMARY, jsonInit, marinaFetch, plural } from "./ui";
 
 interface Props {
   userName: string;
@@ -31,8 +30,6 @@ export default function CutSheetSetup({ userName, isAdmin, permissions, canEdit,
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
-  const [pdfError, setPdfError] = useState<string | null>(null);
   const [current, setCurrent] = useState<number | null>(null);
   const [finished, setFinished] = useState(false);
   const [skipped, setSkipped] = useState<Set<number>>(() => new Set());
@@ -76,33 +73,8 @@ export default function CutSheetSetup({ userName, isAdmin, permissions, canEdit,
               : null;
   const ready = !!detail && !problem;
 
-  // Load the PDF once the checks pass; destroy it on unmount.
-  useEffect(() => {
-    if (!ready) return;
-    let cancelled = false;
-    let doc: PDFDocumentProxy | null = null;
-    (async () => {
-      try {
-        const res = await fetch(`${API}/files/${encodeURIComponent(fileId)}`);
-        if (!res.ok) throw new Error(`Couldn't download the cut sheet (HTTP ${res.status}).`);
-        const data = new Uint8Array(await res.arrayBuffer());
-        const lib = await loadPdfJs();
-        doc = await lib.getDocument({ data }).promise;
-        if (cancelled) {
-          doc.destroy().catch(() => {});
-          return;
-        }
-        setPdf(doc);
-      } catch (e: any) {
-        if (!cancelled) setPdfError(String(e?.message || e) || "Couldn't open the cut sheet.");
-      }
-    })();
-    return () => {
-      cancelled = true;
-      setPdf(null);
-      doc?.destroy().catch(() => {});
-    };
-  }, [ready, fileId]);
+  // Load the PDF once the checks pass; destroyed on unmount (useMarinaPdf).
+  const { pdf, error: pdfError } = useMarinaPdf(ready ? fileId : null);
 
   const doneByPage = useMemo(() => {
     const m = new Map<number, MarinaPartSummary>();
@@ -433,74 +405,6 @@ export default function CutSheetSetup({ userName, isAdmin, permissions, canEdit,
           </div>
         </Modal>
       )}
-    </div>
-  );
-}
-
-// One PDF page on a canvas: container width × devicePixelRatio (cap 2), or a fixed CSS scale (Enlarge).
-// The in-flight render is cancelled and awaited before the next one (pdf.js rejects two renders on one
-// canvas). Reference only — no click-to-pick.
-function PageCanvas({ pdf, pageNo, fixedScale }: { pdf: PDFDocumentProxy; pageNo: number; fixedScale?: number }) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const taskRef = useRef<{ promise: Promise<unknown>; cancel: () => void } | null>(null);
-  const [width, setWidth] = useState(0);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    if (fixedScale) return;
-    const el = wrapRef.current;
-    if (!el) return;
-    setWidth(Math.floor(el.clientWidth));
-    const ro = new ResizeObserver((entries) => {
-      const w = Math.floor(entries[0]?.contentRect.width ?? 0);
-      setWidth((prev) => (Math.abs(prev - w) >= 2 ? w : prev));
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [fixedScale]);
-
-  useEffect(() => {
-    if (!fixedScale && !width) return;
-    let cancelled = false;
-    (async () => {
-      const prev = taskRef.current;
-      if (prev) {
-        prev.cancel();
-        await prev.promise.catch(() => {});
-      }
-      try {
-        const page = await pdf.getPage(pageNo);
-        const canvas = canvasRef.current;
-        if (cancelled || !canvas) return;
-        const base = page.getViewport({ scale: 1 });
-        const cssScale = fixedScale ?? width / base.width;
-        const dpr = fixedScale ? 1 : Math.min(window.devicePixelRatio || 1, 2);
-        const vp = page.getViewport({ scale: cssScale * dpr });
-        canvas.width = Math.floor(vp.width);
-        canvas.height = Math.floor(vp.height);
-        canvas.style.width = `${Math.floor(base.width * cssScale)}px`;
-        canvas.style.height = `${Math.floor(base.height * cssScale)}px`;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        const task = page.render({ canvasContext: ctx, viewport: vp });
-        taskRef.current = task;
-        await task.promise;
-        if (!cancelled) setError(false);
-      } catch (e: any) {
-        if (!cancelled && e?.name !== "RenderingCancelledException") setError(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      taskRef.current?.cancel();
-    };
-  }, [pdf, pageNo, width, fixedScale]);
-
-  return (
-    <div ref={wrapRef} className={fixedScale ? "w-max" : "w-full"}>
-      <canvas ref={canvasRef} className="block rounded" aria-label={`Cut sheet page ${pageNo}`} role="img" />
-      {error && <p className={ERROR_TEXT}>Couldn&apos;t draw this page.</p>}
     </div>
   );
 }
