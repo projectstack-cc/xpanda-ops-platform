@@ -3,10 +3,12 @@
 // StatTile, which is shaped around orders/loads — leave that one alone.
 // rpt-01: additive `tone="warn"` (warn tokens on the tile, label, value, unit and caption); the
 // default tone renders byte-identically to before.
+// rpt-03: additive `value: number | string` (Incidents' "Top category" shows a name); output for a
+// number is unchanged.
 
 interface MetricTileProps {
   label: string;
-  value: number | undefined;
+  value: number | string | undefined;
   unit?: string;
   caption?: string;
   /** Renders a <button> when set, a <div> otherwise. */

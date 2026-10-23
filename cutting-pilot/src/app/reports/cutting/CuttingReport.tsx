@@ -5,8 +5,9 @@
 // applies the operator / line filters and the "Exclude flagged from hours" toggle client-side.
 // Layout follows the claude.ai "v2 Reports" canvas (Cutting activity — desktop) with the live kit:
 // PlatformHeader, MetricTile, DashboardToolbar, RangeSelector, FilterSelect, QcBoard table/chip classes.
-// Incidents / Scrap stay plain <a> links to the legacy reports until rpt-03/04. Direct URL only (rpt-05).
+// Incidents links the v2 report (rpt-03); Scrap stays a plain <a> to legacy until rpt-04. Direct URL only (rpt-05).
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChevronDown, ChevronRight, ClipboardList, Printer, RefreshCw, TriangleAlert } from "lucide-react";
 import PlatformHeader from "@/components/PlatformHeader";
@@ -141,10 +142,10 @@ export default function CuttingReport({ userName, isAdmin, permissions }: Props)
             <p className="hidden print:block text-xs text-muted font-mono tabular-nums">{rangeLabel(range.from, range.to)}</p>
           </div>
           <div className="flex flex-wrap gap-2 print:hidden">
-            <a href="/reports/incidents/" className={HEADER_BTN}>
+            <Link href="/reports/incidents" className={HEADER_BTN}>
               <TriangleAlert size={14} className="text-muted" aria-hidden="true" />
               Incidents
-            </a>
+            </Link>
             <a href="/reports/scrap/" className={HEADER_BTN}>
               <ClipboardList size={14} className="text-muted" aria-hidden="true" />
               Scrap
