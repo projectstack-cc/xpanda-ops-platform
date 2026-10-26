@@ -712,6 +712,94 @@ export function runBolSharedSelfCheck(): { pass: boolean; results: CheckResult[]
     }
   }
 
+  // --- Resizable text-box width + commodity box-size line spacing (bol-resize-01) ---
+  {
+    const lines = (n: number, from = 1) => Array.from({ length: n }, (_, i) => `Line ${from + i}`);
+    const words = Array.from({ length: 30 }, () => "abcdefghi").join(" "); // 30 × 9 chars, FIXED width = length
+    const base: BolRecord = { special_instructions: words, commodity_description: lines(20).join("\n"), po_number: "PO1" };
+    const runsOf = (r: ReturnType<typeof layoutBol>, k: string) => r.runs.filter((x) => x.fieldKey === k);
+
+    // No `_size` (absent, empty, or an undefined entry) → identical output.
+    {
+      const a = JSON.stringify(layoutBol(base, FIXED_FONTS));
+      const b = JSON.stringify(layoutBol({ ...base, _overrides: { _size: {} } }, FIXED_FONTS));
+      const c = JSON.stringify(layoutBol({ ...base, _overrides: { _size: { specialInstr: undefined } } }, FIXED_FONTS));
+      const d = JSON.stringify(layoutBol({ ...base, _overrides: { _size: { specialInstr: { w: NaN } } } }, FIXED_FONTS));
+      check("bol-resize-01: no _size (absent / {} / undefined entry / NaN w) → identical layout", a === b && a === c && a === d);
+    }
+
+    // `_size.specialInstr.w = 120` → more wrapped lines, every run's maxWidth = 120, box w = 120.
+    {
+      const def = layoutBol(base, FIXED_FONTS);
+      const res = layoutBol({ ...base, _overrides: { _size: { specialInstr: { w: 120 } } } }, FIXED_FONTS);
+      const r0 = runsOf(def, "specialInstr");
+      const r1 = runsOf(res, "specialInstr");
+      check(
+        "bol-resize-01: _size.specialInstr.w = 120 → more wrapped lines, every run maxWidth 120, box w 120",
+        r1.length > r0.length && r1.every((r) => r.maxWidth === 120) && res.boxes.specialInstr.w === 120,
+        JSON.stringify({ before: r0.length, after: r1.length, maxW: Array.from(new Set(r1.map((r) => r.maxWidth))), boxW: res.boxes.specialInstr.w })
+      );
+    }
+
+    // Out-of-range w clamps to [60, PAGE.width − 20 − x] (x = 315 for specialInstr → 277).
+    {
+      const lo = layoutBol({ ...base, _overrides: { _size: { specialInstr: { w: 5 } } } }, FIXED_FONTS);
+      const hi = layoutBol({ ...base, _overrides: { _size: { specialInstr: { w: 9999 } } } }, FIXED_FONTS);
+      check(
+        "bol-resize-01: out-of-range w (5, 9999) clamps to 60 / 277",
+        lo.boxes.specialInstr.w === 60 && hi.boxes.specialInstr.w === 277 &&
+          runsOf(hi, "specialInstr").every((r) => r.maxWidth === 277),
+        JSON.stringify({ lo: lo.boxes.specialInstr.w, hi: hi.boxes.specialInstr.w })
+      );
+    }
+
+    // The clamp uses the `_pos`-shifted x, and the default (unwrapped) PO path's box width follows w.
+    {
+      const res = layoutBol({ ...base, _overrides: { _pos: { specialInstr: { dx: 50, dy: 0 } }, _size: { specialInstr: { w: 9999 }, poNumber: { w: 150 } } } }, FIXED_FONTS);
+      check(
+        "bol-resize-01: clamp uses the _pos-shifted x (365 → 227); default PO box w follows _size",
+        res.boxes.specialInstr.w === 227 && res.boxes.poNumber.w === 150 && runsOf(res, "poNumber").length === 2,
+        JSON.stringify({ si: res.boxes.specialInstr, po: res.boxes.poNumber })
+      );
+    }
+
+    // Part A: two-column left box at size 10 → lineH 12 (was 22 off the stale 13/28 base).
+    {
+      const res = layoutBol({ ...base, _overrides: { _style: { commodity: { size: 10 } } } }, FIXED_FONTS);
+      const left = runsOf(res, "commodity");
+      check(
+        "bol-resize-01 (Part A): two-column left box at size 10 → lineH 12",
+        left.length === 10 && left[0].size === 10 && left[0].y - left[1].y === 12 && res.boxes.commodity.h === 120,
+        JSON.stringify({ n: left.length, step: left[0].y - left[1].y, h: res.boxes.commodity.h })
+      );
+    }
+
+    // Part A: single-column box at size 10 → lineH 12.
+    {
+      const res = layoutBol({ commodity_description: lines(5).join("\n"), _overrides: { _style: { commodity: { size: 10 } } } }, FIXED_FONTS);
+      const c = runsOf(res, "commodity");
+      check(
+        "bol-resize-01 (Part A): single-column box at size 10 → lineH 12",
+        c.length === 5 && !res.boxes.commodity2 && c[0].y - c[1].y === 12 && res.boxes.commodity.h === 60,
+        JSON.stringify({ n: c.length, step: c[0].y - c[1].y, h: res.boxes.commodity.h })
+      );
+    }
+
+    // measureStyledField's maxWOverride replaces COORDS maxW (more lines at a narrower width).
+    {
+      const a = measureStyledField("specialInstr", words, undefined);
+      const b = measureStyledField("specialInstr", words, undefined, 120);
+      check("bol-resize-01: measureStyledField maxWOverride narrows the wrap width", b.lines > a.lines, JSON.stringify({ a, b }));
+    }
+
+    // measureStyledField: a commodity box size measures at the renderer's 12/14 base (10 lines at
+    // size 10 = 120pt, inside the 216 budget — was 220 off the stale 13/28 base).
+    {
+      const m = measureStyledField("commodity", lines(10).join("\n"), { size: 10 }, 225);
+      check("bol-resize-01 (Part A): measureStyledField commodity box size 10 → 12pt lines, no overflow", m.height === 120 && !m.overflow, JSON.stringify(m));
+    }
+  }
+
   return { pass: results.every((r) => r.pass), results };
 }
 

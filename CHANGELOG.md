@@ -3027,6 +3027,42 @@ current series).
 
 ## Logistics (v2)
 
+- **bol-resize-01 — BOL editor: resizable text-box width + commodity box-size line-spacing fix (React Component
+  Agent §9b for `bolEditorEngine.ts`; Logistics Agent for `bol-shared.js` / `bol-editor.js`). No migration (`_overrides`
+  is already JSON).**
+  - **Part A (bug, both renderers, bilateral parity).** A box-level `_style.size` on `commodity` skipped the tier and
+    scaled `lineH` from the stale `COORDS.commodity` placeholder (13/28, 2.15×), so touching the size double-spaced the
+    box (left column at 10pt: 22pt lines vs the right column's 12pt). The two-column left base and the single-column
+    box-size branch now use a 12/14 base (`COORDS.commodity` itself untouched; the zone columns read its x/y/maxW).
+    The unstyled path still overwrites size/lineH with the tier, so unstyled BOLs render byte-identically (snapshot of
+    `layoutBol` on 9 fixtures, both renderers: only the box-size fixtures changed). **Saved BOLs that already carry a
+    commodity `_style.size` re-render with the corrected, tighter spacing — intended.** Editor caret parity: v2
+    `baseCoordForField` returns the same 12/14 base for `commodity`/`commodity2` when a box size is set; mirrored in
+    Classic's `baseCoordForField` too (not in the prompt; without it Classic's caret drifts from the drawn text).
+    `measureStyledField` also measures a commodity box size from 12/14 (not in the prompt; otherwise a correctly
+    fitting 10-line left box at 10pt still showed the amber outline, 220 > 216).
+  - **Part B (feature).** New `_overrides._size: { [field]: { w } }` — absolute wrap width in PDF points for the five
+    multiline wrapping fields (`specialInstr`, `contactInfo`, `poNumber`, `commodity`, `commodity2`). `layoutBol` (both
+    files) gets a `sized()` helper next to `off()`: applied after `_pos` inside `multilineFieldLayout` and on the default
+    PO path's box width; clamps to `max(60, min(w, PAGE.width − 20 − x))`, a non-finite `w` is ignored. Auto tiers
+    (`pickCommodityTier`/`pickCommodityColumnsTier`) still measure at their default widths. v2 editor: a `⇔` handle
+    (brand bg, 16×44 hit area, `ew-resize`, `touch-action:none`) centred on each resizable box's right edge;
+    pointer-capture drag, 0.5pt snap, renderer clamp, double-click resets; hidden with its field (two-column / zoned).
+    `computeOverrides` writes `_size` after `_style` only when non-empty. Classic has no resize UI and carries a saved
+    `_size` through on re-save.
+  - **Overflow measurement.** `measureStyledField(fieldKey, text, style, maxWOverride?)`; both editors pass the effective
+    wrap width (`lastBoxes[k].w`, which equals the renderer's maxW for the five fields: resized `w`, else two-column
+    `colW`, else the COORDS default). Closes the BACKLOG item "bol-2col-01 follow-up — left-column overflow warning".
+  - **Cache-busters:** `bol-shared.js?v=320` (jobs, logistics index/load-builder/bol-test, track), `bol-editor.js?v=4`.
+  - **Verify:** `tsc --noEmit` clean, `cf-build` green, selfcheck 92/92 (84 existing + 8 new: no-`_size` identity incl.
+    NaN, w=120 wrap + maxWidth, clamp 5/9999, clamp after `_pos`, default PO box width, Part A two-column and
+    single-column lineH 12, `maxWOverride`, commodity box-size measure). Browser (next dev + Playwright, mocked
+    APIs, light + dark): left box at 10pt draws at 12pt lines, same as the right box, with the caret line-height
+    matching; dragging Special Instructions narrower rewraps live, clamps at 60pt, goes amber, double-click resets;
+    Apply PUT carried `_size.specialInstr.w = 175`; v2 `generatePdf` and legacy `BolShared.generatePdf` (page context)
+    produce identical text items, and the editor's wrap matches the PDF line for line; Classic open + Apply keeps
+    `_size`.
+
 - **lb-box-03 — v2 Load Builder: holey-board on-edge 4th set in the box truck's 19" slot (Next/Cloudflare Platform
   Agent §9a leads the engine; React Component Agent §9b the UI). No migration, no API change; still dark (unlinked).**
   Same contract as legacy lb-box-02, so the two surfaces agree on which loads get a slot and what the floor reads.

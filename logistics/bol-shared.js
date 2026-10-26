@@ -375,7 +375,7 @@ window.BolShared = (function() {
   // (both editors do so before first paint, same as they already await pdf.js), falling back to
   // the approximate ratio measurer below until then. Return shape and the shipTo/zoneCol/unknown-
   // fieldKey special cases are UNCHANGED — every existing bol-style-02/03 caller keeps working.
-  function measureStyledField(fieldKey, text, style) {
+  function measureStyledField(fieldKey, text, style, maxWOverride) {
     const sourceLines = String(text || '').split('\n');
 
     if (fieldKey === 'shipTo') {
@@ -396,7 +396,13 @@ window.BolShared = (function() {
       heightBudget = colMaxH[idx] != null ? colMaxH[idx] : 216;
     } else if (COORDS[fieldKey]) {
       baseCoord = COORDS[fieldKey];
-      maxW = baseCoord.maxW || null;
+      // bol-resize-01: a commodity box-level size scales from the same 12/14 base layoutBol uses.
+      if ((fieldKey === 'commodity' || fieldKey === 'commodity2') && style && style.size != null) {
+        baseCoord = { ...baseCoord, size: 12, lineH: 14 };
+      }
+      // bol-resize-01: the editors pass the EFFECTIVE wrap width (a resized `_size` w, or colW for
+      // a two-column left commodity box) — replaces the COORDS default.
+      maxW = (maxWOverride != null && Number.isFinite(maxWOverride)) ? maxWOverride : (baseCoord.maxW || null);
       heightBudget = FIELD_HEIGHT_BUDGET[fieldKey] != null ? FIELD_HEIGHT_BUDGET[fieldKey] : 40;
     } else {
       return { lines: 0, height: 0, overflow: false };
@@ -630,6 +636,14 @@ window.BolShared = (function() {
       return { ...coord, x: coord.x + (p.dx || 0), y: coord.y + (p.dy || 0) };
     };
     const _style = _ov._style || {};
+    // bol-resize-01: `_size[key].w` replaces the (already `_pos`-shifted) coord's maxW, clamped so
+    // bad data can never push text off the page; a non-finite w is treated as absent.
+    const _size = _ov._size || {};
+    const sized = (key, coord) => {
+      const sz = _size[key];
+      if (!sz || typeof sz.w !== 'number' || !Number.isFinite(sz.w)) return coord;
+      return { ...coord, maxW: Math.max(60, Math.min(sz.w, PAGE.width - 20 - coord.x)) };
+    };
 
     // ── Delivery time (bold red; multiline-capable via override) ──
     const _deliveryTimeVal = ('deliveryTime' in _ov)
@@ -708,7 +722,7 @@ window.BolShared = (function() {
     // editor has somewhere to click even on a currently-empty field).
     function multilineFieldLayout(fieldKey, text, coord, fieldOpts) {
       fieldOpts = fieldOpts || {};
-      const c = off(fieldKey, coord);
+      const c = sized(fieldKey, off(fieldKey, coord));
       const maxW = c.maxW || 250;
       const { runs: r, box } = layoutField(fieldKey, text || '', _style[fieldKey], fonts, {
         fieldKey, x: c.x, y: c.y, baseCoord: c, maxW,
@@ -738,7 +752,7 @@ window.BolShared = (function() {
       multilineFieldLayout('poNumber', _ov.poNumber.join('\n'), COORDS.poNumber);
     } else {
       const poNum = bol.po_number || bol.poNumber || '';
-      const c = off('poNumber', COORDS.poNumber);
+      const c = sized('poNumber', off('poNumber', COORDS.poNumber));
       const poStyle = resolveFieldLineStyle(_style.poNumber, 0, c);
       const poFontKey = _fontKeyFor(poStyle.bold, poStyle.italic);
       const poLabel = 'PO:';
@@ -810,8 +824,10 @@ window.BolShared = (function() {
         }
         if (!_cols.twoCol) {
           const _commodityHasBoxSize = _style.commodity && _style.commodity.size != null;
+          // bol-resize-01: 12/14 base — COORDS.commodity's 13/28 is a stale placeholder whose 2.15×
+          // leading resolveFieldLineStyle would scale into double-spaced lines.
           const _commodityCoord = _commodityHasBoxSize
-            ? { ...COORDS.commodity }
+            ? { ...COORDS.commodity, size: 12, lineH: 14 }
             : (() => { const _tier = pickCommodityTier(String(_commodityText || ''), fonts.regular); return { ...COORDS.commodity, size: _tier.size, lineH: _tier.lineH }; })();
           multilineFieldLayout('commodity', _commodityText, _commodityCoord, { center: true });
         } else {
@@ -820,7 +836,9 @@ window.BolShared = (function() {
           // independently via multilineFieldLayout's off().
           const _cc = COORDS.commodityCols;
           const _colTier = pickCommodityColumnsTier(_commodityText, _commodity2Text, fonts.regular);
-          const _leftBase = { ...COORDS.commodity, x: _cc.x, maxW: _cc.colW, center: false };
+          // bol-resize-01: 12/14 base (matches commodity2); the no-style path below still overwrites
+          // size/lineH with the column tier, so unstyled BOLs are unchanged.
+          const _leftBase = { ...COORDS.commodity, x: _cc.x, maxW: _cc.colW, center: false, size: 12, lineH: 14 };
           const _leftCoord = (_style.commodity && _style.commodity.size != null)
             ? _leftBase
             : { ..._leftBase, size: _colTier.size, lineH: _colTier.lineH };

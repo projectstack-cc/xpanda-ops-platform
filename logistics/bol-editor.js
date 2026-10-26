@@ -282,6 +282,8 @@ window.BolEditor = (function () {
       if (!field) return { size: 10, lineH: 12 };
       if (field.type === 'shipto') return field.coords[0];
       if ((fieldKey === 'commodity' || fieldKey === 'commodity2') && !zcZoneData) {
+        // bol-resize-01: a box-level size skips the tier — the renderer then scales from a 12/14 base.
+        if (styleOverrides[fieldKey] && styleOverrides[fieldKey].size != null) return { size: 12, lineH: 14 };
         // bol-2col-01: two-column → the shared smaller column tier the renderer uses for both boxes.
         if (fieldKey === 'commodity2' || (currentTextValue('commodity2') || '').trim() !== '') {
           const colTier = BolShared.pickCommodityColumnsTier(currentTextValue('commodity'), currentTextValue('commodity2'), fonts.regular);
@@ -424,6 +426,10 @@ window.BolEditor = (function () {
         if (Object.keys(_out).length) _styleOut[_fk] = _out;
       }
       if (Object.keys(_styleOut).length > 0) overrides._style = _styleOut;
+
+      // bol-resize-01: Classic has no resize UI — carry a v2 resize (`_size`) through unchanged so
+      // rebuilding `overrides` from scratch here never silently drops it.
+      if (bol._overrides && bol._overrides._size) overrides._size = bol._overrides._size;
 
       // lbz-bol-01: persist the WHOLE zoneColumns container (items + zoneData + sourceHash) —
       // Apply replaces `overrides` wholesale (see below), so omitting zoneData/sourceHash here
@@ -631,11 +637,15 @@ window.BolEditor = (function () {
     // strip — the WYSIWYG canvas layer now shows per-line styles in place). Driven by
     // BolShared.measureStyledField, which is itself now a layoutField-backed real-metric check. ──
 
+    const RESIZABLE_FIELDS = ['specialInstr', 'contactInfo', 'poNumber', 'commodity', 'commodity2'];
     function updateFieldOverflow(fieldKey) {
       const el = fieldElFor(fieldKey);
       if (!el || !fieldSupportsLines(fieldKey)) return;
       const text = currentTextValue(fieldKey);
-      const measured = BolShared.measureStyledField(fieldKey, text, styleOverrides[fieldKey]);
+      // bol-resize-01: measure at the EFFECTIVE wrap width — the layout box's w equals the renderer's
+      // maxW for these fields (a passed-through `_size` w, the two-column colW, or the COORDS default).
+      const wrapW = (RESIZABLE_FIELDS.indexOf(fieldKey) !== -1 && lastBoxes[fieldKey]) ? lastBoxes[fieldKey].w : undefined;
+      const measured = BolShared.measureStyledField(fieldKey, text, styleOverrides[fieldKey], wrapW);
       if (measured.overflow) {
         el.style.boxShadow = '0 0 0 2px #f59e0b';
         el.title = fieldKey === 'shipTo' ? 'Only the first 4 non-blank lines will be saved' : 'May overflow the box';

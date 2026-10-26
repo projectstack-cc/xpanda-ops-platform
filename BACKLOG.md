@@ -578,9 +578,14 @@
 - [ ] **bol-2col-01 follow-up — INV 4487's BOL.** Regenerate/re-edit INV 4487's BOL once bol-2col-01 is live;
   its existing `_pos.commodity` nudge (dy −42) will apply to the left column — double-click the handle to reset
   if it lands low.
-- [ ] **bol-2col-01 follow-up — left-column overflow warning.** In two-column mode the editors' amber overflow
-  outline for `commodity` still measures against `COORDS.commodity` (maxW 510), not the 225pt column, so it
-  under-warns for the left box. Warning-only (`measureStyledField`, never affects rendering); fix in both files.
+- [ ] **bol-resize-01 follow-up — commodity auto-tier ignores a resized width** (tier still measured at default width);
+  revisit if floor narrows commodity boxes often.
+- [ ] **Legacy editor resize UI** — not ported (Classic only passes `_size` through).
+- [ ] **bol-resize-01 follow-up — unstyled commodity overflow false positive.** With no box size set,
+  `measureStyledField("commodity", …)` still scales from `COORDS.commodity`'s 13/28 rather than the auto tier the
+  renderer uses, so 10 unstyled lines measure 280pt > 216 and the amber outline shows on a box that fits.
+  Warning-only, predates bol-resize-01; a correct fix needs the tier (or the column tier) passed into the measure.
+  Both files.
 - [ ] **Template editing rule** — any future BOL template edit must be re-exported with text outlined (`gs -sDEVICE=pdfwrite -dNoOutputFonts`); Google Docs exports reintroduce name-colliding subset fonts. (bol-print-03)
 
 ---

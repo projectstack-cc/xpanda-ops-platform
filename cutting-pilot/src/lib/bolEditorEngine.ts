@@ -419,6 +419,7 @@ export async function mountBolEditor(
 
   const inputEls: Record<string, HTMLInputElement | HTMLTextAreaElement | HTMLDivElement> = {};
   const handleEls: Record<string, HTMLDivElement> = {};
+  const resizeHandleEls: Record<string, HTMLDivElement> = {}; // bol-resize-01: right-edge width handles
   const initialValues: Record<string, string | boolean> = {};
 
   const savedPos = (bol._overrides && (bol._overrides as BolOverrides)._pos) || {};
@@ -433,6 +434,15 @@ export async function mountBolEditor(
   const styleOverrides: Record<string, BolFieldStyle | undefined> = {};
   for (const fk in savedStyle) {
     if (savedStyle[fk]) styleOverrides[fk] = JSON.parse(JSON.stringify(savedStyle[fk]));
+  }
+  // bol-resize-01: working copy of _overrides._size (absolute wrap width, PDF points) — only the
+  // multiline wrapping fields get a resize handle.
+  const RESIZABLE_FIELDS = new Set(["specialInstr", "contactInfo", "poNumber", "commodity", "commodity2"]);
+  const savedSize = (bol._overrides && (bol._overrides as BolOverrides)._size) || {};
+  const sizeOverrides: Record<string, { w: number }> = {};
+  for (const sk in savedSize) {
+    const sv = savedSize[sk];
+    if (sv && typeof sv.w === "number" && Number.isFinite(sv.w)) sizeOverrides[sk] = { w: sv.w };
   }
   const prevLines: Record<string, string[]> = {};
   let activeFieldKey: string | null = null;
@@ -456,6 +466,8 @@ export async function mountBolEditor(
     if (!field) return { x: 0, y: 0, size: 10, lineH: 12 };
     if (field.type === "shipto") return (field.coords as BolCoord[])[0];
     if (fieldKey === "commodity" || fieldKey === "commodity2") {
+      // bol-resize-01: a box-level size skips the tier — the renderer then scales from a 12/14 base.
+      if (styleOverrides[fieldKey]?.size != null) return { x: 0, y: 0, size: 12, lineH: 14 };
       // bol-2col-01: two-column → the shared smaller column tier the renderer uses for both boxes.
       if (fieldKey === "commodity2" || currentTextValue("commodity2").trim() !== "") {
         const colTier = pickCommodityColumnsTier(currentTextValue("commodity"), currentTextValue("commodity2"), fonts.regular);
@@ -517,7 +529,10 @@ export async function mountBolEditor(
     const el = inputEls[fieldKey];
     if (!el || !fieldSupportsLines(fieldKey)) return;
     const text = currentTextValue(fieldKey);
-    const measured = measureStyledField(fieldKey, text, styleOverrides[fieldKey]);
+    // bol-resize-01: measure at the EFFECTIVE wrap width — the layout box's w equals the renderer's
+    // maxW for the resizable fields (a `_size` w, the two-column colW, or the COORDS default).
+    const wrapW = RESIZABLE_FIELDS.has(fieldKey) && lastBoxes[fieldKey] ? lastBoxes[fieldKey].w : undefined;
+    const measured = measureStyledField(fieldKey, text, styleOverrides[fieldKey], wrapW);
     if (measured.overflow) {
       (el as HTMLElement).style.boxShadow = "0 0 0 2px #f59e0b";
       (el as HTMLElement).title =
@@ -629,6 +644,22 @@ export async function mountBolEditor(
     attachDragHandle(handle, k);
     handleEls[k] = handle;
     canvasWrap.appendChild(handle);
+
+    if (RESIZABLE_FIELDS.has(k)) {
+      // 44px-tall transparent hit area around a glyph styled like the ✥ move handle, centred on the right edge.
+      const rh = document.createElement("div");
+      rh.title = "Drag to resize width · double-click to reset";
+      rh.style.cssText =
+        "position:absolute;width:16px;height:44px;display:flex;align-items:center;justify-content:center;cursor:ew-resize;z-index:5;touch-action:none;user-select:none;";
+      const glyph = document.createElement("span");
+      glyph.style.cssText =
+        "width:16px;height:16px;border-radius:4px;background:var(--brand,#1e293b);color:#fff;font-size:11px;line-height:16px;text-align:center;box-shadow:0 1px 2px rgba(0,0,0,0.3);pointer-events:none;";
+      glyph.textContent = "⇔";
+      rh.appendChild(glyph);
+      attachResizeHandle(rh, k);
+      resizeHandleEls[k] = rh;
+      canvasWrap.appendChild(rh);
+    }
   }
 
   let renderTask: any = null;
@@ -683,6 +714,53 @@ export async function mountBolEditor(
       e.preventDefault();
       e.stopPropagation();
       delete posOverrides[k];
+      scheduleRelayout();
+    });
+  }
+
+  // bol-resize-01: same pointer-capture pattern as attachDragHandle; width only (text rewraps).
+  function attachResizeHandle(handle: HTMLDivElement, k: string) {
+    let startX = 0,
+      startW = 0,
+      boxX = 0,
+      dragging = false;
+
+    handle.addEventListener("pointerdown", (e) => {
+      const box = lastBoxes[k];
+      if (!box) return;
+      e.preventDefault();
+      e.stopPropagation();
+      dragging = true;
+      handle.setPointerCapture(e.pointerId);
+      startX = e.clientX;
+      startW = box.w;
+      boxX = box.x;
+    });
+
+    handle.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const s = scale || 1;
+      const w = Math.round((startW + (e.clientX - startX) / s) * 2) / 2;
+      sizeOverrides[k] = { w: Math.max(60, Math.min(w, PAGE.width - 20 - boxX)) };
+      scheduleRelayout();
+    });
+
+    const endDrag = (e: PointerEvent) => {
+      if (!dragging) return;
+      dragging = false;
+      try {
+        handle.releasePointerCapture(e.pointerId);
+      } catch {
+        // already released
+      }
+    };
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
+
+    handle.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      delete sizeOverrides[k];
       scheduleRelayout();
     });
   }
@@ -785,6 +863,11 @@ export async function mountBolEditor(
     // survives even when the field's text reverts to its base value (spec §7).
     const styleOut = pruneStyleOverrides(styleOverrides);
     if (Object.keys(styleOut).length > 0) overrides._style = styleOut;
+
+    // bol-resize-01: resized wrap widths, rounded to 0.5pt, written only when non-empty.
+    const sizeOut: Record<string, { w: number }> = {};
+    for (const sk in sizeOverrides) sizeOut[sk] = { w: Math.round(sizeOverrides[sk].w * 2) / 2 };
+    if (Object.keys(sizeOut).length > 0) overrides._size = sizeOut;
 
     return overrides;
   }
@@ -961,13 +1044,16 @@ export async function mountBolEditor(
       // commodity boxes on a zoned BOL) is hidden with its handle — never left stranded at a stale
       // position — and shown again when its box comes back.
       const h = handleEls[k];
+      const rh = resizeHandleEls[k];
       if (!box) {
         (el as HTMLElement).style.display = "none";
         if (h) h.style.display = "none";
+        if (rh) rh.style.display = "none";
         continue;
       }
       if ((el as HTMLElement).style.display === "none") (el as HTMLElement).style.display = "";
       if (h && h.style.display === "none") h.style.display = "";
+      if (rh && rh.style.display === "none") rh.style.display = "flex";
       if (k === "commodity") (el as HTMLElement).style.textAlign = boxes.commodity2 ? "left" : "center";
 
       el.style.left = Math.round(box.x * s) + "px";
@@ -996,6 +1082,10 @@ export async function mountBolEditor(
       if (handle) {
         handle.style.left = Math.max(0, hx - 2) + "px";
         handle.style.top = Math.max(0, hy - 18) + "px";
+      }
+      if (rh) {
+        rh.style.left = hx + parseFloat(el.style.width) - 8 + "px";
+        rh.style.top = hy + parseFloat(el.style.height) / 2 - 22 + "px";
       }
 
       if (field.type !== "scrap") updateFieldOverflow(k);
