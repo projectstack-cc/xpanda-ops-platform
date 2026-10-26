@@ -3027,6 +3027,26 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-topoff-01 — Customize allows thin top-offs (the 3″ K rule is auto-pack only)** (Next/Cloudflare Platform
+  Agent §9a: `lib/loadEditor.ts` + selfcheck). No migration, permission, API or UI file change.
+  - **Why (Steve, 2026-10-26).** In Customize, the 3″ top-off rule (`topOffMinInchesPerPiece`, K) stopped the
+    supervisor stacking thin pieces onto a stack. K is an auto-pack rule; a person customizing is choosing to allow it.
+  - **`evaluateStackTarget`.** The thin-top-off refusal is gone. A thin top-off is `ok` (no confirm tap) with the
+    reason `fits · thin top-off (under 3″) · <height> of <limit>`, using the live K. Height, footprint, the
+    distinct-SKU cap (Holey exempt) and "don't stack" refusals still win; thicker-on-thinner still warns.
+  - **`validateForApply`.** Drops `topoff-threshold` from `validatePlan`'s result via the new exported
+    `CUSTOMIZE_EXEMPT_RULES`, so a thin layer from Stack onto or `addLayer` no longer blocks Done customizing.
+  - **Unchanged on purpose.** `packEngine.ts` (`validatePlan` and the auto-packer keep K), `dissolve.ts` (keeps K —
+    it proposes moves automatically; follow-up in BACKLOG), the distinct-SKU cap, and `ColumnDetailPanel`'s
+    "Vs. K" column (still red for a thin layer; informational only).
+  - **Selfcheck.** loadEditor 339 → 352 (the 2″-onto-11x9 check now expects `ok`, stacks, and `canApply`; new
+    checks: `addLayer` 1″ is exempt in `validateForApply` but raw `validatePlan` still flags it; a thin 3rd size is
+    still `no` for the cap; a thin top-off past 109″ is still `no` for height). packEngine 207, dissolve 35,
+    savedLoad 45, loadingDiagramPdf 60 — unchanged.
+  - **Verified.** `tsc --noEmit` and `cf-build` green. Browser (next dev + Playwright, mocked manual load, 53ft):
+    a 2″×4 stack offered on both 10″ stacks as "Can go here — fits · thin top-off (under 3″) · 88″ of 109″",
+    stacked with no confirm, Done customizing was enabled, and the applied diagram shows the `+2″×4` band.
+
 - **lb-diag-02 — Load Builder loading diagram shows the trailer's BOL #** (Next/Cloudflare Platform Agent §9a:
   `lib/loadingDiagramPdf.ts` + selfcheck; React Component Agent §9b: `LoadingDiagramPrintButton.tsx`,
   `ResultsTab.tsx`, `CustomizeEditor.tsx`). No migration, permission or API change.

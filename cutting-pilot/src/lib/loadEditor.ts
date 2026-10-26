@@ -486,9 +486,16 @@ export function planForApply(state: EditorState): PackPlan {
   return { ...state.plan, balance: merged };
 }
 
+/** lb-topoff-01: validatePlan rules a person customizing may knowingly break. The 3″ top-off rule
+ * (topOffMinInchesPerPiece, K) is an auto-pack rule — a supervisor stacking thin pieces on top is
+ * choosing to allow it. validatePlan itself (and the auto-packer, and dissolve) still enforce K. */
+export const CUSTOMIZE_EXEMPT_RULES: ReadonlySet<string> = new Set(["topoff-threshold"]);
+
 export function validateForApply(state: EditorState): PackViolation[] {
   const plan = planForApply(state);
-  return validatePlan(plan, state.cart, state.skus, state.options);
+  return validatePlan(plan, state.cart, state.skus, state.options).filter(
+    (v) => !CUSTOMIZE_EXEMPT_RULES.has(v.rule)
+  );
 }
 
 /** First row (per trailer) whose cumulative rowLength pushes past that trailer's OWN dims.length
@@ -848,7 +855,8 @@ export function removeRow(state: EditorState, trailerIndex: number, rowIndex: nu
 // returns a new EditorState with one history step, and is a no-op (same reference) on bad input —
 // the same contract as the operations above. The evaluate* functions are the UI's per-target
 // verdicts; stackOnto refuses whatever evaluateStackTarget says "no" to, mirroring validatePlan's
-// own column-height / max-skus-per-column / topoff-threshold thresholds (never new ones). ---
+// own column-height / max-skus-per-column thresholds (never new ones). lb-topoff-01: the 3″
+// topoff-threshold rule is NOT mirrored — it's auto-pack only (see CUSTOMIZE_EXEMPT_RULES). ---
 
 export type PieceSource =
   | { kind: "column"; ref: ColumnRef } // the whole stack
@@ -1000,9 +1008,10 @@ function combineLayers(target: PackLayer[], moved: PackLayer[]): PackLayer[] {
   return out;
 }
 
-/** Can `source`'s pieces go ON TOP of the stack at `to`? "no" mirrors validatePlan's column-height,
- * max-skus-per-column (Holey Board exempt, as there) and topoff-threshold rules on the combined
- * stack; "warn" = allowed, but thicker pieces are going onto thinner ones. */
+/** Can `source`'s pieces go ON TOP of the stack at `to`? "no" mirrors validatePlan's column-height
+ * and max-skus-per-column (Holey Board exempt, as there) rules on the combined stack; "warn" =
+ * allowed, but thicker pieces are going onto thinner ones. lb-topoff-01: a top-off thinner than K
+ * (topOffMinInchesPerPiece) is "ok" — a deliberate choice, flagged only in the reason. */
 export function evaluateStackTarget(state: EditorState, source: PieceSource, to: ColumnRef): TargetVerdict {
   const target = getColumn(state.plan, to);
   if (!target) return { level: "no", reason: "no such stack", heightAfter: 0 };
@@ -1036,20 +1045,14 @@ export function evaluateStackTarget(state: EditorState, source: PieceSource, to:
   if (!isHoley && distinct > state.options.maxSkusPerColumn) {
     return { level: "no", reason: `would be ${distinct} sizes in one stack (max ${state.options.maxSkusPerColumn})`, heightAfter };
   }
-  if (distinct > 1) {
-    const thin = combined.slice(1).find((l) => l.unitHeight < state.options.topOffMinInchesPerPiece - EPS);
-    if (thin) {
-      return {
-        level: "no",
-        reason: `${fmtIn(thin.unitHeight)} pieces are too thin to top off (min ${fmtIn(state.options.topOffMinInchesPerPiece)})`,
-        heightAfter,
-      };
-    }
-  }
-
   const currentTop = target.layers[target.layers.length - 1];
   if (currentTop && moved[0] && moved[0].unitHeight > currentTop.unitHeight + EPS) {
     return { level: "warn", reason: THICKER_ON_THINNER, heightAfter };
+  }
+  const k = state.options.topOffMinInchesPerPiece;
+  const thin = distinct > 1 && combined.slice(1).some((l) => l.unitHeight < k - EPS);
+  if (thin) {
+    return { level: "ok", reason: `fits · thin top-off (under ${fmtIn(k)}) · ${fmtIn(heightAfter)} of ${fmtIn(limit)}`, heightAfter };
   }
   return { level: "ok", reason: `fits · ${fmtIn(heightAfter)} of ${fmtIn(limit)}`, heightAfter };
 }

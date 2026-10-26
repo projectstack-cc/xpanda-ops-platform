@@ -7,7 +7,7 @@
 // same apply-gate call CustomizeEditor/EditorGuards use) returning zero violations, UNLESS the
 // check is specifically testing that a violation fires — per Part D's stated discipline.
 import type { CartLine, PackColumn, PackOptions, PackPlan, PackRow, PackSku, PackTrailer, Dimensions } from "./packEngine";
-import { DEFAULT_PACK_OPTIONS, pack, TRAILER_TYPES, HOLEY_BOARD_CATEGORY } from "./packEngine";
+import { DEFAULT_PACK_OPTIONS, pack, TRAILER_TYPES, HOLEY_BOARD_CATEGORY, validatePlan } from "./packEngine";
 import { proposeDissolve } from "./dissolve";
 import {
   createEditorState,
@@ -32,6 +32,8 @@ import {
   addLayerFromLibrary,
   evaluateStackTarget,
   stackOnto,
+  evaluateGuards,
+  CUSTOMIZE_EXEMPT_RULES,
   evaluateSlotTarget,
   moveToSlot,
   takeToHolding,
@@ -937,9 +939,29 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     const vC = evaluateStackTarget(nineOnD, { kind: "holdingTop", index: 1, count: 1 }, D);
     check("evaluateStackTarget: a third size is no — would be 3 sizes in one stack (max 2)", vC.level === "no" && vC.reason === "would be 3 sizes in one stack (max 2)", JSON.stringify(vC));
 
-    // d. sub-K -> no
+    // d. sub-K -> ok (lb-topoff-01: the 3″ top-off rule is auto-pack only; Customize allows it)
     const vD = evaluateStackTarget(base, { kind: "holdingTop", index: 1, count: 1 }, A);
-    check("evaluateStackTarget: a 2″ piece onto 11x9 is no — too thin to top off (min 3″)", vD.level === "no" && vD.reason === "2″ pieces are too thin to top off (min 3″)", JSON.stringify(vD));
+    check("evaluateStackTarget: a 2″ piece onto 11x9 is ok — thin top-off (under 3″)", vD.level === "ok" && vD.reason === "fits · thin top-off (under 3″) · 101″ of 109″", JSON.stringify(vD));
+    const sD = stackOnto(base, { kind: "holdingTop", index: 1, count: 1 }, A);
+    check("stackOnto (thin top-off): 11x9 now reads 11x9+2x1", layersOf(sD, 0, 0) === "11x9+2x1", layersOf(sD, 0, 0));
+    check("stackOnto (thin top-off): evaluateGuards.canApply is true", evaluateGuards(sD).canApply === true, JSON.stringify(evaluateGuards(sD)));
+    verifyResult("stackOnto (thin 2″ top-off onto 11x9)", base, sD);
+    // d2. a thin top-off that breaks the distinct-SKU cap is still no — for the cap (vC above is a 2″ piece).
+    check("evaluateStackTarget: a thin top-off that would be a 3rd size is still no — for the cap", vC.level === "no" && vC.reason.includes("sizes in one stack"), JSON.stringify(vC));
+    // d3. a thin top-off past the height limit is still no — for height (13x8 = 104″ + 2″x3 = 110″).
+    const vD3 = evaluateStackTarget(base, { kind: "holdingTop", index: 1, count: 3 }, B);
+    check("evaluateStackTarget: three 2″ pieces onto 13x8 is no — would be 110″ tall (limit 109″)", vD3.level === "no" && vD3.reason === "would be 110″ tall (limit 109″)", JSON.stringify(vD3));
+    // d4. addLayer of a 1″ SKU (no pre-validate) — Customize exempts topoff-threshold, raw validatePlan doesn't.
+    {
+      const sku1 = stackSku("S1", 1);
+      const withS1: EditorState = { ...base, skus: [...base.skus, sku1], cart: [...base.cart, { skuId: "S1", qty: 2 }], plan: { ...base.plan, balance: [...base.plan.balance, { skuId: "S1", remaining: 2 }] } };
+      const added = addLayer(withS1, A, "S1", 2);
+      check("addLayer (1″ top-off): 11x9 now reads 11x9+1x2", layersOf(added, 0, 0) === "11x9+1x2", layersOf(added, 0, 0));
+      check("addLayer (1″ top-off): evaluateGuards.canApply is true", evaluateGuards(added).canApply === true, JSON.stringify(evaluateGuards(added)));
+      check("addLayer (1″ top-off): validateForApply has no topoff-threshold entry", ruleViolations(validateForApply(added), "topoff-threshold") === 0, JSON.stringify(validateForApply(added)));
+      check("addLayer (1″ top-off): raw validatePlan still reports topoff-threshold", ruleViolations(validatePlan(planForApply(added), added.cart, added.skus, added.options), "topoff-threshold") > 0);
+      check("CUSTOMIZE_EXEMPT_RULES is exactly { topoff-threshold }", CUSTOMIZE_EXEMPT_RULES.size === 1 && CUSTOMIZE_EXEMPT_RULES.has("topoff-threshold"));
+    }
 
     // e. thicker-on-thinner -> warn (allowed)
     const elevenFromA: PieceSource = { kind: "top", ref: A, count: 1 };

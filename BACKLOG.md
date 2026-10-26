@@ -62,6 +62,9 @@
   (found during lb-edge-02, pre-existing). On an auto-downsized plan (53ft + a 26ft Box Truck), a flat move onto the
   box truck is sized against 109″ / 44,000 lb instead of 108″ / 28,000 lb. `validateForApply` still blocks a bad
   apply, but the preview can propose it. On-edge receivers already use their own trailer's tiers.
+- [ ] **Decide whether dissolve should also ignore the 3″ top-off rule** (lb-topoff-01 lifted K in Customize only).
+  `dissolve.ts` still keeps K, since it proposes moves automatically the way the auto-packer does; a supervisor can
+  still hand-stack thin pieces after dissolving. Steve to confirm or overrule.
 - [ ] **Shift to wall on trailers with on-edge columns** — `reflowTrailer` still only closes empty rows on a trailer
   with any on-edge column (lb-box-03 behaviour, left as is by lb-edge-01). Revisit now that edge stacks can move.
 - [ ] **lgx-review-01 follow-up — Load Builder "Generate BOLs" has no post-generate review step.** LoadPlanView's BolGenerateModal path still just closes. Job-less plans have no job_id, so wiring it needs BolViewerModal to accept saved BOL ids (or the POST responses) instead of a jobId.
