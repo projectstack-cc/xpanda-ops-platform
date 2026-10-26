@@ -135,8 +135,8 @@
 - [x] rpt-01 Cutting activity → `/v2/reports/cutting` (ET days, flagged sessions, recharts)
 - [x] rpt-02 Incident history backfill: tracker Sheet → `qc_incidents` (MIGRATION-GATED, one-time) · run 2026-10-23, 72 rows
 - [x] rpt-03 Incidents → `/v2/reports/incidents` (D1 only; incident rate from tracker baseline + D1 jobs)
-- [ ] rpt-04 Scrap (summary, trend, reasons) on `scrap_events`; then drop the `scrap_log` VIEW
-- [ ] rpt-05 Cutover after Steve tests: home card + both navs → `/v2/reports`; legacy `reports/*` → stubs; Orders report retired → Job Board; remove `/api/reports/*` worker routes; retire gviz + `INCIDENT_TRACKER_JSON_URL`
+- [x] rpt-04 Scrap → `/v2/reports/scrap` (scrap_events only; VIEW drop moved to rpt-05)
+- [ ] rpt-05 Cutover after Steve tests: home card + both navs → `/v2/reports`; legacy `reports/*` → stubs; Orders report retired → Job Board; remove `/api/reports/*` worker routes; retire gviz + `INCIDENT_TRACKER_JSON_URL`; drop the `scrap_log` VIEW once the legacy scrap pages are stubs
 - [ ] Reports i18n (en/es/ht) — legacy `reports/reports-i18n.js` as the source
 - [ ] Cutting data hygiene (from rpt-01 numbers): operators tap Start/Stop without cutting (8/32 sessions < 1 min, wk of 10-16) and tick items off with near-zero session time; floor training, not code
 - [ ] Incident rate depends on jobs being marked shipped/archived promptly — on 10-23 only 40 of 108 October jobs were (the current month reads high until they are).
@@ -700,9 +700,10 @@ schedule badge):**
       reports) to the native store — form + mirror retired; reports read the compat VIEW
 - [x] **qc-05** — Wire v2 cutting CompleteLineModal scrap section to the native API (Mark Complete + clock-out; `POST /v2/api/cutting/scrap`)
 - [x] Batch scrap entry (several events in one submit) as part of the native scrap UI.
-- [ ] Reports port: read scrap_events directly and drop the scrap_log compatibility VIEW.
+- [x] Reports port: read scrap_events directly and drop the scrap_log compatibility VIEW. (rpt-04 reads scrap_events; VIEW drop in rpt-05)
 - [ ] qc follow-up — scrap capture on the Cross Cutter / Hole Cutter board (ChunkStopModal), if the floor wants it.
 - [ ] qc follow-up — consider making scrap an explicit answer ("No scrap" or entries) at Mark Complete once operators are used to it.
+  - Evidence (rpt-04 empty state): Oct 20 → 23, every board Stop / Mark Complete skipped scrap. Pair the "No scrap" answer with Steve's floor training.
 - [ ] Steve: delete the SCRAP_MIRROR_URL secret from the legacy Pages project and archive the "xpanda_scrap_mirror" Apps Script.
 
 ---

@@ -5,7 +5,7 @@
 // changes; buildIncidentReport (lib/reports/incidents.ts) applies the category / risk / search
 // filters client-side. Layout follows the claude.ai "v2 Reports" canvas (Incidents — desktop) with
 // rpt-01's kit: PlatformHeader, MetricTile, DashboardToolbar, SearchInput, FilterSelect, QcBoard
-// table/chip classes. Scrap stays a plain <a> to the legacy report until rpt-04. Direct URL only (rpt-05).
+// table/chip classes. Scrap links the v2 report (rpt-04). Direct URL only (rpt-05).
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -160,10 +160,10 @@ export default function IncidentsReport({ userName, isAdmin, permissions }: Prop
               <Scissors size={14} className="text-muted" aria-hidden="true" />
               Cutting
             </Link>
-            <a href="/reports/scrap/" className={HEADER_BTN}>
+            <Link href="/reports/scrap" className={HEADER_BTN}>
               <ClipboardList size={14} className="text-muted" aria-hidden="true" />
               Scrap
-            </a>
+            </Link>
             <button type="button" className={HEADER_BTN} onClick={() => window.print()}>
               <Printer size={14} className="text-muted" aria-hidden="true" />
               Print

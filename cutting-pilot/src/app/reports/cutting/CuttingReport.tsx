@@ -5,7 +5,7 @@
 // applies the operator / line filters and the "Exclude flagged from hours" toggle client-side.
 // Layout follows the claude.ai "v2 Reports" canvas (Cutting activity — desktop) with the live kit:
 // PlatformHeader, MetricTile, DashboardToolbar, RangeSelector, FilterSelect, QcBoard table/chip classes.
-// Incidents links the v2 report (rpt-03); Scrap stays a plain <a> to legacy until rpt-04. Direct URL only (rpt-05).
+// Incidents links the v2 report (rpt-03), Scrap too (rpt-04). Direct URL only (rpt-05).
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -146,10 +146,10 @@ export default function CuttingReport({ userName, isAdmin, permissions }: Props)
               <TriangleAlert size={14} className="text-muted" aria-hidden="true" />
               Incidents
             </Link>
-            <a href="/reports/scrap/" className={HEADER_BTN}>
+            <Link href="/reports/scrap" className={HEADER_BTN}>
               <ClipboardList size={14} className="text-muted" aria-hidden="true" />
               Scrap
-            </a>
+            </Link>
             <button type="button" className={HEADER_BTN} onClick={() => window.print()}>
               <Printer size={14} className="text-muted" aria-hidden="true" />
               Print
