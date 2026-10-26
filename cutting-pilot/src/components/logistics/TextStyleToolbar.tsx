@@ -28,9 +28,14 @@ export interface TextStyleToolbarProps {
   wrapHeight: number;
 }
 
-const btnBase =
-  "min-h-[44px] min-w-[44px] px-2 rounded-md border border-[var(--border)] bg-[var(--card-bg)] text-text text-sm font-semibold cursor-pointer flex items-center justify-center";
+// Shape and colours are kept apart so a toggle gets EITHER the idle OR the active colours, never both:
+// two conflicting bg-/text- utilities on one element resolve by stylesheet order, not class order
+// (that left the active button white-on-white).
+const btnShape =
+  "min-h-[44px] min-w-[44px] px-2 rounded-md border text-sm font-semibold cursor-pointer flex items-center justify-center";
+const btnIdle = "border-[var(--border)] bg-[var(--card-bg)] text-text";
 const btnActive = "bg-[var(--brand)] text-white border-[var(--brand)]";
+const btnBase = `${btnShape} ${btnIdle}`;
 
 export default function TextStyleToolbar({
   value,
@@ -89,7 +94,7 @@ export default function TextStyleToolbar({
             <button
               key={s}
               type="button"
-              className={`${btnBase} min-w-0 px-2.5 text-xs ${scope === s ? btnActive : ""}`}
+              className={`${btnShape} min-w-0 px-2.5 text-xs ${scope === s ? btnActive : btnIdle}`}
               onClick={() => onScopeChange(s)}
             >
               {s === "box" ? "Box" : "Line"}
@@ -119,7 +124,7 @@ export default function TextStyleToolbar({
       <div className="flex gap-0.5">
         <button
           type="button"
-          className={`${btnBase} font-extrabold ${value.bold ? btnActive : ""}`}
+          className={`${btnShape} font-extrabold ${value.bold ? btnActive : btnIdle}`}
           aria-label="Bold"
           aria-pressed={!!value.bold}
           onClick={() => onChange({ bold: !value.bold })}
@@ -128,7 +133,7 @@ export default function TextStyleToolbar({
         </button>
         <button
           type="button"
-          className={`${btnBase} italic ${value.italic ? btnActive : ""}`}
+          className={`${btnShape} italic ${value.italic ? btnActive : btnIdle}`}
           aria-label="Italic"
           aria-pressed={!!value.italic}
           onClick={() => onChange({ italic: !value.italic })}
@@ -137,7 +142,7 @@ export default function TextStyleToolbar({
         </button>
         <button
           type="button"
-          className={`${btnBase} underline ${value.underline ? btnActive : ""}`}
+          className={`${btnShape} underline ${value.underline ? btnActive : btnIdle}`}
           aria-label="Underline"
           aria-pressed={!!value.underline}
           onClick={() => onChange({ underline: !value.underline })}

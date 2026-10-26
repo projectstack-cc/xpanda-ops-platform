@@ -3027,6 +3027,14 @@ current series).
 
 ## Logistics (v2)
 
+- **bol-toolbar-01 — BOL editor style toolbar: active toggle buttons rendered white-on-white (found during
+  bol-resize-01's walkthrough).** `TextStyleToolbar.tsx` put both the idle (`bg-[var(--card-bg)] text-text`) and the
+  active (`bg-[var(--brand)] text-white`) utilities on one element; conflicting Tailwind utilities resolve by
+  stylesheet order, so the card background won while `text-white` also won. This affected the active Box/Line scope
+  button and active B/I/U. Split into `btnShape` + exactly one of `btnIdle` / `btnActive`; non-toggle buttons are
+  unchanged (`btnBase` = shape + idle). Verified in next dev + Playwright, light and dark, with computed styles: active
+  = brand bg / white text, idle = card bg / theme text. `tsc` and `cf-build` green. UI-only, with no data or API change.
+
 - **bol-resize-01 — BOL editor: resizable text-box width + commodity box-size line-spacing fix (React Component
   Agent §9b for `bolEditorEngine.ts`; Logistics Agent for `bol-shared.js` / `bol-editor.js`). No migration (`_overrides`
   is already JSON).**
