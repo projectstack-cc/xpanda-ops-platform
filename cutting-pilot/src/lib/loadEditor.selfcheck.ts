@@ -1251,8 +1251,9 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
 
   // lb-edge-01 (replaces lb-box-03 H8's lock checks): on-edge boards are editable in Customize. Every
   // plan below passes validateForApply (no edge-slot / piece-fits-trailer / row-geometry /
-  // conservation violation) and keeps placed + balance + held == cart. Dissolve still never moves or
-  // targets them (unchanged, checked at the end).
+  // conservation violation) and keeps placed + balance + held == cart. Dissolve's lb-edge-02 rule
+  // (laid flat off an on-edge column, on edge only into the same SKU) is spot-checked at the end;
+  // dissolve.selfcheck.ts covers it in full.
   {
     const BOX = TRAILER_TYPES["26ft Box Truck"];
     const hb6: PackSku = { id: "EDGE6", name: "6in holey", sku: "EDGE6", length: 48, width: 24, height: 6, weight: 1, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
@@ -1405,8 +1406,9 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     check("7 a two-layer stack is refused", evaluateStandOnEdge(twoLayer, { kind: "holding", index: 0 }) === STAND_NOT_PLAIN_REASON && standOnEdge(twoLayer, { kind: "holding", index: 0 }, { t: 0, r: r7 }) === twoLayer);
     check("7 no room anywhere -> no wall slot has room", evaluateStandOnEdge(st, { kind: "column", ref: flatRef }) === "no wall slot has room");
 
-    // Dissolve (unchanged by lb-edge-01): two box trucks; the second's pieces may go onto the first,
-    // never into its slot, and the first's edge boards are never offered as a source.
+    // Dissolve (lb-edge-02): two box trucks. A move goes into an on-edge column only when it says
+    // toEdge and the column holds the same SKU; a move's fromEdge says exactly whether its source
+    // column stands on edge.
     const cart2: CartLine[] = [{ skuId: "EDGE6", qty: 396 + 10 }];
     const plan2 = pack(cart2, [hb6], BOX, opts);
     const st2 = createEditorState(plan2, BOX, opts, cart2, [hb6]);
@@ -1414,8 +1416,14 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     const fromLast = proposeDissolve(st2, st2.plan.trailers.length - 1);
     const fromFirst = proposeDissolve(st2, 0);
     check("dissolve fixture: plan has 2 box trucks with edge columns", st2.plan.trailers.length === 2 && st2.plan.trailers.some((t) => t.rows.some((r) => r.columns.some((c) => c.onEdge))), String(st2.plan.trailers.length));
-    check("dissolve never targets an edge column", [...fromLast.moves, ...fromFirst.moves].every((m) => !isEdgeAt(m.toTi, m.toRi, m.toCi)));
-    check("dissolve never sources from an edge column", fromFirst.moves.every((m) => !isEdgeAt(0, m.fromRi, m.fromCi)) && fromLast.moves.every((m) => !isEdgeAt(fromLast.srcTi, m.fromRi, m.fromCi)));
+    check(
+      "dissolve targets an edge column only as toEdge, with that column's own SKU",
+      [...fromLast.moves, ...fromFirst.moves].every((m) => isEdgeAt(m.toTi, m.toRi, m.toCi) === m.toEdge && (!m.toEdge || st2.plan.trailers[m.toTi].rows[m.toRi].columns[m.toCi].layers[0].skuId === m.skuId))
+    );
+    check(
+      "dissolve marks a move fromEdge exactly when its source column is on edge",
+      fromFirst.moves.every((m) => isEdgeAt(0, m.fromRi, m.fromCi) === m.fromEdge) && fromLast.moves.every((m) => isEdgeAt(fromLast.srcTi, m.fromRi, m.fromCi) === m.fromEdge)
+    );
   }
 
   return { pass: results.every((r) => r.pass), results };

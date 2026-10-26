@@ -3027,6 +3027,40 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-edge-02 — Load Builder dissolve moves on-edge holey boards** (Next/Cloudflare Platform Agent §9a leads:
+  `lib/dissolve.ts` + selfcheck; React Component Agent §9b: `DissolvePreview.tsx`). No migration, permission or API
+  change.
+  - **The rule (Steve, 2026-10-26).** Dissolve still never creates columns, and `validateForApply` stays the
+    authority. A board off an on-edge column moves **laid flat**: the SKU's own 48×24 footprint, with its height as
+    the thickness. It can go to any flat receiver under the existing rules. Any Holey Board unit, flat or laid flat,
+    can also go into an existing **on-edge column of the same SKU** on another trailer while that column holds fewer
+    boards than its tiers. Tiers come from `edgeTierCap`, so runner height counts. Both kinds of receiver share the
+    existing first-eligible scan (trailer → row → column) and the per-trailer weight check.
+  - **`dissolve.ts`.**
+    - `DissolveMove` gains `fromEdge` and `toEdge`. `unitHeight` is always the board's thickness, never 24.
+    - A move into an on-edge column increments its one layer. That column's `posY`/`colWidth` never change, and its
+      rationale (the slot label) isn't replaced by the dissolve note.
+    - An on-edge source that empties is removed, and its row goes too if it ends up empty.
+    - `dissolveGroupKey` adds `|on-edge` or `|laid-flat` only when an edge is involved. Plain flat moves keep their
+      old key.
+  - **`DissolvePreview.tsx`.** An on-edge group reads "5″ ×1 → on edge, Trailer 1" (`HOLEY_EDGE_LABEL`). A group of
+    boards that came off an on-edge column and land flat adds "(laid flat)".
+  - **Selfchecks.** Before → after: dissolve 21 → 35 (lb-edge-02 checks 1–6). loadEditor 339 → 339: the two
+    lb-edge-01 dissolve checks were reworded to the new rule, not added. packEngine 207 → 207, savedLoad 45 → 45,
+    loadingDiagramPdf 54 → 54. Every applied result has zero edge-slot, piece-fits-trailer, row-geometry or
+    conservation violations.
+  - **Verified.** `tsc --noEmit` and `cf-build` are green.
+    - Walked through in next dev + Playwright, APIs mocked, light and dark, on the Siplast fixture packed onto three
+      26ft box trucks.
+    - Setup: Trailer 3's flat stacks went to holding, one board came off a Trailer 1 on-edge stack, and a Trailer 2
+      flat stack went from 13 to 10.
+    - Dissolving Trailer 3 previewed three groups: 5″ ×1 → on edge, Trailer 1; 5″ ×3 (laid flat) → Trailer 2; and
+      8″ ×1 (laid flat) → Trailer 2.
+    - After Apply, the Trailer 2 stack read 8″×11 with a +5″×3 top-off. Undo restored 8″×10. No validator text
+      appeared at any step.
+  - **Follow-up (BACKLOG).** Dissolve's flat headroom and weight still read `state.dims`, not the receiver
+    trailer's own dims. This was already the case before lb-edge-02, and it only matters on auto-downsized plans.
+
 - **lb-edge-01 — Load Builder Customize: on-edge holey boards unlocked (move, hold, count, lay flat, stand on edge)
   (Next/Cloudflare Platform Agent §9a leads: `lib/loadEditor.ts` + selfchecks; React Component Agent §9b:
   `CustomizeEditor.tsx`, `TrailerDiagram.tsx`, `HoldingArea.tsx`, `lib/i18n.ts`). No migration, permission or API

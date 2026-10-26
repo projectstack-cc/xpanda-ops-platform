@@ -55,8 +55,13 @@
 
 - [ ] **Edit/move on-edge holey columns in the legacy customize editor + dissolve** (lb-box-02 locked them: not
   draggable, not drop targets, never dissolve receivers; a dense re-pack flattens them).
-- [ ] **Dissolve on-edge holey columns in v2** (lb-edge-01 unlocked them in Customize; `dissolve.ts` still never moves
-  them or uses them as receivers).
+- [x] **Dissolve on-edge holey columns in v2** (lb-edge-01 unlocked them in Customize; `dissolve.ts` still never moves
+  them or uses them as receivers). — resolved lb-edge-02: on-edge boards dissolve laid flat, and same-SKU on-edge
+  columns take boards up to their tiers.
+- [ ] **Dissolve measures flat headroom and weight against `state.dims`, not the receiver trailer's own dims**
+  (found during lb-edge-02, pre-existing). On an auto-downsized plan (53ft + a 26ft Box Truck), a flat move onto the
+  box truck is sized against 109″ / 44,000 lb instead of 108″ / 28,000 lb. `validateForApply` still blocks a bad
+  apply, but the preview can propose it. On-edge receivers already use their own trailer's tiers.
 - [ ] **Shift to wall on trailers with on-edge columns** — `reflowTrailer` still only closes empty rows on a trailer
   with any on-edge column (lb-box-03 behaviour, left as is by lb-edge-01). Revisit now that edge stacks can move.
 - [ ] **lgx-review-01 follow-up — Load Builder "Generate BOLs" has no post-generate review step.** LoadPlanView's BolGenerateModal path still just closes. Job-less plans have no job_id, so wiring it needs BolViewerModal to accept saved BOL ids (or the POST responses) instead of a jobId.

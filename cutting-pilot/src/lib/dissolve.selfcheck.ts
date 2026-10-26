@@ -9,8 +9,8 @@
 // silent no-op. Where a check needs multiple receivers to observe an exclusion or an ordering
 // effect, that is called out in the check's own comment.
 import type { CartLine, Dimensions, PackColumn, PackLayer, PackOptions, PackPlan, PackRow, PackSku, PackTrailer } from "./packEngine";
-import { DEFAULT_PACK_OPTIONS } from "./packEngine";
-import { createEditorState, normalizeState, validateForApply, type EditorState } from "./loadEditor";
+import { DEFAULT_PACK_OPTIONS, HOLEY_BOARD_CATEGORY, TRAILER_TYPES, pack } from "./packEngine";
+import { createEditorState, edgeTierCap, normalizeState, validateForApply, type EditorState } from "./loadEditor";
 import { proposeDissolve, applyDissolve, dissolveGroupKey } from "./dissolve";
 
 interface CheckResult {
@@ -376,6 +376,218 @@ export function runDissolveSelfCheck(): { pass: boolean; results: CheckResult[] 
       !threw && !!proposal && proposal.moves.length === 0 && proposal.eligibleReceiverCount === 0,
       JSON.stringify(proposal)
     );
+  }
+
+  // lb-edge-02: on-edge holey boards in dissolve. Real box-truck rows from pack() (66 × 6" boards
+  // per 48" row: three flat 18-high stacks in the 72" floor + three on-edge columns of 4 in the wall
+  // slot), then trimmed by hand so each check has exactly the room it's about. Every applied result
+  // passes validateForApply with no edge-slot / piece-fits-trailer / row-geometry / conservation
+  // violation.
+  {
+    const BOX = TRAILER_TYPES["26ft Box Truck"];
+    const T53 = TRAILER_TYPES["53ft Standard"];
+    const holey = (id: string, thickness: number): PackSku => ({
+      id,
+      name: `${thickness}in holey ${id}`,
+      sku: id,
+      length: 48,
+      width: 24,
+      height: thickness,
+      weight: 1,
+      category: HOLEY_BOARD_CATEGORY,
+      allowRotation: false,
+    });
+    const H6 = holey("H6", 6);
+    const BAD_RULES = ["edge-slot", "piece-fits-trailer", "row-geometry", "conservation"];
+    const bad = (x: EditorState) => validateForApply(x).filter((v) => BAD_RULES.includes(v.rule));
+    /** `rows` 66-board rows of `sku` packed onto `dims` (one trailer). */
+    const packedTrailer = (sku: PackSku, rows: number, dims: Dimensions): PackTrailer =>
+      pack([{ skuId: sku.id, qty: 66 * rows }], [sku], dims, OPTS).trailers[0];
+    const setCount = (col: PackColumn, n: number) => {
+      col.layers[0].count = n;
+      col.stackCount = n;
+      col.totalHeight = n * col.layers[0].unitHeight;
+      col.totalWeight = n; // weight 1 per board
+    };
+    const flats = (row: PackRow) => row.columns.filter((c) => !c.onEdge);
+    const edges = (row: PackRow) => row.columns.filter((c) => c.onEdge);
+    const edgeOnly = (row: PackRow) => {
+      row.columns = edges(row);
+      return row;
+    };
+    /** A state over these trailers with the cart = whatever they hold (balance empty). */
+    const stateOf = (trailers: PackTrailer[], dims: Dimensions, skus: PackSku[], options: PackOptions = OPTS): EditorState => {
+      const qty = new Map<string, number>();
+      for (const t of trailers) for (const r of t.rows) for (const c of r.columns) for (const l of c.layers) qty.set(l.skuId, (qty.get(l.skuId) ?? 0) + l.count);
+      const cart = Array.from(qty, ([skuId, n]) => ({ skuId, qty: n }));
+      const plan: PackPlan = { trailers, balance: [], warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 };
+      return normalizeState(createEditorState(plan, dims, options, cart, skus));
+    };
+
+    // Two box trucks. Truck 1 holds only wall-slot boards (3 on-edge × 4). Truck 2: row 0's flats are
+    // full and its first on-edge column holds 1 (room 3); row 1's first flat stack holds 14 (room 4)
+    // and its on-edge columns are full. First-eligible scan order: 3 go on edge into row 0, the next
+    // 4 lie flat on row 1, the last 5 have nowhere to go.
+    const twoTrucks = () => {
+      const src = packedTrailer(H6, 1, BOX);
+      src.rows = [edgeOnly(src.rows[0])];
+      const dst = packedTrailer(H6, 2, BOX);
+      setCount(edges(dst.rows[0])[0], 1);
+      setCount(flats(dst.rows[1])[0], 14);
+      return stateOf([src, dst], BOX, [H6]);
+    };
+    {
+      const state = twoTrucks();
+      const proposal = proposeDissolve(state, 0);
+      const toEdge = proposal.moves.filter((m) => m.toEdge);
+      const toFlat = proposal.moves.filter((m) => !m.toEdge);
+      check(
+        "lb-edge-02 1: truck 1's wall-slot boards fill truck 2's same-SKU on-edge column to tiers (3 more), then 4 lie flat",
+        proposal.totalSrcUnits === 12 &&
+          toEdge.length === 3 &&
+          toEdge.every((m) => m.fromEdge && m.toTi === 1 && m.toRi === 0) &&
+          toFlat.length === 4 &&
+          toFlat.every((m) => m.fromEdge && m.toTi === 1 && m.toRi === 1),
+        JSON.stringify(proposal.moves.map((m) => [m.fromEdge, m.toTi, m.toRi, m.toCi, m.toEdge]))
+      );
+      check("lb-edge-02 1: every move reads the board's thickness (6), never 24", proposal.moves.every((m) => m.unitHeight === 6), JSON.stringify(proposal.moves.map((m) => m.unitHeight)));
+      const applied = applyDissolve(state, proposal, new Set());
+      const dstRows = applied.plan.trailers[1].rows;
+      const cap = edgeTierCap(applied, { kind: "column", ref: { t: 1, r: 0, c: dstRows[0].columns.findIndex((c) => c.onEdge) } });
+      const maxEdge = Math.max(...dstRows.flatMap((r) => edges(r).map((c) => c.stackCount)));
+      const maxHeight = Math.max(...applied.plan.trailers.flatMap((t) => t.rows.flatMap((r) => r.columns.map((c) => c.totalHeight))));
+      check(
+        "lb-edge-02 1: applied — receiver on-edge column at 4 = tiers, flat stack at 18 (108\"), 5 boards still on truck 1",
+        edges(dstRows[0])[0].stackCount === 4 &&
+          cap === 4 &&
+          maxEdge <= cap &&
+          flats(dstRows[1])[0].stackCount === 18 &&
+          maxHeight <= BOX.height &&
+          applied.plan.trailers[0].totalUnits === 5,
+        JSON.stringify({ edge: edges(dstRows[0])[0].stackCount, cap, flat: flats(dstRows[1])[0].stackCount, maxHeight, left: applied.plan.trailers[0].totalUnits })
+      );
+      const before = edges(state.plan.trailers[1].rows[0])[0];
+      const after = edges(dstRows[0])[0];
+      check(
+        "lb-edge-02 1: the on-edge receiver is still one SKU, one layer, in the same slot position; its rationale isn't replaced",
+        after.layers.length === 1 && after.posY === before.posY && after.colWidth === before.colWidth && after.rationale === before.rationale,
+        JSON.stringify(after)
+      );
+      check("lb-edge-02 1: applied plan has no edge-slot / piece-fits-trailer / row-geometry / conservation violation", bad(applied).length === 0, JSON.stringify(bad(applied)));
+    }
+
+    // A box truck (only wall-slot boards) dissolved onto a 53ft (no wall slot; one row of four 6"
+    // stacks, two of them trimmed to 15 and 16 — room for 5). state.dims is the 53ft, as when
+    // pack({ autoDownsize }) turns a plan's last trailer into a box truck.
+    {
+      const dst = packedTrailer(H6, 1, T53);
+      dst.rows = [dst.rows[0]];
+      dst.rows[0].columns.forEach((c, i) => setCount(c, [15, 16, 18, 18][i]));
+      const src = packedTrailer(H6, 1, BOX);
+      src.rows = [edgeOnly(src.rows[0])];
+      const state = stateOf([dst, src], T53, [H6]);
+      const proposal = proposeDissolve(state, 1);
+      const applied = applyDissolve(state, proposal, new Set());
+      check(
+        "lb-edge-02 2: box truck onto a 53ft — 5 edge boards land flat on the matching holey stacks, none on edge",
+        proposal.moves.length === 5 &&
+          proposal.moves.every((m) => m.fromEdge && !m.toEdge && m.toTi === 0) &&
+          applied.plan.trailers[0].rows[0].columns.length === 4 &&
+          applied.plan.trailers[0].rows[0].columns.every((c) => c.stackCount === 18 && !c.onEdge),
+        JSON.stringify({ moves: proposal.moves.map((m) => [m.toTi, m.toRi, m.toCi, m.toEdge]), cols: applied.plan.trailers[0].rows[0].columns.map((c) => c.stackCount) })
+      );
+      check("lb-edge-02 2: applied plan has no edge-slot / piece-fits-trailer / row-geometry / conservation violation", bad(applied).length === 0, JSON.stringify(bad(applied)));
+    }
+
+    // A flat holey stack of 3 on truck 1; truck 2's flats are all full and its only room is one
+    // on-edge column of the same SKU holding 2 (room 2).
+    {
+      const src = packedTrailer(H6, 1, BOX);
+      src.rows[0].columns = [flats(src.rows[0])[0]];
+      setCount(src.rows[0].columns[0], 3);
+      const dst = packedTrailer(H6, 1, BOX);
+      setCount(edges(dst.rows[0])[2], 2);
+      const state = stateOf([src, dst], BOX, [H6]);
+      const proposal = proposeDissolve(state, 0);
+      const applied = applyDissolve(state, proposal, new Set());
+      check(
+        "lb-edge-02 3: a flat holey source whose only room is a same-SKU on-edge column goes on edge (2 of 3)",
+        proposal.moves.length === 2 &&
+          proposal.moves.every((m) => m.toEdge && !m.fromEdge) &&
+          edges(applied.plan.trailers[1].rows[0])[2].stackCount === 4 &&
+          applied.plan.trailers[0].totalUnits === 1,
+        JSON.stringify(proposal.moves)
+      );
+      check("lb-edge-02 3: applied plan has no edge-slot / piece-fits-trailer / row-geometry / conservation violation", bad(applied).length === 0, JSON.stringify(bad(applied)));
+    }
+
+    // Same receiver (only room: an H6 on-edge column with room 2), but the sources are a 6" holey
+    // board of a DIFFERENT SKU and a 4" holey board — neither may enter it.
+    {
+      const H6B = holey("H6B", 6);
+      const H4 = holey("H4", 4);
+      const src = packedTrailer(H6B, 1, BOX);
+      const four = flats(packedTrailer(H4, 1, BOX).rows[0])[0];
+      src.rows[0].columns = [flats(src.rows[0])[0], four];
+      setCount(src.rows[0].columns[0], 3);
+      setCount(four, 3);
+      four.posY = 24;
+      const dst = packedTrailer(H6, 1, BOX);
+      setCount(edges(dst.rows[0])[2], 2);
+      const state = stateOf([src, dst], BOX, [H6, H6B, H4]);
+      const proposal = proposeDissolve(state, 0);
+      check(
+        "lb-edge-02 4: a different SKU (6\") or a different thickness (4\") never enters an on-edge receiver",
+        proposal.totalSrcUnits === 6 && proposal.moves.length === 0,
+        JSON.stringify(proposal.moves)
+      );
+    }
+
+    // Group keys: the fixture-1 proposal has one "→ on edge" group and one laid-flat group.
+    // Excluding the on-edge group applies only the 4 laid-flat moves.
+    {
+      const state = twoTrucks();
+      const proposal = proposeDissolve(state, 0);
+      const edgeKeys = new Set(proposal.moves.filter((m) => m.toEdge).map(dissolveGroupKey));
+      const flatKeys = new Set(proposal.moves.filter((m) => !m.toEdge).map(dissolveGroupKey));
+      check(
+        "lb-edge-02 5: on-edge and flat moves get separate group keys (one each here)",
+        edgeKeys.size === 1 && flatKeys.size === 1 && !Array.from(edgeKeys).some((k) => flatKeys.has(k)),
+        JSON.stringify([Array.from(edgeKeys), Array.from(flatKeys)])
+      );
+      const applied = applyDissolve(state, proposal, edgeKeys);
+      const dstRows = applied.plan.trailers[1].rows;
+      check(
+        "lb-edge-02 5: excluding the on-edge group applies only the flat moves",
+        edges(dstRows[0])[0].stackCount === 1 && flats(dstRows[1])[0].stackCount === 18 && applied.plan.trailers[0].totalUnits === 8 && bad(applied).length === 0,
+        JSON.stringify({ edge: edges(dstRows[0])[0].stackCount, flat: flats(dstRows[1])[0].stackCount, left: applied.plan.trailers[0].totalUnits, bad: bad(applied) })
+      );
+    }
+
+    // A 13" runner leaves 95" — 3 tiers of 24" boards, not 4. Every stack is trimmed to fit it (flat
+    // 15 × 6" = 90", on edge ≤ 3); truck 2's first on-edge column holds 2, so it takes exactly 1.
+    {
+      const runnerOpts: PackOptions = { ...OPTS, runnerHeight: 13 };
+      const src = packedTrailer(H6, 1, BOX);
+      src.rows = [edgeOnly(src.rows[0])];
+      for (const c of src.rows[0].columns) setCount(c, 3);
+      const dst = packedTrailer(H6, 1, BOX);
+      for (const c of flats(dst.rows[0])) setCount(c, 15);
+      for (const c of edges(dst.rows[0])) setCount(c, 3);
+      setCount(edges(dst.rows[0])[0], 2);
+      const state = stateOf([src, dst], BOX, [H6], runnerOpts);
+      const ref = { t: 1, r: 0, c: dst.rows[0].columns.findIndex((c) => c.onEdge) };
+      const proposal = proposeDissolve(state, 0);
+      const applied = applyDissolve(state, proposal, new Set());
+      check(
+        "lb-edge-02 6: a 13\" runner cuts tiers to 3, and the on-edge receiver takes only 1 more board",
+        edgeTierCap(state, { kind: "column", ref }) === 3 &&
+          proposal.moves.filter((m) => m.toEdge).length === 1 &&
+          edges(applied.plan.trailers[1].rows[0])[0].stackCount === 3,
+        JSON.stringify({ cap: edgeTierCap(state, { kind: "column", ref }), moves: proposal.moves.map((m) => [m.toRi, m.toCi, m.toEdge]) })
+      );
+      check("lb-edge-02 6: applied plan has no edge-slot / piece-fits-trailer / row-geometry / conservation violation", bad(applied).length === 0, JSON.stringify(bad(applied)));
+    }
   }
 
   return { pass: results.every((r) => r.pass), results };

@@ -26,8 +26,17 @@
 // so this file owns that one small, additive recompute (recomputeColumnAggregates below), mirroring
 // packEngine.ts's buildColumn formula (totalHeight = sum(count*unitHeight), totalWeight =
 // sum(count*sku.weight), stackCount = sum(count), mixed = distinct SKU count > 1).
+//
+// lb-edge-02 (Steve, 2026-10-26): on-edge holey boards take part both ways. A board off an on-edge
+// column is treated as laid flat (footprint = the SKU's identity length × width, thickness = its
+// height) and can go to any flat receiver under the rules above. Any Holey Board unit, flat or laid
+// flat, can also go into an existing on-edge column of the SAME SKU on another trailer while that
+// column holds fewer boards than its tiers (loadEditor.ts's edgeTierCap, so runner height counts).
+// Into an edge receiver the board only increments its one layer (the edge-slot rule is one SKU, one
+// layer); the column's posY/colWidth never change, so the wall slot's geometry can't break. Still
+// no new columns, and validateForApply stays the authority.
 import { HOLEY_BOARD_CATEGORY, type PackColumn, type PackSku } from "./packEngine";
-import { clonePlan, recomputePlan, withHistory, type EditorState } from "./loadEditor";
+import { clonePlan, edgeTierCap, recomputePlan, withHistory, type EditorState } from "./loadEditor";
 
 const EPS = 1e-6;
 function approxGte(a: number, b: number, eps = EPS): boolean {
@@ -42,14 +51,19 @@ export interface DissolveMove {
   skuName: string;
   skuCode: string;
   color: string;
+  /** The board's thickness, also when it stands on edge (never the 24″ it occupies there). */
   unitHeight: number;
   weight: number;
   fromRi: number;
   fromCi: number;
   fromLi: number;
+  /** lb-edge-02: the board came off an on-edge column (it moves laid flat unless `toEdge`). */
+  fromEdge: boolean;
   toTi: number;
   toRi: number;
   toCi: number;
+  /** lb-edge-02: the receiver is an on-edge column of the same SKU. */
+  toEdge: boolean;
 }
 
 export interface DissolveProposal {
@@ -63,9 +77,12 @@ export interface DissolveProposal {
 }
 
 /** Group key for the preview's exclude-by-group UI: same SKU, same thickness, same destination
- * trailer are one decision to the planner, not N — mirrors legacy's dissolveGroupKey. */
+ * trailer are one decision to the planner, not N — mirrors legacy's dissolveGroupKey. lb-edge-02:
+ * "→ on edge" and "→ flat" are separate decisions, and so are boards laid flat off an on-edge
+ * column and boards that were already flat (the preview labels each). */
 export function dissolveGroupKey(move: DissolveMove): string {
-  return `${move.skuCode}|${move.unitHeight}|${move.toTi}`;
+  const edge = move.toEdge ? "|on-edge" : move.fromEdge ? "|laid-flat" : "";
+  return `${move.skuCode}|${move.unitHeight}|${move.toTi}${edge}`;
 }
 
 function effectiveHeightOf(state: EditorState): number {
@@ -112,6 +129,7 @@ interface Unit {
   // which is only the row's deepest column and can differ from this column's own depth in a
   // mixed-depth row (PackRow's own comment: "Rows may hold columns of differing depth").
   width: number; // source column's colWidth
+  fromEdge: boolean; // lb-edge-02: off an on-edge column — length/width/unitHeight are then the laid-flat board's
   skuId: string;
   skuName: string;
   skuCode: string;
@@ -126,21 +144,25 @@ function expandSourceUnits(state: EditorState, srcTi: number, skuById: Map<strin
   if (!trailer) return units;
   trailer.rows.forEach((row, ri) => {
     row.columns.forEach((col, ci) => {
-      if (col.onEdge) return; // lb-box-03: on-edge boards are not moved by dissolve — they stay on the source trailer
       col.layers.forEach((layer, li) => {
-        const weight = skuById.get(layer.skuId)?.weight ?? 0;
+        const sku = skuById.get(layer.skuId);
+        const weight = sku?.weight ?? 0;
+        // lb-edge-02: an on-edge board moves laid flat — the SKU's identity footprint, its height as
+        // the thickness. Without its SKU there is no flat shape to give it, so it stays put.
+        if (col.onEdge && !sku) return;
         for (let n = 0; n < layer.count; n++) {
           units.push({
             ri,
             ci,
             li,
-            length: col.colLength,
-            width: col.colWidth,
+            length: col.onEdge && sku ? sku.length : col.colLength,
+            width: col.onEdge && sku ? sku.width : col.colWidth,
+            fromEdge: !!col.onEdge,
             skuId: layer.skuId,
             skuName: layer.skuName,
             skuCode: layer.skuCode,
             color: layer.color,
-            unitHeight: layer.unitHeight,
+            unitHeight: col.onEdge && sku ? sku.height : layer.unitHeight,
             weight,
           });
         }
@@ -179,25 +201,33 @@ export function proposeDissolve(state: EditorState, srcTi: number): DissolveProp
           // differs from the unit's, producing an orientation the SKU doesn't have (piece-fits-
           // trailer failure at apply). Stacking into an existing column never changes that
           // column's own footprint, so no rowLength check is needed here at all.
-          if (col.onEdge) continue; // lb-box-03: never a receiver
-          if (!approxEq(col.colLength, unit.length) || !approxEq(col.colWidth, unit.width)) continue;
+          const toEdge = !!col.onEdge;
+          if (toEdge) {
+            // lb-edge-02: an on-edge receiver takes only its own SKU (so its own thickness), one
+            // board at a time, up to its tiers — counted in boards, not inches.
+            const edgeLayer = col.layers[0];
+            if (col.layers.length !== 1 || edgeLayer.skuId !== unit.skuId) continue;
+            if (edgeLayer.count >= edgeTierCap(state, { kind: "column", ref: { t: ti, r: ri, c: ci } })) continue;
+          } else {
+            if (!approxEq(col.colLength, unit.length) || !approxEq(col.colWidth, unit.width)) continue;
 
-          const distinctSkuIds = new Set(col.layers.map((l) => l.skuId));
-          const isSameSku = distinctSkuIds.has(unit.skuId);
-          const headroom = effHeight - col.totalHeight;
-          if (!approxGte(headroom, unit.unitHeight)) continue;
-          if (!isSameSku) {
-            // A different SKU is a top-off, mirroring validatePlan's two rules exactly: the
-            // column must not already be at the distinct-SKU cap, and the incoming piece must
-            // clear K. Same-SKU stacking (the `isSameSku` branch above) is bound only by headroom.
-            // holey-sequential-fill: Holey Board is exempt from the distinct-SKU cap, same as validatePlan —
-            // it's meant to chain through as many thicknesses as fit, and dissolve proposing a move
-            // validatePlan would then accept is exactly the "can never fail the apply gate" invariant
-            // this file's header promises.
-            const baseSku = col.layers[0] ? skuById.get(col.layers[0].skuId) : undefined;
-            const isHoleyColumn = baseSku?.category === HOLEY_BOARD_CATEGORY;
-            if (!isHoleyColumn && distinctSkuIds.size >= state.options.maxSkusPerColumn) continue;
-            if (!approxGte(unit.unitHeight, state.options.topOffMinInchesPerPiece)) continue;
+            const distinctSkuIds = new Set(col.layers.map((l) => l.skuId));
+            const isSameSku = distinctSkuIds.has(unit.skuId);
+            const headroom = effHeight - col.totalHeight;
+            if (!approxGte(headroom, unit.unitHeight)) continue;
+            if (!isSameSku) {
+              // A different SKU is a top-off, mirroring validatePlan's two rules exactly: the
+              // column must not already be at the distinct-SKU cap, and the incoming piece must
+              // clear K. Same-SKU stacking (the `isSameSku` branch above) is bound only by headroom.
+              // holey-sequential-fill: Holey Board is exempt from the distinct-SKU cap, same as validatePlan —
+              // it's meant to chain through as many thicknesses as fit, and dissolve proposing a move
+              // validatePlan would then accept is exactly the "can never fail the apply gate" invariant
+              // this file's header promises.
+              const baseSku = col.layers[0] ? skuById.get(col.layers[0].skuId) : undefined;
+              const isHoleyColumn = baseSku?.category === HOLEY_BOARD_CATEGORY;
+              if (!isHoleyColumn && distinctSkuIds.size >= state.options.maxSkusPerColumn) continue;
+              if (!approxGte(unit.unitHeight, state.options.topOffMinInchesPerPiece)) continue;
+            }
           }
           const runWeight = trailerRunWeight.get(ti) ?? trailer.usedWeight;
           if (runWeight + unit.weight > state.dims.maxWeight + EPS) continue;
@@ -205,7 +235,7 @@ export function proposeDissolve(state: EditorState, srcTi: number): DissolveProp
           // Eligible — commit to the scratch column so subsequent units in this same pass see it.
           const existing = col.layers.find((l) => l.skuId === unit.skuId);
           if (existing) {
-            existing.count += 1;
+            existing.count += 1; // on an on-edge receiver this is its one layer (same SKU)
           } else {
             col.layers.push({
               skuId: unit.skuId,
@@ -230,9 +260,11 @@ export function proposeDissolve(state: EditorState, srcTi: number): DissolveProp
             fromRi: unit.ri,
             fromCi: unit.ci,
             fromLi: unit.li,
+            fromEdge: unit.fromEdge,
             toTi: ti,
             toRi: ri,
             toCi: ci,
+            toEdge,
           });
           placed = true;
         }
@@ -258,6 +290,12 @@ export function applyDissolve(state: EditorState, proposal: DissolveProposal, ex
   for (const m of selected) {
     const col = plan.trailers[m.toTi]?.rows[m.toRi]?.columns[m.toCi];
     if (!col) continue;
+    if (m.toEdge) {
+      // lb-edge-02: one more board in the on-edge column's one layer — never a new layer.
+      col.layers[0].count += 1;
+      recomputeColumnAggregates(col, skuById);
+      continue;
+    }
     const existing = col.layers.find((l) => l.skuId === m.skuId);
     if (existing) {
       existing.count += 1;

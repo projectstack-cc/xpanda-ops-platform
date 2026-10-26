@@ -9,11 +9,15 @@
 // persistent-banner token conventions (color-mix off --warn-bg/--danger-bg — none of the six
 // var(--bg-warning) etc. tokens the original spec named exist in globals.css, confirmed by the same
 // grep lb-ui-02 already ran) rather than inventing a third banner style.
+//
+// lb-edge-02: a group going into an on-edge column reads "→ on edge, Trailer N"; a group of boards
+// that came off an on-edge column and land flat reads "(laid flat)".
 "use client";
 
 import { useMemo, useState } from "react";
 import { PackageOpen, ArrowRight } from "lucide-react";
 import type { EditorState } from "@/lib/loadEditor";
+import { HOLEY_EDGE_LABEL } from "@/lib/packEngine";
 import { proposeDissolve, applyDissolve, dissolveGroupKey, type DissolveMove } from "@/lib/dissolve";
 import Modal from "@/components/Modal";
 
@@ -31,6 +35,8 @@ interface MoveGroup {
   skuCode: string;
   unitHeight: number;
   toTi: number;
+  toEdge: boolean;
+  laidFlat: boolean;
   moves: DissolveMove[];
 }
 
@@ -54,7 +60,16 @@ export default function DissolvePreview({ isOpen, state, srcTi, onApply, onClose
       if (existing) {
         existing.moves.push(move);
       } else {
-        byKey.set(key, { key, skuName: move.skuName, skuCode: move.skuCode, unitHeight: move.unitHeight, toTi: move.toTi, moves: [move] });
+        byKey.set(key, {
+          key,
+          skuName: move.skuName,
+          skuCode: move.skuCode,
+          unitHeight: move.unitHeight,
+          toTi: move.toTi,
+          toEdge: move.toEdge,
+          laidFlat: move.fromEdge && !move.toEdge,
+          moves: [move],
+        });
       }
     }
     return Array.from(byKey.values());
@@ -131,8 +146,11 @@ export default function DissolvePreview({ isOpen, state, srcTi, onApply, onClose
                   <div className="flex items-center gap-1.5 text-[13px] font-mono tabular-nums text-muted shrink-0">
                     <span>{fmtInches(g.unitHeight)}&quot;</span>
                     <span>×{g.moves.length}</span>
+                    {g.laidFlat && <span>(laid flat)</span>}
                     <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Trailer {g.toTi + 1}</span>
+                    <span>
+                      {g.toEdge && `${HOLEY_EDGE_LABEL}, `}Trailer {g.toTi + 1}
+                    </span>
                   </div>
                 </label>
               );
