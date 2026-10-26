@@ -8,12 +8,20 @@ export const catalog: Record<string, Record<Lang, string>> = {
   "lb.edge.slot": { en: "ON EDGE", es: "DE CANTO", ht: "SOU KAN" },
   "lb.edge.onEdge": { en: "On edge", es: "De canto", ht: "Sou kan" },
   "lb.edge.boards": { en: "boards", es: "tableros", ht: "planch" },
-  "lb.edge.locked": { en: "Locked", es: "Bloqueado", ht: "Bloke" },
-  "lb.edge.lockedHint": {
-    en: "On-edge boards are locked in Customize",
-    es: "Los tableros de canto están bloqueados en Personalizar",
-    ht: "Planch sou kan yo bloke nan Personalize",
+  // lb-edge-01: Customize — the ON EDGE chip opens a picker of the row's on-edge stacks; "+ wall
+  // slot" is the target lane for an on-edge stack. ES/HT best effort, flagged for Steve. {r} = "R3".
+  "lb.edge.chipAria": {
+    en: "On-edge stacks in row {r} — tap to pick one",
+    es: "Pilas de canto en la fila {r} — toque para elegir una",
+    ht: "Pil sou kan nan ranje {r} — tape pou chwazi youn",
   },
+  "lb.edge.pickTitle": {
+    en: "Wall slot, row {r} — pick a stack",
+    es: "Hueco de la pared, fila {r} — elija una pila",
+    ht: "Espas bò mi, ranje {r} — chwazi yon pil",
+  },
+  "lb.edge.close": { en: "Close", es: "Cerrar", ht: "Fèmen" },
+  "lb.edge.slotTarget": { en: "+ wall slot", es: "+ hueco de pared", ht: "+ espas bò mi" },
   "lb.edge.key": {
     en: "boards on edge in the wall slot",
     es: "tableros de canto en el hueco de la pared",

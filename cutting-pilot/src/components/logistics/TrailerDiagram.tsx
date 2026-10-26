@@ -83,10 +83,15 @@
 //
 // lb-diag-01 (Steve, 2026-10-26): supersedes the FRONT/REAR terms above — the captions read WALL
 // (left, nose) and DOORS (right). Labels only; the free length already sits on the right (doors).
+//
+// lb-edge-01 (Steve, 2026-10-26): on-edge columns are no longer locked in Customize. They are still
+// too thin to tap (1″–6″) and stay out of the ≥ 44px scaling, so in edit mode the row's ON EDGE chip
+// is the ≥ 44px target: it opens a picker under the diagram listing that row's on-edge stacks (one
+// ≥ 44px button each), and picking one is the same as tapping a flat stack. While an on-edge stack
+// (or Stand on edge) is armed, `edgeSlotVerdict` adds a "+ wall slot" lane under the rows.
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
-import { Lock } from "lucide-react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import type { Dimensions, PackColumn, PackRow, PackTrailer } from "@/lib/packEngine";
 import { thicknessColor, thicknessLabel } from "@/lib/thicknessPalette";
 import { useLang } from "@/components/lang";
@@ -134,6 +139,10 @@ interface TrailerDiagramProps {
    * null = no slot drawn there. */
   slotVerdict?: (rowIndex: number | "new") => TapVerdict | null;
   onChooseSlot?: (rowIndex: number | "new") => void;
+  /** lb-edge-01: a "+ wall slot" target under a row, for an on-edge stack (or Stand on edge). null =
+   * no button there. */
+  edgeSlotVerdict?: (rowIndex: number) => TapVerdict | null;
+  onChooseEdgeSlot?: (rowIndex: number) => void;
   /** lb-ui-03: rendered in the header row, right of the usedLength stat. */
   headerAction?: ReactNode;
   /** lb-ui-12: set by the caller (who knows the plan's primary trailer type — this component only
@@ -226,12 +235,16 @@ export default function TrailerDiagram({
   columnVerdict,
   slotVerdict,
   onChooseSlot,
+  edgeSlotVerdict,
+  onChooseEdgeSlot,
   headerAction,
   typeBadge,
   title,
   subtitle,
 }: TrailerDiagramProps) {
   const { t } = useLang();
+  // lb-edge-01: the row whose ON EDGE picker is open (edit mode only).
+  const [edgePickRow, setEdgePickRow] = useState<number | null>(null);
   const keyThicknesses = thicknessesOn(trailer);
   const hasEdge = trailer.rows.some((r) => r.columns.some((c) => c.onEdge));
   const displayOrder = displayRowIndices(trailer.rows.length);
@@ -239,7 +252,7 @@ export default function TrailerDiagram({
   // lbr-07: edit-mode px layout. Inches -> px, scaled so the shallowest stack (along the length) and
   // the narrowest stack (across the width) are each ≥ EDIT_MIN_TARGET_PX; empty placeholder rows get
   // a fixed width so their "+" slot still exists.
-  // lb-box-03: locked on-edge columns aren't tap targets — they don't drive the ≥ 44px scaling.
+  // lb-box-03: on-edge columns don't drive the ≥ 44px scaling (lb-edge-01: the ON EDGE chip is their target).
   const allColumns = trailer.rows.flatMap((r) => r.columns).filter((c) => !c.onEdge);
   const minColLength = Math.min(...allColumns.map((c) => c.colLength), dims.length);
   const minColWidth = Math.min(...allColumns.map((c) => c.colWidth), dims.width);
@@ -256,6 +269,8 @@ export default function TrailerDiagram({
   const rowWidthStyle = (rowIndex: number): CSSProperties =>
     editable ? { width: rowPx(rowIndex) } : { width: `${dims.length > 0 ? (trailer.rows[rowIndex].rowLength / dims.length) * 100 : 0}%` };
   const anySlot = editable && !!slotVerdict && (newRowVerdict !== null || displayOrder.some((r) => slotVerdict(r) !== null));
+  const anyEdgeSlot = editable && !!edgeSlotVerdict && displayOrder.some((r) => edgeSlotVerdict(r) !== null);
+  const pickRow = editable && edgePickRow !== null && trailer.rows[edgePickRow]?.columns.some((c) => c.onEdge) ? edgePickRow : null;
 
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-surface p-4">
@@ -333,22 +348,28 @@ export default function TrailerDiagram({
                   const widthPctEdge = row.rowLength > 0 ? (column.colLength / row.rowLength) * 100 : 100;
                   const edgeColor = thicknessColor(column.colWidth);
                   const isSelectedEdge = selectedColumn?.rowIndex === rowIndex && selectedColumn?.columnIndex === columnIndex;
+                  const edgeVerdict = editable ? columnVerdict?.(rowIndex, columnIndex) ?? null : null;
                   return (
                     <button
                       key={columnIndex}
                       type="button"
-                      disabled={editable}
                       onClick={() => onSelectColumn(rowIndex, columnIndex)}
                       aria-pressed={isSelectedEdge}
-                      aria-label={`${stackAccessibleName(column)} Trailer ${trailerIndex + 1}, row R${rowIndex + 1}, position ${columnIndex + 1}.${editable ? ` ${t("lb.edge.lockedHint")}.` : ""}`}
-                      title={editable ? t("lb.edge.lockedHint") : column.rationale}
+                      aria-label={`${stackAccessibleName(column)} Trailer ${trailerIndex + 1}, row R${rowIndex + 1}, position ${columnIndex + 1}.${verdictSuffix(edgeVerdict)}`}
+                      title={edgeVerdict ? edgeVerdict.reason : column.rationale}
                       className={[
-                        "absolute left-0 overflow-hidden box-border border-y border-[var(--line)]",
-                        editable ? "cursor-not-allowed" : "cursor-pointer hover:brightness-95",
+                        "absolute left-0 overflow-hidden box-border border-y border-[var(--line)] cursor-pointer hover:brightness-95",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:z-10",
                         isSelectedEdge ? "ring-2 ring-[var(--brand)] z-10" : "",
                       ].join(" ")}
-                      style={{ top: `${topPctEdge}%`, height: `${heightPct}%`, width: `${widthPctEdge}%`, background: edgeColor.bg }}
+                      style={{
+                        top: `${topPctEdge}%`,
+                        height: `${heightPct}%`,
+                        width: `${widthPctEdge}%`,
+                        background: edgeColor.bg,
+                        ...verdictStyle(edgeVerdict),
+                        ...(isSelectedEdge && editable ? { outline: "3px solid var(--text)", outlineOffset: -3 } : {}),
+                      }}
                     >
                       <span className="absolute inset-0 pointer-events-none" style={EDGE_HATCH} aria-hidden="true" />
                     </button>
@@ -439,17 +460,42 @@ export default function TrailerDiagram({
                 const slotTop = Math.min(...edges.map((c) => c.posY));
                 const slotBottom = Math.max(...edges.map((c) => c.posY + c.colWidth));
                 const slotPx = dims.width > 0 ? ((slotBottom - slotTop) / dims.width) * bandHeightPx : 0;
+                // lb-edge-01: in edit mode the chip is a button that can't truncate its parts, so the
+                // detail only shows when the row is wide enough for it (~7px a character at 11px).
+                const detail = edgeSlotDetail(row);
+                const detailFits = slotPx >= 30 && (!editable || rowPx(rowIndex) >= 72 + detail.length * 7);
+                const chip = (
+                  <>
+                    {t("lb.edge.slot")}
+                    {detailFits && <span className="font-mono tabular-nums font-medium text-muted">{detail}</span>}
+                  </>
+                );
                 return (
                   <div
                     className="absolute left-0 right-0 z-[6] pointer-events-none flex items-center justify-center px-0.5"
                     style={{ top: `${(slotTop / dims.width) * 100}%`, height: `${((slotBottom - slotTop) / dims.width) * 100}%` }}
-                    aria-hidden="true"
+                    aria-hidden={editable ? undefined : true}
                   >
-                    <span className="max-w-full truncate rounded-sm border border-[var(--line)] bg-surface text-text px-1 py-0.5 text-[11px] leading-none font-semibold tracking-wide inline-flex items-center gap-1">
-                      {editable && <Lock size={11} aria-hidden="true" />}
-                      {t("lb.edge.slot")}
-                      {slotPx >= 30 && <span className="font-mono tabular-nums font-medium text-muted">{edgeSlotDetail(row)}</span>}
-                    </span>
+                    {editable ? (
+                      // lb-edge-01: the chip is the on-edge stacks' tap target — it opens the picker below.
+                      <button
+                        type="button"
+                        onClick={() => setEdgePickRow(pickRow === rowIndex ? null : rowIndex)}
+                        aria-expanded={pickRow === rowIndex}
+                        aria-label={t("lb.edge.chipAria").replace("{r}", `R${rowIndex + 1}`)}
+                        className={[
+                          "pointer-events-auto max-w-full min-h-[44px] min-w-[44px] truncate rounded-md border-2 bg-surface text-text px-1.5 text-[11px] leading-none font-semibold tracking-wide inline-flex items-center justify-center gap-1 cursor-pointer",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]",
+                          pickRow === rowIndex ? "border-[var(--brand)]" : "border-[var(--line)]",
+                        ].join(" ")}
+                      >
+                        {chip}
+                      </button>
+                    ) : (
+                      <span className="max-w-full truncate rounded-sm border border-[var(--line)] bg-surface text-text px-1 py-0.5 text-[11px] leading-none font-semibold tracking-wide inline-flex items-center gap-1">
+                        {chip}
+                      </span>
+                    )}
                   </div>
                 );
               })()}
@@ -483,6 +529,71 @@ export default function TrailerDiagram({
         </div>
       )}
 
+      {/* lb-edge-01: "+ wall slot" targets, one under each row whose wall slot has room. */}
+      {anyEdgeSlot && (
+        <div className="flex mt-1.5" style={{ width: editWidthPx }}>
+          {displayOrder.map((rowIndex) => {
+            const v = edgeSlotVerdict?.(rowIndex) ?? null;
+            return (
+              <div key={rowIndex} className="shrink-0 px-0.5" style={rowWidthStyle(rowIndex)}>
+                {v && (
+                  <SlotButton
+                    verdict={v}
+                    label={t("lb.edge.slotTarget")}
+                    ariaLabel={`${t("lb.edge.slotTarget")} — row R${rowIndex + 1}.${verdictSuffix(v)}`}
+                    onClick={() => onChooseEdgeSlot?.(rowIndex)}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* lb-edge-01: the open ON EDGE chip's picker — one ≥ 44px button per on-edge stack in that row. */}
+      {pickRow !== null && (
+        <div className="mt-2 rounded-lg border border-[var(--border)] bg-surface p-2 max-w-[720px]" role="group" aria-label={t("lb.edge.pickTitle").replace("{r}", `R${pickRow + 1}`)}>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <p className="text-[13px] font-semibold text-text">{t("lb.edge.pickTitle").replace("{r}", `R${pickRow + 1}`)}</p>
+            <button
+              type="button"
+              onClick={() => setEdgePickRow(null)}
+              className="min-h-[44px] px-3 rounded-md border border-[var(--border)] text-text text-[13px] font-medium cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+            >
+              {t("lb.edge.close")}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {trailer.rows[pickRow].columns.map((column, columnIndex) => {
+              if (!column.onEdge) return null;
+              const v = columnVerdict?.(pickRow, columnIndex) ?? null;
+              const isSel = selectedColumn?.rowIndex === pickRow && selectedColumn?.columnIndex === columnIndex;
+              const c = thicknessColor(column.colWidth);
+              return (
+                <button
+                  key={columnIndex}
+                  type="button"
+                  onClick={() => {
+                    setEdgePickRow(null);
+                    onSelectColumn(pickRow, columnIndex);
+                  }}
+                  aria-pressed={isSel}
+                  aria-label={`${stackAccessibleName(column)} Trailer ${trailerIndex + 1}, row R${pickRow + 1}.${verdictSuffix(v)}`}
+                  title={v ? v.reason : column.rationale}
+                  className="min-h-[44px] px-3 rounded-md border border-[var(--border)] bg-surface text-text text-[13px] font-mono tabular-nums font-semibold inline-flex items-center gap-2 cursor-pointer hover:bg-[var(--ghost-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                  style={{ ...verdictStyle(v), ...(isSel ? { outline: "3px solid var(--text)", outlineOffset: -3 } : {}) }}
+                >
+                  <span className="relative inline-block w-4 h-4 rounded-sm border border-[var(--line)] overflow-hidden" style={{ background: c.bg }} aria-hidden="true">
+                    <span className="absolute inset-0" style={EDGE_HATCH} />
+                  </span>
+                  {thicknessLabel(column.colWidth)} {t("lb.edge.ofWhich")} ×{column.stackCount}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       </div>
       </div>
 
@@ -511,7 +622,6 @@ export default function TrailerDiagram({
                 <span className="absolute inset-0" style={EDGE_HATCH} />
               </span>
               {t("lb.edge.key")}
-              {editable && <span className="inline-flex items-center gap-1 font-semibold text-text"><Lock size={12} aria-hidden="true" />{t("lb.edge.locked")}</span>}
             </span>
           )}
           <span className="inline-flex items-center gap-1.5">

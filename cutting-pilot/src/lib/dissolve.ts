@@ -126,7 +126,7 @@ function expandSourceUnits(state: EditorState, srcTi: number, skuById: Map<strin
   if (!trailer) return units;
   trailer.rows.forEach((row, ri) => {
     row.columns.forEach((col, ci) => {
-      if (col.onEdge) return; // lb-box-03: on-edge boards are locked — they stay on the source trailer
+      if (col.onEdge) return; // lb-box-03: on-edge boards are not moved by dissolve — they stay on the source trailer
       col.layers.forEach((layer, li) => {
         const weight = skuById.get(layer.skuId)?.weight ?? 0;
         for (let n = 0; n < layer.count; n++) {

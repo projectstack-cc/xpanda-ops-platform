@@ -31,6 +31,13 @@
 // one Undo reverts the action and the shift together. A "Shift to rear" toolbar button runs the same
 // shift as its own step (it replaces "Compact load", which only closed empty rows). At xl the
 // trailers sit in TrailerScrollBox and the side panel is sticky.
+//
+// lb-edge-01 (Steve, 2026-10-26): on-edge holey boards are no longer locked. Picked through the row's
+// ON EDGE chip (TrailerDiagram), an on-edge stack offers Move or swap (wall slots and other on-edge
+// stacks only), Send to holding, Change count (a stepper capped at its tiers), Lay flat, Remove and
+// Delete row; a held one offers Place in a wall slot, Lay flat and Change count. A plain flat holey
+// stack offers Stand on edge, which arms a wall-slot pick ("stand"). Stack-onto is never offered for
+// an on-edge stack.
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -52,8 +59,10 @@ import {
   ArrowUpFromLine,
   ListOrdered,
   X,
+  RectangleVertical,
+  RectangleHorizontal,
 } from "lucide-react";
-import type { CartLine, Dimensions, PackColumn, PackOptions, PackPlan, PackSku } from "@/lib/packEngine";
+import { HOLEY_BOARD_CATEGORY, type CartLine, type Dimensions, type PackColumn, type PackOptions, type PackPlan, type PackSku } from "@/lib/packEngine";
 import {
   createEditorState,
   shiftToRearWithNote,
@@ -72,13 +81,20 @@ import {
   evaluateSwapTarget,
   swapColumns,
   addToHolding,
-  isEdgeLocked,
-  EDGE_LOCKED_REASON,
   NEW_ROW,
+  piecesFor,
+  edgeSlotFree,
+  edgeTierCap,
+  layFlat,
+  evaluateStandOnEdge,
+  evaluateStandTarget,
+  standOnEdge,
+  setHeldLayerCount,
   type EditorState,
   type ColumnRef,
   type PieceSource,
   type TargetVerdict,
+  type WholeStackSource,
 } from "@/lib/loadEditor";
 import { fetchLoadBuilderSkus } from "@/lib/jobPull";
 import TrailerDiagram, { type TapVerdict } from "@/components/logistics/TrailerDiagram";
@@ -111,16 +127,20 @@ type Selection = { kind: "trailer"; ref: ColumnRef } | { kind: "holding"; index:
 
 /** Step 2's armed action: what the next target tap does, and with which pieces. "add" = pieces just
  * added to holding: a new stack in a slot OR on top of a stack, whichever the planner taps. */
-type ArmedAction = "move" | "stack" | "take" | "place" | "add";
+type ArmedAction = "move" | "stack" | "take" | "place" | "add" | "stand";
 interface Armed {
   action: ArmedAction;
   source: PieceSource;
 }
 
 /** What the action bar is showing for the current selection. */
-type Panel = "actions" | "take" | "counts";
+type Panel = "actions" | "take" | "counts" | "edgeCount";
 
-type Target = { kind: "stack"; ref: ColumnRef } | { kind: "slot"; t: number; r: number | "new" } | { kind: "holding" };
+type Target =
+  | { kind: "stack"; ref: ColumnRef }
+  | { kind: "slot"; t: number; r: number | "new" }
+  | { kind: "edgeSlot"; t: number; r: number }
+  | { kind: "holding" };
 
 const HOWTO_KEY = "lb_customize_howto_v1";
 
@@ -206,6 +226,21 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
     return state.holding[selection.index] ?? null;
   }, [selection, state]);
 
+  const selectedSource: WholeStackSource | null = useMemo(() => {
+    if (!selection) return null;
+    return selection.kind === "trailer" ? { kind: "column", ref: selection.ref } : { kind: "holding", index: selection.index };
+  }, [selection]);
+
+  // lb-edge-01: Stand on edge is offered for a flat holey stack; null = not offered at all, "" = ok.
+  const standReason: string | null = useMemo(() => {
+    if (!selectedSource || !selectedColumn || selectedColumn.onEdge) return null;
+    const sku = state.skus.find((s) => s.id === selectedColumn.layers[0]?.skuId);
+    if (sku?.category !== HOLEY_BOARD_CATEGORY) return null;
+    return evaluateStandOnEdge(state, selectedSource) ?? "";
+  }, [selectedSource, selectedColumn, state]);
+
+  const edgeCap = useMemo(() => (selectedSource && selectedColumn?.onEdge ? edgeTierCap(state, selectedSource) : 0), [selectedSource, selectedColumn, state]);
+
   const selectedDetail: SelectedColumnDetail | null = useMemo(() => {
     if (selection?.kind !== "trailer" || !selectedColumn) return null;
     return { trailerIndex: selection.ref.t, rowIndex: selection.ref.r, columnIndex: selection.ref.c, column: selectedColumn };
@@ -216,27 +251,45 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
     if (!armed) return null;
     const stacks = new Map<string, TargetVerdict>();
     const slots = new Map<string, TargetVerdict>();
+    const edgeSlots = new Map<string, TargetVerdict>();
     const srcRef = armed.source.kind === "column" || armed.source.kind === "top" ? armed.source.ref : null;
+    // lb-edge-01: an on-edge stack (and Stand on edge) only targets wall slots — "+ wall slot"
+    // buttons where the slot has a board's thickness free — never the flat "+" lane.
+    const pieces = piecesFor(state, armed.source);
+    const stand = armed.action === "stand";
+    const edgeSource = !!pieces?.onEdge || stand;
+    const thickness = pieces ? (pieces.onEdge ? pieces.colWidth : pieces.layers[0]?.unitHeight ?? 0) : 0;
     state.plan.trailers.forEach((trailer, t) => {
       trailer.rows.forEach((row, r) => {
         row.columns.forEach((_, c) => {
           const ref = { t, r, c };
           if (srcRef && sameRef(srcRef, ref)) return;
-          if (armed.action === "move" && srcRef) stacks.set(key(ref), evaluateSwapTarget(state, srcRef, ref));
-          else if (armed.action === "place") stacks.set(key(ref), { level: "no", reason: "tap a + spot to place it as a new stack", heightAfter: 0 });
+          if (stand) stacks.set(key(ref), { level: "no", reason: "tap a + wall slot to stand it on edge", heightAfter: 0 });
+          else if (armed.action === "move" && srcRef) stacks.set(key(ref), evaluateSwapTarget(state, srcRef, ref));
+          else if (armed.action === "place") stacks.set(key(ref), { level: "no", reason: edgeSource ? "tap a + wall slot to place it" : "tap a + spot to place it as a new stack", heightAfter: 0 });
           else stacks.set(key(ref), evaluateStackTarget(state, armed.source, ref));
         });
-        if (armed.action !== "stack" && row.rowWidthUsed < trailer.dims.width - 1e-6) {
+        if (edgeSource) {
+          const free = edgeSlotFree(state, armed.source, t, r);
+          if (free !== null && free >= thickness - 1e-6) {
+            edgeSlots.set(
+              `${t}:${r}`,
+              stand && (armed.source.kind === "column" || armed.source.kind === "holding")
+                ? evaluateStandTarget(state, armed.source, { t, r })
+                : evaluateSlotTarget(state, armed.source, { t, r, slot: row.columns.length })
+            );
+          }
+        } else if (armed.action !== "stack" && row.rowWidthUsed < trailer.dims.width - 1e-6) {
           slots.set(`${t}:${r}`, evaluateSlotTarget(state, armed.source, { t, r, slot: row.columns.length }));
         }
       });
-      if (armed.action !== "stack" && trailer.usedLength < trailer.dims.length - 1e-6) {
+      if (armed.action !== "stack" && !stand && trailer.usedLength < trailer.dims.length - 1e-6) {
         slots.set(`${t}:new`, evaluateSlotTarget(state, armed.source, { t, r: NEW_ROW, slot: 0 }));
       }
     });
     const holdingTarget: TargetVerdict | null =
       armed.action === "take" && armed.source.kind === "top" ? { level: "ok", reason: "set the pieces aside", heightAfter: 0 } : null;
-    return { stacks, slots, holdingTarget };
+    return { stacks, slots, edgeSlots, holdingTarget };
   }, [armed, state]);
 
   function commit(next: EditorState) {
@@ -265,11 +318,6 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
 
   function handleTapStack(t: number, r: number, c: number) {
     const ref = { t, r, c };
-    // lb-box-03: on-edge boards are locked (the diagram disables them too; this is the backstop).
-    if (isEdgeLocked(state, ref)) {
-      setToast(`Can't move that — ${EDGE_LOCKED_REASON}.`);
-      return;
-    }
     if (armed) {
       if (selection?.kind === "trailer" && sameRef(selection.ref, ref)) {
         cancelAll();
@@ -307,6 +355,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
     if (!verdicts) return null;
     if (target.kind === "stack") return verdicts.stacks.get(key(target.ref)) ?? null;
     if (target.kind === "slot") return verdicts.slots.get(`${target.t}:${target.r}`) ?? null;
+    if (target.kind === "edgeSlot") return verdicts.edgeSlots.get(`${target.t}:${target.r}`) ?? null;
     return verdicts.holdingTarget;
   }
 
@@ -334,6 +383,9 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
       const r = target.r === "new" ? NEW_ROW : target.r;
       const slot = target.r === "new" ? 0 : state.plan.trailers[target.t]?.rows[target.r]?.columns.length ?? 0;
       finishAction(moveToSlot(state, source, { t: target.t, r, slot }));
+    } else if (target.kind === "edgeSlot") {
+      if (action === "stand" && (source.kind === "column" || source.kind === "holding")) finishAction(standOnEdge(state, source, { t: target.t, r: target.r }));
+      else finishAction(moveToSlot(state, source, { t: target.t, r: target.r, slot: 0 }));
     } else if (source.kind === "top") {
       finishAction(takeToHolding(state, source));
     }
@@ -385,6 +437,24 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
     // Zeroing the last layer removes the stack itself — nothing left to show counts for. If the
     // auto-shift moved stacks, the selected (t, r, c) may now point at a different stack.
     if (shifted !== next || !next.plan.trailers[selection.ref.t]?.rows[selection.ref.r]?.columns[selection.ref.c]) cancelAll();
+  }
+
+  /** lb-edge-01: an on-edge stack's count, on a trailer or held (the stepper caps it at its tiers). */
+  function handleSetEdgeCount(count: number) {
+    if (!selection) return;
+    if (selection.kind === "trailer") {
+      handleSetLayerCount(0, count);
+      return;
+    }
+    const next = setHeldLayerCount(state, selection.index, 0, count);
+    if (next === state) return;
+    commit(applyEdit(next));
+    if (!next.holding[selection.index]) cancelAll();
+  }
+
+  function handleLayFlat() {
+    if (!selectedSource) return;
+    finishAction(layFlat(state, selectedSource));
   }
 
   // --- toolbar ---
@@ -451,7 +521,8 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
   }
 
   const hasEdits = state.history.length > 0 || state.holding.length > 0;
-  const verb = armed?.action === "stack" ? "stack" : armed?.action === "place" || armed?.action === "add" ? "place" : "move";
+  const verb =
+    armed?.action === "stack" ? "stack" : armed?.action === "stand" ? "stand on edge" : armed?.action === "place" || armed?.action === "add" ? "place" : "move";
   const topLayer = selectedColumn ? selectedColumn.layers[selectedColumn.layers.length - 1] : null;
 
   return (
@@ -560,6 +631,8 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                 columnVerdict={verdicts ? (r, c): TapVerdict | null => verdicts.stacks.get(key({ t, r, c })) ?? null : undefined}
                 slotVerdict={verdicts ? (r): TapVerdict | null => verdicts.slots.get(`${t}:${r}`) ?? null : undefined}
                 onChooseSlot={(r) => chooseTarget({ kind: "slot", t, r })}
+                edgeSlotVerdict={verdicts ? (r): TapVerdict | null => verdicts.edgeSlots.get(`${t}:${r}`) ?? null : undefined}
+                onChooseEdgeSlot={(r) => chooseTarget({ kind: "edgeSlot", t, r })}
                 headerAction={
                   <div className="flex items-center gap-1.5">
                     <button
@@ -617,6 +690,12 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                 onSetLayerCount={handleSetLayerCount}
                 onRemove={handleRemoveStack}
                 onDeleteRow={handleDeleteRow}
+                edgeCap={edgeCap}
+                standReason={standReason}
+                onEdgeCount={() => setPanel("edgeCount")}
+                onSetEdgeCount={handleSetEdgeCount}
+                onLayFlat={handleLayFlat}
+                onStand={() => selectedSource && arm("stand", selectedSource)}
                 onConfirmWarn={() => pendingWarn && applyTarget(pendingWarn.target)}
                 onDismissWarn={() => setPendingWarn(null)}
                 onCancel={cancelAll}
@@ -751,6 +830,14 @@ interface ActionBarProps {
   onSetLayerCount: (layerIndex: number, count: number) => void;
   onRemove: () => void;
   onDeleteRow: () => void;
+  /** lb-edge-01: most boards the selected on-edge stack can hold (0 for a flat stack). */
+  edgeCap: number;
+  /** lb-edge-01: null = Stand on edge not offered; "" = allowed; otherwise why it's disabled. */
+  standReason: string | null;
+  onEdgeCount: () => void;
+  onSetEdgeCount: (count: number) => void;
+  onLayFlat: () => void;
+  onStand: () => void;
   onConfirmWarn: () => void;
   onDismissWarn: () => void;
   onCancel: () => void;
@@ -832,6 +919,58 @@ function ActionBar(p: ActionBarProps) {
     );
   }
 
+  if (panel === "edgeCount" && column.onEdge) {
+    const count = column.layers[0]?.count ?? 0;
+    return (
+      <div>
+        {heading}
+        <p className="text-sm text-text mb-2">
+          Boards on edge <span className="text-muted">(at most {p.edgeCap} here)</span>
+        </p>
+        <div className="flex items-center gap-2 mb-3">
+          <button type="button" onClick={() => p.onSetEdgeCount(count - 1)} disabled={count <= 1} aria-label="One fewer board" className="min-h-[48px] min-w-[48px] rounded-lg border border-[var(--border)] text-text flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]">
+            <Minus className="w-5 h-5" aria-hidden="true" />
+          </button>
+          <span className="min-w-[64px] text-center text-2xl font-semibold font-mono tabular-nums text-text" aria-live="polite">
+            {count}
+          </span>
+          <button type="button" onClick={() => p.onSetEdgeCount(count + 1)} disabled={count >= p.edgeCap} aria-label="One more board" className="min-h-[48px] min-w-[48px] rounded-lg border border-[var(--border)] text-text flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]">
+            <Plus className="w-5 h-5" aria-hidden="true" />
+          </button>
+        </div>
+        <p className="text-xs text-muted mb-3">Fewer boards go back to unassigned; more draw from what&apos;s unassigned.</p>
+        <button type="button" onClick={p.onBack} className={ACTION_BTN}>
+          Back
+        </button>
+      </div>
+    );
+  }
+
+  const standButton =
+    p.standReason !== null ? (
+      <>
+        <button type="button" onClick={p.onStand} disabled={p.standReason !== ""} className={`${ACTION_BTN} disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent`}>
+          <RectangleVertical className="w-4 h-4 shrink-0" aria-hidden="true" />
+          Stand on edge
+        </button>
+        {p.standReason !== "" && <p className="-mt-1 px-1 text-xs text-muted">Can&apos;t stand on edge — {p.standReason}.</p>}
+      </>
+    ) : null;
+
+  const layFlatButton = (
+    <button type="button" onClick={p.onLayFlat} className={ACTION_BTN}>
+      <RectangleHorizontal className="w-4 h-4 shrink-0" aria-hidden="true" />
+      Lay flat (goes to holding)
+    </button>
+  );
+
+  const edgeCountButton = (
+    <button type="button" onClick={p.onEdgeCount} className={ACTION_BTN}>
+      <ListOrdered className="w-4 h-4 shrink-0" aria-hidden="true" />
+      Change count
+    </button>
+  );
+
   if (panel === "counts" && selection.kind === "trailer") {
     return (
       <div>
@@ -863,7 +1002,39 @@ function ActionBar(p: ActionBarProps) {
         </div>
       )}
       <div className="space-y-2">
-        {selection.kind === "trailer" ? (
+        {column.onEdge ? (
+          selection.kind === "trailer" ? (
+            <>
+              <button type="button" onClick={p.onMove} className={ACTION_BTN}>
+                <ArrowLeftRight className="w-4 h-4 shrink-0" aria-hidden="true" />
+                Move or swap (wall slots only)
+              </button>
+              <button type="button" onClick={p.onSendToHolding} className={ACTION_BTN}>
+                <PackageMinus className="w-4 h-4 shrink-0" aria-hidden="true" />
+                Send to holding
+              </button>
+              {edgeCountButton}
+              {layFlatButton}
+              <button type="button" onClick={p.onRemove} className={`${ACTION_BTN} text-[var(--danger-ink)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_8%,transparent)]`}>
+                <Trash2 className="w-4 h-4 shrink-0" aria-hidden="true" />
+                Remove from the load
+              </button>
+              <button type="button" onClick={p.onDeleteRow} className={`${ACTION_BTN} text-[var(--danger-ink)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_8%,transparent)]`}>
+                <Trash2 className="w-4 h-4 shrink-0" aria-hidden="true" />
+                Delete this row (its stacks go to holding)
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={p.onPlace} className={ACTION_BTN}>
+                <Plus className="w-4 h-4 shrink-0" aria-hidden="true" />
+                Place in a wall slot
+              </button>
+              {layFlatButton}
+              {edgeCountButton}
+            </>
+          )
+        ) : selection.kind === "trailer" ? (
           <>
             <button type="button" onClick={p.onMove} className={ACTION_BTN}>
               <ArrowLeftRight className="w-4 h-4 shrink-0" aria-hidden="true" />
@@ -891,6 +1062,7 @@ function ActionBar(p: ActionBarProps) {
               <ListOrdered className="w-4 h-4 shrink-0" aria-hidden="true" />
               Change counts
             </button>
+            {standButton}
             <button type="button" onClick={p.onRemove} className={`${ACTION_BTN} text-[var(--danger-ink)] hover:bg-[color-mix(in_srgb,var(--danger-bg)_8%,transparent)]`}>
               <Trash2 className="w-4 h-4 shrink-0" aria-hidden="true" />
               Remove from the load
@@ -914,6 +1086,7 @@ function ActionBar(p: ActionBarProps) {
               <ArrowUpFromLine className="w-4 h-4 shrink-0" aria-hidden="true" />
               Take pieces off the top…
             </button>
+            {standButton}
           </>
         )}
         <button type="button" onClick={p.onCancel} className={ACTION_BTN}>

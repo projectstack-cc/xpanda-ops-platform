@@ -42,6 +42,17 @@ import {
   shiftToRearWithNote,
   withAutoShift,
   NEW_ROW,
+  layFlat,
+  evaluateStandOnEdge,
+  evaluateStandTarget,
+  standOnEdge,
+  setHeldLayerCount,
+  edgeSlotFree,
+  EDGE_NO_STACK_REASON,
+  EDGE_SLOT_ONLY_REASON,
+  EDGE_NO_SLOT_REASON,
+  EDGE_SWAP_REASON,
+  STAND_NOT_PLAIN_REASON,
   type EditorState,
   type PieceSource,
 } from "./loadEditor";
@@ -54,6 +65,10 @@ interface CheckResult {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function getCol(state: EditorState, ref: { t: number; r: number; c: number }): PackColumn | undefined {
+  return state.plan.trailers[ref.t]?.rows[ref.r]?.columns[ref.c];
 }
 
 function ruleViolations(violations: { rule: string }[], rule: string): number {
@@ -1234,47 +1249,173 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
     check("lbr-10 mixed 3: guard never fired on these fixtures", [shifted.note, nm.note].every((n) => n === null));
   }
 
-  // lb-box-03 H8. On-edge columns are locked in Customize; dissolve never moves or targets them.
+  // lb-edge-01 (replaces lb-box-03 H8's lock checks): on-edge boards are editable in Customize. Every
+  // plan below passes validateForApply (no edge-slot / piece-fits-trailer / row-geometry /
+  // conservation violation) and keeps placed + balance + held == cart. Dissolve still never moves or
+  // targets them (unchanged, checked at the end).
   {
     const BOX = TRAILER_TYPES["26ft Box Truck"];
     const hb6: PackSku = { id: "EDGE6", name: "6in holey", sku: "EDGE6", length: 48, width: 24, height: 6, weight: 1, category: HOLEY_BOARD_CATEGORY, allowRotation: false };
     const opts = { ...DEFAULT_PACK_OPTIONS };
     const cart: CartLine[] = [{ skuId: "EDGE6", qty: 198 }];
     const plan = pack(cart, [hb6], BOX, opts);
+    // 198 boards: three 48" rows, each 3 flat 6"×18 stacks (72") + three 6" on-edge ×4 (72–90, 1" free).
     const st = createEditorState(plan, BOX, opts, cart, [hb6]);
     const rows = st.plan.trailers[0].rows;
+    const flatWidth = 72;
     const ri = rows.findIndex((r) => r.columns.some((c) => c.onEdge));
     const edgeRef = { t: 0, r: ri, c: rows[ri].columns.findIndex((c) => c.onEdge) };
     const flatRef = { t: 0, r: ri, c: rows[ri].columns.findIndex((c) => !c.onEdge) };
-    const otherRi = rows.findIndex((r, i) => i !== ri && r.columns.some((c) => !c.onEdge));
+    const otherRi = rows.findIndex((r, i) => i !== ri && r.columns.some((c) => c.onEdge));
     const otherFlat = { t: 0, r: otherRi, c: rows[otherRi].columns.findIndex((c) => !c.onEdge) };
-    check("H8 fixture: the box-truck plan has on-edge columns", ri >= 0 && edgeRef.c >= 0 && flatRef.c >= 0 && otherRi >= 0);
-    check("H8: an edge column can't be pulled to holding", pullToHolding(st, edgeRef) === st);
-    check("H8: an edge column can't be moved to a slot", moveToSlot(st, { kind: "column", ref: edgeRef }, { t: 0, r: otherRi, slot: 0 }) === st);
-    check("H8: pieces can't come off an edge column's top", takeToHolding(st, { kind: "top", ref: edgeRef, count: 1 }) === st);
-    check("H8: nothing stacks onto an edge column", evaluateStackTarget(st, { kind: "top", ref: otherFlat, count: 1 }, edgeRef).level === "no");
-    check("H8: an edge column can't be swapped", swapColumns(st, flatRef, edgeRef) === st && evaluateSwapTarget(st, otherFlat, edgeRef).level === "no");
-    check("H8: an edge column's count can't change", setLayerCount(st, edgeRef, 0, 1) === st);
-    check("H8: a row holding edge columns can't be deleted", removeRow(st, 0, ri) === st);
-    const held = takeToHolding(st, { kind: "top", ref: otherFlat, count: 1 });
-    check("H8: a flat stack can't be placed into a full wall slot", evaluateSlotTarget(held, { kind: "holding", index: held.holding.length - 1 }, { t: 0, r: ri, slot: rows[ri].columns.length }).level === "no");
-    const edgesBefore = JSON.stringify(st.plan.trailers[0].rows.map((r) => r.columns.filter((c) => c.onEdge).map((c) => [c.posY, c.colWidth, c.stackCount])));
-    const shifted = shiftToRear(st);
-    const edgesAfter = JSON.stringify(shifted.plan.trailers[0].rows.map((r) => r.columns.filter((c) => c.onEdge).map((c) => [c.posY, c.colWidth, c.stackCount])));
-    check("H8: Shift to rear leaves edge columns in place", edgesBefore === edgesAfter, edgesAfter);
-    const swapped = swapColumns(st, flatRef, otherFlat);
-    check("H8: an allowed edit (swap two flat stacks) still validates", swapped !== st && validateForApply(swapped).length === 0, JSON.stringify(validateForApply(swapped)));
-    // Dissolve: two box trucks; the second's pieces may go onto the first, never into its slot, and
-    // the first's edge boards are never offered as a source.
+    const otherEdge = { t: 0, r: otherRi, c: rows[otherRi].columns.findIndex((c) => c.onEdge) };
+    check("lb-edge-01 fixture: two box-truck rows with on-edge columns, 312\" truck has free length", ri >= 0 && otherRi >= 0 && edgeRef.c >= 0 && otherEdge.c >= 0 && st.plan.trailers[0].usedLength + 48 <= BOX.length, JSON.stringify(rows.map((r) => r.columns.length)));
+
+    const BAD_RULES = ["edge-slot", "piece-fits-trailer", "row-geometry", "conservation", "row-width", "column-height", "trailer-length"];
+    const bad = (x: EditorState) => validateForApply(x).filter((v) => BAD_RULES.includes(v.rule));
+    const conserved = (x: EditorState) => {
+      const placed = x.plan.trailers.flatMap((t) => t.rows.flatMap((r) => r.columns.flatMap((c) => c.layers))).reduce((n, l) => n + l.count, 0);
+      const held = x.holding.flatMap((c) => c.layers).reduce((n, l) => n + l.count, 0);
+      const balance = x.plan.balance.reduce((n, b) => n + b.remaining, 0);
+      return placed + held + balance === x.cart.reduce((n, c) => n + c.qty, 0);
+    };
+    const valid = (name: string, x: EditorState, changed = true) => {
+      const v = bad(x);
+      check(`${name} — validates and conserves`, (!changed || x !== st) && v.length === 0 && conserved(x), JSON.stringify(v.slice(0, 3)));
+    };
+    const edgesIn = (x: EditorState, r: number) => x.plan.trailers[0].rows[r].columns.filter((c) => c.onEdge);
+    const undoes = (name: string, before: EditorState, after: EditorState) => {
+      const u = undo(after);
+      check(`${name} — Undo restores it`, JSON.stringify(u.plan) === JSON.stringify(before.plan) && JSON.stringify(u.holding) === JSON.stringify(before.holding));
+    };
+
+    // 1. Hold, place back, move to another row's slot, move to a new row; refusals.
+    const held = takeToHolding(st, { kind: "column", ref: edgeRef });
+    const hi = held.holding.length - 1;
+    check("1 hold: the held stack keeps onEdge", held !== st && held.holding[hi]?.onEdge === true && edgesIn(held, ri).length === 2);
+    valid("1 hold", held);
+    undoes("1 hold", st, held);
+    const backVerdict = evaluateSlotTarget(held, { kind: "holding", index: hi }, { t: 0, r: ri, slot: 0 });
+    check("1 place back: the row's own wall slot is ok", backVerdict.level === "ok", backVerdict.reason);
+    const back = moveToSlot(held, { kind: "holding", index: hi }, { t: 0, r: ri, slot: 0 });
+    check("1 place back: three edge stacks again, packed from 72\"", edgesIn(back, ri).length === 3 && edgesIn(back, ri).map((c) => c.posY).join() === "72,78,84" && back.holding.length === 0, JSON.stringify(edgesIn(back, ri).map((c) => c.posY)));
+    valid("1 place back", back);
+    undoes("1 place back", held, back);
+
+    const fullVerdict = evaluateSlotTarget(st, { kind: "column", ref: edgeRef }, { t: 0, r: otherRi, slot: 0 });
+    check("1 refuse: a row whose wall slot is full says on-edge boards only go in the wall slot", fullVerdict.level === "no" && fullVerdict.reason.startsWith(EDGE_SLOT_ONLY_REASON), fullVerdict.reason);
+    const roomy = takeToHolding(st, { kind: "column", ref: otherEdge }); // frees 6" in the other row
+    const moveVerdict = evaluateSlotTarget(roomy, { kind: "column", ref: edgeRef }, { t: 0, r: otherRi, slot: 0 });
+    check("1 move: another row's slot with room is ok", moveVerdict.level === "ok" && edgeSlotFree(roomy, { kind: "column", ref: edgeRef }, 0, otherRi) === 7, `${moveVerdict.reason} free=${edgeSlotFree(roomy, { kind: "column", ref: edgeRef }, 0, otherRi)}`);
+    const moved = moveToSlot(roomy, { kind: "column", ref: edgeRef }, { t: 0, r: otherRi, slot: 0 });
+    check("1 move: lands in the other row's slot", edgesIn(moved, otherRi).length === 3 && edgesIn(moved, ri).length === 2);
+    valid("1 move", moved);
+    undoes("1 move", roomy, moved);
+
+    const newRowVerdict = evaluateSlotTarget(st, { kind: "column", ref: edgeRef }, { t: 0, r: NEW_ROW, slot: 0 });
+    const newRow = moveToSlot(st, { kind: "column", ref: edgeRef }, { t: 0, r: NEW_ROW, slot: 0 });
+    const lone = newRow.plan.trailers[0].rows[0].columns;
+    check("1 new row: ok, and the stack sits at posY = flatWidth with no flat columns", newRowVerdict.level === "ok" && lone.length === 1 && lone[0].onEdge === true && lone[0].posY === flatWidth, `${newRowVerdict.reason} ${JSON.stringify(lone.map((c) => c.posY))}`);
+    valid("1 new row", newRow);
+    undoes("1 new row", st, newRow);
+
+    const T53 = TRAILER_TYPES["53ft Standard"];
+    const plan53 = pack([{ skuId: "EDGE6", qty: 54 }], [hb6], T53, opts);
+    const st53 = { ...createEditorState(plan53, T53, opts, [{ skuId: "EDGE6", qty: 54 }], [hb6]), holding: [held.holding[hi]] };
+    const noSlotRow = evaluateSlotTarget(st53, { kind: "holding", index: 0 }, { t: 0, r: 0, slot: 0 });
+    const noSlotNew = evaluateSlotTarget(st53, { kind: "holding", index: 0 }, { t: 0, r: NEW_ROW, slot: 0 });
+    check("1 refuse: a 53ft trailer has no wall slot (row and new row)", noSlotRow.reason === EDGE_NO_SLOT_REASON && noSlotNew.reason === EDGE_NO_SLOT_REASON && moveToSlot(st53, { kind: "holding", index: 0 }, { t: 0, r: NEW_ROW, slot: 0 }) === st53, `${noSlotRow.reason} / ${noSlotNew.reason}`);
+
+    // 2. Count: up to tiers (4 on a 108" box truck) ok, over clamps, 0 removes; balance follows.
+    const three = setLayerCount(st, edgeRef, 0, 3);
+    check("2 count 4 -> 3: one board back to balance", getCol(three, edgeRef)?.stackCount === 3 && three.plan.balance.find((b) => b.skuId === "EDGE6")?.remaining === 1);
+    valid("2 count 3", three);
+    const four = setLayerCount(three, edgeRef, 0, 4);
+    check("2 count 3 -> 4 (the tier cap): ok, balance drawn back to 0", getCol(four, edgeRef)?.stackCount === 4 && four.plan.balance.length === 0);
+    valid("2 count 4", four);
+    const over = setLayerCount(three, edgeRef, 0, 9);
+    check("2 count 9 clamps to 4 tiers", getCol(over, edgeRef)?.stackCount === 4 && getCol(over, edgeRef)?.totalHeight === 96);
+    valid("2 count clamp", over);
+    check("2 count over the cap on a full stack is a no-op", setLayerCount(st, edgeRef, 0, 9) === st);
+    const zero = setLayerCount(st, edgeRef, 0, 0);
+    check("2 count 0 removes the column, 4 boards to balance", edgesIn(zero, ri).length === 2 && zero.plan.balance.find((b) => b.skuId === "EDGE6")?.remaining === 4);
+    valid("2 count 0", zero);
+    undoes("2 count", st, three);
+    const heldThree = setHeldLayerCount(held, hi, 0, 3);
+    check("2 held count: 3, clamps at 4, balance follows", heldThree.holding[hi]?.stackCount === 3 && setHeldLayerCount(held, hi, 0, 7) === held && conserved(heldThree));
+
+    // 3. Swap: edge <-> edge ok; edge <-> flat no.
+    const swapV = evaluateSwapTarget(st, edgeRef, otherEdge);
+    const swapped = swapColumns(st, edgeRef, otherEdge);
+    check("3 swap edge <-> edge is ok", swapV.level === "ok" && swapped !== st, swapV.reason);
+    valid("3 swap edge", swapped);
+    undoes("3 swap edge", st, swapped);
+    const swapFlat = evaluateSwapTarget(st, edgeRef, otherFlat);
+    check("3 swap edge <-> flat is no", swapFlat.level === "no" && swapFlat.reason === EDGE_SWAP_REASON && swapColumns(st, otherFlat, edgeRef) === st, swapFlat.reason);
+
+    // 4. Never stacks, either way.
+    const onto = evaluateStackTarget(st, { kind: "top", ref: otherFlat, count: 1 }, edgeRef);
+    const from = evaluateStackTarget(st, { kind: "column", ref: edgeRef }, otherFlat);
+    check("4 stack onto an edge stack: on-edge boards don't stack", onto.level === "no" && onto.reason === EDGE_NO_STACK_REASON, onto.reason);
+    check("4 edge stack onto a flat one: on-edge boards don't stack", from.level === "no" && from.reason === EDGE_NO_STACK_REASON && stackOnto(st, { kind: "column", ref: edgeRef }, otherFlat) === st, from.reason);
+    check("4 pieces don't come off an edge stack's top", takeToHolding(st, { kind: "top", ref: edgeRef, count: 1 }) === st);
+
+    // 5. Delete a row with a wall slot: everything to holding, onEdge intact.
+    const deleted = removeRow(st, 0, ri);
+    check("5 delete row: 3 flat + 3 edge stacks in holding, edge ones still on edge", deleted !== st && deleted.holding.length === 6 && deleted.holding.filter((c) => c.onEdge).length === 3);
+    valid("5 delete row", deleted);
+    undoes("5 delete row", st, deleted);
+
+    // 6. Lay flat -> holding, identity orientation, count kept; places as a flat stack.
+    const laid = layFlat(st, { kind: "column", ref: edgeRef });
+    const flat = laid.holding[laid.holding.length - 1];
+    const o = flat?.layers[0]?.orientation;
+    check("6 lay flat: held, not on edge, 48×24×6 flat, 4 boards, partial", !!flat && !flat.onEdge && o?.length === 48 && o?.width === 24 && o?.height === 6 && flat.stackCount === 4 && flat.stackKind === "partial" && flat.colWidth === 24, JSON.stringify(flat));
+    valid("6 lay flat", laid);
+    undoes("6 lay flat", st, laid);
+    const placedFlat = moveToSlot(laid, { kind: "holding", index: laid.holding.length - 1 }, { t: 0, r: NEW_ROW, slot: 0 });
+    check("6 lay flat: places as a normal flat stack in a new row", evaluateSlotTarget(laid, { kind: "holding", index: laid.holding.length - 1 }, { t: 0, r: NEW_ROW, slot: 0 }).level === "ok" && placedFlat.plan.trailers[0].rows[0].columns[0]?.posY === 0);
+    valid("6 lay flat placed", placedFlat);
+    check("6 lay flat: a flat stack is a no-op", layFlat(st, { kind: "column", ref: flatRef }) === st);
+
+    // 7. Stand on edge: 150 boards -> rows with empty 19" slots (room for k = 3 columns × 4 tiers).
+    const cart7: CartLine[] = [{ skuId: "EDGE6", qty: 150 }];
+    const st7 = createEditorState(pack(cart7, [hb6], BOX, opts), BOX, opts, cart7, [hb6]);
+    const r7 = st7.plan.trailers[0].rows.findIndex((r) => r.columns.length === 3 && r.columns.every((c) => !c.onEdge && c.stackCount === 18));
+    const src7 = { kind: "column" as const, ref: { t: 0, r: r7, c: 0 } };
+    check("7 fixture: a row of three full 6\"×18 flat stacks, empty slot", r7 >= 0 && edgeSlotFree(st7, src7, 0, r7) === 19);
+    check("7 a plain holey stack may stand on edge", evaluateStandOnEdge(st7, src7) === null);
+    const standV = evaluateStandTarget(st7, src7, { t: 0, r: r7 });
+    const stood = standOnEdge(st7, src7, { t: 0, r: r7 });
+    const k = Math.floor(19 / 6);
+    const expected = Math.min(18, k * 4);
+    const stoodEdges = stood.plan.trailers[0].rows[r7].columns.filter((c) => c.onEdge);
+    check(`7 stand: min(18, ${k}×4) = ${expected} boards stand in ${k} columns at 72/78/84`, standV.level === "ok" && stoodEdges.reduce((n, c) => n + c.stackCount, 0) === expected && stoodEdges.map((c) => c.posY).join() === "72,78,84", `${standV.reason} ${JSON.stringify(stoodEdges.map((c) => [c.posY, c.stackCount]))}`);
+    check("7 stand: the rest stay in the source stack", stood.plan.trailers[0].rows[r7].columns.filter((c) => !c.onEdge)[0]?.stackCount === 18 - expected);
+    valid("7 stand", stood);
+    undoes("7 stand", st7, stood);
+    const heldSrc = takeToHolding(st7, { kind: "top", ref: { t: 0, r: r7, c: 1 }, count: 5 });
+    const heldStood = standOnEdge(heldSrc, { kind: "holding", index: heldSrc.holding.length - 1 }, { t: 0, r: r7 });
+    check("7 stand from holding: all 5 stand (4 + 1), holding empties", heldStood.holding.length === 0 && heldStood.plan.trailers[0].rows[r7].columns.filter((c) => c.onEdge).map((c) => c.stackCount).join() === "4,1");
+    valid("7 stand from holding", heldStood);
+    const block: PackSku = { id: "BLK", name: "block", sku: "BLK", length: 48, width: 24, height: 8, weight: 1, category: "Blocks", allowRotation: true };
+    const withBlock = addToHolding({ ...st7, skus: [...st7.skus, block] }, block, 3);
+    check("7 a non-holey stack is refused", evaluateStandOnEdge(withBlock, { kind: "holding", index: withBlock.holding.length - 1 }) === STAND_NOT_PLAIN_REASON);
+    const twoLayer = { ...heldSrc, holding: [{ ...heldSrc.holding[0], layers: [...heldSrc.holding[0].layers, { ...heldSrc.holding[0].layers[0], count: 1 }] }] };
+    check("7 a two-layer stack is refused", evaluateStandOnEdge(twoLayer, { kind: "holding", index: 0 }) === STAND_NOT_PLAIN_REASON && standOnEdge(twoLayer, { kind: "holding", index: 0 }, { t: 0, r: r7 }) === twoLayer);
+    check("7 no room anywhere -> no wall slot has room", evaluateStandOnEdge(st, { kind: "column", ref: flatRef }) === "no wall slot has room");
+
+    // Dissolve (unchanged by lb-edge-01): two box trucks; the second's pieces may go onto the first,
+    // never into its slot, and the first's edge boards are never offered as a source.
     const cart2: CartLine[] = [{ skuId: "EDGE6", qty: 396 + 10 }];
     const plan2 = pack(cart2, [hb6], BOX, opts);
     const st2 = createEditorState(plan2, BOX, opts, cart2, [hb6]);
     const isEdgeAt = (ti: number, r: number, c: number) => st2.plan.trailers[ti]?.rows[r]?.columns[c]?.onEdge === true;
     const fromLast = proposeDissolve(st2, st2.plan.trailers.length - 1);
     const fromFirst = proposeDissolve(st2, 0);
-    check("H8 fixture: dissolve plan has 2 box trucks with edge columns", st2.plan.trailers.length === 2 && st2.plan.trailers.some((t) => t.rows.some((r) => r.columns.some((c) => c.onEdge))), String(st2.plan.trailers.length));
-    check("H8: dissolve never targets an edge column", [...fromLast.moves, ...fromFirst.moves].every((m) => !isEdgeAt(m.toTi, m.toRi, m.toCi)));
-    check("H8: dissolve never sources from an edge column", fromFirst.moves.every((m) => !isEdgeAt(0, m.fromRi, m.fromCi)) && fromLast.moves.every((m) => !isEdgeAt(fromLast.srcTi, m.fromRi, m.fromCi)));
+    check("dissolve fixture: plan has 2 box trucks with edge columns", st2.plan.trailers.length === 2 && st2.plan.trailers.some((t) => t.rows.some((r) => r.columns.some((c) => c.onEdge))), String(st2.plan.trailers.length));
+    check("dissolve never targets an edge column", [...fromLast.moves, ...fromFirst.moves].every((m) => !isEdgeAt(m.toTi, m.toRi, m.toCi)));
+    check("dissolve never sources from an edge column", fromFirst.moves.every((m) => !isEdgeAt(0, m.fromRi, m.fromCi)) && fromLast.moves.every((m) => !isEdgeAt(fromLast.srcTi, m.fromRi, m.fromCi)));
   }
 
   return { pass: results.every((r) => r.pass), results };

@@ -55,8 +55,10 @@
 
 - [ ] **Edit/move on-edge holey columns in the legacy customize editor + dissolve** (lb-box-02 locked them: not
   draggable, not drop targets, never dissolve receivers; a dense re-pack flattens them).
-- [ ] **Edit/move on-edge holey columns in v2 Customize + dissolve** (lb-box-03 locked them: no move/stack/swap/
-  count change, rows holding them can't be deleted, Shift to rear only closes empty rows on that trailer).
+- [ ] **Dissolve on-edge holey columns in v2** (lb-edge-01 unlocked them in Customize; `dissolve.ts` still never moves
+  them or uses them as receivers).
+- [ ] **Shift to wall on trailers with on-edge columns** — `reflowTrailer` still only closes empty rows on a trailer
+  with any on-edge column (lb-box-03 behaviour, left as is by lb-edge-01). Revisit now that edge stacks can move.
 - [ ] **lgx-review-01 follow-up — Load Builder "Generate BOLs" has no post-generate review step.** LoadPlanView's BolGenerateModal path still just closes. Job-less plans have no job_id, so wiring it needs BolViewerModal to accept saved BOL ids (or the POST responses) instead of a jobId.
 - [ ] **Load Builder rework (`lbr-NN`) — scoped 2026-10-12.** Keep the v2 stack; legacy-like layout; engine made as
   close to optimal as possible; novice-friendly customization. Locked rules (final 2026-10-12, supersede

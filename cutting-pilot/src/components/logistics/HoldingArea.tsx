@@ -7,10 +7,15 @@
 // placement action is armed (Step 2), `holdingTarget` turns the tray itself into a target ("Put it
 // in holding", for pieces taken off a trailer stack), and `itemVerdict` fades held stacks that
 // can't take the pieces, with the same green/amber/faded language as the trailer diagram.
+//
+// lb-edge-01: a held on-edge stack reads "6″ on edge ×4" with the hatched on-edge swatch (its layer
+// unitHeight is the 24″ tier, not a size). Its actions (Place in a wall slot, Lay flat, Change count)
+// live in Customize's action bar, like every held stack's.
 "use client";
 
 import { PackageOpen, Layers } from "lucide-react";
 import type { PackColumn } from "@/lib/packEngine";
+import { thicknessColor, thicknessLabel } from "@/lib/thicknessPalette";
 import type { TapVerdict } from "./TrailerDiagram";
 
 interface HoldingAreaProps {
@@ -26,6 +31,7 @@ interface HoldingAreaProps {
 }
 
 function stackLabel(column: PackColumn): string {
+  if (column.onEdge) return column.layers.map((l) => `${thicknessLabel(column.colWidth)} on edge ×${l.count}`).join(" + ");
   return column.layers.map((l) => `${l.unitHeight}″×${l.count}`).join(" + ");
 }
 
@@ -86,7 +92,13 @@ export default function HoldingArea({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-text font-medium">{base.skuName}</span>
                   <span className="text-[12px] text-muted font-mono tabular-nums flex items-center gap-1">
-                    <Layers className="w-3 h-3" aria-hidden="true" />
+                    {column.onEdge ? (
+                      <span className="relative inline-block w-3 h-3 rounded-sm border border-[var(--line)] overflow-hidden" style={{ background: thicknessColor(column.colWidth).bg }} aria-hidden="true">
+                        <span className="absolute inset-0" style={{ backgroundImage: "repeating-linear-gradient(135deg, var(--text) 0 1.5px, transparent 1.5px 4px)", opacity: 0.4 }} />
+                      </span>
+                    ) : (
+                      <Layers className="w-3 h-3" aria-hidden="true" />
+                    )}
                     {stackLabel(column)} · {column.stackCount}pc
                   </span>
                 </span>

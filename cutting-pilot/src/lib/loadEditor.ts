@@ -63,7 +63,7 @@ import type {
   PackBalance,
   PackViolation,
 } from "./packEngine";
-import { validatePlan, skuOrientations, HOLEY_BOARD_CATEGORY } from "./packEngine";
+import { validatePlan, skuOrientations, HOLEY_BOARD_CATEGORY, holeyEdgeSlot, HOLEY_EDGE_LABEL } from "./packEngine";
 // Reuses lb-ui-05's reproduction of packEngine.ts's private, unexported colorForSku rather than
 // duplicating the palette/hash a third time — packEngine.ts is closed/ratchet-guarded and exports
 // neither. See jobPull.ts's own header note; BACKLOG.md's existing "export colorForSku instead of
@@ -280,17 +280,87 @@ function getColumn(plan: PackPlan, ref: ColumnRef): PackColumn | null {
   return plan.trailers[ref.t]?.rows[ref.r]?.columns[ref.c] ?? null;
 }
 
-// lb-box-03: on-edge holey columns are locked in Customize for now (BACKLOG: full edge editing) —
-// never a move/stack/swap source or target, never resized, and no flat stack goes into the slot.
-export const EDGE_LOCKED_REASON = "on-edge boards are locked";
-
-/** True when the stack at `ref` is an on-edge column (locked). */
-export function isEdgeLocked(state: EditorState, ref: ColumnRef): boolean {
-  return getColumn(state.plan, ref)?.onEdge === true;
-}
-
 function rowHasEdge(row: PackRow | undefined): boolean {
   return !!row && row.columns.some((c) => c.onEdge);
+}
+
+// --- lb-edge-01 (Steve, 2026-10-26): on-edge holey boards are editable in Customize (lb-box-03 had
+// locked them). They move, hold, swap (with other on-edge stacks), change count and go to holding
+// with their row like flat stacks, but only ever land in a wall slot, and never stack. Lay flat /
+// Stand on edge convert between the two. validatePlan's edge-slot rule stays the authority; every op
+// here leaves a plan that passes it. ---
+
+export const EDGE_NO_STACK_REASON = "on-edge boards don't stack";
+export const EDGE_SLOT_ONLY_REASON = "on-edge boards only go in the wall slot";
+export const EDGE_NO_SLOT_REASON = "this trailer has no wall slot";
+export const EDGE_SWAP_REASON = "on-edge boards only swap with on-edge boards";
+export const STAND_NOT_PLAIN_REASON = "only plain holey board stacks can stand on edge";
+export const STAND_NO_ROOM_REASON = "no wall slot has room";
+
+/** A whole stack, on a trailer or held — the sources Lay flat / Stand on edge take. */
+export type WholeStackSource = { kind: "column"; ref: ColumnRef } | { kind: "holding"; index: number };
+
+function skuOfColumn(state: EditorState, column: PackColumn): PackSku | undefined {
+  const skuId = column.layers[0]?.skuId;
+  return skuId ? state.skus.find((s) => s.id === skuId) : undefined;
+}
+
+/** Boards an on-edge column of this SKU can hold on a trailer: floor(effectiveHeight / board width). */
+function edgeTiers(state: EditorState, dims: Dimensions, sku: PackSku): number {
+  return sku.width > 0 ? Math.floor((effectiveHeightOf(state, dims) + EPS) / sku.width) : 0;
+}
+
+/** The dims a held on-edge stack is measured against: the first slot trailer's, else state.dims. */
+function edgeDimsForHolding(state: EditorState): Dimensions {
+  return state.plan.trailers.find((t) => t.dims.holeyEdgeSlot)?.dims ?? state.dims;
+}
+
+/** Most boards one on-edge stack of this column's SKU can hold (for the UI's count stepper). */
+export function edgeTierCap(state: EditorState, source: WholeStackSource): number {
+  const column = source.kind === "column" ? getColumn(state.plan, source.ref) : state.holding[source.index];
+  const sku = column ? skuOfColumn(state, column) : undefined;
+  if (!column || !sku) return 0;
+  return edgeTiers(state, source.kind === "column" ? state.plan.trailers[source.ref.t].dims : edgeDimsForHolding(state), sku);
+}
+
+/** One row's wall slot for boards `skuWidth` wide (24″ holey): where it starts (past the flat
+ * columns, never before holeyEdgeSlot's flatWidth) and the width left after its on-edge columns.
+ * `exclude` leaves one column out (a stack moving within its own row). */
+function wallSlotRoom(row: PackRow, dims: Dimensions, skuWidth: number, exclude?: PackColumn | null): { start: number; free: number } {
+  const flatSum = row.columns.filter((c) => !c.onEdge && c !== exclude).reduce((s, c) => s + c.colWidth, 0);
+  const start = Math.max(holeyEdgeSlot(dims, skuWidth).flatWidth, flatSum);
+  const edgeSum = row.columns.filter((c) => c.onEdge && c !== exclude).reduce((s, c) => s + c.colWidth, 0);
+  return { start, free: dims.width - start - edgeSum };
+}
+
+/** Lays a row's on-edge columns side by side from its wall slot's start, in array order. */
+function packWallSlot(row: PackRow, dims: Dimensions, skuWidth: number): void {
+  let posY = wallSlotRoom(row, dims, skuWidth).start;
+  for (const column of row.columns) {
+    if (!column.onEdge) continue;
+    column.posY = posY;
+    posY += column.colWidth;
+  }
+}
+
+/** True when every on-edge column in the row ends inside the trailer width. */
+function wallSlotFits(row: PackRow, dims: Dimensions): boolean {
+  return row.columns.every((c) => !c.onEdge || c.posY + c.colWidth <= dims.width + EPS);
+}
+
+/** Free wall-slot width (inches) in row `r` of trailer `t` for `source`'s pieces (an on-edge stack,
+ * or a holey stack about to stand), leaving out the source column when it already sits in that row.
+ * null when the trailer has no slot or the row doesn't exist. The UI uses it to decide which slots
+ * get a button. */
+export function edgeSlotFree(state: EditorState, source: PieceSource, t: number, r: number): number | null {
+  const trailer = state.plan.trailers[t];
+  const row = trailer?.rows[r];
+  const pieces = piecesFor(state, source);
+  if (!trailer || !row || !pieces || !trailer.dims.holeyEdgeSlot) return null;
+  const sku = skuOfColumn(state, pieces);
+  if (!sku) return null;
+  const own = source.kind === "column" ? getColumn(state.plan, source.ref) : null;
+  return wallSlotRoom(row, trailer.dims, sku.width, own).free;
 }
 
 // --- operations ---
@@ -307,7 +377,7 @@ export function moveColumn(state: EditorState, from: ColumnRef, to: DropTarget):
  * compactLoad (or apply) removes it. */
 export function pullToHolding(state: EditorState, from: ColumnRef): EditorState {
   const column = getColumn(state.plan, from);
-  if (!column || column.onEdge) return state;
+  if (!column) return state;
 
   const plan = clonePlan(state.plan);
   const fromRow = plan.trailers[from.t].rows[from.r];
@@ -715,9 +785,14 @@ export function addLayerFromLibrary(state: EditorState, ref: ColumnRef, sku: Pac
 export function setLayerCount(state: EditorState, ref: ColumnRef, layerIndex: number, count: number): EditorState {
   const existingColumn = getColumn(state.plan, ref);
   const existingLayer = existingColumn?.layers[layerIndex];
-  if (!existingColumn || !existingLayer || existingColumn.onEdge) return state;
+  if (!existingColumn || !existingLayer) return state;
   const priorCount = existingLayer.count;
-  const nextCount = Math.max(0, Math.floor(count));
+  let nextCount = Math.max(0, Math.floor(count));
+  // lb-edge-01: an on-edge stack holds at most floor(effectiveHeight / 24) boards — clamp.
+  if (existingColumn.onEdge) {
+    const sku = skuOfColumn(state, existingColumn);
+    if (sku) nextCount = Math.min(nextCount, edgeTiers(state, state.plan.trailers[ref.t].dims, sku));
+  }
   const delta = nextCount - priorCount;
   if (delta === 0) return state;
 
@@ -756,7 +831,7 @@ export function setLayerCount(state: EditorState, ref: ColumnRef, layerIndex: nu
  * consistent with lb-ui-02's own CHANGELOG precedent for the same divergence on column delete. */
 export function removeRow(state: EditorState, trailerIndex: number, rowIndex: number): EditorState {
   const row = state.plan.trailers[trailerIndex]?.rows[rowIndex];
-  if (!row || rowHasEdge(row)) return state; // lb-box-03: a row holding on-edge boards is locked
+  if (!row) return state; // lb-edge-01: on-edge columns go to holding too, onEdge kept
 
   const plan = clonePlan(state.plan);
   const removedRow = plan.trailers[trailerIndex].rows[rowIndex];
@@ -865,22 +940,24 @@ function extractPieces(state: EditorState, source: PieceSource, keepRef?: Column
   if (source.kind === "column" || source.kind === "top") {
     const row = plan.trailers[source.ref.t]?.rows[source.ref.r];
     const column = row?.columns[source.ref.c];
-    if (!row || !column || column.onEdge) return null;
+    if (!row || !column) return null;
     if (source.kind === "column") {
       row.columns.splice(source.ref.c, 1);
       return { plan, holding, pieces: column, kept };
     }
+    if (column.onEdge) return null; // lb-edge-01: one layer — nothing to split off the top
     const pieces = splitTop(column, source.count, state, plan.trailers[source.ref.t].dims);
     if (!pieces) return null;
     if (column.layers.length === 0) row.columns.splice(source.ref.c, 1);
     return { plan, holding, pieces, kept };
   }
   const held = holding[source.index];
-  if (!held || held.onEdge) return null;
+  if (!held) return null;
   if (source.kind === "holding") {
     holding.splice(source.index, 1);
     return { plan, holding, pieces: held, kept };
   }
+  if (held.onEdge) return null;
   const pieces = splitTop(held, source.count, state, state.dims);
   if (!pieces) return null;
   if (held.layers.length === 0) holding.splice(source.index, 1);
@@ -929,12 +1006,13 @@ function combineLayers(target: PackLayer[], moved: PackLayer[]): PackLayer[] {
 export function evaluateStackTarget(state: EditorState, source: PieceSource, to: ColumnRef): TargetVerdict {
   const target = getColumn(state.plan, to);
   if (!target) return { level: "no", reason: "no such stack", heightAfter: 0 };
-  if (target.onEdge) return { level: "no", reason: EDGE_LOCKED_REASON, heightAfter: target.totalHeight };
+  if (target.onEdge) return { level: "no", reason: EDGE_NO_STACK_REASON, heightAfter: target.totalHeight };
   if ((source.kind === "column" || source.kind === "top") && sameRef(source.ref, to)) {
     return { level: "no", reason: "that's the same stack", heightAfter: target.totalHeight };
   }
   const pieces = piecesFor(state, source);
   if (!pieces) return { level: "no", reason: "nothing to move", heightAfter: target.totalHeight };
+  if (pieces.onEdge) return { level: "no", reason: EDGE_NO_STACK_REASON, heightAfter: target.totalHeight };
   const heightAfter = target.totalHeight + pieces.totalHeight;
 
   const moved = layersOnFootprint(state, pieces, target.colLength, target.colWidth);
@@ -1002,6 +1080,21 @@ export function moveToSlot(state: EditorState, source: PieceSource, to: DropTarg
   if (!extracted) return state;
   const { plan, holding, pieces } = extracted;
   const toTrailer = plan.trailers[to.t];
+  if (pieces.onEdge) {
+    // lb-edge-01: an on-edge stack only lands in a wall slot, after the slot's existing boards.
+    const sku = skuOfColumn(state, pieces);
+    if (!sku || !toTrailer.dims.holeyEdgeSlot) return state;
+    if (to.r === NEW_ROW) {
+      pieces.posY = holeyEdgeSlot(toTrailer.dims, sku.width).flatWidth;
+      toTrailer.rows.unshift({ posFromFront: 0, rowLength: 0, rowWidthUsed: 0, wastedFloorArea: 0, columns: [pieces], totalUnits: 0, totalWeight: 0 });
+    } else {
+      const toRow = toTrailer.rows[to.r];
+      toRow.columns.push(pieces);
+      packWallSlot(toRow, toTrailer.dims, sku.width);
+    }
+    recomputePlan(plan, state.options);
+    return { ...state, plan, holding, history: withHistory(state) };
+  }
   if (to.r === NEW_ROW) {
     toTrailer.rows.unshift({ posFromFront: 0, rowLength: 0, rowWidthUsed: 0, wastedFloorArea: 0, columns: [pieces], totalUnits: 0, totalWeight: 0 });
   } else {
@@ -1033,7 +1126,11 @@ export function evaluateSlotTarget(state: EditorState, source: PieceSource, to: 
   }
 
   let reason: string;
-  if (to.r === NEW_ROW) {
+  if (pieces.onEdge) {
+    const edge = evaluateEdgeSlotTarget(state, source, pieces, to);
+    if (edge.level === "no") return edge;
+    reason = edge.reason;
+  } else if (to.r === NEW_ROW) {
     if (pieces.colWidth > trailer.dims.width + EPS) {
       return { level: "no", reason: `too wide · would be ${fmtInches(pieces.colWidth)}"`, heightAfter };
     }
@@ -1046,7 +1143,7 @@ export function evaluateSlotTarget(state: EditorState, source: PieceSource, to: 
       const slotStart = Math.min(...toRow.columns.filter((c) => c.onEdge).map((c) => c.posY));
       const sourceCol = source.kind === "column" ? getColumn(state.plan, source.ref) : null;
       const flatAfter = toRow.columns.filter((c) => !c.onEdge && c !== sourceCol).reduce((s, c) => s + c.colWidth, 0) + pieces.colWidth;
-      if (flatAfter > slotStart + EPS) return { level: "no", reason: `${EDGE_LOCKED_REASON} · the wall slot is full`, heightAfter };
+      if (flatAfter > slotStart + EPS) return { level: "no", reason: "would run into the wall slot", heightAfter };
     }
     // canDrop excludes a same-row column's own width by object identity, so a whole trailer column
     // is passed as the original object.
@@ -1065,6 +1162,25 @@ export function evaluateSlotTarget(state: EditorState, source: PieceSource, to: 
     return { level: "no", reason: `too deep · pushes trailer ${overflow.trailerIndex + 1} to ${fmtInches(total)}"`, heightAfter };
   }
   return { level: "ok", reason, heightAfter };
+}
+
+/** lb-edge-01: the width/slot side of evaluateSlotTarget for an on-edge stack. Only a wall slot
+ * takes it (a new row on a slot trailer starts its slot at flatWidth); the caller's simulated move
+ * still checks depth. */
+function evaluateEdgeSlotTarget(state: EditorState, source: PieceSource, pieces: PackColumn, to: DropTarget): TargetVerdict {
+  const heightAfter = pieces.totalHeight;
+  const trailer = state.plan.trailers[to.t];
+  if (!trailer.dims.holeyEdgeSlot) return { level: "no", reason: EDGE_NO_SLOT_REASON, heightAfter };
+  const sku = skuOfColumn(state, pieces);
+  if (!sku) return { level: "no", reason: "unknown part", heightAfter };
+  const slotWidth = holeyEdgeSlot(trailer.dims, sku.width).slotWidth;
+  if (to.r === NEW_ROW) return { level: "ok", reason: `fits · new row, wall slot ${fmtInches(pieces.colWidth)}" of ${fmtInches(slotWidth)}"`, heightAfter };
+  const free = edgeSlotFree(state, source, to.t, to.r);
+  if (free === null) return { level: "no", reason: "no such row", heightAfter };
+  if (pieces.colWidth > free + EPS) {
+    return { level: "no", reason: `${EDGE_SLOT_ONLY_REASON} · ${free > EPS ? `${fmtInches(free)}" left in this row's slot` : "this row's slot is full"}`, heightAfter };
+  }
+  return { level: "ok", reason: `fits · wall slot, ${fmtInches(free - pieces.colWidth)}" left`, heightAfter };
 }
 
 /** "column" = pullToHolding; "top" = split N pieces off the top into a new held stack. */
@@ -1088,6 +1204,14 @@ function swappedPlan(state: EditorState, a: ColumnRef, b: ColumnRef): PackPlan |
   const colA = rowA.columns[a.c];
   rowA.columns[a.c] = rowB.columns[b.c];
   rowB.columns[b.c] = colA;
+  // lb-edge-01: two on-edge stacks trade places — re-lay both wall slots from their start.
+  if (colA.onEdge && rowA.columns[a.c].onEdge) {
+    const sku = skuOfColumn(state, colA);
+    if (sku) {
+      packWallSlot(rowA, plan.trailers[a.t].dims, sku.width);
+      packWallSlot(rowB, plan.trailers[b.t].dims, sku.width);
+    }
+  }
   recomputePlan(plan, state.options);
   return plan;
 }
@@ -1096,12 +1220,17 @@ function swappedPlan(state: EditorState, a: ColumnRef, b: ColumnRef): PackPlan |
 export function evaluateSwapTarget(state: EditorState, a: ColumnRef, b: ColumnRef): TargetVerdict {
   const heightAfter = getColumn(state.plan, a)?.totalHeight ?? 0;
   if (sameRef(a, b)) return { level: "no", reason: "that's the same stack", heightAfter };
-  if (isEdgeLocked(state, a) || isEdgeLocked(state, b)) return { level: "no", reason: EDGE_LOCKED_REASON, heightAfter };
+  const edgeA = getColumn(state.plan, a)?.onEdge === true;
+  const edgeB = getColumn(state.plan, b)?.onEdge === true;
+  if (edgeA !== edgeB) return { level: "no", reason: EDGE_SWAP_REASON, heightAfter };
   const plan = swappedPlan(state, a, b);
   if (!plan) return { level: "no", reason: "no such stack", heightAfter };
   for (const ref of [a, b]) {
     const trailer = plan.trailers[ref.t];
     const row = trailer.rows[ref.r];
+    if (edgeA && !wallSlotFits(row, trailer.dims)) {
+      return { level: "no", reason: `won't fit · row R${ref.r + 1}'s wall slot is too narrow`, heightAfter };
+    }
     if (row.rowWidthUsed > trailer.dims.width + EPS) {
       return {
         level: "no",
@@ -1153,6 +1282,168 @@ export function addToHolding(state: EditorState, sku: PackSku, count: number): E
   return { ...introduced, plan, cart, holding: [...state.holding.map(cloneColumn), ...added], history: withHistory(state) };
 }
 
+// --- lb-edge-01: Lay flat / Stand on edge / held count ---
+
+/** A held stack's layer count (the held-stack counterpart of setLayerCount, same balance
+ * bookkeeping): 0 drops the layer, and a held stack left empty leaves holding. An on-edge stack is
+ * clamped to its tiers (measured against the first slot trailer). One history step. */
+export function setHeldLayerCount(state: EditorState, index: number, layerIndex: number, count: number): EditorState {
+  const held = state.holding[index];
+  const layer = held?.layers[layerIndex];
+  if (!held || !layer) return state;
+  let nextCount = Math.max(0, Math.floor(count));
+  if (held.onEdge) {
+    const sku = skuOfColumn(state, held);
+    if (sku) nextCount = Math.min(nextCount, edgeTiers(state, edgeDimsForHolding(state), sku));
+  }
+  const delta = nextCount - layer.count;
+  if (delta === 0) return state;
+  const holding = state.holding.map(cloneColumn);
+  const column = holding[index];
+  if (nextCount === 0) column.layers.splice(layerIndex, 1);
+  else column.layers[layerIndex].count = nextCount;
+  if (column.layers.length === 0) holding.splice(index, 1);
+  else {
+    const keepKind = column.stackKind;
+    refreshColumn(column, state, held.onEdge ? edgeDimsForHolding(state) : state.dims);
+    if (column.onEdge) column.stackKind = keepKind; // refreshColumn's full/partial test reads unitHeight, a tier here
+  }
+  const plan = clonePlan(state.plan);
+  plan.balance = adjustBalance(plan.balance, layer.skuId, -delta);
+  return { ...state, plan, holding, history: withHistory(state) };
+}
+
+/** Lays an on-edge stack (on a trailer or held) flat: the same boards as a flat Holey Board stack in
+ * the SKU's identity orientation, `stackKind: "partial"`, put in holding to be placed like any held
+ * stack. Pieces only change shape, so balance and cart are untouched. One history step. */
+export function layFlat(state: EditorState, source: WholeStackSource): EditorState {
+  const original = source.kind === "column" ? getColumn(state.plan, source.ref) : state.holding[source.index];
+  if (!original?.onEdge) return state;
+  const sku = skuOfColumn(state, original);
+  if (!sku) return state;
+  const extracted = extractPieces(state, source);
+  if (!extracted) return state;
+  const { plan, holding, pieces } = extracted;
+  const flat = buildColumn(sku, pieces.stackCount, state.options);
+  flat.layers[0].color = pieces.layers[0].color;
+  flat.rationale = `Laid flat from ${HOLEY_EDGE_LABEL} — ${flat.stackCount} × ${fmtInches(flat.layers[0].unitHeight)}" = ${fmtInches(flat.totalHeight)}"`;
+  flat.stackKind = "partial";
+  recomputePlan(plan, state.options);
+  return { ...state, plan, holding: [...holding, flat], history: withHistory(state) };
+}
+
+/** Why a stack can't stand on edge, or null when it can: one Holey Board SKU in one flat layer, and
+ * some row on a slot trailer with a board's thickness of wall slot free. */
+export function evaluateStandOnEdge(state: EditorState, source: WholeStackSource): string | null {
+  const pieces = piecesFor(state, source);
+  const sku = pieces ? skuOfColumn(state, pieces) : undefined;
+  if (!pieces || !sku || pieces.onEdge || pieces.layers.length !== 1 || sku.category !== HOLEY_BOARD_CATEGORY) return STAND_NOT_PLAIN_REASON;
+  const roomy = state.plan.trailers.some(
+    (trailer) =>
+      trailer.dims.holeyEdgeSlot &&
+      edgeTiers(state, trailer.dims, sku) > 0 &&
+      trailer.rows.some((row) => wallSlotRoom(row, trailer.dims, sku.width).free >= sku.height - EPS)
+  );
+  return roomy ? null : STAND_NO_ROOM_REASON;
+}
+
+/** The on-edge columns standing `pieces` in row (t, r) would create: left to right while a board's
+ * thickness fits, min(remaining, tiers) boards each. */
+function standColumns(state: EditorState, pieces: PackColumn, sku: PackSku, t: number, r: number): PackColumn[] {
+  const trailer = state.plan.trailers[t];
+  const row = trailer?.rows[r];
+  if (!trailer?.dims.holeyEdgeSlot || !row) return [];
+  const tiers = edgeTiers(state, trailer.dims, sku);
+  let free = wallSlotRoom(row, trailer.dims, sku.width).free;
+  let left = pieces.stackCount;
+  const base = pieces.layers[0];
+  const out: PackColumn[] = [];
+  while (left > 0 && tiers > 0 && free >= sku.height - EPS) {
+    const count = Math.min(left, tiers);
+    out.push({
+      posY: 0,
+      colWidth: sku.height,
+      colLength: sku.length,
+      totalHeight: count * sku.width,
+      totalWeight: count * sku.weight,
+      stackCount: count,
+      layers: [
+        {
+          skuId: sku.id,
+          skuName: sku.name,
+          skuCode: sku.sku,
+          color: base.color,
+          unitHeight: sku.width,
+          count,
+          orientation: { length: sku.length, width: sku.height, height: sku.width, label: HOLEY_EDGE_LABEL },
+        },
+      ],
+      mixed: false,
+      rationale: `${HOLEY_EDGE_LABEL}: ${count} × ${fmtInches(sku.height)}" boards stood ${fmtInches(sku.width)}" tall in the wall slot (Customize)`,
+      onEdge: true,
+    });
+    left -= count;
+    free -= sku.height;
+  }
+  return out;
+}
+
+/** Stands a plain holey stack on edge in row (t, r)'s wall slot. Boards that don't fit stay in the
+ * source stack (reduced; removed only if it empties). Pieces only change shape and place, so balance
+ * and cart are untouched. One history step; the same state when nothing fits. */
+export function standOnEdge(state: EditorState, source: WholeStackSource, to: { t: number; r: number }): EditorState {
+  if (evaluateStandOnEdge(state, source) === STAND_NOT_PLAIN_REASON) return state;
+  const pieces = piecesFor(state, source)!;
+  const sku = skuOfColumn(state, pieces)!;
+  const stood = standColumns(state, pieces, sku, to.t, to.r);
+  const boards = stood.reduce((s, c) => s + c.stackCount, 0);
+  if (boards === 0) return state;
+
+  const plan = clonePlan(state.plan);
+  const holding = state.holding.map(cloneColumn);
+  const toRow = plan.trailers[to.t].rows[to.r];
+  if (source.kind === "column") {
+    const row = plan.trailers[source.ref.t].rows[source.ref.r];
+    const column = row.columns[source.ref.c];
+    column.layers[0].count -= boards;
+    if (column.layers[0].count <= 0) row.columns.splice(source.ref.c, 1);
+    else refreshColumn(column, state, plan.trailers[source.ref.t].dims);
+  } else {
+    const held = holding[source.index];
+    held.layers[0].count -= boards;
+    if (held.layers[0].count <= 0) holding.splice(source.index, 1);
+    else refreshColumn(held, state, state.dims);
+  }
+  toRow.columns.push(...stood);
+  packWallSlot(toRow, plan.trailers[to.t].dims, sku.width);
+  recomputePlan(plan, state.options);
+  return { ...state, plan, holding, history: withHistory(state) };
+}
+
+/** Stand on edge's per-row verdict: how many boards would stand there; no when none fit or the row
+ * would push the trailer past its length. */
+export function evaluateStandTarget(state: EditorState, source: WholeStackSource, to: { t: number; r: number }): TargetVerdict {
+  const why = evaluateStandOnEdge(state, source);
+  if (why === STAND_NOT_PLAIN_REASON) return { level: "no", reason: why, heightAfter: 0 };
+  const trailer = state.plan.trailers[to.t];
+  if (!trailer?.dims.holeyEdgeSlot) return { level: "no", reason: EDGE_NO_SLOT_REASON, heightAfter: 0 };
+  const pieces = piecesFor(state, source)!;
+  const sku = skuOfColumn(state, pieces)!;
+  const stood = standColumns(state, pieces, sku, to.t, to.r);
+  const boards = stood.reduce((s, c) => s + c.stackCount, 0);
+  const heightAfter = stood[0]?.totalHeight ?? 0;
+  if (boards === 0) return { level: "no", reason: "no room in this row's wall slot", heightAfter };
+  const simulated = standOnEdge(state, source, to);
+  const sourceTrailer = source.kind === "column" ? source.ref.t : to.t;
+  const overflow = findOverflowingRows(simulated).find((o) => o.trailerIndex === to.t || o.trailerIndex === sourceTrailer);
+  if (overflow) {
+    const total = simulated.plan.trailers[overflow.trailerIndex].dims.length + overflow.overflowBy;
+    return { level: "no", reason: `too deep · pushes trailer ${overflow.trailerIndex + 1} to ${fmtInches(total)}"`, heightAfter };
+  }
+  const rest = pieces.stackCount - boards;
+  return { level: "ok", reason: `${boards} board${boards === 1 ? "" : "s"} stand here${rest > 0 ? ` · ${rest} stay where they are` : ""}`, heightAfter };
+}
+
 // --- lbr-09: Shift to rear. Floor terms (Steve, 2026-10-13): FRONT = doors (trailer.rows[0],
 // posFromFront 0, loaded last), REAR = nose (the last row, loaded first). When a move leaves a hole,
 // every stack behind it slides toward the rear to fill it. Stacks keep their order — nothing is
@@ -1190,8 +1481,8 @@ function emptyRow(columns: PackColumn[]): PackRow {
 function reflowTrailer(trailer: PackTrailer, trailerIndex: number): { rows: PackRow[] | null; note: string | null } {
   const nonEmpty = trailer.rows.filter((r) => r.columns.length > 0);
   const compactOnly = nonEmpty.length === trailer.rows.length ? null : nonEmpty;
-  // lb-box-03: on-edge boards are locked to their row's wall slot — stacks don't slide across rows on
-  // this trailer; empty rows still close.
+  // lb-box-03: stacks don't slide across rows on a trailer with on-edge boards (each sits in its own
+  // row's wall slot); empty rows still close. lb-edge-01 left this as is (BACKLOG).
   if (nonEmpty.some(rowHasEdge)) return { rows: compactOnly, note: null };
   if (nonEmpty.some((r) => rowDepth(r) === null)) return slideMixedTrailer(trailer, trailerIndex, compactOnly);
 

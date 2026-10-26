@@ -3027,6 +3027,59 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-edge-01 — Load Builder Customize: on-edge holey boards unlocked (move, hold, count, lay flat, stand on edge)
+  (Next/Cloudflare Platform Agent §9a leads: `lib/loadEditor.ts` + selfchecks; React Component Agent §9b:
+  `CustomizeEditor.tsx`, `TrailerDiagram.tsx`, `HoldingArea.tsx`, `lib/i18n.ts`). No migration, permission or API
+  change, and the engine and validator are unchanged. Closes the v2 Customize half of "Edit/move on-edge holey
+  columns"; dissolve stays as is.**
+  - **Editor (`loadEditor.ts`).**
+    - Removed `isEdgeLocked`, `EDGE_LOCKED_REASON` and every `onEdge` early return in `pullToHolding`,
+      `setLayerCount`, `removeRow` and `extractPieces`. Splitting pieces off the top of an on-edge stack is still
+      refused, since it has only one layer.
+    - **Placement.** An on-edge stack lands only in a wall slot: after the slot's existing boards, re-laid side by side
+      from `max(flatWidth, flat columns' width)`, or in a new row on a slot trailer at `posY = flatWidth`.
+    - **Refusals.** Each refusal now gives a specific reason: "on-edge boards only go in the wall slot", "this trailer
+      has no wall slot", "on-edge boards don't stack" (both ways), and "on-edge boards only swap with on-edge
+      boards".
+    - **Swap.** On-edge ↔ on-edge swaps re-lay both slots and are refused if a slot would overflow.
+    - **Count.** Clamped to `floor(effectiveHeight / 24)` tiers; 0 removes the stack, and balance is kept as for a
+      flat stack.
+    - **New exports.** `layFlat` (to holding as a flat Holey Board stack in its identity orientation,
+      `stackKind: "partial"`), `evaluateStandOnEdge`, `evaluateStandTarget` and `standOnEdge` (fills the chosen slot
+      left to right with `min(left, tiers)` boards a column; boards that don't fit stay in the source stack),
+      `setHeldLayerCount`, `edgeSlotFree`, `edgeTierCap` and `WholeStackSource`.
+    - **Flat stacks.** The "can't run into the slot" rule is unchanged; its reason now reads "would run into the wall
+      slot".
+  - **Diagram.** The lock icon, the locked hint and the Key's "Locked" entry are gone. On-edge columns stay out of
+    the ≥ 44px scaling. In edit mode the row's ON EDGE chip is a ≥ 44px button that opens a picker of that row's
+    on-edge stacks, one ≥ 44px button each; picking one is the same as tapping a flat stack. While an on-edge stack
+    (or Stand on edge) is armed, a "+ wall slot" lane appears under every row whose slot has a board's thickness
+    free. The chip's detail text is dropped when the row is too narrow for it (it used to clip on both sides).
+  - **Customize.**
+    - The edge lock backstop in `handleTapStack` is gone.
+    - **Actions.** An on-edge stack offers Move or swap (wall slots only), Send to holding, Change count (a stepper
+      capped at its tiers), Lay flat, Remove and Delete row. A held on-edge stack offers Place in a wall slot, Lay
+      flat and Change count. A flat holey stack offers **Stand on edge**, which is disabled with its reason when it
+      isn't possible. Stack-onto is never offered for an on-edge stack.
+    - **Holding.** A held on-edge stack reads "8″ on edge ×4" with the hatched swatch.
+    - **ColumnDetailPanel** is unchanged and still renders for a selected on-edge stack. As for every held stack,
+      it isn't shown for held ones.
+  - **i18n.** `lb.edge.locked` and `lb.edge.lockedHint` are removed. New keys: `lb.edge.chipAria`,
+    `lb.edge.pickTitle`, `lb.edge.close` and `lb.edge.slotTarget`. **The ES/HT strings are best effort and need
+    Steve's review.**
+  - **`dissolve.ts`.** Only a comment changed, from "locked" to "not moved by dissolve".
+  - **Selfchecks.** Before → after: loadEditor 295 → 339 (lb-box-03's H8 lock checks were replaced by lb-edge-01
+    checks 1–8), packEngine 207 → 207, savedLoad 45 → 45, dissolve 21 → 21, loadingDiagramPdf 54 → 54, so the
+    engine numbers are unchanged. Every edited plan passes `validateForApply` with no edge-slot,
+    piece-fits-trailer, row-geometry or conservation violation, keeps placed + balance + held == cart, and is
+    reversed by one Undo.
+  - **Verified.** `tsc --noEmit` and `cf-build` (including the on-color token guard) are green. Walked through in
+    next dev + Playwright, APIs mocked, light and dark, on the Siplast fixture packed onto 26ft box trucks (3
+    trucks, wall slots full). Steps: ON EDGE chip → picker → Send to holding → place back into the wall slot;
+    count 4 → 3; Lay flat an 8″ → place it as a new floor row on Trailer 3; Stand a flat 8″×13 on edge in the freed
+    slot (4 stand, 9 stay); delete a row with a slot (6 stacks to holding, 3 still on edge). No validator text
+    appeared at any step.
+
 - **lb-diag-01 — Load Builder loading diagram: WALL / DOORS labels, free space drawn at the doors (React Component
   Agent §9b for `TrailerDiagram.tsx` / `CustomizeEditor.tsx`; Next/Cloudflare Platform Agent §9a for
   `lib/loadingDiagramPdf.ts` + selfcheck). No migration, permission or API change. Supersedes lbr-09's FRONT/REAR floor
