@@ -20,6 +20,8 @@ interface LoadingDiagramPrintButtonProps {
   skus: PackSku[];
   runnerHeight?: number;
   warnings?: string[];
+  /** lb-diag-02: this trailer's BOL # and the job's invoice #, passed straight to the PDF. */
+  bolNumber?: string;
   invoiceNumber?: string;
 }
 
@@ -30,6 +32,7 @@ export default function LoadingDiagramPrintButton({
   skus,
   runnerHeight,
   warnings,
+  bolNumber,
   invoiceNumber,
 }: LoadingDiagramPrintButtonProps) {
   const [busy, setBusy] = useState(false);
@@ -39,7 +42,7 @@ export default function LoadingDiagramPrintButton({
     setBusy(true);
     setError(null);
     try {
-      const bytes = await buildLoadingDiagramPdf(trailer, trailerIndex, dims, skus, { runnerHeight, warnings, invoiceNumber });
+      const bytes = await buildLoadingDiagramPdf(trailer, trailerIndex, dims, skus, { runnerHeight, warnings, bolNumber, invoiceNumber });
       const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const opened = window.open(url, "_blank");

@@ -25,6 +25,7 @@ import {
   rowSpanX,
   loadNoseEnd,
   END_LABEL_SIZE,
+  diagramHeaderText,
 } from "./loadingDiagramPdf";
 import { pack, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, HOLEY_BOARD_CATEGORY } from "./packEngine";
 import { thicknessColor } from "./thicknessPalette";
@@ -291,6 +292,20 @@ export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; 
     check("buildLoadingDiagramPdf: runner + warning lines push rows down but still 2 pages", manyWithNotes === 2, String(manyWithNotes));
     const smallPages = (await PDFDocument.load(await buildLoadingDiagramPdf(trailer, 0, DIMS, SKUS))).getPageCount();
     check("buildLoadingDiagramPdf: a small trailer stays on 1 page", smallPages === 1, String(smallPages));
+    // lb-diag-02: a 30-character BOL # shrinks/truncates beside the title (page 1 and the (cont.) page).
+    const longBol = "BOL-2026-10-26-4511-01-ABCDEFG";
+    const longPages = (await PDFDocument.load(await buildLoadingDiagramPdf(many, 1, wide, manySkus, { bolNumber: longBol, invoiceNumber: "4511" }))).getPageCount();
+    check("lb-diag-02: a 30-char BOL # still builds a loadable PDF (2 pages)", longBol.length === 30 && longPages === 2, String(longPages));
+  }
+
+  // lb-diag-02: header label logic.
+  {
+    const same = (a: { bol: string | null; subtitleSuffix: string }, bol: string | null, suffix: string) => a.bol === bol && a.subtitleSuffix === suffix;
+    check("lb-diag-02 header: BOL only -> BOL, no suffix", same(diagramHeaderText({ bolNumber: "4511-01" }), "4511-01", ""));
+    check("lb-diag-02 header: BOL != invoice -> BOL + INV# suffix", same(diagramHeaderText({ bolNumber: "4511-01", invoiceNumber: "4511" }), "4511-01", " · INV# 4511"));
+    check("lb-diag-02 header: BOL == invoice -> no duplicate suffix", same(diagramHeaderText({ bolNumber: "4511", invoiceNumber: "4511" }), "4511", ""));
+    check("lb-diag-02 header: invoice only -> no BOL, INV# suffix", same(diagramHeaderText({ invoiceNumber: "4511" }), null, " · INV# 4511"));
+    check("lb-diag-02 header: neither -> no BOL, empty suffix", same(diagramHeaderText({}), null, "") && same(diagramHeaderText({ bolNumber: "  ", invoiceNumber: "" }), null, ""));
   }
 
   // filterTrailerWarnings: only this trailer's lines, prefix-matched exactly (not a substring match

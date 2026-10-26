@@ -278,6 +278,8 @@ export default function ResultsTab(p: ResultsTabProps) {
           skus={p.effectiveSkus}
           onApply={p.onApplyEdit}
           onDiscard={p.onDiscardEdit}
+          bolNumbers={p.bolNumbers}
+          invoiceNumber={p.invoiceNumber}
         />
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
@@ -317,7 +319,8 @@ export default function ResultsTab(p: ResultsTabProps) {
                         skus={p.effectiveSkus}
                         runnerHeight={p.runnerHeight}
                         warnings={plan.warnings}
-                        invoiceNumber={p.bolNumbers[trailerIndex] || p.invoiceNumber}
+                        bolNumber={p.bolNumbers[trailerIndex] || undefined}
+                        invoiceNumber={p.invoiceNumber}
                       />
                     </div>
                   }

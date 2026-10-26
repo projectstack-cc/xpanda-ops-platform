@@ -25,7 +25,8 @@
 // - Confirmed per-trailer, not whole-plan: printPackingSlip/buildLoadingDiagramPdfBytes both take a
 //   single `trailer` + `trailerNumber`; the call site (:2261) is inside the per-trailer row loop.
 //   No combined multi-trailer export exists in legacy. Matched here.
-// - Content set (buildLoadingDiagramInnerHtml): title + trailer-type/inv# subtitle, the diagram, a
+// - Content set (buildLoadingDiagramInnerHtml): title (+ BOL # on the right, lb-diag-02) +
+//   trailer-type/inv# subtitle, the diagram, a
 //   pieces table (swatch + name + count, from trailer.skuBreakdown), a stack breakdown table (stack
 //   count + per-layer size pattern, from trailer.stackPatterns), and a runner-dunnage warning when
 //   state.runnerHeight > 0. v2 has no precomputed skuBreakdown/stackPatterns equivalent on
@@ -345,9 +346,39 @@ export interface BuildLoadingDiagramPdfOptions {
   runnerHeight?: number;
   /** Plan-level warnings; only entries naming this trailer are shown (filterTrailerWarnings). */
   warnings?: string[];
-  /** Optional per-trailer invoice number (legacy: state.trailerInvNumbers[ti]), shown in the
-   * subtitle when present. */
+  /** lb-diag-02: this trailer's BOL # (the Load Builder card's input, saved by the BOL generator as
+   * `bol_number`). Printed bold at the top right of the title row; "BOL # —" in grey when absent,
+   * so a missing number shows on the floor instead of silently vanishing. */
+  bolNumber?: string;
+  /** The job's invoice #, appended to the subtitle as " · INV# …" when present and different from
+   * the BOL #. */
   invoiceNumber?: string;
+}
+
+/** lb-diag-02: the header's label logic, pure so the selfcheck can test it without rendering. */
+export function diagramHeaderText(options: Pick<BuildLoadingDiagramPdfOptions, "bolNumber" | "invoiceNumber">): { bol: string | null; subtitleSuffix: string } {
+  const bol = options.bolNumber?.trim() || null;
+  const inv = options.invoiceNumber?.trim() || "";
+  return { bol, subtitleSuffix: inv && inv !== bol ? ` · INV# ${inv}` : "" };
+}
+
+const TITLE_SIZE = 20;
+const BOL_SIZE = 16;
+const BOL_MIN_SIZE = 12;
+const BOL_GAP = 16; // minimum space between the title and the BOL #
+
+/** Draws "BOL # …" right-aligned on a title row (baseline `y`) whose title is `title`: bold 16pt
+ * INK, shrinking to 12pt and then truncating so it never runs into the title; "BOL # —" in MUTED
+ * when there's no number. */
+function drawBolLabel(page: PDFPage, fontBold: PDFFont, title: string, bol: string | null, y: number) {
+  const text = `BOL # ${bol ?? "—"}`;
+  const right = PAGE_WIDTH - MARGIN;
+  const room = right - (MARGIN + fontBold.widthOfTextAtSize(title, TITLE_SIZE) + BOL_GAP);
+  let size = BOL_SIZE;
+  while (size > BOL_MIN_SIZE && fontBold.widthOfTextAtSize(text, size) > room) size -= 1;
+  const fitted = fitText(fontBold, text, size, room);
+  const width = fontBold.widthOfTextAtSize(fitted, size);
+  page.drawText(fitted, { x: right - width, y, size, font: fontBold, color: bol ? INK : MUTED });
 }
 
 /** Builds one trailer's loading-diagram PDF: the top-down layout, a pieces table, a stack
@@ -369,11 +400,13 @@ export async function buildLoadingDiagramPdf(
 
   let cursorY = PAGE_HEIGHT - MARGIN;
 
-  // Title + subtitle
-  page.drawText(`Trailer ${trailerIndex + 1} Loading Diagram`, { x: MARGIN, y: cursorY - 20, size: 20, font: fontBold, color: INK });
+  // Title (+ BOL # on the right) + subtitle
+  const header = diagramHeaderText(options);
+  const title = `Trailer ${trailerIndex + 1} Loading Diagram`;
+  page.drawText(title, { x: MARGIN, y: cursorY - 20, size: TITLE_SIZE, font: fontBold, color: INK });
+  drawBolLabel(page, fontBold, title, header.bol, cursorY - 20);
   cursorY -= 26;
-  const invSuffix = options.invoiceNumber ? ` · INV# ${options.invoiceNumber}` : "";
-  page.drawText(`${dims.length}"L × ${dims.width}"W × ${dims.height}"H${invSuffix}`, { x: MARGIN, y: cursorY - 12, size: 12, font, color: MUTED });
+  page.drawText(`${dims.length}"L × ${dims.width}"W × ${dims.height}"H${header.subtitleSuffix}`, { x: MARGIN, y: cursorY - 12, size: 12, font, color: MUTED });
   cursorY -= 22;
 
   // Runner-dunnage note (legacy: runner-height gate, not a warnings-array lookup)
@@ -411,7 +444,9 @@ export async function buildLoadingDiagramPdf(
   const pageAt = (i: number): PDFPage => {
     while (pages.length <= i) {
       const more = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-      more.drawText(`Trailer ${trailerIndex + 1} Loading Diagram (cont.)`, { x: MARGIN, y: PAGE_HEIGHT - MARGIN - 20, size: 20, font: fontBold, color: INK });
+      const contTitle = `Trailer ${trailerIndex + 1} Loading Diagram (cont.)`;
+      more.drawText(contTitle, { x: MARGIN, y: PAGE_HEIGHT - MARGIN - 20, size: TITLE_SIZE, font: fontBold, color: INK });
+      drawBolLabel(more, fontBold, contTitle, header.bol, PAGE_HEIGHT - MARGIN - 20);
       pages.push(more);
     }
     return pages[i];

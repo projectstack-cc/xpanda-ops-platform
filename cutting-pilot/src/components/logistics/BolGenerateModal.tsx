@@ -521,7 +521,7 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
           const bytes = await buildLoadingDiagramPdf(planTrailer, i, planTrailer.dims, packPlanSource.skus, {
             runnerHeight: packPlanSource.runnerHeight,
             warnings: packPlanSource.plan.warnings,
-            invoiceNumber: td.invNumber || undefined,
+            bolNumber: td.invNumber || undefined, // td.invNumber is the BOL # (saved as bol_number)
           });
           const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
           const url = URL.createObjectURL(blob);

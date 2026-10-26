@@ -120,6 +120,11 @@ interface CustomizeEditorProps {
   // without the library SKU and misclassify further edits to it as a conservation violation.
   onApply: (appliedPlan: PackPlan, cart: CartLine[], skus: PackSku[]) => void;
   onDiscard: () => void;
+  /** lb-diag-02: the view-mode cards' per-trailer BOL #s and the job's invoice #, shown read-only in
+   * each trailer header and carried into its Print / Export. Indexed by the trailer's position in
+   * the edited plan, like the view-mode cards after Apply. */
+  bolNumbers?: string[];
+  invoiceNumber?: string;
 }
 
 /** Step 1's selection: a stack on a trailer, or a held stack. */
@@ -169,7 +174,7 @@ function readHowtoDismissed(): boolean {
   }
 }
 
-export default function CustomizeEditor({ plan, dims, options, cart, skus, onApply, onDiscard }: CustomizeEditorProps) {
+export default function CustomizeEditor({ plan, dims, options, cart, skus, onApply, onDiscard, bolNumbers = [], invoiceNumber }: CustomizeEditorProps) {
   const [state, setState] = useState<EditorState>(() => createEditorState(plan, dims, options, cart, skus));
   const [selection, setSelection] = useState<Selection | null>(null);
   const [panel, setPanel] = useState<Panel>("actions");
@@ -635,6 +640,11 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                 onChooseEdgeSlot={(r) => chooseTarget({ kind: "edgeSlot", t, r })}
                 headerAction={
                   <div className="flex items-center gap-1.5">
+                    <span
+                      className={`px-1 text-[13px] font-mono tabular-nums whitespace-nowrap ${bolNumbers[t] ? "text-text" : "text-muted"}`}
+                    >
+                      BOL # {bolNumbers[t] || "—"}
+                    </span>
                     <button
                       type="button"
                       onClick={() => setDissolveTi(t)}
@@ -650,6 +660,8 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                       skus={state.skus}
                       runnerHeight={state.options.runnerHeight}
                       warnings={state.plan.warnings}
+                      bolNumber={bolNumbers[t] || undefined}
+                      invoiceNumber={invoiceNumber}
                     />
                   </div>
                 }

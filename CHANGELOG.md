@@ -3027,6 +3027,44 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-diag-02 — Load Builder loading diagram shows the trailer's BOL #** (Next/Cloudflare Platform Agent §9a:
+  `lib/loadingDiagramPdf.ts` + selfcheck; React Component Agent §9b: `LoadingDiagramPrintButton.tsx`,
+  `ResultsTab.tsx`, `CustomizeEditor.tsx`). No migration, permission or API change.
+  - **Why (Steve, 2026-10-26).** The diagram has to show the BOL number. It used to print the per-trailer BOL #
+    as a small grey "INV# …", or the job's invoice # under the same label when the BOL # was blank. Customize's
+    Print / Export passed no number at all.
+  - **PDF.**
+    - `BuildLoadingDiagramPdfOptions` replaces its one `invoiceNumber` with `bolNumber` (the trailer's BOL #) and
+      `invoiceNumber` (the job's).
+    - The title row prints **`BOL # 4511-01`** right-aligned in bold 16pt INK. It shrinks to 12pt and then
+      truncates (`fitText`) rather than run into the title. With no BOL # it prints **`BOL # —`** in MUTED, so a
+      missing number shows on the floor.
+    - The subtitle adds ` · INV# …` only when the invoice # is set and differs from the BOL #.
+    - "(cont.)" pages carry the same BOL #.
+    - New pure helper `diagramHeaderText(options)` holds the label logic.
+  - **Print button / call sites.**
+    - `LoadingDiagramPrintButton` takes `bolNumber` and `invoiceNumber` and passes them straight through.
+    - `ResultsTab` passes the card's BOL # as `bolNumber` and the job's invoice # as `invoiceNumber`.
+    - `CustomizeEditor` now receives `bolNumbers` and `invoiceNumber` from `ResultsTab`. It shows each trailer's
+      BOL # read-only (mono, or a muted `BOL # —`) beside Dissolve… and passes both numbers to its Print / Export.
+    - Trailer indices can't shift in Customize: no edit removes a trailer from the plan; an emptied one stays as an
+      empty card. So the header BOL # always matches the view-mode card's.
+  - **Also changed: `BolGenerateModal.tsx`** (one key, outside the prompt's file list). Its per-trailer number
+    `td.invNumber` is the BOL # (saved as `bol_number`), but it was passed as `invoiceNumber`. It now passes
+    `bolNumber`. Otherwise those diagrams would print "BOL # —" with the BOL # mislabelled as INV#.
+  - **Selfchecks.** loadingDiagramPdf 54 → 60: five `diagramHeaderText` cases, plus a 30-char BOL # PDF that still
+    loads (2 pages). packEngine 207, savedLoad 45, dissolve 35, loadEditor 339 unchanged.
+  - **Verified.**
+    - `tsc --noEmit` and `cf-build` are green.
+    - Rendered PDFs, page 1:
+      - BOL # `4511-01` with invoice `4511`: `BOL # 4511-01` at the top right and `· INV# 4511` in the subtitle.
+      - Blank BOL #: a grey `BOL # —`.
+      - A 30-char BOL #: still fits.
+      - The WALL/DOORS layout is unchanged.
+    - Browser walkthrough: next dev + Playwright, APIs mocked, light and dark, Siplast fixture. After typing
+      `4511-01` on Trailer 1's card, Customize's headers read `BOL # 4511-01` and the auto-filled `BOL # 4511-02`.
+      Trailer 1's Print / Export PDF shows `BOL # 4511-01` with `· INV# INV_4356`.
+
 - **lb-edge-02 — Load Builder dissolve moves on-edge holey boards** (Next/Cloudflare Platform Agent §9a leads:
   `lib/dissolve.ts` + selfcheck; React Component Agent §9b: `DissolvePreview.tsx`). No migration, permission or API
   change.
