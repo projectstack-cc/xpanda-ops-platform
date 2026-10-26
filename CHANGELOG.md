@@ -3027,6 +3027,35 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-diag-01 — Load Builder loading diagram: WALL / DOORS labels, free space drawn at the doors (React Component
+  Agent §9b for `TrailerDiagram.tsx` / `CustomizeEditor.tsx`; Next/Cloudflare Platform Agent §9a for
+  `lib/loadingDiagramPdf.ts` + selfcheck). No migration, permission or API change. Supersedes lbr-09's FRONT/REAR floor
+  terms in all user-facing text; internal names (`posFromFront`, `shiftToRear`, `handleShiftToRear`, `FRONT_ORANGE`, …)
+  are unchanged.**
+  - **PDF.** New exported `rowSpanX()` (+ `loadNoseEnd()`), used by both `layoutColumnRects()` and `drawDiagram()` in
+    place of the duplicated `1 - rowEndFrac` line. Placement is now wall-anchored: `noseEnd` is computed from the rows
+    (max `posFromFront + rowLength`), the nose-most row starts at the box's left edge, and unused length shows as white
+    space at the doors (right). A full-length trailer draws exactly as before. When there is free length, a dashed line
+    marks R1's doors-side edge. Labels: `EndLabel.text` is `"DOORS" | "WALL"`. WALL now sits vertically centred left of the
+    box, mirroring DOORS, which stays orange. `endLabels(box, fontBold)` measures WALL's width with the bold font at 10pt,
+    so its right edge sits 6pt clear of the box.
+  - **Screen.** `TrailerDiagram.tsx` captions now read `WALL` / `DOORS`, and the new-row slot's aria label reads "New
+    row at the doors end of trailer N". There is no layout change: the free length was already on the right.
+  - **Customize.** The button reads **Shift to wall**, its tooltip reads "Close gaps — stacks slide toward the wall",
+    and the help text reads "…toward the wall." A sweep of `app/logistics/load-builder/`, `components/logistics/` and the
+    `loadEditor.ts` note strings found no other user-visible front/rear/nose text except `EditorGuards.tsx`'s "past the
+    rear of the trailer" overflow message. That message is deliberately unchanged and moved to BACKLOG.
+  - **Selfcheck.** `loadingDiagramPdf.selfcheck.ts` passes 54/54 (was 48). The end-label block now checks DOORS/WALL,
+    with WALL fully left of the box (measured with the real bold font) and both labels on one centred baseline. New
+    `rowSpanX` checks cover a short load (the nose row is at `box.x`, and R1's right edge is
+    `box.x + noseEnd/length·width`, short of the doors) and a full-length load (R1 ends at the box's right edge).
+    The `layoutColumnRects` expected x values moved to the wall-anchored positions. `loadEditor.selfcheck.ts` passes
+    295/295.
+  - **Verified.** `tsc --noEmit` and `cf-build` are green. Checked in next dev + Playwright (APIs mocked, light and
+    dark) with FIXTURE_BLOCKS_PAIRING (508.5″ of 636″): WALL is on the left, DOORS on the right, freight sits flush left
+    and the gap is on the right, in both view mode and Customize. The same load's PDF page 1 was rendered to PNG and
+    matches.
+
 - **bol-toolbar-01 — BOL editor style toolbar: active toggle buttons rendered white-on-white (found during
   bol-resize-01's walkthrough).** `TextStyleToolbar.tsx` put both the idle (`bg-[var(--card-bg)] text-text`) and the
   active (`bg-[var(--brand)] text-white`) utilities on one element; conflicting Tailwind utilities resolve by

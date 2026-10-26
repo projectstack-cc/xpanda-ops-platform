@@ -82,6 +82,9 @@
   - [x] lbr-10 — Force sizes (forcedPack.ts composes pack(); queue in order, then default type; auto-downsize off) +
     Shift to rear slides stacks on mixed-footprint rows (same-depth only, never lengthens)
   - [ ] lbr-11 — cutover with a Classic link (held until Steve has floor-tested)
+  - [ ] lb-diag-01 follow-up — decide the `EditorGuards.tsx` overflow wording ("…past the rear of the trailer there").
+    lb-diag-01 renamed the floor terms to WALL / DOORS but left this message alone. Which end a row overflows from is a
+    judgement call.
   - [x] lbr-05 follow-up — `PlanMetricsStrip.tsx` is no longer imported (Results uses `MetricTile`); delete it. Loading
     diagram PDF: the "636"L × 98"W — 1' 0" remaining" caption overlaps the STACK BREAKDOWN heading (observed in the lbr-05 smoke render). (resolved lbr-08)
   - [ ] lbr-04 follow-up — legacy Load Builder still writes order loads with a 90-day TTL; moot after lbr-11 cutover.

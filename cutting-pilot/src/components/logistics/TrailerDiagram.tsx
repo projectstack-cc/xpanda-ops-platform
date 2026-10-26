@@ -80,6 +80,9 @@
 // and user-facing text says "front (doors)". The layout, row order and R-numbering are unchanged
 // (trailer.rows[0] / posFromFront 0 is still the doors end, R1). Older comments in this file that
 // call the doors the "rear" predate this and describe the same physical end.
+//
+// lb-diag-01 (Steve, 2026-10-26): supersedes the FRONT/REAR terms above — the captions read WALL
+// (left, nose) and DOORS (right). Labels only; the free length already sits on the right (doors).
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
@@ -280,8 +283,8 @@ export default function TrailerDiagram({
       <div className="overflow-x-auto">
       <div style={editable ? { width: Math.max(editWidthPx, DIAGRAM_MIN_WIDTH_PX) } : { minWidth: DIAGRAM_MIN_WIDTH_PX }}>
       <div className="flex items-center justify-between text-[11px] font-semibold tracking-wide text-text-hint mb-1">
-        <span>REAR · NOSE</span>
-        <span>FRONT · DOORS</span>
+        <span>WALL</span>
+        <span>DOORS</span>
       </div>
 
       {/* Row labels, legacy print style: R1 at the doors (array index 0) up to Rn at the nose. */}
@@ -473,7 +476,7 @@ export default function TrailerDiagram({
           {freePx > 0 && (
             <div className="shrink-0 px-0.5" style={{ width: freePx }}>
               {newRowVerdict && (
-                <SlotButton verdict={newRowVerdict} label="+ new row" ariaLabel={`New row at the front (doors) end of trailer ${trailerIndex + 1}.${verdictSuffix(newRowVerdict)}`} onClick={() => onChooseSlot?.("new")} />
+                <SlotButton verdict={newRowVerdict} label="+ new row" ariaLabel={`New row at the doors end of trailer ${trailerIndex + 1}.${verdictSuffix(newRowVerdict)}`} onClick={() => onChooseSlot?.("new")} />
               )}
             </div>
           )}

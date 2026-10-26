@@ -462,9 +462,9 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
           <Undo2 className="w-4 h-4" aria-hidden="true" />
           Undo
         </button>
-        <button type="button" onClick={handleShiftToRear} className={BTN} title="Close gaps — stacks slide toward the rear (nose)">
+        <button type="button" onClick={handleShiftToRear} className={BTN} title="Close gaps — stacks slide toward the wall">
           <ArrowLeftToLine className="w-4 h-4" aria-hidden="true" />
-          Shift to rear
+          Shift to wall
         </button>
         <button type="button" onClick={() => setShowAddPieces(true)} className={BTN}>
           <PackagePlus className="w-4 h-4" aria-hidden="true" />
@@ -508,7 +508,7 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
             <p>1. Tap a stack — on a trailer or in holding — to pick it.</p>
             <p>2. Choose what to do: move it, stack it onto another stack, or take pieces off the top.</p>
             <p>3. Tap a green spot. Faded spots can&apos;t take it — tap one to see why. Undo reverses any step.</p>
-            <p>Gaps close automatically — stacks slide toward the rear.</p>
+            <p>Gaps close automatically — stacks slide toward the wall.</p>
           </div>
           <button type="button" onClick={dismissHowto} className="shrink-0 min-h-[44px] px-3 rounded-lg border border-[var(--info-border)] bg-surface text-text text-sm font-semibold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]">
             Got it

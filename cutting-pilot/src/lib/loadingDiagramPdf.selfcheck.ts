@@ -7,7 +7,7 @@
 // run*SelfCheck() function. Not part of the production build path.
 //
 // lbr-09: async — the overflow check builds a real PDF and counts its pages with pdf-lib.
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, StandardFonts } from "pdf-lib";
 import type { PackColumn, PackRow, PackTrailer, Dimensions, PackSku } from "./packEngine";
 import {
   formatStackLines,
@@ -22,6 +22,9 @@ import {
   buildLoadingDiagramPdf,
   formatEdgeSlotDetail,
   layerThickness,
+  rowSpanX,
+  loadNoseEnd,
+  END_LABEL_SIZE,
 } from "./loadingDiagramPdf";
 import { pack, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, HOLEY_BOARD_CATEGORY } from "./packEngine";
 import { thicknessColor } from "./thicknessPalette";
@@ -214,23 +217,46 @@ export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; 
     );
   }
 
-  // lbr-09: FRONT (doors) / REAR (nose) labels follow the floor terms. The doors end is
-  // trailer.rows[0] (R1), drawn on the right — FRONT must sit on that side, with the emphasis.
+  // lb-diag-01 (supersedes lbr-09's FRONT/REAR): DOORS / WALL labels. The doors end is
+  // trailer.rows[0] (R1), drawn rightmost — DOORS sits on that side with the emphasis; WALL mirrors
+  // it on the left, vertically centred, fully clear of the box (measured with the real bold font).
   {
+    const fontBold = await (await PDFDocument.create()).embedFont(StandardFonts.HelveticaBold);
     const box = { x: 60, yTop: 400, width: 650, height: 190 };
-    const labels = endLabels(box);
-    const front = labels.find((l) => l.text === "FRONT");
-    const rear = labels.find((l) => l.text === "REAR");
-    const r1 = layoutColumnRects(trailer, DIMS, box).find((r) => r.rowIndex === 0)!;
+    const labels = endLabels(box, fontBold);
+    const doors = labels.find((l) => l.text === "DOORS");
+    const wall = labels.find((l) => l.text === "WALL");
+    const rects = layoutColumnRects(trailer, DIMS, box);
+    const r1 = rects.find((r) => r.rowIndex === 0)!;
     const r1Center = r1.x + r1.width / 2;
-    const boxCenter = box.x + box.width / 2;
-    check("endLabels: R1 (rows[0], the doors) draws on the right half", r1Center > boxCenter, JSON.stringify(r1));
+    check("endLabels: R1 (rows[0], the doors) draws right of every other row", rects.every((r) => r.rowIndex === 0 || r.x + r.width <= r1.x + 1e-9), JSON.stringify(rects));
     check(
-      "endLabels: FRONT is on the doors (R1) side, right of the box, and carries the emphasis",
-      !!front && front.side === "right" && front.x >= box.x + box.width && front.x > r1Center && front.emphasis,
-      JSON.stringify(front)
+      "endLabels: DOORS is on the doors (R1) side, right of the box, and carries the emphasis",
+      !!doors && doors.side === "right" && doors.x >= box.x + box.width && doors.x > r1Center && doors.emphasis,
+      JSON.stringify(doors)
     );
-    check("endLabels: REAR is on the nose side, left of the box, no emphasis", !!rear && rear.side === "left" && rear.x < box.x && !rear.emphasis, JSON.stringify(rear));
+    const wallRight = wall ? wall.x + fontBold.widthOfTextAtSize("WALL", END_LABEL_SIZE) : NaN;
+    check("endLabels: WALL is on the nose side, left of the box (right edge <= box.x - 4), no emphasis", !!wall && wall.side === "left" && wallRight <= box.x - 4 && !wall.emphasis, `${JSON.stringify(wall)} right=${wallRight}`);
+    check("endLabels: WALL and DOORS share one baseline, vertically centred on the box", !!wall && !!doors && wall.y === doors.y && Math.abs(wall.y + 4 - (box.yTop - box.height / 2)) < 1e-9, JSON.stringify(labels));
+  }
+
+  // lb-diag-01: the load draws flush to the wall (left); unused length sits at the doors (right).
+  {
+    const EPS = 1e-9;
+    const box = { x: 60, yTop: 400, width: 650, height: 190 };
+    const noseEnd = loadNoseEnd(trailer); // 35 of 65
+    const spans = trailer.rows.map((row) => rowSpanX(trailer, DIMS, box, row));
+    const noseMost = spans.reduce((a, b) => (b.x < a.x ? b : a));
+    check("rowSpanX: loadNoseEnd computed from the rows (35)", noseEnd === 35, String(noseEnd));
+    check("rowSpanX: short load — the nose-most row's left edge is box.x (the wall)", Math.abs(noseMost.x - box.x) < EPS, JSON.stringify(spans));
+    const r1Right = spans[0].x + spans[0].width;
+    const expected = box.x + (noseEnd / DIMS.length) * box.width;
+    check("rowSpanX: short load — R1's right edge is box.x + noseEnd/length*width, short of the doors", Math.abs(r1Right - expected) < EPS && r1Right < box.x + box.width, `r1Right=${r1Right} expected=${expected}`);
+
+    const full: PackTrailer = { ...trailer, rows: [makeRow(0, 30, trailer.rows[0].columns), makeRow(30, 35, trailer.rows[1].columns)], usedLength: 65 };
+    const fullSpans = full.rows.map((row) => rowSpanX(full, DIMS, box, row));
+    check("rowSpanX: full-length load — R1's right edge is the box's right edge (unchanged)", Math.abs(fullSpans[0].x + fullSpans[0].width - (box.x + box.width)) < EPS, JSON.stringify(fullSpans));
+    check("rowSpanX: full-length load — the nose row starts at box.x", Math.abs(fullSpans[1].x - box.x) < EPS, JSON.stringify(fullSpans));
   }
 
   // lbr-09: table pagination.
@@ -286,6 +312,9 @@ export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; 
   // widthPct = colLength/rowLength) — box scaled ×10 from dims (width 650×500) so the fractions
   // produce round numbers to assert against exactly.
   //
+  // lb-diag-01: wall-anchored — the 35-unit load now sits flush LEFT (wall) and the 30-unit gap is on
+  // the right (doors): row1 0..150, row0 150..350 (was 300..450 / 450..650 below).
+  //
   // Steve, 2026-09-16: mirrored (nose-left/doors-right — see layoutColumnRects' own header comment
   // in loadingDiagramPdf.ts). Row0 (posFromFront 0, the rear-most row) now sits flush to the box's
   // own right edge (450..650 of a 650-wide box) instead of its left (0..200); row1 sits immediately
@@ -302,22 +331,22 @@ export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; 
 
     const rectA = rects.find((r) => r.rowIndex === 0 && r.columnIndex === 0)!;
     check(
-      "layoutColumnRects: colA (row0, full row width+depth) -> x450 y-100 w200 h200",
-      rectA.x === 450 && rectA.y === -100 && rectA.width === 200 && rectA.height === 200,
+      "layoutColumnRects: colA (row0, full row width+depth) -> x150 y-100 w200 h200",
+      rectA.x === 150 && rectA.y === -100 && rectA.width === 200 && rectA.height === 200,
       JSON.stringify(rectA)
     );
 
     const rectB = rects.find((r) => r.rowIndex === 0 && r.columnIndex === 1)!;
     check(
-      "layoutColumnRects: colB (row0, posY 20 of 50, colLength 15 of rowLength 20, flush left) -> x450 y-400 w150 h300",
-      rectB.x === 450 && rectB.y === -400 && rectB.width === 150 && rectB.height === 300,
+      "layoutColumnRects: colB (row0, posY 20 of 50, colLength 15 of rowLength 20, flush left) -> x150 y-400 w150 h300",
+      rectB.x === 150 && rectB.y === -400 && rectB.width === 150 && rectB.height === 300,
       JSON.stringify(rectB)
     );
 
     const rectC = rects.find((r) => r.rowIndex === 1 && r.columnIndex === 0)!;
     check(
-      "layoutColumnRects: colC (row1, posFromFront 20 of 65) -> x300 y-400 w150 h500",
-      rectC.x === 300 && rectC.y === -400 && rectC.width === 150 && rectC.height === 500,
+      "layoutColumnRects: colC (row1, posFromFront 20 of 65, nose-most) -> x0 y-400 w150 h500",
+      rectC.x === 0 && rectC.y === -400 && rectC.width === 150 && rectC.height === 500,
       JSON.stringify(rectC)
     );
 

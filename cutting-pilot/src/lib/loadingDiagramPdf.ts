@@ -55,6 +55,12 @@
 // at the bottom, and a Color column — the stack breakdown's swatches (base, then top-off) sit directly
 // left of each pattern (Color · Stack · Stacks). A table that runs past the bottom margin continues on a new page under "Trailer N
 // Loading Diagram (cont.)" with its header repeated, so nothing is drawn off the page.
+//
+// lb-diag-01 (Steve, 2026-10-26): supersedes lbr-09's FRONT/REAR — the floor calls the nose end the
+// WALL and the door end the DOORS (labels only; internal names like posFromFront / FRONT_ORANGE stay).
+// WALL now sits vertically centred left of the box, mirroring DOORS on the right. Freight is loaded
+// wall-first, so the load draws flush to the wall and any unused length shows at the doors (rowSpanX),
+// with a dashed line marking the load's doors-side end.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import type { Dimensions, PackColumn, PackRow, PackTrailer, PackSku } from "./packEngine";
 import { thicknessColor } from "./thicknessPalette";
@@ -222,17 +228,15 @@ export interface DiagramBox {
  * row-order-nose-first comment for which end the thickest freight actually sits at. `rowX` below is
  * a mirror transform (`1 - endFrac`, not `startFrac`) so each row's on-screen LEFT edge is its true nose-ward
  * (far) edge — this flips ROW order only. A shallow column's own anchor within its row (flush to the
- * row's left edge, colX = rowX) is UNCHANGED: PackColumn carries no along-length offset within its
+ * row's left edge, colX = rowX) is UNCHANGED (lb-diag-01: rowX now comes from rowSpanX, which also
+ * anchors the load to the wall instead of the doors): PackColumn carries no along-length offset within its
  * row (only posY, on the width axis), so which end of the row's depth a shallow column visually sits
  * against was never a physical placement fact to begin with — it's a display convention for showing
  * the lane's wastedFloorArea, and has nothing to mirror. */
 export function layoutColumnRects(trailer: PackTrailer, dims: Dimensions, box: DiagramBox): LayoutRect[] {
   const rects: LayoutRect[] = [];
   trailer.rows.forEach((row: PackRow, rowIndex) => {
-    const rowEndFrac = dims.length > 0 ? (row.posFromFront + row.rowLength) / dims.length : 0;
-    const rowWFrac = dims.length > 0 ? row.rowLength / dims.length : 0;
-    const rowX = box.x + (1 - rowEndFrac) * box.width;
-    const rowW = rowWFrac * box.width;
+    const { x: rowX, width: rowW } = rowSpanX(trailer, dims, box, row);
     row.columns.forEach((column: PackColumn, columnIndex) => {
       const topFrac = dims.width > 0 ? column.posY / dims.width : 0;
       const heightFrac = dims.width > 0 ? column.colWidth / dims.width : 0;
@@ -246,6 +250,24 @@ export function layoutColumnRects(trailer: PackTrailer, dims: Dimensions, box: D
     });
   });
   return rects;
+}
+
+/** lb-diag-01: one row's horizontal span in the box. Wall-anchored: `noseEnd` (the furthest
+ * posFromFront + rowLength over all rows — computed, not read from usedLength) maps to box.x, so the
+ * nose-most row starts at the wall and the unused length sits at the doors (right). A full-length
+ * trailer draws exactly as before. Used by both layoutColumnRects and drawDiagram. */
+export function rowSpanX(trailer: PackTrailer, dims: Dimensions, box: DiagramBox, row: PackRow): { x: number; width: number } {
+  if (dims.length <= 0) return { x: box.x, width: 0 };
+  const noseEnd = loadNoseEnd(trailer);
+  return {
+    x: box.x + ((noseEnd - (row.posFromFront + row.rowLength)) / dims.length) * box.width,
+    width: (row.rowLength / dims.length) * box.width,
+  };
+}
+
+/** lb-diag-01: max over rows of posFromFront + rowLength (0 for an empty trailer). */
+export function loadNoseEnd(trailer: PackTrailer): number {
+  return trailer.rows.reduce((m, r) => Math.max(m, r.posFromFront + r.rowLength), 0);
 }
 
 // --- PDF assembly ---
@@ -272,22 +294,27 @@ const TABLE_ROW_H = 16;
 const CONT_TITLE_H = 26;
 
 export interface EndLabel {
-  text: "FRONT" | "REAR";
+  text: "DOORS" | "WALL";
   side: "left" | "right";
   x: number;
   y: number;
-  /** The orange emphasis — always on FRONT. */
+  /** The orange emphasis — always on DOORS. */
   emphasis: boolean;
 }
 
-/** The diagram's end labels. Floor terms (Steve, 2026-10-13): FRONT = doors, REAR = nose. The doors
- * end (trailer.rows[0], posFromFront 0, R1) draws on the right — see layoutColumnRects — so FRONT is
- * the right-side label and carries the orange emphasis; REAR is the left-side label. */
-export function endLabels(box: DiagramBox): EndLabel[] {
-  const boxBottomY = box.yTop - box.height;
+/** Size of the end labels, drawn in the bold font. */
+export const END_LABEL_SIZE = 10;
+
+/** The diagram's end labels. Floor terms (lb-diag-01, supersedes lbr-09's FRONT/REAR): WALL = nose,
+ * DOORS = door end. The doors end (trailer.rows[0], posFromFront 0, R1) draws on the right — see
+ * layoutColumnRects — so DOORS is the right-side label and carries the orange emphasis; WALL mirrors
+ * it on the left, vertically centred, its right edge 6pt clear of the box (measured with `fontBold`). */
+export function endLabels(box: DiagramBox, fontBold: PDFFont): EndLabel[] {
+  const midY = box.yTop - box.height / 2 - 4;
+  const wallW = fontBold.widthOfTextAtSize("WALL", END_LABEL_SIZE);
   return [
-    { text: "REAR", side: "left", x: box.x - 32, y: boxBottomY - 12, emphasis: false },
-    { text: "FRONT", side: "right", x: box.x + box.width + 6, y: box.yTop - box.height / 2 - 4, emphasis: true },
+    { text: "WALL", side: "left", x: box.x - 6 - wallW, y: midY, emphasis: false },
+    { text: "DOORS", side: "right", x: box.x + box.width + 6, y: midY, emphasis: true },
   ];
 }
 
@@ -419,10 +446,7 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
   // trailer with unused length leaves a gap that isn't flush to either border).
   const EPS = 0.01;
   trailer.rows.forEach((row, rowIndex) => {
-    const rowEndFrac = dims.length > 0 ? (row.posFromFront + row.rowLength) / dims.length : 0;
-    const rowWFrac = dims.length > 0 ? row.rowLength / dims.length : 0;
-    const rowX = box.x + (1 - rowEndFrac) * box.width;
-    const rowW = rowWFrac * box.width;
+    const { x: rowX, width: rowW } = rowSpanX(trailer, dims, box, row);
     const label = `R${rowIndex + 1}`;
     const labelWidth = fontBold.widthOfTextAtSize(label, 9);
     page.drawText(label, { x: rowX + rowW / 2 - labelWidth / 2, y: box.yTop + 4, size: 9, font: fontBold, color: MUTED });
@@ -432,6 +456,14 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
       page.drawLine({ start: { x: rowX, y: box.yTop }, end: { x: rowX, y: boxBottomY }, thickness: 0.75, color: MUTED, dashArray: [3, 2] });
     }
   });
+  // lb-diag-01: with free length, mark the load's doors-side end (R1's right edge) the same way.
+  if (trailer.rows.length > 0) {
+    const r1 = rowSpanX(trailer, dims, box, trailer.rows[0]);
+    const loadEndX = r1.x + r1.width;
+    if (loadEndX < box.x + box.width - EPS && loadEndX > box.x + EPS) {
+      page.drawLine({ start: { x: loadEndX, y: box.yTop }, end: { x: loadEndX, y: boxBottomY }, thickness: 0.75, color: MUTED, dashArray: [3, 2] });
+    }
+  }
 
   // Column rects, filled by thickness (lbr-05). The top band of a topped stack sits at the column's
   // top edge (the same side TrailerDiagram.tsx draws it), sized by the top layer's share of the
@@ -482,9 +514,9 @@ function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: P
     drawEdgeSlotLabel(page, fontBold, detail, area);
   });
 
-  // REAR (nose, left) / FRONT (doors, right) + dims caption — see endLabels() for the floor terms.
-  for (const l of endLabels(box)) {
-    page.drawText(l.text, { x: l.x, y: l.y, size: 10, font: fontBold, color: l.emphasis ? FRONT_ORANGE : MUTED });
+  // WALL (nose, left) / DOORS (right) + dims caption — see endLabels() for the floor terms.
+  for (const l of endLabels(box, fontBold)) {
+    page.drawText(l.text, { x: l.x, y: l.y, size: END_LABEL_SIZE, font: fontBold, color: l.emphasis ? FRONT_ORANGE : MUTED });
   }
   const remaining = formatRemainingLabel(dims, trailer);
   const caption = remaining ? `${dims.length}"L × ${dims.width}"W — ${remaining}` : `${dims.length}"L × ${dims.width}"W`;
