@@ -1,7 +1,8 @@
 // src/app/api/qc/scrap/[id]/void/route.ts  ->  POST /v2/api/qc/scrap/:id/void
 // qc-04: corrections are voids, never deletes. Sets voided_at / voided_by_name / void_reason (≤ 200).
-// A voided row stays listed (struck through) but drops out of every total and the scrap_log
-// compatibility VIEW. Already voided → 409. Gated on `qc` by middleware (POST → edit).
+// A voided row stays listed (struck through) but drops out of every total. (The scrap_log
+// compatibility VIEW (legacy scrap reports) was retired in rpt-05.) Already voided → 409. Gated on
+// `qc` by middleware (POST → edit).
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { logActivity } from "@/lib/activityLog";

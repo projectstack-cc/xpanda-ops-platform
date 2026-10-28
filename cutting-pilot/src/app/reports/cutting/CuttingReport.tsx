@@ -5,7 +5,7 @@
 // applies the operator / line filters and the "Exclude flagged from hours" toggle client-side.
 // Layout follows the claude.ai "v2 Reports" canvas (Cutting activity — desktop) with the live kit:
 // PlatformHeader, MetricTile, DashboardToolbar, RangeSelector, FilterSelect, QcBoard table/chip classes.
-// Incidents links the v2 report (rpt-03), Scrap too (rpt-04). Direct URL only (rpt-05).
+// Incidents links the v2 report (rpt-03), Scrap too (rpt-04). Linked from the home card + navs since rpt-05.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";

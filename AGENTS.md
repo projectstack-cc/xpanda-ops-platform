@@ -17,7 +17,7 @@ The xPanda Operations Platform is an ERP-lite system for foam manufacturing oper
 - **Legacy worker**, which Pages bundles into one worker (there is no build step of ours):
   - entry `_worker.js/index.js` — the session gate plus the declarative `API_ROUTES` table (F2)
   - shared helpers in `_worker.js/lib/`: `core.js` (`json()`, `logActivity()`, session validation, `PATH_PERMISSION_MAP` / `API_PERMISSION_MAP`), `bol-carrier.js`, `holey-nester.js`, `lineItems.js`, `push.js`
-  - per-domain handlers in `_worker.js/routes/`: `auth.js`, `bols.js`, `jobs.js`, `loading.js`, `notifications.js`, `production.js`, `public.js`, `qc.js`, `reports.js`
+  - per-domain handlers in `_worker.js/routes/`: `auth.js`, `bols.js`, `jobs.js`, `loading.js`, `notifications.js`, `production.js`, `public.js`, `qc.js`
   - static assets served via `env.ASSETS.fetch(request)`
 
 **v2 migration surface — `cutting-pilot/`:**
@@ -28,11 +28,10 @@ The xPanda Operations Platform is an ERP-lite system for foam manufacturing oper
 
 **Data sources:**
 - **D1 Database (SQLite)** → all operational records (jobs, BOLs, parts, shipments, users, roles, activity log, production)
-- **Google Sheets gviz endpoint** → incident report analytics (legacy integration)
 
 **Migration status.** Strangler pattern: modules are ported one at a time, built unlinked, tested, then cut over (links repointed, legacy pages archived and replaced by redirect stubs). The end state is full retirement of the legacy worker and the Pages project.
-- **Cut over to v2:** Dock Loading (`/v2/logistics/loading`), BOL Email Queue (`/v2/logistics/bol-email`), Production Log (`/v2/production`), Admin (`/v2/admin`).
-- **Still legacy:** Job Board Classic (`/jobs/`) and Logistics Classic (`/logistics/`) — both in active testing alongside their v2 counterparts — the Manufacturing calculators, Reports, Safety, and the shell (home `index.html`, `login.html`, `track/`, `legal/`, `account/`).
+- **Cut over to v2:** Dock Loading (`/v2/logistics/loading`), BOL Email Queue (`/v2/logistics/bol-email`), Production Log (`/v2/production`), Admin (`/v2/admin`), Reports (`/v2/reports`, rpt-05).
+- **Still legacy:** Job Board Classic (`/jobs/`) and Logistics Classic (`/logistics/`) — both in active testing alongside their v2 counterparts — the Manufacturing calculators, Safety, and the shell (home `index.html`, `login.html`, `track/`, `legal/`, `account/`).
 
 ---
 
@@ -57,7 +56,6 @@ The xPanda Operations Platform is an ERP-lite system for foam manufacturing oper
 /api/loading-*         — dock bays, assignments, photos
 /api/completions       — QC final inspections
 /api/scrap-log         — QC scrap entries
-/api/reports/*         — read-only analytics
 /api/notifications     — bell notifications (+ /api/push/* web-push)
 /api/public/*          — unauthenticated carrier BOL lookup / pickup / delivery / documents
 /v2/api/admin/*        — users, roles, stats, simulate-role, activity (+ facets) — v2 Admin
@@ -121,7 +119,7 @@ The xPanda Operations Platform is an ERP-lite system for foam manufacturing oper
 | **Shift Notes** | `/v2/notes` | v2 | Shift notes, manager mark-viewed | `cutting-pilot/src/app/notes/` |
 | **QC** | `/v2/qc` (every legacy `/qc/` page is a redirect stub; originals in `qc/_archived/`) | v2 | Final inspection (+ Drive PDF), scrap log, density calculator, incident report (+ Drive Doc + incident tracker row) | `cutting-pilot/src/app/qc/`, `cutting-pilot/src/components/qc/` (`IncidentModal.tsx`), `cutting-pilot/src/lib/qc/` (`incident.ts`, `drive.ts`, `driveForward.ts`), `cutting-pilot/src/app/api/qc/incidents/` |
 | **Safety** | `/safety/` | legacy | SDS browser, i18n safety content, training | `safety/` |
-| **Reports** | `/reports/` | legacy | Read-only analytics dashboards (cutting, incidents, orders, scrap) | `reports/` |
+| **Reports** | `/v2/reports` (Cutting · Incidents · Scrap; every legacy `/reports/` page is a redirect stub, originals in `reports/_archived/`) | v2 (cut over rpt-05) | Read-only analytics dashboards | `cutting-pilot/src/app/reports/`, `cutting-pilot/src/lib/reports/`, `cutting-pilot/src/app/api/reports/` |
 | **Admin** | `/v2/admin` (tabs Users · Roles · Parts · Activity) | v2 (legacy stubs deleted admin-11; originals in `admin/_archived/`, reference only) | Users, roles & permissions, test-as-role, parts library, audit trail | `cutting-pilot/src/app/admin/`, `cutting-pilot/src/components/admin/`, `cutting-pilot/src/components/parts/PartsLibrary.tsx` (shared with Load Builder), `cutting-pilot/src/lib/permissions.ts` |
 | **Shell** | `/` (home), `/login`, `/track/`, `/legal/`, `/account/` | legacy | Home cards, login, public tracking, legal pages, password change | `index.html`, `login.html`, `track/`, `legal/`, `account/` |
 
@@ -269,7 +267,6 @@ Complex features are scoped in conversation with Claude, then implemented via st
 Tracked here so agents don't "fix" these without being asked:
 
 - `document.write()` in module header JS files — works but is a legacy pattern. Future refactor to `DOMContentLoaded` + `insertAdjacentHTML`.
-- Google Sheets gviz endpoint for incident data — uncached. Caching would help but is low priority.
 - `location_no` column exists in `bols` table but is no longer used in the UI. Column kept for backward compatibility.
 - Legacy `role` TEXT column on `users` table — kept alongside `role_id` FK for backward compatibility during transition.
 

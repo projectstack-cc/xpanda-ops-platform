@@ -20,7 +20,7 @@ const NAV_MODULES = [
   { label: "Schedule",      href: "/v2/schedule",     perm: "schedule" },
   { label: "Production",    href: "/v2/production",   perm: "production.log" },
   { label: "QC",            href: "/v2/qc",           perm: "qc" },
-  { label: "Reports",       href: "/reports/",        perm: "reports" },
+  { label: "Reports",       href: "/v2/reports",      perm: "reports" },
   { label: "Safety",        href: "/safety/",         perm: "safety" },
   { label: "Admin",         href: "/v2/admin",        perm: "admin" },
 ] as const;

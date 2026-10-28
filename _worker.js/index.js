@@ -7,9 +7,6 @@ import { handleApiBolCustomersSeed, handleApiBolCustomers, handleApiBolCarriers,
 import { handleApiJobs, handleApiShipments, handleApiAddressValidate, handleApiAssignableUsers, handleHoleyChunksPreview, handleHoleyChunksBackfill } from './routes/jobs.js';
 import { handleApiParts, handleApiCombos } from './routes/production.js';
 import { handleApiCompletions } from './routes/qc.js';
-import { handleApiReportsScrapSummary, handleApiReportsScrapTrend, handleApiReportsScrapReasons,
-         handleIncidentTrend, handleIncidentSummary, handleIncidentList, handleIncidentDetail,
-         handleCuttingActivityReport } from './routes/reports.js';
 import { handleAuthLogin, handleAuthLogout, handleAuthMe, handleAuthChangePassword,
          handleSimulateRoleStart, handleSimulateRoleStop } from './routes/auth.js';
 import { handleApiNotifications, handleApiPushSubscribe, handleApiPushUnsubscribe } from './routes/notifications.js';
@@ -36,18 +33,6 @@ const API_ROUTES = [
 
   // QC
   { path: '/api/completions', handler: (req, env) => handleApiCompletions(req, env) },
-
-  // Reports (scrap)
-  { path: '/api/reports/scrap-summary', handler: (req, env) => handleApiReportsScrapSummary(req, env) },
-  { path: '/api/reports/scrap-trend',   handler: (req, env) => handleApiReportsScrapTrend(req, env) },
-  { path: '/api/reports/scrap-reasons', handler: (req, env) => handleApiReportsScrapReasons(req, env) },
-
-  // Reports (incidents)
-  { path: '/api/reports/incidents-trend',   handler: (req, env) => handleIncidentTrend(req, env) },
-  { path: '/api/reports/incidents-summary', handler: (req, env) => handleIncidentSummary(req, env) },
-  { path: '/api/reports/incidents-list',    handler: (req, env) => handleIncidentList(req, env) },
-  { path: '/api/reports/incidents-detail',  handler: (req, env) => handleIncidentDetail(req, env) },
-  { path: '/api/reports/cutting-activity',  handler: (req, env) => handleCuttingActivityReport(req, env) },
 
   // Parts / production
   { path: '/api/parts',             handler: (req, env) => handleApiParts(req, env) },

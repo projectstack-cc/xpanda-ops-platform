@@ -1,6 +1,6 @@
 // src/app/reports/scrap/page.tsx  ->  /v2/reports/scrap
 // rpt-04: server shell for the v2 Scrap report (copies reports/cutting/page.tsx). Middleware gates this
-// path on `reports` (legacy's own key). Direct URL only until rpt-05 repoints the home card + navs.
+// path on `reports` (legacy's own key). Home card + navs point here since rpt-05.
 import { headers } from "next/headers";
 import { validateSession } from "@/lib/session";
 import { getEnv } from "@/lib/db";

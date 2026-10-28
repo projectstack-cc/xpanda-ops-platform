@@ -50,7 +50,7 @@ export interface ScrapReport {
   bySource: Record<ScrapSource, number>;
   months: ScrapMonth[];
   list: ScrapListRow[];
-  empty: { isEmpty: boolean; closedSessions: number; sinceLive: boolean };
+  empty: { isEmpty: boolean; closedSessions: number; liveFrom: string | null };
 }
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -184,7 +184,11 @@ export function buildScrapReport(raw: ScrapRaw, opts: {
       : b.event_date.localeCompare(a.event_date)))
     .map((r) => ({ ...r, size: sizeText(r), voided: !!r.voided_at }));
 
-  const closedSessions = (raw.closedSessions ?? []).filter((s) => inRange(etDateKey(s.ended_at))).length;
+  // rpt-05: the closed-sessions line covers the part of the range on/after SCRAP_PROMPT_LIVE (null = none).
+  const liveFrom = to >= SCRAP_PROMPT_LIVE ? (from > SCRAP_PROMPT_LIVE ? from : SCRAP_PROMPT_LIVE) : null;
+  const closedSessions = liveFrom
+    ? (raw.closedSessions ?? []).filter((s) => { const d = etDateKey(s.ended_at); return !!d && d >= liveFrom && d <= to; }).length
+    : 0;
 
   return {
     kpis: {
@@ -205,6 +209,6 @@ export function buildScrapReport(raw: ScrapRaw, opts: {
     bySource,
     months,
     list,
-    empty: { isEmpty: live.length === 0, closedSessions, sinceLive: from >= SCRAP_PROMPT_LIVE },
+    empty: { isEmpty: live.length === 0, closedSessions, liveFrom },
   };
 }

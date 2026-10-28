@@ -5,7 +5,7 @@
 // changes; buildIncidentReport (lib/reports/incidents.ts) applies the category / risk / search
 // filters client-side. Layout follows the claude.ai "v2 Reports" canvas (Incidents — desktop) with
 // rpt-01's kit: PlatformHeader, MetricTile, DashboardToolbar, SearchInput, FilterSelect, QcBoard
-// table/chip classes. Scrap links the v2 report (rpt-04). Direct URL only (rpt-05).
+// table/chip classes. Scrap links the v2 report (rpt-04). Linked from the home card + navs since rpt-05.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";

@@ -6,7 +6,7 @@
 // Show voided client-side. Layout follows the claude.ai "v2 Reports" canvas (Scrap — desktop) with
 // rpt-01's kit: PlatformHeader, MetricTile, DashboardToolbar, RangeSelector, FilterSelect, QcBoard
 // table/chip classes. Empty state is the real first impression (prod has 0 live rows at launch).
-// Direct URL only (rpt-05).
+// Linked from the home card + navs since rpt-05.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -19,9 +19,9 @@ import RangeSelector, { type RangeValue } from "@/components/dashboard/RangeSele
 import { useTokenColors } from "@/components/charts/useTokenColors";
 import { etNowWallClock } from "@/lib/etDateTime";
 import { SHIFT_LABELS, SHIFT_VALUES, type ScrapReason, type ScrapSource } from "@/lib/qc/scrap";
-import { presetRange, rangeLabel } from "@/lib/reports/range";
+import { dayLabel, presetRange, rangeLabel } from "@/lib/reports/range";
 import {
-  SCRAP_LINES, SCRAP_REASONS, buildScrapReport, type ScrapBucket, type ScrapListRow, type ScrapMonth, type ScrapRaw,
+  SCRAP_LINES, SCRAP_PROMPT_LIVE, SCRAP_REASONS, buildScrapReport, type ScrapBucket, type ScrapListRow, type ScrapMonth, type ScrapRaw,
   type ScrapReport as Report, type ScrapWeek,
 } from "@/lib/reports/scrap";
 import { CARD, CHIP_GHOST, CHIP_WARN, GHOST_BTN, HEADER_BTN, NUM, ROW, TABLE_WRAP, TD, TH, THEAD_ROW } from "../ui";
@@ -210,7 +210,7 @@ export default function ScrapReport({ userName, isAdmin, permissions }: Props) {
                     </button>
                   </div>
                 ) : (
-                  <EmptyCard report={report} />
+                  <EmptyCard report={report} from={range.from} />
                 )}
                 <MonthsCard months={report.months} wide />
                 {/* Show voided still reveals voided rows in an otherwise empty range (e.g. the March test data). */}
@@ -283,8 +283,12 @@ function Kpis({ report }: { report: Report }) {
 
 // ── Empty state ──────────────────────────────────────────────────────────────────────────────
 
-function EmptyCard({ report }: { report: Report }) {
-  const { closedSessions, sinceLive } = report.empty;
+function EmptyCard({ report, from }: { report: Report; from: string }) {
+  const { closedSessions, liveFrom } = report.empty;
+  // rpt-05: a range reaching back past the live date only counts sessions since then — say so.
+  const leadIn = liveFrom === SCRAP_PROMPT_LIVE && from < SCRAP_PROMPT_LIVE
+    ? `Since ${dayLabel(SCRAP_PROMPT_LIVE).replace(/^\S+ /, "")}:`
+    : "In this range:";
   return (
     <div className={`${CARD} p-12 text-center break-inside-avoid`}>
       <ClipboardList size={28} className="mx-auto text-muted" aria-hidden="true" />
@@ -293,9 +297,9 @@ function EmptyCard({ report }: { report: Report }) {
         Operators log scrap on the cutting board when they tap Mark Complete or Stop. QC can add it from Quality
         Control → Scrap log. Entries show up here as soon as they&apos;re saved.
       </p>
-      {sinceLive && closedSessions > 0 && (
+      {liveFrom && closedSessions > 0 && (
         <p className="mt-3 text-xs text-muted">
-          In this range: <strong className="font-semibold text-text font-mono tabular-nums">{closedSessions}</strong>{" "}
+          {leadIn} <strong className="font-semibold text-text font-mono tabular-nums">{closedSessions}</strong>{" "}
           {closedSessions === 1 ? "cutting session" : "cutting sessions"} closed,{" "}
           <strong className="font-semibold text-text font-mono tabular-nums">0</strong> with scrap entered.
         </p>

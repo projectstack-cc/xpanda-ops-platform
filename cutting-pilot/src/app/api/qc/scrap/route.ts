@@ -2,8 +2,8 @@
 // qc-04: the native scrap database (scrap_events). One table, two entry points: the /v2/qc Scrap log
 // popup (here, source='qc') and the cutting board's Mark Complete + clock-out (qc-05, source='cutting',
 // POST /v2/api/cutting/scrap — both write through lib/qc/scrapWrite.ts saveScrapEntries). The 11
-// legacy form rows carried over as source='legacy'. scrap_log is now a compatibility VIEW over the
-// non-voided rows for the legacy scrap reports — never INSERT into it.
+// legacy form rows carried over as source='legacy'. The scrap_log compatibility VIEW (legacy scrap
+// reports) was retired in rpt-05.
 //   GET  — that Monday..Sunday's rows by event_date, newest first, voided rows included (flagged);
 //          totals cover non-voided rows only.
 //   POST — { entries: Entry[] } (1–20), all-or-nothing: every entry is validated first and one bad

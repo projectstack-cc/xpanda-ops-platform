@@ -31,6 +31,3 @@ id = "ac3674d41b8541fba89939120cf268ea"
 [[env.production.kv_namespaces]]
 binding = "RATE_LIMIT"
 id = "ac3674d41b8541fba89939120cf268ea"
-
-[vars]
-INCIDENT_TRACKER_JSON_URL = "https://docs.google.com/spreadsheets/d/1DRRJyyiSRMhBQIne5gTBri4HhiBPk4mCtvS0XWNGNu0/gviz/tq?tqx=out:json&gid=1547880443"

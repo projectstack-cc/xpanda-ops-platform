@@ -214,7 +214,6 @@ export const API_PERMISSION_MAP = [
   { pattern: /^\/api\/combos/,            key: 'manufacturing.calculators' },
   { pattern: /^\/api\/cutting/,           key: 'manufacturing.cutting' },
   { pattern: /^\/api\/completions/,       key: 'qc' },
-  { pattern: /^\/api\/reports/,           key: 'reports' },
 ];
 
 export function getPermissionKey(pathname, isApi) {

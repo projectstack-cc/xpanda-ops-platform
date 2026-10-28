@@ -157,9 +157,13 @@ eq("size all missing", sizeText({ pieces: null, thickness_in: null, width_in: nu
     { ended_at: "2026-10-20 03:00:00" },   // ET 10-19 → out
   ];
   const r = build({ closedSessions: closed }, { from: SCRAP_PROMPT_LIVE, to: TODAY });
-  eq("empty: isEmpty, closedSessions, sinceLive", r.empty, { isEmpty: true, closedSessions: 2, sinceLive: true });
+  eq("empty: isEmpty, closedSessions, liveFrom", r.empty, { isEmpty: true, closedSessions: 2, liveFrom: SCRAP_PROMPT_LIVE });
   const before = build({ closedSessions: closed }, { from: "2026-09-24", to: TODAY });
-  eq("range before live → sinceLive false", [before.empty.sinceLive, before.empty.closedSessions], [false, 3]);
+  eq("range reaching past live → liveFrom = live, 10-19 excluded", [before.empty.liveFrom, before.empty.closedSessions], [SCRAP_PROMPT_LIVE, 2]);
+  const allBefore = build({ closedSessions: closed }, { from: "2026-09-24", to: "2026-10-19" });
+  eq("range entirely before live → liveFrom null, 0", [allBefore.empty.liveFrom, allBefore.empty.closedSessions], [null, 0]);
+  const after = build({ closedSessions: closed }, { from: "2026-10-21", to: TODAY });
+  eq("from after live → liveFrom = from", [after.empty.liveFrom, after.empty.closedSessions], ["2026-10-21", 1]);
   eq("not empty with a live row", build({ rows: fixture }).empty.isEmpty, false);
   eq("empty weeks still zero-filled", build({}, { from: "2026-10-19", to: "2026-10-23" }).weeks.length, 1);
 }

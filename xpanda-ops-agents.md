@@ -42,7 +42,7 @@ _root/
     lib/core.js           (json/error, validateSession, PATH/API_PERMISSION_MAP, logActivity, helpers)
     lib/push.js           (web-push / VAPID notification dispatch)
     routes/*.js           (per-domain handlers: auth, jobs, bols, loading, production,
-                           qc, reports, admin, notifications, public)
+                           qc, admin, notifications, public)
   index.html              (20KB — landing page with module cards)
   login.html              (6.5KB — auth page)
   sw.js                   (1.4KB — service worker)
@@ -103,13 +103,8 @@ _root/
     pdfs/                 (SDS documents)
     training/             (training materials)
 
-  reports/
-    index.html            (1.6KB — reports dashboard)
-    reports-header.js     (2.8KB)
-    reports-shared.css    (7.3KB)
-    incidents/            (incident analytics)
-    scrap/                (scrap analytics)
-    orders/               (order reports)
+  reports/                (redirect stubs → /v2/reports — rpt-05)
+    _archived/            (retired originals: pages, reports-header.js, reports-i18n.js, reports-shared.css)
 
   admin/                  (_archived/ only — legacy pages retired admin-08, stubs deleted admin-11)
 
@@ -459,7 +454,7 @@ You build and maintain the QC module (`/qc/`). This covers scrap logging, final 
 ## Domain Knowledge
 - **Scrap Log**: Record scrap events with reason codes, weight, dimensions, density auto-calculation
 - **Final Inspection**: Dimensional inspection form with pass/fail/NA, PDF record generation
-- **Incident Report** (qc-08, native `qc_incidents`): quality incidents for customer or production issues. Create-only — the incident Google Doc the Inspection Tool Apps Script makes (`createIncidentReport`) is the document of record; the same call appends a row to the incident tracker Sheet, which legacy Reports' incident pages read through gviz, so that row must keep its legacy shape
+- **Incident Report** (qc-08, native `qc_incidents`): quality incidents for customer or production issues. Create-only — the incident Google Doc the Inspection Tool Apps Script makes (`createIncidentReport`) is the document of record; the same call appends a row to the incident tracker Sheet, which legacy Reports' incident pages read through gviz until rpt-05 (v2 Reports read `qc_incidents`) — keep that row's legacy shape
 - **Density Calculator**: Standalone floor tool — lb/ft³ from inches and pounds
 
 ## Key Files You Own
@@ -560,7 +555,7 @@ function t(key, lang = 'en') {
 # 7. Reports Agent
 
 ## Identity
-You build and maintain the Reports module (`/reports/`). This is read-only analytics: incident dashboards, scrap trends, order analytics. You understand manufacturing KPIs and data visualization for management decisions.
+You build and maintain the Reports module — **v2 at `/v2/reports` since rpt-05** (Cutting, Incidents, Scrap; `cutting-pilot/src/app/reports/`, pure builders in `cutting-pilot/src/lib/reports/`, APIs under `/v2/api/reports/*`, gated `reports`). Every legacy `reports/*` page is a redirect stub (`orders/` → `/v2/board`); the originals, `reports-header.js`, `reports-i18n.js` and `reports-shared.css` are in `reports/_archived/` (reference only). `_worker.js/routes/reports.js`, `/api/reports/*` and the gviz incident feed (`INCIDENT_TRACKER_JSON_URL`) were removed in rpt-05. The rest of this section describes the retired legacy module. This is read-only analytics: incident dashboards, scrap trends, order analytics. You understand manufacturing KPIs and data visualization for management decisions.
 
 ## Domain Knowledge
 - **Incident Reports**: Analytics from Google Sheets gviz endpoint + D1 data
@@ -709,7 +704,6 @@ You architect and maintain the data layer and API backend. You own the `_worker.
 /api/saved-loads      → load builder states (90-day TTL)
 /api/completions      → QC final inspections
 /api/scrap-log        → QC scrap entries
-/api/reports/*        → read-only analytics
 /api/activity-log     → platform audit trail
 ```
 

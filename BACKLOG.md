@@ -141,15 +141,16 @@
 - [ ] Incident follow-up — add root cause / corrective actions after the initial report (today: create-only, like legacy; the Doc is the record).
 - [ ] Incident customers not in the incident customer sheet land in the default incident folder — add them to the sheet to route their Docs.
 - [ ] Delete the qc/ redirect stubs once logs show no hits.
-- [ ] Reports port: incident pages still read the tracker Sheet via gviz; consider reading qc_incidents.
+- [x] Reports port: incident pages still read the tracker Sheet via gviz; consider reading qc_incidents. (rpt-03 reads qc_incidents; gviz removed in rpt-05)
 
-### Reports · v2 IN PROGRESS at /v2/reports (rpt-01 cutting, rpt-03 incidents; direct URL only)
+### Reports · CUT OVER — v2 at /v2/reports (rpt-01…05)
 
 - [x] rpt-01 Cutting activity → `/v2/reports/cutting` (ET days, flagged sessions, recharts)
 - [x] rpt-02 Incident history backfill: tracker Sheet → `qc_incidents` (MIGRATION-GATED, one-time) · run 2026-10-23, 72 rows
 - [x] rpt-03 Incidents → `/v2/reports/incidents` (D1 only; incident rate from tracker baseline + D1 jobs)
 - [x] rpt-04 Scrap → `/v2/reports/scrap` (scrap_events only; VIEW drop moved to rpt-05)
-- [ ] rpt-05 Cutover after Steve tests: home card + both navs → `/v2/reports`; legacy `reports/*` → stubs; Orders report retired → Job Board; remove `/api/reports/*` worker routes; retire gviz + `INCIDENT_TRACKER_JSON_URL`; drop the `scrap_log` VIEW once the legacy scrap pages are stubs
+- [x] rpt-05 Cutover after Steve tests: home card + both navs → `/v2/reports`; legacy `reports/*` → stubs; Orders report retired → Job Board; remove `/api/reports/*` worker routes; retire gviz + `INCIDENT_TRACKER_JSON_URL`; drop the `scrap_log` VIEW once the legacy scrap pages are stubs · shipped in the rpt-05 commit; VIEW drop by the Orchestrator post-deploy
+- [ ] Delete the reports/* redirect stubs (and reports/_archived/) once Cloudflare logs show no hits — same rule as the qc/* stubs.
 - [ ] Reports i18n (en/es/ht) — legacy `reports/reports-i18n.js` as the source
 - [ ] Cutting data hygiene (from rpt-01 numbers): operators tap Start/Stop without cutting (8/32 sessions < 1 min, wk of 10-16) and tick items off with near-zero session time; floor training, not code
 - [ ] Incident rate depends on jobs being marked shipped/archived promptly — on 10-23 only 40 of 108 October jobs were (the current month reads high until they are).
