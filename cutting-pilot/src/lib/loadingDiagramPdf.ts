@@ -458,6 +458,40 @@ export async function buildLoadingDiagramPdf(
   return doc.save();
 }
 
+/** lb-trailer-01: one trailer's input to buildAllLoadingDiagramsPdf — the same per-trailer values
+ * its own card's Print / Export passes. */
+export interface AllDiagramsTrailer {
+  trailer: PackTrailer;
+  trailerIndex: number;
+  dims: Dimensions;
+  bolNumber?: string;
+  invoiceNumber?: string;
+}
+
+/** lb-trailer-01: "Print all diagrams" — buildLoadingDiagramPdf per trailer, merged in trailer order
+ * with copyPages (bolShared.ts's merge pattern). No drawing code of its own. Empty trailers (no
+ * stacks) are skipped defensively; Apply and saved-load restore already drop them. */
+export async function buildAllLoadingDiagramsPdf(
+  trailers: AllDiagramsTrailer[],
+  skus: PackSku[],
+  options: Pick<BuildLoadingDiagramPdfOptions, "runnerHeight" | "warnings"> = {}
+): Promise<Uint8Array> {
+  const merged = await PDFDocument.create();
+  for (const t of trailers) {
+    if (t.trailer.rows.every((row) => row.columns.length === 0)) continue;
+    const bytes = await buildLoadingDiagramPdf(t.trailer, t.trailerIndex, t.dims, skus, {
+      runnerHeight: options.runnerHeight,
+      warnings: options.warnings,
+      bolNumber: t.bolNumber,
+      invoiceNumber: t.invoiceNumber,
+    });
+    const one = await PDFDocument.load(bytes);
+    const pages = await merged.copyPages(one, one.getPageIndices());
+    pages.forEach((p) => merged.addPage(p));
+  }
+  return merged.save();
+}
+
 function drawDiagram(page: PDFPage, font: PDFFont, fontBold: PDFFont, trailer: PackTrailer, dims: Dimensions, box: DiagramBox) {
   const boxBottomY = box.yTop - box.height;
 

@@ -70,6 +70,8 @@ import {
   undo,
   evaluateGuards,
   planForApply,
+  dropEmptyTrailers,
+  isEmptyTrailer,
   setLayerCount,
   removeRow,
   withHistory,
@@ -118,7 +120,9 @@ interface CustomizeEditorProps {
   // introduceSku/cartAfterPlacement); the caller must carry those forward into whatever it re-mounts
   // this editor with next (or persists), or a reopened session's originalSkuIds would be rebuilt
   // without the library SKU and misclassify further edits to it as a conservation violation.
-  onApply: (appliedPlan: PackPlan, cart: CartLine[], skus: PackSku[]) => void;
+  // lb-trailer-01: appliedPlan has its empty trailers dropped (dropEmptyTrailers); removedTrailers
+  // holds their original indices, ascending, so the caller can keep each BOL # on its trailer.
+  onApply: (appliedPlan: PackPlan, cart: CartLine[], skus: PackSku[], removedTrailers: number[]) => void;
   onDiscard: () => void;
   /** lb-diag-02: the view-mode cards' per-trailer BOL #s and the job's invoice #, shown read-only in
    * each trailer header and carried into its Print / Export. Indexed by the trailer's position in
@@ -148,6 +152,8 @@ type Target =
   | { kind: "holding" };
 
 const HOWTO_KEY = "lb_customize_howto_v1";
+// lb-trailer-01: the empty-trailer card's one muted line, and the reason its Print / Dissolve are off.
+const EMPTY_TRAILER_NOTE = "Empty — this trailer is removed when you Apply.";
 
 const BTN =
   "min-h-[44px] px-3 rounded-lg text-[14px] font-medium border border-[var(--border)] text-text flex items-center gap-2 cursor-pointer transition-colors hover:bg-[var(--ghost-bg)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
@@ -506,7 +512,8 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
       setShowBlockedHint(true);
       return;
     }
-    onApply(planForApply(state), state.cart, state.skus);
+    const { plan: applied, removed } = dropEmptyTrailers(planForApply(state));
+    onApply(applied, state.cart, state.skus, removed);
   }
 
   function dismissHowto() {
@@ -622,12 +629,16 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
           <div className="rounded-xl border border-[var(--card-border)] bg-surface p-6 text-sm text-muted">Nothing placed on any trailer.</div>
         ) : (
           <TrailerScrollBox count={state.plan.trailers.length}>
-            {state.plan.trailers.map((trailer, t) => (
+            {state.plan.trailers.map((trailer, t) => {
+              // lb-trailer-01: an emptied trailer stays (stacks can go back; Undo restores it) until Apply drops it.
+              const empty = isEmptyTrailer(trailer);
+              return (
               <TrailerDiagram
                 key={t}
                 trailer={trailer}
                 dims={trailer.dims}
                 trailerIndex={t}
+                subtitle={empty ? <span className="font-sans">{EMPTY_TRAILER_NOTE}</span> : undefined}
                 typeBadge={trailerBadge(trailer, state.options.trailerTypeLabel ?? "")}
                 selectedColumn={selection?.kind === "trailer" && selection.ref.t === t ? { rowIndex: selection.ref.r, columnIndex: selection.ref.c } : null}
                 onSelectColumn={(r, c) => handleTapStack(t, r, c)}
@@ -648,7 +659,9 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                     <button
                       type="button"
                       onClick={() => setDissolveTi(t)}
-                      className="min-h-[44px] px-3 rounded-md text-[13px] font-medium border border-[var(--border)] text-text flex items-center gap-1.5 cursor-pointer transition-colors hover:bg-[var(--ghost-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+                      disabled={empty}
+                      title={empty ? EMPTY_TRAILER_NOTE : undefined}
+                      className="min-h-[44px] px-3 rounded-md text-[13px] font-medium border border-[var(--border)] text-text flex items-center gap-1.5 cursor-pointer transition-colors hover:bg-[var(--ghost-bg)] disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
                     >
                       <Shuffle className="w-3.5 h-3.5" aria-hidden="true" />
                       Dissolve…
@@ -662,11 +675,13 @@ export default function CustomizeEditor({ plan, dims, options, cart, skus, onApp
                       warnings={state.plan.warnings}
                       bolNumber={bolNumbers[t] || undefined}
                       invoiceNumber={invoiceNumber}
+                      disabledReason={empty ? EMPTY_TRAILER_NOTE : undefined}
                     />
                   </div>
                 }
               />
-            ))}
+              );
+            })}
           </TrailerScrollBox>
         )}
 

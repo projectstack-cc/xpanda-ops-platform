@@ -106,6 +106,30 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
     );
   }
 
+  // 2b. lb-trailer-01: an editedPlan with an empty middle trailer (saved load 4527's shape) still
+  //     round-trips unchanged -- the drop happens in LoadPlanView's restore, not in the parser.
+  {
+    const pulled = makePulledSource();
+    const packed = pack(pulled.cart, pulled.skus, TRAILER_TYPES["53ft Standard"], DEFAULT_PACK_OPTIONS);
+    const t = packed.trailers[0];
+    const empty = { ...t, rows: [], usedLength: 0, usedFloorArea: 0, usedWeight: 0, totalStacks: 0, totalUnits: 0, mixedStacks: 0, widthUtilization: 0, heightUtilization: 0 };
+    const plan = makePlan({ trailers: [t, empty, t] });
+    const snapshot = buildSnapshot({
+      fixtureId: REAL_FIXTURE_ID,
+      pulledSource: pulled,
+      trailerTypeKey: "53ft Standard",
+      runnerHeight: 0,
+      editedPlan: plan,
+      bolNumbers: ["4527-01", "4527-02", "4527-03"],
+    });
+    const result = deserializeSnapshot(serializeSnapshot(snapshot));
+    check(
+      "round-trip: editedPlan with an empty middle trailer is accepted unchanged",
+      result.ok === true && JSON.stringify(result.snapshot) === JSON.stringify(snapshot) && result.snapshot.editedPlan?.trailers.length === 3,
+      JSON.stringify(result.ok)
+    );
+  }
+
   // 3. deserializeSnapshot rejects corrupt (non-JSON) input with a reason, not a throw.
   {
     let threw = false;

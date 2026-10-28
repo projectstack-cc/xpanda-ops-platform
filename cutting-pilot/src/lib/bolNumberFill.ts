@@ -70,3 +70,17 @@ export function reconcileBolNumbers(prev: BolNumberState | null, count: number, 
   }
   return { numbers, autoFilled };
 }
+
+/**
+ * lb-trailer-01: drop the BOL # slots of removed trailers (original indices) so every number stays
+ * with its trailer. Run BEFORE reconcileBolNumbers — that one only resizes by count, which would
+ * shift a later trailer's number into a removed one's slot. Inputs untouched.
+ */
+export function removeBolIndices(state: BolNumberState, removed: number[]): BolNumberState {
+  if (removed.length === 0) return { numbers: state.numbers.slice(), autoFilled: state.autoFilled.slice() };
+  const drop = new Set(removed);
+  return {
+    numbers: state.numbers.filter((_, i) => !drop.has(i)),
+    autoFilled: state.numbers.map((_, i) => !!state.autoFilled[i]).filter((_, i) => !drop.has(i)),
+  };
+}

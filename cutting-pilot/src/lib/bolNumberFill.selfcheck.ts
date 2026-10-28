@@ -1,7 +1,7 @@
 // src/lib/bolNumberFill.selfcheck.ts
 // Guarded dev self-check for bolNumberFill.ts (lb-ui-13). Same check()/results shape as
 // deliveryTime.selfcheck.ts. Not part of the production build path.
-import { fillBolNumbers, reconcileBolNumbers, seedBolNumber } from "./bolNumberFill";
+import { fillBolNumbers, reconcileBolNumbers, removeBolIndices, seedBolNumber } from "./bolNumberFill";
 
 interface CheckResult {
   name: string;
@@ -44,6 +44,16 @@ export function runBolNumberFillSelfCheck(): { pass: boolean; results: CheckResu
   eq("3 → 2 drops trailers past the new count", reconcileBolNumbers(typed, 2, "4440").numbers, ["4440-01", "MINE"]);
   const typedFirst = fillBolNumbers(["", ""], [true, true], 0, "B-07");
   eq("re-pack after a typed trailer 1 continues its sequence", reconcileBolNumbers(typedFirst, 3, "4440").numbers, ["B-07", "B-08", "B-09"]);
+
+  // ── lb-trailer-01: removeBolIndices (an empty trailer dropped) ───────────────────────────
+  const typed4527 = { numbers: ["4527-01", "4527-02", "4527-03"], autoFilled: [false, false, false] };
+  eq("remove [1] from hand-typed keeps each number on its trailer", removeBolIndices(typed4527, [1]), { numbers: ["4527-01", "4527-03"], autoFilled: [false, false] });
+  eq("remove [] is a copy", removeBolIndices(typed4527, []), typed4527);
+  eq("remove does not mutate its input", typed4527.numbers, ["4527-01", "4527-02", "4527-03"]);
+  const autoSet = reconcileBolNumbers(null, 3, "4527");
+  eq("auto-filled set, remove [1] + reconcile → re-seeded for 2", reconcileBolNumbers(removeBolIndices(autoSet, [1]), 2, "4527").numbers, ["4527-01", "4527-02"]);
+  const mixed = fillBolNumbers(autoSet.numbers, autoSet.autoFilled, 2, "SPECIAL");
+  eq("remove [1] + reconcile keeps a hand-typed trailer 3 as the new trailer 2", reconcileBolNumbers(removeBolIndices(mixed, [1]), 2, "4527").numbers, ["4527-01", "SPECIAL"]);
 
   return { pass: results.every((r) => r.pass), results };
 }

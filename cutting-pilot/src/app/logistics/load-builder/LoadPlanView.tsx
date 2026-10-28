@@ -94,7 +94,8 @@ import LoadPickerModal from "@/components/logistics/LoadPickerModal";
 import { packForced, type ForcedTrailer } from "@/lib/forcedPack";
 import { buildSnapshot, defaultSaveName, deserializeSnapshot, type ManualLoadSource, type OrderLoadSource, type SavedLoadRecord, type SavedLoadSnapshot } from "@/lib/savedLoad";
 import { fetchLibrarySkus, LibraryFetchError } from "@/lib/jobPull";
-import { fillBolNumbers, reconcileBolNumbers, type BolNumberState } from "@/lib/bolNumberFill";
+import { fillBolNumbers, reconcileBolNumbers, removeBolIndices, type BolNumberState } from "@/lib/bolNumberFill";
+import { dropEmptyTrailers } from "@/lib/loadEditor";
 import type { LibraryState } from "./LoadPicker";
 import { addLine, clear as clearList, diffFromOrder, setQty as setLineQty, step as stepLine, withSku } from "@/lib/loadList";
 import { useOrderLoadPersistence, findSavedForJob } from "@/components/logistics/useOrderLoadPersistence";
@@ -102,7 +103,7 @@ import LoadBuilderTabs, { isLoadBuilderTab, type LoadBuilderTab } from "./LoadBu
 import LoadTab from "./LoadTab";
 import PartsTab from "./PartsTab";
 import ResultsTab from "./ResultsTab";
-import type { LoadBuilderAccess } from "./loadBuilderUi";
+import { plural, type LoadBuilderAccess } from "./loadBuilderUi";
 
 // lb-ui-06: shipped runner-height values, confirmed against legacy's own dropdown
 // (logistics/load-builder.html:1462 — `[0, 3, 4].forEach(rh => ...)`), not invented here.
@@ -236,6 +237,9 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   // lbr-04: set when ?job_id= reopened the order's saved load (its updated_at, for the banner).
   const [reopenedAt, setReopenedAt] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  // lb-trailer-01: empty trailers dropped from the saved load just restored (shown while that load is
+  // still the current one, until dismissed).
+  const [droppedNotice, setDroppedNotice] = useState<{ loadId: string; count: number } | null>(null);
 
   // lbr-08: memoized so its identity only changes with manualSource — packedPlan memoizes on `fixture`.
   const manualFixture: LoadBuilderFixture | null = useMemo(
@@ -490,7 +494,12 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
     // lbr-10: a missing value (any pre-lbr-10 row) means Force sizes off.
     setForceSizes(!!snapshot.forcedTrailers && snapshot.forcedTrailers.length > 0);
     setForcedQueue(snapshot.forcedTrailers ?? []);
-    setEditedPlan(snapshot.editedPlan);
+    // lb-trailer-01: drop any empty trailer the saved plan carries (e.g. saved load 4527). The plan
+    // now differs from the saved snapshot, so the load reads unsaved and Update save keeps the cleanup.
+    const dropped = snapshot.editedPlan ? dropEmptyTrailers(snapshot.editedPlan) : null;
+    const removed = dropped?.removed ?? [];
+    setEditedPlan(dropped ? dropped.plan : null);
+    setDroppedNotice(removed.length > 0 ? { loadId: record.id, count: removed.length } : null);
     // Only restore editedCart/editedSkus alongside a non-null editedPlan -- these two describe
     // divergence FROM the frozen source that a materialized plan already accounts for; restoring
     // them next to a null editedPlan would claim library-part demand for a plan that's about to be
@@ -500,11 +509,12 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
     setEditedCart(snapshot.editedPlan ? snapshot.editedCart ?? null : null);
     setEditedSkus(snapshot.editedPlan ? snapshot.editedSkus ?? null : null);
     // lb-ui-13: saved BOL #s come back as hand-typed (kept as-is); none saved → re-seeded by the effect.
+    // lb-trailer-01: a dropped trailer's slot goes with it, before the effect's count-based reconcile.
     const restoredKey =
       snapshot.source.kind === "pulled" ? snapshot.source.pulledSource.id : snapshot.source.kind === "manual" ? MANUAL_ID : snapshot.source.fixtureId;
     setBolState(
       snapshot.bolNumbers
-        ? { key: restoredKey, numbers: snapshot.bolNumbers, autoFilled: snapshot.bolNumbers.map((b) => b === "") }
+        ? { key: restoredKey, ...removeBolIndices({ numbers: snapshot.bolNumbers, autoFilled: snapshot.bolNumbers.map((b) => b === "") }, removed) }
         : null
     );
     setSelected(null);
@@ -702,7 +712,12 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
     setSearchFocusKey((k) => k + 1);
   }
 
-  function handleApplyEdit(appliedPlan: PackPlan, cart: CartLine[], skus: PackSku[]) {
+  // lb-trailer-01: removedTrailers = the empty trailers Apply dropped; their BOL # slots go with them
+  // (before the effect's count-based reconcile) so every number stays on its trailer.
+  function handleApplyEdit(appliedPlan: PackPlan, cart: CartLine[], skus: PackSku[], removedTrailers: number[]) {
+    if (removedTrailers.length > 0) {
+      setBolState((prev) => (prev && prev.key === bolSourceKey ? { key: prev.key, ...removeBolIndices(prev, removedTrailers) } : prev));
+    }
     setEditedPlan(appliedPlan);
     setEditedCart(cart);
     setEditedSkus(skus);
@@ -753,6 +768,17 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
           )}
         </div>
       </div>
+
+      {droppedNotice && droppedNotice.loadId === currentSavedLoadId && (
+        <div className="rounded-xl border border-[var(--loaded-border)] bg-[var(--loaded-bg)] px-4 py-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm text-[var(--loaded-text)]">
+            Removed {plural(droppedNotice.count, "empty trailer", "empty trailers")} from this saved load. Update save to keep the change.
+          </div>
+          <button type="button" onClick={() => setDroppedNotice(null)} className="shrink-0 text-sm font-semibold text-[var(--loaded-text)] cursor-pointer min-h-[44px] px-2">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <LoadBuilderTabs tab={tab} onChange={handleTabChange} status={persistence.status} savedAt={persistence.savedAt} isOrderLoad={!!pulledSource} />
 

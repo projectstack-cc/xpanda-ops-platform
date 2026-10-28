@@ -1,8 +1,9 @@
 "use client";
 // src/app/logistics/load-builder/ResultsTab.tsx
 // lbr-05: the Results tab, laid out per the approved mockup ("Load Builder v2 Mockup"), top to bottom:
-//   1. action row — Re-pack, Customize, Generate BOLs (primary), Save/Update, Load saved. Printing
-//      stays per trailer (each card's header): there is no multi-trailer print to call.
+//   1. action row — Re-pack, Customize, Generate BOLs (primary), Print all diagrams (lb-trailer-01;
+//      2+ trucks — one truck's own card covers it), Save/Update, Load saved. Each card's header keeps
+//      its own per-trailer print.
 //   2. KPI tiles (the shared MetricTile) — Trucks, Stacks, Top-offs, Floor used.
 //   3. the consolidation note + pure-plan toggle (PackOptions.consolidate).
 //   4. one card per trailer (TrailerDiagram with a legacy-style title/subtitle, print in headerAction).
@@ -21,6 +22,7 @@ import TrailerDiagram from "@/components/logistics/TrailerDiagram";
 import TrailerScrollBox from "@/components/logistics/TrailerScrollBox";
 import ColumnDetailPanel, { type SelectedColumnDetail } from "@/components/logistics/ColumnDetailPanel";
 import LoadingDiagramPrintButton from "@/components/logistics/LoadingDiagramPrintButton";
+import PrintAllDiagramsButton from "@/components/logistics/PrintAllDiagramsButton";
 import type { CartLine, Dimensions, PackOptions, PackPlan, PackSku, PackTrailer } from "@/lib/packEngine";
 import { thicknessColor, thicknessLabel } from "@/lib/thicknessPalette";
 import CustomizeEditor from "./CustomizeEditor";
@@ -67,7 +69,8 @@ interface ResultsTabProps {
   onGoToLoad: () => void;
 
   editorKey: string;
-  onApplyEdit: (plan: PackPlan, cart: CartLine[], skus: PackSku[]) => void;
+  /** lb-trailer-01: removedTrailers = original indices of the empty trailers Apply dropped. */
+  onApplyEdit: (plan: PackPlan, cart: CartLine[], skus: PackSku[], removedTrailers: number[]) => void;
   onDiscardEdit: () => void;
 }
 
@@ -225,6 +228,22 @@ export default function ResultsTab(p: ResultsTabProps) {
           >
             <FileText size={16} aria-hidden="true" /> Generate BOLs
           </button>
+          {trucks > 1 && (
+            <PrintAllDiagramsButton
+              trailers={plan.trailers.map((trailer, trailerIndex) => ({
+                trailer,
+                trailerIndex,
+                dims: trailer.dims,
+                bolNumber: p.bolNumbers[trailerIndex] || undefined,
+                invoiceNumber: p.invoiceNumber,
+              }))}
+              skus={p.effectiveSkus}
+              runnerHeight={p.runnerHeight}
+              warnings={plan.warnings}
+              disabled={trucks === 0}
+              className={BTN_GHOST}
+            />
+          )}
           <button type="button" onClick={p.onSave} disabled={trucks === 0 || !p.canSave} title={p.canSave ? undefined : NO_SAVE_REASON} className={BTN_GHOST}>
             <Save size={16} aria-hidden="true" /> {p.isUpdate ? "Update save" : "Save load"}
           </button>

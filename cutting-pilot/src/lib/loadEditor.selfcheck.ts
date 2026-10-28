@@ -8,7 +8,7 @@
 // check is specifically testing that a violation fires — per Part D's stated discipline.
 import type { CartLine, PackColumn, PackOptions, PackPlan, PackRow, PackSku, PackTrailer, Dimensions } from "./packEngine";
 import { DEFAULT_PACK_OPTIONS, pack, TRAILER_TYPES, HOLEY_BOARD_CATEGORY, validatePlan } from "./packEngine";
-import { proposeDissolve } from "./dissolve";
+import { proposeDissolve, applyDissolve } from "./dissolve";
 import {
   createEditorState,
   moveColumn,
@@ -55,6 +55,8 @@ import {
   EDGE_NO_SLOT_REASON,
   EDGE_SWAP_REASON,
   STAND_NOT_PLAIN_REASON,
+  dropEmptyTrailers,
+  isEmptyTrailer,
   type EditorState,
   type PieceSource,
 } from "./loadEditor";
@@ -1446,6 +1448,35 @@ export function runLoadEditorSelfCheck(): { pass: boolean; results: CheckResult[
       "dissolve marks a move fromEdge exactly when its source column is on edge",
       fromFirst.moves.every((m) => isEdgeAt(0, m.fromRi, m.fromCi) === m.fromEdge) && fromLast.moves.every((m) => isEdgeAt(fromLast.srcTi, m.fromRi, m.fromCi) === m.fromEdge)
     );
+  }
+
+  // lb-trailer-01: empty trailers are dropped at Apply (and on saved-load restore).
+  {
+    const one = () => makeTrailer([makeRow([makeColumn(SKU_A, "Single column A")])]);
+    const cartA: CartLine[] = [{ skuId: "A", qty: 3 }];
+    const plan3: PackPlan = { trailers: [one(), one(), one()], balance: [], warnings: [], totalWeight: 0, totalUnits: 0, totalStacks: 0, mixedStacks: 0 };
+    const st3 = normalizeState(createEditorState(plan3, DIMS, OPTS, cartA, [SKU_A]));
+    const proposal = proposeDissolve(st3, 1);
+    const dissolved = applyDissolve(st3, proposal, new Set());
+    check("drop: dissolve empties trailer 2 of 3", proposal.moves.length === 1 && isEmptyTrailer(dissolved.plan.trailers[1]), JSON.stringify(proposal.moves.length));
+    const dropped = dropEmptyTrailers(planForApply(dissolved));
+    check("drop: Apply leaves 2 trailers, removed = [1]", dropped.plan.trailers.length === 2 && JSON.stringify(dropped.removed) === "[1]", JSON.stringify(dropped.removed));
+    const applied = { ...dissolved, plan: dropped.plan };
+    check("drop: validateForApply is clean after the drop", validateForApply(applied).length === 0, JSON.stringify(validateForApply(applied)));
+    const cons = conservationHolds(applied);
+    check("drop: conservation holds after the drop", cons.ok, cons.detail);
+    check("drop: plan rollups re-summed", dropped.plan.totalUnits === 3 && dropped.plan.totalStacks === 2, `${dropped.plan.totalUnits}/${dropped.plan.totalStacks}`);
+    check("drop: balance untouched", JSON.stringify(dropped.plan.balance) === JSON.stringify(planForApply(dissolved).balance));
+    check("drop: input plan not mutated", dissolved.plan.trailers.length === 3);
+
+    const full = makeFixture();
+    const kept = dropEmptyTrailers(full.plan);
+    check("drop: no empty trailers → same trailers, removed = []", kept.plan.trailers.length === full.plan.trailers.length && kept.removed.length === 0 && JSON.stringify(kept.plan.trailers) === JSON.stringify(full.plan.trailers));
+
+    const zeroCols = normalizeState(createEditorState({ ...plan3, trailers: [one(), makeTrailer([makeRow([]), makeRow([])]), one(), makeTrailer([])] }, DIMS, OPTS, [{ skuId: "A", qty: 2 }], [SKU_A]));
+    check("drop: rows with zero columns count as empty", isEmptyTrailer(zeroCols.plan.trailers[1]) && isEmptyTrailer(zeroCols.plan.trailers[3]) && !isEmptyTrailer(zeroCols.plan.trailers[0]));
+    const droppedZero = dropEmptyTrailers(zeroCols.plan);
+    check("drop: zero-column and no-row trailers removed, ascending", droppedZero.plan.trailers.length === 2 && JSON.stringify(droppedZero.removed) === "[1,3]", JSON.stringify(droppedZero.removed));
   }
 
   return { pass: results.every((r) => r.pass), results };

@@ -486,6 +486,30 @@ export function planForApply(state: EditorState): PackPlan {
   return { ...state.plan, balance: merged };
 }
 
+/** lb-trailer-01: a trailer with no rows, or whose rows all have zero columns, holds nothing. */
+export function isEmptyTrailer(trailer: PackTrailer): boolean {
+  return trailer.rows.every((row) => row.columns.length === 0);
+}
+
+/** lb-trailer-01: the plan without its empty trailers (Customize Apply, saved-load restore).
+ * `removed` = the original indices dropped, ascending. Balance is untouched — an empty trailer holds
+ * no pieces — and only the plan rollups are re-summed (each kept trailer's own geometry is
+ * unchanged, so no per-trailer recompute — and no PackOptions — is needed). */
+export function dropEmptyTrailers(plan: PackPlan): { plan: PackPlan; removed: number[] } {
+  const next = clonePlan(plan);
+  const removed: number[] = [];
+  next.trailers = next.trailers.filter((trailer, i) => {
+    if (!isEmptyTrailer(trailer)) return true;
+    removed.push(i);
+    return false;
+  });
+  next.totalWeight = next.trailers.reduce((s, t) => s + t.usedWeight, 0);
+  next.totalUnits = next.trailers.reduce((s, t) => s + t.totalUnits, 0);
+  next.totalStacks = next.trailers.reduce((s, t) => s + t.totalStacks, 0);
+  next.mixedStacks = next.trailers.reduce((s, t) => s + t.mixedStacks, 0);
+  return { plan: next, removed };
+}
+
 /** lb-topoff-01: validatePlan rules a person customizing may knowingly break. The 3″ top-off rule
  * (topOffMinInchesPerPiece, K) is an auto-pack rule — a supervisor stacking thin pieces on top is
  * choosing to allow it. validatePlan itself (and the auto-packer, and dissolve) still enforce K. */

@@ -12,6 +12,7 @@ import { useState } from "react";
 import { Printer, RefreshCw } from "lucide-react";
 import type { Dimensions, PackSku, PackTrailer } from "@/lib/packEngine";
 import { buildLoadingDiagramPdf } from "@/lib/loadingDiagramPdf";
+import { openPdfTab, POPUP_BLOCKED_MESSAGE } from "./openPdfTab";
 
 interface LoadingDiagramPrintButtonProps {
   trailer: PackTrailer;
@@ -23,6 +24,8 @@ interface LoadingDiagramPrintButtonProps {
   /** lb-diag-02: this trailer's BOL # and the job's invoice #, passed straight to the PDF. */
   bolNumber?: string;
   invoiceNumber?: string;
+  /** lb-trailer-01: set (the reason) to disable the button — Customize's empty-trailer card. */
+  disabledReason?: string;
 }
 
 export default function LoadingDiagramPrintButton({
@@ -34,6 +37,7 @@ export default function LoadingDiagramPrintButton({
   warnings,
   bolNumber,
   invoiceNumber,
+  disabledReason,
 }: LoadingDiagramPrintButtonProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,15 +47,7 @@ export default function LoadingDiagramPrintButton({
     setError(null);
     try {
       const bytes = await buildLoadingDiagramPdf(trailer, trailerIndex, dims, skus, { runnerHeight, warnings, bolNumber, invoiceNumber });
-      const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const opened = window.open(url, "_blank");
-      if (!opened) {
-        setError("Pop-up blocked — allow pop-ups for this site to view the diagram.");
-      }
-      // Give the new tab time to load the blob before releasing it; the object URL is otherwise
-      // orphaned in this tab's memory for the rest of the session, a fine tradeoff for one action.
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (!openPdfTab(bytes)) setError(POPUP_BLOCKED_MESSAGE);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate the loading diagram PDF.");
     } finally {
@@ -64,7 +60,8 @@ export default function LoadingDiagramPrintButton({
       <button
         type="button"
         onClick={handleClick}
-        disabled={busy}
+        disabled={busy || !!disabledReason}
+        title={disabledReason}
         aria-label={`Print or export loading diagram for trailer ${trailerIndex + 1}`}
         className="min-h-[28px] px-2.5 rounded-md text-[12px] font-medium border border-[var(--border)] text-text flex items-center gap-1 cursor-pointer transition-colors hover:bg-[var(--ghost-bg)] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
       >

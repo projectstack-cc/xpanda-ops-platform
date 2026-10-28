@@ -7,7 +7,7 @@
 // run*SelfCheck() function. Not part of the production build path.
 //
 // lbr-09: async — the overflow check builds a real PDF and counts its pages with pdf-lib.
-import { PDFDocument, StandardFonts } from "pdf-lib";
+import { PDFArray, PDFDocument, PDFRawStream, StandardFonts, decodePDFRawStream } from "pdf-lib";
 import type { PackColumn, PackRow, PackTrailer, Dimensions, PackSku } from "./packEngine";
 import {
   formatStackLines,
@@ -20,6 +20,7 @@ import {
   endLabels,
   paginateRows,
   buildLoadingDiagramPdf,
+  buildAllLoadingDiagramsPdf,
   formatEdgeSlotDetail,
   layerThickness,
   rowSpanX,
@@ -91,6 +92,22 @@ function makeFixture(): PackTrailer {
     widthUtilization: 0,
     heightUtilization: 0,
   };
+}
+
+/** lb-trailer-01: a page's drawn text — its content stream(s) inflated, every hex-string Tj decoded
+ * (pdf-lib draws StandardFont text as `<hex> Tj`; ASCII maps 1:1). Enough to probe a page's title. */
+function pageText(doc: PDFDocument, index: number): string {
+  const contents = doc.getPage(index).node.Contents();
+  const streams = contents instanceof PDFArray ? contents.asArray().map((ref) => doc.context.lookup(ref)) : [contents];
+  let out = "";
+  for (const stream of streams) {
+    if (!(stream instanceof PDFRawStream)) continue;
+    const raw = Array.from(decodePDFRawStream(stream).decode(), (b) => String.fromCharCode(b)).join("");
+    for (const m of Array.from(raw.matchAll(/<([0-9A-Fa-f]*)>\s*Tj/g))) {
+      out += (m[1].match(/../g) ?? []).map((h) => String.fromCharCode(parseInt(h, 16))).join("") + "\n";
+    }
+  }
+  return out;
 }
 
 export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; results: CheckResult[] }> {
@@ -296,6 +313,36 @@ export async function runLoadingDiagramPdfSelfCheck(): Promise<{ pass: boolean; 
     const longBol = "BOL-2026-10-26-4511-01-ABCDEFG";
     const longPages = (await PDFDocument.load(await buildLoadingDiagramPdf(many, 1, wide, manySkus, { bolNumber: longBol, invoiceNumber: "4511" }))).getPageCount();
     check("lb-diag-02: a 30-char BOL # still builds a loadable PDF (2 pages)", longBol.length === 30 && longPages === 2, String(longPages));
+
+    // lb-trailer-01: Print all diagrams — one PDF, each trailer's pages in trailer order, empties skipped.
+    const allSkus = [...SKUS, ...manySkus];
+    const empty: PackTrailer = { ...trailer, rows: [], usedLength: 0, totalStacks: 0 };
+    const zeroCols: PackTrailer = { ...trailer, rows: [makeRow(0, 0, [])], usedLength: 0, totalStacks: 0 };
+    const three = [
+      { trailer, trailerIndex: 0, dims: DIMS, bolNumber: "4527-01", invoiceNumber: "4527" },
+      { trailer: many, trailerIndex: 1, dims: wide, bolNumber: "4527-02", invoiceNumber: "4527" },
+      { trailer, trailerIndex: 2, dims: DIMS, bolNumber: "4527-03", invoiceNumber: "4527" },
+    ];
+    const perTrailer: number[] = [];
+    for (const t of three) {
+      perTrailer.push((await PDFDocument.load(await buildLoadingDiagramPdf(t.trailer, t.trailerIndex, t.dims, allSkus, { bolNumber: t.bolNumber, invoiceNumber: t.invoiceNumber }))).getPageCount());
+    }
+    const all = await PDFDocument.load(await buildAllLoadingDiagramsPdf(three, allSkus, { runnerHeight: 0, warnings: [] }));
+    check("lb-trailer-01: all-diagrams page count = sum of per-trailer counts (1 + 2 + 1)", all.getPageCount() === 4 && perTrailer.join(",") === "1,2,1", `${all.getPageCount()} vs ${perTrailer.join("+")}`);
+    const want = ["Trailer 1 Loading Diagram|BOL # 4527-01", "Trailer 2 Loading Diagram|BOL # 4527-02", "Trailer 2 Loading Diagram (cont.)|BOL # 4527-02", "Trailer 3 Loading Diagram|BOL # 4527-03"];
+    const texts = want.map((_, i) => pageText(all, i));
+    check(
+      "lb-trailer-01: pages in trailer order, each with its own title and BOL #",
+      want.every((w, i) => w.split("|").every((part) => texts[i].includes(part))),
+      texts.map((t) => t.split("\n").slice(0, 2).join(" / ")).join(" || ")
+    );
+    const withEmpty = await PDFDocument.load(
+      await buildAllLoadingDiagramsPdf(
+        [three[0], { trailer: empty, trailerIndex: 1, dims: DIMS }, { trailer: zeroCols, trailerIndex: 2, dims: DIMS }, { ...three[2], trailerIndex: 3 }],
+        allSkus
+      )
+    );
+    check("lb-trailer-01: empty trailers (no rows / zero-column rows) are skipped", withEmpty.getPageCount() === 2 && pageText(withEmpty, 1).includes("Trailer 4 Loading Diagram"), String(withEmpty.getPageCount()));
   }
 
   // lb-diag-02: header label logic.

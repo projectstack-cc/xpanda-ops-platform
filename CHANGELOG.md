@@ -3027,6 +3027,51 @@ current series).
 
 ## Logistics (v2)
 
+- **lb-trailer-01 — Load Builder drops empty trailers automatically + "Print all diagrams"** (Next/Cloudflare
+  Platform Agent §9a: `lib/loadEditor.ts`, `lib/bolNumberFill.ts`, `lib/loadingDiagramPdf.ts` + selfchecks, incl.
+  `savedLoad.selfcheck.ts`; React Component Agent §9b: `LoadPlanView.tsx`, `ResultsTab.tsx`, `CustomizeEditor.tsx`,
+  `LoadingDiagramPrintButton.tsx`, new `PrintAllDiagramsButton.tsx` + `openPdfTab.ts`). No migration, permission
+  or API change.
+  - **Why (Steve, 2026-10-28).** Saved load 4527 had an empty trailer: nothing in v2 ever removed one, so a trailer
+    emptied by Customize or dissolve kept its card, BOL # slot, diagram print and "Trucks" count. Steve chose
+    automatic removal over a delete button. He also asked for a "Print all loading diagrams" button.
+  - **Empty trailers dropped.**
+    - New pure helpers `isEmptyTrailer` (no rows, or every row has zero columns) and
+      `dropEmptyTrailers(plan) → { plan, removed }` (clone, plan rollups re-summed, balance untouched).
+    - **Apply:** `CustomizeEditor` hands `onApply` the dropped plan plus `removedTrailers`.
+    - **Inside Customize** an emptied trailer stays until Apply (stacks can go back; Undo restores it). Its card
+      shows "Empty — this trailer is removed when you Apply.", and its Dissolve… and Print / Export are disabled
+      with that line as the reason (`LoadingDiagramPrintButton` gained an optional `disabledReason`).
+    - **Saved-load restore** runs the same drop. The plan then differs from the saved snapshot, so the load reads
+      "Unsaved changes" and Update save persists the cleanup. A one-time banner (the "reopened" banner style,
+      dismissible) reads "Removed N empty trailer(s) from this saved load. Update save to keep the change."
+    - `pack()` is unchanged. No single spot in the packEngine selfcheck covers all pack() output, so no assert there.
+  - **BOL #s follow their trailers.** New `removeBolIndices(state, removed)` splices both arrays. It runs in
+    `handleApplyEdit` and on restore, before the count-based `reconcileBolNumbers`. Hand-typed numbers stay with
+    their trailer; auto-filled ones re-seed for the new count.
+  - **Print all diagrams.**
+    - `buildAllLoadingDiagramsPdf(trailers, skus, { runnerHeight, warnings })` calls `buildLoadingDiagramPdf` per
+      trailer and merges with `copyPages` in trailer order (bolShared's merge pattern), skipping empty trailers.
+      No drawing code duplicated.
+    - `PrintAllDiagramsButton` (Printer icon, "Building…" spinner) sits in Results' action row after Generate BOLs,
+      `BTN_GHOST` at 44px. Each trailer gets the same BOL # / invoice # as its card's print. Hidden with one truck.
+      Not in Customize.
+    - The blob-URL open + pop-up-blocked message now live in a shared `openPdfTab` helper, used by both buttons.
+  - **Selfchecks.** loadEditor 352 → 362 (dissolve empties trailer 2 of 3 → Apply leaves 2, `removed = [1]`,
+    `validateForApply` clean, conservation holds; no-empty plan unchanged with `removed = []`; zero-column rows and
+    no-row trailers count as empty). bolNumberFill 17 → 22 (`4527-01/02/03` hand-typed, remove `[1]` →
+    `4527-01, 4527-03`; auto-filled set re-seeds for 2; hand-typed trailer 3 stays as the new trailer 2). savedLoad
+    45 → 46 (empty middle trailer round-trips unchanged). loadingDiagramPdf 60 → 63 (3 trailers → 1 + 2 + 1 = 4
+    pages; per-page title and BOL # in trailer order via a content-stream text probe; empties skipped).
+    packEngine 207 and dissolve 35 unchanged.
+  - **Verified.** `tsc --noEmit` and `cf-build` green. Browser (next dev + Playwright, saved-loads API mocked, light
+    and dark). The fixture was 4527-shaped: 4 trailers with #2 empty, BOL #s `4527-01…04` hand-typed.
+    - On open: 3 trucks, the banner, BOL #s `4527-01, 4527-03, 4527-04`, "Unsaved changes", Update save enabled.
+    - Print all diagrams: one 3-page PDF, "Trailer 1/2/3 Loading Diagram" with `BOL # 4527-01 / -03 / -04`.
+    - Customize: sending trailer 3's six stacks to holding showed the empty note with Print / Dissolve disabled.
+      Done customizing left 2 trucks, BOL #s `4527-01, 4527-03`.
+    - Production data untouched. Steve opens 4527 after deploy and clicks Update save.
+
 - **lb-topoff-01 — Customize allows thin top-offs (the 3″ K rule is auto-pack only)** (Next/Cloudflare Platform
   Agent §9a: `lib/loadEditor.ts` + selfcheck). No migration, permission, API or UI file change.
   - **Why (Steve, 2026-10-26).** In Customize, the 3″ top-off rule (`topOffMinInchesPerPiece`, K) stopped the
