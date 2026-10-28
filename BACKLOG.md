@@ -386,6 +386,12 @@
 - [ ] **board-prints-01 follow-up — Sweep orphaned `job-prints/` R2 objects for deleted jobs.** Legacy
   `DELETE /api/jobs` drops the `job_prints` rows but leaves their `BOL_PHOTOS` objects under
   `job-prints/<jobId>/`. Add a sweep (or delete the prefix inline once the job delete moves to v2).
+- [ ] **ord-dims-01 follow-up — Classic Job Board parity for the blank-dims rule** (`jobs/index.html` `saveJob()`
+  plus legacy `/api/jobs` POST/PUT), if Classic stays in use. v2 order entry and the edit modal enforce it today.
+- [ ] **ord-dims-01 follow-up — decide whether QB-imported orders (review/apply) are held to the blank-dims rule.**
+  Today `createJob` callers other than order entry skip it.
+- [ ] **ord-dims-01 follow-up — consider a stricter dims rule** ("must read as L × W × H, taper ranges allowed")
+  in place of today's blank-only check.
 - [ ] **board-search-01 follow-up — Calendar view + archived search results (if wanted).** Search on
   `/v2/board` merges archived/shipped matches into the List view only; the Calendar still renders the active
   feed. Extend `CalendarView` to show them (view-only) if Steve wants it.

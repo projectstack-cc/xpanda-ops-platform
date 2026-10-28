@@ -10,6 +10,7 @@ import { useLang } from "@/components/lang";
 import { parsePackingSlip, type OffloadWarning } from "@/lib/packingSlip";
 import { matchLineItemToPart, loadPartsLibrary, partDimsString, hbSlipDims } from "@/lib/partMatch";
 import { bdftPerPiece, computeTotalBdft } from "@/lib/bdft";
+import { linesMissingDims, missingDimsMessage } from "@/lib/orderLineDims";
 import { buildCutListPdf, type CutListJob } from "@/lib/cutList";
 import PartsPicker from "@/components/orders/PartsPicker";
 import CutListChunkToggle from "@/components/CutListChunkToggle";
@@ -114,9 +115,11 @@ interface Field {
   onChange: (v: string) => void;
   placeholder?: string;
   required?: boolean;
+  /** ord-dims-01: danger border + aria-invalid. */
+  invalid?: boolean;
 }
 
-function TextField({ label, value, onChange, placeholder, required }: Field) {
+function TextField({ label, value, onChange, placeholder, required, invalid }: Field) {
   return (
     <label className="block">
       <span className={labelClass}>
@@ -129,7 +132,8 @@ function TextField({ label, value, onChange, placeholder, required }: Field) {
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         required={required}
-        className={inputClass}
+        aria-invalid={invalid || undefined}
+        className={invalid ? inputClass.replace("border-[var(--input-border)]", "border-2 border-[var(--danger-ink)]") : inputClass}
       />
     </label>
   );
@@ -193,6 +197,16 @@ export default function OrderEntryForm({ userName, isAdmin, permissions }: Order
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // ord-dims-01: once a save is blocked for blank dims, highlight rows still missing them —
+  // recomputed from lineItems, so typing dims or removing the row clears it.
+  const [dimsChecked, setDimsChecked] = useState(false);
+  const missingDimRows = new Set(dimsChecked ? linesMissingDims(lineItems) : []);
+  const errorRef = useRef<HTMLDivElement>(null);
+  function showDimsError(msg: string) {
+    setError(msg);
+    setDimsChecked(true);
+    requestAnimationFrame(() => errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }
   const [savedId, setSavedId] = useState<string | null>(null);
   const [savedOrder, setSavedOrder] = useState<{
     id: string;
@@ -411,6 +425,7 @@ function setQtyAsBdftConvert(on: boolean) {
     setParseError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setError(null);
+    setDimsChecked(false);
     setSavedId(null);
     setSavedOrder(null);
     setIncludeChunks(false);
@@ -622,6 +637,9 @@ function setQtyAsBdftConvert(on: boolean) {
       return;
     }
 
+    const dimsMsg = missingDimsMessage(lineItems);
+    if (dimsMsg) { showDimsError(dimsMsg); return; }
+
     const payload: OrderPayload = {
       customer: customer.trim(),
       po_number: poNumber.trim(),
@@ -727,6 +745,9 @@ function setQtyAsBdftConvert(on: boolean) {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
+        // ord-dims-01: the server's `lines` number the filtered payload, so re-derive the
+        // on-screen numbering (same rule) and fall back to its message.
+        if (data.code === "line_missing_dims") { showDimsError(missingDimsMessage(lineItems) || data.error); return; }
         setError(data.error || "Couldn't save the order. Try again.");
         return;
       }
@@ -861,7 +882,7 @@ function setQtyAsBdftConvert(on: boolean) {
         </section>
 
         {error && (
-          <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
+          <div ref={errorRef} role="alert" className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-4 py-3">
             {error}
           </div>
         )}
@@ -1053,7 +1074,7 @@ function setQtyAsBdftConvert(on: boolean) {
                       className={inputClass}
                     />
                   </label>
-                  <TextField label="Dimensions" value={li.dimensions} onChange={(v) => updateLine(idx, { dimensions: v })} placeholder='e.g. 76 x 38 x 12' />
+                  <TextField label="Dimensions" value={li.dimensions} onChange={(v) => updateLine(idx, { dimensions: v })} placeholder='e.g. 76 x 38 x 12' invalid={missingDimRows.has(idx + 1)} />
                   <TextField label="Density" value={li.density} onChange={(v) => updateLine(idx, { density: v })} placeholder="1.0 RC" />
                   <button
                     type="button"

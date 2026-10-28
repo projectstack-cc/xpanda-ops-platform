@@ -36,6 +36,7 @@ import LoadTimesEditor, {
 } from "@/components/orders/LoadTimesEditor";
 import type { BoardJob } from "./ProductionBoard";
 import { mergeProcesses, parseProcesses, type JobProcess } from "@/lib/processes";
+import { linesMissingDims, missingDimsMessage } from "@/lib/orderLineDims";
 
 interface EditJob {
   id: string;
@@ -160,6 +161,16 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
 
   const [job, setJob] = useState<EditJob | null>(null);
   const [lineItems, setLineItems] = useState<OrderLineItem[]>([{ ...EMPTY_LINE }]);
+  // ord-dims-01: once a save is blocked for blank dims, highlight rows still missing them —
+  // recomputed from lineItems, so typing dims or removing the row clears it.
+  const [dimsChecked, setDimsChecked] = useState(false);
+  const missingDimRows = new Set(dimsChecked ? linesMissingDims(lineItems) : []);
+  const saveErrorRef = useRef<HTMLDivElement>(null);
+  function showDimsError(msg: string) {
+    setSaveError(msg);
+    setDimsChecked(true);
+    requestAnimationFrame(() => saveErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }
 
   const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
@@ -253,6 +264,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
     setLineItems([{ ...EMPTY_LINE }]);
     setAssignees([]);
     setSaveError(null);
+    setDimsChecked(false);
     setAssignError(null);
 
     (async () => {
@@ -399,6 +411,8 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
       setSaveError("This job is linked to a trailer group — unlink it before changing the ship date.");
       return;
     }
+    const dimsMsg = missingDimsMessage(lineItems);
+    if (dimsMsg) { showDimsError(dimsMsg); return; }
     setSaving(true);
     setSaveError(null);
     try {
@@ -447,6 +461,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
+        if (data.code === "line_missing_dims") { showDimsError(data.error); return; }
         setSaveError(data.error || "Couldn't save. Try again.");
         return;
       }
@@ -722,7 +737,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
           </div>
 
           {saveError && (
-            <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-3 py-2">
+            <div ref={saveErrorRef} role="alert" className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] text-[var(--warn-text)] text-sm px-3 py-2">
               {saveError}
             </div>
           )}
@@ -1077,7 +1092,8 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
                         value={li.dimensions}
                         onChange={(e) => updateLine(idx, { dimensions: e.target.value })}
                         placeholder='e.g. 76 x 38 x 12'
-                        className={inputClass}
+                        aria-invalid={missingDimRows.has(idx + 1) || undefined}
+                        className={missingDimRows.has(idx + 1) ? inputClass.replace("border-[var(--input-border)]", "border-2 border-[var(--danger-ink)]") : inputClass}
                       />
                     </label>
                     <label className="block">

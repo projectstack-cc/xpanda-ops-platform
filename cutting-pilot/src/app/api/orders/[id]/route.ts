@@ -20,6 +20,7 @@ import { computeAndPersistHoleyChunks } from "@/lib/holeyChunks";
 import { JOB_TO_SHIPMENT_SYNC, reconcileLoadingAssignments, syncJobFieldsToShipment, type JobSyncField } from "@/lib/logistics/jobSync";
 import { propagateJobCarrierToBols } from "@/lib/logistics/bolCarrier";
 import { replaceLineItemsPreservingIds, type LineItemRow } from "@/lib/lineItems";
+import { linesMissingDims, missingDimsMessage } from "@/lib/orderLineDims";
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const STATUSES = ["not_started", "in_production", "done", "loading", "shipped"];
@@ -58,6 +59,18 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   let p: any;
   try { p = await request.json(); }
   catch { return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 }); }
+
+  // ord-dims-01: a line with a part # or description must have dimensions. Checked here, ahead of
+  // the jobs UPDATE (which runs before the line-item replace), so a rejected save writes nothing.
+  if (Array.isArray(p.line_items)) {
+    const dimsMsg = missingDimsMessage(p.line_items);
+    if (dimsMsg) {
+      return NextResponse.json(
+        { ok: false, code: "line_missing_dims", error: dimsMsg, lines: linesMissingDims(p.line_items) },
+        { status: 400 }
+      );
+    }
+  }
 
   // Verify the job exists (and not archived). Same 404/400 contract as /v2/api/board/:id.
   const existing = await DB.prepare(

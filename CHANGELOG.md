@@ -722,6 +722,25 @@ current series).
 
 ## Orders (v2)
 
+- **ord-dims-01 — saving an order is blocked while a line has a part # or description but blank dimensions.
+  (next/cloudflare-platform-agent §9a for the API rule, react-component-agent §9b for the form and modal.) No
+  migration, middleware or permission change.** The rule is blank-only: any typed text passes, including `TBD` and
+  tapers such as `0-2" x 48" x 48"`. A fully empty row is still ignored. New `src/lib/orderLineDims.ts`
+  (`linesMissingDims`, `missingDimsMessage`; 1-based positions in the array as given) plus
+  `orderLineDims.selfcheck.ts` (17 checks). **Server:** `POST /v2/api/orders` and `PUT /v2/api/orders/:id` return
+  400 `{ ok:false, code:"line_missing_dims", error, lines }`. On the PUT, the check runs right after the JSON parse
+  (gated on `Array.isArray(p.line_items)`), because the `UPDATE jobs` runs before the line-item replace. A rejected
+  save writes nothing, and a PUT without `line_items` is unaffected. **`/v2/orders` (create):** checked in
+  `handleSubmit` on the unfiltered rows, so the numbers match the screen. `TextField` gains `invalid` (a 2px
+  `--danger-ink` border plus `aria-invalid`), and the error banner scrolls into view. **`/v2/board` OrderEditModal:**
+  the same check runs after the trailer-group ship-date guard, with the same highlight and scroll. On both surfaces
+  the highlight is recomputed from the line state, so typing dims or removing the row clears it. A server
+  `line_missing_dims` 400 shows the same message and highlight. On create, the message is re-derived from the
+  on-screen rows, because the server numbers the filtered payload. Not covered: Classic Job Board, the QB
+  import/review path, and `PUT /v2/api/board/:id`. **No grandfathering:** three open orders already have a
+  blank-dims line — invoices **4468**, **4515** (a "PACKAGING —" note line) and **4544**. Editing any of them is
+  blocked until that line gets dims or is removed.
+
 - **jb-13 — Core Covers labels: per-line pieces-per-bag (default 4, set-all, live label count); print-dialog only, not saved. Block Calculator unchanged. (react-component-agent §9b lead, next/cloudflare-platform-agent §9a owns the `bagLabels.ts` contract.) No migration, API, middleware or permission change.** `bagLabels.ts`: `PIECES_PER_BAG` → exported `DEFAULT_PIECES_PER_BAG` (4); `computeBags(lines, piecesPerBag?)` uses each line's own `per` (bag count + remainder), whole-order "BAG x of y" numbering now sums each line's own bag count; new `BagLabelOptions.piecesPerBag`, `isValidPiecesPerBag` (integer 1–999) and `InvalidPiecesPerBagError` (thrown by `buildBagLabelsPdf` for a qty>0 line with an invalid provided entry — defense in depth). `LabelChecklistModal.tsx`: optional `rowExtra` (rendered outside the `<label>`, so typing never toggles the checkbox), `headerExtra`, `printStatus` (blocked reason disables Print + shows in warn text; summary next to Print) — all omitted by DiversiTech, whose markup is unchanged. `CoreCoverLabelsModal.tsx`: per-row `pcs/bag` input + "→ N bags" readout (warn border / "—" when invalid), "Set all to [ ] pcs/bag" + Apply (all rows), "Prints N labels" summary (Σ ceil(qty ÷ per) over selected lines = PDF pages), blocked with "Pieces per bag must be a whole number from 1 to 999." when a selected qty>0 line is invalid; resets to 4 on open and on close (no stale-value flash on reopen). Input is parsed as digits-only (`""`, `"1e2"`, `" 6.0"` → invalid) rather than `Number()`; an invalid value on an UNSELECTED line falls back to 4 for whole-order numbering instead of failing the build. `OrderDetailModal.tsx` comment only. `BlocksApp.tsx`, `DiversiTechLabelsModal.tsx`, `coreCoverLabels.ts` untouched. `bagLabels.selfcheck.ts` +8 checks (14@6 → 6,6,2; 12@12; 3@10; A5@4+B6@3 → 4 bags 1–4, lineIndex kept; undefined entry → 4; validator) — all 21 pass (run via a scratch runner: the file only exports `runBagLabelsSelfCheck`, so `npx tsx` on it directly executes nothing). Verified: `tsc --noEmit` clean, `cf-build` green (on-color guard OK); Playwright smoke (`next dev`, temporary harness page mounting the real modals, deleted before commit; light + dark) 48/48: defaults 4/2 bags + "Prints 6 labels"; line 1 → 6 gives 3 bags / "Prints 5 labels" and a 5-page PDF reading 06pcs, 06pcs, 02pcs, 04pcs, 01pcs, "1 of 5"…"5 of 5"; set-all 10 → "Prints 3 labels"; 0 on a checked line disables Print + shows the message, unchecking re-enables; typing doesn't toggle the checkbox; reopen resets to 4; DiversiTech has no inputs/summary and the same row classes. Not exercised: the OrderDetailModal button path (unchanged wiring) and a physical D520BT print.
 
 - **live-03 (cross-reference) — Job Board rows carry `live_times`; the Live load chip shows the arrival time. New
