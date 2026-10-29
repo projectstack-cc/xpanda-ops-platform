@@ -3,8 +3,9 @@
 // dock-10: full-screen "Which bays is this tablet at?" overlay for /v2/dock (approved mockup --
 // deliberately not the generic Modal). Display-only choice; the page persists it to localStorage
 // + the URL and never writes D1. Same selection rules as dock-08: tap toggles, a third pick
-// replaces the oldest. With canCancel false (no pair yet) Escape/backdrop do nothing.
-import { useEffect, useState } from "react";
+// replaces the oldest. Closes only from inside: Cancel (shown when canCancel) or Confirm; the
+// backdrop and Escape never close it (modal-01).
+import { useState } from "react";
 import type { DockBay } from "../dockTypes";
 import { DOCK_TABLET as P } from "./palette";
 
@@ -22,15 +23,6 @@ export default function DockBayPicker({ bays, initial, canCancel, onConfirm, onC
     initial.filter((n) => activeBays.some((b) => b.bay_number === n)).slice(0, 2)
   );
 
-  useEffect(() => {
-    if (!canCancel) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [canCancel, onClose]);
-
   function toggle(n: number) {
     setSelected((prev) => {
       if (prev.includes(n)) return prev.filter((x) => x !== n);
@@ -43,13 +35,11 @@ export default function DockBayPicker({ bays, initial, canCancel, onConfirm, onC
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       style={{ background: P.pickerBackdrop }}
-      onClick={canCancel ? onClose : undefined}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="dock-bay-picker-title"
-        onClick={(e) => e.stopPropagation()}
         className="flex flex-col overflow-y-auto"
         style={{
           width: 820,

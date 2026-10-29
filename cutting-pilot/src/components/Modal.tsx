@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { X } from "lucide-react";
 
 interface Props {
@@ -11,28 +11,18 @@ interface Props {
 }
 
 // Reusable modal primitive. Bottom-sheet on mobile, centered dialog on sm+.
-// Closes on Escape or backdrop click. Children own the action buttons.
+// Closes only from inside: the X button or the caller's own actions (no backdrop click, no Escape — modal-01).
+// Children own the action buttons.
 export default function Modal({ isOpen, onClose, title, children, size = "md" }: Props) {
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [isOpen, onClose]);
-
   if (!isOpen) return null;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50"
-      onClick={onClose}
     >
       <div
         className={`w-full ${size === "xl" ? "sm:max-w-[min(52.5rem,92vw)]" : size === "lg" ? "sm:max-w-2xl" : "sm:max-w-md"} bg-surface rounded-t-2xl sm:rounded-2xl shadow-xl p-6 space-y-4 max-h-[90vh] overflow-y-auto`}
         style={{ boxShadow: "var(--shadow-md)" }}
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"

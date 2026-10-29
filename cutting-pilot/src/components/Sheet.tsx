@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 interface Props {
   isOpen: boolean;
@@ -8,19 +8,12 @@ interface Props {
 }
 
 // Responsive detail surface:
-//   narrow  → fixed bottom-sheet overlay (scrim + slide-up); closes on Escape or scrim click
+//   narrow  → fixed bottom-sheet overlay (scrim + slide-up); closes only from the caller's own close
+//             control inside its children (no scrim click, no Escape — modal-01). `onClose` stays in
+//             the props contract; callers still pass it.
 //   md+     → static flex-1 side column in the flex layout; no scrim, no close affordance
 // The scrim is the only place backdrop-blur is used per design doctrine.
-export default function Sheet({ isOpen, onClose, children }: Props) {
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, onClose]);
-
+export default function Sheet({ isOpen, children }: Props) {
   return (
     <>
       {/* Scrim: narrow only, when open */}
@@ -28,7 +21,6 @@ export default function Sheet({ isOpen, onClose, children }: Props) {
         <div
           aria-hidden="true"
           className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-          onClick={onClose}
         />
       )}
 

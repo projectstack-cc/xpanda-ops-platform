@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { X } from "lucide-react";
 
 interface Props {
@@ -11,24 +11,14 @@ interface Props {
 
 // Reusable right-anchored slide-over. Overlays from the right on ALL breakpoints
 // (distinct from <Sheet>, which becomes a static side column on md+).
-// Scrim, Escape, and the close button all dismiss.
+// Only the close button dismisses (no scrim click, no Escape — modal-01).
 export default function SlideOver({ isOpen, onClose, title, children }: Props) {
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, onClose]);
-
   return (
     <>
       {isOpen && (
         <div
           aria-hidden="true"
           className="fixed inset-0 z-[55] bg-black/50 backdrop-blur-sm"
-          onClick={onClose}
         />
       )}
       <div

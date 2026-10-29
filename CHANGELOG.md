@@ -10285,6 +10285,27 @@ current series).
 
 ## Admin / Platform
 
+- **modal-01 — v2 dialogs close only from inside: no backdrop click, no Escape (React Component Agent §9b; Next/Cloudflare Platform Agent §9a confirmed nothing outside `src/components` needed changing). No migration, no API change. v2 only — legacy dialogs unchanged by Steve's call.**
+  - **Rule (Steve, 2026-10-29).** A dialog closes only through something inside it: the X, Cancel, Save, or another action that closes it as part of its own flow. A click or tap outside does nothing, and Escape does nothing. This came from accidental closes that lost work. Menus, popovers, tooltips and pickers keep click-away and Escape.
+  - **The four primitives.**
+    - **`Modal.tsx`** (used by about 77 files): the Escape `useEffect`, the backdrop `onClick={onClose}` and the panel's `stopPropagation` are gone. The X is unchanged, and the header comment now reads "Closes only from inside…".
+    - **`SlideOver.tsx`:** scrim `onClick` and Escape effect removed; only the X dismisses. It has no callers, so a typecheck is the only check.
+    - **`Sheet.tsx`** (narrow bottom sheet): scrim `onClick` and Escape effect removed. `onClose` stays in the props contract but is no longer read. Its only caller, `app/cutting/CuttingBoard.tsx`, has its own header close button (`setSelectedJobId(null)`).
+    - **`DockBayPicker.tsx`:** backdrop `onClick={canCancel ? onClose : undefined}` and the `canCancel` Escape effect removed. Its own Cancel (shown when `canCancel`) and Confirm still close it.
+  - **Sweep** (`fixed inset-0` overlays + every `"Escape"` handler in `cutting-pilot/src`). **Changed:** none beyond the four primitives. **Left alone on purpose:**
+    - `app/dock/DockTablet.tsx`: the More popover (menu) keeps its click-away overlay and Escape.
+    - `app/logistics/ShipmentCalendar.tsx`: the quick-view popover keeps its click-away (on Steve's out-of-scope list).
+    - `components/marina/ReworkQueue.tsx`: a full-screen measure panel with no click-out or Escape close, so nothing to change.
+    - `InfoTip`, `SplitButton`, `CarrierSelect`, `FractionKeypad` (Escape = clear) and `CustomizeEditor` (Escape = cancel drag/selection) are all on the out-of-scope list.
+  - **Caller check.** `Modal` always renders an X, so no caller relied on the backdrop or Escape as its only way out. Callers with a dirty guard (for example `ScrapLogModal`, `InspectModal`) still confirm on X.
+  - **Noted, not changed.**
+    - `CarrierSelect`'s "+ Add carrier…" dialog is a `Modal`, but CarrierSelect's own `onDialogKeyDown` still closes it on Escape. CarrierSelect is on the out-of-scope list, so this is a BACKLOG decision.
+    - Two comments are now stale: `ScrapLogModal.tsx:804` ("Escape / backdrop / X … confirm too") and `CarrierSelect.tsx:122` ("its Escape listener sits on document"). Both are outside this prompt's file list.
+  - **Verified** with Playwright under `next dev` against local D1 (local D1 was brought up to the prod schema via a read-only `sqlite_master` pull, plus seed rows).
+    - **Five surfaces** (`/v2/board` Order edit, `/v2/logistics` Shipment edit, `/v2/qc` Inspect, `/v2/qc/marina` New job, `/v2/admin` User edit via "+ Add user"): a backdrop click (confirmed on the backdrop with `elementFromPoint`) and Escape both left the dialog open with typed input kept, and the X closed it. Cancel closed it where the dialog has one; the Order edit dialog has no Cancel, so its footer Close was used. 24/24.
+    - **The rest:** the Sheet at 390px on `/v2/cutting` (scrim tap and Escape ignored; the header close closes it), DockBayPicker on `/v2/dock?bays=1,2` (backdrop and Escape ignored; Cancel closes), and the out-of-scope dock More popover (click-away and Escape still close) and ShipmentCalendar quick-view (click-away still closes). 14/14, no page errors. `CarrierSelect` is a native `<select>`, so it has no custom click-away to regress.
+    - `tsc --noEmit` clean, `cf-build` green. The selfchecks are unaffected (no `src/lib` change; 53/53 at ui-44-01).
+
 - **pwa-01 — fix Android PWA install: square 192/512 + maskable icons, manifest `id`/`scope`, v2 manifest link (Admin & Auth Agent §8 for the shell manifest/icons; Next/Cloudflare Platform Agent §9a for `cutting-pilot/src/app/layout.tsx`). No migration, no worker change.**
   - **Root cause.** `manifest.json` declared one icon, `/logo/xpanda.png`, as `192x192`, but the file is the 211×74 wordmark. Chrome needs a square icon of at least 192px (and expects 512px) matching its declared size, so it refused install and only offered "Add to Home screen" (a plain shortcut). iOS was unaffected because it uses `apple-touch-icon` (`/assets/img/favicon.png`, 1024²).
   - **Icons.** Four new PNGs in `assets/img/`: `icon-192.png` / `icon-512.png` (panda favicon, transparent, `purpose: any`) and `icon-maskable-192.png` / `icon-maskable-512.png` (panda at ~72% on solid `#1e293b`, `purpose: maskable`). Sizes checked from the PNG headers. `/assets/` is already a worker static prefix, so they bypass the session gate.
