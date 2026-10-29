@@ -62,7 +62,7 @@ export function runLoadTimesSelfCheck(): { pass: boolean; results: CheckResult[]
   eq("range is not a list", mins(parseLoadTimePattern("INV 4325-001 (8am - 5pm}", 2, WED)), [h(8), null]);
   eq("4200 range start 2-3:00 pm", disp(parseLoadTimePattern("INV 4200 - CPU @ 2-3:00 pm EST", 1, WED)), ["Wed 2:00PM"]);
   eq("receiving window 7:30 am – 4:00 pm", disp(parseLoadTimePattern("INV 4208 - Deliveries accepted 7:30 am – 4:00 pm", 1, WED)), ["Wed 7:30AM"]);
-  eq("bare 8:30 (no meridiem) → null", parseLoadTimePattern("INV 4474 - Delivery @ 8:30", 1, WED), null);
+  eq("4474 bare 8:30 → 8:30 AM (dlv-06; was null)", mins(parseLoadTimePattern("INV 4474 - Delivery @ 8:30", 1, WED)), [h(8, 30)]);
   eq("suffix range never a time", mins(parseLoadTimePattern("INV 4434 - 001-004- Delivery @ 9am & HRLY", 2, THU)), [h(9), h(10)]);
   eq("every 2 hr", mins(parseLoadTimePattern("6am every 2 hr", 3, WED)), [h(6), h(8), h(10)]);
   eq("every 1 hour", mins(parseLoadTimePattern("6am every 1 hour", 2, WED)), [h(6), h(7)]);
@@ -150,6 +150,18 @@ export function runLoadTimesSelfCheck(): { pass: boolean; results: CheckResult[]
   eq("cap range form unchanged", capLoadTimesLabel("Thurs 9:00AM–12:00PM (4 loads)"), "Thurs 9:00AM–12:00PM (4 loads)");
   eq("cap legacy free text unchanged", capLoadTimesLabel("8:00 AM & HRLY"), "8:00 AM & HRLY");
   eq("cap empty", capLoadTimesLabel(""), "");
+
+  // ── bare "@ h:mm" with no am/pm (dlv-06): 5–11 → AM, 12–4 → PM ───────────────────────────
+  eq("4542 @ 8:30 bare ×1", mins(parseLoadTimePattern("INV 4542 - Delivery @ 8:30", 1, WED)), [h(8, 30)]);
+  eq("4542 @ 1:30 bare → PM", mins(parseLoadTimePattern("INV 4542 - Delivery @ 1:30", 1, WED)), [h(13, 30)]);
+  eq("@ 12 bare → noon", mins(parseLoadTimePattern("Delivery @ 12", 1, WED)), [h(12)]);
+  eq("@ 7 bare → AM", mins(parseLoadTimePattern("Delivery @ 7", 1, WED)), [h(7)]);
+  eq("4531 @ 8:30 & HRLY ×3", mins(parseLoadTimePattern("INV 4531 - Delivery @ 8:30 & HRLY", 3, WED)), [h(8, 30), h(9, 30), h(10, 30)]);
+  eq("@ 8:30 driver note ignored", mins(parseLoadTimePattern("Delivery @ 8:30 **NO EARLIER THAN 8:15**", 1, WED)), [h(8, 30)]);
+  eq("@ 13:00 bare → null", parseLoadTimePattern("Delivery @ 13:00", 1, WED), null);
+  eq("4434 suffix unchanged", mins(parseLoadTimePattern("INV 4434-005-008 - Delivery @ 8am & HRLY", 4, WED)), [h(8), h(9), h(10), h(11)]);
+  eq("4463 shared meridiem unchanged", mins(parseLoadTimePattern("INV 4463 - Delivery @ 6:30 & 7:30 am", 2, WED)), [h(6, 30), h(7, 30)]);
+  eq("4536 no time still null", parseLoadTimePattern("INV 4536 - Tyler pull for PIPER", 1, WED), null);
 
   return { pass: results.every((r) => r.pass), results };
 }

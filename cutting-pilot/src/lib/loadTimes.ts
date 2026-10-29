@@ -11,7 +11,8 @@
 //   "INV 4329 - Delivery @ 10:00 am  **… NO EARLIER THAN 9:45 AM**"  driver-note time is never read
 //   "INV 4356 ^^^"                                           ditto — previous row in the same day section
 //   "INV 4331-001 - Tyler pull for BRAD WRIEDT"              no time -> null
-import { TIME_RE } from "./deliveryTime";
+//   "INV 4542 - Delivery @ 8:30"                           no am/pm -> 8:30 AM (dlv-06: 5–11 AM, 12–4 PM)
+import { TIME_RE, inferBareMeridiem } from "./deliveryTime";
 
 /** Day labels by JS weekday index. This exact casing and these abbreviations are what BOLs print. */
 export const DAY_ABBR = ["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"] as const;
@@ -167,6 +168,8 @@ export function parseLoadTimePattern(
       return `${pre}${sh}${sm ? ":" + sm : ""}${mer}m${sep}${eh}${endRest}`;
     }
   );
+
+  body = inferBareMeridiem(body); // dlv-06: "Delivery @ 8:30" → 8:30am
 
   const explicit: number[] = [];
   let lastEnd = -1;

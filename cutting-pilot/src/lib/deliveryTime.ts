@@ -13,9 +13,25 @@
 // by am/pm, so a 4-digit INV number like "4307" can never match as a time.
 export const TIME_RE = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m/i;
 
+// dlv-06: the sheet sometimes states a delivery time with no AM/PM ("INV 4542 - Delivery @ 8:30").
+// Only a time DIRECTLY after "@" is read, so invoice numbers/suffixes ("4434-005-008") can never
+// match. The meridiem is inferred from plant delivery hours: 5:00–11:59 → AM, 12:00–4:59 → PM.
+// Times that already carry am/pm are left alone.
+const BARE_AT_TIME_RE = /(@\s*)(\d{1,2})(:\d{2})?(?![\d:/])(?!\s*[ap]\.?m)/gi;
+
+export function inferBareMeridiem(text: string): string {
+  return text.replace(BARE_AT_TIME_RE, (all, at: string, hh: string, mm: string | undefined) => {
+    const hour = Number(hh);
+    if (hour < 1 || hour > 12) return all;
+    const mer = hour >= 5 && hour <= 11 ? "am" : "pm";
+    return `${at}${hh}${mm ?? ""}${mer}`;
+  });
+}
+
 export function parseDeliveryTime(raw: string | null): string | null {
   if (!raw) return null;
-  const m = raw.match(TIME_RE);
+  // dlv-06: read a bare "@ 8:30" before any driver note; otherwise the original first-match.
+  const m = inferBareMeridiem(raw.split("**")[0]).match(TIME_RE) ?? raw.match(TIME_RE);
   if (!m) return null;
   const hour = Number(m[1]);
   if (hour < 1 || hour > 12) return null;

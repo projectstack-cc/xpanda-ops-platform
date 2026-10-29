@@ -50,5 +50,10 @@ export function runDeliveryTimeSelfCheck(): { pass: boolean; results: CheckResul
   eq("pickup no duration", suggestedPickup({ date: ship, minutes: 420 }, null), null);
   eq("pickup no appt", suggestedPickup(null, 3600), null);
 
+  // parseDeliveryTime — bare "@ h:mm" with no am/pm (dlv-06).
+  eq("pdt 4542 bare @ 8:30", parseDeliveryTime("INV 4542 - Delivery @ 8:30"), "8:30a");
+  eq("pdt bare @ 2:00 → PM", parseDeliveryTime("Delivery @ 2:00"), "2p");
+  eq("pdt bare @ 8:30 driver note", parseDeliveryTime("Delivery @ 8:30 **NO EARLIER THAN 8:15**"), "8:30a");
+
   return { pass: results.every((r) => r.pass), results };
 }
