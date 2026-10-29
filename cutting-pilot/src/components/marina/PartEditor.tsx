@@ -2,83 +2,19 @@
 // src/components/marina/PartEditor.tsx — marina-05
 // Shared label / notes / dim-row editor for a Marina part: the cut-sheet setup screen (with chips from
 // the page text), "Add part by hand", "Edit label & notes" and "Edit dims" on the job page. Controlled:
-// the caller owns the PartDraft and does the API call. Pure helpers (validation, payload) live here too.
+// the caller owns the PartDraft and does the API call. Pure helpers live in lib/marina/partDraft.ts.
 import { Plus, X } from "lucide-react";
-import { formatInches, parseInches, roundToSixteenth } from "@/lib/inches";
+import { parseInches } from "@/lib/inches";
 import type { DimChip } from "@/lib/marina/cutSheet";
-import type { MarinaPartSummary, NewDimInput } from "@/lib/marina/types";
+import {
+  NAMES, checkDraft, chipKey, chipUseCount, dimName, firstProblem, newRow, withName,
+  type DimRowState, type EditorFields, type PartDraft,
+} from "@/lib/marina/partDraft";
 import { INPUT, LABEL, TEXTAREA } from "./ui";
 
-export type DimName = "L" | "W" | "H" | "Other";
-const NAMES: DimName[] = ["L", "W", "H", "Other"];
-
-export interface DimRowState { key: string; name: DimName; other: string; text: string; chip: string | null; }
-export interface PartDraft { label: string; notes: string; dims: DimRowState[]; }
-export type EditorFields = "all" | "labelNotes" | "dims";
-
-let _seq = 0;
-const rowKey = () => `d${Date.now().toString(36)}${(++_seq).toString(36)}`;
-export const chipKey = (c: DimChip) => String(roundToSixteenth(c.value_in));
-
-export function emptyDraft(label = "", notes = ""): PartDraft {
-  return { label, notes, dims: [] };
-}
-
-export function draftFromPart(part: MarinaPartSummary): PartDraft {
-  return {
-    label: part.label,
-    notes: part.notes ?? "",
-    dims: part.dims.map((d) => {
-      const std = (["L", "W", "H"] as const).find((n) => n === d.label);
-      return { key: rowKey(), name: std ?? "Other", other: std ? "" : d.label, text: d.nominal_text ?? formatInches(d.nominal_in), chip: null };
-    }),
-  };
-}
-
-export const dimName = (r: DimRowState) => (r.name === "Other" ? r.other.trim() : r.name);
-
-// First of L, W, H not yet used on this part, then Other.
-export function nextDefaultName(dims: DimRowState[]): DimName {
-  const used = new Set(dims.map((d) => dimName(d).toUpperCase()));
-  return (["L", "W", "H"] as const).find((n) => !used.has(n)) ?? "Other";
-}
-
-export function newRow(dims: DimRowState[], text = "", chip: string | null = null): DimRowState {
-  return { key: rowKey(), name: nextDefaultName(dims), other: "", text, chip };
-}
-
-export interface DraftCheck {
-  ok: boolean;
-  labelOk: boolean;
-  dupNames: Set<string>;       // upper-cased names used more than once
-  countOk: boolean;            // 1–20 dims
-  rowsOk: boolean;             // every row has a 1–40 name and a valid value
-}
-
-export function checkDraft(d: PartDraft, fields: EditorFields): DraftCheck {
-  const label = d.label.trim();
-  const labelOk = fields === "dims" || (label.length >= 1 && label.length <= 80);
-  const counts = new Map<string, number>();
-  for (const r of d.dims) {
-    const n = dimName(r).toUpperCase();
-    if (n) counts.set(n, (counts.get(n) ?? 0) + 1);
-  }
-  const dupNames = new Set<string>();
-  counts.forEach((c, n) => {
-    if (c > 1) dupNames.add(n);
-  });
-  const countOk = fields === "labelNotes" || (d.dims.length >= 1 && d.dims.length <= 20);
-  const rowsOk = fields === "labelNotes" || d.dims.every((r) => {
-    const n = dimName(r);
-    const v = parseInches(r.text);
-    return n.length >= 1 && n.length <= 40 && v !== null && v > 0;
-  });
-  return { ok: labelOk && countOk && rowsOk && dupNames.size === 0, labelOk, dupNames, countOk, rowsOk };
-}
-
-export function dimsPayload(d: PartDraft): NewDimInput[] {
-  return d.dims.map((r) => ({ label: dimName(r), nominal_text: r.text.trim() }));
-}
+// Pure helpers moved to lib/marina/partDraft.ts (marina-fix-01); re-exported for the existing callers.
+export { checkDraft, dimsPayload, draftFromPart, emptyDraft } from "@/lib/marina/partDraft";
+export type { EditorFields, PartDraft } from "@/lib/marina/partDraft";
 
 interface Props {
   draft: PartDraft;
@@ -105,12 +41,12 @@ export default function PartEditor({
   const patchRow = (key: string, patch: Partial<DimRowState>) =>
     setDims(draft.dims.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
-  function toggleChip(c: DimChip) {
-    const k = chipKey(c);
-    const existing = draft.dims.find((r) => r.chip === k);
-    if (existing) setDims(draft.dims.filter((r) => r.key !== existing.key));
-    else setDims([...draft.dims, newRow(draft.dims, c.text, k)]);
+  // Always appends (a part can have two equal dims); a row is removed only with its ×.
+  function addChip(c: DimChip) {
+    setDims([...draft.dims, newRow(draft.dims, c.text, chipKey(c))]);
   }
+
+  const problem = readOnly ? null : firstProblem(draft, fields);
 
   return (
     <div className="space-y-4">
@@ -156,20 +92,21 @@ export default function PartEditor({
           ) : (
             <div className="flex flex-wrap gap-2">
               {chips.map((c) => {
-                const on = draft.dims.some((r) => r.chip === chipKey(c));
+                const uses = chipUseCount(draft.dims, chipKey(c));
+                const on = uses > 0;
                 return (
                   <button
                     key={chipKey(c)}
                     type="button"
-                    aria-pressed={on}
-                    onClick={() => toggleChip(c)}
+                    aria-label={`${c.text}, added ${uses} times`}
+                    onClick={() => addChip(c)}
                     className={`min-h-[44px] min-w-[44px] px-3 rounded-lg border text-sm font-semibold cursor-pointer transition-colors ${
                       on
                         ? "bg-[var(--brand)] text-white border-[var(--brand)]"
                         : "bg-surface text-text border-[var(--input-border)] hover:bg-[var(--ghost-bg)]"
                     }`}
                   >
-                    {c.text}
+                    {c.text}{uses > 1 && ` ×${uses}`}
                   </button>
                 );
               })}
@@ -198,7 +135,7 @@ export default function PartEditor({
                           role="radio"
                           aria-checked={r.name === n}
                           disabled={readOnly}
-                          onClick={() => patchRow(r.key, { name: n })}
+                          onClick={() => setDims(withName(draft.dims, r.key, n))}
                           className={`min-h-[44px] min-w-[44px] px-2.5 text-sm font-semibold cursor-pointer disabled:cursor-default ${
                             r.name === n ? "bg-[var(--brand)] text-white" : "bg-surface text-text hover:bg-[var(--ghost-bg)]"
                           }`}
@@ -257,6 +194,10 @@ export default function PartEditor({
             </button>
           )}
         </div>
+      )}
+
+      {problem && (
+        <p role="status" aria-live="polite" className="text-xs font-semibold text-[var(--danger-ink)]">{problem}</p>
       )}
     </div>
   );
