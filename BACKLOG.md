@@ -414,6 +414,7 @@
 - [ ] packingSlip.ts parity gap: v2 has no `reassemblePageBreaks` (legacy lbz-parse-01) — a row whose
   QTY re-flows onto the next PDF page parses differently in v2. Real zoned slips (4404) hit this. Port
   verbatim + add a two-page fixture to `scripts/packing-slip-parity.mjs` (found during slip-parse-05).
+- [ ] Packing-slip parse: QuickBooks lines are hand-typed. Add a fixture for each new miss Steve finds (the harness is the regression net). (slip-parse-07)
 - [ ] Packing-slip parser rewrite (anchor-relative extraction + per-vendor template registry) —
   P340 ported the existing y-coordinate/x-gap heuristic parser as-is into v2; the more robust
   rewrite is still a separate, future effort (applies to both legacy and v2 copies).

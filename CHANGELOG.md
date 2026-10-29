@@ -722,6 +722,28 @@ current series).
 
 ## Orders (v2)
 
+- **slip-parse-07 — packing slip keeps a space-separated fraction (`2 1/4` → `2-1/4`) (Job Board Agent §2 for legacy `jobs/packing-slip-parser.js`; Next/Cloudflare Platform Agent §9a for the v2 port `src/lib/packingSlip.ts`). Both parsers changed identically, legacy ↔ v2 parity holds. No migration, no API change.**
+  - **Bug (Steve, INV 4550, 10-29).** The slip line `FOAM-HT4040-4 ~ 37.5X37.5X2 1/4` was stored as `37.5X37.5X2`, dropping the `1/4` (Steve fixed the line by hand to `37.5X37.5X2-1/4`). **Root cause:** every term of the dims regex was `\d[\d.\/\-]*`, which allows the hyphen form (`2-1/4`) but not a space before the fraction, so the match stopped at `2`. It's intermittent because QuickBooks lines are hand-typed: sometimes `2-1/4` or `2.25`, sometimes `2 1/4`.
+  - **Fix.**
+    - Each dims term is now `(\d[\d.\/\-]*(?:\s+\d+\/\d+)?)`.
+    - A new `normalizeSpacedFractions()` (one per parser, applied inside `withTaperLead` so the taper path is covered too) rewrites each `<whole> <num>/<den>` to `<whole>-<num>/<den>` and leaves the rest of the matched text byte-for-byte: `37.5X37.5X2 1/4` → `37.5X37.5X2-1/4`, `2 1/2" x 48" x 96"` → `2-1/2" x 48" x 96"`.
+    - `TAPER_LEAD_RE` also accepts a space-fraction lead, normalized the same way: `2 1/2" - 4" x 39" x 80"` → `2-1/2>4" x 39" x 80"`.
+  - **Why the hyphen form, not the space.** Every downstream dims parser (`partMatch.parseDimensionValues`, `jobPull.parseDimensionString`, the Load Builder's `parseDimensionString`) strips whitespace before reading a term. A stored `2 1/4` would become `21/4`, which reads as **5.25"**. Those readers (`partMatch.ts`, `jobPull.ts`, `qc/board.ts`, `poParser.ts`, `coreCoverLabels.ts`) already read the hyphen form and are untouched.
+  - **Left alone:** legacy `DIM_PATTERN` / `isDimensionLine` (`jobs/packing-slip-parser.js:75–79`) are defined but never called (grep: definition only).
+  - **Fixture `INV 4550: spaced fraction (2 1/4)`.**
+    - Real slip pulled read-only from R2 (`packing-slips/<job id>.pdf`) to `Prompts/INV_4550.pdf`, which is gitignored and not committed. Bill-to, ship-to, contact, phone and PO are scrubbed to invented placeholders; x / y / width and item text are byte-exact.
+    - **Two pages, not page 1 only:** the bug line is on page 2, so page-2 items carry `y − page height`, exactly as `parsePackingSlip()` concatenates pages. Neither parser reads `page`.
+    - **`expect`:** the 5 non-zero lines. The bug line is `37.5X37.5X2-1/4`, and the other four equal what both parsers gave on the unchanged code (recorded first): `39x39x0.25`, `37.5x37.5x3.625`, `15.5X37.5X2-916` (the slip's own typo, kept verbatim) and `33.5X33.5X2-9/16`.
+    - The slip's `33.5 X 45.5 X 2.625` and `39.5X39.5X2.625` rows are qty 0, so both parsers filter them out. Their exact-unchanged check is a harness unit case instead.
+  - **Harness unit cases** (`scripts/packing-slip-parity.mjs`; each swaps the INV 4550 bug line's text and checks both parsers):
+    - `41 3/8 x 48 x 96` → `41-3/8 x 48 x 96`
+    - `54-3/4" x 90-3/4" x 8"` unchanged
+    - `33.5 X 45.5 X 2.625` and `39.5X39.5X2.625` unchanged
+    - tapered `2.5" - 4" x 39" x 80"` → `2.5>4" x 39" x 80"` (unchanged)
+    - tapered `2 1/2" - 4" x 39" x 80"` → `2-1/2>4" x 39" x 80"`
+    - Run against the old parsers, the INV 4550 fixture and the two spaced-fraction cases fail. With the fix, all pass.
+  - **Verified.** `node scripts/packing-slip-parity.mjs`: **PASS — 15 rows** (the 8 existing fixtures + INV 4550 + 6 unit cases), expectations and legacy ↔ v2 parity all PASS. `node --check` on a named temp copy of the legacy parser, `tsc --noEmit` clean, 53/53 selfcheck files, `cf-build` green.
+
 - **ship-days-01 (cross-ref)** — `/v2/board` OrderEditModal loses Assign Ship Days, and the board's ship-date cell shows a split-days line (`Thu 10/29: 01, 02 · Fri 10/30: 03, 04`) from `boardRows.ts`'s new `load_days`. See `## Logistics (v2)`.
 
 - **ui-44-01 — shared dashboard controls at 44px: `WeekSelector`, `SearchInput`, `FilterSelect` (React Component Agent §9b). No migration, no API change, no caller edited.** These are the primitives board-ui-01 created, and they were under the floor's 44px touch rule.
@@ -9271,6 +9293,8 @@ current series).
 ---
 
 ## Job Board
+
+- **slip-parse-07 (cross-ref)** — `jobs/packing-slip-parser.js` keeps a space-separated fraction in dimensions (`37.5X37.5X2 1/4` → `37.5X37.5X2-1/4`), in parity with v2. See Orders (v2) → slip-parse-07.
 
 - **ship-days-01 (cross-ref)** — Classic's Assign Ship Days (modal, button, i18n keys) and the legacy `PUT /api/loading-assignments/load-days` branch are removed. The schedule now sets each load's ship day via D1 triggers, and `buildSplitBadgeHtml` reads the mirrored days. See `## Logistics (v2)`.
 

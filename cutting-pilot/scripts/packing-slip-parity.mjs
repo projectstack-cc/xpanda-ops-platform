@@ -151,6 +151,37 @@ for (const fx of SLIP_FIXTURES) {
   });
 }
 
+// ── slip-parse-07: spaced-fraction unit cases ──
+// Each case swaps the text of INV 4550's `FOAM-HT4040-4 ~ 37.5X37.5X2 1/4` line (qty 200, line_items[4])
+// and checks that line's dimensions from BOTH parsers. "TAPERED" in the text makes withTaperLead apply.
+const fx4550 = SLIP_FIXTURES.find((f) => f.expect.invoice_number === "4550");
+const UNIT_CASES = [
+  ["41 3/8 x 48 x 96", "41-3/8 x 48 x 96"],
+  ['54-3/4" x 90-3/4" x 8"', '54-3/4" x 90-3/4" x 8"'],
+  ["33.5 X 45.5 X 2.625", "33.5 X 45.5 X 2.625"],
+  ["39.5X39.5X2.625", "39.5X39.5X2.625"],
+  ['TAPERED 2.5" - 4" x 39" x 80"', '2.5>4" x 39" x 80"'],
+  ['TAPERED 2 1/2" - 4" x 39" x 80"', '2-1/2>4" x 39" x 80"'],
+];
+for (const [text, want] of UNIT_CASES) {
+  const items = fx4550.items.map((it) => (it.text === "FOAM-HT4040-4 ~ 37.5X37.5X2 1/4" ? { ...it, text } : it));
+  const gotL = plain(legacyParseDoc(rawCopy(items))).line_items[4]?.dimensions;
+  const gotV = plain(v2.parseDoc(rawCopy(items))).line_items[4]?.dimensions;
+  const details = [];
+  if (gotL !== want) details.push(`[legacy] expected ${fmt(want)} got ${fmt(gotL)}`);
+  if (gotV !== want) details.push(`[v2] expected ${fmt(want)} got ${fmt(gotV)}`);
+  if (details.length) failed = true;
+  rows.push({
+    name: `unit: ${text}`,
+    items: "1/1",
+    legacy: gotL === want ? "PASS" : "FAIL",
+    v2: gotV === want ? "PASS" : "FAIL",
+    parity: gotL === gotV ? "PASS" : "FAIL",
+    extra: "-",
+    details,
+  });
+}
+
 // ── Report ──
 const cols = ["name", "items", "legacy", "v2", "parity", "extra"];
 const heads = { name: "fixture", items: "items L/v2", legacy: "expect:legacy", v2: "expect:v2", parity: "parity", extra: "hb-dims" };

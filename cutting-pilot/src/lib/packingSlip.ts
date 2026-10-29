@@ -267,14 +267,22 @@ function parseShipTo(rows: string[]): ParsedAddress {
 // slip-parse-06: parity port of legacy withTaperLead() (jobs/packing-slip-parser.js). Tapered lines
 // print thickness as a range (`2.5” - 4” x 39” x 80”`); the 3-term dimension match drops the thin
 // end. For tapered items only, emit the platform taper convention `2.5>4” x 39” x 80”`.
-const TAPER_LEAD_RE = /(\d+(?:\.\d+)?(?:-\d+\/\d+)?)(?:\s*["\u201C\u201D]\s*|\s+)[-\u2013\u2014>]\s*$/;
+const TAPER_LEAD_RE = /(\d+(?:\.\d+)?(?:(?:-|\s+)\d+\/\d+)?)(?:\s*["\u201C\u201D]\s*|\s+)[-\u2013\u2014>]\s*$/;
+
+// slip-parse-07: QuickBooks lines are hand-typed, sometimes `2 1/4` instead of `2-1/4`. The dims match
+// accepts a space-separated fraction on every term; this rewrites `<whole> <num>/<den>` to the platform's
+// hyphen form `<whole>-<num>/<den>`, leaving the rest byte-for-byte. Never store the spaced form: every
+// downstream dims parser strips whitespace, so `2 1/4` would read as `21/4` = 5.25".
+function normalizeSpacedFractions(text: string): string {
+  return text.replace(/(\d)\s+(\d+\/\d+)/g, "$1-$2");
+}
 
 function withTaperLead(lineText: string, dimMatch: RegExpMatchArray, item: ParsedLineItem): string {
-  const dims = dimMatch[0].trim();
+  const dims = normalizeSpacedFractions(dimMatch[0].trim());
   const ctx = [item.category, ...(item._descLines || []), lineText].join(" ");
   if (!/taper/i.test(ctx)) return dims;
   const lead = lineText.slice(0, dimMatch.index ?? 0).match(TAPER_LEAD_RE);
-  return lead ? `${lead[1]}>${dims}` : dims;
+  return lead ? `${normalizeSpacedFractions(lead[1])}>${dims}` : dims;
 }
 
 function isItemHeader(sortedItems: RawItem[]): boolean {
@@ -340,7 +348,7 @@ function parseLineItems(groups: LineGroup[], descriptionY: number): ParsedLineIt
       if (current._isNotes) continue;
 
       const dimMatch = lineText.match(
-        /(\d[\d.\/\-]*)\s*["”]?\s*[xX×]\s*(\d[\d.\/\-]*)\s*["”]?\s*[xX×]\s*(\d[\d.\/\-]*)\s*["”]?/
+        /(\d[\d.\/\-]*(?:\s+\d+\/\d+)?)\s*["”]?\s*[xX×]\s*(\d[\d.\/\-]*(?:\s+\d+\/\d+)?)\s*["”]?\s*[xX×]\s*(\d[\d.\/\-]*(?:\s+\d+\/\d+)?)\s*["”]?/
       );
       if (dimMatch && !current.dimensions) {
         current.dimensions = withTaperLead(lineText, dimMatch, current);
