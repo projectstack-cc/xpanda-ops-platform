@@ -230,25 +230,6 @@
   </div>
 </div>
 
-<!-- ══ Split Ship-Days Modal (P319) ══ -->
-<div class="jobs-modal-overlay" id="split-days-modal" hidden onclick="if(event.target===this)closeSplitDaysModal()" style="z-index:160;">
-  <div class="jobs-modal-panel" role="dialog" aria-modal="true" aria-labelledby="split-days-title" style="max-width:420px;">
-    <div class="jobs-modal-header">
-      <h2 id="split-days-title" data-i18n="jobs.splitDaysTitle">Assign Ship Days</h2>
-      <button class="jobs-modal-close" aria-label="Close" data-i18n-attr="aria-label:jobs.close" onclick="closeSplitDaysModal()">&times;</button>
-    </div>
-    <div class="jobs-modal-body">
-      <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px;" data-i18n="jobs.splitDaysDesc">Set the ship day for each load. Leave blank to use the job&rsquo;s ship date. Loads on different days show as a split on the board.</p>
-      <div id="split-days-rows"></div>
-      <div id="split-days-error" style="color:#ef4444;font-size:13px;margin-top:8px;" hidden></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
-        <button class="btn ghost small" onclick="closeSplitDaysModal()" data-i18n="jobs.cancel">Cancel</button>
-        <button class="btn small" id="split-days-save" onclick="saveSplitDays()" data-i18n="jobs.save">Save</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <div class="jobs-modal-overlay" id="diversitech-print-modal" hidden onclick="if(event.target===this)closeDiversiTechPrintModal()" style="z-index:160;">
   <div class="jobs-modal-panel" role="dialog" aria-modal="true" aria-labelledby="diversitech-print-title" style="max-width:420px;">
     <div class="jobs-modal-header">
@@ -330,7 +311,6 @@
           <span data-i18n="jobs.rush">Rush</span>
         </label>
         <button id="modal-view-bol" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;" data-i18n="jobs.viewBol">View BOL</button>
-        <button id="modal-split-days" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;" data-i18n="jobs.assignShipDays">Assign Ship Days</button>
         <button id="modal-print-diversitech" hidden class="btn ghost small" style="flex-shrink:0;font-size:12px;margin-bottom:1px;" data-i18n="jobs.printDiversitech">🏷️ Print DiversiTech Labels</button>
       </div>
 
@@ -1596,7 +1576,6 @@ function setupModal() {
   document.getElementById('modal-save').addEventListener('click', saveJob);
   document.getElementById('modal-delete').addEventListener('click', confirmDelete);
   document.getElementById('modal-view-bol').addEventListener('click', () => viewBolForJob(editingJobId));
-  document.getElementById('modal-split-days').addEventListener('click', () => openSplitDaysModal(editingJobId));
   document.getElementById('modal-print-diversitech').addEventListener('click', () => openDiversiTechPrintModal(editingJobId));
 
   document.getElementById('f-ship-date').addEventListener('change', (e) => {
@@ -1683,61 +1662,6 @@ function setupModal() {
       input.dispatchEvent(new Event('change', { bubbles: true }));
     }
   });
-}
-
-async function openSplitDaysModal(jobId) {
-  const job = allJobs.find(j => j.id === jobId);
-  if (!job) return;
-  const loadCount = Math.max(Number(job.load_count) || 1, 1);
-  const rows = document.getElementById('split-days-rows');
-  const err  = document.getElementById('split-days-error');
-  err.hidden = true;
-  rows.innerHTML = `<div style="color:var(--text-muted);font-size:13px;">${esc(t('jobs.loadingEllipsis'))}</div>`;
-  const modal = document.getElementById('split-days-modal');
-  modal.dataset.jobId = jobId;
-  modal.hidden = false;
-  const byLoad = {};
-  try {
-    const r = await api.get('/api/loading-assignments?job_id=' + encodeURIComponent(jobId));
-    if (r.ok && Array.isArray(r.data?.assignments)) {
-      r.data.assignments.forEach(a => { if (a.load_number) byLoad[a.load_number] = a; });
-    }
-  } catch (e) {}
-  let html = '';
-  for (let n = 1; n <= loadCount; n++) {
-    const a = byLoad[n] || {};
-    html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-      <span style="min-width:70px;font-weight:600;font-size:13px;">${esc(t('jobs.splitDaysLoad', { n: String(n).padStart(2, '0') }))}</span>
-      <input type="date" data-load="${n}" value="${esc(a.load_ship_date || '')}" style="flex:1;padding:8px;border:1px solid var(--input-border);border-radius:8px;font-size:14px;" />
-    </div>`;
-  }
-  rows.innerHTML = html;
-}
-
-function closeSplitDaysModal() {
-  document.getElementById('split-days-modal').hidden = true;
-}
-
-async function saveSplitDays() {
-  const modal = document.getElementById('split-days-modal');
-  const jobId = modal.dataset.jobId;
-  const err   = document.getElementById('split-days-error');
-  const btn   = document.getElementById('split-days-save');
-  const days  = Array.prototype.map.call(
-    modal.querySelectorAll('input[data-load]'),
-    inp => ({ load_number: Number(inp.dataset.load), ship_date: inp.value || null })
-  );
-  btn.disabled = true;
-  try {
-    const r = await api.put('/api/loading-assignments/load-days', { job_id: jobId, days });
-    if (!r.ok) { err.textContent = r.error || t('jobs.saveFailed'); err.hidden = false; btn.disabled = false; return; }
-    closeSplitDaysModal();
-    await loadJobs();
-  } catch (e) {
-    err.textContent = t('jobs.saveFailed'); err.hidden = false; btn.disabled = false;
-  } finally {
-    btn.disabled = false;
-  }
 }
 
 function openDiversiTechPrintModal(jobId) {
@@ -1839,12 +1763,6 @@ function openModal(jobId) {
     document.getElementById('cutlist-viewer-toggle').addEventListener('click', function loadCutList() {
       loadCutListIntoViewer();
     }, { once: true });
-  }
-  {
-    const _u = window.__xpandaUser;
-    const _canManage = _u && (_u.isAdministrator || _u.permissions?.['logistics.loading.manage']?.edit);
-    const _job = allJobs.find(j => j.id === jobId);
-    document.getElementById('modal-split-days').hidden = !(_canManage && _job && (Number(_job.load_count) || 1) > 1);
   }
   {
     const _u = window.__xpandaUser;

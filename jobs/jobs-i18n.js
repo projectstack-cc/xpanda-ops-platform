@@ -62,9 +62,6 @@
       monthShort8: "Sep", monthShort9: "Oct", monthShort10: "Nov", monthShort11: "Dec",
 
       // Split Ship-Days modal
-      splitDaysTitle: "Assign Ship Days",
-      splitDaysDesc: "Set the ship day for each load. Leave blank to use the job's ship date. Loads on different days show as a split on the board.",
-      splitDaysLoad: "Load {n}",
       cancel: "Cancel",
       save: "Save",
       saveFailed: "Save failed.",
@@ -81,7 +78,6 @@
       priorityCritical: "Critical",
       rush: "Rush",
       viewBol: "View BOL",
-      assignShipDays: "Assign Ship Days",
       printDiversitech: "🏷️ Print DiversiTech Labels",
       diversitechPrintTitle: "Select Labels to Print",
       diversitechPrintDesc: "Uncheck any SKUs that don't need labels printed.",
@@ -407,9 +403,6 @@
       monthShort8: "Sep", monthShort9: "Oct", monthShort10: "Nov", monthShort11: "Dic",
 
       // Split Ship-Days modal
-      splitDaysTitle: "Asignar Días de Envío",
-      splitDaysDesc: "Establezca el día de envío para cada carga. Deje en blanco para usar la fecha de envío del trabajo. Las cargas en días diferentes se muestran como una división en el tablero.",
-      splitDaysLoad: "Carga {n}",
       cancel: "Cancelar",
       save: "Guardar",
       saveFailed: "Error al guardar.",
@@ -426,7 +419,6 @@
       priorityCritical: "Crítica",
       rush: "Urgente",
       viewBol: "Ver Conocimiento de Embarque",
-      assignShipDays: "Asignar Días de Envío",
       printDiversitech: "🏷️ Imprimir Etiquetas DiversiTech",
       diversitechPrintTitle: "Seleccionar Etiquetas a Imprimir",
       diversitechPrintDesc: "Desmarque cualquier SKU que no necesite etiquetas impresas.",
@@ -752,9 +744,6 @@
       monthShort8: "Sep", monthShort9: "Okt", monthShort10: "Nov", monthShort11: "Des",
 
       // Split Ship-Days modal
-      splitDaysTitle: "Bay Jou Ekspedisyon",
-      splitDaysDesc: "Chwazi jou ekspedisyon pou chak chajman. Kite l vid pou itilize dat ekspedisyon travay la. Chajman ki gen diferan jou parèt kòm yon separasyon sou tablo a.",
-      splitDaysLoad: "Chajman {n}",
       cancel: "Anile",
       save: "Sove",
       saveFailed: "Sovgade echwe.",
@@ -771,7 +760,6 @@
       priorityCritical: "Kritik",
       rush: "Ijan",
       viewBol: "Gade BOL",
-      assignShipDays: "Bay Jou Ekspedisyon",
       printDiversitech: "🏷️ Enprime Etikèt DiversiTech",
       diversitechPrintTitle: "Chwazi Etikèt pou Enprime",
       diversitechPrintDesc: "Dekoche nenpòt SKU ki pa bezwen etikèt enprime.",

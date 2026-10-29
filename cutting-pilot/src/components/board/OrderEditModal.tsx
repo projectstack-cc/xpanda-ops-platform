@@ -17,7 +17,6 @@ import PartsPicker from "@/components/orders/PartsPicker";
 import CarrierSelect from "@/components/orders/CarrierSelect";
 import type { OrderLineItem } from "@/components/orders/OrderEntryForm";
 import ProcessPicker from "./ProcessPicker";
-import ShipDaysModal from "./ShipDaysModal";
 import PrioritySelect from "./PrioritySelect";
 import { fromPriorityChoice, toPriorityChoice } from "@/lib/priority";
 import HbFloorStockSection from "./HbFloorStockSection";
@@ -196,9 +195,8 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // jb-03: Assign Ship Days — keyed on the SAVED load_count from the fetched job, not the edit field.
+  // The SAVED load_count from the fetched job, not the edit field (per-load editors key on it).
   const [savedLoadCount, setSavedLoadCount] = useState(1);
-  const [shipDaysOpen, setShipDaysOpen] = useState(false);
 
   // dlv-03: per-load delivery times (GET/PUT /v2/api/orders/:id/load-times), saved after the order PUT.
   const [loadTimesData, setLoadTimesData] = useState<LoadTimesData | null>(null);
@@ -215,7 +213,6 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
   const [savedShipDate, setSavedShipDate] = useState<string | null>(null);
 
   const statusLocked = job?.status === "loading" || job?.status === "shipped";
-  const canAssignShipDays = isAdmin || !!permissions["logistics.loading.manage"]?.edit;
   const canManageAssignees = isAdmin || !!permissions["jobs.manage"]?.edit;
   // jb-02 / admin-07: delete needs `jobs.archive` edit (or admin), matching legacy DELETE /api/jobs; no
   // status restriction. Status changes need `jobs.status` edit. The server enforces both.
@@ -239,7 +236,6 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
     setConfirmingDelete(false);
     setDeleting(false);
     setDeleteError(null);
-    setShipDaysOpen(false);
     setSavedLoadCount(1);
     setLoadTimesData(null);
     setLoadTimes([]);
@@ -928,21 +924,6 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
                     className={inputClass}
                   />
                 </label>
-                {/* jb-03: legacy parity — admin / logistics.loading.manage edit, saved load_count > 1. */}
-                {canAssignShipDays && savedLoadCount > 1 && (() => {
-                  const loadCountDirty = Number(job.load_count ?? 1) !== savedLoadCount;
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => setShipDaysOpen(true)}
-                      disabled={loadCountDirty}
-                      title={loadCountDirty ? "Save the load count first" : undefined}
-                      className="mt-2 w-full min-h-[44px] px-3 rounded-md border border-[var(--input-border)] text-text text-sm font-semibold cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Assign Ship Days
-                    </button>
-                  );
-                })()}
               </div>
               <label className="block">
                 <span className={labelClass}>Total BDFT</span>
@@ -957,7 +938,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
             </div>
           </section>
 
-          {/* dlv-03: per-load delivery times — one row per SAVED load (same as Assign Ship Days). */}
+          {/* dlv-03: per-load delivery times — one row per SAVED load; each row's day is that load's ship day (ship-days-01). */}
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-text">Delivery times</h2>
             {loadTimesData ? (
@@ -1296,13 +1277,6 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
           )}
         </div>
       )}
-
-      <ShipDaysModal
-        jobId={shipDaysOpen ? jobId : null}
-        loadCount={savedLoadCount}
-        onClose={() => setShipDaysOpen(false)}
-        onSaved={onSaved}
-      />
 
       <PartsPicker
         isOpen={partsPickerOpen}

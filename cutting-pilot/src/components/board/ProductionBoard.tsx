@@ -70,6 +70,28 @@ export interface BoardJob {
   /** live-03: arrival display per live load. */
   live_times?: Record<number, string>;
   load_count?: number | null;
+  /** ship-days-01: each load's ship day (the schedule's day, mirrored onto loading_assignments). */
+  load_days?: { load_number: number; day: string }[];
+}
+
+// ship-days-01: Classic's split badge (buildSplitBadgeHtml) carried over — "Thu 11/5: 01, 02 · Fri 11/6: 03".
+// Null unless the loads land on more than one distinct day.
+function splitDaysLabel(job: BoardJob): string | null {
+  const byDay = new Map<string, number[]>();
+  for (const ld of job.load_days ?? []) {
+    if (!ld.day) continue;
+    byDay.set(ld.day, [...(byDay.get(ld.day) ?? []), ld.load_number]);
+  }
+  if (byDay.size < 2) return null;
+  return Array.from(byDay.keys())
+    .sort()
+    .map((day) => {
+      const [y, m, d] = day.split("-").map(Number);
+      const dow = new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short" });
+      const nums = byDay.get(day)!.sort((a, b) => a - b).map((n) => String(n).padStart(2, "0"));
+      return `${dow} ${m}/${d}: ${nums.join(", ")}`;
+    })
+    .join(" · ");
 }
 
 // live-02: "partial" = some but not all of the order's loads are live → the chip names them.
@@ -503,7 +525,17 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
                               <td className="px-3 py-[8.8px] align-top text-muted">
                                 {job.ship_to_city ? `${job.ship_to_city}${job.ship_to_state ? `, ${job.ship_to_state}` : ""}` : "—"}
                               </td>
-                              <td className="px-3 py-[8.8px] align-top text-muted tabular-nums">{fmtShortDate(job.ship_date)}</td>
+                              <td className="px-3 py-[8.8px] align-top text-muted tabular-nums">
+                                {fmtShortDate(job.ship_date)}
+                                {(() => {
+                                  const split = splitDaysLabel(job);
+                                  return split ? (
+                                    <div className="text-xs text-muted mt-0.5" title={split}>
+                                      {split}
+                                    </div>
+                                  ) : null;
+                                })()}
+                              </td>
                               <td className="px-3 py-[8.8px] align-top">
                                 <PriorityBadge priority={job.priority} priorityLevel={job.priority_level} />
                               </td>

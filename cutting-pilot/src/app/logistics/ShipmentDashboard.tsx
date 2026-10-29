@@ -274,7 +274,8 @@ export default function ShipmentDashboard({
     load();
   }
 
-  // split-days-02: per-load ship days changed -- drop cached drill-downs and refetch so split rows regroup.
+  // Drill-down "detail changed" (acknowledge, BOL delete) -- drop cached drill-downs and refetch so rows
+  // update. (Was split-days-02's ship-days save; Assign Ship Days was removed in ship-days-01.)
   function handleShipDaysSaved() {
     detailCacheRef.current.clear();
     load();

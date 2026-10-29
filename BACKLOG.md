@@ -481,8 +481,8 @@
 - [ ] **dlv-02 follow-up — sheet rows whose suffix skips loads mis-number them.** Sequential numbering by `load_count` is the rule (suffixes are inconsistent in live data), but INV 4440 (`001-005` Mon ×5 + `009` Tue ×1, job has 9 loads) gives Tue 11:00AM to load 6. A mismatch only logs `Sheet describes N loads; job has M`. Decide whether a mismatch should skip the job or surface on the dashboard.
 - [ ] **dlv-02 follow-up — a slipped order keeps its old week's schedule row, and the sync numbers it first.** Past weeks' `schedule_rows` are never pruned, so an order moved to a later week has both rows. Sequential numbering gives load 1 the stale old time; the real time goes to a phantom load past `load_count`, and no alert fires (live example: INV 4386 `take 1` Thu + `take 2` Wed → `Thurs 10:00AM | Wed 10:00AM`). Design decision needed: restricting to the newest week breaks legitimate cross-week splits after rollover. Options include: skip/flag jobs whose sheet load total exceeds `load_count`, or prefer the latest week per load.
 - [ ] **dlv-02 follow-up — subscribe roles to "Delivery time changed"** in `/v2/admin` → Roles (ships with no subscribers).
-- [ ] **dlv-03 follow-up — should the sheet's per-load day also set `loading_assignments.ship_date` (Assign Ship Days)?** Left separate for now: `job_load_times.delivery_date` is the delivery day, Assign Ship Days the dock day, and the editor only reads the latter as a default.
-- [ ] **split-days-01 follow-up — per-load ship days don't move when the order's ship date changes.** Moving an order's date leaves any `loading_assignments.ship_date` overrides behind. Today this is harmless for unsplit orders (ignored), but a split order would keep its old days. Decide: clear overrides on order-date change, or shift them by the same delta.
+- [x] **Answered by ship-days-01 (2026-10-29): yes.** D1 triggers mirror `job_load_times.delivery_date` onto `loading_assignments.ship_date`, and Assign Ship Days is removed. Original item: **dlv-03 follow-up — should the sheet's per-load day also set `loading_assignments.ship_date` (Assign Ship Days)?** Left separate for now: `job_load_times.delivery_date` is the delivery day, Assign Ship Days the dock day, and the editor only reads the latter as a default.
+- [ ] **split-days-01 follow-up — per-load ship days don't move when the order's ship date changes.** Moving an order's date leaves any `loading_assignments.ship_date` overrides behind. Today this is harmless for unsplit orders (ignored), but a split order would keep its old days. Decide: clear overrides on order-date change, or shift them by the same delta. *ship-days-01 note: per-load days now come from the schedule (`job_load_times`, mirrored by triggers). A schedule change moves them automatically; only an in-app order-date change without a schedule change still leaves them behind.*
 - [ ] **INV 4386 — shipment status stuck `ready_to_ship` while its only load is `delivered`** (after the 9/29 delivered→not_started revert and the 9/30 re-delivery). Investigate the revert/redeliver path's shipment status sync.
 - [ ] **tls-01: `nextShipDay` is Mon–Fri only.** Plant holidays aren't modeled, and an occasional Saturday ship
   date never appears on the Load Verification sheets.
@@ -545,7 +545,7 @@
   lightweight periodic job that flags any job whose non-archived `loading_assignments` count exceeds
   its `load_count`, so future regressions in the reconcile/backfill/adopt paths surface proactively
   instead of silently accumulating orphan `awaiting` cards again.
-- [ ] **P325 / split-days-01 follow-up — harden legacy `PUT /api/loading-assignments/load-days`** to return
+- [x] **Moot (ship-days-01, 2026-10-29): the legacy `load-days` branch and v2 `ShipDaysModal` were removed.** Original item: **P325 / split-days-01 follow-up — harden legacy `PUT /api/loading-assignments/load-days`** to return
   the matched-row count and warn on 0-row saves (it currently returns success on 0 matched rows). Callers:
   legacy Job Board split modal AND v2 `/v2/board` `ShipDaysModal.tsx`. It is **not** legacy-only, so it
   survives jb-09 unless the v2 modal moves to its own route.
@@ -669,6 +669,7 @@ schedule badge):**
 
 ## Infra / CI-CD
 
+- [ ] D1 triggers now exist (`trg_*shipday*`: `trg_jlt_shipday_ins/_upd/_del`, `trg_la_shipday_ins`). Any future rebuild of `job_load_times` / `loading_assignments` must recreate them; see `DB_Migrations/ship-days-mirror.sql`. (ship-days-01)
 - [ ] Unknown legacy `/api/*` paths return the home page (200) because there's no `404.html`. Add a JSON 404 in the shell/worker phase. (Found in ui-44-01.)
 - [ ] **P446 follow-up — repo-wide CRLF/LF working-tree drift, masked by a stale git index
   stat-cache.** While fixing P446, found ~13 files (`_worker.js/lib/core.js`, `push.js`,

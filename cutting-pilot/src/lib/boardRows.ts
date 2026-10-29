@@ -3,9 +3,26 @@
 // GET /v2/api/board/search (archived/shipped matches) so both return the identical row shape.
 // Extracted verbatim from api/board/route.ts — SELECT column list + assignee / in_cutting /
 // is_loading enrichment. Adds `is_archived` (archived_at IS NOT NULL).
+// ship-days-01: `load_days` — each non-archived load's ship day (loading_assignments.ship_date, which
+// D1 triggers mirror from the schedule's job_load_times), from the same `loads_summary` subquery as
+// legacy GET /api/jobs. One subquery column, no extra query.
 import type { D1Database } from "@cloudflare/workers-types";
 import { parseProcesses } from "@/lib/processes";
 import { fetchLiveLoadByJob } from "@/lib/logistics/liveLoad";
+
+// ship-days-01: loads_summary JSON → [{ load_number, day }] for loads with a non-blank day.
+function parseLoadDays(raw: unknown): { load_number: number; day: string }[] {
+  let rows: any[] = [];
+  try {
+    rows = typeof raw === "string" ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .filter((r) => r && typeof r.d === "string" && r.d.trim() !== "" && Number(r.n) > 0)
+    .map((r) => ({ load_number: Number(r.n), day: r.d.trim().slice(0, 10) }));
+}
 
 // `whereSql` / `orderSql` are trusted SQL fragments written by the caller (no user text);
 // user input goes through `binds` only.
@@ -31,7 +48,10 @@ export async function loadBoardRows(
                      WHERE cl.job_id = j.id AND cl.line_status = 'in_progress') AS in_cutting,
            EXISTS (SELECT 1 FROM loading_assignments la
                      WHERE la.job_id = j.id
-                       AND la.loading_status NOT IN ('delivered','archived')) AS is_loading
+                       AND la.loading_status NOT IN ('delivered','archived')) AS is_loading,
+           (SELECT json_group_array(json_object('n', la.load_number, 'd', substr(la.ship_date, 1, 10), 's', la.loading_status))
+              FROM loading_assignments la
+             WHERE la.job_id = j.id AND la.loading_status != 'archived') AS loads_summary
       FROM jobs j
      WHERE ${whereSql}
      ORDER BY ${orderSql}
@@ -63,8 +83,9 @@ export async function loadBoardRows(
   // live-01: per-job live-load flags (best-effort; empty map on error).
   const liveMap = await fetchLiveLoadByJob(DB, ids);
 
-  return jobs.map((j) => ({
+  return jobs.map(({ loads_summary, ...j }) => ({
     ...j,
+    load_days: parseLoadDays(loads_summary),
     in_cutting: !!j.in_cutting,
     is_loading: !!j.is_loading,
     is_archived: j.archived_at != null,

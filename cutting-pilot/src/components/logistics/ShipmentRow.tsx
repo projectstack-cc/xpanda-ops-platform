@@ -237,7 +237,6 @@ export default function ShipmentRow({
               shipmentId={s.id}
               cache={detailCache}
               canManageLoading={canManageLoading}
-              isCustomerPickup={Boolean(s.is_customer_pickup)}
               orderShipDate={s.ship_date}
               onShipDaysSaved={onShipDaysSaved}
               bolCount={Number(s.bol_count || 0)}

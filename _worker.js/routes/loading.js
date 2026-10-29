@@ -272,37 +272,8 @@ export async function handleApiLoadingAssignments(request, env) {
     let payload;
     try { payload = await request.json(); } catch { return json({ ok: false, error: 'Invalid JSON' }, 400); }
 
-    // [P318] Batch per-load ship-day assignment (split shipment). Manager-only.
-    // Dispatched here via the existing /api/loading-assignments prefix — no index.js row needed.
-    if (assignmentId === 'load-days') {
-      if (!isAdministrator && !(userPerms['logistics.loading.manage']?.edit)) {
-        return json({ ok: false, error: 'Manager access required to assign ship days.' }, 403);
-      }
-      const jobId = String(payload.job_id || '').trim();
-      if (!jobId) return json({ ok: false, error: 'job_id is required.' }, 400);
-      const days = Array.isArray(payload.days) ? payload.days : null;
-      if (!days) return json({ ok: false, error: 'days[] is required.' }, 400);
-      const nowLd = new Date().toISOString();
-      const applied = [];
-      for (const d of days) {
-        const ln = Number(d.load_number);
-        if (!Number.isInteger(ln) || ln < 1) continue;
-        let sd = (d.ship_date == null) ? null : String(d.ship_date).trim();
-        if (sd === '') sd = null;
-        if (sd !== null && !/^\d{4}-\d{2}-\d{2}$/.test(sd)) {
-          return json({ ok: false, error: `Invalid ship_date for load ${ln}. Use YYYY-MM-DD.` }, 400);
-        }
-        await db.prepare(
-          "UPDATE loading_assignments SET ship_date = ?, updated_at = ? WHERE job_id = ? AND load_number = ?"
-        ).bind(sd, nowLd, jobId, ln).run();
-        applied.push({ load_number: ln, ship_date: sd });
-      }
-      await logActivity(db, 'update', 'loading_assignment', jobId,
-        'Set per-load ship days (split shipment)', { job_id: jobId, days: applied },
-        request.headers.get('X-User-Id'));
-      return json({ ok: true, applied });
-    }
-
+    // ship-days-01: the [P318] 'load-days' batch ship-day branch was removed -- the schedule
+    // (job_load_times, mirrored by D1 triggers) now sets each load's ship_date.
     const id = payload.id || assignmentId;
     if (!id) return json({ ok: false, error: 'id is required.' }, 400);
 

@@ -722,6 +722,8 @@ current series).
 
 ## Orders (v2)
 
+- **ship-days-01 (cross-ref)** — `/v2/board` OrderEditModal loses Assign Ship Days, and the board's ship-date cell shows a split-days line (`Thu 10/29: 01, 02 · Fri 10/30: 03, 04`) from `boardRows.ts`'s new `load_days`. See `## Logistics (v2)`.
+
 - **ui-44-01 — shared dashboard controls at 44px: `WeekSelector`, `SearchInput`, `FilterSelect` (React Component Agent §9b). No migration, no API change, no caller edited.** These are the primitives board-ui-01 created, and they were under the floor's 44px touch rule.
   - **`WeekSelector`.** The This Week / Next Week / Show All segments add `min-h-[44px] inline-flex items-center` (they keep `px-3 py-1.5 text-xs font-semibold`, the same way `RangeSelector` does its segments). The prev/next arrows go from `w-8 h-8` to `min-w-[44px] min-h-[44px]` and gain `aria-label` "Previous week" / "Next week" (`title` kept). Selected-state classes are unchanged.
   - **`SearchInput`.** `h-9` → `h-11`. The clear-X is now a 44×44 hit area anchored right (`right-0`, `min-w/min-h-[44px]`, `aria-label="Clear search"`), and the input's `pr-8` → `pr-11` so typed text doesn't run under it.
@@ -3053,6 +3055,43 @@ current series).
 ---
 
 ## Logistics (v2)
+
+- **ship-days-01 — the schedule sets each load's ship day: Assign Ship Days removed (v2 + Classic), split days on `/v2/board` (Logistics Agent §3 lead; Job Board Agent §2 for Classic; React Component Agent §9b for the `/v2/board` + `/v2/logistics` UI; Next/Cloudflare Platform Agent §9a for the route deletion). No schema change in this commit; the triggers below were already live in prod.**
+  - **Decision (Steve, 2026-10-29, option A).** A load's day came from two places: `job_load_times.delivery_date` (schedule-sheet sync dlv-02, editable per load in the dlv-03 **Delivery times** editor) and `loading_assignments.ship_date` (hand-entered via **Assign Ship Days**, and what every board plus dock, BOL, carrier, BOL email and late pickup reads). The schedule never fed the second, so schedule splits showed nowhere. On prod 10-29 the two agreed on 36 of 36 loads where both were set, and 24 more split loads had only the schedule day. Now the **schedule is the single source**. D1 triggers mirror it onto `loading_assignments.ship_date`, so **every existing reader is unchanged**, and a manual change goes through the per-load Delivery times editor (`source='manual'`, mirrored too). Assign Ship Days is removed because the next schedule change would silently overwrite a hand edit there.
+  - **Triggers** (live in prod, created by the Orchestrator via the D1 connector with Steve's OK after an 11/11 dry run against the live DDL in local SQLite; copy in `DB_Migrations/ship-days-mirror.sql`, gitignored). **Delivered and archived loads are never re-dated**, so past carrier and billing weeks stay where they are.
+    - `trg_jlt_shipday_ins`: after INSERT on `job_load_times`, set the matching (job, load) assignment's `ship_date` to the new day.
+    - `trg_jlt_shipday_upd`: the same on UPDATE OF `delivery_date`, when it changed.
+    - `trg_jlt_shipday_del`: after DELETE, set `ship_date = NULL` only where it still equals the deleted day.
+    - `trg_la_shipday_ins`: after INSERT on `loading_assignments`, adopt the schedule day if one exists.
+    - Each `job_load_times` trigger skips `loading_status IN ('archived','delivered')` and rows already equal (`IS NOT`).
+  - **Prod backfill (Orchestrator, 2026-10-29 ~10:55 ET, via the D1 connector, Steve OK'd).**
+    - The 4 triggers were created and checked.
+    - `UPDATE loading_assignments SET ship_date = <its job_load_times.delivery_date>` ran on non-archived, non-delivered rows with `ship_date IS NULL` and a schedule day. It wrote **27 rows**, matching the 27 in the pre-run list. Every row was blank before, so nothing was overwritten. Statuses: 19 awaiting, 6 in_transit, 1 loading, 1 loaded.
+    - Check: 0 non-delivered loads still differ from their schedule day, and 41 are mirrored in total (for example INV 4106 now reads Mon 11/2 ×4, Tue 11/3 ×3).
+    - The undo statement (resets exactly those 27 ids) is saved as a comment at the end of `DB_Migrations/ship-days-mirror.sql`.
+    - This session re-checked prod with a read-only `sqlite_master` query and found all 4 triggers present. Nothing was run against remote.
+  - **Removed (v2).**
+    - `OrderEditModal.tsx`: the `ShipDaysModal` import / state / `canAssignShipDays` / button / render. The dlv-03 comment now reads "each row's day is that load's ship day". `savedLoadCount` stays because `LoadTimesEditor` uses it.
+    - Deleted `components/board/ShipDaysModal.tsx`, `components/logistics/AssignShipDaysModal.tsx` and the route `app/api/shipments/[id]/load-days/route.ts` (`PUT /v2/api/shipments/:id/load-days` now 404s; no middleware row existed).
+    - `ShipmentDetailPanel.tsx`: the Assign Ship Days button, modal, `daysOpen` state and `canAssignDays` are gone. `fmtDay` moved into the panel, so the per-load "Ships <day>" label stays. The now-dead `isCustomerPickup` prop is removed (one line in `ShipmentRow.tsx`).
+  - **Deviation from the prompt (kept on purpose).** The prompt called `handleShipDaysSaved` (`ShipmentDashboard.tsx`) and the panel's `onShipDaysSaved` prop dead. They aren't: they're the panel's generic "detail changed" refresh, also called by dlv-04's **Acknowledge** and lgx-boldel-01's **Delete all BOLs**, so removing them would stop the list refreshing after those actions. Both are kept, unrenamed, with corrected comments.
+  - **Removed (Classic `jobs/index.html`).** The `split-days-modal` overlay, the `modal-split-days` button, its listener, its visibility block (the whole `{ … }` block, whose consts only fed that line), and `openSplitDaysModal` / `closeSplitDaysModal` / `saveSplitDays`. **`buildSplitBadgeHtml` is kept** and now lights up from the mirrored days. `jobs/jobs-i18n.js`: `splitDaysTitle` / `splitDaysDesc` / `splitDaysLoad` / `assignShipDays` removed in all three languages (12 lines; grep showed no remaining use).
+  - **Removed (legacy worker).** `_worker.js/routes/loading.js`'s `[P318]` `if (assignmentId === 'load-days')` PUT branch. A repo grep found no live caller (only stale `.kilo/worktrees` and `.wrangler/tmp` copies). A PUT to that path now falls through to the generic handler → "Assignment not found." 404. `logistics.loading.manage` is still used elsewhere (dock, BOLs, logistics), so there is no permission change.
+  - **`/v2/board` split line.**
+    - `lib/boardRows.ts` adds legacy GET `/api/jobs`'s `loads_summary` subquery (`json_group_array(json_object('n', load_number, 'd', substr(ship_date,1,10), 's', loading_status))`, non-archived). That's one subquery column: no extra query, no N+1.
+    - It's parsed server-side into `load_days: { load_number, day }[]` (non-blank days only). The raw string isn't returned.
+    - `ProductionBoard.tsx`'s ship-date cell (table only; the board has no separate card layout) shows Classic's badge text when the loads span more than one day, for example `Thu 10/29: 01, 02 · Fri 10/30: 03, 04`, in `text-xs text-muted` with a `title`. The row stays in its order-date group, and there's no partial-shipped line.
+  - **Verified.**
+    - `tsc --noEmit` clean, `cf-build` green, 53/53 selfcheck files. `node --check` on `loading.js`, `jobs-i18n.js` and both extracted `jobs/index.html` inline scripts.
+    - **Local D1:** `ship-days-mirror.sql` applied. Seeded a 4-load job (assignments for loads 1–2 inserted before their schedule rows, loads 3–4 after) and a 1-day job; both trigger paths mirrored Thu ×2 / Fri ×2, and an `UPDATE` of a schedule day mirrored too.
+    - **Playwright under `next dev`:**
+      - `/v2/board` at 390px and 1024px: split line on the 4-load job only, no page scroll.
+      - Order edit: no Assign Ship Days. Changing load 4's day to Mon 11/2 in the Delivery times editor and saving gives `Thu 10/29: 01, 02 · Fri 10/30: 03 · Mon 11/2: 04` on `/v2/board`, and three day-rows on `/v2/logistics`.
+      - Drill-down: no Assign Ship Days; "Ships Thu 10/29 … Mon 11/2" still shown.
+      - `PUT /v2/api/shipments/:id/load-days` → 404.
+      - Classic `/jobs/` served statically with `/api/*` fixtures: split badge on the 4-load job only, no Assign Ship Days button, modal or edit-modal entry, no page errors.
+    - 23/23 checks.
+  - **Noted.** `LoadTimesEditor.tsx`'s header still says each row's day "defaults to that load's Assign Ship Days date". That default (`assigned_days` = `loading_assignments.ship_date`) is now the mirrored schedule day. The comment is outside this prompt's file list.
 
 - **ui-44-01 (cross-ref)** — the shared `WeekSelector` / `SearchInput` / `FilterSelect` the dashboard toolbar uses are now 44px (see `## Orders (v2)`).
 
@@ -9232,6 +9271,8 @@ current series).
 ---
 
 ## Job Board
+
+- **ship-days-01 (cross-ref)** — Classic's Assign Ship Days (modal, button, i18n keys) and the legacy `PUT /api/loading-assignments/load-days` branch are removed. The schedule now sets each load's ship day via D1 triggers, and `buildSplitBadgeHtml` reads the mirrored days. See `## Logistics (v2)`.
 
 - **slip-parse-06 — Packing-slip parser keeps the thin end of tapered thickness ranges (Job Board Agent §2). No
   migration.** New `withTaperLead()` in `jobs/packing-slip-parser.js`: tapered items' `2.5” - 4” x 39” x 80”` now

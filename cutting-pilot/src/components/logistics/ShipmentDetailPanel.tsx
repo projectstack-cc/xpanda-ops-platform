@@ -13,16 +13,26 @@
 // dlv-04 -- the Shipping time cell lists per-load delivery times (GET /v2/api/orders/:id/load-times);
 // loads the schedule sheet changed show `was <old>` in warn tokens, with an Acknowledge button
 // (POST …/load-times/ack) for the same users the panel's other edits are for (canManageLoading).
+// ship-days-01 -- Assign Ship Days removed: the schedule (job_load_times, mirrored onto
+// loading_assignments.ship_date by D1 triggers) sets each load's day. The "Ships <day>" label stays.
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import PhotoGalleryModal from "@/components/loading/PhotoGalleryModal";
 import { formatEtDateTime } from "@/lib/etDateTime";
 import { formatUsdCents } from "@/lib/money";
 import { StatusBadge } from "./ShipmentRow";
-import AssignShipDaysModal, { fmtDay } from "./AssignShipDaysModal";
 import type { ShipmentDetail, ShipmentLoad } from "./types";
 import type { LoadTimeRow } from "@/components/orders/LoadTimesEditor";
 import { LiveLoadPill } from "@/components/LiveLoadMarker";
+
+// "Thu 11/5" for a load's ship day (YYYY-MM-DD, local calendar date); "—" when blank/invalid.
+function fmtDay(dateStr: string | null | undefined): string {
+  const s = String(dateStr ?? "").slice(0, 10);
+  const [y, m, d] = s.split("-").map(Number);
+  if (!y || !m || !d) return "—";
+  const dt = new Date(y, m - 1, d);
+  return `${dt.toLocaleDateString("en-US", { weekday: "short" })} ${m}/${d}`;
+}
 
 // lgx-minimap-01: shared with the Carrier View. Leaflet touches `window` at import -> client-only.
 const DestinationMiniMap = dynamic(() => import("@/components/DestinationMiniMap"), { ssr: false });
@@ -31,8 +41,8 @@ interface ShipmentDetailPanelProps {
   shipmentId: string;
   cache: Map<string, ShipmentDetail>;
   canManageLoading?: boolean;
-  isCustomerPickup?: boolean;
   orderShipDate?: string | null;
+  /** Generic "detail changed" refresh (acknowledge, BOL delete): the dashboard reloads its list. */
   onShipDaysSaved?: () => void;
   /** lgx-boldel-01: row's bol_count; drives the manager-only "Delete all BOLs" button. */
   bolCount?: number;
@@ -57,7 +67,6 @@ export default function ShipmentDetailPanel({
   shipmentId,
   cache,
   canManageLoading = false,
-  isCustomerPickup = false,
   orderShipDate = null,
   onShipDaysSaved,
   bolCount = 0,
@@ -69,9 +78,7 @@ export default function ShipmentDetailPanel({
   const [loading, setLoading] = useState(!cache.has(shipmentId));
   // lgx-photos-01: index into allPhotos of the open gallery photo (null = closed).
   const [gallery, setGallery] = useState<number | null>(null);
-  // split-days-02: Assign Ship Days modal.
-  const [daysOpen, setDaysOpen] = useState(false);
-  // Bumped after a ship-days save: the panel stays mounted across the list refetch, so force a fresh detail.
+  // Bumped after an acknowledge / BOL delete: the panel stays mounted across the list refetch, so force a fresh detail.
   const [reloadKey, setReloadKey] = useState(0);
   // lgx-boldel-01: two-step arm/confirm (house pattern -- PartsLibraryPanel/BolViewerModal), no window.confirm().
   const [delArmed, setDelArmed] = useState(false);
@@ -211,7 +218,6 @@ export default function ShipmentDetailPanel({
   const orderDay = String(orderShipDate ?? "").slice(0, 10);
   const effDays = new Set((detail.loads ?? []).map((ld) => String(ld.load_ship_date ?? "").trim().slice(0, 10) || orderDay));
   const multiDay = effDays.size > 1;
-  const canAssignDays = canManageLoading && !isCustomerPickup && (detail.load_count ?? 1) > 1;
 
   return (
     <div className="px-4 py-4 bg-[var(--ghost-bg)] space-y-3">
@@ -285,18 +291,6 @@ export default function ShipmentDetailPanel({
         <div>
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">Loads</div>
-            {canAssignDays && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDaysOpen(true);
-                }}
-                className="min-h-[44px] md:min-h-[32px] px-3 rounded-md border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-[var(--brand)] cursor-pointer hover:bg-[var(--ghost-bg)]"
-              >
-                Assign Ship Days
-              </button>
-            )}
           </div>
           <div className="rounded-lg border border-[var(--card-border)] bg-surface divide-y divide-[var(--line)]">
             {detail.loads.map((ld, i) => {
@@ -461,22 +455,6 @@ export default function ShipmentDetailPanel({
             </button>
           )}
         </div>
-      )}
-
-      {canAssignDays && (
-        <AssignShipDaysModal
-          isOpen={daysOpen}
-          shipmentId={shipmentId}
-          loadCount={detail.load_count ?? 1}
-          loads={detail.loads ?? []}
-          orderShipDate={orderShipDate}
-          onClose={() => setDaysOpen(false)}
-          onSaved={() => {
-            cache.delete(shipmentId);
-            setReloadKey((k) => k + 1);
-            onShipDaysSaved?.();
-          }}
-        />
       )}
 
       <PhotoGalleryModal
