@@ -23,6 +23,9 @@ export default function Modal({ isOpen, onClose, title, children, size = "md" }:
       <div
         className={`w-full ${size === "xl" ? "sm:max-w-[min(52.5rem,92vw)]" : size === "lg" ? "sm:max-w-2xl" : "sm:max-w-md"} bg-surface rounded-t-2xl sm:rounded-2xl shadow-xl p-6 space-y-4 max-h-[90vh] overflow-y-auto`}
         style={{ boxShadow: "var(--shadow-md)" }}
+        // Not a close handler: keeps clicks inside the dialog from bubbling to a clickable ancestor
+        // (e.g. a row with onClick) that renders this Modal inline.
+        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"

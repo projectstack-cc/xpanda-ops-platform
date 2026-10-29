@@ -40,6 +40,7 @@ export default function DockBayPicker({ bays, initial, canCancel, onConfirm, onC
         role="dialog"
         aria-modal="true"
         aria-labelledby="dock-bay-picker-title"
+        onClick={(e) => e.stopPropagation()}
         className="flex flex-col overflow-y-auto"
         style={{
           width: 820,
