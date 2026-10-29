@@ -1,7 +1,7 @@
 "use client";
 // src/components/dashboard/FilterSelect.tsx
 // board-ui-01: toolbar <select> filter with a leading "all" option, shared by the v2 Shipment
-// Dashboard and Job Board (JSX + classes moved verbatim from ShipmentDashboard.tsx).
+// Dashboard and Job Board (JSX + classes moved verbatim from ShipmentDashboard.tsx). ui-44-01: 44px tall.
 
 export interface FilterOption {
   value: string;
@@ -20,7 +20,7 @@ export default function FilterSelect({ value, onChange, options, allLabel }: Fil
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-9 px-3 text-xs rounded-lg border border-[var(--border)] bg-surface text-text focus:outline-hidden focus:border-[var(--brand)] cursor-pointer"
+      className="h-11 px-3 text-xs rounded-lg border border-[var(--border)] bg-surface text-text focus:outline-hidden focus:border-[var(--brand)] cursor-pointer"
     >
       <option value="">{allLabel}</option>
       {options.map((o) => (

@@ -136,7 +136,7 @@
 - [ ] qc follow-up — "Line changed since inspection" only flags; decide whether a changed line should drop back to Not inspected.
 - [ ] qc follow-up — customers not in the FINAL INSPECTION master sheet land in the default Drive folder (drive_customer NULL). Add them to the sheet (Name, Active=YES, Folder ID) to route their PDFs.
 - [ ] qc follow-up — admin bulk inspect (qc-06) skips lines with unreadable dimensions; if that list is long in practice, consider a per-line nominal override in the bulk modal.
-- [ ] qc-01 follow-up — shared dashboard primitives under 44px touch targets: `WeekSelector` arrows (`w-8 h-8`) and segment buttons (~30px), `SearchInput` / `FilterSelect` (`h-9`). Used by /v2/qc, /v2/logistics and /v2/board — raise in one shared change.
+- [x] **Done in ui-44-01 (2026-10-29).** qc-01 follow-up — shared dashboard primitives under 44px touch targets: `WeekSelector` arrows (`w-8 h-8`) and segment buttons (~30px), `SearchInput` / `FilterSelect` (`h-9`). Used by /v2/qc, /v2/logistics and /v2/board — raise in one shared change.
 - [ ] qc-09 follow-up — delete the dead `addCustomer` / `addIncidentCustomer` functions from the Inspection Tool script (unreachable since qc-09 removed their `doGet` dispatch lines).
 - [ ] Incident follow-up — add root cause / corrective actions after the initial report (today: create-only, like legacy; the Doc is the record).
 - [ ] Incident customers not in the incident customer sheet land in the default incident folder — add them to the sheet to route their Docs.
@@ -668,6 +668,7 @@ schedule badge):**
 
 ## Infra / CI-CD
 
+- [ ] Unknown legacy `/api/*` paths return the home page (200) because there's no `404.html`. Add a JSON 404 in the shell/worker phase. (Found in ui-44-01.)
 - [ ] **P446 follow-up — repo-wide CRLF/LF working-tree drift, masked by a stale git index
   stat-cache.** While fixing P446, found ~13 files (`_worker.js/lib/core.js`, `push.js`,
   `routes/{admin,auth,bols,loading,notifications,qc,reports}.js`, `jobs/jobs-header.js`,

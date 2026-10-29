@@ -3,6 +3,7 @@
 // board-ui-01: This Week / Next Week / Show All + prev/next week stepping, shared by the v2 Shipment
 // Dashboard and Job Board (JSX + classes moved verbatim from ShipmentDashboard.tsx).
 // weekOffset: 0 = This Week, 1 = Next Week, null = Show All.
+// ui-44-01: every button is 44px (floor rule), matching RangeSelector.
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface WeekSelectorProps {
@@ -18,7 +19,7 @@ export default function WeekSelector({ weekOffset, onChange, label }: WeekSelect
         <button
           type="button"
           onClick={() => onChange(0)}
-          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+          className={`min-h-[44px] inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
             weekOffset === 0
               ? "bg-[var(--brand)] text-white shadow-xs"
               : "text-muted hover:text-text"
@@ -29,7 +30,7 @@ export default function WeekSelector({ weekOffset, onChange, label }: WeekSelect
         <button
           type="button"
           onClick={() => onChange(1)}
-          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+          className={`min-h-[44px] inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
             weekOffset === 1
               ? "bg-[var(--brand)] text-white shadow-xs"
               : "text-muted hover:text-text"
@@ -40,7 +41,7 @@ export default function WeekSelector({ weekOffset, onChange, label }: WeekSelect
         <button
           type="button"
           onClick={() => onChange(null)}
-          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+          className={`min-h-[44px] inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
             weekOffset === null
               ? "bg-surface text-text shadow-xs"
               : "text-muted hover:text-text"
@@ -55,8 +56,9 @@ export default function WeekSelector({ weekOffset, onChange, label }: WeekSelect
           <button
             type="button"
             onClick={() => onChange(weekOffset - 1)}
-            className="w-8 h-8 rounded-lg border border-[var(--border)] flex items-center justify-center text-muted hover:text-text hover:bg-[var(--ghost-bg)] cursor-pointer"
+            className="min-w-[44px] min-h-[44px] rounded-lg border border-[var(--border)] flex items-center justify-center text-muted hover:text-text hover:bg-[var(--ghost-bg)] cursor-pointer"
             title="Previous week"
+            aria-label="Previous week"
           >
             <ChevronLeft size={16} />
           </button>
@@ -66,8 +68,9 @@ export default function WeekSelector({ weekOffset, onChange, label }: WeekSelect
           <button
             type="button"
             onClick={() => onChange(weekOffset + 1)}
-            className="w-8 h-8 rounded-lg border border-[var(--border)] flex items-center justify-center text-muted hover:text-text hover:bg-[var(--ghost-bg)] cursor-pointer"
+            className="min-w-[44px] min-h-[44px] rounded-lg border border-[var(--border)] flex items-center justify-center text-muted hover:text-text hover:bg-[var(--ghost-bg)] cursor-pointer"
             title="Next week"
+            aria-label="Next week"
           >
             <ChevronRight size={16} />
           </button>

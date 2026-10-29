@@ -1,7 +1,7 @@
 "use client";
 // src/components/dashboard/SearchInput.tsx
 // board-ui-01: toolbar search box with icon + clear-X, shared by the v2 Shipment Dashboard and Job
-// Board (JSX + classes moved verbatim from ShipmentDashboard.tsx).
+// Board (JSX + classes moved verbatim from ShipmentDashboard.tsx). ui-44-01: input + clear-X at 44px.
 import { Search, X } from "lucide-react";
 
 interface SearchInputProps {
@@ -22,13 +22,14 @@ export default function SearchInput({ value, onChange, placeholder }: SearchInpu
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full h-9 pl-9 pr-8 text-xs rounded-lg border border-[var(--border)] bg-surface text-text placeholder:text-muted focus:outline-hidden focus:border-[var(--brand)] transition-colors"
+        className="w-full h-11 pl-9 pr-11 text-xs rounded-lg border border-[var(--border)] bg-surface text-text placeholder:text-muted focus:outline-hidden focus:border-[var(--brand)] transition-colors"
       />
       {value && (
         <button
           type="button"
           onClick={() => onChange("")}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-text text-sm cursor-pointer"
+          aria-label="Clear search"
+          className="absolute right-0 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] inline-flex items-center justify-center text-muted hover:text-text text-sm cursor-pointer"
         >
           <X size={14} />
         </button>
