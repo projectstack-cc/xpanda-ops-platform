@@ -25,7 +25,8 @@ interface DockAssignmentCardProps extends CardActionHandlers {
 }
 
 // Fixed Overview tile height (explicit height, not min-height), sized to the worst case: a
-// manager on a bay card (Advance + BOL + Photos + Move to yard = two action rows). 2x6px padding +
+// manager on a bay card (Advance + BOL + Photos + Yard + To queue = two action rows; dock-13
+// shortened Move to yard / Send back to queue to "Yard" / "To queue" in compact). 2x6px padding +
 // 2px border + row1 16 + row2 16 + row3 28 + actions 60 (2x28 + 4 gap) + 3x4px row gaps = 146,
 // plus 2px slack. Must stay <= 150.
 export const COMPACT_CARD_H = 148;
@@ -267,8 +268,25 @@ export default function DockAssignmentCard({
           )}
         </button>
         {canManage && a.bay_id && ["not_started", "loading", "loaded"].includes(a.loading_status) && (
-          <button type="button" onClick={() => onMoveToYard(a)} className={`${ACTION_BTN_WARN} ${sz}`}>
-            Move to yard
+          <button
+            type="button"
+            onClick={() => onMoveToYard(a)}
+            title={compact ? "Move to yard" : undefined}
+            aria-label={compact ? "Move to yard" : undefined}
+            className={`${ACTION_BTN_WARN} ${sz}`}
+          >
+            {compact ? "Yard" : "Move to yard"}
+          </button>
+        )}
+        {canManage && (a.loading_status === "delivered" || (!!a.bay_id && ["not_started", "loading", "loaded"].includes(a.loading_status))) && (
+          <button
+            type="button"
+            onClick={() => onSendBackToQueue(a)}
+            title={compact ? "Send back to queue" : undefined}
+            aria-label={compact ? "Send back to queue" : undefined}
+            className={`${ACTION_BTN_WARN} ${sz}`}
+          >
+            {compact ? "To queue" : "Send back to queue"}
           </button>
         )}
         {canManage && a.loading_status === "in_transit" && (
@@ -279,11 +297,6 @@ export default function DockAssignmentCard({
         {canManage && a.location === "yard" && !["in_transit", "delivered", "archived"].includes(a.loading_status) && (
           <button type="button" onClick={() => onRevertYardToBay(a)} className={`${ACTION_BTN_WARN} ${sz}`}>
             Move back to bay
-          </button>
-        )}
-        {canManage && a.loading_status === "delivered" && (
-          <button type="button" onClick={() => onSendBackToQueue(a)} className={`${ACTION_BTN_WARN} ${sz}`}>
-            Send back to queue
           </button>
         )}
         {showArchive && (

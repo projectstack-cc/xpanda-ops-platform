@@ -107,8 +107,15 @@ export function useDockActions({ assignments, load, canManage, canEditLoading }:
     if (await putAssignment(a.id, { location: "bay", bay_id: null, loading_status: "awaiting" })) load();
   }
 
+  // dock-13: also offered on bay cards (not_started / loading / loaded), worded by status.
   async function handleSendBackToQueue(a: DockAssignment) {
-    if (!window.confirm("Send this delivered load back to the awaiting queue?")) return;
+    const message =
+      a.loading_status === "delivered"
+        ? "Send this delivered load back to the awaiting queue?"
+        : a.loading_status === "not_started"
+          ? `Send this load back to the awaiting queue?${a.bay_number != null ? ` It will leave Bay ${a.bay_number}.` : ""}`
+          : "This load has already started loading. Send it back to the awaiting queue? Its loading progress will be cleared.";
+    if (!window.confirm(message)) return;
     if (await putAssignment(a.id, { location: "bay", bay_id: null, loading_status: "awaiting" })) load();
   }
 

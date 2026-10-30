@@ -199,6 +199,7 @@ export default function DockTablet({ isAdmin, permissions }: DockTabletProps) {
         },
       });
       moreItems.push({ label: "Move to yard", onClick: () => cardHandlers.onMoveToYard(a) });
+      moreItems.push({ label: "Send back to queue", onClick: () => cardHandlers.onSendBackToQueue(a) });
     }
     if (a.loading_status === "loaded") {
       moreItems.push({ label: "Mark in transit", onClick: () => cardHandlers.onAdvance(a, "in_transit") });
