@@ -8,7 +8,8 @@
 //   value is NOT rewritten on open (that would raise unsaved-changes banners) — the canonical
 //   spelling is written once the user picks it.
 // - "+ Add carrier…" (when can_add) opens a small dialog composed from Modal. It is portaled to
-//   <body> (call sites sit inside <label>s and <form>s) and stops Escape so the parent modal stays open.
+//   <body> (call sites sit inside <label>s and <form>s). Like every v2 Modal it closes only from inside
+//   (X / Add / Cancel); Escape is swallowed and does nothing (modal-02).
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import Modal from "@/components/Modal";
@@ -119,10 +120,12 @@ export default function CarrierSelect({ value, onChange, disabled, placeholder, 
 
   function onDialogKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === "Escape") {
-      // Keep the parent edit modal open — its Escape listener sits on document.
+      // modal-02: Escape never closes this dialog (modal-01 rule: close only via X / Add / Cancel).
+      // Still swallowed here so it can't reach any document-level listener behind the dialog
+      // (popovers, the dock tablet's menu, the Load Builder editor).
+      e.preventDefault();
       e.stopPropagation();
       e.nativeEvent.stopImmediatePropagation();
-      closeAdd();
     } else if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
       e.preventDefault();
       submitAdd();

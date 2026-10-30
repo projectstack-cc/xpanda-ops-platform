@@ -657,7 +657,6 @@ schedule badge):**
 
 ## Admin / Platform
 
-- [ ] **modal-01 follow-up (decision for Steve):** the `CarrierSelect` "+ Add carrier…" dialog is a `Modal`, but CarrierSelect's own `onDialogKeyDown` still closes it on Escape. CarrierSelect was on modal-01's out-of-scope list, so it was left alone. Should this small dialog follow the no-Escape rule too? While there, refresh the stale comments at `CarrierSelect.tsx:122` and `ScrapLogModal.tsx:804`, which still describe Escape/backdrop closing.
 - [ ] Remove temporary `pages.dev` → `xpandaops.com` redirect from `_worker.js/index.js` once all internal links/bookmarks confirmed updated.
   Decision 2026-10-05: hold until access logs confirm no traffic on the pages.dev
   host (Pages analytics filtered to that host, or a temporary log line + wrangler tail).

@@ -10350,6 +10350,12 @@ current series).
 
 ## Admin / Platform
 
+- **modal-02 — CarrierSelect "Add carrier" dialog follows the no-Escape rule; stale close comments refreshed (React Component Agent §9b). No migration, no API change. v2 only.**
+  - `cutting-pilot/src/components/orders/CarrierSelect.tsx`: `onDialogKeyDown` no longer calls `closeAdd()` on Escape. The key is still swallowed (`preventDefault` + `stopPropagation` + `stopImmediatePropagation`) so it can't reach document-level listeners behind the dialog. The dialog closes only via X / Add / Cancel, like every v2 Modal since modal-01; Enter in the field still submits. Header comment updated to match.
+  - `cutting-pilot/src/components/qc/ScrapLogModal.tsx`: the dirty-confirm comment now says only the X routes to `onClose` (backdrop and Escape no longer close). Comment only.
+  - `cutting-pilot/src/components/orders/LoadTimesEditor.tsx`: header comment says each row defaults to the load's ship day set from the schedule (ship-days-01) instead of the retired Assign Ship Days. Comment only.
+  - BACKLOG: "modal-01 follow-up (decision for Steve)" removed — Steve decided 2026-10-30 that the dialog follows the rule.
+
 - **modal-01 — v2 dialogs close only from inside: no backdrop click, no Escape (React Component Agent §9b; Next/Cloudflare Platform Agent §9a confirmed nothing outside `src/components` needed changing). No migration, no API change. v2 only — legacy dialogs unchanged by Steve's call.**
   - **Rule (Steve, 2026-10-29).** A dialog closes only through something inside it: the X, Cancel, Save, or another action that closes it as part of its own flow. A click or tap outside does nothing, and Escape does nothing. This came from accidental closes that lost work. Menus, popovers, tooltips and pickers keep click-away and Escape.
   - **The four primitives.**

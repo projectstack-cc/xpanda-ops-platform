@@ -4,8 +4,8 @@
 // edited (order entry, /v2/board OrderEditModal, logistics ShipmentEditModal). Controlled: the
 // parent owns the LoadTimeDraft[] and saves it through PUT /v2/api/orders/:id/load-times.
 // Typing a pattern ("8:00AM & HRLY") and pressing Expand fills one row per load via
-// parseLoadTimePattern (lib/loadTimes.ts); each row's day defaults to that load's Assign Ship Days
-// date, else the order's ship date, unless the pattern leads with a weekday. Display text is only a
+// parseLoadTimePattern (lib/loadTimes.ts); each row's day defaults to that load's ship day (set from the schedule, ship-days-01)
+// if it has one, else the order's ship date, unless the pattern leads with a weekday. Display text is only a
 // preview here — the server recomputes it with formatLoadTime.
 import { useEffect, useId, useState } from "react";
 import CarrierSelect from "./CarrierSelect";

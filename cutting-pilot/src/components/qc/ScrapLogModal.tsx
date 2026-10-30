@@ -801,7 +801,7 @@ function ScrapLogBody({
 }
 
 export default function ScrapLogModal({ isOpen, onClose, canEdit, mondayStr }: Props) {
-  // Dirty lives here so Escape / backdrop / X (Modal routes them to onClose) confirm too.
+  // Dirty lives here so the X (Modal routes it to onClose) confirms too. Backdrop and Escape no longer close (modal-01).
   const [dirty, setDirty] = useState(false);
   const requestClose = useCallback(
     (force = false) => {
