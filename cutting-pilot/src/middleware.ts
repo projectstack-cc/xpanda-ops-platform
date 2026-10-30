@@ -51,6 +51,8 @@ const PERMISSION_MAP: Array<{ prefix: string; keys: string[] }> = [
   // qc-01: v2 QC board (/v2/qc) — legacy's own `qc` key (PATH_PERMISSION_MAP /^\/qc\//). GET→view, mutate→edit.
   { prefix: "/v2/api/qc", keys: ["qc"] },
   { prefix: "/v2/qc", keys: ["qc"] },
+  // blk-01: v2 Block Calculator — legacy's own key (manufacturing.calculators), ABOVE /v2/blocks (first match wins).
+  { prefix: "/v2/blocks/calculator", keys: ["manufacturing.calculators"] },
   { prefix: "/v2/blocks", keys: ["manufacturing.blocks"] },
   // rpt-01: v2 Reports (/v2/reports/*) — legacy's own `reports` key (PATH_PERMISSION_MAP /^\/reports\//).
   // Read-only surface: every route is GET (→ view).
