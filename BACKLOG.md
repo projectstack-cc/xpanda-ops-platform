@@ -618,6 +618,8 @@
 
 > Items mentioning the job form/job card target v2 (`/v2/orders` entry, `/v2/board`) going forward; the legacy board is in testing only.
 
+- [ ] jb-14 follow-up — floor supervisor role: confirm it has jobs.status edit and jobs.manage edit in /v2/admin → Roles (Steve).
+- [ ] Assignments still go through legacy /api/jobs/:id/assignments — port to /v2/api/orders/:id/assignments with the shell/worker phase.
 - [ ] **Taper-aware dimension parsing downstream (from slip-parse-06).** `thin>thick` dims (parser output and the
   hand-entered rows already in D1) are read by `parseFloat` on the first token. As a result:
   - legacy `parseDimensionString` / `parseDimensionValues` (load builder + part match) treat `2.5>4”` as 2.5";

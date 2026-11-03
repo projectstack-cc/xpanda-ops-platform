@@ -6,22 +6,13 @@
 // instructions) is shown read-only here and edited via the full OrderEditModal (P439 modal
 // opened from the Edit button). The "Open in order entry →" link is intentionally gone
 // because the modal now covers everything /v2/orders would.
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { BoardJob } from "./ProductionBoard";
+import JobAssigneeChips, { type AssignableUser } from "./JobAssigneeChips";
+import { STATUS_OPTIONS } from "./JobQuickEdit";
 import JobShiftChips from "./JobShiftChips";
 import PrioritySelect from "./PrioritySelect";
 import { fromPriorityChoice, toPriorityChoice, type PriorityChoice } from "@/lib/priority";
-
-interface Assignee {
-  user_id: string;
-  name: string;
-}
-
-interface AssignableUser {
-  id: string;
-  name: string;
-  username: string;
-}
 
 interface BoardRowEditProps {
   job: BoardJob;
@@ -36,14 +27,6 @@ const inputClass =
   "w-full min-h-[40px] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
 const labelClass = "block text-xs font-semibold text-muted mb-1";
 
-const STATUS_OPTIONS = [
-  { value: "not_started", label: "Not started" },
-  { value: "in_production", label: "In production" },
-  { value: "done", label: "Done" },
-  { value: "loading", label: "Loading" },
-  { value: "shipped", label: "Shipped" },
-];
-
 export default function BoardRowEdit({ job, assignableUsers, canManageShifts, canChangeStatus, onSaved, onCancel }: BoardRowEditProps) {
   const [shipDate, setShipDate] = useState(job.ship_date || "");
   const [choice, setChoice] = useState<PriorityChoice>(toPriorityChoice(job.priority, job.priority_level));
@@ -53,32 +36,7 @@ export default function BoardRowEdit({ job, assignableUsers, canManageShifts, ca
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [assignees, setAssignees] = useState<Assignee[]>([]);
-  const [assigneesLoading, setAssigneesLoading] = useState(true);
-  const [assignError, setAssignError] = useState<string | null>(null);
-  const [addingUserId, setAddingUserId] = useState("");
-
   const statusLocked = job.status === "loading" || job.status === "shipped";
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/jobs/${job.id}/assignments`);
-        const data = await res.json();
-        if (!cancelled && res.ok && data.ok) {
-          setAssignees(data.assignees || []);
-        }
-      } catch {
-        // Non-fatal — the panel still works for the editable field subset without assignees.
-      } finally {
-        if (!cancelled) setAssigneesLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [job.id]);
 
   async function handleSave() {
     setSaving(true);
@@ -106,55 +64,6 @@ export default function BoardRowEdit({ job, assignableUsers, canManageShifts, ca
       setSaving(false);
     }
   }
-
-  async function handleAddAssignee() {
-    if (!addingUserId) return;
-    setAssignError(null);
-    try {
-      const res = await fetch(`/api/jobs/${job.id}/assignments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: addingUserId }),
-      });
-      const data = await res.json();
-      if (res.status === 403) {
-        setAssignError("Manager access required to assign.");
-        return;
-      }
-      if (!res.ok || !data.ok) {
-        setAssignError(data.error || "Couldn't assign. Try again.");
-        return;
-      }
-      setAddingUserId("");
-      const added = assignableUsers.find((u) => u.id === addingUserId);
-      if (added) setAssignees((prev) => [...prev, { user_id: added.id, name: added.name }]);
-      onSaved();
-    } catch {
-      setAssignError("Network error — couldn't reach the server.");
-    }
-  }
-
-  async function handleRemoveAssignee(userId: string) {
-    setAssignError(null);
-    try {
-      const res = await fetch(`/api/jobs/${job.id}/assignments/${userId}`, { method: "DELETE" });
-      const data = await res.json();
-      if (res.status === 403) {
-        setAssignError("Manager access required to assign.");
-        return;
-      }
-      if (!res.ok || !data.ok) {
-        setAssignError(data.error || "Couldn't remove. Try again.");
-        return;
-      }
-      setAssignees((prev) => prev.filter((a) => a.user_id !== userId));
-      onSaved();
-    } catch {
-      setAssignError("Network error — couldn't reach the server.");
-    }
-  }
-
-  const availableToAdd = assignableUsers.filter((u) => !assignees.some((a) => a.user_id === u.id));
 
   return (
     <div className="p-4 bg-[var(--surface-2)] border-t border-[var(--line)] space-y-4">
@@ -193,57 +102,7 @@ export default function BoardRowEdit({ job, assignableUsers, canManageShifts, ca
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={inputClass} />
       </label>
 
-      {/* Assign */}
-      <div>
-        <span className={labelClass}>Assigned</span>
-        {assignError && <p className="text-xs text-[var(--warn-text)] mb-2">{assignError}</p>}
-        <div className="flex flex-wrap items-center gap-2">
-          {assigneesLoading && <span className="text-xs text-muted">Loading…</span>}
-          {!assigneesLoading && assignees.length === 0 && (
-            <span className="text-xs text-muted">Unassigned</span>
-          )}
-          {assignees.map((a) => (
-            <span
-              key={a.user_id}
-              className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-[var(--ghost-bg)] text-xs font-medium text-text"
-            >
-              {a.name}
-              <button
-                type="button"
-                onClick={() => handleRemoveAssignee(a.user_id)}
-                aria-label={`Remove ${a.name}`}
-                className="min-w-[20px] min-h-[20px] inline-flex items-center justify-center rounded-full hover:bg-[var(--card-border)] cursor-pointer text-muted hover:text-text"
-              >
-                ×
-              </button>
-            </span>
-          ))}
-          {availableToAdd.length > 0 && (
-            <span className="inline-flex items-center gap-1">
-              <select
-                value={addingUserId}
-                onChange={(e) => setAddingUserId(e.target.value)}
-                className="min-h-[32px] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-xs px-2"
-              >
-                <option value="">+ Add…</option>
-                {availableToAdd.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={handleAddAssignee}
-                disabled={!addingUserId}
-                className="min-h-[32px] px-2 rounded-md border border-[var(--input-border)] text-text text-xs font-semibold cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Add
-              </button>
-            </span>
-          )}
-        </div>
-      </div>
+      <JobAssigneeChips jobId={job.id} assignableUsers={assignableUsers} canManage={canManageShifts} onChanged={onSaved} />
 
       {/* jb-10: Shifts moved here from OrderEditModal — writes immediately, no board refetch. */}
       <JobShiftChips jobId={job.id} canManage={canManageShifts} />

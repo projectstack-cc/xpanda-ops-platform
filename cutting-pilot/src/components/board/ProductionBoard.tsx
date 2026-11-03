@@ -10,8 +10,8 @@
 //      what the legacy /jobs/ "Edit Job" modal edits (customer, PO, INV, ship-to,
 //      cutting/packing instructions, line items, shifts, etc.) — POSTs to PUT
 //      /v2/api/orders/:id.
-//   3. View button — opens OrderDetailModal, the read-only viewer (shipping + line items +
-//      cut-list + packing-slip dropdowns). Mirrors the previous behavior.
+//   3. View button — opens OrderDetailModal, the viewer (shipping + line items + cut-list +
+//      packing-slip dropdowns). jb-14: active jobs also get its editable Status & crew block.
 // board-ui-01: renamed "Job Board" (legacy parity) and rebuilt on the shared dashboard kit to
 // mirror /v2/logistics — title block, StatTile status cards, toolbar (List/Calendar, week
 // selector, search, status filter), and day-grouped tables. Filtering is client-side, list only.
@@ -32,6 +32,7 @@ import OrderEditModal from "./OrderEditModal";
 import BolViewerModal from "@/components/logistics/BolViewerModal";
 import CalendarView from "./CalendarView";
 import BoardRowEdit from "./BoardRowEdit";
+import type { AssignableUser } from "./JobAssigneeChips";
 import LinkedTableGroups from "@/components/linked/LinkedTableGroups";
 import { JobStatusBadge, PriorityBadge, STATUS_VARIANTS } from "./badges";
 import LinePills from "./LinePills";
@@ -98,12 +99,6 @@ function splitDaysLabel(job: BoardJob): string | null {
 function partialLiveLoads(job: Pick<BoardJob, "live_loads" | "load_count">): number[] | undefined {
   const loads = job.live_loads ?? [];
   return loads.length > 0 && loads.length < Math.max(Number(job.load_count) || 1, 1) ? loads : undefined;
-}
-
-interface AssignableUser {
-  id: string;
-  name: string;
-  username: string;
 }
 
 interface BoardResponse {
@@ -240,23 +235,32 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
     window.history.replaceState(null, "", url.pathname + (url.search ? url.search : "") + url.hash);
   }, []);
 
+  // Lazy, cached once — the assignable-users list rarely changes within a session.
+  async function ensureAssignableUsers() {
+    if (assignableUsers.length > 0) return;
+    try {
+      const res = await fetch("/api/assignable-users");
+      const data = await res.json();
+      if (res.ok && data.ok) setAssignableUsers(data.users || []);
+    } catch {
+      // Non-fatal — the panel still allows removing existing assignees without this list.
+    }
+  }
+
   async function toggleExpand(jobId: string) {
     if (expandedId === jobId) {
       setExpandedId(null);
       return;
     }
     setExpandedId(jobId);
-    // Lazy, cached once — the assignable-users list rarely changes within a session.
-    if (assignableUsers.length === 0) {
-      try {
-        const res = await fetch("/api/assignable-users");
-        const data = await res.json();
-        if (res.ok && data.ok) setAssignableUsers(data.users || []);
-      } catch {
-        // Non-fatal — the panel still allows removing existing assignees without this list.
-      }
-    }
+    await ensureAssignableUsers();
   }
+
+  // jb-14: the popup's Status & crew block needs the same list.
+  useEffect(() => {
+    if (viewId) ensureAssignableUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewId]);
 
   function bucketJobs(bucket: StatusBucket): BoardJob[] {
     if (!data) return [];
@@ -359,6 +363,9 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
     });
     return sortedKeys.map((dateKey) => ({ dateKey, jobs: map.get(dateKey) ?? [] }));
   }, [filteredJobs]);
+
+  // jb-14: same read-only rule that hides BoardRowEdit also hides the popup's Status & crew block.
+  const viewJob = (data?.jobs ?? []).concat(archivedResults).find((x) => x.id === viewId);
 
   return (
     <div className="min-h-screen flex flex-col bg-bg text-text">
@@ -612,10 +619,12 @@ export default function ProductionBoard({ userName, isAdmin, permissions }: Prod
         jobId={viewId}
         onClose={() => setViewId(null)}
         onViewBol={setBolJobId}
-        liveLoads={(() => {
-          const j = (data?.jobs ?? []).concat(archivedResults).find((x) => x.id === viewId);
-          return j?.live_load ? partialLiveLoads(j) ?? [] : null;
-        })()}
+        quickEdit={
+          viewJob && !isReadOnlyJob(viewJob)
+            ? { assignableUsers, canManage: canManageShifts, canChangeStatus, onChanged: load }
+            : undefined
+        }
+        liveLoads={viewJob?.live_load ? partialLiveLoads(viewJob) ?? [] : null}
       />
       {/* jb-02: mounted after OrderDetailModal so it stacks above it (same z-50, later DOM wins). */}
       <BolViewerModal jobId={bolJobId} onClose={() => setBolJobId(null)} viewOnly onEdit={() => {}} />

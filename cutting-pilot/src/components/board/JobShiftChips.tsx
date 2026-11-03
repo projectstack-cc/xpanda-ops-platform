@@ -1,7 +1,7 @@
 "use client";
 // src/components/board/JobShiftChips.tsx
-// jb-10 — Job Shifts chip block for the board row dropdown (BoardRowEdit), moved out of
-// OrderEditModal. Self-contained: loads GET /v2/api/orders/:id/shifts on mount; add (POST) and
+// jb-10 — Job Shifts chip block for the board row dropdown (BoardRowEdit) and the order popup
+// (JobQuickEdit, jb-14), moved out of OrderEditModal. Self-contained: loads GET /v2/api/orders/:id/shifts on mount; add (POST) and
 // remove (DELETE /v2/api/orders/:id/shifts/:shift) write immediately. Manager-gated client-side
 // via `canManage` (isAdmin || jobs.manage edit); the routes enforce it server-side (403). Shift
 // changes don't touch the board — the board doesn't display shifts, so no onSaved/refetch.
@@ -94,7 +94,8 @@ export default function JobShiftChips({ jobId, canManage }: JobShiftChipsProps) 
     <div>
       <span className={labelClass}>Shifts</span>
       {error && <p className="text-xs text-[var(--warn-text)] mb-2">{error}</p>}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* jb-14: gap-y-4 keeps the × hit areas of wrapped chip rows from overlapping. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-4">
         {loading && <span className="text-xs text-muted">Loading…</span>}
         {!loading && shifts.length === 0 && <span className="text-xs text-muted">No shifts assigned</span>}
         {shifts.map((s) => (
@@ -104,13 +105,14 @@ export default function JobShiftChips({ jobId, canManage }: JobShiftChipsProps) 
           >
             {SHIFT_LABELS[s] || s}
             {canManage && (
+              // jb-14: 44px hit area; negative margins keep the chip at its small visual size.
               <button
                 type="button"
                 onClick={() => handleRemoveShift(s)}
                 aria-label={`Remove ${s} shift`}
-                className="min-w-[20px] min-h-[20px] inline-flex items-center justify-center rounded-full hover:bg-[var(--card-border)] cursor-pointer text-[var(--info-text)] hover:text-text"
+                className="group min-w-[44px] min-h-[44px] -mx-3 -my-3 inline-flex items-center justify-center cursor-pointer text-[var(--info-text)] hover:text-text"
               >
-                ×
+                <span className="w-5 h-5 inline-flex items-center justify-center rounded-full group-hover:bg-[var(--card-border)]">×</span>
               </button>
             )}
           </span>
@@ -123,7 +125,7 @@ export default function JobShiftChips({ jobId, canManage }: JobShiftChipsProps) 
               setAddingShift("");
               if (v) handleAddShift(v);
             }}
-            className="min-h-[32px] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-xs px-2"
+            className="min-h-[44px] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-xs px-2"
           >
             <option value="">Add shift…</option>
             {availableToAdd.map((s) => (

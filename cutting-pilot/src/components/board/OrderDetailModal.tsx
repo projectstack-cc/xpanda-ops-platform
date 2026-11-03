@@ -1,6 +1,7 @@
 "use client";
 // src/components/board/OrderDetailModal.tsx
-// P439 — restored read-only modal. The P439 broader /v2/api/board/:id GET still returns the
+// P439 — restored read-only modal (jb-14: the board passes `quickEdit` for an editable Status &
+// crew block; the schedule desk doesn't, and stays read-only). The P439 broader /v2/api/board/:id GET still returns the
 // `shifts` and `processes` arrays on the job (for the OrderEditModal to consume), but this
 // modal ignores them — its surface is the read-only shipping / line items / cut-list /
 // packing-slip viewer. Opens from the "View" button in /v2/board and from a click on the
@@ -11,6 +12,8 @@ import Modal from "@/components/Modal";
 import PdfViewer from "@/components/PdfViewer";
 import PackingSlipViewer from "@/components/PackingSlipViewer";
 import JobPrintsSection from "@/components/board/JobPrintsSection";
+import JobQuickEdit from "@/components/board/JobQuickEdit";
+import type { AssignableUser } from "@/components/board/JobAssigneeChips";
 import CutListChunkToggle from "@/components/CutListChunkToggle";
 import DiversiTechLabelsModal from "@/components/board/DiversiTechLabelsModal";
 import CoreCoverLabelsModal from "@/components/board/CoreCoverLabelsModal";
@@ -51,6 +54,13 @@ interface OrderDetailModalProps {
   // jb-02: opens the board-level BolViewerModal. Optional — the schedule desk mounts this modal
   // without it, and the View BOL row only renders when a handler is supplied.
   onViewBol?: (jobId: string) => void;
+  // jb-14: when supplied (board only), shows the editable Status & crew block. The schedule desk omits it → read-only.
+  quickEdit?: {
+    assignableUsers: AssignableUser[];
+    canManage: boolean;
+    canChangeStatus: boolean;
+    onChanged: () => void;
+  };
   // live-02: from the caller's row (live-01 flags). null/undefined = not live; [] = every load live;
   // [n…] = only those loads live.
   liveLoads?: number[] | null;
@@ -58,7 +68,7 @@ interface OrderDetailModalProps {
 
 type CutListDoc = { src: string; filename: string } | null;
 
-export default function OrderDetailModal({ jobId, onClose, onViewBol, liveLoads }: OrderDetailModalProps) {
+export default function OrderDetailModal({ jobId, onClose, onViewBol, quickEdit, liveLoads }: OrderDetailModalProps) {
   const [data, setData] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [cutListOpen, setCutListOpen] = useState(false);
@@ -212,6 +222,23 @@ export default function OrderDetailModal({ jobId, onClose, onViewBol, liveLoads 
                 </div>
               )}
             </div>
+          )}
+
+          {quickEdit && (
+            <JobQuickEdit
+              jobId={job.id}
+              status={job.status}
+              assignableUsers={quickEdit.assignableUsers}
+              canManage={quickEdit.canManage}
+              canChangeStatus={quickEdit.canChangeStatus}
+              onChanged={(patch) => {
+                if (patch.status) {
+                  const nextStatus = patch.status;
+                  setData((prev) => (prev?.job ? { ...prev, job: { ...prev.job, status: nextStatus } } : prev));
+                }
+                quickEdit.onChanged();
+              }}
+            />
           )}
 
           <div className="overflow-x-auto rounded-lg border border-[var(--card-border)]">
