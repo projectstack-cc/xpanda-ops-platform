@@ -9,10 +9,10 @@
 import { useState } from "react";
 import type { BoardJob } from "./ProductionBoard";
 import JobAssigneeChips, { type AssignableUser } from "./JobAssigneeChips";
-import { STATUS_OPTIONS } from "./JobQuickEdit";
 import JobShiftChips from "./JobShiftChips";
 import PrioritySelect from "./PrioritySelect";
 import { fromPriorityChoice, toPriorityChoice, type PriorityChoice } from "@/lib/priority";
+import { statusOptionsFor } from "@/lib/board/statusOptions";
 
 interface BoardRowEditProps {
   job: BoardJob;
@@ -88,7 +88,7 @@ export default function BoardRowEdit({ job, assignableUsers, canManageShifts, ca
             title={statusLocked ? "Loading/shipped jobs can't be changed from the board." : !canChangeStatus ? "You don't have permission to change job status." : undefined}
             className={`${inputClass} ${(statusLocked || !canChangeStatus) ? "opacity-50 cursor-not-allowed" : ""}`}
           >
-            {STATUS_OPTIONS.map((o) => (
+            {statusOptionsFor(job.status).map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>

@@ -19,6 +19,7 @@ import type { OrderLineItem } from "@/components/orders/OrderEntryForm";
 import ProcessPicker from "./ProcessPicker";
 import PrioritySelect from "./PrioritySelect";
 import { fromPriorityChoice, toPriorityChoice } from "@/lib/priority";
+import { statusOptionsFor } from "@/lib/board/statusOptions";
 import HbFloorStockSection from "./HbFloorStockSection";
 import OrderLinksSection from "./OrderLinksSection";
 import JobPrintsSection from "./JobPrintsSection";
@@ -118,14 +119,6 @@ interface OrderEditModalProps {
   isAdmin?: boolean;
   permissions?: Record<string, { view?: boolean; edit?: boolean }>;
 }
-
-const STATUS_OPTIONS = [
-  { value: "not_started", label: "Not started" },
-  { value: "in_production", label: "In production" },
-  { value: "done", label: "Done" },
-  { value: "loading", label: "Loading" },
-  { value: "shipped", label: "Shipped" },
-];
 
 const inputClass =
   "w-full min-h-[44px] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]";
@@ -878,7 +871,7 @@ export default function OrderEditModal({ jobId, onClose, onSaved, boardJobs = []
                   title={statusLocked ? "Loading/shipped jobs can't be changed from the board." : !canChangeStatus ? "You don't have permission to change job status." : undefined}
                   className={`${inputClass} ${(statusLocked || !canChangeStatus) ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  {STATUS_OPTIONS.map((o) => (
+                  {statusOptionsFor(job.status).map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>

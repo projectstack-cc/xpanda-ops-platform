@@ -7,6 +7,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { canJobAction } from "@/lib/jobPerms";
+import { boardStatusChangeError } from "@/lib/board/statusOptions";
 
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const STATUSES = ["not_started", "in_production", "done", "loading", "shipped"];
@@ -89,8 +90,8 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   if ("status" in p) {
     const v = s(p.status);
     if (!STATUSES.includes(v)) return NextResponse.json({ ok: false, error: "Invalid status." }, { status: 400 });
-    // Guard: don't let the board downgrade a job out of a terminal/loading state. This is a
-    // deliberately narrower rule than the legacy PUT /api/jobs (which allows any of the 5
+    // Guard: don't let the board move a job out of a terminal/loading state, or into one
+    // (jb-15: those belong to the logistics and dock flows). This is a deliberately narrower rule than the legacy PUT /api/jobs (which allows any of the 5
     // states unconditionally on that endpoint) — the board's editable subset is intentionally
     // conservative per the locked scoping; full status control stays in the legacy/job-detail flow.
     const cur = await DB.prepare("SELECT status, archived_at FROM jobs WHERE id = ?").bind(id).first<any>();
@@ -99,9 +100,8 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
     if (v !== cur.status && !canJobAction(request, "jobs.status")) {
       return NextResponse.json({ ok: false, error: "Changing job status requires Job Board — Change job status." }, { status: 403 });
     }
-    if ((cur.status === "shipped" || cur.status === "loading") && v !== cur.status) {
-      return NextResponse.json({ ok: false, error: "Can't change a loading/shipped job from the board." }, { status: 400 });
-    }
+    const statusError = boardStatusChangeError(cur.status, v);
+    if (statusError) return NextResponse.json({ ok: false, error: statusError }, { status: 400 });
     sets.push("status = ?"); binds.push(v);
   }
 

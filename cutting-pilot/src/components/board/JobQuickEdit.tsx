@@ -7,14 +7,7 @@
 import { useEffect, useState } from "react";
 import JobAssigneeChips, { type AssignableUser } from "./JobAssigneeChips";
 import JobShiftChips from "./JobShiftChips";
-
-export const STATUS_OPTIONS = [
-  { value: "not_started", label: "Not started" },
-  { value: "in_production", label: "In production" },
-  { value: "done", label: "Done" },
-  { value: "loading", label: "Loading" },
-  { value: "shipped", label: "Shipped" },
-];
+import { statusOptionsFor } from "@/lib/board/statusOptions";
 
 interface JobQuickEditProps {
   jobId: string;
@@ -78,7 +71,7 @@ export default function JobQuickEdit({ jobId, status, assignableUsers, canManage
           title={statusLocked ? "Loading/shipped jobs can't be changed from the board." : !canChangeStatus ? "You don't have permission to change job status." : undefined}
           className={`w-full sm:w-64 min-h-[44px] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-text text-sm px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
         >
-          {STATUS_OPTIONS.map((o) => (
+          {statusOptionsFor(status).map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>

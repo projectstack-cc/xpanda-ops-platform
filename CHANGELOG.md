@@ -724,6 +724,14 @@ current series).
 
 ## Orders (v2)
 
+- **jb-15 — the board's status pickers can't send a job into Loading or Shipped (react-component-agent §9b lead, next/cloudflare-platform-agent §9a for the route guards). No migration or permission change.**
+  - **Correction.** The jb-14 report said the server always rejects Loading and Shipped from the board. It didn't: `PUT /v2/api/board/:id` and `PUT /v2/api/orders/:id` only blocked changes *out of* those states, so a mis-tap into one succeeded, then locked the job and skipped the logistics and dock flows.
+  - **New `lib/board/statusOptions.ts`.** `BOARD_SETTABLE_STATUSES` (Not started / In production / Done), `STATUS_LABELS` (all five) and `statusOptionsFor(current)`, which adds the current status when it's Loading or Shipped so a locked job's disabled select shows its real value. `JobQuickEdit`, `BoardRowEdit` and `OrderEditModal` all use it; jb-14's exported list and the Edit modal's private copy are gone. Locked/disabled logic and `title` strings unchanged.
+  - **Server rule.** `boardStatusChangeError(current, next)` lives in the same file and both routes call it, replacing the out-of check: re-sending the current status passes, out-of keeps its error word-for-word, and into returns 400 "Loading and Shipped are set from the Logistics / Dock flow, not the board." The Edit modal sends `status` on every save, so a stale form holding Loading after the job left that state now gets this error instead of silently moving the job back. Legacy `/api/jobs` and the logistics/dock routes are untouched.
+  - **Callers checked.** The only v2 callers that PUT `status` to these routes are the three pickers.
+  - **Role follow-up closed.** Steve confirmed the floor supervisor is in Management, which has `jobs`, `jobs.status`, `jobs.manage` and `orders` edit, so the jb-14 backlog item is removed.
+  - **Selfcheck.** New `lib/board/statusOptions.selfcheck.ts`.
+
 - **jb-14 — Status & crew in the order popup (react-component-agent §9b lead, next/cloudflare-platform-agent §9a review only). No migration, API, middleware or permission change.**
   - **Why.** On the `/v2/board` Calendar view the floor supervisor taps a job and gets `OrderDetailModal`, which was read-only. They need to change the status and assign people and shifts from that popup. The change lives in the modal, so View, the calendar and the `?job=` deep link all get it. The schedule desk mounts the same modal without the new prop and stays read-only.
   - **New `JobAssigneeChips.tsx`.** The people block moved out of `BoardRowEdit` (same move jb-10 made for `JobShiftChips`) and `AssignableUser` is exported from it; `BoardRowEdit` and `ProductionBoard` import it. When `!canManage` the add control and × are hidden and it shows "Only managers can assign people."

@@ -15,6 +15,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/db";
 import { canJobAction } from "@/lib/jobPerms";
+import { boardStatusChangeError } from "@/lib/board/statusOptions";
 import { PROCESS_NAMES, mergeProcesses, parseProcesses } from "@/lib/processes";
 import { computeAndPersistHoleyChunks } from "@/lib/holeyChunks";
 import { JOB_TO_SHIPMENT_SYNC, reconcileLoadingAssignments, syncJobFieldsToShipment, type JobSyncField } from "@/lib/logistics/jobSync";
@@ -85,20 +86,16 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   const binds: any[] = [];
   const s = (v: any) => String(v ?? "").trim();
 
-  // status — validate + apply the same loading/shipped self-lock the /v2/api/board/:id PUT
-  // already enforces. (The prompt's "loading/shipped lock" rule.)
+  // status — validate + apply the same loading/shipped rule the /v2/api/board/:id PUT enforces
+  // (jb-15: no change out of those states, or into them).
   if ("status" in p) {
     const v = s(p.status);
     if (!STATUSES.includes(v)) return NextResponse.json({ ok: false, error: "Invalid status." }, { status: 400 });
     if (v !== existing.status && !canJobAction(request, "jobs.status")) {
       return NextResponse.json({ ok: false, error: "Changing job status requires Job Board — Change job status." }, { status: 403 });
     }
-    if ((existing.status === "shipped" || existing.status === "loading") && v !== existing.status) {
-      return NextResponse.json(
-        { ok: false, error: "Can't change a loading/shipped job from the board." },
-        { status: 400 }
-      );
-    }
+    const statusError = boardStatusChangeError(existing.status, v);
+    if (statusError) return NextResponse.json({ ok: false, error: statusError }, { status: 400 });
     sets.push("status = ?"); binds.push(v);
   }
 
