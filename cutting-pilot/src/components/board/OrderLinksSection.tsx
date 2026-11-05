@@ -2,13 +2,18 @@
 // src/components/board/OrderLinksSection.tsx
 // jb-06 — trailer group link/unlink + Link Combo for the v2 edit modal. Both are immediate-save
 // actions through the legacy partial PUT /api/jobs ({ id, trailer_group_id } / { id, combo_id }):
-// every trailer-group rule (same ship_date, merging, "never leave a group of one") stays
-// server-side in routes/jobs.js — this component only mirrors legacy's candidate filter and
+// every trailer-group rule (same ship_date, merging, "never leave a group of one", the 4-stop cap)
+// stays server-side in routes/jobs.js — this component only mirrors legacy's candidate filter and
 // shows the server's error strings verbatim. Never touches the edit modal's dirty state.
 import { useEffect, useRef, useState } from "react";
 import { Package, Truck, X } from "lucide-react";
 import SearchPickerModal, { type SearchPickerItem } from "@/components/SearchPickerModal";
+import { countLocalGroups } from "@/lib/linkedGroups";
 import type { BoardJob } from "./ProductionBoard";
+
+// jb-16: most stops per trailer group. The server is authoritative (409 group_full); boardJobs can
+// undercount a group, so this only decides what the UI offers.
+const MAX_TRAILER_GROUP_JOBS = 4;
 
 interface GroupMember {
   id: string;
@@ -48,8 +53,10 @@ export default function OrderLinksSection({
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
-  const [groupBusy, setGroupBusy] = useState(false);
+  const [groupBusy, setGroupBusy] = useState<"link" | "unlink" | null>(null);
   const [groupError, setGroupError] = useState<string | null>(null);
+  // jb-16: adding a stop leaves trailerGroupId unchanged, so it needs its own members re-read.
+  const [membersVersion, setMembersVersion] = useState(0);
 
   useEffect(() => {
     if (!trailerGroupId) {
@@ -67,20 +74,31 @@ export default function OrderLinksSection({
       .catch(() => { if (!cancelled) setMembers([]); })
       .finally(() => { if (!cancelled) setMembersLoading(false); });
     return () => { cancelled = true; };
-  }, [jobId, trailerGroupId]);
+  }, [jobId, trailerGroupId, membersVersion]);
 
-  // Legacy openTrailerGroupPicker filter, verbatim: not self, not archived (the board payload is
-  // already non-archived), same ship_date, and (no group OR the same group).
+  const boardGroupCounts = countLocalGroups(boardJobs);
+  // The server's member list once loaded; the board's count while it loads (or if it failed).
+  const groupSize = !membersLoading && members.length > 0
+    ? members.length
+    : (trailerGroupId ? boardGroupCounts.get(trailerGroupId) ?? 0 : 0);
+  const groupFull = groupSize >= MAX_TRAILER_GROUP_JOBS;
+
+  // Same filter as legacy openTrailerGroupPicker: not self, not archived (the board payload is
+  // already non-archived), same ship_date, and unlinked — or, when this job is unlinked too, in a
+  // group with room to join. A grouped job never lists other groups (409 group_conflict) or its own.
   const candidates: SearchPickerItem[] = boardJobs
     .filter((j) =>
       j.id !== jobId &&
       (j.ship_date || "") === (shipDate || "") &&
-      (!j.trailer_group_id || j.trailer_group_id === trailerGroupId),
+      (!j.trailer_group_id ||
+        (!trailerGroupId && (boardGroupCounts.get(j.trailer_group_id) ?? 0) < MAX_TRAILER_GROUP_JOBS)),
     )
     .map((j) => ({
       id: j.id,
       primary: j.customer || "Untitled",
-      secondary: `${j.invoice_number || "—"} · ${j.ship_date || "—"}`,
+      secondary: `${j.invoice_number || "—"} · ${j.ship_date || "—"}${
+        j.trailer_group_id ? ` · in group (${boardGroupCounts.get(j.trailer_group_id) ?? 0})` : ""
+      }`,
     }));
 
   async function putJob(payload: Record<string, unknown>, fallbackError: string): Promise<string | null> {
@@ -100,19 +118,20 @@ export default function OrderLinksSection({
 
   async function handleLinkGroup(targetJobId: string) {
     setGroupPickerOpen(false);
-    setGroupBusy(true);
+    setGroupBusy("link");
     setGroupError(null);
     const err = await putJob({ trailer_group_id: targetJobId }, "Couldn't link this order.");
-    setGroupBusy(false);
+    setGroupBusy(null);
     if (err) { setGroupError(err); return; }
+    setMembersVersion((v) => v + 1);
     onChanged();
   }
 
   async function handleUnlinkGroup() {
-    setGroupBusy(true);
+    setGroupBusy("unlink");
     setGroupError(null);
     const err = await putJob({ trailer_group_id: null }, "Couldn't unlink this order.");
-    setGroupBusy(false);
+    setGroupBusy(null);
     if (err) { setGroupError(err); return; }
     onChanged();
   }
@@ -193,14 +212,24 @@ export default function OrderLinksSection({
                 <span className="font-mono tabular-nums">{m.invoice_number || m.customer || "Untitled"}</span>
               </span>
             ))}
-            {canEdit && (
-              <button type="button" onClick={handleUnlinkGroup} disabled={groupBusy} className={ghostBtn}>
-                {groupBusy ? "Unlinking…" : "Unlink from Trailer Group"}
+            {canEdit && !groupFull && (
+              <button type="button" onClick={() => { setGroupError(null); setGroupPickerOpen(true); }} disabled={!!groupBusy} className={ghostBtn}>
+                {groupBusy === "link" ? "Linking…" : "Add Another Stop"}
               </button>
+            )}
+            {canEdit && (
+              <button type="button" onClick={handleUnlinkGroup} disabled={!!groupBusy} className={ghostBtn}>
+                {groupBusy === "unlink" ? "Unlinking…" : "Unlink from Trailer Group"}
+              </button>
+            )}
+            {groupFull && (
+              <span className="text-xs text-muted">
+                {MAX_TRAILER_GROUP_JOBS} of {MAX_TRAILER_GROUP_JOBS} stops — max reached
+              </span>
             )}
           </div>
         ) : canEdit ? (
-          <button type="button" onClick={() => { setGroupError(null); setGroupPickerOpen(true); }} disabled={groupBusy} className={ghostBtn}>
+          <button type="button" onClick={() => { setGroupError(null); setGroupPickerOpen(true); }} disabled={!!groupBusy} className={ghostBtn}>
             {groupBusy ? "Linking…" : "Link to Another Job"}
           </button>
         ) : (
@@ -246,7 +275,7 @@ export default function OrderLinksSection({
       <SearchPickerModal
         isOpen={groupPickerOpen}
         onClose={() => setGroupPickerOpen(false)}
-        title="Link to another job"
+        title={trailerGroupId ? "Add another stop" : "Link to another job"}
         items={candidates}
         onPick={handleLinkGroup}
         emptyText="No other orders ship the same day."

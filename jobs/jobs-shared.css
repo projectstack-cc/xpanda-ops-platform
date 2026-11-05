@@ -716,6 +716,9 @@ button, input, select, textarea { font: inherit; }
 }
 
 .jobs-picker-overlay[hidden] { display: none; }
+/* jb-16: .btn's display rule (shared/components.css) otherwise beats the hidden attribute. */
+#btn-link-trailer-group[hidden],
+#btn-unlink-trailer-group[hidden] { display: none; }
 
 .jobs-picker-panel {
     background: var(--card-bg);

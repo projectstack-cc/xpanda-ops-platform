@@ -65,5 +65,18 @@ export function runLinkedGroupsSelfCheck(): { pass: boolean; results: CheckResul
   const many = [r("a", "G1"), r("b"), r("c", "G2"), r("d", "G1"), r("e", "G2"), r("f", "G3")];
   eq("conserves rows", groupRows(many).flatMap((b) => b.rows.map((x) => x.id)).sort(), ["a", "b", "c", "d", "e", "f"]);
 
+  // 10. jb-16: a full 3- and 4-stop trailer stay one block, whatever rows sit between members.
+  eq("3 stops", shape(groupRows([r("a", "G1"), r("x"), r("b", "G1"), r("y"), r("c", "G1")])), ["[g:a,b,c]", "x", "y"]);
+  eq(
+    "4 stops",
+    shape(groupRows([r("x"), r("a", "G1"), r("b", "G1"), r("y"), r("c", "G1"), r("z"), r("d", "G1")])),
+    ["x", "[g:a,b,c,d]", "y", "z"]
+  );
+  eq(
+    "4 stops + 3 stops",
+    shape(groupRows([r("a", "G1"), r("p", "G2"), r("b", "G1"), r("q", "G2"), r("c", "G1"), r("s", "G2"), r("d", "G1")])),
+    ["[g:a,b,c,d]", "[g:p,q,s]"]
+  );
+
   return { pass: results.every((x) => x.pass), results };
 }

@@ -3,6 +3,9 @@ import { propagateJobCarrierToBols } from '../lib/bol-carrier.js';
 import { nestHoleyChunks, netHoleyChunks } from '../lib/holey-nester.js';
 import { replaceLineItemsPreservingIds } from '../lib/lineItems.js';
 
+// jb-16: most stops (jobs) one trailer group may hold. The board UIs mirror this; this is the real gate.
+const MAX_TRAILER_GROUP_JOBS = 4;
+
 // admin-07 — granular Job Board edit rights. Same header pattern as the jobs.manage checks below
 // (X-User-Is-Admin / X-User-Permissions, set by index.js's session gate). Admins always pass.
 function canJobAction(request, key) {
@@ -844,9 +847,10 @@ export async function handleApiJobs(request, env) {
     //   - target already grouped  -> join target's real group (target's row is untouched)
     //   - target unlinked         -> form a brand-new group anchored on the target's own id
     //                                (a follow-up UPDATE self-assigns that to the target's row)
-    //   - both already grouped, in DIFFERENT groups -> rejected (409 group_conflict); the entry
-    //     UI only ever offers unlinked jobs or jobs already in the group being joined as
-    //     candidates, so this only fires on a stale/racing client.
+    //   - both already grouped, in DIFFERENT groups -> rejected (409 group_conflict); a grouped
+    //     job's picker only offers unlinked jobs, so this only fires on a stale/racing client.
+    //   - the link would add a job to a group already at MAX_TRAILER_GROUP_JOBS -> rejected (409
+    //     group_full, jb-16); groups already over the cap are left alone, only adding is blocked.
     // Unlinking clears this job's own value; if that leaves exactly one other job holding the old
     // group id, that job is cleared too in the same batch — a group of one is meaningless.
     let unlinkedFromGroupId = null;
@@ -888,6 +892,18 @@ export async function handleApiJobs(request, env) {
             error: `Cannot link: ship dates differ (this job ships ${ourShipDate || 'unset'}, target ships ${theirShipDate || 'unset'}).`,
             code: 'ship_date_mismatch',
           }, 409);
+        }
+
+        // jb-16: a link adds a member whenever the two jobs aren't already in the same group — this
+        // job joining the target's group, or an unlinked target being pulled into this job's group.
+        const joinGroupId = target.trailer_group_id || existing.trailer_group_id;
+        if (joinGroupId && existing.trailer_group_id !== target.trailer_group_id) {
+          const groupSize = await db.prepare(
+            "SELECT COUNT(*) AS n FROM jobs WHERE trailer_group_id = ?"
+          ).bind(joinGroupId).first();
+          if ((groupSize?.n ?? 0) >= MAX_TRAILER_GROUP_JOBS) {
+            return json({ ok: false, error: "This trailer group already has 4 stops — that's the maximum.", code: 'group_full' }, 409);
+          }
         }
 
         const resolvedGroupId = target.trailer_group_id || existing.trailer_group_id || targetJobId;

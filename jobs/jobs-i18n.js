@@ -209,8 +209,9 @@
 
       // Trailer Group
       sectionTrailerGroup: "Trailer Group",
-      trailerGroupHint: "Link this job to another job shipping on the same trailer (same ship date required). They'll appear as a linked set on the schedule board.",
+      trailerGroupHint: "Link this job to another job shipping on the same trailer (same ship date required, up to 4 jobs). They'll appear as a linked set on the schedule board.",
       linkTrailerGroup: "Link to Another Job",
+      addToTrailerGroup: "Add Another Stop",
       unlinkTrailerGroup: "Unlink from Trailer Group",
       loadingGroup: "Loading group…",
 
@@ -550,8 +551,9 @@
 
       // Trailer Group
       sectionTrailerGroup: "Grupo de Remolque",
-      trailerGroupHint: "Vincule este trabajo a otro trabajo que se envíe en el mismo remolque (se requiere la misma fecha de envío). Aparecerán como un conjunto vinculado en el tablero.",
+      trailerGroupHint: "Vincule este trabajo a otro trabajo que se envíe en el mismo remolque (se requiere la misma fecha de envío, hasta 4 trabajos). Aparecerán como un conjunto vinculado en el tablero.",
       linkTrailerGroup: "Vincular a Otro Trabajo",
+      addToTrailerGroup: "Agregar Otra Parada",
       unlinkTrailerGroup: "Desvincular del Grupo de Remolque",
       loadingGroup: "Cargando grupo…",
 
@@ -891,8 +893,9 @@
 
       // Trailer Group
       sectionTrailerGroup: "Gwoup Kamyon Remòk",
-      trailerGroupHint: "Lye travay sa a ak yon lòt travay k ap ekspedye sou menm kamyon remòk la (menm dat ekspedisyon obligatwa). Yo va parèt kòm yon gwoup lye sou tablo orè a.",
+      trailerGroupHint: "Lye travay sa a ak yon lòt travay k ap ekspedye sou menm kamyon remòk la (menm dat ekspedisyon obligatwa, jiska 4 travay). Yo va parèt kòm yon gwoup lye sou tablo orè a.",
       linkTrailerGroup: "Lye ak Yon Lòt Travay",
+      addToTrailerGroup: "Ajoute Yon Lòt Arè",
       unlinkTrailerGroup: "Delye nan Gwoup Kamyon Remòk",
       loadingGroup: "N ap chaje gwoup…",
 
