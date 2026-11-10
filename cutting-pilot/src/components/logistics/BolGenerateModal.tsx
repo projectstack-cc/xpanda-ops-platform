@@ -41,6 +41,9 @@ import CarrierSelect from "@/components/orders/CarrierSelect";
 import { confirmNoBolNumber } from "@/lib/bolDomGlue";
 import { formatCutListDims } from "@/lib/cutList";
 import { buildPiecesTable, buildLoadingDiagramPdf } from "@/lib/loadingDiagramPdf";
+import { isZonedTrailer } from "@/lib/zoneLayout";
+import { buildBolZoneData, type BolZoneData } from "@/lib/zoneBol";
+import { hashJobZoneData, type JobZoneLineItem } from "@/lib/bolShared";
 import type { PackPlan, Dimensions, PackSku } from "@/lib/packEngine";
 import type { JobForBol, LoadingAssignmentForJob } from "./types";
 import type { LoadManifestItem } from "@/lib/logistics/loadManifest";
@@ -141,6 +144,10 @@ interface TrailerForm {
   // lgx-loadsheet-02: plan-sourced trailers only; undefined on the dock-assignment path.
   loadManifest?: LoadManifestItem[];
   includeLoadingDiagram: boolean;
+  // lbz-v2-04: plan-sourced ZONED trailers only — this truck's zones (zoneBol.ts) and the job's
+  // stale-guard hash (null when the load has no job), sent as render_overrides.zoneColumns.
+  zoneData?: BolZoneData[];
+  zoneSourceHash?: string | null;
 }
 
 function today(): string {
@@ -255,8 +262,12 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
           const timeForLoad = (n: number) => loadTimes.get(n) || "";
           // mlc-03: same mapping for the per-load carrier override.
           const carrierForLoad = (n: number) => loadCarriers.get(n) || "";
+          // lbz-v2-04: the job's line items (SELECT * — offload_seq / zone_label / density included,
+          // though JobForBol's narrower type doesn't list them) feed zone densities and the hash.
+          const zoneLines = j && Array.isArray(j.line_items) ? (j.line_items as unknown as JobZoneLineItem[]) : null;
           const built: TrailerForm[] = packPlanSource.plan.trailers.map((trailer, i) => {
             const pieces = buildPiecesTable(trailer, packPlanSource.skus);
+            const zoneData = isZonedTrailer(trailer) ? buildBolZoneData(trailer, packPlanSource.skus, zoneLines) : null;
             const commodityDescriptionFull = buildPlanCommodityDescription(pieces, skuById, true);
             const commodityDescriptionNoDims = buildPlanCommodityDescription(pieces, skuById, false);
             return {
@@ -291,6 +302,7 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
                 return { name: p.name, sku: sku?.sku ?? "", dims: sku ? `${sku.length} x ${sku.width} x ${sku.height}` : "", pieces: p.pieces };
               }),
               includeLoadingDiagram: false,
+              ...(zoneData && zoneData.length > 0 ? { zoneData, zoneSourceHash: zoneLines ? hashJobZoneData(zoneLines) : null } : {}),
             };
           });
           setTrailers(built);
@@ -498,6 +510,10 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
         weight: "",
         delivery_time: td.deliveryTime,
         job_id: jobId || packPlanSource?.jobId || null,
+        // lbz-v2-04: a zoned trailer's zone columns (same container shape as legacy bol-compose.js).
+        // bolShared lays out the default columns at render time; absent on every non-zoned BOL, so
+        // that payload is unchanged.
+        ...(td.zoneData ? { render_overrides: { zoneColumns: { zoneData: td.zoneData, sourceHash: td.zoneSourceHash ?? null } } } : {}),
         notes: "",
       };
 
@@ -736,6 +752,7 @@ export default function BolGenerateModal({ jobId, packPlanSource, onClose }: Bol
               onChange={(e) => handleCommodityDescriptionChange(page, e.target.value)}
             />
           </Field>
+          {trailer.zoneData && <p className="-mt-2 text-xs text-muted">Zone columns replace the commodity text on this BOL.</p>}
 
           <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
             <input

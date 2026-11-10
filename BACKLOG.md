@@ -96,7 +96,7 @@
     - [x] lbz-v2-01 zonedPack wrapper
     - [x] lbz-v2-02 job pull, planner, per-zone load list, save/restore
     - [x] lbz-v2-03 diagram, PDF, Customize (the sliver-label fix is v2-only; the legacy bug item stays open)
-    - [ ] lbz-v2-04 Generate BOL zone data
+    - [x] lbz-v2-04 Generate BOL zone data
     - [ ] lbz-v2-05 BOL zone-column editing
   - [ ] lb-diag-01 follow-up — decide the `EditorGuards.tsx` overflow wording ("…past the rear of the trailer there").
     lb-diag-01 renamed the floor terms to WALL / DOORS but left this message alone. Which end a row overflows from is a
