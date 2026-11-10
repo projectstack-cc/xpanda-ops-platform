@@ -92,12 +92,13 @@ import BolGenerateModal, { type PackPlanSource } from "@/components/logistics/Bo
 import SaveLoadModal from "@/components/logistics/SaveLoadModal";
 import LoadPickerModal from "@/components/logistics/LoadPickerModal";
 import { packForced, type ForcedTrailer } from "@/lib/forcedPack";
+import { zonedPack } from "@/lib/zonedPack";
 import { buildSnapshot, defaultSaveName, deserializeSnapshot, type ManualLoadSource, type OrderLoadSource, type SavedLoadRecord, type SavedLoadSnapshot } from "@/lib/savedLoad";
 import { fetchLibrarySkus, LibraryFetchError } from "@/lib/jobPull";
 import { fillBolNumbers, reconcileBolNumbers, removeBolIndices, type BolNumberState } from "@/lib/bolNumberFill";
 import { dropEmptyTrailers } from "@/lib/loadEditor";
 import type { LibraryState } from "./LoadPicker";
-import { addLine, clear as clearList, diffFromOrder, setQty as setLineQty, step as stepLine, withSku } from "@/lib/loadList";
+import { addLine, clear as clearList, diffFromOrder, setQty as setLineQty, step as stepLine, withSku, type LineZone } from "@/lib/loadList";
 import { useOrderLoadPersistence, findSavedForJob } from "@/components/logistics/useOrderLoadPersistence";
 import LoadBuilderTabs, { isLoadBuilderTab, type LoadBuilderTab } from "./LoadBuilderTabs";
 import LoadTab from "./LoadTab";
@@ -251,6 +252,10 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   // lbr-05: the dev multiplier is gone, so this is just the source's own cart (name kept so the
   // comments below that reference it still read true). lbr-08: this is the load list.
   const scaledCart = fixture.cart;
+  // lbz-v2-02: an order pulled with its offload-zones flag on. Zones win over Force sizes and
+  // auto-downsize (both off, as in legacy) without clearing what a saved load carries for them.
+  const zoneMode = !!pulledSource?.zoneMode;
+  const zoneCount = useMemo(() => (zoneMode ? new Set(scaledCart.map((c) => (c.zoneLabel ?? "").trim()).filter((l) => l !== "")).size : 0), [zoneMode, scaledCart]);
   const orderDiff = useMemo(() => (pulledSource ? diffFromOrder(pulledSource.orderCart ?? pulledSource.cart, pulledSource.cart) : []), [pulledSource]);
   // lb-ui-11: once an edit session has Applied, these are what everything downstream of the plan
   // should treat as "the load's actual cart/SKU set" — scaledCart/fixture.skus describe only the
@@ -264,16 +269,18 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
   // reads the primary type — see PackOptions.trailerTypeLabel's own comment.
   // lbr-10: auto-downsize is off while Force sizes is on (legacy: `!state.forcedMode`).
   const packOptions: PackOptions = useMemo(
-    () => ({ ...DEFAULT_PACK_OPTIONS, runnerHeight, autoDownsize: autoDownsize && !forceSizes, consolidate, trailerTypeLabel: trailerTypeKey }),
-    [runnerHeight, autoDownsize, forceSizes, consolidate, trailerTypeKey]
+    () => ({ ...DEFAULT_PACK_OPTIONS, runnerHeight, autoDownsize: autoDownsize && !forceSizes && !zoneMode, consolidate, trailerTypeLabel: trailerTypeKey }),
+    [runnerHeight, autoDownsize, forceSizes, zoneMode, consolidate, trailerTypeKey]
   );
 
   const packedPlan = useMemo(
     () =>
-      forceSizes && forcedQueue.length > 0
-        ? packForced(scaledCart, fixture.skus, forcedQueue, trailerTypeKey, packOptions)
-        : pack(scaledCart, fixture.skus, dims, packOptions),
-    [scaledCart, fixture, dims, packOptions, forceSizes, forcedQueue, trailerTypeKey]
+      zoneMode
+        ? zonedPack(scaledCart, fixture.skus, dims, packOptions)
+        : forceSizes && forcedQueue.length > 0
+          ? packForced(scaledCart, fixture.skus, forcedQueue, trailerTypeKey, packOptions)
+          : pack(scaledCart, fixture.skus, dims, packOptions),
+    [zoneMode, scaledCart, fixture, dims, packOptions, forceSizes, forcedQueue, trailerTypeKey]
   );
   const plan = editedPlan ?? packedPlan;
 
@@ -673,12 +680,14 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
     requestListChange(addLine(scaledCart, sku), sku);
   }
 
-  function handleStepPart(sku: PackSku, delta: 1 | -1) {
-    requestListChange(stepLine(scaledCart, sku.id, delta), delta === 1 ? sku : undefined);
+  // lbz-v2-02: `zone` targets one zone's line on a zoned list (the load list card). Omitted (the
+  // picker, and every non-zoned load) = the line with no zone, exactly as before.
+  function handleStepPart(sku: PackSku, delta: 1 | -1, zone?: LineZone) {
+    requestListChange(stepLine(scaledCart, sku.id, delta, zone), delta === 1 ? sku : undefined);
   }
 
-  function handleSetPartQty(sku: PackSku, qty: number) {
-    requestListChange(setLineQty(scaledCart, sku.id, qty), qty > 0 ? sku : undefined);
+  function handleSetPartQty(sku: PackSku, qty: number, zone?: LineZone) {
+    requestListChange(setLineQty(scaledCart, sku.id, qty, zone), qty > 0 ? sku : undefined);
   }
 
   function handleClearList() {
@@ -761,6 +770,11 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
             {trailerTypeKey} trailer{runnerHeight > 0 ? ` · ${runnerHeight}″ runners` : ""}
           </span>
           {editedPlan && <span className="text-[var(--brand)] font-sans font-semibold">edited</span>}
+          {zoneMode && (
+            <span className="px-1.5 rounded border border-[var(--border)] font-sans font-semibold text-text">
+              Offload zones · {plural(zoneCount, "zone", "zones")}
+            </span>
+          )}
           {currentSavedLoadName && (
             <span className="font-sans">
               saved as <span className="font-semibold text-text">{currentSavedLoadName}</span>
@@ -806,6 +820,7 @@ export default function LoadPlanView({ access }: { access: LoadBuilderAccess }) 
           onAutoDownsizeChange={handleAutoDownsizeChange}
           onConsolidateChange={handleConsolidateChange}
           forceSizes={forceSizes}
+          zoneMode={zoneMode}
           forcedQueue={forcedQueue}
           onForceSizesChange={handleForceSizesChange}
           onForcedQueueChange={handleForcedQueueChange}

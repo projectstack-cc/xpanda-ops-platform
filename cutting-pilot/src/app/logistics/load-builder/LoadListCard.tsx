@@ -8,9 +8,15 @@
 // Clear and Calculate load; for an order load whose list differs from the order, a warn-token
 // "Changed from the order" note with Reset to order. Confirms (Clear, Reset, re-pack) live in
 // LoadPlanView.
+//
+// lbz-v2-02: on a zoned order the list is one section per zone in delivery order (heading
+// `{n} · {label}`, the zone's color swatch, its piece count), and each row's controls edit that
+// zone's line only. Hand-added parts sit in "Unzoned (loads at the wall)", last. A non-zoned list
+// renders exactly as before.
 import { Calculator, Trash2, Undo2 } from "lucide-react";
 import type { CartLine, PackSku } from "@/lib/packEngine";
-import type { LoadListDiff } from "@/lib/loadList";
+import type { LineZone, LoadListDiff } from "@/lib/loadList";
+import { groupCartByZone } from "@/lib/zonedPack";
 import { BTN_GHOST, BTN_PRIMARY, CARD, NO_SAVE_REASON, plural } from "./loadBuilderUi";
 import { QtyStepper, Swatch, dimsLabel } from "./LoadPicker";
 
@@ -22,8 +28,10 @@ interface LoadListCardProps {
   canReset: boolean;
   canEdit: boolean;
   locked: boolean;
-  onStep: (sku: PackSku, d: 1 | -1) => void;
-  onSetQty: (sku: PackSku, qty: number) => void;
+  /** lbz-v2-02: group the list by offload zone. */
+  zoneMode?: boolean;
+  onStep: (sku: PackSku, d: 1 | -1, zone?: LineZone) => void;
+  onSetQty: (sku: PackSku, qty: number, zone?: LineZone) => void;
   onClear: () => void;
   onResetToOrder: () => void;
   onCalculate: () => void;
@@ -31,16 +39,77 @@ interface LoadListCardProps {
 
 /** "+20 × 10″ block", "12″ block 120 → 100", "12″ block removed (was 120)". */
 export function describeDiff(d: LoadListDiff, skuById: Map<string, PackSku>): string {
-  const name = skuById.get(d.skuId)?.name ?? d.skuId;
+  const name = (d.zoneLabel ? `${d.zoneLabel}: ` : "") + (skuById.get(d.skuId)?.name ?? d.skuId);
   if (d.orderQty === 0) return `+${d.listQty} × ${name}`;
   if (d.listQty === 0) return `${name} removed (was ${d.orderQty})`;
   return `${name} ${d.orderQty} → ${d.listQty}`;
+}
+
+interface ZoneSection {
+  key: string;
+  heading: string;
+  color: string | undefined;
+  /** undefined for the Unzoned section (its lines carry no zone). */
+  zone: LineZone | undefined;
+  lines: CartLine[];
+  pieces: number;
+}
+
+/** lbz-v2-02: the list's zones in delivery order (zonedPack's grouping and colors), Unzoned last. */
+function zoneSections(cart: CartLine[]): ZoneSection[] {
+  return groupCartByZone(cart).map((g) => {
+    const unzoned = g.offloadSeq === null && !cart.some((c) => (c.zoneLabel ?? "").trim() === g.label);
+    const lines = cart.filter((c) => (unzoned ? !(c.zoneLabel ?? "").trim() : (c.zoneLabel ?? "").trim() === g.label));
+    const zone: LineZone | undefined = unzoned ? undefined : { offloadSeq: lines[0]?.offloadSeq ?? null, zoneLabel: g.label };
+    return {
+      key: unzoned ? "__unzoned__" : `zone:${g.label}`,
+      heading: unzoned ? "Unzoned (loads at the wall)" : g.offloadSeq !== null ? `${g.offloadSeq} · ${g.label}` : g.label,
+      color: g.color,
+      zone,
+      lines,
+      pieces: lines.reduce((n, c) => n + c.qty, 0),
+    };
+  });
 }
 
 export default function LoadListCard(p: LoadListCardProps) {
   const skuById = new Map(p.skus.map((s) => [s.id, s]));
   const editable = p.canEdit && !p.locked;
   const pieces = p.cart.reduce((n, c) => n + c.qty, 0);
+
+  function renderLine(c: CartLine, zone?: LineZone) {
+    const s = skuById.get(c.skuId);
+    const name = s?.name ?? c.skuId;
+    const label = zone?.zoneLabel ? `${name} (${zone.zoneLabel})` : name;
+    return (
+      <li key={`${c.skuId}|${zone?.zoneLabel ?? ""}`} className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 py-2">
+        {s && <Swatch height={s.height} size={10} />}
+        <div className="flex-1 min-w-0">
+          {s?.category && <div className="text-xs font-semibold text-muted truncate">{s.category}</div>}
+          <div className="text-sm font-semibold text-text truncate" title={name}>
+            {name}
+          </div>
+          {s && <div className="text-xs text-muted font-mono tabular-nums">{dimsLabel(s)}</div>}
+        </div>
+        {s ? (
+          <QtyStepper qty={c.qty} label={label} disabled={!editable} onStep={(d) => p.onStep(s, d, zone)} onSet={(n) => p.onSetQty(s, n, zone)} />
+        ) : (
+          <span className="font-mono tabular-nums text-sm text-text">{c.qty}</span>
+        )}
+        {s && (
+          <button
+            type="button"
+            onClick={() => p.onSetQty(s, 0, zone)}
+            disabled={!editable}
+            aria-label={`Remove ${label}`}
+            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg text-[var(--danger-ink)] cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+          >
+            <Trash2 size={16} aria-hidden="true" />
+          </button>
+        )}
+      </li>
+    );
+  }
 
   return (
     <section className={`${CARD} space-y-3 min-w-0`} aria-labelledby="lb-list-heading">
@@ -66,40 +135,24 @@ export default function LoadListCard(p: LoadListCardProps) {
         </div>
       )}
 
-      <ul className="divide-y divide-[var(--line)]">
-        {p.cart.map((c) => {
-          const s = skuById.get(c.skuId);
-          const name = s?.name ?? c.skuId;
-          return (
-            <li key={c.skuId} className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 py-2">
-              {s && <Swatch height={s.height} size={10} />}
-              <div className="flex-1 min-w-0">
-                {s?.category && <div className="text-xs font-semibold text-muted truncate">{s.category}</div>}
-                <div className="text-sm font-semibold text-text truncate" title={name}>
-                  {name}
-                </div>
-                {s && <div className="text-xs text-muted font-mono tabular-nums">{dimsLabel(s)}</div>}
-              </div>
-              {s ? (
-                <QtyStepper qty={c.qty} label={name} disabled={!editable} onStep={(d) => p.onStep(s, d)} onSet={(n) => p.onSetQty(s, n)} />
-              ) : (
-                <span className="font-mono tabular-nums text-sm text-text">{c.qty}</span>
-              )}
-              {s && (
-                <button
-                  type="button"
-                  onClick={() => p.onSetQty(s, 0)}
-                  disabled={!editable}
-                  aria-label={`Remove ${name}`}
-                  className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg text-[var(--danger-ink)] cursor-pointer hover:bg-[var(--ghost-bg)] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-                >
-                  <Trash2 size={16} aria-hidden="true" />
-                </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      {p.zoneMode ? (
+        <div className="space-y-3">
+          {zoneSections(p.cart).map((z) => (
+            <section key={z.key} aria-label={z.heading} className="rounded-lg border border-[var(--line)] px-3 pt-2">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-text">
+                <span aria-hidden="true" className="shrink-0 w-3 h-3 rounded-sm border border-[var(--border)]" style={{ background: z.color ?? "transparent" }} />
+                <span className="min-w-0 truncate" title={z.heading}>
+                  {z.heading}
+                </span>
+                <span className="ml-auto font-mono tabular-nums text-muted font-normal">{plural(z.pieces, "piece", "pieces")}</span>
+              </h3>
+              <ul className="divide-y divide-[var(--line)]">{z.lines.map((c) => renderLine(c, z.zone))}</ul>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <ul className="divide-y divide-[var(--line)]">{p.cart.map((c) => renderLine(c))}</ul>
+      )}
 
       <button type="button" onClick={p.onCalculate} className={`${BTN_PRIMARY} w-full`}>
         <Calculator size={16} aria-hidden="true" /> Calculate load

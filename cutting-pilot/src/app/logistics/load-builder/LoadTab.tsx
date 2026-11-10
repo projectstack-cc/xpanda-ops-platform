@@ -13,10 +13,13 @@
 //
 // lbr-10: Settings gains Force sizes (On/Off, legacy parity) — when on, ForceSizesList edits the
 // queue of exact trucks, and Auto-downsize is disabled with "Off while Force sizes is on".
+//
+// lbz-v2-02: on a zoned order Auto-downsize and Force sizes are both disabled, "Off on zoned orders"
+// (legacy parity); a saved Force sizes queue is kept, just not used. The load list groups by zone.
 import { Truck, Save, FolderOpen, PencilLine } from "lucide-react";
 import type { CartLine, Dimensions, PackSku } from "@/lib/packEngine";
 import type { LibrarySku } from "@/lib/jobPull";
-import type { LoadListDiff } from "@/lib/loadList";
+import type { LineZone, LoadListDiff } from "@/lib/loadList";
 import type { OrderLoadSource } from "@/lib/savedLoad";
 import { BTN_GHOST, BTN_OUTLINE, BTN_PRIMARY, CARD, NO_SAVE_REASON, SELECT, formatEt } from "./loadBuilderUi";
 import LoadPicker, { type LibraryState } from "./LoadPicker";
@@ -53,6 +56,8 @@ interface LoadTabProps {
   onConsolidateChange: (v: boolean) => void;
   /** lbr-10: Force sizes on/off and its queue (loaded in order, then trailerTypeKey for the rest). */
   forceSizes: boolean;
+  /** lbz-v2-02: a zoned order — Auto-downsize and Force sizes are off. */
+  zoneMode?: boolean;
   forcedQueue: ForcedTrailer[];
   onForceSizesChange: (v: boolean) => void;
   onForcedQueueChange: (next: ForcedTrailer[]) => void;
@@ -75,8 +80,8 @@ interface LoadTabProps {
   /** false for a view-only user (browse only). */
   canEditList: boolean;
   onAddPart: (sku: LibrarySku) => void;
-  onStepPart: (sku: PackSku, d: 1 | -1) => void;
-  onSetPartQty: (sku: PackSku, qty: number) => void;
+  onStepPart: (sku: PackSku, d: 1 | -1, zone?: LineZone) => void;
+  onSetPartQty: (sku: PackSku, qty: number, zone?: LineZone) => void;
   onClearList: () => void;
   onResetToOrder: () => void;
 
@@ -85,6 +90,8 @@ interface LoadTabProps {
   bannerDismissed: boolean;
   onDismissBanner: () => void;
 }
+
+const ZONED_REASON = "Off on zoned orders";
 
 function Toggle({
   label,
@@ -273,19 +280,20 @@ export default function LoadTab(p: LoadTabProps) {
           <Toggle
             label="Auto-downsize last trailer"
             hint="Use a 26ft box truck when the last load fits one."
-            value={p.autoDownsize && !p.forceSizes}
+            value={p.autoDownsize && !p.forceSizes && !p.zoneMode}
             disabled={p.locked}
-            disabledReason={p.forceSizes ? "Off while Force sizes is on" : undefined}
+            disabledReason={p.zoneMode ? ZONED_REASON : p.forceSizes ? "Off while Force sizes is on" : undefined}
             onChange={p.onAutoDownsizeChange}
           />
           <Toggle
             label="Force sizes"
             hint="Pick the exact trucks, in loading order. Anything left goes on the trailer above."
-            value={p.forceSizes}
+            value={p.forceSizes && !p.zoneMode}
             disabled={p.locked}
+            disabledReason={p.zoneMode ? ZONED_REASON : undefined}
             onChange={p.onForceSizesChange}
           />
-          {p.forceSizes && (
+          {p.forceSizes && !p.zoneMode && (
             <ForceSizesList
               queue={p.forcedQueue}
               trailerTypeKeys={p.trailerTypeKeys}
@@ -324,6 +332,7 @@ export default function LoadTab(p: LoadTabProps) {
           skus={p.listSkus}
           orderDiff={p.orderDiff}
           canReset={!!pulledSource?.orderCart}
+          zoneMode={!!p.zoneMode}
           canEdit={p.canEditList}
           locked={p.locked}
           onStep={p.onStepPart}

@@ -3,7 +3,7 @@
 // hand-built fixtures, a check()/results table, one exported run*SelfCheck() function. Not part of
 // the production build path.
 import type { PackSku } from "./packEngine";
-import { parseDimensionString, matchLineItemsToSkus, buildCartFromMatches, colorForSkuId, type JobLineItem } from "./jobPull";
+import { parseDimensionString, matchLineItemsToSkus, buildCartFromMatches, buildZonedCartFromMatches, buildPullCart, colorForSkuId, type JobLineItem } from "./jobPull";
 
 interface CheckResult {
   name: string;
@@ -148,6 +148,53 @@ export function runJobPullSelfCheck(): { pass: boolean; results: CheckResult[] }
     const c2 = colorForSkuId("SOME_SKU_ID");
     check("colorForSkuId: deterministic for the same skuId", c1 === c2, `${c1} vs ${c2}`);
     check("colorForSkuId: returns a color from the same palette packEngine.ts uses", PALETTE.includes(c1), c1);
+  }
+
+  // lbz-v2-02: zoned pull. A part repeated across zones stays one line per zone; same SKU + same zone
+  // merges; an unlabeled line carries no zone fields; first-seen order.
+  {
+    const a = makeSku("SKU_A", 48, 24, 6, "A");
+    const b = makeSku("SKU_B", 48, 24, 8, "B");
+    const lines = [
+      makeLineItem({ id: "z1", part_id: "SKU_A", quantity: 40, offload_seq: 1, zone_label: "ZONE 1" }),
+      makeLineItem({ id: "z2", part_id: "SKU_B", quantity: 10, offload_seq: 1, zone_label: "ZONE 1" }),
+      makeLineItem({ id: "z3", part_id: "SKU_A", quantity: 8, offload_seq: 2, zone_label: "ZONE 2" }),
+      makeLineItem({ id: "z4", part_id: "SKU_A", quantity: 2, offload_seq: 1, zone_label: " ZONE 1 " }),
+      makeLineItem({ id: "z5", part_id: "SKU_B", quantity: 3, offload_seq: null, zone_label: null }),
+      makeLineItem({ id: "z6", part_id: "no-match", quantity: 9, offload_seq: 2, zone_label: "ZONE 2" }),
+    ];
+    const matches = matchLineItemsToSkus(lines, [a, b]);
+    const zoned = buildZonedCartFromMatches(matches);
+    check(
+      "buildZonedCartFromMatches: one line per SKU per zone, merged within a zone, first-seen order",
+      JSON.stringify(zoned) ===
+        JSON.stringify([
+          { skuId: "SKU_A", qty: 42, offloadSeq: 1, zoneLabel: "ZONE 1" },
+          { skuId: "SKU_B", qty: 10, offloadSeq: 1, zoneLabel: "ZONE 1" },
+          { skuId: "SKU_A", qty: 8, offloadSeq: 2, zoneLabel: "ZONE 2" },
+          { skuId: "SKU_B", qty: 3 },
+        ]),
+      JSON.stringify(zoned)
+    );
+    const seqString = buildZonedCartFromMatches(matchLineItemsToSkus([makeLineItem({ part_id: "SKU_A", quantity: 1, offload_seq: "3" as unknown as number, zone_label: "Z" })], [a]));
+    check("buildZonedCartFromMatches: a string offload_seq is read as a number", seqString[0]?.offloadSeq === 3, JSON.stringify(seqString));
+
+    const on = buildPullCart(matches, 1);
+    check("buildPullCart: flag on (1) -> zoned cart, zoneMode", on.zoneMode === true && JSON.stringify(on.cart) === JSON.stringify(zoned));
+    check("buildPullCart: flag true -> zoned", buildPullCart(matches, true).zoneMode === true);
+    for (const flag of [0, false, null, undefined]) {
+      const off = buildPullCart(matches, flag);
+      check(
+        `regression: flag ${String(flag)} -> exactly buildCartFromMatches (zone data ignored)`,
+        off.zoneMode === false && JSON.stringify(off.cart) === JSON.stringify(buildCartFromMatches(matches)) && off.cart.every((c) => !("zoneLabel" in c)),
+        JSON.stringify(off.cart)
+      );
+    }
+    const plain = matchLineItemsToSkus([makeLineItem({ id: "p1", part_id: "SKU_A", quantity: 5 }), makeLineItem({ id: "p2", part_id: "SKU_A", quantity: 3 })], [a]);
+    check(
+      "regression: a non-zoned pull yields the same cart as buildCartFromMatches",
+      JSON.stringify(buildPullCart(plain, 0).cart) === JSON.stringify(buildCartFromMatches(plain)) && JSON.stringify(buildCartFromMatches(plain)) === JSON.stringify([{ skuId: "SKU_A", qty: 8 }])
+    );
   }
 
   return { pass: results.every((r) => r.pass), results };

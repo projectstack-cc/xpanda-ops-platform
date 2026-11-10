@@ -90,6 +90,40 @@ export function runLoadListSelfCheck(): { pass: boolean; results: CheckResult[] 
     check("diffFromOrder: empty order + list -> every line added", eq(diffFromOrder([], base), [{ skuId: "A", orderQty: 0, listQty: 5 }, { skuId: "B", orderQty: 0, listQty: 2 }]));
   }
 
+  // lbz-v2-02: zoned lists. With no zone argument an edit targets the line with no zone; with one, only
+  // that zone's line.
+  {
+    const z1 = { offloadSeq: 1, zoneLabel: "ZONE 1" };
+    const z2 = { offloadSeq: 2, zoneLabel: "ZONE 2" };
+    const zoned: CartLine[] = [
+      { skuId: "A", qty: 40, ...z1 },
+      { skuId: "A", qty: 8, ...z2 },
+      { skuId: "B", qty: 5, ...z1 },
+    ];
+    const zf = JSON.stringify(zoned);
+    check("zoned step +1 on ZONE 2 changes only that line", eq(step(zoned, "A", 1, z2), [{ skuId: "A", qty: 40, ...z1 }, { skuId: "A", qty: 9, ...z2 }, { skuId: "B", qty: 5, ...z1 }]));
+    check("zoned setQty on ZONE 1 changes only that line", eq(setQty(zoned, "A", 30, z1), [{ skuId: "A", qty: 30, ...z1 }, { skuId: "A", qty: 8, ...z2 }, { skuId: "B", qty: 5, ...z1 }]));
+    check("zoned setQty 0 removes only that zone's line", eq(setQty(zoned, "A", 0, z2), [{ skuId: "A", qty: 40, ...z1 }, { skuId: "B", qty: 5, ...z1 }]));
+    check("zoned addLine into a zone without the SKU appends a zoned line", eq(addLine(zoned, sku("B"), 2, z2), [...zoned, { skuId: "B", qty: 2, ...z2 }]));
+    check("no zone argument on a zoned list: adds an unzoned line, zones untouched", eq(addLine(zoned, sku("A")), [...zoned, { skuId: "A", qty: 1 }]));
+    const withUnz = addLine(zoned, sku("A"), 3);
+    check("no zone argument: step / setQty hit the unzoned line only", eq(step(withUnz, "A", 1), [...zoned, { skuId: "A", qty: 4 }]) && eq(setQty(withUnz, "A", 0), zoned));
+    check("zoned helpers don't mutate input", JSON.stringify(zoned) === zf);
+    check("diffFromOrder zoned: identical -> empty", diffFromOrder(zoned, zoned.map((c) => ({ ...c }))).length === 0);
+    const moved = setQty(setQty(zoned, "A", 39, z1), "A", 9, z2);
+    const d = diffFromOrder(zoned, moved);
+    check(
+      "diffFromOrder zoned: moving 1 piece ZONE 1 -> ZONE 2 is two changes, not 'no change'",
+      eq(d, [
+        { skuId: "A", orderQty: 40, listQty: 39, offloadSeq: 1, zoneLabel: "ZONE 1" },
+        { skuId: "A", orderQty: 8, listQty: 9, offloadSeq: 2, zoneLabel: "ZONE 2" },
+      ]),
+      JSON.stringify(d)
+    );
+    const added = diffFromOrder(zoned, withUnz);
+    check("diffFromOrder zoned: an unzoned add has the old diff shape", eq(added, [{ skuId: "A", orderQty: 0, listQty: 3 }]), JSON.stringify(added));
+  }
+
   // toPackSku / withSku
   {
     const lib = { ...sku("L", 13), parentGroup: "13in HB" };

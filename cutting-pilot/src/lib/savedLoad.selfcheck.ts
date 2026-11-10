@@ -15,6 +15,7 @@ import {
 } from "./savedLoad";
 import type { PackPlan, PackSku } from "./packEngine";
 import { pack, TRAILER_TYPES, DEFAULT_PACK_OPTIONS, HOLEY_BOARD_CATEGORY } from "./packEngine";
+import { zonedPack } from "./zonedPack";
 import type { PulledLoadSource } from "@/components/logistics/JobPullModal";
 import { LOAD_BUILDER_FIXTURES } from "./loadBuilderFixtures";
 
@@ -464,6 +465,47 @@ export function runSavedLoadSelfCheck(): { pass: boolean; results: CheckResult[]
     const oldRaw = serializeSnapshot(old);
     const oldBack = deserializeSnapshot(oldRaw);
     check("H8: an old snapshot (no onEdge anywhere) loads unchanged", oldBack.ok === true && JSON.stringify(oldBack.snapshot) === JSON.stringify(old) && !oldRaw.includes("onEdge"));
+  }
+
+  // lbz-v2-02: zoned loads ride the existing format (no version bump).
+  {
+    const zonedCart = [
+      { skuId: "HB_6", qty: 40, offloadSeq: 1, zoneLabel: "ZONE 1" },
+      { skuId: "HB_6", qty: 8, offloadSeq: 2, zoneLabel: "ZONE 2" },
+      { skuId: "HB_7", qty: 3 },
+    ];
+    const zskus = [6, 7].map((h): PackSku => ({ id: `HB_${h}`, name: `${h}in holey`, sku: `HB_${h}`, length: 48, width: 24, height: h, weight: 1, category: HOLEY_BOARD_CATEGORY, allowRotation: false }));
+    const zsrc = { ...makePulledSource({ cart: zonedCart, skus: zskus, zoneMode: true }), orderCart: zonedCart.map((c) => ({ ...c })) };
+    const zplan = zonedPack(zonedCart, zskus, TRAILER_TYPES["53ft Standard"], DEFAULT_PACK_OPTIONS);
+    const snap = buildSnapshot({
+      fixtureId: REAL_FIXTURE_ID,
+      pulledSource: zsrc,
+      trailerTypeKey: "53ft Standard",
+      runnerHeight: 0,
+      editedPlan: zplan,
+      forcedTrailers: [{ type: "26ft Box Truck", count: 1 }],
+      autoDownsize: true,
+    });
+    const back = deserializeSnapshot(serializeSnapshot(snap));
+    const src = back.ok && back.snapshot.source.kind === "pulled" ? back.snapshot.source.pulledSource : null;
+    check("zoned: snapshot round-trips byte-identical", back.ok === true && JSON.stringify(back.snapshot) === JSON.stringify(snap));
+    check("zoned: zoneMode and per-line zones survive", !!src && src.zoneMode === true && JSON.stringify(src.cart) === JSON.stringify(zonedCart) && JSON.stringify(src.orderCart) === JSON.stringify(zonedCart));
+    check("zoned: saved Force sizes / auto-downsize are kept (zoneMode wins at pack time, nothing cleared)", back.ok === true && back.snapshot.forcedTrailers?.length === 1 && back.snapshot.autoDownsize === true);
+    const cols = (p: PackPlan | null) => (p ? p.trailers.flatMap((t) => t.rows.flatMap((r) => r.columns)) : []);
+    const savedCols = cols(back.ok ? back.snapshot.editedPlan : null);
+    const orig = cols(zplan);
+    check(
+      "zoned: an editedPlan keeps column zone fields",
+      savedCols.length > 0 &&
+        savedCols.length === orig.length &&
+        savedCols.every((c, i) => c.zoneLabel === orig[i].zoneLabel && c.offloadSeq === orig[i].offloadSeq && c.zoneColor === orig[i].zoneColor) &&
+        savedCols.some((c) => c.zoneLabel === "ZONE 2"),
+      String(savedCols.length)
+    );
+    const plainSnap = buildSnapshot({ fixtureId: REAL_FIXTURE_ID, pulledSource: makePulledSource(), trailerTypeKey: "53ft Standard", runnerHeight: 0, editedPlan: null });
+    const plainBack = deserializeSnapshot(serializeSnapshot(plainSnap));
+    const plainSrc = plainBack.ok && plainBack.snapshot.source.kind === "pulled" ? plainBack.snapshot.source.pulledSource : null;
+    check("zoned: a row without zoneMode deserializes as non-zoned", !!plainSrc && plainSrc.zoneMode === undefined && !serializeSnapshot(plainSnap).includes("zone"));
   }
 
   return { pass: results.every((r) => r.pass), results };

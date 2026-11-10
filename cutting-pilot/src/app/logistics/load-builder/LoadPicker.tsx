@@ -117,7 +117,9 @@ export default function LoadPicker(p: LoadPickerProps) {
   }, [p.searchFocusKey]);
 
   const skus = useMemo(() => (p.library.status === "ready" ? p.library.skus : []), [p.library]);
-  const qtyById = useMemo(() => new Map(p.cart.map((c) => [c.skuId, c.qty])), [p.cart]);
+  // lbz-v2-02: only lines with no zone. On a zoned load those are the Unzoned lines, so the count
+  // and +/− act on them alone and never sum a part across zones. On a non-zoned load it's every line.
+  const qtyById = useMemo(() => new Map(p.cart.filter((c) => !(c.zoneLabel ?? "").trim()).map((c) => [c.skuId, c.qty])), [p.cart]);
 
   const { groups, catKeys } = useMemo(() => {
     const g = new Map<string, LibrarySku[]>();

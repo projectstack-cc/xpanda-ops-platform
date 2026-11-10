@@ -9,26 +9,52 @@ function clean(qty: number): number {
   return Number.isFinite(qty) ? Math.floor(qty) : 0;
 }
 
-/** Adds `qty` of `sku`, merging into the existing line for the same skuId. */
-export function addLine(list: CartLine[], sku: Pick<PackSku, "id">, qty = 1): CartLine[] {
+/** lbz-v2-02: which zone a list edit targets. Omitted = the line with no zone (on a non-zoned load,
+ * every line), which is exactly the pre-zone behavior. */
+export interface LineZone {
+  offloadSeq?: number | null;
+  zoneLabel?: string | null;
+}
+
+function zoneLabelOf(z: LineZone | undefined): string | null {
+  const s = (z?.zoneLabel ?? "").toString().trim();
+  return s ? s : null;
+}
+
+/** True when `line` is `skuId` in `zone` (no zone argument / no label = a line with no zone). */
+export function sameLine(line: CartLine, skuId: string, zone?: LineZone): boolean {
+  if (line.skuId !== skuId) return false;
+  const want = zoneLabelOf(zone);
+  const have = zoneLabelOf(line);
+  if (want === null) return have === null;
+  return have === want && (line.offloadSeq ?? null) === (zone?.offloadSeq ?? null);
+}
+
+function newLine(skuId: string, qty: number, zone?: LineZone): CartLine {
+  const label = zoneLabelOf(zone);
+  return label === null ? { skuId, qty } : { skuId, qty, offloadSeq: zone?.offloadSeq ?? null, zoneLabel: label };
+}
+
+/** Adds `qty` of `sku`, merging into the existing line for the same skuId (and zone). */
+export function addLine(list: CartLine[], sku: Pick<PackSku, "id">, qty = 1, zone?: LineZone): CartLine[] {
   const n = clean(qty);
-  const found = list.some((c) => c.skuId === sku.id);
-  const next = found ? list.map((c) => (c.skuId === sku.id ? { ...c, qty: c.qty + n } : { ...c })) : [...list.map((c) => ({ ...c })), { skuId: sku.id, qty: n }];
+  const found = list.some((c) => sameLine(c, sku.id, zone));
+  const next = found ? list.map((c) => (sameLine(c, sku.id, zone) ? { ...c, qty: c.qty + n } : { ...c })) : [...list.map((c) => ({ ...c })), newLine(sku.id, n, zone)];
   return next.filter((c) => c.qty > 0);
 }
 
-/** Sets a line's qty (0 or less removes it). An unknown skuId with a positive qty is appended. */
-export function setQty(list: CartLine[], skuId: string, qty: number): CartLine[] {
+/** Sets a line's qty (0 or less removes it). An unknown skuId (or zone) with a positive qty is appended. */
+export function setQty(list: CartLine[], skuId: string, qty: number, zone?: LineZone): CartLine[] {
   const n = clean(qty);
-  const found = list.some((c) => c.skuId === skuId);
-  const next = found ? list.map((c) => (c.skuId === skuId ? { ...c, qty: n } : { ...c })) : [...list.map((c) => ({ ...c })), { skuId, qty: n }];
+  const found = list.some((c) => sameLine(c, skuId, zone));
+  const next = found ? list.map((c) => (sameLine(c, skuId, zone) ? { ...c, qty: n } : { ...c })) : [...list.map((c) => ({ ...c })), newLine(skuId, n, zone)];
   return next.filter((c) => c.qty > 0);
 }
 
 /** Steps a line up or down by one. Stepping up an absent line adds it at 1. */
-export function step(list: CartLine[], skuId: string, delta: 1 | -1): CartLine[] {
-  const current = list.find((c) => c.skuId === skuId)?.qty ?? 0;
-  return setQty(list, skuId, current + delta);
+export function step(list: CartLine[], skuId: string, delta: 1 | -1, zone?: LineZone): CartLine[] {
+  const current = list.find((c) => sameLine(c, skuId, zone))?.qty ?? 0;
+  return setQty(list, skuId, current + delta, zone);
 }
 
 export function clear(_list: CartLine[]): CartLine[] {
@@ -39,25 +65,42 @@ export interface LoadListDiff {
   skuId: string;
   orderQty: number;
   listQty: number;
+  // lbz-v2-02: set only for a zoned line (absent on a non-zoned diff, which keeps its old shape).
+  offloadSeq?: number | null;
+  zoneLabel?: string;
 }
 
 /** Lines where the list differs from the order: changed or removed (in order-cart order), then
- * added (in list order). Empty when they match. */
+ * added (in list order). Empty when they match. Summed by SKU and zone, so moving pieces between
+ * zones never nets out to "no change". */
 export function diffFromOrder(orderCart: CartLine[], list: CartLine[]): LoadListDiff[] {
+  const keyOf = (c: CartLine) => {
+    const label = zoneLabelOf(c);
+    return label === null ? c.skuId : JSON.stringify([c.skuId, c.offloadSeq ?? null, label]);
+  };
   const sum = (cart: CartLine[]) => {
-    const m = new Map<string, number>();
-    for (const c of cart) m.set(c.skuId, (m.get(c.skuId) ?? 0) + c.qty);
+    const m = new Map<string, { line: CartLine; qty: number }>();
+    for (const c of cart) {
+      const k = keyOf(c);
+      const e = m.get(k);
+      if (e) e.qty += c.qty;
+      else m.set(k, { line: c, qty: c.qty });
+    }
     return m;
+  };
+  const diff = (line: CartLine, orderQty: number, listQty: number): LoadListDiff => {
+    const label = zoneLabelOf(line);
+    return label === null ? { skuId: line.skuId, orderQty, listQty } : { skuId: line.skuId, orderQty, listQty, offloadSeq: line.offloadSeq ?? null, zoneLabel: label };
   };
   const order = sum(orderCart);
   const listed = sum(list);
   const out: LoadListDiff[] = [];
-  order.forEach((orderQty, skuId) => {
-    const listQty = listed.get(skuId) ?? 0;
-    if (listQty !== orderQty) out.push({ skuId, orderQty, listQty });
+  order.forEach((o, k) => {
+    const listQty = listed.get(k)?.qty ?? 0;
+    if (listQty !== o.qty) out.push(diff(o.line, o.qty, listQty));
   });
-  listed.forEach((listQty, skuId) => {
-    if (!order.has(skuId)) out.push({ skuId, orderQty: 0, listQty });
+  listed.forEach((l, k) => {
+    if (!order.has(k)) out.push(diff(l.line, 0, l.qty));
   });
   return out;
 }

@@ -20,6 +20,10 @@ export interface JobLineItem {
   quantity: number;
   dimensions: string;
   sort_order: number;
+  // lbz-v2-02: offload zone columns (jb-07). `/v2/api/jobs/[id]` is SELECT *, so they're already in
+  // the payload; null on a non-zoned job.
+  offload_seq?: number | null;
+  zone_label?: string | null;
 }
 
 export interface DimensionParseResult {
@@ -101,6 +105,42 @@ export function buildCartFromMatches(matches: JobPullMatch[]): CartLine[] {
     bySkuId.set(m.matchedSkuId, (bySkuId.get(m.matchedSkuId) ?? 0) + (m.lineItem.quantity || 0));
   }
   return Array.from(bySkuId.entries()).map(([skuId, qty]) => ({ skuId, qty }));
+}
+
+function zoneOf(line: JobLineItem): { offloadSeq: number | null; zoneLabel: string } | null {
+  const label = (line.zone_label ?? "").toString().trim();
+  if (!label) return null;
+  const raw = line.offload_seq as unknown;
+  const seq = raw === null || raw === undefined || raw === "" ? null : Number(raw);
+  return { offloadSeq: seq !== null && Number.isFinite(seq) ? seq : null, zoneLabel: label };
+}
+
+/** lbz-v2-02: the zoned cart. Like buildCartFromMatches, but lines merge only when SKU, offload_seq
+ * and zone_label all match, so a part repeated across zones stays one line per zone (first-seen
+ * order). A line with no zone label carries no zone fields (it packs as Unzoned). */
+export function buildZonedCartFromMatches(matches: JobPullMatch[]): CartLine[] {
+  const byKey = new Map<string, CartLine>();
+  for (const m of matches) {
+    if (!m.matchedSkuId) continue;
+    const zone = zoneOf(m.lineItem);
+    const key = `${m.matchedSkuId}|${zone ? zone.offloadSeq : ""}|${zone ? zone.zoneLabel : ""}`;
+    const qty = m.lineItem.quantity || 0;
+    const found = byKey.get(key);
+    if (found) found.qty += qty;
+    else byKey.set(key, zone ? { skuId: m.matchedSkuId, qty, offloadSeq: zone.offloadSeq, zoneLabel: zone.zoneLabel } : { skuId: m.matchedSkuId, qty });
+  }
+  return Array.from(byKey.values());
+}
+
+/** lbz-v2-02: the job's offload-zones flag (D1 INTEGER 0/1; tolerate a boolean). */
+export function zonesEnabled(flag: unknown): boolean {
+  return flag === true || Number(flag) === 1;
+}
+
+/** lbz-v2-02: the pull's cart. Flag on: the zoned cart and zoneMode. Flag off: exactly
+ * buildCartFromMatches (zone data on the lines, if any, is ignored). */
+export function buildPullCart(matches: JobPullMatch[], offloadZonesEnabled: unknown): { cart: CartLine[]; zoneMode: boolean } {
+  return zonesEnabled(offloadZonesEnabled) ? { cart: buildZonedCartFromMatches(matches), zoneMode: true } : { cart: buildCartFromMatches(matches), zoneMode: false };
 }
 
 // Mirrors packEngine.ts's private, unexported colorForSku (same palette array, same hash) so the

@@ -27,8 +27,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Search, AlertTriangle, CheckCircle2 } from "lucide-react";
 import Modal from "@/components/Modal";
-import type { CartLine, PackSku } from "@/lib/packEngine";
-import { matchLineItemsToSkus, buildCartFromMatches, colorForSkuId, fetchLoadBuilderSkus, type JobLineItem, type JobPullMatch } from "@/lib/jobPull";
+import type { PackSku } from "@/lib/packEngine";
+import { matchLineItemsToSkus, buildPullCart, colorForSkuId, fetchLoadBuilderSkus, type JobLineItem, type JobPullMatch } from "@/lib/jobPull";
 import type { LoadBuilderFixture } from "@/lib/loadBuilderFixtures";
 
 interface JobSearchResult {
@@ -45,6 +45,8 @@ interface JobDetail {
   invoice_number: string | null;
   po_number: string | null;
   line_items: JobLineItem[];
+  // lbz-v2-02: jb-07's flag (D1 INTEGER 0/1). On = the pull keeps zones.
+  offload_zones_enabled?: number | boolean;
 }
 
 // Structurally a LoadBuilderFixture (advisor: keeps the pulled source a drop-in for the existing
@@ -53,6 +55,9 @@ export interface PulledLoadSource extends LoadBuilderFixture {
   jobId: string;
   unmatchedCount: number;
   unmatchedDescriptions: string[];
+  // lbz-v2-02: set (true) only when the job's offload-zones flag is on. The cart's lines then carry
+  // offloadSeq / zoneLabel, and the planner packs with zonedPack(). Absent = a non-zoned load.
+  zoneMode?: boolean;
 }
 
 // Steve, 2026-09-16: legacy restricted job-pull to "done"/"loading" status (load-builder.html:2942),
@@ -85,7 +90,8 @@ export async function pullJobPreview(jobId: string): Promise<PreviewState> {
  * matched SKUs (advisor: a fixture's skus[] is exactly what its cart references; handing pack() the
  * whole library would change footprintCount/top-off behavior no fixture can produce). */
 export function buildPulledSource(preview: PreviewState): PulledLoadSource {
-  const cart: CartLine[] = buildCartFromMatches(preview.matches);
+  // lbz-v2-02: flag on -> one line per SKU per zone; flag off -> buildCartFromMatches, unchanged.
+  const { cart, zoneMode } = buildPullCart(preview.matches, preview.job.offload_zones_enabled);
   const matchedIds = new Set(cart.map((c) => c.skuId));
   const skus = Array.from(matchedIds)
     .map((id) => preview.skuById.get(id))
@@ -102,6 +108,7 @@ export function buildPulledSource(preview: PreviewState): PulledLoadSource {
     skus,
     unmatchedCount: unmatched.length,
     unmatchedDescriptions: unmatched.map((m) => m.lineItem.description || m.lineItem.part_number || "Unnamed item"),
+    ...(zoneMode ? { zoneMode: true } : {}),
   };
 }
 
