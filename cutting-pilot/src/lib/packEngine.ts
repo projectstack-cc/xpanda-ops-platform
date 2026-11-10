@@ -80,6 +80,10 @@ export interface PackSku {
 export interface CartLine {
   skuId: string;
   qty: number;
+  // lbz-v2-01: offload zone (from the job's line items). Optional and additive; pack() reads only
+  // skuId and qty, so these never change a plan. zonedPack.ts groups by them.
+  offloadSeq?: number | null;
+  zoneLabel?: string | null;
 }
 
 export interface Orientation {
@@ -131,6 +135,11 @@ export interface PackColumn {
   // saved loads and fixtures stay valid. Only pack() creates one; validatePlan's edge-slot rule
   // polices it.
   onEdge?: true;
+  // lbz-v2-01: the offload zone this stack belongs to, stamped by zonedPack.ts only. Optional and
+  // additive, like stackKind / onEdge. zoneColor is data (legacy's ZONE_COLORS), not theme.
+  offloadSeq?: number | null;
+  zoneLabel?: string | null;
+  zoneColor?: string;
 }
 
 export interface PackRow {
